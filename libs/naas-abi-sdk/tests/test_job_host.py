@@ -250,7 +250,7 @@ class JetStream:
             raise BadRequestError(code=400, err_code=10071, description="wrong last")
         self.published.append((subject, payload, headers))
         self.last[subject] = SimpleNamespace(seq=len(self.published), headers=headers)
-        return SimpleNamespace(seq=len(self.published))
+        return SimpleNamespace(seq=len(self.published), duplicate=None)
 
     async def get_last_msg(self, stream, subject):
         from nats.js.errors import NotFoundError
@@ -470,7 +470,7 @@ def test_manual_triggers_carry_the_callers_trace(monkeypatch):
     class _JS:
         async def publish(self, subject, payload, headers=None, stream=None):
             published.append(dict(headers or {}))
-            return SimpleNamespace(seq=3)
+            return SimpleNamespace(seq=3, duplicate=None)
 
     class _NC:
         max_payload = 1024 * 1024
@@ -634,6 +634,7 @@ def test_a_host_triggers_its_own_jobs_once_per_idempotency_key():
 
     first, again, other = asyncio.run(scenario())
 
+    assert (first.duplicate, again.duplicate, other.duplicate) == (False, True, False)
     assert first.run_id == again.run_id == "ingest:1" and other.run_id == "ingest:2"
     assert len(js.published) == 2
     subject, headers = js.published[0]
@@ -1532,7 +1533,7 @@ def test_consumers_leave_attempts_to_the_host():
             raise NotFoundError(code=404, err_code=10037)
 
         async def publish(self, *args, **kwargs):
-            return SimpleNamespace(seq=1)
+            return SimpleNamespace(seq=1, duplicate=None)
 
         async def purge_stream(self, name, subject=None):
             return None
