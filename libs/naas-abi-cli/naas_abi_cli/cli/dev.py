@@ -57,12 +57,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import click
+from naas_abi_core.utils.LegacyExtras import LEGACY_NOTICE, install_hint
 from rich.console import Console, Group
 from rich.live import Live
 from rich.table import Table
 from rich.text import Text
-
-from naas_abi_core.utils.LegacyExtras import LEGACY_NOTICE, install_hint
 
 from naas_abi_cli.cli.admin_credentials import (
     NATS_USERS,
