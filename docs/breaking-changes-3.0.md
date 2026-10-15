@@ -226,7 +226,7 @@ Commits `6d32eb86e`, `9977c9060`, `82ccb8352`.
 | `ICodingEnvironmentAdapter` | `list_all_environments()` |
 | `ISourceControlAdapter` | `delete_repo(*, repo_id)` |
 | `ITripleStoreService` (service implementations only) | `query_stream(query)`, `export(graph_name)` |
-| `IDocumentAdapter` | `collection_spec(namespace, collection)`, `namespaces()`; `find(..., max_bytes=)` is passed only when a caller sets it (`7f01adc51`) |
+| `IDocumentAdapter` | `collection_spec(namespace, collection)`, `namespaces()`; `find(..., max_bytes=)` is passed only to a `find` that takes it, in process and over NATS (`7f01adc51`, `21aa48f63`) |
 
 Custom triple store adapters (`ITripleStorePort`) get defaults and keep
 working.
@@ -285,14 +285,16 @@ working.
   install `nats-server` 2.14 or later.
 
 ### `abi new module` creates remote modules in NATS projects
-- **What changed:** in a project with a `nats:` block, and outside any
-  project, `abi new module <name>` creates a remote SDK module: in the
-  project's `src/<name>/` with a `dev.modules` entry, a Compose service in
-  `docker-compose.override.yml` and its module key in `.env`; outside a
-  project, a repository of its own (`./<kebab-name>/`, as `--standalone`).
-  In a project without NATS it still creates an in-engine module and says so
-  (`a203d3afa`); `--remote` forces a remote one, `--in-engine` (alias
-  `--local`) an in-engine one. Module names must match
+- **What changed:** in a project with a `nats:` block (in `config.yaml` or
+  `config.local.yaml`), and outside any project, `abi new module <name>`
+  creates a remote SDK module: in the project's `src/<name>/` with a
+  `dev.modules` entry, plus a Compose service in `docker-compose.override.yml`
+  and its module key in `.env` when the Docker config (`config.local.yaml`)
+  is on NATS; outside a project, a repository of its own (`./<kebab-name>/`,
+  as `--standalone`). In a project whose configs have no `nats:` block it
+  still creates an in-engine module and says so (`a203d3afa`, `1f8a5c5c8`);
+  `--remote` forces a remote one, `--in-engine` (alias `--local`) an
+  in-engine one. Module names must match
   `^[a-z][a-z0-9-]{0,62}$` once kebab-cased. In a project, the default path
   `.` means `src/<name>` wherever the command runs, and a remote module must
   live under `src/`. Commits `6b4d376dc`, `4163aea00`.
@@ -397,7 +399,10 @@ No route was removed or renamed.
 - **Chat with remote agents** (NATS): the `agent` of `POST /api/chat/stream`
   and `POST /api/chat/complete` must be the agent's id for an agent published
   by a remote module; a name selects in-process agents only. Both endpoints
-  answer with remote agents (`136d8cf5e`, `642ca5dc3`).
+  answer with remote agents. When the agent is unavailable or its run fails,
+  the stream ends with an error message and `/api/chat/complete` answers with
+  the provider marked `(error)`, as for an in-process agent; a failure after
+  the answer is done is only logged (`136d8cf5e`, `642ca5dc3`, `4d1c014f4`).
 - New super-admin routes under `/api/admin/system/` (System app: data, jobs,
   traces). Jobs run with
   `POST /api/admin/system/jobs/<module>/<job>/trigger` and
@@ -435,6 +440,12 @@ Compose (generated stack):
 Remote modules, remote agents and remote apps are new in 3.0, so nothing here
 breaks a 2.x project. Projects that ran earlier builds of the branch must:
 
+- with NATS off and `POSTGRES_URL` set, expect agent memory back in
+  PostgreSQL: earlier builds kept it in the Document Service whenever that
+  service loaded, and 3.0 gives `POSTGRES_URL` precedence without NATS
+  (`1cd7790cf`). Conversations held in documents since are not seen; turn
+  NATS on to read them again, or unset `POSTGRES_URL`;
+
 - sign with the module key as the module id (`ABI_MODULE_KEY`, `abi module key
   <module_id>`), never `NATS_JWT_SECRET`; `ABI_MODULE_IDENTITY` and the
   template's `service_token.py` are gone, and discovery registers a module
@@ -467,14 +478,14 @@ on the branch:
 |---|---|
 | `1cd7790cf` | Phase 1 (NATS off) moved agent memory and the activity log to the Document Service: a 2.x Docker deploy's agents forgot every conversation, and no job could copy them without NATS. |
 | `20492ba1b`, `37f559ff5` | A root container rewrote `.env` as root; `abi deploy local --regenerate` then failed with a traceback. |
-| `7f01adc51` | Every query of a 2.x custom document adapter failed on the `max_bytes` keyword. |
-| `a203d3afa` | `abi new module` created remote modules in classic projects, where nothing runs them. |
+| `7f01adc51`, `21aa48f63` | Every query of a 2.x custom document adapter failed on the `max_bytes` keyword, in process and over NATS. |
+| `a203d3afa`, `1f8a5c5c8` | `abi new module` created remote modules in classic projects, where nothing runs them (and, once that was fixed, in-engine modules in projects on NATS natively). |
 | `c539455e4`, `2bcb2ff71` | The generated stack (and the repository's) pulled MinIO images that no longer exist; `fuseki-compact` restarted forever on a shell syntax error. |
-| `28e885211`, `24b9a5e42` | The generated `mcp-server` restarted forever (no project mounted) and listened on 127.0.0.1 only. |
+| `28e885211`, `24b9a5e42`, `4b0236741` | The generated (and the repository's) `mcp-server` restarted forever (no project mounted) and listened on 127.0.0.1 only. |
 | `c6f7251b3` | Under `abi dev up`, Dagster could not load a config that templates `PUBLIC_WEB_HOST`, so no orchestration or job loaded. |
 | `a9149c9ca`, `45352a858` | `abi new project` could not install a NATS project: `naas-abi-sdk[agent]` required langchain-core 1 while `naas-abi-core` needs 0.3. |
-| `136d8cf5e` | `POST /api/chat/complete` answered "Unknown provider type: remote". |
-| `642ca5dc3` | A remote agent's next turn, sent right after the previous one, failed with `CONVERSATION_BUSY`: Nexus stopped reading at `done` and cancelled the finishing run. |
+| `136d8cf5e`, `4d1c014f4` | `POST /api/chat/complete` answered "Unknown provider type: remote", then returned a module's failure as a successful answer. |
+| `642ca5dc3` | A remote agent's next turn, sent right after the previous one, failed with `CONVERSATION_BUSY`: Nexus stopped reading at `done` and cancelled the finishing run; reading on must not append a late failure to the answer (`4d1c014f4`). |
 | `39807a0d3` | The migration guide's phase 2 started the classic stack's `nats` profile, where the API and Dagster cannot both serve (`EngineAlreadyServing`), and its restart commands left the API on the old code. |
 
 ## Known limits found by the check
