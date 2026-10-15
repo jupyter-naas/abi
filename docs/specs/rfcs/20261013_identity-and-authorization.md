@@ -985,7 +985,7 @@ All resource types are platform-level unless their scope says otherwise.
 | `ListPrincipals`, `ListGroups`, `ListPolicies`, `ListAttachments`, `ListKeys`, `ListManifests`, `ListPlacements` | list | each item |
 | `GetPrincipal`, `GetGroup`, `GetPolicy`, `GetManifest`, `Explain`, `Simulate` | read | the item (`Explain`/`Simulate`: the principal asked about) |
 | `ExchangeToken` | write | `audience/<session, nats, agent, app, preview, coding, api-key>` (§9.4) |
-| `CreateServiceAccount`, `DeletePrincipal`, `SuspendPrincipal`, `ResumePrincipal`, `LinkUser` | admin | `principal/…` |
+| `CreateUser` (the user of a verified `(issuer, sub)`; token exchange creates it as `engine`), `CreateServiceAccount`, `DeletePrincipal`, `SuspendPrincipal`, `ResumePrincipal`, `LinkUser` | admin | `principal/…` |
 | `CreateGroup`, `DeleteGroup`, `AddGroupMember`, `RemoveGroupMember`, `MapIdpGroup`, `UnmapIdpGroup` | admin | `group/…` |
 | `CreatePolicy`, `UpdatePolicy`, `DeletePolicy` | admin | `policy/…` |
 | `AttachPolicy`, `DetachPolicy` | admin | `attachment/<policy>/<principal>` |
@@ -1518,6 +1518,7 @@ services:
       adapter: sqlite              # sqlite | postgres | memory
       path: storage/iam/iam.sqlite
       # dsn: "{{ secret.IAM_POSTGRES_DSN }}"
+      # schema: abi_iam            # postgres: the tables' own schema
     authorizer: policy             # policy (default) | allow_all (explicit opt-out; warns at boot)
     modules:
       auto_approve: false          # true only in the abi dev overlay
@@ -1577,6 +1578,28 @@ A sealed resource is a resource pattern bound to one principal.
   change. In process it calls the same invalidation directly.
 - Caches drop affected entries on receipt, and everything after 60 seconds.
 - A process that sees a revision gap drops its whole cache.
+
+**As built in subtask 3.** `services/iam/` (see its `AGENTS.md`):
+
+- **Store.** One SQL implementation on SQLAlchemy Core (`adapters/secondary/iam_sql.py`) serves SQLite and
+  PostgreSQL; the in-memory adapter passes the same contract. So far the tables are `principals`, `group_members`,
+  `group_mappings`, `policies`, `attachments`, `placements`, `scopes`, `catalogs` and `state` (revision,
+  install id); keys, manifests, grants and signing keys come with the subtasks that use them. The Docker
+  templates reuse the deployment database through its `POSTGRES_*` secrets, in schema `abi_iam`.
+- **Boot.** The engine loads IAM before every other service and bootstraps it: IAM's catalog, the managed
+  policies, the `engine`, `api` and `idp` service accounts and their policies. A serving engine gives its
+  modules the IAM owner itself; a client-role engine gets `IAMSecondaryAdapterNATSClient`. Both implement
+  `IIAMService`, whose `require` raises `PermissionDeniedError` or the caller's `not_found()` (§5.4).
+- **Caches.** Each process caches effective statements per principal, policies and placements for at most 60
+  seconds and drops them on every change made through it. The NATS primary publishes `abi.iam.v1.changed`.
+- **Built-in policies.** Roles, `builtin.platform_admin`, `builtin.platform.viewer` and `.member` (kept in step
+  with workspace and org-wide role attachments), `builtin.idp`. `builtin.self` is held implicitly by every user.
+  Feature policies come with the Nexus catalog (subtask 11).
+- **Transitional grants** (ADR `20261015_iam-transitional-bootstrap.md`): `builtin.engine` and `builtin.api` are
+  one `TransitionalBroadAccess` statement each; a service account IAM has no record of (a remote module)
+  implicitly holds `builtin.transitional.module` until subtask 6; a user named by a Nexus id resolves to the user
+  of issuer `urn:abi:nexus` until subtask 7. Nexus seeding turns `users[].is_superadmin` into
+  `builtin.platform_admin`.
 
 ### 12. Identity providers and the built-in IdP
 

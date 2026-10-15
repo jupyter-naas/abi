@@ -32,6 +32,7 @@ Core services live under `libs/naas-abi-core/naas_abi_core/services/`. Each has 
 | `document` | Portable mutable documents, scoped to modules (SQLite / PostgreSQL) | [services/document/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/document/AGENTS.md) |
 | `email` | Transactional email sending (SMTP / SES / FS) | [services/email/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/email/AGENTS.md) |
 | `event` | Durable typed event log + live pub/sub | [services/event/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/event/AGENTS.md) |
+| `iam` | Principals, AWS-style policies, roles and the deny-by-default authorizer every service asks (SQLite / PostgreSQL) | [services/iam/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/iam/AGENTS.md) |
 | `keyvalue` | Bytes-in/out KV store with TTL + atomic CAS/CAD | [services/keyvalue/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/keyvalue/AGENTS.md) |
 | `model_registry` | Canonical-ID catalog of chat/embedding models | [services/model_registry/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/model_registry/AGENTS.md) |
 | `object_storage` | S3-style blob storage (FS / S3 / Naas) | [services/object_storage/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/object_storage/AGENTS.md) |

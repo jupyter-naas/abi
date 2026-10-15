@@ -18,6 +18,9 @@ copy, `engine/call_context_types.py`, for installs without the SDK, so keep them
 its user in the `Abi-On-Behalf-Of` header only for `Transport(forward_user=True)`:
 kernel services accept that header only from `api` and `engine`, so only the
 engine's kernel-calling transports set it. Identity never goes in request fields.
+`engine.services.iam` (`services/iam.py`) needs no dependency declaration: IAM
+answers for the module's own verified identity and authorizes its own operations
+(`abi.iam.v1.*`; core's `services/iam/AGENTS.md`).
 The document schema is in langgraph_documents.py, shared with core's synchronous
 engine saver and the Nexus viewer: collections, ids, write plans (schema 2 stores
 increments: content-addressed blobs, list elements and chunks, parts above
