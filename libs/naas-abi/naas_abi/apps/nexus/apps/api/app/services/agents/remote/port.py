@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 REMOTE_PROVIDER = "remote"
 # The SDK AgentHost rejects larger prompts (naas_abi_sdk.agent_host).
@@ -49,8 +49,9 @@ class RemoteAgentDirectory(Protocol):
 
     def stream(
         self, key: str, prompt: str, *, thread_id: str, invocation_id: str | None = None
-    ) -> AsyncIterator[dict[str, str]]:
-        """Run one turn; yields ``{"event", "data"}`` like core ``Agent.stream_invoke``.
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Run one turn; yields ``{"event", "data"}`` like core ``Agent.stream_invoke``,
+        with ``"chat_source": False`` on a tool response whose tool opted out.
 
         Raises RemoteAgentUnavailable when the agent cannot be reached or its run fails.
         """

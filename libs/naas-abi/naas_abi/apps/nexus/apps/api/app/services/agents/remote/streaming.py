@@ -105,7 +105,7 @@ async def remote_agent_chunks(
                 if text.strip():
                     final_replay.append(text.strip())
                 continue
-            chunk = agent_event_chunk(name, text)
+            chunk = agent_event_chunk(name, text, chat_source=event.get("chat_source"))
             if chunk is not None:
                 emitted = emitted or isinstance(chunk, str)
                 yield chunk

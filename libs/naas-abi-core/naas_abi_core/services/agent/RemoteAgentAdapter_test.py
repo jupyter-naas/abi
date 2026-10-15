@@ -31,6 +31,30 @@ def test_existing_agent_and_intent_surface_keeps_thread_and_sse_values():
     asyncio.run(scenario())
 
 
+def test_streamed_events_keep_event_data_and_a_chat_source_opt_out_only():
+    original = Mock()
+    original.duplicate.return_value.stream_invoke.return_value = iter(
+        [
+            {"event": "tool_response", "data": "a", "chat_source": True},
+            {"event": "tool_response", "data": "b", "chat_source": False},
+            {"event": "message", "data": "answer", "in_process_only": object()},
+        ]
+    )
+
+    async def scenario():
+        context = SimpleNamespace(thread_id="thread", cancelled=asyncio.Event())
+        return [
+            e async for e in RemoteAgentAdapter(original).stream_invoke("p", context)
+        ]
+
+    # The SDK host refuses any other key (INVALID_STREAM) and fails the run.
+    assert asyncio.run(scenario()) == [
+        {"event": "tool_response", "data": "a"},
+        {"event": "tool_response", "data": "b", "chat_source": False},
+        {"event": "message", "data": "answer"},
+    ]
+
+
 def test_cancel_waits_for_sync_worker_before_returning():
     from threading import Event
 

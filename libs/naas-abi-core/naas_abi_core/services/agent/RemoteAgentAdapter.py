@@ -19,6 +19,15 @@ class RemoteInvocationContext(Protocol):
     cancelled: asyncio.Event
 
 
+def _wire_event(event: dict[str, Any]) -> dict[str, Any]:
+    """The host stores and sends ``event``/``data`` and a ``chat_source``
+    opt-out; any other in-process key would fail the run (INVALID_STREAM)."""
+    wire = {"event": event["event"], "data": event["data"]}
+    if event.get("chat_source") is False:
+        wire["chat_source"] = False
+    return wire
+
+
 class RemoteAgentAdapter:
     def __init__(self, agent: Agent):
         self.agent = agent
@@ -58,7 +67,9 @@ class RemoteAgentAdapter:
             )
             for event in agent.stream_invoke(prompt):
                 if not context.cancelled.is_set():
-                    asyncio.run_coroutine_threadsafe(deliver(event), loop).result()
+                    asyncio.run_coroutine_threadsafe(
+                        deliver(_wire_event(event)), loop
+                    ).result()
 
         task = asyncio.create_task(asyncio.to_thread(produce))
         try:

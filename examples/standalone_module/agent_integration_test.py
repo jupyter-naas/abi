@@ -197,6 +197,145 @@ def test_core_agents_and_async_parent_tool_over_network(document_host):  # noqa:
     asyncio.run(scenario())
 
 
+def test_a_tool_that_opts_out_of_chat_sources_streams_over_the_network(document_host):  # noqa: F811
+    """A core agent whose tool sets metadata {"chat_source": False} streams
+    through RemoteAgentAdapter: the run completes, and the opt-out reaches the
+    caller on the live stream and on the stored replay."""
+    from langchain_core.messages import AIMessage
+    from langchain_core.tools import tool
+    from naas_abi_core.services.agent.Agent_stream_test import _ScriptedChatModel
+    from naas_abi_sdk import (
+        AgentDescriptor,
+        BaseModule,
+        DiscoveryConfiguration,
+        ModuleDependencies,
+        run_module,
+    )
+
+    @tool
+    def lookup(term: str) -> str:
+        """Look a term up.
+
+        Args:
+            term (str): The term.
+        """
+        return f"https://example.org/{term}"
+
+    @tool
+    def internal_lookup(term: str) -> str:
+        """Look a term up in the internal index.
+
+        Args:
+            term (str): The term.
+        """
+        return f"https://internal.example.org/{term}"
+
+    internal_lookup.metadata = {"chat_source": False}
+
+    def tool_responses(events):
+        return [
+            {k: v for k, v in e.items() if k != "sequence"}
+            for e in events
+            if e["event"] == "tool_response"
+        ]
+
+    expected = [
+        {"event": "tool_response", "data": "https://example.org/a"},
+        {
+            "event": "tool_response",
+            "data": "https://internal.example.org/b",
+            "chat_source": False,
+        },
+    ]
+
+    async def scenario():
+        nc = await nats.connect(document_host)
+        registry = await start_discovery(nc, SECRET)
+        stop = asyncio.Event()
+
+        class Provider(BaseModule):
+            module_id = "test.sources"
+            dependencies = ModuleDependencies(services=("document",))
+            agents = (AgentDescriptor("Quiet", capabilities=("agent.invoke.v1",)),)
+
+            async def on_initialized(self):
+                def turn(n):
+                    return [
+                        AIMessage(
+                            content="",
+                            tool_calls=[
+                                {"name": "lookup", "args": {"term": "a"}, "id": f"a{n}"},
+                                {
+                                    "name": "internal_lookup",
+                                    "args": {"term": "b"},
+                                    "id": f"b{n}",
+                                },
+                            ],
+                        ),
+                        AIMessage(content="done"),
+                    ]
+
+                # One scripted model for every run's duplicate: two turns of
+                # one conversation, with their own tool call ids.
+                model = _ScriptedChatModel(script=turn(1) + turn(2))
+                agent = Agent(
+                    name="Quiet",
+                    description="Test agent",
+                    chat_model=model,
+                    tools=[lookup, internal_lookup],
+                    memory=MemorySaver(),
+                    enable_default_tools=False,
+                )
+                self.expose_agent("Quiet", RemoteAgentAdapter(agent))
+
+            async def run(self):
+                await stop.wait()
+
+        class Consumer(BaseModule):
+            module_id = "test.reader"
+            dependencies = ModuleDependencies(modules=("test.sources",))
+
+            async def run(self):
+                proxy = await self.engine.modules["test.sources"].get_agent("Quiet")
+                events = [e async for e in proxy.stream_invoke("look", timeout=20)]
+                assert tool_responses(events) == expected
+                assert events[-1] == {"event": "done", "data": "[DONE]"}
+
+                handle = await proxy.submit("look again", stream=True)
+                assert tool_responses([e async for e in handle.events(timeout=20)]) == (
+                    expected
+                )
+                status = await handle.status()
+                assert status.status == "SUCCEEDED"
+                assert tool_responses(status.events) == expected
+
+        task = asyncio.create_task(
+            run_module(
+                Provider,
+                url=document_host,
+                token=_module_token(Provider.module_id),
+                discovery=DiscoveryConfiguration(),
+            )
+        )
+        try:
+            await asyncio.wait_for(
+                run_module(
+                    Consumer,
+                    url=document_host,
+                    token=_module_token(Consumer.module_id),
+                    discovery=DiscoveryConfiguration(refresh_seconds=0.05),
+                ),
+                40,
+            )
+        finally:
+            stop.set()
+            await task
+            await registry.stop()
+            await nc.close()
+
+    asyncio.run(scenario())
+
+
 def test_a_run_stays_reachable_after_its_owner_loses_the_lease(document_host):  # noqa: F811
     from naas_abi_sdk import (
         AgentDescriptor,
