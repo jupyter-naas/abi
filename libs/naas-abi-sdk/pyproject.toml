@@ -27,11 +27,13 @@ naas-abi-module = "naas_abi_sdk.module_runner:main"
 
 [project.optional-dependencies]
 models = ["langchain-core>=0.3.78,<2"]
-agents = ["langchain-core>=1,<2"]
+# naas-abi-core pins langchain-openai below 0.4 (langchain-core 0.3), and a
+# project installs both: the agent extras accept the same range as models.
+agents = ["langchain-core>=0.3.78,<2"]
 rdf = ["rdflib>=7,<8"]
 langgraph = ["langgraph-checkpoint>=3.0.1,<4"]
 # Agents written like naas_abi_core agents (naas_abi_sdk.agents).
-agent = ["langchain-core>=1,<2", "langgraph>=1,<2", "langgraph-checkpoint>=3.0.1,<4"]
+agent = ["langchain-core>=0.3.78,<2", "langgraph>=1,<2", "langgraph-checkpoint>=3.0.1,<4"]
 # OpenTelemetry tracing over NATS (W3C trace context in message headers).
 otel = [
     "opentelemetry-api>=1.27,<2",
