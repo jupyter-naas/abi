@@ -63,8 +63,13 @@ attached or implicit, each named TRANSITIONAL in the code, in its description an
      resource: Nexus keeps deciding what such a user may do, with its own membership checks, as before
      IAM. It allows nothing on `iam:*`. Seals and explicit Denies hold.
    - Discovery is the exception, for both transitional grants: they reach every module, agent, model, app
-     and job, but agent runs only on `run/${principal.id}/*`, so no holder reads or cancels another
+     and job, but agent runs only on `run/${principal.id}/*` and `run/${user.id}/*` (its own, and those of
+     the user it acts for, whom a run started for a user belongs to), so no holder reads or cancels another
      principal's run.
+   - Registering is bound by discovery itself: a live module id belongs to the principal of its instances,
+     and renewing or unregistering needs the instance's lease. A module id nobody holds can still be
+     registered by any transitional module, until subtask 6's `module/<project>/<module_id>` accounts
+     register only their own module and this grant goes.
    - Users with IAM ids (OIDC users from subtask 7, test principals) never hold it: they get only what is
      attached, so the user side of a call is real for them today.
 5. **`builtin.self` is implicit.** Every user holds it without an attachment row, unknown users included.

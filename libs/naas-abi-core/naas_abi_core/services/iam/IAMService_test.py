@@ -218,6 +218,30 @@ def test_a_nexus_user_reaches_only_their_own_agent_runs(h, action):
 @pytest.mark.parametrize(
     "action", ["discovery:GetAgentRun", "discovery:CancelAgentRun"]
 )
+def test_a_module_acting_for_a_user_follows_that_users_runs(h, action):
+    """A run started for a user is the user's: a module delegating for that
+    user (a delegated token, #62) follows it, and still no one else's."""
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        Principal,
+        use_call_context,
+    )
+
+    ada = "user-aaaaaaaaaaaa"
+    delegated = CallContext(
+        principal=Principal(id="research", kind="service_account", name="research"),
+        on_behalf_of=Principal(id=ada, kind="user"),
+    )
+    with use_call_context(delegated):
+        assert h.iam.authorize(action, RUN.format(owner=ada)).allowed
+        assert not h.iam.authorize(
+            action, RUN.format(owner="user-bbbbbbbbbbbb")
+        ).allowed
+
+
+@pytest.mark.parametrize(
+    "action", ["discovery:GetAgentRun", "discovery:CancelAgentRun"]
+)
 def test_a_remote_module_reaches_only_its_own_agent_runs(h, action):
     assert h.allowed(action, RUN.format(owner="research"), actor="research")
     assert not h.allowed(action, RUN.format(owner="user-1"), actor="research")

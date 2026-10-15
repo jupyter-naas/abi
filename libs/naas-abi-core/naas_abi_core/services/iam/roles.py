@@ -391,8 +391,13 @@ def transitional_module_policy() -> Policy:
 
 def _transitional_discovery() -> list[Statement]:
     """Discovery for a transitional holder: every module, agent, model, app and
-    job, but only its own agent runs, so it never reads or cancels another
-    principal's run."""
+    job, but agent runs only its own or those of the user it acts for, so it
+    never reads or cancels another principal's run.
+
+    Registering is bound further by discovery itself: a live module id belongs
+    to the principal of its instances, and renewing or unregistering needs the
+    instance's lease. A module id nobody holds can still be registered by any
+    module until #60's accounts register only their own module."""
     return [
         Statement(
             effect="Allow",
@@ -406,7 +411,14 @@ def _transitional_discovery() -> list[Statement]:
         Statement(
             effect="Allow",
             actions=("discovery:*",),
-            resources=("abi:-:-:discovery:run/${principal.id}/*",),
+            # Its own runs, and the runs of the user it acts for: an agent run
+            # started for a user is that user's (RFC §6.4), and the holder
+            # delegating for them must still follow it. ``${user.id}`` matches
+            # nothing on a call for no user.
+            resources=(
+                "abi:-:-:discovery:run/${principal.id}/*",
+                "abi:-:-:discovery:run/${user.id}/*",
+            ),
             sid="TransitionalOwnRuns",
         ),
     ]

@@ -57,7 +57,9 @@ model_registry, discovery (agents, models, apps, jobs), source_control and codin
 7. **Module names are bound to principals.** A module id is held by the principal of its live instances,
    and a `module/<project>/<module_id>` account (#60) registers only its own module. A strict
    "token subject equals module id" rule would break every existing module, whose generated ids are
-   `<project>.<name>`. `Evict` is a policy, `discovery:Evict`; the transitional module policy denies it.
+   `<project>.<name>`. Renewing or unregistering an instance needs its lease. Until #60, a module id that
+   nobody holds can still be registered by any module. `Evict` is a policy, `discovery:Evict`; the
+   transitional module policy denies it, and a discovery with no IAM lets only `api` and `engine` evict.
 8. **Jobs.** A manual trigger or a cancel carries its caller's credentials in the stored message. The job
    host asks discovery (`authorize_job`) before running it, with the token checked as of the time JetStream
    stored the message, since a trigger may be consumed after its token expired. Engine-hosted jobs run the
@@ -69,11 +71,15 @@ model_registry, discovery (agents, models, apps, jobs), source_control and codin
    `Embed` are checked per call. An in-process embedding is checked as `Resolve`.
 10. **The user comes from the call.** source_control and coding_environment derive the user from the
     `CallContext` and find the forge or orchestrator account by the principal it was ensured for. Request
-    `user_id` fields are ignored. `AddCollaborator` is an admin action.
+    `user_id` fields are ignored. `AddCollaborator` is an admin action. An existing forge or Coder account
+    is the caller's only when bound to it, or when it predates the binding and a first party (`api`,
+    `engine`) vouches for the email it carries; an administrator is never handed over.
 11. **Bug (b).** Nexus grants write on a repository only when it is placed in the route's workspace (or is
     the deployment's configured shared repository), the caller's role there is member or above, and IAM
     allows `source_control:UpsertFile` for them. The grant itself runs as `api`. Another workspace's
-    repository answers as a missing one.
+    repository answers as a missing one. A repository is created with `create_repo`, a create-only
+    operation that fails for one that exists in any letter case (forges look names up case-insensitively),
+    and IAM names repositories by their lowercase id: Nexus places and grants only what it just created.
 
 ## Consequences
 
