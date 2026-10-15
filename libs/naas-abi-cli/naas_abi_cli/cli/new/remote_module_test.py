@@ -444,6 +444,12 @@ def test_new_app_in_a_remote_module_says_how_nexus_serves_it(tmp_path: Path) -> 
     assert "/app-html/remote/<module_id>/reports/" in result.output
     assert 'expose_app("reports", app)' in result.output
 
+    # A second app keeps the AGENTS.md the module's author has since edited.
+    (apps / "AGENTS.md").write_text("hand-written notes\n")
+    assert _invoke(_new_app, apps, "charts").exit_code == 0
+    assert (apps / "AGENTS.md").read_text() == "hand-written notes\n"
+    assert "research" in (apps / "charts" / "manifest.json").read_text()
+
 
 def test_new_agent_in_an_in_engine_module_is_a_core_agent(tmp_path: Path) -> None:
     root = _project(tmp_path)

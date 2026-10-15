@@ -25,16 +25,23 @@ class Copier:
     destination_path: str
     values: dict
 
-    def __init__(self, templates_path: str, destination_path: str):
+    def __init__(
+        self, templates_path: str, destination_path: str, keep: tuple[str, ...] = ()
+    ):
         # Normalize paths to avoid double-joining relative segments during recursion.
         self.templates_path = os.path.abspath(templates_path)
         self.destination_path = os.path.abspath(destination_path)
+        # Destination files (relative paths) left as they are when they exist.
+        self.keep = {os.path.normpath(path) for path in keep}
         # Files this Copier wrote, so the post-render format pass touches only
         # generated code and never the rest of the user's project.
         self._generated_files: list[str] = []
 
     def _template_file_to_file(self, template_path: str, destination_path: str) -> None:
         destination_path = self._template_string(destination_path)
+        relative = os.path.relpath(destination_path, self.destination_path)
+        if os.path.normpath(relative) in self.keep and os.path.exists(destination_path):
+            return
         with open(destination_path, "w", encoding="utf-8") as file:
             file.write(self._template_file(template_path))
         self._generated_files.append(destination_path)

@@ -48,6 +48,8 @@ def new_app(app_name: str, app_path: str = ".", extra_values: dict | None = None
             os.path.dirname(naas_abi_cli.__file__), "cli/new/templates/apps"
         ),
         destination_path=app_path,
+        # A module's apps/AGENTS.md may have been written by hand since.
+        keep=("AGENTS.md",),
     )
 
     if "module_name_snake" not in extra_values:
