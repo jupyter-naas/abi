@@ -71,9 +71,17 @@ class Project:
         return self.root / "src"
 
     def nats(self) -> bool:
+        """Whether its Docker stack runs on NATS (``config.local.yaml`` first)."""
         from naas_abi_cli.cli.deploy.local import project_uses_nats
 
         return bool(project_uses_nats(str(self.root)))
+
+    def nats_anywhere(self) -> bool:
+        """Whether it runs on NATS natively or in Docker: either config has
+        a ``nats:`` block."""
+        from naas_abi_cli.cli.deploy.local import any_config_uses_nats
+
+        return any_config_uses_nats(str(self.root))
 
     def discovery_project(self) -> str:
         """The configured discovery project, else the project's own name."""
@@ -397,8 +405,8 @@ def create_in_project(project: Project, module_name: str, package: Path) -> None
                 )
     if not project.nats():
         click.echo(
-            "- This project's config has no `nats:` block, so its Docker stack "
-            "has no broker for the module. See docs/migrate-to-nats.md; then add "
+            "- This project's Docker config has no `nats:` block, so its Docker "
+            "stack has no broker for the module. See docs/migrate-to-nats.md; then add "
             f"this service to {COMPOSE_OVERRIDE}:\n\n" + compose_snippet(name, service)
         )
     elif not (project.root / "docker-compose.yml").exists():
