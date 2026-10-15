@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
 from naas_abi.apps.nexus.apps.api.app.services.agents.remote.adapters.in_memory import (
     InMemoryRemoteAgentDirectory,
 )
 from naas_abi.apps.nexus.apps.api.app.services.agents.remote.contracts import RESEARCHER
 from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import RemoteAgentUnavailable
 from naas_abi.apps.nexus.apps.api.app.services.agents.remote.streaming import (
+    NoUserMessage,
     stream_with_remote_agent,
 )
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import Message, ProviderConfig
@@ -178,18 +180,12 @@ def _complete(monkeypatch, directory, messages=None):
 def test_a_chat_completion_raises_when_the_agent_is_unavailable(monkeypatch):
     # Not a 200 whose stored answer is the error text: the service marks the
     # provider "(error)", as for an in-process agent.
-    import pytest
-
     unavailable = _Directory(error=RemoteAgentUnavailable(RESEARCHER.key, "NO_RESPONDERS"))
     with pytest.raises(RemoteAgentUnavailable, match="NO_RESPONDERS"):
         _complete(monkeypatch, unavailable)
 
 
 def test_a_chat_completion_without_a_user_message_raises(monkeypatch):
-    import pytest
-
-    from naas_abi.apps.nexus.apps.api.app.services.agents.remote.streaming import NoUserMessage
-
     with pytest.raises(NoUserMessage):
         _complete(monkeypatch, _Directory(), [Message(role="assistant", content="hi")])
 
