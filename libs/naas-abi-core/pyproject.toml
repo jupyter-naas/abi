@@ -40,6 +40,9 @@ dependencies = [
     "dagster-aws>=0.27.12",
     "pyoxigraph>=0.5.5",
     "duckdb>=1.5.5",
+    # Identity: OIDC providers' ID tokens and their HTTP endpoints.
+    "pyjwt[crypto]>=2.11.0",
+    "httpx>=0.28.1",
 ]
 license = { text = "MIT License" }
 
