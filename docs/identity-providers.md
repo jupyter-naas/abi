@@ -18,7 +18,7 @@ and [`20261015_nexus-oidc-sessions`](adr/20261015_nexus-oidc-sessions.md).
 | Client | A confidential web client (client ID and secret), authorization code grant, PKCE with S256 |
 | Redirect URI | `<Nexus API URL>/api/auth/oidc/callback`, for example `https://abi.example.com/api/auth/oidc/callback` (`oidc_redirect_uri` in the Nexus config overrides it) |
 | Post-logout redirect URI | `<Nexus web URL>/auth/login` |
-| Refresh tokens | Required: Nexus re-verifies each user at the provider at least every 10 minutes. Ask for `offline_access` where the provider needs it. A refresh must return an ID token. |
+| Refresh tokens | Required: Nexus re-verifies each user at the provider at least every 10 minutes. Ask for `offline_access` where the provider needs it. A refresh may leave the ID token out (OIDC Core §12.2). |
 | ID token | Signed with an asymmetric key (RS256, ES256, PS256 or EdDSA) published in the JWKS. `aud` holds the client ID; `azp`, when present, is the client ID. |
 | Email | `email` with `email_verified: true`. An unverified email is never stored as such (see [Emails](#emails)). |
 | Groups (optional) | A claim listing the user's groups, named by `groups_claim` |
@@ -31,7 +31,7 @@ authorization URL, redeem the code and refresh. It never holds the secret.
 
 ```yaml
 identity:
-  default_provider: acme            # where a login goes when no organization domain routes it
+  default_provider: acme            # offered as a button; where /login goes with no provider and no email
   providers:
     - name: acme                    # ^[a-z0-9-]{1,32}$, unique
       display_name: Acme SSO        # the login page's "Continue with ..." button
@@ -60,10 +60,14 @@ The login page asks for an email first:
    to that provider. Set it as an organization admin with
    `PUT /api/organizations/{org_id}/domains/{domain_id}/provider` and
    `{"provider": "acme"}` (or `null`).
-2. Otherwise the login goes to `default_provider`.
-3. Without either, the built-in Nexus login (password or emailed code) is used.
+2. Otherwise the built-in Nexus login (password or emailed code) is used. The
+   default provider never captures an email by itself: it would lock out every
+   account the provider does not hold, including the seeded admin (there is
+   always a break-glass login).
 
-The login page also offers a "Continue with ..." button for each provider.
+The login page also offers a "Continue with ..." button for each provider, the
+default one included. `/api/auth/oidc/login` with neither `provider` nor
+`email` goes to `default_provider`.
 
 ## Users, groups and accounts
 

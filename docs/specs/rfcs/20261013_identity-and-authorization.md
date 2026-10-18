@@ -1643,7 +1643,8 @@ identity:
   - `issuer` is `https`, or `http` on localhost only.
   - Discovery is read from `<issuer>/.well-known/openid-configuration`.
 - **Login routing.** `organization_domains` gains a `provider` column: an email domain routes to a provider.
-  With no match, `default_provider` is used.
+  With no match, the built-in login is used (as built: `default_provider` is a "Continue with ..." button
+  and the target of a bare `/login`, never an email's route).
 - **Organizations stay an ABI concept.** A provider is not per organization, and an org is not an IdP
   tenant.
 - **Nexus is an OIDC client.**

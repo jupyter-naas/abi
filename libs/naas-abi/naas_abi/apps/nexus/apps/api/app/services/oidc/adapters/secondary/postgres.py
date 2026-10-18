@@ -16,8 +16,10 @@ from naas_abi.apps.nexus.apps.api.app.services.oidc.port import (
     OidcSessionPersistencePort,
     OidcUser,
     SessionRecord,
+    UserConflictError,
 )
 from sqlalchemy import delete, func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -137,7 +139,16 @@ class OidcSessionSecondaryAdapterPostgres(OidcSessionPersistencePort):
             updated_at=now,
         )
         self.db.add(model)
-        await self.db.flush()
+        try:
+            await self.db.flush()
+        except IntegrityError as exc:
+            # A concurrent sign-in of this user (a double click, two tabs) won
+            # the insert: nothing else is pending in this session.
+            await self.db.rollback()
+            existing = await self.user_by_principal(principal_id)
+            if existing is None:
+                raise UserConflictError(email) from exc
+            return existing
         return _user(model)
 
     async def update_user(
@@ -184,9 +195,31 @@ class OidcSessionSecondaryAdapterPostgres(OidcSessionPersistencePort):
 
     async def get_session(self, session_id: str) -> SessionRecord | None:
         model = (
-            await self.db.execute(select(AuthSessionModel).where(AuthSessionModel.id == session_id))
+            await self.db.execute(
+                select(AuthSessionModel)
+                .where(AuthSessionModel.id == session_id)
+                # The row as it is now: this session's identity map may still
+                # hold an older read of it.
+                .execution_options(populate_existing=True)
+            )
         ).scalar_one_or_none()
         return _session(model) if model is not None else None
+
+    async def swap_refresh_at(
+        self, session_id: str, *, expected: datetime, value: datetime
+    ) -> bool:
+        swapped = await self.db.execute(
+            update(AuthSessionModel)
+            .where(
+                AuthSessionModel.id == session_id,
+                AuthSessionModel.refresh_at == expected,
+                AuthSessionModel.revoked_at.is_(None),
+            )
+            .values(refresh_at=value)
+            # The statement alone decides; no stale object is synchronized.
+            .execution_options(synchronize_session=False)
+        )
+        return swapped.rowcount == 1  # type: ignore[attr-defined]
 
     async def update_session(
         self,

@@ -18,12 +18,10 @@
 
 from __future__ import annotations
 
-import asyncio
 import base64
 import hashlib
 import hmac
 import secrets
-import weakref
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -36,8 +34,10 @@ from naas_abi.apps.nexus.apps.api.app.services.oidc.port import (
     OidcUser,
     PrincipalGateway,
     SessionRecord,
+    UserConflictError,
 )
 from naas_abi_core import logger
+from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
 from naas_abi_core.services.identity.IdentityPorts import (
     AuthenticatedUser,
     PrincipalSuspendedError,
@@ -54,6 +54,11 @@ LOGIN_REQUEST_SECONDS = 600
 # never delegated), so no invitation or lookup by email finds the account.
 PLACEHOLDER_EMAIL_DOMAIN = "unverified.internal"
 _LAST_SEEN_EVERY = timedelta(minutes=1)
+# A refresh is claimed by moving ``refresh_at`` this far ahead, in one
+# compare-and-set: of the requests (and workers) that find a session due, one
+# refreshes it, and the others carry on with the session as it stands. A claim
+# whose holder died lapses by itself.
+REFRESH_LEASE = timedelta(seconds=30)
 _CSRF_CONTEXT = b"nexus-csrf-v1"
 
 
@@ -129,18 +134,6 @@ class ActiveSession:
     refresh_at: datetime
 
 
-# One refresh at a time per session, in this process.
-_refresh_locks: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
-
-
-def _refresh_lock(session_id: str) -> asyncio.Lock:
-    lock = _refresh_locks.get(session_id)
-    if lock is None:
-        lock = asyncio.Lock()
-        _refresh_locks[session_id] = lock
-    return lock
-
-
 class OidcSignInService:
     def __init__(
         self,
@@ -168,15 +161,14 @@ class OidcSignInService:
     # =========================================================================
 
     async def route(self, email: str | None) -> str | None:
-        """The provider a login goes to: the email's verified organization
-        domain, else the default provider, else none."""
-        if email and "@" in email:
-            domain = email.rsplit("@", 1)[1].strip().lower()
-            routed = await self.adapter.provider_for_domain(domain) if domain else None
-            if routed:
-                return routed
-        _, default = await self.identity.providers()
-        return default
+        """The provider an email's login goes to: the one its verified
+        organization domain names, else none (the built-in login, with the
+        providers offered as buttons). The default provider is never an email's
+        route: it would lock out every account the provider does not hold."""
+        if not email or "@" not in email:
+            return None
+        domain = email.rsplit("@", 1)[1].strip().lower()
+        return await self.adapter.provider_for_domain(domain) if domain else None
 
     # =========================================================================
     # Sign-in
@@ -189,15 +181,19 @@ class OidcSignInService:
         email: str | None = None,
         next_path: str | None = None,
     ) -> LoginStart:
-        if provider is None:
-            provider = await self.route(email)
-        if provider is None:
-            raise OidcLoginError("no_provider", "No identity provider is configured")
-        state = secrets.token_urlsafe(32)
-        nonce = secrets.token_urlsafe(32)
-        verifier = secrets.token_urlsafe(64)
-        binding = secrets.token_urlsafe(32)
         try:
+            if provider is None:
+                if email:
+                    provider = await self.route(email)
+                else:
+                    # /login?provider= left out, no email: the default provider.
+                    _, provider = await self.identity.providers()
+            if provider is None:
+                raise OidcLoginError("no_provider", "No identity provider is configured")
+            state = secrets.token_urlsafe(32)
+            nonce = secrets.token_urlsafe(32)
+            verifier = secrets.token_urlsafe(64)
+            binding = secrets.token_urlsafe(32)
             url = await self.identity.authorization_url(
                 provider,
                 redirect_uri=self.redirect_uri,
@@ -206,10 +202,8 @@ class OidcSignInService:
                 code_challenge=code_challenge(verifier),
                 login_hint=email or None,
             )
-        except UnknownProviderError as exc:
-            raise OidcLoginError("unknown_provider", str(exc)) from exc
-        except ProviderUnavailableError as exc:
-            raise OidcLoginError("provider_unavailable", str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001 - mapped for the login page
+            raise _login_error(exc) from exc
         now = self._clock()
         await self.adapter.purge_login_requests(now)
         await self.adapter.save_login_request(
@@ -303,16 +297,23 @@ class OidcSignInService:
                 "email_in_use",
                 f"{verified_email} already belongs to another account",
             )
-        return await self.adapter.create_user(
-            user_id=signed_in.principal_id,
-            email=verified_email or f"{signed_in.principal_id}@{PLACEHOLDER_EMAIL_DOMAIN}",
-            name=name,
-            principal_id=signed_in.principal_id,
-            provider=token.provider,
-            issuer=token.issuer,
-            subject=token.subject,
-            now=now,
-        )
+        try:
+            return await self.adapter.create_user(
+                user_id=signed_in.principal_id,
+                email=verified_email or f"{signed_in.principal_id}@{PLACEHOLDER_EMAIL_DOMAIN}",
+                name=name,
+                principal_id=signed_in.principal_id,
+                provider=token.provider,
+                issuer=token.issuer,
+                subject=token.subject,
+                now=now,
+            )
+        except UserConflictError as exc:
+            # Another sign-in of the same user won the insert, or another
+            # account took the email meanwhile: never linked automatically.
+            raise OidcLoginError(
+                "email_in_use", f"{verified_email} already belongs to another account"
+            ) from exc
 
     # =========================================================================
     # Sessions
@@ -348,56 +349,89 @@ class OidcSignInService:
         )
 
     async def _refresh(self, record: SessionRecord) -> SessionRecord | None:
-        async with _refresh_lock(record.id):
-            current = await self.adapter.get_session(record.id)
-            now = self._clock()
-            if current is None or current.revoked_at is not None:
-                return None
-            if current.refresh_at > now:
-                return current  # refreshed meanwhile
-            refresh_token = (
-                self._decrypt(current.refresh_token_enc) if current.refresh_token_enc else None
+        """Refresh a due session at its provider, once across requests and workers.
+
+        The claim is a compare-and-set on ``refresh_at``: the request that moves
+        it refreshes; the others use the session as it stands (it was vouched
+        for within ten minutes) and never replay a refresh token a provider that
+        rotates them has already spent.
+        """
+        now = self._clock()
+        lease = now + REFRESH_LEASE
+        claimed = await self.adapter.swap_refresh_at(
+            record.id, expected=record.refresh_at, value=lease
+        )
+        await self.adapter.commit()
+        if not claimed:
+            return await self._refreshed_elsewhere(record.id)
+        refresh_token = (
+            self._decrypt(record.refresh_token_enc) if record.refresh_token_enc else None
+        )
+        if not refresh_token:
+            await self._end(record.id, now)
+            return None
+        try:
+            signed = await self.identity.refresh(
+                record.provider,
+                refresh_token=refresh_token,
+                principal_id=record.principal_id,
             )
-            if not refresh_token:
-                await self._end(current.id, now)
-                return None
-            try:
-                signed = await self.identity.refresh(
-                    current.provider,
-                    refresh_token=refresh_token,
-                    principal_id=current.principal_id,
-                )
-            except ProviderUnavailableError as exc:
-                # Not vouched for: this request is not authenticated, and the
-                # next one tries again.
-                logger.warning(f"Session refresh at {current.provider} failed: {exc}")
-                return None
-            except (SignInError, TokenRejectedError, PrincipalSuspendedError) as exc:
-                logger.info(f"Session ended: {current.provider} refused its refresh ({exc})")
-                await self._end(current.id, now)
-                return None
-            refresh_at = self._refresh_at(signed, now)
-            await self.adapter.update_session(
-                current.id,
-                group_ids=signed.user.group_ids,
-                refresh_token_enc=self._sealed(signed.tokens.refresh_token),
-                id_token_enc=self._sealed(signed.tokens.id_token),
-                refresh_at=refresh_at,
-                last_seen_at=now,
-            )
+        except ProviderUnavailableError as exc:
+            # Not vouched for: this request is not authenticated, and the next
+            # one tries again.
+            logger.warning(f"Session refresh at {record.provider} failed: {exc}")
+            await self.adapter.swap_refresh_at(record.id, expected=lease, value=record.refresh_at)
             await self.adapter.commit()
-            return SessionRecord(
-                id=current.id,
-                user_id=current.user_id,
-                principal_id=current.principal_id,
-                provider=current.provider,
-                group_ids=signed.user.group_ids,
-                refresh_token_enc=None,
-                id_token_enc=None,
-                refresh_at=refresh_at,
-                expires_at=current.expires_at,
-                last_seen_at=now,
-            )
+            return None
+        except (SignInError, TokenRejectedError, PrincipalSuspendedError) as exc:
+            # A refresh another worker completed (after a lapsed claim) spent
+            # the token: the session is alive.
+            latest = await self.adapter.get_session(record.id)
+            if (
+                latest is not None
+                and latest.revoked_at is None
+                and latest.refresh_token_enc != record.refresh_token_enc
+                and latest.refresh_at > now
+            ):
+                return latest
+            logger.info(f"Session ended: {record.provider} refused its refresh ({exc})")
+            await self._end(record.id, now)
+            return None
+        refresh_at = self._refresh_at(signed, now)
+        # A refresh that sends no ID token (OIDC Core §12.2) keeps the groups and
+        # the ID token the session already holds.
+        renewed = signed.tokens.id_token is not None
+        group_ids = signed.user.group_ids if renewed else record.group_ids
+        await self.adapter.update_session(
+            record.id,
+            group_ids=group_ids,
+            refresh_token_enc=self._sealed(signed.tokens.refresh_token),
+            id_token_enc=self._sealed(signed.tokens.id_token),
+            refresh_at=refresh_at,
+            last_seen_at=now,
+        )
+        await self.adapter.commit()
+        return SessionRecord(
+            id=record.id,
+            user_id=record.user_id,
+            principal_id=record.principal_id,
+            provider=record.provider,
+            group_ids=group_ids,
+            refresh_token_enc=None,
+            id_token_enc=None,
+            refresh_at=refresh_at,
+            expires_at=record.expires_at,
+            last_seen_at=now,
+        )
+
+    async def _refreshed_elsewhere(self, session_id: str) -> SessionRecord | None:
+        """The session after another request claimed its refresh: usable while
+        that refresh (or its lease) runs."""
+        latest = await self.adapter.get_session(session_id)
+        now = self._clock()
+        if latest is None or latest.revoked_at is not None or latest.expires_at <= now:
+            return None
+        return latest if latest.refresh_at > now else None
 
     async def logout(
         self, secret: str | None, *, post_logout_redirect_uri: str | None
@@ -455,5 +489,8 @@ def _login_error(exc: Exception) -> OidcLoginError:
         return OidcLoginError("provider_unavailable", "The identity provider cannot be reached")
     if isinstance(exc, UnknownProviderError):
         return OidcLoginError("unknown_provider", str(exc))
+    if isinstance(exc, PermissionDeniedError):
+        logger.warning(f"IAM refused Nexus a sign-in: {exc}")
+        return OidcLoginError("sign_in_failed", "Sign-in is not permitted for this provider")
     logger.opt(exception=exc).error("OIDC sign-in failed")
     return OidcLoginError("sign_in_failed", "The sign-in failed")

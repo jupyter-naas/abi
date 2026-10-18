@@ -33,8 +33,8 @@ open:
    - It verifies ID tokens against each issuer's discovery document and JWKS: exact `iss`; an asymmetric
      algorithm the key allows; `aud` holding the client ID, and `azp` equal to it when present or when
      there are several audiences; `exp`, `nbf` and `iat` with 30 s of skew; the nonce.
-   - The JWKS is cached for its `max-age` (5 minutes by default). An unknown `kid` refetches it, at most
-     every 30 s.
+   - The JWKS is cached for its `max-age` (5 minutes by default; `no-store` and `max-age=0` mean no
+     caching). An unknown `kid` refetches it, at most every 30 s.
    - It resolves `(issuer, sub)` to the IAM user, maps the groups claim and refuses suspended principals.
    - It is exposed over NATS as `abi.identity.v1.*` and to SDK modules as `engine.services.identity`.
    - Every operation is authorized with its own catalog (`identity:*` on
@@ -69,6 +69,10 @@ open:
      cannot be reached authenticates nothing until it answers.
    - Each request also checks that the IAM principal is active (cached 5 s), so a suspension ends the
      session within 5 s; kernel calls for the user are denied at once.
+   - A refresh is claimed with a compare-and-set on `refresh_at` (a 30 s lease): of the requests and
+     workers that find a session due, one refreshes at the provider, and the others carry on with the
+     session. Providers that rotate refresh tokens never see one replayed, and a claim whose holder died
+     lapses by itself.
    - The request runs as `api` on behalf of the principal, with its mapped group ids.
 6. **CSRF**: every cookie-authenticated request that changes state carries `X-CSRF-Token`.
    - The token is an HMAC of the session secret: never stored, derived again on every request.
@@ -78,7 +82,9 @@ open:
    principal. The user side of a Nexus call then allows what it allows a built-in login user, until
    subtask 11 attaches the roles of each membership and detaches it.
 8. **Routing.** `organization_domains.provider` sends the logins of a verified domain to a provider.
-   Otherwise `identity.default_provider` is used, and without one the built-in login.
+   Otherwise the built-in login is used, with a "Continue with ..." button per provider. The default
+   provider never captures an email: it would shut out every account the provider does not hold. It is
+   where `/login` goes with neither `provider` nor `email`.
 
 ## Consequences
 

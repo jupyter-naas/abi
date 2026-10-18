@@ -49,6 +49,11 @@ class OidcUser:
     idp_subject: str | None
 
 
+class UserConflictError(Exception):
+    """A user could not be created: its email or identity is already held by
+    another row, and the row of this principal does not exist."""
+
+
 class OidcSessionPersistencePort(ABC):
     """Nexus's tables for sign-in: login requests, sessions and users."""
 
@@ -82,7 +87,10 @@ class OidcSessionPersistencePort(ABC):
         subject: str,
         now: datetime,
     ) -> OidcUser:
-        """A user signed in through a provider: no password, no workspace."""
+        """A user signed in through a provider: no password, no workspace.
+
+        When a concurrent sign-in of the same principal inserted the row first,
+        that row; ``UserConflictError`` when the email is held by another."""
 
     @abstractmethod
     async def update_user(
@@ -98,7 +106,15 @@ class OidcSessionPersistencePort(ABC):
     async def create_session(self, session: SessionRecord, *, user_agent: str | None) -> None: ...
 
     @abstractmethod
-    async def get_session(self, session_id: str) -> SessionRecord | None: ...
+    async def get_session(self, session_id: str) -> SessionRecord | None:
+        """The session as stored now, never a copy an earlier read left behind."""
+
+    @abstractmethod
+    async def swap_refresh_at(
+        self, session_id: str, *, expected: datetime, value: datetime
+    ) -> bool:
+        """Set ``refresh_at`` to ``value`` when it is still ``expected`` and the
+        session is not revoked, atomically; whether this call did."""
 
     @abstractmethod
     async def update_session(
