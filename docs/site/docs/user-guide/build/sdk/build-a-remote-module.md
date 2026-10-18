@@ -13,6 +13,14 @@ and it deploys, restarts and scales on its own. How it works underneath is in
 This guide builds one in a project made by `abi new project`, runs it with
 `abi dev up`, and deploys it with Docker Compose.
 
+A remote module offers agents, apps and jobs. If you need pipelines,
+workflows, integrations or ontologies, which use `naas_abi_core` directly,
+create an in-engine module instead (`abi new module <name> --in-engine`); the
+two are compared in [Creating a Module](/user-guide/build/modules/creating-a-module#remote-or-in-engine).
+Inside a remote module, `abi new workflow`, `abi new pipeline`,
+`abi new integration` and `abi new orchestration` refuse to run and say what to
+do instead.
+
 ## Before you start
 
 - A NATS project: `abi new project <name>` creates one (see the
@@ -187,7 +195,8 @@ async def morning_digest(self, ctx: JobContext) -> dict:
   `{"payload": {...}}` as a super admin.
 
 Triggers, retries, idempotency and retention are described in
-[Module jobs](/developer-guide/architecture/remote-modules#module-jobs).
+[Module jobs and scheduling](/user-guide/build/modules/module-jobs) and, in
+depth, in [Remote Modules and Jobs](/developer-guide/architecture/remote-modules#module-jobs).
 
 ## 5. Add an app
 

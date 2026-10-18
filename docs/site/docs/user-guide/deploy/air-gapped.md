@@ -1,498 +1,213 @@
 ---
-sidebar_position: 3
+sidebar_position: 8
 ---
 
 # Air-Gapped Deployment
 
-Deploy Naas in completely isolated networks without internet connectivity while maintaining full AI and analytics capabilities. This guide covers offline installation, local model hosting, and secure data processing patterns.
+Run ABI on a network with no internet access, with local models and no call to an external service. This page lists what a default project reaches out for, and how to bring it all in beforehand.
 
 :::info Professional Services Implementation
-The enterprise capabilities described in this section represent our ability to implement these solutions through our professional services team. Each deployment is customized to your specific requirements and implemented with dedicated support. Contact our enterprise team at [support@naas.ai](mailto:support@naas.ai) to discuss your needs and implementation timeline.
+Air-gapped installations are customized to each environment and implemented with dedicated support. Contact our enterprise team at [support@naas.ai](mailto:support@naas.ai) to discuss your needs and implementation timeline.
 :::
 
-## Overview
+ABI has no component that must call home. The engine, the Nexus web app, the knowledge graph and the NATS broker all run on your hosts. What needs the internet in a default project is the *installation* (images, Python packages) and the *model provider* (OpenRouter). Both are replaced by what you carry in.
 
-Air-gapped deployment enables organizations with the highest security requirements to leverage Naas's AI capabilities while ensuring no data exfiltration or external dependencies. This includes government agencies, defense contractors, financial institutions, and any organization handling classified or highly sensitive information.
+## What reaches the network by default
 
-## Pre-Deployment Planning
+| What | When | Offline replacement |
+|---|---|---|
+| Model calls to OpenRouter | At every chat | Local models with Ollama (below). |
+| Docker images | `docker compose up`, build | Load them from archives; do not pull. Most services of the generated file carry `pull_policy: always`. |
+| The `abi` image build | `docker compose build` | Build it on a connected machine. Its `Dockerfile` runs `apt-get`, `pip install uv`, and downloads the AWS CLI and the OpenCode CLI. |
+| Python packages | First start of the `abi` container | A package mirror, or a virtual environment you populated beforehand (below). |
+| ABI framework source | `abi new project` clones `jupyter-naas/abi` into `.abi/`; a NATS project resolves `naas-abi-proto` and `naas-abi-sdk` from it | `--abi-source` with a local checkout. |
+| Document models | First use of the document pipeline (Docling), cached in the `huggingface_cache` volume | Populate the volume beforehand. |
+| Let's Encrypt | Caddy, for a public domain | Your own certificates (below). |
+| `docker build` of the snapshot helper | First `abi stack snapshot create` | Build or load the image `abi-snapshot-helper:zstd1` beforehand (below). |
 
-### Network Architecture
-- **Complete isolation**: No inbound or outbound internet connectivity
-- **Internal DNS**: Local DNS resolution for service discovery
-- **Certificate management**: Internal CA for TLS certificates
-- **Time synchronization**: Local NTP servers for accurate timestamps
+## Plan the environment
 
-### Infrastructure Requirements
-- **Container runtime**: Docker or Podman for containerized deployment
-- **Orchestration**: Kubernetes cluster for production deployments
-- **Storage**: High-availability storage for persistent data
-- **Compute**: GPU nodes for local AI model inference
+- **No internet at all, in or out.** Nothing in ABI needs it once the pieces above are in place.
+- **Internal DNS** for the hosts you publish (`PUBLIC_WEB_HOST`, `PUBLIC_API_HOST`; the project's `--domain`).
+- **Certificates** from an internal CA, for those hosts.
+- **Time synchronization** between every host that runs an ABI process. Calls on the NATS broker carry short-lived signed tokens, so hosts whose clocks drift apart can have their calls refused. Use a local NTP server.
+- **Container runtime**: Docker with Compose v2. ABI ships a Compose stack; it does not ship Kubernetes manifests. If you run on Kubernetes, translate the stack's services yourself; [Production and remote deployments](/user-guide/deploy/production) lists what to run and what to size.
+- **Compute** for the models. A GPU is optional: the default local pair (`qwen2.5:3b` and `nomic-embed-text`) is small.
 
-## Offline Installation Process
+## Local models
 
-### 1. Dependency Preparation
+`global_config.ai_mode` takes `cloud`, `local` or `airgap`. It is a value that modules read, not a switch that blocks the network: what keeps your data on the machine is which model modules are enabled, and which models the registry defaults point at.
 
-Create an offline installation package containing all required components:
+1. **Install [Ollama](https://ollama.com) on a connected machine** and pull the models you need:
 
-```bash
-# Create offline package directory
-mkdir naas-offline-package
-cd naas-offline-package
+   ```bash
+   ollama pull qwen2.5:3b
+   ollama pull nomic-embed-text
+   ```
 
-# Download container images
-docker pull jupyter/naas:latest
-docker pull postgres:13
-docker pull redis:6
-docker pull nginx:1.21
+   The default local pair is the one `make ollama-models` pulls. `naas_abi_marketplace.ai.gemma` (`gemma3:4b`), `ai.qwen` (`qwen3:8b`) and `ai.deepseek` (DeepSeek R1 8B) are Ollama models too: pull the ones you enable.
 
-# Save images as tar files
-docker save jupyter/naas:latest > naas-core.tar
-docker save postgres:13 > postgres.tar
-docker save redis:6 > redis.tar
-docker save nginx:1.21 > nginx.tar
+2. **Move the models.** Copy Ollama's model directory (set by `OLLAMA_MODELS`; check with the Ollama docs for your platform) to the isolated host, next to the same Ollama version. Models are large: plan the transfer media.
 
-# Download Python packages
-pip download --dest ./python-packages naas naas-python
-pip download --dest ./python-packages -r requirements.txt
+3. **Install the extra and enable the module**, in the project's config (see [AI mode](/user-guide/get-started/quickstart#ai-mode-cloud-vs-local)):
 
-# Package AI models
-mkdir ai-models
-# Download and package your selected models
-```
+   ```bash
+   uv add "naas-abi-marketplace[ai-ollama]"
+   ```
 
-### 2. Secure Transfer
+   ```yaml
+   global_config:
+     ai_mode: "airgap"        # or "local"
 
-Transfer the offline package to the air-gapped environment:
+   modules:
+     - module: naas_abi_marketplace.ai.ollama
+       enabled: true
+       config:
+         base_url: "http://host.docker.internal:11434"   # where the engine reaches Ollama
 
-```bash
-# Create checksums for integrity verification
-sha256sum *.tar python-packages/* > checksums.txt
+   services:
+     model_registry:
+       default_chat_model: "qwen-2.5-3b"
+       default_embedding_model: "nomic-embed-text"
+   ```
 
-# Create encrypted archive
-tar czf naas-offline.tar.gz *
-gpg --symmetric --cipher-algo AES256 naas-offline.tar.gz
+4. **Turn off every cloud provider module**: in a generated project, set `enabled: false` (or remove) `naas_abi_marketplace.ai.openrouter`, and any other provider you enabled. The registry defaults are checked after the modules load, so the engine stops at start if a default names a model nothing serves.
 
-# Transfer via approved secure media
-# Verify checksums after transfer
-```
+The module's `base_url` can also come from `ABI_OLLAMA_BASE_URL` or `OLLAMA_HOST`, and `probe_on_load: false` skips the check at start. In the Docker stack the engine reaches Ollama on the host as `host.docker.internal`; on Linux, Ollama listens on `127.0.0.1` unless you change `OLLAMA_HOST` (see the comments in the generated `docker-compose.yml` for the trade-off). You can also point `base_url` at a dedicated Ollama server on your network.
 
-### 3. Environment Setup
+## Prepare the offline bundle
 
-Install Naas in the air-gapped environment:
+On a connected machine.
 
-```bash
-# Load container images
-docker load < naas-core.tar
-docker load < postgres.tar
-docker load < redis.tar
-docker load < nginx.tar
+### 1. The project and the framework
 
-# Set up local package repository
-python -m http.server --directory python-packages 8080
-
-# Install Naas with local packages
-pip install --index-url http://localhost:8080 --trusted-host localhost naas
-```
-
-## Local AI Model Configuration
-
-### Model Selection
-
-Choose appropriate models for offline deployment:
-
-#### Open-Source Models
-- **Llama 2/3**: Meta's open-source models for general-purpose tasks
-- **Code Llama**: Specialized for code generation and analysis
-- **Mistral**: Efficient models for various text tasks
-- **Sentence Transformers**: For embedding generation and semantic search
-
-#### Model Hosting Infrastructure
-
-Set up local model serving:
-
-```yaml
-# docker-compose.yml for model serving
-version: '3.8'
-services:
- ollama-service:
- image: ollama/ollama:latest
- volumes:
- - ./models:/root/.ollama
- ports:
- - "11434:11434"
- environment:
- - OLLAMA_HOST=0.0.0.0
- deploy:
- resources:
- reservations:
- devices:
- - driver: nvidia
- count: 1
- capabilities: [gpu]
-```
-
-### Model Configuration
-
-Configure Naas to use local models:
-
-```python
-# .env configuration for air-gapped deployment
-OPENAI_API_BASE=http://localhost:11434/v1
-OPENAI_API_KEY=not-required-for-local
-MODEL_PROVIDER=ollama
-
-# Agent configuration for local models
-from abi.services.agent.Agent import Agent
-
-agent = Agent(
- name="Local Agent",
- chat_model=ChatOpenAI(
- base_url="http://localhost:11434/v1",
- api_key="not-required",
- model="llama2:7b"
- )
-)
-```
-
-## Data Security and Isolation
-
-### Storage Encryption
-
-Implement comprehensive encryption for data at rest:
-
-```yaml
-# Storage configuration with encryption
-apiVersion: v1
-kind: StorageClass
-metadata:
- name: encrypted-storage
-provisioner: kubernetes.io/aws-ebs
-parameters:
- type: gp3
- encrypted: "true"
- kmsKeyId: alias/k8s-storage-key
-```
-
-### Network Policies
-
-Implement strict network segmentation:
-
-```yaml
-# Kubernetes NetworkPolicy for service isolation
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
- name: naas-isolation
-spec:
- podSelector:
- matchLabels:
- app: naas
- policyTypes:
- - Ingress
- - Egress
- ingress:
- - from:
- - podSelector:
- matchLabels:
- app: naas-frontend
- ports:
- - protocol: TCP
- port: 8000
- egress:
- - to:
- - podSelector:
- matchLabels:
- app: postgres
- ports:
- - protocol: TCP
- port: 5432
-```
-
-## Monitoring and Observability
-
-### Offline Monitoring Stack
-
-Deploy monitoring without external dependencies:
-
-```yaml
-# Prometheus configuration for air-gapped monitoring
-global:
- scrape_interval: 15s
- external_labels:
- environment: 'airgap'
-
-scrape_configs:
- - job_name: 'naas-services'
- static_configs:
- - targets: ['naas-api:8000', 'naas-worker:8001']
- metrics_path: /metrics
- scrape_interval: 30s
-
- - job_name: 'kubernetes-pods'
- kubernetes_sd_configs:
- - role: pod
- relabel_configs:
- - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
- action: keep
- regex: true
-```
-
-### Log Management
-
-Centralized logging for audit and troubleshooting:
-
-```yaml
-# Fluentd configuration for log collection
-apiVersion: v1
-kind: ConfigMap
-metadata:
- name: fluentd-config
-data:
- fluent.conf: |
- <source>
- @type tail
- path /var/log/containers/naas-*.log
- pos_file /var/log/fluentd-naas.log.pos
- tag kubernetes.naas
- format json
- </source>
-
- <match kubernetes.naas>
- @type elasticsearch
- host elasticsearch.logging.svc.cluster.local
- port 9200
- index_name naas-logs
- </match>
-```
-
-## Update and Maintenance Procedures
-
-### Offline Updates
-
-Establish procedures for updating the air-gapped installation:
-
-1. **Preparation Phase**
- - Download updates in connected environment
- - Test updates in isolated staging environment
- - Create update packages with integrity verification
-
-2. **Transfer Phase**
- - Use approved secure media for transfer
- - Verify checksums and signatures
- - Document all transferred components
-
-3. **Deployment Phase**
- - Schedule maintenance window
- - Create system backup before updates
- - Apply updates using rolling deployment
- - Verify functionality post-update
-
-### Backup Strategies
-
-Implement comprehensive backup for disaster recovery:
+Create or update the project, with the framework in `.abi/`:
 
 ```bash
-#!/bin/bash
-# Air-gapped backup script
-
-BACKUP_DATE=$(date +%Y%m%d-%H%M%S)
-BACKUP_DIR="/secure-backup/naas-$BACKUP_DATE"
-
-# Create backup directory
-mkdir -p "$BACKUP_DIR"
-
-# Database backup
-kubectl exec postgres-0 -- pg_dump -U naas naas_db > "$BACKUP_DIR/database.sql"
-
-# Configuration backup
-kubectl get configmap naas-config -o yaml > "$BACKUP_DIR/config.yaml"
-kubectl get secret naas-secrets -o yaml > "$BACKUP_DIR/secrets.yaml"
-
-# Persistent volume backup
-kubectl exec naas-worker-0 -- tar czf - /data > "$BACKUP_DIR/persistent-data.tar.gz"
-
-# Encrypt backup
-gpg --symmetric --cipher-algo AES256 --compress-algo 2 "$BACKUP_DIR.tar.gz"
-
-# Store on secure media
-mv "$BACKUP_DIR.tar.gz.gpg" /secure-media/
+abi new project my_project
 ```
 
-## Security Hardening
+For an isolated environment, bring a checkout of the ABI repository for the version you run, and create the project from it with `abi new project my_project --abi-source /path/to/abi`. Then archive the whole project folder, `.abi/` included, with `git bundle` or `tar`.
 
-### Container Security
-
-Implement container security best practices:
-
-```dockerfile
-# Hardened Naas container
-FROM python:3.9-slim
-
-# Create non-root user
-RUN useradd --create-home --shell /bin/bash naas
-
-# Install security updates only
-RUN apt-get update && apt-get upgrade -y && \
- apt-get install --no-install-recommends -y \
- ca-certificates && \
- rm -rf /var/lib/apt/lists/*
-
-# Set up application
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Switch to non-root user
-USER naas
-COPY --chown=naas:naas . .
-
-# Security labels
-LABEL security.no-new-privileges=true
-LABEL security.read-only-root-filesystem=true
-
-EXPOSE 8000
-CMD ["python", "app.py"]
-```
-
-### Access Controls
-
-Implement strict access controls:
-
-```yaml
-# RBAC configuration for Naas
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
- name: naas-operator
-rules:
-- apiGroups: [""]
- resources: ["pods", "configmaps", "secrets"]
- verbs: ["get", "list", "watch", "create", "update", "patch"]
-- apiGroups: ["apps"]
- resources: ["deployments", "replicasets"]
- verbs: ["get", "list", "watch", "create", "update", "patch"]
-
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
- name: naas-operator-binding
-subjects:
-- kind: ServiceAccount
- name: naas-operator
- namespace: naas
-roleRef:
- kind: Role
- name: naas-operator
- apiGroup: rbac.authorization.k8s.io
-```
-
-## Compliance and Auditing
-
-### Audit Logging
-
-Enable comprehensive audit logging:
-
-```yaml
-# Kubernetes audit policy
-apiVersion: audit.k8s.io/v1
-kind: Policy
-rules:
-- level: Metadata
- namespaces: ["naas"]
- resources:
- - group: ""
- resources: ["secrets", "configmaps"]
- - group: "apps"
- resources: ["deployments"]
-
-- level: Request
- namespaces: ["naas"]
- verbs: ["create", "update", "patch", "delete"]
-```
-
-### Compliance Reporting
-
-Generate compliance reports for audit purposes:
-
-```python
-# Compliance reporting script
-import json
-from datetime import datetime, timedelta
-
-def generate_compliance_report(start_date, end_date):
- report = {
- "report_id": f"naas-compliance-{datetime.now().strftime('%Y%m%d')}",
- "period": {
- "start": start_date.isoformat(),
- "end": end_date.isoformat()
- },
- "security_events": [],
- "access_logs": [],
- "data_processing": [],
- "model_usage": []
- }
-
- # Collect security events
- security_events = query_security_logs(start_date, end_date)
- report["security_events"] = security_events
-
- # Collect access logs
- access_logs = query_access_logs(start_date, end_date)
- report["access_logs"] = access_logs
-
- return report
-```
-
-## Troubleshooting Common Issues
-
-### Model Loading Problems
-
-If local models fail to load:
+### 2. The images
 
 ```bash
-# Check model availability
-ollama list
-
-# Verify model file integrity
-sha256sum /models/llama2-7b.bin
-
-# Check model server logs
-docker logs ollama-service
-
-# Test model endpoint
-curl http://localhost:11434/api/generate \
- -d '{"model": "llama2:7b", "prompt": "test"}'
+cd my_project
+docker compose build                              # the abi and mcp-server images
+docker compose pull                               # every other image
+docker compose config --images                    # the list, as Compose resolves it
+docker compose config --images | sort -u | xargs docker save -o abi-images.tar
+docker save -o abi-helpers.tar alpine:3.20 abi-snapshot-helper:zstd1   # optional, see Backups
 ```
 
-### Network Connectivity Issues
+Run `docker compose config --images` with the same profiles you will run. The list includes the Nexus web image (`NEXUS_WEB_IMAGE`, `NEXUS_WEB_TAG` in `.env`), NATS, PostgreSQL, Fuseki, Qdrant, Redis, MinIO and Caddy. If a remote module has its own service, build its image too.
 
-Debug internal network problems:
+### 3. The Python environment
+
+The `abi` container runs `uv run --no-dev python -m naas_abi_core.apps.api.api`, which creates the project's virtual environment in the `venv_cache` volume at its first start from `pyproject.toml` and `uv.lock`. Two ways to make that offline:
+
+- **A mirror.** Run an internal package index (a PyPI mirror, or a folder served as a find-links index) and point `uv` at it: set `UV_DEFAULT_INDEX` in the `abi` service's `environment:` in `docker-compose.override.yml`. Fill the mirror from the `uv.lock` of your project.
+- **A populated volume.** Start the stack once on the connected machine, so `venv_cache` holds the environment, and carry the volume (and `huggingface_cache`) to the isolated host with your usual Docker volume tooling.
+
+### 4. Checksums and transfer
 
 ```bash
-# Test internal DNS resolution
-nslookup naas-api.naas.svc.cluster.local
-
-# Check service connectivity
-kubectl exec -it naas-worker-0 -- nc -zv naas-api 8000
-
-# Verify network policies
-kubectl describe networkpolicy naas-isolation
+sha256sum abi-images.tar abi-helpers.tar my_project.tar > checksums.txt
+tar czf abi-offline.tar.gz abi-images.tar abi-helpers.tar my_project.tar checksums.txt ollama-models/
+gpg --symmetric --cipher-algo AES256 abi-offline.tar.gz
 ```
 
-### Storage and Performance
-
-Monitor and optimize storage performance:
+Move the archive on your approved media, then verify the checksums on the other side:
 
 ```bash
-# Check disk usage
-df -h /data
-
-# Monitor I/O performance
-iostat -x 1
-
-# Check database performance
-kubectl exec postgres-0 -- psql -U naas -c "SELECT * FROM pg_stat_activity;"
+gpg --decrypt abi-offline.tar.gz.gpg | tar xz
+sha256sum -c checksums.txt
 ```
 
-This air-gapped deployment approach ensures that organizations can leverage Naas's full AI capabilities while maintaining the highest levels of security and data isolation.
+## Install on the isolated network
+
+```bash
+docker load -i abi-images.tar
+docker load -i abi-helpers.tar
+tar xf my_project.tar && cd my_project
+```
+
+Then:
+
+1. **Stop Compose from pulling.** Most services of the generated `docker-compose.yml` have `pull_policy: always`, which fails with no registry. Set `never` for each one in `docker-compose.override.yml` (the CLI never rewrites that file; `docker compose config --services` lists the names):
+
+   ```yaml
+   services:
+     nexus-web:
+       pull_policy: never
+     nats:
+       pull_policy: never
+     # ... one entry per service of the stack
+   ```
+
+2. **Point the `abi` service at your package index**, if you use a mirror (see above).
+3. **Set the model configuration** as described above.
+4. **Certificates.** The generated `.deploy/docker/Caddyfile` serves `PUBLIC_WEB_HOST` and `PUBLIC_API_HOST`. For a public-looking domain Caddy tries to obtain a certificate from Let's Encrypt, which fails offline: give Caddy your own certificate and key with a `tls <cert> <key>` line in each site block (mount the files into the `caddy` service), or use Caddy's internal CA and distribute its root to your clients. Edits to files under `.deploy/` are overwritten by `abi deploy local --regenerate`; make them again, or keep a patched copy.
+5. **Start**:
+
+   ```bash
+   abi stack start
+   ```
+
+   `abi stack start` generates the broker's passwords and signing secret into `.env` on first run. See [Deploy with Docker](/user-guide/deploy/local-docker).
+
+6. **Check it**: `abi stack status`, then Nexus at your `PUBLIC_WEB_HOST`, then a chat against the local model. The broker's monitoring endpoint answers `http://127.0.0.1:8222/healthz`.
+
+Without Docker, `abi dev up` runs the engine natively (with `nats-server` 2.14 or later on `PATH` and a Python environment you prepared with `uv sync`); it is for development, not for an operated installation.
+
+## Network and data isolation
+
+- **The broker stays private.** The generated stack publishes NATS (4222) and its monitoring port (8222) on `127.0.0.1` only. Remote modules on other hosts need a private route to the broker, and the broker does not encrypt traffic: see [Security model](/developer-guide/architecture/security).
+- **Expose Caddy only**, on ports 80 and 443, and keep PostgreSQL, Fuseki, Qdrant, Redis and MinIO on the internal Docker network, behind your firewall. The generated file publishes some of them on host ports for development: remove or restrict those ports on a server.
+- **Encrypt data at rest at the volume or disk level** (LUKS, or your storage platform): ABI does not encrypt the stores itself. Object storage can be S3 with server-side encryption if you replace MinIO.
+- **Keep the NATS passwords, `NATS_JWT_SECRET` and `ABI_API_KEY` out of images and repositories.** See [Add secrets to production](/user-guide/deploy/add_secrets_to_production).
+
+## Monitoring
+
+Everything ABI needs to be observed is inside the deployment:
+
+- the Nexus **System** app (super admins): services, modules, jobs, agents, the broker, live traffic and traces ([Observability](/developer-guide/architecture/observability));
+- `docker compose logs -f abi`, and the logs of each service;
+- OpenTelemetry traces to a Jaeger you run on the isolated network, with the `telemetry:` block described in [Observability](/developer-guide/architecture/observability#with-docker-compose). Its image is one more image to bring in;
+- the broker's `/healthz`, `/connz` and `/jsz`.
+
+Ship the container logs to the log platform you already run in the isolated network.
+
+## Updates
+
+1. On the connected side, update the project (`git submodule update --remote .abi` for the framework, `uv lock` for packages), rebuild the `abi` image, and produce a new bundle with new checksums.
+2. Carry it across, verify the checksums and load the images.
+3. Read the [release notes](/user-guide/release-notes) and, for a major version, the [upgrade guide](/user-guide/upgrade/migrate-to-3).
+4. Take a snapshot (below), then redeploy. To avoid downtime on shared backends, set `ABI_ROLLOUT_ID` per deploy: see [one serving engine](/developer-guide/architecture/nats#one-serving-engine).
+
+## Backups
+
+`abi stack snapshot` archives the stack's data while it is briefly stopped: the PostgreSQL, MinIO, Fuseki, Qdrant, Redis and NATS volumes, and the project's `storage/` folder.
+
+```bash
+abi stack snapshot create --note "before update"
+abi stack snapshot list
+abi stack snapshot export <id> /secure-media/snapshot.tar
+abi stack snapshot restore <id>
+```
+
+Snapshots live in `.snapshots/` of the project. `export` makes one archive you can move to another host, and `import` reads it there. Archives are compressed inside a helper container: `abi-snapshot-helper:zstd1`, built from `alpine:3.20` with `apk add zstd` the first time. Build or load it before you go offline, as in the bundle above, or the first snapshot fails.
+
+Snapshots are cold copies. A restore is destructive, and it takes a safety snapshot of the current state first. For the knowledge graph alone, the project also has `.deploy/docker/fuseki/backup.sh`, which dumps the Fuseki dataset (and can compact it) through Fuseki's admin API. Encrypt the archives before they leave the host (`gpg --symmetric`), and test a restore on a spare host.
+
+## Troubleshooting
+
+**The `abi` container hangs or exits at first start.** It is resolving Python packages with no reachable index. Check its logs; configure the mirror or the populated volume.
+
+**`pull access denied` or `connection refused` on `up`.** A service still has `pull_policy: always`, or an image is missing: `docker image ls`, then `docker load` it.
+
+**No model responds.** Check Ollama on its host (`ollama list`, `curl http://<host>:11434/api/tags`), the module's `base_url`, and that the registry defaults name models that module serves.
+
+**Nexus loads but chat fails with the broker down.** Kernel calls need the broker; see [NATS and the kernel services](/developer-guide/architecture/nats). `docker compose logs nats`, and `curl http://127.0.0.1:8222/healthz`.
+
+**Calls fail between hosts with token errors.** Check that the clocks agree.

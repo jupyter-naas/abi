@@ -54,7 +54,7 @@ Every module declares a `ModuleConfiguration` (merged with global config) and `M
 
 ABI follows a five-layer architecture. The **Interface** layer holds the entry points: the Nexus web app (with its System app for operators), the `abi` CLI, MCP clients, and the SPARQL workbench. The **Application** layer sits below it: the Core API and the Nexus API (one process), the MCP server, and the remote modules, which translate incoming calls into a common internal format and reach the Context Engine.
 
-The **Intelligence** layer is where work happens. The Context Engine wires together services at startup, loads ontologies, and routes requests to the right agent based on intent. The AbiAgent acts as a supervisor: it reads the intent behind each request and dispatches to the right domain agent or marketplace agent. All LLM calls flow through OpenRouter (cloud providers) or Ollama (local, air-gapped), and the model can be swapped per request without rebuilding anything.
+The **Intelligence** layer is where work happens. The Context Engine wires together services at startup, loads ontologies, and routes requests to the right agent based on intent. The AbiAgent acts as a supervisor: it reads the intent behind each request and dispatches to the right domain agent or marketplace agent. All LLM calls go through the model registry, which serves the models of the enabled provider modules: OpenRouter by default, any other cloud provider module, or Ollama for local and air-gapped deployments. The model can be swapped per agent or per request without rebuilding anything.
 
 The **Services** layer provides the kernel service ports, each with pluggable adapters you can swap via `config.yaml`: a triple store for RDF/OWL knowledge graphs, a vector store for embeddings, object storage for files, datasets, documents, events, a key-value store and cache, secrets, and a message bus for async work. In a NATS deployment the engine serves each of them on the [NATS broker](./nats), so modules in other processes call them the same way. The **Infrastructure** layer backs each port with a concrete Docker service. In local dev most fall back to lightweight file-based alternatives.
 
@@ -86,7 +86,7 @@ The **Services** layer provides the kernel service ports, each with pluggable ad
 
 ## Packages
 
-The codebase is split into four Python packages. `naas-abi-core` is the foundation: the Context Engine, all service port interfaces, and their adapters. It has no agents and no business logic, making it publishable as a standalone library.
+The codebase is split into Python packages. `naas-abi-core` is the foundation: the Context Engine, all service port interfaces, and their adapters. It has no agents and no business logic, making it publishable as a standalone library.
 
 `naas-abi` builds on top of it, adding the built-in agents, the Nexus full-stack web app, the Core REST API, and the base ontologies. `naas-abi-marketplace` holds community-contributed modules and agents, all disabled by default and enabled selectively via `config.yaml`. `naas-abi-cli` is the `abi` command-line tool that orchestrates the whole stack. `naas-abi-sdk` and `naas-abi-proto` depend on neither of them: a remote module installs only those two, `protobuf` and `nats-py`, and reaches the engine over NATS.
 
@@ -201,7 +201,7 @@ When a user or system sends a request, an agent receives it. The agent selects t
 | PostgreSQL         | 5432         | Nexus app data, documents (agent memory, job runs), dataset catalog |
 | Redis              | 6379         | Key-value store + cache                       |
 | MinIO              | 9000 / 9001  | Object storage + console                      |
-| MCP Server         | 8000         | Model Context Protocol                        |
+| MCP Server         | 8000         | Model Context Protocol (127.0.0.1 only)       |
 | Caddy              | 80 / 443     | Reverse proxy · TLS termination               |
 | Remote modules     | none         | One service each, in `docker-compose.override.yml` |
 

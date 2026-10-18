@@ -1,6 +1,8 @@
 # Creating a Pipeline
 
-Pipelines transform raw data from integrations into OWL/RDF triples and store them in the knowledge graph. They are the semantic ingestion layer.
+Pipelines transform raw data from integrations into OWL/RDF triples for the knowledge graph. They are the semantic ingestion layer: a pipeline's `run()` returns an `rdflib.Graph`.
+
+Pipelines are `naas_abi_core` code, so they belong in an [in-engine module](/user-guide/build/modules/creating-a-module#remote-or-in-engine). `abi new pipeline` refuses to run inside a remote module; there, put the logic in a plain async function, write through `self.engine.services.triple_store`, and run it from a `@job`.
 
 ---
 
@@ -13,115 +15,124 @@ Integration (raw API data)  →  Pipeline (transforms to RDF)  →  Triple Store
 A pipeline:
 - Calls an integration to fetch raw data.
 - Maps that data to ontology classes and properties.
-- Writes RDF triples to the triple store.
+- Builds an RDF graph and returns it, writing it to the triple store when it is meant to persist it.
 - Is exposed as a tool for agents and as an API endpoint.
+
+If your output is not RDF, write a [workflow](/user-guide/build/agents/creating-a-workflow) instead.
+
+---
+
+## Scaffold one
+
+From the project root:
+
+```bash
+abi new pipeline Items src/my_module/pipelines
+```
+
+It writes `ItemsPipeline.py` (the name is converted to PascalCase and `Pipeline` is appended): a configuration dataclass, a parameters model and a `Pipeline` subclass whose `run()` and `as_tools()` you fill in.
 
 ---
 
 ## Pipeline class
 
 ```python
-# pipelines/MyPipeline.py
-from naas_abi_core.pipeline.pipeline import Pipeline, PipelineConfiguration
-from naas_abi_core.pipeline.pipeline import PipelineParameters
-from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
-from naas_abi.modules.custom.my_module.integrations.MyIntegration import (
-    MyIntegration, MyIntegrationConfiguration,
-)
+# pipelines/ItemsPipeline.py
 from dataclasses import dataclass
-from pydantic import BaseModel, Field
-from rdflib import Graph, URIRef, Literal, Namespace
-from rdflib.namespace import RDF, RDFS, OWL
+from typing import Annotated
 
-ABI = Namespace("http://ontology.naas.ai/abi/")
-CCO = Namespace("https://www.commoncoreontologies.org/")
+from langchain_core.tools import BaseTool, StructuredTool
+from my_module import ABIModule
+from my_module.integrations.MyIntegration import MyIntegration, MyIntegrationConfiguration
+from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
+from pydantic import Field
+from rdflib import RDF, RDFS, Graph, Literal, Namespace, URIRef
+
+MY = Namespace("http://ontology.naas.ai/my_module/")  # your module's ontology namespace
+GRAPH = URIRef("http://ontology.naas.ai/graph/my_module")
+
 
 @dataclass
-class MyPipelineConfiguration(PipelineConfiguration):
-    integration_config: MyIntegrationConfiguration
-    triple_store_service: TripleStoreService
+class ItemsPipelineConfiguration(PipelineConfiguration):
+    """Configuration for ItemsPipeline."""
 
-class MyPipelineParameters(PipelineParameters):
-    filter: str | None = Field(None, description="Optional filter for items to ingest")
 
-class MyPipeline(Pipeline):
-    __configuration: MyPipelineConfiguration
+class ItemsPipelineParameters(PipelineParameters):
+    filter: Annotated[
+        str | None, Field(description="Optional filter for the items to ingest")
+    ] = None
 
-    def __init__(self, configuration: MyPipelineConfiguration):
+
+class ItemsPipeline(Pipeline):
+    """Ingest the items of MyService into the knowledge graph."""
+
+    __configuration: ItemsPipelineConfiguration
+
+    def __init__(self, configuration: ItemsPipelineConfiguration):
+        super().__init__(configuration)
         self.__configuration = configuration
-        self.__integration = MyIntegration(configuration.integration_config)
+        module = ABIModule.get_instance()
+        self.__triple_store = module.engine.services.triple_store
+        self.__integration = MyIntegration(
+            MyIntegrationConfiguration(api_key=module.configuration.my_api_key)
+        )
 
-    def run(self, parameters: MyPipelineParameters) -> dict:
+    def run(self, parameters: ItemsPipelineParameters) -> Graph:  # type: ignore[override]
         # 1. Fetch raw data
         items = self.__integration.list_items(filter=parameters.filter)
 
         # 2. Build an RDF graph
         g = Graph()
-
         for item in items:
             item_uri = URIRef(f"http://ontology.naas.ai/abi/item/{item['id']}")
-
-            # Map to ontology class
-            g.add((item_uri, RDF.type, CCO.InformationContentEntity))
-
-            # Map properties
+            g.add((item_uri, RDF.type, MY.Item))  # a class of your ontology
             if item.get("name"):
                 g.add((item_uri, RDFS.label, Literal(item["name"])))
-            if item.get("url"):
-                g.add((item_uri, ABI.url, Literal(item["url"])))
+            g.add((item_uri, MY.item_id, Literal(item["id"])))
 
-        # 3. Store in triple store
-        triples_added = len(g)
-        self.__configuration.triple_store_service.insert_graph(g)
+        # 3. Store it, and return it
+        self.__triple_store.insert(g, GRAPH)
+        return g
 
-        return {"triples_added": triples_added, "items_processed": len(items)}
-
-    def as_tools(self) -> list:
-        from langchain_core.tools import StructuredTool
-
+    def as_tools(self) -> list[BaseTool]:
         return [
             StructuredTool(
                 name="ingest_myservice_items",
                 description="Fetch items from MyService and store them in the knowledge graph.",
-                func=lambda **kwargs: self.run(MyPipelineParameters(**kwargs)),
-                args_schema=MyPipelineParameters,
+                func=lambda **kwargs: len(self.run(ItemsPipelineParameters(**kwargs))),
+                args_schema=ItemsPipelineParameters,
             )
         ]
-
-    def as_api(self, router) -> None:
-        from fastapi import APIRouter
-
-        @router.post("/pipelines/myservice/ingest")
-        def run_pipeline(parameters: MyPipelineParameters):
-            return self.run(parameters)
 ```
+
+How the engine uses it:
+
+- **Discovery.** The engine finds every `Pipeline` subclass under `pipelines/` and instantiates it with `New()` if the class defines one, else with an empty `<Name>PipelineConfiguration()`. A pipeline whose configuration needs arguments the engine cannot supply is skipped and logged, which is why the example reads its services from the module in `__init__`.
+- **REST.** `as_api` is inherited from `Expose`: when `run(parameters)` is a real override with a Pydantic parameters model, the API mounts `POST /pipelines/<class name in snake case>` (here `POST /pipelines/items_pipeline`). The returned graph comes back as `{"format": "turtle", "data": "..."}`. See the [REST API](/user-guide/build/applications/api).
+- **Tools.** `as_tools()` gives an agent the pipeline as a tool: see [Creating an Agent](/user-guide/build/agents/creating-an-agent).
+- **From a terminal.** `abi run script my_script.py` loads the engine and runs a script of yours, which can build the pipeline and call `run()` (in a NATS project it needs the broker).
 
 ---
 
 ## Using onto2py generated classes
 
-If your ontology has been processed by `onto2py`, you can use typed Python classes instead of raw RDF construction:
+`onto2py` generates typed Python classes from your module's ontology (see [Creating an Ontology](/user-guide/build/knowledge-graph/creating-an-ontology#onto2py-code-generation)). Each class is a Pydantic model with one field per data property and an `rdf()` method that returns its triples, so a pipeline can build entities instead of raw triples:
 
 ```python
-# onto2py generates this from MyOntology.ttl:
-from naas_abi.modules.custom.my_module.ontologies.MyOntology import MyItem
+# generated from ontologies/modules/MyModuleOntology.ttl
+from my_module.ontologies.modules.MyModuleOntology import Item
 
-# Use it in the pipeline:
-item_obj = MyItem(
-    uri=f"http://ontology.naas.ai/abi/item/{item['id']}",
-    label=item["name"],
-    url=item["url"],
-)
-g += item_obj.to_graph()
+item = Item(_uri=f"http://ontology.naas.ai/abi/item/{item_id}", label=name, item_id=item_id)
+g += item.rdf()
 ```
 
-See [Creating an Ontology](/user-guide/build/knowledge-graph/creating-an-ontology) for onto2py setup.
+Omit `_uri` and the entity gets a generated IRI. Property names are the ontology's, in snake case.
 
 ---
 
 ## Scheduling a pipeline
 
-In NATS mode, run a pipeline on a schedule with a [module job](/developer-guide/architecture/remote-modules#module-jobs) on the module that owns it. The engine hosts it, and a synchronous handler runs in a worker thread:
+A pipeline is plain Python, so a [module job](/user-guide/build/modules/module-jobs) runs it on a schedule: declare a `@job` on the module that owns the pipeline. The engine hosts it, and a synchronous handler runs in a worker thread:
 
 ```python
 from datetime import timedelta
@@ -130,22 +141,18 @@ from naas_abi_core.module.jobs import Every, JobContext, job
 class ABIModule(BaseModule):
     @job(triggers=(Every("1h"),), timeout=timedelta(minutes=30))
     def sync_items(self, ctx: JobContext) -> dict:
-        pipeline = MyPipeline(MyPipelineConfiguration(...))
-        return pipeline.run(MyPipelineParameters())  # stored on the run record
+        from my_module.pipelines.ItemsPipeline import (
+            ItemsPipeline, ItemsPipelineConfiguration, ItemsPipelineParameters,
+        )
+        graph = ItemsPipeline(ItemsPipelineConfiguration()).run(ItemsPipelineParameters())
+        return {"triples": len(graph)}  # stored on the run record
 ```
 
-A run's result, logs and failures show in the Nexus System app's **Jobs** tab, where **Run now** triggers it by hand.
+Return something JSON-serializable (a count, not the graph). A run's result, logs and failures show in the Nexus System app's **Jobs** tab, where **Run now** triggers it by hand. Triggers, retries and idempotency: [Module jobs](/user-guide/build/modules/module-jobs).
 
-Projects without NATS can still schedule it with a Dagster asset, a [legacy](/user-guide/build/applications/dagster) extra removed in the next major:
-
-```python
-from dagster import asset
-
-@asset
-def my_pipeline_asset(context):
-    pipeline = MyPipeline(MyPipelineConfiguration(...))
-    return pipeline.run(MyPipelineParameters())
-```
+:::warning Legacy: Dagster
+Projects without NATS can schedule a pipeline with a Dagster asset (`abi new orchestration`), a [legacy](/user-guide/build/applications/dagster) extra removed in the next major. New projects use module jobs.
+:::
 
 ---
 
@@ -154,4 +161,4 @@ def my_pipeline_asset(context):
 - **Idempotent**: running the same pipeline twice should not create duplicate triples. Use `owl:hasKey` in your ontology for entity deduplication, or check for existing triples before inserting.
 - **Schema-first**: define (or reuse) an ontology class for every entity type you ingest before writing the pipeline.
 - **Small batches**: for large datasets, paginate the integration and commit triples in batches to avoid memory pressure.
-- **Log progress**: use `abi.logger` for structured logging; avoid `print()`.
+- **Log progress**: use `from naas_abi_core import logger`; avoid `print()`.

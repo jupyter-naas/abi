@@ -21,7 +21,7 @@ The ontology system is not a thin semantic layer. It is a three-part architectur
 
 The **Language** is the formal vocabulary for modeling the world: OWL/Turtle files that define entity classes, properties, and relationships following the BFO hierarchy. The Language models both nouns (entities that persist through time: organizations, persons, products) and verbs (occurrents that happen at a point in time: acts of employment, partnership, acquisition). This separation is not academic; it determines how agents query and reason about time-varying operational data.
 
-The **Engine** substantiates the Language at runtime. It provides the read architecture for high-precision SPARQL queries, OWL reasoning (inferring facts not explicitly stated), and real-time subscription to knowledge graph changes. It provides the write architecture for atomic triple insertions from pipelines, batch mutations from integrations, and streaming updates from event-driven sources.
+The **Engine** substantiates the Language at runtime. It provides the read architecture for high-precision SPARQL queries and subscriptions to knowledge graph changes (views on triple patterns that call you back). It provides the write architecture for atomic triple insertions from pipelines, batch mutations from integrations, and streaming updates from event-driven sources.
 
 The **Toolchain** makes the Language and Engine accessible to developers. `onto2py` reads OWL Turtle files and emits typed Python dataclasses alongside them, providing a single source of truth with no schema drift. Parameterized SPARQL templates (`TemplatableSparqlQuery`) let agents invoke graph queries as tools without writing Python. Module scaffolding generates the directory structure, class stubs, and configuration blocks for a new ontology domain in one command.
 
@@ -151,15 +151,15 @@ This isn't academic. It determines how agents query and reason about your data. 
 
 ## How ontologies become code: onto2py
 
-ABI includes `onto2py`, a code generation tool that reads OWL Turtle files and emits typed Python dataclasses alongside them.
+ABI includes `onto2py`, a code generation tool that reads OWL Turtle files and emits typed Python dataclasses alongside them. In the repository, `make onto2py` regenerates the classes of every `.ttl` under `libs`.
 
 ```bash
 # Your ontology file
-libs/naas-abi/naas_abi/modules/crm/ontologies/
-└── CRMOntology.ttl
+libs/naas-abi/naas_abi/ontologies/modules/
+└── NaasAbiOntology.ttl
 
 # onto2py generates next to it:
-└── CRMOntology.py   ← typed dataclasses, one per OWL class
+└── NaasAbiOntology.py   ← typed dataclasses, one per OWL class
 ```
 
 This gives you a single source of truth: the `.ttl` file defines the RDF schema, and the generated `.py` file gives you type-checked Python access to ontology entities. No drift, no hand-written class definitions.
@@ -180,12 +180,15 @@ Agents interact with the knowledge graph in two ways:
 
 ## Supported triple store backends
 
-| Backend | Use case | ADR |
+| Backend (`adapter`) | Use case | ADR |
 |---------|---------|-----|
-| Apache Jena Fuseki (TDB2) | Default for production and local dev | [ADR-2026-02](/user-guide/release-notes/apache-jena-fuseki-default-triplestore) |
-| Oxigraph | Alternative for lightweight local dev | [ADR-2025-08](/user-guide/release-notes/oxigraph-local-triplestore) |
+| Apache Jena Fuseki, TDB2 (`apache_jena_tdb2`) | Default of the generated Docker stack, for production | [ADR-2026-02](/user-guide/release-notes/apache-jena-fuseki-default-triplestore) |
+| Oxigraph server (`oxigraph`) | Default of `abi dev up`, which starts a local Oxigraph server; one server shared by every process | [ADR-2025-08](/user-guide/release-notes/oxigraph-local-triplestore) |
+| Oxigraph, embedded in the process | Single-process development and tests | - |
+| Filesystem and object-storage backed stores | Development and tests without a server | - |
 | AWS Neptune | Cloud-managed production | - |
-| Filesystem | Dev/test without a running server | - |
+
+In NATS mode the engine owns the store and serves it as a kernel service, so modules in other processes query it over NATS. A deploy that hands over without downtime needs a store on a server (Fuseki, Oxigraph server or Neptune), not an embedded or file-backed one: see [one serving engine](./nats#one-serving-engine).
 
 Configuration is done in `config.yaml` under `services.triple_store`.
 

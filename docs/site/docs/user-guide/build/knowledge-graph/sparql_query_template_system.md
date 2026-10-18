@@ -10,7 +10,7 @@ The TemplatableSparqlQueries system provides a declarative way to define reusabl
 ## How It Works
 
 1. **Ontology Definition**: SPARQL queries and their arguments are defined in a TTL file using a specialized ontology
-2. **Runtime Generation**: When ABI initializes, it loads all query definitions from the triple store
+2. **Runtime Generation**: When the engine initializes, the `naas_abi_core.modules.templatablesparqlquery` module (loaded by default) reads all query definitions from the triple store's schema graph
 3. **Dynamic Tool Creation**: Each query is transformed into a function with proper argument validation
 4. **Agent Integration**: These functions are made available as tools for the agent to use
 
@@ -34,6 +34,8 @@ This approach drastically reduces the need to write boilerplate code for similar
 
 ### Step 1: Define the Query in a TTL File
 ```turtle
+@prefix intentMapping: <http://ontology.naas.ai/intentMapping/> .
+
 intentMapping:newQueryName a intentMapping:TemplatableSparqlQuery ;
  rdfs:label "newQueryName"@en ;
  intentMapping:intentDescription "Description of what the query does" ;
@@ -59,28 +61,40 @@ intentMapping:newQueryArgument a intentMapping:QueryArgument ;
  intentMapping:validationFormat "human_readable_format" .
 ```
 
-### Step 3: Ensure Your TTL File is Loaded Into the Triple Store
-Your TTL file should be placed in the `ontologies` directory of your own module, not in the core intentmapping module. Make sure your TTL file is either:
-- Included in the `src/your_module/ontologies` directory
-- Loaded into the triple store during your module's initialization
+### Step 3: Put the TTL File in Your Module
+Place the file in your own module's `ontologies/` folder (the scaffold of `abi new module <name> --in-engine` already has `ontologies/queries/<Name>SparqlQueries.ttl`, with two example queries and their arguments). The engine loads every `*.ttl` under `ontologies/` into the triple store when it starts, so the queries are available once the module is loaded. Restart the engine after editing the file.
 
-The TTL file will be loaded into the triple store during application startup, making your queries available at runtime.
+Constraints of the loader:
+- A query is only loaded if it has at least one `intentMapping:hasArgument`.
+- Every argument is a required string, checked against its `validationPattern` before the value goes into the template. Keep the pattern tight enough to block injection.
+- The tool's name is the query's `rdfs:label`, and its description is `intentMapping:intentDescription`: the model chooses the tool from them.
 
-### Step 4: Register Templatable SPARQL Tools with the Agent
-The intentmapping module automatically makes tools available at runtime. Add them to your agent with:
+### Step 4: Give the Tools to an Agent
+Declare the module as a dependency, then ask it for the tools by name (leave the list empty to get them all):
 
 ```python
-from src.core.modules.intentmapping import get_tools
-tools.extend(get_tools())
+# my_module/__init__.py
+dependencies = ModuleDependencies(
+    modules=["naas_abi_core.modules.templatablesparqlquery"],
+    services=[TripleStoreService],
+)
 ```
 
-You can find the `Agent` class in `src/core/modules/ontology/agents/OntologyAgent.py`.
+```python
+# inside an agent's New()
+from my_module import ABIModule
+
+sparql_module = ABIModule.get_instance().engine.modules[
+    "naas_abi_core.modules.templatablesparqlquery"
+]
+tools += sparql_module.get_tools(["find_my_module_record_by_id"])
+```
 
 ## Technical Implementation Details
 
-The system uses the following process to create query workflows at runtime:
+The module creates the query workflows at runtime:
 
-1. The `intentmapping` module queries the triple store for all instances of `intentMapping:TemplatableSparqlQuery`
+1. `TemplatableSparqlQueryLoader` queries the triple store for all instances of `intentMapping:TemplatableSparqlQuery`
 2. For each query, it gathers all associated arguments and their validation rules
 3. It dynamically creates Pydantic models for argument validation based on these rules
 4. It wraps each query in a `GenericWorkflow` class that handles:
@@ -108,6 +122,8 @@ intentMapping:sparqlTemplate """
  }
 """
 ```
+
+Every argument is required, so an `{% if %}` on an optional value needs a `validationPattern` that accepts an empty string (for example `^[0-9]*$`); the agent then passes an empty value to skip the clause.
 
 ### Multiple Arguments
 Queries can accept multiple arguments by linking to multiple argument definitions:
@@ -139,16 +155,3 @@ intentMapping:hasArgument intentMapping:arg1, intentMapping:arg2, intentMapping:
  - Use appropriate filters
  - Include score thresholds
  - Consider adding LIMIT clauses for large result sets
-
-## Roadmap
-
-### Automatic API Endpoint Generation
-In upcoming releases, templatable SPARQL queries will also be automatically exposed as API endpoints:
-
-1. **Runtime API Registration**: When the API starts, all templatable SPARQL queries will be registered as HTTP endpoints
-2. **Third-Party Access**: These endpoints will be accessible to any third-party application with proper authentication
-3. **Consistent Interface**: The same validation rules defined in the TTL files will be applied to API requests
-4. **Documentation**: Swagger/OpenAPI documentation will be automatically generated for all query endpoints
-
-This feature will allow you to create both agent tools and API endpoints from a single TTL definition, eliminating the need to maintain separate code paths for different interfaces to the same functionality.
-

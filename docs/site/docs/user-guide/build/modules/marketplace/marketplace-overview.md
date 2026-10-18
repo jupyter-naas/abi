@@ -6,63 +6,34 @@ sidebar_position: 2
 
 ## Overview
 
-The Marketplace is a space for sharing and discovering custom modules that extend the functionality of the ABI system. It enables users to publish their own creations and utilize modules developed by others, fostering a collaborative ecosystem around the ABI framework.
+The Marketplace is the `naas-abi-marketplace` package: a registry of ready-made modules that extend the ABI engine. It is part of the ABI repository, so a module is reviewed, tested and released with the framework.
 
-## Purpose and Benefits
+## What is in it
 
-The Marketplace serves as a central repository for reusable components that:
+| Category | Path | Contents |
+|---|---|---|
+| AI providers | `naas_abi_marketplace/ai/` | One module per provider (OpenRouter, Ollama, Anthropic, OpenAI, Gemini, Mistral, Bedrock, and more). Each registers its models in the model registry |
+| Applications | `naas_abi_marketplace/applications/` | Integrations with third-party services (GitHub, Gmail, Notion, Postgres, Slack, Salesforce, and many more), each with an integration wrapper, an agent and an ontology |
+| Domains | `naas_abi_marketplace/domains/` | Domain-expert agents, workflows, pipelines and ontologies, filed by the function they serve in an organization |
+| Demos | `naas_abi_marketplace/__demo__/` | Reference implementations to copy from |
 
-- Accelerates development by providing ready-to-use modules
-- Encourages sharing of domain-specific expertise
-- Reduces duplication of effort across projects
-- Creates a collaborative community around ABI extension
-- Standardizes module development practices
+Browse the directories, or the `AGENTS.md` of each category, for the full list. Every module has the same shape as a module you write yourself: an `ABIModule` with its `dependencies` and a typed `Configuration`, and the optional folders `agents/`, `models/`, `integrations/`, `workflows/`, `pipelines/` and `ontologies/`. See [Creating a Module](/user-guide/build/modules/creating-a-module).
 
-## How It Works
-
-The Marketplace is structured as a directory (`src/marketplace/`) containing self-contained modules that follow the standard ABI module architecture. Each module in the Marketplace is like an "atom" - a fundamental, independent building block that:
-
-1. Is entirely self-contained and doesn't rely on other custom components
-2. Has clear documentation and example usage
-3. Follows standard ABI module structure
-4. Can be easily installed in any ABI project
+These are in-engine modules: the engine loads them from the `naas_abi_marketplace` package. To use one, see [Installing from the Marketplace](/user-guide/build/modules/marketplace/marketplace-install).
 
 ## Best Practices
 
-When creating modules for the Marketplace:
+When creating a module for the Marketplace:
 
-1. **Self-contained design**: Minimize dependencies on other custom modules
-2. **Clear documentation**: Include detailed README, examples, and configuration instructions
-3. **Comprehensive testing**: Include tests to validate functionality
-4. **Version control**: Include version information in your module documentation
-5. **Standard structure**: Follow the ABI module structure conventions
-6. **License information**: Include license details for your module (freemium, open source, closed source, service-based implementation)
-
-## Current Limitations
-
-The Marketplace is currently in alpha stage, which means:
-
-- There is no automated publishing process yet
-- Dependency management is manual
-- Version control is limited to documentation
-- No centralized web interface for browsing modules
-- Limited validation of module quality or security
-
-Despite these limitations, the Marketplace can already be leveraged to share and reuse functionality across projects.
-
-## Future Plans
-
-Future enhancements to the Marketplace may include:
-
-- Web interface for browsing available modules in naas.ai/search
-- Automated publishing and installation process
-- Versioning and dependency management
-- Rating and review system
-- Security validation
-- Community contribution guidelines
+1. **Self-contained design**: declare what the module needs in `ModuleDependencies`, and minimize its dependencies on other modules.
+2. **Typed configuration**: put every setting in `Configuration(ModuleConfiguration)`, with a docstring that shows the `config.yaml` entry.
+3. **Clear documentation**: a README with setup, configuration and examples.
+4. **Tests**: `<Name>Agent_test.py` next to each agent, and an `on_load_test.py` that checks the module loads with a minimal configuration.
+5. **Standard structure**: follow the layout and the `PascalCase.py` naming of the existing modules.
+6. **Optional dependencies as extras**: a module that needs third-party libraries adds an extra to the package's `pyproject.toml`.
 
 ## Contributing to the Marketplace
 
-We encourage all users to consider contributing their custom modules to the Marketplace. By sharing your work, you help grow the ABI ecosystem and benefit from community feedback and improvements.
+To share a module with everyone, contribute it to the ABI repository: see [Publishing to the Marketplace](/user-guide/build/modules/marketplace/marketplace-publish). To keep a module private or ship it from your own repository, keep it in your project's `src/`, or create a [remote module](/user-guide/build/sdk/build-a-remote-module) as a repository of its own (`abi new module <name> --standalone`).
 
-For questions or support with the Marketplace, please reach out via [support@naas.ai](mailto:support@naas.ai).
+For questions or support, reach out via [support@naas.ai](mailto:support@naas.ai).

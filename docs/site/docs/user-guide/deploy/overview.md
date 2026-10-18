@@ -1,110 +1,44 @@
 ---
 sidebar_position: 1
+title: "Deploy ABI"
 ---
 
-# Enterprise Implementation
+# Deploy ABI
 
-Naas is architected for enterprise-grade deployments that meet the most stringent security, compliance, and operational requirements. From air-gapped government installations to multi-tenant SaaS deployments, our platform's modular architecture enables secure scaling without compromising functionality.
+A project made by `abi new project` runs the same way everywhere: an engine, a NATS broker,
+remote modules, Nexus, and the backing services your config points at. What changes between a laptop
+and production is the config file and who runs the pieces.
 
-:::info Professional Services Implementation
-The enterprise capabilities described in this section represent our ability to implement these solutions through our professional services team. Each deployment is customized to your specific requirements and implemented with dedicated support. Contact our enterprise team at [support@naas.ai](mailto:support@naas.ai) to discuss your needs and implementation timeline.
+## Pick a way to run it
+
+| You want | Use | Guide |
+|---|---|---|
+| To develop, on your machine, without Docker | `abi dev up` | [Quickstart](/user-guide/get-started/quickstart) |
+| The full stack on one machine | `abi deploy local`, `abi stack start` | [Deploy with Docker](/user-guide/deploy/local-docker) |
+| One server with a domain and certificates | `abi deploy dokploy` | [Deploy with Dokploy](/user-guide/deploy/dokploy) |
+| Your cluster, a container platform or Naas Spaces; a managed NATS | `config.remote.yaml`, `abi deploy naas` | [Production and remote deployments](/user-guide/deploy/production) |
+| No outbound network | Local models, an offline bundle | [Air-gapped deployment](/user-guide/deploy/air-gapped) |
+
+[Deployment models](/user-guide/deploy/deployment-models) compares them, from local development to
+self-hosted production and the enterprise reference architectures.
+
+## Before production
+
+- **Secrets.** Nothing in the config is a secret: `{{ secret.X }}` resolves from the environment or a
+  secret adapter. See [Add secrets to production](/user-guide/deploy/add_secrets_to_production).
+- **Security.** There is no default password, sign-up is off, and the broker must stay private. See
+  [Security and compliance](/user-guide/deploy/security-compliance) and the
+  [security model](/developer-guide/architecture/security).
+- **Availability.** One engine serves the kernel services per NATS account; deploys without downtime
+  need shared backends and `ABI_ROLLOUT_ID`. See [High availability and disaster recovery](/user-guide/deploy/high-availability).
+- **Upgrades.** Moving a 2.x deployment: [Migrate from 2.x to 3.0](/user-guide/upgrade/migrate-to-3).
+- **Remote agents.** [Publish remote agents](/user-guide/deploy/publish_remote_agents).
+
+## Enterprise implementation
+
+:::info Professional services
+naas.ai's team designs and implements enterprise deployments (on-premises, air-gapped, hybrid,
+government) with you. Contact [support@naas.ai](mailto:support@naas.ai) to discuss your needs and
+timeline. The pages of this section describe what ABI itself provides; what a deployment must add
+(identity provider, monitoring, backups, network controls) is yours or your integrator's.
 :::
-
-## Enterprise-Ready Architecture
-
-### Core Capabilities
-- **Multi-deployment models**: Cloud-native, on-premises, hybrid, and air-gapped
-- **Enterprise security**: Zero trust architecture with comprehensive compliance frameworks
-- **High availability**: 99.9%+ uptime with automatic failover and disaster recovery
-- **Scalable infrastructure**: Kubernetes-native with intelligent auto-scaling
-- **Compliance ready**: SOC 2, ISO 27001, FedRAMP, GDPR, and HIPAA support
-
-### Deployment Flexibility
-```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor': '#f8fafc', 'primaryTextColor': '#1e293b', 'primaryBorderColor': '#e2e8f0', 'lineColor': '#64748b'}}}%%
-graph TD
- subgraph "Cloud Native"
- A[Multi-Region]
- B[Auto-Scaling]
- C[Managed Services]
- end
-
- subgraph "On-Premises"
- D[Air-Gapped]
- E[Custom Infrastructure]
- F[Local Models]
- end
-
- subgraph "Government"
- G[FedRAMP]
- H[GovCloud]
- I[SCIF Compatible]
- end
-
- subgraph "Hybrid"
- J[Secure Connectivity]
- K[Data Residency]
- L[Flexible Integration]
- end
-
- class A,B,C,D,E,F,G,H,I,J,K,L platform
-```
-
-## Implementation Approach
-
-### Phase 1: Assessment & Planning
-- **Requirements analysis**: Security, compliance, and performance needs
-- **Architecture design**: Custom deployment architecture
-- **Proof of concept**: Validation deployment with key stakeholders
-- **Security review**: Comprehensive security assessment and approval
-
-### Phase 2: Deployment & Integration
-- **Infrastructure setup**: Automated provisioning and configuration
-- **Platform deployment**: Naas installation and initial configuration
-- **System integration**: Connect to existing enterprise systems
-- **Security hardening**: Implementation of security controls and policies
-
-### Phase 3: Operations & Optimization
-- **Monitoring implementation**: Comprehensive observability and alerting
-- **User onboarding**: Training and enablement programs
-- **Performance tuning**: Optimization based on usage patterns
-- **Continuous improvement**: Regular reviews and enhancements
-
-## Enterprise Support
-
-### Professional Services
-- **Architecture consulting**: Custom deployment design and planning
-- **Security assessment**: Comprehensive security review and recommendations
-- **Migration assistance**: Legacy system migration and integration
-- **Training programs**: Technical and user training for successful adoption
-
-### Support Tiers
-- **Professional**: Business hours support with SLA guarantees
-- **Enterprise**: 24/7 support with dedicated technical account management
-- **Mission-Critical**: Premium support for critical deployments with guaranteed response times
-
-## Detailed Guides
-
-### Deployment Models
-- **[Deployment Models](./deployment-models)**: Comprehensive guide to cloud, on-premises, and government deployment options
-
-### Security & Compliance
-- **[Security & Compliance](./security-compliance)**: Detailed security architecture, compliance frameworks, and audit procedures
-
-### High Availability
-- **[High Availability & Disaster Recovery](./high-availability)**: Fault tolerance, backup strategies, and business continuity planning
-
-### Specialized Deployments
-- **[Air-Gapped Deployment](./air-gapped)**: Complete offline deployment guide for secure environments
-
-## Getting Started
-
-Ready to deploy Naas in your enterprise environment? Our enterprise team provides comprehensive support throughout the entire deployment lifecycle.
-
-**Next Steps**:
-1. **Schedule a consultation** to discuss your specific requirements
-2. **Receive a custom architecture proposal** tailored to your needs
-3. **Begin with a proof of concept** to validate the approach
-4. **Deploy with confidence** using our proven methodologies
-
-For deployment planning assistance, [contact our enterprise team](mailto:enterprise@naas.ai) or [schedule a consultation](https://naas.ai/enterprise-consultation).

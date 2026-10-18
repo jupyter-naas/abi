@@ -105,10 +105,10 @@ What changes even with NATS off, the ones you are most likely to see:
 - **Drain the old bus.** Messages still waiting in RabbitMQ or `python_queue`
   are not moved to NATS. Let workers empty the queues before phase 2.
 - **Take a snapshot.** With a Docker stack, run `abi stack snapshot create`.
-  It archives the data volumes and the project's `storage/` folder (the SQLite
-  activity log, the dataset files of `abi deploy local`), not the `nats_data`
-  volume where NATS keeps its own data. Without a Docker stack, copy
-  `storage/`.
+  It archives the data volumes (the `nats_data` volume, where NATS keeps its
+  own data, included once the stack runs on NATS) and the project's `storage/`
+  folder (the SQLite activity log, the dataset files of `abi deploy local`).
+  Without a Docker stack, copy `storage/`.
 
 ## Phase 1: upgrade with NATS off
 

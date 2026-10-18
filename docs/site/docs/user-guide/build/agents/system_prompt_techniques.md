@@ -80,3 +80,28 @@ Output: "Could you please review this document before distribution?"
 - Tasks: Lay out clear step-by-step tasks the agent will execute
 - Operating Guidelines: Specify how the agent should execute each task. Include which tools to use. Define how to interact with users. Outline process steps
 - Constraints: Define rules. Specify expected formats. Outline off-topic areas
+
+## In an ABI agent
+
+The prompt of an agent scaffolded by `abi new agent` follows this structure, with one XML-style tag per part (`<role>`, `<objective>`, `<context>`, `<tools>`, `<tasks>`, `<operating_guidelines>`, `<constraints>`). The `[TOOLS]` placeholder in `<tools>` is replaced, in the agent's `New()`, with the name and description of each tool the agent has:
+
+```python
+system_prompt: str = """<role>
+You are ReviewerAgent, a careful reviewer.
+</role>
+
+<objective>
+Help the user review their documents.
+</objective>
+
+<tools>
+[TOOLS]
+</tools>
+
+<constraints>
+- Only use the provided tools; do not fabricate data.
+</constraints>
+"""
+```
+
+Tool descriptions are part of the prompt: the model chooses a tool from its name and description, so write them as the question or action they answer. See [Creating an Agent](/user-guide/build/agents/creating-an-agent).

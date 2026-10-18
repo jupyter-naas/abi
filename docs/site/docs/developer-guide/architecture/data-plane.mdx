@@ -32,7 +32,7 @@ ABI stores five categories of data, each in a purpose-built open-source backend:
 
 **Ephemeral data** lives in Redis as a key-value cache: real-time state, session data, and short-lived computation results that do not belong in any of the durable stores.
 
-All five backends are community-licensed (Apache 2.0 or MIT), expose standard interfaces (SPARQL, REST, S3, JDBC, Redis protocol), and can be replaced via a single config change with no code edits.
+All five backends are open source, expose standard interfaces (SPARQL, REST, S3, JDBC, Redis protocol), and are chosen per service in `config.yaml` (an adapter and its settings), with no code edits.
 
 ---
 
@@ -56,21 +56,21 @@ Every agent in ABI accepts a `ChatModel` interface rather than a hardcoded provi
 
 **OpenRouter** provides access to 100+ models (OpenAI, Anthropic, Google, Meta, Mistral, and others) through a single API key and a unified endpoint. Model selection can be per-agent, per-request, or per-environment.
 
-**Ollama** serves models locally for air-gapped or privacy-sensitive deployments. Qwen3 8B, DeepSeek R1 8B, and Gemma3 4B are the tested configurations; any Ollama-compatible model works. No inference request leaves your network.
+**Ollama** serves models locally for air-gapped or privacy-sensitive deployments. The marketplace has modules for Qwen3 8B, DeepSeek R1 8B and Gemma3 4B, and the `ai.ollama` module serves Qwen2.5 3B and `nomic-embed-text` with no key; any Ollama-compatible model works. No inference request leaves your network.
 
 **Custom endpoints** are supported by any service that implements the OpenAI-compatible chat completions API. Bring your own fine-tuned models, on-premises inference servers, or private endpoints — the agent layer does not care.
 
-Token budgets, model routing rules, and fallback behavior are configured in `config.yaml` and applied globally without modifying agent code.
+The default chat and embedding models are set in `config.yaml` (`services.model_registry`), and agents with no explicit model use them.
 
 ---
 
 ## Anywhere
 
-The full stack runs in four topologies without code changes, controlled entirely by `config.yaml` and the `ABI_ENV` environment variable:
+The full stack runs in four topologies without code changes, controlled by the config files (`config.yaml`, `config.local.yaml`, `config.remote.yaml`, selected by the `ENV` environment variable) and by the adapters they name:
 
 | Topology | Infrastructure | Notes |
 |---|---|---|
-| Local development | Docker Compose on your machine | Lightweight adapters replace most production services |
+| Local development | `abi dev up` on your machine, or Docker Compose | `abi dev up` uses file-based adapters (SQLite, the file system) and a local Oxigraph; Compose runs the production service set |
 | On-premises | Your Kubernetes cluster or Docker hosts | Full production service set |
 | Air-gapped | Same as on-premises, Ollama for models | Zero external API calls |
 | Managed | naas.ai-hosted infrastructure | MIT core, managed operations tier |

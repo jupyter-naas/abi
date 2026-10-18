@@ -4,141 +4,95 @@ sidebar_position: 2
 
 # Managing Dependencies
 
-This document provides a comprehensive guide on how to manage dependencies in this project, which uses Poetry for dependency management and Docker for containerization.
+ABI is a Python monorepo managed with [uv](https://docs.astral.sh/uv/). This page is about working in the ABI repository. A project made with `abi new project` has its own `pyproject.toml`; there, use `uv add` directly (see [Create a module](/user-guide/build/modules/creating-a-module)).
 
-## Project Structure Overview
+## Project structure
 
-The project consists of two main Python packages, each with its own dependency management:
+| Project | Path | What it is |
+|---|---|---|
+| Root (`abi`) | `pyproject.toml`, `uv.lock` | Depends on the packages below and on the marketplace modules the repository runs. |
+| `naas-abi-core` | `libs/naas-abi-core` | Engine, service ports and adapters. |
+| `naas-abi` | `libs/naas-abi` | Built-in agents, the Nexus app, base ontologies. |
+| `naas-abi-cli` | `libs/naas-abi-cli` | The `abi` command. |
+| `naas-abi-marketplace` | `libs/naas-abi-marketplace` | Optional modules, each with its own extra. |
+| `naas-abi-proto`, `naas-abi-sdk` | `libs/naas-abi-proto`, `libs/naas-abi-sdk` | Protobuf contracts and the SDK for [remote modules](/developer-guide/architecture/remote-modules). They do not depend on `naas-abi-core`. |
 
-1. `src` - The main project (root level)
-2. `lib/abi` - A local library that's included as a dependency in the main project
+Each package has its own `pyproject.toml` and `uv.lock`. The root `pyproject.toml` points at the local copies with editable `[tool.uv.sources]` entries (`naas-abi = { path = "libs/naas-abi", editable = true }`, and so on), so a change in `libs/` shows up in the root environment at once.
 
-Both packages use Poetry for dependency management, and all operations should be performed through the Makefile targets to ensure consistency.
+Python is pinned to 3.11 in `.python-version`; every package requires `>=3.11,<4`.
 
-## Adding Dependencies
-
-### Adding dependencies to the main project (`src`)
-
-```bash
-make add dep=<library-name>
-```
-
-For example:
-```bash
-make add dep=requests
-```
-
-To specify a specific version:
-```bash
-make add dep="requests==2.28.1"
-```
-
-To add a package with extras:
-```bash
-make add dep="uvicorn[standard]"
-```
-
-This will:
-- Add the dependency to your root `pyproject.toml`
-- Update the `uv.lock` file
-- Install the package in your Docker environment
-
-### Adding dependencies to the `lib/abi` project
+## Install
 
 ```bash
-make abi-add dep=<library-name>
+make deps          # uv sync --all-extras, then pnpm install for the Nexus web app
+uv sync --all-extras
 ```
 
-For example:
-```bash
-make abi-add dep=numpy
-```
+`uv sync --all-extras` installs every extra of the root project, including the legacy `dagster` and `rabbitmq` extras of `naas-abi-core`: the root `pyproject.toml` asks for `naas-abi-core[all,dagster,rabbitmq]` because the repository still tests them. They are not part of `naas-abi-core[all]`, and a project on NATS does not need them.
 
-This will:
-- Add the dependency to the `lib/pyproject.toml` file
-- Update the `lib/uv.lock` file
-- Install the package in your Docker environment
+The Nexus web app is a Node project: `pnpm install` in `libs/naas-abi/naas_abi/apps/nexus/apps/web` (`make deps` does it when `pnpm` is installed).
 
-## Updating Locked Dependencies
+`make install` does not work: it depends on a target that does not exist. Use `uv sync --all-extras`.
 
-To update the lock files after manual changes to `pyproject.toml`:
+## Add a dependency
+
+Add it to the package that owns the code that imports it:
 
 ```bash
-make lock
+make add dep=requests               # root project
+make add-core dep="uvicorn[standard]"
+make add-abi dep=numpy
+make add-cli dep=rich
+make add-marketplace dep="requests==2.32.3"
 ```
 
-## Installing All Dependencies
+`make add` runs `uv add $(dep)` at the root. The others run `cd libs/<package> && uv add $(dep)`. Each one updates that project's `pyproject.toml` and `uv.lock`. Quote `dep` when it has extras or a version specifier.
 
-To install all dependencies after cloning the project or after updating lock files:
+A dependency for one marketplace module belongs in that module's extra (`[project.optional-dependencies]` of `libs/naas-abi-marketplace/pyproject.toml`), and the root `pyproject.toml` lists the extras the repository enables (`naas-abi-marketplace[ai-claude]`, ...).
+
+## Update the lock files
 
 ```bash
-make install
+make lock             # uv lock at the root
+make deps-upgrade     # uv sync --all-extras --upgrade
+cd libs/naas-abi-core && uv lock
 ```
 
-This command:
-- Installs all dependencies from both the main project and the `lib/abi` project
-- Updates the `lib/abi` package in the main project's environment
+Commit the `uv.lock` that changed.
 
-## Accessing Shell with Dependencies Loaded
+## Development dependencies
 
-To access a shell inside the Docker container with all dependencies loaded:
+Test and lint tools (`pytest`, `mypy`, `ruff`, ...) live in `[dependency-groups]` of each `pyproject.toml`, under `dev`. `uv sync` installs the `dev` group by default. Edit the file by hand, then run `uv lock`.
+
+## Work with the environment
 
 ```bash
-make sh
+uv run pytest libs/naas-abi-core         # run a tool in the root environment
+uv run abi dev up -d                     # run the CLI
+uv run python path/to/script.py
 ```
 
-This allows you to run commands that depend on the installed packages without having to install Poetry or the dependencies locally.
+See [Run Python scripts](./run_python_scripts) and [Test Python scripts](./test_python_scripts). `make check-core` and `make check-marketplace` run `uv sync --all-extras` inside `libs/naas-abi-core`, `libs/naas-abi-cli` and `libs/naas-abi-marketplace` and use that package's own environment (`libs/<package>/.venv`) for `mypy`.
 
-## Development Dependencies
-
-Development dependencies in both `pyproject.toml` files are managed in the `[dependency-groups] dev =` section. These are automatically installed when you run `make install`.
-
-## Docker Integration
-
-All dependency management happens inside Docker containers, so you don't need to install Poetry or any Python packages locally on your machine. The project uses Docker Compose to ensure a consistent environment for all developers.
-
-The Docker setup ensures that:
-- All dependencies are isolated from your local system
-- Everyone on the team has the exact same development environment
-- Production builds have the same dependencies as your development environment
-
-## Common Dependency Management Tasks
-
-### Recreating the environment from scratch
+To start again from a clean environment:
 
 ```bash
-make clean
-make install
+make clean      # removes .venv, caches and the Docker containers (see the Makefile page)
+make deps
 ```
 
-### Adding a dependency only for development
+## Resolve a conflict
 
-Edit the appropriate `pyproject.toml` file manually to add the dependency under `[dependency-groups] dev =`, then run:
+1. Read the error: uv names the packages and the constraints that clash.
+2. Loosen or tighten the version range in the `pyproject.toml` of the package that declares it.
+3. Run `uv lock` in that project, then `uv sync --all-extras` at the root.
 
-```bash
-make lock
-make install
-```
+## Best practices
 
-### Resolving dependency conflicts
+1. Keep every `uv.lock` under version control.
+2. Put a dependency in the package that uses it, not at the root.
+3. Keep optional integrations behind an extra, so a deployment installs only what it enables.
+4. Upgrade `naas-abi-core`, `naas-abi` and `naas-abi-cli` together: they import each other's modules.
+5. After a pull, run `uv sync --all-extras` so your environment matches the lock files.
 
-If you encounter dependency conflicts when adding a new package:
-
-1. Check the error message for details on the conflict
-2. Modify the appropriate `pyproject.toml` file manually to adjust version constraints
-3. Run `make lock` to attempt to resolve the conflict
-4. Run `make install` if the lock was successful
-
-### Running tests with the current dependencies
-
-```bash
-make test
-```
-
-## Best Practices
-
-1. Always use the Makefile targets to manage dependencies
-2. Keep the `uv.lock` files under version control
-3. When adding dependencies, consider which package (`src` or `lib/abi`) should own the dependency
-4. Regularly update dependencies to keep up with security patches
-5. When collaborating, pull changes and run `make install` to ensure your environment matches the updated lock files
+See also [The Makefile](./makefile).

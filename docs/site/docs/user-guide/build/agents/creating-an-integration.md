@@ -2,6 +2,20 @@
 
 Integrations are the external API adapters in ABI. They are the smallest, most atomic units - they talk to a specific external service and nothing else. They do not depend on pipelines, workflows, or agents.
 
+Integrations are `naas_abi_core` code, so they belong in an [in-engine module](/user-guide/build/modules/creating-a-module#remote-or-in-engine). `abi new integration` refuses to run inside a remote module; there, call the third-party API from plain Python (`httpx`, `requests`) in the module, with credentials read through `self.engine.services.secret`.
+
+---
+
+## Scaffold one
+
+From the project root:
+
+```bash
+abi new integration My src/my_module/integrations
+```
+
+It writes `MyIntegration.py` with a configuration dataclass and an `Integration` subclass to fill in (the name is converted to PascalCase and `Integration` is appended).
+
 ---
 
 ## Role in the stack
@@ -19,7 +33,7 @@ An integration should:
 
 An integration must NOT:
 - Write to the triple store directly.
-- Depend on other ABI modules or services.
+- Depend on other ABI modules, or on services beyond what it needs for itself (the scaffold wires the cache service to memoize upstream calls).
 - Contain business logic.
 
 ---
@@ -90,7 +104,7 @@ class MyIntegration(Integration):
 
 ## Exposing as tools for agents
 
-Every integration should implement an `as_tools()` function at module level:
+By convention, an integration file also defines an `as_tools(configuration)` function at module level (the marketplace integrations all do), which an agent calls to get the tools:
 
 ```python
 def as_tools(configuration: MyIntegrationConfiguration) -> list:
@@ -128,26 +142,28 @@ def as_tools(configuration: MyIntegrationConfiguration) -> list:
 
 - **One integration per external service.** A `GitHubIntegration` for GitHub, a `SalesforceIntegration` for Salesforce.
 - **Document all methods.** Agents use tool descriptions to decide when to call them. Vague descriptions lead to wrong invocations.
-- **Handle errors gracefully.** Raise descriptive exceptions; don't swallow HTTP errors silently.
-- **Guard optional keys.** Check for API key presence before adding tools:
+- **Handle errors gracefully.** Raise descriptive exceptions; don't swallow HTTP errors silently. Raise `IntegrationConnectionError` (from `naas_abi_core.integration`) for transport-level failures, so callers can tell them from logic errors.
+- **Guard optional keys.** Check for the API key before adding tools:
 
 ```python
-# In your agent:
-if secret.get("MY_API_KEY"):
-    config = MyIntegrationConfiguration(api_key=secret.get("MY_API_KEY"))
-    tools += as_tools(config)
+# In your agent's New():
+from my_module import ABIModule
+
+api_key = ABIModule.get_instance().configuration.my_api_key
+if api_key:
+    tools += as_tools(MyIntegrationConfiguration(api_key=api_key))
 ```
 
-- **Keep credentials in secrets.** Never hardcode API keys. Use `secret.get("KEY_NAME")` from the secret service.
+- **Keep credentials in secrets.** Never hardcode API keys. Declare a field on the module's `Configuration` (`my_api_key: str`) and set it in `config.yaml` as `my_api_key: "{{ secret.MY_API_KEY }}"`; the value comes from the secret service (`.env` by default). A module can also read a secret at run time with `self.engine.services.secret.get("MY_API_KEY")`.
 
 ---
 
 ## Testing
 
 ```python
-# tests/test_my_integration.py
+# integrations/MyIntegration_test.py
 from unittest.mock import patch
-from naas_abi.modules.custom.my_module.integrations.MyIntegration import (
+from my_module.integrations.MyIntegration import (
     MyIntegration, MyIntegrationConfiguration,
 )
 

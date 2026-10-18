@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Quickstart
 
-Get a running ABI project in under 10 minutes.
+Create a project, add modules, start it and chat with its agents, in about 10 minutes plus the first boot.
 
 :::tip Upgrading from 2.x?
 ABI 3.0 runs on NATS, makes module jobs the default scheduler, and turns Dagster
@@ -16,13 +16,7 @@ and the [release note](/user-guide/release-notes/abi-3-0-nats).
 
 ## Prerequisites
 
-- Python 3.12+, [git](https://git-scm.com/) and [uv](https://docs.astral.sh/uv/getting-started/installation/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`). The project adds ABI as a git submodule.
-- To run the project natively with `abi dev up`:
-  - [`nats-server`](https://docs.nats.io/running-a-nats-service/introduction/installation) 2.14 or later on `PATH` (`brew install nats-server`, or a release binary);
-  - Node.js 18+ and [pnpm](https://pnpm.io/installation) 8.15+, for the Nexus web app;
-  - optionally [`jaeger`](https://www.jaegertracing.io/download/) v2 on `PATH`, for `abi dev up --with-tracing`.
-- Or [Docker](https://www.docker.com/products/docker-desktop/) (8 GB+ RAM) to run the project's Docker Compose stack instead.
-- An [OpenRouter API key](https://openrouter.ai/keys) for cloud models. Skip it for local-only mode (Ollama).
+[git](https://git-scm.com/) and [uv](https://docs.astral.sh/uv/getting-started/installation/); for `abi dev up`, `nats-server` 2.14 or later, Node.js 20 or later and [pnpm](https://pnpm.io/installation); an [OpenRouter API key](https://openrouter.ai/keys) (or Ollama, see [AI mode](#ai-mode-cloud-vs-local)); for the Docker stack, [Docker](https://www.docker.com/products/docker-desktop/) with 8 GB of RAM or more. Details and versions: [Install and prerequisites](/user-guide/get-started/install).
 
 ---
 
@@ -38,46 +32,78 @@ abi --help
 ## 2) Create a project
 
 ```bash
-abi new project my_ai
+export OPENROUTER_API_KEY=sk-or-...       # asked for when missing, and impossible to ask without a terminal
+abi new project my_ai --domain localhost
 cd my_ai
 ```
 
-`abi new project` asks for the base domain (`localhost` by default), adds ABI
-as a git submodule (`.abi/`), installs the packages, and validates the config.
-The validation asks for `OPENROUTER_API_KEY` when it is not in your environment
-or in `.env`.
-
-The project runs on **NATS**: its configs have a `nats:` block with discovery
-on, and `.env` holds the signing secret (`NATS_JWT_SECRET`), the broker's
-passwords (`NATS_ABI_PASSWORD`, `NATS_MODULE_PASSWORD`) and the admin's
-generated password (`NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`).
+`abi new project` adds ABI as a git submodule (`.abi/`), installs the packages and
+validates the config. The project runs on **NATS**: its configs have a `nats:` block with
+discovery on, and `.env` holds the signing secret (`NATS_JWT_SECRET`), the broker's passwords
+(`NATS_ABI_PASSWORD`, `NATS_MODULE_PASSWORD`) and the admin's generated password
+(`NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`).
 
 | Option | Effect |
 |---|---|
-| `--without-nats` | The classic in-process project: RabbitMQ and Dagster (legacy, removed in the next major), with the `naas-abi-core[dagster,rabbitmq]` extras. |
+| `--without-nats` | The classic in-process project: RabbitMQ and Dagster. [Legacy](/user-guide/get-started/legacy-mode), removed in the next major. |
 | `--without-local-deploy` | No Docker Compose stack. |
 | `--domain example.com` | Public hosts `nexus.example.com` and `api.example.com`. |
 | `--with-coding`, `--with-headscale` | Coding workspaces, a Headscale service. |
 
+Every option: [`abi new project`](/user-guide/reference/cli#abi-new-project).
+
 ---
 
-## 3) Start it
+## 3) Add modules
+
+```bash
+abi new module research                   # a remote module: own process, naas-abi-sdk
+abi new module legacy --in-engine         # a module the engine loads: naas_abi_core
+```
+
+A **remote module** runs in its own process: it publishes an agent and an hourly job,
+registers itself in discovery, and `abi dev up` (or Docker Compose) runs it. An
+**in-engine module** is loaded by the engine and has pipelines, workflows, integrations and
+ontologies as well. Add it under `modules:` in `config.yaml`, as the command prints:
+
+```yaml
+modules:
+  - module: legacy
+    enabled: true
+```
+
+Add an agent and an app inside each module (see [Creating a Module](/user-guide/build/modules/creating-a-module)
+for when to choose which):
+
+```bash
+cd src/legacy
+abi new agent analyst agents
+abi new app reports apps
+cd ../..
+uv run pytest                             # the tests the modules came with
+```
+
+---
+
+## 4) Start it
 
 **Natively, no Docker:**
 
 ```bash
-abi dev up
+abi dev up -d
+abi dev status
+abi dev ports
 ```
 
-It starts `nats-server`, an Oxigraph server, the API (the engine, with
-discovery), Nexus web, and the remote modules listed under `dev.modules`. It
-prints each service's URL and the admin login. The first boot takes a few
-minutes. Ports are offset per checkout: `abi dev ports` prints them.
+It starts `nats-server`, an Oxigraph server, the API (the engine, with discovery and
+jobs), Nexus web and the remote modules listed under `dev.modules`, and prints each
+service's URL and the admin login. In NATS mode `abi dev up -d` waits for the API before it
+starts the modules. The first boot takes a few minutes: the API loads every module, and
+Nexus web installs its packages with pnpm. Ports are offset per checkout: `abi dev ports`
+prints them.
 
 ```bash
-abi dev status            # services and their health
 abi dev logs api -f       # follow a service's log
-abi dev up -d             # run in the background
 abi dev up --with-tracing # also run Jaeger and trace every call
 abi dev down              # stop everything
 ```
@@ -85,33 +111,16 @@ abi dev down              # stop everything
 **With Docker Compose:**
 
 ```bash
-docker compose up -d
+abi stack start
 abi stack status
 ```
 
-The stack: NATS, PostgreSQL, Fuseki, Qdrant, MinIO, Redis, the API, Nexus web
-(port 3042), the MCP server and Caddy. Regenerate it after a CLI upgrade with
-`abi deploy local --regenerate`.
+The stack: NATS, PostgreSQL, Fuseki, Qdrant, MinIO, Redis, the API, Nexus web (port 3042),
+the MCP server and Caddy. See [Deploy with Docker](/user-guide/deploy/local-docker).
 
-Sign in to Nexus as `admin@example.com`, with the password from `.env`.
-
----
-
-## 4) Add a module
-
-```bash
-abi new module research
-```
-
-In a NATS project this is a **remote module**: it runs in its own process with
-`naas-abi-sdk`, publishes an agent and an hourly job, and registers itself in
-discovery. `abi dev up` runs it (`dev.modules` in `config.yaml`), and so does
-Docker Compose (`docker-compose.override.yml`). Its agent appears in Nexus once
-it logs `READY`. Continue with [Build a Remote Module](/user-guide/build/sdk/build-a-remote-module).
-
-`abi new module <name> --in-engine` creates a classic module that the engine
-loads (agents, workflows, pipelines, integrations, ontologies); add it under
-`modules:` in the config. See [Creating a Module](/user-guide/build/modules/creating-a-module).
+Sign in to Nexus as `admin@example.com`, with the password from `.env`. The **Research**,
+**Legacy** and **Analyst** agents are listed once the remote module logs `READY` and the
+engine has loaded the in-engine one.
 
 ---
 
@@ -123,11 +132,19 @@ In Nexus, or from the terminal:
 abi chat
 ```
 
+`abi chat` (and `abi agent list`, `abi run script`) reads the project's `config.yaml`, whose broker is `127.0.0.1:4222`: the Docker stack's. It is a client of that engine. Under `abi dev up` the broker has its own port, which only the generated overlay knows, so point the command at it:
+
+```bash
+ABI_CONFIG_OVERLAY=.abi/dev/dev.overlay.yaml abi chat
+```
+
+Without any engine running, it starts its own (it needs a broker: see [`abi chat`](/user-guide/reference/cli#abi-chat)).
+
 ---
 
 ## AI mode: cloud vs. local
 
-**Cloud mode** (default): models come through OpenRouter. Requires `OPENROUTER_API_KEY`.
+**Cloud mode** (default): models come through OpenRouter. Requires `OPENROUTER_API_KEY` (another provider's module works the same way).
 
 **Local mode**: all AI processing runs on your machine via Ollama. No data leaves your network.
 
@@ -165,4 +182,12 @@ services:
 The Nexus **System** app (sidebar, super admins) shows the kernel services,
 modules, jobs, agents, NATS and traces: see [Observability](/developer-guide/architecture/observability).
 
-Next: [Configuration Reference](/user-guide/get-started/configuration), [NATS and the Kernel Services](/developer-guide/architecture/nats), or [Build a Remote Module](/user-guide/build/sdk/build-a-remote-module).
+---
+
+## Next steps
+
+- [Build a Remote Module](/user-guide/build/sdk/build-a-remote-module): agents, apps and jobs in their own process.
+- [Module jobs and scheduling](/user-guide/build/modules/module-jobs): run work on a schedule or on an event.
+- [Configuration Reference](/user-guide/get-started/configuration): the `nats:` block, services and secrets.
+- [Deploy](/user-guide/deploy/overview): Docker, Dokploy, production.
+- [NATS and the Kernel Services](/developer-guide/architecture/nats): how it works.

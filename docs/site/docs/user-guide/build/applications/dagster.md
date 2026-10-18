@@ -1,7 +1,7 @@
 # Dagster (legacy)
 
 :::warning Legacy
-Dagster is a **legacy, optional extra** since ABI 3.0 and will be removed in the next major. New projects run on NATS, where [module jobs](/developer-guide/architecture/remote-modules#module-jobs) replace it: each module declares its jobs and runs them in its own process, and JetStream schedules them. Move orchestrations to module jobs before you turn NATS on: [Migrate from 2.x to 3.0](/user-guide/upgrade/migrate-to-3).
+Dagster is a **legacy, optional extra** since ABI 3.0 and will be removed in the next major. New projects run on NATS, where [module jobs](/user-guide/build/modules/module-jobs) replace it: each module declares its jobs and runs them in its own process, and JetStream schedules them. Move orchestrations to module jobs before you turn NATS on: [Migrate from 2.x to 3.0](/user-guide/upgrade/migrate-to-3). The rest of the opt-in setup is on [Legacy mode: without NATS](/user-guide/get-started/legacy-mode).
 :::
 
 Dagster schedules jobs, data pipelines, and asset materialization for projects **without NATS** (no `nats:` block in the config, or `abi new project --without-nats`).
@@ -24,12 +24,13 @@ In NATS mode one engine serves the kernel services, so Dagster, a second engine,
 
 ## Starting Dagster
 
-In a project without NATS, `abi dev up` starts Dagster natively, and the classic Docker Compose stack (`abi deploy local`) runs it as the `dagster` service. In the ABI repository:
+In a project without NATS, `abi dev up` starts Dagster natively, and the classic Docker Compose stack (`abi deploy local`) runs it as the `dagster` service. In the ABI repository, Dagster sits behind the `legacy` Compose profile; its Makefile targets run `docker compose --profile legacy ...`:
 
 ```bash
-make dagster-dev           # Development server with live reload
+make dagster-dev           # Foreground
 make dagster-up            # Background service
-make dagster-ui            # Open web UI in browser (port 3001)
+make dagster-ui            # Print the URL (http://localhost:3001) and run it in the foreground
+make dagster-logs          # Follow its logs
 ```
 
 ---
@@ -47,7 +48,7 @@ Dagster orchestrates ABI pipelines as **assets** - materialized data artifacts w
 
 ## Defining a Dagster asset from a pipeline
 
-The module equivalent is a job: see [From Dagster to module jobs](/developer-guide/architecture/remote-modules#from-dagster-to-module-jobs).
+The module equivalent is a job: see [From Dagster to module jobs](/user-guide/build/modules/module-jobs#from-dagster-to-module-jobs).
 
 ```python
 # orchestrations/MyOrchestration.py

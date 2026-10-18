@@ -1,592 +1,131 @@
 ---
-sidebar_position: 4
+sidebar_position: 7
 ---
 
 # High Availability & Disaster Recovery
 
-Naas is architected for enterprise-grade availability and resilience, with comprehensive disaster recovery capabilities that ensure business continuity even in the face of major infrastructure failures. Our multi-layered approach to availability provides 99.9%+ uptime guarantees with rapid recovery capabilities.
+How an ABI deployment behaves when a process, a host or a backing service fails, and what you have to provide around it. ABI 3.0 gives you the engine side: one serving engine that hands over by lease, deploys without downtime, remote modules that scale and restart on their own, and durable jobs. The availability of the stores (PostgreSQL, object storage, the triple store, Redis, Qdrant) and of the NATS broker is the availability of the infrastructure you run them on.
 
 :::info Professional Services Implementation
-The enterprise capabilities described in this section represent our ability to implement these solutions through our professional services team. Each deployment is customized to your specific requirements and implemented with dedicated support. Contact our enterprise team at [support@naas.ai](mailto:support@naas.ai) to discuss your needs and implementation timeline.
+Multi-zone and disaster-recovery designs are customized to each environment and implemented with dedicated support. Contact our enterprise team at [support@naas.ai](mailto:support@naas.ai) to discuss your needs and implementation timeline.
 :::
 
-## High Availability Architecture
+## What the engine does
 
-### Multi-Zone Deployment
+These behaviours are in `naas-abi-core` 3.0 and apply to a project in NATS mode (one with a `nats:` block, which `abi new project` creates). They are explained in [NATS and the kernel services](/developer-guide/architecture/nats).
 
-**Availability Zone Strategy**:
-- **Primary Zone**: Main operational zone with full capacity
-- **Secondary Zones**: Hot standby zones with automatic failover
-- **Cross-Zone Replication**: Real-time data replication across zones
-- **Load Distribution**: Intelligent traffic distribution across zones
+### One serving engine, by lease
 
-**Zone Failure Scenarios**:
-```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor': '#f8fafc', 'primaryTextColor': '#1e293b', 'primaryBorderColor': '#e2e8f0', 'lineColor': '#64748b'}}}%%
-graph TD
- subgraph "Zone A (Primary)"
- A1[API Gateway]
- A2[Application Services]
- A3[Database Primary]
- end
+Exactly one engine serves the kernel services per NATS account. It holds a lease (the key `owner` in the `ABI_ENGINE` bucket of JetStream) that it renews every quarter of `nats.engine.lease_seconds` (20 s by default).
 
- subgraph "Zone B (Secondary)"
- B1[API Gateway]
- B2[Application Services]
- B3[Database Replica]
- end
+- A second engine that tries to serve fails at start with `EngineAlreadyServing`, so two replicas never split the requests between two copies of each service.
+- An engine that crashed is replaced after at most one lease period. A holder that cannot renew for half a lease stops serving at once (fencing).
+- `role: client` engines (scripts, notebooks) never serve and open no backend.
 
- subgraph "Zone C (Tertiary)"
- C1[API Gateway]
- C2[Application Services]
- C3[Database Replica]
- end
+### Deploys without downtime
 
- LB[Load Balancer]
+Set `ABI_ROLLOUT_ID` (the image tag, for example) on every deploy. A new engine with a different rollout id **stands by**: it loads, reports ready, and takes the lease when the old engine releases it. The old engine stops its jobs, releases the lease, stops taking calls, and finishes the calls and transfers it already holds, for up to `nats.engine.drain_seconds` (60 s). For a moment both serve, rather than neither.
 
- LB --> A1
- LB --> B1
- LB --> C1
+This needs **shared backends**. An engine started with a rollout id refuses to start if a service it owns keeps its data on local disk or in the process (SQLite, embedded Oxigraph or Qdrant, the `fs` adapters): the next engine would answer from another copy. Use PostgreSQL, S3 or MinIO, Redis, a Fuseki or Oxigraph server and a Qdrant server. Development and single-host setups keep the file backends and deploy by stopping, then starting.
 
- A3 --> B3
- A3 --> C3
+A standby that has not taken over within `nats.engine.standby_timeout_seconds` (900 s) stops its process, so a deploy that never stops the old engine shows up.
 
- class A1,A2,A3,B1,B2,B3,C1,C2,C3 platform
- class LB infrastructure
+On Kubernetes, use one `ABI_ROLLOUT_ID` per deploy, `maxSurge: 1` and `maxUnavailable: 0`, count a standby as ready, and set `terminationGracePeriodSeconds` above the jobs' run time plus `drain_seconds`. ABI does not ship Kubernetes manifests; the Compose stack of `abi deploy local` is the reference.
+
+### When the broker is lost
+
+The API process and SDK modules reconnect for about two minutes (60 attempts, 2 s apart). After that, the API process stops (SIGTERM, then exit status 1 after 20 s) and so does a module. Run them under a supervisor that restarts them: Docker `restart: unless-stopped` (what the generated stack uses), or Kubernetes. With `api.reload: true` the loss is only logged.
+
+Cross-service calls have no local fallback in NATS mode: while the broker is down, they fail.
+
+### Remote modules
+
+A remote module scales and fails on its own:
+
+- Several replicas of a module share its agent runs and its jobs (one replica takes each job trigger).
+- A module's instance holds a lease in discovery (180 s in a generated project) and renews it; a clean stop unregisters at once, a crash is cleaned up when the lease expires. Callers use only `READY` instances.
+- Instances started with the same `ABI_ROLLOUT_ID` cut over together: the previous generation stays ready until the new one is up, then drains.
+- On `SIGTERM` a module stops taking new work, finishes the runs and jobs it started, and unregisters. Give it a grace period longer than its longest job.
+
+See [Remote modules and jobs](/developer-guide/architecture/remote-modules).
+
+### Jobs and agent runs
+
+- Module jobs are **at least once**: a handler may run again after a crash. Write handlers that tolerate a repeat. A run is a record in the Document Service, so its state survives a restart.
+- A missed cron tick fires once when the broker comes back, not once per missed tick.
+- An agent run is a durable record too: it can be reattached after a lost reply, and a conversation's memory lives in the Document Service, shared by replicas. Repeating a submission with the same invocation id returns the stored run.
+
+## What you provide
+
+| Component | What runs it in the generated stack | What to plan |
+|---|---|---|
+| **NATS and JetStream** | One `nats` container, JetStream data on the `nats_data` volume. | It holds the bus, job schedules, the module registry and the engine lease. The engine and the modules stop when it is gone for two minutes. ABI does not ship a clustered broker configuration. If you run a NATS cluster, point `nats.nats_url` at it and reproduce the `abi` and `module` users of the generated `nats.conf`; test the failover with your own procedure. Put the data on a persistent disk and back it up. |
+| **PostgreSQL** | `postgres` container. | Nexus data, the documents (agent memory, job runs, the activity log in the Document Service) and the dataset catalog. Use your platform's replicated or managed PostgreSQL, with point-in-time recovery. |
+| **Object storage** | MinIO. | Files and datasets' data. Use S3, or MinIO in a mode you operate. |
+| **Triple store** | Fuseki (Apache Jena TDB2). | The knowledge graph. One server in the stack; the stack runs a compaction sidecar and has a backup script (below). Plan a standby host or restore procedure. |
+| **Qdrant, Redis** | `qdrant`, `redis` containers. | Embeddings and key-value data. Use the replication of each product, or accept restoring them from a snapshot. |
+| **Entry point** | Caddy. | Put a load balancer or your platform's ingress in front, and your own certificates or ACME. |
+
+Whatever you choose, keep the data on storage that outlives the host.
+
+## Health and monitoring
+
+- The generated stack has health checks: the `abi` service requests `http://localhost:9879/`, NATS answers `/healthz` on port 8222, and Fuseki is probed with a real query against its dataset (a corrupt dataset marks it unhealthy). Dependent services wait for them.
+- The Nexus **System** app shows what is serving, which modules are registered and in what status, the jobs and their runs, and the broker's connections and streams. See [Observability](/developer-guide/architecture/observability).
+- The broker's monitoring endpoint (`/healthz`, `/connz`, `/jsz`) has no authentication: keep it on the private network.
+- `abi stack status` and `abi stack tui` show the Compose stack; `docker compose logs -f abi` follows the engine.
+
+Alerting is yours: wire the container health, the broker's `/healthz`, the API and your databases into your monitoring system. A useful set of alerts: the API or a module restarting repeatedly, the broker down, a lease that changes holder often, a job run stuck in `RETRYING`, and the disk space of the volumes.
+
+## Disaster recovery
+
+ABI does not set an RTO or RPO: they come from how you replicate and back up each store. Decide them first, then check that your design meets them.
+
+- **RTO**: how long the service may be down. It is bounded by how fast you can bring the stores and the broker back, and by the engine's boot (2 to 3 minutes for the API).
+- **RPO**: how much data you can lose. It is the age of your newest usable copy of each store.
+
+### Snapshots of the Docker stack
+
+`abi stack snapshot` takes a cold, consistent copy of the stack:
+
+```bash
+abi stack snapshot create --note "before the upgrade"
+abi stack snapshot list
+abi stack snapshot export <id> /backups/abi-<id>.tar    # one archive for another host
+abi stack snapshot import /backups/abi-<id>.tar
+abi stack snapshot restore <id>
+abi stack snapshot prune --keep 5
 ```
 
-**Automatic Failover Configuration**:
-```yaml
-# High availability configuration
-high_availability:
- zones:
- primary: "us-east-1a"
- secondary: ["us-east-1b", "us-east-1c"]
+It stops the stack, archives the stateful volumes (`postgres_data`, `minio_data`, `fuseki_data`, `qdrant_storage`, `redis_data`, `nats_data`, and the legacy and Headscale ones when present) and the project's `storage/` folder, then restarts the stack. Because the stack is stopped, the archives agree with each other: the dataset catalog in PostgreSQL and the data files in `storage/` come from the same moment. Restore the whole snapshot, not one store.
 
- failover:
- detection_timeout: "30 seconds"
- failover_time: "2 minutes"
- automatic: true
- health_checks:
- - endpoint: "/health"
- interval: "10 seconds"
- timeout: "5 seconds"
- retries: 3
+Snapshots are stored in `.snapshots/` of the project. A restore is destructive, and takes a safety snapshot of the current state first (`--no-safety-snapshot` turns that off). A snapshot stops the stack briefly, so it is a cold backup, not a continuous one: it does not give you a short RPO by itself. Copy the exported archives off the host.
 
- load_balancing:
- algorithm: "least_connections"
- sticky_sessions: false
- health_check_grace_period: "60 seconds"
-```
+### Backups of the stores
 
-### Database High Availability
+For a deployment on managed or replicated services, back up each store with its own tooling instead:
 
-**PostgreSQL High Availability**:
-- **Streaming Replication**: Synchronous replication for zero data loss
-- **Connection Pooling**: PgBouncer for connection management
-- **Automatic Failover**: Patroni for automated failover management
-- **Point-in-Time Recovery**: Continuous WAL archiving
+- **PostgreSQL**: base backups with WAL archiving (point-in-time recovery), or your platform's managed backups.
+- **Object storage**: bucket versioning and replication on S3, or backups of the MinIO volume.
+- **Knowledge graph**: `.deploy/docker/fuseki/backup.sh` dumps the Fuseki dataset to the Fuseki volume through the admin API (and compacts it with `--compact`); a compaction sidecar already compacts it daily. Copy the dump off the host.
+- **Configuration and secrets**: the project is a git repository; keep `.env` in your secret manager, not in git.
 
-**Database Cluster Configuration**:
-```yaml
-# PostgreSQL HA configuration
-postgresql_ha:
- cluster_name: "naas-postgres"
+Keep copies in at least one other location, encrypted, and keep the retention you need for compliance.
 
- nodes:
- primary:
- name: "postgres-primary"
- zone: "us-east-1a"
- instance_type: "db.r5.2xlarge"
+### Recovering
 
- replicas:
- - name: "postgres-replica-1"
- zone: "us-east-1b"
- instance_type: "db.r5.2xlarge"
- replication: "synchronous"
+1. Declare the incident and decide the target: the same host or another.
+2. Bring up the stores and the broker from your latest copies (a snapshot restores all of them together).
+3. Start the engine. It loads every module and runs migrations, so allow a few minutes. With the data in place, the lease is free and the engine takes it.
+4. Start the remote modules. They re-register in discovery.
+5. Check the System app (services serving, modules `READY`), sign in, chat, and run a job from the Jobs tab.
+6. If the broker's data (`nats_data`) was lost, what was queued in the bus and the job triggers is gone. The engine that hosts discovery creates the jobs stream and the claim-check store again at start, and the modules register again; check the Jobs tab and trigger what is missing.
 
- - name: "postgres-replica-2"
- zone: "us-east-1c"
- instance_type: "db.r5.2xlarge"
- replication: "asynchronous"
+Rehearse the recovery on a spare host on a schedule you can keep: backup restores often, a full recovery at least once a year, and after every major upgrade.
 
- failover:
- automatic: true
- timeout: "30 seconds"
- promotion_timeout: "60 seconds"
-```
+## Known limits
 
-**Redis High Availability**:
-- **Redis Sentinel**: Automatic failover for Redis instances
-- **Cluster Mode**: Distributed Redis cluster for scalability
-- **Persistence**: RDB and AOF persistence for data durability
-- **Memory Management**: Automatic memory optimization and eviction
-
-### Service Mesh Resilience
-
-**Istio Service Mesh**:
-- **Circuit Breakers**: Automatic failure detection and isolation
-- **Retry Policies**: Configurable retry logic with exponential backoff
-- **Timeout Management**: Request timeout configuration
-- **Traffic Splitting**: Gradual traffic migration during deployments
-
-**Circuit Breaker Configuration**:
-```yaml
-# Istio circuit breaker configuration
-apiVersion: networking.istio.io/v1beta1
-kind: DestinationRule
-metadata:
- name: naas-api-circuit-breaker
-spec:
- host: naas-api-service
- trafficPolicy:
- outlierDetection:
- consecutiveErrors: 3
- interval: 30s
- baseEjectionTime: 30s
- maxEjectionPercent: 50
- connectionPool:
- tcp:
- maxConnections: 100
- http:
- http1MaxPendingRequests: 50
- maxRequestsPerConnection: 10
-```
-
-**Retry and Timeout Policies**:
-```yaml
-# Retry and timeout configuration
-apiVersion: networking.istio.io/v1beta1
-kind: VirtualService
-metadata:
- name: naas-api-retry-policy
-spec:
- http:
- - retries:
- attempts: 3
- perTryTimeout: 10s
- retryOn: "5xx,reset,connect-failure,refused-stream"
- timeout: 30s
-```
-
-### Application-Level Resilience
-
-**Graceful Degradation**:
-- **Feature Flags**: Dynamic feature enabling/disabling
-- **Fallback Mechanisms**: Alternative processing paths during failures
-- **Cache Strategies**: Multi-level caching for improved resilience
-- **Asynchronous Processing**: Queue-based processing for non-critical operations
-
-**Health Check Implementation**:
-```python
-# Application health check example
-from fastapi import FastAPI, HTTPException
-from typing import Dict, Any
-import asyncio
-import time
-
-app = FastAPI()
-
-class HealthChecker:
- def __init__(self):
- self.checks = {
- "database": self.check_database,
- "redis": self.check_redis,
- "external_api": self.check_external_api
- }
-
- async def check_database(self) -> Dict[str, Any]:
- try:
- # Database connectivity check
- result = await db.execute("SELECT 1")
- return {
- "status": "healthy",
- "response_time": 0.05,
- "details": "Database connection successful"
- }
- except Exception as e:
- return {
- "status": "unhealthy",
- "error": str(e),
- "details": "Database connection failed"
- }
-
- async def check_redis(self) -> Dict[str, Any]:
- try:
- # Redis connectivity check
- await redis.ping()
- return {
- "status": "healthy",
- "response_time": 0.02,
- "details": "Redis connection successful"
- }
- except Exception as e:
- return {
- "status": "unhealthy",
- "error": str(e),
- "details": "Redis connection failed"
- }
-
-@app.get("/health")
-async def health_check():
- checker = HealthChecker()
- results = {}
- overall_status = "healthy"
-
- for check_name, check_func in checker.checks.items():
- result = await check_func()
- results[check_name] = result
- if result["status"] != "healthy":
- overall_status = "unhealthy"
-
- return {
- "status": overall_status,
- "timestamp": time.time(),
- "checks": results
- }
-```
-
-## Disaster Recovery
-
-### Recovery Time and Point Objectives
-
-**Service Level Objectives**:
-- **RTO (Recovery Time Objective)**: Maximum acceptable downtime
-- **RPO (Recovery Point Objective)**: Maximum acceptable data loss
-- **MTTR (Mean Time to Recovery)**: Average time to restore service
-- **MTBF (Mean Time Between Failures)**: Average time between failures
-
-**SLA Tiers**:
-```yaml
-# Disaster recovery SLA tiers
-sla_tiers:
- standard:
- rto: "4 hours"
- rpo: "1 hour"
- availability: "99.9%"
- support: "business hours"
-
- premium:
- rto: "1 hour"
- rpo: "15 minutes"
- availability: "99.95%"
- support: "24/7"
-
- enterprise:
- rto: "30 minutes"
- rpo: "5 minutes"
- availability: "99.99%"
- support: "24/7 with dedicated TAM"
-```
-
-### Backup Strategies
-
-**Comprehensive Backup Coverage**:
-- **Database Backups**: Continuous WAL archiving with point-in-time recovery
-- **File System Backups**: Incremental backups of application data
-- **Configuration Backups**: Version-controlled infrastructure and application configuration
-- **Secrets Backup**: Encrypted backup of secrets and certificates
-
-**Backup Schedule and Retention**:
-```yaml
-# Backup configuration
-backup_strategy:
- database:
- full_backup:
- schedule: "daily at 2:00 AM UTC"
- retention: "30 days"
-
- incremental_backup:
- schedule: "every 4 hours"
- retention: "7 days"
-
- wal_archiving:
- enabled: true
- retention: "7 days"
-
- filesystem:
- schedule: "daily at 3:00 AM UTC"
- retention: "14 days"
- compression: true
- encryption: true
-
- configuration:
- schedule: "on every change"
- retention: "90 days"
- versioning: true
-```
-
-**Cross-Region Backup Replication**:
-- **Primary Region**: us-east-1 (production and primary backups)
-- **Secondary Region**: us-west-2 (backup replication and DR site)
-- **Tertiary Region**: eu-west-1 (long-term archive storage)
-
-### Disaster Recovery Sites
-
-**Hot Standby Site**:
-- **Real-time Replication**: Continuous data replication to DR site
-- **Warm Infrastructure**: Pre-provisioned infrastructure ready for activation
-- **Automated Failover**: Automatic failover with minimal manual intervention
-- **Regular Testing**: Monthly DR testing and validation
-
-**DR Site Architecture**:
-```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor': '#f8fafc', 'primaryTextColor': '#1e293b', 'primaryBorderColor': '#e2e8f0', 'lineColor': '#64748b'}}}%%
-graph TD
- subgraph "Primary Site (us-east-1)"
- P1[Load Balancer]
- P2[Application Cluster]
- P3[Database Primary]
- P4[Storage]
- end
-
- subgraph "DR Site (us-west-2)"
- D1[Load Balancer]
- D2[Application Cluster]
- D3[Database Standby]
- D4[Storage Replica]
- end
-
- subgraph "Archive Site (eu-west-1)"
- A1[Long-term Storage]
- A2[Compliance Archive]
- end
-
- P3 --> D3
- P4 --> D4
- D4 --> A1
- P4 --> A2
-
- class P1,P2,P3,P4,D1,D2,D3,D4 platform
- class A1,A2 infrastructure
-```
-
-**Cold Standby Site**:
-- **Backup Restoration**: Recovery from backups stored in secondary region
-- **Infrastructure Provisioning**: Automated infrastructure provisioning during DR
-- **Extended Recovery Time**: Longer recovery time but lower cost
-- **Quarterly Testing**: Quarterly DR testing and validation
-
-### Disaster Recovery Procedures
-
-**Disaster Declaration Process**:
-1. **Incident Detection**: Automated monitoring or manual reporting
-2. **Impact Assessment**: Evaluate scope and severity of the incident
-3. **Disaster Declaration**: Formal declaration by incident commander
-4. **DR Team Activation**: Activate disaster recovery team and procedures
-5. **Stakeholder Notification**: Notify customers, partners, and regulators
-
-**Recovery Procedures**:
-```yaml
-# Disaster recovery runbook
-disaster_recovery:
- detection:
- - automated_monitoring: "System health checks fail"
- - manual_trigger: "Operations team declares disaster"
- - external_notification: "Cloud provider outage notification"
-
- assessment:
- - scope_evaluation: "Determine affected systems and users"
- - impact_analysis: "Assess business impact and urgency"
- - recovery_strategy: "Select appropriate recovery approach"
-
- execution:
- - infrastructure_activation: "Provision DR infrastructure"
- - data_restoration: "Restore data from backups or replicas"
- - service_validation: "Validate service functionality"
- - traffic_redirection: "Redirect user traffic to DR site"
-
- communication:
- - internal_notification: "Notify internal stakeholders"
- - customer_communication: "Update status page and notify customers"
- - regulatory_reporting: "File required regulatory reports"
-```
-
-**Recovery Validation**:
-- **Smoke Tests**: Basic functionality verification
-- **Integration Tests**: End-to-end workflow validation
-- **Performance Tests**: System performance validation
-- **Security Tests**: Security control validation
-
-## Business Continuity
-
-### Continuity Planning
-
-**Business Impact Analysis**:
-- **Critical Processes**: Identification of mission-critical business processes
-- **Dependencies**: Mapping of system and process dependencies
-- **Recovery Priorities**: Prioritization of recovery activities
-- **Resource Requirements**: Identification of required resources for recovery
-
-**Continuity Strategies**:
-```yaml
-# Business continuity strategies
-continuity_strategies:
- prevention:
- - redundant_systems: "Multiple availability zones"
- - proactive_monitoring: "24/7 system monitoring"
- - preventive_maintenance: "Regular system maintenance"
-
- mitigation:
- - graceful_degradation: "Reduced functionality during incidents"
- - load_shedding: "Prioritize critical operations"
- - alternative_workflows: "Manual processes when systems unavailable"
-
- recovery:
- - automated_failover: "Automatic system recovery"
- - manual_procedures: "Documented manual recovery steps"
- - communication_plans: "Stakeholder communication procedures"
-```
-
-### Crisis Communication
-
-**Communication Channels**:
-- **Status Page**: Public status page for service availability
-- **Email Notifications**: Automated email alerts to subscribers
-- **SMS Alerts**: Critical alerts via SMS for urgent issues
-- **Social Media**: Updates via Twitter and LinkedIn
-- **Direct Communication**: Phone calls for major customers
-
-**Communication Templates**:
-```yaml
-# Crisis communication templates
-communication_templates:
- incident_notification:
- subject: "Service Disruption - [Service Name]"
- template: |
- We are currently experiencing an issue with [service_name] that began at [start_time].
-
- Impact: [impact_description]
- Current Status: [current_status]
- Next Update: [next_update_time]
-
- We apologize for any inconvenience and are working to resolve this as quickly as possible.
-
- resolution_notification:
- subject: "Service Restored - [Service Name]"
- template: |
- The issue with [service_name] has been resolved as of [resolution_time].
-
- Root Cause: [root_cause_summary]
- Resolution: [resolution_summary]
-
- We will conduct a post-incident review and share findings within 48 hours.
-```
-
-### Testing and Validation
-
-**DR Testing Schedule**:
-- **Monthly**: Backup restoration testing
-- **Quarterly**: Partial DR site activation
-- **Semi-annually**: Full DR site failover test
-- **Annually**: Comprehensive business continuity exercise
-
-**Testing Procedures**:
-```yaml
-# DR testing procedures
-dr_testing:
- backup_restoration:
- frequency: "monthly"
- scope: "database and critical data"
- validation: "data integrity and completeness"
- rollback: "automatic rollback after testing"
-
- failover_testing:
- frequency: "quarterly"
- scope: "application services failover"
- validation: "end-to-end functionality"
- duration: "4 hours maximum"
-
- full_dr_exercise:
- frequency: "annually"
- scope: "complete system failover"
- validation: "business process continuity"
- stakeholders: "all business units"
-```
-
-**Test Results Documentation**:
-- **Test Execution Logs**: Detailed logs of all test activities
-- **Performance Metrics**: Recovery time and data loss measurements
-- **Issue Identification**: Documentation of any issues discovered
-- **Improvement Recommendations**: Recommendations for process improvements
-
-## Monitoring and Alerting
-
-### Comprehensive Monitoring
-
-**Infrastructure Monitoring**:
-- **Server Metrics**: CPU, memory, disk, network utilization
-- **Container Metrics**: Pod resource usage and health status
-- **Network Metrics**: Bandwidth utilization and latency
-- **Storage Metrics**: Disk usage, IOPS, and throughput
-
-**Application Monitoring**:
-- **Response Times**: API and web interface response times
-- **Error Rates**: Application error rates and types
-- **Throughput**: Request volume and processing rates
-- **User Experience**: Real user monitoring and synthetic testing
-
-**Monitoring Stack**:
-```yaml
-# Monitoring configuration
-monitoring:
- metrics:
- prometheus:
- retention: "30 days"
- scrape_interval: "15 seconds"
- alerting_rules: "custom_rules.yml"
-
- grafana:
- dashboards: "infrastructure, application, business"
- alerting: "integrated with PagerDuty"
-
- logging:
- elasticsearch:
- retention: "90 days"
- indices: "daily rotation"
- replicas: 2
-
- kibana:
- dashboards: "security, application, audit"
- access_control: "role-based"
-
- tracing:
- jaeger:
- sampling_rate: "0.1%"
- retention: "7 days"
- storage: "elasticsearch"
-```
-
-### Intelligent Alerting
-
-**Alert Categories**:
-- **Critical**: Immediate response required (page on-call engineer)
-- **Warning**: Issue requires attention within business hours
-- **Info**: Informational alerts for trend analysis
-
-**Alert Escalation**:
-```yaml
-# Alert escalation configuration
-alerting:
- escalation_policies:
- critical:
- - level_1: "on_call_engineer"
- timeout: "5 minutes"
- - level_2: "engineering_manager"
- timeout: "15 minutes"
- - level_3: "cto"
- timeout: "30 minutes"
-
- warning:
- - level_1: "engineering_team_slack"
- timeout: "30 minutes"
- - level_2: "engineering_manager"
- timeout: "2 hours"
-
- notification_channels:
- - pagerduty: "critical alerts"
- - slack: "warning and info alerts"
- - email: "daily summary reports"
-```
-
-For detailed high availability implementation guidance, contact our infrastructure team at [infrastructure@naas.ai](mailto:infrastructure@naas.ai).
+- The generated stack is a single host with one broker, one database, one triple store. It restarts what crashes (`restart: unless-stopped`) and hands over without downtime on shared backends, but a lost host is a restore.
+- The engine that serves the kernel services is one process at a time. Replicas of it are standbys for a deploy or a failure, not extra capacity; remote modules are what you scale out.
+- Calls are at most once, and jobs at least once. After a crash, a request the engine had already received may or may not have run: reconcile before you retry.
+- The broker's own limits (no TLS, no authentication on monitoring, modules as trusted code) are in the [Security model](/developer-guide/architecture/security).

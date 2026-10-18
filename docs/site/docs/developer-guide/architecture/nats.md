@@ -137,7 +137,7 @@ lease, the key `owner` in the key-value bucket `ABI_ENGINE`, renewed every
 quarter of `nats.engine.lease_seconds` (20 s by default). A second engine that
 tries to serve fails at start with `EngineAlreadyServing`, naming the holder's
 host, pid, version and start time. This is what stops a second replica, a
-second `abi dev up`, or a Dagster process from splitting requests between two
+second `abi dev up`, or a legacy Dagster process from splitting requests between two
 copies of every service.
 
 An engine has one of three roles (`nats.engine.role`, or `ABI_ENGINE_ROLE`):

@@ -29,7 +29,7 @@ The API publishes a completion route for each agent of the modules **the engine 
 
 **Docker Compose.** The project's stack (`abi deploy local`) runs it as the `mcp-server` service, on port 8000, with `MCP_TRANSPORT=http`, `MCP_HOST=0.0.0.0` and `ABI_API_BASE=http://abi:9879`. MCP clients connect to `http://localhost:8000/mcp`.
 
-**Natively,** from a project or the ABI repository:
+**Natively,** from a project or the ABI repository (`abi dev up` does not start it):
 
 ```bash
 # STDIO, for a desktop client that starts the server itself

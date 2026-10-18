@@ -4,34 +4,63 @@ sidebar_position: 5
 
 # Setup Git Remote
 
-Once you have forked and created your own version of the ABI repository, you need to establish a Git remote.
-This will enable you to push and pull to and from the original ABI repository.
-Doing so will allow you to update your project with the latest changes, or contribute back to the open-source project.
+Two situations call for a second Git remote, and they use it differently:
 
-Execute the following commands in your terminal:
+- You **forked** the ABI repository to contribute a change. You need the original repository as a remote, to stay up to date with it.
+- You have a **project** made with `abi new project`. The framework is not a remote of your repository: it is a submodule, and you update it with `git submodule`.
+
+## Contribute to ABI from a fork
+
+Fork [jupyter-naas/abi](https://github.com/jupyter-naas/abi) on GitHub, clone your fork, and add the original repository as a remote. The conventional name is `upstream`:
 
 ```bash
-# Access your repo
-cd "your_directory_name"
+# Clone your fork: Git names it `origin`
+git clone git@github.com:<your-user>/abi.git
+cd abi
 
-# Add remote
-git remote add abi https://github.com/jupyter-naas/abi.git
-
-# Push to main branch
-git push abi main
-
-# Pull from main branch
-git pull abi main
-
+# Add the original repository
+git remote add upstream https://github.com/jupyter-naas/abi.git
+git remote -v
 ```
 
-**About Git default remote**
+Bring your fork's `main` up to date, then branch from it:
 
-When you clone a git repository from Github or any other provider, it will always create a default remote for you, named, `origin`. You might already have asked yourself what this `origin` was. It's your default git remote.
+```bash
+git fetch upstream
+git switch main
+git merge --ff-only upstream/main      # or: git rebase upstream/main
+git push origin main                   # update your fork
 
-This means that, assuming you are on the `main` branch, executing `git push` is the same as `git push origin main`.
+git switch -c fix/my-change
+```
 
-So by default will just use:
+Push your branch to **your fork** (`origin`), not to `upstream`, and open a pull request into `main` of `jupyter-naas/abi`:
 
-- The branch you are actually on
-- The `origin` remote. Even if other exists, it will always use `origin` by default.
+```bash
+git push -u origin fix/my-change
+gh pr create --repo jupyter-naas/abi --base main
+```
+
+Run `make check` and the tests that cover your change before you push ([The Makefile](/developer-guide/toolchain/makefile), [Test Python scripts](/developer-guide/toolchain/test_python_scripts)). Fixes for 2.x go to the `v2` branch: see [Backporting a fix to v2](/developer-guide/releasing/backporting-to-v2).
+
+## Update the framework of a project
+
+A project made by `abi new project` keeps the ABI repository at `.abi/` as a Git submodule (the default; `--without-abi-submodule` turns it off). A NATS project resolves `naas-abi-proto` and `naas-abi-sdk` from it until they are published on PyPI. The submodule is pinned to one commit. To take the latest framework:
+
+```bash
+git submodule update --remote .abi
+git add .abi && git commit -m "Bump .abi"
+uv sync
+```
+
+If you cloned the project without `--recurse-submodules`:
+
+```bash
+git submodule update --init --recursive
+```
+
+Do not edit files under `.abi/`; to change the framework, contribute to ABI from a fork as above.
+
+## About the default remote
+
+When you clone a repository, Git creates a remote called `origin`: the place you cloned from. With no other arguments, `git push` and `git pull` use the branch you are on and its `origin` counterpart. Other remotes, such as `upstream`, are used only when you name them (`git fetch upstream`).

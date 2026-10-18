@@ -1,22 +1,22 @@
 # REST API
 
-The ABI API is a FastAPI application that serves as the primary programmatic interface to the ABI stack. It auto-discovers and registers every loaded agent, workflow, and pipeline as API endpoints.
+The ABI API is a FastAPI application and the primary programmatic interface to the ABI stack. It auto-discovers every agent, workflow and pipeline of the modules the engine loads and registers them as endpoints. The Nexus API is mounted on the same process, under `/api`.
 
 ---
 
 ## Starting the API
 
 ```bash
-# Development
-make api
-# or
-uv run python -m naas_abi_core.apps.api.api
+# Natively: Oxigraph, NATS, the API and Nexus web
+abi dev up
 
-# Production (Docker)
-make api-prod
+# With Docker Compose
+abi stack start
 ```
 
-Default port: **9879**
+The API listens on port **9879** by default. `abi dev up` offsets the ports per checkout so several projects can run side by side: `abi dev ports` prints the live ones. In the ABI repository, `make api` runs the API alone (`uv run python -m naas_abi_core.apps.api.api`); in a NATS project it needs a broker.
+
+The first boot takes a few minutes: the engine loads every module and ontology. The API is ready when `/docs` answers. For a production deployment, see [Deploy](/user-guide/deploy/overview).
 
 ---
 
@@ -28,18 +28,24 @@ When the server is running:
 - `http://localhost:9879/redoc` - Redoc (readable)
 - `http://localhost:9879/openapi.json` - OpenAPI spec
 
+(Use the `api` port printed by `abi dev ports` with `abi dev up`.)
+
 ---
 
 ## Authentication
 
-All endpoints require Bearer token authentication:
+The routes the engine registers (`/agents`, `/workflows`, `/pipelines`, `/tools`) require the project's API key as a Bearer token. It is `ABI_API_KEY` in the project's `.env`:
 
 ```bash
-curl -X POST "http://localhost:9879/agents/abi/completion" \
+curl -X POST "http://localhost:9879/agents/Abi/completion" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"prompt": "What organizations are in my knowledge graph?", "thread_id": 1}'
 ```
+
+There is no token endpoint for these routes. The key can also be sent as `?token=<key>`.
+
+The Nexus routes under `/api` use the Nexus sign-in instead: `POST /api/auth/login` returns an access token and a refresh token, `POST /api/auth/refresh` renews it. See [Nexus](/user-guide/build/applications/nexus#authentication).
 
 ---
 
@@ -47,14 +53,15 @@ curl -X POST "http://localhost:9879/agents/abi/completion" \
 
 ### Agents
 
-Every loaded agent is available at:
+Every agent the engine loads is available at:
 
 ```http
 POST /agents/{agent_name}/completion
 POST /agents/{agent_name}/stream-completion
 ```
 
-Request body:
+`{agent_name}` is the agent's `name`, with characters other than letters, digits, `_` and `-` replaced by `_`. Request body:
+
 ```json
 {
   "prompt": "Your question or instruction",
@@ -62,29 +69,32 @@ Request body:
 }
 ```
 
-### SPARQL query endpoint
+`stream-completion` answers with server-sent events.
+
+### Workflows, pipelines and tools
+
+A workflow or pipeline whose `run(parameters)` takes a Pydantic parameters model gets a route, named after its class in snake case:
 
 ```http
-POST /graph/query
-Body: { "query": "SELECT * WHERE { ?s ?p ?o } LIMIT 10" }
+POST /workflows/{workflow_name}
+POST /pipelines/{pipeline_name}
+POST /tools/{tool_name}
 ```
 
-### Knowledge graph endpoints
+The body is the parameters model. A pipeline's graph comes back as `{"format": "turtle", "data": "..."}`. A class can override `as_api` for a different surface. Empty stubs are not published, and a LangChain-only tool is not given a REST route. See [Creating a Workflow](/user-guide/build/agents/creating-a-workflow) and [Creating a Pipeline](/user-guide/build/knowledge-graph/creating-a-pipeline).
 
-```bash
-GET  /graph/entities          # List entities
-POST /abi/sync                # Trigger a data sync
-GET  /ontology/classes        # List ontology classes
-```
+### Agents of remote modules
 
-### Workspace and auth
+Agents published by [remote modules](/user-guide/build/sdk/build-a-remote-module) have no `/agents/...` route. Call them through the chat API, which selects them by **id**:
 
 ```http
-POST /auth/login
-POST /auth/refresh
-GET  /workspaces
-GET  /organizations
+POST /api/chat/stream
+POST /api/chat/complete
 ```
+
+### The Nexus API
+
+The Nexus API is served under `/api`: authentication (`/api/auth/...`), organizations and workspaces (`/api/organizations`, `/api/workspaces`), chat (`/api/chat/...`), the knowledge graph (`/api/graph/...`, `/api/ontology/...`, `/api/search`), modules and apps (`/api/modules`, `/api/apps`), files, and the admin and System endpoints. Its OpenAPI document is part of `/openapi.json`; browse it in Swagger UI.
 
 ---
 
@@ -96,4 +106,4 @@ CORS origins are configured in `config.yaml` under `api.cors_origins`. This is t
 
 ## Tenant configuration
 
-The `/api/tenant` endpoint returns branding configuration for the current deployment (logo, colors, title). This is consumed by the Nexus frontend. Configuration is set in `config.yaml`. See [ADR: Tenant Provisioning](/user-guide/release-notes/config-driven-tenant-provisioning).
+The `/api/tenant` endpoint returns the branding configuration of the deployment (tab title, logo, colors). It is consumed by the Nexus frontend and set in the `tenant:` block of the `naas_abi` module's `nexus_config` in `config.yaml`. See [Nexus](/user-guide/build/applications/nexus#tenant-branding) and [ADR: Tenant Provisioning](/user-guide/release-notes/config-driven-tenant-provisioning).

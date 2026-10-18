@@ -66,7 +66,7 @@ This section is written for engineers, architects, and technical decision-makers
 
 **[Interoperability](./interoperability)** documents every integration point: SPARQL endpoints, S3-compatible object storage, MCP tool registration, OpenAI-compatible model interfaces, standard JWT auth, and the Python SDK.
 
-**[The Runtime](./deployment-models)** covers how ABI is operated in practice: Docker Compose and `abi dev up`, the four deployment topologies (local, on-premises, air-gapped, managed), and how configuration drives environment differences.
+**[Deployment models](/user-guide/deploy/deployment-models)** covers how ABI is operated in practice: Docker Compose and `abi dev up`, the deployment topologies (local, on-premises, air-gapped, managed), and how configuration drives environment differences.
 
 **[The Agent System](./agent-system)** explains how agents are structured as LangGraph state machines, how intent routing dispatches requests to the right domain agent, how agents compose into delegation hierarchies, and how they are exposed simultaneously via REST, MCP, and CLI.
 

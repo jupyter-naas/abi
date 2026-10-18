@@ -64,7 +64,7 @@ abi module key <module_id>   # prints the key; the module gets it as ABI_MODULE_
 ```
 
 - A module key signs tokens for its own module id only. No key exists for the
-  first-party identities (`api`, `engine`, `dagster`).
+  first-party identities (`api`, `engine`, and `dagster`, the legacy Dagster process).
 - Discovery registers a module only under a token for its own module id, so no
   module can claim another's agents, jobs or app routes.
 - `abi new module` writes the module's key to `.env`

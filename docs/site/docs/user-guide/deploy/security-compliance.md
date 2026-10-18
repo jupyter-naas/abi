@@ -1,464 +1,118 @@
 ---
-sidebar_position: 5
+sidebar_position: 6
 ---
 
 # Security & Compliance
 
-Naas implements enterprise-grade security controls and compliance frameworks to meet the most stringent organizational requirements. Our security-by-design approach ensures data protection, regulatory compliance, and operational security across all deployment models.
+What ABI does for security, what it leaves to you, and how to place it in a compliance programme. ABI is self-hosted software: you run it on your own infrastructure, with your own network, identity provider and storage. It gives you the controls below; the certification of a deployment is a property of the whole deployment, not of the software.
 
 :::info Professional Services Implementation
-The enterprise capabilities described in this section represent our ability to implement these solutions through our professional services team. Each deployment is customized to your specific requirements and implemented with dedicated support. Contact our enterprise team at [support@naas.ai](mailto:support@naas.ai) to discuss your needs and implementation timeline.
+Security reviews, hardening and compliance mapping are done with our professional services team, customized to your requirements. Contact our enterprise team at [support@naas.ai](mailto:support@naas.ai) to discuss your needs and implementation timeline.
 :::
 
-## Security Architecture
-
-### Zero Trust Security Model
-
-Naas implements a comprehensive zero trust security architecture that assumes no implicit trust and continuously validates every transaction.
-
-**Core Principles**:
-- **Never Trust, Always Verify**: Every request is authenticated and authorized
-- **Least Privilege Access**: Minimal access rights for users and systems
-- **Assume Breach**: Design for containment and rapid response
-- **Continuous Monitoring**: Real-time security monitoring and analysis
-
-**Implementation Framework**:
-```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor': '#f8fafc', 'primaryTextColor': '#1e293b', 'primaryBorderColor': '#e2e8f0', 'lineColor': '#64748b'}}}%%
-graph TD
- subgraph "Identity & Access"
- A[Multi-Factor Authentication]
- B[Identity Provider Integration]
- C[Privileged Access Management]
- end
-
- subgraph "Network Security"
- D[Micro-Segmentation]
- E[Encrypted Communications]
- F[Network Monitoring]
- end
-
- subgraph "Data Protection"
- G[Encryption at Rest]
- H[Encryption in Transit]
- I[Data Loss Prevention]
- end
-
- subgraph "Monitoring & Response"
- J[SIEM Integration]
- K[Threat Detection]
- L[Incident Response]
- end
-
- A --> D
- B --> E
- C --> F
- G --> J
- H --> K
- I --> L
-
- class A,B,C,D,E,F,G,H,I platform
- class J,K,L infrastructure
-```
-
-### Authentication & Authorization
-
-**Multi-Factor Authentication (MFA)**:
-- **TOTP Support**: Time-based one-time passwords (Google Authenticator, Authy)
-- **Hardware Tokens**: FIDO2/WebAuthn, YubiKey, RSA SecurID
-- **Biometric Authentication**: Fingerprint, facial recognition (where supported)
-- **Smart Cards**: CAC/PIV card support for government deployments
-
-**Enterprise Identity Integration**:
-```yaml
-# SAML configuration example
-saml_config:
- identity_provider: "https://adfs.company.com"
- service_provider: "https://naas.company.com"
- attributes:
- email: "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"
- name: "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"
- groups: "http://schemas.microsoft.com/ws/2008/06/identity/claims/groups"
-
- encryption:
- certificate: "/path/to/saml-cert.pem"
- algorithm: "AES256-GCM"
-```
-
-**Role-Based Access Control (RBAC)**:
-- **Hierarchical Roles**: Nested role inheritance with permission aggregation
-- **Attribute-Based Access**: Dynamic permissions based on user attributes
-- **Resource-Level Permissions**: Granular control over individual resources
-- **Temporal Access**: Time-based access controls with automatic expiration
-
-**API Security**:
-- **OAuth 2.0/OpenID Connect**: Standard authentication protocols
-- **JWT Tokens**: Stateless authentication with configurable expiration
-- **API Rate Limiting**: Configurable rate limits per user/application
-- **Scope-Based Access**: Fine-grained API permission scopes
-
-### Data Protection
-
-**Encryption at Rest**:
-- **Database Encryption**: AES-256 encryption for all database storage
-- **File System Encryption**: Full disk encryption using LUKS/BitLocker
-- **Object Storage Encryption**: S3/Azure Blob encryption with customer-managed keys
-- **Backup Encryption**: Encrypted backups with separate key management
-
-**Encryption in Transit**:
-- **TLS 1.3**: Latest TLS protocol for all network communications
-- **Certificate Management**: Automated certificate provisioning and renewal
-- **Perfect Forward Secrecy**: Ephemeral key exchange for session security
-- **HSTS**: HTTP Strict Transport Security for web interfaces
-
-**Key Management**:
-```yaml
-# Key management configuration
-key_management:
- provider: "aws-kms" # or "azure-keyvault", "hashicorp-vault"
-
- encryption_keys:
- database: "arn:aws:kms:us-east-1:123456789:key/database-key"
- storage: "arn:aws:kms:us-east-1:123456789:key/storage-key"
- backup: "arn:aws:kms:us-east-1:123456789:key/backup-key"
-
- rotation:
- enabled: true
- schedule: "90 days"
- automatic: true
-```
-
-**Data Loss Prevention (DLP)**:
-- **Content Scanning**: Automated scanning for sensitive data patterns
-- **Policy Enforcement**: Configurable policies for data handling
-- **Redaction**: Automatic redaction of sensitive information
-- **Audit Logging**: Complete audit trail for all data access
-
-### Network Security
-
-**Micro-Segmentation**:
-- **Network Policies**: Kubernetes NetworkPolicies for pod-to-pod communication
-- **Service Mesh**: Istio-based service mesh with mTLS
-- **Firewall Rules**: Application-layer firewall with deep packet inspection
-- **Traffic Analysis**: Real-time network traffic monitoring and analysis
-
-**Secure Communications**:
-```yaml
-# Network security configuration
-network_security:
- service_mesh:
- enabled: true
- mtls: "STRICT"
- protocol: "TLS_1_3"
-
- network_policies:
- default_deny: true
- ingress_rules:
- - from: "api-gateway"
- to: "application-services"
- ports: [8080, 8443]
-
- egress_rules:
- - from: "application-services"
- to: "database"
- ports: [5432]
-```
-
-**Intrusion Detection and Prevention**:
-- **Network IDS**: Real-time network intrusion detection
-- **Host-Based IDS**: File integrity monitoring and anomaly detection
-- **Behavioral Analysis**: Machine learning-based threat detection
-- **Automated Response**: Automatic threat containment and mitigation
-
-## Compliance Frameworks
-
-### SOC 2 Type II
-
-**Trust Service Criteria**:
-- **Security**: Protection against unauthorized access
-- **Availability**: System availability for operation and use
-- **Processing Integrity**: Complete and accurate system processing
-- **Confidentiality**: Protection of confidential information
-- **Privacy**: Personal information collection, use, and disposal
-
-**Control Implementation**:
-```yaml
-# SOC 2 control mapping
-soc2_controls:
- security:
- - access_controls: "Multi-factor authentication required"
- - logical_access: "Role-based access control implemented"
- - network_security: "Firewall and intrusion detection active"
-
- availability:
- - backup_procedures: "Daily automated backups with testing"
- - disaster_recovery: "RTO 4 hours, RPO 1 hour"
- - monitoring: "24/7 system monitoring and alerting"
-
- processing_integrity:
- - data_validation: "Input validation and sanitization"
- - error_handling: "Comprehensive error logging and handling"
- - change_management: "Controlled deployment processes"
-```
-
-### ISO 27001
-
-**Information Security Management System (ISMS)**:
-- **Risk Assessment**: Comprehensive risk identification and assessment
-- **Security Policies**: Documented security policies and procedures
-- **Incident Management**: Formal incident response and management processes
-- **Continuous Improvement**: Regular security reviews and improvements
-
-**Control Domains**:
-- **A.5**: Information Security Policies
-- **A.6**: Organization of Information Security
-- **A.7**: Human Resource Security
-- **A.8**: Asset Management
-- **A.9**: Access Control
-- **A.10**: Cryptography
-- **A.11**: Physical and Environmental Security
-- **A.12**: Operations Security
-- **A.13**: Communications Security
-- **A.14**: System Acquisition, Development and Maintenance
-- **A.15**: Supplier Relationships
-- **A.16**: Information Security Incident Management
-- **A.17**: Information Security Aspects of Business Continuity Management
-- **A.18**: Compliance
-
-### FedRAMP
-
-**Authorization Levels**:
-- **FedRAMP Low**: Basic security controls for low-impact systems
-- **FedRAMP Moderate**: Enhanced controls for moderate-impact systems
-- **FedRAMP High**: Comprehensive controls for high-impact systems
-
-**Security Control Families** (NIST SP 800-53):
-```yaml
-# FedRAMP control implementation
-fedramp_controls:
- access_control:
- - AC-1: "Access Control Policy and Procedures"
- - AC-2: "Account Management"
- - AC-3: "Access Enforcement"
- - AC-17: "Remote Access"
-
- audit_accountability:
- - AU-1: "Audit and Accountability Policy"
- - AU-2: "Auditable Events"
- - AU-3: "Content of Audit Records"
- - AU-12: "Audit Generation"
-
- system_communications_protection:
- - SC-1: "System and Communications Protection Policy"
- - SC-7: "Boundary Protection"
- - SC-8: "Transmission Confidentiality and Integrity"
- - SC-13: "Cryptographic Protection"
-```
-
-### GDPR Compliance
-
-**Data Protection Principles**:
-- **Lawfulness**: Legal basis for data processing
-- **Purpose Limitation**: Data used only for specified purposes
-- **Data Minimization**: Only necessary data is collected
-- **Accuracy**: Data is accurate and up-to-date
-- **Storage Limitation**: Data retained only as long as necessary
-- **Security**: Appropriate security measures implemented
-
-**Individual Rights**:
-- **Right to Information**: Transparent information about data processing
-- **Right of Access**: Individuals can access their personal data
-- **Right to Rectification**: Correction of inaccurate personal data
-- **Right to Erasure**: "Right to be forgotten" implementation
-- **Right to Portability**: Data export in machine-readable format
-- **Right to Object**: Opt-out of certain data processing activities
-
-**Technical Implementation**:
-```yaml
-# GDPR compliance features
-gdpr_compliance:
- data_subject_rights:
- access_request: "Automated data export within 30 days"
- rectification: "Self-service data correction interface"
- erasure: "Automated data deletion with audit trail"
- portability: "JSON/CSV export functionality"
-
- privacy_by_design:
- data_minimization: "Collect only necessary data"
- pseudonymization: "Automatic PII pseudonymization"
- encryption: "End-to-end encryption for personal data"
- retention_policies: "Automated data retention and deletion"
-```
-
-### HIPAA Compliance
-
-**Administrative Safeguards**:
-- **Security Officer**: Designated security officer responsible for HIPAA compliance
-- **Workforce Training**: Regular HIPAA training for all personnel
-- **Access Management**: Procedures for granting and revoking access
-- **Incident Response**: Formal breach notification procedures
-
-**Physical Safeguards**:
-- **Facility Access**: Controlled access to facilities containing PHI
-- **Workstation Security**: Secure workstation configuration and access
-- **Media Controls**: Secure handling of electronic media containing PHI
-
-**Technical Safeguards**:
-- **Access Control**: Unique user identification and authentication
-- **Audit Controls**: Comprehensive audit logging of PHI access
-- **Integrity**: Protection of PHI from unauthorized alteration
-- **Transmission Security**: Secure transmission of PHI over networks
-
-## Audit & Monitoring
-
-### Comprehensive Logging
-
-**Audit Log Categories**:
-- **Authentication Events**: Login attempts, MFA challenges, session management
-- **Authorization Events**: Permission grants, role changes, access denials
-- **Data Access Events**: Data queries, modifications, exports, deletions
-- **System Events**: Configuration changes, service starts/stops, errors
-- **Security Events**: Intrusion attempts, policy violations, anomalies
-
-**Log Format and Structure**:
-```json
-{
- "timestamp": "2024-01-15T10:30:00Z",
- "event_type": "data_access",
- "user_id": "user@company.com",
- "session_id": "sess_abc123",
- "resource": "customer_database",
- "action": "query",
- "result": "success",
- "ip_address": "192.168.1.100",
- "user_agent": "Mozilla/5.0...",
- "risk_score": 2,
- "metadata": {
- "query_type": "select",
- "records_returned": 150,
- "execution_time_ms": 45
- }
-}
-```
-
-### Security Information and Event Management (SIEM)
-
-**SIEM Integration**:
-- **Splunk**: Native Splunk integration with custom dashboards
-- **IBM QRadar**: Real-time event correlation and analysis
-- **Microsoft Sentinel**: Cloud-native SIEM with AI-powered detection
-- **Elastic Security**: Open-source SIEM with machine learning capabilities
-
-**Threat Detection Rules**:
-```yaml
-# Example threat detection rules
-threat_detection:
- failed_login_attempts:
- threshold: 5
- timeframe: "5 minutes"
- action: "lock_account"
-
- unusual_data_access:
- baseline: "30 days"
- threshold: "3 standard deviations"
- action: "alert_security_team"
-
- privilege_escalation:
- event: "role_change"
- condition: "elevated_permissions"
- action: "require_approval"
-```
-
-### Compliance Reporting
-
-**Automated Report Generation**:
-- **SOC 2 Reports**: Quarterly compliance status reports
-- **ISO 27001 Reports**: Annual management review reports
-- **FedRAMP Reports**: Monthly continuous monitoring reports
-- **Custom Reports**: Configurable reports for specific requirements
-
-**Compliance Dashboard**:
-- **Real-time Compliance Status**: Current compliance posture
-- **Control Effectiveness**: Metrics on security control performance
-- **Risk Assessment**: Current risk levels and mitigation status
-- **Audit Findings**: Tracking of audit findings and remediation
-
-## Incident Response
-
-### Incident Response Framework
-
-**Incident Classification**:
-- **P1 - Critical**: System outage, data breach, security incident
-- **P2 - High**: Performance degradation, partial service disruption
-- **P3 - Medium**: Minor issues, non-critical functionality affected
-- **P4 - Low**: Cosmetic issues, documentation updates
-
-**Response Procedures**:
-```yaml
-# Incident response procedures
-incident_response:
- detection:
- - automated_monitoring: "24/7 system monitoring"
- - user_reports: "Support ticket system"
- - security_alerts: "SIEM integration"
-
- response:
- - initial_assessment: "15 minutes"
- - escalation: "30 minutes for P1/P2"
- - communication: "Stakeholder notification"
- - containment: "Immediate threat containment"
-
- recovery:
- - root_cause_analysis: "Post-incident review"
- - remediation: "Fix implementation"
- - testing: "Solution validation"
- - documentation: "Incident documentation"
-```
-
-### Breach Notification
-
-**Notification Requirements**:
-- **Internal Notification**: Immediate notification to security team
-- **Customer Notification**: Within 72 hours for data breaches
-- **Regulatory Notification**: As required by applicable regulations
-- **Public Disclosure**: If required by law or regulation
-
-**Breach Response Checklist**:
-1. **Immediate Containment**: Stop the breach and secure systems
-2. **Assessment**: Determine scope and impact of the breach
-3. **Notification**: Notify required parties within specified timeframes
-4. **Investigation**: Conduct thorough investigation of the incident
-5. **Remediation**: Implement fixes to prevent future occurrences
-6. **Documentation**: Complete documentation for compliance and learning
-
-## Security Best Practices
-
-### Secure Development Lifecycle
-
-**Development Security**:
-- **Secure Coding Standards**: OWASP secure coding guidelines
-- **Code Review**: Mandatory security-focused code reviews
-- **Static Analysis**: Automated static code analysis tools
-- **Dependency Scanning**: Automated vulnerability scanning of dependencies
-
-**Testing Security**:
-- **Penetration Testing**: Regular third-party penetration testing
-- **Vulnerability Assessments**: Automated vulnerability scanning
-- **Security Testing**: Integrated security testing in CI/CD pipeline
-- **Red Team Exercises**: Simulated attack scenarios
-
-### Operational Security
-
-**Configuration Management**:
-- **Infrastructure as Code**: All infrastructure defined in code
-- **Configuration Baselines**: Standardized secure configurations
-- **Change Control**: Formal change management processes
-- **Drift Detection**: Automated detection of configuration changes
-
-**Patch Management**:
-- **Automated Patching**: Automated security patch deployment
-- **Vulnerability Management**: Regular vulnerability assessments
-- **Patch Testing**: Comprehensive testing before production deployment
-- **Emergency Patching**: Procedures for critical security patches
-
-For detailed security implementation guidance, contact our security team at [security@naas.ai](mailto:security@naas.ai).
+This page is the operator's view. The design of the NATS layer (broker passwords, service tokens, module keys, remote app grants) and its known limits are in [Security model](/developer-guide/architecture/security).
+
+## What ABI provides
+
+### Sign-in and accounts
+
+The Nexus API (the web app's backend) handles sign-in:
+
+- **Passwords and magic links.** A generated project enables password sign-in (`auth_password_enabled: true`) so the first login works without email; set it to `false` to require magic-link email, which needs an SMTP configuration.
+- **No default password.** The seeded account is `admin@example.com`; its password is generated into `.env` as `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`. The published defaults of earlier versions (`admin`, `Admin1234!`) are refused at login and replaced at boot.
+- **Self-registration is off** (`auth_signup_enabled: false`). Accounts come from invitations (`abi user invite`, `abi org members invite`) or from the `users:` list of the config.
+- **Rate limiting** on every sign-in endpoint, in every environment: 5 failures per account and 20 attempts per client IP per 5 minutes. `rate_limit_enabled: false` turns it off for local debugging only.
+- **Tokens.** Access tokens are JWTs that expire after 30 minutes by default, refreshed with 30-day refresh tokens.
+
+ABI has **no built-in MFA, SAML or OpenID Connect sign-in**. If you need them, put an identity-aware proxy in front of Nexus and the API (Caddy, the reverse proxy of the generated stack, can sit behind or in front of one), and keep ABI's own accounts for service use.
+
+The REST API also accepts the shared `ABI_API_KEY` (as a bearer token or the `token` query parameter) for service-to-service calls. Treat it as a root credential: keep it in the secret store, rotate it when someone leaves, and do not put it in URLs you share.
+
+### Access control
+
+- **Organizations and workspaces.** Users belong to organizations (roles `owner`, `admin`, `member`) and to workspaces (roles `admin`, `member`, `viewer`).
+- **Features by role.** The `nexus_config.feature_flags` of the config set which Nexus sections are on (`chat`, `files`, `agents`, `apps`, `marketplace`, `search`, `ontology`, `graph`, `settings`, and `code` with the coding stack) and which roles get them (`role_baseline`, with per-workspace overrides).
+- **Super admins** (`is_superadmin: true`, or promoted in the platform settings) reach the platform's admin console and the System app. Keep that group small.
+- **Remote apps** run in a sandbox with a grant bound to one app, one user and one workspace, for at most 8 hours, revoked at logout or a password change.
+
+### Secrets
+
+Secrets are read through the secret service, which composes adapters in order (`dotenv`, the Naas secret store, `base64`). The config refers to them as `{{ secret.NAME }}`. The System app masks secrets, and revealing one is a separate, audited action. See [Add secrets to production](/user-guide/deploy/add_secrets_to_production).
+
+The generated stack creates its own secrets (database passwords, the broker's passwords, `NATS_JWT_SECRET`, the admin password) on first run and writes them to `.env`, which is gitignored. Rotating `NATS_JWT_SECRET` changes every module key; there is no way to revoke the key of a single module.
+
+### Network and transport
+
+- **Entry point.** Caddy is the only service the generated stack exposes on ports 80 and 443. It obtains a certificate from Let's Encrypt for a public domain, or you configure your own certificates.
+- **The broker is private.** NATS (4222) and its monitoring port (8222) are published on `127.0.0.1` only. The broker requires a password (two users: `abi` for the engine, `module` for remote modules, with restricted rights), but **traffic to it is not encrypted** and the monitoring endpoint has no authentication. Keep the broker on a private network; a module on another machine reaches it through a VPN or an SSH tunnel.
+- **The MCP server** checks no credential of its own and calls agents with `ABI_API_KEY`: the generated stack publishes it on `127.0.0.1` only. Do not expose it.
+- **Internal traffic** between the stack's containers uses the Docker network and is not encrypted. On a shared network, add your own encryption.
+- **Remote modules are trusted code.** All of them share one broker user; a module can read other modules' traffic and the JetStream streams. Run only modules you trust. See [Known limits](/developer-guide/architecture/security#known-limits).
+
+### Audit and monitoring
+
+- **System app** (super admins): every change to a service's data from the Data tab (create, replace, delete, reveal a secret) writes an audit row before it runs, needs the resource id typed back to confirm, and is open to super admins only. Cancelling an agent run is audited too.
+- **Activity log service.** Events are recorded per actor, fail-open: a failed recording never breaks the call that produced it. The System app's Data tab browses them read-only.
+- **Traces and live traffic.** With OpenTelemetry, one request is one trace across Nexus, the engine and the modules; live traffic shows metadata (service, method, caller, sizes, latency, status), never payloads. Logs and traces show remote app links as `/app-remote/[grant]/...`, never the grant.
+- **Error codes.** Every failed kernel call carries an `Abi-Error-Code` header.
+
+See [Observability](/developer-guide/architecture/observability). Keep production logs at `INFO`: at `DEBUG` the engine logs model prompts.
+
+ABI does not ship a SIEM connector. Send the container logs and the traces to the log platform and SIEM you already run.
+
+### Data and models
+
+- **Data residency.** All data is in the stores you deploy. With local models (Ollama), no prompt leaves your network; with a cloud provider, prompts go to that provider. See [Air-gapped deployment](/user-guide/deploy/air-gapped).
+- **Encryption at rest** is not done by ABI. Use disk or volume encryption, server-side encryption on S3, and your database's encryption.
+- **Export and deletion.** The knowledge graph exports to Turtle (`make triplestore-export-turtle`) and to Excel. There is no built-in workflow for data-subject requests: locate and delete a person's data in each store (graph, documents, files, vectors, conversation memory) with your own procedure.
+
+### Build and supply chain
+
+The repository's `make check` runs `ruff`, `mypy` and `bandit` on every package (a pre-commit hook and CI run it), `make trivy-container-scan` scans the container image with Trivy, and CI runs the CLI end to end on every pull request into `main`. Pin and scan your own dependencies: `uv.lock` is committed so installs are reproducible.
+
+2.x gets bug and security fixes from the `v2` branch until 2027-01-31 (see [Staying on 2.x](/user-guide/upgrade/v2-support)).
+
+## What you provide
+
+| Area | Your part |
+|---|---|
+| Identity | SSO, MFA and account lifecycle through your identity provider or proxy. |
+| Network | Firewalls and segmentation (only Caddy public), private network for the broker, TLS certificates, VPN for remote modules. Network policies if you run on Kubernetes. |
+| Encryption | At rest (volumes, S3, database) and between hosts. |
+| Keys and secrets | Storage in a vault or secret manager; rotation of `ABI_API_KEY`, `NATS_JWT_SECRET` and provider keys. |
+| Logging | Retention and SIEM. |
+| Backups | See [High availability and disaster recovery](/user-guide/deploy/high-availability). |
+| Patching | The OS, Docker and the images of the stack's backing services, and ABI upgrades. |
+| Policies | Access reviews, incident response, breach notification and retention. These are organizational processes ABI does not implement. |
+
+## Compliance frameworks
+
+ABI is open-source software and does not hold SOC 2, ISO 27001, FedRAMP, HIPAA or any other attestation by itself, and this page does not claim one. A framework applies to an organization and its systems. What ABI can do is make some controls easier to implement and evidence, in a deployment you control:
+
+| Theme (SOC 2, ISO 27001, FedRAMP, HIPAA and GDPR share them) | What ABI offers | What the deployment must add |
+|---|---|---|
+| Access control and least privilege | Roles, feature flags per role, rate-limited sign-in, no self-registration, super admin separation | SSO and MFA, access reviews |
+| Audit logging | System app audit rows, the activity log, traces | Log retention, protection and review |
+| Data residency and isolation | Self-hosted; local models; air-gapped installs | Hosting location, physical and network controls |
+| Secrets management | Secret service, masked secrets, generated credentials | A vault, rotation policy |
+| Encryption | TLS at the edge (Caddy) | At rest, in transit between hosts, key management |
+| Availability and recovery | Lease-based handover, restarts, snapshots | Replication, backups, tested recovery |
+| Privacy rights (GDPR) | Graph export, per-store deletion | A data-subject request process |
+| Change management | Versioned releases, a migration guide per major, committed lockfiles | Your approval and deployment process |
+
+If you need a framework mapped to your deployment, or an assessment, the enterprise team can do it with you ([support@naas.ai](mailto:support@naas.ai)).
+
+## Hardening checklist
+
+1. Keep ports 4222 and 8222 on loopback or a private network; expose only Caddy.
+2. Keep self-registration off; invite users.
+3. Change the generated admin password after the first login, and keep the number of super admins small.
+4. Set `ABI_API_KEY` to a long random value; rotate it when people leave.
+5. Run at `LOG_LEVEL=INFO` in production.
+6. Run remote modules only from code you trust; give each its own container.
+7. Keep `.env`, `.env.dokploy` and `.snapshots/` out of git and out of images, and encrypt archives you move.
+8. Encrypt the volumes, and back them up off the host.
+9. Upgrade `naas-abi-core`, `naas-abi` and `naas-abi-cli` together, and read the release notes.
+10. Regenerate the stack's files (`abi deploy local --regenerate`) after a CLI upgrade, so the broker's permission rules are current.
+
+To report a vulnerability, write to [security@naas.ai](mailto:security@naas.ai).

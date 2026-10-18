@@ -4,7 +4,7 @@ sidebar_position: 2
 
 # Configuration Reference
 
-ABI is configured through `config.yaml`. This page documents every top-level section.
+ABI is configured through `config.yaml`. This page documents every top-level section of a 3.0 project, which runs on [NATS](/developer-guide/architecture/nats). The classic in-process configuration (no `nats:` block, Dagster, RabbitMQ) is described in [its own section](#classic-configuration-legacy) at the end.
 
 ---
 
@@ -18,7 +18,7 @@ exists, else `config.yaml`:
 |---|---|
 | `config.yaml` | `abi dev up`, the CLI (`abi chat`, `abi run`), scripts |
 | `config.local.yaml` | The Docker Compose stack (its `abi` service sets `ENV=local`) |
-| `config.remote.yaml` | A remote deployment (`ENV=remote`) |
+| `config.remote.yaml` | A remote deployment (`ENV=remote`), with its secrets in `.env.remote`: see [Production and remote deployments](/user-guide/deploy/production) |
 
 `ABI_CONFIG_OVERLAY` names a YAML file merged over the config; `abi dev up`
 uses it (`.abi/dev/dev.overlay.yaml`) for the broker it runs. Secrets belong in
@@ -39,7 +39,7 @@ api:
 global_config:
   ai_mode: "cloud"       # "cloud", "local" or "airgap"
 
-nats:                    # NATS mode (new projects); omit for in-process wiring
+nats:                    # NATS mode (the default); omit only for the legacy in-process engine
   nats_url: "nats://abi:{{ secret.NATS_ABI_PASSWORD }}@127.0.0.1:4222"
   jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
   discovery:
@@ -93,7 +93,7 @@ api:
 
 ```yaml
 global_config:
-  ai_mode: "cloud"   # "cloud" uses OpenRouter; "local" uses Ollama
+  ai_mode: "cloud"   # "cloud" uses OpenRouter; "local" uses Ollama; "airgap" uses local models only
 ```
 
 ---
@@ -179,6 +179,19 @@ dev:
 ---
 
 ## Services
+
+A project made by `abi new project` picks these adapters. The engine's built-in defaults,
+described under each service below, apply to a service you leave out.
+
+| Service | `config.yaml` (`abi dev up`) | `config.local.yaml` (Docker) |
+|---|---|---|
+| `triple_store` | `oxigraph` (HTTP; `abi dev up` runs the server) | `apache_jena_tdb2` (Fuseki) |
+| `vector_store` | `sqlite_vec` (a SQLite file) | `qdrant` |
+| `object_storage` | `fs` (`storage/datastore`) | `s3` (MinIO) |
+| `document` | `sqlite` (`storage/documents.sqlite`) | `postgresql` |
+| `dataset` | `ducklake` (SQLite catalog) | `ducklake` |
+| `kv` | `python` (SQLite) | `redis` |
+| `bus` | NATS JetStream (no `bus:` block) | NATS JetStream (no `bus:` block) |
 
 ### Triple Store
 
@@ -276,15 +289,8 @@ services:
         nats_url: "nats://abi:{{ secret.NATS_ABI_PASSWORD }}@nats:4222"
 ```
 
-Without NATS, the default is **`python_queue`** (SQLite-backed, under
-`storage/bus/`). The **`rabbitmq`** adapter is **legacy**: it needs the
-`naas-abi-core[rabbitmq]` extra and is removed in the next major.
-
-```yaml
-      adapter: "rabbitmq"
-      config:
-        rabbitmq_url: "{{ secret.RABBITMQ_URL }}"
-```
+Without NATS the bus is `python_queue` or the `rabbitmq` adapter, both described under
+[Classic configuration (legacy)](#classic-configuration-legacy).
 
 ### Key-Value Store
 
@@ -379,6 +385,43 @@ These are the modules the engine loads (in-engine modules). Modules are loaded
 in dependency order. Disabled modules and their dependencies are skipped.
 Remote modules are not listed here: they run in their own process and register
 through discovery (see `dev:` above).
+
+---
+
+## Classic configuration (legacy)
+
+:::warning Legacy
+A project without a `nats:` block, Dagster and the RabbitMQ bus are **legacy**: opt-in
+since 3.0 and removed in the next major. See [Legacy mode: without
+NATS](/user-guide/get-started/legacy-mode), and
+[Migrate from 2.x to 3.0](/user-guide/upgrade/migrate-to-3) to move off them.
+:::
+
+With no `nats:` block, the engine runs in one process, as in 2.x, and the
+services it reaches by NATS in 3.0 are plain adapters:
+
+- **No `nats:` block.** `abi dev up` runs Oxigraph, the API, Nexus web
+  and, with the `naas-abi-core[dagster]` extra, Dagster. There are no remote modules,
+  no discovery and no module jobs (declared jobs are logged, not run).
+- **Bus.** `python_queue` (the default: SQLite under `storage/bus/`) or `rabbitmq`
+  (needs the `naas-abi-core[rabbitmq]` extra):
+
+  ```yaml
+  services:
+    bus:
+      bus_adapter:
+        adapter: "python_queue"          # or "rabbitmq"
+        # config:
+        #   rabbitmq_url: "{{ secret.RABBITMQ_URL }}"
+  ```
+
+- **Scheduling.** Dagster orchestrations (`abi new orchestration`), from the
+  `naas-abi-core[dagster]` extra: see [Dagster](/user-guide/build/applications/dagster).
+- **Install the extras** with `uv add 'naas-abi-core[all,dagster,rabbitmq]'`.
+  `abi new project --without-nats` and `abi deploy local` add them for you.
+
+`abi new project --without-nats` generates this configuration. `abi dev up --without-nats`
+forces it for a project whose config has a `nats:` block.
 
 ---
 

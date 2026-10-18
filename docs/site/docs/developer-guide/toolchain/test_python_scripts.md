@@ -4,253 +4,190 @@ sidebar_position: 8
 
 # Test Python Scripts
 
-Testing is the key to maintainability of each project. This guide covers how to write and run tests using pytest in this project.
+Tests keep ABI maintainable. ABI uses [pytest](https://docs.pytest.org/). This page covers how to name and place tests, how to write them, and how to run them, in the ABI repository and in a project made with `abi new project`.
 
-## Naming Convention
+## Naming and placement
 
-We use the suffix `_test.py` to name all our test files.
-To make it more convenient, we place test files next to the main files so they are easy to find, check, and update.
+Test files end in `_test.py` and sit next to the code they test. Some older files use `test_*.py`; follow the neighbours. Where a test goes depends on what it covers:
 
-**Examples:**
-- `Agent.py` → `Agent_test.py`
-- `Workflow.py` → `Workflow_test.py`
-- `Pipeline.py` → `Pipeline_test.py`
+- **Beside its source**, for a test of one file: `users.py` has `users_test.py`. It is found where the code is and moves with it.
+- **In the module's `tests/` folder**, for a test with no single natural neighbour: behaviour of the whole module, or something defined in its `__init__.py`. `tests/` also holds shared fixtures, such as an `artifacts/` folder.
 
-## Project Structure
+Both forms are intentional. Do not consolidate them.
 
-```bash
-src/
-├── custom/
-│ └── modules/
-│ └── mymodule/
-│ └── agents/
-│ ├── Agent.py
-│ └── Agent_test.py
-│ └── workflows/
-│ ├── Workflow.py
-│ └── Workflow_test.py
-│ └── pipelines/
-│ ├── Pipeline.py
-│ └── Pipeline_test.py
+```text
+libs/naas-abi-core/naas_abi_core/services/keyvalue/
+├── KeyValuePorts.py
+├── adapters/secondary/
+│   ├── PythonAdapter.py
+│   └── PythonAdapter_test.py                     # one file, one neighbour
+└── tests/
+    └── kv__secondary_adapter__generic_test.py    # the contract every adapter must pass
 ```
 
-## Writing Tests
+In a generated project, modules live under `src/<module>/`. A remote module made by `abi new module` comes with `tests/module_test.py`; for the other files you add the tests yourself, beside the code:
 
-We use the pytest library for testing. You can use the `@pytest.fixture` decorator to set up initial configurations and reusable test data.
-
-### Basic Test Example
-
-```python
-import pytest
-from src.custom.modules.mymodule.calculator import Calculator
-
-@pytest.fixture
-def calculator():
- """Fixture that returns a Calculator instance"""
- return Calculator()
-
-def test_addition(calculator):
- """Test the add method of Calculator"""
- result = calculator.add(2, 3)
- assert result == 5
-
-def test_subtraction(calculator):
- """Test the subtract method of Calculator"""
- result = calculator.subtract(5, 3)
- assert result == 2
-
-def test_multiplication(calculator):
- """Test the multiply method of Calculator"""
- result = calculator.multiply(4, 3)
- assert result == 12
-
-def test_division(calculator):
- """Test the divide method of Calculator"""
- result = calculator.divide(10, 2)
- assert result == 5
-
- # Test division by zero
- with pytest.raises(ValueError):
- calculator.divide(5, 0)
+```text
+src/my_module/
+├── __init__.py
+├── agents/
+│   ├── MyAgent.py
+│   └── MyAgent_test.py
+└── tests/
+    └── module_test.py
 ```
 
-### Advanced Test Examples
+## Writing tests
 
-#### Testing with Multiple Fixtures
-
-```python
-import pytest
-from src.custom.modules.mymodule.data_processor import DataProcessor
-
-@pytest.fixture
-def sample_data():
- """Fixture that provides sample data for testing"""
- return [1, 2, 3, 4, 5]
-
-@pytest.fixture
-def data_processor():
- """Fixture that returns a DataProcessor instance"""
- return DataProcessor()
-
-def test_process_data(data_processor, sample_data):
- """Test data processing with sample data"""
- result = data_processor.process(sample_data)
- assert len(result) == 5
- assert result[0] == 2 # Assuming processing doubles the values
-```
-
-#### Testing Exceptions
-
-```python
-import pytest
-from src.custom.modules.mymodule.calculator import Calculator
-
-@pytest.fixture
-def calculator():
- """Fixture that returns a Calculator instance"""
- return Calculator()
-
-def test_invalid_input(calculator):
- """Test that invalid inputs raise appropriate exceptions"""
- with pytest.raises(TypeError):
- calculator.add("string", 5)
-
- with pytest.raises(ValueError, match="Cannot divide by zero"):
- calculator.divide(10, 0)
-```
-
-#### Parametrized Tests
+Tests are plain pytest: functions named `test_...`, classes named `Test...`, and fixtures for setup.
 
 ```python
 import pytest
 
-@pytest.mark.parametrize("a, b, expected", [
- (2, 3, 5),
- (0, 0, 0),
- (-1, 1, 0),
- (100, 200, 300),
-])
-def test_addition_parametrized(calculator, a, b, expected):
- """Test addition with multiple input combinations"""
- result = calculator.add(a, b)
- assert result == expected
+from my_module.calculator import Calculator
+
+
+@pytest.fixture
+def calculator() -> Calculator:
+    return Calculator()
+
+
+def test_addition(calculator: Calculator) -> None:
+    assert calculator.add(2, 3) == 5
+
+
+def test_division_by_zero(calculator: Calculator) -> None:
+    with pytest.raises(ValueError, match="Cannot divide by zero"):
+        calculator.divide(5, 0)
+
+
+@pytest.mark.parametrize(
+    ("a", "b", "expected"),
+    [(2, 3, 5), (0, 0, 0), (-1, 1, 0)],
+)
+def test_addition_parametrized(calculator: Calculator, a: int, b: int, expected: int) -> None:
+    assert calculator.add(a, b) == expected
 ```
 
-## Running Tests
+### Keep tests offline and deterministic
 
-### Running a Specific Test File
+- A test should not need a running stack. Unit tests build the object under test directly and use the in-memory or file adapters (`PythonAdapter`, SQLite, `tmp_path`), not Postgres, Fuseki or a NATS broker.
+- Tests that need an external service are marked `@pytest.mark.integration` (the marker is declared in `libs/naas-abi-core/pyproject.toml`) and read their connection from the environment, for example `DOCUMENT_TEST_POSTGRES_DSN` for PostgreSQL. Without it, the PostgreSQL cases do not run.
+- A remote module's tests run with no broker and no engine: the module scaffolded by `abi new module` checks its declared agents, services and jobs, its configuration from the environment, and that it never imports `naas_abi_core`. Keep that property.
+- Do not call a model provider in a test.
+
+### Adapters: run the generic contract
+
+Every service has a generic contract test in its `tests/` folder. A new adapter subclasses it and supplies the `adapter` fixture, so it gets the whole suite:
+
+```python
+class TestPythonAdapter(GenericKVSecondaryAdapterTest):
+    @pytest.fixture
+    def adapter_class(self):
+        return PythonAdapter
+
+    @pytest.fixture
+    def adapter(self):
+        return PythonAdapter()
+```
+
+Each service's `AGENTS.md` (under `libs/naas-abi-core/naas_abi_core/services/<service>/`) names the contract test and how to run it.
+
+### Async code
+
+Remote-module code is async (`naas-abi-sdk`). The SDK's tests and the module scaffolded by `abi new module` drive a coroutine from a plain test function with `asyncio.run`:
+
+```python
+import asyncio
+
+
+def test_the_call_returns() -> None:
+    async def scenario() -> None:
+        assert await my_coroutine() == "ok"
+
+    asyncio.run(scenario())
+```
+
+## Running tests
+
+From the repository root:
 
 ```bash
-uv run python -m pytest src/custom/modules/your_module_name/pipelines/your_pipeline_name_test.py
+uv run pytest libs/naas-abi-core                   # one package
+uv run pytest libs/naas-abi libs/naas-abi-cli      # several
+make test                                          # uv run python -m pytest .  (everything)
 ```
 
-### Running All Tests
+One file, one class, one test, a keyword:
 
 ```bash
-# Run all tests in the project
-uv run python -m pytest
-
-# Run tests with verbose output
-uv run python -m pytest -v
-
-# Run tests and show print statements
-uv run python -m pytest -s
+uv run pytest libs/naas-abi-core/naas_abi_core/apps/api/api_test.py -v
+uv run pytest libs/naas-abi-core/naas_abi_core/services/keyvalue/adapters/secondary/PythonAdapter_test.py::TestPythonAdapter -v
+uv run pytest libs/naas-abi-core/naas_abi_core/services/keyvalue/adapters/secondary/PythonAdapter_test.py::TestPythonAdapter::test_set_get_exists_delete -v
+uv run pytest libs/naas-abi-core -k "postgres or checkpointer" -v
 ```
 
-### Running Tests with Specific Options
+Options you will use most:
+
+| Option | Meaning |
+|---|---|
+| `-v` | Verbose output. |
+| `-s` | Show `print` output. |
+| `-k "pattern"` | Run the tests whose name matches. |
+| `-m integration` / `-m "not integration"` | Select or skip the marked tests. |
+| `-x` | Stop at the first failure. |
+| `--tb=short` | Shorter tracebacks. |
+| `-n auto` | Run in parallel (`pytest-xdist` is in the dev group). |
+| `--cov=<package>` | Coverage report (`pytest-cov` is in the dev group). |
+
+### Targets with their own setup
+
+The Makefile has targets for suites that need a flag, a Docker container or a database; see [The Makefile](./makefile#tests):
 
 ```bash
-# Run tests matching a pattern
-uv run python -m pytest -k "test_addition"
-
-# Run tests in a specific directory
-uv run python -m pytest src/custom/modules/mymodule/
-
-# Run tests and generate coverage report
-uv run python -m pytest --cov=src/custom/modules/mymodule
-
-# Run tests and stop on first failure
-uv run python -m pytest -x
-
-# Run tests in parallel (requires pytest-xdist)
-uv run python -m pytest -n auto
+make test-api                   # the API tests
+make test-local-embedded-core   # the no-Docker embedded engine end to end
+make test-integration-core      # triple store integration tests (testcontainers, needs Docker)
+make test-document-core         # document service; set DOCUMENT_TEST_POSTGRES_DSN for PostgreSQL
+make test-event-core            # event and activity log
+make test-agent-memory-core     # agent memory jobs and checkpoint migration
+make test-sdk                   # naas-abi-proto and naas-abi-sdk
 ```
 
-## Test Output
+Tests that build an `Engine()` from the repository's root config run on NATS like everything else there, so they need a broker at `127.0.0.1:4222` (the Docker stack's, `abi stack start`). To load the engine in-process instead, point `ABI_CONFIG_OVERLAY` at a YAML file that holds `nats: null`. Details: [The Makefile](./makefile#which-targets-need-nats).
 
-The test runner will show:
-- Number of tests collected
-- Number of tests passed/failed
-- Detailed error messages for failed tests
-- Test execution time
+### The CLI end to end
 
-**Example output:**
-```
-============================= test session starts ==============================
-platform linux -- Python 3.9.7, pytest-6.2.5, py-1.10.0, pluggy-0.13.1
-rootdir: /home/user/project
-collected 4 items
+`scripts/cli_smoke.sh` runs the `abi` CLI the way a user does: it creates a project in a temporary folder, adds modules, starts it with `abi dev up -d`, checks the API, the agents and Nexus, then stops it. It needs `uv`, `git`, `curl`, `python3`, `pnpm` and `nats-server` 2.14 or later, but no Docker and no model. CI runs it on every pull request into `main`.
 
-src/custom/modules/mymodule/calculator_test.py .... [100%]
-
-============================== 4 passed in 0.02s ==============================
+```bash
+scripts/cli_smoke.sh            # both variants, 5 to 10 minutes each
+scripts/cli_smoke.sh nats       # the default project
+scripts/cli_smoke.sh without-nats   # the legacy project, without NATS
 ```
 
-## Best Practices
+### In a generated project
 
-### 1. Test Organization
-- Keep test files close to the code they test
-- Use descriptive test function names
-- Group related tests in the same file
+```bash
+uv run pytest
+```
 
-### 2. Fixtures
-- Use fixtures for setup and teardown
-- Keep fixtures simple and focused
-- Use fixture scope appropriately (`function`, `class`, `module`, `session`)
-
-### 3. Assertions
-- Use specific assertions (`assert result == expected`)
-- Test both positive and negative cases
-- Test edge cases and error conditions
-
-### 4. Test Data
-- Use realistic test data
-- Avoid hardcoded values when possible
-- Use parametrized tests for multiple scenarios
-
-### 5. Documentation
-- Write clear docstrings for test functions
-- Explain what each test is verifying
-- Document any special setup requirements
-
-## Common pytest Options
-
-| Option | Description |
-|--------|-------------|
-| `-v` | Verbose output |
-| `-s` | Show print statements |
-| `-k "pattern"` | Run tests matching pattern |
-| `-x` | Stop on first failure |
-| `--tb=short` | Short traceback format |
-| `--cov` | Generate coverage report |
-| `-n auto` | Run tests in parallel |
+runs the tests under `src/` (`testpaths = ["src"]`, files `*_test.py` and `test_*.py`). `uv sync --no-dev` leaves pytest out. A remote module created with `--standalone` has its own `tests/` folder and its own `pytest` configuration.
 
 ## Troubleshooting
 
-### Test Discovery Issues
-If pytest doesn't find your tests:
-1. Ensure test files end with `_test.py`
-2. Check that test functions start with `test_`
-3. Verify the file is in the correct directory
+**pytest does not find a test.** The file must end in `_test.py` (or start with `test_`), and the function must start with `test_`. Check that the file is under a path pytest collects (`testpaths`).
 
-### Import Errors
-If you get import errors:
-1. Make sure your `PYTHONPATH` includes the project root
-2. Use absolute imports in test files
-3. Check that the module you're testing is properly installed
+**Import errors.** Run through `uv run`, so the project's environment is used. Use absolute imports (`naas_abi_core...`, `my_module...`), as the rest of the code does.
 
-### Fixture Issues
-If fixtures aren't working:
-1. Ensure the fixture function is decorated with `@pytest.fixture`
-2. Check that the fixture name matches the parameter name
-3. Verify the fixture is in scope (same file or conftest.py)
+**`EngineAlreadyServing`, or connection refused on 4222.** The test builds an engine in NATS mode. Start a broker, stop the other engine, or use the `nats: null` overlay. See [Running Python scripts](./run_python_scripts#a-script-that-builds-its-own-engine).
+
+**A fixture is not found.** The name must match the parameter, and the fixture must be in the same file or in a `conftest.py` above it.
+
+## Best practices
+
+1. Keep tests next to the code they cover; use `tests/` for what spans a module.
+2. Name tests after the behaviour (`test_division_by_zero`), and test the failure cases as well as the success.
+3. Prefer fixtures and `parametrize` to copy-paste.
+4. Update the test in the same change as the behaviour. A new behaviour gets its test first where you can.
+5. Keep integration requirements explicit: a marker, an environment variable, a skip.

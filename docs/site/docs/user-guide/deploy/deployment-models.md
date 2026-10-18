@@ -1,18 +1,113 @@
 ---
-sidebar_position: 2
+sidebar_position: 5
+title: "Deployment models"
 ---
 
-# Deployment Models
+# Deployment models
 
-Naas supports multiple deployment models to meet diverse enterprise requirements, from cloud-native SaaS deployments to air-gapped government installations. Each model is designed to maintain full platform functionality while meeting specific security, compliance, and operational needs.
+ABI's production stack is Docker Compose: every service is a standard container, with no proprietary Kubernetes substrate and no managed infrastructure required. For development, `abi dev up` runs the same engine as native processes. You operate it with tools you already know.
 
-:::info Professional Services Implementation
-The enterprise capabilities described in this section represent our ability to implement these solutions through our professional services team. Each deployment is customized to your specific requirements and implemented with dedicated support. Contact our enterprise team at [support@naas.ai](mailto:support@naas.ai) to discuss your needs and implementation timeline.
+This is an intentional design choice. Abstracting infrastructure into a managed runtime delivers security and availability guarantees but removes operator visibility and control. ABI makes the opposite tradeoff: the infrastructure is yours to inspect, modify, extend, and replace. You own operations; in return, there are no accreditation dependencies, no vendor upgrade cycles, and no egress charges.
+
+The same project runs on a developer laptop and in a production data center. The only differences between environments are the config files that select service backends, the model provider, and the LLM routing configuration.
+
+Since 3.0 every deployment runs on a [NATS broker](/developer-guide/architecture/nats): the engine serves its kernel services over it, the bus and the [module jobs](/user-guide/build/modules/module-jobs) use JetStream, and remote modules run in their own containers next to the engine.
+
+| Model | For | How |
+|---|---|---|
+| Local development | One developer | `abi dev up`, or [Docker](/user-guide/deploy/local-docker) |
+| One server | A team, a client, a staging environment | [Docker](/user-guide/deploy/local-docker) or [Dokploy](/user-guide/deploy/dokploy) |
+| Self-hosted production | Your cluster or data center | [Production and remote deployments](/user-guide/deploy/production) |
+| Air-gapped | No outbound network | [Air-gapped deployment](/user-guide/deploy/air-gapped) |
+| Managed | naas.ai runs it | [naas.ai/enterprise](https://naas.ai/enterprise) |
+
+---
+
+
+## Local development
+
+Two ways to run a project on your machine:
+
+- **Native, no Docker:** `abi dev up` starts `nats-server`, an Oxigraph server, the API, Nexus web and the remote modules listed under `dev.modules`, as native processes with file-based backends (SQLite, the file system). Each git worktree gets its own ports. It needs `nats-server` 2.14 or later on `PATH`, and `jaeger` for `--with-tracing`.
+- **Docker Compose:** `abi deploy local` writes the project's stack, and `docker compose up -d` (or `abi stack start`) starts it: NATS, PostgreSQL, Fuseki, Qdrant, MinIO, Redis, the API, Nexus web, the MCP server and Caddy. Remote modules each get a service in `docker-compose.override.yml`.
+
+Step by step: [Quickstart](/user-guide/get-started/quickstart) and [Deploy with Docker](/user-guide/deploy/local-docker).
+
+---
+
+## Self-hosted (on-premises)
+
+The production configuration. All services run in your infrastructure, nothing leaves your network.
+
+- Your Kubernetes cluster or bare-metal Docker Compose
+- Your NATS server (2.14 or later, JetStream on), PostgreSQL, MinIO or S3, Redis, Fuseki and Qdrant
+- Your LLM infrastructure (Ollama cluster or private API endpoints)
+- Your SSL/TLS termination
+
+Things to plan for:
+
+- **One serving engine.** One engine serves the kernel services per NATS account. For deploys without downtime, set `ABI_ROLLOUT_ID` per deploy and use shared backends (no SQLite or local files): the new engine stands by and takes over when the old one stops. See [one serving engine](/developer-guide/architecture/nats#one-serving-engine).
+- **A supervisor.** The API and remote modules exit when the broker is unreachable for about two minutes; Docker (`restart: unless-stopped`) or Kubernetes restarts them.
+- **The broker stays private.** Traffic to NATS is not encrypted, and its monitoring port has no authentication. See [Security model](/developer-guide/architecture/security).
+- **Remote modules** scale on their own: several replicas of a module share its agent runs and its jobs.
+
+This is the configuration naas.ai deploys for enterprise customers who require data residency compliance. How to set it up: [Production and remote deployments](/user-guide/deploy/production); on one server with a domain, [Dokploy](/user-guide/deploy/dokploy).
+
+---
+
+## Air-gapped
+
+Full offline operation with locally-run models:
+
+- Ollama serves LLM inference from a local model library; the `ai.ollama` module registers Qwen2.5 3B and `nomic-embed-text`, and the marketplace has modules for Qwen3 8B, DeepSeek R1 8B and Gemma3 4B
+- No calls to OpenAI, Anthropic, OpenRouter or any external API: disable the cloud provider modules
+- `ai_mode: "local"` (or `"airgap"`) in `config.yaml`, with the model registry defaults pointed at the local models
+- Images, Python packages and models are brought in beforehand
+
+The steps are in [Air-gapped deployment](/user-guide/deploy/air-gapped).
+
+---
+
+## Managed (naas.ai)
+
+naas.ai provides enterprise-managed ABI deployments. The open-source core is MIT-licensed; the managed tier adds:
+
+- Deployment and maintenance on your premises or naas.ai infrastructure
+- 24/7 support and SLA
+- Security compliance assistance (SOC 2, ISO 42001)
+- Upgrade management
+
+See [naas.ai/enterprise](https://naas.ai/enterprise) for details.
+
+---
+
+## Configuration per environment
+
+A project made by `abi new project` keeps one config file per environment:
+
+```bash
+config.yaml          # Default: what `abi dev up` and the CLI read
+config.local.yaml    # The Docker Compose stack (its `abi` service sets ENV=local)
+config.remote.yaml   # A remote deployment
+```
+
+The engine reads `config.<ENV>.yaml` when the `ENV` environment variable names one that exists, else `config.yaml`. `ABI_CONFIG_OVERLAY` merges a YAML file over it (`abi dev up` uses it for its broker settings). See [Configuration Reference](/user-guide/get-started/configuration).
+
+---
+
+---
+
+## Enterprise reference architectures
+
+:::info Professional services implementation
+The architectures below are reference material for enterprise deployments that naas.ai's professional services team designs and implements with you. The YAML is illustrative, not a template ABI ships. Contact [support@naas.ai](mailto:support@naas.ai) to discuss your needs and timeline.
 :::
 
-## Cloud-Native Deployment
+Whatever the platform, the rules of [self-hosted production](#self-hosted-on-premises) hold: one NATS broker with JetStream on a private network, one serving engine per NATS account, shared backends for deploys without downtime, and a supervisor that restarts what exits when the broker is gone.
 
-### Kubernetes-Native Architecture
+### Cloud-Native Deployment
+
+#### Kubernetes-Native Architecture
 
 Naas is built from the ground up as a cloud-native application, leveraging Kubernetes for container orchestration and management.
 
@@ -24,11 +119,11 @@ Naas is built from the ground up as a cloud-native application, leveraging Kuber
 
 **Kubernetes Resources**:
 ```yaml
-# Example Naas deployment configuration
+# Example deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
- name: naas-platform
+ name: my-ai-engine
 spec:
  replicas: 3
  selector:
@@ -38,7 +133,7 @@ spec:
  spec:
  containers:
  - name: naas-api
- image: naas/platform:latest
+ image: registry.example.com/my-ai:latest
  resources:
  requests:
  memory: "2Gi"
@@ -48,7 +143,7 @@ spec:
  cpu: "2000m"
 ```
 
-### Multi-Region Deployment
+#### Multi-Region Deployment
 
 **Global Distribution Strategy**:
 - **Primary Region**: Main deployment with full functionality
@@ -86,7 +181,7 @@ graph TD
  class G,H infrastructure
 ```
 
-### Auto-Scaling Configuration
+#### Auto-Scaling Configuration
 
 **Horizontal Pod Autoscaler (HPA)**:
 ```yaml
@@ -122,7 +217,7 @@ spec:
 - Recommendation-based scaling
 - Cost optimization through right-sizing
 
-### Managed Service Options
+#### Managed Service Options
 
 **AWS Deployment**:
 - **EKS**: Managed Kubernetes with AWS integration
@@ -142,9 +237,9 @@ spec:
 - **Azure Cache**: Redis cache with clustering support
 - **Application Gateway**: Layer 7 load balancing with WAF
 
-## On-Premises Installation
+### On-Premises Installation
 
-### Air-Gapped Environment Setup
+#### Air-Gapped Environment Setup
 
 **Complete Offline Operation**:
 - No external internet connectivity required
@@ -180,7 +275,7 @@ storage:
 - **Inference Scaling**: Automatic model loading and unloading
 - **Custom Models**: Support for fine-tuned and domain-specific models
 
-### Hybrid Connectivity
+#### Hybrid Connectivity
 
 **Secure External Connections**:
 - **VPN Tunnels**: Site-to-site VPN for secure data access
@@ -221,7 +316,7 @@ graph TD
  class G,H,I external
 ```
 
-### Custom Infrastructure Integration
+#### Custom Infrastructure Integration
 
 **Enterprise System Integration**:
 - **Active Directory**: LDAP/SAML integration for authentication
@@ -235,9 +330,9 @@ graph TD
 - **Network Optimization**: 10GbE or higher for inter-node communication
 - **Backup Systems**: Integration with enterprise backup solutions
 
-## Government and Defense Deployments
+### Government and Defense Deployments
 
-### FedRAMP Compliance
+#### FedRAMP Compliance
 
 **FedRAMP Moderate Requirements**:
 - **Security Controls**: Implementation of NIST SP 800-53 controls
@@ -251,7 +346,7 @@ graph TD
 - **Personnel Security**: Background check requirements for system access
 - **Physical Security**: Enhanced physical security controls
 
-### DoD Compliance
+#### DoD Compliance
 
 **Security Requirements Guide (SRG) Compliance**:
 - **STIG Implementation**: Security Technical Implementation Guides
@@ -264,7 +359,7 @@ graph TD
 - **Controlled Unclassified Information (CUI)**: Enhanced data protection
 - **Classified**: Support for classified data processing (with appropriate accreditation)
 
-### GovCloud Deployment
+#### GovCloud Deployment
 
 **AWS GovCloud Integration**:
 - **Isolated Regions**: Physically and logically separated infrastructure
@@ -278,7 +373,7 @@ graph TD
 - **Data Residency**: Guaranteed US data residency
 - **Support**: Government-cleared support personnel
 
-### SCIF Compatibility
+#### SCIF Compatibility
 
 **Sensitive Compartmented Information Facility Requirements**:
 - **Physical Security**: Compliance with ICD/ICS 705 standards
@@ -306,9 +401,9 @@ scif_deployment:
  - continuous_monitoring: true
 ```
 
-## Deployment Planning
+### Deployment Planning
 
-### Requirements Assessment
+#### Requirements Assessment
 
 **Security Requirements**:
 - Compliance frameworks (FedRAMP, SOC 2, ISO 27001)
@@ -328,7 +423,7 @@ scif_deployment:
 - API requirements and rate limits
 - Monitoring and logging integration
 
-### Architecture Design
+#### Architecture Design
 
 **Reference Architectures**:
 - **Small Deployment**: Single region, 100-500 users
@@ -353,7 +448,7 @@ infrastructure:
  network_bandwidth: "10 Gbps"
 ```
 
-### Implementation Timeline
+#### Implementation Timeline
 
 **Phase 1: Foundation (Weeks 1-4)**:
 - Infrastructure provisioning

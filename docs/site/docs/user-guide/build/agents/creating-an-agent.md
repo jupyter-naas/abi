@@ -1,111 +1,178 @@
 # Creating an Agent
 
-ABI agents use the `Agent.New()` class method pattern. The agent is self-contained: name, system prompt, tools, and intent registration are all in one place.
+An agent binds a chat model to tools (workflows, integrations) and to other agents. In an in-engine module, an agent is a class with a `New()` class method: the name, system prompt, tools and sub-agents are all in one place, and the engine builds it at startup.
+
+:::tip Remote module?
+In a [remote module](/user-guide/build/sdk/build-a-remote-module) an agent is an SDK `IntentAgent` built by an async `create_agent(...)` function and published with an `AgentDescriptor`; `abi new agent` writes that variant when you run it inside a remote module. This page covers the in-engine agent. To choose between the two, see [Creating a Module](/user-guide/build/modules/creating-a-module#remote-or-in-engine).
+:::
+
+---
+
+## Scaffold one
+
+From the project root:
+
+```bash
+abi new agent Reviewer src/my_module/agents
+```
+
+It writes `ReviewerAgent.py`. (Inside a module, `abi new module <name> --in-engine` already scaffolds a first agent.) `abi chat` runs an agent from a terminal:
+
+```bash
+abi chat my_module ReviewerAgent    # <module> <agent class name>
+```
+
+`abi chat` loads the engine, so in a NATS project it needs the broker (`abi dev up` or `abi stack start`).
 
 ---
 
 ## The pattern
 
-Every agent:
-1. Extends `AbiAgent` (from `naas_abi.agents.AbiAgent`).
-2. Exposes a `New(...)` classmethod as its canonical constructor.
-3. Declares its intents via `IntentConfiguration`.
-4. Lists its tools (workflows, integrations, or other agents).
+The scaffold is a subclass of `Agent` (from `naas_abi_core.services.agent.Agent`) with class attributes and a `New(...)` constructor:
 
 ```python
-# agents/MyAgent.py
-from naas_abi.agents.AbiAgent import AbiAgent, AbiAgentConfiguration
-from naas_abi_core.services.agent.Agent import AgentSharedState, IntentConfiguration
-from naas_abi_core.models.Model import ChatModel
+# agents/ReviewerAgent.py
+from __future__ import annotations
 
-class MyAgent(AbiAgent):
+from typing import Optional
+
+from naas_abi_core.services.agent.Agent import (
+    Agent,
+    AgentConfiguration,
+    AgentSharedState,
+)
+
+
+class ReviewerAgent(Agent):
+    name: str = "Reviewer"
+    description: str = "Reviews documents and answers questions about them."
+    avatar_url: str = "https://example.com/reviewer.png"
+    system_prompt: str = """<role>
+You are ReviewerAgent, a careful reviewer.
+</role>
+
+<objective>
+Help the user review their documents.
+</objective>
+
+<tools>
+[TOOLS]
+</tools>
+
+<constraints>
+- Only use the provided tools; do not fabricate data.
+</constraints>
+"""
 
     @classmethod
     def New(
         cls,
-        model: ChatModel,
-        agent_shared_state: AgentSharedState | None = None,
-        agent_configuration: AbiAgentConfiguration | None = None,
-    ) -> "MyAgent":
-        name = "My Agent"
-        description = "Handles queries about [your domain]."
-        system_prompt = f"""
-You are {name}. Your role is to [describe the role].
+        agent_shared_state: Optional[AgentSharedState] = None,
+        agent_configuration: Optional[AgentConfiguration] = None,
+    ) -> "ReviewerAgent":
+        from naas_abi_core.engine.context import get_default_model_registry
 
-You have access to the following tools:
-- [list key tools]
+        # The workspace's default chat model, from the model registry.
+        registry = get_default_model_registry()
+        assert registry is not None, "ModelRegistryService not initialized"
+        chat_model = registry.get_default_chat_model()
 
-Always be concise, factual, and grounded in the data available to you.
-"""
-        intents = [
-            IntentConfiguration(
-                name="handle_domain_query",
-                description="Handle queries about [your domain]",
-                scope="supervisor",  # or "integration" or "research"
-            )
-        ]
-
-        tools = [
-            # Add your workflow and integration tools here
-        ]
+        tools: list = []   # workflow and integration tools go here
+        agents: list = []  # sub-agents this agent can delegate to
 
         if agent_configuration is None:
-            agent_configuration = AbiAgentConfiguration(
-                system_prompt=system_prompt,
-                intents=intents,
+            tools_section = "\n".join(f"- {t.name}: {t.description}" for t in tools)
+            agent_configuration = AgentConfiguration(
+                system_prompt=cls.system_prompt.replace("[TOOLS]", tools_section)
             )
         if agent_shared_state is None:
-            agent_shared_state = AgentSharedState(thread_id=0)
+            agent_shared_state = AgentSharedState(thread_id="0")
 
         return cls(
-            name=name,
-            description=description,
-            chat_model=model,
+            name=cls.name,
+            description=cls.description,
+            chat_model=chat_model,
             tools=tools,
-            agents=[],  # Sub-agents this agent can delegate to
+            agents=agents,
+            memory=None,
             state=agent_shared_state,
             configuration=agent_configuration,
         )
 ```
 
+The model is the registry's default (`services.model_registry.default_chat_model` in `config.yaml`). For a specific model, ask the registry for its canonical id: `registry.get_chat_model("gemma-4-26b-a4b-it")`. A module that needs its own settings reads them from its configuration: `ABIModule.get_instance().configuration`.
+
+The scaffold also has two optional hooks, `onHumanMessage(message)` and `onAImessage(message, agent_name)`, called on every user message and every AI message (also from sub-agents). They are for observation: what they return is ignored, an exception in them is logged and swallowed, and they run inline, so keep them quick.
+
+---
+
+## Routing between agents with `IntentAgent`
+
+`IntentAgent` (from `naas_abi_core.services.agent.IntentAgent`) extends `Agent` with intent mapping: it matches the user's message to intents with an embedding model and routes to the tool or sub-agent the intent names. Most marketplace agents are `IntentAgent`s. They add an `embedding_model` and a list of `Intent` objects:
+
+```python
+from naas_abi_core.services.agent.IntentAgent import IntentAgent
+from naas_abi_core.services.agent.beta.IntentMapper import Intent, IntentScope, IntentType
+
+INTENTS = [
+    Intent(
+        intent_value="review a document",
+        intent_type=IntentType.TOOL,        # TOOL, AGENT or RAW
+        intent_target="review_document",    # the tool or agent name
+        intent_scope=IntentScope.DIRECT,    # DIRECT (default is ALL)
+    ),
+]
+
+# inside New(): embedding_model = registry.get_default_embedding_model().model
+return cls(
+    name=cls.name,
+    description=cls.description,
+    chat_model=chat_model,
+    embedding_model=embedding_model,
+    tools=tools,
+    agents=agents,
+    intents=INTENTS,
+    memory=None,
+    state=agent_shared_state,
+    configuration=agent_configuration,
+)
+```
+
+For a complete working example, read an agent of the marketplace, such as `naas_abi_marketplace/applications/github/agents/GitHubAgent.py`.
+
 ---
 
 ## Adding tools from workflows
 
-Workflows expose themselves as tools via `as_tools()`. Add them to your agent's tool list:
+Workflows expose themselves as tools with `as_tools()`. Instantiate one with its configuration and add its tools:
 
 ```python
-from naas_abi.modules.custom.my_module.workflows.MyWorkflow import (
-    MyWorkflow,
-    MyWorkflowConfiguration,
-)
+from my_module.workflows.MyWorkflow import MyWorkflow, MyWorkflowConfiguration
 
 # ... inside New():
-my_workflow = MyWorkflow(MyWorkflowConfiguration(
-    integration_config=MyIntegrationConfiguration(
-        api_key=secret.get("MY_API_KEY")
-    )
-))
-tools = my_workflow.as_tools()
+workflow = MyWorkflow(MyWorkflowConfiguration())
+tools += workflow.as_tools()
 ```
+
+See [Creating a Workflow](/user-guide/build/agents/creating-a-workflow).
 
 ---
 
 ## Adding tools from integrations
 
-Integrations expose themselves as tools directly:
+By convention an integration module exposes a module-level `as_tools(configuration)` function that returns LangChain tools:
 
 ```python
-from naas_abi.modules.custom.my_module.integrations.MyIntegration import (
-    MyIntegration,
-    MyIntegrationConfiguration,
-)
+from my_module import ABIModule
+from my_module.integrations.MyIntegration import MyIntegrationConfiguration, as_tools
 
 # ... inside New():
-if secret.get("MY_API_KEY"):
-    config = MyIntegrationConfiguration(api_key=secret.get("MY_API_KEY"))
-    tools += MyIntegration.as_tools(config)
+api_key = ABIModule.get_instance().configuration.my_api_key
+if api_key:
+    tools += as_tools(MyIntegrationConfiguration(api_key=api_key))
 ```
+
+See [Creating an Integration](/user-guide/build/agents/creating-an-integration).
 
 ---
 
@@ -117,34 +184,20 @@ Pass agents in the `agents=[]` list:
 from naas_abi.agents.OntologyEngineerAgent import OntologyEngineerAgent
 
 # ... inside New():
-ontology_agent = OntologyEngineerAgent.New(model=model)
+ontology_agent = OntologyEngineerAgent.New()
 
 return cls(
-    name=name,
+    name=cls.name,
     ...
-    agents=[ontology_agent],   # MyAgent can now delegate to OntologyEngineerAgent
+    agents=[ontology_agent],   # this agent can now delegate to OntologyEngineerAgent
 )
 ```
 
 ---
 
-## Intent scopes
-
-| Scope | When to use |
-|-------|------------|
-| `supervisor` | The agent handles general user queries. The supervisor will route to it. |
-| `integration` | The agent requires live API credentials. Available for direct call, not auto-routed. |
-| `research` | Experimental agent. Excluded from all routing. |
-
-See [ADR: Intent Scope](/user-guide/release-notes/intent-scope-agent-routing).
-
----
-
 ## Registering in the module
 
-The Engine auto-discovers agents in `agents/*.py` that expose `Agent.New()`. No explicit registration required if your agent file is inside your module's `agents/` directory.
-
-The Engine calls `Agent.New()` with the configured model at startup.
+The engine discovers every agent class defined in a module's `agents/*.py` and calls its `New()` at startup (a module-level `create_agent()` function in the file is used as `New` when present). No registration is needed. Make sure the module is listed under `modules:` in `config.yaml`.
 
 ---
 
@@ -169,12 +222,14 @@ Memory written by earlier releases to `POSTGRES_URL` moves over with
 
 ## REST API exposure
 
-Every agent in the Engine is automatically exposed at:
+Every agent the engine loads is exposed at:
 
 ```http
-POST /agents/{agent_route}/completion
-POST /agents/{agent_route}/stream-completion
+POST /agents/{agent_name}/completion
+POST /agents/{agent_name}/stream-completion
 ```
+
+`{agent_name}` is the agent's `name`, with characters other than letters, digits, `_` and `-` replaced by `_` (`Multi Models` becomes `Multi_Models`).
 
 Request body:
 ```json
@@ -185,3 +240,5 @@ Request body:
 ```
 
 Authentication: `Authorization: Bearer YOUR_API_KEY`.
+
+Agents published by [remote modules](/user-guide/build/sdk/build-a-remote-module) have no such route: reach them through Nexus or the chat API (`POST /api/chat/stream`, selecting the agent by its id). See the [REST API](/user-guide/build/applications/api).

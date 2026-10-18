@@ -35,10 +35,12 @@ It also covers the full stack from ingestion to UI, so you are not stitching tog
 ### Prerequisites
 
 - Python 3.12+, Git, [uv](https://astral.sh/uv) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
-- Node.js 18+ and [pnpm](https://pnpm.io/installation) 8.15+ (`npm install -g pnpm`) — for the Nexus web app; required by `abi dev up`, not by the Docker stack
-- [`nats-server`](https://docs.nats.io/running-a-nats-service/introduction/installation) on `PATH` (`brew install nats-server`, or a release binary) — new projects run on NATS; required by `abi dev up`, not by the Docker stack
+- Node.js 20+ and [pnpm](https://pnpm.io/installation) 8.15+ (`npm install -g pnpm`) — for the Nexus web app; required by `abi dev up`, not by the Docker stack
+- [`nats-server`](https://docs.nats.io/running-a-nats-service/introduction/installation) 2.14 or later on `PATH` (`brew install nats-server`, or a release binary) — new projects run on NATS; required by `abi dev up`, not by the Docker stack
 - [Docker Desktop](https://www.docker.com/products/docker-desktop) (8GB+ RAM for full stack)
 - LLM API keys: any OpenAI-compatible provider (OpenAI, OpenRouter, or equivalent)
+
+Details and versions: [Install and prerequisites](docs/site/docs/user-guide/get-started/install.md).
 
 > **Upgrading from 2.x?** ABI 3.0 runs on NATS: read [Migrate from 2.x to 3.0](docs/site/docs/upgrade/migrate-to-3.md) and [Breaking changes in 3.0](docs/site/docs/upgrade/breaking-changes-3.md).
 
@@ -170,7 +172,7 @@ cd abi
 # uv + Python toolchain (skip if you already have uv globally)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Node toolchain for the Nexus web app (Node.js 18+, pnpm 8.15+ — required by `abi dev up`)
+# Node toolchain for the Nexus web app (Node.js 20+, pnpm 8.15+ — required by `abi dev up`)
 brew install pnpm        # or: npm install -g pnpm
 
 # NATS broker, 2.14 or later (required by `abi dev up`)
@@ -270,6 +272,12 @@ Live, written to disk regardless of foreground/background mode:
 
 `abi dev logs <service> -f` follows one of them.
 
+## Documentation
+
+**User guide**: [Install and prerequisites](docs/site/docs/user-guide/get-started/install.md), [Quickstart](docs/site/docs/user-guide/get-started/quickstart.md), [Configuration](docs/site/docs/user-guide/get-started/configuration.md), [Build](docs/site/docs/user-guide/build/overview.md) (modules, [module jobs](docs/site/docs/user-guide/build/modules/module-jobs.md), agents, pipelines, the SDK), [Deploy](docs/site/docs/user-guide/deploy/overview.md) (Docker, Dokploy, production), [Upgrade to 3.0](docs/site/docs/upgrade/migrate-to-3.md), [CLI reference](docs/site/docs/user-guide/reference/cli.md).
+
+**Developer guide**: [Contribute to ABI](docs/site/docs/developer-guide/contributing/overview.md), [Testing](docs/site/docs/developer-guide/contributing/testing.md), [Releasing](docs/site/docs/developer-guide/releasing/release-process.md), [Architecture](docs/site/docs/developer-guide/architecture/what-is-abi.md), [ADR index](docs/site/docs/developer-guide/adr.md).
+
 ## Production Deployment
 
 ### Self-Hosted
@@ -297,7 +305,7 @@ Collaborative effort between:
 
 ## Contributing
 
-We welcome contributions. Open an issue or pull request to get started.
+We welcome contributions. Open an issue or pull request to get started, and read [Contribute to ABI](docs/site/docs/developer-guide/contributing/overview.md) first.
 
 ## License
 
