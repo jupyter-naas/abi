@@ -23,7 +23,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Self
-from urllib.parse import parse_qs, urlencode, urlsplit
+from urllib.parse import parse_qs, unquote_plus, urlencode, urlsplit
 
 import httpx
 import jwt
@@ -107,6 +107,10 @@ class FakeIdP:
     ) -> None:
         self.token_ttl_seconds = token_ttl_seconds
         self.jwks_max_age = jwks_max_age
+        # The JWKS's Cache-Control, when a test wants something else than max-age.
+        self.jwks_cache_control: str | None = None
+        # OIDC Core §12.2: a refresh response may leave the ID token out.
+        self.refresh_returns_id_token = True
         self.redirect_uri = redirect_uri
         self._lock = threading.Lock()
         self._keys: list[_Key] = [_new_key("RS256")]
@@ -194,10 +198,15 @@ class FakeIdP:
     # -- test controls ----------------------------------------------------------
 
     def add_client(
-        self, redirect_uri: str, *, confidential: bool = True
+        self,
+        redirect_uri: str,
+        *,
+        confidential: bool = True,
+        secret: str | None = None,
     ) -> tuple[str, str | None]:
         client_id = f"client-{secrets.token_hex(4)}"
-        secret = secrets.token_urlsafe(24) if confidential else None
+        if secret is None and confidential:
+            secret = secrets.token_urlsafe(24)
         with self._lock:
             self._clients[client_id] = _Client(client_id, secret, (redirect_uri,))
         return client_id, secret
@@ -314,6 +323,8 @@ class FakeIdP:
         if authorization and authorization.lower().startswith("basic "):
             decoded = base64.b64decode(authorization[6:]).decode()
             client_id, _, secret = decoded.partition(":")
+            # RFC 6749 §2.3.1: form-urlencoded before the Basic encoding.
+            client_id, secret = unquote_plus(client_id), unquote_plus(secret)
         client = self._clients.get(client_id or "")
         if client is None:
             return None
@@ -349,7 +360,10 @@ class FakeIdP:
                 held = self._refresh.pop(form.get("refresh_token", ""), None)
             if held is None or held[0] != client.client_id:
                 return 400, {"error": "invalid_grant"}
-            return 200, self._tokens(client, held[1], nonce=None)
+            tokens = self._tokens(client, held[1], nonce=None)
+            if not self.refresh_returns_id_token:
+                del tokens["id_token"]
+            return 200, tokens
         return 400, {"error": "unsupported_grant_type"}
 
     def _tokens(
@@ -415,7 +429,12 @@ def _handler(idp: FakeIdP) -> type[BaseHTTPRequestHandler]:
                 self._send(200, idp._discovery(), {"Cache-Control": "max-age=60"})
             elif parts.path == "/jwks":
                 self._send(
-                    200, idp._jwks(), {"Cache-Control": f"max-age={idp.jwks_max_age}"}
+                    200,
+                    idp._jwks(),
+                    {
+                        "Cache-Control": idp.jwks_cache_control
+                        or f"max-age={idp.jwks_max_age}"
+                    },
                 )
             elif parts.path == "/authorize":
                 status, headers, text = idp._authorize(query)

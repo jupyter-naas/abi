@@ -65,7 +65,7 @@ OAuth error); `UnknownProviderError`; `ProviderUnavailableError`.
 identity = engine.services.identity  # IIdentityService
 
 identity.list_providers()  # ProviderInfo, never the client secret
-identity.default_provider  # where an unrouted login goes
+identity.default_provider  # the provider a login page offers as a button
 user = identity.authenticate(id_token, nonce=nonce)  # AuthenticatedUser
 user.principal_id, user.issuer, user.subject, user.group_ids
 
@@ -91,14 +91,21 @@ identity.end_session_url("acme", id_token_hint=..., post_logout_redirect_uri=...
   `abi:-:-:identity:provider/<name>` for the current `CallContext`:
   `ListProviders`, `GetProvider`, `VerifyToken` (no side effect),
   `Authenticate` (creates or refreshes the IAM user, as `engine`) and `SignIn`
-  (the relying-party operations). A caller with none gets "not found". `api` and
+  (the relying-party operations). `exchange_code` and `refresh` resolve the
+  user too, so they need `SignIn` **and** `Authenticate`; the authorization URL,
+  revocation and end-session need `SignIn` only. A caller with none gets "not found". `api` and
   `engine` hold them through their transitional policies; a module needs a grant.
 - **`refresh_at`** is the ID token's expiry, at most ten minutes after the
   sign-in: a relying party re-verifies at the provider by then (RFC §9.2).
-- **A refresh must return an ID token** naming the same user; otherwise it is
-  refused (`no_id_token`, `subject_changed`).
+- **A refresh** that returns an ID token must name the same user
+  (`subject_changed` otherwise). One that returns none (OIDC Core §12.2) is
+  accepted: the provider took the refresh token and the subject cannot change,
+  so the service only checks that the session's principal is an active user of
+  this provider's issuer. `tokens.id_token` is then `None` and no groups are
+  re-read: the relying party keeps the ones it holds.
 - **Key cache.** The JWKS is cached for its `Cache-Control: max-age` (300 s
-  when none, an hour at most). An unknown `kid` refetches it at most once every
+  when none, an hour at most; `no-store`, `no-cache` and `max-age=0` mean no
+  caching, so every verification reads it again). An unknown `kid` refetches it at most once every
   `jwks_refetch_seconds` (30). Known keys keep verifying for 15 minutes past
   their cache while the provider is unreachable.
 

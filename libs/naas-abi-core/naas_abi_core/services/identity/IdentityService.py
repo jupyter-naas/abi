@@ -15,8 +15,9 @@ from __future__ import annotations
 import re
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import replace
 from typing import Protocol
-from urllib.parse import urlencode, urlsplit, urlunsplit
+from urllib.parse import quote_plus, urlencode, urlsplit, urlunsplit
 
 import jwt
 
@@ -81,6 +82,8 @@ class IdentityIAM(Protocol):
     def resolve_idp_groups(
         self, provider: str, claim_values: Iterable[str]
     ) -> list[str]: ...
+
+    def get_principal(self, principal_id: str) -> PrincipalRecord: ...
 
     def filter(self, action: str, resources: Iterable[str]) -> FilterResult: ...
 
@@ -276,7 +279,7 @@ class IdentityService(IIdentityService):
         redirect_uri: str,
         nonce: str,
     ) -> SignIn:
-        configured = self._provider("identity:SignIn", provider)
+        configured = self._signing_in(provider)
         if not _CODE_VERIFIER.match(code_verifier):
             raise ValueError("code_verifier is not an RFC 7636 verifier")
         tokens = self._token_request(
@@ -294,29 +297,60 @@ class IdentityService(IIdentityService):
     def refresh(
         self, provider: str, *, refresh_token: str, principal_id: str
     ) -> SignIn:
-        configured = self._provider("identity:SignIn", provider)
+        configured = self._signing_in(provider)
         tokens = self._token_request(
             configured,
             {"grant_type": "refresh_token", "refresh_token": refresh_token},
         )
-        # OIDC Core §12.2: a refreshed ID token names the same user.
+        if tokens.refresh_token is None:
+            # The provider keeps the refresh token it had issued.
+            tokens = replace(tokens, refresh_token=refresh_token)
+        if not tokens.id_token:
+            # OIDC Core §12.2: a refresh response may omit the ID token. The
+            # provider accepted the refresh token and the subject cannot change:
+            # what is left to check is IAM's side.
+            return self._sign_in(
+                self._still_signed_in(configured, principal_id), tokens
+            )
+        # A refreshed ID token names the same user.
         verified = self._verify_issued(configured, tokens, nonce=None)
         user = self._authenticate(verified)
         if user.principal_id != principal_id:
             raise SignInError(
                 "subject_changed", "The refreshed token names another user"
             )
-        if tokens.refresh_token is None:
-            # The provider keeps the refresh token it had issued.
-            tokens = TokenSet(
-                id_token=tokens.id_token,
-                access_token=tokens.access_token,
-                refresh_token=refresh_token,
-                expires_in=tokens.expires_in,
-                token_type=tokens.token_type,
-                scope=tokens.scope,
-            )
         return self._sign_in(user, tokens)
+
+    def _still_signed_in(
+        self, provider: IdentityProvider, principal_id: str
+    ) -> AuthenticatedUser:
+        """The session's user, with no ID token to read: it must be an active IAM
+        user of this provider's issuer. Its groups are not re-read (none came)."""
+        with as_service_account(USER_WRITER):
+            record = self._iam.get_principal(principal_id)
+        if (
+            record.kind != "user"
+            or record.issuer != provider.issuer
+            or record.subject is None
+        ):
+            raise SignInError(
+                "subject_changed", "The session's user does not belong to this provider"
+            )
+        if record.status != "active":
+            raise PrincipalSuspendedError(record.id, record.status)
+        now = int(self._clock())
+        token = VerifiedToken(
+            provider=provider.name,
+            issuer=record.issuer,
+            subject=record.subject,
+            audience=(provider.client_id,),
+            issued_at=now,
+            expires_at=now + MAX_SESSION_TOKEN_SECONDS,
+            email=record.email,
+            email_verified=record.email_verified,
+            display_name=record.display_name,
+        )
+        return AuthenticatedUser(principal_id=record.id, token=token)
 
     def revoke(self, provider: str, *, refresh_token: str) -> bool:
         configured = self._provider("identity:SignIn", provider)
@@ -401,7 +435,15 @@ class IdentityService(IIdentityService):
     def _basic_auth(provider: IdentityProvider) -> tuple[str, str] | None:
         if not provider.client_secret:
             return None
-        return (provider.client_id, provider.client_secret)
+        # RFC 6749 §2.3.1: both are form-urlencoded before the Basic encoding.
+        return (quote_plus(provider.client_id), quote_plus(provider.client_secret))
+
+    def _signing_in(self, name: str) -> IdentityProvider:
+        """The provider of a code exchange or a refresh, which resolve (and may
+        create) the IAM user: the caller needs ``SignIn`` and ``Authenticate``."""
+        configured = self._provider("identity:SignIn", name)
+        self._provider("identity:Authenticate", name)
+        return configured
 
     def _provider(self, action: str, name: str) -> IdentityProvider:
         def not_found() -> UnknownProviderError:

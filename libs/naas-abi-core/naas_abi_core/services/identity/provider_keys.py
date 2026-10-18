@@ -112,7 +112,8 @@ class _Cached:
     def __init__(self) -> None:
         self.fetched_at = float("-inf")
         self.attempted_at = float("-inf")
-        self.max_age = 0.0
+        # None until the provider states one: 0 is a real answer (no-store).
+        self.max_age: float | None = None
         self.failed = False
         self.error = ""
 
@@ -272,16 +273,16 @@ class ProviderKeys:
             now = self._clock()
             if state.failed and now - state.attempted_at < self._retry_seconds:
                 return False  # backing off
-            return now - state.fetched_at >= (state.max_age or default_age)
+            return now - state.fetched_at >= _age(state, default_age)
 
     def _usable(self, state: _Cached, default_age: float) -> bool:
         age = self._clock() - state.fetched_at
-        return age < (state.max_age or default_age) + self._stale_seconds
+        return age < _age(state, default_age) + self._stale_seconds
 
     def _succeeded(self, state: _Cached, started: float, max_age: float | None) -> None:
         state.fetched_at = state.attempted_at = started
         state.max_age = (
-            min(max(max_age, 0.0), _MAX_CACHE_SECONDS) if max_age is not None else 0.0
+            min(max(max_age, 0.0), _MAX_CACHE_SECONDS) if max_age is not None else None
         )
         state.failed, state.error = False, ""
 
@@ -289,6 +290,10 @@ class ProviderKeys:
         with self._lock:
             state.attempted_at, state.failed = started, True
             state.error = str(exc) or type(exc).__name__
+
+
+def _age(state: _Cached, default_age: float) -> float:
+    return default_age if state.max_age is None else state.max_age
 
 
 @dataclass(frozen=True)

@@ -4,7 +4,8 @@ A provider is a platform resource, ``abi:-:-:identity:provider/<name>``.
 ``Authenticate`` creates or refreshes the token's IAM user, as the engine, once
 the caller is allowed it; ``SignIn`` runs the provider side of a relying
 party's sign-in with the provider's client secret, which never leaves the
-engine.
+engine. A code exchange and a refresh also resolve (and may create) the user:
+they need ``SignIn`` and ``Authenticate``.
 """
 
 from __future__ import annotations
@@ -59,7 +60,10 @@ CATALOG = ActionCatalog(
             "refresh",
             "revoke",
             "end_session_url",
-            description="Run a relying party's sign-in at the provider, with its client secret.",
+            description=(
+                "Run a relying party's sign-in at the provider, with its client secret. "
+                "Exchanging a code or refreshing also needs identity:Authenticate."
+            ),
         ),
     ),
 )
