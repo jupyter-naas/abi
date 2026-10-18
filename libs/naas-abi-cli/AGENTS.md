@@ -8,7 +8,7 @@ The `abi` command: scaffolds projects and modules (`abi new ...`), runs a projec
 natively (`abi dev ...`) or in Docker (`abi stack ...`, `abi deploy local`),
 deploys it (`abi deploy dokploy|naas`) and administers a running Nexus (`abi user`,
 `abi org`, `abi workspace`). Every command and option: `README.md` and
-`docs/site/docs/capabilities/developer-toolchain/cli.md`.
+`docs/site/docs/user-guide/reference/cli.md`.
 
 ## Files
 

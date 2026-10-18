@@ -726,3 +726,10 @@ Expired leases use half the nominal lease as the cap.
 Authentication/configuration errors remain fatal and visible. Unexpected renewal
 or endpoint-binding failures receive at most three consecutive attempts. Failed
 endpoint rebinds clean up partial subscriptions and retain the previous bindings.
+
+## Documentation
+
+- [Quickstart](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/get-started/quickstart.md)
+- [Module jobs and scheduling](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/build/modules/module-jobs.md)
+- [SDK and proto internals](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/developer-guide/sdk-and-proto.md)
+- [Deploy](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/deploy/overview.md)

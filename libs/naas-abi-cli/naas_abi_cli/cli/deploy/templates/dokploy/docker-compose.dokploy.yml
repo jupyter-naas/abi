@@ -9,7 +9,7 @@
 #
 # Every value comes from the Environment tab, which Dokploy writes to `.env`
 # next to this file. `abi deploy dokploy` generates a starting set in
-# .env.dokploy. Guide: docs/deploy-dokploy.md in the ABI repository.
+# .env.dokploy. Guide: https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/deploy/dokploy.md
 #
 # Several stacks can share a server, and the services Traefik reaches (abi,
 # nexus-web{% if INCLUDE_CODING %}, coder, forgejo{% endif %}) join `dokploy-network` under their service

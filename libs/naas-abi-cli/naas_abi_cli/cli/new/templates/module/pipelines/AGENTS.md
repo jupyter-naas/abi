@@ -35,7 +35,7 @@ class <Name>PipelineParameters(PipelineParameters):
     """Run-time inputs."""
     target: Annotated[str, Field(..., description="What to ingest")]
 
-class <Name>Pipeline(Pipeline[<Name>PipelineParameters]):
+class <Name>Pipeline(Pipeline):
     """One-line description."""
 
     __configuration: <Name>PipelineConfiguration

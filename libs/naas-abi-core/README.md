@@ -621,3 +621,12 @@ uv build
 
 MIT License
 
+## Documentation
+
+- [Install and prerequisites](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/get-started/install.md)
+- [Quickstart](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/get-started/quickstart.md)
+- [Configuration](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/get-started/configuration.md)
+- [Module jobs and scheduling](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/build/modules/module-jobs.md)
+- [Architecture](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/developer-guide/architecture/nats.md)
+- [Contribute to ABI](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/developer-guide/contributing/overview.md)
+- [Testing](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/developer-guide/contributing/testing.md)
