@@ -119,6 +119,17 @@ def test_a_catalogued_action_reaches_every_subject_its_endpoint_serves():
     assert "abi.svc.source_control.v1.delete_repo" not in permissions.publish
 
 
+def test_identity_is_reached_on_its_own_subjects():
+    permissions = derive(
+        allow(["identity:ListProviders", "identity:GetProvider"]), catalogs=kernel()
+    )
+    assert "abi.identity.v1.list_providers" in permissions.publish
+    assert "abi.identity.v1.get_provider" in permissions.publish
+    assert not any(p.startswith("abi.identity.v1.auth") for p in permissions.publish)
+    # Without a registered catalog, the whole identity prefix.
+    assert "abi.identity.v1.>" in derive(allow(["identity:*"])).publish
+
+
 def test_a_deny_on_everything_takes_the_service_back():
     permissions = derive(
         allow(["keyvalue:*"]), Statement("Deny", ("keyvalue:*",), ("*",))

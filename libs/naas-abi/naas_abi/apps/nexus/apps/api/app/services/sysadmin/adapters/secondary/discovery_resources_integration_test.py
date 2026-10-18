@@ -67,7 +67,8 @@ def broker(tmp_path_factory):
         process.wait(timeout=5)
 
 
-async def _register(nc, project, module_id, instance_id, version):
+async def _register(nc, project, module_id, instance_id, version, principal=None):
+    """``principal``: the module's account when IAM decides, else its id."""
     from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 
     request = pb.RegisterRequest(
@@ -84,7 +85,7 @@ async def _register(nc, project, module_id, instance_id, version):
         f"abi.discovery.{project}.v1.register",
         request.SerializeToString(),
         timeout=5,
-        headers={"Nats-Auth-Token": TEST_TOKENS.token(module_id)},
+        headers={"Nats-Auth-Token": TEST_TOKENS.token(principal or module_id)},
     )
     assert not pb.RegisterResponse.FromString(reply.data).error.code
 
@@ -103,9 +104,25 @@ class Registry:
         self.primary = await start_discovery(
             self.broker.nc, SECRET, self.project, lease_seconds=300, iam=self.iam
         )
+        # With IAM, a module registers as its own account (its bootstrap).
+        accounts = {}
+        if self.iam is not None:
+            from naas_abi_core.services.iam.tests.iam_harness import IAMHarness
+
+            harness = IAMHarness(self.iam)
+            for module_id in ("acme", "zeta"):
+                name = f"module/{self.project}/{module_id}"
+                accounts[module_id] = harness.service_account(name).id
         for name, value in fixtures.SEED_ITEMS.items():
-            await _register(self.broker.nc, self.project, "acme", name, value.decode())
-        await _register(self.broker.nc, self.project, "zeta", "z-1", "1.0.0")
+            await _register(
+                self.broker.nc,
+                self.project,
+                "acme",
+                name,
+                value.decode(),
+                accounts.get("acme"),
+            )
+        await _register(self.broker.nc, self.project, "zeta", "z-1", "1.0.0", accounts.get("zeta"))
 
     def client(self):
         from naas_abi_sdk.discovery import DiscoveryClient

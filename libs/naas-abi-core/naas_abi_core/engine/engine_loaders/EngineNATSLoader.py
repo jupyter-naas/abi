@@ -251,9 +251,7 @@ class EngineNATSLoader:
         if services.identity_available() and isinstance(
             services.identity, IdentityService
         ):
-            primary_identity = IdentityPrimaryAdapterNATS(
-                services.identity, nats_config.jwt_secret
-            )
+            primary_identity = IdentityPrimaryAdapterNATS(services.identity, verifier)
             nats_runtime.run_coro(primary_identity.start(nc))
             started.append(primary_identity)
             logger.debug("EngineNATSLoader: exposed identity over NATS")

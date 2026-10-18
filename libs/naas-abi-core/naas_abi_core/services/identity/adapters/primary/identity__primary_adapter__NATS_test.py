@@ -7,11 +7,10 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-from naas_abi_core.engine.nats_auth import issue_service_token
 from naas_abi_core.engine.nats_rpc_integration_test import (  # noqa: F401 - pytest fixture
-    SECRET,
     broker,
 )
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.identity.adapters.primary.identity__primary_adapter__NATS import (
     IdentityPrimaryAdapterNATS,
 )
@@ -43,10 +42,12 @@ def test_a_client_engine_signs_users_in_through_the_serving_engine(broker):  # n
             import nats
 
             nc = await nats.connect(url)
-            primary = IdentityPrimaryAdapterNATS(service, SECRET)
+            primary = IdentityPrimaryAdapterNATS(service, TEST_TOKENS.verifier)
             await primary.start(nc)
-            api = IdentitySecondaryAdapterNATSClient(url, SECRET, "api")
-            module = IdentitySecondaryAdapterNATSClient(url, SECRET, "people")
+            api = IdentitySecondaryAdapterNATSClient(url, TEST_TOKENS.source("api"))
+            module = IdentitySecondaryAdapterNATSClient(
+                url, TEST_TOKENS.source("people")
+            )
             try:
                 providers = await asyncio.to_thread(api.list_providers)
                 assert [p.name for p in providers] == ["fake"]
@@ -117,9 +118,9 @@ def test_sdk_modules_reach_identity_over_nats(broker):  # noqa: F811
             import nats
 
             nc = await nats.connect(url)
-            primary = IdentityPrimaryAdapterNATS(service, SECRET)
+            primary = IdentityPrimaryAdapterNATS(service, TEST_TOKENS.verifier)
             await primary.start(nc)
-            client = ABIClient(url, issue_service_token("people", SECRET))
+            client = ABIClient(url, TEST_TOKENS.token("people"))
             try:
                 identity = ServicesProxy(
                     client, ModuleDependencies(services=("identity",)), "people"

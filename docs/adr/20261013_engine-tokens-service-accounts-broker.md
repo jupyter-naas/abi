@@ -133,7 +133,7 @@ Implemented as decided, with these differences:
     `abi.agent.<project>.<sa>.>` and `abi.mod.<project>.<sa>.>`, where `<sa>` is the ULID part of its
     `sa_` id;
   - for each allowed action, the action's catalog subjects. A service without a registered catalog grants
-    its whole prefix `abi.svc.<service>.v1.>`. A catalog therefore lists every subject an action's endpoint
+    its whole prefix `abi.svc.<service>.v1.>` (identity: `abi.identity.v1.>`). A catalog therefore lists every subject an action's endpoint
     serves, its transfer session included (`abi.svc.<service>.v1.transfer.open`, `*.write`, ...): a subject
     missing there is one no module reaches. Discovery actions add the hosting subjects of the modules they
     reach, in the module's project (for another account, the projects its resources name), and the event

@@ -16,6 +16,7 @@ from naas_abi_proto.common.v1 import common_pb2
 from naas_abi_proto.identity.v1 import identity_pb2 as pb
 
 from naas_abi_core import logger
+from naas_abi_core.engine.nats_auth import TokenVerifier
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import (
     RequestPayloadError,
@@ -34,9 +35,9 @@ def _opt(message: Any, field: str) -> Any:
 
 
 class IdentityPrimaryAdapterNATS(ServicePrimary):
-    def __init__(self, service: IdentityService, jwt_secret: str) -> None:
+    def __init__(self, service: IdentityService, verifier: TokenVerifier) -> None:
         self._identity = service
-        self._jwt_secret = jwt_secret
+        self._verifier = verifier
         self._dispatch = DomainRPCDispatcher(codec.SERVICE_NAME)
         self._service: TracedService | None = None
 
@@ -68,7 +69,7 @@ class IdentityPrimaryAdapterNATS(ServicePrimary):
     async def _handle(self, request, *, operation: str) -> None:
         name = codec.OPERATIONS[operation]
         response_type = getattr(pb, f"{name}Response")
-        caller = await authenticate_request(request, self._jwt_secret, response_type)
+        caller = await authenticate_request(request, self._verifier, response_type)
         if caller is None:
             return
         try:

@@ -48,9 +48,14 @@ class NatsAgentControl:
         from naas_abi_sdk.agent import agent_subject
         from nats.errors import NoRespondersError
 
-        subject = agent_subject(
-            self.project, await self._service_account(run), run.owner, run.agent, "cancel"
-        )
+        try:
+            service_account = await self._service_account(run)
+        except Exception as exc:  # noqa: BLE001 - discovery down, timeouts, refusals
+            code = getattr(exc, "code", "") or type(exc).__name__
+            raise SourceUnavailable(
+                "agents", f"discovery could not name the run's owner: {code}"
+            ) from exc
+        subject = agent_subject(self.project, service_account, run.owner, run.agent, "cancel")
         request = pb.CancelRequest(invocation_id=run.invocation_id, output_format=2)
         try:
             await asyncio.wait_for(

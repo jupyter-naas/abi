@@ -14,7 +14,13 @@ CALLER_IDENTITY = "api"
 
 
 def api_token() -> Any:
-    """A callable returning a valid ``api`` token, for ``Transport``."""
-    from naas_abi import ABIModule
+    """A callable returning a valid ``api`` token, for ``Transport``. The
+    engine is looked up when a token is needed, not when a client is built."""
 
-    return ABIModule.get_instance().engine.service_credentials(CALLER_IDENTITY).token
+    def token() -> str:
+        from naas_abi import ABIModule
+
+        engine = ABIModule.get_instance().engine
+        return engine.service_credentials(CALLER_IDENTITY).token()
+
+    return token

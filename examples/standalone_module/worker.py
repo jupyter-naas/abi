@@ -814,9 +814,10 @@ class ABIModule(BaseModule):
             raise AssertionError("iam.token exchanged an unknown key")
 
     async def identity(self):
-        """A module holds no identity:* grant: it sees no provider, and every
-        sign-in operation is refused; a token is refused before any of that
-        when no provider issued it."""
+        """The module declares identity, so its approved manifest reaches it,
+        but the demo engine has no provider: it lists none, and every sign-in
+        operation is refused, for an unknown provider or a token no provider
+        issued."""
         assert not (await self.call("identity", "list_providers")).providers
         challenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
         refused = {

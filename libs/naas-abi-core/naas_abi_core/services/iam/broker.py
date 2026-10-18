@@ -428,7 +428,7 @@ def _actions(pattern: str, catalogs: CatalogRegistry) -> list[tuple[str, str | N
     service_pattern, _, action_pattern = pattern.partition(":")
     if pattern == "*":
         service_pattern, action_pattern = "*", "*"
-    known = sorted(set(KERNEL_SERVICES) | {"iam", "discovery", "bus"})
+    known = sorted(set(KERNEL_SERVICES) | {"iam", "identity", "discovery", "bus"})
     found: list[tuple[str, str | None]] = []
     for service in known:
         if not matches(service_pattern, service):
@@ -453,6 +453,8 @@ def _subjects(service: str, action: str | None, catalogs: CatalogRegistry) -> li
     if catalog is not None and action is not None:
         spec = next((a for a in catalog.actions if a.name == action), None)
         return list(spec.subjects) if spec is not None else []
+    if service == "identity":
+        return ["abi.identity.v1.>"]  # a kernel service outside abi.svc
     return [f"abi.svc.{service}.v1.>"]
 
 
