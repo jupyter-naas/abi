@@ -117,6 +117,10 @@ Do not add a second role check at the endpoint when the IAM service already does
 - The session is the `nexus_session` httpOnly cookie, stored in `auth_sessions` and resolved by
   `RequestIdentityMiddleware`, which leaves it on `request.state.nexus_session`. `get_current_user` reads it
   when there is no bearer token.
+- The cookie authenticates no page or frame (`Sec-Fetch-Dest` document, iframe, embed, object, or
+  `Sec-Fetch-Mode: navigate`): a link to an API URL is anonymous. A route that serves user bytes sends
+  `user_content_headers` (`core/user_content.py`): sandbox CSP, `nosniff`, and `attachment` for active
+  types; the security-headers middleware does the same for any `/api` response of an active type.
 - A cookie request that changes state needs `X-CSRF-Token` (from `GET /api/auth/oidc/session`); without it
   `get_current_user_required` answers 403.
 - The web app's cookie sessions (`sessionKind: 'cookie'` in `stores/auth.ts`) keep no token: use `authFetch`,

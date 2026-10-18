@@ -78,6 +78,14 @@ open:
    - The token is an HMAC of the session secret: never stored, derived again on every request.
    - The web app reads it from `GET /api/auth/oidc/session` and keeps it in memory only.
    - Without it the request names no user, and authenticated routes answer 403.
+   - **The cookie never authenticates a page or a frame.** A request the browser marks as a navigation
+     (`Sec-Fetch-Mode: navigate`) or as a document, iframe, embed or object (`Sec-Fetch-Dest`) names no
+     user, and `/session` gives it no CSRF token. A link to an API URL therefore never acts as the
+     signed-in user, whatever it serves. The web app's own requests are `fetch` calls and keep working.
+   - **User bytes never run on the API origin**, which holds the cookie (`core/user_content.py`). Routes
+     that serve uploads send a sandbox policy and `nosniff`, and active types (SVG, HTML, XML, script) as
+     `attachment`; the security-headers middleware applies the same to any other `/api` response of an
+     active type, in front of the global CSP. Sandboxed apps (`/app-*`) keep their own policy.
 7. **TRANSITIONAL (#65).** At each sign-in Nexus attaches `builtin.transitional.nexus_user` to the
    principal. The user side of a Nexus call then allows what it allows a built-in login user, until
    subtask 11 attaches the roles of each membership and detaches it.

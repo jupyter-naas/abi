@@ -16,7 +16,7 @@ from urllib.parse import parse_qs, urlsplit
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, Response
 from naas_abi.apps.nexus.apps.api.app.core import database
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.models import (
@@ -24,6 +24,9 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     OrganizationDomainModel,
     OrganizationModel,
     UserModel,
+)
+from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
+    get_current_user_required,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__FastAPI import (  # noqa: E501
     router as auth_router,
@@ -91,6 +94,11 @@ def _app() -> FastAPI:
             "user": user.id if user else None,
             "groups": sorted(user.groups) if user else [],
         }
+
+    @app.get("/api/uploads/x.svg")
+    async def uploaded_svg(user=Depends(get_current_user_required)) -> Response:
+        """Stands for a member's upload, served to whoever may read it."""
+        return Response("<svg xmlns='http://www.w3.org/2000/svg'/>", media_type="image/svg+xml")
 
     app.add_middleware(RequestIdentityMiddleware)
     return app
@@ -251,6 +259,62 @@ class NexusSignInContract:
         # The ended session stays ended, even with its cookie replayed.
         client.cookies.set(settings.oidc_session_cookie, cookie or "", domain="testserver")
         assert (await client.get("/api/auth/me")).status_code == 401
+
+    # -- the cookie never authenticates a page or a frame ----------------------------
+
+    NAVIGATIONS = (
+        {
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "cross-site",
+        },
+        {"Sec-Fetch-Dest": "document", "Sec-Fetch-Mode": "navigate", "Sec-Fetch-Site": "same-site"},
+        {"Sec-Fetch-Dest": "iframe", "Sec-Fetch-Mode": "navigate", "Sec-Fetch-Site": "cross-site"},
+        {"Sec-Fetch-Dest": "embed", "Sec-Fetch-Mode": "no-cors", "Sec-Fetch-Site": "cross-site"},
+        {"Sec-Fetch-Dest": "object", "Sec-Fetch-Mode": "no-cors", "Sec-Fetch-Site": "same-origin"},
+    )
+
+    @pytest.mark.asyncio
+    async def test_a_link_to_the_api_is_not_signed_in(self, nexus, harness):
+        client, _, _ = nexus
+        user = harness.create_user(f"nav-{os.urandom(3).hex()}@example.com")
+        await self._sign_in(client, harness, user)
+        for navigation in self.NAVIGATIONS:
+            # The uploaded page a member sends an admin must not even be served.
+            served = await client.get("/api/uploads/x.svg", headers=navigation)
+            assert served.status_code == 401, navigation
+            assert "svg" not in served.text
+            assert (await client.get("/api/auth/me", headers=navigation)).status_code == 401
+            # And it hands out no CSRF token, which is what turns a script into the user.
+            session = await client.get("/api/auth/oidc/session", headers=navigation)
+            assert session.status_code == 401, navigation
+            assert "csrf_token" not in session.text
+            assert (await client.get("/api/whoami", headers=navigation)).json()["user"] is None
+
+    @pytest.mark.asyncio
+    async def test_the_web_apps_own_requests_still_carry_the_session(self, nexus, harness):
+        client, _, _ = nexus
+        user = harness.create_user(f"web-{os.urandom(3).hex()}@example.com")
+        await self._sign_in(client, harness, user)
+        fetches = (
+            {},  # no Fetch Metadata: older browsers, scripts
+            {"Sec-Fetch-Dest": "empty", "Sec-Fetch-Mode": "cors", "Sec-Fetch-Site": "same-site"},
+            {"Sec-Fetch-Dest": "empty", "Sec-Fetch-Mode": "cors", "Sec-Fetch-Site": "same-origin"},
+            {"Sec-Fetch-Dest": "image", "Sec-Fetch-Mode": "no-cors", "Sec-Fetch-Site": "same-site"},
+        )
+        for headers in fetches:
+            assert (await client.get("/api/auth/me", headers=headers)).status_code == 200, headers
+            session = await client.get("/api/auth/oidc/session", headers=headers)
+            assert session.status_code == 200, headers
+            assert session.json()["csrf_token"]
+        # A change the web app sends keeps working with its CSRF token.
+        csrf = (await client.get("/api/auth/oidc/session")).json()["csrf_token"]
+        renamed = await client.patch(
+            "/api/auth/me",
+            json={"name": "Web"},
+            headers={"X-CSRF-Token": csrf, "Sec-Fetch-Dest": "empty", "Sec-Fetch-Mode": "cors"},
+        )
+        assert renamed.status_code == 200
 
     # -- what is refused --------------------------------------------------------
 

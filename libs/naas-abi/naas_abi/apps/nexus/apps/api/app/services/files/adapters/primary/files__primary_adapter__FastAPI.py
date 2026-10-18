@@ -14,6 +14,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     require_workspace_system_drive,
 )
 from naas_abi.apps.nexus.apps.api.app.core.content_disposition import content_disposition
+from naas_abi.apps.nexus.apps.api.app.core.user_content import user_content_headers
 from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__primary_adapter__dependencies import (  # noqa: E501
     get_files_service,
 )
@@ -449,7 +450,7 @@ async def preview_file_as_pdf(
     return Response(
         content=preview.content,
         media_type="application/pdf",
-        headers={"Content-Disposition": content_disposition("inline", preview.filename)},
+        headers=user_content_headers(preview.filename, "application/pdf"),
     )
 
 
@@ -499,7 +500,7 @@ async def read_file_raw(
     return Response(
         content=raw_file.content,
         media_type=raw_file.media_type,
-        headers={"Content-Disposition": content_disposition("inline", raw_file.filename)},
+        headers=user_content_headers(raw_file.filename, raw_file.media_type),
     )
 
 

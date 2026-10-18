@@ -18,6 +18,7 @@ from naas_abi.apps.nexus.apps.api.app.core.config import settings, validate_sett
 from naas_abi.apps.nexus.apps.api.app.core.database import init_db
 from naas_abi.apps.nexus.apps.api.app.core.frame_headers import embed_csp, is_embeddable
 from naas_abi.apps.nexus.apps.api.app.core.logging import configure_logging
+from naas_abi.apps.nexus.apps.api.app.core.user_content import harden_active_content
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat_ingestion_worker import (
     start_chat_ingestion_consumer,
 )
@@ -445,6 +446,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await _shutdown(app)
 
 
+# FastAPI's own interactive docs (development only) are HTML with scripts.
+_DOCS_PATHS = frozenset({"/docs", "/redoc", "/docs/oauth2-redirect"})
+
+
+def _with_own_policy(own: str | None, global_policy: str) -> str:
+    own = (own or "").strip().rstrip(";").strip()
+    return f"{own}; {global_policy}" if own else global_policy
+
+
 # Security Headers Middleware
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Add security headers to all responses."""
@@ -455,6 +465,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         response: Response = await call_next(request)
+
+        # Not switchable: user bytes of an active type (SVG, HTML, script) never
+        # run on this origin, which holds the session cookie. Sandboxed apps
+        # (embeddable paths) and the dev docs carry policies of their own.
+        if not is_embeddable(request.url.path) and request.url.path not in _DOCS_PATHS:
+            harden_active_content(response.headers)
 
         if settings.enable_security_headers:
             # Prevent MIME type sniffing
@@ -513,8 +529,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
             # CSP (if configured) — skip bundled and preview app HTML; embed CSP set above.
             if not embeddable:
+                # The route's own policy (a sandbox) stays in front of the global one.
+                own_policy = response.headers.get("Content-Security-Policy")
                 if settings.content_security_policy:
-                    response.headers["Content-Security-Policy"] = settings.content_security_policy
+                    response.headers["Content-Security-Policy"] = _with_own_policy(
+                        own_policy, settings.content_security_policy
+                    )
                 elif settings.environment == "production":
                     # Strict default CSP for production (no 'unsafe-*').
                     # Generate a per-response nonce in case any HTML is ever served via this app.
@@ -533,7 +553,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                         "connect-src 'self' https:; "
                         "upgrade-insecure-requests"
                     )
-                    response.headers["Content-Security-Policy"] = csp
+                    response.headers["Content-Security-Policy"] = _with_own_policy(own_policy, csp)
                     # Expose nonce for any upstream that may render templates (informational only)
                     response.headers["X-CSP-Nonce"] = nonce
 

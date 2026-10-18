@@ -37,6 +37,20 @@ from starlette.types import Scope
 
 CSRF_HEADER = "x-csrf-token"
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+# What a request is for, as the browser states it (``Sec-Fetch-Dest``): a page
+# or a frame showing an API response. The cookie never authenticates one: a link
+# to ``/api/...`` must not act as the user, whatever it serves.
+_DOCUMENT_DESTINATIONS = frozenset(
+    {"document", "iframe", "frame", "embed", "object", "fencedframe"}
+)
+
+
+def is_document_request(headers: Headers) -> bool:
+    """A navigation, or a frame, embed or object, rather than a ``fetch`` of the web app."""
+    return (
+        headers.get("sec-fetch-dest", "").strip().lower() in _DOCUMENT_DESTINATIONS
+        or headers.get("sec-fetch-mode", "").strip().lower() == "navigate"
+    )
 
 
 def redirect_uri() -> str:
@@ -108,6 +122,8 @@ async def cookie_auth(scope: Scope) -> CookieAuth | None:
     secret = session_secret(headers)
     if secret is None:
         return None
+    if is_document_request(headers):
+        return CookieAuth(session=None)
     from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
 
     try:
