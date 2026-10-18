@@ -16,7 +16,7 @@ and the [release note](/user-guide/release-notes/abi-3-0-nats).
 
 ## Prerequisites
 
-[git](https://git-scm.com/) and [uv](https://docs.astral.sh/uv/getting-started/installation/); for `abi dev up`, `nats-server` 2.14 or later, Node.js 20 or later and [pnpm](https://pnpm.io/installation); an [OpenRouter API key](https://openrouter.ai/keys) (or Ollama, see [AI mode](#ai-mode-cloud-vs-local)); for the Docker stack, [Docker](https://www.docker.com/products/docker-desktop/) with 8 GB of RAM or more. Details and versions: [Install and prerequisites](/user-guide/get-started/install).
+[git](https://git-scm.com/) and [uv](https://docs.astral.sh/uv/getting-started/installation/); for `abi dev up`, `nats-server` 2.14 or later, Node.js 18.17 or later and [pnpm](https://pnpm.io/installation); an [OpenRouter API key](https://openrouter.ai/keys) (or Ollama, see [AI mode](#ai-mode-cloud-vs-local)); for the Docker stack, [Docker](https://www.docker.com/products/docker-desktop/) with 8 GB of RAM or more. Details and versions: [Install and prerequisites](/user-guide/get-started/install).
 
 ---
 

@@ -15,7 +15,7 @@ what each way of running it adds. ABI runs on **macOS and Linux**.
 | You want to | You need |
 |---|---|
 | Install the CLI and create a project | [git](https://git-scm.com/), [uv](https://docs.astral.sh/uv/getting-started/installation/) |
-| Run the project natively (`abi dev up`) | `nats-server` 2.14 or later, Node.js 20 or later and [pnpm](https://pnpm.io/installation) |
+| Run the project natively (`abi dev up`) | `nats-server` 2.14 or later, Node.js 18.17 or later and [pnpm](https://pnpm.io/installation) |
 | Run the project in Docker (`abi deploy local`, `abi stack start`) | [Docker](https://docs.docker.com/get-docker/) with Compose v2, 8 GB of RAM or more |
 | Chat with an agent | A model: an [OpenRouter](https://openrouter.ai/keys) key (or another cloud provider's), or [Ollama](https://ollama.com/download) for local models |
 | Trace calls across processes (`abi dev up --with-tracing`) | [`jaeger`](https://www.jaegertracing.io/download/) v2 on `PATH` |
@@ -73,8 +73,8 @@ Compose stack has a `nats` service.
 
 ## Node.js and pnpm, for Nexus web
 
-`abi dev up` runs the Nexus web app natively, which needs Node.js 20 or later and
-pnpm. It runs `pnpm install` itself on the first start.
+`abi dev up` runs the Nexus web app natively, which needs Node.js 18.17 or later and
+pnpm (CI runs Node 20 and 22). It runs `pnpm install` itself on the first start.
 
 ---
 

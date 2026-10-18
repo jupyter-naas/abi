@@ -53,7 +53,7 @@ and gets `config.remote.yaml`:
 
 | What it sets | How |
 |---|---|
-| Secrets | A dotenv adapter on `.env.remote`: keep the production values in that file (never commit it) or in the platform's environment variables, which win over the file. |
+| Secrets | A dotenv adapter on `.env.remote`: keep the production values in that file or in the platform's environment variables, which win over the file. Neither is committed or baked into an image: see [Keep secrets out of git and out of the image](#keep-secrets-out-of-git-and-out-of-the-image). |
 | The broker | `nats.nats_url: "{{ secret.NATS_URL }}"`, logged in as the broker user `abi`, and `nats.jwt_secret: "{{ secret.NATS_JWT_SECRET }}"`. |
 | Backends | PostgreSQL (`services.document`), S3-compatible object storage, Fuseki, Qdrant and Redis, each from `{{ secret.* }}` host, port and credentials. |
 | Models | `ai_mode: "cloud"` with the OpenRouter module, so the host needs no inference hardware. Ollama is opt-in and needs a server the app can reach (`ABI_OLLAMA_BASE_URL`). |
@@ -132,13 +132,18 @@ scale on their own: replicas share a module's agent runs and jobs.
 
 ## Your own Docker Compose or Kubernetes
 
-The image is the project's `Dockerfile`: it installs the project with `uv sync --no-dev`
-and runs `python -m naas_abi_core.apps.api.api` on port 9879. Build it for your platform:
+The image is the project's `Dockerfile`: it copies the project folder (`COPY . .`), installs
+it with `uv sync --no-dev` and runs `python -m naas_abi_core.apps.api.api` on port 9879. Check
+that [`.dockerignore`](#keep-secrets-out-of-git-and-out-of-the-image) excludes `.env*` before you
+build, then build for your platform:
 
 ```bash
 docker build -t my_ai:latest .
 docker run --rm -p 9879:9879 -e ENV=remote --env-file .env.remote my_ai:latest
 ```
+
+Secrets reach the container as environment variables (`--env-file`, your platform's secret
+store), not as files in the image.
 
 To start from a working stack, run `abi deploy local` and take `docker-compose.yml`,
 `.deploy/` and `docker-compose.override.yml` as the base: they hold every service with its
@@ -180,6 +185,25 @@ GitHub Actions workflow (`.github/workflows/release.yaml`) that runs `abi deploy
 every push to `main`, with `ENV=prod` and `NAAS_API_KEY` as a repository secret.
 
 ---
+
+## Keep secrets out of git and out of the image
+
+`.env`, `.env.remote`, `.env.dokploy` and the volume archives of `abi stack snapshot` (`.snapshots/`)
+hold secrets: `NATS_JWT_SECRET`, passwords, API keys. A project made by `abi new project` ignores
+them in `.gitignore` and `.dockerignore`:
+
+```
+# .gitignore                # .dockerignore
+.env                        .env
+.env.*                      .env.*
+.snapshots/                 .snapshots/
+                            .git
+```
+
+A project created before this had a shorter `.gitignore` and no `.dockerignore`: add these lines
+before you build an image or commit `.env.remote`. `abi deploy dokploy` adds `.env.dokploy` to
+`.gitignore` and `.env`, `.env.*` to `.dockerignore` itself. An image that contains `.env*` leaks
+every secret to whoever can pull it.
 
 ## Secrets
 

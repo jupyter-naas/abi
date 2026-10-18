@@ -1,4 +1,6 @@
 .venv
 .env
+.env.*
 storage
 .dagster/
+.snapshots/

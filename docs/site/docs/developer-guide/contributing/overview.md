@@ -15,7 +15,7 @@ To test, see [Testing](/developer-guide/contributing/testing); to release,
 ## Set up
 
 You need [git](https://git-scm.com/), [uv](https://docs.astral.sh/uv/getting-started/installation/),
-Node.js 20 or later with [pnpm](https://pnpm.io/installation) (for Nexus web), and, to run the
+Node.js 18.17 or later with [pnpm](https://pnpm.io/installation) (for Nexus web), and, to run the
 repository natively, `nats-server` 2.14 or later on `PATH`
 ([install](/user-guide/get-started/install)).
 
@@ -27,7 +27,7 @@ uv pip install greenlet                    # SQLAlchemy's asyncpg needs it
 cd libs/naas-abi/naas_abi/apps/nexus/apps/web && pnpm install && cd -
 ```
 
-`make deps` does the Python part and creates `.env`. The repository is a Python monorepo
+`make deps` does the same (`uv sync --all-extras` and the web app's `pnpm install`). It does not create `.env`: the first `abi dev up` or `abi stack start` does. The repository is a Python monorepo
 managed by `uv`:
 
 | Package | Path | What |

@@ -50,7 +50,7 @@ scripts/cli_smoke.sh without-nats     # the legacy project only
 ABI_SMOKE_DIR=~/abi-smoke ABI_SMOKE_KEEP=1 scripts/cli_smoke.sh nats   # keep it
 ```
 
-- Needs `uv`, `git`, `curl`, `python3`, `pnpm` (Node.js 20+) and, for `nats`,
+- Needs `uv`, `git`, `curl`, `python3`, `pnpm` (Node.js 18.17+) and, for `nats`,
   `nats-server` 2.14+ on `PATH`. No Docker; no model is downloaded and nothing chats
   (the AI key is a placeholder).
 - The project's `.abi` is a clone of the checkout's **HEAD**: commit what you want

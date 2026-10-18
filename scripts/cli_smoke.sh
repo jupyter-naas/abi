@@ -7,7 +7,7 @@
 #   scripts/cli_smoke.sh nats            # the default project (NATS)
 #   scripts/cli_smoke.sh without-nats    # the legacy project (--without-nats)
 #
-# Needs uv, git, curl, python3, pnpm (Node.js 20+) and, for the NATS variant,
+# Needs uv, git, curl, python3, pnpm (Node.js 18.17+) and, for the NATS variant,
 # nats-server 2.14 or later on PATH. No Docker, no model download, no chat: the
 # AI provider key is a placeholder. A run takes 5-10 minutes per variant.
 #

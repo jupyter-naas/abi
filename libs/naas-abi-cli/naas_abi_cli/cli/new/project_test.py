@@ -305,6 +305,24 @@ def test_new_project_generates_the_admin_password_in_env(tmp_path, monkeypatch) 
     assert "NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD" in result.output
 
 
+def test_new_project_keeps_secrets_out_of_git_and_out_of_the_image(
+    tmp_path, monkeypatch
+) -> None:
+    result = _invoke_new_project(tmp_path, monkeypatch)
+    assert result.exit_code == 0, result.output
+
+    project = tmp_path / "demo"
+    ignored_by_git = (project / ".gitignore").read_text(encoding="utf-8").split()
+    ignored_by_docker = (project / ".dockerignore").read_text(encoding="utf-8").split()
+    # `.env.remote`, `.env.dokploy`, volume snapshots: all hold secrets.
+    for name in (".env", ".env.*", ".snapshots/"):
+        assert name in ignored_by_git, name
+    for name in (".env", ".env.*", ".snapshots/", ".git"):
+        assert name in ignored_by_docker, name
+    # The `.abi` submodule is what the image installs the framework from.
+    assert ".abi" not in ignored_by_docker
+
+
 # =============================================================================
 # NATS is the default; --without-nats keeps the classic in-process project.
 # =============================================================================

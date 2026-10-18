@@ -23,7 +23,6 @@ Since 3.0 every deployment runs on a [NATS broker](/developer-guide/architecture
 
 ---
 
-
 ## Local development
 
 Two ways to run a project on your machine:
@@ -92,8 +91,6 @@ config.remote.yaml   # A remote deployment
 ```
 
 The engine reads `config.<ENV>.yaml` when the `ENV` environment variable names one that exists, else `config.yaml`. `ABI_CONFIG_OVERLAY` merges a YAML file over it (`abi dev up` uses it for its broker settings). See [Configuration Reference](/user-guide/get-started/configuration).
-
----
 
 ---
 

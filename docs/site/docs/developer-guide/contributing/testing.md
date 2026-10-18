@@ -121,7 +121,7 @@ scripts/cli_smoke.sh nats             # the default project; 5 to 10 minutes
 scripts/cli_smoke.sh without-nats     # the legacy project
 ```
 
-It needs `uv`, `git`, `curl`, `python3`, `pnpm` (Node.js 20 or later) and, for `nats`,
+It needs `uv`, `git`, `curl`, `python3`, `pnpm` (Node.js 18.17 or later) and, for `nats`,
 `nats-server` 2.14 or later. The project's `.abi` is a clone of the checkout's HEAD: commit
 what you want tested. Details: `libs/naas-abi-cli/AGENTS.md`.
 
@@ -132,7 +132,10 @@ cd docs/site
 npm ci
 npm run build              # broken links fail the build
 npm run check:redirects    # every route of the pre-split site still resolves; needs a build
+npm run check:adr-index    # docs/developer-guide/adr.md lists every file of docs/adr
 ```
+
+After adding an ADR, run `npm run adr-index` and commit the regenerated `adr.md`, or the docs workflow fails on a stale index. Run the build alone: a second build running at the same time clobbers `build/`.
 
 ---
 
@@ -146,7 +149,6 @@ npm run check:redirects    # every route of the pre-split site still resolves; n
 | `standalone_sdk.yml`, `packages` | proto and SDK tests on 3.10 to 3.12, the optional extras, and the wheel builds |
 | `standalone_sdk.yml`, `nats-integration` | The NATS integration tests above, on nats-server v2.14.7 with `ABI_REQUIRE_NATS_SERVER=1` |
 | `cli_e2e.yml` | `scripts/cli_smoke.sh` for `nats` and `without-nats`, on every PR into `main` |
-| `docs.yml` | The docs build and `npm run check:redirects` when `docs/site` changes |
+| `docs.yml` | `npm run check:adr-index`, the docs build and `npm run check:redirects` when `docs/site` changes |
 
-No workflow runs `make test` (the whole suite), `pnpm test` or the Nexus API tests: run
-them yourself when you change those areas.
+No workflow runs `make test` (the whole suite), `pnpm test`, the Nexus API tests or the CLI suite (`uv run pytest libs/naas-abi-cli`, which holds the CLI reference completeness test): run them yourself when you change those areas.
