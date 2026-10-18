@@ -94,9 +94,9 @@ const sidebars = {
       "developer-guide/releasing",
     ),
     {
-      type: "link",
+      type: "doc",
+      id: "developer-guide/adr",
       label: "Architecture decision records",
-      href: "https://github.com/jupyter-naas/abi/tree/main/docs/adr",
     },
     section(
       "Library reference",

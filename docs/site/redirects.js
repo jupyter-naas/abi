@@ -25,6 +25,11 @@ const LEGACY_ROUTES_FILE = path.join(__dirname, "legacy-routes.txt");
 const EXACT = {
   "/capabilities/overview": "/user-guide/build/overview",
 
+  // Merged deployment pages.
+  "/architecture/deployment-models": "/user-guide/deploy/deployment-models",
+  "/capabilities/enterprise/deploy_api_to_production":
+    "/user-guide/deploy/production",
+
   "/capabilities/developer-toolchain/cli": "/user-guide/reference/cli",
   "/capabilities/developer-toolchain/publish_remote_agents":
     "/user-guide/deploy/publish_remote_agents",

@@ -44,6 +44,10 @@ jobs:
         working-directory: docs/site
         run: npm ci
 
+      - name: Check the ADR index lists every ADR
+        working-directory: docs/site
+        run: npm run check:adr-index
+
       - name: Build the site
         working-directory: docs/site
         run: npm run build
