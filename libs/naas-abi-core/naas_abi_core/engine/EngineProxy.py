@@ -18,6 +18,7 @@ from naas_abi_core.services.document.DocumentService import DocumentService
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.iam.IAMPorts import IIAMService
+from naas_abi_core.services.identity.IdentityPorts import IIdentityService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.model_registry.ModelRegistryService import (
     ModelRegistryService,
@@ -209,6 +210,15 @@ class ServicesProxy:
 
     def iam_available(self) -> bool:
         return self.__engine.services.iam_available()
+
+    @property
+    def identity(self) -> IIdentityService:
+        # A kernel service like IAM: no dependency declaration, and it
+        # authorizes every operation for the caller's own CallContext.
+        return self.__engine.services.identity
+
+    def identity_available(self) -> bool:
+        return self.__engine.services.identity_available()
 
     @property
     def document_admin(self) -> DocumentService:

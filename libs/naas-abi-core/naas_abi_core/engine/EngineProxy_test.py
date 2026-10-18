@@ -326,3 +326,24 @@ def test_engine_proxy_document_view_cache_is_thread_safe_under_contention():
     assert len({id(view) for view in results}) == 1
     assert call_count == 1
     assert results[0].namespace == "test_module"
+
+
+def test_engine_proxy_grants_identity_without_declared_dependency():
+    """Like IAM, identity is a kernel service that authorizes its own calls:
+    Nexus reads it through the proxy with no dependency declaration."""
+    identity = object()
+    engine = _DummyEngine(services=IEngine.Services(identity=identity))  # type: ignore[arg-type]
+
+    proxy = EngineProxy(
+        engine=engine,
+        module_name="test_module",
+        module_dependencies=ModuleDependencies(modules=[], services=[]),
+    )
+
+    assert proxy.services.identity_available()
+    assert proxy.services.identity is identity
+    assert not EngineProxy(
+        engine=_DummyEngine(services=IEngine.Services()),
+        module_name="test_module",
+        module_dependencies=ModuleDependencies(modules=[], services=[]),
+    ).services.identity_available()
