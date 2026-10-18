@@ -97,7 +97,9 @@ default one included. `/api/auth/oidc/login` with neither `provider` nor
 
 Nexus uses an account's email for invitations and member lookups, so it stores
 only an email the provider verified. An absent or unverified email becomes a
-placeholder, `<principal id>@unverified.internal`, which nothing can match.
+placeholder, `<principal id>@unverified.internal`, which nothing can match. So
+is an address Nexus cannot represent, such as one under a reserved name
+(`.test`, `.local`): stored, it would fail every request of its user.
 
 Some directories issue only addresses they control but send no
 `email_verified` claim (Entra ID). Set `trust_email: true` on such a provider

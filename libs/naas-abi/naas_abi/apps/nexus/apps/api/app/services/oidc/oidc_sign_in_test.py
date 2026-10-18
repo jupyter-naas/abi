@@ -596,6 +596,17 @@ class TestNexusSignInWithFakeIdP(NexusSignInContract):
         async with sessions() as db:
             assert (await db.execute(select(AuthSessionModel))).scalars().one().revoked_at
 
+    @pytest.mark.asyncio
+    async def test_an_email_the_schemas_cannot_carry_is_never_stored(self, nexus, harness):
+        client, _, _ = nexus
+        # ".test" is a reserved name: stored, it would fail every request of the user.
+        user = harness.create_user(f"mia-{os.urandom(3).hex()}@corp.test")
+        await self._sign_in(client, harness, user)
+        me = await client.get("/api/auth/me")
+        assert me.status_code == 200, me.text
+        assert me.json()["email"] == f"{me.json()['id']}@unverified.internal"
+        assert (await client.get("/api/auth/oidc/session")).status_code == 200
+
 
 class TestNexusSignInWithZitadel(NexusSignInContract):
     @pytest.fixture(scope="class")

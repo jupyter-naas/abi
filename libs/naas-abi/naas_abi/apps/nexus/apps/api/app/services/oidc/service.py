@@ -26,6 +26,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from email_validator import EmailNotValidError, validate_email
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.services.oidc.port import (
     IdentityGateway,
@@ -83,6 +84,16 @@ def csrf_token(session_secret: str) -> str:
 
 def csrf_matches(session_secret: str, presented: str | None) -> bool:
     return bool(presented) and hmac.compare_digest(csrf_token(session_secret), presented or "")
+
+
+def representable_email(email: str) -> bool:
+    """Whether Nexus's schemas can carry the email (``EmailStr``): one with a
+    reserved name (``.test``, ``.local``) would fail every request of its user."""
+    try:
+        validate_email(email, check_deliverability=False)
+    except EmailNotValidError:
+        return False
+    return True
 
 
 def safe_next_path(value: str | None) -> str:
@@ -279,7 +290,11 @@ class OidcSignInService:
     async def _nexus_user(self, signed_in: AuthenticatedUser) -> OidcUser:
         """The Nexus row of ``(issuer, sub)``: its id is the principal id."""
         token = signed_in.token
-        verified_email = token.email.lower() if token.email and token.email_verified else None
+        verified_email = (
+            token.email.lower()
+            if token.email and token.email_verified and representable_email(token.email)
+            else None
+        )
         name = token.display_name or (token.email or "").split("@")[0] or "User"
         now = self._clock()
         existing = await self.adapter.user_by_principal(signed_in.principal_id)
