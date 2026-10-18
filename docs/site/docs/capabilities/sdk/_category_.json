@@ -1,8 +1,0 @@
-{
-  "label": "Remote Modules (SDK)",
-  "position": 4.5,
-  "link": {
-    "type": "generated-index",
-    "description": "Write modules that run in their own process with naas-abi-sdk: agents, jobs and apps, run with abi dev up, deployed with Docker Compose."
-  }
-}

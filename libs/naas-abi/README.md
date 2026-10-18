@@ -38,8 +38,8 @@ also:
 - has the super-admin **System** app (Overview, Services, Data, Jobs, Agents,
   Modules, NATS, Live traffic, Traces), backed by `/api/admin/system/`.
 
-See [Remote Apps](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/architecture/remote-apps.md) and
-[Observability](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/architecture/observability.md).
+See [Remote Apps](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/developer-guide/architecture/remote-apps.md) and
+[Observability](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/developer-guide/architecture/observability.md).
 
 ## Core Components
 

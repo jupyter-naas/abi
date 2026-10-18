@@ -68,8 +68,8 @@ nats:
   handovers); discovery registers remote modules.
 - Agent memory and the activity log live in the Document Service.
 
-Architecture: [NATS and the Kernel Services](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/architecture/nats.md),
-[Remote Modules and Jobs](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/architecture/remote-modules.md).
+Architecture: [NATS and the Kernel Services](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/developer-guide/architecture/nats.md),
+[Remote Modules and Jobs](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/developer-guide/architecture/remote-modules.md).
 
 ## Core Architecture
 
@@ -552,7 +552,7 @@ modules:
 ```
 
 The full reference, with every service and the `nats:`, `telemetry:` and
-`dev:` blocks: [Configuration Reference](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/get-started/configuration.md).
+`dev:` blocks: [Configuration Reference](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/get-started/configuration.md).
 
 ## Key Dependencies
 

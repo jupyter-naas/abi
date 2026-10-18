@@ -1,6 +1,7 @@
 ---
 sidebar_position: 1
 title: "Migrate from 2.x to 3.0"
+slug: /user-guide/upgrade/migrate-to-3
 ---
 
 # Migrate from 2.x to 3.0
@@ -34,7 +35,7 @@ works.
    module jobs replace Dagster.
 3. [Optionally, move a service or a module into its own process](#phase-3-optional-split-into-separate-processes).
 
-How the pieces fit together is in [NATS and the kernel services](/architecture/nats).
+How the pieces fit together is in [NATS and the kernel services](/developer-guide/architecture/nats).
 Every change, with what it means for your code, scripts and API clients, is in
 [Breaking changes in 3.0](./breaking-changes-3).
 
@@ -74,12 +75,12 @@ What changes even with NATS off, the ones you are most likely to see:
 - The bus always uses NATS JetStream. RabbitMQ and `python_queue` are not used.
 - One engine serves the kernel services per NATS account. A second engine that
   tries fails with `EngineAlreadyServing`, unless it is a planned handover
-  (see [one serving engine](/architecture/nats#one-serving-engine)).
+  (see [one serving engine](/developer-guide/architecture/nats#one-serving-engine)).
 - Agents use the model registry over NATS too, so model lookup and inference
   depend on the broker.
 - Calls are authenticated with short-lived tokens signed by one shared secret
   (`NATS_JWT_SECRET`). Remote modules sign with a key derived from it for their
-  own module id. See [Security model](/architecture/security).
+  own module id. See [Security model](/developer-guide/architecture/security).
 - When the broker stays unreachable for about two minutes (60 reconnect
   attempts, 2 s apart), the API process stops: SIGTERM, then exit status 1 if
   the shutdown takes more than 20 s. Run it under a supervisor that restarts it
@@ -221,7 +222,7 @@ to module jobs.
    account: a second one that tries fails with `EngineAlreadyServing`. The
    classic stack runs two engines (the API and Dagster), so do not start its
    `nats` profile; render the NATS stack instead. Move Dagster orchestrations
-   to [module jobs](/architecture/remote-modules#module-jobs) first: the
+   to [module jobs](/developer-guide/architecture/remote-modules#module-jobs) first: the
    engine's own dataset maintenance already runs as jobs in NATS mode.
    - Docker:
 
@@ -352,8 +353,8 @@ Before you split, keep in mind:
 ### Run a module outside the engine
 
 A module built with `naas-abi-sdk` runs as its own process and reaches the
-engine only through NATS. [Build a remote module](/capabilities/sdk/build-a-remote-module)
-walks through one; [Remote modules and jobs](/architecture/remote-modules)
+engine only through NATS. [Build a remote module](/user-guide/build/sdk/build-a-remote-module)
+walks through one; [Remote modules and jobs](/developer-guide/architecture/remote-modules)
 explains the runtime. In short:
 
 1. Give the module its **module key**, never `NATS_JWT_SECRET`. In the
@@ -447,7 +448,7 @@ upgrade, restore the snapshot (`abi stack snapshot restore`).
 - All remote modules share one broker user, so they must be trusted code: one
   module can listen on another module's subjects, read or purge any stream,
   and take over another module's jobs. The full list is in
-  [Security model](/architecture/security#known-limits).
+  [Security model](/developer-guide/architecture/security#known-limits).
 - Traffic to the broker is not encrypted (no TLS). Keep the broker on a
   private network; a module on another machine should reach it through a
   VPN or an SSH tunnel.

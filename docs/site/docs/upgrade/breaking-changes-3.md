@@ -1,6 +1,7 @@
 ---
 sidebar_position: 2
 title: "Breaking changes in 3.0"
+slug: /user-guide/upgrade/breaking-changes-3
 ---
 
 # Breaking changes in 3.0

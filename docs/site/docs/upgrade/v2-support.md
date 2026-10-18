@@ -1,6 +1,7 @@
 ---
 sidebar_position: 3
 title: "Staying on 2.x: v2 support"
+slug: /user-guide/upgrade/v2-support
 ---
 
 # Staying on 2.x: v2 support
@@ -101,4 +102,4 @@ not in a public issue.
 A fix that also applies to 3.0 lands on `main` first, then on `v2`. A fix for
 2.x only lands on `v2` directly. Either way, it is released as the next 2.x patch
 version. How maintainers do this is in
-[Backporting a fix to v2](/capabilities/developer-toolchain/backporting-to-v2).
+[Backporting a fix to v2](/developer-guide/releasing/backporting-to-v2).

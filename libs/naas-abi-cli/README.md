@@ -10,7 +10,7 @@ Since 3.0, `abi new project` creates projects that run on NATS and `abi new
 module` creates remote modules (`naas-abi-sdk`). Dagster and RabbitMQ are
 legacy extras for projects without NATS, removed in the next major. Upgrading
 a 2.x project: [Migrate from 2.x to 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/migrate-to-3.md).
-Every command: [CLI Reference](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/capabilities/developer-toolchain/cli.md).
+Every command: [CLI Reference](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/reference/cli.md).
 
 ## Installation
 

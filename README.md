@@ -112,11 +112,11 @@ Each infrastructure concern is abstracted as a port with a swappable adapter. Ch
 - **Cache** (sessions and hot data): Community: Redis / Enterprise: Amazon ElastiCache, Azure Cache for Redis, Memorystore
 - **Scheduling** (schedules and event triggers): module jobs on NATS JetStream, run by each module in its own process
 
-New projects run on **NATS**: the engine serves every kernel service over the broker, the bus is JetStream, and modules can run in their own process with `naas-abi-sdk`, registering through discovery. `abi new module` creates such a module; `abi new module --in-engine` and `abi new project --without-nats` keep the classic in-process setup. Dagster and RabbitMQ are legacy extras, removed in the next major. Existing projects move over with [Migrate from 2.x to 3.0](docs/site/docs/upgrade/migrate-to-3.md); the architecture is in [NATS and the Kernel Services](docs/site/docs/architecture/nats.md).
+New projects run on **NATS**: the engine serves every kernel service over the broker, the bus is JetStream, and modules can run in their own process with `naas-abi-sdk`, registering through discovery. `abi new module` creates such a module; `abi new module --in-engine` and `abi new project --without-nats` keep the classic in-process setup. Dagster and RabbitMQ are legacy extras, removed in the next major. Existing projects move over with [Migrate from 2.x to 3.0](docs/site/docs/upgrade/migrate-to-3.md); the architecture is in [NATS and the Kernel Services](docs/site/docs/developer-guide/architecture/nats.md).
 
 The **Context Engine** wires all these services at startup and routes every request to the right agent. **Abi** acts as the supervisor: it reads the intent behind each request and dispatches to the right domain agent or answers directly from the knowledge graph, vector store, or file system.
 
-Start with the marketplace modules to get running immediately, then use `abi new module` to model your own domain. Full architecture reference: [The ABI Stack](https://docs.naas.ai/architecture/the-stack).
+Start with the marketplace modules to get running immediately, then use `abi new module` to model your own domain. Full architecture reference: [The ABI Stack](https://docs.naas.ai/developer-guide/architecture/the-stack).
 
 ## Repository Layout
 
@@ -280,7 +280,7 @@ Copy your `.env` and config files to the target server, then run:
 docker compose -f docker-compose.yml up -d
 ```
 
-All services (NATS, PostgreSQL, Fuseki, Qdrant, MinIO, Redis) start as containers, with remote modules from `docker-compose.override.yml`. In NATS mode one engine serves the kernel services; for deploys without downtime see [one serving engine](docs/site/docs/architecture/nats.md#one-serving-engine). For production workloads, swap the Docker adapters for managed cloud services as described in [How It Works](#how-it-works).
+All services (NATS, PostgreSQL, Fuseki, Qdrant, MinIO, Redis) start as containers, with remote modules from `docker-compose.override.yml`. In NATS mode one engine serves the kernel services; for deploys without downtime see [one serving engine](docs/site/docs/developer-guide/architecture/nats.md#one-serving-engine). For production workloads, swap the Docker adapters for managed cloud services as described in [How It Works](#how-it-works).
 
 ### Managed Hosting
 

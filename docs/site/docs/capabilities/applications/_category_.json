@@ -1,8 +1,0 @@
-{
-  "label": "Applications",
-  "position": 5,
-  "link": {
-    "type": "generated-index",
-    "description": "Deploy ABI via REST API, Nexus web app or MCP server; Dagster pipelines are legacy, for projects without NATS."
-  }
-}

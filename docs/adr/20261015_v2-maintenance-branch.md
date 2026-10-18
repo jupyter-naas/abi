@@ -71,4 +71,4 @@ from. A workflow cannot use it to tell which branch a release was cut from.
   archived then.
 
 Users: [Staying on 2.x: v2 support](../site/docs/upgrade/v2-support.md).
-Maintainers: [Backporting a fix to v2](../site/docs/capabilities/developer-toolchain/backporting-to-v2.md).
+Maintainers: [Backporting a fix to v2](../site/docs/developer-guide/releasing/backporting-to-v2.md).
