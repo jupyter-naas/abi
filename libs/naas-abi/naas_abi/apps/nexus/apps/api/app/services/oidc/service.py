@@ -10,7 +10,7 @@
 * **The session** is a random secret in an httpOnly cookie; Nexus stores its
   SHA-256, the user, and the provider's refresh token, encrypted. The provider
   vouches for the user again at least every ten minutes (``refresh_at``); a
-  refresh it refuses, or an IAM suspension, ends the session at once.
+  refresh it refuses ends the session, and an IAM suspension within seconds.
 * **CSRF**: a request the cookie authenticates and that changes state carries
   ``X-CSRF-Token``, an HMAC of the session secret Nexus hands the web app
   (``csrf_token``). The browser keeps it in memory only.
@@ -252,7 +252,11 @@ class OidcSignInService:
         except Exception as exc:  # noqa: BLE001 - mapped for the login page
             raise _login_error(exc) from exc
         user = await self._nexus_user(signed.user)
-        await self.principals.admit(signed.user.principal_id)
+        try:
+            await self.principals.admit(signed.user.principal_id)
+        except Exception as exc:  # noqa: BLE001 - no session for a user IAM refused
+            logger.opt(exception=exc).error("IAM refused a signed-in user's transitional grant")
+            raise OidcLoginError("sign_in_failed", "The sign-in could not be completed") from exc
         secret = secrets.token_urlsafe(32)
         expires_at = now + self.session_max_age
         await self.adapter.create_session(

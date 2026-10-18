@@ -748,6 +748,45 @@ class ABIModule(BaseModule):
             else:
                 raise AssertionError(f"iam.{operation} answered a module identity")
 
+    async def identity(self):
+        """A module holds no identity:* grant: it sees no provider, and every
+        sign-in operation is refused; a token is refused before any of that
+        when no provider issued it."""
+        assert not (await self.call("identity", "list_providers")).providers
+        challenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+        refused = {
+            "get_provider": {"name": "acme"},
+            "verify_token": {"token": "not.a.token"},
+            "authenticate": {"token": "not.a.token"},
+            "authorization_url": {
+                "provider": "acme",
+                "redirect_uri": "https://abi.example/callback",
+                "state": "state",
+                "nonce": "nonce",
+                "code_challenge": challenge,
+            },
+            "exchange_code": {
+                "provider": "acme",
+                "code": "code",
+                "code_verifier": "v" * 43,
+                "redirect_uri": "https://abi.example/callback",
+                "nonce": "nonce",
+            },
+            "refresh": {"provider": "acme", "refresh_token": "r", "principal_id": "usr_x"},
+            "revoke": {"provider": "acme", "refresh_token": "r"},
+            "end_session_url": {"provider": "acme"},
+        }
+        for operation, fields in refused.items():
+            try:
+                await self.call("identity", operation, **fields)
+            except RPCError as exc:
+                assert exc.code in ("NOT_FOUND", "PERMISSION_DENIED") or exc.code.startswith(
+                    "TOKEN_"
+                ), (operation, exc)
+                self.seen.add(("identity", operation))
+            else:
+                raise AssertionError(f"identity.{operation} answered a module identity")
+
     async def model_registry(self):
         from naas_abi_proto.model_registry.v1 import model_registry_pb2 as pb
 

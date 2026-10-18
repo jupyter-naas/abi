@@ -170,7 +170,7 @@ class PrincipalGateway(ABC):
 
     @abstractmethod
     async def is_active(self, principal_id: str) -> bool:
-        """Not suspended or deleted: suspension takes effect at once."""
+        """Not suspended or deleted, checked on every request (cached briefly)."""
 
     @abstractmethod
     async def admit(self, principal_id: str) -> None:

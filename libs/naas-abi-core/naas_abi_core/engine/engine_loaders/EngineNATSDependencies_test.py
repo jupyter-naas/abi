@@ -15,6 +15,9 @@ from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.iam.adapters.secondary.IAMSecondaryAdapterNATSClient import (
     IAMSecondaryAdapterNATSClient,
 )
+from naas_abi_core.services.identity.adapters.secondary.IdentitySecondaryAdapterNATSClient import (
+    IdentitySecondaryAdapterNATSClient,
+)
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
@@ -256,7 +259,8 @@ def test_a_client_engine_gets_the_facades_a_serving_engine_gives_its_modules():
                 getattr(service, "services_wired", None),
             )
             for service in services.all
-            if service is not services.iam  # compared below
+            # compared below
+            if service is not services.iam and service is not services.identity
         ]
 
     try:
@@ -269,6 +273,9 @@ def test_a_client_engine_gets_the_facades_a_serving_engine_gives_its_modules():
         # context in process), the serving engine's over NATS on a client.
         assert built.iam is owners.iam
         assert isinstance(facades.iam, IAMSecondaryAdapterNATSClient)
+        # Identity too: it authorizes the caller of this process's context.
+        assert built.identity is owners.identity
+        assert isinstance(facades.identity, IdentitySecondaryAdapterNATSClient)
         assert client.module_services is facades
         assert [tier for tier, _ in facades.cache.adapters] == ["hot", "cold"]
         assert facades.bus.emit_message_events

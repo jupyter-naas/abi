@@ -84,7 +84,8 @@ The login page also offers a "Continue with ..." button for each provider.
   The mapped groups apply for as long as the session's last verification, at
   most 10 minutes.
 - **Offboarding.** Disabling a user at the provider ends their Nexus session at
-  the next refresh, within 10 minutes. Suspending the IAM user ends it at once.
+  the next refresh, within 10 minutes. Suspending the IAM user ends it within
+  5 seconds, and every kernel call for the user is denied at once.
 - **The built-in login never opens a provider's account:** no password, code,
   magic link or reset reaches it.
 

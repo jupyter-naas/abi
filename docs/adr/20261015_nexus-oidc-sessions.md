@@ -68,7 +68,7 @@ open:
      and earlier when the ID token expires sooner. A refused refresh ends the session; a provider that
      cannot be reached authenticates nothing until it answers.
    - Each request also checks that the IAM principal is active (cached 5 s), so a suspension ends the
-     session at once.
+     session within 5 s; kernel calls for the user are denied at once.
    - The request runs as `api` on behalf of the principal, with its mapped group ids.
 6. **CSRF**: every cookie-authenticated request that changes state carries `X-CSRF-Token`.
    - The token is an HMAC of the session secret: never stored, derived again on every request.
