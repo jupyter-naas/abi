@@ -24,7 +24,7 @@ pip install naas-abi-cli
 
 ### Project Management
 
-#### `abi new project <project-name> [project-path] [--with-local-deploy/--without-local-deploy] [--without-nats]`
+#### `abi new project <project-name> [project-path] [--with-local-deploy/--without-local-deploy] [--without-nats] [--abi-source <url|path>]`
 Creates a new ABI project with all necessary starter files and dependencies.
 
 **What it does:**
@@ -45,6 +45,9 @@ schedules. Check the broker with `curl -s localhost:8222/healthz` and
 
 NATS mode installs `naas-abi-proto` and `naas-abi-sdk` from the `.abi`
 submodule (they are not on PyPI yet), so it refuses `--without-abi-submodule`.
+`--abi-source` clones that submodule from another git URL or a local ABI
+checkout (its HEAD) instead of GitHub, to try framework changes not published
+yet.
 `--without-nats` creates the classic in-process project (RabbitMQ in Docker,
 no broker for `abi dev`). The project's own module (`src/<project>/`, holding
 the default agent) is an in-engine module either way.

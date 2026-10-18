@@ -21,13 +21,15 @@ A `click` CLI command (`abi new project`) that scaffolds a new Naas ABI project 
       - admin credentials (always)
       - NATS secret and NATS user passwords (when `--with-nats`)
     - Install dependencies via `uv add ...`.
-    - Validate config via `uv run abi config validate`.
+    - Validate config via `uv run abi config validate` (on failure, a `click.ClickException` naming the project path).
     - Print a short “next steps” guide (including `abi dev up`).
 
 Internal helpers (module-level; not exposed as CLI commands):
 
-- `_add_abi_submodule(project_path: str) -> bool`
-  - Adds `https://github.com/jupyter-naas/abi.git` as a git submodule at `.abi/`.
+- `_add_abi_submodule(project_path: str, source: str = ABI_SUBMODULE_URL) -> bool`
+  - Adds `source` (default `https://github.com/jupyter-naas/abi.git`) as a git submodule at `.abi/`.
+- `_submodule_source(source: str) -> tuple[str, list[str]]`
+  - A local checkout becomes an absolute path, cloned with `-c protocol.file.allow=always` (git refuses the file transport for submodules otherwise); a URL is used as is.
   - Returns `True` only if `.abi/libs` exists (usable as a dependency source); failures are non-fatal unless NATS mode requires it.
 - `_cd_argument(project_path: str) -> str`
   - Returns a quoted `cd` target (relative when appropriate, absolute otherwise).
@@ -44,6 +46,8 @@ Internal helpers (module-level; not exposed as CLI commands):
   - `--with-headscale / --without-headscale` (default: disabled)
   - `--with-coding / --without-coding` (default: disabled)
   - `--with-abi-submodule / --without-abi-submodule` (default: enabled)
+  - `--abi-source` (default: `https://github.com/jupyter-naas/abi.git`)
+    - Git URL or local checkout the `.abi` submodule is cloned from (its HEAD). The CLI smoke test (`scripts/cli_smoke.sh`) passes the checkout under test.
   - `--with-nats / --without-nats` (default: enabled)
   - `--domain` / `base_domain` (prompted; default: `localhost`)
     - Sets `BASE_DOMAIN` and derives `PUBLIC_WEB_HOST` and `PUBLIC_API_HOST` via `_build_hosts_from_domain(...)`.
@@ -82,6 +86,9 @@ abi new project my-project . --with-headscale
 # Create a classic (non-NATS) project
 abi new project my-project . --without-nats
 
+# Resolve the framework from a local ABI checkout (its HEAD) instead of GitHub
+abi new project my-project . --abi-source ~/src/abi
+
 # Set a custom base domain (also threaded into local deploy scaffolding when enabled)
 abi new project my-project . --domain example.test
 ```
@@ -94,6 +101,7 @@ abi new project my-project . --domain example.test
   - `--with-nats --without-abi-submodule` raises a `click.UsageError`.
   - If submodule add fails in a newly-created directory, the directory is removed and the command errors.
 - Dependency install and config validation are strict:
-  - `uv add ...` and `uv run abi config validate` run with `check=True` and will stop execution on failure.
+  - `uv add ...` runs with `check=True` and stops execution on failure.
+  - Without a TTY, `abi config validate` cannot prompt for a secret the config names (`OPENROUTER_API_KEY`): export it beforehand, or the command ends with a message once the project is written.
 - NATS runtime requirement:
   - The printed next steps note that `abi dev up` needs `nats-server` on `PATH` when `--with-nats` is enabled.
