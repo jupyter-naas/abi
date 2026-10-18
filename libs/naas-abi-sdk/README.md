@@ -145,7 +145,8 @@ module/default/acme.research`, optionally `--document narrowed.yaml`). Until the
 it can call nothing but IAM. The manifest is `BaseModule.permissions`, else
 `permissions.yaml` beside the module's code, else derived from `dependencies`:
 its own `document`/`dataset` namespace, the secrets named `<module id>/...`,
-every action of the other services it declares, the agents, models and apps of
+every action of the other services it declares (sending only for `email`, and no
+`source_control:AddCollaborator`), the agents, models and apps of
 the modules it depends on, and its own jobs. Bus topics are never derived:
 declare `bus:Publish` and `bus:Consume` on `abi:-:-:bus:topic/<topic>` yourself.
 

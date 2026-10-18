@@ -218,7 +218,15 @@ Implemented as decided, with these differences:
   `iam/` to any caller but `engine`, and under `idp/` to any but `idp`, in `get`, `set`, `remove` and `list`
   (`secret_nats_contract.RESERVED_NAMES`), whatever a policy grants: an approved module with `secret:*` signs
   as nobody. The default manifest grants a module the secrets named `<module id>/...`, never every secret.
-  The default `dataset` grant denies `dataset:QueryUnchecked` (#58).
+- **Default manifests grant no admin action.** The default `dataset` grant denies `dataset:QueryUnchecked`
+  (#58), the `source_control` grant denies `AddCollaborator` (which grants write on any repository: bug b
+  reached over NATS), and the `email` grant is `Send` alone, since the platform keeps a copy of what it sends,
+  sign-in codes included (`ListSent`, `GetSent` and `DeleteSent` are named in a manifest that needs them).
+  A Deny cannot be overridden by an Allow of the same policy: a module needing an action writes its own
+  manifest. The source-control service refuses a repository owner or name that is not a plain path segment
+  (`^[A-Za-z0-9][A-Za-z0-9._-]*$`, never `.` or `..`) and treats such a repository id as not found, so no
+  module reaches a path outside the repositories' root through the local adapter or a forge URL. The bus topic
+  `triple_store` is reserved for the same reason as the secrets: nothing checks who subscribes to it.
 - **Retired signing keys verify what they signed.** A job trigger waits in its stream up to 168 hours and is
   verified as of its stored time. A retired key's public half therefore stays in the JWKS for 169 hours past
   its retirement, marked `abi_retired_at`: verifiers accept it for a call stored before that, never for a

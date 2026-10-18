@@ -42,6 +42,15 @@ class ABIModule(BaseModule):
         "statements": [
             *default_manifest(DEPENDENCIES)["statements"],
             {
+                # The default grants sending only: the platform keeps a copy of
+                # the mail it sends (sign-in codes included), so reading it back
+                # is asked for by name.
+                "sid": "DemoKeptMail",
+                "effect": "Allow",
+                "actions": ["email:ListSent", "email:GetSent", "email:DeleteSent"],
+                "resources": ["abi:*:*:email:message/*"],
+            },
+            {
                 "sid": "DemoBus",
                 "effect": "Allow",
                 "actions": ["bus:*"],
@@ -449,7 +458,15 @@ class ABIModule(BaseModule):
         async def call(op, **fields):
             return await self.call(domain, op, repo_id="demo/repo", **fields)
 
-        await call("add_collaborator", username="demo", permission="write")
+        # Granting access to a repository is an admin action: the default
+        # manifest denies it, so a module cannot make anyone a collaborator.
+        try:
+            await call("add_collaborator", username="demo", permission="write")
+        except RPCError as exc:
+            assert exc.code == "PERMISSION_DENIED", exc
+            self.seen.add((domain, "add_collaborator"))
+        else:
+            raise AssertionError("a module's default manifest granted add_collaborator")
         await call(
             "upsert_file",
             path="hello.txt",

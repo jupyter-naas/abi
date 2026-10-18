@@ -25,8 +25,8 @@ def test_defaults_reach_the_modules_own_namespaces_and_declared_services():
         "abi:-:-:dataset:dataset/default/*",
         "abi:-:-:dataset:catalog/-",
     ]
-    assert statements["NoUncheckedSql"]["effect"] == "Deny"
-    assert statements["NoUncheckedSql"]["actions"] == ["dataset:QueryUnchecked"]
+    assert statements["NoDatasetAdmin"]["effect"] == "Deny"
+    assert statements["NoDatasetAdmin"]["actions"] == ["dataset:QueryUnchecked"]
     # Never every secret: the ones named after the module.
     assert statements["UseSecret"]["resources"] == [
         "abi:-:-:secret:secret/${module.id}%2F*"
@@ -35,6 +35,21 @@ def test_defaults_reach_the_modules_own_namespaces_and_declared_services():
     assert statements["UseTripleStore"]["resources"] == ["abi:*:*:triple_store:*"]
     # Bus topics are declared, never defaulted.
     assert not any("bus:" in a for s in manifest["statements"] for a in s["actions"])
+
+
+def test_defaults_grant_no_admin_action_and_no_kept_mail():
+    manifest = default_manifest(
+        ModuleDependencies(services=("email", "source_control"))
+    )
+    statements = _by_sid(manifest)
+    # Sending only: the kept copies hold users' sign-in codes.
+    assert statements["UseEmail"]["actions"] == ["email:Send"]
+    # Every source-control action but the one that grants access to a repository.
+    assert statements["UseSourceControl"]["actions"] == ["source_control:*"]
+    assert statements["NoSourceControlAdmin"]["effect"] == "Deny"
+    assert statements["NoSourceControlAdmin"]["actions"] == [
+        "source_control:AddCollaborator"
+    ]
 
 
 def test_module_dependencies_reach_those_modules_only():

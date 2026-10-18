@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from naas_abi_core.engine.call_context import (
     ANONYMOUS_PRINCIPAL,
     as_service_account,
@@ -36,6 +38,20 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     ValidationError,
     WorkflowRun,
 )
+
+# One path segment of a repository id (owner, name): the local adapter makes
+# directories of them and the forge puts them in URLs, so never ``..`` or a
+# separator, whoever asks (a module over NATS included).
+_SEGMENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+
+
+def _segment_ok(value: str) -> bool:
+    return bool(_SEGMENT.fullmatch(value)) and value not in (".", "..")
+
+
+def _repo_id_ok(repo_id: str) -> bool:
+    owner, sep, name = repo_id.partition("/")
+    return bool(sep) and _segment_ok(owner) and _segment_ok(name)
 
 
 def _repo_missing(repo_id: str):
@@ -107,12 +123,21 @@ class SourceControlService(ServiceBase):
 
     # -- checks -----------------------------------------------------------------
 
+    @staticmethod
+    def _known_repo_id(repo_id: str) -> None:
+        """No repository has an id that is not ``<owner>/<name>`` of plain
+        segments: it is not found, whatever the caller may do."""
+        if not _repo_id_ok(repo_id):
+            raise _repo_missing(repo_id)()
+
     def _repo(self, action: str, repo_id: str) -> None:
+        self._known_repo_id(repo_id)
         self._guard.require(
             action, "repo", repo_key(repo_id), not_found=_repo_missing(repo_id)
         )
 
     def _on_branch(self, action: str, repo_id: str, name: str) -> None:
+        self._known_repo_id(repo_id)
         self._guard.require(
             action,
             "branch",
@@ -121,6 +146,7 @@ class SourceControlService(ServiceBase):
         )
 
     def _on_proposal(self, action: str, repo_id: str, number: int | str) -> None:
+        self._known_repo_id(repo_id)
         self._guard.require(
             action,
             "proposal",
@@ -131,6 +157,7 @@ class SourceControlService(ServiceBase):
     def _visible_repo(self, repo_id: str) -> None:
         """A repository's items are listed only once the repository itself is
         visible: not found otherwise (RFC §5.5)."""
+        self._known_repo_id(repo_id)
         iam = self._guard.iam
         if iam is None:
             return
@@ -191,7 +218,7 @@ class SourceControlService(ServiceBase):
         ``EnsureRepo`` on the repository as placed. One with no placement
         predates IAM: it is recorded on the platform, so no workspace claims it.
         """
-        repo_id = f"{owner}/{name}"
+        repo_id = self._new_repo_id(owner, name)
         iam = self._guard.iam
         if iam is not None and self._exists(repo_id):
             # Not a create: an existing repository is ensured where it is
@@ -225,7 +252,7 @@ class SourceControlService(ServiceBase):
         nothing is placed. A caller may then place or grant access to what it
         gets back, knowing it created it.
         """
-        repo_id = f"{owner}/{name}"
+        repo_id = self._new_repo_id(owner, name)
         creation = self._guard.create(
             "EnsureRepo", "repo", repo_key(repo_id), not_found=_repo_missing(repo_id)
         )
@@ -234,6 +261,15 @@ class SourceControlService(ServiceBase):
         )
         creation.record()
         return repo
+
+    @staticmethod
+    def _new_repo_id(owner: str, name: str) -> str:
+        if not (_segment_ok(owner) and _segment_ok(name)):
+            raise ValidationError(
+                "A repository's owner and name are letters, digits, '.', '_' "
+                "and '-', starting with a letter or a digit"
+            )
+        return f"{owner}/{name}"
 
     def _exists(self, repo_id: str) -> bool:
         try:

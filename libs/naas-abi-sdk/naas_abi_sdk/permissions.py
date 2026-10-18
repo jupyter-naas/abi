@@ -9,6 +9,11 @@ code; otherwise it defaults from ``ModuleDependencies``:
 * ``secret``: the secrets named ``<module id>/...``; never every secret;
 * ``dataset``: the namespace ``default`` the SDK's facade writes to, and the
   catalog, without unchecked SQL (``dataset:QueryUnchecked`` is denied);
+* ``email``: sending only. The platform keeps a copy of the mail it sends,
+  sign-in codes included, so listing, reading and deleting kept messages is
+  asked for by name;
+* ``source_control``: every action but ``AddCollaborator``, an admin action
+  that grants a forge user access to any repository (name it to ask for it);
 * any other service it declares: every action of that service;
 * the modules it depends on: their agents, models and apps, and the runs it
   starts;
@@ -52,6 +57,17 @@ _OWN_NAMESPACES = {
 }
 
 
+# What a default grant of a service is limited to, where "every action" is
+# too much to approve unread.
+_ACTIONS = {"email": ("email:Send",)}
+# Actions a default grant of ``<service>:*`` never includes: a Deny.
+_NEVER = {
+    "source_control": ("source_control:AddCollaborator",),
+    # SQL the query check cannot vouch for reads the engine host's files.
+    "dataset": ("dataset:QueryUnchecked",),
+}
+
+
 def _statement(sid: str, actions: list[str], resources: list[str]) -> dict[str, Any]:
     return {"sid": sid, "effect": "Allow", "actions": actions, "resources": resources}
 
@@ -72,17 +88,19 @@ def default_manifest(
     for service in services:
         resources = _OWN_NAMESPACES.get(service, (f"abi:*:*:{service}:*",))
         statements.append(
-            _statement(f"Use{_sid(service)}", [f"{service}:*"], list(resources))
+            _statement(
+                f"Use{_sid(service)}",
+                list(_ACTIONS.get(service, (f"{service}:*",))),
+                list(resources),
+            )
         )
-        if service == "dataset":
-            # SQL the query check cannot vouch for reads the engine host's files:
-            # an admin action, never part of ``dataset:*`` for a module.
+        if service in _NEVER:
             statements.append(
                 {
-                    "sid": "NoUncheckedSql",
+                    "sid": f"No{_sid(service)}Admin",
                     "effect": "Deny",
-                    "actions": ["dataset:QueryUnchecked"],
-                    "resources": ["abi:*:*:dataset:*"],
+                    "actions": list(_NEVER[service]),
+                    "resources": [f"abi:*:*:{service}:*"],
                 }
             )
     if dependencies.modules:
