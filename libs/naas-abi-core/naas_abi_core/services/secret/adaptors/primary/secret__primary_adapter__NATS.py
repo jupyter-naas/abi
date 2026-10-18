@@ -9,7 +9,9 @@ there). This is the server side; the matching client is
 
 Security note: callers are authenticated (``naas_abi_core.engine.nats_auth``)
 but not yet authorized per secret -- see ``secret_nats_contract.py``'s
-docstring. A known, temporary gap, not an oversight.
+docstring. A known, temporary gap, not an oversight -- except for the
+reserved names (IAM's signing keys, the IdP's secrets), which only their
+owner reaches, over this endpoint, in every operation.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ import nats
 import nats.micro
 from google.protobuf.message import DecodeError, Message
 from naas_abi_core import logger
+from naas_abi_core.engine.call_context import current_call_context
 from naas_abi_core.engine.nats_auth import TokenVerifier
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import (
@@ -38,6 +41,7 @@ from naas_abi_core.services.secret.adaptors.secret_nats_contract import (
     SERVICE_NAME,
     SERVICE_VERSION,
     SUBJECT_PREFIX,
+    reserved_owner,
 )
 from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.secret.SecretPorts import (
@@ -53,6 +57,29 @@ __all__ = [
     "SUBJECT_PREFIX",
     "SecretPrimaryAdapterNATS",
 ]
+
+
+class _ReservedSecretError(Exception):
+    pass
+
+
+def _may_use(key: str) -> bool:
+    """Whether the verified caller owns ``key``, or the name is not reserved."""
+    owner = reserved_owner(key)
+    if owner is None:
+        return True
+    principal = current_call_context().principal
+    return (
+        principal.kind == "service_account"
+        and (principal.name or principal.id) == owner
+    )
+
+
+def _checked(key: str) -> str:
+    if not _may_use(key):
+        raise _ReservedSecretError(key)
+    return key
+
 
 _RequestT = TypeVar("_RequestT", bound=Message)
 _ResponseT = TypeVar("_ResponseT", bound=Message)
@@ -185,6 +212,15 @@ class SecretPrimaryAdapterNATS(ServicePrimary):
                 request, response_cls, "SECRET_AUTH_FAILED", str(exc), retryable=False
             )
             return
+        except _ReservedSecretError:
+            await self._respond_error(
+                request,
+                response_cls,
+                "PERMISSION_DENIED",
+                "this secret belongs to a first-party account",
+                retryable=False,
+            )
+            return
         except Exception:  # noqa: BLE001 - a handler must never crash the service
             logger.opt(exception=True).error(
                 f"SecretPrimaryAdapterNATS: unexpected error handling {request.subject!r}"
@@ -222,7 +258,7 @@ class SecretPrimaryAdapterNATS(ServicePrimary):
     def _call_get(self, req: secret_pb2.GetRequest) -> secret_pb2.GetResponse:
         # No `default` argument here -- see secret.proto's header comment:
         # the client applies its caller's default locally when unset.
-        value = self._adapter.get(req.key, None)
+        value = self._adapter.get(_checked(req.key), None)
         result = secret_pb2.GetResult()
         if value is not None:
             result.value = str(value)
@@ -234,7 +270,7 @@ class SecretPrimaryAdapterNATS(ServicePrimary):
         )
 
     def _call_set(self, req: secret_pb2.SetRequest) -> secret_pb2.SetResponse:
-        self._adapter.set(req.key, req.value)
+        self._adapter.set(_checked(req.key), req.value)
         return secret_pb2.SetResponse()
 
     async def _handle_remove(self, request: Request) -> None:
@@ -246,7 +282,7 @@ class SecretPrimaryAdapterNATS(ServicePrimary):
         )
 
     def _call_remove(self, req: secret_pb2.RemoveRequest) -> secret_pb2.RemoveResponse:
-        self._adapter.remove(req.key)
+        self._adapter.remove(_checked(req.key))
         return secret_pb2.RemoveResponse()
 
     async def _handle_list(self, request: Request) -> None:
@@ -258,6 +294,8 @@ class SecretPrimaryAdapterNATS(ServicePrimary):
         secrets = self._adapter.list()
         entries = []
         for key, value in secrets.items():
+            if not _may_use(key):
+                continue
             entry = secret_pb2.SecretEntry(key=key)
             if value is not None:
                 entry.value = value

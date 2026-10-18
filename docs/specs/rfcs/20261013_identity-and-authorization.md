@@ -1259,9 +1259,10 @@ The flow:
 - **What the callout does.**
   1. Reads the service key from `CONNECT` (password, with user `sa`).
   2. Checks that the key is valid and the principal active.
-  3. Returns a user JWT signed with the callout account's nkey, valid at most 1 hour.
-- **Expiry.** On expiry the client reconnects and permissions are recomputed. Services enforce changes
-  immediately (§5.6); the broker catches up within the hour.
+  3. Returns a user JWT signed with the callout account's nkey, valid five minutes by default, ten at most.
+- **Expiry.** On expiry the client reconnects and permissions are recomputed (as built: nats-py closes an
+  expired connection, so the SDK reconnects every two minutes before it does). Services enforce changes
+  immediately (§5.6); the broker catches up within five minutes (§8.4, as built).
 - **Subjects.** From the approved policy plus the bootstrap:
 
 | Source | Publish allow | Subscribe allow |
@@ -1300,7 +1301,12 @@ manifests, the callout and §9.1 are implemented as specified, except:
   consumers, and reads its claim checks through the engine (never by direct get). Every trigger, schedule and
   cancel the engine writes is sealed, and a module's job host takes no other. Claim checks are scoped to the
   topic or the module's jobs they travel with. Bus topics under `abi`, `evt`, `_INBOX`, `$` or `_`, or nested in
-  another approved topic, are refused.
+  another approved topic, are refused, and so is `triple_store`. Bus and event grants follow the action:
+  `bus:Publish` publishes, `bus:Consume` subscribes and fetches; `event:Append` publishes live events, the read
+  actions subscribe to them.
+- **Secrets of the platform.** The secret service's NATS endpoint refuses names under `iam/` to every caller
+  but `engine` and under `idp/` to every but `idp`: a module granted `secret:*` reads no signing key. The
+  default manifest grants `secret/<module id>/...` only.
 - **No response permissions; replies to inboxes only.** A callout user gets no `resp`, and every responder
   answers only reply subjects under `_INBOX.`.
 - **Remaining gap.** The server answers a module's JetStream requests on the reply subject it chose, and streams

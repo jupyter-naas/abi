@@ -43,6 +43,8 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
     """
     if error.code == "SECRET_AUTH_FAILED":
         raise SecretAuthenticationError(error.message)
+    if error.code == "PERMISSION_DENIED":
+        raise PermissionError(error.message)
     raise RuntimeError(f"secret NATS RPC failed ({error.code}): {error.message}")
 
 

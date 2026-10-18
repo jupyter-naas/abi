@@ -874,17 +874,25 @@ class IIAMService(ABC):
     def rotate_key(
         self, principal_id: str, key_id: str, *, description: str | None = None
     ) -> CreatedKey:
-        """A new key, then the old one revoked: deploy the new value at once."""
+        """A new key, then the old one revoked: deploy the new value at once.
+
+        The new key has the default life of a new key, not what was left of
+        the old one's (a key rotated late, or already expired, still gets a
+        full one). An account at its limit of active keys revokes the old key
+        first: the rotation would otherwise be refused exactly when the
+        account has no key to spare.
+        """
         old = next(
             (k for k in self.list_keys(principal_id) if k.key_id == key_id), None
         )
         if old is None:
             raise IAMNotFoundError(f"Key {key_id} not found")
-        created = self.create_key(
-            principal_id,
-            description=old.description if description is None else description,
-            expires_at=old.expires_at,
-        )
+        description = old.description if description is None else description
+        try:
+            created = self.create_key(principal_id, description=description)
+        except IAMConflictError:
+            self.revoke_key(principal_id, key_id)
+            return self.create_key(principal_id, description=description)
         self.revoke_key(principal_id, key_id)
         return created
 

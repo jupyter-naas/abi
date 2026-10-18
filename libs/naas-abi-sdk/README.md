@@ -135,17 +135,19 @@ abi iam service-account create module/default/acme.research --key
 The SDK logs in to the broker with the key (user `sa`, the key as password) and
 exchanges it at `abi.iam.v1.token` for an engine-signed token of at most ten
 minutes, renewed at half its life. The broker gives the connection only the
-subjects its approved policy allows.
+subjects its approved policy allows, for a few minutes: the transport reconnects
+itself every two minutes, so a revoked key or a narrowed manifest reaches the
+broker within minutes.
 
 At start the module submits its permission manifest, a policy document, and
 waits until an admin approves it (`abi iam module approve
 module/default/acme.research`, optionally `--document narrowed.yaml`). Until then
 it can call nothing but IAM. The manifest is `BaseModule.permissions`, else
 `permissions.yaml` beside the module's code, else derived from `dependencies`:
-its own `document`/`dataset` namespace, every action of the other services it
-declares, the agents, models and apps of the modules it depends on, and its own
-jobs. Bus topics are never derived: declare `bus:*` on
-`abi:-:-:bus:topic/<topic>` yourself.
+its own `document`/`dataset` namespace, the secrets named `<module id>/...`,
+every action of the other services it declares, the agents, models and apps of
+the modules it depends on, and its own jobs. Bus topics are never derived:
+declare `bus:Publish` and `bus:Consume` on `abi:-:-:bus:topic/<topic>` yourself.
 
 ```python
 class Research(BaseModule):

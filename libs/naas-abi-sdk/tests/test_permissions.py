@@ -9,7 +9,7 @@ def _by_sid(document):
 def test_defaults_reach_the_modules_own_namespaces_and_declared_services():
     manifest = default_manifest(
         ModuleDependencies(
-            services=("document", "dataset", "kv", "triple_store", "bus")
+            services=("document", "dataset", "kv", "triple_store", "bus", "secret")
         )
     )
     statements = _by_sid(manifest)
@@ -24,6 +24,12 @@ def test_defaults_reach_the_modules_own_namespaces_and_declared_services():
         "abi:-:-:dataset:namespace/default",
         "abi:-:-:dataset:dataset/default/*",
         "abi:-:-:dataset:catalog/-",
+    ]
+    assert statements["NoUncheckedSql"]["effect"] == "Deny"
+    assert statements["NoUncheckedSql"]["actions"] == ["dataset:QueryUnchecked"]
+    # Never every secret: the ones named after the module.
+    assert statements["UseSecret"]["resources"] == [
+        "abi:-:-:secret:secret/${module.id}%2F*"
     ]
     assert statements["UseKeyvalue"]["actions"] == ["keyvalue:*"]
     assert statements["UseTripleStore"]["resources"] == ["abi:*:*:triple_store:*"]

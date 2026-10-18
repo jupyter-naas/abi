@@ -6,8 +6,9 @@ The manifest is a policy document (``version`` and ``statements`` of
 code; otherwise it defaults from ``ModuleDependencies``:
 
 * ``document``: everything on the module's own namespace, ``${module.id}``;
+* ``secret``: the secrets named ``<module id>/...``; never every secret;
 * ``dataset``: the namespace ``default`` the SDK's facade writes to, and the
-  catalog;
+  catalog, without unchecked SQL (``dataset:QueryUnchecked`` is denied);
 * any other service it declares: every action of that service;
 * the modules it depends on: their agents, models and apps, and the runs it
   starts;
@@ -39,6 +40,7 @@ _OWN_NAMESPACES = {
         "abi:-:-:document:collection/${module.id}/*",
         "abi:-:-:document:document/${module.id}/*",
     ),
+    "secret": ("abi:-:-:secret:secret/${module.id}%2F*",),
     # The SDK's dataset facade writes to the namespace "default" (a dataset
     # namespace is an identifier, ^[A-Za-z][A-Za-z0-9_]*$, which a module id
     # need not be): granted until the SDK maps a module to a namespace of its own.
@@ -72,6 +74,17 @@ def default_manifest(
         statements.append(
             _statement(f"Use{_sid(service)}", [f"{service}:*"], list(resources))
         )
+        if service == "dataset":
+            # SQL the query check cannot vouch for reads the engine host's files:
+            # an admin action, never part of ``dataset:*`` for a module.
+            statements.append(
+                {
+                    "sid": "NoUncheckedSql",
+                    "effect": "Deny",
+                    "actions": ["dataset:QueryUnchecked"],
+                    "resources": ["abi:*:*:dataset:*"],
+                }
+            )
     if dependencies.modules:
         project = "${module.project}"
         reach = []

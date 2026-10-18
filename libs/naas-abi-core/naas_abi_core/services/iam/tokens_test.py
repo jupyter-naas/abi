@@ -13,6 +13,7 @@ from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import (
 from naas_abi_core.services.iam.tokens import (
     PUBLISH_AHEAD,
     RETIRE_AFTER,
+    VERIFY_RETIRED_FOR,
     TokenIssuer,
 )
 
@@ -108,10 +109,18 @@ def test_rotation_publishes_ahead_and_retires_after(issuer, clock):
     nxt = published[1]
     clock.now = START + timedelta(days=30)
     assert kid(issuer.issue("s", kind="user", audience="a").token) == nxt
-    # The old key stays published for tokens it signed, then goes.
+    # The old key stays published for the calls it signed (stored triggers),
+    # marked retired, then goes.
     clock.now = START + timedelta(days=30) + RETIRE_AFTER - timedelta(seconds=1)
     assert first in [k["kid"] for k in issuer.jwks()["keys"]]
     clock.now = START + timedelta(days=30) + RETIRE_AFTER
+    keys = {k["kid"]: k for k in issuer.jwks()["keys"]}
+    assert set(keys) == {first, nxt}
+    assert keys[first]["abi_retired_at"] == int(
+        (START + timedelta(days=30) + RETIRE_AFTER).timestamp()
+    )
+    assert "abi_retired_at" not in keys[nxt]
+    clock.now = START + timedelta(days=30) + RETIRE_AFTER + VERIFY_RETIRED_FOR
     assert [k["kid"] for k in issuer.jwks()["keys"]] == [nxt]
 
 
@@ -122,3 +131,36 @@ def test_a_key_that_left_the_jwks_no_longer_verifies(issuer, clock):
     clock.now = START + timedelta(days=32)
     with pytest.raises(InvalidServiceTokenError):
         JWKSVerifier(issuer.jwks).verify(token)
+
+
+def test_a_call_stored_before_a_rotation_still_verifies_after_it():
+    """A job trigger waits in its stream for days, then is checked as of the
+    time it was stored: its signing key is retired by then."""
+    clock = Clock()
+    clock.now = datetime.now(UTC)
+    start = clock.now
+    store, secrets = IAMStoreMemory(), IAMSecretsMemory()
+    issuer = TokenIssuer(store, secrets, clock=clock)
+    token = issuer.issue("s", kind="user", audience="abi:nats").token
+    stored = clock.now.timestamp()
+    first = kid(token)
+    # The key rotates (day 30), and has been retired for three days.
+    clock.now = start + timedelta(days=29, hours=23, minutes=50)
+    issuer.issue("s", kind="user", audience="abi:nats")  # publishes the next
+    clock.now = start + timedelta(days=30, minutes=1)
+    issuer.issue("s", kind="user", audience="abi:nats")  # the next signs
+    clock.now = start + timedelta(days=33)
+    issuer.issue("s", kind="user", audience="abi:nats")  # retires the first
+    verifier = JWKSVerifier(issuer.jwks, clock=lambda: clock.now.timestamp())
+    assert verifier.verify(token, at=stored).subject == "s"
+    # Never as a token presented now, nor as of a later time.
+    with pytest.raises(InvalidServiceTokenError, match="retired"):
+        verifier.verify(token)
+    with pytest.raises(InvalidServiceTokenError, match="retired"):
+        verifier.verify(token, at=(start + timedelta(days=31)).timestamp())
+    # Its private half is gone: nothing signs with it again, or can be forged.
+    assert secrets.get(f"iam/signing-keys/{first}") is None
+    # And after the longest a call waits, it leaves the JWKS.
+    clock.now = start + timedelta(days=30, minutes=30) + VERIFY_RETIRED_FOR
+    issuer.issue("s", kind="user", audience="abi:nats")
+    assert first not in [k["kid"] for k in issuer.jwks()["keys"]]

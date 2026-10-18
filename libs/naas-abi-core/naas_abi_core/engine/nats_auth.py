@@ -238,6 +238,10 @@ def sign_token(key: SigningKey, claims: TokenClaims) -> str:
 # ---------------------------------------------------------------------------
 
 
+# The JWKS member of a retired key: when it stopped signing (epoch seconds).
+RETIRED_AT_MEMBER = "abi_retired_at"
+
+
 class TokenVerifier(ABC):
     """Verifies engine tokens; every NATS primary adapter holds one."""
 
@@ -287,7 +291,7 @@ class JWKSVerifier(TokenVerifier):
         self._clock = clock
         self._lock = threading.Lock()
         self._fetching = threading.Lock()
-        self._keys: dict[str, Any] = {}
+        self._keys: dict[str, tuple[Any, float | None]] = {}
         self._issuer: str | None = None
         self._fetched_at = float("-inf")  # last read
         self._attempted_at = float("-inf")  # last attempt, read or not
@@ -308,7 +312,7 @@ class JWKSVerifier(TokenVerifier):
         kid = header.get("kid")
         if not isinstance(kid, str) or not kid:
             raise InvalidServiceTokenError("token names no key")
-        key, issuer = self._key(kid)
+        key, issuer, retired_at = self._key(kid)
         try:
             payload = jwt.decode(
                 token,
@@ -328,12 +332,23 @@ class JWKSVerifier(TokenVerifier):
         except jwt.InvalidTokenError as exc:
             raise InvalidServiceTokenError(str(exc)) from exc
         claims = TokenClaims.from_payload(payload)
+        if retired_at is not None:
+            # A retired key vouches for what it signed while it signed: a call
+            # stored back then (``at``), never a token presented now, or one
+            # dated after its retirement.
+            when = self._clock() if at is None else at
+            if when > retired_at + CLOCK_SKEW_SECONDS or (
+                claims.issued_at > retired_at + CLOCK_SKEW_SECONDS
+            ):
+                raise InvalidServiceTokenError(f"signing key {kid!r} is retired")
         if at is not None and not (
             claims.issued_at - CLOCK_SKEW_SECONDS
             <= at
             <= claims.expires_at + CLOCK_SKEW_SECONDS
         ):
-            raise InvalidServiceTokenError("token was not valid when the call was stored")
+            raise InvalidServiceTokenError(
+                "token was not valid when the call was stored"
+            )
         if claims.audience not in self.audiences:
             raise InvalidServiceTokenError(
                 f"token audience {claims.audience!r} is not accepted here"
@@ -343,7 +358,7 @@ class JWKSVerifier(TokenVerifier):
             raise InvalidServiceTokenError("token lifetime exceeds ten minutes")
         return claims
 
-    def _key(self, kid: str) -> tuple[Any, str]:
+    def _key(self, kid: str) -> tuple[Any, str, float | None]:
         if self._should_fetch(kid):
             # One fetch at a time. Without keys to go on, wait for it.
             if self._fetching.acquire(blocking=not self._usable()):
@@ -354,13 +369,14 @@ class JWKSVerifier(TokenVerifier):
                     self._fetching.release()
         with self._lock:
             usable = self._usable_locked()
-            key = self._keys.get(kid) if usable else None
+            known = self._keys.get(kid) if usable else None
             issuer, error = self._issuer, self._error
+        key, retired_at = known if known is not None else (None, None)
         if key is None or issuer is None:
             if not usable and error:
                 raise InvalidServiceTokenError(f"cannot read the JWKS: {error}")
             raise InvalidServiceTokenError(f"unknown signing key {kid!r}")
-        return key, issuer
+        return key, issuer, retired_at
 
     def _should_fetch(self, kid: str) -> bool:
         with self._lock:
@@ -397,16 +413,24 @@ class JWKSVerifier(TokenVerifier):
             self._failed, self._error = False, ""
 
     @staticmethod
-    def _read(jwks: Mapping[str, Any]) -> tuple[dict[str, Any], str]:
+    def _read(
+        jwks: Mapping[str, Any],
+    ) -> tuple[dict[str, tuple[Any, float | None]], str]:
         issuer = jwks.get("issuer")
         if not isinstance(issuer, str) or not issuer:
             raise InvalidServiceTokenError("the JWKS names no issuer")
-        keys: dict[str, Any] = {}
+        keys: dict[str, tuple[Any, float | None]] = {}
         for jwk in jwks.get("keys", []):
             if jwk.get("kty") != "EC" or jwk.get("alg", ALGORITHM) != ALGORITHM:
                 continue
             try:
-                keys[jwk["kid"]] = jwt.PyJWK.from_dict(dict(jwk), ALGORITHM).key
+                retired = jwk.get(RETIRED_AT_MEMBER)
+                keys[jwk["kid"]] = (
+                    jwt.PyJWK.from_dict(dict(jwk), ALGORITHM).key,
+                    float(retired) if retired is not None else None,
+                )
+            except (TypeError, ValueError):
+                continue
             except (KeyError, jwt.InvalidKeyError, jwt.PyJWKError):
                 continue
         return keys, issuer

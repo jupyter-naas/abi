@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
 import uuid
 from collections.abc import Awaitable, Callable
@@ -14,7 +15,11 @@ from nats.errors import MaxPayloadError, NoRespondersError
 
 from naas_abi_sdk import no_responders, overflow
 from naas_abi_sdk.call_context import current_call_context, on_behalf_of_header
-from naas_abi_sdk.credentials import SERVICE_KEY_PREFIX, ServiceKey
+from naas_abi_sdk.credentials import (
+    RENEW_CONNECTION_SECONDS,
+    SERVICE_KEY_PREFIX,
+    ServiceKey,
+)
 from naas_abi_sdk.lifeline import Lifeline
 from naas_abi_sdk.messages import message_size
 from naas_abi_sdk.telemetry import (
@@ -24,6 +29,8 @@ from naas_abi_sdk.telemetry import (
     record_overflow,
     record_reply,
 )
+
+logger = logging.getLogger(__name__)
 
 Response = TypeVar("Response", bound=Message)
 
@@ -53,19 +60,27 @@ class Transport:
         timeout: float = 10.0,
         *,
         forward_user: bool = False,
+        renew_seconds: float = RENEW_CONNECTION_SECONDS,
         **connection_options: Any,
     ) -> None:
         """``forward_user``: send the user the current call acts for
         (``Abi-On-Behalf-Of``). Only for a transport holding a trusted
         identity (``api``, ``engine``) that calls kernel services: they
-        refuse the header from anyone else, and no module host needs it."""
+        refuse the header from anyone else, and no module host needs it.
+
+        ``renew_seconds``: a connection logged in with a service key
+        reconnects this often, so the broker computes its subjects again
+        before its own expire (they last minutes, ``credentials``)."""
         if not math.isfinite(timeout) or timeout <= 0:
             raise ValueError("timeout must be finite and positive")
         if isinstance(token, str) and token.startswith(SERVICE_KEY_PREFIX):
             token = ServiceKey(token)
         self.credentials = token if isinstance(token, ServiceKey) else None
-        if self.credentials is not None and "@" not in url.split("//", 1)[-1]:
+        if self.credentials is not None:
+            with_login = "@" in url.split("//", 1)[-1]  # the URL carries its own
             for option, value in self.credentials.connect_options().items():
+                if with_login and option in ("user", "password"):
+                    continue
                 connection_options.setdefault(option, value)
         self.url, self.token, self.timeout = url, token, timeout
         self.forward_user = forward_user
@@ -75,6 +90,8 @@ class Transport:
         self._connected = False
         self._closed = False
         self._lifeline: Lifeline | None = None
+        self.renew_seconds = renew_seconds
+        self._renewal: asyncio.Task | None = None
 
     async def connect(self) -> Client:
         async with self._lock:
@@ -97,7 +114,32 @@ class Transport:
                     raise
                 self._lifeline = watched
                 self._connected = True
-            return self.connection
+                if self.credentials is not None and self.renew_seconds > 0:
+                    self._renewal = asyncio.create_task(self._renew(connection))
+            connection = self.connection
+        # A renewal in progress (a few milliseconds): wait for it rather than
+        # fail the call that happens to start then.
+        deadline = asyncio.get_running_loop().time() + self.timeout
+        while connection.is_reconnecting and (
+            asyncio.get_running_loop().time() < deadline
+        ):
+            await asyncio.sleep(0.01)
+        return connection
+
+    async def _renew(self, connection: Client) -> None:
+        """Reconnect ``connection`` every ``renew_seconds``: nats-py keeps its
+        subscriptions, and the broker's auth callout answers again, with the
+        subjects the account's policy allows now. A revoked key, a suspended
+        account or a narrowed policy ends here at the latest when the
+        permissions the broker gave the connection do."""
+        while True:
+            await asyncio.sleep(self.renew_seconds)
+            if self._closed or connection is not self.connection:
+                return
+            try:
+                await connection.force_reconnect()
+            except Exception:  # nats-py retries; the lifeline reports a loss
+                logger.warning("Could not renew the broker connection", exc_info=True)
 
     def _on_closed(
         self, connection: Client, watched: Lifeline
@@ -126,6 +168,7 @@ class Transport:
         async with self._lock:
             if self._closed:
                 raise RuntimeError("Client is closed")
+            self._stop_renewal()
             old, watched = self.connection, self._lifeline
             connected = self._connected
             self.connection, self._connected, self._lifeline = Client(), False, None
@@ -136,9 +179,15 @@ class Transport:
                 await old.close()
         await self.connect()
 
+    def _stop_renewal(self) -> None:
+        renewal, self._renewal = self._renewal, None
+        if renewal is not None and renewal is not asyncio.current_task():
+            renewal.cancel()
+
     async def close(self) -> None:
         async with self._lock:
             self._closed = True
+            self._stop_renewal()
             if self._connected:
                 if self._lifeline is not None:
                     await self._lifeline.close(self.connection)

@@ -8,6 +8,12 @@ RFC §9.1:
 * keys rotate every ``rotation_days``: the next key is published at least
   ``PUBLISH_AHEAD`` before it signs, and a key stays published for
   ``RETIRE_AFTER`` after the next one took over (a token lives ten minutes);
+* a retired key's public half stays in the JWKS ``VERIFY_RETIRED_FOR`` more,
+  marked ``abi_retired_at``, for the calls stored while it signed: a job
+  trigger waits in its stream up to seven days and is checked as of its stored
+  time. Verifiers accept it for that and for nothing else (a token is never
+  accepted live, or as of a later time, from a retired key), and its private
+  half is deleted at retirement;
 * the JWKS names the issuer, ``urn:abi:engine:<install id>``, next to the keys.
 
 Rotation is checked whenever a token is issued or the JWKS read: no timer.
@@ -40,7 +46,12 @@ from naas_abi_core.services.iam.IAMPorts import (
 
 PUBLISH_AHEAD = timedelta(minutes=15)
 RETIRE_AFTER = timedelta(minutes=20)
+# The longest a stored call waits (a job trigger: 168 hours), and an hour more.
+VERIFY_RETIRED_FOR = timedelta(hours=169)
 SIGNING_KEY_SECRET = "iam/signing-keys/{kid}"
+# The JWK member naming when a retired key stopped signing and verifying live
+# tokens (epoch seconds). nats_auth.RETIRED_AT_MEMBER reads it.
+RETIRED_AT = "abi_retired_at"
 
 
 def issuer_name(install_id: str) -> str:
@@ -66,6 +77,7 @@ class TokenIssuer:
         self._clock = clock
         self._lock = threading.Lock()
         self._private: dict[str, SigningKey] = {}
+        self._purged: set[str] = set()
         self.issuer = issuer_name(store.install_id())
 
     # -- issuing ------------------------------------------------------------------
@@ -102,12 +114,16 @@ class TokenIssuer:
         """The published keys (RFC 7517) and the issuer they sign for."""
         now = self._clock()
         self._current_key(now)  # rotates when due, so the next key is published
-        keys = [
-            record.public_jwk
-            for record in self._store.list_signing_keys()
-            if record.created_at <= now
-            and (record.retires_at is None or now < record.retires_at)
-        ]
+        keys: list[dict[str, Any]] = []
+        for record in self._store.list_signing_keys():
+            if record.created_at > now:
+                continue
+            jwk = dict(record.public_jwk)
+            if record.retires_at is not None:
+                if now >= record.retires_at + VERIFY_RETIRED_FOR:
+                    continue
+                jwk[RETIRED_AT] = int(record.retires_at.timestamp())
+            keys.append(jwk)
         return {"issuer": self.issuer, "keys": keys}
 
     # -- keys -----------------------------------------------------------------------
@@ -127,6 +143,7 @@ class TokenIssuer:
                 # First boot, or the private halves are gone: sign at once.
                 current = self._create(now, now)
             self._retire_older(records, current)
+            self._purge_retired(records, now)
             due = current.activates_at + self._rotation - PUBLISH_AHEAD
             pending = [r for r in records if r.activates_at > now]
             if now >= due and not pending:
@@ -143,6 +160,24 @@ class TokenIssuer:
                 self._store.retire_signing_key(
                     record.kid, current.activates_at + RETIRE_AFTER
                 )
+
+    def _purge_retired(self, records: list[SigningKeyRecord], now: datetime) -> None:
+        """Delete the private half of every key that stopped verifying live
+        tokens: nothing signs with it again, and a copy leaked later forges
+        nothing."""
+        for record in records:
+            if (
+                record.retires_at is None
+                or now < record.retires_at
+                or record.kid in self._purged
+            ):
+                continue
+            self._purged.add(record.kid)
+            self._private.pop(record.kid, None)
+            try:
+                self._secrets.delete(SIGNING_KEY_SECRET.format(kid=record.kid))
+            except Exception as exc:  # noqa: BLE001 - best effort, tried next process
+                logger.warning(f"IAM signing key {record.kid} was not deleted: {exc}")
 
     def _create(self, now: datetime, activates_at: datetime) -> SigningKeyRecord:
         key = SigningKey.generate(now)

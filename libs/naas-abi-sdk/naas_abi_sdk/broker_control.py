@@ -140,7 +140,8 @@ class BrokerControl:
 
         if operation not in OPERATIONS:
             raise ValueError(f"Unknown broker operation {operation!r}")
-        if time.monotonic() < self._absent_until:
+        confined = getattr(self.transport, "credentials", None) is not None
+        if not confined and time.monotonic() < self._absent_until:
             return None  # no engine answered a moment ago
         nc = await self.transport.connect()
         headers = credentials or {AUTH_HEADER: await self.transport.access_token()}
@@ -154,5 +155,8 @@ class BrokerControl:
                 timeout=self.transport.timeout,
             )
         except NoRespondersError:
-            self._absent_until = time.monotonic() + ABSENT_SECONDS
+            if not confined:
+                # Behind the auth callout an engine that is away is back soon,
+                # and nothing may be done without it: ask again next time.
+                self._absent_until = time.monotonic() + ABSENT_SECONDS
             return None

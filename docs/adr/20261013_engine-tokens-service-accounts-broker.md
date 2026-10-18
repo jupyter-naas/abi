@@ -89,8 +89,8 @@ It calls remote agents as the shared identity `api`, and passes the end user as 
 - **Hosting subjects change.** Agent, app and model hosting subjects gain the service-account token. Callers
   read subjects from discovery records, so only hosts change.
 - **Broker permissions lag behind policy.** They are recomputed when a connection is (re)established, and
-  callout-issued users expire within an hour. Services enforce every change immediately, so the broker only
-  narrows further.
+  callout-issued users expire within five minutes (ten at most), and the SDK reconnects every two minutes.
+  Services enforce every change immediately, so the broker only narrows further.
 - **Nexus's narrow tokens move to the engine issuer.** The 30-day coding-agent JWT (bug a) becomes a
   revocable environment key exchanged for 10-minute `abi:delegated:coding` tokens.
 
@@ -116,8 +116,13 @@ Implemented as decided, with these differences:
 - **Broker logins.** Two static users skip the callout. `engine` reaches every subject but `$SYS`, not only
   what the kernel serves: the API, Nexus and jobs run on it and use many subjects. Narrowing it is left for
   later. `auth` answers the callout. Everyone else logs in as `sa`, with a key as password. The responder
-  signs the user with the account seed `NATS_AUTH_CALLOUT_SEED`, and the user expires within an hour
-  (`nats.auth_callout.user_ttl_seconds`).
+  signs the user with the account seed `NATS_AUTH_CALLOUT_SEED`, and the user expires in five minutes by
+  default, never over ten, the life of an access token (`nats.auth_callout.user_ttl_seconds`, 240 to 600). A
+  revoked key, a suspended account or a narrowed manifest therefore reaches the broker within that time.
+  nats-py does not reconnect a connection the broker expired (it closes it), so a transport logged in with a
+  service key reconnects itself every two minutes (`renew_seconds`): the callout answers again, with the
+  subjects of the policy as it is then. Calls that start during the few milliseconds of a renewal wait for it;
+  one in flight when it begins is lost, as in any reconnect.
 - **Subjects a module gets** (`services/iam/broker.py`). A permission ending in `*` also matches a client's
   literal `>` or `*` token, so every grant keeps the account's own tokens before its first wildcard:
   - IAM's request subjects, one by one (IAM authorizes each operation itself). Never `abi.iam.v1.changed`.
@@ -137,16 +142,21 @@ Implemented as decided, with these differences:
     serves, its transfer session included (`abi.svc.<service>.v1.transfer.open`, `*.write`, ...): a subject
     missing there is one no module reaches. Discovery actions add the hosting subjects of the modules they
     reach, in the module's project (for another account, the projects its resources name), and the event
-    service adds `evt.>`;
+    service adds `evt.>` by action: `event:Append` publishes, `Query`, `QueryStream` and `QueryForConsumer`
+    subscribe, the other event actions neither;
   - **jobs**, only for job resources naming the module (`job/<project>/<module>/<job>`): the triggers and
     cancels the engine publishes for it on that module's jobs (`<module hash>` subjects). A module hosts the
     jobs its policy names: fetching from and acknowledging its consumers by exact name, its cancel subject.
     It writes nothing into the jobs stream: schedules make the server allow rollups there (whatever the
     stream's flag says), so one `Nats-Rollup: all` from a module would purge every module's triggers and
     schedules. The default manifest names each job;
-  - **bus topics**, concrete, under no platform root (`abi`, `evt`, `_INBOX`, `$...`, `_...`) and nested in
-    no other approved topic (refused when a manifest is submitted or approved): the topic, and fetching from and
-    acknowledging the consumers of its queue stream;
+  - **bus topics**, concrete, under no platform root (`abi`, `evt`, `_INBOX`, `$...`, `_...`, `triple_store`:
+    the topic every graph's changes go out on, which the bus checks no subscriber of; a module reads graphs
+    through `triple_store:Subscribe`) and nested in no other approved topic (refused when a manifest is
+    submitted or approved). By action: `bus:Publish` publishes on the topic and writes its claim checks;
+    `bus:Consume` subscribes to it and fetches from and acknowledges the consumers of its queue stream. A
+    module approved for `Publish` alone cannot pull or acknowledge another routing key's work, and a Deny of
+    an action on one topic keeps the module from it there;
   - **claim checks** under the scope they travel with: `abi.cc.t.<topic hash>.>` for a topic,
     `abi.cc.j.<project>.<module hash>.>` for a module's job triggers (writers: those who may trigger;
     readers: the host). The SDK stores them in the stream `ABI_CLAIM_CHECKS`; a module reads chunks back
@@ -202,6 +212,23 @@ Implemented as decided, with these differences:
   schedules).
 - **Quotas.** `ABI_CLAIM_CHECKS` has no size limit beyond its seven-day age, and the overflow host's 64 sessions
   and 1 GiB have no per-caller share: one module can fill either for everyone.
+- **Sealed names in the secret service.** The ES256 private halves (`iam/signing-keys/<kid>`), the engine's
+  service key (`iam/service-keys/engine`) and the job-trigger seal key (`iam/job-trigger-seal`) live in the
+  secret service, which checks no IAM per secret yet. Its NATS endpoint therefore refuses every name under
+  `iam/` to any caller but `engine`, and under `idp/` to any but `idp`, in `get`, `set`, `remove` and `list`
+  (`secret_nats_contract.RESERVED_NAMES`), whatever a policy grants: an approved module with `secret:*` signs
+  as nobody. The default manifest grants a module the secrets named `<module id>/...`, never every secret.
+  The default `dataset` grant denies `dataset:QueryUnchecked` (#58).
+- **Retired signing keys verify what they signed.** A job trigger waits in its stream up to 168 hours and is
+  verified as of its stored time. A retired key's public half therefore stays in the JWKS for 169 hours past
+  its retirement, marked `abi_retired_at`: verifiers accept it for a call stored before that, never for a
+  token presented later or issued after it. Its private half is deleted at retirement.
+- **The job host's seal check fails closed** behind the callout: with no engine answering `verify_trigger`
+  (a restart), a trigger is redelivered, never run, and a cancel is dropped. Only a host with no callout takes
+  a message as it is. Behind the callout the broker control does not remember an absent engine either.
+- **Key rotation** issues the new key before revoking the old one, revoking first only for an account at its
+  limit of five; the new key gets a fresh default life, so a key rotated late or already expired still
+  rotates. A key's `last_used_at` is written at most once a minute.
 - **Verifiers** keep the keys they know for 15 minutes past their cache when the JWKS cannot be read, back off
   5 seconds between attempts, and fetch outside the lock every `verify` takes.
 - **Manifests.** Approving or rejecting without a version decides the pending one only. A superseded version

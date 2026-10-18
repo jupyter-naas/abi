@@ -171,6 +171,7 @@ ENGINE_KEY_SECRET = "iam/service-keys/engine"
 TRIGGER_SEAL_SECRET = "iam/job-trigger-seal"
 TRIGGER_SEAL_VERSION = "v1"
 ENGINE_KEY_DESCRIPTION = "client-role engines"
+_LAST_USED_RESOLUTION = timedelta(minutes=1)
 _CI_KEY_EXPIRY = timedelta(days=90)
 
 
@@ -1086,7 +1087,8 @@ class IAMService(IIAMService, PolicySource):
         """The active service account a valid ``abi_sk_`` key belongs to.
 
         Revocation, expiry and suspension take effect at once: nothing here is
-        cached. Records the key's last use.
+        cached. Records the key's last use, at most once a minute: a storm of
+        reconnects or exchanges writes nothing to the store.
         """
         try:
             presented = keys.parse(value)
@@ -1104,7 +1106,11 @@ class IAMService(IIAMService, PolicySource):
             or not principal.active
         ):
             raise KeyRefusedError()
-        self.store.touch_key(record.key_id, now)
+        if (
+            record.last_used_at is None
+            or now - record.last_used_at >= _LAST_USED_RESOLUTION
+        ):
+            self.store.touch_key(record.key_id, now)
         return principal, record
 
     # =========================================================================

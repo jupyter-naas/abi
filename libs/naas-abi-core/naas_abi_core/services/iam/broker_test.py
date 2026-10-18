@@ -140,6 +140,67 @@ def test_a_deny_on_everything_takes_the_service_back():
 # -- bus ------------------------------------------------------------------------------
 
 
+def _consumes(permissions, topic):
+    stream = broker.bus_stream(topic)
+    return (
+        f"$JS.API.CONSUMER.MSG.NEXT.{stream}.>" in permissions.publish
+        or f"$JS.ACK.{stream}.>" in permissions.publish
+    )
+
+
+def test_publishing_a_topic_neither_subscribes_nor_fetches():
+    topic = "demo.inbox"
+    permissions = derive(allow(["bus:Publish"], [f"abi:-:-:bus:topic/{topic}"]))
+    assert topic in permissions.publish and f"{topic}.>" in permissions.publish
+    assert broker.topic_claim_subjects(topic) in permissions.publish  # claim checks
+    assert not any(s.startswith(topic) for s in permissions.subscribe)
+    assert not _consumes(permissions, topic)
+    assert permissions.bus_publish == (topic,) and permissions.bus_consume == ()
+
+
+def test_consuming_a_topic_neither_publishes_nor_writes_claim_checks():
+    topic = "demo.inbox"
+    permissions = derive(allow(["bus:Consume"], [f"abi:-:-:bus:topic/{topic}"]))
+    assert topic in permissions.subscribe and f"{topic}.>" in permissions.subscribe
+    assert _consumes(permissions, topic)
+    assert topic not in permissions.publish
+    assert f"{topic}.>" not in permissions.publish
+    assert broker.topic_claim_subjects(topic) not in permissions.publish
+    assert permissions.bus_publish == () and permissions.bus_consume == (topic,)
+
+
+def test_an_unknown_bus_action_reaches_nothing():
+    permissions = derive(allow(["bus:Admin"], ["abi:-:-:bus:topic/demo.inbox"]))
+    assert permissions.bus_topics == ()
+    assert "demo.inbox" not in permissions.publish + permissions.subscribe
+
+
+def test_a_deny_on_one_topic_keeps_it_from_that_action_only():
+    permissions = derive(
+        allow(["bus:*"], ["abi:-:-:bus:topic/a", "abi:-:-:bus:topic/b"]),
+        Statement("Deny", ("bus:Consume",), ("abi:-:-:bus:topic/b",)),
+    )
+    assert permissions.bus_consume == ("a",)
+    assert set(permissions.bus_publish) == {"a", "b"}  # still publishes on b
+    assert _consumes(permissions, "a") and not _consumes(permissions, "b")
+    assert "b.>" not in permissions.subscribe
+    assert "b.>" in permissions.publish
+
+
+def test_live_events_follow_the_specific_action():
+    registry = kernel()
+    appends = derive(allow(["event:Append"]), catalogs=registry)
+    assert "evt.>" in appends.publish and "evt.>" not in appends.subscribe
+    reads = derive(allow(["event:Query"]), catalogs=registry)
+    assert "evt.>" in reads.subscribe and "evt.>" not in reads.publish
+    for action in ("ListEventTypes", "GetCursor", "SetCursor", "MaxSeq"):
+        listed = derive(allow([f"event:{action}"]), catalogs=registry)
+        assert "evt.>" not in listed.publish + listed.subscribe, action
+    # Every action: both.
+    every = derive(allow(["event:*"]), catalogs=registry)
+    assert "evt.>" in every.publish and "evt.>" in every.subscribe
+
+
 def test_bus_topics_are_named_never_wildcarded():
     permissions = derive(
         allow(["bus:*"], ["abi:-:-:bus:topic/demo.inbox", "abi:-:-:bus:topic/*"])
@@ -167,7 +228,17 @@ def test_a_topic_queue_is_consumed_never_created_or_changed():
 
 
 @pytest.mark.parametrize(
-    "topic", ["abi", "abi.iam.v1", "_INBOX", "_INBOX.x", "$JS", "$SYS.x", "evt.x"]
+    "topic",
+    [
+        "abi",
+        "abi.iam.v1",
+        "_INBOX",
+        "_INBOX.x",
+        "$JS",
+        "$SYS.x",
+        "evt.x",
+        "triple_store",
+    ],
 )
 def test_a_topic_under_a_platform_root_grants_nothing(topic):
     permissions = derive(allow(["bus:*"], [f"abi:-:-:bus:topic/{topic}"]))
@@ -305,3 +376,21 @@ def test_subject_matching_is_natss():
     assert broker.subject_matches("a.>", "a.b.c")
     assert not broker.subject_matches("a.>", "a")
     assert not broker.subject_matches("a.b", "a.c")
+
+
+def test_a_connection_is_renewed_well_before_the_broker_expires_it():
+    from naas_abi_sdk import credentials
+
+    from naas_abi_core.engine import nats_auth_callout as callout
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+        NATSAuthCalloutConfiguration,
+    )
+
+    assert credentials.CONNECTION_TTL_SECONDS == callout.MAX_USER_TTL_SECONDS
+    # The configuration's shortest lifetime still leaves a renewal's margin.
+    shortest = NATSAuthCalloutConfiguration.model_fields["user_ttl_seconds"]
+    minimum = next(m.ge for m in shortest.metadata if hasattr(m, "ge"))
+    assert credentials.RENEW_CONNECTION_SECONDS * 2 <= minimum
+    # ... and no longer than an access token lives.
+    maximum = next(m.le for m in shortest.metadata if hasattr(m, "le"))
+    assert maximum <= 600

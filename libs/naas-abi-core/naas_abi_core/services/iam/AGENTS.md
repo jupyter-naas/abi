@@ -156,7 +156,15 @@ iam.broker_permissions(principal, key)  # records from authenticate_key; never c
 
 - **Keys.** At most five active per account; `ci/*` keys expire in 90 days by
   default. Only `sha256(secret)` is stored. Revocation takes effect at the next
-  exchange and the next broker connection.
+  exchange and the next broker connection, which is within five minutes: the
+  callout's user JWT lasts that long (ten at most) and the SDK reconnects every
+  two minutes. `rotate_key` gives the new key a fresh default life and, at the
+  limit of five, revokes the old key first. `last_used_at` is written at most
+  once a minute.
+- **Signing keys** retire 20 minutes after the next one signs, but their public
+  half stays in the JWKS 169 hours more (`abi_retired_at`), so job triggers
+  stored meanwhile still verify `at` their stored time; a retired key is never
+  accepted for a token presented later. Its private half is deleted.
 - **Module accounts** are `module/<project>/<module_id>` and start with
   `builtin.module_bootstrap` only: their own discovery record and their own
   manifest. Approval writes the managed policy `module.<project>.<module_id>`
@@ -297,8 +305,12 @@ The engine's broker control (`engine/nats_broker_control.py`,
 `abi.broker.v1.<operation>`) creates the streams and consumers modules use
 and writes the jobs stream for them, checked against `broker_grants`:
 modules never create or change a stream or a consumer. `broker.py` documents what each grant
-reaches; a bus topic under `abi`, `evt`, `_INBOX`, `$` or `_` is refused at
-submission and approval. Wire codes: `PERMISSION_DENIED`, `NOT_FOUND`,
+reaches; a bus topic under `abi`, `evt`, `_INBOX`, `triple_store`, `$` or `_` is
+refused at submission and approval. Bus and event grants follow the action
+(`bus:Publish` vs `bus:Consume`; `event:Append` publishes, the read actions
+subscribe) and a Deny of an action on a topic is honoured. The secrets IAM keeps
+(`iam/...`) are readable only by `engine` over the secret service's NATS
+endpoint. Wire codes: `PERMISSION_DENIED`, `NOT_FOUND`,
 `CONFLICT`, `REVISION_CONFLICT`, `INVALID_ARGUMENT`, `UNAUTHENTICATED` (a
 refused key). The SDK facade is
 `engine.services.iam` (`naas_abi_sdk/services/iam.py`), reachable without a

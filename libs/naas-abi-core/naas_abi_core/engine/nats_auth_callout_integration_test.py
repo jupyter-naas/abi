@@ -110,13 +110,15 @@ def approve(iam: IAMService, account_id: str, name: str, document=DOCUMENT) -> N
         iam.approve_manifest(account_id)
 
 
-def run(stack, scenario):
+def run(stack, scenario, **callout_options):
     async def main():
         from naas_abi_core.engine import nats_overflow
         from naas_abi_core.engine.nats_rpc import request_payload
 
         engine = await nats.connect(stack["engine"])
-        callout = AuthCallout(stack["iam"], stack["issuer"].seed, stack["auth"])
+        callout = AuthCallout(
+            stack["iam"], stack["issuer"].seed, stack["auth"], **callout_options
+        )
         await callout.start()
         control = BrokerControl(stack["iam"], stack["iam"].verifier(), stack["engine"])
         await control.start()
@@ -1090,5 +1092,237 @@ def test_a_module_reads_the_claim_checks_of_what_it_is_granted_only(stack):
                 await control.read("read_claim_check", reference=mine, index=0)
         finally:
             await transport.close()
+
+    run(stack, scenario)
+
+
+def test_a_connection_renews_itself_before_its_permissions_expire(stack):
+    iam = stack["iam"]
+    account, key = module(iam, "module/default/people")
+    approve(iam, account, "module/default/people")
+
+    async def scenario(served):
+        # The broker gives a connection 3 s; the transport reconnects every 1 s,
+        # and the callout answers each time. Without it nats-py would close the
+        # connection at expiry and never reconnect it.
+        transport = Transport(
+            stack["url"], key, timeout=2, renew_seconds=1, reconnect_time_wait=0.1
+        )
+        try:
+            nc = await transport.connect()
+            for _ in range(20):  # seven seconds: two lives of the broker's JWT
+                await asyncio.sleep(0.37)
+                for attempt in range(3):
+                    try:
+                        # A call that starts during a renewal waits for it; one
+                        # in flight when it begins is lost, as in any reconnect.
+                        nc = await transport.connect()
+                        await nc.request(KV_GET, b"", timeout=1)
+                        break
+                    except Exception:
+                        if attempt == 2:
+                            raise
+            assert not nc.is_closed
+        finally:
+            await transport.close()
+
+    run(stack, scenario, user_ttl_seconds=3)
+
+
+def test_a_revoked_key_loses_its_connection_within_the_ttl(stack):
+    iam = stack["iam"]
+    account, key = module(iam, "module/default/people")
+    approve(iam, account, "module/default/people")
+
+    async def scenario(served):
+        transport = Transport(
+            stack["url"], key, timeout=2, renew_seconds=1, reconnect_time_wait=0.1
+        )
+        try:
+            nc = await transport.connect()
+            await nc.request(KV_GET, b"", timeout=2)
+            with as_service_account("engine"):
+                iam.revoke_key(account, key.split("_")[2])
+            await asyncio.sleep(5)  # the renewal is refused; no expiry gets past
+            with pytest.raises(Exception):
+                await nc.request(KV_GET, b"", timeout=1)
+        finally:
+            await transport.close()
+
+    run(stack, scenario, user_ttl_seconds=3)
+
+
+def test_a_narrowed_manifest_reaches_the_broker_at_the_next_renewal(stack):
+    iam = stack["iam"]
+    account, key = module(iam, "module/default/people")
+    approve(iam, account, "module/default/people")
+
+    async def scenario(served):
+        transport = Transport(
+            stack["url"], key, timeout=2, renew_seconds=1, reconnect_time_wait=0.1
+        )
+        try:
+            nc = await transport.connect()
+            await nc.request(KV_GET, b"", timeout=2)
+            approve(
+                iam,
+                account,
+                "module/default/people",
+                {
+                    "version": "2026-10-13",
+                    "statements": [
+                        {
+                            "effect": "Allow",
+                            "actions": ["document:*"],
+                            "resources": ["abi:-:-:document:namespace/people"],
+                        }
+                    ],
+                },
+            )
+            for _ in range(10):  # the next renewal, within a second or two
+                await asyncio.sleep(1)
+                if await denied(transport, KV_GET):
+                    break
+            else:
+                raise AssertionError("the narrowed manifest never reached the broker")
+        finally:
+            await transport.close()
+
+    run(stack, scenario, user_ttl_seconds=30)
+
+
+def test_a_module_with_secret_grants_reads_no_signing_key(stack):
+    from naas_abi_core.services.secret.adaptors.primary.secret__primary_adapter__NATS import (
+        SecretPrimaryAdapterNATS,
+    )
+    from naas_abi_core.services.secret.SecretPorts import ISecretAdapter
+    from naas_abi_proto.secret.v1 import secret_pb2
+
+    class Secrets(ISecretAdapter):
+        def __init__(self):
+            self.values = {
+                "iam/signing-keys/20261018-abcd1234": "PEM",
+                "iam/job-trigger-seal": "seal",
+                "idp/signing-key": "idp",
+                "people/api-key": "mine",
+            }
+
+        def get(self, key, default=None):
+            return self.values.get(key, default)
+
+        def set(self, key, value):
+            self.values[key] = value
+
+        def remove(self, key):
+            self.values.pop(key, None)
+
+        def list(self):
+            return dict(self.values)
+
+    iam = stack["iam"]
+    account, key = module(iam, "module/default/people")
+    # What the default manifest used to grant: every secret.
+    approve(
+        iam,
+        account,
+        "module/default/people",
+        {
+            "version": "2026-10-13",
+            "statements": [
+                {
+                    "effect": "Allow",
+                    "actions": ["secret:*"],
+                    "resources": ["abi:*:*:secret:*"],
+                }
+            ],
+        },
+    )
+    secrets = Secrets()
+
+    async def scenario(served):
+        engine = await nats.connect(stack["engine"])
+        primary = SecretPrimaryAdapterNATS(secrets, iam.verifier())
+        await primary.start(engine)
+        transport = Transport(stack["url"], key, timeout=3)
+        try:
+            for name in ("iam/signing-keys/20261018-abcd1234", "iam/job-trigger-seal"):
+                with pytest.raises(RPCError) as refused:
+                    await transport.call(
+                        "abi.svc.secret.v1.get",
+                        secret_pb2.GetRequest(key=name),
+                        secret_pb2.GetResponse,
+                    )
+                assert refused.value.code == "PERMISSION_DENIED"
+                with pytest.raises(RPCError):
+                    await transport.call(
+                        "abi.svc.secret.v1.set",
+                        secret_pb2.SetRequest(key=name, value="mine"),
+                        secret_pb2.SetResponse,
+                    )
+            assert secrets.values["iam/job-trigger-seal"] == "seal"
+            listed = await transport.call(
+                "abi.svc.secret.v1.list",
+                secret_pb2.ListRequest(),
+                secret_pb2.ListResponse,
+            )
+            assert {e.key for e in listed.found.entries} == {"people/api-key"}
+            got = await transport.call(
+                "abi.svc.secret.v1.get",
+                secret_pb2.GetRequest(key="people/api-key"),
+                secret_pb2.GetResponse,
+            )
+            assert got.found.value == "mine"
+        finally:
+            await transport.close()
+            await primary.stop()
+            await engine.close()
+
+    run(stack, scenario)
+
+
+def _bus_for(action: str) -> dict:
+    return {
+        "version": "2026-10-13",
+        "statements": [
+            {
+                "effect": "Allow",
+                "actions": [action],
+                "resources": [f"abi:-:-:bus:topic/{TOPIC}"],
+            }
+        ],
+    }
+
+
+def test_bus_grants_follow_the_action_publish_is_not_consume(stack):
+    from naas_abi_sdk.broker_control import BrokerControlError
+
+    iam = stack["iam"]
+    producer, producer_key = module(iam, "module/default/producer")
+    consumer, consumer_key = module(iam, "module/default/consumer")
+    approve(iam, producer, "module/default/producer", _bus_for("bus:Publish"))
+    approve(iam, consumer, "module/default/consumer", _bus_for("bus:Consume"))
+    stream = broker.bus_stream(TOPIC)
+    durable = BusClient.consumer_name(TOPIC, "a")
+
+    async def scenario(served):
+        sending = Transport(stack["url"], producer_key, timeout=2)
+        receiving = Transport(stack["url"], consumer_key, timeout=2)
+        try:
+            await BusClient(sending).enqueue(TOPIC, "a", b"work")
+            # Publish-only: it may neither create the queue nor pull or
+            # acknowledge anyone's work, wherever it aims the request.
+            with pytest.raises(BrokerControlError):
+                await BusClient(sending).dequeue(TOPIC, "a")
+            for subject in (
+                f"$JS.API.CONSUMER.MSG.NEXT.{stream}.{durable}",
+                f"$JS.ACK.{stream}.{durable}.1.1.1.1.1",
+            ):
+                assert await denied(sending, subject), subject
+            assert await denied(receiving, f"{TOPIC}.a")  # consume-only: no publish
+            queue = await BusClient(receiving).dequeue(TOPIC, "a")
+            assert [m.data for m in await queue.fetch(1, timeout=5)] == [b"work"]
+        finally:
+            await sending.close()
+            await receiving.close()
 
     run(stack, scenario)

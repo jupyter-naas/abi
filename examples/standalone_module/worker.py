@@ -155,17 +155,18 @@ class ABIModule(BaseModule):
         await hot.delete(cache_pb2.DeleteRequest(key="tier-demo"))
 
     async def secret(self):
-        await self.call("secret", "set", key="DEMO_VALUE", value="fixture-value")
+        # A module's secrets are named after it: that is all its manifest
+        # grants by default.
+        key = f"{self.module_id}/DEMO_VALUE"
+        await self.call("secret", "set", key=key, value="fixture-value")
         assert (
-            await self.call("secret", "get", key="DEMO_VALUE")
+            await self.call("secret", "get", key=key)
         ).found.value == "fixture-value"
-        await self.call("secret", "set", key="DEMO_VALUE", value="updated")
+        await self.call("secret", "set", key=key, value="updated")
         entries = (await self.call("secret", "list")).found.entries
-        assert any(e.key == "DEMO_VALUE" and e.value == "updated" for e in entries)
-        await self.call("secret", "remove", key="DEMO_VALUE")
-        assert not (await self.call("secret", "get", key="DEMO_VALUE")).found.HasField(
-            "value"
-        )
+        assert any(e.key == key and e.value == "updated" for e in entries)
+        await self.call("secret", "remove", key=key)
+        assert not (await self.call("secret", "get", key=key)).found.HasField("value")
 
     async def email(self):
         await self.call(
@@ -838,7 +839,11 @@ class ABIModule(BaseModule):
                 "redirect_uri": "https://abi.example/callback",
                 "nonce": "nonce",
             },
-            "refresh": {"provider": "acme", "refresh_token": "r", "principal_id": "usr_x"},
+            "refresh": {
+                "provider": "acme",
+                "refresh_token": "r",
+                "principal_id": "usr_x",
+            },
             "revoke": {"provider": "acme", "refresh_token": "r"},
             "end_session_url": {"provider": "acme"},
         }
@@ -846,9 +851,10 @@ class ABIModule(BaseModule):
             try:
                 await self.call("identity", operation, **fields)
             except RPCError as exc:
-                assert exc.code in ("NOT_FOUND", "PERMISSION_DENIED") or exc.code.startswith(
-                    "TOKEN_"
-                ), (operation, exc)
+                assert exc.code in (
+                    "NOT_FOUND",
+                    "PERMISSION_DENIED",
+                ) or exc.code.startswith("TOKEN_"), (operation, exc)
                 self.seen.add(("identity", operation))
             else:
                 raise AssertionError(f"identity.{operation} answered a module identity")

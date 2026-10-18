@@ -402,7 +402,10 @@ class BrokerControl:
         await request.require(
             "bus:Publish" if operation == "ensure_topic" else "bus:Consume",
             resource_name("bus", "topic", topic),
-            granted=lambda g: topic in g.bus_topics,
+            granted=lambda g: (
+                topic
+                in (g.bus_publish if operation == "ensure_topic" else g.bus_consume)
+            ),
         )
         if operation == "ensure_topic":
             await ensure_topic_stream(js, topic)
@@ -452,7 +455,7 @@ class BrokerControl:
         grants = request.grants
         assert grants is not None
         if len(scope) >= 3 and scope[0] == "t":
-            for topic in grants.bus_topics:
+            for topic in grants.bus_consume:
                 if claim_check.topic_scope(
                     topic
                 ) == f"t.{scope[1]}" and await self.allowed(

@@ -351,6 +351,52 @@ def test_behind_the_callout_the_engine_creates_consumers_and_writes_schedules():
     assert js.published == [] and js.purged == []
 
 
+class _AbsentEngine:
+    """Broker control with no engine answering, as `BrokerControl.request` says."""
+
+    async def request(self, operation, **fields):
+        return None
+
+
+def test_behind_the_callout_an_absent_engine_never_lets_a_message_through():
+    from naas_abi_sdk.credentials import ServiceKey
+    from naas_abi_sdk.job_host import EngineUnavailable
+
+    host = _host(control=_AbsentEngine())
+    host.transport.credentials = ServiceKey(
+        "abi_sk_aaaaaaaaaaaaaaaa_dGVzdC1vbmx5LXNlcnZpY2Uta2V5"
+    )
+    for headers in ({}, {"Abi-Job-Seal": "forged"}):
+        with pytest.raises(EngineUnavailable):
+            asyncio.run(host._sealed("abi.jobs.x", "manual", b"{}", headers))
+
+
+def test_without_a_callout_an_absent_engine_means_nothing_is_sealed():
+    host = _host(control=_AbsentEngine())
+    assert asyncio.run(host._sealed("abi.jobs.x", "manual", b"{}", {})) is True
+
+
+def test_a_trigger_waits_for_the_engine_rather_than_running_or_failing():
+    from naas_abi_sdk.credentials import ServiceKey
+
+    docs = Documents()
+    ran = []
+
+    async def handler(ctx):
+        ran.append(ctx.payload)
+
+    host = _host(docs, control=_AbsentEngine())
+    host.transport.credentials = ServiceKey(
+        "abi_sk_aaaaaaaaaaaaaaaa_dGVzdC1vbmx5LXNlcnZpY2Uta2V5"
+    )
+    msg = Msg()
+    descriptor = JobDescriptor("ingest")
+    _run(host, descriptor, handler, msg)
+    assert ran == []  # the message is redelivered, never run on faith
+    assert [call[0] for call in msg.calls] == ["nak"]  # redelivered later
+    assert docs.data == {}  # no run recorded, FAILED or otherwise
+
+
 def test_a_restart_leaves_unchanged_schedules_alone():
     # Replacing an @every schedule restarts its interval: restarts more frequent
     # than the interval would keep it from ever firing.

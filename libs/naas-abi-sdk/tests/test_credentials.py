@@ -51,7 +51,9 @@ def test_a_transport_given_a_key_logs_in_with_it():
     assert transport.options["inbox_prefix"] == "_INBOX.abcdefghijklmnop"
     # A URL naming its own login keeps it.
     explicit = Transport("nats://engine:pw@127.0.0.1:4222", KEY)
-    assert "user" not in explicit.options
+    assert "user" not in explicit.options and "password" not in explicit.options
+    # ... but the inbox prefix still confines the reply subscription.
+    assert explicit.options["inbox_prefix"] == "_INBOX.abcdefghijklmnop"
 
 
 def _exchanging(*responses):

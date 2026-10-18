@@ -742,6 +742,21 @@ def test_exchange_gives_a_ten_minute_nats_token_for_the_account(h, iam):
     assert iam.store.get_key(value.split("_")[2]).last_used_at is not None
 
 
+def test_a_storm_of_exchanges_writes_the_last_use_once(h, iam, monkeypatch):
+    value = h.admin("create_key", _module(h).id).value
+    touched: list[str] = []
+    real = iam.store.touch_key
+    monkeypatch.setattr(
+        iam.store,
+        "touch_key",
+        lambda key_id, now: (touched.append(key_id), real(key_id, now)),
+    )
+    for _ in range(20):
+        iam.exchange_key(value)
+        iam.authenticate_key(value)
+    assert touched == [value.split("_")[2]]
+
+
 @pytest.mark.parametrize(
     "mangle",
     [
@@ -788,6 +803,37 @@ def test_rotation_issues_a_new_key_and_revokes_the_old(h, iam):
     assert iam.exchange_key(new.value)
     with pytest.raises(KeyRefusedError):
         iam.exchange_key(old.value)
+
+
+def test_an_account_at_its_key_limit_can_still_rotate(h, iam):
+    account = _module(h)
+    created = [h.admin("create_key", account.id) for _ in range(5)]
+    new = h.admin("rotate_key", account.id, created[0].record.key_id)
+    assert iam.exchange_key(new.value)
+    with pytest.raises(KeyRefusedError):
+        iam.exchange_key(created[0].value)
+    assert (
+        len(
+            [k for k in h.admin("list_keys", account.id) if k.usable(datetime.now(UTC))]
+        )
+        == 5
+    )
+
+
+def test_a_rotated_key_gets_a_fresh_life_and_an_expired_one_rotates(h, iam):
+    account = h.service_account("ci/nightly")
+    short = h.admin(
+        "create_key",
+        account.id,
+        expires_at=datetime.now(UTC) + timedelta(seconds=1),
+    )
+    time.sleep(1.1)
+    with pytest.raises(KeyRefusedError):
+        iam.exchange_key(short.value)
+    new = h.admin("rotate_key", account.id, short.record.key_id)
+    # Not what was left of the old key's life: a ci key's full 90 days.
+    assert new.record.expires_at - datetime.now(UTC) > timedelta(days=89)
+    assert iam.exchange_key(new.value)
 
 
 def test_at_most_five_active_keys(h):

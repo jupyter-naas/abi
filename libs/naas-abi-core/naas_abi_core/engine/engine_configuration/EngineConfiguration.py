@@ -451,14 +451,15 @@ class NATSAuthCalloutConfiguration(BaseModel):
     auth_users: [engine, auth] }``; the responder logs in as ``auth``
     (``nats_url``) and signs each connection's user JWT with the account seed
     whose public key is that issuer. Users it issues expire within
-    ``user_ttl_seconds`` (an hour at most): a reconnect recomputes them.
+    ``user_ttl_seconds`` (five minutes by default, ten at most: an access token's
+    life): a reconnect recomputes them, and modules reconnect every two minutes.
     """
 
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     nats_url: str
     issuer_seed: str = Field(min_length=1, repr=False)
-    user_ttl_seconds: int = Field(default=3600, ge=60, le=3600)
+    user_ttl_seconds: int = Field(default=300, ge=240, le=600)
 
 
 class NATSConfiguration(BaseModel):

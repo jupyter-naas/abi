@@ -8,9 +8,13 @@ broker asks ``$SYS.REQ.USER.AUTH`` and this responder, logged in as ``auth``:
 1. checks the key and its principal (``IAMService.authenticate_key``: revoked,
    expired or suspended is refused at once);
 2. derives the subjects the account's policy allows (``broker_permissions``);
-3. answers with a user JWT signed by the account seed, valid an hour at most
-   and never past the key's expiry, without response permissions (a module
-   answers on ``_INBOX.>``). A reconnect recomputes it.
+3. answers with a user JWT signed by the account seed, valid five minutes by
+   default (ten at most, the life of an access token) and never past the key's
+   expiry, without response permissions (a module answers on ``_INBOX.>``).
+   A reconnect recomputes it: the SDK reconnects every two minutes, so a
+   revoked key, a suspended account or a narrowed policy takes effect at the
+   broker within the JWT's life, and the connection ends there (nats-py does
+   not reconnect a connection the broker expired).
 
 The streams and consumers a module uses are created by the engine on demand
 (``nats_broker_control.py``). Each request is answered on its own task: one
@@ -45,6 +49,11 @@ AUTH_SUBJECT = "$SYS.REQ.USER.AUTH"
 KEY_USER = "sa"
 # NATS's global account: the one a broker without accounts puts every user in.
 ACCOUNT = "$G"
+# How long a connection's permissions last: never longer than an access token.
+# naas_abi_sdk.credentials.CONNECTION_TTL_SECONDS names the same bounds (a
+# test keeps them equal).
+DEFAULT_USER_TTL_SECONDS = 300
+MAX_USER_TTL_SECONDS = 600
 
 
 class AuthCallout:
@@ -54,12 +63,12 @@ class AuthCallout:
         issuer_seed: str,
         nats_url: str,
         *,
-        user_ttl_seconds: int = 3600,
+        user_ttl_seconds: int = DEFAULT_USER_TTL_SECONDS,
     ) -> None:
         self.iam = iam
         self.issuer = KeyPair.from_seed(issuer_seed)
         self.nats_url = nats_url
-        self.user_ttl_seconds = min(user_ttl_seconds, 3600)
+        self.user_ttl_seconds = min(user_ttl_seconds, MAX_USER_TTL_SECONDS)
         self._nc: Any = None
         self._tasks: set[asyncio.Task] = set()
 
@@ -120,6 +129,12 @@ class AuthCallout:
             body = {"error": "invalid service key"}
         except IAMError as exc:
             logger.warning(f"Auth callout: refused a connection: {exc}")
+            body = {"error": "not authorized"}
+        except Exception:  # noqa: BLE001 - a store error must still be answered
+            # Unanswered, the server holds the connection until its own timeout.
+            logger.opt(exception=True).error(
+                "Auth callout: could not decide a connection; refused"
+            )
             body = {"error": "not authorized"}
         response = encode_jwt(
             {

@@ -332,6 +332,10 @@ async def remove_schedules(js: Any, subjects: Any, keep: int) -> None:
         )
 
 
+class EngineUnavailable(RuntimeError):
+    """The engine that seals triggers did not answer: try again later."""
+
+
 class JobHost:
     def __init__(
         self,
@@ -890,22 +894,32 @@ class JobHost:
     async def _sealed(
         self, subject: str, kind: str, body: bytes, headers: dict[str, str] | None
     ) -> bool:
-        """Whether the engine wrote this trigger or cancel (its seal). A host
-        without broker control, or with no engine answering (a broker without
-        the auth callout, where nothing is sealed), takes it as it is."""
+        """Whether the engine wrote this trigger or cancel (its seal).
+
+        Behind the broker's auth callout (a transport logged in with a service
+        key) nothing is taken on faith: with no engine answering, this raises
+        and the message is redelivered, so an engine restart never lets a
+        forged or unsealed message run. Only a host without a callout (no
+        broker control, or a broker where nothing is sealed) takes a message as
+        it is."""
         if self.control is None:
             return True
+        confined = getattr(self.transport, "credentials", None) is not None
         seal = (headers or {}).get(SEAL_HEADER, "")
         if not seal:
             # Nothing unsealed is written behind the callout: unless no engine
             # answers at all, this one was forged.
             answer = await self.control.request("verify_trigger", fields=[], seal="-")
+            if answer is None and confined:
+                raise EngineUnavailable("no engine answered to check a seal")
             return answer is None
         answer = await self.control.request(
             "verify_trigger",
             fields=seal_fields(subject, kind, body, headers),
             seal=seal,
         )
+        if answer is None and confined:
+            raise EngineUnavailable("no engine answered to check a seal")
         return answer is None or bool(answer.get("valid"))
 
     # --- running one trigger ---------------------------------------------------------------

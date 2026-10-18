@@ -39,8 +39,13 @@ answers there only, ``naas_abi_sdk.messages.reply_allowed``).
   subject, reading its triggers' claim checks. A module writes nothing into
   the jobs stream: its schedules make the server allow rollups there.
 * **Bus topics** named ``abi:-:-:bus:topic/<topic>`` (a concrete topic, none
-  under a reserved root): the topic, writing its claim checks, and fetching
-  from and acknowledging the consumers of its queue stream.
+  under a reserved root), by action: ``bus:Publish`` publishes on the topic
+  and writes its claim checks; ``bus:Consume`` subscribes to it and fetches
+  from and acknowledges the consumers of its queue stream. A Deny of an
+  action on a topic keeps that topic from it.
+* **Live events** (``evt.>``): ``event:Append`` publishes, and the read
+  actions (``Query``, ``QueryStream``, ``QueryForConsumer``) subscribe.
+  Listing types or cursors reaches neither.
 * **Claim checks** are read through the engine (``read_claim_check``), never
   by direct get: JetStream answers on the reply subject the requester chose,
   and a stream there would store a message of the module's choosing, headers
@@ -58,7 +63,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from urllib.parse import unquote
 
@@ -135,8 +140,15 @@ ALWAYS_PUBLISH = (
     # Requests and replies above the broker limit: sessions bound to the caller.
     "abi.rpc.overflow.>",
 )
-# Live pub/sub of a service besides its request subjects.
+# Live pub/sub of a service besides its request subjects: per action, what it
+# lets a module publish and subscribe. Any other action of the service reaches
+# neither.
 LIVE_SUBJECTS = {"event": ("evt.>",)}
+LIVE_PUBLISH_ACTIONS = {"event": ("Append",)}
+LIVE_SUBSCRIBE_ACTIONS = {"event": ("Query", "QueryStream", "QueryForConsumer")}
+# The bus has no catalog: its two actions, publishing (and enqueueing) on a
+# topic, and consuming from it (subscribing, dequeuing).
+BUS_ACTIONS = ("Publish", "Consume")
 # Kernel services served under abi.svc.<service>.v1 (iam and discovery have
 # their own subjects).
 KERNEL_SERVICES = (
@@ -156,7 +168,10 @@ KERNEL_SERVICES = (
     "vector_store",
 )
 # Bus topics may not start with these: their subjects belong to the platform.
-RESERVED_TOPIC_ROOTS = ("abi", "evt", "_INBOX")
+# ``triple_store`` is the topic the triple store broadcasts every graph's
+# changes on: the bus checks no subscriber, so a module reads graphs through
+# ``triple_store:Subscribe``, never by naming the topic.
+RESERVED_TOPIC_ROOTS = ("abi", "evt", "_INBOX", "triple_store")
 TOPIC_PREFIX = "abi:-:-:bus:topic/"
 
 # Names shared with naas_abi_sdk (claim_check, jobs, bus); a test keeps them equal.
@@ -181,6 +196,10 @@ class BrokerPermissions:
     services: tuple[str, ...] = field(default=())
     # What the engine creates before the connection is admitted.
     bus_topics: tuple[str, ...] = field(default=())
+    # ... by action: the topics it may publish on (bus:Publish) and consume
+    # from (bus:Consume); ``bus_topics`` is every topic either names.
+    bus_publish: tuple[str, ...] = field(default=())
+    bus_consume: tuple[str, ...] = field(default=())
     claim_checks: bool = False
     # The module's own jobs, (project, job): their consumers the engine creates.
     hosted_jobs: tuple[tuple[str, str], ...] = field(default=())
@@ -342,18 +361,33 @@ def derive(
     inbox = f"_INBOX.{key_id}"
     allows: list[EffectiveStatement] = []
     blanket_denies: list[str] = []
+    # Denies of one resource: (action patterns, resource patterns). Only bus
+    # topics are decided per resource here; the services decide the rest.
+    resource_denies: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
     for effective in statements:
         statement = effective.statement
         if statement.effect == "Deny":
             if any(r == "*" for r in statement.resources):
                 blanket_denies += statement.actions
+            resource_denies.append(
+                (tuple(statement.actions), tuple(statement.resources))
+            )
         else:
             allows.append(effective)
+
+    def denied(action: str, resource: str) -> bool:
+        return any(
+            any(matches(a, action) for a in actions)
+            and any(matches(r, resource) for r in resources)
+            for actions, resources in resource_denies
+        )
 
     publish: list[str] = list(ALWAYS_PUBLISH)
     subscribe: list[str] = [f"{inbox}.>"]
     services: set[str] = set()
     topics: list[str] = []
+    bus_publish: list[str] = []
+    bus_consume: list[str] = []
     claim_checks = False
     own_project = module[0] if module else None
     if module is not None:
@@ -388,16 +422,25 @@ def derive(
                         hosted |= reach.hosted
                     continue
                 add(publish, _subjects(service, action, catalogs))
-                add(publish, LIVE_SUBJECTS.get(service, ()))
-                add(subscribe, LIVE_SUBJECTS.get(service, ()))
+                if action is None or action in LIVE_PUBLISH_ACTIONS.get(service, ()):
+                    add(publish, LIVE_SUBJECTS.get(service, ()))
+                if action is None or action in LIVE_SUBSCRIBE_ACTIONS.get(service, ()):
+                    add(subscribe, LIVE_SUBJECTS.get(service, ()))
                 if service == "bus":
-                    for topic in _topics(resources):
-                        add(topics, (topic,))
-                        add(publish, (topic, f"{topic}.>"))
-                        add(subscribe, (topic, f"{topic}.>"))
-                        add(publish, _queue_api(bus_stream(topic)))
-                        add(publish, _claim_check_api(topic_claim_subjects(topic)))
-                        claim_checks = True
+                    for resource in resources:
+                        for topic in _topics((resource,)):
+                            _bus_topic(
+                                action,
+                                topic,
+                                resource,
+                                denied=denied,
+                                topics=topics,
+                                bus_publish=bus_publish,
+                                bus_consume=bus_consume,
+                                publish=publish,
+                                subscribe=subscribe,
+                            )
+                            claim_checks = True
     if module is not None:
         for project, job in sorted(hosted):
             add(publish, _job_host_api(project, module[1], job))
@@ -415,11 +458,48 @@ def derive(
         inbox_prefix=inbox,
         services=tuple(sorted(services)),
         bus_topics=tuple(topics),
+        bus_publish=tuple(bus_publish),
+        bus_consume=tuple(bus_consume),
         claim_checks=claim_checks,
         hosted_jobs=tuple(sorted(hosted)) if module is not None else (),
         job_triggers=tuple(job_triggers),
         job_cancels=tuple(job_cancels),
     )
+
+
+def _bus_topic(
+    action: str | None,
+    topic: str,
+    resource: str,
+    *,
+    denied: Callable[[str, str], bool],
+    topics: list[str],
+    bus_publish: list[str],
+    bus_consume: list[str],
+    publish: list[str],
+    subscribe: list[str],
+) -> None:
+    """One topic's subjects for one bus action: ``Publish`` writes, ``Consume``
+    reads (subscribes, fetches and acknowledges). Another action reaches
+    nothing, and a Deny of an action on the topic keeps it from that action."""
+
+    def add(target: list[str], subjects: Iterable[str]) -> None:
+        for subject in subjects:
+            if subject not in target:
+                target.append(subject)
+
+    for name in BUS_ACTIONS if action is None else (action,):
+        if name not in BUS_ACTIONS or denied(f"bus:{name}", resource):
+            continue
+        add(topics, (topic,))
+        if name == "Publish":
+            add(bus_publish, (topic,))
+            add(publish, (topic, f"{topic}.>"))
+            add(publish, _claim_check_api(topic_claim_subjects(topic)))
+        else:
+            add(bus_consume, (topic,))
+            add(subscribe, (topic, f"{topic}.>"))
+            add(publish, _queue_api(bus_stream(topic)))
 
 
 def _actions(pattern: str, catalogs: CatalogRegistry) -> list[tuple[str, str | None]]:
@@ -434,6 +514,11 @@ def _actions(pattern: str, catalogs: CatalogRegistry) -> list[tuple[str, str | N
         if not matches(service_pattern, service):
             continue
         catalog = catalogs.get(service)
+        if catalog is None and service == "bus":
+            found += [
+                ("bus", name) for name in BUS_ACTIONS if matches(action_pattern, name)
+            ]
+            continue
         if catalog is None:
             # No catalog to expand a wildcard against: a concrete action keeps
             # its name (discovery:Register reaches registration subjects only).

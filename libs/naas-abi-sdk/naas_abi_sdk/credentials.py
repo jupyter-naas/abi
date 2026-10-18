@@ -12,7 +12,8 @@ and no signing secret (docs/specs/rfcs/20261013_identity-and-authorization.md,
   most), sent on every call, and exchanges again at half its life.
 
 Revoking the key ends the next exchange and the next connection; tokens
-already issued expire within ten minutes.
+already issued expire within ten minutes, and the broker's permissions of a
+connection within five (the transport reconnects every two minutes).
 """
 
 from __future__ import annotations
@@ -26,6 +27,13 @@ from naas_abi_proto.iam.v1 import iam_pb2 as pb
 if TYPE_CHECKING:
     from naas_abi_sdk.transport import Transport
 
+# The broker gives a connection its subjects for at most this long (the engine's
+# auth callout: nats_auth_callout.MAX_USER_TTL_SECONDS, five minutes by
+# default, never under four). nats-py does not reconnect a connection the
+# broker expired, so a transport reconnects itself well before: the callout
+# then computes its subjects again.
+CONNECTION_TTL_SECONDS = 600
+RENEW_CONNECTION_SECONDS = 120.0
 TOKEN_SUBJECT = "abi.iam.v1.token"
 KEY_USER = "sa"
 SERVICE_KEY_PREFIX = "abi_sk_"

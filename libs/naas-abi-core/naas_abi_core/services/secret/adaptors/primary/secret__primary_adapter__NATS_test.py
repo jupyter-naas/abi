@@ -272,3 +272,119 @@ def test_domain_call_runs_off_the_event_loop_so_the_loop_stays_responsive():
     assert not response.HasField("error"), response.error
     assert response.found.value == "slow-but-served"
     assert call_threads and call_threads[0] is not loop_thread
+
+
+# ---------------------------------------------------------------------------
+# Reserved names: IAM's and the IdP's secrets open to their owner only.
+# ---------------------------------------------------------------------------
+
+
+def _call(handler, message, *, account: str, subject: str):
+    stub = message[1]
+    adapter = SecretPrimaryAdapterNATS(stub, SECRET)
+    request = _FakeRequest(
+        message[0],
+        headers={AUTH_HEADER: TEST_TOKENS.token(account)},
+        subject=subject,
+    )
+    asyncio.run(getattr(adapter, handler)(request))
+    return request.responses[0]
+
+
+def _stub_with_reserved() -> _StubAdapter:
+    stub = _StubAdapter()
+    stub.secrets.update(
+        {
+            "iam/signing-keys/20261018-abcd1234": "PEM",
+            "iam/job-trigger-seal": "seal",
+            "idp/signing-key": "idp-pem",
+            "PLAIN": "value",
+        }
+    )
+    return stub
+
+
+def test_a_module_cannot_read_write_remove_or_list_reserved_secrets():
+    for key in (
+        "iam/signing-keys/20261018-abcd1234",
+        "iam/job-trigger-seal",
+        "IAM/job-trigger-seal",
+        " iam/service-keys/engine",
+        "idp/signing-key",
+    ):
+        stub = _stub_with_reserved()
+        raw = _call(
+            "_handle_get",
+            (secret_pb2.GetRequest(key=key).SerializeToString(), stub),
+            account="module/p/m",
+            subject="abi.svc.secret.v1.get",
+        )
+        response = secret_pb2.GetResponse()
+        response.ParseFromString(raw)
+        assert response.error.code == "PERMISSION_DENIED", key
+        assert not response.found.HasField("value"), key
+
+        raw = _call(
+            "_handle_set",
+            (secret_pb2.SetRequest(key=key, value="x").SerializeToString(), stub),
+            account="module/p/m",
+            subject="abi.svc.secret.v1.set",
+        )
+        response = secret_pb2.SetResponse()
+        response.ParseFromString(raw)
+        assert response.error.code == "PERMISSION_DENIED", key
+        assert stub.secrets.get(key) != "x"
+
+        raw = _call(
+            "_handle_remove",
+            (secret_pb2.RemoveRequest(key=key).SerializeToString(), stub),
+            account="module/p/m",
+            subject="abi.svc.secret.v1.remove",
+        )
+        response = secret_pb2.RemoveResponse()
+        response.ParseFromString(raw)
+        assert response.error.code == "PERMISSION_DENIED", key
+
+    stub = _stub_with_reserved()
+    raw = _call(
+        "_handle_list",
+        (secret_pb2.ListRequest().SerializeToString(), stub),
+        account="module/p/m",
+        subject="abi.svc.secret.v1.list",
+    )
+    response = secret_pb2.ListResponse()
+    response.ParseFromString(raw)
+    assert {e.key for e in response.found.entries} == {"PLAIN"}
+
+
+def test_the_api_account_cannot_read_iam_secrets_either():
+    raw = _call(
+        "_handle_get",
+        (
+            secret_pb2.GetRequest(key="iam/job-trigger-seal").SerializeToString(),
+            _stub_with_reserved(),
+        ),
+        account="api",
+        subject="abi.svc.secret.v1.get",
+    )
+    response = secret_pb2.GetResponse()
+    response.ParseFromString(raw)
+    assert response.error.code == "PERMISSION_DENIED"
+
+
+def test_each_reserved_name_opens_to_its_owner_only():
+    for account, key, allowed in (
+        ("engine", "iam/job-trigger-seal", True),
+        ("engine", "idp/signing-key", False),
+        ("idp", "idp/signing-key", True),
+        ("idp", "iam/job-trigger-seal", False),
+    ):
+        raw = _call(
+            "_handle_get",
+            (secret_pb2.GetRequest(key=key).SerializeToString(), _stub_with_reserved()),
+            account=account,
+            subject="abi.svc.secret.v1.get",
+        )
+        response = secret_pb2.GetResponse()
+        response.ParseFromString(raw)
+        assert (response.error.code == "") is allowed, (account, key)
