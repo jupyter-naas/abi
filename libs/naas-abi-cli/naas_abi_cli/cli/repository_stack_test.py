@@ -18,6 +18,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
 )
 
 from naas_abi_cli.cli.deploy.local import project_uses_nats
+from naas_abi_cli.cli.dev_modules import configured_nats
 
 # The modules, not the click groups naas_abi_cli.cli exports under these names.
 dev = importlib.import_module("naas_abi_cli.cli.dev")
@@ -69,10 +70,16 @@ def test_the_repository_names_its_nats_secrets_in_env_example() -> None:
         assert re.search(rf"^#? ?{key}=", example, re.MULTILINE), key
 
 
-def test_abi_dev_up_runs_the_repository_on_nats(monkeypatch) -> None:
-    monkeypatch.chdir(REPO_ROOT)
+def test_abi_dev_up_runs_the_repository_on_nats(monkeypatch, tmp_path: Path) -> None:
+    """Also on a fresh clone, before `abi dev up` has written a .env."""
+    for name in ("config.yaml", "config.local.yaml"):
+        shutil.copy(REPO_ROOT / name, tmp_path / name)
+    monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("ENV", raising=False)
 
+    config = dev._project_config()
+    assert config is not None and config.name == "config.yaml"
+    assert configured_nats(config) is not None
     assert dev._project_declares_nats()
     assert dev._services_for((), with_nats=True) == [
         "oxigraph",
@@ -94,8 +101,7 @@ def _services(profiles: tuple[str, ...] = ()) -> dict:
     return {
         name: service
         for name, service in services.items()
-        if not service.get("profiles")
-        or set(service["profiles"]) & set(profiles)
+        if not service.get("profiles") or set(service["profiles"]) & set(profiles)
     }
 
 

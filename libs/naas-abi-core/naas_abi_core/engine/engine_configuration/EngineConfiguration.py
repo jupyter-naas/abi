@@ -847,9 +847,14 @@ class EngineConfiguration(BaseModel):
             with open("config.yaml", "r") as file:
                 config_yaml = file.read()
 
-            bootstrap_dotenv_adapter = (
-                cls._load_bootstrap_dotenv_adapter_from_yaml_content(config_yaml)
-            )
+            try:
+                bootstrap_dotenv_adapter = (
+                    cls._load_bootstrap_dotenv_adapter_from_yaml_content(config_yaml)
+                )
+            except FileNotFoundError:
+                # No .env yet (a fresh clone, before `abi dev up` writes one):
+                # no ENV from it. Loading the engine still requires the file.
+                bootstrap_dotenv_adapter = None
             if bootstrap_dotenv_adapter is not None:
                 env_from_bootstrap = bootstrap_dotenv_adapter.get("ENV")
                 if env_from_bootstrap is not None:
