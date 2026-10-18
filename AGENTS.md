@@ -151,6 +151,10 @@ uv run pytest libs/naas-abi-core
 uv run pytest libs/naas-abi
 uv run pytest libs/naas-abi-cli
 uv run pytest libs/naas-abi-marketplace
+
+# CLI end to end: new project, modules, `abi dev up`, checks, `abi dev down`
+# (no Docker, no model). See libs/naas-abi-cli/AGENTS.md.
+scripts/cli_smoke.sh [nats|without-nats]
 ```
 
 Single-test execution (important):
