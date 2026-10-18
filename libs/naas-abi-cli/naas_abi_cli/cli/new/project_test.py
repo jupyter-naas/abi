@@ -125,7 +125,7 @@ def test_a_relative_source_is_cloned_from_where_the_command_ran(
     remote, not the caller's directory: pass it the absolute path."""
     (tmp_path / "abi").mkdir()
     monkeypatch.chdir(tmp_path)
-    commands = []
+    commands: list[list[str]] = []
     _invoke_new_project(tmp_path, monkeypatch, "--abi-source", "abi", commands=commands)
 
     [clone] = [cmd for cmd in commands if "submodule" in cmd]
@@ -134,7 +134,7 @@ def test_a_relative_source_is_cloned_from_where_the_command_ran(
 
 
 def test_the_submodule_comes_from_github_by_default(tmp_path, monkeypatch) -> None:
-    commands = []
+    commands: list[list[str]] = []
     _invoke_new_project(tmp_path, monkeypatch, commands=commands)
 
     [clone] = [cmd for cmd in commands if "submodule" in cmd]
