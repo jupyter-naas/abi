@@ -382,8 +382,9 @@ def test_new_project_without_nats_is_the_classic_project(tmp_path, monkeypatch) 
 
 
 def test_a_nats_project_refuses_to_skip_the_submodule(tmp_path, monkeypatch) -> None:
-    """naas-abi-proto and naas-abi-sdk are not on PyPI: without the submodule
-    the project could not install, so it fails before writing anything."""
+    """naas-abi-proto and naas-abi-sdk come from the submodule: without it the
+    project would not install the framework's own revision, so it fails before
+    writing anything."""
     result = _invoke_new_project(tmp_path, monkeypatch, "--without-abi-submodule")
 
     assert result.exit_code != 0

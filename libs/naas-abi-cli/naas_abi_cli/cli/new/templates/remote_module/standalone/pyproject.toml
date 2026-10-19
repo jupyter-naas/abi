@@ -4,10 +4,10 @@ version = "0.1.0"
 description = "A remote ABI module: runs in its own process, reaches the engine over NATS."
 readme = "README.md"
 requires-python = ">=3.12"
-# naas-abi-proto and naas-abi-sdk are not on PyPI yet: both come from the ABI
-# repository, at the same ref (by default the release tag of the naas-abi-cli
-# that created this module). Bump the ref to upgrade, and move to plain
-# version pins once they are published.
+# naas-abi-proto and naas-abi-sdk both come from the ABI repository, at the
+# same ref (by default the release tag of the naas-abi-cli that created this
+# module). Bump the ref to upgrade. Plain version pins work as well, once the
+# release you target is on PyPI.
 dependencies = [
     "naas-abi-proto @ git+{{abi_git_url}}@{{abi_git_ref}}#subdirectory=libs/naas-abi-proto",
     "naas-abi-sdk[agent,otel] @ git+{{abi_git_url}}@{{abi_git_ref}}#subdirectory=libs/naas-abi-sdk",

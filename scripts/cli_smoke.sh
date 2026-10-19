@@ -15,7 +15,7 @@
 #   1. installs the CLI from this checkout (`uv tool install`, in the temp dir);
 #   2. `abi new project --abi-source <this checkout>`: the project's `.abi`
 #      submodule is a clone of this checkout's HEAD, so the framework comes
-#      from the code under test (proto and the SDK are not on PyPI yet);
+#      from the code under test (proto and the SDK come from it too);
 #   3. adds a remote module and an in-engine one, an agent and an app, enables
 #      the in-engine module the way `abi new module` says, runs their tests;
 #   4. `abi dev up -d`, then waits for the API's /docs, the remote module READY

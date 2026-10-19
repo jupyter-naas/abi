@@ -44,7 +44,7 @@ schedules. Check the broker with `curl -s localhost:8222/healthz` and
 `curl -s localhost:8222/connz`.
 
 NATS mode installs `naas-abi-proto` and `naas-abi-sdk` from the `.abi`
-submodule (they are not on PyPI yet), so it refuses `--without-abi-submodule`.
+submodule, at the framework's revision, so it refuses `--without-abi-submodule`.
 `--abi-source` clones that submodule from another git URL or a local ABI
 checkout (its HEAD) instead of GitHub, to try framework changes not published
 yet.

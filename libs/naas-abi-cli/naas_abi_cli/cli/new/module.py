@@ -68,8 +68,8 @@ ModuleKind = Literal["remote", "in-engine"]
     default=None,
     help=(
         "With --standalone: the ABI branch, tag or commit naas-abi-sdk and "
-        "naas-abi-proto install from (they are not on PyPI yet). Default: this "
-        "CLI's release tag, naas-abi-cli-v<version>."
+        "naas-abi-proto install from. Default: this CLI's release tag, "
+        "naas-abi-cli-v<version>."
     ),
 )
 def _new_module(

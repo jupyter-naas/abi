@@ -28,13 +28,13 @@ from .utils import to_kebab_case, to_pascal_case, to_snake_case
 ABI_SUBMODULE_URL = "https://github.com/jupyter-naas/abi.git"
 ABI_SUBMODULE_PATH = ".abi"
 
-# naas-abi-proto and naas-abi-sdk, which NATS mode needs, are not on PyPI yet:
-# a NATS project resolves the framework from the `.abi` submodule or not at all.
-# Falling back to PyPI would install a naas-abi-core without NATS support and a
-# project whose config the engine cannot load.
+# naas-abi-proto and naas-abi-sdk, which NATS mode needs, must be the revision
+# of the framework the project runs: a NATS project resolves all of them from
+# the `.abi` submodule or not at all. Falling back to PyPI could install a
+# naas-abi-core older than the config the project was generated with.
 NATS_NEEDS_SUBMODULE = (
     "A NATS project installs naas-abi-proto and naas-abi-sdk from the .abi "
-    "submodule; they are not on PyPI yet. Keep the submodule "
+    "submodule, at the revision of the framework it runs. Keep the submodule "
     "(--with-abi-submodule, the default), or create a classic project with "
     "--without-nats."
 )

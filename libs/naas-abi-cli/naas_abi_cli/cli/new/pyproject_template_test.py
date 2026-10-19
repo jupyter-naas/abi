@@ -37,7 +37,7 @@ _FRAMEWORK_PACKAGES = {
     "naas-abi-core",
     "naas-abi-marketplace",
     "naas-abi-cli",
-    # Not on PyPI yet; naas-abi-core's nats extra (in [all]) needs both.
+    # naas-abi-core's nats extra (in [all]) needs both; they follow the submodule.
     "naas-abi-proto",
     "naas-abi-sdk",
 }
