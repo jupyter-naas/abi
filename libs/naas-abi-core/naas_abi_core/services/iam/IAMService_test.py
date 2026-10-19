@@ -778,6 +778,8 @@ def test_allows_every_is_a_safe_shortcut(h):
     # On behalf of a user, both must span the type.
     with h.as_(actor="engine", on_behalf_of=bob):
         assert not h.iam.allows_every("document:Get", "document", "document")
+
+
 # -- service accounts, keys and the exchange (RFC §8.1, §8.2) -------------------------
 
 

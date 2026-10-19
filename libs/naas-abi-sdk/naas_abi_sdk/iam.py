@@ -310,3 +310,52 @@ class IamClient:
         return await self._transport.call(
             "abi.iam.v1.reject_manifest", request, pb.RejectManifestResponse
         )
+
+    async def create_pending_grant(
+        self, request: pb.CreatePendingGrantRequest
+    ) -> pb.CreatePendingGrantResponse:
+        return await self._transport.call(
+            "abi.iam.v1.create_pending_grant", request, pb.CreatePendingGrantResponse
+        )
+
+    async def list_pending_grants(
+        self, request: pb.ListPendingGrantsRequest
+    ) -> pb.ListPendingGrantsResponse:
+        return await self._transport.call(
+            "abi.iam.v1.list_pending_grants", request, pb.ListPendingGrantsResponse
+        )
+
+    async def revoke_pending_grant(
+        self, request: pb.RevokePendingGrantRequest
+    ) -> pb.RevokePendingGrantResponse:
+        return await self._transport.call(
+            "abi.iam.v1.revoke_pending_grant", request, pb.RevokePendingGrantResponse
+        )
+
+    async def claim_pending_grants(
+        self, request: pb.ClaimPendingGrantsRequest
+    ) -> pb.ClaimPendingGrantsResponse:
+        return await self._transport.call(
+            "abi.iam.v1.claim_pending_grants", request, pb.ClaimPendingGrantsResponse
+        )
+
+    async def bind_idp_group(
+        self, request: pb.BindIdpGroupRequest
+    ) -> pb.BindIdpGroupResponse:
+        return await self._transport.call(
+            "abi.iam.v1.bind_idp_group", request, pb.BindIdpGroupResponse
+        )
+
+    async def unbind_idp_group(
+        self, request: pb.UnbindIdpGroupRequest
+    ) -> pb.UnbindIdpGroupResponse:
+        return await self._transport.call(
+            "abi.iam.v1.unbind_idp_group", request, pb.UnbindIdpGroupResponse
+        )
+
+    async def list_idp_bindings(
+        self, request: pb.ListIdpBindingsRequest
+    ) -> pb.ListIdpBindingsResponse:
+        return await self._transport.call(
+            "abi.iam.v1.list_idp_bindings", request, pb.ListIdpBindingsResponse
+        )

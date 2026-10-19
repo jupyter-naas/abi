@@ -24,9 +24,11 @@ from naas_abi_core.services.iam.IAMPorts import (
     GroupMapping,
     IAMConflictError,
     IAMNotFoundError,
+    IdpBinding,
     KeyRecord,
     KeyRefusedError,
     ManifestRecord,
+    PendingGrant,
     PermissionDeniedError,
     Placement,
     Policy,
@@ -72,6 +74,13 @@ OPERATIONS = {
     "attach_policy": "AttachPolicy",
     "detach_policy": "DetachPolicy",
     "list_attachments": "ListAttachments",
+    "create_pending_grant": "CreatePendingGrant",
+    "list_pending_grants": "ListPendingGrants",
+    "revoke_pending_grant": "RevokePendingGrant",
+    "claim_pending_grants": "ClaimPendingGrants",
+    "bind_idp_group": "BindIdpGroup",
+    "unbind_idp_group": "UnbindIdpGroup",
+    "list_idp_bindings": "ListIdpBindings",
     "put_placement": "PutPlacement",
     "delete_placement": "DeletePlacement",
     "list_placements": "ListPlacements",
@@ -248,6 +257,52 @@ def attachment_from_pb(message: pb.Attachment) -> Attachment:
         principal_id=message.principal_id,
         scope=_optional(message, "scope"),
         created_at=_datetime(message, "created_at"),
+    )
+
+
+def pending_grant_to_pb(grant: PendingGrant) -> pb.PendingGrant:
+    message = pb.PendingGrant(
+        id=grant.id,
+        provider=grant.provider,
+        email=grant.email,
+        policy_id=grant.policy_id,
+        scope=grant.scope,
+        created_by=grant.created_by,
+    )
+    return _stamped(message, created_at=grant.created_at)
+
+
+def pending_grant_from_pb(message: pb.PendingGrant) -> PendingGrant:
+    return PendingGrant(
+        id=message.id,
+        provider=message.provider,
+        email=message.email,
+        policy_id=message.policy_id,
+        scope=_optional(message, "scope"),
+        created_by=_optional(message, "created_by"),
+        created_at=_datetime(message, "created_at"),
+    )
+
+
+def binding_to_pb(binding: IdpBinding) -> pb.IdpBinding:
+    return pb.IdpBinding(
+        provider=binding.provider,
+        claim_value=binding.claim_value,
+        group_id=binding.group_id,
+        policy_id=binding.policy_id,
+        scope=binding.scope,
+        attachment_id=binding.attachment_id,
+    )
+
+
+def binding_from_pb(message: pb.IdpBinding) -> IdpBinding:
+    return IdpBinding(
+        provider=message.provider,
+        claim_value=message.claim_value,
+        group_id=message.group_id,
+        policy_id=message.policy_id,
+        scope=_optional(message, "scope"),
+        attachment_id=_optional(message, "attachment_id"),
     )
 
 

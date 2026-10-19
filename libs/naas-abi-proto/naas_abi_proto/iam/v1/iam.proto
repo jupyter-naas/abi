@@ -65,6 +65,29 @@ message Attachment {
   google.protobuf.Timestamp created_at = 5;
 }
 
+// A policy attached at a scope to someone who has not signed in yet: claimed at
+// the first sign-in through `provider` with `email` verified (RFC 12.2).
+message PendingGrant {
+  string id = 1;
+  string provider = 2;
+  string email = 3;
+  string policy_id = 4;
+  optional string scope = 5;
+  optional string created_by = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+// An IdP group's members hold `policy_id` at `scope`, through the ABI group
+// `group_id` that is mapped to the claim value and carries the attachment.
+message IdpBinding {
+  string provider = 1;
+  string claim_value = 2;
+  string group_id = 3;
+  string policy_id = 4;
+  optional string scope = 5;
+  optional string attachment_id = 6;
+}
+
 message GroupMapping {
   string provider = 1;
   string claim_value = 2;
@@ -731,4 +754,81 @@ message RejectManifestRequest {
 message RejectManifestResponse {
   abi.common.v1.CallError error = 1;
   Manifest manifest = 2;
+}
+
+// -- invitations and IdP group bindings --------------------------------------------------
+
+message CreatePendingGrantRequest {
+  abi.common.v1.CallContext context = 1;
+  string provider = 2;
+  string email = 3;
+  string policy_id = 4;
+  optional string scope = 5;
+}
+message CreatePendingGrantResponse {
+  abi.common.v1.CallError error = 1;
+  PendingGrant grant = 2;
+}
+
+message ListPendingGrantsRequest {
+  abi.common.v1.CallContext context = 1;
+  optional string provider = 2;
+  optional string email = 3;
+  optional string policy_id = 4;
+}
+message ListPendingGrantsResponse {
+  abi.common.v1.CallError error = 1;
+  repeated PendingGrant grants = 2;
+}
+
+message RevokePendingGrantRequest {
+  abi.common.v1.CallContext context = 1;
+  string grant_id = 2;
+}
+message RevokePendingGrantResponse {
+  abi.common.v1.CallError error = 1;
+  bool revoked = 2;
+}
+
+message ClaimPendingGrantsRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+}
+message ClaimPendingGrantsResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Attachment attachments = 2;
+}
+
+message BindIdpGroupRequest {
+  abi.common.v1.CallContext context = 1;
+  string provider = 2;
+  string claim_value = 3;
+  string policy_id = 4;
+  optional string scope = 5;
+}
+message BindIdpGroupResponse {
+  abi.common.v1.CallError error = 1;
+  IdpBinding binding = 2;
+}
+
+message UnbindIdpGroupRequest {
+  abi.common.v1.CallContext context = 1;
+  string provider = 2;
+  string claim_value = 3;
+  string policy_id = 4;
+  optional string scope = 5;
+}
+message UnbindIdpGroupResponse {
+  abi.common.v1.CallError error = 1;
+  bool removed = 2;
+}
+
+message ListIdpBindingsRequest {
+  abi.common.v1.CallContext context = 1;
+  optional string provider = 2;
+  optional string policy_id = 3;
+}
+message ListIdpBindingsResponse {
+  abi.common.v1.CallError error = 1;
+  repeated IdpBinding bindings = 2;
 }

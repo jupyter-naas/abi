@@ -26,6 +26,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     Explanation,
     FilterResult,
     GroupMapping,
+    IdpBinding,
     IIAMService,
     KeyKind,
     KeyRecord,
@@ -33,6 +34,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     ManifestStatus,
     ManifestSubmission,
     Page,
+    PendingGrant,
     Placement,
     Policy,
     PrincipalKind,
@@ -270,6 +272,70 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
             "list_attachments", principal_id=principal_id, policy_id=policy_id
         )
         return [codec.attachment_from_pb(a) for a in response.attachments]
+
+    # -- invitations and IdP group bindings ------------------------------------------------
+
+    def create_pending_grant(
+        self, provider: str, email: str, policy_id: str, scope: str | None = None
+    ) -> PendingGrant:
+        response = self._request(
+            "create_pending_grant",
+            provider=provider,
+            email=email,
+            policy_id=policy_id,
+            scope=scope,
+        )
+        return codec.pending_grant_from_pb(response.grant)
+
+    def list_pending_grants(
+        self,
+        *,
+        provider: str | None = None,
+        email: str | None = None,
+        policy_id: str | None = None,
+    ) -> list[PendingGrant]:
+        response = self._request(
+            "list_pending_grants", provider=provider, email=email, policy_id=policy_id
+        )
+        return [codec.pending_grant_from_pb(g) for g in response.grants]
+
+    def revoke_pending_grant(self, grant_id: str) -> bool:
+        return self._request("revoke_pending_grant", grant_id=grant_id).revoked
+
+    def claim_pending_grants(self, principal_id: str) -> list[Attachment]:
+        response = self._request("claim_pending_grants", principal_id=principal_id)
+        return [codec.attachment_from_pb(a) for a in response.attachments]
+
+    def bind_idp_group(
+        self, provider: str, claim_value: str, policy_id: str, scope: str | None = None
+    ) -> IdpBinding:
+        response = self._request(
+            "bind_idp_group",
+            provider=provider,
+            claim_value=claim_value,
+            policy_id=policy_id,
+            scope=scope,
+        )
+        return codec.binding_from_pb(response.binding)
+
+    def unbind_idp_group(
+        self, provider: str, claim_value: str, policy_id: str, scope: str | None = None
+    ) -> bool:
+        return self._request(
+            "unbind_idp_group",
+            provider=provider,
+            claim_value=claim_value,
+            policy_id=policy_id,
+            scope=scope,
+        ).removed
+
+    def list_idp_bindings(
+        self, *, provider: str | None = None, policy_id: str | None = None
+    ) -> list[IdpBinding]:
+        response = self._request(
+            "list_idp_bindings", provider=provider, policy_id=policy_id
+        )
+        return [codec.binding_from_pb(b) for b in response.bindings]
 
     # -- placements, scopes, catalogs -----------------------------------------------------
 

@@ -20,11 +20,10 @@ def _action(
     name: str,
     level: str,
     types: tuple[str, ...],
-    subject: str | None = None,
-    *,
+    *operations: str,
     creates: bool = False,
 ) -> ActionSpec:
-    subjects = (f"{SUBJECT_PREFIX}.{subject}",) if subject else ()
+    subjects = tuple(f"{SUBJECT_PREFIX}.{operation}" for operation in operations)
     return ActionSpec(
         name=name,
         level=level,  # type: ignore[arg-type]
@@ -38,7 +37,9 @@ CATALOG = ActionCatalog(
     service=SERVICE,
     # 2: SubmitManifest, and the subjects of keys and manifests (#60).
     # 3: RevokeTokens, and the exchange of tokens (#62).
-    version=3,
+    # 4: ClaimPendingGrants, and the subjects of pending grants and IdP group
+    # bindings (#64).
+    version=4,
     resource_types=(
         ResourceType("principal", id="opaque", placement="platform"),
         ResourceType("group", id="opaque", placement="platform"),
@@ -60,7 +61,14 @@ CATALOG = ActionCatalog(
         _action("ListPrincipals", "list", ("principal",), "list_principals"),
         _action("ListGroups", "list", ("group",), "list_groups"),
         _action("ListPolicies", "list", ("policy",), "list_policies"),
-        _action("ListAttachments", "list", ("attachment",), "list_attachments"),
+        _action(
+            "ListAttachments",
+            "list",
+            ("attachment",),
+            "list_attachments",
+            "list_pending_grants",
+            "list_idp_bindings",
+        ),
         _action("ListKeys", "list", ("key",), "list_keys"),
         _action("ListManifests", "list", ("manifest",), "list_manifests"),
         _action("ListPlacements", "list", ("placement",), "list_placements"),
@@ -93,8 +101,32 @@ CATALOG = ActionCatalog(
         _action("CreatePolicy", "admin", ("policy",), "create_policy", creates=True),
         _action("UpdatePolicy", "admin", ("policy",), "update_policy"),
         _action("DeletePolicy", "admin", ("policy",), "delete_policy"),
-        _action("AttachPolicy", "admin", ("attachment",), "attach_policy"),
-        _action("DetachPolicy", "admin", ("attachment",), "detach_policy"),
+        # An invitation is an attachment to someone who has not signed in yet,
+        # and a bound IdP group holds one through an ABI group: both need the
+        # right to attach (or detach) that policy at that scope, no more.
+        _action(
+            "AttachPolicy",
+            "admin",
+            ("attachment",),
+            "attach_policy",
+            "create_pending_grant",
+            "bind_idp_group",
+        ),
+        _action(
+            "DetachPolicy",
+            "admin",
+            ("attachment",),
+            "detach_policy",
+            "revoke_pending_grant",
+            "unbind_idp_group",
+        ),
+        # The identity service, at a user's sign-in: grants an invitation named.
+        _action(
+            "ClaimPendingGrants",
+            "admin",
+            ("principal",),
+            "claim_pending_grants",
+        ),
         _action("CreateKey", "admin", ("key",), "create_key", creates=True),
         _action("RevokeKey", "admin", ("key",), "revoke_key"),
         # A module submits its own manifest (builtin.module_bootstrap).

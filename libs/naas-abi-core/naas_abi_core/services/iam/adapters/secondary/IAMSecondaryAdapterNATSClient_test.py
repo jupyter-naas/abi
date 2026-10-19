@@ -73,6 +73,53 @@ def iam_host(broker):  # noqa: F811 - imported pytest fixture
 
 
 @BROKER
+def test_invitations_and_idp_bindings_round_trip(iam_host):
+    engine = iam_host.client("engine")
+    grant = engine.create_pending_grant(
+        "builtin", "Bob@Example.com", roles.MEMBER, "abi:org-1:ws-1"
+    )
+    assert (grant.provider, grant.email, grant.scope) == (
+        "builtin",
+        "bob@example.com",
+        "abi:org-1:ws-1",
+    )
+    assert grant.created_at is not None
+    assert engine.list_pending_grants(email="bob@example.com") == [grant]
+    assert engine.list_pending_grants(provider="acme") == []
+
+    bob = engine.ensure_user(
+        "https://idp.example",
+        "bob",
+        provider="builtin",
+        email="bob@example.com",
+        email_verified=True,
+    )
+    claimed = engine.claim_pending_grants(bob.id)
+    assert [(a.policy_id, a.principal_id, a.scope) for a in claimed] == [
+        (roles.MEMBER, bob.id, "abi:org-1:ws-1")
+    ]
+    assert engine.claim_pending_grants(bob.id) == []
+    assert engine.list_pending_grants() == []
+    other = engine.create_pending_grant(
+        "builtin", "x@example.com", roles.VIEWER, "abi:o:w"
+    )
+    assert engine.revoke_pending_grant(other.id) is True
+    assert engine.revoke_pending_grant(other.id) is False
+
+    binding = engine.bind_idp_group("acme", "Sales", roles.VIEWER, "abi:org-1:ws-1")
+    assert binding.group_id.startswith("grp_") and binding.attachment_id
+    assert engine.list_idp_bindings(provider="acme") == [binding]
+    assert engine.unbind_idp_group("acme", "Sales", roles.VIEWER, "abi:org-1:ws-1")
+    assert engine.list_idp_bindings() == []
+    with pytest.raises(ValueError):
+        engine.create_pending_grant("builtin", "not-an-email", roles.MEMBER, "abi:o:w")
+    # A module that was granted nothing cannot invite.
+    module = iam_host.client("module")
+    with pytest.raises((PermissionDeniedError, IAMNotFoundError)):
+        module.create_pending_grant("builtin", "y@example.com", roles.MEMBER, "abi:o:w")
+
+
+@BROKER
 def test_administration_round_trip(iam_host):
     engine = iam_host.client("engine")
     bob = engine.ensure_user("https://idp.example", "bob", email="bob@example.com")

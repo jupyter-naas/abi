@@ -352,6 +352,70 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
             attachments=[codec.attachment_to_pb(a) for a in found]
         )
 
+    # -- invitations and IdP group bindings ------------------------------------------
+
+    def _call_create_pending_grant(
+        self, req: pb.CreatePendingGrantRequest
+    ) -> pb.CreatePendingGrantResponse:
+        grant = self._iam.create_pending_grant(
+            req.provider, req.email, req.policy_id, _opt(req, "scope")
+        )
+        return pb.CreatePendingGrantResponse(grant=codec.pending_grant_to_pb(grant))
+
+    def _call_list_pending_grants(
+        self, req: pb.ListPendingGrantsRequest
+    ) -> pb.ListPendingGrantsResponse:
+        found = self._iam.list_pending_grants(
+            provider=_opt(req, "provider"),
+            email=_opt(req, "email"),
+            policy_id=_opt(req, "policy_id"),
+        )
+        return pb.ListPendingGrantsResponse(
+            grants=[codec.pending_grant_to_pb(g) for g in found]
+        )
+
+    def _call_revoke_pending_grant(
+        self, req: pb.RevokePendingGrantRequest
+    ) -> pb.RevokePendingGrantResponse:
+        return pb.RevokePendingGrantResponse(
+            revoked=self._iam.revoke_pending_grant(req.grant_id)
+        )
+
+    def _call_claim_pending_grants(
+        self, req: pb.ClaimPendingGrantsRequest
+    ) -> pb.ClaimPendingGrantsResponse:
+        claimed = self._iam.claim_pending_grants(req.principal_id)
+        return pb.ClaimPendingGrantsResponse(
+            attachments=[codec.attachment_to_pb(a) for a in claimed]
+        )
+
+    def _call_bind_idp_group(
+        self, req: pb.BindIdpGroupRequest
+    ) -> pb.BindIdpGroupResponse:
+        binding = self._iam.bind_idp_group(
+            req.provider, req.claim_value, req.policy_id, _opt(req, "scope")
+        )
+        return pb.BindIdpGroupResponse(binding=codec.binding_to_pb(binding))
+
+    def _call_unbind_idp_group(
+        self, req: pb.UnbindIdpGroupRequest
+    ) -> pb.UnbindIdpGroupResponse:
+        return pb.UnbindIdpGroupResponse(
+            removed=self._iam.unbind_idp_group(
+                req.provider, req.claim_value, req.policy_id, _opt(req, "scope")
+            )
+        )
+
+    def _call_list_idp_bindings(
+        self, req: pb.ListIdpBindingsRequest
+    ) -> pb.ListIdpBindingsResponse:
+        found = self._iam.list_idp_bindings(
+            provider=_opt(req, "provider"), policy_id=_opt(req, "policy_id")
+        )
+        return pb.ListIdpBindingsResponse(
+            bindings=[codec.binding_to_pb(b) for b in found]
+        )
+
     # -- placements, scopes, catalogs ------------------------------------------------
 
     def _call_put_placement(

@@ -248,6 +248,69 @@ class IAMService(ServiceProxy):
             "list_attachments", principal_id=principal_id, policy_id=policy_id
         )
 
+    # -- invitations and IdP group bindings ----------------------------------------------
+
+    async def create_pending_grant(
+        self, provider: str, email: str, policy_id: str, scope: str | None = None
+    ) -> dict[str, Any]:
+        """Attach a policy at a scope to whoever first signs in through
+        ``provider`` with ``email`` verified."""
+        return await self._request(
+            "create_pending_grant",
+            provider=provider,
+            email=email,
+            policy_id=policy_id,
+            scope=scope,
+        )
+
+    async def list_pending_grants(
+        self,
+        *,
+        provider: str | None = None,
+        email: str | None = None,
+        policy_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        return await self._request(
+            "list_pending_grants", provider=provider, email=email, policy_id=policy_id
+        )
+
+    async def revoke_pending_grant(self, grant_id: str) -> bool:
+        return await self._request("revoke_pending_grant", grant_id=grant_id)
+
+    async def claim_pending_grants(self, principal_id: str) -> list[dict[str, Any]]:
+        return await self._request("claim_pending_grants", principal_id=principal_id)
+
+    async def bind_idp_group(
+        self, provider: str, claim_value: str, policy_id: str, scope: str | None = None
+    ) -> dict[str, Any]:
+        """Give the members of ``provider``'s group ``claim_value`` a policy at
+        a scope."""
+        return await self._request(
+            "bind_idp_group",
+            provider=provider,
+            claim_value=claim_value,
+            policy_id=policy_id,
+            scope=scope,
+        )
+
+    async def unbind_idp_group(
+        self, provider: str, claim_value: str, policy_id: str, scope: str | None = None
+    ) -> bool:
+        return await self._request(
+            "unbind_idp_group",
+            provider=provider,
+            claim_value=claim_value,
+            policy_id=policy_id,
+            scope=scope,
+        )
+
+    async def list_idp_bindings(
+        self, *, provider: str | None = None, policy_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        return await self._request(
+            "list_idp_bindings", provider=provider, policy_id=policy_id
+        )
+
     # -- placements, scopes, catalogs -------------------------------------------------
 
     async def put_placement(

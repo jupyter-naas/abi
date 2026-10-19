@@ -65,6 +65,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     FilterResult,
     GroupMapping,
     IAMConflictError,
+    IdpBinding,
     IAMNotFoundError,
     IAMSecrets,
     IAMStore,
@@ -78,6 +79,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     ManifestStatus,
     ManifestSubmission,
     Page,
+    PendingGrant,
     PermissionDeniedError,
     Placement,
     Policy,
@@ -155,6 +157,39 @@ def attachment_resource(policy_id: str, principal_id: str, scope: str | None) ->
         kind="path",
         org=org,
         workspace=workspace,
+    )
+
+
+_PROVIDER_NAME = re.compile(r"^[a-z0-9-]{1,32}$")
+
+
+def _grantee(provider: str, value: str, *, email: bool = True) -> tuple[str, str]:
+    """A provider name, and an email (lower case) or a groups claim value."""
+    if not _PROVIDER_NAME.match(provider or ""):
+        raise ValueError(f"{provider!r} is not a provider name")
+    value = (value or "").strip()
+    if email:
+        value = value.lower()
+        if "@" not in value[1:-1] or any(c.isspace() for c in value):
+            raise ValueError(f"{value!r} is not an email address")
+    elif not value:
+        raise ValueError("A binding names a groups claim value")
+    return provider, value
+
+
+def _invitee(provider: str, email: str) -> str:
+    """The principal part of a pending grant's resource: who is not here yet."""
+    return f"pending:{provider}:{email}"
+
+
+def _bound_group(provider: str, claim_value: str) -> str:
+    """The name of the ABI group an IdP group's binding is carried by."""
+    return f"idp:{provider}:{claim_value}"
+
+
+def _grant_resource(grant: PendingGrant) -> str:
+    return attachment_resource(
+        grant.policy_id, _invitee(grant.provider, grant.email), grant.scope
     )
 
 
@@ -1022,23 +1057,26 @@ class IAMService(IIAMService, PolicySource):
         """
         if scope is not None:
             validate_scope(scope)
+        self._require_attach(policy_id, principal_id, scope)
+        return self._attach(policy_id, principal_id, scope)
+
+    def _require_attach(
+        self, policy_id: str, principal_id: str, scope: str | None
+    ) -> None:
         self.require(
             "iam:AttachPolicy",
             attachment_resource(policy_id, principal_id, scope),
             not_found=lambda: IAMNotFoundError("Policy or principal not found"),
         )
+
+    def _attach(
+        self, policy_id: str, principal_id: str, scope: str | None
+    ) -> Attachment:
         policy = self.store.get_policy(policy_id)
         principal = self._get_principal(principal_id)
         if principal.status == "deleted":
             raise IAMConflictError(f"Principal {principal_id} is deleted")
-        if scope is None and policy.document.uses_scope:
-            raise ValueError(f"{policy_id} uses ${{scope}}: attach it at a scope")
-        if scope is not None and not policy.document.confined_to_scope:
-            # A scope only fills ${scope}: anything else would reach past it.
-            raise ValueError(
-                f"{policy_id} names resources outside ${{scope}}: "
-                "only a policy confined to its scope is attached at one"
-            )
+        self._check_attachable(policy, scope)
         existing = self._find_attachment(policy_id, principal_id, scope)
         if existing is not None:
             return existing
@@ -1049,6 +1087,17 @@ class IAMService(IIAMService, PolicySource):
             self._sync_platform_roles(principal_id)
         self._changed()
         return attachment
+
+    @staticmethod
+    def _check_attachable(policy: Policy, scope: str | None) -> None:
+        if scope is None and policy.document.uses_scope:
+            raise ValueError(f"{policy.id} uses ${{scope}}: attach it at a scope")
+        if scope is not None and not policy.document.confined_to_scope:
+            # A scope only fills ${scope}: anything else would reach past it.
+            raise ValueError(
+                f"{policy.id} names resources outside ${{scope}}: "
+                "only a policy confined to its scope is attached at one"
+            )
 
     def detach_policy(
         self, policy_id: str, principal_id: str, scope: str | None = None
@@ -1126,6 +1175,250 @@ class IAMService(IIAMService, PolicySource):
                 self.store.attach(Attachment(new_id("att"), companion, principal_id))
             elif companion != wanted and present:
                 self.store.detach(companion, principal_id, None)
+
+    # =========================================================================
+    # Invitations and IdP group bindings (RFC §12.2)
+    # =========================================================================
+
+    def create_pending_grant(
+        self, provider: str, email: str, policy_id: str, scope: str | None = None
+    ) -> PendingGrant:
+        """Attach ``policy_id`` at ``scope`` to whoever first signs in through
+        ``provider`` with ``email`` verified.
+
+        Authorized exactly as attaching it to a user would be: the invitee is
+        named in the attachment's resource, so a workspace admin can invite to
+        that workspace and no further, and the owner rules of the roles hold.
+        """
+        provider, email = _grantee(provider, email)
+        if scope is not None:
+            validate_scope(scope)
+        self._require_attach(policy_id, _invitee(provider, email), scope)
+        self._check_attachable(self.store.get_policy(policy_id), scope)
+        existing = next(
+            (
+                g
+                for g in self.store.list_pending_grants(
+                    provider=provider, email=email, policy_id=policy_id
+                )
+                if g.scope == scope
+            ),
+            None,
+        )
+        if existing is not None:
+            return existing
+        try:
+            grant = self.store.add_pending_grant(
+                PendingGrant(
+                    new_id("pgr"),
+                    provider,
+                    email,
+                    policy_id,
+                    scope,
+                    created_by=self.current_user_or_actor(),
+                )
+            )
+        except IAMConflictError:
+            # The same invitation, made at the same time.
+            return next(
+                g
+                for g in self.store.list_pending_grants(
+                    provider=provider, email=email, policy_id=policy_id
+                )
+                if g.scope == scope
+            )
+        self._changed()
+        return grant
+
+    def list_pending_grants(
+        self,
+        *,
+        provider: str | None = None,
+        email: str | None = None,
+        policy_id: str | None = None,
+    ) -> list[PendingGrant]:
+        if email is not None:
+            email = email.strip().lower()
+        found = self.store.list_pending_grants(
+            provider=provider, email=email, policy_id=policy_id
+        )
+        allowed = set(
+            self.filter(
+                "iam:ListAttachments", (_grant_resource(g) for g in found)
+            ).allowed
+        )
+        return [g for g in found if _grant_resource(g) in allowed]
+
+    def revoke_pending_grant(self, grant_id: str) -> bool:
+        grant = next(
+            (g for g in self.store.list_pending_grants() if g.id == grant_id), None
+        )
+        if grant is None:
+            return False
+        self.require(
+            "iam:DetachPolicy",
+            _grant_resource(grant),
+            not_found=lambda: IAMNotFoundError("Pending grant not found"),
+        )
+        removed = self.store.remove_pending_grant(grant_id)
+        if removed:
+            self._changed()
+        return removed
+
+    def claim_pending_grants(self, principal_id: str) -> list[Attachment]:
+        """The grants the user's provider and verified email were invited with.
+
+        Never by a supplied email: the user's own record says which provider
+        vouched for which address, so a grant reaches that person on that
+        provider only, and nobody who merely typed the address.
+        """
+        self.require(
+            "iam:ClaimPendingGrants",
+            principal_resource(principal_id),
+            not_found=lambda: IAMNotFoundError(f"Principal {principal_id} not found"),
+        )
+        user = self._get_principal(principal_id)
+        if (
+            user.kind != "user"
+            or user.status != "active"
+            or not user.email_verified
+            or not user.email
+            or not user.provider
+        ):
+            return []
+        claimed: list[Attachment] = []
+        for grant in self.store.list_pending_grants(
+            provider=user.provider, email=user.email.strip().lower()
+        ):
+            attachment = self.store.claim_pending_grant(
+                grant.id, principal_id, new_id("att")
+            )
+            if attachment is None:
+                continue  # another sign-in of this user claimed it first
+            claimed.append(attachment)
+            if grant.policy_id in roles.ROLES:
+                self._sync_platform_roles(principal_id)
+        if claimed:
+            self._changed()
+        return claimed
+
+    def bind_idp_group(
+        self, provider: str, claim_value: str, policy_id: str, scope: str | None = None
+    ) -> IdpBinding:
+        """Give the members of ``provider``'s group ``claim_value`` the policy at
+        ``scope``. The ABI group that carries it is created and mapped here, as
+        part of the one operation the caller was authorized for: attaching that
+        policy at that scope, which is all the binding can ever grant."""
+        provider, claim_value = _grantee(provider, claim_value, email=False)
+        if scope is not None:
+            validate_scope(scope)
+        self._require_attach(policy_id, _bound_group(provider, claim_value), scope)
+        self._check_attachable(self.store.get_policy(policy_id), scope)
+        group = self._binding_group(provider, claim_value, scope)
+        attachment = self._attach(policy_id, group.id, scope)
+        return IdpBinding(
+            provider, claim_value, group.id, policy_id, scope, attachment.id
+        )
+
+    def _binding_group(
+        self, provider: str, claim_value: str, scope: str | None
+    ) -> PrincipalRecord:
+        name = _bound_group(provider, claim_value)
+        for group_id in self.store.resolve_idp_groups(provider, [claim_value]):
+            record = self.store.get_principal(group_id)
+            if record.kind == "group" and record.status == "active":
+                if record.name == name:
+                    return record
+        org = None
+        if scope is not None:
+            org = scope_fields(scope)[0]
+            org = org if org not in (NONE, "*") else None
+        group = self.store.create_principal(
+            PrincipalRecord(id=new_id("grp"), kind="group", name=name, org=org)
+        )
+        self.store.map_idp_group(GroupMapping(provider, claim_value, group.id))
+        self._changed()
+        return group
+
+    def unbind_idp_group(
+        self, provider: str, claim_value: str, policy_id: str, scope: str | None = None
+    ) -> bool:
+        provider, claim_value = _grantee(provider, claim_value, email=False)
+        if scope is not None:
+            validate_scope(scope)
+        self._require_detach_binding(policy_id, provider, claim_value, scope)
+        removed = False
+        for group_id in self.store.resolve_idp_groups(provider, [claim_value]):
+            if self.store.detach(policy_id, group_id, scope):
+                removed = True
+        if removed:
+            self._sync_bound_roles(provider, claim_value)
+            self._changed()
+        return removed
+
+    def _require_detach_binding(
+        self, policy_id: str, provider: str, claim_value: str, scope: str | None
+    ) -> None:
+        self.require(
+            "iam:DetachPolicy",
+            attachment_resource(policy_id, _bound_group(provider, claim_value), scope),
+            not_found=lambda: IAMNotFoundError("Binding not found"),
+        )
+
+    def _sync_bound_roles(self, provider: str, claim_value: str) -> None:
+        for group_id in self.store.resolve_idp_groups(provider, [claim_value]):
+            self._sync_platform_roles(group_id)
+
+    def list_idp_bindings(
+        self, *, provider: str | None = None, policy_id: str | None = None
+    ) -> list[IdpBinding]:
+        found: list[IdpBinding] = []
+        after: str | None = None
+        while True:
+            page = self.store.list_principals("group", limit=500, after=after)
+            for group in page.items:
+                if group.status != "active":
+                    continue
+                mappings = [
+                    m
+                    for m in self.store.list_idp_group_mappings(group.id)
+                    if provider in (None, m.provider)
+                ]
+                if not mappings:
+                    continue
+                for attachment in self.store.list_attachments(
+                    principal_id=group.id, policy_id=policy_id
+                ):
+                    if attachment.scope is None and attachment.policy_id in (
+                        roles.PLATFORM_MEMBER,
+                        roles.PLATFORM_VIEWER,
+                    ):
+                        continue  # IAM's companions of the roles, not bindings
+                    found += [
+                        IdpBinding(
+                            m.provider,
+                            m.claim_value,
+                            group.id,
+                            attachment.policy_id,
+                            attachment.scope,
+                            attachment.id,
+                        )
+                        for m in mappings
+                    ]
+            if page.next_after is None:
+                break
+            after = page.next_after
+        allowed = set(
+            self.filter(
+                "iam:ListAttachments",
+                (attachment_resource(b.policy_id, b.group_id, b.scope) for b in found),
+            ).allowed
+        )
+        return [
+            b
+            for b in found
+            if attachment_resource(b.policy_id, b.group_id, b.scope) in allowed
+        ]
 
     # =========================================================================
     # Tokens (RFC §9.1): the engine signs, everyone verifies with the JWKS.

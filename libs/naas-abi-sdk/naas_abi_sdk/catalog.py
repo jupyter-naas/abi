@@ -107,6 +107,13 @@ OPERATIONS = {
         "list_manifests",
         "approve_manifest",
         "reject_manifest",
+        "create_pending_grant",
+        "list_pending_grants",
+        "revoke_pending_grant",
+        "claim_pending_grants",
+        "bind_idp_group",
+        "unbind_idp_group",
+        "list_idp_bindings",
     ],
     "identity": [
         "list_providers",

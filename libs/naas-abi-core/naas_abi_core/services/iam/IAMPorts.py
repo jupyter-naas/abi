@@ -178,6 +178,38 @@ class Attachment:
 
 
 @dataclass(frozen=True)
+class PendingGrant:
+    """A policy attached at a scope to someone who has not signed in yet: the
+    person an invitation names, by email, on one identity provider (RFC §12.2).
+
+    It becomes an ``Attachment`` of the user's principal when that user first
+    signs in through ``provider`` with this email verified; on no other
+    provider and never on an unverified email."""
+
+    id: str
+    provider: str
+    email: str  # lower case
+    policy_id: str
+    scope: str | None = None
+    created_by: str | None = None  # the principal that granted it
+    created_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class IdpBinding:
+    """An IdP group bound to a policy at a scope: the members of the provider's
+    group ``claim_value`` hold the policy there. ``group_id`` is the ABI group
+    that carries the attachment."""
+
+    provider: str
+    claim_value: str
+    group_id: str
+    policy_id: str
+    scope: str | None = None
+    attachment_id: str | None = None
+
+
+@dataclass(frozen=True)
 class Placement:
     """``(service, id_key) -> (org, workspace)``; ``id_key`` is exact or ends with ``*``."""
 
@@ -479,6 +511,34 @@ class IAMStore(ABC):
     @abstractmethod
     def attachments_for(self, principal_ids: Sequence[str]) -> list[Attachment]:
         """Every attachment of any of ``principal_ids`` (a principal and its groups)."""
+
+    # -- pending grants -------------------------------------------------------
+
+    @abstractmethod
+    def add_pending_grant(self, grant: PendingGrant) -> PendingGrant:
+        """``IAMConflictError`` when the same (provider, email, policy, scope)
+        exists; ``IAMNotFoundError`` when the policy does not."""
+
+    @abstractmethod
+    def list_pending_grants(
+        self,
+        *,
+        provider: str | None = None,
+        email: str | None = None,
+        policy_id: str | None = None,
+    ) -> list[PendingGrant]: ...
+
+    @abstractmethod
+    def remove_pending_grant(self, grant_id: str) -> bool:
+        """True when the grant was there."""
+
+    @abstractmethod
+    def claim_pending_grant(
+        self, grant_id: str, principal_id: str, attachment_id: str
+    ) -> Attachment | None:
+        """Atomically delete the grant and attach its policy to ``principal_id``
+        (an attachment that exists is kept). None when another claim, or a
+        removal, took the grant first: exactly one caller wins."""
 
     # -- placements and scopes ----------------------------------------------
 
@@ -909,6 +969,55 @@ class IIAMService(ABC):
     def list_attachments(
         self, *, principal_id: str | None = None, policy_id: str | None = None
     ) -> list[Attachment]: ...
+
+    # -- invitations and IdP group bindings (RFC §12.2) --------------------------
+
+    @abstractmethod
+    def create_pending_grant(
+        self, provider: str, email: str, policy_id: str, scope: str | None = None
+    ) -> PendingGrant:
+        """Attach ``policy_id`` at ``scope`` to whoever first signs in through
+        ``provider`` with ``email`` verified. Needs the right to attach that
+        policy there, like ``attach_policy``. Idempotent."""
+
+    @abstractmethod
+    def list_pending_grants(
+        self,
+        *,
+        provider: str | None = None,
+        email: str | None = None,
+        policy_id: str | None = None,
+    ) -> list[PendingGrant]:
+        """The grants the caller may list (``iam:ListAttachments`` at their scope)."""
+
+    @abstractmethod
+    def revoke_pending_grant(self, grant_id: str) -> bool:
+        """Needs the right to detach that policy there."""
+
+    @abstractmethod
+    def claim_pending_grants(self, principal_id: str) -> list[Attachment]:
+        """Attach what invitations granted to this user: the grants of the
+        user's provider and verified email, once. The identity service calls it
+        at sign-in (``iam:ClaimPendingGrants``)."""
+
+    @abstractmethod
+    def bind_idp_group(
+        self, provider: str, claim_value: str, policy_id: str, scope: str | None = None
+    ) -> IdpBinding:
+        """Give the members of ``provider``'s group ``claim_value`` the policy
+        at the scope: an ABI group is mapped to the claim and carries the
+        attachment. Needs the right to attach that policy there. Idempotent."""
+
+    @abstractmethod
+    def unbind_idp_group(
+        self, provider: str, claim_value: str, policy_id: str, scope: str | None = None
+    ) -> bool: ...
+
+    @abstractmethod
+    def list_idp_bindings(
+        self, *, provider: str | None = None, policy_id: str | None = None
+    ) -> list[IdpBinding]:
+        """The bindings the caller may list (``iam:ListAttachments`` at their scope)."""
 
     # -- placements, scopes, catalogs ----------------------------------------------
 

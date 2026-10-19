@@ -25,6 +25,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     ManifestRecord,
     ManifestStatus,
     Page,
+    PendingGrant,
     Placement,
     Policy,
     PrincipalKind,
@@ -135,6 +136,22 @@ attachments = Table(
     Column("scope", Text, nullable=False, default=""),
     Column("created_at", DateTime(timezone=True), nullable=False),
     UniqueConstraint("policy_id", "principal_id", "scope", name="iam_attachments_once"),
+)
+
+pending_grants = Table(
+    "iam_pending_grants",
+    metadata,
+    Column("id", String(64), primary_key=True),
+    Column("provider", String(64), nullable=False),
+    Column("email", String(320), nullable=False),
+    Column("policy_id", String(255), ForeignKey("iam_policies.id"), nullable=False),
+    # "" for a grant without scope, so the unique constraint holds.
+    Column("scope", Text, nullable=False, default=""),
+    Column("created_by", String(64)),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint(
+        "provider", "email", "policy_id", "scope", name="iam_pending_grants_once"
+    ),
 )
 
 placements = Table(
@@ -305,6 +322,18 @@ def _attachment(row: Row) -> Attachment:
         policy_id=row.policy_id,
         principal_id=row.principal_id,
         scope=row.scope or None,
+        created_at=_aware(row.created_at),
+    )
+
+
+def _pending_grant(row: Row) -> PendingGrant:
+    return PendingGrant(
+        id=row.id,
+        provider=row.provider,
+        email=row.email,
+        policy_id=row.policy_id,
+        scope=row.scope or None,
+        created_by=row.created_by,
         created_at=_aware(row.created_at),
     )
 
@@ -713,6 +742,12 @@ class IAMStoreSQL(IAMStore):
                 select(attachments.c.id).where(attachments.c.policy_id == policy_id)
             ).first():
                 raise IAMConflictError(f"Policy {policy_id} is attached")
+            if conn.execute(
+                select(pending_grants.c.id).where(
+                    pending_grants.c.policy_id == policy_id
+                )
+            ).first():
+                raise IAMConflictError(f"Policy {policy_id} is granted to invitees")
             result = conn.execute(delete(policies).where(policies.c.id == policy_id))
             if result.rowcount == 0:
                 raise IAMNotFoundError(f"Policy {policy_id} not found")
@@ -773,6 +808,98 @@ class IAMStoreSQL(IAMStore):
                     .order_by(attachments.c.id)
                 )
             ]
+
+    # -- pending grants -----------------------------------------------------------
+
+    def add_pending_grant(self, grant: PendingGrant) -> PendingGrant:
+        with self._change() as conn:
+            if not conn.execute(
+                select(policies.c.id).where(policies.c.id == grant.policy_id)
+            ).first():
+                raise IAMNotFoundError(f"Policy {grant.policy_id} not found")
+            conn.execute(
+                insert(pending_grants).values(
+                    id=grant.id,
+                    provider=grant.provider,
+                    email=grant.email,
+                    policy_id=grant.policy_id,
+                    scope=grant.scope or "",
+                    created_by=grant.created_by,
+                    created_at=_now(),
+                )
+            )
+        with self._read() as conn:
+            row = conn.execute(
+                select(pending_grants).where(pending_grants.c.id == grant.id)
+            ).one()
+        return _pending_grant(row)
+
+    def list_pending_grants(
+        self,
+        *,
+        provider: str | None = None,
+        email: str | None = None,
+        policy_id: str | None = None,
+    ) -> list[PendingGrant]:
+        query = select(pending_grants).order_by(pending_grants.c.id)
+        if provider is not None:
+            query = query.where(pending_grants.c.provider == provider)
+        if email is not None:
+            query = query.where(pending_grants.c.email == email)
+        if policy_id is not None:
+            query = query.where(pending_grants.c.policy_id == policy_id)
+        with self._read() as conn:
+            return [_pending_grant(row) for row in conn.execute(query)]
+
+    def remove_pending_grant(self, grant_id: str) -> bool:
+        return self._delete(
+            delete(pending_grants).where(pending_grants.c.id == grant_id)
+        )
+
+    def claim_pending_grant(
+        self, grant_id: str, principal_id: str, attachment_id: str
+    ) -> Attachment | None:
+        with self._change() as conn:
+            row = conn.execute(
+                select(pending_grants).where(pending_grants.c.id == grant_id)
+            ).first()
+            if row is None:
+                return None
+            self._require(conn, principal_id)
+            # The delete is the claim: of two racing claims, one removes the row.
+            if (
+                conn.execute(
+                    delete(pending_grants).where(pending_grants.c.id == grant_id)
+                ).rowcount
+                == 0
+            ):
+                return None
+            held = conn.execute(
+                select(attachments).where(
+                    attachments.c.policy_id == row.policy_id,
+                    attachments.c.principal_id == principal_id,
+                    attachments.c.scope == row.scope,
+                )
+            ).first()
+            if held is None:
+                conn.execute(
+                    insert(attachments).values(
+                        id=attachment_id,
+                        policy_id=row.policy_id,
+                        principal_id=principal_id,
+                        scope=row.scope,
+                        created_at=_now(),
+                    )
+                )
+        with self._read() as conn:
+            found = conn.execute(
+                select(attachments).where(
+                    attachments.c.policy_id == row.policy_id,
+                    attachments.c.principal_id == principal_id,
+                    attachments.c.scope == row.scope,
+                )
+            ).one()
+        return _attachment(found)
 
     # -- placements and scopes ----------------------------------------------------
 

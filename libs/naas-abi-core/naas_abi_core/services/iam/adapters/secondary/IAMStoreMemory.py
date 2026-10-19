@@ -19,6 +19,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     ManifestRecord,
     ManifestStatus,
     Page,
+    PendingGrant,
     Placement,
     Policy,
     PrincipalKind,
@@ -41,6 +42,7 @@ class IAMStoreMemory(IAMStore):
         self._mappings: set[GroupMapping] = set()
         self._policies: dict[str, Policy] = {}
         self._attachments: dict[str, Attachment] = {}
+        self._pending: dict[str, PendingGrant] = {}
         self._placements: dict[tuple[str, str], Placement] = {}
         self._scopes: dict[tuple[str, str], ScopeRecord] = {}
         self._catalogs: dict[str, ActionCatalog] = {}
@@ -290,6 +292,8 @@ class IAMStoreMemory(IAMStore):
             self.get_policy(policy_id)
             if any(a.policy_id == policy_id for a in self._attachments.values()):
                 raise IAMConflictError(f"Policy {policy_id} is attached")
+            if any(g.policy_id == policy_id for g in self._pending.values()):
+                raise IAMConflictError(f"Policy {policy_id} is granted to invitees")
             self._write()
             del self._policies[policy_id]
 
@@ -347,6 +351,72 @@ class IAMStoreMemory(IAMStore):
                 (a for a in self._attachments.values() if a.principal_id in wanted),
                 key=lambda a: a.id,
             )
+
+    # -- pending grants -----------------------------------------------------------
+
+    def add_pending_grant(self, grant: PendingGrant) -> PendingGrant:
+        with self._lock:
+            self.get_policy(grant.policy_id)
+            key = (grant.provider, grant.email, grant.policy_id, grant.scope)
+            if grant.id in self._pending or any(
+                (g.provider, g.email, g.policy_id, g.scope) == key
+                for g in self._pending.values()
+            ):
+                raise IAMConflictError("This pending grant exists")
+            stored = replace(grant, created_at=_now())
+            self._write()
+            self._pending[grant.id] = stored
+            return stored
+
+    def list_pending_grants(
+        self,
+        *,
+        provider: str | None = None,
+        email: str | None = None,
+        policy_id: str | None = None,
+    ) -> list[PendingGrant]:
+        with self._lock:
+            return sorted(
+                (
+                    g
+                    for g in self._pending.values()
+                    if provider in (None, g.provider)
+                    and email in (None, g.email)
+                    and policy_id in (None, g.policy_id)
+                ),
+                key=lambda g: g.id,
+            )
+
+    def remove_pending_grant(self, grant_id: str) -> bool:
+        with self._lock:
+            if grant_id not in self._pending:
+                return False
+            self._write()
+            del self._pending[grant_id]
+            return True
+
+    def claim_pending_grant(
+        self, grant_id: str, principal_id: str, attachment_id: str
+    ) -> Attachment | None:
+        with self._lock:
+            grant = self._pending.get(grant_id)
+            if grant is None:
+                return None
+            self._require(principal_id)
+            self._write()
+            del self._pending[grant_id]
+            for existing in self._attachments.values():
+                if (existing.policy_id, existing.principal_id, existing.scope) == (
+                    grant.policy_id,
+                    principal_id,
+                    grant.scope,
+                ):
+                    return existing
+            stored = Attachment(
+                attachment_id, grant.policy_id, principal_id, grant.scope, _now()
+            )
+            self._attachments[attachment_id] = stored
+            return stored
 
     # -- placements and scopes ----------------------------------------------------
 

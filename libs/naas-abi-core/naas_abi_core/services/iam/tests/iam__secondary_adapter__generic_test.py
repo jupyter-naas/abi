@@ -15,6 +15,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     IAMStore,
     KeyRecord,
     ManifestRecord,
+    PendingGrant,
     Placement,
     Policy,
     PrincipalRecord,
@@ -269,6 +270,92 @@ class IAMStoreContract(ABC):
             store.attach(Attachment(new_id("att"), "pol_missing", bob.id))
         with pytest.raises(IAMNotFoundError):
             store.attach(Attachment(new_id("att"), read.id, new_id("usr")))
+
+    # -- pending grants -----------------------------------------------------------
+
+    def test_pending_grants_round_trip(self, store: IAMStore):
+        read = store.create_policy(policy())
+        scope = "abi:org-1:ws-1"
+        first = store.add_pending_grant(
+            PendingGrant(new_id("pgr"), "builtin", "bob@example.com", read.id, scope)
+        )
+        assert first.created_at is not None and first.scope == scope
+        unscoped = store.add_pending_grant(
+            PendingGrant(
+                new_id("pgr"), "builtin", "bob@example.com", read.id, created_by="usr_a"
+            )
+        )
+        assert unscoped.scope is None and unscoped.created_by == "usr_a"
+        other_provider = store.add_pending_grant(
+            PendingGrant(new_id("pgr"), "acme", "bob@example.com", read.id, scope)
+        )
+        with pytest.raises(IAMConflictError):
+            store.add_pending_grant(
+                PendingGrant(
+                    new_id("pgr"), "builtin", "bob@example.com", read.id, scope
+                )
+            )
+        with pytest.raises(IAMNotFoundError):
+            store.add_pending_grant(
+                PendingGrant(new_id("pgr"), "builtin", "x@example.com", "pol_missing")
+            )
+        # Ordered by id; ids made within one millisecond are not ordered.
+        assert store.list_pending_grants() == sorted(
+            [first, unscoped, other_provider], key=lambda g: g.id
+        )
+        assert store.list_pending_grants(provider="acme") == [other_provider]
+        assert store.list_pending_grants(email="nobody@example.com") == []
+        assert store.list_pending_grants(policy_id=read.id, provider="builtin") == (
+            sorted([first, unscoped], key=lambda g: g.id)
+        )
+        with pytest.raises(IAMConflictError):  # an invitee still names it
+            store.delete_policy(read.id)
+        assert store.remove_pending_grant(unscoped.id) is True
+        assert store.remove_pending_grant(unscoped.id) is False
+        assert store.list_pending_grants(provider="builtin") == [first]
+
+    def test_claiming_a_pending_grant_attaches_it_once(self, store: IAMStore):
+        read = store.create_policy(policy())
+        bob = store.create_principal(user())
+        scope = "abi:org-1:ws-1"
+        grant = store.add_pending_grant(
+            PendingGrant(new_id("pgr"), "builtin", "bob@example.com", read.id, scope)
+        )
+        before = store.revision()
+        attached = store.claim_pending_grant(grant.id, bob.id, new_id("att"))
+        assert attached is not None and store.revision() > before
+        assert (attached.policy_id, attached.principal_id, attached.scope) == (
+            read.id,
+            bob.id,
+            scope,
+        )
+        assert store.list_attachments(principal_id=bob.id) == [attached]
+        assert store.list_pending_grants() == []
+        # The second claim finds nothing: exactly one caller wins.
+        assert store.claim_pending_grant(grant.id, bob.id, new_id("att")) is None
+        assert len(store.list_attachments(principal_id=bob.id)) == 1
+
+    def test_claiming_keeps_an_attachment_that_exists(self, store: IAMStore):
+        read = store.create_policy(policy())
+        bob = store.create_principal(user())
+        held = store.attach(Attachment(new_id("att"), read.id, bob.id, "abi:o:w"))
+        grant = store.add_pending_grant(
+            PendingGrant(
+                new_id("pgr"), "builtin", "bob@example.com", read.id, "abi:o:w"
+            )
+        )
+        assert store.claim_pending_grant(grant.id, bob.id, new_id("att")) == held
+        assert store.list_attachments(principal_id=bob.id) == [held]
+        assert store.list_pending_grants() == []
+
+    def test_claiming_needs_the_principal(self, store: IAMStore):
+        read = store.create_policy(policy())
+        grant = store.add_pending_grant(
+            PendingGrant(new_id("pgr"), "builtin", "bob@example.com", read.id)
+        )
+        with pytest.raises(IAMNotFoundError):
+            store.claim_pending_grant(grant.id, new_id("usr"), new_id("att"))
+        assert store.list_pending_grants() == [grant]
 
     # -- placements and scopes ----------------------------------------------------
 

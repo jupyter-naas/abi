@@ -115,7 +115,9 @@ allowed = iam.filter("triple_store:ListGraphs", names).allowed
 iam.authorize(action, resource)  # Decision
 iam.allows_every(action, "triple_store", "graph")  # a safe shortcut: False when unsure
 iam.explain(action, resource, principal_id=...)  # needs iam:Explain on the principal
-iam.placement_of(service, canonical_id)  # the covering placement, or None (serving engine)
+iam.placement_of(
+    service, canonical_id
+)  # the covering placement, or None (serving engine)
 ```
 
 `allows_every` is True only when nothing can deny: no seal on the type, no

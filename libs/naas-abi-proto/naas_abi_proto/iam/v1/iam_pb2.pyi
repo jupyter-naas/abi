@@ -76,6 +76,40 @@ class Attachment(_message.Message):
     created_at: _timestamp_pb2.Timestamp
     def __init__(self, id: _Optional[str] = ..., policy_id: _Optional[str] = ..., principal_id: _Optional[str] = ..., scope: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
+class PendingGrant(_message.Message):
+    __slots__ = ("id", "provider", "email", "policy_id", "scope", "created_by", "created_at")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    PROVIDER_FIELD_NUMBER: _ClassVar[int]
+    EMAIL_FIELD_NUMBER: _ClassVar[int]
+    POLICY_ID_FIELD_NUMBER: _ClassVar[int]
+    SCOPE_FIELD_NUMBER: _ClassVar[int]
+    CREATED_BY_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AT_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    provider: str
+    email: str
+    policy_id: str
+    scope: str
+    created_by: str
+    created_at: _timestamp_pb2.Timestamp
+    def __init__(self, id: _Optional[str] = ..., provider: _Optional[str] = ..., email: _Optional[str] = ..., policy_id: _Optional[str] = ..., scope: _Optional[str] = ..., created_by: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+
+class IdpBinding(_message.Message):
+    __slots__ = ("provider", "claim_value", "group_id", "policy_id", "scope", "attachment_id")
+    PROVIDER_FIELD_NUMBER: _ClassVar[int]
+    CLAIM_VALUE_FIELD_NUMBER: _ClassVar[int]
+    GROUP_ID_FIELD_NUMBER: _ClassVar[int]
+    POLICY_ID_FIELD_NUMBER: _ClassVar[int]
+    SCOPE_FIELD_NUMBER: _ClassVar[int]
+    ATTACHMENT_ID_FIELD_NUMBER: _ClassVar[int]
+    provider: str
+    claim_value: str
+    group_id: str
+    policy_id: str
+    scope: str
+    attachment_id: str
+    def __init__(self, provider: _Optional[str] = ..., claim_value: _Optional[str] = ..., group_id: _Optional[str] = ..., policy_id: _Optional[str] = ..., scope: _Optional[str] = ..., attachment_id: _Optional[str] = ...) -> None: ...
+
 class GroupMapping(_message.Message):
     __slots__ = ("provider", "claim_value", "group_id")
     PROVIDER_FIELD_NUMBER: _ClassVar[int]
@@ -1145,3 +1179,139 @@ class RejectManifestResponse(_message.Message):
     error: _common_pb2.CallError
     manifest: Manifest
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., manifest: _Optional[_Union[Manifest, _Mapping]] = ...) -> None: ...
+
+class CreatePendingGrantRequest(_message.Message):
+    __slots__ = ("context", "provider", "email", "policy_id", "scope")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    PROVIDER_FIELD_NUMBER: _ClassVar[int]
+    EMAIL_FIELD_NUMBER: _ClassVar[int]
+    POLICY_ID_FIELD_NUMBER: _ClassVar[int]
+    SCOPE_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    provider: str
+    email: str
+    policy_id: str
+    scope: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., provider: _Optional[str] = ..., email: _Optional[str] = ..., policy_id: _Optional[str] = ..., scope: _Optional[str] = ...) -> None: ...
+
+class CreatePendingGrantResponse(_message.Message):
+    __slots__ = ("error", "grant")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    GRANT_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    grant: PendingGrant
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., grant: _Optional[_Union[PendingGrant, _Mapping]] = ...) -> None: ...
+
+class ListPendingGrantsRequest(_message.Message):
+    __slots__ = ("context", "provider", "email", "policy_id")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    PROVIDER_FIELD_NUMBER: _ClassVar[int]
+    EMAIL_FIELD_NUMBER: _ClassVar[int]
+    POLICY_ID_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    provider: str
+    email: str
+    policy_id: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., provider: _Optional[str] = ..., email: _Optional[str] = ..., policy_id: _Optional[str] = ...) -> None: ...
+
+class ListPendingGrantsResponse(_message.Message):
+    __slots__ = ("error", "grants")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    GRANTS_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    grants: _containers.RepeatedCompositeFieldContainer[PendingGrant]
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., grants: _Optional[_Iterable[_Union[PendingGrant, _Mapping]]] = ...) -> None: ...
+
+class RevokePendingGrantRequest(_message.Message):
+    __slots__ = ("context", "grant_id")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    GRANT_ID_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    grant_id: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., grant_id: _Optional[str] = ...) -> None: ...
+
+class RevokePendingGrantResponse(_message.Message):
+    __slots__ = ("error", "revoked")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    REVOKED_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    revoked: bool
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., revoked: bool = ...) -> None: ...
+
+class ClaimPendingGrantsRequest(_message.Message):
+    __slots__ = ("context", "principal_id")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    PRINCIPAL_ID_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    principal_id: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., principal_id: _Optional[str] = ...) -> None: ...
+
+class ClaimPendingGrantsResponse(_message.Message):
+    __slots__ = ("error", "attachments")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    ATTACHMENTS_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    attachments: _containers.RepeatedCompositeFieldContainer[Attachment]
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., attachments: _Optional[_Iterable[_Union[Attachment, _Mapping]]] = ...) -> None: ...
+
+class BindIdpGroupRequest(_message.Message):
+    __slots__ = ("context", "provider", "claim_value", "policy_id", "scope")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    PROVIDER_FIELD_NUMBER: _ClassVar[int]
+    CLAIM_VALUE_FIELD_NUMBER: _ClassVar[int]
+    POLICY_ID_FIELD_NUMBER: _ClassVar[int]
+    SCOPE_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    provider: str
+    claim_value: str
+    policy_id: str
+    scope: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., provider: _Optional[str] = ..., claim_value: _Optional[str] = ..., policy_id: _Optional[str] = ..., scope: _Optional[str] = ...) -> None: ...
+
+class BindIdpGroupResponse(_message.Message):
+    __slots__ = ("error", "binding")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    BINDING_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    binding: IdpBinding
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., binding: _Optional[_Union[IdpBinding, _Mapping]] = ...) -> None: ...
+
+class UnbindIdpGroupRequest(_message.Message):
+    __slots__ = ("context", "provider", "claim_value", "policy_id", "scope")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    PROVIDER_FIELD_NUMBER: _ClassVar[int]
+    CLAIM_VALUE_FIELD_NUMBER: _ClassVar[int]
+    POLICY_ID_FIELD_NUMBER: _ClassVar[int]
+    SCOPE_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    provider: str
+    claim_value: str
+    policy_id: str
+    scope: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., provider: _Optional[str] = ..., claim_value: _Optional[str] = ..., policy_id: _Optional[str] = ..., scope: _Optional[str] = ...) -> None: ...
+
+class UnbindIdpGroupResponse(_message.Message):
+    __slots__ = ("error", "removed")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    REMOVED_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    removed: bool
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., removed: bool = ...) -> None: ...
+
+class ListIdpBindingsRequest(_message.Message):
+    __slots__ = ("context", "provider", "policy_id")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    PROVIDER_FIELD_NUMBER: _ClassVar[int]
+    POLICY_ID_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    provider: str
+    policy_id: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., provider: _Optional[str] = ..., policy_id: _Optional[str] = ...) -> None: ...
+
+class ListIdpBindingsResponse(_message.Message):
+    __slots__ = ("error", "bindings")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    BINDINGS_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    bindings: _containers.RepeatedCompositeFieldContainer[IdpBinding]
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., bindings: _Optional[_Iterable[_Union[IdpBinding, _Mapping]]] = ...) -> None: ...
