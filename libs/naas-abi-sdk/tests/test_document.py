@@ -20,7 +20,7 @@ def test_lossless_values():
         decode_data(pb.Data.FromString(encode_data(values).SerializeToString()))
         == values
     )
-    for invalid in (float("nan"), datetime(2026, 1, 1), 2**63, object(), "\x00"):
+    for invalid in (float("nan"), datetime(2026, 1, 1), 2**63, object(), "\x00"):  # noqa: DTZ001 (naive on purpose)
         with pytest.raises((ValueError, OverflowError)):
             encode_value(invalid)
 
