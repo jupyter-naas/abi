@@ -104,6 +104,10 @@ class OidcSessionPersistencePort(ABC):
         identity provider signs in yet (no principal, no identity)."""
 
     @abstractmethod
+    async def list_legacy_users(self) -> list[OidcUser]:
+        """Every user of the old built-in login no provider signs in yet, by email."""
+
+    @abstractmethod
     async def link_user(
         self,
         user_id: str,

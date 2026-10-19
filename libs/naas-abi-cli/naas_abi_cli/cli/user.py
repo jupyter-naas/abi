@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import os
-import secrets
-from pathlib import Path
+import asyncio
 from typing import Any
 
 import click
@@ -16,197 +14,11 @@ from .nexus_client import (
     print_json,
     print_table,
 )
-from .nexus_postgres import create_user_sql, run_postgres_sql
-
-
-def _register_user(*, api_url: str, body: dict[str, Any]) -> Any:
-    """Public register endpoint (no bearer token)."""
-    import json
-    import urllib.error
-    import urllib.request
-
-    raw = json.dumps(body).encode("utf-8")
-    req = urllib.request.Request(
-        f"{api_url.rstrip('/')}/api/auth/register",
-        data=raw,
-        method="POST",
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
-    )
-    try:
-        # http(s) Nexus register endpoint only.
-        with urllib.request.urlopen(req, timeout=30.0) as resp:  # nosec B310
-            return json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        from .nexus_client import _read_error_detail
-
-        raise NexusApiError(exc.code, _read_error_detail(exc), "/api/auth/register") from exc
 
 
 @click.group("user")
 def user() -> None:
-    """Manage Nexus users via the authenticated API (or break-glass Postgres)."""
-
-
-@user.command("create")
-@click.option("--email", "user_email", required=True, help="User email.")
-@click.option("--name", "user_name", required=True, help="Display name.")
-@click.option(
-    "--password",
-    "user_password",
-    default=None,
-    help="Initial password (generated if omitted). Never printed unless --show-password.",
-)
-@click.option(
-    "--workspace",
-    "workspace_id",
-    default=None,
-    help="Optional workspace id to invite the user into after create.",
-)
-@click.option(
-    "--role",
-    default="member",
-    show_default=True,
-    type=click.Choice(["admin", "member", "viewer"], case_sensitive=False),
-    help="Workspace role when --workspace is set.",
-)
-@click.option(
-    "--org",
-    "organization_id",
-    default=None,
-    help="Optional organization id to invite the user into after create.",
-)
-@click.option(
-    "--org-role",
-    default="member",
-    show_default=True,
-    type=click.Choice(["owner", "admin", "member"], case_sensitive=False),
-)
-@click.option(
-    "--secret-file",
-    type=click.Path(dir_okay=False, path_type=Path),
-    default=None,
-    help="Write credentials here (mode 600). Default: secrets/NEXUS_USER_<EMAIL>.env",
-)
-@click.option(
-    "--show-password",
-    is_flag=True,
-    default=False,
-    help="Echo the password to stdout (off by default).",
-)
-@click.option(
-    "--via",
-    "via",
-    type=click.Choice(["api", "postgres"], case_sensitive=False),
-    default="api",
-    show_default=True,
-    help="api: POST /api/auth/register. postgres: break-glass SQL (ops VM only).",
-)
-@common_api_options
-def user_create(
-    user_email: str,
-    user_name: str,
-    user_password: str | None,
-    workspace_id: str | None,
-    role: str,
-    organization_id: str | None,
-    org_role: str,
-    secret_file: Path | None,
-    show_password: bool,
-    via: str,
-    api_url: str,
-    token: str | None,
-    email: str | None,
-    password: str | None,
-    dry_run: bool,
-) -> None:
-    """Create a user.
-
-    API path uses `/api/auth/register` (requires password auth enabled on the
-    Nexus instance). On production deployments where password auth is disabled, use
-    magic-link signup or `--via postgres` on the VM (documented break-glass).
-    """
-    password_value = user_password or secrets.token_urlsafe(18)
-    if via.lower() == "postgres":
-        _create_via_postgres(
-            user_email=user_email,
-            user_name=user_name,
-            password_value=password_value,
-            organization_id=organization_id,
-            workspace_id=workspace_id,
-            workspace_role=role.lower(),
-            org_role=org_role.lower(),
-            secret_file=secret_file,
-            show_password=show_password,
-            dry_run=dry_run,
-        )
-        return
-
-    body = {"email": user_email, "name": user_name, "password": password_value}
-    if dry_run:
-        redacted = {**body, "password": "***"}
-        print_json({"method": "POST", "path": "/api/auth/register", "body": redacted})
-        return
-
-    try:
-        result = _register_user(api_url=api_url, body=body)
-    except NexusApiError as exc:
-        if exc.status == 410:
-            raise click.ClickException(
-                "Password registration is disabled on this Nexus instance. "
-                "Use magic-link signup, config seed (settings.users), or "
-                "`abi user create --via postgres` on the VM (break-glass)."
-            ) from exc
-        raise click.ClickException(str(exc)) from exc
-
-    user_payload = result.get("user") if isinstance(result, dict) else None
-    user_id = (user_payload or {}).get("id")
-
-    invite_results: list[dict[str, Any]] = []
-    if workspace_id or organization_id:
-        client = build_client(
-            api_url=api_url, token=token, email=email, password=password
-        )
-        if workspace_id:
-            try:
-                invite_results.append(
-                    client.post(
-                        f"/api/workspaces/{workspace_id}/members/invite",
-                        {"email": user_email, "role": role.lower()},
-                    )
-                )
-            except NexusApiError as exc:
-                raise click.ClickException(
-                    f"User created ({user_id}) but workspace invite failed: {exc}"
-                ) from exc
-        if organization_id:
-            try:
-                invite_results.append(
-                    client.post(
-                        f"/api/organizations/{organization_id}/members/invite",
-                        {"email": user_email, "role": org_role.lower()},
-                    )
-                )
-            except NexusApiError as exc:
-                raise click.ClickException(
-                    f"User created ({user_id}) but org invite failed: {exc}"
-                ) from exc
-
-    secret_path = _write_secret_file(
-        secret_file=secret_file,
-        user_email=user_email,
-        user_id=str(user_id or ""),
-        password_value=password_value,
-        workspace_id=workspace_id,
-    )
-
-    out: dict[str, Any] = {
-        "user": user_payload,
-        "secret_file": str(secret_path) if secret_path else None,
-        "invites": invite_results,
-    }
-    if show_password:
-        out["password"] = password_value
-    print_json(out)
+    """Manage Nexus users: invite them, list them, move the old logins to the identity provider."""
 
 
 @user.command("invite")
@@ -238,14 +50,13 @@ def user_invite(
     workspace_role: str,
     api_url: str,
     token: str | None,
-    email: str | None,
-    password: str | None,
     dry_run: bool,
 ) -> None:
-    """Invite a user (create-on-invite) to an org and/or workspace.
+    """Invite a user to an org and/or workspace.
 
-    Creates the Nexus account when missing and emails OTP / magic-link sign-in.
-    Prefer --org (optionally with --workspace). Workspace-only invite remains supported.
+    The identity provider makes the person exist and Nexus emails them a link to
+    sign in (the provider mails the code). Prefer --org (optionally with
+    --workspace). Workspace-only invite remains supported.
     """
     if not organization_id and not workspace_id:
         raise click.ClickException("Provide --org and/or --workspace.")
@@ -266,9 +77,7 @@ def user_invite(
         if dry_run:
             results.append({"method": "POST", "path": path, "body": body})
         else:
-            client = build_client(
-                api_url=api_url, token=token, email=email, password=password
-            )
+            client = build_client(api_url=api_url, token=token)
             try:
                 results.append(client.post(path, body))
             except NexusApiError as exc:
@@ -286,9 +95,7 @@ def user_invite(
         if dry_run:
             results.append({"method": "POST", "path": path, "body": body})
         else:
-            client = build_client(
-                api_url=api_url, token=token, email=email, password=password
-            )
+            client = build_client(api_url=api_url, token=token)
             try:
                 results.append(client.post(path, body))
             except NexusApiError as exc:
@@ -311,8 +118,6 @@ def user_list(
     workspace_id: str | None,
     api_url: str,
     token: str | None,
-    email: str | None,
-    password: str | None,
     dry_run: bool,
 ) -> None:
     """List users in an org or workspace (no global admin user index API today)."""
@@ -326,7 +131,7 @@ def user_list(
     if dry_run:
         print_json({"method": "GET", "path": path})
         return
-    client = build_client(api_url=api_url, token=token, email=email, password=password)
+    client = build_client(api_url=api_url, token=token)
     try:
         rows = client.get(path)
     except NexusApiError as exc:
@@ -341,90 +146,107 @@ def user_list(
     )
 
 
-@user.command("me")
-@common_api_options
-def user_me(
-    api_url: str,
-    token: str | None,
-    email: str | None,
-    password: str | None,
-    dry_run: bool,
+@user.command("migrate")
+@click.option(
+    "--provider",
+    default=None,
+    help="The built-in identity provider to move the users to (default: the engine's default).",
+)
+@click.option(
+    "--database-url",
+    envvar="DATABASE_URL",
+    default=None,
+    help="Nexus's database (default: nexus_config.database_url of the project's configuration).",
+)
+@click.option(
+    "--apply",
+    is_flag=True,
+    default=False,
+    help="Make the people exist at the provider. Without it: a dry run, nothing changes.",
+)
+@click.pass_context
+def user_migrate(
+    ctx: click.Context, provider: str | None, database_url: str | None, apply: bool
 ) -> None:
-    """Show the authenticated Nexus user (`GET /api/auth/me`)."""
-    if dry_run:
-        print_json({"method": "GET", "path": "/api/auth/me"})
-        return
-    client = build_client(api_url=api_url, token=token, email=email, password=password)
+    """Move the users of Nexus's old login to the built-in identity provider.
+
+    Makes every account that no provider signs in yet exist at the provider,
+    with the same email. Each person then signs in with the code the provider
+    mails to that address, and that first sign-in links the account: it keeps
+    its roles, groups and data. Passwords do not move. Run it without --apply
+    first, and again whenever accounts were added; it creates nobody twice.
+    """
+    from naas_abi.apps.nexus.apps.api.app.services.oidc.migration import migrate_users
+
+    from .iam import _provider, _services
+
+    url = database_url or _configured_database_url()
+    users = asyncio.run(_legacy_users(url))
+    with _services(ctx) as services:
+        chosen = _provider(services, provider)
+        info = next((p for p in services.identity.list_providers() if p.name == chosen), None)
+        if info is None or getattr(info, "provisioning", None) != "builtin":
+            raise click.ClickException(
+                f"{chosen!r} is not the built-in identity provider (provisioning: builtin): "
+                "only it proves an address by mailing a code, so only it takes over an "
+                "existing account. Other providers' people are managed in the provider."
+            )
+        rows = migrate_users(
+            users,
+            provision=lambda email, name: services.identity.provision_user(
+                chosen, email, name=name
+            ),
+            find=lambda email: services.identity.find_provisioned_user(chosen, email),
+            apply=apply,
+        )
+    print_table(
+        [
+            {"user": r.user_id, "email": r.email, "result": r.outcome, "detail": r.detail}
+            for r in rows
+        ],
+        ["user", "email", "result", "detail"],
+        title=f"Users to {chosen}" + ("" if apply else " (dry run)"),
+    )
+    failed = [r for r in rows if r.outcome == "failed"]
+    if not apply:
+        click.echo("Dry run: nothing changed. Run again with --apply.", err=True)
+    if failed:
+        raise click.ClickException(f"{len(failed)} user(s) could not be moved: see above")
+
+
+def _configured_database_url() -> str:
+    """``nexus_config.database_url`` of the project's configuration."""
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+        EngineConfiguration,
+    )
+
     try:
-        print_json(client.get("/api/auth/me"))
-    except NexusApiError as exc:
-        raise click.ClickException(str(exc)) from exc
+        configuration = EngineConfiguration.load_configuration()
+    except Exception as exc:  # noqa: BLE001 - a secret the shell lacks, a missing file
+        raise click.ClickException(
+            f"Could not read the project's configuration ({exc}): pass --database-url"
+        ) from exc
+    for module in configuration.modules:
+        if module.module == "naas_abi" or (module.path or "").endswith("naas_abi"):
+            found = (module.config.get("nexus_config") or {}).get("database_url")
+            if found:
+                return str(found)
+    from naas_abi import NexusConfig
+
+    return NexusConfig().database_url
 
 
-def _write_secret_file(
-    *,
-    secret_file: Path | None,
-    user_email: str,
-    user_id: str,
-    password_value: str,
-    workspace_id: str | None,
-) -> Path | None:
-    if secret_file is None:
-        safe = user_email.upper().replace("@", "_").replace(".", "_").replace("-", "_")
-        secret_file = Path("secrets") / f"NEXUS_USER_{safe}.env"
-    secret_file.parent.mkdir(parents=True, exist_ok=True)
-    lines = [
-        f"email={user_email}",
-        f"user_id={user_id}",
-        f"password={password_value}",
-    ]
-    if workspace_id:
-        lines.append(f"workspace_id={workspace_id}")
-    secret_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    os.chmod(secret_file, 0o600)
-    return secret_file
-
-
-def _create_via_postgres(
-    *,
-    user_email: str,
-    user_name: str,
-    password_value: str,
-    organization_id: str | None,
-    workspace_id: str | None,
-    workspace_role: str,
-    org_role: str,
-    secret_file: Path | None,
-    show_password: bool,
-    dry_run: bool,
-) -> None:
-    sql, user_id = create_user_sql(
-        email=user_email,
-        name=user_name,
-        password=password_value,
-        organization_id=organization_id,
-        org_role=org_role,
-        workspace_id=workspace_id,
-        workspace_role=workspace_role,
+async def _legacy_users(database_url: str) -> list[Any]:
+    from naas_abi.apps.nexus.apps.api.app.services.oidc.adapters.secondary.postgres import (
+        OidcSessionSecondaryAdapterPostgres,
     )
-    if dry_run:
-        print(sql)
-        return
-    run_postgres_sql(sql)
-    secret_path = _write_secret_file(
-        secret_file=secret_file,
-        user_email=user_email,
-        user_id=user_id,
-        password_value=password_value,
-        workspace_id=workspace_id,
-    )
-    out: dict[str, Any] = {
-        "via": "postgres",
-        "user_id": user_id,
-        "email": user_email,
-        "name": user_name,
-        "secret_file": str(secret_path) if secret_path else None,
-    }
-    if show_password:
-        out["password"] = password_value
-    print_json(out)
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+
+    engine = create_async_engine(database_url)
+    try:
+        async with AsyncSession(engine) as db:
+            return await OidcSessionSecondaryAdapterPostgres(db).list_legacy_users()
+    except Exception as exc:  # noqa: BLE001 - a wrong URL, a database that is down
+        raise click.ClickException(f"Could not read Nexus's users: {exc}") from exc
+    finally:
+        await engine.dispose()

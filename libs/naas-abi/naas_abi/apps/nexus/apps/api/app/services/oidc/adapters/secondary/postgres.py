@@ -173,6 +173,20 @@ class OidcSessionSecondaryAdapterPostgres(OidcSessionPersistencePort):
         ).scalar_one_or_none()
         return _user(model) if model is not None else None
 
+    async def list_legacy_users(self) -> list[OidcUser]:
+        rows = (
+            (
+                await self.db.execute(
+                    select(UserModel)
+                    .where(UserModel.principal_id.is_(None), UserModel.idp_issuer.is_(None))
+                    .order_by(UserModel.email)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return [_user(row) for row in rows]
+
     async def link_user(
         self,
         user_id: str,

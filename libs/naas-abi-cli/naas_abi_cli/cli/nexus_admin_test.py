@@ -9,7 +9,7 @@ import pytest
 from click.testing import CliRunner
 
 from naas_abi_cli.cli import _main, nexus_client
-from naas_abi_cli.cli.nexus_postgres import create_user_sql, create_workspace_sql, esc
+from naas_abi_cli.cli.nexus_postgres import create_workspace_sql, esc
 
 
 @pytest.fixture()
@@ -48,28 +48,6 @@ def test_workspace_list_org_dry_run(runner: CliRunner) -> None:
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["path"] == "/api/organizations/org-960fbfdd82bc/workspaces"
-
-
-def test_user_create_dry_run_redacts_password(runner: CliRunner) -> None:
-    result = runner.invoke(
-        _main,
-        [
-            "user",
-            "create",
-            "--email",
-            "tester@naas.ai",
-            "--name",
-            "Tester",
-            "--password",
-            "supersecret1",
-            "--dry-run",
-        ],
-    )
-    assert result.exit_code == 0, result.output
-    payload = json.loads(result.output)
-    assert payload["path"] == "/api/auth/register"
-    assert payload["body"]["email"] == "tester@naas.ai"
-    assert payload["body"]["password"] == "***"
 
 
 def test_user_invite_dry_run(runner: CliRunner) -> None:
@@ -172,32 +150,6 @@ def test_workspace_create_postgres_dry_run_prints_sql(runner: CliRunner) -> None
     assert "user-0d9665ad586d" in result.output
 
 
-def test_create_user_sql_contains_memberships(monkeypatch: pytest.MonkeyPatch) -> None:
-    class _Bcrypt:
-        @staticmethod
-        def gensalt() -> bytes:
-            return b"$2b$12$abcdefghijklmnopqrstuv"
-
-        @staticmethod
-        def hashpw(password: bytes, salt: bytes) -> bytes:
-            return b"$2b$12$hashed"
-
-    monkeypatch.setitem(__import__("sys").modules, "bcrypt", _Bcrypt)
-    # Force re-import path: create_user_sql imports bcrypt inside the function.
-    sql, user_id = create_user_sql(
-        email="a@naas.ai",
-        name="A",
-        password="password12",
-        organization_id="org-1",
-        workspace_id="ws-1",
-    )
-    assert user_id.startswith("user-")
-    assert "INSERT INTO users" in sql
-    assert "organization_members" in sql
-    assert "workspace_members" in sql
-    assert "a@naas.ai" in sql
-
-
 def test_create_workspace_sql_escapes_quotes() -> None:
     sql, ws_id = create_workspace_sql(
         name="O'Brien Lab",
@@ -246,3 +198,133 @@ def test_help_lists_new_groups(runner: CliRunner) -> None:
     assert "workspace" in result.output
     assert "user" in result.output
     assert "org" in result.output
+
+
+def test_the_client_needs_a_token_and_never_logs_in(
+    monkeypatch: pytest.MonkeyPatch, runner: CliRunner
+) -> None:
+    monkeypatch.delenv("NEXUS_ACCESS_TOKEN", raising=False)
+    with pytest.raises(RuntimeError, match="abi_pk_"):
+        nexus_client.build_client(api_url="http://nexus.test", token=None)
+    result = runner.invoke(_main, ["user", "list", "--org", "o", "--auth-password", "x"])
+    assert result.exit_code != 0
+    assert "No such option" in result.output
+    assert not hasattr(nexus_client.NexusClient, "_login")
+
+
+def test_there_is_no_command_that_creates_a_password_account(runner: CliRunner) -> None:
+    result = runner.invoke(_main, ["user", "--help"])
+    assert result.exit_code == 0
+    commands = [line.split()[0] for line in result.output.split("Commands:")[1].split("\n") if line.strip()]
+    assert "create" not in commands and "migrate" in commands
+
+
+# -- abi user migrate ----------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def nexus_db(tmp_path):
+    """A Nexus database with two accounts of the old login and one a provider signs in."""
+    import asyncio
+
+    from naas_abi.apps.nexus.apps.api.app.core.database import Base
+    from naas_abi.apps.nexus.apps.api.app.models import UserModel
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+
+    url = f"sqlite+aiosqlite:///{tmp_path / 'nexus.db'}"
+
+    async def make() -> None:
+        engine = create_async_engine(url)
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        async with AsyncSession(engine) as db:
+            db.add(UserModel(id="u-ada", email="Ada@Example.com", name="Ada"))
+            db.add(UserModel(id="u-bob", email="bob@example.com", name="Bob"))
+            db.add(
+                UserModel(
+                    id="usr_x",
+                    email="carl@example.com",
+                    name="Carl",
+                    principal_id="usr_x",
+                    idp_issuer="https://idp.example",
+                    idp_subject="s-carl",
+                )
+            )
+            await db.commit()
+        await engine.dispose()
+
+    asyncio.run(make())
+    return url
+
+
+class _Identity:
+    default_provider = "builtin"
+
+    def __init__(self, provisioning: str = "builtin", existing: tuple[str, ...] = ()) -> None:
+        from types import SimpleNamespace
+
+        self._info = SimpleNamespace(name="builtin", provisioning=provisioning)
+        self.people = set(existing)
+        self.provisioned: list[tuple[str, str, str | None]] = []
+
+    def list_providers(self):
+        return [self._info]
+
+    def provision_user(self, provider, email, *, name=None):
+        from types import SimpleNamespace
+
+        if self._info.provisioning != "builtin":
+            raise NotImplementedError("managed in the identity provider")
+        self.provisioned.append((provider, email, name))
+        created = email not in self.people
+        self.people.add(email)
+        return SimpleNamespace(email=email, created=created, disabled=False)
+
+    def find_provisioned_user(self, provider, email):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(email=email) if email in self.people else None
+
+
+def _migrate(runner: CliRunner, nexus_db: str, identity: _Identity, *args: str):
+    from types import SimpleNamespace
+
+    return runner.invoke(
+        _main,
+        ["user", "migrate", "--database-url", nexus_db, *args],
+        obj={"services_opener": lambda: (SimpleNamespace(identity=identity), lambda: None)},
+    )
+
+
+def test_migrate_is_a_dry_run_until_it_is_applied(runner: CliRunner, nexus_db: str) -> None:
+    identity = _Identity(existing=("bob@example.com",))
+    result = _migrate(runner, nexus_db, identity)
+    assert result.exit_code == 0, result.output
+    assert identity.provisioned == []
+    assert "would_create" in result.output and "exists" in result.output
+    assert "carl@example.com" not in result.output  # a provider's user is not migrated
+    assert "Dry run" in result.output
+
+
+def test_migrate_applies_and_can_be_run_again(runner: CliRunner, nexus_db: str) -> None:
+    identity = _Identity()
+    first = _migrate(runner, nexus_db, identity, "--apply")
+    assert first.exit_code == 0, first.output
+    assert sorted(email for _, email, _ in identity.provisioned) == [
+        "ada@example.com",
+        "bob@example.com",
+    ]
+    assert ("builtin", "ada@example.com", "Ada") in identity.provisioned
+    again = _migrate(runner, nexus_db, identity, "--apply")
+    assert again.exit_code == 0
+    assert "created" not in again.output.replace("would_create", "")
+
+
+def test_migrate_refuses_a_provider_that_does_not_prove_addresses(
+    runner: CliRunner, nexus_db: str
+) -> None:
+    identity = _Identity(provisioning="none")
+    result = _migrate(runner, nexus_db, identity, "--apply")
+    assert result.exit_code != 0
+    assert "built-in identity provider" in result.output
+    assert identity.provisioned == []

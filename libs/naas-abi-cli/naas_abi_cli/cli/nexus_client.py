@@ -1,8 +1,10 @@
 """Thin authenticated client for Nexus HTTP admin APIs.
 
-Auth resolution order:
-1. Explicit access token (`--token` / `NEXUS_ACCESS_TOKEN`)
-2. Email + password login (`--email`/`--password` or `NEXUS_EMAIL`/`NEXUS_PASSWORD`)
+Nexus has no login of its own: people sign in at the engine's identity
+provider. A script holds a personal API key (`abi_pk_...`, made in Nexus under
+Account, API keys) or a session token the engine issued for an identity
+provider's token (`POST /api/iam/token`), passed as `--token` or
+`NEXUS_ACCESS_TOKEN`.
 
 Base URL: `--api-url` / `NEXUS_API_URL` (default `http://localhost:9879`).
 """
@@ -40,41 +42,14 @@ class NexusClient:
         *,
         api_url: str | None = None,
         token: str | None = None,
-        email: str | None = None,
-        password: str | None = None,
     ) -> NexusClient:
         base = (api_url or os.getenv("NEXUS_API_URL") or DEFAULT_NEXUS_API_URL).rstrip(
             "/"
         )
         access = token or os.getenv("NEXUS_ACCESS_TOKEN")
         if not access:
-            login_email = email or os.getenv("NEXUS_EMAIL")
-            login_password = password or os.getenv("NEXUS_PASSWORD")
-            if not login_email or not login_password:
-                raise click_auth_error()
-            access = cls._login(base, login_email, login_password)
+            raise click_auth_error()
         return cls(api_url=base, access_token=access)
-
-    @staticmethod
-    def _login(api_url: str, email: str, password: str) -> str:
-        body = json.dumps({"email": email, "password": password}).encode("utf-8")
-        req = urllib.request.Request(
-            f"{api_url}/api/auth/login",
-            data=body,
-            method="POST",
-            headers={"Content-Type": "application/json", "Accept": "application/json"},
-        )
-        try:
-            # http(s) Nexus API only; Request URL is built from api_url.
-            with urllib.request.urlopen(req, timeout=30.0) as resp:  # nosec B310
-                payload = json.loads(resp.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            detail = _read_error_detail(exc)
-            raise NexusApiError(exc.code, detail, "/api/auth/login") from exc
-        token = payload.get("access_token")
-        if not token:
-            raise NexusApiError(500, "login response missing access_token", "/api/auth/login")
-        return str(token)
 
     def request(
         self,
@@ -123,9 +98,9 @@ class NexusClient:
 
 def click_auth_error() -> RuntimeError:
     return RuntimeError(
-        "Nexus auth required. Set NEXUS_ACCESS_TOKEN, or NEXUS_EMAIL + NEXUS_PASSWORD "
-        "(or pass --token / --email --password). Base URL via NEXUS_API_URL "
-        f"(default {DEFAULT_NEXUS_API_URL})."
+        "Nexus auth required. Set NEXUS_ACCESS_TOKEN (or pass --token) to a personal "
+        "API key (abi_pk_..., made in Nexus under Account, API keys). Base URL via "
+        f"NEXUS_API_URL (default {DEFAULT_NEXUS_API_URL})."
     )
 
 
@@ -160,21 +135,7 @@ def common_api_options(fn):  # type: ignore[no-untyped-def]
             "--token",
             envvar="NEXUS_ACCESS_TOKEN",
             default=None,
-            help="Bearer access token (preferred over email/password).",
-        ),
-        click.option(
-            "--auth-email",
-            "email",
-            envvar="NEXUS_EMAIL",
-            default=None,
-            help="Login email when no token is set (env: NEXUS_EMAIL).",
-        ),
-        click.option(
-            "--auth-password",
-            "password",
-            envvar="NEXUS_PASSWORD",
-            default=None,
-            help="Login password when no token is set (env: NEXUS_PASSWORD).",
+            help="A personal API key (abi_pk_...) or an engine session token.",
         ),
         click.option(
             "--dry-run",
@@ -188,16 +149,8 @@ def common_api_options(fn):  # type: ignore[no-untyped-def]
     return fn
 
 
-def build_client(
-    *,
-    api_url: str,
-    token: str | None,
-    email: str | None,
-    password: str | None,
-) -> NexusClient:
-    return NexusClient.from_env(
-        api_url=api_url, token=token, email=email, password=password
-    )
+def build_client(*, api_url: str, token: str | None) -> NexusClient:
+    return NexusClient.from_env(api_url=api_url, token=token)
 
 
 def print_json(payload: Any) -> None:
