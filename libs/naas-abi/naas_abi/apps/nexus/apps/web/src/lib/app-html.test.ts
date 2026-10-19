@@ -132,9 +132,16 @@ describe('remote app grant renewal', () => {
     expect(remoteGrantRenewDelayMs(8 * 3600)).toBe(8 * 3600 * 1000 - 60_000);
   });
 
-  it('never reloads a live app within five minutes of opening it', () => {
-    expect(remoteGrantRenewDelayMs(40)).toBe(5 * 60_000);
-    expect(remoteGrantRenewDelayMs(300)).toBe(5 * 60_000);
+  it('does not reload a live app within five minutes of opening it when the grant lasts longer', () => {
+    expect(remoteGrantRenewDelayMs(6 * 60)).toBe(5 * 60_000);
+    expect(remoteGrantRenewDelayMs(10 * 60)).toBe(9 * 60_000);
+  });
+
+  it('renews a short grant before it expires', () => {
+    // remote_app_grant_expire_minutes can be 1: five minutes would be after expiry.
+    expect(remoteGrantRenewDelayMs(60)).toBe(30_000);
+    expect(remoteGrantRenewDelayMs(40)).toBe(20_000);
+    expect(remoteGrantRenewDelayMs(300)).toBe(240_000);
   });
 
   it('schedules nothing without a lifetime', () => {

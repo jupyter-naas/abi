@@ -20,6 +20,7 @@ from typing import Any
 from langchain_core.tools import BaseTool, tool
 
 MAX_ROWS = 200  # rows kg_sparql_query returns to the model
+COUNT_LIMIT = 10_000  # rows kg_sparql_query counts before it stops reading the stream
 
 
 def _services() -> Any:
@@ -35,7 +36,9 @@ def platform_service_tools() -> list[BaseTool]:
         """Run a SPARQL query against the knowledge graph (triple store) and
         return the result rows (SELECT), the answer (ASK) or the triples
         (CONSTRUCT). At most 200 rows come back; a larger result returns
-        {"rows", "total_rows", "truncated"}: refine the query or add a LIMIT.
+        {"rows", "total_rows", "truncated"} (and "total_rows_at_least": true
+        when it has more than 10,000 rows, the count stops there): refine the
+        query or add a LIMIT.
         Use this to answer questions about entities and relationships in the
         graph."""
         try:
@@ -43,7 +46,7 @@ def platform_service_tools() -> list[BaseTool]:
                 nt_line,
             )
 
-            # A stream: rows past MAX_ROWS are counted, never held in memory.
+            # A stream: rows past MAX_ROWS are counted up to COUNT_LIMIT, never held in memory.
             with _services().triple_store.query_stream(query) as result:
                 if result.result_type == "ASK":
                     return {"ask": bool(result.ask_answer)}
@@ -58,9 +61,16 @@ def platform_service_tools() -> list[BaseTool]:
                 else:
                     items = (nt_line(triple).rstrip("\n") for triple in result.triples)
                 rows = list(islice(items, MAX_ROWS))
-                total = len(rows) + sum(1 for _ in items)
+                total = len(rows) + sum(1 for _ in islice(items, COUNT_LIMIT + 1))
             if total > len(rows):
-                return {"rows": rows, "total_rows": total, "truncated": True}
+                answer: dict[str, Any] = {
+                    "rows": rows,
+                    "total_rows": min(total, COUNT_LIMIT),
+                    "truncated": True,
+                }
+                if total > COUNT_LIMIT:
+                    answer["total_rows_at_least"] = True
+                return answer
             return rows or None
         except Exception as exc:  # noqa: BLE001
             return {"error": str(exc)}

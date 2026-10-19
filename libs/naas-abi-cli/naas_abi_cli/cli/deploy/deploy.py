@@ -308,7 +308,8 @@ def local_deploy(
     "--regenerate",
     is_flag=True,
     default=False,
-    help="Generate new secrets in .env.dokploy (the previous file is backed up).",
+    help="Generate new secrets in .env.dokploy, keeping the hosts, settings and "
+    "your own keys (the previous file is backed up).",
 )
 @click.option(
     "--wildcard-cert-resolver",

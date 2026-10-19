@@ -413,6 +413,16 @@ def _with_ignored(path: Path, entries: list[str]) -> str | None:
     return "\n".join(lines) + "\n"
 
 
+def _fixed(value: str) -> Callable[[], str]:
+    """A setting, not a secret: ``--regenerate`` keeps the value the file has."""
+
+    def factory() -> str:
+        return value
+
+    factory.keeps_existing = True  # type: ignore[attr-defined]
+    return factory
+
+
 def _env_layout(
     *,
     stack_name: str,
@@ -424,8 +434,7 @@ def _env_layout(
     """Sections of .env.dokploy for the values the stack itself needs:
     (title, [(key, value factory)])."""
 
-    def fixed(value: str) -> Callable[[], str]:
-        return lambda: value
+    fixed = _fixed
 
     def uuid() -> str:
         return str(uuid4())
@@ -554,8 +563,13 @@ def _render_env(
     sections: list[tuple[str, list[tuple[str, Callable[[], str]]]]],
     existing: dict[str, str],
     overrides: dict[str, str],
+    regenerate: bool = False,
 ) -> tuple[str, list[str]]:
-    """The content of .env.dokploy, and the keys left empty."""
+    """The content of .env.dokploy, and the keys left empty.
+
+    ``regenerate`` draws new values for the generated secrets only: the hosts,
+    the other settings, the values you filled in and your own keys stay.
+    """
     lines = [
         "# Paste into the Dokploy compose app's Environment tab.",
         (
@@ -571,7 +585,9 @@ def _render_env(
         for key, factory in entries:
             if key in overrides:
                 value = overrides[key]
-            elif key in existing:
+            elif key in existing and (
+                not regenerate or getattr(factory, "keeps_existing", False)
+            ):
                 value = existing[key]
             else:
                 value = factory()
@@ -656,7 +672,8 @@ def setup_dokploy_deploy(
 
     ``docker-compose.dokploy.yml``, ``config.dokploy.yaml`` and the
     ``.deploy/docker`` files are rewritten on every run. ``.env.dokploy`` keeps
-    its values unless ``regenerate``; ``domain`` moves the hosts only.
+    its values; ``regenerate`` draws new generated secrets and keeps the rest
+    (hosts, settings, your own keys); ``domain`` moves the hosts only.
     ``wildcard_cert_resolver`` names a DNS-challenge resolver for the
     ``*.coder`` certificate; it is kept on later runs, even regenerated ones.
     """
@@ -686,7 +703,6 @@ def setup_dokploy_deploy(
     if wildcard_cert_resolver is None:
         wildcard_cert_resolver = existing.get(_WILDCARD_RESOLVER_KEY) or None
     wildcard_cert = include_coding and bool(wildcard_cert_resolver)
-    existing = {} if regenerate else existing
     existing.pop(_WILDCARD_RESOLVER_KEY, None)
 
     overrides: dict[str, str] = {}
@@ -730,7 +746,7 @@ def setup_dokploy_deploy(
                     "commented out, the engine reads them from its secrets file "
                     "(empty until saved from Nexus)."
                 ),
-                [(name, lambda: "") for name in seed_keys],
+                [(name, _fixed("")) for name in seed_keys],
             )
         )
     files = {
@@ -751,7 +767,9 @@ def setup_dokploy_deploy(
             },
         ),
     }
-    files[ENV_FILE], empty = _render_env(sections, existing, overrides)
+    files[ENV_FILE], empty = _render_env(
+        sections, existing, overrides, regenerate
+    )
     # Dokploy writes the Environment tab to .env in the build context: keep it
     # out of the image.
     for name, entries in (

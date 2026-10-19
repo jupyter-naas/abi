@@ -68,7 +68,7 @@ export function remoteAppGrantUrl(apiBase: string, grantPath: string, rest: stri
 
 /** Reopen a remote app this long before its grant expires... */
 const REMOTE_GRANT_RENEW_MARGIN_MS = 60_000;
-/** ...but never sooner than this after opening it: a reload loses the page's state. */
+/** ...but not sooner than this after opening it (a reload loses the page's state)... */
 const REMOTE_GRANT_RENEW_FLOOR_MS = 5 * 60_000;
 
 /**
@@ -78,7 +78,13 @@ const REMOTE_GRANT_RENEW_FLOOR_MS = 5 * 60_000;
 export function remoteGrantRenewDelayMs(expiresIn: unknown): number | null {
   const seconds = Number(expiresIn);
   if (!Number.isFinite(seconds) || seconds <= 0) return null;
-  return Math.max(seconds * 1000 - REMOTE_GRANT_RENEW_MARGIN_MS, REMOTE_GRANT_RENEW_FLOOR_MS);
+  // ...except that a grant shorter than the floor (the API allows one minute)
+  // is renewed within its first half: later it is already expired.
+  const lifetimeMs = seconds * 1000;
+  return Math.max(
+    lifetimeMs - REMOTE_GRANT_RENEW_MARGIN_MS,
+    Math.min(REMOTE_GRANT_RENEW_FLOOR_MS, lifetimeMs / 2),
+  );
 }
 
 /**

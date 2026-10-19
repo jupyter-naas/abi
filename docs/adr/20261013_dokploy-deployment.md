@@ -68,7 +68,7 @@ on it:
   variables already win over dotenv files when the config resolves
   `{{ secret.X }}`. The command writes a starting set to the gitignored
   `.env.dokploy`, with the same generators as `abi deploy local`; reruns keep
-  its values and `--regenerate` replaces them.
+  its values and `--regenerate` replaces the generated secrets only.
 - **`config.dokploy.yaml`.** The stack sets `ENV=dokploy`. The command derives
   the file from `config.local.yaml` on every run, so the two do not drift. It
   only inserts lines into `services.secret.secret_adapters` (found by

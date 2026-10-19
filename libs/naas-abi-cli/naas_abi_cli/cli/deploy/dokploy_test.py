@@ -361,6 +361,28 @@ def test_the_env_is_stable_across_reruns_unless_regenerated(tmp_path: Path) -> N
     assert len(backups) == 1
 
 
+def test_regenerate_replaces_the_secrets_and_keeps_everything_else(
+    tmp_path: Path,
+) -> None:
+    project = _project(tmp_path, nats=True)
+    _deploy(project)
+    first = _env(project)
+    text = (project / ENV_FILE).read_text(encoding="utf-8")
+    text = text.replace("NEXUS_WEB_TAG=latest", "NEXUS_WEB_TAG=v2")
+    (project / ENV_FILE).write_text(text + "MY_KEY=kept\n", encoding="utf-8")
+
+    # No --domain: the hosts come from the file, nothing is asked.
+    _deploy(project, domain=None, regenerate=True)
+    after = _env(project)
+
+    for key in ("PUBLIC_WEB_HOST", "PUBLIC_API_HOST", "NEXUS_API_URL", "ABI_STACK_NAME"):
+        assert after[key] == first[key], key
+    assert after["NEXUS_WEB_TAG"] == "v2"
+    assert after["MY_KEY"] == "kept"
+    for key in ("POSTGRES_PASSWORD", "ABI_API_KEY", "NATS_ABI_PASSWORD"):
+        assert after[key] != first[key], key
+
+
 def test_a_new_domain_moves_the_hosts_and_keeps_the_secrets(tmp_path: Path) -> None:
     project = _project(tmp_path, nats=True)
     _deploy(project)

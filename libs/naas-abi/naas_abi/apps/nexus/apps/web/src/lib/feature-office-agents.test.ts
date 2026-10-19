@@ -9,6 +9,7 @@ import {
   isFeatureOfficeAgent,
   isNaasAbiAgent,
   resourceFromPath,
+  routeWithSearch,
 } from './feature-office-agents';
 import {
   pickFeatureOfficeAgent,
@@ -85,6 +86,18 @@ describe('resourceFromPath', () => {
       kind: 'repo',
       id: 'abi/monorepo',
     });
+  });
+
+  it('reads the map layers from the query that routeWithSearch adds', () => {
+    const route = routeWithSearch('/workspace/ws-1/maps', '?layer=earthquakes&layer=storms');
+    expect(route).toBe('/workspace/ws-1/maps?layer=earthquakes&layer=storms');
+    expect(resourceFromPath(route)).toEqual({
+      feature: 'maps',
+      kind: 'map_dataset',
+      id: 'earthquakes,storms',
+    });
+    expect(routeWithSearch('/workspace/ws-1/maps', '')).toBe('/workspace/ws-1/maps');
+    expect(resourceFromPath(routeWithSearch('/workspace/ws-1/maps', null))).toBeNull();
   });
 
   it('is null on list routes', () => {

@@ -66,8 +66,8 @@ It writes:
 Rerun the command after upgrading the CLI or editing `config.local.yaml`: the
 compose file, `config.dokploy.yaml` and `.deploy/docker` are rewritten, and the
 values in `.env.dokploy` are kept. `--domain` moves the hosts and keeps the
-secrets. `--regenerate` generates new secrets and backs the old file up under
-`.abi-backups/deploy-dokploy/`. Do not regenerate a stack that already holds
+secrets. `--regenerate` generates new secrets, keeps the hosts, the other settings and
+your own keys, and backs the old file up under `.abi-backups/deploy-dokploy/`. Do not regenerate a stack that already holds
 data: Postgres, MinIO and Fuseki keep the passwords they were created with.
 
 The hosts are `nexus.<domain>` for Nexus and `api.<domain>` for the API. To

@@ -32,4 +32,18 @@ describe('gdacs', () => {
 
     expect(collectGdacsPins([{ features: [quake] }, { features: [quake] }], 1)).toHaveLength(1);
   });
+
+  it('lets the collections take turns when the limit is reached', () => {
+    const event = (eventtype: string, eventid: number) => ({
+      properties: { eventtype, eventid },
+      geometry: { coordinates: [eventid, 1] },
+    });
+    const earthquakes = Array.from({ length: 10 }, (_, n) => event('EQ', n));
+    const pins = collectGdacsPins(
+      [{ features: earthquakes }, { features: [event('TC', 1), event('TC', 2)] }, { features: [event('FL', 1)] }],
+      6,
+    );
+
+    expect(pins.map((p) => p.id)).toEqual(['EQ-0', 'TC-1', 'FL-1', 'EQ-1', 'TC-2', 'EQ-2']);
+  });
 });
