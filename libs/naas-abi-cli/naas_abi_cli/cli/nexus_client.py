@@ -72,7 +72,9 @@ class NexusClient:
             data = urllib.parse.urlencode(form_body).encode("utf-8")
             headers["Content-Type"] = "application/x-www-form-urlencoded"
 
-        req = urllib.request.Request(url, data=data, method=method.upper(), headers=headers)
+        req = urllib.request.Request(
+            url, data=data, method=method.upper(), headers=headers
+        )
         try:
             # http(s) Nexus API only; Request URL is built from api_url + path.
             with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:  # nosec B310

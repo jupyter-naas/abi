@@ -314,9 +314,12 @@ rejects a partial one.
 
 ### Nexus admin (workspace / user / org)
 
-Authenticated admin surface against the Nexus HTTP API. Auth via
-`NEXUS_ACCESS_TOKEN`, or `NEXUS_EMAIL` + `NEXUS_PASSWORD`. Base URL:
-`NEXUS_API_URL` (default `http://localhost:9879`).
+Authenticated admin surface against the Nexus HTTP API. Nexus has no login of its
+own (people sign in at an identity provider), so a script authenticates with a
+personal API key (`abi_pk_...`, made in Nexus under Account, API keys), as
+`NEXUS_ACCESS_TOKEN` or `--token`. Base URL: `NEXUS_API_URL` (default
+`http://localhost:9879`). The `/api/auth/*` and `/api/iam/*` routes take a signed-in
+session only, never a key.
 
 ```bash
 abi workspace create --name "Research preview" --slug research-preview --org org-...
@@ -324,12 +327,12 @@ abi workspace list --org org-...
 abi workspace members list --workspace ws-...
 abi workspace members add --workspace ws-... --email someone@naas.ai --role member
 
-# Preferred when password signup is off: create-on-invite + OTP/magic-link email
+# Someone with no account is invited through the identity provider (it makes them
+# exist and mails the code at their first sign-in); an existing account is added directly.
 abi user invite --email someone@gmail.com --name "Someone" \
   --org org-... --workspace ws-... --role member --workspace-role member
 abi org members invite --org org-... --email someone@gmail.com --workspace ws-...
 
-abi user create --email someone@naas.ai --name "Someone"   # needs password auth enabled
 abi user list --org org-...   # or --workspace ws-...
 
 abi org list
@@ -338,20 +341,26 @@ abi org workspaces --org org-...
 ```
 
 All of these accept `--dry-run` (prints the intended API call) and
-`--api-url` / `--token` / `--auth-email` / `--auth-password`.
+`--api-url` / `--token`.
 
-Invite endpoints create the user when missing and email OTP / magic-link sign-in.
+**Moving an older project to the identity provider** (accounts of the removed
+password / magic-link login):
 
-**Credentials:** `abi user create` never prints the password by default. It
-writes `secrets/NEXUS_USER_<EMAIL>.env` (mode 600). Pass `--show-password` only
-when you intentionally need stdout.
+```bash
+abi user migrate            # dry run: who would be made at the built-in provider
+abi user migrate --apply    # make them exist there, with the same email
+```
 
-**Break-glass Postgres** (ops VM only, when invite email / browser auth is
-unavailable):
+Each person then signs in with the code the provider mails to their address; that
+first sign-in links the account, which keeps its roles, groups and data. Nobody is
+created twice, so it can be run again. `--database-url` names Nexus's database
+(default: `nexus_config.database_url` of the project). In `abi dev`, `abi dev code`
+prints the newest sign-in code (dev mail is a file in `storage/email`).
+
+**Break-glass Postgres** (ops VM only, when the API is unavailable):
 
 ```bash
 export NEXUS_POSTGRES_COMPOSE_DIR=/opt/abi
-abi user create --via postgres --email someone@naas.ai --name "Someone" --org org-...
 abi workspace create --via postgres --name "..." --slug ... --org org-... --owner-id user-...
 ```
 

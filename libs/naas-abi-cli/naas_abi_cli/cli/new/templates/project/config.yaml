@@ -76,14 +76,10 @@ modules:
       ontology_engineer_model: "gemma-4-26b-a4b-it"
       nexus_config:
         database_url: "sqlite+aiosqlite:///./storage/nexus.db"
-        # Dev convenience: enable password login + seed an admin user. The
-        # bootstrap password is auto-generated on first boot and written to
-        # `.env` as `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`.
-        auth_password_enabled: true
-        # Self-registration is off: accounts come from invitations or `users:`
-        # below. Set true to let anyone reaching the login page create an account.
-        auth_signup_enabled: false
-        magic_link_allow_signup: false
+        # Nexus has no login of its own: people sign in at an identity provider
+        # (`abi dev up` runs the built-in one, which emails a code; `abi dev code`
+        # prints it). The admin below is made there when the API starts, and keeps
+        # the roles configured here.
         users:
           - email: "admin@example.com"
             name: "Dev Admin"

@@ -103,17 +103,11 @@ modules:
             member: [chat, files]
             viewer: [chat, files]
           workspace_overrides: {}
-{% raw %}        # Enable password login by default so first sign-in works without an SMTP
-        # setup (magic-link email). Configure SMTP + set this false to require it.
-        auth_password_enabled: true
-        # Self-registration is off: accounts come from invitations or `users:`
-        # below. Set true to let anyone reaching the login page create an account.
-        auth_signup_enabled: false
-        magic_link_allow_signup: false
-        magic_link_email_app_name: "ABI Platform"
-        magic_link_email_subject_template: "Your {app_name} sign-in link"
-        magic_link_email_text_template: "Use this link to sign in to {app_name}:\n\n{magic_link_url}\n\nThis link expires in {expire_minutes} minutes."
-        magic_link_email_html_template: "<p>Use this link to sign in to {app_name}:</p><p><a href=\"{magic_link_url}\">Sign in</a></p><p>This link expires in {expire_minutes} minutes.</p>"
+{% raw %}        # Nexus has no login of its own: people sign in at the built-in identity
+        # provider (the `idp` service), which emails a sign-in code. The `users:`
+        # below are made there when the API starts, and keep the roles configured here.
+        # The name the emails Nexus sends (invitations) call the application:
+        email_app_name: "ABI Platform"
         tenant:
           tab_title: "ABI AI Platform"
           primary_color: "#34D399"

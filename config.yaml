@@ -43,15 +43,10 @@ modules:
       ontology_engineer_provider: "openai"
       nexus_config:
         database_url: "sqlite+aiosqlite:///./storage/nexus.db"
-        # Dev convenience: enable password login so the seeded admin user
-        # below can actually sign in. The bootstrap password is auto-
-        # generated on first boot and written to `.env` as
-        # `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`.
-        auth_password_enabled: true
-        # Self-registration is off: accounts come from invitations or `users:`
-        # below. Set true to let anyone reaching the login page create an account.
-        auth_signup_enabled: false
-        magic_link_allow_signup: false
+        # Nexus has no login of its own: people sign in at an identity provider
+        # (`identity.providers`; `abi dev up` runs the built-in one, which mails a
+        # code, and `abi dev code` prints it). The `users:` below are made at the
+        # provider when the API starts, and keep the roles configured here.
         tenant:
           tab_title: "ABI"
           # Social sharing preview - shown when the platform URL is shared in

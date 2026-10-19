@@ -60,7 +60,7 @@ from rich.table import Table
 from rich.text import Text
 
 from naas_abi_cli.cli.admin_credentials import (
-    ensure_admin_credentials,
+    ADMIN_EMAIL,
     ensure_api_key,
     ensure_idp_client_secret,
     ensure_nats_callout_seed,
@@ -1489,14 +1489,18 @@ class _KeyboardReader:
 RECENT_DUMP_LINES = 30
 
 
-def _ensure_default_admin_env() -> tuple[str, str]:
-    """Return the seeded admin's ``(email, password)``, generating the password.
-
-    The password is random per project and stored in `.env`, where the Nexus
-    seed picks it up through the dotenv secret adapter on first boot. A value
-    an older CLI wrote (``admin``) is replaced.
-    """
-    return ensure_admin_credentials(_project_root() / ".env")
+def _sign_in_hint(ports: dict[str, int]) -> list[str]:
+    """How to sign in to a fresh stack: Nexus has no password. The built-in
+    identity provider mails a code to the address, and in dev the mail is a file."""
+    web = ports.get("nexus-web")
+    where = f"http://{BROWSER_HOST}:{web}" if web else _api_origin(ports)
+    return [
+        (
+            f"Sign in: {where} as {ADMIN_EMAIL}. The identity provider mails a sign-in "
+            "code to that address; in dev the mail is a file in storage/email."
+        ),
+        "Print the code: `abi dev code`",
+    ]
 
 
 def _ensure_default_api_key_env() -> str:
@@ -2049,10 +2053,6 @@ def dev_up(
     ports: dict[str, int] = instance["ports"]
     _ensure_storage_layout()
     config_overlay: Path | None = None
-    # Pre-populate `.env` with the default admin credentials so the Nexus
-    # seed adopts them instead of generating a random password. Done before
-    # the api process spawns and reads .env via the dotenv adapter.
-    admin_email, admin_password = _ensure_default_admin_env()
     _ensure_default_api_key_env()
     # The built-in IdP, the default identity provider in NATS mode: its client
     # secret is generated into .env (the engine's config reads it from there),
@@ -2161,21 +2161,16 @@ def dev_up(
         for spec in started:
             click.echo(f"  {spec.name:<10} {_display_url(spec)}")
         click.echo()
-        click.echo(f"Login: {admin_email} / {admin_password}")
+        for line in _sign_in_hint(ports):
+            click.echo(line)
         click.echo("Logs: `abi dev logs <service> -f`   Stop: `abi dev down`")
         return
 
     # Print the dev login one-liner before handing control to the live UI
     # so it survives in the terminal scrollback after the pinned panel
     # erases (on Ctrl+C / q).
-    Console().print(
-        Text.assemble(
-            ("Login: ", "dim"),
-            (admin_email, "bold"),
-            (" / ", "dim"),
-            (admin_password, "bold"),
-        )
-    )
+    for line in _sign_in_hint(ports):
+        Console().print(Text(line, style="dim"))
 
     _follow_until_interrupt(
         started,
@@ -2186,6 +2181,28 @@ def dev_up(
             modules[name], _module_overlay(config_overlay)
         ),
     )
+
+
+@dev.command("code")
+@click.option(
+    "--email",
+    default=ADMIN_EMAIL,
+    show_default=True,
+    help="The address the code was mailed to; empty for anyone's.",
+)
+def dev_code(email: str) -> None:
+    """Print the newest sign-in code the identity provider mailed (dev mail is a file)."""
+    from naas_abi_cli.cli.dev_mail import latest_sign_in_code
+
+    directory = _project_root() / "storage" / "email"
+    found = latest_sign_in_code(directory, email or None)
+    if found is None:
+        raise click.ClickException(
+            f"No sign-in code in {directory}: ask the login page for one first "
+            f"(sign in as {email or 'someone'})."
+        )
+    click.echo(found.code)
+    click.echo(f"mailed to {found.to}: {found.subject}", err=True)
 
 
 @dev.command("down")
@@ -2364,8 +2381,8 @@ def _running_services(ports: dict[str, int]) -> list[str]:
     is_flag=True,
     default=False,
     help=(
-        "Also remove the seeded admin credentials from .env. Default keeps "
-        "them so the next `up` boots with the same login."
+        "Also remove the admin credential lines older versions wrote to .env "
+        "(there is no password any more: the admin signs in with a mailed code)."
     ),
 )
 def dev_nuke(yes: bool, start: bool, reset_env: bool) -> None:
@@ -2378,7 +2395,7 @@ def dev_nuke(yes: bool, start: bool, reset_env: bool) -> None:
 
     Preserved by default:
       • `.abi/dev/instance.json`   (so allocated ports stay stable)
-      • `.env`                     (your secrets + admin credentials)
+      • `.env`                     (your secrets)
       • `node_modules`             (expensive to reinstall)
     """
     root = _project_root()

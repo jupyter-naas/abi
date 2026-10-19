@@ -69,18 +69,14 @@ modules:
           workspace_overrides: {}
 
         # Q: How do users sign in?
-        # A: Magic link login is on and restricted to pre-seeded users. Password login is off.
-        auth_password_enabled: false
-        magic_link_allow_signup: false
+        # A: At the engine's identity provider (`identity.providers`): the built-in one
+        #    mails a sign-in code. Nexus has no password, magic link or code login.
 
-        # Q: What do the passwordless sign-in emails say?
-        # A: Set the app name and templates -- {app_name}, {magic_link_url}, {expire_minutes} are auto-filled.
+        # Q: What do the emails Nexus sends (invitations) say?
+        # A: The sender, and the name they call the application.
         email_from_address: "no-reply@axi-ai-test.org"
         email_from_name: "AXI AI"
-        magic_link_email_app_name: "ABI Platform"
-        magic_link_email_subject_template: "Your {app_name} sign-in link"
-        magic_link_email_text_template: "Use this link to sign in to {app_name}:\n\n{magic_link_url}\n\nThis link expires in {expire_minutes} minutes."
-        magic_link_email_html_template: '<p>Use this link to sign in to {app_name}:</p><p><a href="{magic_link_url}">Sign in</a></p><p>This link expires in {expire_minutes} minutes.</p>'
+        email_app_name: "ABI Platform"
 
         # Q: What name, colors, and logo should the UI show?
         # A: Set the brand identity here -- workspaces can override these defaults.
@@ -104,7 +100,8 @@ modules:
           login_footer_text: "© ABI AI Platform (Beta) | Naas.ai"
 
         # Q: Who gets an account created automatically on first boot?
-        # A: List seed users here. Password comes from NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD in .env (default: Admin1234!)
+        # A: List seed users here. They are made at the built-in identity provider, which
+        #    mails each a sign-in code; there is no password.
         users:
           - email: "admin@example.com"
             name: "Local Admin"

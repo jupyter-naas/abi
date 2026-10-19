@@ -12,11 +12,9 @@ from rich.prompt import Prompt
 import naas_abi_cli
 
 from ..admin_credentials import (
-    ensure_admin_credentials,
     ensure_idp_client_secret,
     ensure_nats_callout_seed,
     ensure_nats_passwords,
-    generate_admin_password,
 )
 from ..utils.Copier import Copier
 
@@ -386,6 +384,14 @@ def _read_env_vars(env_path: str) -> dict[str, str]:
     return env_vars
 
 
+def _is_dead_admin_password(key: str) -> bool:
+    """The admin password an older CLI generated: nothing reads it any more
+    (Nexus has no login of its own), so it is not carried over."""
+    return key == "NEXUS_USER_ADMIN_PASSWORD" or (
+        key.startswith("NEXUS_USER_") and key.endswith("_PASSWORD")
+    )
+
+
 def _merge_local_env_template(
     source_env_path: str,
     destination_env_path: str,
@@ -416,7 +422,11 @@ def _merge_local_env_template(
 
         merged_lines.append(line)
 
-    additional_keys = [key for key in existing_env_vars if key not in template_keys]
+    additional_keys = [
+        key
+        for key in existing_env_vars
+        if key not in template_keys and not _is_dead_admin_password(key)
+    ]
     if additional_keys:
         if merged_lines and merged_lines[-1].strip() != "":
             merged_lines.append("")
@@ -534,7 +544,6 @@ def setup_local_deploy(
         "RABBITMQ_PASSWORD": str(uuid4()),
         "FUSEKI_ADMIN_PASSWORD": str(uuid4()),
         "ABI_API_KEY": str(uuid4()),
-        "NEXUS_USER_ADMIN_PASSWORD": generate_admin_password(),
     }
 
     existing_env_vars = _read_env_vars(local_env_target_path)
@@ -609,8 +618,6 @@ def setup_local_deploy(
     for key in RANDOM_ENV_KEYS:
         _ensure_env_var(local_env_target_path, key, str(uuid4()))
 
-    # Generated per project; a password an older CLI wrote is replaced.
-    ensure_admin_credentials(Path(local_env_target_path))
     # The NATS broker's users (nats.conf), also when the nats profile is off,
     # and the account seed its auth callout signs admitted modules with.
     ensure_nats_passwords(Path(local_env_target_path))

@@ -7,8 +7,6 @@ import pytest
 
 from naas_abi_cli.cli.admin_credentials import (
     ADMIN_EMAIL,
-    ADMIN_PASSWORD_KEY,
-    ensure_admin_credentials,
     ensure_api_key,
 )
 
@@ -22,51 +20,19 @@ def _env(path: Path) -> dict[str, str]:
     return values
 
 
-def test_admin_password_is_generated_when_missing(tmp_path: Path) -> None:
-    env = tmp_path / ".env"
+def test_the_seeded_admin_has_no_password() -> None:
+    """Nexus has no login of its own: the admin signs in at the identity provider
+    with a code mailed to its address, so no password is ever generated."""
+    from naas_abi_cli.cli import admin_credentials
 
-    email, password = ensure_admin_credentials(env)
-
-    assert email == ADMIN_EMAIL
-    assert len(password) >= 24
-    assert _env(env)[ADMIN_PASSWORD_KEY] == password
-    assert _env(env)["NEXUS_USER_ADMIN_EXAMPLE_COM_EMAIL"] == ADMIN_EMAIL
-
-
-def test_each_project_gets_a_different_password(tmp_path: Path) -> None:
-    first = ensure_admin_credentials(tmp_path / "a.env")[1]
-    second = ensure_admin_credentials(tmp_path / "b.env")[1]
-
-    assert first != second
-
-
-@pytest.mark.parametrize("default", ["Admin1234!", "admin"])
-def test_a_shipped_default_password_is_replaced_in_place(
-    tmp_path: Path, default: str
-) -> None:
-    env = tmp_path / ".env"
-    env.write_text(
-        "OTHER=1\n"
-        f"NEXUS_USER_ADMIN_PASSWORD={default}\n"
-        f"{ADMIN_PASSWORD_KEY}={default}\n"
-        "LAST=2\n"
-    )
-
-    _email, password = ensure_admin_credentials(env)
-
-    values = _env(env)
-    assert password != default
-    assert values[ADMIN_PASSWORD_KEY] == password
-    assert "NEXUS_USER_ADMIN_PASSWORD" not in values
-    assert values["OTHER"] == "1" and values["LAST"] == "2"
-    assert env.read_text().count(ADMIN_PASSWORD_KEY) == 1
-
-
-def test_a_custom_password_is_kept(tmp_path: Path) -> None:
-    env = tmp_path / ".env"
-    env.write_text(f"{ADMIN_PASSWORD_KEY}=my-own-strong-pw\n")
-
-    assert ensure_admin_credentials(env)[1] == "my-own-strong-pw"
+    assert ADMIN_EMAIL == "admin@example.com"
+    for name in (
+        "ensure_admin_credentials",
+        "generate_admin_password",
+        "ADMIN_PASSWORD_KEY",
+        "ADMIN_EMAIL_KEY",
+    ):
+        assert not hasattr(admin_credentials, name)
 
 
 @pytest.mark.parametrize("existing", [None, "abi"])

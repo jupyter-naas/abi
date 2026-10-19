@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 from typing import Any
 
 import click
@@ -15,6 +16,8 @@ from .nexus_client import (
     print_table,
 )
 
+_NEXUS_OIDC = "naas_abi.apps.nexus.apps.api.app.services.oidc"
+
 
 @click.group("user")
 def user() -> None:
@@ -22,10 +25,18 @@ def user() -> None:
 
 
 @user.command("invite")
-@click.option("--email", "member_email", required=True, help="Invitee email (created if missing).")
-@click.option("--name", "member_name", default=None, help="Display name when creating the user.")
-@click.option("--workspace", "workspace_id", default=None, help="Workspace id (ws-...).")
-@click.option("--org", "organization_id", default=None, help="Organization id (org-...).")
+@click.option(
+    "--email", "member_email", required=True, help="Invitee email (created if missing)."
+)
+@click.option(
+    "--name", "member_name", default=None, help="Display name when creating the user."
+)
+@click.option(
+    "--workspace", "workspace_id", default=None, help="Workspace id (ws-...)."
+)
+@click.option(
+    "--org", "organization_id", default=None, help="Organization id (org-...)."
+)
 @click.option(
     "--role",
     default="member",
@@ -67,7 +78,9 @@ def user_invite(
         path = f"/api/organizations/{organization_id}/members/invite"
         org_role = role.lower()
         if org_role not in {"owner", "admin", "member"}:
-            raise click.ClickException("--role for --org must be owner, admin, or member.")
+            raise click.ClickException(
+                "--role for --org must be owner, admin, or member."
+            )
         body: dict[str, Any] = {"email": member_email, "role": org_role}
         if member_name:
             body["name"] = member_name
@@ -105,7 +118,9 @@ def user_invite(
 
 
 @user.command("list")
-@click.option("--org", "organization_id", default=None, help="List organization members.")
+@click.option(
+    "--org", "organization_id", default=None, help="List organization members."
+)
 @click.option(
     "--workspace",
     "workspace_id",
@@ -176,15 +191,19 @@ def user_migrate(
     its roles, groups and data. Passwords do not move. Run it without --apply
     first, and again whenever accounts were added; it creates nobody twice.
     """
-    from naas_abi.apps.nexus.apps.api.app.services.oidc.migration import migrate_users
-
     from .iam import _provider, _services
+
+    # Nexus ships in naas-abi, which the CLI reaches by name only (it is not a
+    # dependency of the CLI's own type check).
+    migrate_users = importlib.import_module(f"{_NEXUS_OIDC}.migration").migrate_users
 
     url = database_url or _configured_database_url()
     users = asyncio.run(_legacy_users(url))
     with _services(ctx) as services:
         chosen = _provider(services, provider)
-        info = next((p for p in services.identity.list_providers() if p.name == chosen), None)
+        info = next(
+            (p for p in services.identity.list_providers() if p.name == chosen), None
+        )
         if info is None or getattr(info, "provisioning", None) != "builtin":
             raise click.ClickException(
                 f"{chosen!r} is not the built-in identity provider (provisioning: builtin): "
@@ -201,7 +220,12 @@ def user_migrate(
         )
     print_table(
         [
-            {"user": r.user_id, "email": r.email, "result": r.outcome, "detail": r.detail}
+            {
+                "user": r.user_id,
+                "email": r.email,
+                "result": r.outcome,
+                "detail": r.detail,
+            }
             for r in rows
         ],
         ["user", "email", "result", "detail"],
@@ -211,7 +235,9 @@ def user_migrate(
     if not apply:
         click.echo("Dry run: nothing changed. Run again with --apply.", err=True)
     if failed:
-        raise click.ClickException(f"{len(failed)} user(s) could not be moved: see above")
+        raise click.ClickException(
+            f"{len(failed)} user(s) could not be moved: see above"
+        )
 
 
 def _configured_database_url() -> str:
@@ -222,7 +248,7 @@ def _configured_database_url() -> str:
 
     try:
         configuration = EngineConfiguration.load_configuration()
-    except Exception as exc:  # noqa: BLE001 - a secret the shell lacks, a missing file
+    except Exception as exc:
         raise click.ClickException(
             f"Could not read the project's configuration ({exc}): pass --database-url"
         ) from exc
@@ -231,22 +257,21 @@ def _configured_database_url() -> str:
             found = (module.config.get("nexus_config") or {}).get("database_url")
             if found:
                 return str(found)
-    from naas_abi import NexusConfig
-
-    return NexusConfig().database_url
+    return str(importlib.import_module("naas_abi").NexusConfig().database_url)
 
 
 async def _legacy_users(database_url: str) -> list[Any]:
-    from naas_abi.apps.nexus.apps.api.app.services.oidc.adapters.secondary.postgres import (
-        OidcSessionSecondaryAdapterPostgres,
-    )
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+
+    adapter = importlib.import_module(
+        f"{_NEXUS_OIDC}.adapters.secondary.postgres"
+    ).OidcSessionSecondaryAdapterPostgres
 
     engine = create_async_engine(database_url)
     try:
         async with AsyncSession(engine) as db:
-            return await OidcSessionSecondaryAdapterPostgres(db).list_legacy_users()
-    except Exception as exc:  # noqa: BLE001 - a wrong URL, a database that is down
+            return await adapter(db).list_legacy_users()
+    except Exception as exc:
         raise click.ClickException(f"Could not read Nexus's users: {exc}") from exc
     finally:
         await engine.dispose()

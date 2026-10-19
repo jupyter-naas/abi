@@ -448,30 +448,22 @@ def _env_values(path: Path) -> dict[str, str]:
     return values
 
 
-def test_setup_local_deploy_generates_a_per_project_admin_password(
-    tmp_path: Path,
-) -> None:
-    first, second = tmp_path / "a", tmp_path / "b"
-    setup_local_deploy(str(first), base_domain="localhost")
-    setup_local_deploy(str(second), base_domain="localhost")
+def test_setup_local_deploy_makes_no_admin_password(tmp_path: Path) -> None:
+    setup_local_deploy(str(tmp_path), base_domain="localhost")
 
-    a = _env_values(first / ".env")["NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD"]
-    b = _env_values(second / ".env")["NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD"]
-
-    assert a != b
-    assert len(a) >= 24
+    values = _env_values(tmp_path / ".env")
+    assert values["NEXUS_USER_ADMIN_EMAIL"] == "admin@example.com"
+    # The admin signs in at the identity provider with a mailed code.
+    assert not [key for key in values if key.startswith("NEXUS_USER_") and "PASSWORD" in key]
     for content in (
-        (first / ".env").read_text(),
-        (first / "docker-compose.yml").read_text(),
+        (tmp_path / ".env").read_text(),
+        (tmp_path / "docker-compose.yml").read_text(),
     ):
         assert "Admin1234!" not in content
         assert "ABI_API_KEY=abi\n" not in content
-    assert "NEXUS_USER_ADMIN_PASSWORD" not in _env_values(first / ".env")
 
 
-def test_setup_local_deploy_replaces_a_shipped_default_admin_password(
-    tmp_path: Path,
-) -> None:
+def test_regenerating_does_not_bring_a_password_back(tmp_path: Path) -> None:
     (tmp_path / ".env").write_text(
         "NEXUS_USER_ADMIN_PASSWORD=Admin1234!\n"
         "NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD=Admin1234!\n",
@@ -482,12 +474,10 @@ def test_setup_local_deploy_replaces_a_shipped_default_admin_password(
         str(tmp_path), base_domain="localhost", regenerate=True, backup=False
     )
 
-    content = (tmp_path / ".env").read_text(encoding="utf-8")
-    assert "Admin1234!" not in content
-    assert (
-        len(_env_values(tmp_path / ".env")["NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD"])
-        >= 24
-    )
+    values = _env_values(tmp_path / ".env")
+    assert values["NEXUS_USER_ADMIN_EMAIL"] == "admin@example.com"
+    assert "NEXUS_USER_ADMIN_PASSWORD" not in values
+    assert "NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD" not in values
 
 
 NATS_USERS = {"engine": "NATS_ENGINE_PASSWORD", "auth": "NATS_AUTH_PASSWORD"}

@@ -146,16 +146,37 @@ def test_ensure_default_api_key_writes_env_when_missing(monkeypatch, tmp_path) -
     assert "OTHER=1" in env_file.read_text()
 
 
-def test_ensure_default_admin_env_generates_a_password(monkeypatch, tmp_path) -> None:
-    env_file = tmp_path / ".env"
-    env_file.write_text("NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD=admin\n")
+def test_up_makes_no_admin_password_and_says_how_to_sign_in() -> None:
+    assert not hasattr(dev, "_ensure_default_admin_env")
+    lines = dev._sign_in_hint({"api": 9879, "nexus-web": 3042})
+    text = "\n".join(lines)
+    assert "http://localhost:3042" in text and "admin@example.com" in text
+    assert "abi dev code" in text and "password" not in text.lower()
+    # Without the web app the API's address is given instead.
+    assert "http://localhost:9879" in "\n".join(dev._sign_in_hint({"api": 9879}))
+
+
+def test_dev_code_prints_the_newest_code_of_the_admin(monkeypatch, tmp_path) -> None:
+    from email.message import EmailMessage
+
+    from click.testing import CliRunner
+
     monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
+    mail = tmp_path / "storage" / "email"
+    mail.mkdir(parents=True)
+    for name, code in (("1000-a", "111111"), ("2000-b", "222222")):
+        message = EmailMessage()
+        message["To"] = "admin@example.com"
+        message["Subject"] = "Your ABI sign-in code"
+        message.set_content(f"Your ABI sign-in code is: {code}\n")
+        (mail / f"{name}.eml").write_bytes(bytes(message))
 
-    email, password = dev._ensure_default_admin_env()
+    result = CliRunner().invoke(dev.dev, ["code"])
 
-    assert email == "admin@example.com"
-    assert password != "admin" and len(password) >= 24
-    assert f"NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD={password}" in env_file.read_text()
+    assert result.exit_code == 0, result.output
+    assert result.output.splitlines()[0] == "222222"
+    refused = CliRunner().invoke(dev.dev, ["code", "--email", "nobody@example.com"])
+    assert refused.exit_code != 0 and "No sign-in code" in refused.output
 
 
 def test_ensure_default_api_key_does_not_overwrite_env_file(
@@ -950,9 +971,6 @@ def stack(monkeypatch, tmp_path):
     monkeypatch.setattr(dev, "_dev_dir", lambda: tmp_path)
     monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
     monkeypatch.setattr(dev, "_ensure_storage_layout", lambda: None)
-    monkeypatch.setattr(
-        dev, "_ensure_default_admin_env", lambda: ("admin@example.com", "pw")
-    )
     monkeypatch.setattr(dev, "_ensure_default_api_key_env", lambda: "key")
     monkeypatch.setattr(dev, "ensure_nats_callout_seed", lambda path: "SA-seed")
     monkeypatch.setattr(dev, "_wait_until_ready", lambda *a, **k: True)

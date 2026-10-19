@@ -9,8 +9,7 @@ import click
 
 import naas_abi_cli
 from naas_abi_cli.cli.admin_credentials import (
-    ADMIN_PASSWORD_KEY,
-    ensure_admin_credentials,
+    ADMIN_EMAIL,
     ensure_idp_client_secret,
     ensure_nats_callout_seed,
     ensure_nats_passwords,
@@ -110,14 +109,14 @@ def _cd_argument(project_path: str) -> str:
     return shlex.quote(relative)
 
 
-def _print_next_steps(project_path: str, admin_email: str, nats: bool) -> None:
+def _print_next_steps(project_path: str, nats: bool) -> None:
     """Report where the project landed and how to start it."""
     click.echo()
     click.secho(f"✓ Project created at {project_path}", fg="green", bold=True)
     click.echo()
     click.echo(
-        f"Admin login: {admin_email} — its generated password is in .env "
-        f"as {ADMIN_PASSWORD_KEY}."
+        f"Admin: {ADMIN_EMAIL} signs in with the code the identity provider mails to "
+        "that address (`abi dev code` prints it)."
     )
     click.echo()
     click.secho("Next steps:", bold=True)
@@ -269,8 +268,6 @@ def new_project(
         )
 
     env_path = Path(project_path) / ".env"
-    # The one seeded account gets a password generated for this project only.
-    admin_email, _password = ensure_admin_credentials(env_path)
     if with_nats:
         # The configs name these: the broker users' passwords (the engine logs
         # in as `engine`, its auth callout as `auth`) and the callout's account
@@ -310,4 +307,4 @@ def new_project(
         check=True,
     )
 
-    _print_next_steps(project_path, admin_email, with_nats)
+    _print_next_steps(project_path, with_nats)

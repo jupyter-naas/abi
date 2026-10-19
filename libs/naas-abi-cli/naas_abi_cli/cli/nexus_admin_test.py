@@ -206,7 +206,9 @@ def test_the_client_needs_a_token_and_never_logs_in(
     monkeypatch.delenv("NEXUS_ACCESS_TOKEN", raising=False)
     with pytest.raises(RuntimeError, match="abi_pk_"):
         nexus_client.build_client(api_url="http://nexus.test", token=None)
-    result = runner.invoke(_main, ["user", "list", "--org", "o", "--auth-password", "x"])
+    result = runner.invoke(
+        _main, ["user", "list", "--org", "o", "--auth-password", "x"]
+    )
     assert result.exit_code != 0
     assert "No such option" in result.output
     assert not hasattr(nexus_client.NexusClient, "_login")
@@ -215,7 +217,11 @@ def test_the_client_needs_a_token_and_never_logs_in(
 def test_there_is_no_command_that_creates_a_password_account(runner: CliRunner) -> None:
     result = runner.invoke(_main, ["user", "--help"])
     assert result.exit_code == 0
-    commands = [line.split()[0] for line in result.output.split("Commands:")[1].split("\n") if line.strip()]
+    commands = [
+        line.split()[0]
+        for line in result.output.split("Commands:")[1].split("\n")
+        if line.strip()
+    ]
     assert "create" not in commands and "migrate" in commands
 
 
@@ -226,10 +232,13 @@ def test_there_is_no_command_that_creates_a_password_account(runner: CliRunner) 
 def nexus_db(tmp_path):
     """A Nexus database with two accounts of the old login and one a provider signs in."""
     import asyncio
+    import importlib
 
-    from naas_abi.apps.nexus.apps.api.app.core.database import Base
-    from naas_abi.apps.nexus.apps.api.app.models import UserModel
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+
+    nexus = "naas_abi.apps.nexus.apps.api.app"
+    Base = importlib.import_module(f"{nexus}.core.database").Base
+    UserModel = importlib.import_module(f"{nexus}.models").UserModel
 
     url = f"sqlite+aiosqlite:///{tmp_path / 'nexus.db'}"
 
@@ -260,7 +269,9 @@ def nexus_db(tmp_path):
 class _Identity:
     default_provider = "builtin"
 
-    def __init__(self, provisioning: str = "builtin", existing: tuple[str, ...] = ()) -> None:
+    def __init__(
+        self, provisioning: str = "builtin", existing: tuple[str, ...] = ()
+    ) -> None:
         from types import SimpleNamespace
 
         self._info = SimpleNamespace(name="builtin", provisioning=provisioning)
@@ -292,11 +303,18 @@ def _migrate(runner: CliRunner, nexus_db: str, identity: _Identity, *args: str):
     return runner.invoke(
         _main,
         ["user", "migrate", "--database-url", nexus_db, *args],
-        obj={"services_opener": lambda: (SimpleNamespace(identity=identity), lambda: None)},
+        obj={
+            "services_opener": lambda: (
+                SimpleNamespace(identity=identity),
+                lambda: None,
+            )
+        },
     )
 
 
-def test_migrate_is_a_dry_run_until_it_is_applied(runner: CliRunner, nexus_db: str) -> None:
+def test_migrate_is_a_dry_run_until_it_is_applied(
+    runner: CliRunner, nexus_db: str
+) -> None:
     identity = _Identity(existing=("bob@example.com",))
     result = _migrate(runner, nexus_db, identity)
     assert result.exit_code == 0, result.output
