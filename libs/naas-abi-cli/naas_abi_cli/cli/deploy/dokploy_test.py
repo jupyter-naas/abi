@@ -70,7 +70,7 @@ def _project(
     (project / "config.local.yaml").write_text(
         config.replace("{nats}", _NATS_BLOCK if nats else ""), encoding="utf-8"
     )
-    (project / "Dockerfile").write_text("FROM python:3.11\n", encoding="utf-8")
+    (project / "Dockerfile").write_text("FROM python:3.12\n", encoding="utf-8")
     return project
 
 
