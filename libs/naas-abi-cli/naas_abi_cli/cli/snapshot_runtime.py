@@ -33,6 +33,7 @@ from pathlib import Path
 import click
 
 from .bootstrap import find_abi_project_root
+from .private_dir import keep_out_of_git
 from .stack_runtime import run_compose
 
 # Stateful volumes worth snapshotting, by their docker-compose volume key.
@@ -629,6 +630,7 @@ def import_snapshot(src: Path, root: Path | None = None, force: bool = False) ->
         raise click.ClickException(f"Archive not found: {src}")
     base = snapshots_root(root)
     base.mkdir(parents=True, exist_ok=True)
+    keep_out_of_git(base)
     with tarfile.open(src, "r:gz") as tar:
         # Skip members with no path parts ('.', './', '') so a `tar -C dir .`
         # style archive resolves to its real top-level entries instead of raising
@@ -753,6 +755,7 @@ def create_snapshot(
         raise click.ClickException(f"Snapshot '{snapshot_id}' already exists.")
     volumes_dir = snap_dir / VOLUMES_DIRNAME
     volumes_dir.mkdir(parents=True)
+    keep_out_of_git(snapshots_root(root))
 
     emit("Stopping stack for a consistent copy...")
     run_compose(["stop"])

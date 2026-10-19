@@ -21,6 +21,7 @@ from ..admin_credentials import (
     ensure_nats_secret,
     generate_admin_password,
 )
+from ..private_dir import keep_out_of_git
 from ..utils.Copier import Copier
 
 LOCAL_ENV_MARKER = "# Added by abi deploy local command execution"
@@ -508,6 +509,8 @@ def _backup_local_deploy_files(
     backup_timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     backup_path = os.path.join(backup_root, backup_timestamp)
     os.makedirs(backup_path, exist_ok=False)
+    # The backup holds a copy of .env.
+    keep_out_of_git(Path(backup_root).parent)
 
     for source_path in existing_paths:
         destination_path = os.path.join(backup_path, os.path.basename(source_path))
