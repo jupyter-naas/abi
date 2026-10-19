@@ -1835,10 +1835,7 @@ async def evaluate_workbook_preview(
         workbook = parse_workbook_html(body.html)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    if (
-        len(workbook.sheets) > 256
-        or sum(len(row) for tab in workbook.sheets for row in tab.rows) > 100_000
-    ):
+    if len(workbook.sheets) > 256 or sum(len(row) for tab in workbook.sheets for row in tab.rows) > 100_000:
         raise HTTPException(status_code=422, detail="Calculate up to 100,000 cells")
 
     def calculate() -> dict:

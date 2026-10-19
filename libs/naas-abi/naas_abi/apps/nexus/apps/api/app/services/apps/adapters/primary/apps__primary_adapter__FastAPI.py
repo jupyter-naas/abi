@@ -133,7 +133,7 @@ def _resolve_manifest_url(raw_url: str | None, module_path: str, app_name: str) 
     ``naas_abi_marketplace/ai/chatgpt`` in the URL.
     """
     if raw_url and raw_url.startswith("html:"):
-        filename = raw_url[len("html:") :]
+        filename = raw_url[len("html:"):]
         module_path_url = module_path.replace(".", "/")
         return f"/app-html/{module_path_url}/{app_name}/{filename}"
     return raw_url
@@ -311,7 +311,10 @@ def _scan_apps_html_paths() -> dict[str, str]:
             if not manifest_path.is_file():
                 continue
             for asset_file in app_dir.rglob("*"):
-                if not asset_file.is_file() or asset_file.suffix.lower() not in _APP_ASSET_SUFFIXES:
+                if (
+                    not asset_file.is_file()
+                    or asset_file.suffix.lower() not in _APP_ASSET_SUFFIXES
+                ):
                     continue
                 rel = asset_file.relative_to(app_dir).as_posix()
                 url_key = f"{module_path_url}/{app_dir.name}/{rel}"
@@ -560,11 +563,15 @@ async def list_apps(
     if workspace_id:
         seed = workspace_seed_for_slug(workspace_slug)
         if seed is not None and seed.apps:
-            seed_apps = {str(app_id).strip() for app_id in seed.apps if str(app_id).strip()}
+            seed_apps = {
+                str(app_id).strip() for app_id in seed.apps if str(app_id).strip()
+            }
 
     results: list[AppInfo] = []
     for app in catalog:
-        update: dict = {"enabled": resolve_app_enabled(app.app_id, enabled_by_app_id, seed_apps)}
+        update: dict = {
+            "enabled": resolve_app_enabled(app.app_id, enabled_by_app_id, seed_apps)
+        }
 
         # Manifest values take precedence; only fall back to runtime config
         # when the manifest omits the credential.

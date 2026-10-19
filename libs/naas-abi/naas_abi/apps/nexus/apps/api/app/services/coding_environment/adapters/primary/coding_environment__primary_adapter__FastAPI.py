@@ -216,7 +216,11 @@ def _public_clone_url(repo_id: str) -> str:
 
 def _to_repo_item(repo: Repo) -> RepoListItem:
     repo_id = f"{repo.owner}/{repo.name}"
-    clone_url = repo.clone_url if repo.clone_url.startswith("file:") else _public_clone_url(repo_id)
+    clone_url = (
+        repo.clone_url
+        if repo.clone_url.startswith("file:")
+        else _public_clone_url(repo_id)
+    )
     return RepoListItem(
         repo_id=repo_id,
         name=repo.name,
@@ -258,7 +262,9 @@ def _coder_username(name: str | None, email: str) -> str:
     """The Coder username for this user — same derivation the Coder adapter uses
     for ``ensure_user``, so it matches the workspace owner in the container name
     ``coder-<owner>-<workspace>``."""
-    return _sanitize_coder_username(name or "") or _sanitize_coder_username(email.split("@", 1)[0])
+    return _sanitize_coder_username(name or "") or _sanitize_coder_username(
+        email.split("@", 1)[0]
+    )
 
 
 def _continue_agent_ids() -> list[str]:
@@ -275,7 +281,9 @@ def _continue_agent_ids() -> list[str]:
         ids = [a for a in _list_agent_model_ids() if not a.startswith("_")]
     except Exception:
         ids = []
-    ordered = ([default] if default and default in ids else []) + [a for a in ids if a != default]
+    ordered = ([default] if default and default in ids else []) + [
+        a for a in ids if a != default
+    ]
     return ordered or ([default] if default else ["AbiAgent"])
 
 
@@ -596,7 +604,8 @@ async def repo_contents(
     except SourceControlError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return [
-        ContentEntryResponse(name=e.name, path=e.path, type=e.type, size=e.size) for e in entries
+        ContentEntryResponse(name=e.name, path=e.path, type=e.type, size=e.size)
+        for e in entries
     ]
 
 
@@ -616,7 +625,9 @@ async def repo_file(
         raise HTTPException(status_code=503, detail="No git backend configured.")
     await _authorize_repo(iam, repo, workspace_id, role, write=False)
     try:
-        f = await run_in_threadpool(source_control.get_file, repo_id=repo, path=path, ref=ref)
+        f = await run_in_threadpool(
+            source_control.get_file, repo_id=repo, path=path, ref=ref
+        )
     except SourceControlError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return FileContentResponse(
@@ -646,7 +657,8 @@ async def repo_commits(
     except SourceControlError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return [
-        CommitResponse(sha=c.sha, message=c.message, author=c.author, date=c.date) for c in commits
+        CommitResponse(sha=c.sha, message=c.message, author=c.author, date=c.date)
+        for c in commits
     ]
 
 
@@ -712,7 +724,9 @@ async def set_default_repo(
         )
     await _authorize_repo(iam, body.repo_id, body.workspace_id, role, write=False)
     row = (
-        await db.execute(select(WorkspaceModel).where(WorkspaceModel.id == body.workspace_id))
+        await db.execute(
+            select(WorkspaceModel).where(WorkspaceModel.id == body.workspace_id)
+        )
     ).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="Workspace not found.")
@@ -785,7 +799,9 @@ async def delete_repo_branch(
         raise HTTPException(status_code=503, detail="No git backend configured.")
     await _authorize_repo(iam, repo, workspace_id, role, write=True)
     try:
-        await run_in_threadpool(source_control.delete_branch, repo_id=repo, name=name)
+        await run_in_threadpool(
+            source_control.delete_branch, repo_id=repo, name=name
+        )
     except SourceControlError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {"ok": True}
@@ -882,7 +898,9 @@ async def provision_environment(
             params["git_author_name"] = current_user.name or ""
             params["git_author_email"] = str(current_user.email)
         except SourceControlError as exc:
-            raise HTTPException(status_code=502, detail=f"Git setup failed: {exc}") from exc
+            raise HTTPException(
+                status_code=502, detail=f"Git setup failed: {exc}"
+            ) from exc
 
     params["branch"] = checkout_branch
     if settings.coding_workspace_docker_network:
@@ -1018,7 +1036,9 @@ async def lookup_code_bindings(
     service: CodingEnvironmentService | None = None,
 ) -> tuple[str | None, str | None, str | None, str | None]:
     """Return sidecar_base, sidecar_secret, harness_base, environment_id."""
-    label = _code_runtime_label(workspace_id=workspace_id, repo_id=repo_id, branch=branch)
+    label = _code_runtime_label(
+        workspace_id=workspace_id, repo_id=repo_id, branch=branch
+    )
     result = await db.execute(
         select(CodingEnvironmentModel).where(
             CodingEnvironmentModel.workspace_id == workspace_id,
@@ -1031,7 +1051,9 @@ async def lookup_code_bindings(
         return None, None, None, None
     harness_base = None
     if service is not None and row.id:
-        harness_base = await run_in_threadpool(service.get_harness_binding, workspace_id=row.id)
+        harness_base = await run_in_threadpool(
+            service.get_harness_binding, workspace_id=row.id
+        )
     return (
         str(row.sidecar_base),
         str(row.sidecar_secret),
@@ -1074,7 +1096,9 @@ async def ensure_sandbox_runtime(
     if source_control is not None:
         await _authorize_repo(iam, repo_id, workspace_id, role, write=True)
     label = _code_runtime_label(workspace_id=workspace_id, repo_id=repo_id, branch=branch)
-    name = _sandbox_workspace_name(workspace_id=workspace_id, repo_id=repo_id, branch=branch)
+    name = _sandbox_workspace_name(
+        workspace_id=workspace_id, repo_id=repo_id, branch=branch
+    )
 
     existing = await db.execute(
         select(CodingEnvironmentModel).where(
@@ -1094,7 +1118,9 @@ async def ensure_sandbox_runtime(
             ready = await run_in_threadpool(
                 _wait_for_sidecar, str(row.sidecar_base), str(row.sidecar_secret)
             )
-        harness_base = await run_in_threadpool(service.get_harness_binding, workspace_id=row.id)
+        harness_base = await run_in_threadpool(
+            service.get_harness_binding, workspace_id=row.id
+        )
         if harness_base:
             harness_ready = await run_in_threadpool(_wait_for_harness, harness_base)
             if not harness_ready:
@@ -1103,7 +1129,9 @@ async def ensure_sandbox_runtime(
                     service.get_harness_binding, workspace_id=row.id
                 )
                 if harness_base:
-                    harness_ready = await run_in_threadpool(_wait_for_harness, harness_base)
+                    harness_ready = await run_in_threadpool(
+                        _wait_for_harness, harness_base
+                    )
         detail = None
         if not ready and not harness_ready:
             detail = "Sidecar and harness not reachable"
@@ -1186,10 +1214,15 @@ async def ensure_sandbox_runtime(
         sidecar_base, sidecar_secret = binding
 
     ready = bool(
-        sidecar_base and await run_in_threadpool(_wait_for_sidecar, sidecar_base, sidecar_secret)
+        sidecar_base
+        and await run_in_threadpool(_wait_for_sidecar, sidecar_base, sidecar_secret)
     )
-    harness_base = await run_in_threadpool(service.get_harness_binding, workspace_id=status.id)
-    harness_ready = bool(harness_base and await run_in_threadpool(_wait_for_harness, harness_base))
+    harness_base = await run_in_threadpool(
+        service.get_harness_binding, workspace_id=status.id
+    )
+    harness_ready = bool(
+        harness_base and await run_in_threadpool(_wait_for_harness, harness_base)
+    )
     try:
         db.add(
             CodingEnvironmentModel(
@@ -1235,7 +1268,9 @@ async def get_environment(
     await require_workspace_access(current_user.id, workspace_id)
     try:
         status = await run_in_threadpool(service.get_status, workspace_id=environment_id)
-        ui_url = await run_in_threadpool(service.get_workspace_ui_url, workspace_id=environment_id)
+        ui_url = await run_in_threadpool(
+            service.get_workspace_ui_url, workspace_id=environment_id
+        )
     except CodingEnvironmentError as exc:
         raise _http_error(exc) from exc
     return _to_env(status, ui_url=ui_url)
@@ -1304,7 +1339,9 @@ async def delete_environment(
         raise _http_error(exc) from exc
     try:
         await db.execute(
-            delete(CodingEnvironmentModel).where(CodingEnvironmentModel.id == environment_id)
+            delete(CodingEnvironmentModel).where(
+                CodingEnvironmentModel.id == environment_id
+            )
         )
         await db.commit()
     except Exception:
@@ -1337,7 +1374,11 @@ async def get_environment_access(
             user_id=user_id,
             app_slug=app_slug,
         )
-        ui_url = await run_in_threadpool(service.get_workspace_ui_url, workspace_id=environment_id)
+        ui_url = await run_in_threadpool(
+            service.get_workspace_ui_url, workspace_id=environment_id
+        )
     except CodingEnvironmentError as exc:
         raise _http_error(exc) from exc
-    return EnvironmentAccessResponse(url=access.url, expires_at=access.expires_at, ui_url=ui_url)
+    return EnvironmentAccessResponse(
+        url=access.url, expires_at=access.expires_at, ui_url=ui_url
+    )

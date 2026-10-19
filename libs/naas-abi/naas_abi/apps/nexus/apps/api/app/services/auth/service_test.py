@@ -138,7 +138,9 @@ async def test_ensure_user_for_invite_creates_user_without_workspace() -> None:
     )
     service = AuthService(adapter=adapter)
 
-    user, created = await service.ensure_user_for_invite("NEW@example.com", name="Emma Petit")
+    user, created = await service.ensure_user_for_invite(
+        "NEW@example.com", name="Emma Petit"
+    )
 
     assert created is True
     assert user.id == "user-new"
@@ -188,7 +190,9 @@ async def test_request_magic_link_public_signup_creates_default_workspace(
 
     assert challenge
     adapter.create_user_with_default_workspace.assert_awaited_once()
-    assert adapter.create_user_with_default_workspace.await_args.kwargs["name"] == "Unknown"
+    assert (
+        adapter.create_user_with_default_workspace.await_args.kwargs["name"] == "Unknown"
+    )
     adapter.create_user.assert_not_called()
     adapter.create_magic_link_token.assert_awaited_once()
     adapter.commit.assert_awaited_once()
@@ -210,7 +214,9 @@ async def test_request_magic_link_create_if_missing_true_skips_workspace(
     )
     service = AuthService(adapter=adapter)
 
-    challenge = await service.request_magic_link("invitee@example.com", create_if_missing=True)
+    challenge = await service.request_magic_link(
+        "invitee@example.com", create_if_missing=True
+    )
 
     assert challenge
     adapter.create_user.assert_awaited_once()

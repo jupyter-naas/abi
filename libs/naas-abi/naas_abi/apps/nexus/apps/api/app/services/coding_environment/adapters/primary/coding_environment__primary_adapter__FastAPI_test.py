@@ -288,7 +288,9 @@ def test_branch_crud(monkeypatch: pytest.MonkeyPatch) -> None:
     # appears in the list
     names = [
         b["name"]
-        for b in client.get("/coding-environments/branches", params={"workspace_id": "org"}).json()
+        for b in client.get(
+            "/coding-environments/branches", params={"workspace_id": "org"}
+        ).json()
     ]
     assert "feature/x" in names
     # duplicate -> 409
@@ -305,7 +307,9 @@ def test_branch_crud(monkeypatch: pytest.MonkeyPatch) -> None:
     assert resp.status_code == 200, resp.text
     names = [
         b["name"]
-        for b in client.get("/coding-environments/branches", params={"workspace_id": "org"}).json()
+        for b in client.get(
+            "/coding-environments/branches", params={"workspace_id": "org"}
+        ).json()
     ]
     assert "feature/x" not in names
 
@@ -316,7 +320,9 @@ def test_get_logs(monkeypatch: pytest.MonkeyPatch) -> None:
         "/coding-environments",
         json={"workspace_id": "org", "name": "lg", "template_id": "tmpl-default"},
     ).json()
-    resp = client.get(f"/coding-environments/{env['id']}/logs", params={"workspace_id": "org"})
+    resp = client.get(
+        f"/coding-environments/{env['id']}/logs", params={"workspace_id": "org"}
+    )
     assert resp.status_code == 200, resp.text
     assert isinstance(resp.json()["lines"], list)
     assert resp.json()["lines"]
@@ -336,19 +342,25 @@ def test_list_and_create_repos(monkeypatch: pytest.MonkeyPatch) -> None:
     # the configured default is surfaced first
     assert repos[0]["repo_id"] == "abi/monorepo"
     # create a new repo under the same owner
-    resp = client.post("/coding-environments/repos", json={"workspace_id": "org", "name": "lib"})
+    resp = client.post(
+        "/coding-environments/repos", json={"workspace_id": "org", "name": "lib"}
+    )
     assert resp.status_code == 200, resp.text
     assert resp.json()["repo_id"] == "abi/lib"
     repos2 = [
         r["repo_id"]
-        for r in client.get("/coding-environments/repos", params={"workspace_id": "org"}).json()
+        for r in client.get(
+            "/coding-environments/repos", params={"workspace_id": "org"}
+        ).json()
     ]
     assert "abi/lib" in repos2
 
 
 def test_create_repo_is_empty_with_clone_url(monkeypatch: pytest.MonkeyPatch) -> None:
     client = _client(monkeypatch)
-    resp = client.post("/coding-environments/repos", json={"workspace_id": "org", "name": "fresh"})
+    resp = client.post(
+        "/coding-environments/repos", json={"workspace_id": "org", "name": "fresh"}
+    )
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["repo_id"] == "abi/fresh"
@@ -453,7 +465,9 @@ def test_branches_scoped_to_repo_id(monkeypatch: pytest.MonkeyPatch) -> None:
     # the default repo is unaffected
     default = [
         b["name"]
-        for b in client.get("/coding-environments/branches", params={"workspace_id": "org"}).json()
+        for b in client.get(
+            "/coding-environments/branches", params={"workspace_id": "org"}
+        ).json()
     ]
     assert "feat" not in default
 

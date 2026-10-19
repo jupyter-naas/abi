@@ -26,9 +26,7 @@ APP_HTML_TOKEN_COOKIE_MAX_AGE = 8 * 60 * 60
 _EXTRA_APP_HTML_TOKEN_VALIDATORS: list[Callable[[str, Request], bool]] = []
 
 
-def register_app_html_token_validator(
-    validator: Callable[[str, Request], bool],
-) -> None:
+def register_app_html_token_validator(validator: Callable[[str, Request], bool]) -> None:
     """Register an additional ``/app-html/`` token checker (Nexus JWT, etc.)."""
     _EXTRA_APP_HTML_TOKEN_VALIDATORS.append(validator)
 

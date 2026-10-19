@@ -113,9 +113,7 @@ def _abandon_engine() -> None:
     try:
         runtime_engine.shutdown()
     except Exception as exc:  # noqa: BLE001 - the start failure is what to report
-        logger.warning(
-            f"api: shutting down the engine of a failed start failed: {exc!r}"
-        )
+        logger.warning(f"api: shutting down the engine of a failed start failed: {exc!r}")
 
 
 @asynccontextmanager

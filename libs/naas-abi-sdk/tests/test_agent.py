@@ -40,11 +40,7 @@ def proxy(*updates):
     module = SimpleNamespace(
         client=SimpleNamespace(project="default", transport=transport),
         ready_instances=AsyncMock(
-            return_value=[
-                SimpleNamespace(
-                    instance_id="one", service_account="sa1", agents=(descriptor,)
-                )
-            ]
+            return_value=[SimpleNamespace(instance_id="one", service_account="sa1", agents=(descriptor,))]
         ),
     )
     module.instances = module.ready_instances

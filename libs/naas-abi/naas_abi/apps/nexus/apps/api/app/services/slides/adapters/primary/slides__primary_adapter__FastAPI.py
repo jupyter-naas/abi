@@ -273,7 +273,9 @@ def _slides_sc(request: Request) -> tuple[SourceControlService, str]:
 
 def _forge_username(name: str, email: str) -> str:
     def slug(raw: str) -> str:
-        return re.sub(r"[^a-z0-9._-]+", "-", raw.strip().lower()).strip("-._")[:39].strip("-._")
+        return re.sub(r"[^a-z0-9._-]+", "-", raw.strip().lower()).strip("-._")[:39].strip(
+            "-._"
+        )
 
     return slug(name) or slug(email.split("@", 1)[0]) or "abi-user"
 
@@ -388,14 +390,14 @@ def _resolve_project_paths(
     branch_names: set[str] | None = None,
 ) -> dict[str, str] | None:
     """Namespaced or legacy paths when the deck belongs to workspace_id."""
-    names = (
-        branch_names
-        if branch_names is not None
-        else {b.name for b in sc.list_branches(repo_id=repo_id)}
-    )
+    names = branch_names if branch_names is not None else {
+        b.name for b in sc.list_branches(repo_id=repo_id)
+    }
     ns = _paths_for(workspace_id, slug, legacy=False)
     if ns["branch"] in names:
-        meta = _load_project_meta(sc, repo_id=repo_id, path=ns["project_path"], ref=ns["branch"])
+        meta = _load_project_meta(
+            sc, repo_id=repo_id, path=ns["project_path"], ref=ns["branch"]
+        )
         if meta is None:
             return None
         owner = _meta_workspace_id(meta)
@@ -428,7 +430,9 @@ def _claim_workspace_in_meta(
     author_email: str,
 ) -> None:
     """Persist workspace_id on legacy/unscoped project.json when missing."""
-    meta = _load_project_meta(sc, repo_id=repo_id, path=paths["project_path"], ref=paths["branch"])
+    meta = _load_project_meta(
+        sc, repo_id=repo_id, path=paths["project_path"], ref=paths["branch"]
+    )
     if meta is None or _meta_workspace_id(meta) is not None:
         return
     meta = {
@@ -526,7 +530,9 @@ def _seed_file_writes(
     else:
         writes.append(FileWrite(path=paths["assets_gitkeep"], content=""))
     if include_readme:
-        writes.append(FileWrite(path=paths["assets_readme"], content=_ASSETS_README))
+        writes.append(
+            FileWrite(path=paths["assets_readme"], content=_ASSETS_README)
+        )
     return writes
 
 
@@ -703,7 +709,9 @@ def _template_sources() -> list[_TemplateSource]:
                 directory,
             )
             continue
-        sources.append(_TemplateSource(entry.namespace, str(directory), (directory,)))
+        sources.append(
+            _TemplateSource(entry.namespace, str(directory), (directory,))
+        )
     return sources
 
 
@@ -860,8 +868,12 @@ def _list_seed_template_records() -> list[dict]:
         except HTTPException:
             seed = ""
         meta["slides"] = _parse_slide_outline(seed) if seed else []
-        file_assets = [{"name": name, "kind": "file"} for name in _list_seed_asset_names(tid)]
-        meta["assets"] = file_assets or (_parse_template_assets(seed) if seed else [])
+        file_assets = [
+            {"name": name, "kind": "file"} for name in _list_seed_asset_names(tid)
+        ]
+        meta["assets"] = file_assets or (
+            _parse_template_assets(seed) if seed else []
+        )
         rows.append(meta)
     return rows
 
@@ -915,7 +927,11 @@ def _iter_seed_asset_entries(template_id: str):
             yielded = False
             for entry in entries:
                 name = getattr(entry, "name", "") or ""
-                if not name or name in _SKIP_ASSET_NAMES or not _ASSET_FILENAME_RE.match(name):
+                if (
+                    not name
+                    or name in _SKIP_ASSET_NAMES
+                    or not _ASSET_FILENAME_RE.match(name)
+                ):
                     continue
                 try:
                     if hasattr(entry, "is_file") and not entry.is_file():
@@ -1177,11 +1193,15 @@ def _sidecar_tool_call(
         return {"error": f"sidecar {tool_name} failed: {exc}"}
 
 
-def _read_deck_via_sidecar(base: str | None, secret: str | None, *, deck_path: str) -> str | None:
+def _read_deck_via_sidecar(
+    base: str | None, secret: str | None, *, deck_path: str
+) -> str | None:
     """Return deck HTML from the Coder sidecar, or None when unavailable."""
     if not _probe_sidecar(base, secret):
         return None
-    result = _sidecar_tool_call(base, secret, "read_file", {"path": deck_path}, timeout_s=10.0)
+    result = _sidecar_tool_call(
+        base, secret, "read_file", {"path": deck_path}, timeout_s=10.0
+    )
     if result.get("error") or result.get("binary"):
         return None
     content = result.get("content")
@@ -1231,7 +1251,11 @@ def _friendly_git_detail(exc: BaseException) -> str:
         isinstance(exc, RepoNotFoundError) and _is_repo_id_message(repo_hint)
     ):
         return _repo_missing_detail(repo_hint or _repo_id())
-    if len(text) > 180 or text.startswith("{") or "forgejo api request failed" in text.lower():
+    if (
+        len(text) > 180
+        or text.startswith("{")
+        or "forgejo api request failed" in text.lower()
+    ):
         return "Git setup temporarily unavailable"
     return text or "Git setup temporarily unavailable"
 
@@ -1255,7 +1279,9 @@ def _friendly_coding_detail(exc: BaseException) -> str:
     return text or "Coder runtime temporarily unavailable"
 
 
-def _git_clone_url(sc: SourceControlService, repo_id: str, *, username: str, token: str) -> str:
+def _git_clone_url(
+    sc: SourceControlService, repo_id: str, *, username: str, token: str
+) -> str:
     """Clone URL the slides sidecar should use for this repo.
 
     The default targets Forgejo over HTTP, which does not exist in the
@@ -1466,15 +1492,21 @@ async def create_project(
             "updated_at": None,
             "embedded_images": embedded,
             "extracted_images": len(catalog_assets),
-            "assets_note": _assets_note(copied=len(catalog_assets), embedded=embedded),
+            "assets_note": _assets_note(
+                copied=len(catalog_assets), embedded=embedded
+            ),
         }
         # Concurrent/prior create already finished: keep 409. If seed is
         # incomplete (branch exists, deck.html missing), finish seeding.
         if adopted_branch:
             try:
-                existing_deck = sc.get_file(repo_id=repo_id, path=paths["deck_path"], ref=branch)
+                existing_deck = sc.get_file(
+                    repo_id=repo_id, path=paths["deck_path"], ref=branch
+                )
                 if existing_deck.text:
-                    raise BranchNameConflictError(f"Slides project '{slug}' already exists")
+                    raise BranchNameConflictError(
+                        f"Slides project '{slug}' already exists"
+                    )
             except RepoNotFoundError:
                 pass
         commit = sc.upsert_files(
@@ -1514,7 +1546,9 @@ async def create_project(
             db=db,
         )
         if not runtime.ensured:
-            logger.warning("slides runtime not ensured for %s: %s", slug, runtime.detail)
+            logger.warning(
+                "slides runtime not ensured for %s: %s", slug, runtime.detail
+            )
     except Exception:
         logger.exception("slides runtime ensure failed for %s", slug)
 
@@ -1534,7 +1568,9 @@ async def get_project(
     sc, repo_id = _slides_sc(request)
 
     def _get() -> ProjectResponse:
-        paths = _resolve_project_paths(sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug)
+        paths = _resolve_project_paths(
+            sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug
+        )
         if paths is None:
             raise RepoNotFoundError(f"slides project {slug}")
         branches = {b.name: b for b in sc.list_branches(repo_id=repo_id)}
@@ -1653,7 +1689,9 @@ async def get_deck(
     sc, repo_id = _slides_sc(request)
 
     def _resolve() -> dict[str, str]:
-        paths = _resolve_project_paths(sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug)
+        paths = _resolve_project_paths(
+            sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug
+        )
         if paths is None:
             raise RepoNotFoundError(f"slides project {slug}")
         # Do not claim here: get_project already claims on open, and parallel
@@ -1675,7 +1713,9 @@ async def get_deck(
     )
 
     def _get_sidecar() -> str | None:
-        return _read_deck_via_sidecar(sidecar_base, sidecar_secret, deck_path=paths["deck_path"])
+        return _read_deck_via_sidecar(
+            sidecar_base, sidecar_secret, deck_path=paths["deck_path"]
+        )
 
     try:
         sidecar_html = await run_in_threadpool(_get_sidecar)
@@ -1689,7 +1729,9 @@ async def get_deck(
             )
 
         def _get_forgejo() -> DeckResponse:
-            file = sc.get_file(repo_id=repo_id, path=paths["deck_path"], ref=paths["branch"])
+            file = sc.get_file(
+                repo_id=repo_id, path=paths["deck_path"], ref=paths["branch"]
+            )
             if file.is_binary or file.text is None:
                 raise ValidationError("Deck is not UTF-8 text")
             return DeckResponse(
@@ -1726,7 +1768,9 @@ async def get_project_asset(
     sc, repo_id = _slides_sc(request)
 
     def _get() -> Response:
-        paths = _resolve_project_paths(sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug)
+        paths = _resolve_project_paths(
+            sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug
+        )
         if paths is None:
             raise RepoNotFoundError(f"slides project {slug}")
         file = sc.get_file(
@@ -1893,7 +1937,9 @@ def _save_live_deck_html(
         author_email=author_email,
     )
     try:
-        meta_file = sc.get_file(repo_id=repo_id, path=paths["project_path"], ref=paths["branch"])
+        meta_file = sc.get_file(
+            repo_id=repo_id, path=paths["project_path"], ref=paths["branch"]
+        )
         if meta_file.text:
             data = _parse_meta(meta_file.text)
             from datetime import UTC, datetime
@@ -1964,10 +2010,9 @@ async def apply_template(
         )
         from datetime import UTC, datetime
 
-        meta = (
-            _load_project_meta(sc, repo_id=repo_id, path=paths["project_path"], ref=paths["branch"])
-            or {}
-        )
+        meta = _load_project_meta(
+            sc, repo_id=repo_id, path=paths["project_path"], ref=paths["branch"]
+        ) or {}
         meta["workspace_id"] = body.workspace_id
         meta["template_id"] = body.template_id
         meta["updated_at"] = datetime.now(UTC).isoformat()
@@ -2020,7 +2065,9 @@ async def list_history(
     sc, repo_id = _slides_sc(request)
 
     def _hist() -> list[CommitResponse]:
-        paths = _resolve_project_paths(sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug)
+        paths = _resolve_project_paths(
+            sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug
+        )
         if paths is None:
             raise RepoNotFoundError(f"slides project {slug}")
         # Scan the same depth as /version so every returned commit's version
@@ -2070,7 +2117,9 @@ async def get_history_diff(
     sc, repo_id = _slides_sc(request)
 
     def _diff() -> DeckDiffResponse:
-        paths = _resolve_project_paths(sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug)
+        paths = _resolve_project_paths(
+            sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug
+        )
         if paths is None:
             raise RepoNotFoundError(f"slides project {slug}")
         resolved_head = head
@@ -2119,13 +2168,17 @@ async def get_deck_version(
     sc, repo_id = _slides_sc(request)
 
     def _version() -> DeckVersionResponse:
-        paths = _resolve_project_paths(sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug)
+        paths = _resolve_project_paths(
+            sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug
+        )
         if paths is None:
             raise RepoNotFoundError(f"slides project {slug}")
         commits = sc.list_commits(
             repo_id=repo_id, ref=paths["branch"], limit=_VERSION_COMMIT_SCAN_LIMIT
         )
-        return DeckVersionResponse(version=_semver_from_commits(commits), commit_count=len(commits))
+        return DeckVersionResponse(
+            version=_semver_from_commits(commits), commit_count=len(commits)
+        )
 
     try:
         return await run_in_threadpool(_version)
@@ -2269,9 +2322,9 @@ async def _ensure_runtime_impl(
     template_id, template_name = picked
 
     author_email = str(current_user.email)
-    coder_username = _sanitize_coder_username(current_user.name or "") or _sanitize_coder_username(
-        author_email.split("@", 1)[0]
-    )
+    coder_username = _sanitize_coder_username(
+        current_user.name or ""
+    ) or _sanitize_coder_username(author_email.split("@", 1)[0])
     expected_base = _build_sidecar_base(coder_username=coder_username, name=name)
 
     # Reuse the dedicated env for this slides/<slug> when already bound.
@@ -2312,7 +2365,9 @@ async def _ensure_runtime_impl(
                 # The adapter is authoritative: a local runtime moves ports
                 # across restarts, so a stored base can be stale (or a Coder
                 # hostname written before the runtime was known).
-                bound = await run_in_threadpool(_adapter_runtime_binding, coding, existing.id)
+                bound = await run_in_threadpool(
+                    _adapter_runtime_binding, coding, existing.id
+                )
                 if bound is not None:
                     existing.sidecar_base, existing.sidecar_secret = bound
                 elif expected_base and not existing.sidecar_base:
@@ -2340,7 +2395,9 @@ async def _ensure_runtime_impl(
                             existing.id,
                         )
                         try:
-                            await run_in_threadpool(coding.stop, workspace_id=existing.id)
+                            await run_in_threadpool(
+                                coding.stop, workspace_id=existing.id
+                            )
                         except CodingEnvironmentError:
                             pass
                         status = await run_in_threadpool(
@@ -2428,7 +2485,9 @@ async def _ensure_runtime_impl(
         )
         # Prefer looking up an existing Coder workspace before create, so a
         # missing Nexus binding does not race into a name-conflict error.
-        existing_envs = await run_in_threadpool(coding.list_environments, user_id=user_id)
+        existing_envs = await run_in_threadpool(
+            coding.list_environments, user_id=user_id
+        )
         prior_ws = next(
             (env for env in existing_envs if env.name in coder_names),
             None,
@@ -2442,16 +2501,22 @@ async def _ensure_runtime_impl(
                     coding.start, workspace_id=prior_ws.id, params=params
                 )
             else:
-                status = await run_in_threadpool(coding.get_status, workspace_id=prior_ws.id)
+                status = await run_in_threadpool(
+                    coding.get_status, workspace_id=prior_ws.id
+                )
                 # Prefer the secret already baked into the running sidecar.
-                on_ws = await run_in_threadpool(_adapter_get_parameters, coding, prior_ws.id)
+                on_ws = await run_in_threadpool(
+                    _adapter_get_parameters, coding, prior_ws.id
+                )
                 baked = (on_ws or {}).get("sidecar_secret") or ""
                 if baked:
                     ws_secret = baked
                 else:
                     # No sidecar secret on the build: stop+start once to inject.
                     try:
-                        await run_in_threadpool(coding.stop, workspace_id=prior_ws.id)
+                        await run_in_threadpool(
+                            coding.stop, workspace_id=prior_ws.id
+                        )
                     except CodingEnvironmentError:
                         pass
                     status = await run_in_threadpool(
@@ -2466,7 +2531,9 @@ async def _ensure_runtime_impl(
                 params=params,
             )
             # Service-level adopt (race / 400 unique): sync sidecar secret.
-            on_ws = await run_in_threadpool(_adapter_get_parameters, coding, status.id)
+            on_ws = await run_in_threadpool(
+                _adapter_get_parameters, coding, status.id
+            )
             baked = (on_ws or {}).get("sidecar_secret") or ""
             if baked and baked != ws_secret:
                 adopted = True
@@ -2496,14 +2563,22 @@ async def _ensure_runtime_impl(
                 )
             adopted = True
             if match.phase in ("stopped", "stopping"):
-                status = await run_in_threadpool(coding.start, workspace_id=match.id, params=params)
+                status = await run_in_threadpool(
+                    coding.start, workspace_id=match.id, params=params
+                )
             else:
-                status = await run_in_threadpool(coding.get_status, workspace_id=match.id)
-                on_ws = await run_in_threadpool(_adapter_get_parameters, coding, match.id)
+                status = await run_in_threadpool(
+                    coding.get_status, workspace_id=match.id
+                )
+                on_ws = await run_in_threadpool(
+                    _adapter_get_parameters, coding, match.id
+                )
                 baked = (on_ws or {}).get("sidecar_secret") or ""
                 if baked:
                     ws_secret = baked
-            bound = await run_in_threadpool(_adapter_runtime_binding, coding, status.id)
+            bound = await run_in_threadpool(
+                _adapter_runtime_binding, coding, status.id
+            )
             if bound is not None:
                 ws_base, ws_secret = bound
         except CodingEnvironmentError as adopt_exc:
@@ -2648,7 +2723,9 @@ async def get_project_tree(
     sc, repo_id = _slides_sc(request)
 
     def _tree() -> ProjectTreeResponse:
-        paths = _resolve_project_paths(sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug)
+        paths = _resolve_project_paths(
+            sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug
+        )
         if paths is None:
             raise RepoNotFoundError(f"slides project {slug}")
         branch = paths["branch"]
@@ -2670,15 +2747,23 @@ async def get_project_tree(
         names = {e.name for e in entries}
         if "deck.html" not in names:
             entries.append(
-                TreeEntryResponse(name="deck.html", path=paths["deck_path"], type="file")
+                TreeEntryResponse(
+                    name="deck.html", path=paths["deck_path"], type="file"
+                )
             )
         if "assets" not in names:
-            entries.append(TreeEntryResponse(name="assets", path=paths["assets_dir"], type="dir"))
+            entries.append(
+                TreeEntryResponse(
+                    name="assets", path=paths["assets_dir"], type="dir"
+                )
+            )
         entries.sort(key=lambda e: (0 if e.type == "dir" else 1, e.name))
 
         assets: list[TreeEntryResponse] = []
         try:
-            assets_raw = sc.list_contents(repo_id=repo_id, path=paths["assets_dir"], ref=branch)
+            assets_raw = sc.list_contents(
+                repo_id=repo_id, path=paths["assets_dir"], ref=branch
+            )
             assets = [
                 TreeEntryResponse(
                     name=e.name,
@@ -2695,7 +2780,9 @@ async def get_project_tree(
 
         embedded = 0
         assets_note = None
-        meta = _load_project_meta(sc, repo_id=repo_id, path=paths["project_path"], ref=branch) or {}
+        meta = _load_project_meta(
+            sc, repo_id=repo_id, path=paths["project_path"], ref=branch
+        ) or {}
         try:
             embedded = int(meta.get("embedded_images") or 0)
         except (TypeError, ValueError):
@@ -2703,7 +2790,9 @@ async def get_project_tree(
         assets_note = meta.get("assets_note")
         if not embedded:
             try:
-                deck = sc.get_file(repo_id=repo_id, path=paths["deck_path"], ref=branch)
+                deck = sc.get_file(
+                    repo_id=repo_id, path=paths["deck_path"], ref=branch
+                )
                 if deck.text:
                     embedded = _count_embedded_images(deck.text)
             except SourceControlError:
@@ -2715,7 +2804,8 @@ async def get_project_tree(
             entries=entries,
             assets=assets,
             embedded_images=embedded,
-            assets_note=assets_note or _assets_note(copied=len(assets), embedded=embedded),
+            assets_note=assets_note
+            or _assets_note(copied=len(assets), embedded=embedded),
         )
 
     try:
@@ -2853,7 +2943,9 @@ async def _run_slide_html_mutation(
     )
 
     def _run() -> SlideMutationResponse:
-        paths = _resolve_project_paths(sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug)
+        paths = _resolve_project_paths(
+            sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug
+        )
         if paths is None:
             raise RepoNotFoundError(f"slides project {slug}")
         html = _read_live_deck_html(
@@ -2936,7 +3028,9 @@ async def list_slides(
     )
 
     def _list() -> SlidesListResponse:
-        paths = _resolve_project_paths(sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug)
+        paths = _resolve_project_paths(
+            sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug
+        )
         if paths is None:
             raise RepoNotFoundError(f"slides project {slug}")
         html = _read_live_deck_html(
