@@ -392,17 +392,19 @@ def test_an_api_key_caller_acts_as_the_api_account():
     assert contextvars.copy_context().run(signed_in) == nexus
 
 
-# -- keys of IAM on the core API (task #62) ------------------------------------------------------
+# -- keys of IAM stay off the core API's invocation routes (task #62) ----------------------------
+
+ROUTER_PREFIXES = ("/agents", "/pipelines", "/workflows", "/tools")
 
 
 @pytest.fixture
 def keyed_api(monkeypatch):
-    """The core API's key check over a real IAM held by its engine."""
+    """The four invocation routers, each with a route behind the real check, and
+    keys of a real IAM that its engine holds."""
     from types import SimpleNamespace
 
-    from fastapi import Depends, FastAPI
+    from fastapi import APIRouter, FastAPI
     from naas_abi_core.apps.api import api
-    from naas_abi_core.engine.call_context import current_call_context
     from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import (
         IAMStoreMemory,
     )
@@ -416,35 +418,40 @@ def keyed_api(monkeypatch):
     )
     monkeypatch.setenv("ABI_API_KEY", "deployment-key")
     app = FastAPI()
-
-    @app.get("/whoami", dependencies=[Depends(api.is_token_valid)])
-    async def whoami() -> dict:
-        context = current_call_context()
-        return {
-            "principal": context.principal.name or context.principal.id,
-            "on_behalf_of": context.on_behalf_of.id if context.on_behalf_of else None,
-            "scope": list(context.scope) if context.scope is not None else None,
-        }
-
+    for router in (
+        api.agents_router,
+        api.pipelines_router,
+        api.workflows_router,
+        api.tools_router,
+    ):
+        # The router's own prefix and dependencies, with a route that records
+        # that it ran: whatever the check lets through.
+        copy = APIRouter(prefix=router.prefix, dependencies=router.dependencies)
+        copy.post("/thing")(lambda: {"ran": True})
+        app.include_router(copy)
     return TestClient(app), iam
 
 
-def _get(client, token):
-    return client.get("/whoami", headers={"Authorization": f"Bearer {token}"})
+def _post(client, prefix, token):
+    return client.post(f"{prefix}/thing", headers={"Authorization": f"Bearer {token}"})
 
 
-def test_a_service_key_calls_as_its_own_account_not_as_api(keyed_api):
-    from naas_abi_core.engine.call_context import as_service_account
+def test_every_invocation_route_is_behind_the_deployment_key_check():
+    from fastapi.routing import APIRoute
+    from naas_abi_core.apps.api import api
 
-    client, iam = keyed_api
-    with as_service_account("engine"):
-        account = iam.create_service_account("ci/nightly")
-        key = iam.create_key(account.id).value
-    body = _get(client, key).json()
-    assert body == {"principal": "ci/nightly", "on_behalf_of": None, "scope": None}
+    routes = [
+        route
+        for route in api.app.routes
+        if isinstance(route, APIRoute) and route.path.startswith(ROUTER_PREFIXES)
+    ]
+    for route in routes:
+        assert any(d.call is api.is_token_valid for d in route.dependant.dependencies), (
+            route.path
+        )
 
 
-def test_a_personal_key_calls_as_api_for_its_owner_narrowed_by_its_scope(keyed_api):
+def test_a_personal_key_is_refused_on_every_invocation_route(keyed_api):
     from naas_abi_core.engine.call_context import (
         CallContext,
         as_service_account,
@@ -460,12 +467,29 @@ def test_a_personal_key_calls_as_api_for_its_owner_narrowed_by_its_scope(keyed_a
     with use_call_context(
         CallContext(principal=service_account("api"), on_behalf_of=user(ada.id))
     ):
-        key = iam.create_key(ada.id, scope=scope).value
-    body = _get(client, key).json()
-    assert body == {"principal": "api", "on_behalf_of": ada.id, "scope": list(scope)}
+        full = iam.create_key(ada.id).value
+        read_only = iam.create_key(ada.id, scope=scope).value
+    for prefix in ROUTER_PREFIXES:
+        for key in (full, read_only):
+            assert _post(client, prefix, key).status_code == 401, prefix
 
 
-def test_a_revoked_expired_or_unknown_key_is_refused(keyed_api):
+def test_a_modules_or_a_ci_accounts_service_key_is_refused_on_every_invocation_route(
+    keyed_api,
+):
+    from naas_abi_core.engine.call_context import as_service_account
+
+    client, iam = keyed_api
+    with as_service_account("engine"):
+        module = iam.create_service_account("module/acme/people")
+        ci = iam.create_service_account("ci/nightly")
+        keys = [iam.create_key(module.id).value, iam.create_key(ci.id).value]
+    for prefix in ROUTER_PREFIXES:
+        for key in keys:
+            assert _post(client, prefix, key).status_code == 401, prefix
+
+
+def test_a_coding_agents_key_and_garbage_are_refused_too(keyed_api):
     from datetime import UTC, datetime, timedelta
 
     from naas_abi_core.engine.call_context import (
@@ -480,87 +504,23 @@ def test_a_revoked_expired_or_unknown_key_is_refused(keyed_api):
     client, iam = keyed_api
     with as_service_account("engine"):
         ada = iam.ensure_user("https://idp.example", "ada")
-        account = iam.create_service_account("ci/nightly")
-        service_key = iam.create_key(account.id)
     with use_call_context(
         CallContext(principal=service_account("api"), on_behalf_of=user(ada.id))
     ):
-        personal = iam.create_key(ada.id)
         coding = iam.create_key(
             ada.id,
             audience=CODING_AUDIENCE,
             resource="http://coder:8378",
             expires_at=datetime.now(UTC) + timedelta(days=1),
-        )
-    assert _get(client, personal.value).status_code == 200
-    with use_call_context(
-        CallContext(principal=service_account("api"), on_behalf_of=user(ada.id))
-    ):
-        iam.revoke_key(ada.id, personal.record.key_id)
-    assert _get(client, personal.value).status_code == 401
-    with as_service_account("engine"):
-        iam.revoke_key(account.id, service_key.record.key_id)
-    assert _get(client, service_key.value).status_code == 401
-    # A coding agent's key is for the OpenAI gateway only.
-    assert _get(client, coding.value).status_code == 401
-    assert _get(client, "abi_pk_aaaaaaaaaaaaaaaa_nope").status_code == 401
-    assert _get(client, "abi_sk_aaaaaaaaaaaaaaaa_nope").status_code == 401
-    assert _get(client, "garbage").status_code == 401
+        ).value
+    for token in (coding, "abi_pk_aaaaaaaaaaaaaaaa_nope", "abi_sk_aaaaaaaaaaaaaaaa_nope", "x"):
+        for prefix in ROUTER_PREFIXES:
+            assert _post(client, prefix, token).status_code == 401, prefix
 
 
-def test_a_suspended_owner_s_key_is_refused(keyed_api):
-    from naas_abi_core.engine.call_context import (
-        CallContext,
-        as_service_account,
-        service_account,
-        use_call_context,
-        user,
-    )
-
-    client, iam = keyed_api
-    with as_service_account("engine"):
-        ada = iam.ensure_user("https://idp.example", "ada")
-    with use_call_context(
-        CallContext(principal=service_account("api"), on_behalf_of=user(ada.id))
-    ):
-        key = iam.create_key(ada.id).value
-    assert _get(client, key).status_code == 200
-    with as_service_account("engine"):
-        iam.suspend_principal(ada.id)
-    assert _get(client, key).status_code == 401
-
-
-def test_the_deployment_key_still_calls_as_api(keyed_api):
+def test_the_deployment_key_still_runs_on_every_invocation_route_as_api(keyed_api):
     client, _ = keyed_api
-    assert _get(client, "deployment-key").json()["principal"] == "api"
-
-
-def test_keys_are_refused_without_the_engines_iam(monkeypatch):
-    from types import SimpleNamespace
-
-    from fastapi import Depends, FastAPI
-    from naas_abi_core.apps.api import api
-
-    monkeypatch.setattr(
-        api,
-        "engine",
-        SimpleNamespace(
-            get=lambda: SimpleNamespace(
-                services=SimpleNamespace(iam_available=lambda: False)
-            )
-        ),
-    )
-    monkeypatch.setenv("ABI_API_KEY", "deployment-key")
-    app = FastAPI()
-
-    @app.get("/x", dependencies=[Depends(api.is_token_valid)])
-    async def x() -> dict:
-        return {}
-
-    client = TestClient(app)
-    assert _get_x(client, "abi_pk_aaaaaaaaaaaaaaaa_nope") == 401
-    assert _get_x(client, "deployment-key") == 200
-
-
-def _get_x(client, token):
-    return client.get("/x", headers={"Authorization": f"Bearer {token}"}).status_code
+    for prefix in ROUTER_PREFIXES:
+        response = _post(client, prefix, "deployment-key")
+        assert (response.status_code, response.json()) == (200, {"ran": True}), prefix
+    assert client.post("/agents/thing").status_code == 401  # no credential at all

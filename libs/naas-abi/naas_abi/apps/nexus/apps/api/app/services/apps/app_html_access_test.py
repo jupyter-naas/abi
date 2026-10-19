@@ -126,3 +126,27 @@ def test_mint_rejects_invalid_path_prefix() -> None:
             user_id="user-1",
             path_prefix="/not-app-html/",
         )
+
+
+def test_a_session_ended_by_its_users_revocation_or_suspension_opens_nothing(
+    monkeypatch: pytest.MonkeyPatch, iam: IAMService
+) -> None:
+    """The floor and suspension that end a session at the API end it here too:
+    a session stolen before a password change must not open an app after it."""
+    from naas_abi_core.engine.call_context import as_service_account
+
+    monkeypatch.setattr(settings, "secret_key", "test-secret-key")
+    with as_service_account("engine"):
+        ada = iam.ensure_user("https://idp.example", "ada")
+    request = _request("/app-html/axi/devops/host/")
+    token, _ = create_access_token(data={"sub": ada.id}, expires_delta=timedelta(minutes=15))
+    assert app_html_access.validate_app_html_jwt(token, request)
+    with use_call_context(CallContext(principal=service_account("api"), on_behalf_of=user(ada.id))):
+        iam.revoke_tokens(ada.id)
+    assert not app_html_access.validate_app_html_jwt(token, request)
+    # The session made after the revocation is good, until the user is suspended.
+    fresh, _ = create_access_token(data={"sub": ada.id}, expires_delta=timedelta(minutes=15))
+    assert app_html_access.validate_app_html_jwt(fresh, request)
+    with as_service_account("engine"):
+        iam.suspend_principal(ada.id)
+    assert not app_html_access.validate_app_html_jwt(fresh, request)

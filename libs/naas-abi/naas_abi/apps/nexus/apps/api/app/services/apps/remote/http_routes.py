@@ -106,19 +106,20 @@ async def _presented_user(request: Request) -> tuple[str, datetime | None]:
     """The signed-in user behind the request and when their credential
     expires; no user for an ABI_API_KEY caller. A session token, or a link (an
     ``/app-html/`` grant: a share link stays a share link)."""
-    from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
-        decode_token,
-        is_session_token,
-    )
+    from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
+    from naas_abi.apps.nexus.apps.api.app.services.auth.service import decode_token
 
     token = extract_abi_api_token(request)
     if not token:
         return "", None
-    payload = decode_token(token)
-    if isinstance(payload, dict) and is_session_token(payload):
-        subject, exp = payload.get("sub"), payload.get("exp")
+    # A session counts only if it is still one: not revoked, issued after its
+    # user's last revocation, the user not suspended.
+    found = await credentials.bearer_credential(token)
+    if found is not None and found.kind == credentials.SESSION:
+        payload = decode_token(token) or {}
+        exp = payload.get("exp")
         expires = datetime.fromtimestamp(exp, UTC) if isinstance(exp, int | float) else None
-        return (subject if isinstance(subject, str) else ""), expires
+        return found.user_id, expires
     link = await links.aopen_link(token, APP_AUDIENCE)
     if link is not None and link.resource.startswith(links.APP_HTML_ROOT):
         return link.user_id, link.expires_at

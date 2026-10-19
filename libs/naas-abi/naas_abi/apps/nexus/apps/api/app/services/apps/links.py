@@ -115,6 +115,7 @@ def mint_link(
     if expires_at <= now + timedelta(seconds=1):
         raise ValueError("The credential this link would open from has expired")
     iam = _iam()
+    credentials.refuse_a_limited_credential("make a link")
     try:
         with use_call_context(
             CallContext(principal=service_account("api"), on_behalf_of=user(user_id))

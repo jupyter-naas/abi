@@ -33,7 +33,7 @@ from typing import Any, Literal
 
 import jwt
 from naas_abi_core import logger
-from naas_abi_core.engine.call_context import as_service_account
+from naas_abi_core.engine.call_context import as_service_account, current_call_context
 from naas_abi_core.engine.nats_auth import (
     API_KEY_AUDIENCE,
     CODING_AUDIENCE,
@@ -46,6 +46,7 @@ from naas_abi_core.engine.nats_auth import (
 from naas_abi_core.services.iam.IAMPorts import (
     TOKEN_TYPE_API_KEY,
     KeyRefusedError,
+    PermissionDeniedError,
     TokenExchange,
 )
 
@@ -130,6 +131,32 @@ def _verifier(iam: Any) -> JWKSVerifier:
         )
         _verifiers[iam] = verifier
     return verifier
+
+
+def refuse_a_limited_credential(what: str) -> None:
+    """A request that came with a credential narrowed to something (a key with a
+    scope) may not ``what``: a credential made here has a reach of its own (a
+    link, a coding agent's key), and would be wider than the one that asked."""
+    if current_call_context().scope is not None:
+        raise PermissionDeniedError(message=f"A credential with a limit cannot {what}")
+
+
+def session_allowed_by_iam(user_id: str, issued_at: Any) -> bool:
+    """What the engine's IAM says about a session Nexus signed: it was issued
+    after the last revocation of its user's tokens, and the user is not
+    suspended. For the places that read a session token outside the API's
+    bearer check (``/app-html/``); blocking, so called from a thread."""
+    iam = IAM()
+    if iam is None:
+        return True
+    revoked_since = getattr(iam, "revoked_since", None)
+    if (
+        revoked_since is not None
+        and isinstance(issued_at, int | float)
+        and revoked_since(user_id, int(issued_at))
+    ):
+        return False
+    return _active(iam, user_id)
 
 
 def _active(iam: Any, user_id: str) -> bool:
@@ -248,18 +275,8 @@ async def _session_credential(
     jti = payload.get("jti")
     if jti and await (is_revoked or service.is_access_token_revoked)(str(jti)):
         return None
-    iam = IAM()
-    if iam is not None:
-        issued_at = payload.get("iat")
-        revoked_since = getattr(iam, "revoked_since", None)
-        if (
-            revoked_since is not None
-            and isinstance(issued_at, int | float)
-            and await asyncio.to_thread(revoked_since, user_id, int(issued_at))
-        ):
-            return None
-        if not await asyncio.to_thread(_active, iam, user_id):
-            return None
+    if not await asyncio.to_thread(session_allowed_by_iam, user_id, payload.get("iat")):
+        return None
     return Credential(kind=SESSION, user_id=user_id, token_id=str(jti) if jti else None)
 
 

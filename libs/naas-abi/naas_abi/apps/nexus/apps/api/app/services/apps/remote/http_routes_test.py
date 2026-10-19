@@ -610,6 +610,35 @@ def test_the_user_and_expiry_come_from_the_nexus_token_or_a_link(monkeypatch):
     assert asyncio.run(http._presented_user(request)) == ("", None)
 
 
+def test_a_session_its_user_revoked_names_no_user_to_open_an_app_for(monkeypatch):
+    import asyncio
+
+    from naas_abi.apps.nexus.apps.api.app.services.auth import credentials, service
+    from naas_abi.apps.nexus.apps.api.app.services.auth.service import create_access_token
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        as_service_account,
+        service_account,
+        use_call_context,
+        user,
+    )
+
+    async def never_revoked(jti: str) -> bool:  # the list of access tokens is a database
+        return False
+
+    monkeypatch.setattr(service, "is_access_token_revoked", never_revoked)
+    iam = credentials.IAM()
+    with as_service_account("engine"):
+        ada = iam.ensure_user("https://idp.example", "ada")
+    token, _ = create_access_token({"sub": ada.id})
+    request = type("R", (), {})()
+    monkeypatch.setattr(http, "extract_abi_api_token", lambda r: token)
+    assert asyncio.run(http._presented_user(request))[0] == ada.id
+    with use_call_context(CallContext(principal=service_account("api"), on_behalf_of=user(ada.id))):
+        iam.revoke_tokens(ada.id)
+    assert asyncio.run(http._presented_user(request)) == ("", None)
+
+
 # -- the grant is a credential: never in logs or traces ------------------------
 
 

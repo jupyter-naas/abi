@@ -62,6 +62,7 @@ def _iam() -> Any:
 
 
 def _acting_for(user_id: str) -> CallContext:
+    credentials.refuse_a_limited_credential("make a key for a coding agent")
     return CallContext(principal=service_account("api"), on_behalf_of=user(user_id))
 
 

@@ -81,3 +81,40 @@ def test_a_link_route_answers_429_at_the_limit_not_500(ada, monkeypatch):
             )
         )
     assert caught.value.status_code == 429
+
+
+def test_a_key_narrowed_to_reading_cannot_make_a_link(ada, engine_iam):
+    """A link is the user's own credential for an app: a request that came with
+    a narrower one must not widen into it."""
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        service_account,
+        use_call_context,
+        user,
+    )
+    from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
+
+    read_only = ({"effect": "Allow", "actions": ["triple_store:Query"], "resources": ["*"]},)
+    request = CallContext(
+        principal=service_account("api"), on_behalf_of=user(ada.id), scope=read_only
+    )
+    with use_call_context(request), pytest.raises(PermissionDeniedError, match="limit"):
+        links.mint_link(
+            user_id=ada.id, audience=APP_AUDIENCE, resource=links.APP_HTML_ROOT, minutes=5
+        )
+    assert engine_iam.store.list_keys(ada.id) == []
+    # Without a narrower credential (a session) it is made, as before.
+    value, _ = links.mint_link(
+        user_id=ada.id, audience=APP_AUDIENCE, resource=links.APP_HTML_ROOT, minutes=5
+    )
+    assert value.startswith("abi_gk_")
+
+
+def test_an_iam_refusal_is_a_403_not_a_server_error():
+    from naas_abi.apps.nexus.apps.api.app.services.exceptions import (
+        _resolve_exception_mapping,
+    )
+    from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
+
+    status, _ = _resolve_exception_mapping(PermissionDeniedError("iam:CreateKey", "k"))
+    assert status == 403

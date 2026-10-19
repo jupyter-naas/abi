@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.services.apps import links
+from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
     decode_token,
     is_session_token,
@@ -29,7 +30,10 @@ def validate_app_html_jwt(token: str, request: Request) -> bool:
             return False
         return request.url.path.startswith(link.resource)
     payload = decode_token(token)
-    return bool(payload and is_session_token(payload) and payload.get("sub"))
+    if not (payload and is_session_token(payload) and payload.get("sub")):
+        return False
+    # Not a session its user's revocation or suspension has ended.
+    return credentials.session_allowed_by_iam(str(payload["sub"]), payload.get("iat"))
 
 
 def mint_app_html_access_token(

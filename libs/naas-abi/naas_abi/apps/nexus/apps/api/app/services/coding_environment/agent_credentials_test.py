@@ -193,3 +193,25 @@ def test_any_other_credential_names_no_workspace(monkeypatch, held):
 
     monkeypatch.setattr(gateway, "_sidecar_of", sidecar)
     assert asyncio.run(gateway._workspace_target(_request(held))) == (None, None)
+
+
+def test_a_key_narrowed_to_reading_cannot_make_an_agent_key(iam, ada):
+    """The agent key is the user's own, with a scope of its own (the workspace):
+    a request that came with a narrower credential must not widen into it."""
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        service_account,
+        use_call_context,
+        user,
+    )
+    from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
+
+    read_only = ({"effect": "Allow", "actions": ["triple_store:Query"], "resources": ["*"]},)
+    request = CallContext(
+        principal=service_account("api"), on_behalf_of=user(ada.id), scope=read_only
+    )
+    with use_call_context(request), pytest.raises(PermissionDeniedError, match="limit"):
+        agent_credentials.mint_agent_key(
+            user_id=ada.id, workspace_id="ws-1", sidecar_base=SIDECAR, label="demo"
+        )
+    assert iam.store.list_keys(ada.id) == []

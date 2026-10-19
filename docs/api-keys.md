@@ -43,18 +43,21 @@ A key does **not** reach the account (`/api/auth/*`) or the key management (`/ap
 another key nor widen itself, and it is not accepted on the WebSocket. It does not carry the groups your identity
 provider gave you at sign-in: what you hold only through an IdP group claim does not reach your keys.
 
-The same key works on the engine's own API (`/agents/...`). Revocation, expiry and suspension of its owner take effect at
-the next request.
+A key is not accepted on the engine's own routes (`/agents`, `/pipelines`, `/workflows`, `/tools`): they run what they are
+asked to and decide nothing themselves, so a key's limit would not bound them. They take the deployment's key
+(`ABI_API_KEY`) until they check IAM. Revocation, expiry and suspension of the key's owner take effect at the next
+request.
 
 ## Service keys, for scripts and CI
 
 A service account (`ci/<name>`, made with `abi iam`) has keys of its own, `abi_sk_<id>_<secret>`: at most five, expiring in
 90 days unless told otherwise. A request made with one runs *as that account*, so what it may do is what policies
-attached to that account allow, nothing implicit. Use it as the bearer token of the engine's API, or let a module's SDK
-exchange it (`ABI_SERVICE_KEY`).
+attached to that account allow, nothing implicit. It is for the kernel services over NATS: a module's SDK exchanges it
+(`ABI_SERVICE_KEY`), and so can a script. It is not accepted on the engine's HTTP routes (`/agents`, `/pipelines`,
+`/workflows`, `/tools`).
 
-`ABI_API_KEY`, the one shared key of a deployment, still works on the engine's API as the `api` account. Move scripts to
-service keys; it goes when `api` is enumerated.
+`ABI_API_KEY`, the one shared key of a deployment, is the credential of those HTTP routes and calls as the `api`
+account. It goes when the routes enforce IAM and `api` is enumerated.
 
 ## Links and coding environments
 

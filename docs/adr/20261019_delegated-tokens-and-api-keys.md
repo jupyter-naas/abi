@@ -64,8 +64,12 @@ already verified, with an audience of its own, so that none of them is ever read
    expiry of a year at most, revocable, scoped (read-only, or statements of the owner's writing, never beyond the
    owner's policies). Nexus manages them for the signed-in user (`/api/iam/api-keys`, session-only) and exchanges
    them for scripts (`POST /api/iam/token`, `client_credentials`); the Nexus `api_keys` table is replaced by
-   IAM's. The core API accepts service keys (`abi_sk_`, the request runs as that account) and personal keys
-   beside the deployment's `ABI_API_KEY`.
+   IAM's. The engine's own HTTP routes (`/agents`, `/pipelines`, `/workflows`, `/tools`) take the deployment's
+   `ABI_API_KEY` and nothing else: they run an agent, pipeline, workflow or tool and make no IAM decision of their
+   own (only the core-service calls made further down are checked), so a personal key's limit and its owner's
+   policies would not bound the invocation, nor what it does with the deployment's credentials. Neither
+   personal nor service keys are accepted there until those routes enforce IAM (#65); a service key still
+   serves its account over NATS.
 8. **Nexus reads a credential's kind from its audience and honours it where it belongs**
    (`services/auth/credentials.py`): a session everywhere and on the WebSocket; an API key on `/api/*` but the
    account and the key management (`/api/auth/`, `/api/iam/`); a coding key at the gateway. Nexus's own session
@@ -94,8 +98,9 @@ already verified, with an audience of its own, so that none of them is ever read
   in process and over NATS.
 - IdP groups (`grp`) travel with a session; a personal key carries none (it is not a session), so what a user
   holds only through an IdP group claim does not reach their API keys until it is a stored membership (#64).
-- `ABI_API_KEY` stays as the deployment's transitional key on the core API; deployments move their scripts to
-  service keys.
+- `ABI_API_KEY` stays as the one credential of the engine's invocation routes until they enforce IAM (#65);
+  scripts that call Nexus use a personal key on `/api/*`, and scripts that call the kernel use a service key
+  over NATS.
 - `api` and `engine` must keep `iam:ExchangeToken` when #65 enumerates their policies.
 - The delegation cache holds a token per user, scope and recipient for half its life (at most 2048); a
   delegation for a suspended user is refused at issue, and an issued one is denied at the next check. The
