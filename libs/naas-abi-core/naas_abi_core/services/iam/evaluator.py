@@ -132,7 +132,7 @@ class Evaluator:
             return denied("suspended")
         # 2. Sealed resources open to their owner only, whatever the policies say.
         seal = self._seal(resource)
-        if seal is not None and seal.owner not in _names(ctx):
+        if seal is not None and not _owns(seal, ctx):
             return denied("sealed")
         # 3. Each side on its own.
         user_id = _user_id(ctx)
@@ -223,6 +223,20 @@ class Evaluator:
 
 
 # -- helpers --------------------------------------------------------------------
+
+
+def _owns(seal: Seal, ctx: CallContext) -> bool:
+    """Whether the actor is the owner of ``seal``: the service account it names,
+    or the module account of the module it names."""
+    if seal.owner in _names(ctx):
+        return True
+    principal = ctx.principal
+    if seal.module_id is None or principal.kind != "service_account":
+        return False
+    from naas_abi_core.services.iam.modules import parse_account
+
+    account = parse_account(principal.name)
+    return account is not None and account[1] == seal.module_id
 
 
 def _names(ctx: CallContext) -> set[str]:

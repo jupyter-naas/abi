@@ -67,7 +67,7 @@ CATALOG = ActionCatalog(
 # Sealed to the built-in IdP (RFC §11.3, §12.3), wherever a placement puts it.
 IDP_NAMESPACE = "idp"
 SEALS: tuple[Seal, ...] = (
-    Seal(f"abi:*:*:document:namespace/{IDP_NAMESPACE}", "idp"),
-    Seal(f"abi:*:*:document:collection/{IDP_NAMESPACE}/*", "idp"),
-    Seal(f"abi:*:*:document:document/{IDP_NAMESPACE}/*", "idp"),
+    Seal(f"abi:*:*:document:namespace/{IDP_NAMESPACE}", "idp", module_id="idp"),
+    Seal(f"abi:*:*:document:collection/{IDP_NAMESPACE}/*", "idp", module_id="idp"),
+    Seal(f"abi:*:*:document:document/{IDP_NAMESPACE}/*", "idp", module_id="idp"),
 )

@@ -16,7 +16,7 @@ code; otherwise it defaults from ``ModuleDependencies``:
   that grants a forge user access to any repository (name it to ask for it);
 * any other service it declares: every action of that service;
 * the modules it depends on: their agents, models and apps, and the runs it
-  starts;
+  starts (never the built-in identity provider's ``admin`` app);
 * its own jobs, when it declares some, each by name: the broker gives the
   module the consumers of the jobs its manifest names, and only those.
 
@@ -127,6 +127,18 @@ def default_manifest(
                 reach,
             )
         )
+        if "idp" in dependencies.modules:
+            # The identity provider's admin app (create users, groups and
+            # clients) is for the platform's provisioning: depending on the
+            # module is not asking for it (name it in a manifest to ask).
+            statements.append(
+                {
+                    "sid": "NoIdentityProviderAdmin",
+                    "effect": "Deny",
+                    "actions": ["discovery:OpenApp"],
+                    "resources": [f"abi:-:-:discovery:app/{project}/idp/admin"],
+                }
+            )
         statements.append(
             _statement(
                 "FollowOwnRuns",

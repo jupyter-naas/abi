@@ -258,3 +258,58 @@ def test_a_module_reaches_its_own_namespace_not_another_modules(tmp_path):
             billing.get("records", "1")
         with pytest.raises(CollectionNotFound):
             billing.drop_collection("records")
+
+
+def test_the_idp_module_account_owns_the_idp_namespace_and_no_manifest_opens_it(
+    tmp_path,
+):
+    """The built-in IdP runs as ``module/<project>/idp``. Its namespace is its
+    own through the seal and its approved manifest; another module (or
+    ``api``, or ``engine``) cannot reach it, even with a manifest that grants
+    every document action everywhere."""
+    from naas_abi_core.services.iam.tests.iam_harness import document, statement
+
+    contract = TestDocumentAuthorization()
+    root, iam = contract._owner(tmp_path)
+    everything = document(statement("Allow", ["document:*"], ["abi:*:*:document:*"]))
+    contexts = {}
+    with internal_call():
+        for name in ("module/default/idp", "module/default/greedy"):
+            account = iam.create_service_account(name)
+            contexts[name] = CallContext(
+                principal=Principal(id=account.id, kind="service_account", name=name)
+            )
+    for name, context in contexts.items():
+        with use_call_context(context):
+            # The IdP's own manifest is the default one; the other asks for the world.
+            iam.submit_manifest(
+                name.rsplit("/", 1)[1],
+                "default",
+                everything
+                if name.endswith("greedy")
+                else document(
+                    statement(
+                        "Allow",
+                        ["document:*"],
+                        [
+                            "abi:-:-:document:namespace/${module.id}",
+                            "abi:-:-:document:collection/${module.id}/*",
+                            "abi:-:-:document:document/${module.id}/*",
+                        ],
+                    )
+                ),
+            )
+    with internal_call():
+        for context in contexts.values():
+            iam.approve_manifest(context.principal.id)
+    with use_call_context(contexts["module/default/idp"]):
+        assert root.for_namespace("idp").get("users", "bob").data == {
+            "email": "bob@example.com"
+        }
+    with use_call_context(contexts["module/default/greedy"]):
+        idp = root.for_namespace("idp")
+        assert idp.collections() == []
+        with pytest.raises(DocumentNotFound):
+            idp.get("users", "bob")
+        with pytest.raises(DocumentNotFound):
+            idp.put("users", "eve", {"email": "eve@example.com"})

@@ -320,6 +320,59 @@ class Engine(IEngine):
                 primaries += nats_loader.expose_auth_callout(self.__services)
             self.__nats_primary_adapters = primaries
             self.__keep_engine_key()
+            self.__attach_builtin_idp()
+
+    def __attach_builtin_idp(self) -> None:
+        """Point the identity service at the built-in IdP, a module that runs
+        over NATS: its discovery document, JWKS and token endpoint are read
+        through its ``idp`` app, only from the instance running as the service
+        account ``module/<project>/idp``."""
+        from naas_abi_core.engine.call_context import as_service_account
+        from naas_abi_core.engine.nats_auth import host_audience
+        from naas_abi_core.services.iam.IAMPorts import IAMNotFoundError
+        from naas_abi_core.services.iam.modules import account_name, subject_token
+        from naas_abi_core.services.identity.IdentityService import IdentityService
+
+        nats = self.__configuration.nats
+        identity = (
+            self.__services.identity if self.__services.identity_available() else None
+        )
+        if (
+            not isinstance(identity, IdentityService)
+            or nats is None
+            or nats.discovery is None
+        ):
+            return
+        from naas_abi_core.engine.engine_configuration.EngineConfiguration_Identity import (
+            warm_up_in_background,
+        )
+        from naas_abi_core.services.identity.adapters.secondary.IdPAppNATS import (
+            IDP_MODULE,
+            IdPAppNATS,
+        )
+
+        project = nats.discovery.project
+        iam = self.__services.iam
+
+        def service_account() -> str | None:
+            with as_service_account("engine"):
+                try:
+                    record = iam.find_service_account(account_name(project, IDP_MODULE))
+                except IAMNotFoundError:
+                    return None
+            return subject_token(record.id)
+
+        app = IdPAppNATS(
+            nats_url=nats.nats_url,
+            project=project,
+            token=lambda: self.service_credentials("engine").token(),
+            host_token=lambda recipient: self.service_credentials(
+                "engine", audience=host_audience(recipient)
+            ).token(),
+            service_account=service_account,
+        )
+        if identity.attach_builtin_idp(app):
+            warm_up_in_background(identity)
 
     def service_credentials(
         self, name: str = "engine", audience: str | None = None

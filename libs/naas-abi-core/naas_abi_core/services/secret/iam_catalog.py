@@ -36,6 +36,6 @@ CATALOG = ActionCatalog(
 )
 
 SEALS: tuple[Seal, ...] = (
-    Seal("abi:*:*:secret:secret/idp%2F*", "idp"),
+    Seal("abi:*:*:secret:secret/idp%2F*", "idp", module_id="idp"),
     Seal("abi:*:*:secret:secret/iam%2F*", "engine"),
 )

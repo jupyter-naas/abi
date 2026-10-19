@@ -691,3 +691,17 @@ class TestNexusSignInWithZitadel(NexusSignInContract):
             yield ZitadelHarness(server, redirect_uri=CALLBACK)
         finally:
             server.stop()
+
+
+class TestNexusSignInWithBuiltinIdP(NexusSignInContract):
+    """The built-in IdP (``naas-abi-idp``): email-code sign-in end to end."""
+
+    @pytest.fixture(scope="class")
+    def harness(self):
+        pytest.importorskip("naas_abi_idp")
+        from naas_abi_core.services.identity.tests.builtin_idp_server import (
+            BuiltinIdPHarness,
+        )
+
+        with BuiltinIdPHarness(redirect_uri=CALLBACK) as idp:
+            yield idp

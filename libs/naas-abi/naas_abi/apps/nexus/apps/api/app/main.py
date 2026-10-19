@@ -25,6 +25,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.chat_ingestion_worker import
 from naas_abi.apps.nexus.apps.api.app.services.exceptions import (
     register_service_exception_handlers,
 )
+from naas_abi.apps.nexus.apps.api.app.services.idp.paths import is_idp_path
 from naas_abi.apps.nexus.apps.api.app.services.ollama import (
     DEFAULT_MODEL,
     ensure_ollama_ready,
@@ -469,7 +470,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Not switchable: user bytes of an active type (SVG, HTML, script) never
         # run on this origin, which holds the session cookie. Sandboxed apps
         # (embeddable paths) and the dev docs carry policies of their own.
-        if not is_embeddable(request.url.path) and request.url.path not in _DOCS_PATHS:
+        # The built-in IdP's login pages are the one active content this origin
+        # serves as itself: they are sandboxed by their own policy (no script),
+        # which the net would turn into a download.
+        trusted = is_idp_path(request.url.path)
+        if (
+            not trusted
+            and not is_embeddable(request.url.path)
+            and request.url.path not in _DOCS_PATHS
+        ):
             harden_active_content(response.headers)
 
         if settings.enable_security_headers:
@@ -528,7 +537,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 )
 
             # CSP (if configured) — skip bundled and preview app HTML; embed CSP set above.
-            if not embeddable:
+            if not embeddable and not trusted:
                 # The route's own policy (a sandbox) stays in front of the global one.
                 own_policy = response.headers.get("Content-Security-Policy")
                 if settings.content_security_policy:
@@ -779,6 +788,20 @@ def _register_routes(app: FastAPI) -> None:
         "/app-remote/{grant}/{module_id}/{app}",
         redirect_remote_app_root,
         methods=["GET", "HEAD"],
+        include_in_schema=False,
+    )
+    # The built-in identity provider, at its issuer URL: public (a login page
+    # has nobody to authenticate yet), forwarded over NATS to the one module
+    # bound to it (services/idp).
+    from naas_abi.apps.nexus.apps.api.app.services.idp.http_routes import (
+        METHODS as IDP_METHODS,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.idp.http_routes import serve_idp
+
+    app.add_api_route(
+        "/idp/{path:path}",
+        serve_idp,
+        methods=IDP_METHODS,
         include_in_schema=False,
     )
     app.add_api_route(

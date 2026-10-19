@@ -16,7 +16,7 @@ import re
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import replace
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 from urllib.parse import quote_plus, urlencode, urlsplit, urlunsplit
 
 import jwt
@@ -55,6 +55,12 @@ USER_WRITER = "engine"
 # RFC 7636 §4.2: BASE64URL(SHA256(verifier)), 43 characters.
 _CODE_CHALLENGE = re.compile(r"^[A-Za-z0-9_-]{43}$")
 _CODE_VERIFIER = re.compile(r"^[A-Za-z0-9._~-]{43,128}$")
+
+
+if TYPE_CHECKING:
+    from naas_abi_core.services.identity.adapters.secondary.OIDCHttpBuiltinIdP import (
+        IdPApp,
+    )
 
 
 class IdentityIAM(Protocol):
@@ -166,6 +172,18 @@ class IdentityService(IIdentityService):
         """The provider's discovery document (needs ``identity:GetProvider``)."""
         self._provider("identity:GetProvider", name)
         return self._keys[name].metadata()
+
+    def attach_builtin_idp(self, app: IdPApp | None) -> bool:
+        """Where requests to the built-in IdP go (over NATS, see
+        ``OIDCHttpBuiltinIdP``); False when no provider is the built-in one."""
+        from naas_abi_core.services.identity.adapters.secondary.OIDCHttpBuiltinIdP import (
+            OIDCHttpBuiltinIdP,
+        )
+
+        if not isinstance(self._http, OIDCHttpBuiltinIdP):
+            return False
+        self._http.attach(app)
+        return True
 
     def warm_up(self) -> dict[str, str]:
         """Read every provider's discovery document and JWKS, for the boot log:

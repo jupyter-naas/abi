@@ -21,6 +21,7 @@ from typing import Any
 
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import (
     DEFAULT_MAX_UPLOAD_BYTES,
+    INTERNAL_MODULES,
     AppRequest,
     AppResponse,
     RemoteApp,
@@ -132,7 +133,11 @@ class DiscoveryRemoteAppDirectory:
                     break
             client.snapshot = _Snapshot(
                 self._now(),
-                sorted(apps.values(), key=lambda a: (a.module_id, a.name)),
+                # The platform's own modules are not in the catalog.
+                sorted(
+                    (a for a in apps.values() if a.module_id not in INTERNAL_MODULES),
+                    key=lambda a: (a.module_id, a.name),
+                ),
                 instances,
             )
             return client.snapshot
@@ -141,6 +146,8 @@ class DiscoveryRemoteAppDirectory:
         return list((await self._snapshot(self._client())).apps)
 
     async def upload_limit(self, module_id: str, app: str) -> int:
+        if module_id in INTERNAL_MODULES:
+            return DEFAULT_MAX_UPLOAD_BYTES
         snapshot = await self._snapshot(self._client())
         found = next(
             (a for a in snapshot.apps if (a.module_id, a.name) == (module_id, app)),
@@ -148,17 +155,26 @@ class DiscoveryRemoteAppDirectory:
         )
         return found.upload_limit if found else DEFAULT_MAX_UPLOAD_BYTES
 
-    async def forward(self, module_id: str, app: str, request: AppRequest) -> AppResponse:
+    async def forward(
+        self,
+        module_id: str,
+        app: str,
+        request: AppRequest,
+        *,
+        service_account: str | None = None,
+    ) -> AppResponse:
         from naas_abi_proto.app.v1 import app_pb2 as pb
         from naas_abi_sdk.app_streams import BodySource
 
+        if module_id in INTERNAL_MODULES and service_account is None:
+            raise RemoteAppUnavailable(404, "App not published by a ready module")
         client = self._client()
         snapshot = await self._snapshot(client)
-        candidates = list(snapshot.instances.get((module_id, app), ()))
+        candidates = self._bound(snapshot, module_id, app, service_account)
         if not candidates:
             # Just started? Read discovery again before answering 404.
             snapshot = await self._snapshot(client, fresh=True)
-            candidates = list(snapshot.instances.get((module_id, app), ()))
+            candidates = self._bound(snapshot, module_id, app, service_account)
         if not candidates:
             raise RemoteAppUnavailable(404, "App not published by a ready module")
         message = pb.HttpRequest(
@@ -203,6 +219,18 @@ class DiscoveryRemoteAppDirectory:
                 await asyncio.gather(pump, return_exceptions=True)
             if source is not None:
                 await source.close()
+
+    @staticmethod
+    def _bound(
+        snapshot: _Snapshot, module_id: str, app: str, service_account: str | None
+    ) -> list[tuple[str, str]]:
+        """The ready instances of the app; with ``service_account``, only those
+        that run as that account."""
+        return [
+            instance
+            for instance in snapshot.instances.get((module_id, app), ())
+            if service_account is None or instance[0] == service_account
+        ]
 
     async def _send(
         self, client: _Client, instance: tuple[str, str], message: Any, source: Any

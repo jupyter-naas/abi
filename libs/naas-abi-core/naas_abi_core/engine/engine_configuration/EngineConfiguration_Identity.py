@@ -11,6 +11,8 @@ identity:
       groups_claim: groups         # optional: the claim IAM maps to groups
       scopes: [openid, email, profile, groups, offline_access]
       provisioning: none           # builtin | zitadel | keycloak | none (subtask 10)
+      # provisioning: builtin      # the built-in IdP (naas-abi-idp): its issuer ends
+      #                            # with /idp and is reached over NATS
       # trust_email: true          # its emails are verified without email_verified (Entra ID)
   verifier:                        # optional tuning
     clock_skew_seconds: 30
@@ -33,16 +35,22 @@ Nexus keeps only its own login.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal, Self
+from urllib.parse import urlsplit
 
 from naas_abi_core.services.identity.provider_keys import check_endpoint_url
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 if TYPE_CHECKING:
     from naas_abi_core.services.iam.IAMPorts import IIAMService
-    from naas_abi_core.services.identity.IdentityPorts import IdentityProvider
+    from naas_abi_core.services.identity.IdentityPorts import (
+        IdentityProvider,
+        OIDCHttpPort,
+    )
     from naas_abi_core.services.identity.IdentityService import IdentityService
 
 PROVIDER_NAME_PATTERN = r"^[a-z0-9-]{1,32}$"
+# Where Nexus serves the built-in IdP: its issuer is https://<host>/idp.
+BUILTIN_IDP_PATH = "/idp"
 
 
 class IdentityProviderConfiguration(BaseModel):
@@ -131,6 +139,19 @@ class IdentityConfiguration(BaseModel):
         shared = sorted({i for i in issuers if issuers.count(i) > 1})
         if shared:
             raise ValueError(f"identity.providers: issuers used twice {shared}")
+        builtin = [p for p in self.providers if p.provisioning == "builtin"]
+        if len(builtin) > 1:
+            raise ValueError(
+                "identity.providers: only one provider is the built-in IdP "
+                f"(provisioning: builtin): {[p.name for p in builtin]}"
+            )
+        for p in builtin:
+            if urlsplit(p.issuer).path != BUILTIN_IDP_PATH:
+                raise ValueError(
+                    f"identity.providers[{p.name}]: the built-in IdP is served at "
+                    f"{BUILTIN_IDP_PATH}, so its issuer ends with it "
+                    f"(https://<host>{BUILTIN_IDP_PATH}), not {p.issuer!r}"
+                )
         if self.default_provider is not None and self.default_provider not in names:
             raise ValueError(
                 f"identity.default_provider {self.default_provider!r} names no provider"
@@ -143,10 +164,22 @@ class IdentityConfiguration(BaseModel):
         )
         from naas_abi_core.services.identity.IdentityService import IdentityService
 
+        http: OIDCHttpPort = OIDCHttpHttpx(
+            timeout_seconds=self.verifier.http_timeout_seconds
+        )
+        builtin = [p.issuer for p in self.providers if p.provisioning == "builtin"]
+        if builtin:
+            # The built-in IdP has no port: its issuer is read over NATS (the
+            # serving engine attaches the app client, ``Engine.__serve``).
+            from naas_abi_core.services.identity.adapters.secondary.OIDCHttpBuiltinIdP import (
+                OIDCHttpBuiltinIdP,
+            )
+
+            http = OIDCHttpBuiltinIdP(http, builtin)
         service = IdentityService(
             [p.to_provider() for p in self.providers],
             iam,  # type: ignore[arg-type]  # the owner: resolve_idp_groups is IAMService's
-            OIDCHttpHttpx(timeout_seconds=self.verifier.http_timeout_seconds),
+            http,
             default_provider=self.default_provider,
             clock_skew_seconds=self.verifier.clock_skew_seconds,
             jwks_cache_seconds=self.verifier.jwks_cache_seconds,
@@ -154,11 +187,11 @@ class IdentityConfiguration(BaseModel):
             refetch_seconds=self.verifier.jwks_refetch_seconds,
         )
         if self.providers:
-            _warm_up_in_background(service)
+            warm_up_in_background(service)
         return service
 
 
-def _warm_up_in_background(service: IdentityService) -> None:
+def warm_up_in_background(service: IdentityService) -> None:
     """Read each provider's discovery document and JWKS without delaying boot;
     one that cannot be read is logged, and read again on first use."""
     import threading

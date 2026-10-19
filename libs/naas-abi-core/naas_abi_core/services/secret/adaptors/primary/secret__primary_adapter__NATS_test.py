@@ -430,6 +430,15 @@ def test_the_engine_and_the_idp_reach_what_is_theirs():
         ("idp", "iam/job-trigger-seal", False),
         ("idp", "NATS_ENGINE_PASSWORD", False),
         ("idp", "idp/../iam/job-trigger-seal", False),
+        # The IdP as a module account reads its own, and only its own.
+        ("module/default/idp", "idp/signing-key", True),
+        ("module/default/idp", "idp/code-key", True),
+        ("module/default/idp", "iam/job-trigger-seal", False),
+        ("module/default/idp", "NATS_ENGINE_PASSWORD", False),
+        ("module/default/idp", "idp/../iam/job-trigger-seal", False),
+        ("module/default/people", "idp/signing-key", False),
+        ("module/default/idpx", "idp/signing-key", False),
+        ("module/default/idp-helper", "idp/signing-key", False),
     ):
         raw = _call(
             "_handle_get",

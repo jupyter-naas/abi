@@ -47,6 +47,12 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ("GET", "/app-remote/{grant}/{module_id}/{app}"): "capability URL (signed remote app grant)",
     ("HEAD", "/app-remote/{grant}/{module_id}/{app}"): "capability URL (signed remote app grant)",
     ("GET", "/provider-logos/{provider_id}"): "static provider logos",
+    **{
+        (method, "/idp/{path:path}"): (
+            "the built-in identity provider's pages and endpoints (a login has no user yet)"
+        )
+        for method in ("GET", "POST")
+    },
 }
 
 SUPERADMIN_ONLY = {

@@ -103,3 +103,15 @@ def test_a_module_with_jobs_names_each_of_them():
         "abi:-:-:discovery:job_run/${module.project}/${module.id}/*",
     ]
     assert "OwnJobs" not in _by_sid(default_manifest(ModuleDependencies()))
+
+
+def test_depending_on_the_identity_provider_never_asks_for_its_admin_app():
+    manifest = default_manifest(ModuleDependencies(modules=("idp", "people")))
+    deny = next(
+        s for s in manifest["statements"] if s["sid"] == "NoIdentityProviderAdmin"
+    )
+    assert deny["effect"] == "Deny"
+    assert deny["actions"] == ["discovery:OpenApp"]
+    assert deny["resources"] == ["abi:-:-:discovery:app/${module.project}/idp/admin"]
+    other = default_manifest(ModuleDependencies(modules=("people",)))
+    assert all(s["sid"] != "NoIdentityProviderAdmin" for s in other["statements"])

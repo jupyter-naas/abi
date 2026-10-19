@@ -17,8 +17,9 @@ service against IAM (RFC §6.4), as in process. Before IAM, any holder of a
 service token could read every secret; that gap is closed.
 
 The endpoint also stays an allowlist (``may_use``), a layer before IAM: the
-``engine`` account reaches every secret but the IdP's, ``idp`` its own
-(``idp/...``), and any other caller only the names under its own prefix,
+``engine`` account reaches every secret but the IdP's, the IdP (the account
+``idp`` or the module account of module ``idp``) its own (``idp/...``), and any
+other caller only the names under its own prefix,
 ``<module id>/...`` for a module, ``<account name>/...`` for another service
 account. Everything else the store serves (the broker's passwords, the callout
 seed, IAM's signing keys, every provider key) is out of reach of a module,
@@ -56,6 +57,15 @@ def _canonical(key: object) -> str | None:
     return key
 
 
+def is_idp(name: str) -> bool:
+    """The built-in IdP: the account named ``idp``, or the module account of
+    the module ``idp`` (``module/<project>/idp``, how it runs by default)."""
+    from naas_abi_core.services.iam.modules import parse_account
+
+    account = parse_account(name)
+    return name == IDP or (account is not None and account[1] == IDP)
+
+
 def owned_prefix(name: str) -> str | None:
     """The prefix of the names a non-first-party account owns: ``<module
     id>/`` for ``module/<project>/<module id>``, ``<name>/`` for any other
@@ -76,7 +86,7 @@ def may_use(kind: str, name: str | None, key: object) -> bool:
         return False
     if name == ENGINE:
         return not key.strip().casefold().startswith(IDP_PREFIX)
-    if name == IDP:
+    if is_idp(name):
         return _canonical(key) is not None and key.startswith(IDP_PREFIX)
     prefix = owned_prefix(name)
     if prefix is None or _canonical(key) is None:

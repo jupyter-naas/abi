@@ -78,9 +78,21 @@ def parse_metadata(
                 f"Provider {provider.name}: the discovery document has no {key}"
             )
         try:
-            return check_endpoint_url(value, what=f"{provider.name} {key}")
+            checked = check_endpoint_url(value, what=f"{provider.name} {key}")
         except ValueError as exc:
             raise ProviderUnavailableError(str(exc)) from exc
+        if provider.provisioning == "builtin":
+            # The built-in IdP is reached over NATS: a document that names an
+            # endpoint elsewhere would send the engine (and the client secret) there.
+            from naas_abi_core.services.identity.adapters.secondary.OIDCHttpBuiltinIdP import (
+                below_issuer,
+            )
+
+            if below_issuer(checked, provider.issuer) is None:
+                raise ProviderUnavailableError(
+                    f"Provider {provider.name}: {key} is outside its issuer"
+                )
+        return checked
 
     def strings(key: str) -> tuple[str, ...]:
         value = document.get(key)

@@ -601,10 +601,17 @@ class Explanation:
 
 @dataclass(frozen=True)
 class Seal:
-    """A resource pattern only ``owner`` (a service-account name) may ever reach."""
+    """A resource pattern only ``owner`` (a service-account name) may ever reach.
+
+    ``module_id``: the module account of that id (``module/<project>/<id>``) owns
+    it too. The built-in IdP runs as a module, so its seals name module ``idp``
+    beside the built-in account of that name. Module ids are the admin's to hand
+    out: nothing else makes an account of that name.
+    """
 
     pattern: str
     owner: str
+    module_id: str | None = None
 
 
 # ---------------------------------------------------------------------------
