@@ -50,7 +50,6 @@ from typing import Any
 import nats
 from naas_abi_core import logger
 from naas_abi_core.engine.call_context import (
-    ON_BEHALF_OF_HEADER,
     CallContext,
     Principal,
     use_call_context,
@@ -168,9 +167,10 @@ class BrokerControl:
         # cancel with (discovery:TriggerJob, CancelJobRun), as of when stored.
         # The caller's own token never goes into the stream: the job's host
         # (a module) reads it, and would hold the caller's identity everywhere.
-        # What is stored is a host token of the same caller addressed to the
-        # job's host alone (``abi:host:<its subject token>``): no kernel
-        # service accepts it, and discovery accepts it only from that host.
+        # What is stored is a host token of the same caller (and the user it
+        # acts for, when its token carried one) addressed to the job's host
+        # alone (``abi:host:<its subject token>``): no kernel service accepts
+        # it, and discovery accepts it only from that host.
         request.credentials = {}
         if operation in ("trigger", "cancel"):
             project, module_id = fields.get("project"), fields.get("module_id")
@@ -180,11 +180,11 @@ class BrokerControl:
                 self._host_recipient, project, module_id
             )
             request.credentials[AUTH_HEADER] = await asyncio.to_thread(
-                lambda: self.iam.issue_host_token(caller, recipient).token
-            )
-        if context.on_behalf_of is not None:
-            request.credentials[ON_BEHALF_OF_HEADER] = headers.get(
-                ON_BEHALF_OF_HEADER, ""
+                lambda: (
+                    self.iam.issue_host_token(
+                        caller, recipient, context.on_behalf_of
+                    ).token
+                )
             )
         js = self._nc.jetstream()
         if operation in ("ensure_topic", "ensure_queue"):

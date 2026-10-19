@@ -12,10 +12,12 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.remote.adapters.in_memory 
 )
 from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import RemoteAgentDirectory
 
-# Nexus calls remote agents and apps as ``api`` on behalf of the signed-in user
-# (the Abi-On-Behalf-Of header, until delegated tokens replace it): discovery
-# checks the user's policy (discovery:InvokeAgent, OpenApp) and makes the user
-# the owner of the runs it starts, so any API worker can follow them.
+# Nexus calls remote agents and apps for the signed-in user with a delegation
+# that names the module behind the host as the actor and the user (RFC §9.4):
+# discovery checks the user's policy and the module's (discovery:InvokeAgent,
+# OpenApp) and makes the user the owner of the runs it starts, so any API worker
+# can follow them. The host holds a token that is good for that module acting
+# for that user, ten minutes, and nowhere else; never ``api``'s own.
 
 _directory: RemoteAgentDirectory | None = None
 
@@ -27,19 +29,21 @@ def build_remote_agent_directory(nats: Any | None) -> RemoteAgentDirectory:
 
     def discovery_client() -> Any:
         from naas_abi.apps.nexus.apps.api.app.services.engine_credentials import (
+            api_delegate,
             api_host_token,
             api_token,
         )
         from naas_abi_sdk.discovery import DiscoveryClient
         from naas_abi_sdk.transport import Transport
 
-        # api's own tokens (engine_credentials), on behalf of the signed-in user:
-        # discovery gets api's token, a host a token addressed to hosts.
+        # api's own tokens (engine_credentials) for what Nexus asks for itself
+        # (listing agents); for a call made for the signed-in user, a delegation:
+        # to discovery with api as the actor, to a host with its module.
         transport = Transport(
             nats.nats_url,
             api_token(),
             timeout=30,
-            forward_user=True,
+            delegate=api_delegate(),
             host_token=api_host_token(),
         )
         return DiscoveryClient(transport, nats.discovery.project)

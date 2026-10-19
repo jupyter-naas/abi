@@ -16,7 +16,6 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
-from naas_abi_core.engine.call_context import ON_BEHALF_OF_HEADER
 from naas_abi_core.engine.nats_auth import (
     HOST_AUDIENCE_PREFIX,
     NATS_AUDIENCE,
@@ -151,14 +150,9 @@ class OverflowHost(TransferHost):
         through a queue group. The caller's token keeps the session binding.
         """
         forwarded = {AUTH_HEADER: headers.get(AUTH_HEADER, "")}
-        # The caller's user too: the upload belongs to the actor and its user.
-        forwarded.update(
-            {
-                k: headers[k]
-                for k in (*_TRACE_HEADERS, ON_BEHALF_OF_HEADER)
-                if k in headers
-            }
-        )
+        # The caller's user is in its token (a delegation): the upload belongs
+        # to the actor and its user.
+        forwarded.update({k: headers[k] for k in _TRACE_HEADERS if k in headers})
 
         async def call(subject: str, request: Any, response_type: Any) -> Any:
             request.context.timeout_ms = int(_FETCH_TIMEOUT_SECONDS * 1000)

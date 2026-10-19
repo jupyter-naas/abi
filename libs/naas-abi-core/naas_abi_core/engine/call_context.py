@@ -7,8 +7,8 @@ docs/specs/rfcs/20261013_identity-and-authorization.md, §10.
 
 Who sets it:
 
-* NATS primary adapters, from the verified ``Nats-Auth-Token`` and the
-  ``Abi-On-Behalf-Of`` header (``naas_abi_core.engine.nats_identity``);
+* NATS primary adapters, from the verified ``Nats-Auth-Token``: a delegated
+  token names the user a service acts for (``naas_abi_core.engine.nats_identity``);
 * Nexus, per request: ``api`` on behalf of the signed-in user (an unrevoked
   session token), else ``ANONYMOUS``;
 * in-process callers inherit their caller's context; work that runs for no
@@ -35,13 +35,11 @@ except ModuleNotFoundError:
 
 ANONYMOUS = _definitions.ANONYMOUS
 ANONYMOUS_PRINCIPAL = _definitions.ANONYMOUS_PRINCIPAL
-ON_BEHALF_OF_HEADER = _definitions.ON_BEHALF_OF_HEADER
 CallContext = _definitions.CallContext
 Principal = _definitions.Principal
 PrincipalKind = _definitions.PrincipalKind
 Statement = _definitions.Statement
 current_call_context = _definitions.current_call_context
-on_behalf_of_header = _definitions.on_behalf_of_header
 reset_call_context = _definitions.reset_call_context
 service_account = _definitions.service_account
 set_call_context = _definitions.set_call_context
@@ -65,6 +63,7 @@ def as_service_account(name: str) -> Iterator[CallContext]:
         token_id=None,
         token_issued_at=None,
         scope=None,
+        delegated_token=None,
     )
     with use_call_context(context):
         yield context

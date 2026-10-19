@@ -14,6 +14,7 @@ See docs/specs/rfcs/20261013_identity-and-authorization.md, §8.2 and §9.1.
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING, Any
@@ -156,14 +157,61 @@ def nats_verifier(
     return _auth().JWKSVerifier(jwks_over_nats(nats_url), audiences=audiences)
 
 
+# The accounts a user may be delegated by: the engine's own, which verified the
+# user themselves (RFC §10.2).
+DELEGATING_ACCOUNTS = ("api", "engine")
+_HOST_ULID = re.compile(r"[0-9a-z]{26}")
+
+
+class DelegationError(Exception):
+    """A call for a user that cannot carry the user: it is not made as the
+    account alone, which would widen it."""
+
+
+def delegation(iam: Any, identity: str) -> Callable[[Any, str | None], IssuedToken]:
+    """What a first-party ``identity`` calls to carry a user it verified: a
+    token exchange for ``abi:delegated:agent`` (RFC §9.4), as ``identity``.
+
+    Without ``recipient`` the token acts as ``identity`` itself, for the kernel
+    services; with one (a call to the module host whose subjects carry that
+    ``<sa>``) it names the module as the actor: a host that keeps it holds
+    only what that module may do for the user."""
+    from naas_abi_core.engine.call_context import as_service_account
+    from naas_abi_core.services.iam.IAMPorts import TOKEN_TYPE_SESSION, TokenExchange
+    from naas_abi_core.services.iam.names import resource_name
+
+    def delegate(user: Any, recipient: str | None = None) -> IssuedToken:
+        resource = None
+        if recipient is not None:
+            if not _HOST_ULID.fullmatch(recipient):
+                raise DelegationError(f"{recipient!r} is not a module host")
+            resource = resource_name("iam", "principal", f"sa_{recipient}")
+        request = TokenExchange(
+            subject_token=user.id,
+            subject_token_type=TOKEN_TYPE_SESSION,
+            audience=_auth().AGENT_AUDIENCE,
+            resource=resource,
+            groups=tuple(sorted(user.groups)),
+        )
+        # As the account: the exchange is its own, never the signed-in user's.
+        with as_service_account(identity):
+            return iam.exchange_token(request)
+
+    return delegate
+
+
 def issuer_source(
     iam: IAMService, name: str, audience: str = NATS_AUDIENCE
 ) -> RenewingTokenSource:
     """Tokens of the engine's own service account ``name``, signed in process,
     for ``audience`` (``abi:host:<recipient>`` for the calls it makes to one module
-    host)."""
+    host). ``api`` and ``engine`` carry the users they serve in a delegation
+    (``token_for``); a host token is the account's own."""
+    delegates = audience == NATS_AUDIENCE and name in DELEGATING_ACCOUNTS
     return _auth().RenewingTokenSource(
-        name, lambda: iam.issue_service_token(name, audience=audience)
+        name,
+        lambda: iam.issue_service_token(name, audience=audience),
+        delegate=delegation(iam, name) if delegates else None,
     )
 
 

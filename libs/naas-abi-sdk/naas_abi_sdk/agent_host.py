@@ -21,8 +21,9 @@ from naas_abi_proto.discovery.v1 import discovery_pb2 as discovery_pb
 
 from naas_abi_sdk import overflow
 from naas_abi_sdk.agent import TERMINAL, agent_subject
-from naas_abi_sdk.call_context import ON_BEHALF_OF_HEADER
+from naas_abi_sdk.call_context import CallContext, Principal, use_call_context
 from naas_abi_sdk.concurrency import DEFAULT_LIMIT, ConcurrentCalls
+from naas_abi_sdk.credentials import AGENT_AUDIENCE
 from naas_abi_sdk.messages import reply
 from naas_abi_sdk.services.errors import DocumentNotFound, VersionConflict
 from naas_abi_sdk.services.models import CollectionSpec
@@ -41,6 +42,38 @@ INLINE_UPDATE_BYTES = 32 * 1024
 # always asks discovery, which checks this provider is READY.
 AUTHORIZATION_SECONDS = 5.0
 MAX_AUTHORIZATIONS = 1024
+
+
+def _delegation(token: str, caller: str) -> CallContext | None:
+    """The context a run executes in, from the delegation its submitter handed
+    over, or None (the run calls as the module itself).
+
+    The engine verifies every token it is sent; the host only checks that this
+    one is a delegation for the run's owner (``caller``: the user discovery
+    named), so a submitter cannot make the host call as someone else. Anything
+    else is dropped, never an error: the run is the module's own."""
+    if not token:
+        return None
+    try:
+        payload = token.split(".")[1]
+        claims = json.loads(
+            base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4))
+        )
+        actor = claims["act"]["sub"]
+    except (IndexError, ValueError, KeyError, TypeError):
+        return None
+    if (
+        claims.get("aud") != AGENT_AUDIENCE
+        or claims.get("sub") != caller
+        or not isinstance(actor, str)
+        or not actor
+    ):
+        return None
+    return CallContext(
+        principal=Principal(id=actor, kind="service_account"),
+        on_behalf_of=Principal(id=caller, kind="user"),
+        delegated_token=token,
+    )
 
 
 @dataclass
@@ -207,8 +240,7 @@ class AgentHost:
         cancel). Discovery verifies the caller's token and the user it acts
         for, and asks IAM (discovery:InvokeAgent, GetAgentRun, CancelAgentRun)."""
         token = headers.get("Nats-Auth-Token", "")
-        on_behalf_of = headers.get(ON_BEHALF_OF_HEADER, "")
-        key = (token, on_behalf_of, name, operation, invocation_id, run_owner)
+        key = (token, name, operation, invocation_id, run_owner)
         now = asyncio.get_running_loop().time()
         cached = self._authorized.get(key)
         if operation != "submit" and cached is not None and now < cached[0]:
@@ -220,7 +252,6 @@ class AgentHost:
                 lease_token=self.session.lease_token,
                 agent_name=name,
                 caller_token=token,
-                caller_on_behalf_of=on_behalf_of,
                 new_invocation=operation == "submit",
                 operation=operation,
                 invocation_id=invocation_id,
@@ -580,7 +611,14 @@ class AgentHost:
                 run.watchers.add(req.updates_inbox)
             run.progress_at = asyncio.get_running_loop().time()
             self.runs[key] = run
-            run.task = asyncio.create_task(self._execute(name, req, run))
+            delegation = _delegation(req.delegated_token, caller)
+            if delegation is None:
+                run.task = asyncio.create_task(self._execute(name, req, run))
+            else:
+                # The run's calls are the module's, for the user: the task
+                # copies this context, and its transport sends the delegation.
+                with use_call_context(delegation):
+                    run.task = asyncio.create_task(self._execute(name, req, run))
             run.task.add_done_callback(self._observe_task)
             streamed = req.mode == "stream" and hasattr(
                 self.handlers[name], "stream_invoke"

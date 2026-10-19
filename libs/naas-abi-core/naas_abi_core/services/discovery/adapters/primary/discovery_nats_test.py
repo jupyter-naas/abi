@@ -110,60 +110,112 @@ def test_an_overflow_uploaded_request_is_refused_as_too_large():
 
 # The host forwarding is "research" (its token below): tokens for it name it.
 HOST = host_audience(subject_token("research"))
+AGENT = "abi:delegated:agent"
 
 
-def test_authorize_agent_verifies_the_forwarded_caller_and_its_user():
+def _authorize_agent_as_host(primary):
+    async def authorize(token: str):
+        msg = SimpleNamespace(
+            data=pb.AuthorizeAgentRequest(
+                instance_id="r-1", agent_name="Researcher", caller_token=token
+            ).SerializeToString(),
+            headers={"Nats-Auth-Token": TEST_TOKENS.token("research")},
+            reply="_INBOX.reply",
+            _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
+        )
+        await primary._handle("authorize_agent", msg)
+        return pb.AuthorizeAgentResponse.FromString(
+            msg._client.publish.call_args.args[1]
+        )
+
+    return authorize
+
+
+def test_authorize_agent_verifies_the_forwarded_caller():
     async def scenario():
         service = AsyncMock()
         service.authorize_agent.return_value = pb.AuthorizeAgentResponse()
         primary = DiscoveryNATS(service, TEST_TOKENS.verifier, "test")
+        authorize = _authorize_agent_as_host(primary)
 
-        async def authorize(caller, on_behalf_of="", audience=HOST):
-            msg = SimpleNamespace(
-                data=pb.AuthorizeAgentRequest(
-                    instance_id="r-1",
-                    agent_name="Researcher",
-                    caller_token=TEST_TOKENS.token(caller, audience=audience),
-                    caller_on_behalf_of=on_behalf_of,
-                ).SerializeToString(),
-                headers={"Nats-Auth-Token": TEST_TOKENS.token("research")},
-                reply="_INBOX.reply",
-                _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
-            )
-            await primary._handle("authorize_agent", msg)
-            return pb.AuthorizeAgentResponse.FromString(
-                msg._client.publish.call_args.args[1]
-            )
-
-        await authorize("orchestrator")
+        # A caller acting alone: a token addressed to this host.
+        await authorize(TEST_TOKENS.token("orchestrator", audience=HOST))
         _, owner, caller = service.authorize_agent.call_args.args
         assert (owner, caller.principal.id, caller.on_behalf_of) == (
             "research",
             "orchestrator",
             None,
         )
-        await authorize("api", "user-1")
-        caller = service.authorize_agent.call_args.args[2]
-        assert (caller.principal.id, caller.user.id) == ("api", "user-1")
-        # Only a trusted identity names the user it acts for.
-        refused = await authorize("orchestrator", "user-1")
-        assert refused.error.code == "UNAUTHENTICATED"
-        assert service.authorize_agent.await_count == 2
         # A host holds a token addressed to hosts, never the caller's own: the
         # kernel's token (``abi:nats``) is refused here, so a host handed one
         # would be refused too, and a host token buys nothing at any kernel
-        # service (they accept ``abi:nats`` only).
-        own = await authorize("api", "user-1", audience="abi:nats")
+        # service (they accept ``abi:nats`` and agent delegations only).
+        own = await authorize(TEST_TOKENS.token("api", audience="abi:nats"))
         assert own.error.code == "UNAUTHENTICATED"
         # ... and so is one made for another host: a module that read api's
         # token from a request to its own agent replays it nowhere else.
         elsewhere = await authorize(
-            "api", "user-1", audience=host_audience(subject_token("another-host"))
+            TEST_TOKENS.token(
+                "api", audience=host_audience(subject_token("another-host"))
+            )
         )
         assert elsewhere.error.code == "UNAUTHENTICATED"
-        assert service.authorize_agent.await_count == 2
+        assert service.authorize_agent.await_count == 1
 
     asyncio.run(scenario())
+
+
+def test_authorize_agent_accepts_a_delegation_for_the_user_naming_this_host():
+    async def scenario():
+        service = AsyncMock()
+        service.authorize_agent.return_value = pb.AuthorizeAgentResponse()
+        primary = DiscoveryNATS(service, TEST_TOKENS.verifier, "test")
+        authorize = _authorize_agent_as_host(primary)
+
+        def delegation(actor="research", audience=AGENT, user="user-1", **extra):
+            return TEST_TOKENS.token(
+                user, kind="user", audience=audience, actor=actor, **extra
+            )
+
+        accepted = await authorize(delegation(groups=("grp_1",)))
+        assert accepted.error.code == ""
+        _, owner, caller = service.authorize_agent.call_args.args
+        # The host is the actor and the user the one it acts for.
+        assert (owner, caller.principal.id, caller.user.id) == (
+            "research",
+            "research",
+            "user-1",
+        )
+        assert caller.on_behalf_of.groups == frozenset({"grp_1"})
+        assert service.authorize_agent.await_count == 1
+
+        # A delegation naming another module: this host read it from a request
+        # and replays it nowhere, not even to ask discovery as itself.
+        stolen = await authorize(delegation(actor="another-host"))
+        assert stolen.error.code == "UNAUTHENTICATED"
+        # No other kind of delegated token is a caller either.
+        for audience in (
+            "abi:session",
+            "abi:delegated:app",
+            "abi:delegated:preview",
+            "abi:delegated:coding",
+            "abi:delegated:api-key",
+        ):
+            refused = await authorize(delegation(audience=audience))
+            assert refused.error.code == "UNAUTHENTICATED", audience
+        assert service.authorize_agent.await_count == 1
+
+    asyncio.run(scenario())
+
+
+def test_the_on_behalf_of_field_is_gone_from_every_authorize_request():
+    for message in (
+        pb.AuthorizeAgentRequest,
+        pb.AuthorizeModelRequest,
+        pb.AuthorizeAppRequest,
+        pb.AuthorizeJobRequest,
+    ):
+        assert "caller_on_behalf_of" not in message.DESCRIPTOR.fields_by_name
 
 
 def test_stopping_under_load_answers_every_request_it_was_sent(tmp_path):

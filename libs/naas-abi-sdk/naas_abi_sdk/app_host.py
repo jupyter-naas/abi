@@ -39,7 +39,6 @@ from naas_abi_sdk.app_streams import (
     pull_body,
 )
 from naas_abi_sdk.apps import AppDescriptor
-from naas_abi_sdk.call_context import ON_BEHALF_OF_HEADER
 from naas_abi_sdk.concurrency import DEFAULT_LIMIT, ConcurrentCalls
 from naas_abi_sdk.messages import reply
 from naas_abi_sdk.transport import RPCError
@@ -219,8 +218,7 @@ class AppHost:
         """The user the verified caller acts for ("" for none), once discovery
         allows it to open this app (discovery:OpenApp)."""
         token = headers.get("Nats-Auth-Token", "")
-        on_behalf_of = headers.get(ON_BEHALF_OF_HEADER, "")
-        key = (token, on_behalf_of, name)
+        key = (token, name)
         now = asyncio.get_running_loop().time()
         cached = self._authorized.get(key)
         if cached is not None and now < cached[0]:
@@ -232,7 +230,6 @@ class AppHost:
                 lease_token=self.session.lease_token,
                 app_name=name,
                 caller_token=token,
-                caller_on_behalf_of=on_behalf_of,
             ),
             discovery_pb.AuthorizeAppResponse,
         )

@@ -128,6 +128,7 @@ pytestmark = pytest.mark.skipif(
     nats_server_binary() is None, reason="nats-server is not installed"
 )
 
+# What every kernel endpoint accepts: a service's token, or a delegation.
 SECRET = TEST_TOKENS.verifier
 # Nexus serving a signed-in user: the RFC's "api on behalf of the user".
 CALLER = CallContext(
@@ -154,7 +155,14 @@ def recording(cls: type, seen: list[CallContext]) -> Any:
                 return object.__getattribute__(self, name)
             # Who calls, for whom, on what: the token's own audience and id
             # exist only over NATS.
-            seen.append(replace(current_call_context(), audience=None, token_id=None))
+            seen.append(
+                replace(
+                    current_call_context(),
+                    audience=None,
+                    token_id=None,
+                    token_issued_at=None,
+                )
+            )
             raise Reached(name)
 
     return Recording()
@@ -380,7 +388,8 @@ async def _core_client(url: str, kernel: Kernel) -> None:
 
 
 async def _sdk_transport(url: str, kernel: Kernel) -> None:
-    transport = Transport(url, TEST_TOKENS.token("api"), forward_user=True)
+    api = TEST_TOKENS.source("api")
+    transport = Transport(url, api.token, delegate=api.token_for)
     try:
         await transport.call(kernel.subject, kernel.request, kernel.response)
     except RPCError:
@@ -493,33 +502,77 @@ def test_a_module_calls_as_itself_and_for_nobody(broker, inside_a_users_call):
     assert context.on_behalf_of is None and context.user is None
 
 
-def test_only_trusted_identities_may_name_a_user(broker):
+def test_the_on_behalf_of_header_is_refused_from_every_identity(broker):
     keyvalue = next(kernel for kernel in KERNELS if kernel.name == "keyvalue")
     seen: list[CallContext] = []
     primary = keyvalue.primary(recording(KeyValueService, seen))
 
-    async def scenario() -> RPCError:
+    async def scenario() -> list[RPCError]:
         nc = await nats.connect(broker)
-        # A module forwarding a user: refused until delegated tokens exist.
-        transport = Transport(
-            broker,
-            TEST_TOKENS.token("module/acme/people"),
-            forward_user=True,
-        )
+        refused = []
         try:
             await primary.start(nc)
             await nc.flush()
-            with use_call_context(CALLER), pytest.raises(RPCError) as refused:
+            for identity in ("api", "engine", "module/acme/people"):
+                reply = await nc.request(
+                    keyvalue.subject,
+                    keyvalue.request.SerializeToString(),
+                    headers={
+                        "Nats-Auth-Token": TEST_TOKENS.token(identity),
+                        "Abi-On-Behalf-Of": "usr-ada",
+                    },
+                    timeout=5,
+                )
+                response = keyvalue.response.FromString(reply.data)
+                refused.append(response.error)
+            return refused
+        finally:
+            await primary.stop()
+            await nc.close()
+
+    refused = asyncio.run(scenario())
+    assert [e.code for e in refused] == ["UNAUTHENTICATED"] * 3
+    assert all("on-behalf-of refused" in e.message for e in refused)
+    assert seen == []
+
+
+def test_a_modules_delegation_reaches_the_service_as_the_module_for_the_user(broker):
+    """A module's delegation (``act`` the module, ``sub`` the user) is the
+    caller of a kernel call: the module acting, the user it acts for."""
+    keyvalue = next(kernel for kernel in KERNELS if kernel.name == "keyvalue")
+    seen: list[CallContext] = []
+    primary = keyvalue.primary(recording(KeyValueService, seen))
+    token = TEST_TOKENS.token(
+        "usr-ada",
+        kind="user",
+        audience="abi:delegated:agent",
+        actor="module/acme/people",
+        actor_name="module/acme/people",
+    )
+
+    async def scenario() -> None:
+        nc = await nats.connect(broker)
+        transport = Transport(broker, TEST_TOKENS.token("module/acme/people"))
+        try:
+            await primary.start(nc)
+            await nc.flush()
+            # A module host runs its invocation with the delegation it was handed.
+            context = CallContext(
+                principal=service_account("module/acme/people"),
+                on_behalf_of=user("usr-ada"),
+                delegated_token=token,
+            )
+            with use_call_context(context), pytest.raises(RPCError):
                 await transport.call(
                     keyvalue.subject, keyvalue.request, keyvalue.response
                 )
-            return refused.value
         finally:
             await transport.close()
             await primary.stop()
             await nc.close()
 
-    refused = asyncio.run(scenario())
-    assert refused.code == "UNAUTHENTICATED"
-    assert "on-behalf-of refused" in str(refused)
-    assert seen == []
+    asyncio.run(scenario())
+    [context] = seen
+    assert context.principal.id == "module/acme/people"
+    assert context.principal.name == "module/acme/people"
+    assert context.user == user("usr-ada")

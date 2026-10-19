@@ -1205,16 +1205,33 @@ class IAMService(IIAMService, PolicySource):
             name=principal.name,
         )
 
-    def issue_host_token(self, caller: CallPrincipal, recipient: str) -> IssuedToken:
+    def issue_host_token(
+        self,
+        caller: CallPrincipal,
+        recipient: str,
+        on_behalf_of: CallPrincipal | None = None,
+    ) -> IssuedToken:
         """A token for one host (``recipient``: its subject token) for an
         already verified ``caller``: what the engine stores with a job trigger
         or cancel, in place of the caller's own ``abi:nats`` token that the
-        job's host would otherwise hold. In process only."""
+        job's host would otherwise hold. With ``on_behalf_of`` the token names
+        that user and ``caller`` as the one acting for them, as a delegation
+        does, but is addressed to the host alone: no kernel service accepts it.
+        In process only."""
+        if on_behalf_of is None:
+            return self.tokens.issue(
+                caller.id,
+                kind=caller.kind,
+                audience=host_audience(recipient),
+                name=caller.name if caller.kind == "service_account" else None,
+            )
         return self.tokens.issue(
-            caller.id,
-            kind=caller.kind,
+            on_behalf_of.id,
+            kind="user",
             audience=host_audience(recipient),
-            name=caller.name if caller.kind == "service_account" else None,
+            actor=caller.id,
+            actor_name=caller.name if caller.kind == "service_account" else None,
+            groups=self.active_groups(on_behalf_of.groups),
         )
 
     def authenticate_key(self, value: str) -> tuple[PrincipalRecord, KeyRecord]:
@@ -1821,10 +1838,20 @@ class IAMService(IIAMService, PolicySource):
     ) -> broker.BrokerPermissions:
         ctx = CallContext(principal=_call_principal(principal))
         subject = self._compute_subject(ctx.principal, fresh=True)
+        # What a module holds only for the actor side of a delegation opens no
+        # subject (``roles.DELEGATION_SIDS``).
+        statements = [
+            effective
+            for effective in subject.statements
+            if not (
+                effective.policy_id == roles.MODULE_BOOTSTRAP
+                and effective.statement.sid in roles.DELEGATION_SIDS
+            )
+        ]
         return broker.derive(
             principal_id=principal.id,
             key_id=key_id,
-            statements=subject.statements,
+            statements=statements,
             catalogs=self._registry,
             module=modules.parse_account(principal.name),
         )

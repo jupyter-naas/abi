@@ -36,7 +36,6 @@ from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 
 from naas_abi_sdk import event_filter
 from naas_abi_sdk.broker_control import BrokerControlError
-from naas_abi_sdk.call_context import ON_BEHALF_OF_HEADER
 from naas_abi_sdk.telemetry import client_span
 
 JOB_CONTRACT_MAJOR = 1
@@ -671,16 +670,15 @@ class JobContext:
 
 
 async def _credentials(transport: Any, *, on_behalf_of: bool = True) -> dict[str, str]:
-    """The caller's token (and user) sent to the engine, which verifies them
-    and stores a token for the job's host in their place (the host reads what is
-    stored, so it never holds the caller's own)."""
+    """The caller's token sent to the engine, which verifies it and stores a
+    token for the job's host in its place (the host reads what is stored, so it
+    never holds the caller's own). With ``on_behalf_of`` the token carries the
+    current call's user, when the transport has one to carry; without, it is the
+    transport's own."""
     auth_headers = getattr(transport, "auth_headers", None)
     if auth_headers is None:
         return {}
-    headers = dict(await auth_headers())
-    if not on_behalf_of:
-        headers.pop(ON_BEHALF_OF_HEADER, None)
-    return headers
+    return dict(await auth_headers(user=on_behalf_of))
 
 
 async def _unconfined_credentials(

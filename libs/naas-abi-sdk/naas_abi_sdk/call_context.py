@@ -13,13 +13,12 @@ ignored. Code called in process inherits its caller's context. ``asyncio``
 tasks and ``asyncio.to_thread`` copy it; raw threads and executor submissions
 need ``contextvars.copy_context().run``.
 
-A client holding a trusted identity forwards the call's user
-(``CallContext.user``) in the ``Abi-On-Behalf-Of`` header: core's RPC client
-as ``api`` or ``engine``, the SDK ``Transport`` when built with
-``forward_user=True``. Until delegated tokens replace it, a kernel service
-honours that header only from the ``api`` and ``engine`` identities.
-
-Nothing authorizes against this yet: it only says who is calling.
+The user a call acts for travels in a delegated token (``abi:delegated:agent``,
+RFC §9.4) that names the user and the service acting for them, never in a
+header: core's RPC client and the SDK ``Transport`` of ``api`` and ``engine``
+send one for the call's user (``CallContext.user``); a module host runs the
+calls of an invocation with the delegation it was handed
+(``CallContext.delegated_token``).
 """
 
 from __future__ import annotations
@@ -27,11 +26,8 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal
-
-# The end user a trusted caller acts for (RFC §10.2, "Transition").
-ON_BEHALF_OF_HEADER = "Abi-On-Behalf-Of"
 
 PrincipalKind = Literal["user", "service_account", "anonymous"]
 # A narrowing statement from a token's ``abi_scope``. IAM owns its schema.
@@ -87,6 +83,11 @@ class CallContext:
     trace_id: str | None = None
     # How the work started ("api", "cli", "configuration", ...), stamped on events.
     triggered_via: str | None = None
+    # The delegation a module host runs an invocation with: an
+    # ``abi:delegated:agent`` token naming the module and the user, sent in
+    # place of the module's own token on the kernel calls the run makes for that
+    # user. A credential: never compared, never printed.
+    delegated_token: str | None = field(default=None, compare=False, repr=False)
 
     @property
     def user(self) -> Principal | None:
@@ -130,9 +131,3 @@ def set_call_context(context: CallContext) -> Token[CallContext]:
 
 def reset_call_context(token: Token[CallContext]) -> None:
     _call_context.reset(token)
-
-
-def on_behalf_of_header(context: CallContext | None = None) -> dict[str, str]:
-    """The ``Abi-On-Behalf-Of`` header naming the call's user, or no header."""
-    served = (context or current_call_context()).user
-    return {ON_BEHALF_OF_HEADER: served.id} if served is not None else {}

@@ -1347,11 +1347,15 @@ def test_bus_grants_follow_the_action_publish_is_not_consume(stack):
     run(stack, scenario)
 
 
-def test_a_host_that_keeps_apis_token_cannot_use_it_to_change_iam(stack):
-    """Nexus calls a hosted agent as ``api``. The host reads the token of the
-    request: it must be one the kernel refuses, and the host's own connection
-    must not reach the IAM operations that would make it an administrator."""
+def test_a_host_that_keeps_what_nexus_sent_cannot_use_it_to_change_iam(stack):
+    """Nexus calls a hosted agent. The host reads the token of the request: for
+    no user, one the kernel refuses; for a user, a delegation that is good for
+    its own module acting for that user and nothing more. Neither lets the
+    host's own connection reach the IAM operations that would make it an
+    administrator."""
     import jwt
+    from naas_abi_core.engine import nats_credentials
+    from naas_abi_core.engine.call_context import service_account, user
 
     iam = stack["iam"]
     account, key = module(iam, "module/default/people")
@@ -1360,18 +1364,20 @@ def test_a_host_that_keeps_apis_token_cannot_use_it_to_change_iam(stack):
     assert api is not None
     host_subject = f"abi.agent.default.{subject_token(account)}.i.h.v1.submit"
     ADMIN = "builtin.platform_admin"
+    api_tokens = nats_credentials.issuer_source(iam, "api")
 
     async def scenario(served):
         captured: list[dict] = []
         hosting = Transport(stack["url"], key, timeout=3)
-        # Nexus runs in the engine: its own tokens, and a token for hosts.
+        # Nexus runs in the engine: its own tokens, a token for hosts, and a
+        # delegation for the users it serves.
         nexus = Transport(
             stack["engine"],
             lambda: iam.issue_service_token("api").token,
             host_token=lambda recipient: (
                 iam.issue_service_token("api", audience=host_audience(recipient)).token
             ),
-            forward_user=True,
+            delegate=api_tokens.token_for,
             timeout=3,
         )
         try:
@@ -1383,14 +1389,30 @@ def test_a_host_that_keeps_apis_token_cannot_use_it_to_change_iam(stack):
 
             await nc.subscribe(host_subject, cb=host)
             await nc.flush()
+            # For no user: api's own, addressed to the host.
             await nexus.call(host_subject, kv_pb.GetRequest(key="x"), kv_pb.GetResponse)
-            (headers,) = captured
-            token = headers["Nats-Auth-Token"]
-            claims = jwt.decode(token, options={"verify_signature": False})
-            # What the host holds is addressed to hosts, and is still api's.
+            # For a user: a delegation naming the module behind the host.
+            with use_call_context(
+                CallContext(
+                    principal=service_account("api"), on_behalf_of=user("usr_ada")
+                )
+            ):
+                await nexus.call(
+                    host_subject, kv_pb.GetRequest(key="x"), kv_pb.GetResponse
+                )
+            alone, delegated = captured
+            claims = jwt.decode(
+                alone["Nats-Auth-Token"], options={"verify_signature": False}
+            )
             assert claims["sub"] == api.id
             assert claims["aud"] == host_audience(subject_token(account))
-            # The kernel refuses it: IAM says UNAUTHENTICATED to every change.
+            claims = jwt.decode(
+                delegated["Nats-Auth-Token"], options={"verify_signature": False}
+            )
+            # The host's own module acts, for ada: api's identity is not in it.
+            assert (claims["sub"], claims["act"]["sub"]) == ("usr_ada", account)
+            assert claims["aud"] == "abi:delegated:agent"
+            assert api.id not in repr(claims)
             engine = await nats.connect(stack["engine"])
             try:
                 attempts = {
@@ -1400,18 +1422,35 @@ def test_a_host_that_keeps_apis_token_cannot_use_it_to_change_iam(stack):
                     "create_key": pb.CreateKeyRequest(principal_id=api.id),
                     "approve_manifest": pb.ApproveManifestRequest(principal_id=account),
                 }
-                for operation, request in attempts.items():
+
+                async def attempt(operation, request, headers):
                     reply = await engine.request(
                         f"abi.iam.v1.{operation}",
                         request.SerializeToString(),
-                        headers={**headers, "Abi-On-Behalf-Of": "usr_x"},
+                        headers=headers,
                         timeout=3,
                     )
-                    response = getattr(
+                    return getattr(
                         pb,
                         "".join(w.title() for w in operation.split("_")) + "Response",
                     ).FromString(reply.data)
-                    assert response.error.code == "UNAUTHENTICATED", operation
+
+                for operation, request in attempts.items():
+                    # The kernel refuses the host token outright ...
+                    refused = await attempt(operation, request, alone)
+                    assert refused.error.code == "UNAUTHENTICATED", operation
+                    # ... accepts the delegation as the module for ada, whose
+                    # policies grant no such change ...
+                    held = await attempt(operation, request, delegated)
+                    assert held.error.code in ("PERMISSION_DENIED", "NOT_FOUND"), (
+                        operation,
+                        held.error.code,
+                    )
+                    # ... and refuses the old header, whoever sends it.
+                    named = await attempt(
+                        operation, request, {**delegated, "Abi-On-Behalf-Of": "usr_x"}
+                    )
+                    assert named.error.code == "UNAUTHENTICATED", operation
                 # ... and so does the host's own connection: the broker does not
                 # offer it the operations at all.
                 for operation in attempts:
@@ -1501,12 +1540,14 @@ def test_a_stored_trigger_holds_a_host_token_never_the_callers_own(stack):
 
 
 def test_a_host_token_is_good_at_the_host_it_names_and_nowhere_else(stack):
-    """Module M hosts an agent and reads the token Nexus sends it (``api``'s,
-    with an on-behalf-of user). M may call other agents' subjects (it holds an
+    """Module M hosts an agent and reads the token Nexus sends it (a delegation
+    naming M and the user). M may call other agents' subjects (it holds an
     ``InvokeAgent`` grant, which the broker turns into every agent subject of
     the project). It replays the token at P's agent: P's host forwards it to
     discovery, which refuses it, because it names M. The same token, forwarded
     by M, is accepted."""
+    import jwt
+    from naas_abi_core.engine import nats_credentials
     from naas_abi_core.engine.call_context import service_account, user
     from naas_abi_proto.discovery.v1 import discovery_pb2 as dpb
     from naas_abi_sdk.agent_host import AgentHost
@@ -1556,7 +1597,7 @@ def test_a_host_token_is_good_at_the_host_it_names_and_nowhere_else(stack):
             host_token=lambda recipient: (
                 iam.issue_service_token("api", audience=host_audience(recipient)).token
             ),
-            forward_user=True,
+            delegate=nats_credentials.issuer_source(iam, "api").token_for,
             timeout=3,
         )
         try:
@@ -1585,7 +1626,11 @@ def test_a_host_token_is_good_at_the_host_it_names_and_nowhere_else(stack):
                     mal_subject, kv_pb.GetRequest(key="x"), kv_pb.GetResponse
                 )
             (headers,) = captured
-            assert headers["Abi-On-Behalf-Of"] == "usr_ada"
+            assert "Abi-On-Behalf-Of" not in headers
+            held = jwt.decode(
+                headers["Nats-Auth-Token"], options={"verify_signature": False}
+            )
+            assert (held["sub"], held["act"]["sub"]) == ("usr_ada", mal)
 
             # P serves the agent M replays the token at: what M sends is what
             # P's host forwards to discovery.

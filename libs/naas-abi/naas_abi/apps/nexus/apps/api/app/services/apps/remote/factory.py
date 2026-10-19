@@ -28,6 +28,7 @@ def build_remote_app_directory(nats: Any | None) -> RemoteAppDirectory:
 
     def clients() -> tuple[Any, Any, Any, str]:
         from naas_abi.apps.nexus.apps.api.app.services.engine_credentials import (
+            api_delegate,
             api_host_token,
             api_token,
         )
@@ -37,20 +38,21 @@ def build_remote_app_directory(nats: Any | None) -> RemoteAppDirectory:
         token = api_token()
         host_token = api_host_token()
 
-        # On behalf of the signed-in user: the app host learns the user from
-        # discovery, which verifies it (never from HttpRequest.user_id).
+        # For the signed-in user: the request to the app host carries a delegation
+        # naming the app's module and the user, which the host forwards to
+        # discovery to learn who is calling (never from HttpRequest.user_id).
         transport = Transport(
             nats.nats_url,
             token,
             timeout=REQUEST_TIMEOUT_SECONDS,
-            forward_user=True,
+            delegate=api_delegate(),
             host_token=host_token,
         )
         uploads = Transport(
             nats.nats_url,
             token,
             timeout=UPLOAD_TIMEOUT_SECONDS,
-            forward_user=True,
+            delegate=api_delegate(),
             host_token=host_token,
         )
         project = nats.discovery.project

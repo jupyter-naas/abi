@@ -17,7 +17,6 @@ from uuid import uuid4
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 from nats.errors import Error as NATSError
 
-from naas_abi_sdk.call_context import ON_BEHALF_OF_HEADER
 from naas_abi_sdk.transport import RPCError, Transport
 
 
@@ -534,7 +533,6 @@ def discovery_job_authorizer(session: DiscoverySession):
                 operation=operation,
                 run_id=run_id if operation == "cancel" else "",
                 caller_token=headers.get("Nats-Auth-Token", ""),
-                caller_on_behalf_of=headers.get(ON_BEHALF_OF_HEADER, ""),
                 stored_at=stored_at.timestamp() if stored_at is not None else 0.0,
             ),
             pb.AuthorizeJobResponse,

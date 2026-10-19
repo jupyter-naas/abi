@@ -2,7 +2,6 @@
 
 from naas_abi_core.engine import nats_runtime
 from naas_abi_core.engine.nats_auth import TokenSource
-from naas_abi_core.engine.nats_identity import ON_BEHALF_OF_IDENTITIES
 from naas_abi_core.engine.nats_naming import connection_name
 from naas_abi_core.models.Model import ChatModel, EmbeddingModel
 from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
@@ -32,9 +31,9 @@ class ModelRegistryNATSClient(ModelRegistryService):
             url,
             credentials.token,
             timeout=120,
-            # The registry is a kernel service; engine and api are trusted to
-            # name the user they act for.
-            forward_user=identity in ON_BEHALF_OF_IDENTITIES,
+            # The registry is a kernel service: engine and api carry the user
+            # they act for in a delegation; any other identity calls as itself.
+            delegate=credentials.token_for,
             name=connection_name(f"abi-{identity}:model_registry"),
         )
         self.remote = RemoteRegistry(ModelRegistryClient(self.transport))

@@ -5,8 +5,9 @@ from typing import Any
 
 from google.protobuf.message import DecodeError
 from naas_abi_core import logger
-from naas_abi_core.engine.call_context import use_call_context
+from naas_abi_core.engine.call_context import CallContext, use_call_context
 from naas_abi_core.engine.nats_auth import (
+    AGENT_AUDIENCE,
     HOST_AUDIENCE_PREFIX,
     InvalidServiceTokenError,
     TokenVerifier,
@@ -45,6 +46,14 @@ OPERATIONS: dict[str, tuple[Any, Any, bool]] = {
 }
 
 
+def _is_for_host(forwarded: CallContext, host: str) -> bool:
+    """Whether a forwarded token is this host's to forward: addressed to it, or a
+    delegation whose acting module is the host itself."""
+    if forwarded.audience == AGENT_AUDIENCE:
+        return forwarded.on_behalf_of is not None and forwarded.principal.id == host
+    return forwarded.audience == host_audience(subject_token(host))
+
+
 class DiscoveryNATS:
     def __init__(
         self,
@@ -55,11 +64,12 @@ class DiscoveryNATS:
     ):
         self.service, self.verifier, self.project = service, verifier, project
         # What a hosting module forwards as its caller's token: addressed to
-        # that host (``abi:host:<host>``), never the caller's own ``abi:nats``
+        # that host (``abi:host:<host>``), or a delegation for a user that names
+        # that host as the acting module; never the caller's own ``abi:nats``
         # token, which a host must not hold, nor one made for another host.
         # Anything else is refused here.
         self.caller_verifier = verifier.for_audiences(
-            (), prefixes=(HOST_AUDIENCE_PREFIX,)
+            (AGENT_AUDIENCE,), prefixes=(HOST_AUDIENCE_PREFIX,)
         )
         self.subscriptions: list[Subscription] = []
         self.max_payload = 512 * 1024
@@ -114,16 +124,13 @@ class DiscoveryNATS:
             forwarded = (
                 caller_of(
                     request.caller_token,
-                    request.caller_on_behalf_of,
                     self.caller_verifier,
                     at=getattr(request, "stored_at", 0.0),
                 )
                 if operation.startswith("authorize_")
                 else None
             )
-            if forwarded is not None and forwarded.audience != host_audience(
-                subject_token(owner)
-            ):
+            if forwarded is not None and not _is_for_host(forwarded, owner):
                 # Made for another host (or for none): a host that read it from
                 # a request replays it nowhere, not even at another host.
                 raise InvalidServiceTokenError("the caller's token is for another host")

@@ -44,8 +44,8 @@ def test_roundtrip_preserves_bytes_and_does_not_mutate_request():
     }
 
 
-def test_the_current_calls_user_trace_and_workspace_travel_with_the_call():
-    rpc, nc = transport(kv.GetResponse().SerializeToString(), forward_user=True)
+def test_the_current_calls_trace_and_workspace_travel_with_the_call():
+    rpc, nc = transport(kv.GetResponse().SerializeToString())
     caller = CallContext(
         principal=service_account("api"),
         on_behalf_of=user("usr-ada"),
@@ -60,19 +60,168 @@ def test_the_current_calls_user_trace_and_workspace_travel_with_the_call():
     assert (sent.context.trace_id, sent.context.workspace_id) == ("trace-1", "ws-1")
     # Identity travels only in headers, never in the request body.
     assert not sent.context.principal_id and not sent.context.tenant_id
-    assert nc.request.call_args.kwargs["headers"]["Abi-On-Behalf-Of"] == "usr-ada"
 
 
-def test_a_transport_names_no_user_unless_asked_to():
-    """A module's transport calls as the module: the kernel refuses the
-    header from it, and module hosts have no use for the user id."""
+def test_a_delegating_transport_sends_the_token_that_carries_the_user():
+    seen = []
+
+    def delegate(who, recipient):
+        seen.append((who.id, recipient))
+        return f"delegation-for-{who.id}"
+
+    rpc, nc = transport(kv.GetResponse().SerializeToString(), delegate=delegate)
+    caller = CallContext(principal=service_account("api"), on_behalf_of=user("usr-ada"))
+    with use_call_context(caller):
+        asyncio.run(
+            rpc.call("abi.svc.keyvalue.v1.get", kv.GetRequest(), kv.GetResponse)
+        )
+    headers = nc.request.call_args.kwargs["headers"]
+    assert headers["Nats-Auth-Token"] == "delegation-for-usr-ada"
+    assert "Abi-On-Behalf-Of" not in headers
+    assert seen == [("usr-ada", None)]
+
+
+def test_a_delegate_may_be_asynchronous_and_names_the_host_it_calls():
+    seen = []
+
+    async def delegate(who, recipient):
+        seen.append(recipient)
+        return "delegation-for-a-host"
+
+    rpc, nc = transport(kv.GetResponse().SerializeToString(), delegate=delegate)
+    caller = CallContext(principal=service_account("api"), on_behalf_of=user("usr-ada"))
+    with use_call_context(caller):
+        asyncio.run(
+            rpc.call(
+                "abi.agent.default.HOSTULID.i1.summarize.submit",
+                kv.GetRequest(),
+                kv.GetResponse,
+            )
+        )
+    assert seen == ["HOSTULID"]
+    assert nc.request.call_args.kwargs["headers"]["Nats-Auth-Token"] == (
+        "delegation-for-a-host"
+    )
+
+
+def test_without_a_user_the_transport_calls_as_itself():
+    rpc, nc = transport(
+        kv.GetResponse().SerializeToString(),
+        delegate=lambda who, recipient: pytest.fail("no user to carry"),
+    )
+    with use_call_context(CallContext(principal=service_account("engine"))):
+        asyncio.run(
+            rpc.call("abi.svc.keyvalue.v1.get", kv.GetRequest(), kv.GetResponse)
+        )
+    assert nc.request.call_args.kwargs["headers"]["Nats-Auth-Token"] == "issued-token"
+
+
+def test_a_delegation_that_fails_fails_the_call_instead_of_dropping_the_user():
+    def refuse(who, recipient):
+        raise PermissionError("user suspended")
+
+    rpc, nc = transport(kv.GetResponse().SerializeToString(), delegate=refuse)
+    caller = CallContext(principal=service_account("api"), on_behalf_of=user("usr-ada"))
+    with use_call_context(caller), pytest.raises(PermissionError):
+        asyncio.run(
+            rpc.call("abi.svc.keyvalue.v1.get", kv.GetRequest(), kv.GetResponse)
+        )
+    nc.request.assert_not_called()
+
+
+def test_a_transport_without_a_delegate_calls_as_itself_for_any_user():
+    """A module's transport calls as the module: it is not allowed to carry a user."""
     rpc, nc = transport(kv.GetResponse().SerializeToString())
     caller = CallContext(principal=service_account("api"), on_behalf_of=user("u"))
     with use_call_context(caller):
         asyncio.run(
             rpc.call("abi.svc.keyvalue.v1.get", kv.GetRequest(), kv.GetResponse)
         )
-    assert "Abi-On-Behalf-Of" not in nc.request.call_args.kwargs["headers"]
+    headers = nc.request.call_args.kwargs["headers"]
+    assert headers["Nats-Auth-Token"] == "issued-token"
+    assert "Abi-On-Behalf-Of" not in headers
+
+
+def _jwt(exp, **claims):
+    import base64
+    import json
+
+    body = base64.urlsafe_b64encode(json.dumps({"exp": exp, **claims}).encode())
+    return f"h.{body.decode().rstrip('=')}.s"
+
+
+def test_a_run_makes_its_kernel_calls_with_the_delegation_it_was_handed():
+    import time
+
+    token = _jwt(time.time() + 600)
+    rpc, nc = transport(kv.GetResponse().SerializeToString())
+    context = CallContext(
+        principal=service_account("module/acme/people"),
+        on_behalf_of=user("usr-ada"),
+        delegated_token=token,
+    )
+    with use_call_context(context):
+        asyncio.run(
+            rpc.call("abi.svc.keyvalue.v1.get", kv.GetRequest(), kv.GetResponse)
+        )
+    assert nc.request.call_args.kwargs["headers"]["Nats-Auth-Token"] == token
+
+
+def test_a_run_never_hands_its_delegation_to_another_module_host():
+    import time
+
+    rpc, nc = transport(kv.GetResponse().SerializeToString())
+    context = CallContext(
+        principal=service_account("module/acme/people"),
+        on_behalf_of=user("usr-ada"),
+        delegated_token=_jwt(time.time() + 600),
+    )
+    with use_call_context(context):
+        rpc.host_token = lambda recipient: f"host-token-{recipient}"
+        asyncio.run(
+            rpc.call(
+                "abi.agent.default.OTHERHOST.i1.x.submit",
+                kv.GetRequest(),
+                kv.GetResponse,
+            )
+        )
+    # The host gets this module's own token for it, not the user's delegation.
+    assert nc.request.call_args.kwargs["headers"]["Nats-Auth-Token"] == (
+        "host-token-OTHERHOST"
+    )
+
+
+def test_a_delegation_about_to_expire_is_renewed_through_the_service_key():
+    import time
+
+    old = _jwt(time.time() + 10)
+    fresh = _jwt(time.time() + 600)
+    rpc, nc = transport(kv.GetResponse().SerializeToString())
+    renewed = []
+
+    class Credentials:
+        async def renew_delegation(self, transport, token):
+            renewed.append(token)
+            return fresh
+
+        async def access_token(self, transport, audience="abi:nats"):
+            return "issued-token"
+
+    rpc.credentials = Credentials()
+    context = CallContext(
+        principal=service_account("module/acme/people"),
+        on_behalf_of=user("usr-ada"),
+        delegated_token=old,
+    )
+
+    async def twice():
+        for _ in range(2):
+            await rpc.call("abi.svc.keyvalue.v1.get", kv.GetRequest(), kv.GetResponse)
+
+    with use_call_context(context):
+        asyncio.run(twice())
+    assert renewed == [old]  # once, then remembered
+    assert nc.request.call_args.kwargs["headers"]["Nats-Auth-Token"] == fresh
 
 
 def test_a_request_keeps_its_own_trace_and_workspace():

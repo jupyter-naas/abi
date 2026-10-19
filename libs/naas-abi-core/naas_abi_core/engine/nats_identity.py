@@ -8,9 +8,10 @@ here (docs/specs/rfcs/20261013_identity-and-authorization.md, §10.2):
 * the actor is its ``sub``, a principal id (``abi_name`` names a service
   account); with ``act``, the actor is ``act.sub`` and ``sub`` the user it
   acts for. ``grp`` and ``abi_scope`` become the groups and the narrowing;
-* the user it acts for is the ``Abi-On-Behalf-Of`` header, accepted only when
-  the actor is a trusted identity (``api``, ``engine``) until delegated tokens
-  replace the header. From anyone else the call is refused;
+* the user it acts for is named by the token and nothing else: a delegated
+  token (``abi:delegated:agent``) carries it. The ``Abi-On-Behalf-Of`` header
+  of the earlier stage is gone, and a request that carries one is refused (a
+  header naming a user can only narrow a call, so dropping it would widen it);
 * the trace id and the target workspace come from the request's ``context``
   envelope: request data, not identity.
 
@@ -24,12 +25,7 @@ from dataclasses import replace
 from typing import Any
 
 from naas_abi_core import logger
-from naas_abi_core.engine.call_context import (
-    ON_BEHALF_OF_HEADER,
-    CallContext,
-    Principal,
-    user,
-)
+from naas_abi_core.engine.call_context import CallContext, Principal
 from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
     TokenClaims,
@@ -37,16 +33,15 @@ from naas_abi_core.engine.nats_auth import (
 )
 
 AUTH_HEADER = "Nats-Auth-Token"
-# The identities trusted to name the user they act for, until subtask 8's
-# delegated tokens carry the user in the token itself.
-ON_BEHALF_OF_IDENTITIES = frozenset({"api", "engine"})
-# Longer than any principal id: usr_ plus a ULID, a UUID, email-sha256:<hex>.
-_MAX_PRINCIPAL_ID = 256
+# The header of the earlier stage, which named the user a trusted caller acted
+# for. A delegated token carries the user now; a request with this header is
+# refused, never ignored.
+REFUSED_HEADER = "abi-on-behalf-of"
 _CALL_CONTEXT_MESSAGE = "abi.common.v1.CallContext"
 
 
 class OnBehalfOfRefusedError(InvalidServiceTokenError):
-    """The caller named a user it may not act for."""
+    """The request carried the ``Abi-On-Behalf-Of`` header."""
 
 
 def caller_context(
@@ -59,25 +54,18 @@ def caller_context(
     valid, by default now (``TokenVerifier.verify``).
 
     Raises :class:`InvalidServiceTokenError` for a missing or invalid token,
-    and its subclass :class:`OnBehalfOfRefusedError` for an
-    ``Abi-On-Behalf-Of`` header the caller may not send.
+    and its subclass :class:`OnBehalfOfRefusedError` for a request carrying
+    the ``Abi-On-Behalf-Of`` header.
     """
     headers = headers or {}
     claims = verifier.verify(headers.get(AUTH_HEADER, ""), at=at)
-    context = token_context(claims)
-    named = headers.get(ON_BEHALF_OF_HEADER, "")
-    if not named:
-        return context
-    identity = claims.name or claims.subject
-    if (
-        context.on_behalf_of is not None
-        or claims.kind != "service_account"
-        or identity not in ON_BEHALF_OF_IDENTITIES
-    ):
-        raise OnBehalfOfRefusedError(f"{identity!r} may not act on behalf of a user")
-    if len(named) > _MAX_PRINCIPAL_ID or named != named.strip():
-        raise OnBehalfOfRefusedError("Malformed on-behalf-of principal id")
-    return replace(context, on_behalf_of=user(named))
+    if any(name.lower() == REFUSED_HEADER and value for name, value in headers.items()):
+        identity = claims.name or claims.subject
+        raise OnBehalfOfRefusedError(
+            f"{identity!r} sent the Abi-On-Behalf-Of header, which is no longer "
+            "accepted: act for a user with a delegated token"
+        )
+    return token_context(claims)
 
 
 def token_context(claims: TokenClaims) -> CallContext:
@@ -90,7 +78,9 @@ def token_context(claims: TokenClaims) -> CallContext:
         groups=groups if claims.kind == "user" else frozenset(),
     )
     if claims.actor is not None:
-        actor = Principal(id=claims.actor, kind="service_account")
+        actor = Principal(
+            id=claims.actor, kind="service_account", name=claims.actor_name
+        )
         principal, on_behalf_of = actor, sub
     else:
         principal, on_behalf_of = sub, None
@@ -108,10 +98,10 @@ def refusal(exc: InvalidServiceTokenError, invalid_token: str) -> str:
     """The UNAUTHENTICATED message for a refused caller.
 
     A refused ``Abi-On-Behalf-Of`` header gets its own message, and a log
-    line: the token was fine, so nobody should go chasing the JWT secret.
+    line: the token was fine, so nobody should go chasing the signing key.
     """
     if isinstance(exc, OnBehalfOfRefusedError):
-        logger.warning(f"Refused a NATS call naming a user: {exc}")
+        logger.warning(f"Refused a NATS call with the Abi-On-Behalf-Of header: {exc}")
         return f"on-behalf-of refused: {exc}"
     return invalid_token
 

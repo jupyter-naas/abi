@@ -646,13 +646,14 @@ def _api_client(identity: str = "api"):
 
 
 @pytest.mark.parametrize("identity", ["api", "engine"])
-def test_a_trusted_client_sends_the_user_the_current_call_acts_for(identity):
+def test_a_delegating_client_sends_a_delegation_naming_the_user(identity):
     from naas_abi_core.engine.call_context import (
         CallContext,
         service_account,
         use_call_context,
         user,
     )
+    from naas_abi_core.engine.nats_identity import caller_context
 
     client, nc = _api_client(identity)
     caller = CallContext(
@@ -667,18 +668,25 @@ def test_a_trusted_client_sends_the_user_the_current_call_acts_for(identity):
             call(client)
     finally:
         client.close()
-    assert nc.request.call_args.kwargs["headers"]["Abi-On-Behalf-Of"] == "usr-ada"
+    headers = nc.request.call_args.kwargs["headers"]
+    assert "Abi-On-Behalf-Of" not in headers
+    served = caller_context(
+        headers, TEST_TOKENS.verifier_for(("abi:nats", "abi:delegated:agent"))
+    )
+    assert served.principal.id == identity
+    assert served.on_behalf_of is not None and served.on_behalf_of.id == "usr-ada"
     assert (context.trace_id, context.workspace_id) == ("trace-1", "ws-1")
     assert not context.principal_id and not context.tenant_id
 
 
-def test_another_client_calls_as_itself_and_never_names_a_user():
+def test_another_client_calls_as_itself_and_never_carries_a_user():
     from naas_abi_core.engine.call_context import (
         CallContext,
         service_account,
         use_call_context,
         user,
     )
+    from naas_abi_core.engine.nats_identity import caller_context
 
     client, nc = _api_client("dagster")
     try:
@@ -688,17 +696,58 @@ def test_another_client_calls_as_itself_and_never_names_a_user():
             call(client)
     finally:
         client.close()
-    assert "Abi-On-Behalf-Of" not in nc.request.call_args.kwargs["headers"]
+    headers = nc.request.call_args.kwargs["headers"]
+    assert "Abi-On-Behalf-Of" not in headers
+    served = caller_context(headers, TEST_TOKENS.verifier)
+    assert served.principal.id == "dagster" and served.on_behalf_of is None
 
 
-def test_without_a_user_no_header_and_a_fresh_trace():
+def test_a_delegation_that_fails_is_a_failed_call_not_the_clients_own_identity():
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        service_account,
+        use_call_context,
+        user,
+    )
+    from naas_abi_core.engine.nats_auth import (
+        InvalidServiceTokenError,
+        RenewingTokenSource,
+    )
+    from naas_abi_core.engine.nats_rpc import NatsRPCClient
+
+    def refuse(who, recipient):
+        raise InvalidServiceTokenError("suspended")
+
+    client = NatsRPCClient(
+        "nats://unused:4222",
+        RenewingTokenSource("api", lambda: TEST_TOKENS.issue("api"), delegate=refuse),
+    )
+    nc = connection(client, return_value=SimpleNamespace(data=b"", headers=None))
+    try:
+        with (
+            use_call_context(
+                CallContext(principal=service_account("api"), on_behalf_of=user("u"))
+            ),
+            pytest.raises(InvalidServiceTokenError),
+        ):
+            call(client)
+    finally:
+        client.close()
+    nc.request.assert_not_called()
+
+
+def test_without_a_user_no_delegation_and_a_fresh_trace():
+    from naas_abi_core.engine.nats_identity import caller_context
+
     client, nc = _api_client()
     try:
         call(client)
         context = client._context()
     finally:
         client.close()
-    assert "Abi-On-Behalf-Of" not in nc.request.call_args.kwargs["headers"]
+    headers = nc.request.call_args.kwargs["headers"]
+    assert "Abi-On-Behalf-Of" not in headers
+    assert caller_context(headers, TEST_TOKENS.verifier).on_behalf_of is None
     assert context.trace_id and not context.workspace_id
 
 
@@ -709,6 +758,7 @@ def test_overflow_chunks_travel_as_the_call_they_belong_to(monkeypatch):
         use_call_context,
         user,
     )
+    from naas_abi_core.engine.nats_identity import caller_context
     from naas_abi_core.engine.nats_rpc import NatsRPCClient
     from naas_abi_proto.transfer.v1 import transfer_pb2
     from naas_abi_sdk.telemetry import TransferTrace
@@ -728,7 +778,7 @@ def test_overflow_chunks_travel_as_the_call_they_belong_to(monkeypatch):
     try:
         with use_call_context(caller):
             chunk = client._chunk_call(
-                {"Nats-Auth-Token": "t", **client._on_behalf_of()},
+                {"Nats-Auth-Token": client._current_token(client._served_user())},
                 call_request,
                 TransferTrace(None),
             )
@@ -748,7 +798,11 @@ def test_overflow_chunks_travel_as_the_call_they_belong_to(monkeypatch):
             "trace-1",
             "ws-1",
         )
-        assert headers["Abi-On-Behalf-Of"] == "u1"
+        assert "Abi-On-Behalf-Of" not in headers
+        served = caller_context(
+            headers, TEST_TOKENS.verifier_for(("abi:nats", "abi:delegated:agent"))
+        )
+        assert served.on_behalf_of is not None and served.on_behalf_of.id == "u1"
 
 
 def test_a_stream_keeps_the_user_it_was_opened_for(monkeypatch):
@@ -775,8 +829,8 @@ def test_a_stream_keeps_the_user_it_was_opened_for(monkeypatch):
     }
 
     def fake_call(subject, request, response_cls, **kwargs):
-        headers = {**(kwargs.get("on_behalf_of") or client._on_behalf_of())}
-        users.append(headers.get("Abi-On-Behalf-Of"))
+        served = kwargs.get("user") or client._served_user()
+        users.append(served.id if served is not None else None)
         return replies[response_cls]
 
     monkeypatch.setattr(client, "_call", fake_call)

@@ -15,6 +15,8 @@ import time
 from collections.abc import Iterable
 
 from naas_abi_core.engine.nats_auth import (
+    AGENT_AUDIENCE,
+    KERNEL_AUDIENCES,
     MAX_TOKEN_SECONDS,
     NATS_AUDIENCE,
     IssuedToken,
@@ -38,7 +40,9 @@ class TestTokens:
     def jwks(self) -> dict:
         return {"issuer": self.issuer, "keys": [self.key.public_jwk()]}
 
-    def verifier_for(self, audiences: Iterable[str] = (NATS_AUDIENCE,)) -> JWKSVerifier:
+    def verifier_for(self, audiences: Iterable[str] = KERNEL_AUDIENCES) -> JWKSVerifier:
+        """By default what every kernel endpoint accepts: a service's own token
+        and a delegation for a user."""
         return JWKSVerifier(self.jwks, audiences=audiences)
 
     def issue(
@@ -51,6 +55,7 @@ class TestTokens:
         issued_at: int | None = None,
         ttl: int = MAX_TOKEN_SECONDS,
         actor: str | None = None,
+        actor_name: str | None = None,
         groups: tuple[str, ...] = (),
     ) -> IssuedToken:
         now = int(time.time()) if issued_at is None else issued_at
@@ -64,6 +69,7 @@ class TestTokens:
             expires_at=now + ttl,
             name=name if kind == "service_account" else None,
             actor=actor,
+            actor_name=actor_name,
             groups=groups,
         )
         return IssuedToken(
@@ -74,11 +80,32 @@ class TestTokens:
         return self.issue(name, **options).token
 
     def source(
-        self, name: str = "api", *, subject: str | None = None
+        self,
+        name: str = "api",
+        *,
+        subject: str | None = None,
+        delegating: bool | None = None,
     ) -> RenewingTokenSource:
         """``subject``: the principal id IAM issued the account (``sa_...``);
-        by default the name, as before IAM assigned ids."""
-        return RenewingTokenSource(name, lambda: self.issue(name, subject=subject))
+        by default the name, as before IAM assigned ids. ``delegating``: the
+        source carries the users it serves in delegations, as ``api`` and
+        ``engine`` do (by default exactly those two)."""
+        delegate = None
+        if delegating if delegating is not None else name in ("api", "engine"):
+
+            def delegate(user, recipient):  # type: ignore[misc]
+                return self.issue(
+                    user.id,
+                    kind="user",
+                    audience=AGENT_AUDIENCE,
+                    actor=subject or name,
+                    actor_name=name,
+                    groups=tuple(sorted(user.groups)),
+                )
+
+        return RenewingTokenSource(
+            name, lambda: self.issue(name, subject=subject), delegate=delegate
+        )
 
 
 TEST_TOKENS = TestTokens()

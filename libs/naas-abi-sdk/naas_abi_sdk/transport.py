@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import inspect
+import json
 import logging
 import math
+import time
 import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar, cast
@@ -14,7 +18,7 @@ from nats.aio.client import Client
 from nats.errors import MaxPayloadError, NoRespondersError
 
 from naas_abi_sdk import no_responders, overflow
-from naas_abi_sdk.call_context import current_call_context, on_behalf_of_header
+from naas_abi_sdk.call_context import Principal, current_call_context
 from naas_abi_sdk.credentials import (
     NATS_AUDIENCE,
     RENEW_CONNECTION_SECONDS,
@@ -80,15 +84,19 @@ class Transport:
         token: str | Callable[[], str] | ServiceKey,
         timeout: float = 10.0,
         *,
-        forward_user: bool = False,
+        delegate: Callable[[Principal, str | None], str | Awaitable[str]] | None = None,
         renew_seconds: float = RENEW_CONNECTION_SECONDS,
         host_token: str | Callable[[], str] | None = None,
         **connection_options: Any,
     ) -> None:
-        """``forward_user``: send the user the current call acts for
-        (``Abi-On-Behalf-Of``). Only for a transport holding a trusted
-        identity (``api``, ``engine``) that calls kernel services: they
-        refuse the header from anyone else, and no module host needs it.
+        """``delegate(user, recipient)``: a token that carries the user the
+        current call acts for, sent in place of this transport's own token: a
+        delegation (``abi:delegated:agent``) acting as this transport's
+        identity for a kernel service, or, with ``recipient`` (a call to a
+        module host), acting as that module. Only for a transport holding a
+        first-party identity (``api``, ``engine``). A transport without one
+        calls as itself; one that has one but cannot get a delegation fails
+        the call, never calling as itself (which would drop the user).
 
         ``host_token``: for a transport given a token instead of a key, what a
         call to a module host carries: a token, or a function of the host's
@@ -112,7 +120,10 @@ class Transport:
                 connection_options.setdefault(option, value)
         self.url, self.token, self.timeout = url, token, timeout
         self.host_token = host_token
-        self.forward_user = forward_user
+        self.delegate = delegate
+        # Renewed delegations of a module host's invocations: held token ->
+        # (fresh token, its expiry).
+        self._renewed: dict[str, tuple[str, float]] = {}
         self.options = connection_options
         self.connection = Client()
         self._lock = asyncio.Lock()
@@ -236,24 +247,60 @@ class Transport:
                 else:
                     await self.connection.close()
 
-    async def auth_headers(
+    async def delegated_token(
         self, current: Any = None, *, host: str | None = None
+    ) -> str | None:
+        """The token that carries the user of ``current`` (default: the current
+        call), or None when the call has no user or this transport carries
+        none (it calls as itself).
+
+        * A module host running an invocation holds the delegation it was
+          handed (``CallContext.delegated_token``), used for its kernel calls
+          and renewed through its service key when it runs out.
+        * A first-party transport asks its ``delegate``; for a call to a module
+          host (``host``) the token names that module as the actor."""
+        context = current if current is not None else current_call_context()
+        served = context.user
+        if served is None:
+            return None
+        if host is None and context.delegated_token:
+            return await self._fresh_delegation(context.delegated_token)
+        if self.delegate is None:
+            return None
+        token = self.delegate(served, host)
+        if inspect.isawaitable(token):
+            token = await token
+        return cast(str, token)
+
+    async def _fresh_delegation(self, token: str) -> str:
+        """``token``, or its renewal when it is about to expire (a run outlives
+        the ten minutes of a token); as is when this transport cannot renew."""
+        if self.credentials is None or _expiry(token) - time.time() > 60:
+            return token
+        held = self._renewed.get(token)
+        if held is not None and held[1] - time.time() > 60:
+            return held[0]
+        renewed = await self.credentials.renew_delegation(self, token)
+        if len(self._renewed) > 1024:
+            self._renewed.clear()
+        self._renewed[token] = (renewed, _expiry(renewed))
+        return renewed
+
+    async def auth_headers(
+        self, current: Any = None, *, host: str | None = None, user: bool = True
     ) -> dict[str, str]:
-        """This transport's credentials for a message it sends itself: its
-        token (a service key's, exchanged as needed), and the current call's
-        user when it forwards users. ``host``: the ``<sa>`` of the module host that
-        will read the message, so the token is addressed to it alone."""
-        token = await self.access_token(recipient=host)
+        """This transport's credentials for a message it sends itself: the
+        token that carries the current call's user when it has one to carry
+        (``delegated_token``), else its own (a service key's, exchanged as
+        needed). ``host``: the ``<sa>`` of the module host that will read the
+        message, so the token is addressed to it alone. ``user=False``: as
+        itself, whoever the call is for (a module triggering its own job)."""
+        token = await self.delegated_token(current, host=host) if user else None
+        if token is None:
+            token = await self.access_token(recipient=host)
         if not token or "\r" in token or "\n" in token:
             raise ValueError("A nonempty service token without newlines is required")
-        headers = {"Nats-Auth-Token": token}
-        if self.forward_user:
-            headers.update(
-                on_behalf_of_header(
-                    current if current is not None else current_call_context()
-                )
-            )
-        return headers
+        return {"Nats-Auth-Token": token}
 
     async def call(
         self,
@@ -380,6 +427,19 @@ class Transport:
             record_error(error.code, error.message)
             raise RPCError(error.code, error.message, response=response)
         return response
+
+
+def _expiry(token: str) -> float:
+    """When ``token`` expires, read without verifying it (the engine verifies
+    every token it is sent); 0 for anything unreadable."""
+    try:
+        payload = token.split(".")[1]
+        claims = json.loads(
+            base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4))
+        )
+        return float(claims["exp"])
+    except (IndexError, ValueError, KeyError, TypeError):
+        return 0.0
 
 
 async def _download(call: overflow.Call, headers: Any) -> bytes:

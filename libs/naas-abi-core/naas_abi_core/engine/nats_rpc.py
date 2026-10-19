@@ -21,8 +21,8 @@ from naas_abi_core import logger
 from naas_abi_core.engine import nats_overflow
 from naas_abi_core.engine.call_context import (
     CallContext,
+    Principal,
     current_call_context,
-    on_behalf_of_header,
 )
 from naas_abi_core.engine.nats_auth import (
     InvalidServiceTokenError,
@@ -30,7 +30,6 @@ from naas_abi_core.engine.nats_auth import (
     TokenVerifier,
 )
 from naas_abi_core.engine.nats_identity import (
-    ON_BEHALF_OF_IDENTITIES,
     caller_context,
     refusal,
     request_envelope,
@@ -279,6 +278,13 @@ class _Reply:
         self.data, self.headers = data, headers
 
 
+class _CurrentUser:
+    """Marks "the user of the current call" as a ``_call`` default."""
+
+
+CURRENT_USER = _CurrentUser()
+
+
 class NatsRPCClient:
     """Owns one lazy connection and loop; domain subclasses own wire mappings."""
 
@@ -419,8 +425,11 @@ class NatsRPCClient:
     # Auth: the credentials renew their token at half its life.
     # ------------------------------------------------------------------
 
-    def _current_token(self) -> str:
-        return self._credentials.token()
+    def _current_token(self, user: Principal | None = None) -> str:
+        """The token of a call: the source's own, or, for a source that carries
+        users (``api``, ``engine``) and a call made for one, a delegation that
+        names the user and this process as the actor."""
+        return self._credentials.token_for(user)
 
     # ------------------------------------------------------------------
     # RPC plumbing.
@@ -439,16 +448,12 @@ class NatsRPCClient:
             workspace_id=current.workspace_id or "",
         )
 
-    def _on_behalf_of(self) -> dict[str, str]:
-        """The current call's user, for an identity trusted to name it.
-
-        Read when the call is made, in the caller's thread. Any other identity
-        sends nothing and calls as itself, as before (the server would refuse
-        the header).
-        """
-        if self._service_identity not in ON_BEHALF_OF_IDENTITIES:
-            return {}
-        return on_behalf_of_header()
+    def _served_user(self) -> Principal | None:
+        """The user the current call acts for, read when the call is made, in
+        the caller's thread. Whether it travels is the credentials' decision:
+        only a source allowed to carry users (``api``, ``engine``) sends a
+        delegation; any other identity calls as itself."""
+        return current_call_context().user
 
     def _deadline(self, timeout_seconds: float | None) -> float:
         return self._timeout_seconds if timeout_seconds is None else timeout_seconds
@@ -461,17 +466,17 @@ class NatsRPCClient:
         *,
         transfer: TransferTrace | None = None,
         timeout_seconds: float | None = None,
-        on_behalf_of: dict[str, str] | None = None,
+        user: Principal | None | _CurrentUser = CURRENT_USER,
     ) -> _ResponseT:
         """One request/reply. ``timeout_seconds`` replaces the client's default
         deadline for this call only (a long operation); overflow chunks keep
-        the default, each being small. ``on_behalf_of``: the user header,
+        the default, each being small. ``user``: the user the call acts for,
         captured once for a whole stream; by default the current call's."""
         payload = request.SerializeToString()
-        token = self._current_token()
-        if on_behalf_of is None:
-            on_behalf_of = self._on_behalf_of()
-        call_headers = {self._auth_header: token, **on_behalf_of}
+        if isinstance(user, _CurrentUser):
+            user = self._served_user()
+        token = self._current_token(user)
+        call_headers = {self._auth_header: token}
         headers = dict(call_headers)
         # The span starts in the calling thread, whose context holds the parent
         # (e.g. a request handler); the trace travels in the headers.
@@ -685,7 +690,7 @@ class NatsRPCClient:
             # One trace and one user for the whole stream, captured here: frames
             # may be read from another thread, or after the caller's context.
             envelope = self._context()
-            on_behalf_of = self._on_behalf_of()
+            served = self._served_user()
 
             def exchange(request: Any, response_cls: Any) -> Any:
                 name = type(request).__name__.removesuffix("Request").lower()
@@ -695,7 +700,7 @@ class NatsRPCClient:
                     request,
                     response_cls,
                     transfer=trace,
-                    on_behalf_of=on_behalf_of,
+                    user=served,
                 )
                 if response.HasField("error"):
                     raise_error(response.error)

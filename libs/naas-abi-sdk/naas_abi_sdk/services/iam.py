@@ -290,15 +290,68 @@ class IAMService(ServiceProxy):
         """The engine's public signing keys and their issuer."""
         return json.loads(await self._request("jwks"))
 
+    async def exchange_token(
+        self,
+        subject_token: str,
+        subject_token_type: str,
+        audience: str,
+        *,
+        resource: str = "",
+        scope: list[Mapping[str, Any]] | None = None,
+        groups: list[str] | None = None,
+        session_id: str = "",
+    ) -> dict[str, Any]:
+        """RFC 8693 token exchange (RFC §9.4): the caller needs
+        ``iam:ExchangeToken`` on ``audience``. ``{"access_token": ...,
+        "expires_in": ..., ...}``. A module renews the delegation it holds with
+        its own token: ``subject_token_type`` the RFC's ``jwt`` and ``audience``
+        ``abi:delegated:agent``."""
+        return await self._request(
+            "exchange_token",
+            grant_type="urn:ietf:params:oauth:grant-type:token-exchange",
+            subject_token=subject_token,
+            subject_token_type=subject_token_type,
+            audience=audience,
+            resource=resource,
+            scope_json=json.dumps(scope) if scope is not None else None,
+            groups=groups or [],
+            session_id=session_id,
+        )
+
+    async def revoke_tokens(
+        self, principal_id: str, *, include_keys: bool = False
+    ) -> None:
+        """Cut off every token issued so far to or for ``principal_id``."""
+        await self._request(
+            "revoke_tokens", principal_id=principal_id, include_keys=include_keys
+        )
+
     async def find_service_account(self, name: str) -> dict[str, Any]:
         return await self._request("find_service_account", name=name)
 
     async def create_key(
-        self, principal_id: str, *, description: str = ""
+        self,
+        principal_id: str,
+        *,
+        description: str = "",
+        kind: str = "",
+        audience: str = "",
+        resource: str = "",
+        scope: list[Mapping[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        """``{"key": {...}, "value": "abi_sk_..."}``: the value is shown once."""
+        """``{"key": {...}, "value": "abi_sk_..."}``: the value is shown once.
+
+        For a user's key (``abi_pk_``, or ``kind="grant"`` for a link
+        ``abi_gk_``): ``audience``, the ``resource`` it is bound to and its
+        ``scope`` (Allow statements, the token's ``abi_scope``)."""
         return await self._request(
-            "create_key", principal_id=principal_id, description=description
+            "create_key",
+            principal_id=principal_id,
+            description=description,
+            kind=kind,
+            audience=audience,
+            resource=resource,
+            scope_json=json.dumps(scope) if scope is not None else None,
         )
 
     async def list_keys(self, principal_id: str) -> list[dict[str, Any]]:

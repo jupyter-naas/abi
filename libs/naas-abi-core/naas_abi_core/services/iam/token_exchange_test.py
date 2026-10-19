@@ -85,6 +85,7 @@ def test_api_vouches_for_a_session_user_and_gets_an_agent_token_acting_as_itself
     assert claims.subject == bob.id and claims.kind == "user"
     assert claims.audience == AGENT_AUDIENCE
     assert claims.actor == iam.store.find_service_account("api").id
+    assert claims.actor_name == "api"
     assert 0 < claims.lifetime <= 600
     assert claims.since == claims.issued_at
 
@@ -241,6 +242,7 @@ def test_a_resource_names_the_module_that_acts_for_the_user(h, iam, bob, people)
     issued = _vouched(iam, bob.id, AGENT_AUDIENCE, resource=MODULE)
     claims = _verify(iam, issued.token)
     assert claims.actor == people.id and claims.subject == bob.id
+    assert claims.actor_name == "module/acme/people"
     assert claims.resource == MODULE
     # The same resource, spelled as one of its agents, names the same module.
     agent = "abi:-:-:discovery:agent/acme/people/summarize"
@@ -292,6 +294,7 @@ def test_the_module_renews_its_own_delegation_and_nobody_else_does(h, iam, bob, 
     renewed = _verify(iam, renew(people).token)
     original = _verify(iam, first.token)
     assert renewed.subject == bob.id and renewed.actor == people.id
+    assert renewed.actor_name == "module/acme/people"
     assert renewed.since == original.since  # the chain keeps its start
     assert renewed.token_id != original.token_id
     with pytest.raises(PermissionDeniedError):
@@ -790,3 +793,100 @@ def test_the_clock_of_the_floor_is_the_issue_time(h, iam, bob):
     other = _verify(iam, _delegated_for(iam, h.user("alice")))
     assert not iam.token_revoked(other)
     time.sleep(0)
+
+
+# -- a module acting for a user may reach what it hosts ----------------------------------------
+
+
+def test_a_module_acting_for_a_user_may_invoke_what_it_hosts_and_nothing_else(
+    h, iam, bob, people
+):
+    """Nexus calls a module's agent with a delegation naming the module: the
+    module's own side of the check must let it serve its own agents, apps and
+    models, for a user whose policy allows them, and no other module's."""
+    from naas_abi_core.services.discovery.iam_catalog import CATALOG
+
+    iam._register_catalog(CATALOG)
+    h.grant(
+        bob.id,
+        statement(
+            "Allow",
+            [
+                "discovery:InvokeAgent",
+                "discovery:OpenApp",
+                "discovery:ChatModel",
+            ],
+            ["abi:-:-:discovery:*"],
+        ),
+        statement(
+            "Allow",
+            ["discovery:GetAgentRun", "discovery:CancelAgentRun"],
+            [f"abi:-:-:discovery:run/{bob.id}/*", "abi:-:-:discovery:run/usr_alice/*"],
+        ),
+    )
+    context = token_context(
+        _verify(iam, _vouched(iam, bob.id, AGENT_AUDIENCE, resource=MODULE).token)
+    )
+
+    def allowed(action, resource):
+        return iam.authorizer.check(context, action, resource).allowed
+
+    mine = "abi:-:-:discovery:{}/acme/people/x"
+    for action, type_ in (
+        ("discovery:InvokeAgent", "agent"),
+        ("discovery:OpenApp", "app"),
+        ("discovery:ChatModel", "model"),
+    ):
+        assert allowed(action, mine.format(type_)), action
+        # Another module's, and another project's, are not its to serve.
+        assert not allowed(action, f"abi:-:-:discovery:{type_}/acme/billing/x")
+        assert not allowed(action, f"abi:-:-:discovery:{type_}/other/people/x")
+    # The runs of the project that belong to the user it acts for: bob's, never
+    # alice's (bob's policy would let him, the module's side does not).
+    assert allowed("discovery:GetAgentRun", f"abi:-:-:discovery:run/{bob.id}/acme/i1")
+    assert allowed(
+        "discovery:CancelAgentRun", f"abi:-:-:discovery:run/{bob.id}/acme/i1"
+    )
+    assert not allowed(
+        "discovery:GetAgentRun", "abi:-:-:discovery:run/usr_alice/acme/i1"
+    )
+    assert not allowed(
+        "discovery:GetAgentRun", f"abi:-:-:discovery:run/{bob.id}/other/i1"
+    )
+    # And it gains nothing else: bob holds no key rights it could borrow.
+    assert not allowed("discovery:Evict", "abi:-:-:discovery:module/acme/people")
+    assert not allowed("iam:CreateKey", f"abi:-:-:iam:key/{bob.id}/new")
+
+
+def test_the_modules_own_side_alone_grants_a_user_with_no_policy_nothing(
+    h, iam, bob, people
+):
+    from naas_abi_core.services.discovery.iam_catalog import CATALOG
+
+    iam._register_catalog(CATALOG)
+    nobody = h.user("nobody")
+    context = token_context(
+        _verify(iam, _vouched(iam, nobody.id, AGENT_AUDIENCE, resource=MODULE).token)
+    )
+    mine = "abi:-:-:discovery:agent/acme/people/x"
+    assert not iam.authorizer.check(context, "discovery:InvokeAgent", mine).allowed
+
+
+def test_what_a_module_holds_for_a_delegation_opens_no_broker_subject(h, iam, people):
+    """The module's side of a delegation lets it serve what it hosts. The broker
+    turns an InvokeAgent grant into every agent subject of the project, so those
+    statements must open none: a module is not to call the agents of others."""
+    from naas_abi_core.services.discovery.iam_catalog import CATALOG
+
+    iam._register_catalog(CATALOG)
+    grants = iam.broker_grants(people.id)
+    assert not [s for s in grants.publish if s.startswith("abi.agent.")]
+    assert not [s for s in grants.publish if s.startswith("abi.mod.")]
+    # While the module still holds the statements, for the actor side.
+    context = token_context(
+        _verify(
+            iam,
+            _vouched(iam, h.user("carol").id, AGENT_AUDIENCE, resource=MODULE).token,
+        )
+    )
+    assert context.principal.id == people.id

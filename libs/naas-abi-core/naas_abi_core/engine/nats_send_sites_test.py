@@ -39,8 +39,8 @@ REVIEWED = {
         "key exchange and JWKS requests: a key, or nothing",
     ),
     "naas-abi-sdk/naas_abi_sdk/credentials.py": (
-        1,
-        "key exchange: the key, then one token",
+        2,
+        "key exchange: the key, then one token; a delegation's renewal: one token",
     ),
     "naas-abi-sdk/naas_abi_sdk/app_streams.py": (
         2,

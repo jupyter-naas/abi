@@ -14,7 +14,7 @@ from google.protobuf.message import DecodeError
 from naas_abi_proto.agent.v1 import agent_pb2 as pb
 from nats.errors import Error as NATSError
 
-from naas_abi_sdk.transport import RPCError
+from naas_abi_sdk.transport import RPCError, host_recipient
 
 TERMINAL = {"SUCCEEDED", "FAILED", "CANCELLED", "TIMED_OUT"}
 # Wall-clock budget for invoke/stream_invoke when the caller sets no timeout.
@@ -280,18 +280,23 @@ class AgentProxy:
         if not eligible:
             raise RPCError("AGENT_UNAVAILABLE", self.name)
         target = next((i for i in eligible if i.instance_id == owner), eligible[0])
+        subject = agent_subject(
+            self.module.client.project,
+            target.service_account,
+            target.instance_id,
+            self.name,
+            operation,
+        )
+        transport = self.module.client.transport
+        if operation == "submit":
+            # The delegation for the run's own calls: the token this call
+            # carries to the host when it carries the current call's user
+            # (RFC §9.4), handed over again so the run outlives the call.
+            held = await transport.delegated_token(host=host_recipient(subject))
+            if held:
+                request.delegated_token = held
         try:
-            return await self.module.client.transport.call(
-                agent_subject(
-                    self.module.client.project,
-                    target.service_account,
-                    target.instance_id,
-                    self.name,
-                    operation,
-                ),
-                request,
-                response_type,
-            )
+            return await transport.call(subject, request, response_type)
         except (NATSError, asyncio.TimeoutError, OSError, RPCError):
             self._instances = (0.0, ())
             raise

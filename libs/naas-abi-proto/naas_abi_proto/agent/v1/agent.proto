@@ -26,6 +26,12 @@ message SubmitRequest {
   // An _INBOX subject the submitter subscribed to: the owner pushes RunUpdates
   // there, so the submitter need not poll Status. Empty: no updates.
   string updates_inbox = 8;
+  // The delegation for the run's own calls: an abi:delegated:agent token naming
+  // this agent's module as the actor and the user the run is for (RFC §9.4).
+  // The host uses it, in place of its own token, for the kernel calls the run
+  // makes for that user, and drops it unless it names the run's owner. Never
+  // stored. Empty: the run calls as the module itself.
+  string delegated_token = 9;
 }
 // Pushed to a submitter's updates_inbox, at most once (core NATS): each event
 // once its fragments are committed (data inline when small, else only its part

@@ -32,12 +32,19 @@ def proxy(*updates):
         new_inbox=lambda: "_INBOX.test.1", subscribe=AsyncMock(return_value=inbox)
     )
     transport = SimpleNamespace(
-        call=AsyncMock(), connect=AsyncMock(return_value=connection), inbox=inbox
+        call=AsyncMock(),
+        connect=AsyncMock(return_value=connection),
+        inbox=inbox,
+        delegated_token=AsyncMock(return_value=None),
     )
     module = SimpleNamespace(
         client=SimpleNamespace(project="default", transport=transport),
         ready_instances=AsyncMock(
-            return_value=[SimpleNamespace(instance_id="one", service_account="sa1", agents=(descriptor,))]
+            return_value=[
+                SimpleNamespace(
+                    instance_id="one", service_account="sa1", agents=(descriptor,)
+                )
+            ]
         ),
     )
     module.instances = module.ready_instances

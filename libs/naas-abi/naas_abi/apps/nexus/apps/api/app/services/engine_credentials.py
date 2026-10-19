@@ -8,8 +8,10 @@ from __future__ import annotations
 
 from typing import Any
 
-# Discovery binds invocation status/events/cancel to the caller identity; every
-# API worker shares this one so any worker can follow a run another started.
+# The service account Nexus's own NATS calls are made as (its token, ``api_token``)
+# and that vouches for the signed-in users it serves: IAM exchanges for them as
+# ``api`` (``api_delegate``). Discovery binds a run to the user it was started
+# for, so any API worker can follow a run another started.
 CALLER_IDENTITY = "api"
 
 
@@ -24,6 +26,23 @@ def api_token() -> Any:
         return engine.service_credentials(CALLER_IDENTITY).token()
 
     return token
+
+
+def api_delegate() -> Any:
+    """What ``Transport(delegate=...)`` calls to carry the signed-in user the
+    request acts for: a delegation (``abi:delegated:agent``, RFC §9.4) naming
+    ``api`` as the actor for a kernel service, or the module behind the host
+    being called. IAM signs it in this process and refuses a user it
+    suspended: such a call fails, it is never made as ``api`` alone. Replaces
+    the ``Abi-On-Behalf-Of`` header, which the kernel no longer accepts."""
+
+    def delegate(user: Any, recipient: str | None = None) -> str:
+        from naas_abi import ABIModule
+
+        engine = ABIModule.get_instance().engine
+        return str(engine.service_credentials(CALLER_IDENTITY).token_for(user, recipient))
+
+    return delegate
 
 
 def api_host_token() -> Any:

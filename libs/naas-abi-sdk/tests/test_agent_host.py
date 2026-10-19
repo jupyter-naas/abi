@@ -545,10 +545,8 @@ def authorizing(identity="caller", decided=False):
     return owner
 
 
-def _ask(owner, agent, token, submit, on_behalf_of=""):
+def _ask(owner, agent, token, submit):
     headers = {"Nats-Auth-Token": token}
-    if on_behalf_of:
-        headers["Abi-On-Behalf-Of"] = on_behalf_of
     if submit:
         return owner._authorize(agent, headers, "submit")
     return owner._authorize(agent, headers, "status", "id", "caller")
@@ -571,11 +569,10 @@ def test_polls_reuse_discovery_authorization_and_submits_always_ask():
         assert owner.session.client._call.await_count == 5
         await _ask(owner, "agent", token, False)
         assert owner.session.client._call.await_count == 5
-        # Per user the caller acts for.
-        await _ask(owner, "agent", token, False, on_behalf_of="user-1")
-        assert owner.session.client._call.await_count == 6
+        # The user is in the token; the run's owner went with the poll.
         sent = owner.session.client._call.call_args.args[1]
-        assert (sent.caller_on_behalf_of, sent.run_owner) == ("user-1", "caller")
+        assert sent.caller_token.startswith("header.") and sent.run_owner == "caller"
+        assert not hasattr(sent, "caller_on_behalf_of")
 
     asyncio.run(scenario())
 
@@ -833,5 +830,86 @@ def test_calls_run_side_by_side_and_close_answers_them_first():
         assert not closing.done()
         release.set()
         await asyncio.wait_for(closing, timeout=2)
+
+    asyncio.run(scenario())
+
+
+# -- the delegation a run executes with (RFC §9.4) ----------------------------------------
+
+
+def _delegation_token(sub="caller", act="sa_module", aud="abi:delegated:agent"):
+    import base64
+    import json
+    import time
+
+    claims = {"sub": sub, "aud": aud, "exp": time.time() + 600}
+    if act is not None:
+        claims["act"] = {"sub": act}
+    body = base64.urlsafe_b64encode(json.dumps(claims).encode()).rstrip(b"=")
+    return f"header.{body.decode()}.signature"
+
+
+class Seen:
+    """A handler recording the context its run executes in."""
+
+    def __init__(self):
+        from naas_abi_sdk.call_context import current_call_context
+
+        self.current = current_call_context
+        self.contexts = []
+
+    async def invoke(self, prompt, context):
+        self.contexts.append(self.current())
+        return "result"
+
+
+def _delegated_request(token):
+    submit = request()
+    submit.delegated_token = token
+    return submit
+
+
+def test_a_run_executes_as_the_module_for_the_user_it_was_delegated():
+    from naas_abi_sdk.call_context import user
+
+    async def scenario():
+        seen = Seen()
+        owner = host(Documents(), seen)
+        token = _delegation_token()
+        doc = await owner._submit("agent", "key", "caller", _delegated_request(token))
+        await owner.runs["key"].task
+        [context] = seen.contexts
+        assert context.principal.id == "sa_module"
+        assert context.principal.kind == "service_account"
+        assert context.on_behalf_of == user("caller")
+        assert context.delegated_token == token
+        assert doc.data["caller"] == "caller"
+        # The token is a credential: it is never written to the run's record.
+        stored = await owner.documents.get(owner.runs_collection, "key")
+        assert token not in repr(stored.data)
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "",
+        "garbage",
+        "a.b.c",
+        _delegation_token(sub="someone-else"),  # not the run's owner
+        _delegation_token(aud="abi:nats"),  # not a delegation
+        _delegation_token(aud="abi:session"),
+        _delegation_token(act=None),  # names no module
+    ],
+)
+def test_a_delegation_that_is_not_for_the_run_owner_is_dropped(token):
+    async def scenario():
+        seen = Seen()
+        owner = host(Documents(), seen)
+        await owner._submit("agent", "key", "caller", _delegated_request(token))
+        await owner.runs["key"].task
+        [context] = seen.contexts
+        assert context.delegated_token is None and context.user is None
 
     asyncio.run(scenario())

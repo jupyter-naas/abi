@@ -27,6 +27,7 @@ import secrets
 import threading
 import time
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -70,6 +71,8 @@ KERNEL_AUDIENCES = (NATS_AUDIENCE, AGENT_AUDIENCE)
 # The longest a chain of renewals of one delegation lives (``abi_since``): a
 # run outlives its ten-minute token by renewing it, up to this.
 MAX_DELEGATION_SECONDS = 8 * 3600
+# Delegations a token source keeps (one per user, groups and recipient).
+MAX_DELEGATIONS = 2048
 # A token addressed to one module host (an agent, a model, an app, a job's
 # host), which forwards it to discovery to learn who called. Its audience names
 # the host: ``abi:host:<host's subject token>`` (the ``<sa>`` of the subjects it
@@ -122,7 +125,10 @@ class TokenClaims:
     """What an engine token says (RFC §9.2).
 
     ``name`` (claim ``abi_name``) is a service account's name (``engine``,
-    ``module/acme/people``), set by IAM. ``actor`` is ``act.sub``.
+    ``module/acme/people``), set by IAM. ``actor`` is ``act.sub`` and
+    ``actor_name`` ``act.name``: the actor's account name, set by IAM from its
+    record, so a service that asks who acts (``api``, a module) is told by the
+    token.
     ``since`` (``abi_since``): when the delegation began, kept across renewals
     so they stop after ``MAX_DELEGATION_SECONDS``. ``resource`` (``abi_res``):
     the target the exchange was for, for audit and for the routes that bind a
@@ -143,6 +149,7 @@ class TokenClaims:
     session: str | None = None
     since: int | None = None
     resource: str | None = None
+    actor_name: str | None = None
 
     @property
     def lifetime(self) -> int:
@@ -163,6 +170,8 @@ class TokenClaims:
             payload["abi_name"] = self.name
         if self.actor is not None:
             payload["act"] = {"sub": self.actor}
+            if self.actor_name is not None:
+                payload["act"]["name"] = self.actor_name
         if self.groups:
             payload["grp"] = list(self.groups)
         if self.scope is not None:
@@ -208,8 +217,12 @@ class TokenClaims:
         if kind not in TOKEN_KINDS:
             raise InvalidServiceTokenError(f"token has an unknown kind {kind!r}")
         actor = payload.get("act")
+        actor_name = None
         if actor is not None:
             if not isinstance(actor, Mapping) or not isinstance(actor.get("sub"), str):
+                raise InvalidServiceTokenError("token has an invalid 'act' claim")
+            actor_name = actor.get("name")
+            if actor_name is not None and not isinstance(actor_name, str):
                 raise InvalidServiceTokenError("token has an invalid 'act' claim")
             actor = actor["sub"]
         groups = payload.get("grp", [])
@@ -241,6 +254,7 @@ class TokenClaims:
             session=optional_text("sid"),
             since=optional_integer("abi_since"),
             resource=optional_text("abi_res"),
+            actor_name=actor_name or None,
         )
 
 
@@ -573,14 +587,22 @@ class IssuedToken:
 
 class TokenSource(ABC):
     """The credential a NATS client presents. ``identity`` names it in
-    connection names and decides whether it may name the user it acts for
-    (``api`` and ``engine`` only, until delegated tokens)."""
+    connection names."""
 
     identity: str
 
     @abstractmethod
     def token(self) -> str:
         """A token valid for at least a few more minutes."""
+
+    def token_for(self, user: Any, recipient: str | None = None) -> str:
+        """The token of a call made for ``user`` (a ``Principal``): a delegation
+        that carries the user, for a source allowed to hold them (``api``,
+        ``engine``). Any other source calls as itself: its own token.
+
+        ``recipient``: the ``<sa>`` of the module host the call is for (a
+        delegation names the module that acts)."""
+        return self.token()
 
 
 class RenewingTokenSource(TokenSource):
@@ -596,16 +618,25 @@ class RenewingTokenSource(TokenSource):
         identity: str,
         fetch: Callable[[], IssuedToken],
         *,
+        delegate: Callable[[Any, str | None], IssuedToken] | None = None,
         clock: Callable[[], float] = time.time,
     ) -> None:
+        """``delegate(user, recipient)``: a token carrying ``user`` (token
+        exchange). Without one, ``token_for`` is the source's own token."""
         if not identity:
             raise ValueError("A token source names its identity")
         self.identity = identity
         self._fetch = fetch
+        self._delegate = delegate
         self._clock = clock
         self._lock = threading.Lock()
         self._current: IssuedToken | None = None
         self._renew_at = float("-inf")
+        # (user id, groups, recipient) -> (token, renew at). Bounded: a long
+        # running API serves many users.
+        self._delegations: OrderedDict[
+            tuple[str, tuple[str, ...], str | None], tuple[IssuedToken, float]
+        ] = OrderedDict()
 
     def token(self) -> str:
         with self._lock:
@@ -621,10 +652,39 @@ class RenewingTokenSource(TokenSource):
                 self._renew_at = now + max(1.0, (issued.expires_at - now) / 2)
             return self._current.token
 
+    def token_for(self, user: Any, recipient: str | None = None) -> str:
+        if user is None or self._delegate is None:
+            return self.token()
+        key = (user.id, tuple(sorted(user.groups)), recipient)
+        with self._lock:
+            now = self._clock()
+            held = self._delegations.get(key)
+            if held is not None and now < held[1]:
+                self._delegations.move_to_end(key)
+                return held[0].token
+            try:
+                issued = self._delegate(user, recipient)
+            except Exception:
+                # A delegation that cannot be renewed keeps the valid one; one
+                # that cannot be made is an error, never the source's own token
+                # (which would drop the user and widen the call).
+                if held is not None and now < held[0].expires_at - 5:
+                    return held[0].token
+                raise
+            self._delegations[key] = (
+                issued,
+                now + max(1.0, (issued.expires_at - now) / 2),
+            )
+            self._delegations.move_to_end(key)
+            while len(self._delegations) > MAX_DELEGATIONS:
+                self._delegations.popitem(last=False)
+            return issued.token
+
     def invalidate(self) -> None:
         """Fetch a new token on next use (after the server refused this one)."""
         with self._lock:
             self._renew_at = float("-inf")
+            self._delegations.clear()
 
 
 class StaticTokenSource(TokenSource):

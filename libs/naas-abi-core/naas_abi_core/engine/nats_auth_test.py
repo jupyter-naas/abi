@@ -49,6 +49,7 @@ def verifier_for(*keys: SigningKey, **options) -> JWKSVerifier:
 def test_round_trip_keeps_every_claim(key):
     original = claims(
         actor="sa_01jabcdefghjkmnpqrstvwxyz1",
+        actor_name="module/acme/people",
         groups=("grp_01jabcdefghjkmnpqrstvwxyz0",),
         scope=({"effect": "Allow", "actions": ["a:B"], "resources": ["*"]},),
         session="s1",
@@ -346,3 +347,92 @@ def test_a_stored_call_is_checked_for_revocation_too(key):
     verifier = verifier_for(key, revoked=lambda c: seen.append(c.issued_at) or False)
     verifier.verify(token, at=time.time())
     assert len(seen) == 1
+
+
+# -- delegation: a token that carries the user, in place of a header -------------------
+
+
+def _user(user_id="usr_1", groups=()):
+    from naas_abi_core.engine.call_context import Principal
+
+    return Principal(id=user_id, kind="user", groups=frozenset(groups))
+
+
+def test_a_source_without_a_delegate_calls_as_itself():
+    source = RenewingTokenSource(
+        "module", lambda: IssuedToken("own", time.time() + 600)
+    )
+    assert source.token_for(_user()) == "own"
+    assert source.token_for(None) == "own"
+    assert source.token_for(_user(), "HOST") == "own"
+
+
+def test_a_delegating_source_carries_the_user_and_renews_at_half_life():
+    now = [1000.0]
+    issued: list[tuple[str, str | None]] = []
+
+    def delegate(user, recipient):
+        issued.append((user.id, recipient))
+        return IssuedToken(f"t{len(issued)}", now[0] + 600)
+
+    source = RenewingTokenSource(
+        "api",
+        lambda: IssuedToken("own", now[0] + 600),
+        delegate=delegate,
+        clock=lambda: now[0],
+    )
+    assert source.token_for(_user("a")) == "t1"
+    assert source.token_for(_user("a")) == "t1"  # cached
+    assert source.token_for(_user("b")) == "t2"
+    assert source.token_for(None) == "own"  # no user: the source's own token
+    assert source.token_for(_user("a"), "HOST") == "t3"  # one per recipient
+    assert source.token_for(_user("a", ["grp_1"])) == "t4"  # groups are claims
+    now[0] += 301
+    assert source.token_for(_user("a")) == "t5"
+    assert issued[0] == ("a", None) and issued[2] == ("a", "HOST")
+
+
+def test_a_delegation_that_cannot_be_made_is_an_error_not_the_sources_own_token():
+    def refuse(user, recipient):
+        raise InvalidServiceTokenError("user is suspended")
+
+    source = RenewingTokenSource(
+        "api", lambda: IssuedToken("own", time.time() + 600), delegate=refuse
+    )
+    with pytest.raises(InvalidServiceTokenError, match="suspended"):
+        source.token_for(_user())
+
+
+def test_a_delegation_failing_to_renew_keeps_the_valid_token():
+    now = [1000.0]
+    calls = [0]
+
+    def delegate(user, recipient):
+        calls[0] += 1
+        if calls[0] > 1:
+            raise ConnectionError("engine restarting")
+        return IssuedToken("t1", now[0] + 600)
+
+    source = RenewingTokenSource(
+        "engine",
+        lambda: IssuedToken("own", now[0] + 600),
+        delegate=delegate,
+        clock=lambda: now[0],
+    )
+    assert source.token_for(_user()) == "t1"
+    now[0] += 400  # past half, still valid
+    assert source.token_for(_user()) == "t1"
+    now[0] += 250  # expired
+    with pytest.raises(ConnectionError):
+        source.token_for(_user())
+
+
+def test_the_delegation_cache_is_bounded():
+    source = RenewingTokenSource(
+        "api",
+        lambda: IssuedToken("own", time.time() + 600),
+        delegate=lambda u, r: IssuedToken(u.id, time.time() + 600),
+    )
+    for index in range(5000):
+        source.token_for(_user(f"u{index}"))
+    assert len(source._delegations) <= 2048

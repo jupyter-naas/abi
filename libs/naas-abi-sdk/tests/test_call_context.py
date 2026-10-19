@@ -5,10 +5,8 @@ import pytest
 
 from naas_abi_sdk.call_context import (
     ANONYMOUS,
-    ON_BEHALF_OF_HEADER,
     CallContext,
     current_call_context,
-    on_behalf_of_header,
     service_account,
     use_call_context,
     user,
@@ -61,12 +59,24 @@ def test_the_calls_user_is_whom_it_acts_for_else_a_user_actor():
     assert CallContext(principal=service_account("engine")).user is None
 
 
-def test_the_header_names_the_calls_user_or_nothing():
-    assert on_behalf_of_header(NEXUS) == {ON_BEHALF_OF_HEADER: "usr-ada"}
-    assert on_behalf_of_header(CallContext(principal=service_account("api"))) == {}
-    assert on_behalf_of_header() == {}
-    with use_call_context(NEXUS):
-        assert on_behalf_of_header() == {"Abi-On-Behalf-Of": "usr-ada"}
+def test_there_is_no_header_naming_the_user_any_more():
+    import naas_abi_sdk.call_context as module
+
+    assert not hasattr(module, "on_behalf_of_header")
+    assert not hasattr(module, "ON_BEHALF_OF_HEADER")
+
+
+def test_a_delegation_is_a_credential_never_compared_or_printed():
+    held = CallContext(
+        principal=service_account("module/acme/people"),
+        on_behalf_of=user("usr-ada"),
+        delegated_token="header.secret-claims.signature",
+    )
+    bare = CallContext(
+        principal=service_account("module/acme/people"), on_behalf_of=user("usr-ada")
+    )
+    assert held == bare
+    assert "secret-claims" not in repr(held)
 
 
 @pytest.mark.parametrize("make", [service_account, user])

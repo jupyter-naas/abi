@@ -56,6 +56,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     TOKEN_TYPE_ID_TOKEN,
     TOKEN_TYPE_JWT,
     TOKEN_TYPE_SESSION,
+    IAMNotFoundError,
     KeyRecord,
     KeyRefusedError,
     PermissionDeniedError,
@@ -130,7 +131,7 @@ class TokenExchanger:
             )
         self._authorize(ctx, subject, audience)
         scope = self._narrow(subject, requested)
-        actor = self._actor(ctx, subject, audience, request.resource)
+        actor, actor_name = self._actor(ctx, subject, audience, request.resource)
         resource = subject.resource if subject.resource else request.resource
         now = iam.tokens.now()
         since = subject.since if subject.since is not None else int(now.timestamp())
@@ -150,6 +151,7 @@ class TokenExchanger:
             ttl_seconds=request.ttl_seconds,
             not_after=not_after,
             actor=actor,
+            actor_name=actor_name,
             groups=subject.groups,
             scope=scope,
             session=subject.session,
@@ -316,29 +318,46 @@ class TokenExchanger:
         subject: _Subject,
         audience: str,
         resource: str | None,
-    ) -> str | None:
-        """The service account an agent token names as ``act``: the module that
-        owns ``resource``, else the requester. Never a request field."""
+    ) -> tuple[str | None, str | None]:
+        """The service account an agent token names as ``act`` (its id and
+        name): the module that owns ``resource``, else the requester. Never a
+        request field."""
         if audience != AGENT_AUDIENCE:
-            return None
+            return None, None
         if subject.renewing is not None:
-            return subject.renewing.actor
+            return subject.renewing.actor, subject.renewing.actor_name
         if resource:
-            return self._module_account(resource).id
+            account = self._module_account(resource)
+            return account.id, account.name
         requester = self._iam.resolve_principal(ctx.principal)
         if requester is None or requester.kind != "service_account":
             raise PermissionDeniedError(
                 ACTION, message="an agent token is for a service account"
             )
-        return requester.id
+        return requester.id, requester.name
 
     def _module_account(self, resource: str) -> PrincipalRecord:
-        """The account of the module a discovery resource belongs to."""
+        """The account of the module a resource names: a discovery module,
+        agent, app, model or job of it, or the module's own account
+        (``abi:-:-:iam:principal/<sa id>``), which is how a caller that only
+        knows the host it is calling (its ``<sa>``) names it."""
         try:
             parsed = parse_resource_name(resource)
         except ValueError as exc:
             raise ValueError(f"resource: {exc}") from exc
         parts = parsed.segments
+        if parsed.service == "iam" and parsed.type == "principal" and len(parts) == 1:
+            try:
+                found = self._iam.store.get_principal(parts[0])
+            except IAMNotFoundError:
+                raise KeyRefusedError() from None
+            if (
+                found.kind != "service_account"
+                or not found.active
+                or modules.parse_account(found.name) is None
+            ):
+                raise KeyRefusedError()
+            return found
         if (
             parsed.service != "discovery"
             or parsed.type not in _DISCOVERY_MODULE_TYPES

@@ -35,8 +35,14 @@ if TYPE_CHECKING:
 CONNECTION_TTL_SECONDS = 600
 RENEW_CONNECTION_SECONDS = 120.0
 TOKEN_SUBJECT = "abi.iam.v1.token"
+EXCHANGE_SUBJECT = "abi.iam.v1.exchange_token"
 KEY_USER = "sa"
 NATS_AUDIENCE = "abi:nats"
+# A module acting for a user (RFC §9.3): what a host is handed to call the
+# kernel with for the user it serves, and renews (up to eight hours).
+AGENT_AUDIENCE = "abi:delegated:agent"
+TOKEN_EXCHANGE_GRANT = "urn:ietf:params:oauth:grant-type:token-exchange"
+TOKEN_TYPE_JWT = "urn:ietf:params:oauth:token-type:jwt"
 # A token for one module host this module calls (an agent, a model, an app):
 # ``abi:host:<the host's subject token>``, the ``<sa>`` of its subjects. The
 # kernel services refuse it and discovery accepts it from that host only, so a
@@ -111,6 +117,31 @@ class ServiceKey:
                 for key in [k for k, v in self._tokens.items() if v[2] < now]:
                     del self._tokens[key]
             return self._tokens[audience][0]
+
+    async def renew_delegation(self, transport: Transport, token: str) -> str:
+        """A fresh ``abi:delegated:agent`` token for the delegation ``token``
+        that this module holds: IAM renews it for the module it names, until
+        eight hours after it began. Sent with the module's own token, so the
+        exchange is the module's, never the user's."""
+        from naas_abi_sdk.transport import RPCError
+
+        own = await self.access_token(transport)
+        nc = await transport.connect()
+        reply = await nc.request(
+            EXCHANGE_SUBJECT,
+            pb.ExchangeTokenRequest(
+                grant_type=TOKEN_EXCHANGE_GRANT,
+                subject_token=token,
+                subject_token_type=TOKEN_TYPE_JWT,
+                audience=AGENT_AUDIENCE,
+            ).SerializeToString(),
+            headers={"Nats-Auth-Token": own},
+            timeout=transport.timeout,
+        )
+        response = pb.ExchangeTokenResponse.FromString(reply.data)
+        if response.HasField("error") and response.error.code:
+            raise RPCError(response.error.code, response.error.message)
+        return response.access_token
 
     def invalidate(self) -> None:
         for slot in self._tokens.values():

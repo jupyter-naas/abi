@@ -123,8 +123,10 @@ message RegistryState { repeated RegistryRecord records = 1; }
 // Provider authenticates the incoming caller without receiving a signing key.
 // Each Authorize* call is a lease check (the provider's registration is live,
 // the target is declared and READY) and an authorization check: discovery
-// verifies the caller's token, applies its on-behalf-of user as a kernel
-// endpoint does, and asks IAM whether that caller may perform the operation.
+// verifies the caller's token as a kernel endpoint does (a delegated token
+// names the user and the module acting for them: discovery accepts it only from
+// that module's host) and asks IAM whether that caller may perform the
+// operation.
 message AuthorizeAgentRequest {
   abi.common.v1.CallContext context = 1;
   string instance_id = 2;
@@ -132,8 +134,8 @@ message AuthorizeAgentRequest {
   string agent_name = 4;
   string caller_token = 5;
   bool new_invocation = 6;
-  // The caller's Abi-On-Behalf-Of header, as the provider received it.
-  string caller_on_behalf_of = 7;
+  reserved 7;  // caller_on_behalf_of: the user is in the caller's delegated token
+  reserved "caller_on_behalf_of";
   // "submit", "status", "event" or "cancel". Empty: an older provider, which
   // checks run ownership itself (submit when new_invocation).
   string operation = 8;
@@ -159,7 +161,8 @@ message AuthorizeModelRequest {
   string lease_token = 3;
   string model_name = 4;
   string caller_token = 5;
-  string caller_on_behalf_of = 6;
+  reserved 6;
+  reserved "caller_on_behalf_of";
 }
 message AuthorizeModelResponse {
   abi.common.v1.CallError error = 1;
@@ -172,7 +175,8 @@ message AuthorizeAppRequest {
   string lease_token = 3;
   string app_name = 4;
   string caller_token = 5;
-  string caller_on_behalf_of = 6;
+  reserved 6;
+  reserved "caller_on_behalf_of";
 }
 message AuthorizeAppResponse {
   abi.common.v1.CallError error = 1;
@@ -194,7 +198,8 @@ message AuthorizeJobRequest {
   // For cancel: the run asked about.
   string run_id = 6;
   string caller_token = 7;
-  string caller_on_behalf_of = 8;
+  reserved 8;
+  reserved "caller_on_behalf_of";
   // When JetStream stored the trigger, in seconds since the epoch; zero: now.
   double stored_at = 9;
 }

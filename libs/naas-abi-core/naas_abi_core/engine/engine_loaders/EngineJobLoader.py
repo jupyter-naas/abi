@@ -86,13 +86,12 @@ def job_authorizer(iam: Any, verifier: Any, project: str, module_id: str) -> Any
     """An engine job host's authorizer: the check discovery runs for a module's
     host (``discovery_service.require_job``), in process.
 
-    The caller is the one the trigger or cancel message names (its token, as of
-    when the trigger was stored, and its on-behalf-of user), verified against
-    the engine's JWKS (``verifier``). A refusal is an ``RPCError`` the host records; IAM is asked
+    The caller is the one the trigger or cancel message's token names (as of
+    when the trigger was stored, with the user it acts for when it names one),
+    verified against the engine's JWKS (``verifier``). A refusal is an ``RPCError`` the host records; IAM is asked
     off the jobs loop.
     """
     from naas_abi_core.engine.call_context import (
-        ON_BEHALF_OF_HEADER,
         as_service_account,
         use_call_context,
     )
@@ -127,7 +126,6 @@ def job_authorizer(iam: Any, verifier: Any, project: str, module_id: str) -> Any
         try:
             caller = caller_of(
                 headers.get("Nats-Auth-Token", ""),
-                headers.get(ON_BEHALF_OF_HEADER, ""),
                 verifier,
                 at=stored_at.timestamp() if stored_at is not None else None,
             )
@@ -246,7 +244,10 @@ class EngineJobLoader:
                 self.configuration.nats_url,
                 self.credentials.token,
                 name=connection_name("abi-engine:jobs"),
-                forward_user=True,  # kernel calls, as the trusted engine identity
+                # Kernel calls carry the user a job runs for in a delegation, as
+                # the engine identity does (a job host runs for no user unless
+                # its trigger named one).
+                delegate=self.credentials.token_for,
             )
         handlers = module._job_handlers
         host = self.host_factory(

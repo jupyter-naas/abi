@@ -334,13 +334,20 @@ _NO_UNCHECKED_SQL = Statement(
     sid="TransitionalNoUncheckedSql",
 )
 
+# The statements of ``builtin.module_bootstrap`` that exist only so the module's
+# own side of a delegation allows what it hosts. They open no broker subject:
+# the broker turns an InvokeAgent grant into every agent subject of the
+# project, and a module is not to call the agents of others.
+DELEGATION_SIDS = ("OwnHosted", "OwnRuns")
+
 
 def module_bootstrap_policy() -> Policy:
     """Held by every module's service account, approved or not (RFC §8.3).
 
     ``${module.project}`` and ``${module.id}`` come from the account's name,
     ``module/<project>/<module_id>``: the module reaches its own discovery
-    record and its own manifest, nothing else, until a manifest is approved.
+    record and its own manifest, and serves what it hosts for a user (the
+    actor side of a delegation), nothing else, until a manifest is approved.
     """
     return _managed(
         MODULE_BOOTSTRAP,
@@ -369,6 +376,34 @@ def module_bootstrap_policy() -> Policy:
                 actions=("iam:SubmitManifest", "iam:GetManifest"),
                 resources=("abi:-:-:iam:manifest/${principal.id}",),
                 sid="OwnManifest",
+            ),
+            # Nexus calls a module's agent, app or model with a delegation that
+            # names the module as the actor and the user it acts for (RFC §9.3):
+            # the call is allowed only if the module's own side allows it too,
+            # so a module may serve what it hosts. Never another module's, and
+            # nothing a user could not do: the user's policy decides as well.
+            Statement(
+                effect="Allow",
+                actions=(
+                    "discovery:InvokeAgent",
+                    "discovery:OpenApp",
+                    "discovery:ChatModel",
+                ),
+                resources=(
+                    "abi:-:-:discovery:agent/${module.project}/${module.id}/*",
+                    "abi:-:-:discovery:app/${module.project}/${module.id}/*",
+                    "abi:-:-:discovery:model/${module.project}/${module.id}/*",
+                ),
+                sid="OwnHosted",
+            ),
+            # The runs of its project that belong to the user it acts for
+            # (``${user.id}`` matches nothing on a call for no user: acting
+            # alone it reaches its own runs only, by the default manifest).
+            Statement(
+                effect="Allow",
+                actions=("discovery:GetAgentRun", "discovery:CancelAgentRun"),
+                resources=("abi:-:-:discovery:run/${user.id}/${module.project}/*",),
+                sid="OwnRuns",
             ),
             # Evicting another module's registration is the platform's, whatever
             # a manifest says.
