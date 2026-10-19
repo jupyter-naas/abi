@@ -617,7 +617,7 @@ The optional catch-all `[[...slug]]/page.tsx` re-exports the thread module so al
 
 ## System app (platform super admins)
 
-`/workspace/[id]/admin/system` (dock entry "System", visible when `is_superadmin`). Tabs: Overview, Services, Data, Jobs, Modules, NATS, Live traffic, Traces; the tab is the `?tab=` query. Live traffic is an SSE stream read with raw `fetch` and `getAuthHeader()` (like chat), started and stopped by the user.
+`/workspace/[id]/admin/system` (dock entry "System", visible when `is_superadmin`). Tabs: Overview, Services, Data, Jobs, Agents, Modules, Access, NATS, Live traffic, Traces; the tab is the `?tab=` query. Live traffic is an SSE stream read with raw `fetch` and `getAuthHeader()` (like chat), started and stopped by the user.
 
 - API: `apps/api/app/services/sysadmin/` (hexagonal, see its `AGENTS.md`), mounted at `/api/admin/system/*` behind `require_superadmin` on the router. `main_public_routes_test.py` fails if a route there loses it.
 - Web: `apps/web/src/app/workspace/[workspaceId]/admin/system/`, the three-file route convention plus colocated modules (`system-api.ts`, `system-model.ts`, one component per tab) and jsdom render tests. Views poll every 10 s while visible; the footer Refresh reloads the active tab.
@@ -633,6 +633,11 @@ The optional catch-all `[[...slug]]/page.tsx` re-exports the thread module so al
   - Run feed with status filters.
   - Run inspector: a trigger → start → finish timeline with the wait before start, the error, logs (`ctx.log`), payload, result, and the run's trace (the Traces waterfall, embedded).
   - Run now, Re-run and Cancel are audited by the API. It reuses the Data tab's atoms, viewers, modal and toasts (`../data/`) and polls only while visible: 5 s, or 1.5 s for a live run.
+- Access tab: `admin/system/access/` over `/api/iam/admin` (API: `apps/api/app/services/iam_admin/`, see its `AGENTS.md`), the platform's permissions as IAM decides them for the signed-in user.
+  - Sub-views, shown only when `GET /access` says the caller may list them: Policies (list; visual statement editor with action and resource autocomplete from the catalogs; YAML/JSON view; IAM's validation errors as the user types), Attachments, Groups (members, IdP group-claim mapping), Service accounts (keys created, revoked and rotated; a key's value is shown once, in component state only), Module approvals (approve as submitted, narrow or reject: `approvals/narrow-model.ts`), Simulator (`iam:Explain`, names the deciding statement) and Audit.
+  - The client is `src/lib/iam-admin/` (`types.ts` is the contract, `api.ts` one function per route, `use-access.ts`). Each view takes `AccessViewProps` (`api`, `can`, `nonce`); gate buttons with `can('iam:...')`, never with a role name.
+  - Org scope: Organization settings → Access (`organizations/[orgId]/settings/access/`) reuses `AttachmentsPanel` at the org and each workspace scope.
+  - Tests: jsdom render tests beside each view (`system-render.ts` helpers) and pure model tests.
 - Traces tab: `admin/system/traces/` over `/api/admin/system/traces`, so nobody needs the Jaeger UI. The API reads the tracing backend's query API (Jaeger `/api/v3`, `telemetry.query_url`, else `telemetry.ui_url`); the browser never talks to Jaeger.
   - Search by service, operation, time window, minimum duration and errors only, or jump to a trace id. Results are a duration-over-time scatter plus a list.
   - Trace: a waterfall (`waterfall.tsx`) in span-tree order with service colors, self time, events as ticks, a minimap to drag-zoom (double-click a span to zoom to it), a span filter that keeps ancestors, collapse and expand, and ↑/↓/←/→. Above 300 visible rows it renders only the rows on screen.

@@ -116,3 +116,28 @@ def test_history_names_the_actor_and_parses_timestamps(engine):
 
     assert (entry.actor_id, entry.actor) == ("u1", "Ada")
     assert entry.at.endswith("+00:00") and "T" in entry.at
+
+
+def test_each_prefix_keeps_its_own_history_and_the_detail(engine):
+    system = SqlAdminAuditLog(lambda: engine)
+    iam = SqlAdminAuditLog(lambda: engine, prefix="iam.")
+
+    asyncio.run(
+        system.record(AuditRecord(AdminAction("u1", "keyvalue", "delete", "k"), "succeeded"))
+    )
+    asyncio.run(
+        iam.record(
+            AuditRecord(
+                AdminAction("u1", "iam", "attach_policy", "p/u", detail="scope abi:acme:-"),
+                "succeeded",
+            )
+        )
+    )
+
+    assert [e.operation for e in asyncio.run(system.history())] == ["delete"]
+    (entry,) = asyncio.run(iam.history(service="iam"))
+    assert (entry.operation, entry.detail, entry.resource_id) == (
+        "attach_policy",
+        "scope abi:acme:-",
+        "p/u",
+    )

@@ -1,0 +1,13 @@
+/* organizations/[orgId]/settings/access */
+
+.org-settings-access-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.org-settings-access-hint {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--muted-foreground-hex);
+}

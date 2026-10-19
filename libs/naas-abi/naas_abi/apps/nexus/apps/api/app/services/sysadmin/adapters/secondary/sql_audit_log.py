@@ -3,7 +3,10 @@
 Unlike ``services/audit.log_audit_event``, which swallows errors, a failed
 insert raises ``AuditUnavailable``: the domain then refuses the change.
 Rows: ``action`` = ``sysadmin.<operation>``, ``resource_type`` = the service,
-``details`` = ``{"phase": ..., "error": ...}``, ``success`` false when failed.
+``details`` = ``{"phase": ..., "error": ..., "detail": ...}`` (the last two when
+there are any), ``success`` false when failed. The IAM admin keeps its own rows
+in the same table under ``iam.`` (``prefix``): one fail-closed log, two
+histories.
 """
 
 from __future__ import annotations
@@ -37,7 +40,7 @@ HISTORY = """
     SELECT a.created_at, a.user_id, COALESCE(u.name, u.email, a.user_id),
            a.resource_type, a.action, a.resource_id, a.details
     FROM audit_logs a LEFT JOIN users u ON u.id = a.user_id
-    WHERE a.action LIKE 'sysadmin.%'{filters}
+    WHERE a.action LIKE :prefix{filters}
     ORDER BY a.created_at DESC
     LIMIT :limit
 """
@@ -56,14 +59,17 @@ def _iso(value: Any) -> str:
 
 
 class SqlAdminAuditLog:
-    def __init__(self, engine: Callable[[], Any]) -> None:
+    def __init__(self, engine: Callable[[], Any], *, prefix: str = ACTION_PREFIX) -> None:
         # A callable: the app's AsyncEngine is created lazily at startup.
         self._engine = engine
+        self._prefix = prefix
 
     async def record(self, record: AuditRecord) -> None:
         details: dict[str, str] = {"phase": record.phase}
         if record.error:
             details["error"] = record.error
+        if record.action.detail:
+            details["detail"] = record.action.detail
         try:
             async with self._engine().begin() as conn:
                 await conn.execute(
@@ -71,7 +77,7 @@ class SqlAdminAuditLog:
                     {
                         "id": f"audit-{uuid4().hex[:12]}",
                         "user_id": record.action.actor_id,
-                        "action": ACTION_PREFIX + record.action.operation,
+                        "action": self._prefix + record.action.operation,
                         "resource_type": record.action.service,
                         "resource_id": record.action.resource_id,
                         "details": json.dumps(details),
@@ -86,7 +92,10 @@ class SqlAdminAuditLog:
         self, *, service: str | None = None, resource_id: str | None = None, limit: int = 50
     ) -> list[AuditEntry]:
         filters = ""
-        params: dict[str, Any] = {"limit": max(1, min(limit, 500))}
+        params: dict[str, Any] = {
+            "limit": max(1, min(limit, 500)),
+            "prefix": self._prefix + "%",
+        }
         if service is not None:
             filters += " AND a.resource_type = :service"
             params["service"] = service
@@ -107,10 +116,11 @@ class SqlAdminAuditLog:
                     actor_id=user_id or "",
                     actor=actor or "",
                     service=service_name or "",
-                    operation=action.removeprefix(ACTION_PREFIX),
+                    operation=action.removeprefix(self._prefix),
                     resource_id=rid or "",
                     phase=info.get("phase", ""),
                     error=info.get("error", ""),
+                    detail=info.get("detail", ""),
                 )
             )
         return entries

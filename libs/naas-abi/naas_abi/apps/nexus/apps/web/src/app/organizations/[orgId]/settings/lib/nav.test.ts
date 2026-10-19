@@ -16,4 +16,11 @@ describe('org settings nav', () => {
       'users'
     );
   });
+
+  it('shows access to admins and owners only', () => {
+    for (const role of ['admin', 'owner']) {
+      expect(orgSettingsNavForRole(role).map((item) => item.slug)).toContain('access');
+    }
+    expect(orgSettingsNavForRole('member').map((item) => item.slug)).not.toContain('access');
+  });
 });

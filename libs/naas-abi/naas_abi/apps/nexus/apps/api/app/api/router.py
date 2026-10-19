@@ -39,6 +39,9 @@ from naas_abi.apps.nexus.apps.api.app.services.documents.handlers import (
     router as documents_router,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.handlers import router as files_router
+from naas_abi.apps.nexus.apps.api.app.services.iam_admin.handlers import (
+    router as iam_admin_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.invites.adapters.primary.invites__primary_adapter__FastAPI import (  # noqa: E501
     idp_groups_router,
     invitations_router,
@@ -71,6 +74,8 @@ api_router = APIRouter()
 api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
 # Personal API keys and their token endpoint: session-only, like the account.
 api_router.include_router(api_keys_router, prefix="/iam", tags=["iam"])
+# The IAM admin pages: policies, attachments, groups, service accounts, approvals.
+api_router.include_router(iam_admin_router, prefix="/iam/admin", tags=["iam-admin"])
 # Sign-in through the engine's identity providers, next to the built-in login.
 api_router.include_router(oidc_router, prefix="/auth/oidc", tags=["auth"])
 api_router.include_router(organizations.router, prefix="/organizations", tags=["organizations"])

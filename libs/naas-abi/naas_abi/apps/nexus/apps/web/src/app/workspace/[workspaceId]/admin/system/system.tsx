@@ -1,6 +1,7 @@
 'use client';
 
 import './system.css';
+import './access/access.css';
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -8,6 +9,7 @@ import { Header } from '@/components/shell/header';
 import { usePlatformStatusStore } from '@/stores/platform-status';
 import type { Loaded } from './system-api';
 import { useSuperadminAccess } from './system-access';
+import { AccessTab } from './access/access';
 import { AgentsTab } from './agents/agents';
 import { DataExplorer } from './data/explorer';
 import { useJobFailures } from './jobs/failures';
@@ -125,6 +127,7 @@ function SystemApp() {
         {tab === 'jobs' && <JobsTab nonce={nonce} failures={failures} onFailuresSeen={markSeen} />}
         {tab === 'agents' && <AgentsTab nonce={nonce} />}
         {tab === 'traces' && <TracesTab nonce={nonce} />}
+        {tab === 'access' && <AccessTab nonce={nonce} />}
         {tab === 'modules' && (
           <View state={modules} render={(data) => <SystemModules view={data} onChanged={refresh} />} />
         )}

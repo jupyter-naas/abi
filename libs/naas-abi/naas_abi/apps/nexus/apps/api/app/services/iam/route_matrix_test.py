@@ -52,6 +52,7 @@ ACCOUNT_ROUTES: dict[tuple[str, str], str] = {
     ("GET", "/api/search/topics/contract"): "the static placeholders of the topic query roles",
     ("GET", "/api/invitations/providers"): "the identity providers an invitation can go through: no tenant data",
     ("GET", "/api/platform/cli"): "the abi-platform CLI script, the same text for everyone",
+    ("GET", "/api/iam/admin/access"): "what the caller may do, decided by IAM for the caller only",
     ("GET", "/api/websocket/websocket/presence/user/{user_id}"): "the caller's own presence; another user's is refused",
 }
 
@@ -76,6 +77,7 @@ READS_BY_POST: dict[tuple[str, str], str] = {
     ("POST", "/api/view/filters/preview"): "previews triples of graphs: the body carries the filters",
     ("POST", "/api/datasets/{namespace}/query"): "read-only SQL: the body carries the query",
     ("POST", "/api/search/private"): "a search of the workspace's sources: the body carries the query",
+    ("POST", "/api/iam/admin/simulate"): "explains a decision (iam:Explain): changes nothing",
     ("POST", "/api/apps/access-token"): "mints a link to an app the caller may use",
     ("POST", "/api/apps/remote-grant"): "mints a link to an app the caller may use",
     ("POST", "/api/apps/sso-token"): "mints a sign-in token for a portal the caller may use",

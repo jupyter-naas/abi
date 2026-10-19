@@ -10,6 +10,7 @@ describe('system tabs', () => {
       'jobs',
       'agents',
       'modules',
+      'access',
       'nats',
       'traffic',
       'traces',
