@@ -411,11 +411,14 @@ class IdentityService(IIdentityService):
         user of this provider's issuer. Its groups are not re-read (none came)."""
         with as_service_account(USER_WRITER):
             record = self._iam.get_principal(principal_id)
-        if (
-            record.kind != "user"
-            or record.issuer != provider.issuer
-            or record.subject is None
-        ):
+            # Its own identity, or one linked to it (a user of the built-in
+            # login that moved to this provider).
+            subject = (
+                self._iam.identity_at(principal_id, provider.issuer)
+                if record.kind == "user"
+                else None
+            )
+        if record.kind != "user" or subject is None:
             raise SignInError(
                 "subject_changed", "The session's user does not belong to this provider"
             )
@@ -424,8 +427,8 @@ class IdentityService(IIdentityService):
         now = int(self._clock())
         token = VerifiedToken(
             provider=provider.name,
-            issuer=record.issuer,
-            subject=record.subject,
+            issuer=provider.issuer,
+            subject=subject,
             audience=(provider.client_id,),
             issued_at=now,
             expires_at=now + MAX_SESSION_TOKEN_SECONDS,

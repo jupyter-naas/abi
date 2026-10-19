@@ -732,6 +732,105 @@ class IAMService(IIAMService, PolicySource):
         self._changed()
         return record
 
+    def identity_at(self, principal_id: str, issuer: str) -> str | None:
+        record = self._get_principal(principal_id)
+        if record.kind != "user":
+            return None
+        if record.issuer == issuer and record.subject:
+            return record.subject
+        return next(
+            (s for i, s in self.store.linked_identities(principal_id) if i == issuer),
+            None,
+        )
+
+    def link_user(
+        self,
+        principal_id: str,
+        issuer: str,
+        subject: str,
+        *,
+        provider: str | None = None,
+        email: str | None = None,
+        email_verified: bool = False,
+        display_name: str | None = None,
+    ) -> PrincipalRecord:
+        """Make ``(issuer, subject)`` one more identity of the user of the
+        built-in login ``principal_id`` (RFC §13): its roles, groups and keys
+        stay, and the user is found by the identity from now on.
+
+        Only a user of the built-in login (issuer ``urn:abi:nexus``) is linked,
+        and an identity belongs to one user. A user the identity already made
+        (the first sign-in creates one before a relying party can link it) is
+        merged into the linked one: its roles and groups move, it is retired,
+        and a user holding keys is refused, since the keys name it. The caller
+        is the one who checked that the person owns the identity (a verified
+        email at a provider that proves it); IAM only needs ``iam:LinkUser``.
+        """
+        if not issuer or not subject:
+            raise ValueError("An identity is an issuer and a subject")
+        self.require(
+            "iam:LinkUser",
+            principal_resource(principal_id),
+            not_found=lambda: IAMNotFoundError(f"Principal {principal_id} not found"),
+        )
+        target = self._get_principal(principal_id)
+        if target.kind != "user" or target.issuer != LEGACY_NEXUS_ISSUER:
+            raise IAMConflictError(
+                f"{principal_id} is not a user of the built-in login: "
+                "only those are linked to an identity provider"
+            )
+        if target.status != "active":
+            raise IAMConflictError(f"Principal {principal_id} is {target.status}")
+        existing = self.store.find_user(issuer, subject)
+        if existing is not None and existing.id != target.id:
+            if existing.issuer != issuer or existing.subject != subject:
+                # Reached through a link: another user's, which a user keeps.
+                raise IAMConflictError("This identity belongs to another user")
+            self._merge_user(existing, target)
+        self.store.link_identity(issuer, subject, target.id)
+        profile = {
+            "provider": provider,
+            "email": email,
+            "email_verified": email_verified,
+            "display_name": display_name,
+        }
+        record = target
+        if not all(getattr(target, k) == v for k, v in profile.items()):
+            record = self.store.update_principal(replace(target, **profile))  # type: ignore[arg-type]
+        self._changed()
+        return record
+
+    def _merge_user(self, source: PrincipalRecord, target: PrincipalRecord) -> None:
+        """Move what ``source`` holds to ``target`` and retire ``source``."""
+        if source.kind != "user":
+            raise IAMConflictError(f"{source.id} is not a user")
+        if source.status != "active":
+            # A suspension of the identity is not lifted by linking it.
+            raise IAMConflictError(f"Principal {source.id} is {source.status}")
+        if self.store.list_keys(source.id):
+            raise IAMConflictError(
+                f"{source.id} holds keys: revoke or delete them before linking"
+            )
+        for attachment in self.store.list_attachments(principal_id=source.id):
+            if self._find_attachment(
+                attachment.policy_id, target.id, attachment.scope
+            ) is None:
+                self.store.attach(
+                    Attachment(
+                        new_id("att"),
+                        attachment.policy_id,
+                        target.id,
+                        attachment.scope,
+                    )
+                )
+            self.store.detach(attachment.policy_id, source.id, attachment.scope)
+        for group_id in self.store.groups_of(source.id):
+            self.store.add_group_member(group_id, target.id)
+            self.store.remove_group_member(group_id, source.id)
+        self._sync_platform_roles(source.id)
+        self._sync_platform_roles(target.id)
+        self.store.update_principal(replace(source, status="deleted"))
+
     def create_service_account(
         self, name: str, *, owner_id: str | None = None
     ) -> PrincipalRecord:

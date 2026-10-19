@@ -114,6 +114,43 @@ class IAMStoreContract(ABC):
         with pytest.raises(IAMNotFoundError):
             store.update_principal(user("ghost"))
 
+    def test_a_linked_identity_finds_its_principal(self, store: IAMStore):
+        bob = store.create_principal(user("bob"))
+        store.link_identity("https://new.example", "s1", bob.id)
+        assert store.find_user("https://new.example", "s1") == bob
+        assert store.find_user("https://idp.example", "bob") == bob
+        # Linking again to the same principal changes nothing.
+        store.link_identity("https://new.example", "s1", bob.id)
+        assert store.find_user("https://new.example", "s1") == bob
+
+    def test_a_link_wins_over_a_principal_holding_the_identity(self, store: IAMStore):
+        bob = store.create_principal(user("bob"))
+        created_later = store.create_principal(user("s1", issuer="https://new.example"))
+        store.link_identity("https://new.example", "s1", bob.id)
+        assert store.find_user("https://new.example", "s1") == bob
+        assert store.get_principal(created_later.id) == created_later
+
+    def test_an_identity_links_to_one_principal(self, store: IAMStore):
+        bob = store.create_principal(user("bob"))
+        ann = store.create_principal(user("ann"))
+        store.link_identity("https://new.example", "s1", bob.id)
+        with pytest.raises(IAMConflictError):
+            store.link_identity("https://new.example", "s1", ann.id)
+        assert store.find_user("https://new.example", "s1") == bob
+
+    def test_only_a_user_takes_a_link(self, store: IAMStore):
+        account = store.create_principal(service_account())
+        with pytest.raises(IAMNotFoundError):
+            store.link_identity("https://new.example", "s1", new_id("usr"))
+        with pytest.raises(IAMConflictError):
+            store.link_identity("https://new.example", "s1", account.id)
+
+    def test_a_link_is_a_change(self, store: IAMStore):
+        bob = store.create_principal(user("bob"))
+        before = store.revision()
+        store.link_identity("https://new.example", "s1", bob.id)
+        assert store.revision() > before
+
     def test_list_principals_pages_by_id_and_kind(self, store: IAMStore):
         created = [store.create_principal(user(f"u{i}")) for i in range(5)]
         store.create_principal(service_account())

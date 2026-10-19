@@ -38,6 +38,7 @@ class IAMStoreMemory(IAMStore):
     def __init__(self) -> None:
         self._lock = threading.RLock()
         self._principals: dict[str, PrincipalRecord] = {}
+        self._links: dict[tuple[str, str], str] = {}
         self._members: set[tuple[str, str]] = set()
         self._mappings: set[GroupMapping] = set()
         self._policies: dict[str, Policy] = {}
@@ -104,7 +105,27 @@ class IAMStoreMemory(IAMStore):
 
     def find_user(self, issuer: str, subject: str) -> PrincipalRecord | None:
         with self._lock:
+            linked = self._links.get((issuer, subject))
+            if linked is not None:
+                return self._principals[linked]
             return self._find_user(issuer, subject)
+
+    def linked_identities(self, principal_id: str) -> list[tuple[str, str]]:
+        with self._lock:
+            return sorted(k for k, v in self._links.items() if v == principal_id)
+
+    def link_identity(self, issuer: str, subject: str, principal_id: str) -> None:
+        with self._lock:
+            record = self.get_principal(principal_id)
+            if record.kind != "user":
+                raise IAMConflictError(f"{principal_id} is not a user")
+            held = self._links.get((issuer, subject))
+            if held == principal_id:
+                return
+            if held is not None:
+                raise IAMConflictError("This identity is linked to another user")
+            self._write()
+            self._links[(issuer, subject)] = principal_id
 
     def find_service_account(self, name: str) -> PrincipalRecord | None:
         with self._lock:

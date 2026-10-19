@@ -408,7 +408,20 @@ class IAMStore(ABC):
     def get_principal(self, principal_id: str) -> PrincipalRecord: ...
 
     @abstractmethod
-    def find_user(self, issuer: str, subject: str) -> PrincipalRecord | None: ...
+    def find_user(self, issuer: str, subject: str) -> PrincipalRecord | None:
+        """The user of an identity: the one it was linked to (``link_identity``),
+        else the one holding it as its own."""
+
+    @abstractmethod
+    def link_identity(self, issuer: str, subject: str, principal_id: str) -> None:
+        """Give an existing user one more identity. ``find_user`` then answers
+        ``principal_id`` for it, whoever else holds it. Idempotent for the same
+        user; ``IAMConflictError`` when the identity is linked to another one or
+        the principal is not a user, ``IAMNotFoundError`` for an unknown id."""
+
+    @abstractmethod
+    def linked_identities(self, principal_id: str) -> list[tuple[str, str]]:
+        """The ``(issuer, subject)`` pairs linked to a user, sorted."""
 
     @abstractmethod
     def find_service_account(self, name: str) -> PrincipalRecord | None: ...
@@ -868,6 +881,29 @@ class IIAMService(ABC):
         email_verified: bool = False,
         display_name: str | None = None,
     ) -> PrincipalRecord: ...
+
+    def identity_at(self, principal_id: str, issuer: str) -> str | None:
+        """The subject by which an identity provider (``issuer``) names the user,
+        its own or a linked one; None when it has none there. In process only."""
+        raise NotImplementedError("identity_at runs in the engine that holds IAM")
+
+    def link_user(
+        self,
+        principal_id: str,
+        issuer: str,
+        subject: str,
+        *,
+        provider: str | None = None,
+        email: str | None = None,
+        email_verified: bool = False,
+        display_name: str | None = None,
+    ) -> PrincipalRecord:
+        """Make ``(issuer, subject)`` one more identity of the user of the
+        built-in login ``principal_id`` (``iam:LinkUser``), so that its roles,
+        groups and keys follow it to the identity provider. The user the
+        identity may already have made (a first sign-in) is merged into it.
+        In process only."""
+        raise NotImplementedError("link_user runs in the engine that holds IAM")
 
     @abstractmethod
     def create_service_account(

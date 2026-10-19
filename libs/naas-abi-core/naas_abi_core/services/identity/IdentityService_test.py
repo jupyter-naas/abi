@@ -190,6 +190,40 @@ def test_a_refresh_without_an_id_token_refuses_another_providers_user(
     assert refused.value.error == "subject_changed"
 
 
+def test_a_user_of_the_built_in_login_linked_to_the_provider_keeps_its_principal(
+    idp, service, iam
+):
+    from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
+
+    user = idp.create_user(_email("lnk"))
+    with as_service_account("engine"):
+        legacy = iam.ensure_user(LEGACY_NEXUS_ISSUER, "user-0123456789ab")
+    first = sign_in(service, idp, user)
+    assert first.user.principal_id != legacy.id  # the sign-in made a user of its own
+    with as_service_account("engine"):
+        iam.link_user(
+            legacy.id,
+            first.user.issuer,
+            first.user.subject,
+            provider=idp.provider_name,
+            email=user.email,
+            email_verified=True,
+        )
+    # From the next sign-in on, the identity is the existing user, and a refresh
+    # that sends no ID token knows the user belongs to this provider.
+    again = sign_in(service, idp, user)
+    assert again.user.principal_id == legacy.id
+    idp.refresh_returns_id_token = False
+    with as_service_account(CALLER):
+        refreshed = service.refresh(
+            idp.provider_name,
+            refresh_token=again.tokens.refresh_token or "",
+            principal_id=legacy.id,
+        )
+    assert refreshed.user.principal_id == legacy.id
+    assert refreshed.user.subject == first.user.subject
+
+
 # -- client credentials -------------------------------------------------------------
 
 

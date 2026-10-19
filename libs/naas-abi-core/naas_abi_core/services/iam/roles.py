@@ -526,6 +526,9 @@ def api_policy() -> Policy:
                 "iam:ListKeys",
                 "iam:RevokeKey",
                 "iam:RevokeTokens",
+                # A user of the built-in login signing in through the built-in
+                # identity provider for the first time keeps its roles (§13).
+                "iam:LinkUser",
             ),
             resources=("*",),
             sid="MembershipsScopesPlacementsAndKeys",

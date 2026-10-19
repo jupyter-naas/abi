@@ -83,6 +83,21 @@ principals = Table(
     UniqueConstraint("issuer", "subject", name="iam_principals_user_identity"),
 )
 
+# Identities added to a user that holds another as its own: the users of the
+# built-in login that moved to an identity provider (``IAMService.link_user``).
+identity_links = Table(
+    "iam_identity_links",
+    metadata,
+    Column("issuer", Text, primary_key=True),
+    Column("subject", Text, primary_key=True),
+    Column(
+        "principal_id",
+        String(64),
+        ForeignKey("iam_principals.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+)
+
 group_members = Table(
     "iam_group_members",
     metadata,
@@ -467,13 +482,57 @@ class IAMStoreSQL(IAMStore):
     def find_user(self, issuer: str, subject: str) -> PrincipalRecord | None:
         with self._read() as conn:
             row = conn.execute(
-                select(principals).where(
-                    principals.c.kind == "user",
-                    principals.c.issuer == issuer,
-                    principals.c.subject == subject,
+                select(principals)
+                .join(identity_links, identity_links.c.principal_id == principals.c.id)
+                .where(
+                    identity_links.c.issuer == issuer,
+                    identity_links.c.subject == subject,
                 )
             ).first()
+            if row is None:
+                row = conn.execute(
+                    select(principals).where(
+                        principals.c.kind == "user",
+                        principals.c.issuer == issuer,
+                        principals.c.subject == subject,
+                    )
+                ).first()
         return _principal(row) if row is not None else None
+
+    def linked_identities(self, principal_id: str) -> list[tuple[str, str]]:
+        with self._read() as conn:
+            rows = conn.execute(
+                select(identity_links.c.issuer, identity_links.c.subject).where(
+                    identity_links.c.principal_id == principal_id
+                )
+            ).all()
+        return sorted((row.issuer, row.subject) for row in rows)
+
+    def link_identity(self, issuer: str, subject: str, principal_id: str) -> None:
+        with self._read() as conn:
+            row = conn.execute(
+                select(principals.c.kind).where(principals.c.id == principal_id)
+            ).first()
+            held = conn.execute(
+                select(identity_links.c.principal_id).where(
+                    identity_links.c.issuer == issuer,
+                    identity_links.c.subject == subject,
+                )
+            ).first()
+        if row is None:
+            raise IAMNotFoundError(f"Principal {principal_id} not found")
+        if row.kind != "user":
+            raise IAMConflictError(f"{principal_id} is not a user")
+        if held is not None:
+            if held.principal_id == principal_id:
+                return
+            raise IAMConflictError("This identity is linked to another user")
+        with self._change() as conn:
+            conn.execute(
+                insert(identity_links).values(
+                    issuer=issuer, subject=subject, principal_id=principal_id
+                )
+            )
 
     def find_service_account(self, name: str) -> PrincipalRecord | None:
         with self._read() as conn:
