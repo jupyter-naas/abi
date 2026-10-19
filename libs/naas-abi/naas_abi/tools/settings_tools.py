@@ -17,7 +17,7 @@ from langchain_core.tools import BaseTool, tool
 from naas_abi.agents.feature.runtime import (
     guarded,
     jsonable,
-    request_context,
+    require_action,
     require_member,
     run_db,
     tool_context,
@@ -50,6 +50,9 @@ def settings_tools() -> list[BaseTool]:
             role = await require_member(db, user_id, workspace_id)
             if isinstance(role, dict):
                 return role
+            denied = await require_action(user_id, workspace_id, "GetWorkspace", id=())
+            if denied is not None:
+                return denied
             record = await _workspace_service(db).get_workspace(workspace_id)
             if record is None:
                 return {"error": "Workspace not found."}
@@ -95,11 +98,11 @@ def settings_tools() -> list[BaseTool]:
                 SecretsService,
             )
 
-            role = await require_member(db, user_id, workspace_id)
-            if isinstance(role, dict):
-                return role
+            denied = await require_action(user_id, workspace_id, "ListSecrets")
+            if denied is not None:
+                return denied
             service = SecretsService(adapter=SecretsSecondaryAdapterPostgres(db=db))
-            secrets = await service.list_secrets(request_context(user_id), workspace_id)
+            secrets = await service.list_secrets(workspace_id)
             return {
                 "total": len(secrets),
                 "secrets": [

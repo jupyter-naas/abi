@@ -6,6 +6,10 @@ are removed. A remote module is a service account `module/<project>/<module_id>`
 `module.<project>.<module_id>` (see
 [`20261013_engine-tokens-service-accounts-broker.md`](20261013_engine-tokens-service-accounts-broker.md)).
 
+Amended 2026-10-19 (#65): `builtin.engine` and `builtin.api` are enumerated statements, and
+`builtin.transitional.nexus_user` is removed (IAM retires it at boot): a Nexus user holds the roles of its
+memberships only. See [`20261019_nexus-authorization-on-iam.md`](20261019_nexus-authorization-on-iam.md).
+
 Date: 2026-10-15
 
 Discussion: [#1314](https://github.com/jupyter-naas/abi/issues/1314).

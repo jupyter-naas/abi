@@ -8,10 +8,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
-    require_workspace_access,
 )
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
-from naas_abi.apps.nexus.apps.api.app.services.iam.port import RequestContext, TokenData
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.registry import (
     ServiceRegistry,
     get_service_registry,
@@ -23,6 +23,7 @@ from naas_abi.apps.nexus.apps.api.app.services.skills import (
     SkillUpdateInput,
 )
 from naas_abi.apps.nexus.apps.api.app.services.skills.service import (
+    RequestContext,
     SkillPermissionError,
     SkillValidationError,
     normalize_slug,
@@ -44,9 +45,9 @@ def get_skill_service(
 
 
 def request_context(current_user: User) -> RequestContext:
-    return RequestContext(
-        token_data=TokenData(user_id=current_user.id, scopes={"*"}, is_authenticated=True)
-    )
+    """Names the caller for the service (user-scoped skills are private to their
+    creator); what the caller may do is IAM's, decided by the route."""
+    return RequestContext(actor_user_id=current_user.id)
 
 
 def _now() -> datetime:
@@ -72,29 +73,27 @@ class SkillUpdateBody(BaseModel):
     enabled: bool | None = None
 
 
-@router.get("/")
+@router.get("/", dependencies=[guard("ListSkills", literal="-")])
 async def list_skills(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
     skill_service: SkillService = Depends(get_skill_service),
 ) -> list[SkillRecord]:
-    await require_workspace_access(current_user.id, workspace_id)
     return await skill_service.list_visible_skills(
         context=request_context(current_user),
         workspace_id=workspace_id,
     )
 
 
-@router.post("/")
+@router.post("/", dependencies=[declares("CreateSkill")])
 async def create_skill(
     body: SkillCreateBody,
     current_user: User = Depends(get_current_user_required),
     skill_service: SkillService = Depends(get_skill_service),
 ) -> SkillRecord:
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require("CreateSkill", user=current_user, workspace=body.workspace_id, id="-")
     try:
         return await skill_service.create_skill(
-            context=request_context(current_user),
             data=SkillCreateInput(
                 workspace_id=body.workspace_id,
                 user_id=current_user.id,
@@ -110,12 +109,10 @@ async def create_skill(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
-@router.get("/{skill_id}")
-async def get_skill(
-    skill_id: str,
-    current_user: User = Depends(get_current_user_required),
-    skill_service: SkillService = Depends(get_skill_service),
+async def _load_skill(
+    skill_service: SkillService, current_user: User, action: str, skill_id: str
 ) -> SkillRecord:
+    """The skill, once the caller may perform ``action`` on it in its workspace."""
     try:
         skill = await skill_service.get_skill(
             context=request_context(current_user),
@@ -125,17 +122,27 @@ async def get_skill(
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     if not skill:
         raise HTTPException(status_code=404, detail="Skill not found")
-    await require_workspace_access(current_user.id, skill.workspace_id)
+    await authz.require(action, user=current_user, workspace=skill.workspace_id, id=skill.id)
     return skill
 
 
-@router.patch("/{skill_id}")
+@router.get("/{skill_id}", dependencies=[declares("GetSkill")])
+async def get_skill(
+    skill_id: str,
+    current_user: User = Depends(get_current_user_required),
+    skill_service: SkillService = Depends(get_skill_service),
+) -> SkillRecord:
+    return await _load_skill(skill_service, current_user, "GetSkill", skill_id)
+
+
+@router.patch("/{skill_id}", dependencies=[declares("UpdateSkill")])
 async def update_skill(
     skill_id: str,
     body: SkillUpdateBody,
     current_user: User = Depends(get_current_user_required),
     skill_service: SkillService = Depends(get_skill_service),
 ) -> SkillRecord:
+    await _load_skill(skill_service, current_user, "UpdateSkill", skill_id)
     try:
         skill = await skill_service.update_skill(
             context=request_context(current_user),
@@ -158,12 +165,13 @@ async def update_skill(
     return skill
 
 
-@router.post("/{skill_id}/use")
+@router.post("/{skill_id}/use", dependencies=[declares("MarkSkillUsed")])
 async def mark_skill_used(
     skill_id: str,
     current_user: User = Depends(get_current_user_required),
     skill_service: SkillService = Depends(get_skill_service),
 ) -> SkillRecord:
+    await _load_skill(skill_service, current_user, "MarkSkillUsed", skill_id)
     skill = await skill_service.mark_skill_used(
         context=request_context(current_user),
         skill_id=skill_id,
@@ -174,12 +182,13 @@ async def mark_skill_used(
     return skill
 
 
-@router.delete("/{skill_id}")
+@router.delete("/{skill_id}", dependencies=[declares("DeleteSkill")])
 async def delete_skill(
     skill_id: str,
     current_user: User = Depends(get_current_user_required),
     skill_service: SkillService = Depends(get_skill_service),
 ) -> dict[str, str]:
+    await _load_skill(skill_service, current_user, "DeleteSkill", skill_id)
     try:
         deleted = await skill_service.delete_skill(
             context=request_context(current_user),

@@ -5,14 +5,11 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from datetime import datetime
-from uuid import uuid4
 
 from naas_abi.apps.nexus.apps.api.app.models import (
     InvitationModel,
     OrganizationDomainModel,
-    OrganizationMemberModel,
     UserModel,
-    WorkspaceMemberModel,
     WorkspaceModel,
 )
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
@@ -181,9 +178,14 @@ class InvitationSecondaryAdapterPostgres(InvitationPersistencePort):
         return await self._transition(invitation_id, status="revoked", updated_at=now)
 
     async def provider_for_domain(self, domain: str, organization_id: str | None) -> str | None:
+        """The provider the organization routes ``domain`` to: a domain it verified
+        itself. Another organization's domains route nothing here."""
+        if organization_id is None:
+            return None
         return (
             await self.db.execute(
                 select(OrganizationDomainModel.provider).where(
+                    OrganizationDomainModel.organization_id == organization_id,
                     func.lower(OrganizationDomainModel.domain) == domain.lower(),
                     OrganizationDomainModel.is_verified.is_(True),
                     OrganizationDomainModel.provider.is_not(None),
@@ -202,56 +204,6 @@ class InvitationSecondaryAdapterPostgres(InvitationPersistencePort):
         return (
             await self.db.execute(select(UserModel.id).where(UserModel.email == email.lower()))
         ).scalar_one_or_none()
-
-    async def add_membership(
-        self,
-        *,
-        user_id: str,
-        organization_id: str | None,
-        org_role: str | None,
-        workspace_id: str | None,
-        workspace_role: str | None,
-        now: datetime,
-    ) -> None:
-        if organization_id and org_role:
-            held = (
-                await self.db.execute(
-                    select(OrganizationMemberModel.id).where(
-                        OrganizationMemberModel.organization_id == organization_id,
-                        OrganizationMemberModel.user_id == user_id,
-                    )
-                )
-            ).first()
-            if held is None:
-                self.db.add(
-                    OrganizationMemberModel(
-                        id=str(uuid4()),
-                        organization_id=organization_id,
-                        user_id=user_id,
-                        role=org_role,
-                        created_at=now,
-                    )
-                )
-        if workspace_id and workspace_role:
-            held = (
-                await self.db.execute(
-                    select(WorkspaceMemberModel.id).where(
-                        WorkspaceMemberModel.workspace_id == workspace_id,
-                        WorkspaceMemberModel.user_id == user_id,
-                    )
-                )
-            ).first()
-            if held is None:
-                self.db.add(
-                    WorkspaceMemberModel(
-                        id=str(uuid4()),
-                        workspace_id=workspace_id,
-                        user_id=user_id,
-                        role=workspace_role,
-                        created_at=now,
-                    )
-                )
-        await self.db.flush()
 
     async def commit(self) -> None:
         await self.db.commit()

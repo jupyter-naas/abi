@@ -8,9 +8,10 @@ workspace bearer token the OpenAI shim uses. Every key is namespaced under
 
 A ``root`` flag lifts that scoping to the whole datastore (all tenants *and*
 platform-internal objects) — i.e. full, unscoped access. It is gated on
-``current_user.is_superadmin``: a non-superadmin passing ``root`` gets a 403 and
-stays confined to their own ``users/<id>/`` namespace. Per-workspace RBAC on the
-datastore (finer than the superadmin/everyone split) is still to be designed.
+IAM (``nexus:ReadRootStorage`` / ``nexus:WriteRootStorage``, platform admins
+only): a caller who may not passing ``root`` gets a 403 and stays confined to their
+own ``users/<id>/`` namespace. The namespace is theirs through ``roles.PLATFORM_TYPES``
+(``nexus:*UserStorage``, and the kernel's own check on ``object_storage``).
 
 The domain service (``engine.services.object_storage``) is synchronous, so calls
 run in a threadpool; downloads stream 1 MiB at a time so a multi-GB object never
@@ -33,10 +34,15 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
 )
 from naas_abi.apps.nexus.apps.api.app.core.content_disposition import content_disposition
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
 _CHUNK = 1024 * 1024  # 1 MiB
+
+_USER_ACTIONS = {"list": "ListUserStorage", "read": "GetUserStorage", "write": "PutUserStorage"}
+_ROOT_ACTIONS = {"list": "ReadRootStorage", "read": "ReadRootStorage", "write": "WriteRootStorage"}
 
 
 def _get_object_storage(request: Request):  # noqa: ANN202 - domain service, dynamically typed
@@ -51,9 +57,7 @@ def _get_object_storage(request: Request):  # noqa: ANN202 - domain service, dyn
         request.app.state.object_storage = svc
         return svc
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(
-            status_code=500, detail="Object storage is not initialized."
-        ) from exc
+        raise HTTPException(status_code=500, detail="Object storage is not initialized.") from exc
 
 
 def _tenant_root(user: User) -> str:
@@ -61,27 +65,35 @@ def _tenant_root(user: User) -> str:
     return f"users/{user.id}"
 
 
-def _scope_base(current_user: User, root: bool) -> str:
-    """The prefix every key in this request is confined to.
+async def _scope_base(current_user: User, root: bool, action: str, rel: str = "") -> str:
+    """The prefix every key in this request is confined to, once IAM allows it.
 
     Per-user (``users/<id>``) by default. When ``root`` is set, operate on the
     datastore root instead — spanning every tenant's namespace *and* the
-    platform's own objects. That is full, unscoped access, so it is restricted
-    to platform superadmins: a non-superadmin passing ``root`` gets a 403 rather
-    than a silent fall-back, so the caller can't mistake denial for an empty
-    datastore.
+    platform's own objects. That is full, unscoped access (``ReadRootStorage`` /
+    ``WriteRootStorage``, held by platform admins alone): anyone else passing
+    ``root`` gets a 403 rather than a silent fall-back, so the caller can't
+    mistake denial for an empty datastore.
+
+    ``action`` is the kind of access (``list``, ``read`` or ``write``), ``rel``
+    the path under the base.
 
     Returning ``""`` maps to the object-storage ``base_prefix`` root (e.g.
     ``abi/datastore/``); the adapter always prepends ``base_prefix`` and
     ``_safe_rel`` neutralizes ``..``, so a key can never escape the datastore.
     """
     if root:
-        if not current_user.is_superadmin:
-            raise HTTPException(
-                status_code=403,
-                detail="Platform superadmin role required for root (unscoped) access.",
-            )
+        await authz.require(
+            _ROOT_ACTIONS[action],
+            user=current_user,
+            denied="Platform superadmin role required for root (unscoped) access.",
+        )
         return ""
+    await authz.require(
+        _USER_ACTIONS[action],
+        user=current_user,
+        id=(current_user.id, *[part for part in rel.split("/") if part]),
+    )
     return _tenant_root(current_user)
 
 
@@ -97,7 +109,10 @@ def _safe_rel(path: str) -> str:
     return p
 
 
-@router.get("/storage/ls")
+@router.get(
+    "/storage/ls",
+    dependencies=[declares("ListUserStorage"), declares("ReadRootStorage")],
+)
 async def storage_ls(
     request: Request,
     prefix: str = Query(default=""),
@@ -111,8 +126,8 @@ async def storage_ls(
     Keys come back relative to the scope base.
     """
     storage = _get_object_storage(request)
-    base = _scope_base(current_user, root)
     rel = _safe_rel(prefix) if prefix.strip() else ""
+    base = await _scope_base(current_user, root, "list", rel)
     scoped_prefix = posixpath.join(base, rel).strip("/")  # "" => datastore root
     try:
         keys = await run_in_threadpool(storage.list_objects, scoped_prefix)
@@ -123,7 +138,10 @@ async def storage_ls(
     return {"items": sorted(items)}
 
 
-@router.get("/storage/download")
+@router.get(
+    "/storage/download",
+    dependencies=[declares("GetUserStorage"), declares("ReadRootStorage")],
+)
 async def storage_download(
     request: Request,
     path: str = Query(..., min_length=1),
@@ -136,7 +154,8 @@ async def storage_download(
     ``root`` is set (see ``_scope_base``).
     """
     storage = _get_object_storage(request)
-    scoped = posixpath.join(_scope_base(current_user, root), _safe_rel(path))
+    rel = _safe_rel(path)
+    scoped = posixpath.join(await _scope_base(current_user, root, "read", rel), rel)
     obj_prefix, _, key = scoped.rpartition("/")
     if not key:
         raise HTTPException(status_code=400, detail="A file key is required.")
@@ -162,7 +181,10 @@ async def storage_download(
     )
 
 
-@router.post("/storage/upload")
+@router.post(
+    "/storage/upload",
+    dependencies=[declares("PutUserStorage"), declares("WriteRootStorage")],
+)
 async def storage_upload(
     request: Request,
     path: str = Query(..., min_length=1),
@@ -179,7 +201,7 @@ async def storage_upload(
     """
     storage = _get_object_storage(request)
     rel = _safe_rel(path)
-    scoped = posixpath.join(_scope_base(current_user, root), rel)
+    scoped = posixpath.join(await _scope_base(current_user, root, "write", rel), rel)
     obj_prefix, _, key = scoped.rpartition("/")
     if not key:
         raise HTTPException(status_code=400, detail="A file key is required.")

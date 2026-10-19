@@ -16,6 +16,7 @@ import asyncio
 import logging
 import re
 import secrets
+from contextvars import ContextVar
 from datetime import datetime
 from typing import Any
 from uuid import uuid4
@@ -30,16 +31,15 @@ from naas_abi.apps.nexus.apps.api.app.core.database import async_engine
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.models import (
     AppConfigModel,
-    OrganizationMemberModel,
     OrganizationModel,
     UserModel,
-    WorkspaceMemberModel,
     WorkspaceModel,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.default_passwords import (
     SHIPPED_DEFAULT_PASSWORDS,
     is_known_default_password,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_scope, workspace_scope
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -165,32 +165,36 @@ async def _get_user_by_id(session: AsyncSession, user_id: str) -> UserModel | No
     return result.scalar_one_or_none()
 
 
+# What this seeding run declares, applied to IAM once the rows are committed:
+# role attachments are the only record of memberships (RFC §13).
+_declared_roles: ContextVar[list[tuple[str, str, str]] | None] = ContextVar(
+    "nexus_seed_roles", default=None
+)
+_declared_scopes: ContextVar[list[tuple[str | None, str | None]] | None] = ContextVar(
+    "nexus_seed_scopes", default=None
+)
+
+
+def _declare_role(user_id: str, role: str, scope: str) -> None:
+    declared = _declared_roles.get()
+    if declared is not None:
+        declared.append((user_id, role, scope))
+
+
+def _declare_scope(org_id: str | None, workspace_id: str | None) -> None:
+    declared = _declared_scopes.get()
+    if declared is not None:
+        declared.append((org_id, workspace_id))
+
+
 async def _ensure_org_member(
     session: AsyncSession,
     organization_id: str,
     user_id: str,
     role: str,
 ) -> None:
-    result = await session.execute(
-        select(OrganizationMemberModel).where(
-            (OrganizationMemberModel.organization_id == organization_id)
-            & (OrganizationMemberModel.user_id == user_id)
-        )
-    )
-    membership = result.scalar_one_or_none()
-    if membership is None:
-        session.add(
-            OrganizationMemberModel(
-                id=str(uuid4()),
-                organization_id=organization_id,
-                user_id=user_id,
-                role=role,
-                created_at=datetime.now(UTC).replace(tzinfo=None),
-            )
-        )
-        return
-
-    membership.role = role
+    _declare_scope(organization_id, None)
+    _declare_role(user_id, role, org_scope(organization_id))
 
 
 async def _ensure_workspace_member(
@@ -198,27 +202,10 @@ async def _ensure_workspace_member(
     workspace_id: str,
     user_id: str,
     role: str,
+    organization_id: str | None = None,
 ) -> None:
-    result = await session.execute(
-        select(WorkspaceMemberModel).where(
-            (WorkspaceMemberModel.workspace_id == workspace_id)
-            & (WorkspaceMemberModel.user_id == user_id)
-        )
-    )
-    membership = result.scalar_one_or_none()
-    if membership is None:
-        session.add(
-            WorkspaceMemberModel(
-                id=str(uuid4()),
-                workspace_id=workspace_id,
-                user_id=user_id,
-                role=role,
-                created_at=datetime.now(UTC).replace(tzinfo=None),
-            )
-        )
-        return
-
-    membership.role = role
+    _declare_scope(organization_id, workspace_id)
+    _declare_role(user_id, role, workspace_scope(organization_id, workspace_id))
 
 
 async def _upsert_users(
@@ -404,7 +391,7 @@ async def _upsert_workspace(
             organization.slug,
         )
 
-    await _ensure_workspace_member(session, workspace.id, owner.id, "owner")
+    await _ensure_workspace_member(session, workspace.id, owner.id, "owner", organization.id)
     for membership in workspace_cfg.members:
         member = await _resolve_user(session, users_by_email, str(membership.email))
         if member is None:
@@ -415,7 +402,9 @@ async def _upsert_workspace(
             )
             continue
         member_role = "owner" if member.id == owner.id else membership.role
-        await _ensure_workspace_member(session, workspace.id, member.id, member_role)
+        await _ensure_workspace_member(
+            session, workspace.id, member.id, member_role, organization.id
+        )
 
     await _seed_workspace_apps(session, workspace.id, workspace_cfg.apps)
 
@@ -435,8 +424,7 @@ async def _seed_workspace_apps(
             continue
         result = await session.execute(
             select(AppConfigModel).where(
-                (AppConfigModel.workspace_id == workspace_id)
-                & (AppConfigModel.app_id == app_id)
+                (AppConfigModel.workspace_id == workspace_id) & (AppConfigModel.app_id == app_id)
             )
         )
         row = result.scalar_one_or_none()
@@ -524,7 +512,7 @@ def sync_platform_admins(iam: Any, users_by_email: dict[str, UserModel]) -> None
     """``users[].is_superadmin`` as IAM's ``builtin.platform_admin`` attachment.
 
     Promoting or demoting in the config attaches or detaches it at the next boot,
-    as ``is_superadmin`` itself is reconciled. TRANSITIONAL until the OIDC
+    as ``is_superadmin`` itself is reconciled. Until the OIDC
     providers of #44: IAM knows a Nexus user as the user of issuer
     ``urn:abi:nexus`` whose subject is the Nexus user id, the id Nexus names on
     every kernel call it makes for them.
@@ -549,6 +537,23 @@ def sync_platform_admins(iam: Any, users_by_email: dict[str, UserModel]) -> None
             iam.detach_policy(PLATFORM_ADMIN, principal.id)
 
 
+async def _apply_declared_roles(
+    scopes: list[tuple[str | None, str | None]],
+    roles: list[tuple[str, str, str]],
+) -> None:
+    """The configuration's scopes and roles, as the system: the configuration is
+    declarative, so the role it names is the role held."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+
+    for org_id, workspace_id in dict.fromkeys(scopes):
+        if workspace_id is None and org_id is not None:
+            await MEMBERSHIPS.register_org(org_id)
+        elif workspace_id is not None:
+            await MEMBERSHIPS.register_workspace(org_id, workspace_id)
+    granted, kept = await MEMBERSHIPS.seed(list(dict.fromkeys(roles)), replace=True)
+    logger.info("Configured memberships in IAM: %d changed, %d already held", granted, kept)
+
+
 def _engine_iam() -> Any | None:
     """The engine's IAM, when Nexus runs in a loaded engine."""
     try:
@@ -565,6 +570,16 @@ async def apply_configuration_seeds(secret_service: Any | None = None) -> None:
     if not settings.users and not settings.organizations:
         return
 
+    roles_token = _declared_roles.set([])
+    scopes_token = _declared_scopes.set([])
+    try:
+        return await _apply_configuration_seeds(secret_service)
+    finally:
+        _declared_roles.reset(roles_token)
+        _declared_scopes.reset(scopes_token)
+
+
+async def _apply_configuration_seeds(secret_service: Any | None) -> None:
     async_session = sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
     async with async_session() as session:
         async with session.begin():
@@ -585,6 +600,10 @@ async def apply_configuration_seeds(secret_service: Any | None = None) -> None:
             await asyncio.to_thread(sync_platform_admins, iam, users_by_email)
         except Exception:
             logger.exception("Failed to apply users[].is_superadmin to IAM")
+        try:
+            await _apply_declared_roles(_declared_scopes.get() or [], _declared_roles.get() or [])
+        except Exception:
+            logger.exception("Failed to apply the configured memberships to IAM")
 
     logger.info(
         "Configuration seeds applied (users=%d, organizations=%d)",

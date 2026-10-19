@@ -16,7 +16,6 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
     mark_message_superseded,
     persist_stream_content,
     persist_stream_metadata,
-    request_context,
     resolve_provider,
     # run_search_if_needed,
 )
@@ -243,10 +242,9 @@ async def stream_chat_response(
 
         async with AsyncSessionLocal() as db:
             with bind_registry(db) as registry:
-                workspace_agents = await registry.agents.list_workspace_agents(
-                    context=request_context(current_user),
-                    workspace_id=request.workspace_id,
-                )
+                # The turn was authorized (SendMessage) in this workspace; the roster
+                # only picks which of its agents answers.
+                workspace_agents = await registry.agents.list_workspace_agents(request.workspace_id)
         resolved_agent = pick_workspace_chat_agent_id(
             workspace_agents, request.agent
         )
@@ -281,7 +279,6 @@ async def stream_chat_response(
 
     has_images = bool(request.images) or any(m.images for m in request.messages if m.images)
     provider = await resolve_provider(
-        request_context(current_user),
         request.provider,
         has_images,
         request.agent,
@@ -546,7 +543,7 @@ async def stream_chat_response(
 
                 provider_messages = await build_provider_messages_with_agents(
                     request=request,
-                    context=request_context(current_user),
+                    user_id=current_user.id,
                     current_agent_id=request.agent,
                     db=db,
                     conversation_id=conversation_id,
@@ -564,7 +561,6 @@ async def stream_chat_response(
                     user_id=current_user.id,
                     workspace_id=request.workspace_id,
                     conversation_id=conversation_id,
-                    context=request_context(current_user),
                     client_context=client_ctx or None,
                 )
                 if provider.type == "remote":
@@ -580,7 +576,6 @@ async def stream_chat_response(
                         user_id=current_user.id,
                         workspace_id=request.workspace_id,
                         conversation_id=conversation_id,
-                        context=request_context(current_user),
                         client_context=client_ctx or None,
                     )
             await db.commit()
@@ -649,7 +644,7 @@ async def stream_chat_response(
         async with AsyncSessionLocal() as pre_db:
             with bind_registry(pre_db) as registry:
                 _, assistant_msg_id = await registry.chat.create_streaming_message_pair(
-                    context=request_context(current_user),
+                    user_id=current_user.id,
                     conversation_id=conversation_id,
                     user_content=request.message,
                     assistant_agent=request.agent,

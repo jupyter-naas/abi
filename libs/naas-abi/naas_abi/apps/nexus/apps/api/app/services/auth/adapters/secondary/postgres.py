@@ -8,7 +8,6 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     MagicLinkTokenModel,
     PasswordResetTokenModel,
     UserModel,
-    WorkspaceMemberModel,
     WorkspaceModel,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.port import (
@@ -147,14 +146,7 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
         )
         self.db.add(default_workspace)
 
-        workspace_member = WorkspaceMemberModel(
-            id=f"member-{uuid4().hex[:12]}",
-            workspace_id=user_id,
-            user_id=user_id,
-            role="owner",
-            created_at=now,
-        )
-        self.db.add(workspace_member)
+        # Its owner is IAM's to record (``AuthService.open_personal_workspace``).
 
         return user
 
@@ -381,3 +373,9 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
 
     async def commit(self) -> None:
         await self.db.commit()
+
+    async def place_workspace(self, workspace_id: str) -> None:
+        from naas_abi.apps.nexus.apps.api.app.services.iam.placements import place_new_workspace
+
+        await self.db.flush()
+        await place_new_workspace(self.db, workspace_id)

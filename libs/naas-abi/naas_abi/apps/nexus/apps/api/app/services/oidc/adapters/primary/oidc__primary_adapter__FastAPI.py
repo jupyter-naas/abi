@@ -20,7 +20,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
-    to_user_schema,
+    to_signed_in_user,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.secondary.postgres import (
     AuthSecondaryAdapterPostgres,
@@ -154,7 +154,7 @@ async def get_session(request: Request, db: AsyncSession = Depends(get_db)) -> d
     if record is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not signed in")
     return {
-        "user": to_user_schema(record).model_dump(mode="json"),
+        "user": (await to_signed_in_user(record)).model_dump(mode="json"),
         "csrf_token": csrf_token(secret),
         "provider": session.provider,
         "refresh_at": session.refresh_at.isoformat(),

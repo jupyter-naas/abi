@@ -1,13 +1,17 @@
-"""Authentication and workspace graph guards at the Maps HTTP boundary."""
+"""IAM and workspace graph guards at the Maps HTTP boundary."""
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from naas_abi import ABIModule
 from naas_abi.apps.nexus.apps.api.app.services.graph.access import GraphAccessScope
+from naas_abi.apps.nexus.apps.api.app.services.graph.testing import (
+    acting_as_header,
+    knowledge_team,
+)
 from naas_abi.apps.nexus.apps.api.app.services.maps.service import GraphMapLayer
 
 
@@ -31,57 +35,61 @@ def boundary(monkeypatch):
     )
     graph = Mock()
     app.dependency_overrides[api.get_graph_service] = lambda: graph
-    return api, app, provider, graph
+    acting_as_header(app)
+    with knowledge_team():
+        yield api, app, provider, graph
 
 
-def test_http_requires_authentication_before_workspace_or_feed(boundary):
+def client(app: FastAPI, user: str) -> TestClient:
+    return TestClient(app, headers={"x-user": user})
+
+
+def test_strangers_and_other_workspaces_reach_neither_the_layers_nor_the_feed(boundary):
     api, app, provider, _ = boundary
     with patch.object(api, "workspace_graph_service", AsyncMock()) as scope:
-        with TestClient(app) as client:
-            assert client.get("/api/maps/layers?workspace_id=ws").status_code == 401
-            assert client.get("/api/maps/layers/example-offices?workspace_id=ws").status_code == 401
+        for user, workspace in (("stranger", "ws-1"), ("member2", "ws-1"), ("member", "ws-2")):
+            http = client(app, user)
+            assert http.get(f"/api/maps/layers?workspace_id={workspace}").status_code == 403
+            feed = http.get(f"/api/maps/layers/example-offices?workspace_id={workspace}")
+            assert feed.status_code == 403, (user, workspace)
         scope.assert_not_called()
         provider.assert_not_called()
 
 
-def test_http_requires_workspace_membership_before_feed(boundary):
+def test_hides_inaccessible_graph_and_rejects_direct_feed(boundary):
+    api, app, provider, _ = boundary
+    scoped = Mock(access_scope=GraphAccessScope("ws-1", frozenset({"urn:other"}), frozenset()))
+    with patch.object(api, "workspace_graph_service", AsyncMock(return_value=scoped)):
+        http = client(app, "viewer")
+        assert http.get("/api/maps/layers?workspace_id=ws-1").json() == {"layers": []}
+        assert http.get("/api/maps/layers/example-offices?workspace_id=ws-1").status_code == 403
+        provider.assert_not_called()
+
+
+@pytest.mark.parametrize("user", ["viewer", "member", "admin", "owner"])
+def test_every_role_reads_an_allowed_layer_from_the_scoped_store_without_cache(boundary, user):
     api, app, provider, graph = boundary
-    app.dependency_overrides[api.get_current_user_required] = lambda: SimpleNamespace(id="user")
-    with patch.object(
-        api, "workspace_graph_service", AsyncMock(side_effect=HTTPException(403, "Forbidden"))
-    ) as scope:
-        with TestClient(app) as client:
-            assert (
-                client.get("/api/maps/layers/example-offices?workspace_id=other").status_code == 403
-            )
-        scope.assert_awaited_once_with(graph, "user", "other")
-        provider.assert_not_called()
+    scoped = Mock(access_scope=GraphAccessScope("ws-1", frozenset({"urn:locations"}), frozenset()))
+    with patch.object(api, "workspace_graph_service", AsyncMock(return_value=scoped)) as scope:
+        http = client(app, user)
+        assert http.get("/api/maps/layers?workspace_id=ws-1").json()["layers"][0]["id"] == (
+            "example-offices"
+        )
+        response = http.get("/api/maps/layers/example-offices?workspace_id=ws-1")
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
+        assert response.json()["pins"] == [{"id": "one"}]
+        assert http.get("/api/maps/layers/unknown?workspace_id=ws-1").status_code == 404
+        # The maps section is checked by the route, not by the graph section's flag.
+        scope.assert_awaited_with(graph, user, "ws-1", feature=None)
+    provider.assert_called_once_with(scoped._get_triple_store.return_value)
 
 
-def test_http_hides_inaccessible_graph_and_rejects_direct_feed(boundary):
+def test_requires_authentication_before_anything(boundary):
     api, app, provider, _ = boundary
-    app.dependency_overrides[api.get_current_user_required] = lambda: SimpleNamespace(id="user")
-    scoped = Mock(access_scope=GraphAccessScope("ws", frozenset({"urn:other"}), frozenset()))
-    with patch.object(api, "workspace_graph_service", AsyncMock(return_value=scoped)):
-        with TestClient(app) as client:
-            assert client.get("/api/maps/layers?workspace_id=ws").json() == {"layers": []}
-            assert client.get("/api/maps/layers/example-offices?workspace_id=ws").status_code == 403
+    app.dependency_overrides.pop(api.get_current_user_required, None)
+    with patch.object(api, "workspace_graph_service", AsyncMock()) as scope:
+        with TestClient(app) as http:
+            assert http.get("/api/maps/layers?workspace_id=ws-1").status_code == 401
+        scope.assert_not_called()
         provider.assert_not_called()
-
-
-def test_http_allowed_layer_uses_scoped_store_and_no_cache(boundary):
-    api, app, provider, _ = boundary
-    app.dependency_overrides[api.get_current_user_required] = lambda: SimpleNamespace(id="user")
-    scoped = Mock(access_scope=GraphAccessScope("ws", frozenset({"urn:locations"}), frozenset()))
-    with patch.object(api, "workspace_graph_service", AsyncMock(return_value=scoped)):
-        with TestClient(app) as client:
-            assert (
-                client.get("/api/maps/layers?workspace_id=ws").json()["layers"][0]["id"]
-                == "example-offices"
-            )
-            response = client.get("/api/maps/layers/example-offices?workspace_id=ws")
-            assert response.status_code == 200
-            assert response.headers["cache-control"] == "no-store"
-            assert response.json()["pins"] == [{"id": "one"}]
-            assert client.get("/api/maps/layers/unknown?workspace_id=ws").status_code == 404
-        provider.assert_called_once_with(scoped._get_triple_store.return_value)

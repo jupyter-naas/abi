@@ -272,15 +272,29 @@ class TestDatasetAuthorization(DataServiceContract):
         ]
 
 
-def _as_nexus_user():
-    """A Nexus call: api on behalf of a user Nexus names, who holds the
-    transitional grant (dataset:* on every dataset)."""
+def _as_nexus_user(iam):
+    """A Nexus call: api on behalf of a user who holds ``dataset:*`` on every
+    dataset (a custom policy: the built-in roles reach a workspace's datasets)."""
     from naas_abi_core.engine.call_context import (
         CallContext,
+        as_service_account,
         service_account,
         use_call_context,
         user,
     )
+    from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
+    from naas_abi_core.services.iam.tests.iam_harness import document, statement
+
+    with as_service_account("engine"):
+        record = iam.ensure_user(LEGACY_NEXUS_ISSUER, "nexus-1")
+        policy = iam.create_policy(
+            "every-dataset",
+            document(
+                statement("Allow", ["dataset:*"], ["abi:*:*:dataset:dataset/*"]),
+                statement("Allow", ["dataset:*"], ["abi:*:*:dataset:namespace/*"]),
+            ),
+        )
+        iam.attach_policy(policy.id, record.id)
 
     return use_call_context(
         CallContext(principal=service_account("api"), on_behalf_of=user("nexus-1"))
@@ -301,14 +315,14 @@ def _as_nexus_user():
 def test_a_caller_allowed_every_dataset_is_still_held_to_dataset_sql(tmp_path, sql):
     """Allowed every dataset skips the per-dataset checks, not the SQL rules:
     a file read reads no dataset."""
-    owner, _ = TestDatasetAuthorization()._owner(tmp_path)
-    with _as_nexus_user(), pytest.raises(ValueError):
+    owner, iam = TestDatasetAuthorization()._owner(tmp_path)
+    with _as_nexus_user(iam), pytest.raises(ValueError):
         owner.query(sql, namespace="sales")
 
 
 def test_a_caller_allowed_every_dataset_reads_them_all(tmp_path):
-    owner, _ = TestDatasetAuthorization()._owner(tmp_path)
-    with _as_nexus_user():
+    owner, iam = TestDatasetAuthorization()._owner(tmp_path)
+    with _as_nexus_user(iam):
         result = owner.query(
             "SELECT count(*) AS n FROM orders JOIN hr.salaries USING (id)",
             namespace="sales",

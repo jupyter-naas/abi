@@ -154,7 +154,7 @@ export default function AppEditorPage() {
         if (!cancelled) setLoadError((e as Error).message);
       }
     })();
-    appProjectsApi.submitConfig().then(setSubmitConfig).catch(() => setSubmitConfig(null));
+    appProjectsApi.submitConfig(workspaceId).then(setSubmitConfig).catch(() => setSubmitConfig(null));
     return () => {
       cancelled = true;
     };

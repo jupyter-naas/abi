@@ -1,4 +1,4 @@
-"""Maps catalog and read-only feeds using Nexus membership and graph policies."""
+"""Maps catalog and read-only feeds: IAM decides who sees a layer, the kernel which graph."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import User, get_current_user_required
@@ -8,6 +8,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import GraphAccessError
 from naas_abi.apps.nexus.apps.api.app.services.graph.service import GraphService
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.maps.service import GraphMapLayer, MapsCatalog
 from starlette.concurrency import run_in_threadpool
 
@@ -19,16 +20,20 @@ async def scoped_graph(
     user: User = Depends(get_current_user_required),
     graph: GraphService = Depends(get_graph_service),
 ) -> GraphService:
-    return await workspace_graph_service(graph, user.id, workspace_id)
+    # The maps feature is checked by the route's guard, not the graph section's.
+    return await workspace_graph_service(graph, user.id, workspace_id, feature=None)
 
 
-@router.get("")
+@router.get("", dependencies=[guard("ListLayers", literal="-")])
 async def layers(request: Request, response: Response, graph: GraphService = Depends(scoped_graph)):
     response.headers["Cache-Control"] = "no-store"
     return {"layers": request.app.state.maps_catalog.list_layers(graph.access_scope)}
 
 
-@router.get("/{layer_id}")
+@router.get(
+    "/{layer_id}",
+    dependencies=[guard("GetLayer", id="layer_id"), declares("triple_store:Query")],
+)
 async def feed(
     layer_id: str, request: Request, response: Response, graph: GraphService = Depends(scoped_graph)
 ):

@@ -4,15 +4,20 @@ import contextlib
 import io
 from collections.abc import Iterator
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
 )
+from naas_abi.apps.nexus.apps.api.app.services.files.testing import (
+    with_personal_drive_rows,
+)
 from naas_abi.apps.nexus.apps.api.app.services.platform.adapters.primary import (
     platform__primary_adapter__FastAPI as platform,
 )
+from naas_abi_core.services.iam import roles
 
 
 class _FakeStorage:
@@ -45,20 +50,31 @@ class _FakeStorage:
         yield io.BytesIO(self._objs[f"{prefix}/{key}"])
 
 
-def _client(storage: _FakeStorage, *, is_superadmin: bool = False) -> TestClient:
+def _client(storage: _FakeStorage, user: str = "member") -> TestClient:
     app = FastAPI()
     app.include_router(platform.router, prefix="/platform")
     app.state.object_storage = storage
     app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
-        id="u1", email="u1@example.com", name="U1", is_superadmin=is_superadmin
+        id=user, email=f"{user}@example.com", name=user
     )
     return TestClient(app)
 
 
-def test_ls_and_download_scoped_to_user() -> None:
+@pytest.fixture(autouse=True)
+def _personal_drive_rows(monkeypatch) -> None:
+    monkeypatch.setattr(roles, "PLATFORM_TYPES", with_personal_drive_rows())
+
+
+@pytest.fixture
+def world(team):
+    team.platform_admin("root")
+    return team
+
+
+def test_ls_and_download_scoped_to_user(world) -> None:
     s = _FakeStorage()
-    s.put("users/u1/hello.txt", b"hi")
-    s.put("users/u1/data/x.bin", b"xx")
+    s.put("users/member/hello.txt", b"hi")
+    s.put("users/member/data/x.bin", b"xx")
     s.put("users/other/secret.txt", b"nope")  # another user's object
     client = _client(s)
 
@@ -76,24 +92,22 @@ def test_ls_and_download_scoped_to_user() -> None:
     assert client.get("/platform/storage/download?path=missing.bin").status_code == 404
 
     # path traversal is confined to the caller's namespace (can't reach other/)
-    assert (
-        client.get("/platform/storage/download?path=../other/secret.txt").status_code == 404
-    )
+    assert client.get("/platform/storage/download?path=../other/secret.txt").status_code == 404
 
 
-def test_root_for_superadmin_lifts_scoping_across_all_namespaces() -> None:
+def test_root_for_a_platform_admin_lifts_scoping_across_all_namespaces(world) -> None:
     s = _FakeStorage()
-    s.put("users/u1/hello.txt", b"hi")
+    s.put("users/root/hello.txt", b"hi")
     s.put("users/other/secret.txt", b"nope")
     s.put("naas_abi/nexus/analytics/events.json", b"{}")
-    client = _client(s, is_superadmin=True)
+    client = _client(s, "root")
 
-    # default stays scoped to the caller even for a superadmin
+    # default stays scoped to the caller even for a platform admin
     assert client.get("/platform/storage/ls").json()["items"] == ["hello.txt"]
 
     # --root lists the whole datastore, keys relative to the datastore root
     items = client.get("/platform/storage/ls?root=true").json()["items"]
-    assert "users/u1/hello.txt" in items
+    assert "users/root/hello.txt" in items
     assert "users/other/secret.txt" in items
     assert "naas_abi/nexus/analytics/events.json" in items
 
@@ -115,11 +129,11 @@ def test_root_for_superadmin_lifts_scoping_across_all_namespaces() -> None:
     assert s._objs["shared/blob.bin"] == b"xyz"
 
 
-def test_root_denied_for_non_superadmin() -> None:
+@pytest.mark.parametrize("user", ["viewer", "member", "admin", "owner", "stranger"])
+def test_root_is_refused_to_everyone_but_a_platform_admin(world, user: str) -> None:
     s = _FakeStorage()
-    s.put("users/u1/hello.txt", b"hi")
     s.put("users/other/secret.txt", b"nope")
-    client = _client(s)  # ordinary (non-superadmin) user
+    client = _client(s, user)  # no workspace role, however high, reaches the datastore root
 
     # every root=true operation is refused with a 403...
     assert client.get("/platform/storage/ls?root=true").status_code == 403
@@ -128,36 +142,57 @@ def test_root_denied_for_non_superadmin() -> None:
         == 403
     )
     assert (
-        client.post("/platform/storage/upload?root=true&path=users/other/x.bin", content=b"x").status_code
+        client.post(
+            "/platform/storage/upload?root=true&path=users/other/x.bin", content=b"x"
+        ).status_code
         == 403
     )
     # ...and no cross-namespace write leaked through
     assert "users/other/x.bin" not in s._objs
 
-    # the same user's own (scoped) access still works
+
+def test_a_viewer_reads_its_own_namespace_and_cannot_write_to_it(world) -> None:
+    s = _FakeStorage()
+    s.put("users/viewer/hello.txt", b"hi")
+    client = _client(s, "viewer")
+
     assert client.get("/platform/storage/ls").json()["items"] == ["hello.txt"]
+    assert client.get("/platform/storage/download?path=hello.txt").content == b"hi"
+    denied = client.post("/platform/storage/upload?path=out.bin", content=b"x")
+    assert denied.status_code == 403
+    assert "users/viewer/out.bin" not in s._objs
 
 
-def test_ls_empty_when_nothing_stored() -> None:
+def test_a_user_with_no_role_has_no_storage(world) -> None:
+    s = _FakeStorage()
+    s.put("users/stranger/hello.txt", b"hi")
+    client = _client(s, "stranger")
+
+    assert client.get("/platform/storage/ls").status_code == 403
+    assert client.get("/platform/storage/download?path=hello.txt").status_code == 403
+    assert client.post("/platform/storage/upload?path=x.bin", content=b"x").status_code == 403
+
+
+def test_ls_empty_when_nothing_stored(world) -> None:
     client = _client(_FakeStorage())
     assert client.get("/platform/storage/ls").json() == {"items": []}
 
 
-def test_cli_endpoint_serves_a_runnable_script() -> None:
+def test_cli_endpoint_serves_a_runnable_script(world) -> None:
     resp = _client(_FakeStorage()).get("/platform/cli")
     assert resp.status_code == 200, resp.text
     assert resp.text.startswith("#!/usr/bin/env python3")
     assert "def storage_cp" in resp.text  # the actual CLI source, verbatim
 
 
-def test_upload_then_download_round_trip() -> None:
+def test_upload_then_download_round_trip(world) -> None:
     s = _FakeStorage()
     client = _client(s)
     # upload streams into the caller's namespace
     up = client.post("/platform/storage/upload?path=out/report.bin", content=b"payload-bytes")
     assert up.status_code == 200, up.text
     assert up.json() == {"ok": True, "path": "out/report.bin"}
-    assert s._objs["users/u1/out/report.bin"] == b"payload-bytes"
+    assert s._objs["users/member/out/report.bin"] == b"payload-bytes"
     # and it comes back via download + shows in ls
     assert client.get("/platform/storage/download?path=out/report.bin").content == b"payload-bytes"
     assert "out/report.bin" in client.get("/platform/storage/ls").json()["items"]

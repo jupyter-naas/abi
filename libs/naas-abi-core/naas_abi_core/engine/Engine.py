@@ -181,7 +181,7 @@ class Engine(IEngine):
             )
 
             self.__nats_dependencies = EngineNATSDependencies(
-                self.__configuration.nats, self.__engine_credentials()
+                self.__configuration.nats, self.__job_aware_credentials()
             )
             dependencies = self.__nats_dependencies.build(self.__services)
             self.__services.wire_services(dependencies)
@@ -417,6 +417,18 @@ class Engine(IEngine):
         if name not in sources:
             sources[name] = nats_credentials.issuer_source(cast(IAMService, iam), name)
         return sources[name]
+
+    def __job_aware_credentials(self) -> Any:
+        """The engine's tokens, except that an engine module's job (running as
+        its own account, ``job/<module_id>``) calls the kernel with that
+        account's token. Only an engine holding IAM can sign them."""
+        from naas_abi_core.engine import nats_credentials
+        from naas_abi_core.services.iam.IAMService import IAMService
+
+        credentials = self.__engine_credentials()
+        if not isinstance(self.__services.iam, IAMService):
+            return credentials
+        return nats_credentials.JobAccountSource(credentials, self.service_credentials)
 
     def __engine_host_credentials(self, name: str, audience: str) -> Any:
         """A client-role engine's tokens for one host: the engine key's

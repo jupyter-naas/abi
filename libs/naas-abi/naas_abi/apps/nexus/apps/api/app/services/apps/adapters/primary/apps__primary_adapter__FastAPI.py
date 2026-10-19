@@ -39,7 +39,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
-    require_workspace_access,
 )
 from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
 from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
@@ -71,6 +70,8 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.service import (
     AppAlreadyConfiguredError,
     AppsService,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.registry import (
     ServiceRegistry,
     get_service_registry,
@@ -134,7 +135,7 @@ def _resolve_manifest_url(raw_url: str | None, module_path: str, app_name: str) 
     ``naas_abi_marketplace/ai/chatgpt`` in the URL.
     """
     if raw_url and raw_url.startswith("html:"):
-        filename = raw_url[len("html:"):]
+        filename = raw_url[len("html:") :]
         module_path_url = module_path.replace(".", "/")
         return f"/app-html/{module_path_url}/{app_name}/{filename}"
     return raw_url
@@ -312,10 +313,7 @@ def _scan_apps_html_paths() -> dict[str, str]:
             if not manifest_path.is_file():
                 continue
             for asset_file in app_dir.rglob("*"):
-                if (
-                    not asset_file.is_file()
-                    or asset_file.suffix.lower() not in _APP_ASSET_SUFFIXES
-                ):
+                if not asset_file.is_file() or asset_file.suffix.lower() not in _APP_ASSET_SUFFIXES:
                     continue
                 rel = asset_file.relative_to(app_dir).as_posix()
                 url_key = f"{module_path_url}/{app_dir.name}/{rel}"
@@ -418,6 +416,7 @@ class AppsFastAPIPrimaryAdapter:
 class AppHtmlAccessTokenRequest(BaseModel):
     """Mint a link for ``/app-html/`` (Bearer or ``?token=``): an IAM grant, not a JWT."""
 
+    workspace_id: str = Field(..., min_length=1, max_length=100)
     expires_minutes: int | None = Field(
         default=None,
         ge=1,
@@ -438,13 +437,34 @@ class AppHtmlAccessTokenResponse(BaseModel):
     path_prefix: str | None = None
 
 
-@router.post("/access-token", response_model=AppHtmlAccessTokenResponse)
+def _app_id_of_prefix(path_prefix: str | None) -> str:
+    """The catalog app an ``/app-html/<module>/<app>/`` path lock names; ``-``
+    (any app) when there is no lock or it names none."""
+    if path_prefix:
+        locked = path_prefix.strip().rstrip("/") + "/"
+        for app in _scan_apps_catalog():
+            if locked == f"/app-html/{app.module_path.replace('.', '/')}/{app.app_name}/":
+                return app.app_id
+    return "-"
+
+
+@router.post(
+    "/access-token",
+    response_model=AppHtmlAccessTokenResponse,
+    dependencies=[declares("UseApp")],
+)
 async def create_app_html_access_token(
     body: AppHtmlAccessTokenRequest,
     current_user: User = Depends(get_current_user_required),
 ) -> AppHtmlAccessTokenResponse:
     """Issue a time-limited link accepted by ``/app-html/`` (alongside ABI_API_KEY):
     a revocable IAM grant for this user, never a session."""
+    await authz.require(
+        "UseApp",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=_app_id_of_prefix(body.path_prefix),
+    )
     try:
         token, expires_in = await asyncio.to_thread(
             mint_app_html_access_token,
@@ -466,6 +486,7 @@ async def create_app_html_access_token(
 class RemoteAppGrantRequest(BaseModel):
     """Open one app of a remote module (``/app-remote/``)."""
 
+    workspace_id: str = Field(..., min_length=1, max_length=100)
     module_id: str = Field(..., pattern=MODULE_ID_PATTERN)
     app: str = Field(..., pattern=APP_NAME_PATTERN)
 
@@ -475,13 +496,23 @@ class RemoteAppGrantResponse(BaseModel):
     expires_in: int
 
 
-@router.post("/remote-grant", response_model=RemoteAppGrantResponse)
+@router.post(
+    "/remote-grant",
+    response_model=RemoteAppGrantResponse,
+    dependencies=[declares("UseApp")],
+)
 async def create_remote_app_grant(
     body: RemoteAppGrantRequest,
     current_user: User = Depends(get_current_user_required),
 ) -> RemoteAppGrantResponse:
     """The app's root under a grant: the page runs sandboxed, from the API
     origin, and the grant in its path is its only credential."""
+    await authz.require(
+        "UseApp",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=f"remote/{body.module_id}:{body.app}",
+    )
     from naas_abi.apps.nexus.apps.api.app.services.apps.remote.http_routes import (
         remote_app_grant_url,
     )
@@ -501,6 +532,7 @@ async def create_remote_app_grant(
 class PagesSsoTokenRequest(BaseModel):
     """Mint a short-lived HMAC token for a Cloudflare Pages portal."""
 
+    workspace_id: str = Field(..., min_length=1, max_length=100)
     audience: str = Field(
         ...,
         min_length=1,
@@ -516,12 +548,17 @@ class PagesSsoTokenResponse(BaseModel):
     audience: str
 
 
-@router.post("/sso-token", response_model=PagesSsoTokenResponse)
+@router.post(
+    "/sso-token",
+    response_model=PagesSsoTokenResponse,
+    dependencies=[declares("UseApp")],
+)
 async def create_pages_sso_token(
     body: PagesSsoTokenRequest,
     current_user: User = Depends(get_current_user_required),
 ) -> PagesSsoTokenResponse:
     """Issue a handshake token so a Pages portal can skip a second login."""
+    await authz.require("UseApp", user=current_user, workspace=body.workspace_id, id="-")
     live = _live_settings()
     if not live.pages_sso_secret:
         raise HTTPException(status_code=503, detail="Pages SSO is not configured")
@@ -537,21 +574,21 @@ async def create_pages_sso_token(
     return PagesSsoTokenResponse(token=token, expires_in=expires_in, audience=body.audience.lower())
 
 
-@router.get("/", response_model=AppsResponse)
+@router.get(
+    "/",
+    response_model=AppsResponse,
+    dependencies=[guard("ListApps", literal="-")],
+)
 async def list_apps(
     request: Request,
-    workspace_id: str | None = None,
-    current_user: User = Depends(get_current_user_required),
+    workspace_id: str,
     apps_service: AppsService = Depends(get_apps_service),
 ) -> AppsResponse:
     """Return every app of the loaded modules and of READY remote modules.
 
-    When ``workspace_id`` is provided, results carry the workspace's enable
-    state. Apps without a stored record default to ``enabled=False``.
+    Results carry the workspace's enable state. Apps without a stored record
+    default to ``enabled=False``.
     """
-    if workspace_id:
-        await require_workspace_access(current_user.id, workspace_id)
-
     try:
         from naas_abi import ABIModule
 
@@ -560,26 +597,17 @@ async def list_apps(
         loaded_modules = {}
 
     catalog = (*_scan_apps_catalog(), *await _remote_apps_catalog())
-    workspace_slug: str | None = None
-    if workspace_id:
-        workspace_slug = await _workspace_slug(workspace_id)
+    workspace_slug = await _workspace_slug(workspace_id)
 
-    enabled_by_app_id: dict[str, bool] = (
-        await apps_service.get_enabled_states(workspace_id) if workspace_id else {}
-    )
+    enabled_by_app_id = await apps_service.get_enabled_states(workspace_id)
     seed_apps: set[str] = set()
-    if workspace_id:
-        seed = workspace_seed_for_slug(workspace_slug)
-        if seed is not None and seed.apps:
-            seed_apps = {
-                str(app_id).strip() for app_id in seed.apps if str(app_id).strip()
-            }
+    seed = workspace_seed_for_slug(workspace_slug)
+    if seed is not None and seed.apps:
+        seed_apps = {str(app_id).strip() for app_id in seed.apps if str(app_id).strip()}
 
     results: list[AppInfo] = []
     for app in catalog:
-        update: dict = {
-            "enabled": resolve_app_enabled(app.app_id, enabled_by_app_id, seed_apps)
-        }
+        update: dict = {"enabled": resolve_app_enabled(app.app_id, enabled_by_app_id, seed_apps)}
 
         # Manifest values take precedence; only fall back to runtime config
         # when the manifest omits the credential.
@@ -602,19 +630,17 @@ async def list_apps(
     return AppsResponse(apps=results)
 
 
-@router.get("/{workspace_id}")
+@router.get("/{workspace_id}", dependencies=[guard("ListApps", literal="-")])
 async def list_app_configs(
     workspace_id: str,
-    current_user: User = Depends(get_current_user_required),
     apps_service: AppsService = Depends(get_apps_service),
 ) -> list[dict]:
     """List every stored app config for a workspace."""
-    await require_workspace_access(current_user.id, workspace_id)
     records = await apps_service.list_app_configs(workspace_id)
     return [_serialize_record(r) for r in records]
 
 
-@router.post("/{workspace_id}", status_code=201)
+@router.post("/{workspace_id}", status_code=201, dependencies=[declares("InstallApp")])
 async def create_app_config(
     workspace_id: str,
     body: AppConfigCreate,
@@ -622,7 +648,7 @@ async def create_app_config(
     apps_service: AppsService = Depends(get_apps_service),
 ) -> dict:
     """Create a new app config row (errors if one already exists)."""
-    await require_workspace_access(current_user.id, workspace_id)
+    await authz.require("InstallApp", user=current_user, workspace=workspace_id, id=body.app_id)
     _ensure_app_exists(body.app_id)
     try:
         record = await apps_service.create_app_config(
@@ -637,15 +663,13 @@ async def create_app_config(
     return _serialize_record(record)
 
 
-@router.get("/{workspace_id}/{app_id:path}")
+@router.get("/{workspace_id}/{app_id:path}", dependencies=[guard("GetApp", id="app_id")])
 async def get_app_config(
     workspace_id: str,
     app_id: str,
-    current_user: User = Depends(get_current_user_required),
     apps_service: AppsService = Depends(get_apps_service),
 ) -> dict:
     """Get a single app config row."""
-    await require_workspace_access(current_user.id, workspace_id)
     _ensure_app_exists(app_id)
     record = await apps_service.get_app_config(workspace_id, app_id)
     if record is None:
@@ -653,12 +677,11 @@ async def get_app_config(
     return _serialize_record(record)
 
 
-@router.patch("/{workspace_id}/{app_id:path}")
+@router.patch("/{workspace_id}/{app_id:path}", dependencies=[guard("UpdateApp", id="app_id")])
 async def update_app_config(
     workspace_id: str,
     app_id: str,
     updates: AppConfigUpdate,
-    current_user: User = Depends(get_current_user_required),
     apps_service: AppsService = Depends(get_apps_service),
 ) -> dict:
     """Update an app config (e.g. enable/disable).
@@ -666,7 +689,6 @@ async def update_app_config(
     Idempotent: if no row exists yet, one is created with the supplied
     values. This lets the UI toggle simply call PATCH without a prior POST.
     """
-    await require_workspace_access(current_user.id, workspace_id)
     _ensure_app_exists(app_id)
 
     record = await apps_service.upsert_app_config(
@@ -677,15 +699,13 @@ async def update_app_config(
     return _serialize_record(record)
 
 
-@router.delete("/{workspace_id}/{app_id:path}")
+@router.delete("/{workspace_id}/{app_id:path}", dependencies=[guard("UninstallApp", id="app_id")])
 async def delete_app_config(
     workspace_id: str,
     app_id: str,
-    current_user: User = Depends(get_current_user_required),
     apps_service: AppsService = Depends(get_apps_service),
 ) -> dict[str, str]:
     """Delete the app config (reverts to the default ``enabled=False``)."""
-    await require_workspace_access(current_user.id, workspace_id)
     _ensure_app_exists(app_id)
     deleted = await apps_service.delete_app_config(workspace_id, app_id)
     if not deleted:

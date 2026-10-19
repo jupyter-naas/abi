@@ -15,23 +15,19 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
 
 
 @pytest.mark.asyncio
-async def test_get_organization_role_delegates_to_adapter() -> None:
-    adapter = SimpleNamespace(get_organization_role=AsyncMock(return_value="member"))
-    service = OrganizationService(adapter=adapter)
+async def test_the_role_is_the_one_iam_holds(team) -> None:
+    service = OrganizationService(adapter=SimpleNamespace())
 
-    role = await service.get_organization_role(user_id="user-1", org_id="org-1")
-
-    assert role == "member"
-    adapter.get_organization_role.assert_awaited_once_with(user_id="user-1", org_id="org-1")
+    assert await service.get_organization_role(user_id="admin", org_id="org-1") == "admin"
+    assert await service.get_organization_role(user_id="stranger", org_id="org-1") is None
 
 
 @pytest.mark.asyncio
-async def test_require_organization_access_raises_when_missing_role() -> None:
-    adapter = SimpleNamespace(get_organization_role=AsyncMock(return_value=None))
-    service = OrganizationService(adapter=adapter)
+async def test_require_organization_access_raises_when_missing_role(team) -> None:
+    service = OrganizationService(adapter=SimpleNamespace())
 
     with pytest.raises(OrganizationPermissionError):
-        await service.require_organization_access(user_id="user-1", org_id="org-1")
+        await service.require_organization_access(user_id="stranger", org_id="org-1")
 
 
 @pytest.mark.asyncio
@@ -49,10 +45,11 @@ async def test_create_organization_raises_when_slug_exists() -> None:
 
 
 @pytest.mark.asyncio
-async def test_invite_member_raises_when_member_exists() -> None:
+async def test_invite_member_raises_when_member_exists(team) -> None:
     adapter = SimpleNamespace(
-        get_user_by_email=AsyncMock(return_value=SimpleNamespace(id="user-2")),
-        is_organization_member=AsyncMock(return_value=True),
+        get_user_by_email=AsyncMock(
+            return_value=SimpleNamespace(id="viewer", email="v@x.io", name="V")
+        ),
     )
     service = OrganizationService(adapter=adapter)
 
@@ -62,6 +59,7 @@ async def test_invite_member_raises_when_member_exists() -> None:
             email="user@example.com",
             role="member",
             now=datetime.utcnow(),
+            by="admin",
         )
 
 
@@ -92,14 +90,17 @@ async def test_list_all_workspaces_delegates_to_adapter() -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_workspace_memberships_delegates_to_adapter() -> None:
-    rows = [SimpleNamespace(user_id="u1", workspace_id="ws-1", role="member")]
+async def test_list_workspace_memberships_reads_each_workspaces_roles(team) -> None:
     adapter = SimpleNamespace(
-        list_workspace_memberships_for_org=AsyncMock(return_value=rows)
+        list_workspaces_for_org=AsyncMock(return_value=[SimpleNamespace(id="ws-1")])
     )
     service = OrganizationService(adapter=adapter)
 
     result = await service.list_workspace_memberships(org_id="org-1")
 
-    assert result == rows
-    adapter.list_workspace_memberships_for_org.assert_awaited_once_with(org_id="org-1")
+    assert {(r.user_id, r.workspace_id, r.role) for r in result} == {
+        ("owner", "ws-1", "owner"),
+        ("admin", "ws-1", "admin"),
+        ("member", "ws-1", "member"),
+        ("viewer", "ws-1", "viewer"),
+    }

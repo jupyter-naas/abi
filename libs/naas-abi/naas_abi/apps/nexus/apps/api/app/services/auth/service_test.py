@@ -11,6 +11,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.port import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
     AuthService,
+    EmailChangeNotAllowedError,
     InvalidMagicLinkError,
     InvalidOtpError,
     PasswordAuthenticationDisabledError,
@@ -138,9 +139,7 @@ async def test_ensure_user_for_invite_creates_user_without_workspace() -> None:
     )
     service = AuthService(adapter=adapter)
 
-    user, created = await service.ensure_user_for_invite(
-        "NEW@example.com", name="Emma Petit"
-    )
+    user, created = await service.ensure_user_for_invite("NEW@example.com", name="Emma Petit")
 
     assert created is True
     assert user.id == "user-new"
@@ -170,6 +169,48 @@ async def test_ensure_user_for_invite_returns_existing_account() -> None:
     adapter.create_user_with_default_workspace.assert_not_called()
 
 
+class _Memberships:
+    """What a signup asks of IAM: records the calls, can be made to fail."""
+
+    def __init__(self, fail: bool = False) -> None:
+        self.calls: list[tuple] = []
+        self.fail = fail
+
+    async def register_workspace(self, org_id, workspace_id):
+        self.calls.append(("register_workspace", org_id, workspace_id))
+        return f"abi:_none:{workspace_id}"
+
+    async def grant(self, user_id, role, scope, **_):
+        if self.fail:
+            raise RuntimeError("IAM is down")
+        self.calls.append(("grant", user_id, role, scope))
+
+    async def drop_scope(self, org_id, workspace_id):
+        self.calls.append(("drop_scope", org_id, workspace_id))
+
+
+@pytest.mark.asyncio
+async def test_a_signup_whose_owner_cannot_be_set_forgets_the_scope(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "magic_link_allow_signup", True)
+    adapter = AsyncMock()
+    adapter.get_user_by_email.return_value = None
+    adapter.create_user_with_default_workspace.return_value = AuthUserRecord(
+        id="user-2",
+        email="unknown@example.com",
+        name="Unknown",
+        hashed_password="hashed",
+        created_at=datetime.utcnow(),
+    )
+    memberships = _Memberships(fail=True)
+    service = AuthService(adapter=adapter, memberships=memberships)  # type: ignore[arg-type]
+
+    with pytest.raises(RuntimeError):
+        await service.request_magic_link("unknown@example.com")
+
+    assert memberships.calls[-1] == ("drop_scope", None, "user-2")
+    adapter.commit.assert_not_called()
+
+
 @pytest.mark.asyncio
 async def test_request_magic_link_public_signup_creates_default_workspace(
     monkeypatch,
@@ -184,15 +225,20 @@ async def test_request_magic_link_public_signup_creates_default_workspace(
         hashed_password="hashed",
         created_at=datetime.utcnow(),
     )
-    service = AuthService(adapter=adapter)
+    memberships = _Memberships()
+    service = AuthService(adapter=adapter, memberships=memberships)  # type: ignore[arg-type]
 
     challenge = await service.request_magic_link("unknown@example.com")
 
     assert challenge
+    # The personal workspace is IAM's from the first request: scope, owner, placements.
+    assert memberships.calls == [
+        ("register_workspace", None, "user-2"),
+        ("grant", "user-2", "owner", "abi:_none:user-2"),
+    ]
+    adapter.place_workspace.assert_awaited_once_with("user-2")
     adapter.create_user_with_default_workspace.assert_awaited_once()
-    assert (
-        adapter.create_user_with_default_workspace.await_args.kwargs["name"] == "Unknown"
-    )
+    assert adapter.create_user_with_default_workspace.await_args.kwargs["name"] == "Unknown"
     adapter.create_user.assert_not_called()
     adapter.create_magic_link_token.assert_awaited_once()
     adapter.commit.assert_awaited_once()
@@ -214,9 +260,7 @@ async def test_request_magic_link_create_if_missing_true_skips_workspace(
     )
     service = AuthService(adapter=adapter)
 
-    challenge = await service.request_magic_link(
-        "invitee@example.com", create_if_missing=True
-    )
+    challenge = await service.request_magic_link("invitee@example.com", create_if_missing=True)
 
     assert challenge
     adapter.create_user.assert_awaited_once()
@@ -561,3 +605,47 @@ def test_a_scoped_token_opens_no_api_route(monkeypatch) -> None:
     assert refused.status_code == 401
     accepted = client.get("/api/me", headers={"Authorization": f"Bearer {session}"})
     assert accepted.status_code == 200 and accepted.json() == {"id": "u-1"}
+
+
+def _user(**kwargs) -> AuthUserRecord:
+    return AuthUserRecord(
+        id="user-1",
+        email="user@example.com",
+        name="User",
+        hashed_password="hashed",
+        created_at=datetime.utcnow(),
+        **kwargs,
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_profile_edit_never_changes_the_email() -> None:
+    adapter = AsyncMock()
+    adapter.get_user_by_id.return_value = _user()
+    adapter.update_user_profile.return_value = _user()
+    service = AuthService(adapter=adapter)
+
+    with pytest.raises(EmailChangeNotAllowedError):
+        await service.update_profile("user-1", "User", "other@example.com", None, None, None)
+    adapter.update_user_profile.assert_not_called()
+
+    # The address it already has is no change; everything else is edited.
+    await service.update_profile("user-1", "New", "USER@example.com", "Acme", None, None)
+    kwargs = adapter.update_user_profile.await_args.kwargs
+    assert kwargs["email"] is None and kwargs["name"] == "New" and kwargs["company"] == "Acme"
+
+
+@pytest.mark.asyncio
+async def test_a_signup_owns_its_personal_workspace_in_iam(nexus_iam) -> None:
+    """With the real IAM: the new user is the owner of their own workspace at once
+    (not at the next boot), and nobody else reaches it."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+
+    nexus_iam.user("stranger")
+    adapter = AsyncMock()
+    await AuthService(adapter=adapter).open_personal_workspace("new-user")
+
+    assert await AUTHZ.org_of("new-user") == "_none"
+    assert await AUTHZ.allowed("DeleteWorkspace", user="new-user", workspace="new-user")
+    assert not await AUTHZ.allowed("GetWorkspace", user="stranger", workspace="new-user")
+    adapter.place_workspace.assert_awaited_once_with("new-user")

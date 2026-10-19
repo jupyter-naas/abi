@@ -76,8 +76,10 @@ def test_a_discovery_outage_still_lists_the_local_apps(monkeypatch: pytest.Monke
     assert asyncio.run(adapter._remote_apps_catalog()) == ()
 
 
-def test_a_remote_app_opens_under_a_grant_for_the_user(monkeypatch: pytest.MonkeyPatch) -> None:
-    import asyncio
+@pytest.mark.asyncio
+async def test_a_remote_app_opens_under_a_grant_for_the_user(
+    team, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from types import SimpleNamespace
 
     from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import (
@@ -90,15 +92,17 @@ def test_a_remote_app_opens_under_a_grant_for_the_user(monkeypatch: pytest.Monke
     iam = IAMService(IAMStoreMemory())
     iam.bootstrap()
     monkeypatch.setattr(credentials, "IAM", lambda: iam)
-    body = adapter.RemoteAppGrantRequest(module_id="acme.research", app="console")
+    body = adapter.RemoteAppGrantRequest(
+        workspace_id="ws-1", module_id="acme.research", app="console"
+    )
 
-    answer = asyncio.run(adapter.create_remote_app_grant(body, SimpleNamespace(id="u-1")))
+    answer = await adapter.create_remote_app_grant(body, SimpleNamespace(id="admin"))
 
     _, prefix, grant, rest = answer.path.split("/", 3)
     assert (prefix, rest) == ("app-remote", "acme.research/console/")
     opened = read_remote_app_grant(grant)
     assert opened is not None
-    assert (opened.user_id, opened.module_id, opened.app) == ("u-1", "acme.research", "console")
+    assert (opened.user_id, opened.module_id, opened.app) == ("admin", "acme.research", "console")
     # Eight hours at most, whatever the configuration says.
     assert (
         answer.expires_in
@@ -113,4 +117,4 @@ def test_a_grant_names_one_path_segment_each(module_id: str, app: str) -> None:
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError):
-        adapter.RemoteAppGrantRequest(module_id=module_id, app=app)
+        adapter.RemoteAppGrantRequest(workspace_id="ws-1", module_id=module_id, app=app)

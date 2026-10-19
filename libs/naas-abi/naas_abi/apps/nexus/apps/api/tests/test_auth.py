@@ -14,9 +14,8 @@ class TestMagicLink:
         assert response.json()["status"] == "success"
 
     async def test_request_magic_link_unknown_user_does_not_create_token(self, client):
+        import naas_abi.apps.nexus.apps.api.app.core.database as db_module
         from sqlalchemy import text
-
-        import app.core.database as db_module
 
         email = "not-registered@example.com"
         response = await client.post(
@@ -34,9 +33,8 @@ class TestMagicLink:
             assert user_row is None
 
     async def test_verify_magic_link(self, client, test_user):
+        import naas_abi.apps.nexus.apps.api.app.core.database as db_module
         from sqlalchemy import text
-
-        import app.core.database as db_module
 
         await client.post("/api/auth/magic-link/request", json={"email": test_user["email"]})
 
@@ -119,7 +117,7 @@ class TestProtectedEndpoints:
         """Expired token returns 401."""
         from datetime import timedelta
 
-        from app.api.endpoints.auth import create_access_token
+        from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import create_access_token
 
         token, _ = create_access_token(
             data={"sub": "user-test"}, expires_delta=timedelta(seconds=-1)

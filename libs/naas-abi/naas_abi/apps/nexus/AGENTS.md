@@ -100,9 +100,9 @@ Event types: `token | thinking | tool_call | link | file | error | done`. See `d
 
 Everything below `organizations` is scoped to `workspace_id`: agents, conversations, secrets, graph nodes, inference servers.
 
-**Why `workspace_id` everywhere:** multi-tenant isolation is a security invariant, not optional filtering. New tables and endpoints must filter by `workspace_id` and check workspace membership via the IAM service (`services/iam/`, see `IAM_SPEC.md` and `authorization.py`).
+**Why `workspace_id` everywhere:** multi-tenant isolation is a security invariant, not optional filtering. New tables and endpoints must filter by `workspace_id` and declare the action a route performs (`services/iam/`, see its `AGENTS.md`): IAM decides, memberships are its role attachments.
 
-Do not add a second role check at the endpoint when the IAM service already does it. Duplicate checks are explicitly called out as anti-patterns in the migration doc.
+Do not add a role check at the endpoint: declare the action (`guard`, `declares`) and let IAM decide.
 
 ### Sign-in through identity providers
 

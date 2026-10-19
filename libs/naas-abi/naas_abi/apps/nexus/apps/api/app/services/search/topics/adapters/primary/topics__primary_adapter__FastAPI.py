@@ -1,7 +1,8 @@
 """HTTP routes for search topics, mounted under ``/api/search/topics``.
 
-Reading (list, results, detail) needs workspace access; editing the topic
-definitions and previewing raw templates needs a workspace owner or admin.
+Reading (list, results, detail) and refreshing the cache are IAM actions of
+the workspace's viewers and members; editing the topic definitions, switching
+scopes and previewing raw templates are its admins' (``catalog/search.py``).
 Every query runs through the workspace-scoped graph store, so a topic can only
 ever read the graphs the workspace is allowed to read.
 """
@@ -13,11 +14,6 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user_required
-from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
-    get_workspace_role,
-    require_workspace_access,
-    require_workspace_admin,
-)
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphAccessError,
     GraphQuerySpecError,
@@ -27,10 +23,15 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.query.adapters.secondary.gr
     GraphQueryTripleStoreAdapter,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.port import IGraphQueryStore
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.search.topics.adapters.secondary.postgres import (
     PostgresSearchTopicStore,
 )
 from naas_abi.apps.nexus.apps.api.app.services.search.topics.cache import SearchCache
+from naas_abi.apps.nexus.apps.api.app.services.search.topics.placement import (
+    ensure_search_cache_placed,
+)
 from naas_abi.apps.nexus.apps.api.app.services.search.topics.scope import topic_scope
 from naas_abi.apps.nexus.apps.api.app.services.search.topics.service import SearchTopicService
 from naas_abi.apps.nexus.apps.api.app.services.search.topics.topics__schema import (
@@ -142,7 +143,7 @@ def _search_cache() -> SearchCache:
 
 
 def _http_error(exc: Exception) -> HTTPException:
-    if isinstance(exc, HTTPException):  # workspace access checks already chose their status
+    if isinstance(exc, HTTPException):  # the graph's access checks already chose their status
         return exc
     if isinstance(exc, SearchTopicValidationError):
         return HTTPException(status_code=422, detail={"errors": exc.errors})
@@ -171,19 +172,19 @@ async def get_contract() -> dict[str, Any]:
     }
 
 
-@router.get("")
+@router.get("", dependencies=[guard("ListTopics", literal="-")])
 async def list_topics(
     workspace_id: str = Query(...),
     current_user=Depends(get_current_user_required),
     service: SearchTopicService = Depends(get_search_topic_service),
 ) -> dict[str, Any]:
-    await require_workspace_access(current_user.id, workspace_id)
-    role = await get_workspace_role(current_user.id, workspace_id)
     topics = await service.list_topics(workspace_id)
     return {
         "topics": [t.to_dict() for t in topics],
         "disabled_scopes": sorted(await service.disabled_scopes(workspace_id)),
-        "can_edit": role in ("owner", "admin"),
+        "can_edit": await authz.allowed(
+            "UpdateTopic", user=current_user, workspace=workspace_id, id="-"
+        ),
     }
 
 
@@ -191,7 +192,7 @@ class ScopeEnabledIn(BaseModel):
     enabled: bool
 
 
-@router.put("/scopes/{scope_id}")
+@router.put("/scopes/{scope_id}", dependencies=[guard("SetSearchScope", id="scope_id")])
 async def set_scope_enabled(
     scope_id: str,
     body: ScopeEnabledIn,
@@ -200,7 +201,6 @@ async def set_scope_enabled(
     service: SearchTopicService = Depends(get_search_topic_service),
 ) -> dict[str, Any]:
     """Switch a Nexus feature or a web engine on or off in this workspace's search."""
-    await require_workspace_admin(current_user.id, workspace_id)
     try:
         disabled = await service.set_scope_enabled(
             workspace_id, scope_id, body.enabled, user_id=current_user.id
@@ -210,13 +210,14 @@ async def set_scope_enabled(
     return {"disabled_scopes": sorted(disabled)}
 
 
-@router.post("/preview")
+@router.post("/preview", dependencies=[declares("PreviewTopic")])
 async def preview_query(
     body: PreviewIn,
     current_user=Depends(get_current_user_required),
     service: SearchTopicService = Depends(get_search_topic_service),
 ) -> dict[str, Any]:
-    await require_workspace_admin(current_user.id, body.workspace_id)
+    # The workspace is in the body, so the check happens here, not in a guard.
+    await authz.require("PreviewTopic", user=current_user, workspace=body.workspace_id, id="-")
     if body.role not in ROLE_CONTRACTS:
         raise HTTPException(status_code=422, detail={"errors": [f"unknown role {body.role!r}"]})
     store = await _scoped_store(current_user.id, body.workspace_id, body.graphs)
@@ -230,7 +231,7 @@ async def preview_query(
     }
 
 
-@router.get("/{topic_id}/results")
+@router.get("/{topic_id}/results", dependencies=[guard("GetTopic", id="topic_id")])
 async def topic_results(
     topic_id: str,
     workspace_id: str = Query(...),
@@ -240,10 +241,10 @@ async def topic_results(
     current_user=Depends(get_current_user_required),
     service: SearchTopicService = Depends(get_search_topic_service),
 ) -> dict[str, Any]:
-    await require_workspace_access(current_user.id, workspace_id)
     try:
         topic = await service.get_topic(workspace_id, topic_id)
         store, scope_key = await _scoped(current_user.id, workspace_id, topic.graphs)
+        await ensure_search_cache_placed(workspace_id)
         cache = _search_cache()
         key = cache.key(
             workspace_id,
@@ -262,7 +263,7 @@ async def topic_results(
     return results
 
 
-@router.get("/{topic_id}/detail")
+@router.get("/{topic_id}/detail", dependencies=[guard("GetTopic", id="topic_id")])
 async def topic_detail(
     topic_id: str,
     workspace_id: str = Query(...),
@@ -270,10 +271,10 @@ async def topic_detail(
     current_user=Depends(get_current_user_required),
     service: SearchTopicService = Depends(get_search_topic_service),
 ) -> dict[str, Any]:
-    await require_workspace_access(current_user.id, workspace_id)
     try:
         topic = await service.get_topic(workspace_id, topic_id)
         store, scope_key = await _scoped(current_user.id, workspace_id, topic.graphs)
+        await ensure_search_cache_placed(workspace_id)
         cache = _search_cache()
         key = cache.key(
             workspace_id,
@@ -290,18 +291,15 @@ async def topic_detail(
     return detail
 
 
-@router.post("/cache/refresh")
-async def refresh_search_cache(
-    workspace_id: str = Query(...),
-    current_user=Depends(get_current_user_required),
-) -> dict[str, Any]:
+@router.post("/cache/refresh", dependencies=[guard("RefreshTopics", literal="-")])
+async def refresh_search_cache(workspace_id: str = Query(...)) -> dict[str, Any]:
     """Retire the workspace's cached search responses: the next search reads the graphs."""
-    await require_workspace_access(current_user.id, workspace_id)
+    await ensure_search_cache_placed(workspace_id)
     _search_cache().refresh(workspace_id)
     return {"refreshed": True}
 
 
-@router.put("/{topic_id}")
+@router.put("/{topic_id}", dependencies=[guard("UpdateTopic", id="topic_id")])
 async def save_topic(
     topic_id: str,
     body: TopicIn,
@@ -309,7 +307,6 @@ async def save_topic(
     current_user=Depends(get_current_user_required),
     service: SearchTopicService = Depends(get_search_topic_service),
 ) -> dict[str, Any]:
-    await require_workspace_admin(current_user.id, workspace_id)
     topic = SearchTopic.from_dict({**body.model_dump(), "id": topic_id})
     try:
         saved = await service.save_topic(workspace_id, topic, user_id=current_user.id)
@@ -318,7 +315,7 @@ async def save_topic(
     return saved.to_dict()
 
 
-@router.delete("/{topic_id}")
+@router.delete("/{topic_id}", dependencies=[guard("DeleteTopic", id="topic_id")])
 async def reset_topic(
     topic_id: str,
     workspace_id: str = Query(...),
@@ -326,7 +323,6 @@ async def reset_topic(
     service: SearchTopicService = Depends(get_search_topic_service),
 ) -> dict[str, Any]:
     """Reset a built-in topic to its shipped definition, or delete a custom one."""
-    await require_workspace_admin(current_user.id, workspace_id)
     try:
         restored = await service.reset_topic(workspace_id, topic_id)
     except Exception as exc:

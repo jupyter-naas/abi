@@ -42,16 +42,39 @@ def as_async_handler(
     return SyncJobRunner(handler, interrupt_grace_seconds=interrupt_grace_seconds)
 
 
-def as_engine(handler: Callable[..., Any]) -> Callable[..., Any]:
-    """``handler``, run as the engine's service account: a job runs for no
-    caller (``naas_abi_core.engine.call_context.as_service_account``)."""
+def as_engine(
+    handler: Callable[..., Any], identity: str = ENGINE_IDENTITY
+) -> Callable[..., Any]:
+    """``handler``, run as a service account of the engine's own (``identity``,
+    by default the engine itself): a job runs for no caller
+    (``naas_abi_core.engine.call_context.as_service_account``)."""
     from naas_abi_core.engine.call_context import as_service_account
 
     async def run(ctx: Any) -> Any:
-        with as_service_account(ENGINE_IDENTITY):
+        with as_service_account(identity):
             return await handler(ctx)
 
     return run
+
+
+def job_identity(iam: Any, module_id: str) -> str:
+    """The account an engine module's jobs run as: ``job/<module_id>``, holding
+    ``builtin.job`` only, created when first needed. Without an IAM service this
+    engine owns (a client-role engine, tests) the jobs run as the engine."""
+    from naas_abi_core.engine.call_context import as_service_account
+    from naas_abi_core.services.iam import roles
+    from naas_abi_core.services.iam.IAMPorts import IAMNotFoundError
+
+    if iam is None or not hasattr(iam, "create_service_account"):
+        return ENGINE_IDENTITY
+    name = roles.job_account_name(module_id)
+    with as_service_account(ENGINE_IDENTITY):
+        try:
+            account = iam.find_service_account(name)
+        except IAMNotFoundError:
+            account = iam.create_service_account(name)
+        iam.attach_policy(roles.JOB, account.id)
+    return name
 
 
 class LoopThread:
@@ -262,7 +285,8 @@ class EngineJobLoader:
                         as_async_handler(
                             handlers[j.name],
                             interrupt_grace_seconds=self.configuration.jobs.interrupt_grace_seconds,
-                        )
+                        ),
+                        job_identity(self.iam, module_id),
                     ),
                 )
                 for j in module.jobs

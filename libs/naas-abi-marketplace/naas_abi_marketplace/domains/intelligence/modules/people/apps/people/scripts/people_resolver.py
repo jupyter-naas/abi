@@ -217,28 +217,22 @@ def _build_snapshot_sync(
 
 
 async def workspace_readable_iris(user_id: str, workspace_id: str) -> frozenset[str]:
-    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-    from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
-        require_workspace_access,
-    )
-    from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.workspace_policy import (
-        load_workspace_scope,
-    )
-    from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
-        GraphAccessError,
+    from fastapi import HTTPException
+    from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__dependencies import (
+        workspace_graph_service,
     )
     from naas_abi.apps.nexus.apps.api.app.services.registry import (
         ServiceRegistry,
     )
 
     try:
-        role = await require_workspace_access(user_id, workspace_id)
-        store = ServiceRegistry.instance().graph._get_catalog_store()
-        async with AsyncSessionLocal() as session:
-            scope = await load_workspace_scope(session, store, workspace_id, role)
-        return scope.readable
-    except GraphAccessError as exc:
-        raise PermissionError(str(exc)) from exc
+        graph = await workspace_graph_service(
+            ServiceRegistry.instance().graph, user_id, workspace_id, feature=None
+        )
+    except HTTPException as exc:
+        raise PermissionError(str(exc.detail)) from exc
+    assert graph.access_scope is not None
+    return graph.access_scope.readable
 
 
 async def resolve_sparql_snapshot(

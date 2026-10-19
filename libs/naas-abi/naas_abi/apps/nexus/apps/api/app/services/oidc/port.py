@@ -188,7 +188,3 @@ class PrincipalGateway(ABC):
     async def is_active(self, principal_id: str) -> bool:
         """Not suspended or deleted, checked on every request (cached briefly)."""
 
-    @abstractmethod
-    async def admit(self, principal_id: str) -> None:
-        """TRANSITIONAL (#65): attach ``builtin.transitional.nexus_user``, so
-        Nexus still decides what the user may do, as for its own users."""

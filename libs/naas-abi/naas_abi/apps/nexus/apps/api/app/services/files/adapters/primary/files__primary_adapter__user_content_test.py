@@ -56,7 +56,7 @@ class _Files:
 def client(monkeypatch) -> httpx.AsyncClient:
     main, files_api, get_files_service = _load()
 
-    async def authorized(current_user, path, workspace_id, scope, *, files_service):
+    async def authorized(current_user, path, workspace_id, scope, op, *, files_service):
         return path
 
     monkeypatch.setattr(files_api, "_authorize_path", authorized)

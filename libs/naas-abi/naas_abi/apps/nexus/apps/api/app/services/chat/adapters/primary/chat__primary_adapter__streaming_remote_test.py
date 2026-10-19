@@ -86,7 +86,6 @@ def _install_fakes(monkeypatch, calls: list[dict[str, Any]]) -> None:
     monkeypatch.setattr(streaming, "bind_registry", fake_bind_registry)
     monkeypatch.setattr(streaming, "get_or_create_conversation", fake_conversation)
     monkeypatch.setattr(streaming, "build_provider_messages_with_agents", fake_messages)
-    monkeypatch.setattr(streaming, "request_context", lambda user: SimpleNamespace(user=user))
     monkeypatch.setattr(streaming, "persist_stream_content", noop)
     monkeypatch.setattr(streaming, "persist_stream_metadata", noop)
     monkeypatch.setattr(remote_streaming, "stream_with_remote_agent", fake_remote)

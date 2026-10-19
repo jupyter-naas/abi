@@ -162,14 +162,6 @@ class EngineIAMPrincipals(PrincipalGateway):
             self._active.clear()
         return active
 
-    async def admit(self, principal_id: str) -> None:
-        iam = self._iam()
-        if iam is None:
-            return
-        from naas_abi_core.services.iam.roles import TRANSITIONAL_NEXUS_USER
-
-        await _as_api(lambda: iam.attach_policy(TRANSITIONAL_NEXUS_USER, principal_id))
-
     def forget(self, principal_id: str) -> None:
         self._active.pop(principal_id, None)
 

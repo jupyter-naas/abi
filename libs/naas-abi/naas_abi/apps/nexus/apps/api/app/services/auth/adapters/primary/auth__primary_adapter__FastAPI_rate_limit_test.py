@@ -116,7 +116,9 @@ async def test_a_blocked_caller_never_reaches_the_service(limiter: Limiter, endp
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("endpoint", ["login", "token", "magic-link/request", "otp/verify"])
-async def test_account_endpoints_are_also_limited_per_email(limiter: Limiter, endpoint: str) -> None:
+async def test_account_endpoints_are_also_limited_per_email(
+    limiter: Limiter, endpoint: str
+) -> None:
     limiter.blocked = True
     limiter.block_prefix = "email:"
 
@@ -147,7 +149,10 @@ async def test_a_failed_password_counts_against_ip_and_account(
 
 @pytest.mark.asyncio
 async def test_a_successful_login_is_not_counted(limiter: Limiter, monkeypatch) -> None:
-    monkeypatch.setattr(auth_api, "to_user_schema", lambda user: user)
+    async def signed_in(user):
+        return user
+
+    monkeypatch.setattr(auth_api, "to_signed_in_user", signed_in)
     monkeypatch.setattr(auth_api, "AuthResponse", lambda **kwargs: kwargs)
     service = AsyncMock()
     service.login_user.return_value = (

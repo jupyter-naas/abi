@@ -41,6 +41,7 @@ from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.objects import
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService
 from naas_abi_core import logger
+from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 from sqlalchemy import event as sa_event
 from sqlalchemy import inspect as sa_inspect
@@ -171,13 +172,16 @@ class MyDriveWriter:
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"[my-drive] object storage unavailable: {exc}")
             return
-        for user_id, (manifest, created) in pending.items():
-            try:
-                write_manifest(storage, manifest)
-                if created:
-                    create_default_folders(storage, user_id)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(f"[my-drive] write failed for {user_id}: {exc}")
+        # Written for no caller: a signup has no signed-in user, and the user's own
+        # right to the drive (``roles.PLATFORM_TYPES``) is theirs to use, not Nexus's.
+        with as_service_account("api"):
+            for user_id, (manifest, created) in pending.items():
+                try:
+                    write_manifest(storage, manifest)
+                    if created:
+                        create_default_folders(storage, user_id)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(f"[my-drive] write failed for {user_id}: {exc}")
 
     def _after_rollback(self, session: Session) -> None:
         session.info.pop(self._key, None)

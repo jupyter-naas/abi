@@ -44,9 +44,10 @@ STORE = ActionCatalog(
 
 
 @pytest.fixture
-def guard(iam):
+def guard(iam, h):
     with internal_call():
         iam.register_catalog(STORE)
+    h.first_party_may("store")
     return ResourceGuard(STORE, lambda: iam)
 
 
@@ -58,6 +59,10 @@ def test_without_iam_nothing_is_checked():
     guard = ResourceGuard(STORE, lambda: None)
     guard.require("Get", "key", "anything")
     assert guard.filter("Get", "key", ["a", "b"], lambda k: k) == ["a", "b"]
+    # A list in every case, whatever iterable the caller handed over.
+    listed = guard.filter("Get", "key", (k for k in ("a", "b")), lambda k: k)
+    assert isinstance(listed, list) and listed == ["a", "b"]
+    assert isinstance(guard.filter("Get", "key", ("a",), lambda k: k), list)
     assert (
         guard.create("Create", "item", ["ns", "x"], container=("namespace", ["ns"]))()
         is None

@@ -148,13 +148,13 @@ def test_secret_listing_returns_names_only(monkeypatch) -> None:
         def __init__(self, adapter):
             del adapter
 
-        async def list_secrets(self, context, workspace_id):
+        async def list_secrets(self, workspace_id):
             return [secret]
 
-    async def _member(db, user_id, workspace_id):
-        return "owner"
+    async def _allowed(user_id, workspace_id, action, **_):
+        assert action == "ListSecrets"
 
-    monkeypatch.setattr(settings_tools, "require_member", _member)
+    monkeypatch.setattr(settings_tools, "require_action", _allowed)
     monkeypatch.setattr(
         settings_tools, "run_db", lambda fn: __import__("asyncio").run(fn(object()))
     )
@@ -211,3 +211,83 @@ def test_member_list_marks_the_caller(monkeypatch) -> None:
         ("user-1", True),
         ("user-2", False),
     ]
+
+
+# ── Admin tools: every membership change is made for the asking user ────────
+
+
+def test_membership_tools_pass_the_asking_user_and_report_iams_refusals(
+    monkeypatch,
+) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
+        MembershipDenied,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
+        WorkspaceMemberRecord,
+    )
+    from naas_abi.tools import nexus_admin_tools
+
+    seen: list[tuple[str, object]] = []
+    refuse = {"on": False}
+
+    def _record(name, by):
+        seen.append((name, by))
+        if refuse["on"]:
+            raise MembershipDenied("An admin cannot change an owner")
+
+    class _Workspaces:
+        async def get_workspace_role(self, user_id, workspace_id):
+            return "admin"
+
+        async def remove_workspace_member(self, workspace_id, user_id, *, by):
+            _record("remove", by)
+            return True
+
+        async def update_workspace_member(self, workspace_id, user_id, updates, *, by):
+            _record("update", by)
+            return True
+
+        async def invite_workspace_member(self, workspace_id, email, role, *, by):
+            _record("invite", by)
+            return WorkspaceMemberRecord("m1", workspace_id, "user-9", role)
+
+    class _Auth:
+        async def ensure_user_for_invite(self, email, name=None):
+            return (None, False)
+
+    async def _with_db(fn):
+        return await fn(object())
+
+    async def _no_mail(*_args, **_kwargs):
+        return False
+
+    monkeypatch.setattr(
+        nexus_admin_tools, "_workspace_service", lambda db: _Workspaces()
+    )
+    monkeypatch.setattr(nexus_admin_tools, "_auth_service", lambda db: _Auth())
+    monkeypatch.setattr(nexus_admin_tools, "_with_db", _with_db)
+    monkeypatch.setattr(
+        "naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email.issue_and_send_invite_sign_in",
+        _no_mail,
+    )
+    tools = {t.name: t for t in nexus_admin_tools.nexus_admin_tools()}
+
+    assert (
+        tools["remove_workspace_member"].invoke({"user_id_to_remove": "u2"})["status"]
+        == "removed"
+    )
+    assert (
+        tools["update_workspace_member_role"].invoke(
+            {"user_id_to_update": "u2", "role": "viewer"}
+        )["status"]
+        == "updated"
+    )
+    assert (
+        tools["invite_workspace_member"].invoke({"email": "a@b.co"})["status"]
+        == "invited"
+    )
+    assert seen == [("remove", "user-1"), ("update", "user-1"), ("invite", "user-1")]
+
+    refuse["on"] = True
+    out = tools["remove_workspace_member"].invoke({"user_id_to_remove": "u2"})
+    assert out == {"error": "An admin cannot change an owner"}

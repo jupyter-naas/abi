@@ -1,10 +1,10 @@
 """App projects HTTP adapter: ``/api/app-projects`` and ``/app-preview/``.
 
-Every route checks workspace membership, like Slides. The preview route is
-public by URL but gated by a link in the path (an IAM grant, see
-``preview_token.py``); it serves the live draft in an opaque origin
-(``Content-Security-Policy: sandbox``), so an app's code can never read the
-Nexus session.
+Every route asks IAM for the app project action it performs (viewers read and
+preview, members write and submit). The preview route is public by URL but gated
+by a link in the path (an IAM grant, see ``preview_token.py``); it serves the live
+draft in an opaque origin (``Content-Security-Policy: sandbox``), so an app's
+code can never read the Nexus session.
 """
 
 from __future__ import annotations
@@ -23,13 +23,15 @@ from fastapi.responses import RedirectResponse, Response
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
-    require_workspace_access,
 )
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.services.apps.links import LinkLimitReached
 from naas_abi.apps.nexus.apps.api.app.services.apps.projects.factory import (
     AppProjectsUnavailableError,
     build_app_projects_service,
+)
+from naas_abi.apps.nexus.apps.api.app.services.apps.projects.placement import (
+    draft_placement,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.projects.port import (
     AppAuthor,
@@ -49,6 +51,8 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.projects.preview_token impor
 from naas_abi.apps.nexus.apps.api.app.services.apps.projects.service import (
     AppProjectsService,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz, placements
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi_core.services.source_control.SourceControlPorts import (
     SourceControlError,
 )
@@ -335,32 +339,40 @@ def inject_bridge(html: bytes) -> bytes:
 # -- routes -------------------------------------------------------------------
 
 
-@router.get("/", response_model=list[ProjectResponse])
+@router.get(
+    "/",
+    response_model=list[ProjectResponse],
+    dependencies=[guard("ListAppProjects", literal="-")],
+)
 async def list_projects(
     workspace_id: str,
     include_archived: bool = False,
-    current_user: User = Depends(get_current_user_required),
     service: AppProjectsService = Depends(get_app_projects_service),
 ) -> list[ProjectResponse]:
-    await require_workspace_access(current_user.id, workspace_id)
     infos = await _run(service.list_projects, workspace_id, include_archived=include_archived)
     return [_project(info) for info in infos]
 
 
-@router.get("/submit-config", response_model=SubmitConfigResponse)
+@router.get(
+    "/submit-config",
+    response_model=SubmitConfigResponse,
+    dependencies=[guard("ListAppProjects", literal="-")],
+)
 async def submit_config(
+    workspace_id: str,
     service: AppProjectsService = Depends(get_app_projects_service),
 ) -> SubmitConfigResponse:
     return SubmitConfigResponse(**(await _run(service.submit_config)))
 
 
-@router.post("/", response_model=ProjectResponse)
+@router.post("/", response_model=ProjectResponse, dependencies=[declares("CreateAppProject")])
 async def create_project(
     body: ProjectCreateRequest,
     current_user: User = Depends(get_current_user_required),
     service: AppProjectsService = Depends(get_app_projects_service),
 ) -> ProjectResponse:
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require("CreateAppProject", user=current_user, workspace=body.workspace_id, id="-")
+    await placements.place(draft_placement(body.workspace_id))
     info = await _run(
         service.create_project,
         body.workspace_id,
@@ -372,14 +384,15 @@ async def create_project(
     return _project(info)
 
 
-@router.post("/import", response_model=ProjectResponse)
+@router.post("/import", response_model=ProjectResponse, dependencies=[declares("CreateAppProject")])
 async def import_module_app(
     body: ProjectImportRequest,
     current_user: User = Depends(get_current_user_required),
     service: AppProjectsService = Depends(get_app_projects_service),
 ) -> ProjectResponse:
     """Duplicate a module app into a new project ("Edit" works like create)."""
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require("CreateAppProject", user=current_user, workspace=body.workspace_id, id="-")
+    await placements.place(draft_placement(body.workspace_id))
     info = await _run(
         service.import_module_app,
         body.workspace_id,
@@ -390,25 +403,29 @@ async def import_module_app(
     return _project(info)
 
 
-@router.get("/{slug}", response_model=ProjectResponse)
+@router.get(
+    "/{slug}",
+    response_model=ProjectResponse,
+    dependencies=[guard("GetAppProject", id="slug")],
+)
 async def get_project(
     slug: str,
     workspace_id: str,
-    current_user: User = Depends(get_current_user_required),
     service: AppProjectsService = Depends(get_app_projects_service),
 ) -> ProjectResponse:
-    await require_workspace_access(current_user.id, workspace_id)
     return _project(await _run(service.get_project, _key(workspace_id, slug)))
 
 
-@router.patch("/{slug}", response_model=ProjectResponse)
+@router.patch(
+    "/{slug}", response_model=ProjectResponse, dependencies=[declares("UpdateAppProject")]
+)
 async def update_project(
     slug: str,
     body: ProjectUpdateRequest,
     current_user: User = Depends(get_current_user_required),
     service: AppProjectsService = Depends(get_app_projects_service),
 ) -> ProjectResponse:
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require("UpdateAppProject", user=current_user, workspace=body.workspace_id, id=slug)
     key = _key(body.workspace_id, slug)
     await _run(
         service.update_project,
@@ -420,15 +437,17 @@ async def update_project(
     return _project(await _run(service.get_project, key))
 
 
-@router.get("/{slug}/file", response_model=FileContentResponse)
+@router.get(
+    "/{slug}/file",
+    response_model=FileContentResponse,
+    dependencies=[guard("GetAppProject", id="slug")],
+)
 async def read_file(
     slug: str,
     workspace_id: str,
     path: str,
-    current_user: User = Depends(get_current_user_required),
     service: AppProjectsService = Depends(get_app_projects_service),
 ) -> FileContentResponse:
-    await require_workspace_access(current_user.id, workspace_id)
     data: bytes = await _run(service.read_file, _key(workspace_id, slug), path)
     try:
         return FileContentResponse(path=path, size=len(data), content=data.decode("utf-8"))
@@ -436,14 +455,16 @@ async def read_file(
         return FileContentResponse(path=path, size=len(data), binary=True)
 
 
-@router.put("/{slug}/file", response_model=FileEntryResponse)
+@router.put(
+    "/{slug}/file", response_model=FileEntryResponse, dependencies=[declares("UpdateAppProject")]
+)
 async def write_file(
     slug: str,
     body: FileWriteRequest,
     current_user: User = Depends(get_current_user_required),
     service: AppProjectsService = Depends(get_app_projects_service),
 ) -> FileEntryResponse:
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require("UpdateAppProject", user=current_user, workspace=body.workspace_id, id=slug)
     if body.encoding == "base64":
         try:
             data: bytes | str = base64.b64decode(body.content, validate=True)
@@ -455,27 +476,27 @@ async def write_file(
     return FileEntryResponse(path=written.path, size=written.size)
 
 
-@router.delete("/{slug}/file")
+@router.delete("/{slug}/file", dependencies=[guard("UpdateAppProject", id="slug")])
 async def delete_file(
     slug: str,
     workspace_id: str,
     path: str,
-    current_user: User = Depends(get_current_user_required),
     service: AppProjectsService = Depends(get_app_projects_service),
 ) -> dict[str, bool]:
-    await require_workspace_access(current_user.id, workspace_id)
     await _run(service.delete_file, _key(workspace_id, slug), path)
     return {"deleted": True}
 
 
-@router.post("/{slug}/save", response_model=SaveResponse)
+@router.post(
+    "/{slug}/save", response_model=SaveResponse, dependencies=[declares("UpdateAppProject")]
+)
 async def save_project(
     slug: str,
     body: SaveRequest,
     current_user: User = Depends(get_current_user_required),
     service: AppProjectsService = Depends(get_app_projects_service),
 ) -> SaveResponse:
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require("UpdateAppProject", user=current_user, workspace=body.workspace_id, id=slug)
     commit = await _run(
         service.save,
         _key(body.workspace_id, slug),
@@ -487,52 +508,64 @@ async def save_project(
     return SaveResponse(saved=True, commit=CommitResponse(**asdict(commit)))
 
 
-@router.post("/{slug}/discard", response_model=ProjectResponse)
+@router.post(
+    "/{slug}/discard", response_model=ProjectResponse, dependencies=[declares("UpdateAppProject")]
+)
 async def discard_draft(
     slug: str,
     body: WorkspaceRequest,
     current_user: User = Depends(get_current_user_required),
     service: AppProjectsService = Depends(get_app_projects_service),
 ) -> ProjectResponse:
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require("UpdateAppProject", user=current_user, workspace=body.workspace_id, id=slug)
     key = _key(body.workspace_id, slug)
     await _run(service.discard, key)
     return _project(await _run(service.get_project, key))
 
 
-@router.get("/{slug}/history", response_model=list[CommitResponse])
+@router.get(
+    "/{slug}/history",
+    response_model=list[CommitResponse],
+    dependencies=[guard("GetAppProject", id="slug")],
+)
 async def project_history(
     slug: str,
     workspace_id: str,
     limit: int = 20,
-    current_user: User = Depends(get_current_user_required),
     service: AppProjectsService = Depends(get_app_projects_service),
 ) -> list[CommitResponse]:
-    await require_workspace_access(current_user.id, workspace_id)
     commits = await _run(service.history, _key(workspace_id, slug), max(1, min(limit, 100)))
     return [CommitResponse(**asdict(c)) for c in commits]
 
 
-@router.get("/{slug}/check", response_model=list[IssueResponse])
+@router.get(
+    "/{slug}/check",
+    response_model=list[IssueResponse],
+    dependencies=[guard("GetAppProject", id="slug")],
+)
 async def check_project(
     slug: str,
     workspace_id: str,
-    current_user: User = Depends(get_current_user_required),
     service: AppProjectsService = Depends(get_app_projects_service),
 ) -> list[IssueResponse]:
-    await require_workspace_access(current_user.id, workspace_id)
     issues = await _run(service.check, _key(workspace_id, slug))
     return [IssueResponse(**asdict(i)) for i in issues]
 
 
-@router.post("/{slug}/preview-token", response_model=PreviewTokenResponse)
+@router.post(
+    "/{slug}/preview-token",
+    response_model=PreviewTokenResponse,
+    dependencies=[declares("PreviewAppProject")],
+)
 async def preview_token(
     slug: str,
     body: WorkspaceRequest,
     current_user: User = Depends(get_current_user_required),
     service: AppProjectsService = Depends(get_app_projects_service),
 ) -> PreviewTokenResponse:
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require(
+        "PreviewAppProject", user=current_user, workspace=body.workspace_id, id=slug
+    )
     key = _key(body.workspace_id, slug)
     await _run(service.get_project, key)  # 404 before minting
     minutes = min(settings.app_preview_token_expire_minutes, 8 * 60)
@@ -549,7 +582,9 @@ async def preview_token(
     return PreviewTokenResponse(path=f"/app-preview/{token}/", expires_in=minutes * 60)
 
 
-@router.post("/{slug}/submit", response_model=SubmissionResponse)
+@router.post(
+    "/{slug}/submit", response_model=SubmissionResponse, dependencies=[declares("SubmitAppProject")]
+)
 async def submit_project(
     slug: str,
     body: SubmitRequest,
@@ -557,7 +592,7 @@ async def submit_project(
     service: AppProjectsService = Depends(get_app_projects_service),
 ) -> SubmissionResponse:
     """Save, then open a review branch in the app's source repository."""
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require("SubmitAppProject", user=current_user, workspace=body.workspace_id, id=slug)
     submission = await _run(
         service.submit,
         _key(body.workspace_id, slug),

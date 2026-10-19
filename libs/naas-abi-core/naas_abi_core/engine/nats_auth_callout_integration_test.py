@@ -1462,15 +1462,16 @@ def test_a_host_that_keeps_what_nexus_sent_cannot_use_it_to_change_iam(stack):
                     if a.policy_id == ADMIN
                 ]
                 assert len(iam.store.list_keys(api.id)) == 0
-                # Control: api's own token, which no host ever holds, would have.
+                # Control: api's own token, which no host ever holds, reaches the
+                # IAM operations api holds (it holds no key administration).
                 own = iam.issue_service_token("api").token
                 reply = await engine.request(
-                    "abi.iam.v1.create_key",
-                    pb.CreateKeyRequest(principal_id=api.id).SerializeToString(),
+                    "abi.iam.v1.get_principal",
+                    pb.GetPrincipalRequest(principal_id=api.id).SerializeToString(),
                     headers={"Nats-Auth-Token": own},
                     timeout=3,
                 )
-                assert not pb.CreateKeyResponse.FromString(reply.data).error.code
+                assert not pb.GetPrincipalResponse.FromString(reply.data).error.code
             finally:
                 await engine.close()
         finally:

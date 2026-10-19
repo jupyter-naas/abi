@@ -10,19 +10,32 @@ from fastapi.responses import JSONResponse
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.any_workspace import (
+    allowed_in_any_workspace,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares
 
 OPENAI_TRANSCRIBE_URL = "https://api.openai.com/v1/audio/transcriptions"
 OPENROUTER_TRANSCRIBE_URL = "https://openrouter.ai/api/v1/audio/transcriptions"
 OPENAI_TRANSCRIBE_MODEL = "gpt-4o-transcribe"
 OPENROUTER_TRANSCRIBE_MODEL = "openai/gpt-4o-transcribe"
 
-router = APIRouter(dependencies=[Depends(get_current_user_required)])
+router = APIRouter(
+    dependencies=[
+        Depends(get_current_user_required),
+        declares("Transcribe"),
+        allowed_in_any_workspace("Transcribe"),
+    ]
+)
 
 
 def _secret(name: str) -> str | None:
     from naas_abi import ABIModule
+    from naas_abi_core.engine.call_context import as_service_account
 
-    value = ABIModule.get_instance().engine.services.secret.get(name)
+    # The platform's key, after the route authorized its caller: read as ourselves.
+    with as_service_account("api"):
+        value = ABIModule.get_instance().engine.services.secret.get(name)
     if value is None:
         return None
     text = str(value).strip()

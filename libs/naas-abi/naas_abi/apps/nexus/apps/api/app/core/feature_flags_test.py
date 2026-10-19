@@ -29,6 +29,7 @@ class TestBuildFeatureFlags:
             "code": False,
             "slides": True,
             "documents": True,
+            "sheets": True,
         }
 
     def test_workspace_overrides_apply_on_top_of_role_baseline(self) -> None:

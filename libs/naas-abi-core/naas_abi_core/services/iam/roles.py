@@ -5,20 +5,10 @@ attached with scope ``abi:<org>:W``. They are cumulative (viewer ⊆ member ⊆
 admin ⊆ owner) and stored with explicit action lists, so ``explain`` shows real
 statements. IAM regenerates them whenever a catalog changes.
 
-Also here, and named so: the TRANSITIONAL policies that keep every caller
-working before the later subtasks of #44 land: ``builtin.engine`` and
-``builtin.api`` are one broad statement each (``TransitionalBroadAccess``).
-Subtask 11 (#65) replaces them with enumerated statements.
-
-* ``builtin.engine`` and ``builtin.api`` are one broad statement each
-  (``TransitionalBroadAccess``). Subtask 11 (#65) replaces them with enumerated
-  statements.
-* ``builtin.transitional.nexus_user`` is what a Nexus user holds until
-  subtask 11 (#65) attaches the roles of its memberships: Nexus still decides
-  what such a user may do, as before IAM. It never reaches another
-  principal's agent runs: discovery is granted on its modules, agents,
-  models, apps and jobs, and on the holder's own runs only
-  (``run/${principal.id}/*``).
+Also here: ``builtin.engine`` and ``builtin.api``, the two first-party service
+accounts, as enumerated statements with a ``sid`` that says what needs each
+(subtask 11, #65). Every caller holds only what its policies allow: no principal
+has implicit full access.
 
 ``builtin.module_bootstrap`` is what every module's service account holds,
 approved or not (RFC §8.3): its own discovery record and its own manifest.
@@ -44,8 +34,15 @@ PLATFORM_MEMBER = "builtin.platform.member"
 ENGINE = "builtin.engine"
 API = "builtin.api"
 IDP = "builtin.idp"
-TRANSITIONAL_NEXUS_USER = "builtin.transitional.nexus_user"
+JOB = "builtin.job"
 MODULE_BOOTSTRAP = "builtin.module_bootstrap"
+FEATURES_PREFIX = "builtin.features."
+# Managed policies an older version stored, since removed: IAM drops them (and what
+# was attached) at boot, so no grant outlives its definition.
+RETIRED_POLICIES = (
+    "builtin.transitional.nexus_user",
+    "builtin.transitional.module",
+)
 
 ROLES = (VIEWER, MEMBER, ADMIN, OWNER)
 ROLE_LEVELS: dict[str, frozenset[Level]] = {
@@ -130,7 +127,99 @@ PLATFORM_TYPES: tuple[_PlatformRow, ...] = (
         ("provider_model/*",),
         viewer=("ListProviderModels", "GetProviderModel"),
     ),
+    # A user's own drive and storage, and the platform drive every workspace
+    # whose setting allows it shares: read by viewers, written by members.
+    _PlatformRow(
+        "nexus",
+        ("my_file/${principal.id}", "my_file/${principal.id}/*"),
+        viewer=("ListMyFiles", "GetMyFile"),
+        member=("PutMyFile", "DeleteMyFile"),
+    ),
+    _PlatformRow(
+        "nexus",
+        ("user_storage/${principal.id}", "user_storage/${principal.id}/*"),
+        viewer=("ListUserStorage", "GetUserStorage"),
+        member=("PutUserStorage",),
+    ),
+    _PlatformRow(
+        "object_storage",
+        (
+            "object/naas_abi/my-drive/${principal.id}",
+            "object/naas_abi/my-drive/${principal.id}/*",
+            "object/users/${principal.id}",
+            "object/users/${principal.id}/*",
+            "object/naas_abi/platform-drive",
+            "object/naas_abi/platform-drive/*",
+        ),
+        viewer=(
+            "ListObjects",
+            "ListObjectsRecursive",
+            "GetObject",
+            "GetObjectMetadata",
+            "GetObjectStream",
+        ),
+        member=("PutObject", "PutObjectStream", "DeleteObject"),
+    ),
 )
+
+
+def feature_policy_id(key: str) -> str:
+    """``builtin.features.<key>``, with ``<key>`` one of ``<role>``,
+    ``<org>.<role>`` or ``<org>.<workspace>.<role>`` (RFC §7 "Features")."""
+    return f"{FEATURES_PREFIX}{key}"
+
+
+def feature_policy(key: str, features: Iterable[str]) -> Policy:
+    """The ``nexus:UseFeature`` grants of one feature key, confined to the
+    scope it is attached at. A key with no features is still a policy: it
+    overrides the broader keys with nothing."""
+    names = sorted(set(features))
+    statements = [
+        Statement(
+            effect="Allow",
+            actions=("nexus:UseFeature",),
+            resources=tuple(f"${{scope}}:nexus:feature/{name}" for name in names),
+            sid="UseFeatures",
+        )
+    ]
+    return _managed(
+        feature_policy_id(key),
+        f"Features of {key}",
+        f"The features the {key} role may use where it is attached.",
+        statements if names else [],
+    )
+
+
+def parse_feature_key(key: str) -> tuple[str | None, str | None, str]:
+    """``(org, workspace, role)`` of a feature key; ``ValueError`` if malformed."""
+    parts = key.split(".")
+    if not 1 <= len(parts) <= 3 or parts[-1] not in {
+        r.removeprefix("builtin.") for r in ROLES
+    }:
+        raise ValueError(f"Invalid feature policy key {key!r}")
+    role = parts[-1]
+    org = parts[0] if len(parts) >= 2 else None
+    workspace = parts[1] if len(parts) == 3 else None
+    for ident in (org, workspace):
+        if ident is not None and not ident:
+            raise ValueError(f"Invalid feature policy key {key!r}")
+    return org, workspace, role
+
+
+def feature_policy_for(
+    role_policy_id: str, scope_org: str, scope_workspace: str, available: Iterable[str]
+) -> str | None:
+    """The most specific feature policy that exists for a role attached at
+    ``abi:<org>:<workspace>``: workspace, then org, then the deployment's."""
+    role = role_policy_id.removeprefix("builtin.")
+    have = set(available)
+    candidates = []
+    if scope_workspace not in ("*", "-"):
+        candidates.append(f"{scope_org}.{scope_workspace}.{role}")
+    candidates += [f"{scope_org}.{role}", role]
+    return next(
+        (feature_policy_id(c) for c in candidates if feature_policy_id(c) in have), None
+    )
 
 
 def _sid(*words: str) -> str:
@@ -263,6 +352,67 @@ def _platform_statements(
     return statements
 
 
+@dataclass(frozen=True)
+class PlatformGrant:
+    """A platform-level resource of the deployment that workspace roles reach by
+    level, beyond ``PLATFORM_TYPES``: a viewer the ``list`` and ``read`` actions
+    of the resource's type, a member ``write`` too (``resources`` are canonical
+    names, ``abi:-:-:<service>:<type>/<id>``)."""
+
+    service: str
+    resources: tuple[str, ...]
+    # False: members read these like viewers do (a shared catalog nobody writes).
+    member_writes: bool = True
+
+
+def _grant_statements(
+    registry: CatalogRegistry,
+    grants: Sequence[PlatformGrant],
+    levels: frozenset[Level],
+    sid_prefix: str,
+) -> list[Statement]:
+    statements: list[Statement] = []
+    for index, grant in enumerate(grants):
+        catalog = registry.get(grant.service)
+        if catalog is None:
+            continue
+        granted = levels if grant.member_writes else levels & ROLE_LEVELS[VIEWER]
+        for resource in grant.resources:
+            type_name = resource.split(":", 4)[-1].partition("/")[0]
+            actions = [
+                catalog.qualified(a.name)
+                for a in catalog.actions
+                if a.level in granted and type_name in a.resource_types
+            ]
+            if actions:
+                statements.append(
+                    Statement(
+                        effect="Allow",
+                        actions=tuple(actions),
+                        resources=(resource,),
+                        sid=_sid(sid_prefix, grant.service, type_name, str(index)),
+                    )
+                )
+    return statements
+
+
+# The built-in identity provider's admin app edits who a ``sub`` is (a user's
+# email, for one), which is who becomes the platform admin: only the engine
+# opens it. ``discovery:OpenApp`` on ``app/*`` comes with every workspace
+# viewer and with a module's own bootstrap, so what carries it for the rest
+# must also refuse this app, whatever a workspace admin attaches to whom.
+_IDP_ADMIN_APP = "abi:-:-:discovery:app/*/idp/admin"
+
+
+def _no_idp_admin_app() -> Statement:
+    return Statement(
+        effect="Deny",
+        actions=("discovery:OpenApp",),
+        resources=(_IDP_ADMIN_APP,),
+        sid="NoIdpAdminApp",
+    )
+
+
 def _managed(
     policy_id: str, name: str, description: str, statements: Iterable[Statement]
 ) -> Policy:
@@ -275,20 +425,210 @@ def _managed(
     )
 
 
-def _broad(policy_id: str, who: str) -> Policy:
+# What the first-party service accounts hold (RFC §7, "Built-in service
+# accounts"): enumerated statements, each with a ``sid`` that says what needs it.
+# Neither holds ``*``: a service Nexus or the engine does not use is reached by
+# neither, and the user a Nexus call acts for still bounds every call.
+_API_FOR_USERS = (
+    ("ObjectStorage", "object_storage", "files and platform storage"),
+    ("Documents", "document", "the document service Nexus keeps records in"),
+    ("KeyValue", "keyvalue", "system browsing"),
+    ("Cache", "cache", "graph query and search caches"),
+    ("VectorStore", "vector_store", "chat file ingestion and search"),
+    ("TripleStore", "triple_store", "the graph, ontology, views and maps"),
+    ("Dataset", "dataset", "datasets"),
+    ("Event", "event", "identity and activity events"),
+    ("ActivityLog", "activity_log", "the activity log of each request"),
+    ("Email", "email", "sign-in and invitation mail"),
+    ("ModelRegistry", "model_registry", "chat models and embeddings"),
+    ("Discovery", "discovery", "agents, apps, models and jobs of modules"),
+    (
+        "SourceControl",
+        "source_control",
+        "repositories of slides, documents, sheets and code",
+    ),
+    ("CodingEnvironment", "coding_environment", "coding workspaces"),
+)
+# What the engine does while it boots, runs modules' jobs and schedulers.
+_ENGINE_SERVICES = (
+    ("ObjectStorage", "object_storage"),
+    ("Document", "document"),
+    ("KeyValue", "keyvalue"),
+    ("Secret", "secret"),
+    ("Cache", "cache"),
+    ("VectorStore", "vector_store"),
+    ("TripleStore", "triple_store"),
+    ("Dataset", "dataset"),
+    ("Event", "event"),
+    ("ActivityLog", "activity_log"),
+    ("Email", "email"),
+    ("ModelRegistry", "model_registry"),
+    ("Discovery", "discovery"),
+    ("SourceControl", "source_control"),
+    ("CodingEnvironment", "coding_environment"),
+    ("Identity", "identity"),
+)
+
+
+def _everything_of(sid: str, service: str) -> Statement:
+    return Statement(
+        effect="Allow", actions=(f"{service}:*",), resources=("*",), sid=sid
+    )
+
+
+def api_policy() -> Policy:
+    """What Nexus holds as ``api``: its own catalog, the kernel services it calls
+    for its users (each user bounds the call), the identity calls of sign-in, and
+    the IAM calls that keep memberships, scopes and placements."""
+    statements = [
+        _everything_of("NexusOwnActions", "nexus"),
+        *(
+            _everything_of(f"ForUsers{name}", service)
+            for name, service, _need in _API_FOR_USERS
+        ),
+        Statement(
+            effect="Allow",
+            actions=("secret:Get", "secret:Set"),
+            resources=("abi:-:-:secret:secret/*",),
+            sid="ConfiguredSeedCredentials",
+        ),
+        Statement(
+            effect="Allow",
+            actions=(
+                "identity:ListProviders",
+                "identity:GetProvider",
+                "identity:SignIn",
+                "identity:Authenticate",
+                "identity:VerifyToken",
+                # Invitations: the provider makes the person the invitation names.
+                "identity:ProvisionUser",
+                "identity:FindProvisionedUser",
+            ),
+            resources=("abi:-:-:identity:provider/*",),
+            sid="SignInThroughProviders",
+        ),
+        Statement(
+            effect="Allow",
+            actions=(
+                "iam:CreateUser",
+                "iam:GetPrincipal",
+                "iam:AttachPolicy",
+                "iam:DetachPolicy",
+                "iam:ListAttachments",
+                "iam:PutScope",
+                "iam:DeleteScope",
+                "iam:PutPlacement",
+                "iam:DeletePlacement",
+                "iam:ListPlacements",
+                # The keys Nexus makes for users (links, coding agents, API keys)
+                # and the sessions it ends (#62): the user's side allows them too.
+                "iam:CreateKey",
+                "iam:ListKeys",
+                "iam:RevokeKey",
+                "iam:RevokeTokens",
+            ),
+            resources=("*",),
+            sid="MembershipsScopesPlacementsAndKeys",
+        ),
+        # A session for a user an identity provider vouched for, and the
+        # delegations Nexus makes for a user (agents, links, coding agents).
+        Statement(
+            effect="Allow",
+            actions=("iam:ExchangeToken",),
+            resources=(
+                "abi:-:-:iam:audience/abi%3Asession",
+                "abi:-:-:iam:audience/abi%3Adelegated%3A*",
+                # A key presented without an audience buys the token of its own
+                # (checked again on that audience once the key is read).
+                "abi:-:-:iam:audience/%2A",
+            ),
+            sid="ExchangeTokensForUsers",
+        ),
+        # A workspace shares graphs with others as policies Nexus keeps itself.
+        Statement(
+            effect="Allow",
+            actions=(
+                "iam:CreatePolicy",
+                "iam:UpdatePolicy",
+                "iam:DeletePolicy",
+                "iam:GetPolicy",
+                "iam:ListPolicies",
+            ),
+            resources=("*",),
+            sid="SharedGraphPolicies",
+        ),
+        # Unchecked dataset SQL reads files on the engine host: never Nexus's.
+        Statement(
+            effect="Deny",
+            actions=("dataset:QueryUnchecked",),
+            resources=("*",),
+            sid="NoUncheckedSql",
+        ),
+    ]
     return _managed(
-        policy_id,
-        f"{who} (transitional)",
-        f"TRANSITIONAL: broad access for the {who} service account until "
-        "subtask 11 of #44 enumerates what it needs.",
-        [
-            Statement(
-                effect="Allow",
-                actions=("*",),
-                resources=("*",),
-                sid="TransitionalBroadAccess",
-            )
-        ],
+        API,
+        "Nexus API",
+        "What Nexus holds as the api service account: the user a call acts for "
+        "still bounds each call.",
+        statements,
+    )
+
+
+def engine_policy() -> Policy:
+    """What the engine holds: IAM's administration (catalogs, placements, service
+    accounts, manifests), and the kernel services it uses to boot, run its
+    modules' jobs and schedulers."""
+    statements = [
+        _everything_of("IamAdministration", "iam"),
+        *(
+            _everything_of(f"Engine{name}", service)
+            for name, service in _ENGINE_SERVICES
+        ),
+    ]
+    return _managed(
+        ENGINE,
+        "Engine",
+        "What the engine process holds: boot, module jobs and schedulers.",
+        statements,
+    )
+
+
+# What a module's engine-hosted jobs reach: the kernel services a maintenance or
+# batch job works with. Never IAM, the identity providers or the sign-in.
+_JOB_SERVICES = tuple(
+    service
+    for _name, service in _ENGINE_SERVICES
+    if service not in ("identity", "secret")
+)
+
+
+def job_account_name(module_id: str) -> str:
+    """The service account the jobs of an engine module run as."""
+    return f"job/{module_id}"
+
+
+def job_policy() -> Policy:
+    """Held by the account of each engine module's jobs (``job/<module_id>``): the
+    kernel services a job works with, and read access to secrets (sealed ones
+    stay the engine's)."""
+    statements = [
+        *(
+            _everything_of(f"Job{name}", service)
+            for name, service in _ENGINE_SERVICES
+            if service in _JOB_SERVICES
+        ),
+        Statement(
+            effect="Allow",
+            actions=("secret:Get", "secret:List"),
+            resources=("*",),
+            sid="JobReadsSecrets",
+        ),
+    ]
+    return _managed(
+        JOB,
+        "Engine job",
+        "What the account of an engine module's jobs holds.",
+        statements,
     )
 
 
@@ -324,15 +664,6 @@ def idp_policy() -> Policy:
         ],
     )
 
-
-# Unchecked dataset SQL reads files on the engine host: never through a
-# transitional grant, whatever ``dataset:*`` it holds.
-_NO_UNCHECKED_SQL = Statement(
-    effect="Deny",
-    actions=("dataset:QueryUnchecked",),
-    resources=("*",),
-    sid="TransitionalNoUncheckedSql",
-)
 
 # The statements of ``builtin.module_bootstrap`` that exist only so the module's
 # own side of a delegation allows what it hosts. They open no broker subject:
@@ -413,92 +744,16 @@ def module_bootstrap_policy() -> Policy:
                 resources=("*",),
                 sid="NoEviction",
             ),
+            _no_idp_admin_app(),
         ],
     )
 
 
-# What a Nexus user's side of a Nexus call may reach (TRANSITIONAL, #65).
-# Discovery is granted apart (``_transitional_discovery``): never other runs.
-_TRANSITIONAL_USER_SERVICES = (
-    "activity_log",
-    "cache",
-    "coding_environment",
-    "dataset",
-    "document",
-    "email",
-    "event",
-    "keyvalue",
-    "model_registry",
-    "object_storage",
-    "secret",
-    "source_control",
-    "triple_store",
-    "vector_store",
-)
-
-
-def _transitional_discovery() -> list[Statement]:
-    """Discovery for a transitional holder: every module, agent, model, app and
-    job, but agent runs only its own or those of the user it acts for, so it
-    never reads or cancels another principal's run."""
-    return [
-        Statement(
-            effect="Allow",
-            actions=("discovery:*",),
-            resources=tuple(
-                f"abi:-:-:discovery:{type_}/*"
-                for type_ in ("module", "agent", "model", "app", "job", "job_run")
-            ),
-            sid="TransitionalDiscovery",
-        ),
-        Statement(
-            effect="Allow",
-            actions=("discovery:*",),
-            # Its own runs, and the runs of the user it acts for: an agent run
-            # started for a user is that user's (RFC §6.4), and the holder
-            # delegating for them must still follow it. ``${user.id}`` matches
-            # nothing on a call for no user.
-            resources=(
-                "abi:-:-:discovery:run/${principal.id}/*",
-                "abi:-:-:discovery:run/${user.id}/*",
-            ),
-            sid="TransitionalOwnRuns",
-        ),
-    ]
-
-
-def transitional_nexus_user_policy() -> Policy:
-    """TRANSITIONAL (#65 attaches role policies from Nexus memberships, #61
-    gives users IAM ids).
-
-    Held implicitly by a user Nexus names on a call (issuer ``urn:abi:nexus``,
-    or a Nexus id IAM has no record of): on a Nexus call, ``api`` on behalf of
-    that user. Nexus still decides what such a user may do, with its own
-    membership checks, so the user side of the intersection (RFC §5.3) allows
-    the kernel services a module can declare, plus document and dataset, and
-    discovery on the user's own runs only. Never ``iam:*``; seals and explicit
-    Denies hold.
-    """
-    return _managed(
-        TRANSITIONAL_NEXUS_USER,
-        "Nexus user (transitional)",
-        "TRANSITIONAL: a Nexus user's side of a Nexus call until subtask 11 of "
-        "#44 attaches the roles of its memberships.",
-        [
-            Statement(
-                effect="Allow",
-                actions=tuple(f"{s}:*" for s in _TRANSITIONAL_USER_SERVICES),
-                resources=("*",),
-                sid="TransitionalNexusUser",
-            ),
-            *_transitional_discovery(),
-            _NO_UNCHECKED_SQL,
-        ],
-    )
-
-
-def builtin_policies(registry: CatalogRegistry) -> list[Policy]:
-    """Every managed policy, generated from ``registry``."""
+def builtin_policies(
+    registry: CatalogRegistry, platform_grants: Sequence[PlatformGrant] = ()
+) -> list[Policy]:
+    """Every managed policy, generated from ``registry``; ``platform_grants`` add
+    the deployment's own platform-level resources to the platform policies."""
     return [
         *(role_policy(role, registry) for role in ROLES),
         _managed(
@@ -524,17 +779,29 @@ def builtin_policies(registry: CatalogRegistry) -> list[Policy]:
             PLATFORM_VIEWER,
             "Platform viewer",
             "Platform-level types a workspace viewer reaches.",
-            _platform_statements(registry, "viewer", "platformViewer"),
+            [
+                *_platform_statements(registry, "viewer", "platformViewer"),
+                _no_idp_admin_app(),
+                *_grant_statements(
+                    registry, platform_grants, ROLE_LEVELS[VIEWER], "grantViewer"
+                ),
+            ],
         ),
         _managed(
             PLATFORM_MEMBER,
             "Platform member",
             "Platform-level types a workspace member reaches.",
-            _platform_statements(registry, "member", "platformMember"),
+            [
+                *_platform_statements(registry, "member", "platformMember"),
+                _no_idp_admin_app(),
+                *_grant_statements(
+                    registry, platform_grants, ROLE_LEVELS[MEMBER], "grantMember"
+                ),
+            ],
         ),
-        _broad(ENGINE, "engine"),
-        _broad(API, "api"),
+        engine_policy(),
+        api_policy(),
+        job_policy(),
         idp_policy(),
-        transitional_nexus_user_policy(),
         module_bootstrap_policy(),
     ]

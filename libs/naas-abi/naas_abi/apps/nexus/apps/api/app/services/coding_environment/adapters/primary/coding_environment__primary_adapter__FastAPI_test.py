@@ -1,7 +1,15 @@
+"""The coding-environments routes, driven through the real router with a real IAM.
+
+Roles are IAM's (``code_iam``: ``ws-1`` with an owner, an admin, a member and a
+viewer, ``ws-2`` for the others); the kernel services are wired with the same
+IAM, so a repository or an environment is reachable only once placed in the
+workspace the caller holds a role in.
+"""
+
 from __future__ import annotations
 
+from collections.abc import Iterator
 from types import SimpleNamespace
-from urllib.parse import parse_qs
 
 import pytest
 from fastapi import FastAPI
@@ -15,34 +23,26 @@ from naas_abi.apps.nexus.apps.api.app.models import CodingEnvironmentModel
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment.adapters.primary import (
     coding_environment__primary_adapter__FastAPI as ce_api,
 )
-from naas_abi_core.engine.call_context import (
-    CallContext,
-    as_service_account,
-    service_account,
-    use_call_context,
-    user,
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment.adapters.primary import (
+    coding_environment__primary_adapter__guard as guard_api,
 )
-from naas_abi_core.services.coding_environment.adapters.secondary.InMemoryAdapter import (
-    InMemoryAdapter,
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment.testing import (
+    AsUser,
+    code_iam,
+    kernel_services,
+    place_repo,
+    principal_of,
 )
-from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
-    CodingEnvironmentService,
-)
+from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
+from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
-from naas_abi_core.services.iam.tests.authorization_contract import (
-    contract_iam,
-    wire,
-)
 from naas_abi_core.services.iam.tests.iam_harness import IAMHarness, statement
-from naas_abi_core.services.source_control.adapters.secondary.InMemoryAdapter import (
-    InMemoryAdapter as SourceControlInMemoryAdapter,
-)
-from naas_abi_core.services.source_control.SourceControlService import (
-    SourceControlService,
-)
 from sqlalchemy import Delete
 
 pytestmark = pytest.mark.usefixtures("engine_iam")
+
+WS = "ws-1"
+MONOREPO = "abi/monorepo"
 
 
 class _FakeResult:
@@ -55,6 +55,9 @@ class _FakeResult:
 
     def all(self) -> list:
         return self._rows
+
+    def scalars(self) -> SimpleNamespace:
+        return SimpleNamespace(first=lambda: self._obj)
 
 
 class _FakeSession:
@@ -86,8 +89,10 @@ class _FakeSession:
         # The (env id -> repo) lookup selects CodingEnvironmentModel columns.
         descs = getattr(statement, "column_descriptions", []) or []
         entity = descs[0].get("entity") if descs else None
-        if entity is CodingEnvironmentModel:
+        if entity is CodingEnvironmentModel and len(descs) > 1:
             return _FakeResult(rows=[(e.id, e.repo_id) for e in self._envs])
+        if entity is CodingEnvironmentModel:
+            return _FakeResult()
         # Everything else is a WorkspaceModel lookup.
         return _FakeResult(obj=self._workspace)
 
@@ -98,278 +103,209 @@ class _FakeSession:
         return None
 
 
-class _AsUser:
-    """Each request runs as ``api`` on behalf of the signed-in user, in its
-    workspace, as Nexus's identity middleware sets it."""
+class Client:
+    """A TestClient of the router; ``as_user`` picks who signs in."""
 
-    def __init__(self, app, user_id: str = "user-1") -> None:
-        self.app, self.user_id = app, user_id
-
-    async def __call__(self, scope, receive, send) -> None:
-        if scope["type"] != "http":
-            await self.app(scope, receive, send)
-            return
-        query = parse_qs(scope.get("query_string", b"").decode())
-        context = CallContext(
-            principal=service_account("api"),
-            on_behalf_of=user(self.user_id),
-            workspace_id=(query.get("workspace_id") or [None])[0],
+    def __init__(self, nexus: NexusIam) -> None:
+        self.nexus = nexus
+        self.iam = nexus.iam
+        self.environments, self.source_control = kernel_services(nexus)
+        place_repo(nexus, self.source_control, MONOREPO, WS)
+        self._holder = {"user": "member"}
+        app = FastAPI()
+        app.include_router(ce_api.router, prefix="/coding-environments")
+        app.add_middleware(AsUser, nexus=nexus, holder=self._holder)
+        app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
+            id=self._holder["user"],
+            email=f"{self._holder['user']}@example.com",
+            name=self._holder["user"].title(),
         )
-        with use_call_context(context):
-            await self.app(scope, receive, send)
+        app.dependency_overrides[ce_api._get_coding_environment_service] = lambda: self.environments
+        app.dependency_overrides[ce_api._get_source_control_service] = lambda: self.source_control
+        app.dependency_overrides[guard_api.get_iam] = lambda: self.iam
+        # One session shared across requests so the in-memory coding_environments
+        # bindings written at provision time survive into the list request.
+        session = _FakeSession(
+            SimpleNamespace(id=WS, coding_default_repo_id=None, organization_id="org-1")
+        )
+
+        async def _fake_db():
+            yield session
+
+        app.dependency_overrides[get_db] = _fake_db
+        self.http = TestClient(app)
+
+    def as_user(self, user_id: str) -> Client:
+        self._holder["user"] = user_id
+        return self
+
+    def get(self, path: str, **kwargs):
+        return self.http.get(f"/coding-environments{path}", **kwargs)
+
+    def post(self, path: str, **kwargs):
+        return self.http.post(f"/coding-environments{path}", **kwargs)
+
+    def put(self, path: str, **kwargs):
+        return self.http.put(f"/coding-environments{path}", **kwargs)
+
+    def delete(self, path: str, **kwargs):
+        return self.http.delete(f"/coding-environments{path}", **kwargs)
+
+    def collaborators(self, repo_id: str) -> dict:
+        adapter = self.source_control.adapter
+        return adapter._repos[repo_id].get("collaborators", {})  # type: ignore[attr-defined]
+
+    def provision(self, name: str = "dev", *, workspace: str = WS, **extra) -> dict:
+        resp = self.post(
+            "",
+            json={
+                "workspace_id": workspace,
+                "name": name,
+                "template_id": "tmpl-default",
+                **extra,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        return resp.json()
 
 
-def _client(monkeypatch: pytest.MonkeyPatch, role: str = "owner") -> TestClient:
-    """A TestClient with the router mounted against the in-memory fakes.
-
-    Auth, workspace access and the DB are bypassed so the test needs no real DB
-    or live Coder. An in-memory source_control with the configured monorepo
-    backs the auto-clone orchestration. The kernel services are wired with an
-    IAM; the caller is ``api`` acting for ``user-1``, a Nexus user, whose
-    workspace role is ``role``.
-    """
-    iam = contract_iam()
-    service = wire(CodingEnvironmentService(InMemoryAdapter()), iam)
-    source_control = wire(SourceControlService(SourceControlInMemoryAdapter()), iam)
-    owner, name = ce_api.settings.coding_repo_id.split("/", 1)
-    with as_service_account("engine"):
-        source_control.ensure_repo(owner=owner, name=name)
-    workspace_row = SimpleNamespace(id="org", coding_default_repo_id=None, organization_id=None)
-    app = FastAPI()
-    app.include_router(ce_api.router, prefix="/coding-environments")
-    app.add_middleware(_AsUser)
-    app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
-        id="user-1", email="user@example.com", name="User One"
-    )
-    app.dependency_overrides[ce_api._get_coding_environment_service] = lambda: service
-    app.dependency_overrides[ce_api._get_source_control_service] = lambda: source_control
-    app.dependency_overrides[ce_api._get_iam] = lambda: iam
-
-    # One session shared across requests so the in-memory coding_environments
-    # bindings written at provision time survive into the list request.
-    session = _FakeSession(workspace_row)
-
-    async def _fake_db():
-        yield session
-
-    app.dependency_overrides[get_db] = _fake_db
-
-    async def _allow(user_id: str, workspace_id: str) -> str:
-        return role
-
-    monkeypatch.setattr(ce_api, "require_workspace_access", _allow)
-    client = TestClient(app)
-    client.iam = iam  # type: ignore[attr-defined]
-    client.source_control = source_control  # type: ignore[attr-defined]
-    return client
+@pytest.fixture
+def client() -> Iterator[Client]:
+    with code_iam() as nexus:
+        yield Client(nexus)
 
 
-def test_templates(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = _client(monkeypatch)
-    resp = client.get("/coding-environments/templates", params={"workspace_id": "org"})
+def _query(**extra: str) -> dict[str, str]:
+    return {"workspace_id": WS, **extra}
+
+
+# --- the routes, as a member of the workspace --------------------------------------
+
+
+def test_templates(client: Client) -> None:
+    resp = client.get("/templates", params=_query())
     assert resp.status_code == 200, resp.text
     assert any(t["id"] == "tmpl-default" for t in resp.json())
 
 
-def test_provision_lifecycle_and_access(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = _client(monkeypatch)
-    resp = client.post(
-        "/coding-environments",
-        json={"workspace_id": "org", "name": "dev", "template_id": "tmpl-default"},
-    )
-    assert resp.status_code == 200, resp.text
-    env = resp.json()
+def test_provision_lifecycle_and_access(client: Client) -> None:
+    env = client.provision()
     assert env["phase"] == "running"
     assert env["agent_ready"] is True
     env_id = env["id"]
 
-    resp = client.post(f"/coding-environments/{env_id}/stop", params={"workspace_id": "org"})
+    resp = client.post(f"/{env_id}/stop", params=_query())
     assert resp.json()["phase"] == "stopped"
 
-    resp = client.post(f"/coding-environments/{env_id}/start", params={"workspace_id": "org"})
+    resp = client.post(f"/{env_id}/start", params=_query())
     assert resp.json()["phase"] == "running"
 
-    resp = client.get(f"/coding-environments/{env_id}/access", params={"workspace_id": "org"})
+    resp = client.get(f"/{env_id}/access", params=_query())
     assert resp.status_code == 200
     assert "coder_session_token=" in resp.json()["url"]
 
-    resp = client.delete(f"/coding-environments/{env_id}", params={"workspace_id": "org"})
+    resp = client.delete(f"/{env_id}", params=_query())
     assert resp.status_code == 200
 
-    resp = client.get(f"/coding-environments/{env_id}", params={"workspace_id": "org"})
+    resp = client.get(f"/{env_id}", params=_query())
     assert resp.status_code == 404
 
 
-def test_list_environments(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = _client(monkeypatch)
+def test_list_environments(client: Client) -> None:
     # empty before anything is provisioned
-    resp = client.get("/coding-environments", params={"workspace_id": "org"})
+    resp = client.get("", params=_query())
     assert resp.status_code == 200, resp.text
     assert resp.json() == []
     # provision two, then list returns both (scoped to the caller's identity)
     for name in ("alpha", "beta"):
-        assert (
-            client.post(
-                "/coding-environments",
-                json={"workspace_id": "org", "name": name, "template_id": "tmpl-default"},
-            ).status_code
-            == 200
-        )
-    resp = client.get("/coding-environments", params={"workspace_id": "org"})
+        client.provision(name)
+    resp = client.get("", params=_query())
     assert resp.status_code == 200, resp.text
     assert sorted(e["name"] for e in resp.json()) == ["alpha", "beta"]
 
 
-def test_workspaces_scoped_to_repo(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = _client(monkeypatch)
+def test_workspaces_scoped_to_repo(client: Client) -> None:
     # A second repo to host its own workspace.
-    assert (
-        client.post(
-            "/coding-environments/repos", json={"workspace_id": "org", "name": "lib"}
-        ).status_code
-        == 200
-    )
+    assert client.post("/repos", json={"workspace_id": WS, "name": "lib"}).status_code == 200
     # One workspace per repo.
-    mono = client.post(
-        "/coding-environments",
-        json={"workspace_id": "org", "name": "mono-ws", "template_id": "tmpl-default"},
-    ).json()
-    assert mono["repo_id"] == "abi/monorepo"
-    lib = client.post(
-        "/coding-environments",
-        json={
-            "workspace_id": "org",
-            "name": "lib-ws",
-            "template_id": "tmpl-default",
-            "repo_id": "abi/lib",
-        },
-    ).json()
-    assert lib["repo_id"] == "abi/lib"
+    assert client.provision("mono-ws")["repo_id"] == MONOREPO
+    assert client.provision("lib-ws", repo_id="abi/lib")["repo_id"] == "abi/lib"
 
     # Filtering by repo shows only that repo's workspace.
-    mono_list = client.get(
-        "/coding-environments", params={"workspace_id": "org", "repo_id": "abi/monorepo"}
-    ).json()
+    mono_list = client.get("", params=_query(repo_id=MONOREPO)).json()
     assert [e["name"] for e in mono_list] == ["mono-ws"]
-    lib_list = client.get(
-        "/coding-environments", params={"workspace_id": "org", "repo_id": "abi/lib"}
-    ).json()
+    lib_list = client.get("", params=_query(repo_id="abi/lib")).json()
     assert [e["name"] for e in lib_list] == ["lib-ws"]
 
     # No filter -> both (back-compat).
-    both = client.get("/coding-environments", params={"workspace_id": "org"}).json()
+    both = client.get("", params=_query()).json()
     assert sorted(e["name"] for e in both) == ["lib-ws", "mono-ws"]
 
 
-def test_duplicate_name_conflict(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = _client(monkeypatch)
-    body = {"workspace_id": "org", "name": "dup", "template_id": "tmpl-default"}
-    assert client.post("/coding-environments", json=body).status_code == 200
-    resp = client.post("/coding-environments", json=body)
-    assert resp.status_code == 409
+def test_provisioning_an_existing_name_adopts_the_callers_environment(client: Client) -> None:
+    first = client.provision("dup")
+    assert client.provision("dup")["id"] == first["id"]
 
 
-def test_list_branches(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = _client(monkeypatch)
-    resp = client.get("/coding-environments/branches", params={"workspace_id": "org"})
+def test_list_branches(client: Client) -> None:
+    resp = client.get("/branches", params=_query())
     assert resp.status_code == 200, resp.text
     assert "main" in [b["name"] for b in resp.json()]
 
 
-def test_branch_crud(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = _client(monkeypatch)
-    # create
+def test_branch_crud(client: Client) -> None:
     resp = client.post(
-        "/coding-environments/branches",
-        json={"workspace_id": "org", "name": "feature/x", "source_branch": "main"},
+        "/branches", json={"workspace_id": WS, "name": "feature/x", "source_branch": "main"}
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["name"] == "feature/x"
-    # appears in the list
-    names = [
-        b["name"]
-        for b in client.get(
-            "/coding-environments/branches", params={"workspace_id": "org"}
-        ).json()
-    ]
-    assert "feature/x" in names
-    # duplicate -> 409
+
+    def names() -> list[str]:
+        return [b["name"] for b in client.get("/branches", params=_query()).json()]
+
+    assert "feature/x" in names()
     dup = client.post(
-        "/coding-environments/branches",
-        json={"workspace_id": "org", "name": "feature/x", "source_branch": "main"},
+        "/branches", json={"workspace_id": WS, "name": "feature/x", "source_branch": "main"}
     )
     assert dup.status_code == 409
     # delete (name with a slash, url-encoded by the client)
-    resp = client.delete(
-        "/coding-environments/branches",
-        params={"workspace_id": "org", "name": "feature/x"},
-    )
+    resp = client.delete("/branches", params=_query(name="feature/x"))
     assert resp.status_code == 200, resp.text
-    names = [
-        b["name"]
-        for b in client.get(
-            "/coding-environments/branches", params={"workspace_id": "org"}
-        ).json()
-    ]
-    assert "feature/x" not in names
+    assert "feature/x" not in names()
 
 
-def test_get_logs(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = _client(monkeypatch)
-    env = client.post(
-        "/coding-environments",
-        json={"workspace_id": "org", "name": "lg", "template_id": "tmpl-default"},
-    ).json()
-    resp = client.get(
-        f"/coding-environments/{env['id']}/logs", params={"workspace_id": "org"}
-    )
+def test_get_logs(client: Client) -> None:
+    env = client.provision("lg")
+    resp = client.get(f"/{env['id']}/logs", params=_query())
     assert resp.status_code == 200, resp.text
-    assert isinstance(resp.json()["lines"], list)
     assert resp.json()["lines"]
 
 
-def test_get_repo(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = _client(monkeypatch)
-    resp = client.get("/coding-environments/repo", params={"workspace_id": "org"})
+def test_get_repo(client: Client) -> None:
+    resp = client.get("/repo", params=_query())
     assert resp.status_code == 200, resp.text
     assert "/" in resp.json()["repo_id"]
 
 
-def test_list_and_create_repos(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = _client(monkeypatch)
-    repos = client.get("/coding-environments/repos", params={"workspace_id": "org"}).json()
-    assert any(r["repo_id"] == "abi/monorepo" for r in repos)
+def test_list_and_create_repos(client: Client) -> None:
+    repos = client.get("/repos", params=_query()).json()
     # the configured default is surfaced first
-    assert repos[0]["repo_id"] == "abi/monorepo"
-    # create a new repo under the same owner
-    resp = client.post(
-        "/coding-environments/repos", json={"workspace_id": "org", "name": "lib"}
-    )
+    assert repos[0]["repo_id"] == MONOREPO
+    resp = client.post("/repos", json={"workspace_id": WS, "name": "lib"})
     assert resp.status_code == 200, resp.text
     assert resp.json()["repo_id"] == "abi/lib"
-    repos2 = [
-        r["repo_id"]
-        for r in client.get(
-            "/coding-environments/repos", params={"workspace_id": "org"}
-        ).json()
-    ]
-    assert "abi/lib" in repos2
+    names = [r["repo_id"] for r in client.get("/repos", params=_query()).json()]
+    assert "abi/lib" in names
 
 
-def test_create_repo_is_empty_with_clone_url(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = _client(monkeypatch)
-    resp = client.post(
-        "/coding-environments/repos", json={"workspace_id": "org", "name": "fresh"}
-    )
+def test_create_repo_is_empty_with_clone_url(client: Client) -> None:
+    resp = client.post("/repos", json={"workspace_id": WS, "name": "fresh"})
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["repo_id"] == "abi/fresh"
     assert body["clone_url"].endswith("/abi/fresh.git")
     # empty repo -> no branches yet (the push-setup signal for the UI)
-    branches = client.get(
-        "/coding-environments/branches",
-        params={"workspace_id": "org", "repo_id": "abi/fresh"},
-    ).json()
+    branches = client.get("/branches", params=_query(repo_id="abi/fresh")).json()
     assert branches == []
 
 
@@ -391,265 +327,365 @@ def test_the_agent_holds_a_key_of_the_user_bound_to_its_sidecar_never_a_session(
     assert (found.kind, found.user_id, found.resource) == ("coding", "user-9", base)
 
 
-def test_generate_git_token(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = _client(monkeypatch)
-    resp = client.post(
-        "/coding-environments/git-token",
-        json={"workspace_id": "org", "repo_id": "abi/monorepo"},
-    )
+def test_generate_git_token(client: Client) -> None:
+    resp = client.post("/git-token", json={"workspace_id": WS, "repo_id": MONOREPO})
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["username"]
     assert body["token"]
 
 
-def test_default_repo_get_set(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = _client(monkeypatch)
-    # defaults to the configured repo
-    resp = client.get("/coding-environments/default-repo", params={"workspace_id": "org"})
+def test_default_repo_get_set(client: Client) -> None:
+    resp = client.get("/default-repo", params=_query())
     assert resp.status_code == 200, resp.text
-    assert resp.json()["repo_id"] == "abi/monorepo"
+    assert resp.json()["repo_id"] == MONOREPO
     # set a new default (team-shared, one of this workspace's repos), then read it back
-    client.post("/coding-environments/repos", json={"workspace_id": "org", "name": "other"})
-    resp = client.put(
-        "/coding-environments/default-repo",
-        json={"workspace_id": "org", "repo_id": "abi/other"},
-    )
+    client.post("/repos", json={"workspace_id": WS, "name": "other"})
+    client.as_user("admin")
+    resp = client.put("/default-repo", json={"workspace_id": WS, "repo_id": "abi/other"})
     assert resp.status_code == 200, resp.text
-    resp = client.get("/coding-environments/default-repo", params={"workspace_id": "org"})
+    resp = client.get("/default-repo", params=_query())
     assert resp.json()["repo_id"] == "abi/other"
 
 
-def test_repo_contents_and_file(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = _client(monkeypatch)
+def test_repo_contents_and_file(client: Client) -> None:
     # the seeded monorepo was auto-initialised with a README
-    entries = client.get(
-        "/coding-environments/repo-contents", params={"workspace_id": "org"}
-    ).json()
+    entries = client.get("/repo-contents", params=_query()).json()
     assert any(e["name"] == "README.md" and e["type"] == "file" for e in entries)
-    f = client.get(
-        "/coding-environments/repo-file",
-        params={"workspace_id": "org", "path": "README.md"},
-    ).json()
+    f = client.get("/repo-file", params=_query(path="README.md")).json()
     assert f["text"].startswith("# ")
     assert f["is_binary"] is False
+    assert client.get("/repo-commits", params=_query()).status_code == 200
 
 
-def test_repos_carry_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = _client(monkeypatch)
-    repos = client.get("/coding-environments/repos", params={"workspace_id": "org"}).json()
-    mono = next(r for r in repos if r["repo_id"] == "abi/monorepo")
+def test_repos_carry_metadata(client: Client) -> None:
+    repos = client.get("/repos", params=_query()).json()
+    mono = next(r for r in repos if r["repo_id"] == MONOREPO)
     assert "private" in mono and "empty" in mono and "clone_url" in mono
 
 
-def test_branches_scoped_to_repo_id(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = _client(monkeypatch)
-    client.post("/coding-environments/repos", json={"workspace_id": "org", "name": "lib"})
+def test_branches_scoped_to_repo_id(client: Client) -> None:
+    client.post("/repos", json={"workspace_id": WS, "name": "lib"})
     client.post(
-        "/coding-environments/branches",
-        json={
-            "workspace_id": "org",
-            "name": "feat",
-            "source_branch": "main",
-            "repo_id": "abi/lib",
-        },
+        "/branches",
+        json={"workspace_id": WS, "name": "feat", "source_branch": "main", "repo_id": "abi/lib"},
     )
-    lib = [
-        b["name"]
-        for b in client.get(
-            "/coding-environments/branches",
-            params={"workspace_id": "org", "repo_id": "abi/lib"},
-        ).json()
-    ]
+    lib = [b["name"] for b in client.get("/branches", params=_query(repo_id="abi/lib")).json()]
     assert "feat" in lib
     # the default repo is unaffected
-    default = [
-        b["name"]
-        for b in client.get(
-            "/coding-environments/branches", params={"workspace_id": "org"}
-        ).json()
-    ]
+    default = [b["name"] for b in client.get("/branches", params=_query()).json()]
     assert "feat" not in default
 
 
-def test_provision_creates_new_branch_from_source(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = _client(monkeypatch)
-    resp = client.post(
-        "/coding-environments",
-        json={
-            "workspace_id": "org",
-            "name": "feat",
-            "template_id": "tmpl-default",
-            "source_branch": "main",
-            "branch": "feature/login",
-        },
-    )
-    assert resp.status_code == 200, resp.text
+def test_provision_creates_new_branch_from_source(client: Client) -> None:
+    client.provision("feat", source_branch="main", branch="feature/login")
     # the new branch was created off main in the monorepo
-    resp = client.get("/coding-environments/branches", params={"workspace_id": "org"})
+    resp = client.get("/branches", params=_query())
     assert "feature/login" in [b["name"] for b in resp.json()]
+
+
+def test_sandbox_runtime_is_a_write_of_the_workspaces_repository(client: Client) -> None:
+    resp = client.post("/sandbox/runtime", params=_query(repo_id=MONOREPO))
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["ensured"] is True
 
 
 # --- bug (b): write access only on a repository the caller may write ---------------
 
 
-def _collaborators(client: TestClient, repo_id: str) -> dict:
-    adapter = client.source_control.adapter  # type: ignore[attr-defined]
-    return adapter._repos[repo_id].get("collaborators", {})
-
-
-def _other_workspace_repo(client: TestClient) -> str:
+def _other_workspace_repo(client: Client, name: str = "theirs") -> str:
     """A repository placed in another workspace."""
-    iam = client.iam  # type: ignore[attr-defined]
-    with as_service_account("engine"):
-        client.source_control.ensure_repo(owner="abi", name="theirs")  # type: ignore[attr-defined]
-        iam.put_placement("source_control", "abi%2Ftheirs", "-", "other-ws")
-        iam.put_placement("source_control", "abi%2Ftheirs/*", "-", "other-ws")
-    return "abi/theirs"
+    place_repo(client.nexus, client.source_control, f"abi/{name}", "ws-2")
+    return f"abi/{name}"
 
 
+@pytest.mark.parametrize("user", ["member", "both"])
 def test_a_member_gets_no_write_access_to_another_workspaces_repository(
-    monkeypatch: pytest.MonkeyPatch,
+    client: Client, user: str
 ) -> None:
-    client = _client(monkeypatch, role="member")
+    """``both`` is a member of the other workspace too: the repository is still not
+    this workspace's, whatever the user's roles reach."""
+    client.as_user(user)
     theirs = _other_workspace_repo(client)
-    resp = client.post(
-        "/coding-environments/git-token",
-        json={"workspace_id": "org", "repo_id": theirs},
-    )
+    resp = client.post("/git-token", json={"workspace_id": WS, "repo_id": theirs})
     assert resp.status_code == 404, resp.text
     resp = client.post(
-        "/coding-environments",
-        json={
-            "workspace_id": "org",
-            "name": "dev",
-            "template_id": "tmpl-default",
-            "repo_id": theirs,
-        },
+        "",
+        json={"workspace_id": WS, "name": "dev", "template_id": "tmpl-default", "repo_id": theirs},
     )
     assert resp.status_code == 404, resp.text
-    resp = client.post(
-        "/coding-environments/sandbox/runtime",
-        params={"workspace_id": "org", "repo_id": theirs},
-    )
+    resp = client.post("/sandbox/runtime", params=_query(repo_id=theirs))
     assert resp.status_code == 404, resp.text
-    resp = client.post(
-        "/coding-environments/branches",
-        json={"workspace_id": "org", "name": "x", "repo_id": theirs},
-    )
+    resp = client.post("/branches", json={"workspace_id": WS, "name": "x", "repo_id": theirs})
     assert resp.status_code == 404, resp.text
-    assert _collaborators(client, theirs) == {}
+    resp = client.delete("/branches", params=_query(repo_id=theirs, name="main"))
+    assert resp.status_code == 404, resp.text
+    assert client.collaborators(theirs) == {}
     # Nor can it read it, or make it this workspace's default.
-    resp = client.get(
-        "/coding-environments/repo-contents",
-        params={"workspace_id": "org", "repo_id": theirs},
+    for path in ("/repo-contents", "/branches", "/repo-commits"):
+        assert client.get(path, params=_query(repo_id=theirs)).status_code == 404, path
+    assert (
+        client.get("/repo-file", params=_query(repo_id=theirs, path="README.md")).status_code == 404
     )
+    client.as_user("admin")
+    resp = client.put("/default-repo", json={"workspace_id": WS, "repo_id": theirs})
     assert resp.status_code == 404
-    resp = client.put(
-        "/coding-environments/default-repo",
-        json={"workspace_id": "org", "repo_id": theirs},
-    )
-    assert resp.status_code in (403, 404)
 
 
-def test_a_member_cannot_take_another_workspaces_repository_name(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    client = _client(monkeypatch, role="member")
+def test_the_repository_list_shows_only_the_workspaces_own(client: Client) -> None:
+    client.as_user("both")
     _other_workspace_repo(client)
-    resp = client.post("/coding-environments/repos", json={"workspace_id": "org", "name": "theirs"})
+    names = [r["repo_id"] for r in client.get("/repos", params=_query()).json()]
+    assert names == [MONOREPO]
+
+
+def test_a_member_cannot_take_another_workspaces_repository_name(client: Client) -> None:
+    _other_workspace_repo(client)
+    resp = client.post("/repos", json={"workspace_id": WS, "name": "theirs"})
     assert resp.status_code == 409, resp.text
-    assert _collaborators(client, "abi/theirs") == {}
+    assert client.collaborators("abi/theirs") == {}
 
 
 @pytest.mark.parametrize("name", ["secret", "SECRET", "sEcReT"])
 def test_a_different_case_name_never_hands_over_another_workspaces_repository(
-    monkeypatch: pytest.MonkeyPatch, name: str
+    client: Client, name: str
 ) -> None:
     """Regression (security review): the forge looks repositories up without
-    case, so ``abi/secret`` is workspace A's ``abi/Secret``. A member of B
-    asking to create it gets 409, no grant, and A's placement stays."""
-    client = _client(monkeypatch, role="member")
-    iam = client.iam  # type: ignore[attr-defined]
-    with as_service_account("engine"):
-        client.source_control.ensure_repo(owner="abi", name="Secret")  # type: ignore[attr-defined]
-        iam.put_placement("source_control", "abi%2Fsecret", "-", "other-ws")
-        iam.put_placement("source_control", "abi%2Fsecret/*", "-", "other-ws")
-    resp = client.post("/coding-environments/repos", json={"workspace_id": "org", "name": name})
+    case, so ``abi/secret`` is workspace B's ``abi/Secret``. A member of A asking
+    to create it gets 409, no grant, and B's placement stays."""
+    place_repo(client.nexus, client.source_control, "abi/Secret", "ws-2")
+    resp = client.post("/repos", json={"workspace_id": WS, "name": name})
     assert resp.status_code == 409, resp.text
-    assert _collaborators(client, "abi/Secret") == {}
-    assert iam.resolve_placement("source_control", "abi%2Fsecret") == ("-", "other-ws")
-    resp = client.post(
-        "/coding-environments/git-token",
-        json={"workspace_id": "org", "repo_id": f"abi/{name}"},
-    )
+    assert client.collaborators("abi/Secret") == {}
+    assert client.iam.resolve_placement("source_control", "abi%2Fsecret") == ("org-1", "ws-2")
+    resp = client.post("/git-token", json={"workspace_id": WS, "repo_id": f"abi/{name}"})
     assert resp.status_code == 404, resp.text
-    assert _collaborators(client, "abi/Secret") == {}
+    assert client.collaborators("abi/Secret") == {}
 
 
 @pytest.mark.parametrize("name", ["legacy", "Legacy"])
-def test_a_repository_that_predates_iam_is_never_claimed(
-    monkeypatch: pytest.MonkeyPatch, name: str
-) -> None:
+def test_a_repository_that_predates_iam_is_never_claimed(client: Client, name: str) -> None:
     """Regression (security review): a repository with no placement is not
     free; asking to create it, in any case, places nothing and grants nothing."""
-    client = _client(monkeypatch, role="member")
     with as_service_account("engine"):
         client.source_control.adapter.ensure_repo(owner="abi", name="legacy")  # type: ignore[attr-defined]
-    resp = client.post("/coding-environments/repos", json={"workspace_id": "org", "name": name})
+    resp = client.post("/repos", json={"workspace_id": WS, "name": name})
     assert resp.status_code == 409, resp.text
-    assert _collaborators(client, "abi/legacy") == {}
-    assert client.iam.placement_of("source_control", "abi%2Flegacy") is None  # type: ignore[attr-defined]
+    assert client.collaborators("abi/legacy") == {}
+    assert client.iam.placement_of("source_control", "abi%2Flegacy") is None
 
 
-def test_a_viewer_gets_no_write_access(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = _client(monkeypatch, role="viewer")
-    resp = client.post(
-        "/coding-environments/git-token",
-        json={"workspace_id": "org", "repo_id": "abi/monorepo"},
-    )
+def test_a_viewer_gets_no_write_access(client: Client) -> None:
+    client.as_user("viewer")
+    resp = client.post("/git-token", json={"workspace_id": WS, "repo_id": MONOREPO})
     assert resp.status_code == 403, resp.text
-    assert _collaborators(client, "abi/monorepo") == {}
+    assert client.collaborators(MONOREPO) == {}
     # A viewer still reads the workspace's repositories.
-    resp = client.get("/coding-environments/repo-contents", params={"workspace_id": "org"})
+    resp = client.get("/repo-contents", params=_query())
     assert resp.status_code == 200
 
 
-def test_a_member_iam_denies_writing_gets_no_write_access(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    client = _client(monkeypatch, role="member")
-    h = IAMHarness(client.iam)  # type: ignore[attr-defined]
-    record = h.admin("ensure_user", LEGACY_NEXUS_ISSUER, "user-1")
+def test_a_member_iam_denies_writing_gets_no_write_access(client: Client) -> None:
+    h = IAMHarness(client.iam)
+    record = h.admin("ensure_user", LEGACY_NEXUS_ISSUER, "member")
     h.grant(
         record.id,
         statement(
             "Deny",
             ["source_control:UpsertFile"],
-            ["abi:-:-:source_control:repo/abi%2Fmonorepo"],
+            ["abi:org-1:ws-1:source_control:repo/abi%2Fmonorepo"],
         ),
     )
-    resp = client.post(
-        "/coding-environments/git-token",
-        json={"workspace_id": "org", "repo_id": "abi/monorepo"},
-    )
+    resp = client.post("/git-token", json={"workspace_id": WS, "repo_id": MONOREPO})
     assert resp.status_code == 403, resp.text
-    assert _collaborators(client, "abi/monorepo") == {}
+    assert client.collaborators(MONOREPO) == {}
 
 
-def test_a_member_gets_write_access_to_a_repository_of_the_workspace(
-    monkeypatch: pytest.MonkeyPatch,
+def test_a_member_gets_write_access_to_a_repository_of_the_workspace(client: Client) -> None:
+    resp = client.post("/repos", json={"workspace_id": WS, "name": "ours"})
+    assert resp.status_code == 200, resp.text
+    assert client.iam.resolve_placement("source_control", "abi%2Fours") == ("org-1", "ws-1")
+    resp = client.post("/git-token", json={"workspace_id": WS, "repo_id": "abi/ours"})
+    assert resp.status_code == 200, resp.text
+    assert client.collaborators("abi/ours") == {resp.json()["username"]: "write"}
+
+
+# --- creating a repository: workspace roles, and a denial is not "name taken" ------
+
+
+@pytest.mark.parametrize("user", ["owner", "admin", "member"])
+def test_a_workspace_role_creates_a_repository_without_a_platform_grant(
+    client: Client, user: str
 ) -> None:
-    client = _client(monkeypatch, role="member")
-    resp = client.post("/coding-environments/repos", json={"workspace_id": "org", "name": "ours"})
+    client.as_user(user)
+    resp = client.post("/repos", json={"workspace_id": WS, "name": f"by-{user}"})
     assert resp.status_code == 200, resp.text
-    assert client.iam.resolve_placement("source_control", "abi%2Fours") == (  # type: ignore[attr-defined]
-        "-",
-        "org",
+    assert client.iam.resolve_placement("source_control", f"abi%2Fby-{user}") == (
+        "org-1",
+        "ws-1",
     )
-    resp = client.post(
-        "/coding-environments/git-token",
-        json={"workspace_id": "org", "repo_id": "abi/ours"},
+
+
+def test_a_refusal_of_iam_on_create_is_not_reported_as_a_taken_name(client: Client) -> None:
+    h = IAMHarness(client.iam)
+    record = h.admin("ensure_user", LEGACY_NEXUS_ISSUER, "member")
+    h.grant(
+        record.id,
+        statement("Deny", ["source_control:EnsureRepo"], ["abi:org-1:ws-1:source_control:repo/*"]),
     )
+    resp = client.post("/repos", json={"workspace_id": WS, "name": "denied"})
+    assert resp.status_code == 403, resp.text
+    assert client.iam.placement_of("source_control", "abi%2Fdenied") is None
+
+
+def test_a_viewer_cannot_create_a_repository(client: Client) -> None:
+    client.as_user("viewer")
+    resp = client.post("/repos", json={"workspace_id": WS, "name": "nope"})
+    assert resp.status_code == 403, resp.text
+    assert client.iam.placement_of("source_control", "abi%2Fnope") is None
+
+
+# --- environments: personal to their owner and to their workspace ------------------
+
+
+ENVIRONMENT_ROUTES = (
+    ("GET", ""),
+    ("POST", "/start"),
+    ("POST", "/stop"),
+    ("DELETE", ""),
+    ("GET", "/logs"),
+    ("GET", "/access"),
+)
+
+
+def _call_environment(client: Client, method: str, env_id: str, suffix: str, workspace: str):
+    return client.http.request(
+        method, f"/coding-environments/{env_id}{suffix}", params={"workspace_id": workspace}
+    )
+
+
+@pytest.mark.parametrize(("method", "suffix"), ENVIRONMENT_ROUTES)
+def test_an_environment_is_found_only_by_its_owner(
+    client: Client, method: str, suffix: str
+) -> None:
+    env_id = client.provision()["id"]
+    for user in ("admin", "owner"):
+        client.as_user(user)
+        resp = _call_environment(client, method, env_id, suffix, WS)
+        assert resp.status_code in (403, 404), (user, resp.status_code)
+        assert resp.status_code != 200, user
+    client.as_user("member")
+    resp = _call_environment(client, method, env_id, suffix, WS)
     assert resp.status_code == 200, resp.text
-    assert _collaborators(client, "abi/ours") == {resp.json()["username"]: "write"}
+
+
+def test_an_environment_is_placed_in_the_workspace_it_was_provisioned_for(client: Client) -> None:
+    env_id = client.provision()["id"]
+    owner = principal_of(client.nexus, "member")
+    assert client.iam.resolve_placement("coding_environment", f"{owner}/{env_id}") == (
+        "org-1",
+        "ws-1",
+    )
+
+
+@pytest.mark.parametrize(("method", "suffix"), ENVIRONMENT_ROUTES)
+def test_an_environment_is_not_reached_through_another_workspace(
+    client: Client, method: str, suffix: str
+) -> None:
+    """``both`` holds a role in each workspace and owns the environment, which
+    was provisioned for ``ws-2``: ``ws-1`` does not have it."""
+    client.as_user("both")
+    place_repo(client.nexus, client.source_control, "abi/second", "ws-2")
+    env_id = client.provision("theirs", workspace="ws-2", repo_id="abi/second")["id"]
+    assert _call_environment(client, method, env_id, suffix, WS).status_code == 404
+    assert _call_environment(client, method, env_id, suffix, "ws-2").status_code == 200
+
+
+def test_an_environment_of_nobody_in_the_workspace_is_not_found(client: Client) -> None:
+    assert client.get("/no-such-environment", params=_query()).status_code == 404
+
+
+# --- roles: viewers read, members write, admins set the default repository ---------
+
+READS = (
+    ("/templates", {}),
+    ("/repos", {}),
+    ("/repo-contents", {}),
+    ("/repo-file", {"path": "README.md"}),
+    ("/repo-commits", {}),
+    ("/default-repo", {}),
+    ("/branches", {}),
+    ("/repo", {}),
+    ("", {}),
+)
+WRITES = (
+    ("POST", "/repos", {"json": {"workspace_id": WS, "name": "w"}}),
+    ("POST", "/git-token", {"json": {"workspace_id": WS}}),
+    ("POST", "/branches", {"json": {"workspace_id": WS, "name": "w"}}),
+    ("DELETE", "/branches", {"params": _query(name="w")}),
+    (
+        "POST",
+        "",
+        {"json": {"workspace_id": WS, "name": "w", "template_id": "tmpl-default"}},
+    ),
+    ("POST", "/sandbox/runtime", {"params": _query(repo_id=MONOREPO)}),
+    ("POST", "/e/start", {"params": _query()}),
+    ("POST", "/e/stop", {"params": _query()}),
+    ("DELETE", "/e", {"params": _query()}),
+    ("GET", "/e/access", {"params": _query()}),
+    ("PUT", "/default-repo", {"json": {"workspace_id": WS, "repo_id": MONOREPO}}),
+)
+
+
+@pytest.mark.parametrize(("path", "params"), READS)
+def test_a_viewer_reads(client: Client, path: str, params: dict) -> None:
+    client.as_user("viewer")
+    resp = client.get(path, params=_query(**params))
+    assert resp.status_code == 200, resp.text
+
+
+@pytest.mark.parametrize(("method", "path", "kwargs"), WRITES)
+def test_a_viewer_cannot_write(client: Client, method: str, path: str, kwargs: dict) -> None:
+    client.as_user("viewer")
+    resp = client.http.request(method, f"/coding-environments{path}", **kwargs)
+    assert resp.status_code == 403, resp.text
+
+
+@pytest.mark.parametrize(("method", "path", "kwargs"), WRITES)
+def test_a_stranger_is_refused_everywhere(
+    client: Client, method: str, path: str, kwargs: dict
+) -> None:
+    client.as_user("stranger")
+    resp = client.http.request(method, f"/coding-environments{path}", **kwargs)
+    assert resp.status_code == 403, resp.text
+    assert "access to this workspace" in resp.json()["detail"]
+
+
+@pytest.mark.parametrize(("path", "params"), READS)
+def test_a_stranger_reads_nothing(client: Client, path: str, params: dict) -> None:
+    client.as_user("stranger")
+    resp = client.get(path, params=_query(**params))
+    assert resp.status_code == 403, resp.text
+
+
+def test_only_an_admin_sets_the_default_repository(client: Client) -> None:
+    body = {"workspace_id": WS, "repo_id": MONOREPO}
+    client.as_user("member")
+    assert client.put("/default-repo", json=body).status_code == 403
+    for user in ("admin", "owner"):
+        client.as_user(user)
+        assert client.put("/default-repo", json=body).status_code == 200, user
+
+
+def test_the_section_is_refused_to_a_role_whose_feature_is_off() -> None:
+    with code_iam(without_code=("member", "viewer")) as nexus:
+        client = Client(nexus)
+        for user in ("member", "viewer"):
+            client.as_user(user)
+            resp = client.get("/repos", params=_query())
+            assert resp.status_code == 403, user
+            assert "feature" in resp.json()["detail"]
+            resp = client.post("/repos", json={"workspace_id": WS, "name": "off"})
+            assert resp.status_code == 403, user
+        client.as_user("admin")
+        assert client.get("/repos", params=_query()).status_code == 200

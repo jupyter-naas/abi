@@ -10,16 +10,18 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
 )
+from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig
+from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 from naas_abi.apps.nexus.apps.api.app.services.openai_gateway.adapters.primary import (
     openai_gateway__primary_adapter__FastAPI as shim,
 )
 
 
-def _client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def _client(monkeypatch: pytest.MonkeyPatch, user_id: str = "member") -> TestClient:
     app = FastAPI()
     app.include_router(shim.router, prefix="/v1")
     app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
-        id="user-1", email="user@example.com", name="User One"
+        id=user_id, email="user@example.com", name="User One"
     )
 
     async def _fake_stream(
@@ -38,7 +40,7 @@ def _client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     return TestClient(app)
 
 
-def test_models(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_models(team: NexusIam, monkeypatch: pytest.MonkeyPatch) -> None:
     client = _client(monkeypatch)
     resp = client.get("/v1/models")
     assert resp.status_code == 200, resp.text
@@ -46,7 +48,7 @@ def test_models(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "aia" in ids
 
 
-def test_chat_completion_non_streaming(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chat_completion_non_streaming(team: NexusIam, monkeypatch: pytest.MonkeyPatch) -> None:
     client = _client(monkeypatch)
     resp = client.post(
         "/v1/chat/completions",
@@ -59,7 +61,7 @@ def test_chat_completion_non_streaming(monkeypatch: pytest.MonkeyPatch) -> None:
     assert shim._CHAT_MARKER_RE.sub("", content).strip() == "Hello world"
 
 
-def test_chat_completion_streaming(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chat_completion_streaming(team: NexusIam, monkeypatch: pytest.MonkeyPatch) -> None:
     client = _client(monkeypatch)
     resp = client.post(
         "/v1/chat/completions",
@@ -85,6 +87,7 @@ def test_chat_completion_streaming(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_gateway_turn_carries_the_caller_profile_onto_the_agent_prompt(
+    team: NexusIam,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The profile has to arrive on the prompt the agent actually runs.
@@ -126,7 +129,7 @@ def test_gateway_turn_carries_the_caller_profile_onto_the_agent_prompt(
     app = FastAPI()
     app.include_router(shim.router, prefix="/v1")
     app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
-        id="user-1",
+        id="member",
         email="user@example.com",
         name="User One",
         company="NaasAI",
@@ -159,3 +162,57 @@ def test_format_tool_event_renders_calls_and_results() -> None:
     # empty / unrelated events render nothing
     assert shim._format_tool_event({"event": "tool_usage", "tool": ""}) == ""
     assert shim._format_tool_event({"event": "call_model", "agent": "AbiAgent"}) == ""
+
+
+_COMPLETION = {"model": "aia", "messages": [{"role": "user", "content": "hi"}]}
+
+
+@pytest.mark.parametrize("user", ["viewer", "member", "admin", "owner"])
+def test_every_role_of_a_workspace_may_use_the_gateway(
+    team: NexusIam, monkeypatch: pytest.MonkeyPatch, user: str
+) -> None:
+    client = _client(monkeypatch, user)
+
+    assert client.get("/v1/models").status_code == 200
+    assert client.post("/v1/chat/completions", json=_COMPLETION).status_code == 200
+
+
+def test_a_user_with_no_workspace_may_not_use_the_gateway(
+    team: NexusIam, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = _client(monkeypatch, "stranger")
+
+    assert client.get("/v1/models").status_code == 403
+    assert client.post("/v1/chat/completions", json=_COMPLETION).status_code == 403
+    assert (
+        client.post("/v1/chat/completions", json={**_COMPLETION, "stream": True}).status_code == 403
+    )
+
+
+def test_a_workspace_named_by_the_client_is_the_one_that_decides(
+    team: NexusIam, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    team.workspace("org-1", "ws-2")
+    client = _client(monkeypatch, "member")
+
+    assert (
+        client.post("/v1/chat/completions?workspace_id=ws-1", json=_COMPLETION).status_code == 200
+    )
+    assert (
+        client.post("/v1/chat/completions?workspace_id=ws-2", json=_COMPLETION).status_code == 403
+    )
+    assert client.get("/v1/models?workspace_id=ws-2").status_code == 403
+
+
+def test_the_gateway_needs_the_chat_feature(monkeypatch: pytest.MonkeyPatch) -> None:
+    flags = FeatureFlagsConfig(
+        enabled_features=["files"], role_baseline={"owner": ["files"], "member": ["files"]}
+    )
+    nexus = NexusIam(flags)
+    nexus.grant("member", "member", nexus.workspace("org-1", "ws-1"))
+
+    with nexus.installed():
+        client = _client(monkeypatch, "member")
+
+        assert client.get("/v1/models").status_code == 403
+        assert client.post("/v1/chat/completions", json=_COMPLETION).status_code == 403

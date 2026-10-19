@@ -102,6 +102,9 @@ def invite_result(outcome: InviteOutcome) -> dict[str, Any]:
         "sign_in_email_sent": outcome.sign_in_email_sent,
         "renewed": outcome.renewed,
         "provisioning_warning": outcome.warning,
+        # The inviting user may not create accounts at the provider: the invitation
+        # waits for the person's sign-in.
+        "provisioning_skipped": outcome.provisioning_skipped,
     }
 
 

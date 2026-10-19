@@ -7,11 +7,9 @@ import pytest
 from naas_abi.apps.nexus.apps.api.app.models import (
     AgentConfigModel,
     AppConfigModel,
-    OrganizationMemberModel,
     OrganizationModel,
     OrganizationRoleFeaturesModel,
     UserModel,
-    WorkspaceMemberModel,
     WorkspaceModel,
 )
 from naas_abi.apps.nexus.apps.api.app.services.identity_graph.adapters.secondary.identity_graph__secondary_adapter__postgres import (  # noqa: E501
@@ -25,17 +23,19 @@ T1 = datetime.datetime(2026, 5, 2, 9, 30)
 _TABLES = (
     UserModel,
     OrganizationModel,
-    OrganizationMemberModel,
     OrganizationRoleFeaturesModel,
     WorkspaceModel,
-    WorkspaceMemberModel,
     AppConfigModel,
     AgentConfigModel,
 )
 
 
 @pytest.mark.asyncio
-async def test_load_snapshot_reads_every_identity_table(tmp_path) -> None:
+async def test_load_snapshot_reads_every_identity_table(tmp_path, nexus_iam) -> None:
+    # Roles are IAM's: the snapshot mirrors its attachments, not the old rows.
+    nexus_iam.grant("usr-2", "admin", nexus_iam.org("org-1"))
+    nexus_iam.grant("usr-2", "admin", nexus_iam.workspace("org-1", "ws-1"))
+    nexus_iam.platform_admin("usr-1")
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'nexus.db'}")
     async with engine.begin() as conn:
         for model in _TABLES:
@@ -64,9 +64,6 @@ async def test_load_snapshot_reads_every_identity_table(tmp_path) -> None:
                 primary_color="#0057B8",
                 created_at=T0,
             ),
-            OrganizationMemberModel(
-                id="om-1", organization_id="org-1", user_id="usr-2", role="admin", created_at=T1
-            ),
             OrganizationRoleFeaturesModel(
                 organization_id="org-1", role_baseline=json.dumps({"viewer": ["chat"]})
             ),
@@ -78,9 +75,6 @@ async def test_load_snapshot_reads_every_identity_table(tmp_path) -> None:
                 organization_id="org-1",
                 background_image_url="bg.webp",
                 created_at=T0,
-            ),
-            WorkspaceMemberModel(
-                id="mem-1", workspace_id="ws-1", user_id="usr-2", role="admin", created_at=T1
             ),
             AppConfigModel(
                 id="app-1", workspace_id="ws-1", app_id="external.acme:web", enabled=True

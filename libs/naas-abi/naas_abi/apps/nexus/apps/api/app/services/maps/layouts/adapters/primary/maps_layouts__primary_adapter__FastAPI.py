@@ -1,9 +1,10 @@
 """HTTP routes for workspace Maps layouts, mounted under ``/api/maps/layouts``.
 
-Reading (list, feed) needs workspace access; creating, editing, deleting,
-hiding and previewing layouts needs a workspace owner or admin. Every query
-runs through the workspace-scoped graph store, narrowed to the layout's
-graphs, so a layout only ever reads what the workspace may read.
+Reading (list, feed) is for everybody who sees the workspace's maps; creating,
+editing, deleting, hiding and previewing layouts is for its admins (the IAM
+actions of the ``layout`` type say so). Every query runs through the
+workspace-scoped graph store, narrowed to the layout's graphs, so a layout only
+ever reads what the caller may read.
 """
 
 from __future__ import annotations
@@ -12,11 +13,6 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user_required
-from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
-    get_workspace_role,
-    require_workspace_access,
-    require_workspace_admin,
-)
 from naas_abi.apps.nexus.apps.api.app.services.graph.access import GraphAccessScope
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphAccessError,
@@ -27,6 +23,8 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.query.adapters.secondary.gr
     GraphQueryTripleStoreAdapter,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.port import IGraphQueryStore
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.adapters.secondary.postgres import (
     PostgresMapsLayoutStore,
 )
@@ -90,7 +88,9 @@ async def _scoped_store(
     )
     from naas_abi.apps.nexus.apps.api.app.services.registry import ServiceRegistry
 
-    graph = await workspace_graph_service(ServiceRegistry.instance().graph, user_id, workspace_id)
+    graph = await workspace_graph_service(
+        ServiceRegistry.instance().graph, user_id, workspace_id, feature=None
+    )
     assert graph.access_scope is not None
     scope = _layout_scope(graph.access_scope, graphs)
     return GraphQueryTripleStoreAdapter(WorkspaceGraphStore(graph._get_catalog_store(), scope))
@@ -125,32 +125,33 @@ def _layout(layout_id: str, body: LayoutIn) -> MapsLayout:
     )
 
 
-@router.get("")
+@router.get("", dependencies=[guard("ListLayouts", literal="-")])
 async def list_layouts(
     response: Response,
     workspace_id: str = Query(..., min_length=1),
     current_user=Depends(get_current_user_required),
     service: MapsLayoutService = Depends(get_maps_layout_service),
 ) -> dict[str, Any]:
-    await require_workspace_access(current_user.id, workspace_id)
     response.headers["Cache-Control"] = "no-store"
     listed = await service.list(workspace_id)
-    role = await get_workspace_role(current_user.id, workspace_id)
+    can_edit = await authz.allowed(
+        "UpdateLayout", user=current_user, workspace=workspace_id, id="-"
+    )
     return {
         "layouts": [layout.to_dict() for layout in listed.layouts],
         "hidden": sorted(listed.hidden),
-        "can_edit": role in ("owner", "admin"),
+        "can_edit": can_edit,
     }
 
 
-@router.post("/preview")
+@router.post("/preview", dependencies=[declares("PreviewLayout"), declares("triple_store:Query")])
 async def preview_layout(
     body: PreviewIn,
     current_user=Depends(get_current_user_required),
     service: MapsLayoutService = Depends(get_maps_layout_service),
 ) -> dict[str, Any]:
     """Run an unsaved layout: its validation errors, or its pin count and first pins."""
-    await require_workspace_admin(current_user.id, body.workspace_id)
+    await authz.require("PreviewLayout", user=current_user, workspace=body.workspace_id, id="-")
     layout = _layout("preview", body)
     errors = service.validate(layout)
     if errors:
@@ -163,7 +164,10 @@ async def preview_layout(
     return {"errors": [], "count": payload["count"], "pins": payload["pins"][:PREVIEW_PINS]}
 
 
-@router.get("/{layout_id}/feed")
+@router.get(
+    "/{layout_id}/feed",
+    dependencies=[guard("GetLayout", id="layout_id"), declares("triple_store:Query")],
+)
 async def layout_feed(
     layout_id: str,
     response: Response,
@@ -171,7 +175,6 @@ async def layout_feed(
     current_user=Depends(get_current_user_required),
     service: MapsLayoutService = Depends(get_maps_layout_service),
 ) -> dict[str, Any]:
-    await require_workspace_access(current_user.id, workspace_id)
     response.headers["Cache-Control"] = "no-store"
     try:
         layout = await service.get(workspace_id, layout_id)
@@ -181,7 +184,10 @@ async def layout_feed(
         raise _http_error(exc) from exc
 
 
-@router.put("/{layout_id}/visibility")
+@router.put(
+    "/{layout_id}/visibility",
+    dependencies=[guard("SetLayoutVisibility", id="layout_id")],
+)
 async def set_layout_visibility(
     layout_id: str,
     body: VisibilityIn,
@@ -190,7 +196,6 @@ async def set_layout_visibility(
     service: MapsLayoutService = Depends(get_maps_layout_service),
 ) -> dict[str, Any]:
     """Hide or show any layout (built-in or custom) in this workspace."""
-    await require_workspace_admin(current_user.id, workspace_id)
     try:
         hidden = await service.set_hidden(
             workspace_id, layout_id, body.hidden, user_id=current_user.id
@@ -200,7 +205,7 @@ async def set_layout_visibility(
     return {"hidden": sorted(hidden)}
 
 
-@router.put("/{layout_id}")
+@router.put("/{layout_id}", dependencies=[guard("UpdateLayout", id="layout_id")])
 async def save_layout(
     layout_id: str,
     body: LayoutIn,
@@ -209,7 +214,6 @@ async def save_layout(
     current_user=Depends(get_current_user_required),
     service: MapsLayoutService = Depends(get_maps_layout_service),
 ) -> dict[str, Any]:
-    await require_workspace_admin(current_user.id, workspace_id)
     try:
         saved = await service.save(
             workspace_id,
@@ -222,14 +226,13 @@ async def save_layout(
     return saved.to_dict()
 
 
-@router.delete("/{layout_id}")
+@router.delete("/{layout_id}", dependencies=[guard("DeleteLayout", id="layout_id")])
 async def delete_layout(
     layout_id: str,
     workspace_id: str = Query(..., min_length=1),
     current_user=Depends(get_current_user_required),
     service: MapsLayoutService = Depends(get_maps_layout_service),
 ) -> dict[str, str]:
-    await require_workspace_admin(current_user.id, workspace_id)
     try:
         await service.delete(workspace_id, layout_id)
     except Exception as exc:

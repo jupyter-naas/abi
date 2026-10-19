@@ -1,4 +1,5 @@
 """Workspace-shared presentation icons, independent of OWL declarations."""
+
 from __future__ import annotations
 
 import re
@@ -6,7 +7,6 @@ from typing import Protocol
 from urllib.parse import urlparse
 
 KINDS = frozenset({"entity", "relationship", "attribute", "annotation", "individual", "file"})
-EDIT_ROLES = frozenset({"owner", "admin", "member"})
 ICON_NAME = re.compile(r"material-symbols-light:[a-z0-9]+(?:-[a-z0-9]+)*")
 MAX_ICON_VALUE = 2048
 
@@ -30,8 +30,12 @@ class OntologyIconsPort(Protocol):
     async def list_icons(self, workspace_id: str) -> list[dict]: ...
 
     async def save_icon(
-        self, workspace_id: str, kind: str, resource_id: str,
-        icon: str | None, user_id: str,
+        self,
+        workspace_id: str,
+        kind: str,
+        resource_id: str,
+        icon: str | None,
+        user_id: str,
     ) -> None: ...
 
 
@@ -39,20 +43,29 @@ class OntologyIconsService:
     def __init__(self, repository: OntologyIconsPort):
         self.repository = repository
 
-    async def list_icons(self, workspace_id: str, allowed: set[tuple[str, str]] | None) -> list[dict]:
+    async def list_icons(
+        self, workspace_id: str, allowed: set[tuple[str, str]] | None
+    ) -> list[dict]:
         items = await self.repository.list_icons(workspace_id)
         if allowed is None:
             return items
-        return [item for item in items
-                if (item["kind"], item["resource_id"]) in allowed
-                or (item["kind"] != "file" and valid_resource_iri(item["resource_id"]))]
+        return [
+            item
+            for item in items
+            if (item["kind"], item["resource_id"]) in allowed
+            or (item["kind"] != "file" and valid_resource_iri(item["resource_id"]))
+        ]
 
     async def save_icon(
-        self, workspace_id: str, role: str, user_id: str,
-        allowed: set[tuple[str, str]], kind: str, resource_id: str, icon: str | None,
+        self,
+        workspace_id: str,
+        user_id: str,
+        allowed: set[tuple[str, str]],
+        kind: str,
+        resource_id: str,
+        icon: str | None,
     ) -> None:
-        if role not in EDIT_ROLES:
-            raise PermissionError("Only workspace members can change object icons.")
+        """Save one object's icon; the caller was authorized for ``UpdateIcons``."""
         catalogued = kind in KINDS and (kind, resource_id) in allowed
         iri_keyed = kind in KINDS and kind != "file" and valid_resource_iri(resource_id)
         if not catalogued and not iri_keyed:

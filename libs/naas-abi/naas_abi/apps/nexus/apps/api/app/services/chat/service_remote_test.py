@@ -24,9 +24,7 @@ def test_remote_agent_resolves_to_the_remote_provider() -> None:
     service.get_agent = AsyncMock(return_value=agent)  # type: ignore[method-assign]
 
     resolved = asyncio.run(
-        service.resolve_provider(
-            context=None, provider=None, has_images=False, agent_id="a-9", workspace_id="ws"
-        )
+        service.resolve_provider(provider=None, has_images=False, agent_id="a-9", workspace_id="ws")
     )
 
     assert resolved is not None
@@ -66,7 +64,7 @@ def test_a_client_cannot_pick_a_remote_agent_through_the_provider_payload() -> N
     )
 
     resolved = asyncio.run(
-        service.resolve_provider(context=None, provider=forged, has_images=False, agent_id=None)
+        service.resolve_provider(provider=forged, has_images=False, agent_id=None)
     )
 
     assert resolved is None or resolved.type != "remote"

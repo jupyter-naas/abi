@@ -8,6 +8,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
     CurrentPasswordInvalidError,
     EmailAlreadyRegisteredError,
     EmailAlreadyTakenError,
+    EmailChangeNotAllowedError,
     ExpiredResetTokenError,
     InvalidCredentialsError,
     InvalidResetTokenError,
@@ -38,7 +39,6 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphProtectedError,
     GraphServiceUnavailableError,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMPermissionError
 from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import (
     OntologyFileNotFoundError,
     OntologyParseError,
@@ -103,7 +103,6 @@ EXCEPTION_TO_HTTP: dict[type[Exception], tuple[int, DetailResolver]] = {
     OntologyServiceUnavailableError: (500, _default_detail),
     OntologyParseError: (500, lambda _: "Failed to parse ontology file"),
     OntologyFileNotFoundError: (404, lambda _: "Ontology file does not exist"),
-    IAMPermissionError: (403, _default_detail),
     # The engine's IAM said no to what a request asked of it (a key's own limit
     # included): a refusal of the caller, not a failure of the server.
     IAMDeniedError: (403, lambda _exc: "This credential is not allowed to do that"),
@@ -111,6 +110,7 @@ EXCEPTION_TO_HTTP: dict[type[Exception], tuple[int, DetailResolver]] = {
     SecretNotFoundError: (404, lambda _exc: "Secret not found"),
     EmailAlreadyRegisteredError: (400, lambda _exc: "Email already registered"),
     EmailAlreadyTakenError: (400, lambda _exc: "Email already taken"),
+    EmailChangeNotAllowedError: (400, lambda _exc: "The email cannot be changed here"),
     UserNotFoundError: (404, lambda _exc: "User not found"),
     InvalidCredentialsError: (401, lambda _exc: "Invalid email or password"),
     CurrentPasswordInvalidError: (401, lambda _exc: "Current password is incorrect"),

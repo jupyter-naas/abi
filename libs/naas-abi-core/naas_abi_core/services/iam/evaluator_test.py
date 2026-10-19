@@ -538,6 +538,44 @@ def test_workspace_roles_keep_the_platform_companion_in_step(h):
     assert companions() == set()
 
 
+IDP_ADMIN_APP = "abi:-:-:discovery:app/idp/idp/admin"
+OTHER_APP = "abi:-:-:discovery:app/sales/crm/web"
+
+
+@pytest.fixture
+def platform(iam):
+    """The kernel services' catalogs, which the platform policies are built from."""
+    from naas_abi_core.services.iam.kernel_catalogs import kernel_catalogs
+
+    for catalog in kernel_catalogs():
+        iam._register_catalog(catalog)
+    return iam
+
+
+@pytest.mark.parametrize("role", ["builtin.viewer", "builtin.member"])
+def test_a_workspace_role_never_opens_the_idp_admin_app(h, platform, role):
+    """Whoever a workspace admin gives a role to (a module's service account
+    included) reaches the platform's apps, never the IdP's admin one: it edits
+    who a ``sub`` is, and so who becomes the platform admin."""
+    account = h.service_account("module/sales/crm")
+    human = h.user()
+    for principal in (account, human):
+        h.attach(role, principal.id, "abi:org-1:ws-1")
+        assert h.allowed("discovery:OpenApp", OTHER_APP, principal)
+        assert not h.allowed("discovery:OpenApp", IDP_ADMIN_APP, principal)
+
+
+def test_a_module_account_never_opens_the_idp_admin_app_on_its_own(h, platform):
+    for module in ("sales/crm", "evil/idp"):
+        account = h.service_account(f"module/{module}")
+        assert not h.allowed("discovery:OpenApp", IDP_ADMIN_APP, account)
+        assert not h.allowed("discovery:OpenApp", "abi:-:-:discovery:app/evil/idp/admin", account)
+
+
+def test_the_engine_still_opens_the_idp_admin_app(h, platform):
+    assert h.allowed("discovery:OpenApp", IDP_ADMIN_APP, actor="engine")
+
+
 def test_every_user_holds_self(h):
     bob = h.user()
     assert h.allowed("iam:GetPrincipal", f"abi:-:-:iam:principal/{bob.id}", bob)
@@ -550,16 +588,20 @@ def test_every_user_holds_self(h):
 # -- transitional bootstrap ---------------------------------------------------------------------------------------
 
 
-def test_engine_and_api_hold_a_transitional_broad_policy(h):
-    for actor in ("engine", "api"):
+def test_engine_and_api_hold_enumerated_statements_not_a_wildcard(h):
+    for actor, sid in (("engine", "EngineTripleStore"), ("api", "ForUsersTripleStore")):
         with h.as_(actor=actor):
             explanation = h.iam.authorizer.explain(
                 h.context(actor=actor), "triple_store:DropGraph", graph("a")
             )
         assert explanation.allowed
         assert explanation.statement is not None
-        assert explanation.statement.sid == "TransitionalBroadAccess"
+        assert explanation.statement.sid == sid
         assert explanation.statement.policy_id == f"builtin.{actor}"
+    # What neither names, neither reaches: Nexus's own catalog is not the engine's.
+    assert not h.allowed("nexus:GetWorkspace", "abi:o:w:nexus:workspace/-", actor="engine")
+    assert h.allowed("nexus:GetWorkspace", "abi:o:w:nexus:workspace/-", actor="api")
+    assert not h.allowed("iam:DeletePrincipal", "abi:-:-:iam:principal/x", actor="api")
 
 
 def test_idp_holds_only_its_own_namespace_secrets_and_sender(h):
@@ -610,15 +652,17 @@ def test_a_module_account_reaches_its_own_registration_and_manifest_only(h):
     assert not h.allowed("discovery:Register", own, ci)
 
 
-def test_a_nexus_user_never_runs_unchecked_dataset_sql(h):
-    """Nexus calls as api on behalf of its user: the user's transitional
-    grant allows every dataset, not SQL the query check cannot vouch for."""
+def test_nexus_never_runs_unchecked_dataset_sql_for_anyone(h):
+    """Nexus calls as api on behalf of its user: even a platform admin's ``*``
+    does not allow SQL the query check cannot vouch for."""
     from naas_abi_core.engine.call_context import CallContext, service_account, user
+    from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
 
+    record = h.admin("ensure_user", LEGACY_NEXUS_ISSUER, "nexus-user-1")
+    h.attach("builtin.platform_admin", record.id)
     catalog = "abi:-:-:dataset:catalog/-"
     nexus_call = CallContext(
-        principal=service_account("api"),
-        on_behalf_of=user("nexus-user-1"),  # a Nexus id: the transitional grant
+        principal=service_account("api"), on_behalf_of=user("nexus-user-1")
     )
     with use_call_context(nexus_call):
         assert h.iam.authorize("dataset:Query", "abi:-:-:dataset:dataset/a/b").allowed
@@ -829,3 +873,23 @@ def test_a_platform_admin_attaches_and_detaches_unscoped(h):
         assert h.allowed("iam:CreatePolicy", "abi:-:-:iam:policy/p", bob)
         assert h.iam.detach_policy("builtin.platform_admin", bob.id) is True
     assert not h.allowed("iam:CreatePolicy", "abi:-:-:iam:policy/p", bob)
+
+
+def test_acting_for_a_user_never_opens_a_sealed_resource(h):
+    from naas_abi_core.engine.call_context import CallContext, service_account, user
+
+    secret = "abi:-:-:secret:secret/iam%2Fsigning-keys%2Fk"
+    seals = h.iam.seals()
+    assert any(s.owner == "engine" and matches_seal(s.pattern, secret) for s in seals)
+    assert h.allowed("secret:Get", secret, actor="engine")
+    on_behalf = CallContext(principal=service_account("engine"), on_behalf_of=user("u-1"))
+    with use_call_context(on_behalf):
+        decision = h.iam.authorize("secret:Get", secret)
+    assert not decision.allowed
+    assert decision.reason == "sealed"
+
+
+def matches_seal(pattern: str, resource: str) -> bool:
+    from naas_abi_core.services.iam.names import matches
+
+    return matches(pattern, resource)

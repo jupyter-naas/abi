@@ -19,6 +19,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.port import (
     AuthUserRecord,
     MagicLinkTokenRecord,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS, Memberships
 from naas_abi.apps.nexus.apps.api.app.services.refresh_token import (
     create_refresh_token,
     hash_otp_code,
@@ -29,6 +30,7 @@ from naas_abi.apps.nexus.apps.api.app.services.refresh_token import (
     revoke_refresh_token,
     validate_refresh_token,
 )
+from naas_abi_core import logger
 
 
 @dataclass
@@ -57,6 +59,16 @@ class EmailAlreadyRegisteredError(ValueError):
 class EmailAlreadyTakenError(ValueError):
     def __str__(self) -> str:
         return "email_already_taken"
+
+
+@dataclass
+class EmailChangeNotAllowedError(ValueError):
+    """A profile edit asked for another email: an address nobody proved is how
+    an invitation meant for someone else (invites find the account by email)
+    would land on this one."""
+
+    def __str__(self) -> str:
+        return "email_change_not_allowed"
 
 
 @dataclass
@@ -223,8 +235,25 @@ def now_utc_naive() -> datetime:
 
 
 class AuthService:
-    def __init__(self, adapter: AuthPersistencePort):
+    def __init__(self, adapter: AuthPersistencePort, memberships: Memberships = MEMBERSHIPS):
         self.adapter = adapter
+        self.memberships = memberships
+
+    async def open_personal_workspace(self, user_id: str) -> None:
+        """Tell IAM about the workspace a public signup got (its id is the user's)
+        and make the user its owner: memberships live only in IAM, so without this
+        the user could not open their own workspace, nor use its drives. A failure forgets the scope
+        and raises: the request's session rolls the signup's rows back."""
+        try:
+            scope = await self.memberships.register_workspace(None, user_id)
+            await self.memberships.grant(user_id, "owner", scope)
+            await self.adapter.place_workspace(user_id)
+        except Exception:
+            try:
+                await self.memberships.drop_scope(None, user_id)
+            except Exception:  # noqa: BLE001 - the original failure is what is raised
+                logger.exception(f"Could not forget the scope of workspace {user_id}")
+            raise
 
     async def register_user(
         self,
@@ -252,6 +281,7 @@ class AuthService:
             hashed_password=get_password_hash(password),
             now=now_utc_naive(),
         )
+        await self.open_personal_workspace(user_id)
         await self.adapter.commit()
 
         access_token, jti = create_access_token(data={"sub": user_id})
@@ -347,16 +377,17 @@ class AuthService:
         role: str | None,
         bio: str | None,
     ) -> AuthUserRecord:
-        normalized_email = email.lower() if email is not None else None
         current = await self.adapter.get_user_by_id(user_id)
-        if current is not None and current.external:
-            # Its identity provider states its email: never changed here.
-            normalized_email = None
-        if normalized_email and await self.adapter.user_exists_with_email(
-            normalized_email,
-            exclude_user_id=user_id,
-        ):
-            raise EmailAlreadyTakenError()
+        if current is None:
+            raise UserNotFoundError(user_id=user_id)
+        # The email is how invitations and sign-in links find an account, and a
+        # profile edit proves nothing about an address: it is never changed here
+        # (a provider's user's is its provider's, the built-in login's is changed by
+        # an administrator). Sending the current one back is not a change.
+        if email is not None and email.strip().lower() != current.email.lower():
+            if not current.external:
+                raise EmailChangeNotAllowedError()
+        normalized_email = None
 
         updated_user = await self.adapter.update_user_profile(
             user_id=user_id,
@@ -577,6 +608,7 @@ class AuthService:
                     hashed_password=get_password_hash(secrets.token_urlsafe(32)),
                     now=now_utc_naive(),
                 )
+                await self.open_personal_workspace(user.id)
             else:
                 return None
         if user.external:

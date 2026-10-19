@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, Query
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
     get_current_user_required,
     require_superadmin,
+    with_platform_role,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__schemas import (
     User,
@@ -62,7 +63,7 @@ async def admin_me(
     """Lightweight check the frontend can call to decide whether to show
     platform-admin surfaces (event stream, etc.). Does not 403 — returns
     a boolean so non-admin clients can simply hide the UI."""
-    return AdminMeResponse(is_superadmin=bool(current_user.is_superadmin))
+    return AdminMeResponse(is_superadmin=(await with_platform_role(current_user)).is_superadmin)
 
 
 class ConfiguredService(BaseModel):

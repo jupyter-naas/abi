@@ -21,7 +21,8 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
     get_auth_service,
     get_current_user_required,
     oauth2_scheme,
-    to_user_schema,
+    to_signed_in_user,
+    with_platform_role,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__schemas import (
     AuthResponse,
@@ -44,7 +45,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
     CurrentPasswordInvalidError,
     DefaultPasswordNotAllowedError,
     EmailAlreadyRegisteredError,
-    EmailAlreadyTakenError,
+    EmailChangeNotAllowedError,
     ExpiredMagicLinkError,
     ExpiredOtpError,
     ExpiredResetTokenError,
@@ -189,7 +190,7 @@ async def register(
 
     await log_register(user.id, request)
     return AuthResponse(
-        user=to_user_schema(user),
+        user=await to_signed_in_user(user),
         access_token=tokens.access_token,
         refresh_token=tokens.refresh_token,
         expires_in=tokens.expires_in,
@@ -232,7 +233,7 @@ async def login(
 
     await log_login(user.id, success=True, request=request)
     return AuthResponse(
-        user=to_user_schema(user),
+        user=await to_signed_in_user(user),
         access_token=tokens.access_token,
         refresh_token=tokens.refresh_token,
         expires_in=tokens.expires_in,
@@ -270,7 +271,7 @@ async def login_for_access_token(
 
 @router.get("/me", response_model=User)
 async def get_me(current_user: User = Depends(get_current_user_required)) -> User:
-    return current_user
+    return await with_platform_role(current_user)
 
 
 @router.patch("/me", response_model=User)
@@ -288,11 +289,11 @@ async def update_me(
             role=updates.role,
             bio=updates.bio,
         )
-    except EmailAlreadyTakenError as exc:
-        raise HTTPException(status_code=400, detail="Email already taken") from exc
+    except EmailChangeNotAllowedError as exc:
+        raise HTTPException(status_code=400, detail="The email cannot be changed here") from exc
     except UserNotFoundError as exc:
         raise HTTPException(status_code=404, detail="User not found") from exc
-    return to_user_schema(user)
+    return await to_signed_in_user(user)
 
 
 @router.post("/logout")
@@ -479,7 +480,7 @@ async def verify_magic_link(
 
     await log_login(user.id, success=True, request=request, details={"method": "magic_link"})
     return AuthResponse(
-        user=to_user_schema(user),
+        user=await to_signed_in_user(user),
         access_token=tokens.access_token,
         refresh_token=tokens.refresh_token,
         expires_in=tokens.expires_in,
@@ -516,7 +517,7 @@ async def verify_otp(
 
     await log_login(user.id, success=True, request=request, details={"method": "email_otp"})
     return AuthResponse(
-        user=to_user_schema(user),
+        user=await to_signed_in_user(user),
         access_token=tokens.access_token,
         refresh_token=tokens.refresh_token,
         expires_in=tokens.expires_in,

@@ -158,3 +158,36 @@ def test_a_cached_delegation_is_dropped_when_the_users_tokens_are_revoked(iam):
     assert iam.verifier().verify(second).subject == bob.id
     with pytest.raises(Exception, match="revoked"):
         iam.verifier().verify(first)
+
+
+def test_a_job_calls_over_nats_with_its_own_accounts_token():
+    from types import SimpleNamespace
+
+    from naas_abi_core.engine.call_context import as_service_account
+    from naas_abi_core.engine.nats_credentials import JobAccountSource
+
+    class Source:
+        def __init__(self, name):
+            self.identity = name
+
+        def token(self):
+            return f"token:{self.identity}"
+
+        def token_for(self, user, recipient=None, scope=None):
+            return f"delegation:{self.identity}:{user.id}"
+
+    accounts = {}
+
+    def for_account(name):
+        accounts.setdefault(name, Source(name))
+        return accounts[name]
+
+    source = JobAccountSource(Source("engine"), for_account)
+    assert source.identity == "engine"
+    assert source.token() == "token:engine"
+    with as_service_account("job/acme.jobs"):
+        assert source.token() == "token:job/acme.jobs"
+        # A call made for a user is the engine's delegation, whoever asks.
+        assert source.token_for(SimpleNamespace(id="u1")) == "delegation:engine:u1"
+    with as_service_account("module/default/people"):
+        assert source.token() == "token:engine"

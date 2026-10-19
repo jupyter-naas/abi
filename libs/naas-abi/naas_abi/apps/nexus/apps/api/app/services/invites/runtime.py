@@ -12,6 +12,9 @@ from fastapi import Depends
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
+from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_scope
 from naas_abi.apps.nexus.apps.api.app.services.invites.adapters.secondary.engine import (
     EngineDirectoryGateway,
     EngineGrantsGateway,
@@ -65,7 +68,14 @@ class InvitationRuntime:
                 return
             if token.email.lower() != user.email.lower():
                 return
-            await service.claim(user_id=user.id, email=user.email, provider=token.provider)
+            accepted = await service.claim(
+                user_id=user.id, email=user.email, provider=token.provider
+            )
+            # What derives from who belongs to a workspace (shared graphs) follows.
+            for invitation in accepted:
+                if invitation.workspace_id:
+                    org = await AUTHZ.org_of(invitation.workspace_id)
+                    await MEMBERSHIPS.changed(workspace_scope(org, invitation.workspace_id))
 
         return claim
 

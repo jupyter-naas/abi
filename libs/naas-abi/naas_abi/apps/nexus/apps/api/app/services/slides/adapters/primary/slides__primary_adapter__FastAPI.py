@@ -33,7 +33,6 @@ from fastapi.responses import Response
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
-    require_workspace_access,
 )
 from naas_abi.apps.nexus.apps.api.app.core.config import (
     ABI_SLIDES_TEMPLATE_NAMESPACE,
@@ -44,6 +43,12 @@ from naas_abi.apps.nexus.apps.api.app.models import CodingEnvironmentModel
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment import agent_credentials
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment.repo_access import (
     ensure_shared_repo,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares
+from naas_abi.apps.nexus.apps.api.app.services.iam.office_guards import (
+    project_guard,
+    readable_projects,
 )
 from naas_abi_core.services.coding_environment.adapters.secondary.CoderAdapter import (
     _sanitize_coder_username,
@@ -81,6 +86,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
+
+# The kind of project this router serves: the feature and the id prefix IAM decides on.
+_KIND = "slides"
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 # A template id is ``<namespace>/<stem>``, or a bare stem from before the
@@ -1360,13 +1368,16 @@ def _project_from_meta(
     )
 
 
-@router.get("/projects", response_model=list[ProjectResponse])
+@router.get(
+    "/projects",
+    response_model=list[ProjectResponse],
+    dependencies=[project_guard("ListProjects", _KIND, id=(), literal="-")],
+)
 async def list_projects(
     workspace_id: str,
     request: Request,
     current_user: User = Depends(get_current_user_required),
 ) -> list[ProjectResponse]:
-    await require_workspace_access(current_user.id, workspace_id)
     sc, repo_id = _slides_sc(request)
     ws_seg = _workspace_segment(workspace_id)
     ns_prefix = f"{_BRANCH_PREFIX}{ws_seg}/"
@@ -1417,19 +1428,32 @@ async def list_projects(
         return out
 
     try:
-        return await run_in_threadpool(_list)
+        projects = await run_in_threadpool(_list)
     except SourceControlError as exc:
         raise _source_control_http_error(exc) from exc
+    return await readable_projects(
+        projects, kind=_KIND, workspace_id=workspace_id, user=current_user
+    )
 
 
-@router.post("/projects", response_model=ProjectResponse)
+@router.post(
+    "/projects",
+    response_model=ProjectResponse,
+    dependencies=[declares("CreateProject")],
+)
 async def create_project(
     body: ProjectCreateRequest,
     request: Request,
     current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> ProjectResponse:
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require(
+        "CreateProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, "-"),
+        feature=_KIND,
+    )
     slug = body.slug or _slugify(body.title)
     if not _SLUG_RE.match(slug):
         raise HTTPException(
@@ -1555,14 +1579,16 @@ async def create_project(
     return project
 
 
-@router.get("/projects/{slug}", response_model=ProjectResponse)
+@router.get(
+    "/projects/{slug}",
+    response_model=ProjectResponse,
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def get_project(
     slug: str,
     workspace_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
 ) -> ProjectResponse:
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _slides_sc(request)
@@ -1598,7 +1624,11 @@ async def get_project(
         raise _source_control_http_error(exc) from exc
 
 
-@router.patch("/projects/{slug}", response_model=ProjectResponse)
+@router.patch(
+    "/projects/{slug}",
+    response_model=ProjectResponse,
+    dependencies=[declares("UpdateProject")],
+)
 async def update_project(
     slug: str,
     body: ProjectUpdateRequest,
@@ -1606,7 +1636,13 @@ async def update_project(
     current_user: User = Depends(get_current_user_required),
 ) -> ProjectResponse:
     """Rename (title) and/or archive a deck. Slug and git folder stay put."""
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require(
+        "UpdateProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     if body.title is None and body.archived is None:
@@ -1670,7 +1706,11 @@ async def update_project(
         raise _source_control_http_error(exc) from exc
 
 
-@router.get("/projects/{slug}/deck", response_model=DeckResponse)
+@router.get(
+    "/projects/{slug}/deck",
+    response_model=DeckResponse,
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def get_deck(
     slug: str,
     workspace_id: str,
@@ -1683,7 +1723,6 @@ async def get_deck(
     Prefer the Coder sidecar (live editing SoT) when the slides runtime is
     bound and healthy. Fall back to Forgejo (version snapshot) otherwise.
     """
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _slides_sc(request)
@@ -1751,16 +1790,17 @@ async def get_deck(
         raise _source_control_http_error(exc) from exc
 
 
-@router.get("/projects/{slug}/assets/{filename}")
+@router.get(
+    "/projects/{slug}/assets/{filename}",
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def get_project_asset(
     slug: str,
     filename: str,
     workspace_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
 ) -> Response:
     """Serve a file from the deck ``assets/`` folder (preview / export)."""
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     if not _ASSET_FILENAME_RE.match(filename) or ".." in filename:
@@ -1792,7 +1832,11 @@ async def get_project_asset(
         raise _source_control_http_error(exc) from exc
 
 
-@router.put("/projects/{slug}/deck", response_model=DeckResponse)
+@router.put(
+    "/projects/{slug}/deck",
+    response_model=DeckResponse,
+    dependencies=[declares("SaveProject")],
+)
 async def put_deck(
     slug: str,
     body: DeckUpdateRequest,
@@ -1801,7 +1845,13 @@ async def put_deck(
     db: AsyncSession = Depends(get_db),
 ) -> DeckResponse:
     """Save deck: commit Forgejo snapshot and dual-write Coder sidecar when ready."""
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require(
+        "SaveProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _slides_sc(request)
@@ -1961,7 +2011,11 @@ def _save_live_deck_html(
     return commit.sha or None, "sidecar" if sidecar_ok else "forgejo"
 
 
-@router.post("/projects/{slug}/apply-template", response_model=DeckResponse)
+@router.post(
+    "/projects/{slug}/apply-template",
+    response_model=DeckResponse,
+    dependencies=[declares("ApplyProjectTemplate")],
+)
 async def apply_template(
     slug: str,
     body: ApplyTemplateRequest,
@@ -1970,13 +2024,19 @@ async def apply_template(
     db: AsyncSession = Depends(get_db),
 ) -> DeckResponse:
     """Rewrite the open deck from a seed template (HTML source of truth)."""
+    await authz.require(
+        "ApplyProjectTemplate",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     if body.template_id not in _known_template_ids():
         raise HTTPException(
             status_code=422,
             detail=f"Unknown template_id '{body.template_id}'.",
         )
     seed, catalog_assets = _load_seed_bundle(body.template_id)
-    await require_workspace_access(current_user.id, body.workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _slides_sc(request)
@@ -2051,15 +2111,17 @@ async def apply_template(
         raise _source_control_http_error(exc) from exc
 
 
-@router.get("/projects/{slug}/history", response_model=list[CommitResponse])
+@router.get(
+    "/projects/{slug}/history",
+    response_model=list[CommitResponse],
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def list_history(
     slug: str,
     workspace_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
     limit: int = 20,
 ) -> list[CommitResponse]:
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _slides_sc(request)
@@ -2096,13 +2158,16 @@ async def list_history(
         raise _source_control_http_error(exc) from exc
 
 
-@router.get("/projects/{slug}/history/diff", response_model=DeckDiffResponse)
+@router.get(
+    "/projects/{slug}/history/diff",
+    response_model=DeckDiffResponse,
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def get_history_diff(
     slug: str,
     workspace_id: str,
     base: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
     head: str | None = None,
 ) -> DeckDiffResponse:
     """Files changed between two commits on the deck branch, for the Files panel.
@@ -2111,7 +2176,6 @@ async def get_history_diff(
     e.g. the branch head when the chat session opened this deck). ``head``
     defaults to the current branch tip.
     """
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _slides_sc(request)
@@ -2130,6 +2194,9 @@ async def get_history_diff(
             resolved_head = commits[0].sha
         if resolved_head == base:
             return DeckDiffResponse(base=base, head=resolved_head, files=[])
+        # base and head come from the client and may be any commit of the shared
+        # repository: only this project's own files are reported.
+        project_dir = paths["project_path"].rsplit("/", 1)[0] + "/"
         diff = sc.get_diff(repo_id=repo_id, base=base, head=resolved_head)
         return DeckDiffResponse(
             base=base,
@@ -2143,6 +2210,7 @@ async def get_history_diff(
                     old_path=f.old_path,
                 )
                 for f in diff.files
+                if f.path.startswith(project_dir) or (f.old_path or "").startswith(project_dir)
             ],
         )
 
@@ -2154,15 +2222,17 @@ async def get_history_diff(
         raise _source_control_http_error(exc) from exc
 
 
-@router.get("/projects/{slug}/version", response_model=DeckVersionResponse)
+@router.get(
+    "/projects/{slug}/version",
+    response_model=DeckVersionResponse,
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def get_deck_version(
     slug: str,
     workspace_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
 ) -> DeckVersionResponse:
     """0.x semver derived from Conventional Commits history; see `_semver_from_commits`."""
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _slides_sc(request)
@@ -2689,7 +2759,11 @@ async def _ensure_runtime_impl(
     )
 
 
-@router.post("/projects/{slug}/runtime", response_model=RuntimeResponse)
+@router.post(
+    "/projects/{slug}/runtime",
+    response_model=RuntimeResponse,
+    dependencies=[project_guard("EnsureProjectRuntime", _KIND)],
+)
 async def ensure_runtime(
     slug: str,
     workspace_id: str,
@@ -2697,7 +2771,6 @@ async def ensure_runtime(
     current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> RuntimeResponse:
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     return await _ensure_runtime_impl(
@@ -2709,15 +2782,17 @@ async def ensure_runtime(
     )
 
 
-@router.get("/projects/{slug}/tree", response_model=ProjectTreeResponse)
+@router.get(
+    "/projects/{slug}/tree",
+    response_model=ProjectTreeResponse,
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def get_project_tree(
     slug: str,
     workspace_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
 ) -> ProjectTreeResponse:
     """List the presentation folder (deck.html, assets/, …) for the sidebar tree."""
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _slides_sc(request)
@@ -2883,13 +2958,15 @@ class SeedTemplateResponse(BaseModel):
     assets: list[TemplateAssetItem] = Field(default_factory=list)
 
 
-@router.get("/templates", response_model=list[SeedTemplateResponse])
+@router.get(
+    "/templates",
+    response_model=list[SeedTemplateResponse],
+    dependencies=[project_guard("ListProjectTemplates", _KIND, id=(), literal="-")],
+)
 async def list_seed_templates(
     workspace_id: str,
-    current_user: User = Depends(get_current_user_required),
 ) -> list[SeedTemplateResponse]:
     """List seed templates with slide outlines for the Slides sidebar."""
-    await require_workspace_access(current_user.id, workspace_id)
     return [SeedTemplateResponse(**row) for row in _list_seed_template_records()]
 
 
@@ -3007,7 +3084,11 @@ async def _run_slide_html_mutation(
         raise _source_control_http_error(exc) from exc
 
 
-@router.get("/projects/{slug}/slides", response_model=SlidesListResponse)
+@router.get(
+    "/projects/{slug}/slides",
+    response_model=SlidesListResponse,
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def list_slides(
     slug: str,
     workspace_id: str,
@@ -3016,7 +3097,6 @@ async def list_slides(
     db: AsyncSession = Depends(get_db),
 ) -> SlidesListResponse:
     """Outline of ``<section>`` slides. No HTML body."""
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _slides_sc(request)
@@ -3059,7 +3139,11 @@ async def list_slides(
         raise _source_control_http_error(exc) from exc
 
 
-@router.post("/projects/{slug}/slides/insert", response_model=SlideMutationResponse)
+@router.post(
+    "/projects/{slug}/slides/insert",
+    response_model=SlideMutationResponse,
+    dependencies=[declares("EditProject")],
+)
 async def insert_slide(
     slug: str,
     body: SlideInsertRequest,
@@ -3070,7 +3154,13 @@ async def insert_slide(
     """Insert a slide after ``after_index`` (-1 appends). Same mutation as the agent tool."""
     from naas_abi.tools.slides_tools import _insert_slide_html
 
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require(
+        "EditProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     return await _run_slide_html_mutation(
         slug=slug,
         workspace_id=body.workspace_id,
@@ -3087,7 +3177,11 @@ async def insert_slide(
     )
 
 
-@router.post("/projects/{slug}/slides/delete", response_model=SlideMutationResponse)
+@router.post(
+    "/projects/{slug}/slides/delete",
+    response_model=SlideMutationResponse,
+    dependencies=[declares("EditProject")],
+)
 async def delete_slide(
     slug: str,
     body: SlideIndexRequest,
@@ -3098,7 +3192,13 @@ async def delete_slide(
     """Delete the slide at index. Refuses the last slide."""
     from naas_abi.tools.slides_tools import _delete_slide_html
 
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require(
+        "EditProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     return await _run_slide_html_mutation(
         slug=slug,
         workspace_id=body.workspace_id,
@@ -3110,7 +3210,11 @@ async def delete_slide(
     )
 
 
-@router.post("/projects/{slug}/slides/duplicate", response_model=SlideMutationResponse)
+@router.post(
+    "/projects/{slug}/slides/duplicate",
+    response_model=SlideMutationResponse,
+    dependencies=[declares("EditProject")],
+)
 async def duplicate_slide(
     slug: str,
     body: SlideIndexRequest,
@@ -3121,7 +3225,13 @@ async def duplicate_slide(
     """Duplicate the slide at index and insert the copy after it."""
     from naas_abi.tools.slides_tools import _duplicate_slide_html
 
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require(
+        "EditProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     return await _run_slide_html_mutation(
         slug=slug,
         workspace_id=body.workspace_id,
@@ -3133,7 +3243,11 @@ async def duplicate_slide(
     )
 
 
-@router.post("/projects/{slug}/slides/reorder", response_model=SlideMutationResponse)
+@router.post(
+    "/projects/{slug}/slides/reorder",
+    response_model=SlideMutationResponse,
+    dependencies=[declares("EditProject")],
+)
 async def reorder_slides(
     slug: str,
     body: SlideReorderRequest,
@@ -3144,7 +3258,13 @@ async def reorder_slides(
     """Move one slide (from_index/to_index) or apply a full ``order`` permutation."""
     from naas_abi.tools.slides_tools import _reorder_slides_html
 
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require(
+        "EditProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     return await _run_slide_html_mutation(
         slug=slug,
         workspace_id=body.workspace_id,

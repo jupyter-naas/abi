@@ -20,9 +20,13 @@ PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
 
 
 class _FakeWorkspaces:
-    def __init__(self) -> None:
+    def __init__(self, role: str = "member") -> None:
         self.updates: list[str | None] = []
         self.url: str | None = None
+        self.role = role
+
+    async def get_workspace_role(self, user_id, workspace_id):
+        return self.role
 
     async def get_workspace(self, workspace_id):
         return WorkspaceRecord(
@@ -51,27 +55,24 @@ class _FakeWorkspaces:
 
 
 @pytest.fixture
-def client_for(tmp_path, monkeypatch):
+def client_for(tmp_path, monkeypatch, team):
     files = FilesService(
         storage=ObjectStorageService(
             adapter=ObjectStorageSecondaryAdapterFS(base_path=str(tmp_path))
         )
     )
-    workspaces = _FakeWorkspaces()
-
     def make(role: str) -> tuple[TestClient, _FakeWorkspaces]:
-        async def access(user_id, workspace_id):
-            return role
+        # The user holds ``role`` in ws-1 through IAM (the ``team`` fixture).
+        workspaces = _FakeWorkspaces(role)
 
         async def no_override(org_id, org_service):
             return None
 
-        monkeypatch.setattr(ws_api, "require_workspace_access", access)
         monkeypatch.setattr(ws_api, "_load_org_role_override", no_override)
         app = FastAPI()
         app.include_router(ws_api.router, prefix="/api/workspaces")
         app.dependency_overrides[ws_api.get_current_user_required] = lambda: SimpleNamespace(
-            id="user-1"
+            id=role
         )
         app.dependency_overrides[ws_api.get_files_service] = lambda: files
         app.dependency_overrides[ws_api.get_workspace_service] = lambda: workspaces

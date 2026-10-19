@@ -15,12 +15,21 @@ def build_chat_collection_name(thread_id: str) -> str:
     return f"chat_{thread_id}"
 
 
+def embedding_cache_prefix(workspace_id: str) -> str:
+    return f"embeddings:{workspace_id}:"
+
+
 def build_embedding_cache_key(
+    workspace_id: str,
     file_sha256: str,
     embedding_model: str,
     embedding_dimension: int,
 ) -> str:
-    return f"embeddings:{file_sha256}:{embedding_model}:{embedding_dimension}"
+    """Per workspace: a cache entry holds a file's text and is placed in its workspace."""
+    return (
+        f"{embedding_cache_prefix(workspace_id)}"
+        f"{file_sha256}:{embedding_model}:{embedding_dimension}"
+    )
 
 
 def chunk_markdown(
@@ -113,9 +122,13 @@ def _build_openai_embedder(embedding_model: str, embedding_dimension: int):
             pass
 
     from naas_abi import ABIModule  # avoid a top-level cycle
+    from naas_abi_core.engine.call_context import as_service_account
 
+    # The platform's key, used for the embeddings of a user who was authorized to
+    # add the file: read as ourselves, never as the user.
     secret_service = ABIModule.get_instance().engine.services.secret
-    api_key = secret_service.get("OPENAI_API_KEY")
+    with as_service_account("api"):
+        api_key = secret_service.get("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError(
             f"Cannot build an embedder for {embedding_model!r}: not registered "

@@ -30,26 +30,22 @@ class ComposerEndpointTest(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         self.store = fixtures()
-        self.service = ServiceIsolationTest.service_class(
-            lambda: self.store, access_scope=scope()
-        )
+        self.service = ServiceIsolationTest.service_class(lambda: self.store, access_scope=scope())
         app = FastAPI()
         app.include_router(self.api.router, prefix="/api/graph")
-        app.dependency_overrides[self.api.get_current_user_required] = lambda: (
-            SimpleNamespace(id="user")
+        app.dependency_overrides[self.api.get_current_user_required] = lambda: SimpleNamespace(
+            id="user"
         )
         app.dependency_overrides[self.api.get_graph_service] = lambda: self.service
         self.guard = patch.object(
-            self.api, "workspace_graph_service", AsyncMock(return_value=self.service)
+            self.api, "graph_section_service", AsyncMock(return_value=self.service)
         )
         self.cache = patch.object(self.api, "_resolve_query_cache", return_value=None)
         self.guard.start()
         self.cache.start()
         self.addCleanup(self.guard.stop)
         self.addCleanup(self.cache.stop)
-        self.client = AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://synthetic"
-        )
+        self.client = AsyncClient(transport=ASGITransport(app=app), base_url="http://synthetic")
 
     async def asyncTearDown(self):
         await self.client.aclose()
@@ -76,11 +72,7 @@ class ComposerEndpointTest(unittest.IsolatedAsyncioTestCase):
     async def test_selected_class_discovers_columns_and_loads_its_instances(self):
         response = await self.columns()
         self.assertEqual(response.status_code, 200, response.text)
-        label = next(
-            c
-            for c in response.json()["columns"]
-            if c["predicate_uri"] == str(RDFS.label)
-        )
+        label = next(c for c in response.json()["columns"] if c["predicate_uri"] == str(RDFS.label))
         response = await self.client.post(
             "/api/graph/query",
             json={
@@ -107,9 +99,7 @@ class ComposerEndpointTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("Secret person", response.text)
 
     async def test_property_free_instances_are_still_rows(self):
-        self.store.insert(
-            Graph().add((URIRef("urn:Unlabelled"), RDF.type, PERSON)), URIRef(ALPHA)
-        )
+        self.store.insert(Graph().add((URIRef("urn:Unlabelled"), RDF.type, PERSON)), URIRef(ALPHA))
         response = await self.client.post(
             "/api/graph/query",
             json={

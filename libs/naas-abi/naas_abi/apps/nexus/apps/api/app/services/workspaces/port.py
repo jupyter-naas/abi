@@ -82,6 +82,7 @@ class WorkspaceMemberRecord:
 class UserRecord:
     id: str
     email: str
+    name: str | None = None
 
 
 @dataclass
@@ -126,12 +127,15 @@ class InferenceServerUpdateInput:
 
 
 class WorkspacePermissionPort(ABC):
+    """The workspaces Nexus keeps. Who belongs to them and with which role is
+    IAM's (``services/iam/memberships``), not this port's."""
+
     @abstractmethod
-    async def get_workspace_role(self, user_id: str, workspace_id: str) -> str | None:
+    async def list_all_workspaces(self) -> list[WorkspaceRecord]:
         raise NotImplementedError
 
     @abstractmethod
-    async def list_workspaces_for_user(self, user_id: str) -> list[WorkspaceRecord]:
+    async def get_users_by_ids(self, user_ids: list[str]) -> dict[str, UserRecord]:
         raise NotImplementedError
 
     @abstractmethod
@@ -165,31 +169,7 @@ class WorkspacePermissionPort(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def list_workspace_members(self, workspace_id: str) -> list[WorkspaceMemberRecord]:
-        raise NotImplementedError
-
-    @abstractmethod
     async def get_user_by_email(self, email: str) -> UserRecord | None:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def is_workspace_member(self, workspace_id: str, user_id: str) -> bool:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def add_workspace_member(
-        self, workspace_id: str, user_id: str, role: str
-    ) -> WorkspaceMemberRecord:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def remove_workspace_member(self, workspace_id: str, user_id: str) -> bool:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def update_workspace_member_role(
-        self, workspace_id: str, user_id: str, role: str
-    ) -> bool:
         raise NotImplementedError
 
     @abstractmethod

@@ -251,9 +251,9 @@ class ServiceGuard:
         org = workspace = NONE
         if target is not None:
             registered = iam.workspace_org(target)
-            # TRANSITIONAL (#65 registers Nexus's orgs and workspaces with
-            # iam:PutScope): a target workspace IAM has no scope for places the
-            # new resource on the platform, where no workspace role reaches it.
+            # A target workspace IAM has no scope for (Nexus registers its orgs
+            # and workspaces with iam:PutScope) places the new resource on the
+            # platform, where no workspace role reaches it.
             if registered is not None:
                 org, workspace = registered, target
         name = resource_name(

@@ -114,6 +114,7 @@ from naas_abi_core.services.iam.tokens import TokenIssuer, normalize_scope
 LEGACY_NEXUS_ISSUER = "urn:abi:nexus"
 
 _PRINCIPAL_ID = re.compile(r"^(usr|grp|sa)_[0-9a-z]{26}$")
+_FEATURE_NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _T = TypeVar("_T")
 
 AuthorizerFactory = Callable[[PolicySource], IAuthorizer]
@@ -284,6 +285,8 @@ class IAMService(IIAMService, PolicySource):
         self._subjects = _TTLCache(cache_ttl_seconds, cache_size)
         self._policies = _TTLCache(cache_ttl_seconds, cache_size)
         self._placements = _TTLCache(cache_ttl_seconds, 2)
+        self._feature_ids = _TTLCache(cache_ttl_seconds, 2)
+        self._platform_grants: tuple[roles.PlatformGrant, ...] = ()
         self._floors = _TTLCache(cache_ttl_seconds, 1)
         self._pending_index: tuple[int, frozenset[tuple[str, str]]] | None = None
         self._listeners: list[Callable[[int], None]] = []
@@ -431,11 +434,6 @@ class IAMService(IIAMService, PolicySource):
         if principal.kind == "user":
             # builtin.self is held by every user, implicitly.
             statements += self._statements_of(roles.SELF, None, None, fresh=fresh)
-            if _named_by_nexus(principal, record):
-                # TRANSITIONAL (#65): a Nexus user, until its roles are attachments.
-                statements += self._statements_of(
-                    roles.TRANSITIONAL_NEXUS_USER, None, None, fresh=fresh
-                )
         # ${module.*} name the module of a module's account; for any other
         # principal they match nothing.
         variables = modules.variables(record.name if record is not None else None)
@@ -623,7 +621,10 @@ class IAMService(IIAMService, PolicySource):
         return deleted
 
     def workspace_org(self, workspace: str) -> str | None:
-        """The org a workspace was registered in (``iam:PutScope``)."""
+        """The org a workspace was registered in (``iam:PutScope``). ``-`` and ``*``
+        are not workspaces (an org's own scope is ``(org, -)``): they have no org."""
+        if workspace in ("", "-", "*"):
+            return None
         return next(
             (s.org for s in self.store.list_scopes() if s.workspace == workspace), None
         )
@@ -1086,6 +1087,7 @@ class IAMService(IIAMService, PolicySource):
         )
         if policy_id in roles.ROLES:
             self._sync_platform_roles(principal_id)
+            self._sync_feature_policies(principal_id)
         self._changed()
         return attachment
 
@@ -1114,6 +1116,7 @@ class IAMService(IIAMService, PolicySource):
         if detached:
             if policy_id in roles.ROLES:
                 self._sync_platform_roles(principal_id)
+                self._sync_feature_policies(principal_id)
             self._changed()
         return detached
 
@@ -1176,6 +1179,89 @@ class IAMService(IIAMService, PolicySource):
                 self.store.attach(Attachment(new_id("att"), companion, principal_id))
             elif companion != wanted and present:
                 self.store.detach(companion, principal_id, None)
+
+    # =========================================================================
+    # Feature policies (RFC §7 "Features"): UseFeature comes only from them.
+    # =========================================================================
+
+    def put_feature_policies(self, grants: Mapping[str, Sequence[str]]) -> None:
+        """Replace the feature policies: ``{key: [feature, ...]}``.
+
+        A key is ``<role>`` (the deployment's grant), ``<org>.<role>`` (an org's
+        overlay) or ``<org>.<workspace>.<role>`` (a workspace's override). Each
+        becomes the managed policy ``builtin.features.<key>``, and a role
+        attached at a workspace scope brings the most specific one that
+        exists, attached at the same scope. The set is replaced as a whole:
+        keys not named are removed with their attachments. Needs
+        ``iam:RegisterCatalog`` on ``nexus``, as the catalog that names the
+        features does.
+        """
+        self.require("iam:RegisterCatalog", catalog_resource("nexus"))
+        wanted: dict[str, Policy] = {}
+        for key, features in grants.items():
+            roles.parse_feature_key(key)
+            for feature in features:
+                if not _FEATURE_NAME.match(feature):
+                    raise ValueError(f"Invalid feature {feature!r}")
+            wanted[roles.feature_policy_id(key)] = roles.feature_policy(key, features)
+        existing = {p.id for p in self._all_policies() if _is_feature_policy(p.id)}
+        for policy in wanted.values():
+            self.store.put_managed_policy(policy)
+        for stale in existing - wanted.keys():
+            for attachment in self.store.list_attachments(policy_id=stale):
+                self.store.detach(stale, attachment.principal_id, attachment.scope)
+            self.store.delete_policy(stale)
+        holders = {
+            a.principal_id
+            for role in roles.ROLES
+            for a in self.store.list_attachments(policy_id=role)
+        }
+        for principal_id in sorted(holders):
+            self._sync_feature_policies(principal_id, available=set(wanted))
+        self._changed()
+
+    def feature_policy_keys(self) -> list[str]:
+        """The keys of the feature policies in force (public metadata)."""
+        return sorted(
+            p.id.removeprefix(roles.FEATURES_PREFIX)
+            for p in self._all_policies()
+            if _is_feature_policy(p.id)
+        )
+
+    def _feature_policy_ids(self) -> set[str]:
+        return self._feature_ids.get(
+            "ids",
+            lambda: {p.id for p in self._all_policies() if _is_feature_policy(p.id)},
+        )
+
+    def _sync_feature_policies(
+        self, principal_id: str, *, available: set[str] | None = None
+    ) -> None:
+        """Hold, at each workspace scope a role is attached at, the most
+        specific feature policy that exists for that role and scope."""
+        known = available if available is not None else self._feature_policy_ids()
+        attachments = self.store.list_attachments(principal_id=principal_id)
+        wanted: set[tuple[str, str]] = set()
+        for attachment in attachments:
+            if attachment.policy_id not in roles.ROLES or attachment.scope is None:
+                continue
+            org, workspace = scope_fields(attachment.scope)
+            if org == NONE or workspace == NONE:
+                continue  # org-level roles have no features: they are a workspace's
+            policy_id = roles.feature_policy_for(
+                attachment.policy_id, org, workspace, known
+            )
+            if policy_id is not None:
+                wanted.add((policy_id, attachment.scope))
+        present = {
+            (a.policy_id, a.scope)
+            for a in attachments
+            if _is_feature_policy(a.policy_id) and a.scope is not None
+        }
+        for policy_id, scope in sorted(wanted - present):
+            self.store.attach(Attachment(new_id("att"), policy_id, principal_id, scope))
+        for policy_id, scope in sorted(present - wanted):
+            self.store.detach(policy_id, principal_id, scope)
 
     # =========================================================================
     # Invitations and IdP group bindings (RFC §12.2)
@@ -1368,6 +1454,7 @@ class IAMService(IIAMService, PolicySource):
         for group_id in self._binding_groups(provider, claim_value):
             if self.store.detach(policy_id, group_id, scope):
                 self._sync_platform_roles(group_id)
+                self._sync_feature_policies(group_id)
                 removed = True
         if removed:
             self._changed()
@@ -1421,9 +1508,10 @@ class IAMService(IIAMService, PolicySource):
                 for attachment in self.store.list_attachments(
                     principal_id=group.id, policy_id=policy_id
                 ):
-                    if attachment.scope is None and attachment.policy_id in (
-                        roles.PLATFORM_MEMBER,
-                        roles.PLATFORM_VIEWER,
+                    if _is_feature_policy(attachment.policy_id) or (
+                        attachment.scope is None
+                        and attachment.policy_id
+                        in (roles.PLATFORM_MEMBER, roles.PLATFORM_VIEWER)
                     ):
                         continue  # IAM's companions of the roles, not bindings
                     found += [
@@ -2233,11 +2321,13 @@ class IAMService(IIAMService, PolicySource):
 
         This is the root of trust, so it runs unchecked: IAM's catalog, the
         managed policies, the built-in service accounts (``engine``, ``api``,
-        ``idp``) and their policies. ``builtin.engine`` and ``builtin.api`` are
-        TRANSITIONAL broad policies until subtask 11 (#65) enumerates them.
+        ``idp``) and their policies (``builtin.engine`` and ``builtin.api`` are
+        enumerated statements), and it retires the managed policies an older
+        version stored.
         """
         self._register_catalog(CATALOG)
         self._refresh_builtin_policies()
+        self._retire_policies()
         for name, policy_id in roles.SERVICE_ACCOUNTS.items():
             record = self.store.find_service_account(name)
             if record is None:
@@ -2248,8 +2338,28 @@ class IAMService(IIAMService, PolicySource):
                 self.store.attach(Attachment(new_id("att"), policy_id, record.id))
         self._changed()
 
+    def _retire_policies(self) -> None:
+        for policy_id in roles.RETIRED_POLICIES:
+            try:
+                self.store.get_policy(policy_id)
+            except IAMNotFoundError:
+                continue
+            for attachment in self.store.list_attachments(policy_id=policy_id):
+                self.store.detach(policy_id, attachment.principal_id, attachment.scope)
+            self.store.delete_policy(policy_id)
+
+    def set_platform_grants(self, grants: Sequence[roles.PlatformGrant]) -> None:
+        """The deployment's own platform-level resources every workspace member
+        reaches by role level (``roles.PlatformGrant``: Nexus's shared repository).
+        Replaces the previous set; kept in memory and applied again whenever the
+        managed policies are regenerated. Needs ``iam:RegisterCatalog`` on ``nexus``."""
+        self.require("iam:RegisterCatalog", catalog_resource("nexus"))
+        self._platform_grants = tuple(grants)
+        self._refresh_builtin_policies()
+        self._changed()
+
     def _refresh_builtin_policies(self) -> None:
-        for policy in roles.builtin_policies(self._registry):
+        for policy in roles.builtin_policies(self._registry, self._platform_grants):
             self.store.put_managed_policy(policy)
 
     # =========================================================================
@@ -2269,6 +2379,7 @@ class IAMService(IIAMService, PolicySource):
         self._subjects.clear()
         self._policies.clear()
         self._placements.clear()
+        self._feature_ids.clear()
         self._floors.clear()
 
     def refresh_if_changed(self) -> bool:
@@ -2330,6 +2441,10 @@ class IAMService(IIAMService, PolicySource):
 
     def close(self) -> None:
         self.store.close()
+
+
+def _is_feature_policy(policy_id: str) -> bool:
+    return policy_id.startswith(roles.FEATURES_PREFIX)
 
 
 # Keys a principal may hold at once, per bucket: a service account's keys, a

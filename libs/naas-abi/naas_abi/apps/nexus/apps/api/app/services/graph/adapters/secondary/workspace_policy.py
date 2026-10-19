@@ -1,22 +1,29 @@
-"""Resolve workspace configuration and persisted ownership for each request."""
+"""A workspace's view of the knowledge graphs, for each request.
+
+Graph rights are IAM's (``graph_grants``, ``graph_placements``). This module
+resolves which graphs a workspace offers its members: its own (IAM placed them
+in it), the ones its saved assignments share with it, and, when it reads the
+whole catalog, every graph of the catalog; each narrowed to what the kernel
+lets the signed-in user read and write.
+"""
 
 from __future__ import annotations
 
 import asyncio
 from typing import Any
 
-from naas_abi.apps.nexus.apps.api.app.services.graph.access import (
-    OWNER_PREDICATE,
-    GraphAccessScope,
+from naas_abi.apps.nexus.apps.api.app.services.graph.access import GraphAccessScope
+from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary import graph_iam
+from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.nexus_catalog import (
+    NexusCatalogStore,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphAccessError,
 )
-from naas_abi.apps.nexus.apps.api.app.services.graph.query.sparql_safe import (
-    sparql_string_literal,
-)
+from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 from naas_abi.apps.nexus.graph_policy_config import (
     NEXUS_GRAPH,
+    SCHEMA_GRAPH,
     WorkspaceGraphPolicyConfig,
 )
 from naas_abi.ontologies.modules.NexusPlatformOntology import KnowledgeGraph
@@ -44,21 +51,13 @@ def config_for_workspace(
     )
 
 
-def owned_graphs(store: Any, workspace_id: str) -> set[str]:
-    # Ownership is server-written metadata, not inferred from a graph label,
-    # namespace, ontology visibility, or its creator's other memberships.
-    query = f"""
-        SELECT DISTINCT ?g WHERE {{ GRAPH <{NEXUS_GRAPH}> {{
-            ?g <{OWNER_PREDICATE}> {sparql_string_literal(workspace_id)} .
-        }} }}
-    """
-    return {str(row.g) for row in store.query(query)}
-
-
 def catalog_graphs(store: Any) -> set[str]:
-    """Include stored graphs and registered empty graphs; exclude application metadata."""
-    graphs = {str(uri) for uri in store.list_graphs()}
-    for row in store.query(
+    """Include stored graphs and registered empty graphs; exclude application metadata.
+
+    Read as Nexus: it is the whole catalog, whoever asks for it."""
+    catalog = NexusCatalogStore(store)
+    graphs = {str(uri) for uri in catalog.list_graphs()}
+    for row in catalog.query(
         f"SELECT DISTINCT ?g WHERE {{ GRAPH <{NEXUS_GRAPH}> {{ "
         f"?g a <{KnowledgeGraph._class_uri}> . FILTER(isIRI(?g)) }} }}"
     ):
@@ -66,11 +65,33 @@ def catalog_graphs(store: Any) -> set[str]:
     return graphs - {NEXUS_GRAPH}
 
 
+def build_scope(
+    workspace_id: str,
+    config: WorkspaceGraphPolicyConfig,
+    *,
+    user: Any,
+    owned: set[str],
+    catalog: set[str],
+    org: str | None,
+) -> GraphAccessScope:
+    """The workspace's view for ``user``: what it offers, narrowed to what IAM
+    lets the user read, and to write."""
+    owned = owned if config.include_owned else set()
+    offered = (catalog if config.read_all else set()) | set(config.read) | set(config.write) | owned
+    offered -= {NEXUS_GRAPH}
+    readable = graph_iam.allowed("Query", offered, user=user)
+    # The schema graph is read-only whatever IAM would say; sharing never writes it.
+    writing = ((set(config.write) | owned) - {NEXUS_GRAPH, SCHEMA_GRAPH}) & readable
+    writable = graph_iam.allowed("Insert", writing, user=user)
+    can_create = org is not None and graph_iam.may_create(workspace_id, org, user=user)
+    return GraphAccessScope(workspace_id, frozenset(readable), frozenset(writable), can_create)
+
+
 async def load_workspace_scope(
     db: AsyncSession,
     store: Any,
     workspace_id: str,
-    role: str,
+    user: Any,
 ) -> GraphAccessScope:
     from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.resource_access_postgres import (
         load_resource_policy,
@@ -78,15 +99,14 @@ async def load_workspace_scope(
 
     saved = await load_resource_policy(db, workspace_id, "graphs")
     config = WorkspaceGraphPolicyConfig.model_validate(saved.data)
-    owned = (
-        await asyncio.to_thread(owned_graphs, store, workspace_id)
-        if config.include_owned
-        else set()
-    )
-    catalog = (
-        await asyncio.to_thread(catalog_graphs, store) if config.read_all else set()
-    )
-    return GraphAccessScope.resolve(workspace_id, config, owned, role, catalog=catalog)
+    org = await AUTHZ.org_of(workspace_id)
+
+    def resolve() -> GraphAccessScope:
+        owned = graph_iam.owned_by(workspace_id)
+        catalog = catalog_graphs(store) if config.read_all else set()
+        return build_scope(workspace_id, config, user=user, owned=owned, catalog=catalog, org=org)
+
+    return await asyncio.to_thread(resolve)
 
 
 def catalog_inventory(
@@ -97,10 +117,8 @@ def catalog_inventory(
     """Metadata only; caller must be a platform administrator, not a workspace member."""
     graphs = catalog_graphs(store)
     owners: dict[str, list[str]] = {}
-    for row in store.query(
-        f"SELECT ?g ?ws WHERE {{ GRAPH <{NEXUS_GRAPH}> {{ ?g <{OWNER_PREDICATE}> ?ws }} }}"
-    ):
-        owners.setdefault(str(row.g), []).append(str(row.ws))
+    for uri, workspace in graph_iam.owners().items():
+        owners.setdefault(uri, []).append(workspace)
     grants: dict[str, list[dict[str, str]]] = {}
     if policies is None:
         policies = {
@@ -109,11 +127,7 @@ def catalog_inventory(
             for ws in getattr(org, "workspaces", None) or []
         }
     for workspace, policy in policies.items():
-        readable = (
-            (graphs if policy.read_all else set())
-            | set(policy.read)
-            | set(policy.write)
-        )
+        readable = (graphs if policy.read_all else set()) | set(policy.read) | set(policy.write)
         for uri in readable:
             grants.setdefault(uri, []).append(
                 {

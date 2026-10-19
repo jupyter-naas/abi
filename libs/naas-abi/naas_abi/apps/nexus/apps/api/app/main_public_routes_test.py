@@ -47,6 +47,17 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     },
     ("GET", "/app-remote/{grant}/{module_id}/{app}"): "capability URL (signed remote app grant)",
     ("HEAD", "/app-remote/{grant}/{module_id}/{app}"): "capability URL (signed remote app grant)",
+    **{
+        (method, path): "capability URL (signed app-html access token, checked by its middleware)"
+        for method in ("GET", "HEAD")
+        for path in (
+            "/app-html/remote/{module_id}/{app}/{path:path}",
+            "/app-html/remote/{module_id}/{app}",
+        )
+    },
+    ("GET", "/app-html/{path:path}"): (
+        "capability URL (signed app-html access token, checked by its middleware)"
+    ),
     ("GET", "/provider-logos/{provider_id}"): "static provider logos",
     **{
         (method, "/idp/{path:path}"): (

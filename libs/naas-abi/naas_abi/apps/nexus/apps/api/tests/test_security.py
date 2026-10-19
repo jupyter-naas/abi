@@ -7,8 +7,7 @@ Maps to: docs/TEST-PROTOCOL.md Section 5.
 """
 
 from jose import jwt
-
-from app.core.config import settings
+from naas_abi.apps.nexus.apps.api.app.core.config import settings
 
 
 class TestJWTSecurity:
@@ -230,9 +229,10 @@ class TestHealthEndpoints:
         assert response.status_code == 200
         assert response.json()["status"] == "healthy"
 
-    async def test_ollama_status_no_auth(self, client):
-        """Ollama status is accessible without authentication."""
-        response = await client.get("/api/ollama/status")
+    async def test_ollama_status_requires_auth(self, client, test_user):
+        """Ollama status is for signed-in users."""
+        assert (await client.get("/api/ollama/status")).status_code == 401
+        response = await client.get("/api/ollama/status", headers=test_user["headers"])
         assert response.status_code == 200
         data = response.json()
         assert "installed" in data

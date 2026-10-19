@@ -31,12 +31,18 @@ def _baseline() -> dict[str, list[str]]:
     }
 
 
+@pytest.fixture(autouse=True)
+def _team(team, monkeypatch):
+    """The user is the team member of that role (IAM decides); the feature policies
+    are recomputed from the database in production, a no-op here."""
+    monkeypatch.setattr(org_api, "refresh_feature_policies", AsyncMock())
+    return team
+
+
 def _client(*, role: str, store: dict[str, OrganizationRoleFeaturesRecord]) -> TestClient:
     adapter = SimpleNamespace(
-        get_organization_role=AsyncMock(return_value=role),
-        get_organization_role_features=AsyncMock(
-            side_effect=lambda org_id: store.get(org_id)
-        ),
+        db=None,
+        get_organization_role_features=AsyncMock(side_effect=lambda org_id: store.get(org_id)),
         upsert_organization_role_features=AsyncMock(),
     )
 
@@ -62,7 +68,7 @@ def _client(*, role: str, store: dict[str, OrganizationRoleFeaturesRecord]) -> T
     app = FastAPI()
     app.include_router(org_api.router, prefix="/organizations")
     app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
-        id="user-1", email="admin@example.com", name="Admin"
+        id=role, email=f"{role}@example.com", name=role.title()
     )
     app.dependency_overrides[org_api.get_organization_service] = lambda: service
     return TestClient(app)
@@ -100,7 +106,7 @@ def test_put_role_features_persists_and_round_trips() -> None:
     body = put.json()
     assert body["persistence"] == "database"
     assert body["role_baseline"]["member"] == ["maps", "chat"]
-    assert body["updated_by"] == "user-1"
+    assert body["updated_by"] == "admin"
     assert "org-1" in store
     assert store["org-1"].role_baseline["viewer"] == ["maps"]
 

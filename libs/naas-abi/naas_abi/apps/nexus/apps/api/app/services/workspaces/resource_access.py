@@ -51,12 +51,8 @@ class ResourceAccessService:
     def __init__(self, repository: ResourcePolicyPort):
         self.repository = repository
 
-    async def load(
-        self, workspace_id: str, kind: ResourceKind, seed: dict
-    ) -> ResourcePolicy:
-        return await self.repository.get_or_seed(
-            workspace_id, kind, validate_policy(kind, seed)
-        )
+    async def load(self, workspace_id: str, kind: ResourceKind, seed: dict) -> ResourcePolicy:
+        return await self.repository.get_or_seed(workspace_id, kind, validate_policy(kind, seed))
 
     async def save(
         self,
@@ -65,10 +61,8 @@ class ResourceAccessService:
         data: dict,
         revision: int,
         user_id: str,
-        role: str,
     ) -> ResourcePolicy:
-        if role not in {"owner", "admin"}:
-            raise PermissionError("Workspace admin role required")
+        """Save an edit; the caller was authorized for ``UpdateResourceAccess``."""
         return await self.repository.save(
             workspace_id, kind, validate_policy(kind, data), revision, user_id
         )

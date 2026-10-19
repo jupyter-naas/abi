@@ -27,6 +27,11 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
 )
 from naas_abi.apps.nexus.apps.api.app.services.chat.service import render_user_context_block
+from naas_abi.apps.nexus.apps.api.app.services.iam.any_workspace import (
+    allowed_in_any_workspace,
+    require_in_any_workspace,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares
 from naas_abi_core.services.agent.context import (
     coder_workspace_base,
     coder_workspace_secret,
@@ -269,7 +274,13 @@ async def _workspace_target(request: Request) -> tuple[str | None, str | None]:
     return await _sidecar_of(credential.user_id, credential.resource)
 
 
-@router.get("/models")
+@router.get(
+    "/models",
+    dependencies=[
+        declares("UseAgent"),
+        allowed_in_any_workspace("UseAgent", id="-", feature="chat"),
+    ],
+)
 async def list_models(
     current_user: User = Depends(get_current_user_required),
 ) -> dict:
@@ -284,12 +295,25 @@ async def list_models(
     }
 
 
-@router.post("/chat/completions", response_model=None)
+@router.post(
+    "/chat/completions",
+    response_model=None,
+    dependencies=[declares("UseAgent")],
+)
 async def chat_completions(
     body: ChatCompletionRequest,
     request: Request,
     current_user: User = Depends(get_current_user_required),
 ) -> StreamingResponse | dict:
+    # The agent is the ``model`` of the body, so the check waits for it; a client
+    # that names a workspace (``?workspace_id=``) is held to that one.
+    await require_in_any_workspace(
+        "UseAgent",
+        user=current_user,
+        workspace=request.query_params.get("workspace_id"),
+        id=body.model or "-",
+        feature="chat",
+    )
     completion_id = f"chatcmpl-{uuid.uuid4().hex}"
     # Stable per-conversation thread id (recovered from / embedded in the reply)
     # so follow-up turns keep the agent's checkpointer memory.

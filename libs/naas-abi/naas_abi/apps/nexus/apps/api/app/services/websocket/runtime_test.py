@@ -3,7 +3,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from fastapi import HTTPException
+from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 from naas_abi.apps.nexus.apps.api.app.services.websocket import runtime
 
 
@@ -18,64 +18,150 @@ class _SessionContext:
         return False
 
 
-@pytest.mark.asyncio
-async def test_join_workspace_denies_unauthorized_user(monkeypatch) -> None:
-    sessions = {"sid-1": {"user_id": "user-1", "workspaces": set()}}
+@pytest.fixture
+def socket(monkeypatch):
+    """A connected client per user: sessions by sid, rooms and emits recorded."""
+    sessions: dict[str, dict] = {}
     monkeypatch.setattr(runtime.sio, "session", lambda sid: _SessionContext(sessions[sid]))
     enter_room = Mock()
     emit = AsyncMock()
-    require_access = AsyncMock(side_effect=HTTPException(status_code=403, detail="denied"))
     monkeypatch.setattr(runtime.sio, "enter_room", enter_room)
     monkeypatch.setattr(runtime.sio, "emit", emit)
-    monkeypatch.setattr(runtime, "require_workspace_access", require_access)
-
-    result = await runtime.join_workspace("sid-1", {"workspace_id": "ws-1"})
-
-    assert result == {"error": "workspace access denied"}
-    assert sessions["sid-1"]["workspaces"] == set()
-    assert runtime.workspace_presence.get("ws-1") is None
-    enter_room.assert_not_called()
-    emit.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_join_workspace_allows_authorized_user(monkeypatch) -> None:
-    sessions = {"sid-1": {"user_id": "user-1", "workspaces": set()}}
-    monkeypatch.setattr(runtime.sio, "session", lambda sid: _SessionContext(sessions[sid]))
-    enter_room = Mock()
-    emit = AsyncMock()
-    require_access = AsyncMock(return_value="member")
-    monkeypatch.setattr(runtime.sio, "enter_room", enter_room)
-    monkeypatch.setattr(runtime.sio, "emit", emit)
-    monkeypatch.setattr(runtime, "require_workspace_access", require_access)
-
     runtime.workspace_presence.clear()
     runtime.user_workspaces.clear()
-    result = await runtime.join_workspace("sid-1", {"workspace_id": "ws-1"})
 
-    assert result["workspace_id"] == "ws-1"
-    assert "user-1" in result["users"]
-    assert sessions["sid-1"]["workspaces"] == {"ws-1"}
-    assert runtime.workspace_presence["ws-1"] == {"user-1"}
-    assert runtime.user_workspaces["user-1"] == {"ws-1"}
-    enter_room.assert_called_once_with("sid-1", "workspace:ws-1")
-    emit.assert_awaited_once()
+    def connect(user_id: str) -> str:
+        sid = f"sid-{user_id}"
+        sessions[sid] = {"user_id": user_id, "workspaces": set(), "broadcast": set()}
+        return sid
+
+    return type(
+        "Socket",
+        (),
+        {
+            "sessions": sessions,
+            "enter_room": enter_room,
+            "emit": emit,
+            "connect": staticmethod(connect),
+        },
+    )
 
 
 @pytest.mark.asyncio
-async def test_typing_start_rejects_unjoined_workspace(monkeypatch) -> None:
-    sessions = {"sid-1": {"user_id": "user-1", "workspaces": set()}}
-    monkeypatch.setattr(runtime.sio, "session", lambda sid: _SessionContext(sessions[sid]))
-    emit = AsyncMock()
-    monkeypatch.setattr(runtime.sio, "emit", emit)
+async def test_join_workspace_denies_a_stranger(team: NexusIam, socket) -> None:
+    sid = socket.connect("stranger")
+
+    result = await runtime.join_workspace(sid, {"workspace_id": "ws-1"})
+
+    assert result == {"error": "workspace access denied"}
+    assert socket.sessions[sid]["workspaces"] == set()
+    assert runtime.workspace_presence.get("ws-1") is None
+    socket.enter_room.assert_not_called()
+    socket.emit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("user", ["viewer", "member", "admin", "owner"])
+async def test_join_workspace_allows_every_role(team: NexusIam, socket, user: str) -> None:
+    sid = socket.connect(user)
+
+    result = await runtime.join_workspace(sid, {"workspace_id": "ws-1"})
+
+    assert result["workspace_id"] == "ws-1"
+    assert user in result["users"]
+    assert socket.sessions[sid]["workspaces"] == {"ws-1"}
+    assert runtime.workspace_presence["ws-1"] == {user}
+    assert runtime.user_workspaces[user] == {"ws-1"}
+    socket.enter_room.assert_called_once_with(sid, "workspace:ws-1")
+    socket.emit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_a_member_may_broadcast_in_a_joined_workspace(team: NexusIam, socket) -> None:
+    sid = socket.connect("member")
+    await runtime.join_workspace(sid, {"workspace_id": "ws-1"})
+    socket.emit.reset_mock()
+    data = {"workspace_id": "ws-1", "conversation_id": "conv-1", "message": "hi"}
+
+    assert await runtime.typing_start(sid, data) is None
+    assert await runtime.typing_stop(sid, data) is None
+    assert await runtime.message_created(sid, data) is None
+    assert await runtime.cursor_position(sid, {**data, "document_id": "d", "position": 3}) is None
+
+    assert socket.emit.await_count == 4
+
+
+@pytest.mark.asyncio
+async def test_a_viewer_follows_a_workspace_but_sends_nothing_into_it(
+    team: NexusIam, socket
+) -> None:
+    sid = socket.connect("viewer")
+    await runtime.join_workspace(sid, {"workspace_id": "ws-1"})
+    socket.emit.reset_mock()
+    data = {"workspace_id": "ws-1", "conversation_id": "conv-1", "message": "hi"}
+
+    results = [
+        await runtime.typing_start(sid, data),
+        await runtime.typing_stop(sid, data),
+        await runtime.message_created(sid, data),
+        await runtime.cursor_position(sid, {**data, "document_id": "d", "position": 3}),
+    ]
+
+    assert results == [{"error": "broadcast not allowed"}] * 4
+    socket.emit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_typing_start_rejects_unjoined_workspace(team: NexusIam, socket) -> None:
+    sid = socket.connect("member")
 
     result = await runtime.typing_start(
-        "sid-1",
+        sid,
         {"workspace_id": "ws-1", "conversation_id": "conv-1"},
     )
 
     assert result == {"error": "workspace not joined"}
-    emit.assert_not_awaited()
+    socket.emit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_leaving_a_workspace_drops_the_right_to_send_there(team: NexusIam, socket) -> None:
+    sid = socket.connect("member")
+    await runtime.join_workspace(sid, {"workspace_id": "ws-1"})
+
+    await runtime.leave_workspace(sid, {"workspace_id": "ws-1"})
+
+    assert socket.sessions[sid]["broadcast"] == set()
+
+
+@pytest.mark.asyncio
+async def test_the_admin_events_room_is_the_platform_administrators(team: NexusIam, socket) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.websocket.admin_events import (
+        ADMIN_EVENTS_ROOM,
+    )
+
+    team.platform_admin("root")
+    refused = {}
+    for user in ("owner", "admin", "viewer", "stranger"):
+        refused[user] = await runtime.join_admin_events(socket.connect(user))
+    socket.enter_room.assert_not_called()
+    assert all(r == {"error": "superadmin required"} for r in refused.values())
+
+    sid = socket.connect("root")
+    joined = await runtime.join_admin_events(sid)
+
+    assert joined == {"status": "joined", "room": ADMIN_EVENTS_ROOM}
+    socket.enter_room.assert_called_once_with(sid, ADMIN_EVENTS_ROOM)
+
+
+@pytest.mark.asyncio
+async def test_the_admin_events_room_follows_the_role_held_now(team: NexusIam, socket) -> None:
+    sid = socket.connect("member")
+    assert await runtime.join_admin_events(sid) == {"error": "superadmin required"}
+
+    team.platform_admin("member")
+
+    assert (await runtime.join_admin_events(sid))["status"] == "joined"
 
 
 @pytest.mark.asyncio

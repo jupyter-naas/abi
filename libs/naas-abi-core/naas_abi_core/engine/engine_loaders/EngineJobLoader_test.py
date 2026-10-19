@@ -279,3 +279,40 @@ def test_retention_defaults_keep_a_week_and_skipped_runs_an_hour():
 
     assert (retention.max_age.days, retention.max_runs_per_job) == (7, 1000)
     assert retention.skipped_max_age.total_seconds() == 3600
+
+
+def test_a_modules_jobs_run_as_their_own_account_not_the_engine() -> None:
+    from naas_abi_core.engine.call_context import current_call_context
+    from naas_abi_core.engine.engine_loaders.EngineJobLoader import (
+        as_async_handler,
+        as_engine,
+        job_identity,
+    )
+    from naas_abi_core.services.iam import roles
+    from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import (
+        IAMStoreMemory,
+    )
+    from naas_abi_core.services.iam.IAMService import IAMService
+
+    iam = IAMService(IAMStoreMemory())
+    iam.bootstrap()
+    identity = job_identity(iam, "acme.jobs")
+    assert identity == "job/acme.jobs"
+    assert job_identity(iam, "acme.jobs") == identity  # idempotent
+    account = iam.store.find_service_account(identity)
+    assert account is not None
+    assert [a.policy_id for a in iam.store.list_attachments(principal_id=account.id)] == [
+        roles.JOB
+    ]
+    # No IAM of this engine's own: the engine itself.
+    assert job_identity(None, "acme.jobs") == "engine"
+
+    seen: list[str] = []
+
+    async def job(ctx):
+        seen.append(current_call_context().principal.name)
+
+    import asyncio
+
+    asyncio.run(as_engine(as_async_handler(job), identity)(None))
+    assert seen == ["job/acme.jobs"]

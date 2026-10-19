@@ -189,3 +189,7 @@ class AuthPersistencePort(ABC):
     @abstractmethod
     async def commit(self) -> None:
         raise NotImplementedError
+
+    async def place_workspace(self, workspace_id: str) -> None:  # noqa: B027 - optional
+        """Place the kernel resources of a workspace that was just created in this
+        session (its drives, graphs, ...). Nothing to place without a store."""

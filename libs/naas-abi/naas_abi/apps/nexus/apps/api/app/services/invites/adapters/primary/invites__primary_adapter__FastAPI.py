@@ -31,6 +31,8 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
 )
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares
 from naas_abi.apps.nexus.apps.api.app.services.invites import runtime
 from naas_abi.apps.nexus.apps.api.app.services.invites.names import (
     org_scope,
@@ -54,10 +56,7 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.views import (
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
     OrganizationSecondaryAdapterPostgres,
 )
-from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
-    OrganizationPermissionError,
-    OrganizationService,
-)
+from naas_abi.apps.nexus.apps.api.app.services.organizations.service import OrganizationService
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.postgres import (
     WorkspaceSecondaryAdapterPostgres,
 )
@@ -68,9 +67,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 invitations_router = APIRouter()
 idp_groups_router = APIRouter()
-
-ADMIN_ROLES = ("owner", "admin")
-
 
 get_invitations = runtime.get_invitation_service
 
@@ -84,28 +80,49 @@ def workspaces(db: AsyncSession) -> WorkspaceService:
 
 
 async def require_org_admin(user: User, org_id: str, db: AsyncSession) -> None:
-    try:
-        role = await organizations(db).require_organization_access(user_id=user.id, org_id=org_id)
-    except OrganizationPermissionError as exc:
-        raise HTTPException(
-            status_code=403, detail="You do not have access to this organization"
-        ) from exc
-    if role not in ADMIN_ROLES:
-        raise HTTPException(status_code=403, detail="Only admins can manage invitations")
+    """IAM decides (``InviteOrganizationMember`` is an admin's): whoever may invite
+    to the organization may see, resend and withdraw its invitations and bind its groups."""
+    del db
+    await authz.require(
+        "InviteOrganizationMember",
+        user=user,
+        org=org_id,
+        id="-",
+        denied="Only admins can manage invitations",
+    )
 
 
 async def require_workspace_admin(user: User, workspace_id: str, db: AsyncSession) -> None:
-    role = await workspaces(db).get_workspace_role(user_id=user.id, workspace_id=workspace_id)
-    if role is None:
-        raise HTTPException(status_code=403, detail="You do not have access to this workspace")
-    if role not in ADMIN_ROLES:
-        raise HTTPException(status_code=403, detail="Only admins can manage invitations")
+    del db
+    await authz.require(
+        "InviteWorkspaceMember",
+        user=user,
+        workspace=workspace_id,
+        id="-",
+        denied="Only admins can manage invitations",
+    )
 
 
 async def require_invitation_admin(user: User, invitation: Invitation, db: AsyncSession) -> None:
-    """Whoever may invite where the invitation is may withdraw it."""
-    if invitation.workspace_id:
-        await require_workspace_admin(user, invitation.workspace_id, db)
+    """Whoever may invite where the invitation is may withdraw or resend it.
+
+    An invitation that carries an organization role is the organization's
+    administrators': withdrawing it drops that role's grant, which a workspace
+    administrator could not make. One that names only a workspace is that
+    workspace's administrators', and the organization's (who put people in any of
+    its workspaces).
+    """
+    if invitation.org_role:
+        if not invitation.organization_id:
+            raise HTTPException(status_code=403, detail="Only admins can manage invitations")
+        await require_org_admin(user, invitation.organization_id, db)
+    elif invitation.workspace_id:
+        try:
+            await require_workspace_admin(user, invitation.workspace_id, db)
+        except HTTPException:
+            if not invitation.organization_id:
+                raise
+            await require_org_admin(user, invitation.organization_id, db)
     elif invitation.organization_id:
         await require_org_admin(user, invitation.organization_id, db)
     else:
@@ -154,7 +171,9 @@ async def list_invite_providers(
     return await provider_views(invites)
 
 
-@invitations_router.get("/organizations/{org_id}")
+@invitations_router.get(
+    "/organizations/{org_id}", dependencies=[declares("InviteOrganizationMember")]
+)
 async def list_org_invitations(
     org_id: str,
     current_user: User = Depends(get_current_user_required),
@@ -166,7 +185,9 @@ async def list_org_invitations(
     return InvitationsView(invitations=[view(i) for i in found])
 
 
-@invitations_router.get("/workspaces/{workspace_id}")
+@invitations_router.get(
+    "/workspaces/{workspace_id}", dependencies=[declares("InviteWorkspaceMember")]
+)
 async def list_workspace_invitations(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
@@ -178,7 +199,10 @@ async def list_workspace_invitations(
     return InvitationsView(invitations=[view(i) for i in found])
 
 
-@invitations_router.post("/{invitation_id}/resend")
+@invitations_router.post(
+    "/{invitation_id}/resend",
+    dependencies=[declares("InviteOrganizationMember"), declares("InviteWorkspaceMember")],
+)
 async def resend_invitation(
     invitation_id: str,
     current_user: User = Depends(get_current_user_required),
@@ -200,7 +224,10 @@ async def resend_invitation(
     return {"status": "pending", "sign_in_email_sent": sent}
 
 
-@invitations_router.delete("/{invitation_id}")
+@invitations_router.delete(
+    "/{invitation_id}",
+    dependencies=[declares("InviteOrganizationMember"), declares("InviteWorkspaceMember")],
+)
 async def revoke_invitation(
     invitation_id: str,
     current_user: User = Depends(get_current_user_required),
@@ -289,7 +316,9 @@ async def _bind(
     )
 
 
-@idp_groups_router.get("/organizations/{org_id}")
+@idp_groups_router.get(
+    "/organizations/{org_id}", dependencies=[declares("InviteOrganizationMember")]
+)
 async def list_org_group_bindings(
     org_id: str,
     current_user: User = Depends(get_current_user_required),
@@ -300,7 +329,9 @@ async def list_org_group_bindings(
     return await _bindings(invites, org_scope(org_id), ORG_ROLES)
 
 
-@idp_groups_router.put("/organizations/{org_id}")
+@idp_groups_router.put(
+    "/organizations/{org_id}", dependencies=[declares("InviteOrganizationMember")]
+)
 async def bind_org_group(
     org_id: str,
     body: GroupBindingInput,
@@ -312,7 +343,9 @@ async def bind_org_group(
     return await _bind(invites, body, org_scope(org_id), ORG_ROLES)
 
 
-@idp_groups_router.delete("/organizations/{org_id}")
+@idp_groups_router.delete(
+    "/organizations/{org_id}", dependencies=[declares("InviteOrganizationMember")]
+)
 async def unbind_org_group(
     org_id: str,
     provider: str = Query(min_length=1, max_length=32),
@@ -341,7 +374,9 @@ async def _workspace_scope(workspace_id: str, db: AsyncSession) -> str:
     return workspace_scope(workspace.organization_id, workspace_id)
 
 
-@idp_groups_router.get("/workspaces/{workspace_id}")
+@idp_groups_router.get(
+    "/workspaces/{workspace_id}", dependencies=[declares("InviteWorkspaceMember")]
+)
 async def list_workspace_group_bindings(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
@@ -353,7 +388,9 @@ async def list_workspace_group_bindings(
     return await _bindings(invites, scope, WORKSPACE_ROLES)
 
 
-@idp_groups_router.put("/workspaces/{workspace_id}")
+@idp_groups_router.put(
+    "/workspaces/{workspace_id}", dependencies=[declares("InviteWorkspaceMember")]
+)
 async def bind_workspace_group(
     workspace_id: str,
     body: GroupBindingInput,
@@ -366,7 +403,9 @@ async def bind_workspace_group(
     return await _bind(invites, body, scope, WORKSPACE_ROLES)
 
 
-@idp_groups_router.delete("/workspaces/{workspace_id}")
+@idp_groups_router.delete(
+    "/workspaces/{workspace_id}", dependencies=[declares("InviteWorkspaceMember")]
+)
 async def unbind_workspace_group(
     workspace_id: str,
     provider: str = Query(min_length=1, max_length=32),

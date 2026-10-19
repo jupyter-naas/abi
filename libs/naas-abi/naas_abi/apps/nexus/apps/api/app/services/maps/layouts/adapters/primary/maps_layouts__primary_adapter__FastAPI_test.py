@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.port import Binding, IGraphQueryStore
+from naas_abi.apps.nexus.apps.api.app.services.graph.testing import acting_as_header, knowledge_team
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.adapters.primary import (
     maps_layouts__primary_adapter__FastAPI as api,
 )
@@ -38,33 +37,26 @@ class _Store(IGraphQueryStore):
 
 @pytest.fixture
 def client_for(monkeypatch):
+    """A client acting as the workspace's user of that role (``ws-1``)."""
     service = MapsLayoutService(InMemoryMapsLayoutStore())
     scoped_calls: list[tuple] = []
 
-    def make(role: str) -> TestClient:
-        async def access(user_id, workspace_id):
-            return role
+    async def scoped(user_id, workspace_id, graphs):
+        scoped_calls.append((workspace_id, tuple(graphs)))
+        return _Store()
 
-        async def admin(user_id, workspace_id):
-            if role not in ("owner", "admin"):
-                raise HTTPException(status_code=403, detail="admins only")
+    monkeypatch.setattr(api, "_scoped_store", scoped)
+    app = FastAPI()
+    app.include_router(api.router, prefix="/api/maps/layouts")
+    app.dependency_overrides[api.get_maps_layout_service] = lambda: service
+    acting_as_header(app)
 
-        async def scoped(user_id, workspace_id, graphs):
-            scoped_calls.append((workspace_id, tuple(graphs)))
-            return _Store()
-
-        monkeypatch.setattr(api, "require_workspace_access", access)
-        monkeypatch.setattr(api, "get_workspace_role", access)
-        monkeypatch.setattr(api, "require_workspace_admin", admin)
-        monkeypatch.setattr(api, "_scoped_store", scoped)
-        app = FastAPI()
-        app.include_router(api.router, prefix="/api/maps/layouts")
-        app.dependency_overrides[api.get_current_user_required] = lambda: SimpleNamespace(id="u-1")
-        app.dependency_overrides[api.get_maps_layout_service] = lambda: service
-        return TestClient(app)
+    def make(user: str) -> TestClient:
+        return TestClient(app, headers={"x-user": user})
 
     make.scoped_calls = scoped_calls  # type: ignore[attr-defined]
-    return make
+    with knowledge_team():
+        yield make
 
 
 def test_admin_creates_layout_and_member_reads_its_feed(client_for) -> None:
@@ -82,6 +74,34 @@ def test_admin_creates_layout_and_member_reads_its_feed(client_for) -> None:
     assert feed.json()["pins"][0]["entityUri"] == "http://ex/p"
     # The query is narrowed to the layout's graphs.
     assert client_for.scoped_calls[-1] == ("ws-1", ("http://g/a",))
+
+
+def test_viewers_read_the_feed_and_nothing_else(client_for) -> None:
+    client_for("admin").put("/api/maps/layouts/offices?workspace_id=ws-1", json=BODY)
+    viewer = client_for("viewer")
+    assert viewer.get("/api/maps/layouts?workspace_id=ws-1").json()["can_edit"] is False
+    assert viewer.get("/api/maps/layouts/offices/feed?workspace_id=ws-1").status_code == 200
+    assert viewer.put("/api/maps/layouts/o2?workspace_id=ws-1", json=BODY).status_code == 403
+    assert viewer.delete("/api/maps/layouts/offices?workspace_id=ws-1").status_code == 403
+
+
+def test_strangers_and_other_workspaces_get_nothing(client_for) -> None:
+    client_for("admin").put("/api/maps/layouts/offices?workspace_id=ws-1", json=BODY)
+    for user, workspace in (("stranger", "ws-1"), ("admin2", "ws-1"), ("admin", "ws-2")):
+        other = client_for(user)
+        assert other.get(f"/api/maps/layouts?workspace_id={workspace}").status_code == 403
+        feed = other.get(f"/api/maps/layouts/offices/feed?workspace_id={workspace}")
+        assert feed.status_code == 403
+        assert (
+            other.put(f"/api/maps/layouts/o2?workspace_id={workspace}", json=BODY).status_code
+            == 403
+        )
+        assert (
+            other.post(
+                "/api/maps/layouts/preview", json={**BODY, "workspace_id": workspace}
+            ).status_code
+            == 403
+        )
 
 
 def test_members_cannot_edit_hide_or_preview(client_for) -> None:

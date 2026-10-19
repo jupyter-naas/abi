@@ -12,8 +12,7 @@ The invited person may not exist yet, so nothing is attached to an account:
    are managed in the provider (``provisioning: none``): then the grants alone
    wait for them there.
 3. Nexus keeps the **invitation** (who invited whom, where, as what) to list,
-   resend and revoke it, and makes the memberships Nexus still stores once the
-   person signs in (``claim``).
+   resend and revoke it, and marks it accepted once the person signs in (``claim``).
 
 The service never decides whether the inviting person may invite: the route
 did, before it called (RFC §6.5), and IAM's checks of the grants it writes run
@@ -44,8 +43,11 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     InvitationPersistencePort,
     InviteOutcome,
     NoProviderError,
+    OrgInvitationExistsError,
     OwnerGrantRefusedError,
     ProviderChoice,
+    Provisioned,
+    ProvisioningRefused,
 )
 from naas_abi_core import logger
 
@@ -123,6 +125,7 @@ class InvitationService:
         organization_name: str | None = None,
         workspace_name: str | None = None,
         may_grant_owner: bool = False,
+        may_renew_org_invitation: bool = False,
     ) -> InviteOutcome:
         """Invite ``email`` and send the invitation. Inviting again someone
         already invited here renews the invitation (new roles, a new email).
@@ -130,28 +133,48 @@ class InvitationService:
         ``may_grant_owner``: the inviting person is an owner. The grants are
         written as Nexus's own, so IAM's rule that only an owner makes an owner
         cannot see who asked: the route says it, and nobody else gets ``owner``.
+
+        ``may_renew_org_invitation``: the inviting person administers the
+        organization. A workspace-only invitation of someone already invited to the
+        organization *and* this workspace would rewrite that invitation without its
+        organization role: it is refused unless they may, and then the organization
+        role is kept.
+
+        The provider makes the person exist only for an inviting user IAM lets
+        create accounts there (``identity:ProvisionUser``), or for an address on a
+        domain the organization verified and routed to that provider. Otherwise the
+        grants wait for the person's sign-in, as with a provider that manages its people.
         """
         email = email.lower().strip()
         if org_role is None and workspace_role is None:
             raise ValueError("An invitation names a role in an organization or a workspace")
-        if "owner" in (org_role, workspace_role) and not may_grant_owner:
-            raise OwnerGrantRefusedError("Only an owner can invite an owner")
         choice = await self.choose(email, provider, organization_id)
-        now = self._clock()
-        scopes = _scopes(organization_id, org_role, workspace_id, workspace_role)
         existing = await self.persistence.find_pending(
             email=email,
             provider=choice.name,
             organization_id=organization_id,
             workspace_id=workspace_id,
         )
+        if existing is not None and existing.org_role is not None and org_role is None:
+            if not may_renew_org_invitation:
+                raise OrgInvitationExistsError(
+                    "This person is invited to the organization and this workspace: "
+                    "an organization administrator renews that invitation"
+                )
+            org_role = existing.org_role
+        if "owner" in (org_role, workspace_role) and not may_grant_owner:
+            raise OwnerGrantRefusedError("Only an owner can invite an owner")
+        now = self._clock()
+        scopes = _scopes(organization_id, org_role, workspace_id, workspace_role)
         elsewhere = await self._held_elsewhere(
             email, choice.name, existing.id if existing else None
         )
         made = await self._grant(choice.name, email, scopes)
         grant_ids = [g.id for g in made]
         try:
-            provisioned = await self.directory.provision(choice, email, name)
+            provisioned, skipped = await self._provision(
+                choice, email, name, organization_id, invited_by
+            )
             if existing is None:
                 invitation = await self.persistence.add(
                     Invitation(
@@ -204,7 +227,31 @@ class InvitationService:
             sign_in_email_sent=sent,
             renewed=existing is not None,
             warning=provisioned.warning if provisioned else None,
+            provisioning_skipped=skipped,
         )
+
+    async def _provision(
+        self,
+        choice: ProviderChoice,
+        email: str,
+        name: str | None,
+        organization_id: str | None,
+        invited_by: str | None,
+    ) -> tuple[Provisioned | None, bool]:
+        """``(what the provider made, whether provisioning was withheld)``."""
+        if choice.managed_in_provider:
+            return None, False
+        routed = await self.persistence.provider_for_domain(
+            email.rsplit("@", 1)[-1], organization_id
+        )
+        if routed == choice.name or invited_by is None:
+            # An address the organization proved it controls (or the system's own
+            # call): Nexus's own, for nobody.
+            return await self.directory.provision(choice, email, name), False
+        try:
+            return await self.directory.provision(choice, email, name, by=invited_by), False
+        except ProvisioningRefused:
+            return None, True
 
     async def _held_elsewhere(self, email: str, provider: str, except_id: str | None) -> set[str]:
         """The pending grants other invitations of this person rely on: IAM keeps
@@ -319,9 +366,10 @@ class InvitationService:
     # =========================================================================
 
     async def claim(self, *, user_id: str, email: str, provider: str) -> list[Invitation]:
-        """Make the memberships Nexus stores for the invitations of ``email`` on
-        ``provider``. The caller vouches that the provider verified the address
-        (IAM's grants wait for the same proof)."""
+        """Mark the invitations of ``email`` on ``provider`` accepted. The memberships
+        are IAM's: the engine claimed the pending grants at the sign-in, and those
+        attachments are the roles. The caller vouches that the provider verified the
+        address (IAM's grants wait for the same proof)."""
         accepted: list[Invitation] = []
         for invitation in await self.persistence.pending_for(
             email=email.lower().strip(), provider=provider
@@ -329,14 +377,6 @@ class InvitationService:
             now = self._clock()
             if not await self.persistence.mark_accepted(invitation.id, user_id=user_id, now=now):
                 continue  # another sign-in of this person took it
-            await self.persistence.add_membership(
-                user_id=user_id,
-                organization_id=invitation.organization_id,
-                org_role=invitation.org_role,
-                workspace_id=invitation.workspace_id,
-                workspace_role=invitation.workspace_role,
-                now=now,
-            )
             accepted.append(invitation)
         if accepted:
             await self.persistence.commit()

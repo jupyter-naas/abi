@@ -260,11 +260,6 @@ class OidcSignInService:
         except Exception as exc:  # noqa: BLE001 - mapped for the login page
             raise _login_error(exc) from exc
         user = await self._nexus_user(signed.user)
-        try:
-            await self.principals.admit(signed.user.principal_id)
-        except Exception as exc:  # noqa: BLE001 - no session for a user IAM refused
-            logger.opt(exception=exc).error("IAM refused a signed-in user's transitional grant")
-            raise OidcLoginError("sign_in_failed", "The sign-in could not be completed") from exc
         if self._on_signed_in is not None:
             try:
                 await self._on_signed_in(user, signed.user)

@@ -34,7 +34,7 @@ model_registry, discovery, source_control, coding_environment; subtask 5) use
 | `catalog.py` | `ActionCatalog`, `ResourceType`, `ActionSpec`, `CatalogRegistry` (RFC §6.2 format) |
 | `policy.py` | Policy documents: schema, validation (every error listed), `Statement` |
 | `evaluator.py` | The algorithm of RFC §5.3: `check`, `filter`, `explain` over a `PolicySource` |
-| `roles.py` | Built-in managed policies generated from the catalogs, and the TRANSITIONAL ones |
+| `roles.py` | Built-in managed policies generated from the catalogs, and the enumerated ones of `engine`, `api` and engine jobs |
 | `iam_catalog.py` | IAM's own `iam:*` catalog and the code-declared seals (§11.3) |
 | `guard.py` | `ServiceGuard`: how a runtime service checks (names, require, filter, create rule, placements) and the shared wire codes |
 | `enforcement.py` | `ResourceGuard`, what a data service enforces with; `scan_allowed`, `own_storage`, `internal_call`, wire codes |
@@ -92,6 +92,9 @@ port, from `authorize`.
 - Reasons: `allow`, `explicit_deny`, `implicit_deny`, `suspended`, `sealed`.
 - An inactive actor or OBO user (`suspended`, `deleted`) is denied everything.
 - A sealed resource opens to its owner only (the actor, never through OBO).
+- The built-in IdP's admin app (`discovery:app/*/idp/admin`) is denied `OpenApp` by `builtin.platform.viewer`,
+  `builtin.platform.member` and `builtin.module_bootstrap` (`roles._no_idp_admin_app`): whoever holds a workspace role
+  reaches the platform's apps, never the one that edits who a `sub` is. Only the engine opens it.
 - On behalf of a user both sides must be allowed; a token's `abi_scope`
   (`CallContext.scope`, Allow statements whose `actions` and `resources` are
   lists of strings; anything else matches nothing) narrows further.
@@ -122,8 +125,8 @@ iam.placement_of(
 
 `allows_every` is True only when nothing can deny: no seal on the type, no
 narrowing token, no Deny naming the action, and on each side an Allow spanning
-every org, workspace and id of the type (`engine`, `api` and the transitional
-grants today). Services use it to skip per-item work.
+every org, workspace and id of the type (`engine` and `api` today). Services use it
+to skip per-item work.
 
 Administration (each needs its `iam:*` action): `ensure_user`,
 `create_service_account`, `get_principal`, `list_principals`,
@@ -380,29 +383,21 @@ iam.list_idp_bindings(provider=None, policy_id=None)
   seals (`Seal.module_id`) and the secret endpoint (`secret_nats_contract.is_idp`)
   name both, so the module id `idp` is reserved: an admin creates its account,
   nothing else does.
-- Feature policies (`builtin.features.*`) come with the Nexus catalog (#65).
-
+- Feature policies `builtin.features.<key>` (`<role>`, `<org>.<role>` or `<org>.<ws>.<role>`): the
+  `nexus:UseFeature` grants of a role, set as a whole by `iam.put_feature_policies({key: [feature, ...]})`
+  (needs `iam:RegisterCatalog` on `nexus`; Nexus computes them from its `feature_flags`). A role attached at a
+  workspace scope brings the most specific policy that exists, attached at the same scope; org-level roles bring none.
+- `builtin.engine`, `builtin.api` and `builtin.job` are enumerated: one statement per service, each with a `sid`
+  saying what needs it. The engine holds IAM's administration and the kernel services; `api` holds `nexus:*`, the
+  kernel services it calls for its users (each user bounds the call), the sign-in identity actions and the IAM actions
+  that keep memberships, scopes and placements, and denies `dataset:QueryUnchecked`; `builtin.job` is what the
+  account `job/<module_id>` of an engine module's jobs holds. Nobody holds `*`, but the platform admin.
 - `builtin.module_bootstrap`: a module account before approval (above).
-
-**TRANSITIONAL** (named so in the code and in
-[ADR 20261015_iam-transitional-bootstrap](../../../../../docs/adr/20261015_iam-transitional-bootstrap.md)):
-
-- `builtin.engine`, `builtin.api`: one `TransitionalBroadAccess` statement each,
-  until subtask 11 (#65) enumerates them.
-- `builtin.transitional.nexus_user`: held implicitly by a user Nexus names on
-  a call (IAM's user of issuer `urn:abi:nexus`, or a Nexus id IAM has no
-  record of; on a Nexus call, `api` on behalf of that user). Nexus
-  still decides what such a user may do, so the user side of the intersection
-  allows every kernel service, document and dataset included; never `iam:*` or
-  `dataset:QueryUnchecked` (a Nexus user's dataset SQL is always checked).
-  It reaches discovery's modules, agents, models, apps and jobs, but only its
-  holder's own agent runs. Seals and explicit Denies hold. Removed by
-  subtask 11 (#65), which attaches the roles of each membership.
-- `LEGACY_NEXUS_ISSUER` (`urn:abi:nexus`): a Nexus user named on a call by its
-  Nexus id resolves to IAM's user of that issuer, until the built-in login's
-  users move to the built-in IdP (#67). Users of an identity provider are IAM
-  users named by their principal id (`services/identity`, #61); Nexus attaches
-  `builtin.transitional.nexus_user` to each at sign-in, for #65 to detach.
+- Acting on behalf of a user never opens a sealed resource, whoever the actor is.
+- `LEGACY_NEXUS_ISSUER` (`urn:abi:nexus`): a Nexus user named on a call by its Nexus id resolves to IAM's user of
+  that issuer, until the built-in login's users move to the built-in IdP (#67). Users of an identity provider are IAM
+  users named by their principal id (`services/identity`, #61). Nexus holds no implicit grant for either: a user
+  reaches what its role attachments reach (`services/iam/memberships` in Nexus).
 
 ## Enforcing in a data service (`enforcement.py`)
 

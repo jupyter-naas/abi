@@ -1,13 +1,22 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
 from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary import (
     files__primary_adapter__FastAPI as files_api,
 )
+from naas_abi.apps.nexus.apps.api.app.services.files.testing import (
+    with_personal_drive_rows,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AuthzDenied
+from naas_abi_core.services.iam import roles
+
+
+@pytest.fixture(autouse=True)
+def _personal_drive_rows(monkeypatch) -> None:
+    monkeypatch.setattr(roles, "PLATFORM_TYPES", with_personal_drive_rows())
 
 
 def test_resolve_workspace_scoped_path_rejects_empty_path_without_workspace() -> None:
@@ -80,18 +89,39 @@ def test_resolve_workspace_scoped_path_rejects_other_workspace_storage_path() ->
 
 
 @pytest.mark.asyncio
-async def test_authorize_workspace_path_checks_workspace_access(monkeypatch) -> None:
-    require_access = AsyncMock()
-    monkeypatch.setattr(files_api, "require_workspace_access", require_access)
-
+async def test_authorize_workspace_path_asks_iam_for_the_workspace(team) -> None:
     scoped_path = await files_api._authorize_workspace_path(
-        current_user=SimpleNamespace(id="user-1"),
+        current_user=SimpleNamespace(id="member"),
         path="docs/readme.md",
         workspace_id="ws-1",
+        op="read",
     )
 
     assert scoped_path == "naas_abi/workspace-drive/ws-1/docs/readme.md"
-    require_access.assert_awaited_once_with("user-1", "ws-1")
+    with pytest.raises(AuthzDenied) as denied:
+        await files_api._authorize_workspace_path(
+            current_user=SimpleNamespace(id="stranger"),
+            path="docs/readme.md",
+            workspace_id="ws-1",
+            op="read",
+        )
+    assert denied.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_authorize_workspace_path_needs_a_write_role_to_write(team) -> None:
+    for user, allowed in (("viewer", False), ("member", True)):
+        attempt = files_api._authorize_workspace_path(
+            current_user=SimpleNamespace(id=user),
+            path="docs/readme.md",
+            workspace_id="ws-1",
+            op="write",
+        )
+        if allowed:
+            await attempt
+        else:
+            with pytest.raises(AuthzDenied):
+                await attempt
 
 
 def test_resolve_my_drive_scoped_path() -> None:
@@ -109,52 +139,62 @@ def test_resolve_platform_drive_scoped_path() -> None:
 
 
 @pytest.mark.asyncio
-async def test_authorize_path_my_drive_skips_workspace_check(monkeypatch) -> None:
-    require_access = AsyncMock()
-    monkeypatch.setattr(files_api, "require_workspace_access", require_access)
-
+async def test_authorize_path_my_drive_is_the_callers_own_and_names_no_workspace(team) -> None:
     scoped_path = await files_api._authorize_path(
-        current_user=SimpleNamespace(id="user-1"),
+        current_user=SimpleNamespace(id="member"),
         path="uploads/readme.md",
         workspace_id=None,
         scope="my_drive",
+        op="read",
     )
 
-    assert scoped_path == "naas_abi/my-drive/user-1/uploads/readme.md"
-    require_access.assert_not_awaited()
+    assert scoped_path == "naas_abi/my-drive/member/uploads/readme.md"
 
 
 @pytest.mark.asyncio
-async def test_authorize_path_platform_drive_requires_workspace(monkeypatch) -> None:
-    require_pd = AsyncMock()
-    monkeypatch.setattr(files_api, "require_workspace_platform_drive", require_pd)
-
+async def test_authorize_path_platform_drive_requires_workspace(team) -> None:
     with pytest.raises(HTTPException) as exc_info:
         await files_api._authorize_path(
-            current_user=SimpleNamespace(id="user-1"),
+            current_user=SimpleNamespace(id="member"),
             path="shared/readme.md",
             workspace_id=None,
             scope="platform_drive",
+            op="read",
         )
 
     assert exc_info.value.status_code == 400
-    require_pd.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_authorize_path_platform_drive_checks_flag(monkeypatch) -> None:
-    require_pd = AsyncMock()
-    monkeypatch.setattr(files_api, "require_workspace_platform_drive", require_pd)
+async def test_authorize_path_platform_drive_checks_flag(team, monkeypatch) -> None:
+    enabled = {"platform_drive_enabled": True}
+
+    async def setting(workspace_id: str, name: str) -> bool:
+        assert workspace_id == "ws-1"
+        return enabled[name]
+
+    monkeypatch.setattr(files_api, "workspace_setting", setting)
+    user = SimpleNamespace(id="member")
 
     scoped_path = await files_api._authorize_path(
-        current_user=SimpleNamespace(id="user-1"),
+        current_user=user,
         path="shared/readme.md",
         workspace_id="ws-1",
         scope="platform_drive",
+        op="read",
     )
-
     assert scoped_path == "naas_abi/platform-drive/shared/readme.md"
-    require_pd.assert_awaited_once_with("user-1", "ws-1")
+
+    enabled["platform_drive_enabled"] = False
+    with pytest.raises(HTTPException) as exc_info:
+        await files_api._authorize_path(
+            current_user=user,
+            path="shared/readme.md",
+            workspace_id="ws-1",
+            scope="platform_drive",
+            op="read",
+        )
+    assert exc_info.value.status_code == 403
 
 
 @pytest.mark.parametrize(

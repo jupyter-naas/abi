@@ -55,7 +55,11 @@ from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.staff_folders 
     STAFF_FOLDERS_MARKER_ROOT,
     write_staff_folders,
 )
+from naas_abi.apps.nexus.apps.api.app.services.files.placement import (
+    place_workspace_drive_sync,
+)
 from naas_abi_core import logger
+from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 from sqlalchemy import event as sa_event
@@ -175,6 +179,15 @@ async def backfill_workspace_drives(
     return await asyncio.to_thread(_write_missing)
 
 
+def _place(workspace_id: str) -> None:
+    """Place a new workspace's drive. Without IAM, or before IAM knows the
+    workspace, the first request that reaches the drive places it."""
+    try:
+        place_workspace_drive_sync(workspace_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"[workspace-drive] placement deferred for {workspace_id}: {exc}")
+
+
 class WorkspaceDriveWriter:
     """Install/uninstall the ORM listeners. One instance per object storage."""
 
@@ -231,13 +244,18 @@ class WorkspaceDriveWriter:
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"[workspace-drive] object storage unavailable: {exc}")
             return
-        for workspace_id, (manifest, created) in pending.items():
-            try:
-                write_manifest(storage, manifest)
+        # The drive is Nexus's own scaffolding, written for no caller: the committing
+        # request's user may not hold the drive yet (a new workspace's owner).
+        with as_service_account("api"):
+            for workspace_id, (manifest, created) in pending.items():
                 if created:
-                    create_staff_folders(storage, workspace_id)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(f"[workspace-drive] write failed for {workspace_id}: {exc}")
+                    _place(workspace_id)
+                try:
+                    write_manifest(storage, manifest)
+                    if created:
+                        create_staff_folders(storage, workspace_id)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(f"[workspace-drive] write failed for {workspace_id}: {exc}")
 
     def _after_rollback(self, session: Session) -> None:
         session.info.pop(self._key, None)

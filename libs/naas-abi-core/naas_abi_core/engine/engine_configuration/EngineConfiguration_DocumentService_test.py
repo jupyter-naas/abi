@@ -164,7 +164,7 @@ def test_remote_configuration_explicitly_uses_deployment_postgresql(scaffold):
         content = (
             Environment(undefined=StrictUndefined, autoescape=False)  # nosec B701
             .from_string(path.read_text())
-            .render(project_name_snake="example", project_name_pascal="Example")
+            .render(project_name_snake="example", project_name_pascal="Example", nats=True)
         )
     else:
         content = (root / "config.remote.yaml").read_text()

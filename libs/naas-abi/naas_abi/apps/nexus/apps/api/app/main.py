@@ -316,6 +316,38 @@ async def _reencrypt_secrets_under_default_keys() -> None:
         )
 
 
+async def _prepare_iam() -> None:
+    """Register the ``nexus`` catalog and feature policies, then move the role
+    data Nexus kept itself into IAM. Without an IAM service every Nexus
+    decision is a refusal, so the failure is logged loudly and boot goes on."""
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+    from naas_abi.apps.nexus.apps.api.app.services.iam import bootstrap
+    from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+
+    log = logging.getLogger(__name__)
+    MEMBERSHIPS.known_user = bootstrap.nexus_user_exists
+    try:
+        async with AsyncSessionLocal() as db:
+            await bootstrap.register_catalog(db, live_settings().feature_flags)
+            report = await bootstrap.migrate_role_data(db)
+            if report.applied:
+                log.info("Role data moved into IAM: %s", report)
+    except Exception:
+        log.exception("Nexus could not set up its authorization in IAM: every request is refused")
+
+
+async def _place_workspace_resources() -> None:
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.services.iam import placements
+
+    try:
+        async with AsyncSessionLocal() as db:
+            await placements.place_existing(db)
+    except Exception:
+        logging.getLogger(__name__).exception("Nexus could not place its workspaces' resources")
+
+
 async def _startup(app: FastAPI) -> None:
     """Application startup handler."""
     configure_logging()
@@ -340,6 +372,10 @@ async def _startup(app: FastAPI) -> None:
 
     await _reencrypt_secrets_under_default_keys()
 
+    # Nexus's authorization lives in IAM: its action catalog and feature policies,
+    # and (once) the memberships and superadmin flags it kept itself before.
+    await _prepare_iam()
+
     # Apply config-driven user/org/workspace seeds from config.yaml.
     from naas_abi.apps.nexus.apps.api.app.core.org_seed import apply_configuration_seeds
 
@@ -358,6 +394,11 @@ async def _startup(app: FastAPI) -> None:
             await apply_configuration_seeds(getattr(app.state, "secret_service", None))
         finally:
             event_triggered_via.reset(via)
+
+    # After seeds, so every workspace of the configuration exists: the kernel
+    # resources Nexus keeps for each are placed in it, which is what lets its
+    # members' roles reach them.
+    await _place_workspace_resources()
 
     # An ABI restart clears the settings pages' 24h API cache (after seeds, which
     # may have changed users, workspaces and organizations).

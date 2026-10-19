@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import logging
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
@@ -580,7 +581,14 @@ def overview(
             max_workers=min(max_workers, len(graphs)),
             thread_name_prefix="explorer-snapshot",
         ) as pool:
-            results = list(pool.map(lambda uri: snapshot(store, uri), graphs))
+            # Each snapshot reads as the caller (a context is entered by one thread at a time).
+            contexts = [contextvars.copy_context() for _ in graphs]
+            results = list(
+                pool.map(
+                    lambda job: job[0].run(snapshot, store, job[1]),
+                    zip(contexts, graphs, strict=True),
+                )
+            )
     else:
         results = [snapshot(store, uri) for uri in graphs]
     pending = [uri for uri, item in zip(graphs, results, strict=True) if item is None]

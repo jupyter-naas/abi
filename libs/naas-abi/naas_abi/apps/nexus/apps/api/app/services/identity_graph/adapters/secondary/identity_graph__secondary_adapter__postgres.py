@@ -6,13 +6,14 @@ from typing import Any
 from naas_abi.apps.nexus.apps.api.app.models import (
     AgentConfigModel,
     AppConfigModel,
-    OrganizationMemberModel,
     OrganizationModel,
     OrganizationRoleFeaturesModel,
     UserModel,
-    WorkspaceMemberModel,
     WorkspaceModel,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_scope, workspace_scope
 from naas_abi.apps.nexus.apps.api.app.services.identity_graph.port import (
     IdentityAgentConfig,
     IdentityAppConfig,
@@ -84,20 +85,31 @@ class IdentitySourceSecondaryAdapterPostgres(IdentitySourcePort):
         organizations = await self._all(
             OrganizationModel, OrganizationModel.created_at, OrganizationModel.id
         )
-        organization_members = await self._all(
-            OrganizationMemberModel, OrganizationMemberModel.created_at, OrganizationMemberModel.id
-        )
         role_features = await self._all(
             OrganizationRoleFeaturesModel, OrganizationRoleFeaturesModel.organization_id
         )
         workspaces = await self._all(WorkspaceModel, WorkspaceModel.created_at, WorkspaceModel.id)
-        members = await self._all(
-            WorkspaceMemberModel, WorkspaceMemberModel.created_at, WorkspaceMemberModel.id
-        )
         apps = await self._all(AppConfigModel, AppConfigModel.workspace_id, AppConfigModel.app_id)
         agents = await self._all(
             AgentConfigModel, AgentConfigModel.workspace_id, AgentConfigModel.id
         )
+
+        # Roles are IAM's: the graph mirrors its attachments, never the old rows.
+        organization_members = [
+            (org, member)
+            for org in organizations
+            for member in await MEMBERSHIPS.members(org_scope(org.id))
+        ]
+        members = [
+            (workspace, member)
+            for workspace in workspaces
+            for member in await MEMBERSHIPS.members(
+                workspace_scope(workspace.organization_id, workspace.id)
+            )
+        ]
+        platform_admins = {
+            u.id for u in users if await AUTHZ.allowed("ManageSystem", user=u.id)
+        }
 
         overlays: dict[str, dict[str, list[str]]] = {}
         for row in role_features:
@@ -122,7 +134,7 @@ class IdentitySourceSecondaryAdapterPostgres(IdentitySourcePort):
                     company=u.company,
                     job_title=u.role,
                     bio=u.bio,
-                    is_superadmin=bool(u.is_superadmin),
+                    is_superadmin=u.id in platform_admins,
                 )
                 for u in users
             ],
@@ -139,13 +151,13 @@ class IdentitySourceSecondaryAdapterPostgres(IdentitySourcePort):
             ],
             organization_memberships=[
                 IdentityOrganizationMembership(
-                    id=m.id,
-                    organization_id=m.organization_id,
+                    id=f"member-{org.id}-{m.user_id}",
+                    organization_id=org.id,
                     user_id=m.user_id,
                     role=m.role,
-                    created_at=m.created_at,
+                    created_at=m.since,
                 )
-                for m in organization_members
+                for org, m in organization_members
             ],
             organization_role_features=overlays,
             workspaces=[
@@ -162,13 +174,13 @@ class IdentitySourceSecondaryAdapterPostgres(IdentitySourcePort):
             ],
             memberships=[
                 IdentityMembership(
-                    id=m.id,
-                    workspace_id=m.workspace_id,
+                    id=f"member-{w.id}-{m.user_id}",
+                    workspace_id=w.id,
                     user_id=m.user_id,
                     role=m.role,
-                    created_at=m.created_at,
+                    created_at=m.since,
                 )
-                for m in members
+                for w, m in members
             ],
             app_configs=[
                 IdentityAppConfig(

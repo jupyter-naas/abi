@@ -58,6 +58,7 @@ function EmbedView({
   onOpenProject: (project: AppProject) => void;
 }) {
   const url = record.url;
+  const workspaceId = useParams().workspaceId as string;
   const baseEmbedUrl = useMemo(() => resolveAppEmbedUrl(url), [url]);
   const [embedUrl, setEmbedUrl] = useState<string | null>(
     isBundledAppHtmlUrl(url) ? null : baseEmbedUrl,
@@ -87,7 +88,7 @@ function EmbedView({
           const res = await authFetch('/api/apps/sso-token', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ audience }),
+            body: JSON.stringify({ workspace_id: workspaceId, audience }),
           });
           if (!res.ok) {
             if (!cancelled) setEmbedUrl(baseEmbedUrl);
@@ -116,7 +117,11 @@ function EmbedView({
           const res = await authFetch('/api/apps/remote-grant', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ module_id: remote.moduleId, app: remote.app }),
+            body: JSON.stringify({
+              workspace_id: workspaceId,
+              module_id: remote.moduleId,
+              app: remote.app,
+            }),
           });
           if (!res.ok) {
             throw new Error(`remote-grant HTTP ${res.status}`);
@@ -147,6 +152,7 @@ function EmbedView({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            workspace_id: workspaceId,
             expires_minutes: 60,
             path_prefix: prefix,
           }),
@@ -172,7 +178,7 @@ function EmbedView({
     return () => {
       cancelled = true;
     };
-  }, [url, baseEmbedUrl, reloadKey]);
+  }, [url, baseEmbedUrl, reloadKey, workspaceId]);
 
   const handleLoad = useCallback(() => {
     // Same-origin bundled apps are proxied via /app-html/ — never flag them blocked.

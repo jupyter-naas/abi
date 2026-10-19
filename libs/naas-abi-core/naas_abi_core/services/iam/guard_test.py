@@ -44,8 +44,9 @@ class BoxNotFound(LookupError):
 
 
 @pytest.fixture
-def guard(iam) -> ServiceGuard:
+def guard(iam, h) -> ServiceGuard:
     iam._register_catalog(BOXES)
+    h.first_party_may("boxes")
     return ServiceGuard(BOXES, lambda: iam)
 
 

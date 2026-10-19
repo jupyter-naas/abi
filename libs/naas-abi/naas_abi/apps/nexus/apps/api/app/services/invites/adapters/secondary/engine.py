@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import Any, TypeVar
 
+from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     Directory,
     DirectoryGateway,
@@ -18,9 +19,18 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     IdpBindingView,
     ProviderChoice,
     Provisioned,
+    ProvisioningRefused,
 )
-from naas_abi_core.engine.call_context import as_service_account
-from naas_abi_core.services.identity.IdentityPorts import ProviderUnavailableError
+from naas_abi_core.engine.call_context import as_service_account, use_call_context
+from naas_abi_core.services.iam.IAMPorts import (
+    IAMNotFoundError,
+    PermissionDeniedError,
+    ResourceNotFoundError,
+)
+from naas_abi_core.services.identity.IdentityPorts import (
+    ProviderUnavailableError,
+    UnknownProviderError,
+)
 from starlette.concurrency import run_in_threadpool
 
 NEXUS_IDENTITY = "api"
@@ -28,8 +38,15 @@ BUILTIN_PREFIX = "builtin."
 _T = TypeVar("_T")
 
 
-async def _as_api(fn: Callable[[], _T]) -> _T:
+async def _as_api(fn: Callable[[], _T], *, by: str | None = None) -> _T:
+    """Run ``fn`` as ``api``: for nobody, or (``by``) on behalf of that user, so IAM
+    asks both: what Nexus may and what the user may."""
+    context = AUTHZ.context(by) if by is not None else None
+
     def call() -> _T:
+        if context is not None:
+            with use_call_context(context):
+                return fn()
         with as_service_account(NEXUS_IDENTITY):
             return fn()
 
@@ -64,15 +81,24 @@ class EngineDirectoryGateway(DirectoryGateway):
         )
 
     async def provision(
-        self, provider: ProviderChoice, email: str, name: str | None
+        self, provider: ProviderChoice, email: str, name: str | None, *, by: str | None = None
     ) -> Provisioned | None:
         if provider.managed_in_provider:
             return None  # its people are made in the provider: no call to make
         service = self._service()
         try:
-            user = await _as_api(lambda: service.provision_user(provider.name, email, name=name))
+            user = await _as_api(
+                lambda: service.provision_user(provider.name, email, name=name), by=by
+            )
         except NotImplementedError:
             return None
+        except (
+            PermissionDeniedError,
+            IAMNotFoundError,
+            ResourceNotFoundError,
+            UnknownProviderError,  # how a provider the user may not see answers
+        ) as exc:
+            raise ProvisioningRefused(str(exc)) from exc
         return Provisioned(
             subject=user.subject, created=user.created, warning=getattr(user, "warning", None)
         )

@@ -34,7 +34,6 @@ from fastapi.responses import Response
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
-    require_workspace_access,
 )
 from naas_abi.apps.nexus.apps.api.app.core.config import (
     ABI_DOCUMENTS_TEMPLATE_NAMESPACE,
@@ -45,6 +44,12 @@ from naas_abi.apps.nexus.apps.api.app.models import CodingEnvironmentModel
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment import agent_credentials
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment.repo_access import (
     ensure_shared_repo,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares
+from naas_abi.apps.nexus.apps.api.app.services.iam.office_guards import (
+    project_guard,
+    readable_projects,
 )
 from naas_abi_core.services.coding_environment.adapters.secondary.CoderAdapter import (
     _sanitize_coder_username,
@@ -82,6 +87,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
+
+# The kind of project this router serves: the feature and the id prefix IAM decides on.
+_KIND = "documents"
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 # A template id is ``<namespace>/<stem>``, or a bare stem from before the
@@ -1458,13 +1466,16 @@ def _project_from_meta(
     )
 
 
-@router.get("/projects", response_model=list[ProjectResponse])
+@router.get(
+    "/projects",
+    response_model=list[ProjectResponse],
+    dependencies=[project_guard("ListProjects", _KIND, id=(), literal="-")],
+)
 async def list_projects(
     workspace_id: str,
     request: Request,
     current_user: User = Depends(get_current_user_required),
 ) -> list[ProjectResponse]:
-    await require_workspace_access(current_user.id, workspace_id)
     sc, repo_id = _sections_sc(request)
     ws_seg = _workspace_segment(workspace_id)
     ns_prefix = f"{_BRANCH_PREFIX}{ws_seg}/"
@@ -1515,19 +1526,32 @@ async def list_projects(
         return out
 
     try:
-        return await run_in_threadpool(_list)
+        projects = await run_in_threadpool(_list)
     except SourceControlError as exc:
         raise _source_control_http_error(exc) from exc
+    return await readable_projects(
+        projects, kind=_KIND, workspace_id=workspace_id, user=current_user
+    )
 
 
-@router.post("/projects", response_model=ProjectResponse)
+@router.post(
+    "/projects",
+    response_model=ProjectResponse,
+    dependencies=[declares("CreateProject")],
+)
 async def create_project(
     body: ProjectCreateRequest,
     request: Request,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user_required),
 ) -> ProjectResponse:
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require(
+        "CreateProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, "-"),
+        feature=_KIND,
+    )
     slug = body.slug or _slugify(body.title)
     if not _SLUG_RE.match(slug):
         raise HTTPException(
@@ -1647,14 +1671,16 @@ async def create_project(
     return project
 
 
-@router.get("/projects/{slug}", response_model=ProjectResponse)
+@router.get(
+    "/projects/{slug}",
+    response_model=ProjectResponse,
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def get_project(
     slug: str,
     workspace_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
 ) -> ProjectResponse:
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _sections_sc(request)
@@ -1732,7 +1758,11 @@ def _write_project_display_title(
     return meta
 
 
-@router.patch("/projects/{slug}", response_model=ProjectResponse)
+@router.patch(
+    "/projects/{slug}",
+    response_model=ProjectResponse,
+    dependencies=[declares("UpdateProject")],
+)
 async def update_project(
     slug: str,
     body: ProjectUpdateRequest,
@@ -1740,7 +1770,13 @@ async def update_project(
     current_user: User = Depends(get_current_user_required),
 ) -> ProjectResponse:
     """Rename (title) and/or archive a document. Slug and git folder stay put."""
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require(
+        "UpdateProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     if body.title is None and body.archived is None:
@@ -1804,7 +1840,11 @@ async def update_project(
         raise _source_control_http_error(exc) from exc
 
 
-@router.get("/projects/{slug}/document", response_model=DocumentResponse)
+@router.get(
+    "/projects/{slug}/document",
+    response_model=DocumentResponse,
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def get_document(
     slug: str,
     workspace_id: str,
@@ -1817,7 +1857,6 @@ async def get_document(
     Prefer the Coder sidecar (live editing SoT) when the sections runtime is
     bound and healthy. Fall back to Forgejo (version snapshot) otherwise.
     """
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _sections_sc(request)
@@ -1885,16 +1924,17 @@ async def get_document(
         raise _source_control_http_error(exc) from exc
 
 
-@router.get("/projects/{slug}/assets/{filename}")
+@router.get(
+    "/projects/{slug}/assets/{filename}",
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def get_project_asset(
     slug: str,
     filename: str,
     workspace_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
 ) -> Response:
     """Serve a file from the document ``assets/`` folder (preview / export)."""
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     if not _ASSET_FILENAME_RE.match(filename) or ".." in filename:
@@ -1926,7 +1966,11 @@ async def get_project_asset(
         raise _source_control_http_error(exc) from exc
 
 
-@router.put("/projects/{slug}/document", response_model=DocumentResponse)
+@router.put(
+    "/projects/{slug}/document",
+    response_model=DocumentResponse,
+    dependencies=[declares("SaveProject")],
+)
 async def put_document(
     slug: str,
     body: DocumentUpdateRequest,
@@ -1935,7 +1979,13 @@ async def put_document(
     db: AsyncSession = Depends(get_db),
 ) -> DocumentResponse:
     """Save document: commit Forgejo snapshot and dual-write Coder sidecar when ready."""
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require(
+        "SaveProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _sections_sc(request)
@@ -2101,7 +2151,11 @@ def _save_live_document_html(
     return commit.sha or None, "sidecar" if sidecar_ok else "forgejo"
 
 
-@router.post("/projects/{slug}/apply-template", response_model=DocumentResponse)
+@router.post(
+    "/projects/{slug}/apply-template",
+    response_model=DocumentResponse,
+    dependencies=[declares("ApplyProjectTemplate")],
+)
 async def apply_template(
     slug: str,
     body: ApplyTemplateRequest,
@@ -2110,13 +2164,19 @@ async def apply_template(
     db: AsyncSession = Depends(get_db),
 ) -> DocumentResponse:
     """Rewrite the open document from a seed template (HTML source of truth)."""
+    await authz.require(
+        "ApplyProjectTemplate",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     if body.template_id not in _known_template_ids():
         raise HTTPException(
             status_code=422,
             detail=f"Unknown template_id '{body.template_id}'.",
         )
     seed, catalog_assets = _load_seed_bundle(body.template_id)
-    await require_workspace_access(current_user.id, body.workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _sections_sc(request)
@@ -2191,15 +2251,17 @@ async def apply_template(
         raise _source_control_http_error(exc) from exc
 
 
-@router.get("/projects/{slug}/history", response_model=list[CommitResponse])
+@router.get(
+    "/projects/{slug}/history",
+    response_model=list[CommitResponse],
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def list_history(
     slug: str,
     workspace_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
     limit: int = 20,
 ) -> list[CommitResponse]:
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _sections_sc(request)
@@ -2236,13 +2298,16 @@ async def list_history(
         raise _source_control_http_error(exc) from exc
 
 
-@router.get("/projects/{slug}/history/diff", response_model=DocumentDiffResponse)
+@router.get(
+    "/projects/{slug}/history/diff",
+    response_model=DocumentDiffResponse,
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def get_history_diff(
     slug: str,
     workspace_id: str,
     base: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
     head: str | None = None,
 ) -> DocumentDiffResponse:
     """Files changed between two commits on the document branch, for the Files panel.
@@ -2251,7 +2316,6 @@ async def get_history_diff(
     e.g. the branch head when the chat session opened this document). ``head``
     defaults to the current branch tip.
     """
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _sections_sc(request)
@@ -2270,6 +2334,9 @@ async def get_history_diff(
             resolved_head = commits[0].sha
         if resolved_head == base:
             return DocumentDiffResponse(base=base, head=resolved_head, files=[])
+        # base and head come from the client and may be any commit of the shared
+        # repository: only this project's own files are reported.
+        project_dir = paths["project_path"].rsplit("/", 1)[0] + "/"
         diff = sc.get_diff(repo_id=repo_id, base=base, head=resolved_head)
         return DocumentDiffResponse(
             base=base,
@@ -2283,6 +2350,7 @@ async def get_history_diff(
                     old_path=f.old_path,
                 )
                 for f in diff.files
+                if f.path.startswith(project_dir) or (f.old_path or "").startswith(project_dir)
             ],
         )
 
@@ -2294,15 +2362,17 @@ async def get_history_diff(
         raise _source_control_http_error(exc) from exc
 
 
-@router.get("/projects/{slug}/version", response_model=DocumentVersionResponse)
+@router.get(
+    "/projects/{slug}/version",
+    response_model=DocumentVersionResponse,
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def get_document_version(
     slug: str,
     workspace_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
 ) -> DocumentVersionResponse:
     """0.x semver derived from Conventional Commits history; see `_semver_from_commits`."""
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _sections_sc(request)
@@ -2887,7 +2957,11 @@ def _schedule_created_runtime(
     )
 
 
-@router.post("/projects/{slug}/runtime", response_model=RuntimeResponse)
+@router.post(
+    "/projects/{slug}/runtime",
+    response_model=RuntimeResponse,
+    dependencies=[project_guard("EnsureProjectRuntime", _KIND)],
+)
 async def ensure_runtime(
     slug: str,
     workspace_id: str,
@@ -2895,7 +2969,6 @@ async def ensure_runtime(
     current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> RuntimeResponse:
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     return await _ensure_runtime_serialized(
@@ -2907,15 +2980,17 @@ async def ensure_runtime(
     )
 
 
-@router.get("/projects/{slug}/tree", response_model=ProjectTreeResponse)
+@router.get(
+    "/projects/{slug}/tree",
+    response_model=ProjectTreeResponse,
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def get_project_tree(
     slug: str,
     workspace_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
 ) -> ProjectTreeResponse:
     """List the document folder (document.html, assets/, …) for the sidebar tree."""
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _sections_sc(request)
@@ -3139,13 +3214,15 @@ class SeedTemplateResponse(BaseModel):
     is_default: bool = False
 
 
-@router.get("/templates", response_model=list[SeedTemplateResponse])
+@router.get(
+    "/templates",
+    response_model=list[SeedTemplateResponse],
+    dependencies=[project_guard("ListProjectTemplates", _KIND, id=(), literal="-")],
+)
 async def list_seed_templates(
     workspace_id: str,
-    current_user: User = Depends(get_current_user_required),
 ) -> list[SeedTemplateResponse]:
     """List seed templates with section outlines for the Documents sidebar."""
-    await require_workspace_access(current_user.id, workspace_id)
     return [SeedTemplateResponse(**row) for row in _picker_template_records()]
 
 
@@ -3266,7 +3343,11 @@ async def _run_section_html_mutation(
         raise _source_control_http_error(exc) from exc
 
 
-@router.get("/projects/{slug}/sections", response_model=SectionsListResponse)
+@router.get(
+    "/projects/{slug}/sections",
+    response_model=SectionsListResponse,
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def list_sections(
     slug: str,
     workspace_id: str,
@@ -3275,7 +3356,6 @@ async def list_sections(
     db: AsyncSession = Depends(get_db),
 ) -> SectionsListResponse:
     """Outline of ``<section>`` documents. No HTML body."""
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _sections_sc(request)
@@ -3318,7 +3398,11 @@ async def list_sections(
         raise _source_control_http_error(exc) from exc
 
 
-@router.post("/projects/{slug}/sections/insert", response_model=SectionMutationResponse)
+@router.post(
+    "/projects/{slug}/sections/insert",
+    response_model=SectionMutationResponse,
+    dependencies=[declares("EditProject")],
+)
 async def insert_section(
     slug: str,
     body: SectionInsertRequest,
@@ -3329,7 +3413,13 @@ async def insert_section(
     """Insert a section after ``after_index`` (-1 appends). Same mutation as the agent tool."""
     from naas_abi.tools.documents_tools import _insert_section_html
 
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require(
+        "EditProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     return await _run_section_html_mutation(
         slug=slug,
         workspace_id=body.workspace_id,
@@ -3346,7 +3436,11 @@ async def insert_section(
     )
 
 
-@router.post("/projects/{slug}/sections/delete", response_model=SectionMutationResponse)
+@router.post(
+    "/projects/{slug}/sections/delete",
+    response_model=SectionMutationResponse,
+    dependencies=[declares("EditProject")],
+)
 async def delete_section(
     slug: str,
     body: SectionIndexRequest,
@@ -3357,7 +3451,13 @@ async def delete_section(
     """Delete the section at index. Refuses the last section."""
     from naas_abi.tools.documents_tools import _delete_section_html
 
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require(
+        "EditProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     return await _run_section_html_mutation(
         slug=slug,
         workspace_id=body.workspace_id,
@@ -3369,7 +3469,11 @@ async def delete_section(
     )
 
 
-@router.post("/projects/{slug}/sections/duplicate", response_model=SectionMutationResponse)
+@router.post(
+    "/projects/{slug}/sections/duplicate",
+    response_model=SectionMutationResponse,
+    dependencies=[declares("EditProject")],
+)
 async def duplicate_section(
     slug: str,
     body: SectionIndexRequest,
@@ -3380,7 +3484,13 @@ async def duplicate_section(
     """Duplicate the section at index and insert the copy after it."""
     from naas_abi.tools.documents_tools import _duplicate_section_html
 
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require(
+        "EditProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     return await _run_section_html_mutation(
         slug=slug,
         workspace_id=body.workspace_id,
@@ -3392,7 +3502,11 @@ async def duplicate_section(
     )
 
 
-@router.post("/projects/{slug}/sections/reorder", response_model=SectionMutationResponse)
+@router.post(
+    "/projects/{slug}/sections/reorder",
+    response_model=SectionMutationResponse,
+    dependencies=[declares("EditProject")],
+)
 async def reorder_sections(
     slug: str,
     body: SectionReorderRequest,
@@ -3403,7 +3517,13 @@ async def reorder_sections(
     """Move one section (from_index/to_index) or apply a full ``order`` permutation."""
     from naas_abi.tools.documents_tools import _reorder_sections_html
 
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require(
+        "EditProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     return await _run_section_html_mutation(
         slug=slug,
         workspace_id=body.workspace_id,
@@ -3420,7 +3540,11 @@ async def reorder_sections(
     )
 
 
-@router.get("/projects/{slug}/outline", response_model=DocumentOutlineResponse)
+@router.get(
+    "/projects/{slug}/outline",
+    response_model=DocumentOutlineResponse,
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def get_document_outline(
     slug: str,
     workspace_id: str,
@@ -3431,7 +3555,6 @@ async def get_document_outline(
     """Heading outline (Pandoc Header walk). Not the leftover section list."""
     from naas_abi.tools.documents_commands import heading_outline
 
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _sections_sc(request)
@@ -3480,7 +3603,11 @@ async def get_document_outline(
         raise _source_control_http_error(exc) from exc
 
 
-@router.post("/projects/{slug}/commands", response_model=DocumentCommandsResponse)
+@router.post(
+    "/projects/{slug}/commands",
+    response_model=DocumentCommandsResponse,
+    dependencies=[declares("EditProject")],
+)
 async def apply_document_commands_route(
     slug: str,
     body: DocumentCommandsRequest,
@@ -3491,7 +3618,13 @@ async def apply_document_commands_route(
     """Google Docs batchUpdate analog on the HTML store. See COMMANDS.md."""
     from naas_abi.tools.documents_commands import apply_document_commands
 
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require(
+        "EditProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
 

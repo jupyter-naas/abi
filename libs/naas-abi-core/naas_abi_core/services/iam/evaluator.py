@@ -131,8 +131,10 @@ class Evaluator:
         if ctx.on_behalf_of is not None and (user is None or user.status != "active"):
             return denied("suspended")
         # 2. Sealed resources open to their owner only, whatever the policies say.
+        # Acting for a user never opens one, whoever the actor is: a call made for
+        # a user (Nexus's, over the engine's facade) is the user's, not the owner's.
         seal = self._seal(resource)
-        if seal is not None and not _owns(seal, ctx):
+        if seal is not None and (not _owns(seal, ctx) or ctx.on_behalf_of is not None):
             return denied("sealed")
         # 3. Each side on its own.
         user_id = _user_id(ctx)

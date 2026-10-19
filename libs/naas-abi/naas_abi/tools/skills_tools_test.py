@@ -45,8 +45,7 @@ class _FakeSkillsService:
         del context, workspace_id
         return list(self.skills)
 
-    async def create_skill(self, context, data):
-        del context
+    async def create_skill(self, data):
         self.created.append(data)
         return _skill(
             "skill-new",
@@ -86,12 +85,11 @@ def skills(monkeypatch) -> dict[str, Any]:
 
         return asyncio.run(fn(object()))
 
-    async def _require_member(db, user_id, workspace_id):
-        del db, user_id, workspace_id
-        return "owner"
+    async def _allowed(user_id, workspace_id, action, **_):
+        del user_id, workspace_id, action
 
     monkeypatch.setattr(tools_module, "run_db", _run_db)
-    monkeypatch.setattr(tools_module, "require_member", _require_member)
+    monkeypatch.setattr(tools_module, "require_action", _allowed)
     monkeypatch.setattr(tools_module, "request_context", lambda user_id: user_id)
     monkeypatch.setattr(
         tools_module, "bound_session", lambda db: contextlib.nullcontext()
@@ -225,3 +223,18 @@ def test_write_tools_are_the_ones_the_web_refreshes_on() -> None:
     block = web.read_text(encoding="utf-8").split("SKILL_WRITE_TOOLS = [", 1)[1]
     listed = set(block.split("]", 1)[0].replace("'", "").replace(" ", "").split(","))
     assert listed - {""} == set(tools_module.SKILL_WRITE_TOOLS)
+
+
+def test_a_refusal_of_iam_stops_every_tool(skills, monkeypatch) -> None:
+    asked: list[str] = []
+
+    async def refuse(user_id, workspace_id, action, **_):
+        asked.append(action)
+        return {"error": "You do not have access to this in this workspace."}
+
+    monkeypatch.setattr(tools_module, "require_action", refuse)
+    tools = skills["tools"]
+    assert "error" in tools["list_workspace_skills"].invoke({})
+    assert "error" in tools["create_skill"].invoke({"name": "Report", "prompt": "Run it."})
+    assert skills["service"].created == []
+    assert asked == ["ListSkills", "CreateSkill"]

@@ -1062,6 +1062,16 @@ class IIAMService(ABC):
     @abstractmethod
     def register_catalog(self, catalog: Any) -> bool: ...
 
+    def set_platform_grants(self, grants: Sequence[Any]) -> None:
+        """The deployment's platform-level resources workspace roles reach (the
+        serving engine's IAM only)."""
+        raise NotImplementedError("Platform grants are set on the serving engine")
+
+    def put_feature_policies(self, grants: Mapping[str, Sequence[str]]) -> None:
+        """Replace the feature policies (``UseFeature`` grants, RFC §7). The
+        serving engine's IAM only: Nexus runs there."""
+        raise NotImplementedError("Feature policies are set on the serving engine")
+
     # -- service accounts, keys and manifests (RFC §8) ----------------------------------
 
     @abstractmethod

@@ -13,7 +13,6 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     InferenceServerModel,
     OrganizationModel,
     UserModel,
-    WorkspaceMemberModel,
     WorkspaceModel,
 )
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
@@ -22,13 +21,12 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     InferenceServerUpdateInput,
     UserRecord,
     WorkspaceCreateInput,
-    WorkspaceMemberRecord,
     WorkspacePermissionPort,
     WorkspaceRecord,
     WorkspaceStatsRecord,
     WorkspaceUpdateInput,
 )
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 AsyncSessionGetter = Callable[[], AsyncSession | None]
@@ -50,23 +48,19 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             raise RuntimeError("No database session bound in ServiceRegistry context")
         return db
 
-    async def get_workspace_role(self, user_id: str, workspace_id: str) -> str | None:
-        member_result = await self.db.execute(
-            select(WorkspaceMemberModel.role)
-            .where(WorkspaceMemberModel.workspace_id == workspace_id)
-            .where(WorkspaceMemberModel.user_id == user_id)
-        )
-        member_role = member_result.scalar_one_or_none()
-        if member_role is not None:
-            return member_role
+    async def list_all_workspaces(self) -> list[WorkspaceRecord]:
+        result = await self.db.execute(select(WorkspaceModel).order_by(WorkspaceModel.name))
+        rows = [self._to_workspace_record(row) for row in result.scalars().all()]
+        return await self._apply_org_logos(rows)
 
-        owner_result = await self.db.execute(
-            select(WorkspaceModel.owner_id).where(WorkspaceModel.id == workspace_id)
-        )
-        owner_id = owner_result.scalar_one_or_none()
-        if owner_id == user_id:
-            return "owner"
-        return None
+    async def get_users_by_ids(self, user_ids: list[str]) -> dict[str, UserRecord]:
+        if not user_ids:
+            return {}
+        result = await self.db.execute(select(UserModel).where(UserModel.id.in_(user_ids)))
+        return {
+            user.id: UserRecord(id=user.id, email=user.email, name=user.name)
+            for user in result.scalars().all()
+        }
 
     @staticmethod
     def _to_workspace_record(model: WorkspaceModel) -> WorkspaceRecord:
@@ -132,17 +126,6 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             hydrated.append(row)
         return hydrated
 
-    async def list_workspaces_for_user(self, user_id: str) -> list[WorkspaceRecord]:
-        result = await self.db.execute(
-            select(WorkspaceModel)
-            .outerjoin(WorkspaceMemberModel, WorkspaceModel.id == WorkspaceMemberModel.workspace_id)
-            .where((WorkspaceModel.owner_id == user_id) | (WorkspaceMemberModel.user_id == user_id))
-            .distinct()
-            .order_by(WorkspaceModel.name)
-        )
-        rows = [self._to_workspace_record(row) for row in result.scalars().all()]
-        return await self._apply_org_logos(rows)
-
     async def get_workspace_by_id(self, workspace_id: str) -> WorkspaceRecord | None:
         result = await self.db.execute(
             select(WorkspaceModel).where(WorkspaceModel.id == workspace_id)
@@ -186,15 +169,6 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             updated_at=now,
         )
         self.db.add(workspace_model)
-        self.db.add(
-            WorkspaceMemberModel(
-                id=str(uuid4()),
-                workspace_id=workspace_id,
-                user_id=workspace.owner_id,
-                role="owner",
-                created_at=now,
-            )
-        )
         await self.db.flush()
         return self._to_workspace_record(workspace_model)
 
@@ -281,32 +255,6 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             agents=int(agents),
         )
 
-    async def list_workspace_members(self, workspace_id: str) -> list[WorkspaceMemberRecord]:
-        query = text(
-            """
-            SELECT
-                wm.id, wm.workspace_id, wm.user_id, wm.role, wm.created_at,
-                u.email, u.name
-            FROM workspace_members wm
-            JOIN users u ON wm.user_id = u.id
-            WHERE wm.workspace_id = :workspace_id
-            ORDER BY wm.created_at
-            """
-        )
-        result = await self.db.execute(query, {"workspace_id": workspace_id})
-        return [
-            WorkspaceMemberRecord(
-                id=row.id,
-                workspace_id=row.workspace_id,
-                user_id=row.user_id,
-                role=row.role,
-                email=row.email,
-                name=row.name,
-                created_at=row.created_at,
-            )
-            for row in result.fetchall()
-        ]
-
     async def get_user_by_email(self, email: str) -> UserRecord | None:
         normalized = email.lower().strip()
         result = await self.db.execute(select(UserModel).where(UserModel.email == normalized))
@@ -314,64 +262,6 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
         if user is None:
             return None
         return UserRecord(id=user.id, email=user.email)
-
-    async def is_workspace_member(self, workspace_id: str, user_id: str) -> bool:
-        result = await self.db.execute(
-            select(WorkspaceMemberModel.id).where(
-                (WorkspaceMemberModel.workspace_id == workspace_id)
-                & (WorkspaceMemberModel.user_id == user_id)
-            )
-        )
-        return result.scalar_one_or_none() is not None
-
-    async def add_workspace_member(
-        self, workspace_id: str, user_id: str, role: str
-    ) -> WorkspaceMemberRecord:
-        member = WorkspaceMemberModel(
-            id=str(uuid4()),
-            workspace_id=workspace_id,
-            user_id=user_id,
-            role=role,
-        )
-        self.db.add(member)
-        await self.db.commit()
-        return WorkspaceMemberRecord(
-            id=member.id,
-            workspace_id=member.workspace_id,
-            user_id=member.user_id,
-            role=member.role,
-            created_at=member.created_at,
-        )
-
-    async def remove_workspace_member(self, workspace_id: str, user_id: str) -> bool:
-        result = await self.db.execute(
-            select(WorkspaceMemberModel).where(
-                (WorkspaceMemberModel.workspace_id == workspace_id)
-                & (WorkspaceMemberModel.user_id == user_id)
-            )
-        )
-        member = result.scalar_one_or_none()
-        if member is None:
-            return False
-        await self.db.delete(member)
-        await self.db.commit()
-        return True
-
-    async def update_workspace_member_role(
-        self, workspace_id: str, user_id: str, role: str
-    ) -> bool:
-        result = await self.db.execute(
-            select(WorkspaceMemberModel).where(
-                (WorkspaceMemberModel.workspace_id == workspace_id)
-                & (WorkspaceMemberModel.user_id == user_id)
-            )
-        )
-        member = result.scalar_one_or_none()
-        if member is None:
-            return False
-        member.role = role
-        await self.db.commit()
-        return True
 
     async def list_inference_servers(self, workspace_id: str) -> list[InferenceServerRecord]:
         result = await self.db.execute(

@@ -12,10 +12,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
-    require_workspace_access,
 )
 from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
     caller_feature_flags,
+    feature_keys_of,
     filter_feature_agents,
 )
 from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
@@ -33,7 +33,8 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import (
     REMOTE_PROVIDER,
     RemoteAgent,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam.port import RequestContext, TokenData
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares
 from naas_abi.apps.nexus.apps.api.app.services.registry import (
     ServiceRegistry,
     get_service_registry,
@@ -152,12 +153,6 @@ def get_agent_service(
     return registry.agents
 
 
-def request_context(current_user: User) -> RequestContext:
-    return RequestContext(
-        token_data=TokenData(user_id=current_user.id, scopes={"*"}, is_authenticated=True)
-    )
-
-
 async def _workspace_slug(workspace_id: str) -> str | None:
     from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
     from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
@@ -169,12 +164,12 @@ async def _workspace_slug(workspace_id: str) -> str | None:
         return result.scalar_one_or_none()
 
 
-async def _caller_feature_flags(workspace_id: str, role: str | None) -> dict[str, bool]:
-    """``caller_feature_flags`` on a session of our own (routes hold none)."""
-    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-
-    async with AsyncSessionLocal() as db:
-        return await caller_feature_flags(db, workspace_id, role)
+async def _visible_to_caller(
+    agents: list[AgentRecord], current_user: User, workspace_id: str
+) -> list[AgentRecord]:
+    """The agents of ``workspace_id`` the caller's features let them see."""
+    flags = await caller_feature_flags(current_user, workspace_id, feature_keys_of(agents))
+    return filter_feature_agents(agents, flags)
 
 
 def _get_engine_default_agent_class_name() -> str | None:
@@ -616,7 +611,6 @@ def _enrich_agent(
 
 async def _dedupe_agents_by_class_name(
     agent_service: AgentService,
-    context: RequestContext,
     agent_list: list[AgentRecord],
 ) -> list[AgentRecord]:
     """Keep one row per non-empty class_name; delete the rest.
@@ -648,7 +642,7 @@ async def _dedupe_agents_by_class_name(
                 duplicate.id,
                 canonical.id,
             )
-            await agent_service.delete_agent(context=context, agent_id=duplicate.id)
+            await agent_service.delete_agent(agent_id=duplicate.id)
     return kept
 
 
@@ -676,7 +670,6 @@ def _remote_agent_enabled(
 
 async def _reconcile_workspace_agents(
     agent_service: AgentService,
-    current_user: User,
     workspace_id: str,
     agent_list: list[AgentRecord],
     class_name_to_agent_class: dict[str, type[Agent]],
@@ -706,8 +699,7 @@ async def _reconcile_workspace_agents(
     Returns the reconciled agent list (deleted records removed, created ones
     appended, backfilled ones refreshed).
     """
-    context = request_context(current_user)
-    agent_list = await _dedupe_agents_by_class_name(agent_service, context, agent_list)
+    agent_list = await _dedupe_agents_by_class_name(agent_service, agent_list)
     existing_agents_by_class_name = {
         agent.class_name: agent for agent in agent_list if agent.class_name
     }
@@ -722,7 +714,7 @@ async def _reconcile_workspace_agents(
     ]
     for agent in stale_agents:
         logger.debug("Removing stale agent (class no longer in registry): %s", agent.class_name)
-        await agent_service.delete_agent(context=context, agent_id=agent.id)
+        await agent_service.delete_agent(agent_id=agent.id)
         existing_agents_by_class_name.pop(agent.class_name, None)
     if stale_agents:
         stale_ids = {agent.id for agent in stale_agents}
@@ -764,7 +756,6 @@ async def _reconcile_workspace_agents(
         system_prompt = _get_agent_system_prompt(agent_cls)
         try:
             created_agent = await agent_service.create_agent(
-                context=context,
                 data=AgentCreateInput(
                     name=name,
                     description=description or "",
@@ -784,7 +775,6 @@ async def _reconcile_workspace_agents(
                 class_name,
             )
             refreshed = await agent_service.list_workspace_agents(
-                context=context,
                 workspace_id=workspace_id,
             )
             created_agent = next(
@@ -800,7 +790,6 @@ async def _reconcile_workspace_agents(
 
         if default_class_name and class_name == default_class_name:
             updated = await agent_service.update_agent(
-                context=context,
                 agent_id=created_agent.id,
                 updates=AgentUpdateInput(is_default=True),
             )
@@ -814,7 +803,6 @@ async def _reconcile_workspace_agents(
             continue
         try:
             created_agent = await agent_service.create_agent(
-                context=context,
                 data=AgentCreateInput(
                     name=remote.name,
                     description=remote.description,
@@ -845,7 +833,6 @@ async def _reconcile_workspace_agents(
             module_path = getattr(resolved_cls, "__module__", None) if resolved_cls else None
             if module_path:
                 updated = await agent_service.update_agent(
-                    context=context,
                     agent_id=agent.id,
                     updates=AgentUpdateInput(module_path=module_path),
                 )
@@ -881,7 +868,6 @@ async def _reconcile_workspace_agents(
             aligned.append(agent)
             continue
         updated = await agent_service.update_agent(
-            context=context,
             agent_id=agent.id,
             updates=AgentUpdateInput(enabled=should_enable),
         )
@@ -898,7 +884,6 @@ async def _reconcile_workspace_agents(
             renamed.append(agent)
             continue
         updated = await agent_service.update_agent(
-            context=context,
             agent_id=agent.id,
             updates=AgentUpdateInput(name=class_label),
         )
@@ -913,7 +898,6 @@ async def _reconcile_workspace_agents(
         )
         if default_agent and (not default_agent.enabled or not default_agent.is_default):
             updated = await agent_service.update_agent(
-                context=context,
                 agent_id=default_agent.id,
                 updates=AgentUpdateInput(
                     enabled=True if not default_agent.enabled else None,
@@ -926,7 +910,7 @@ async def _reconcile_workspace_agents(
     return reconciled
 
 
-@router.get("/")
+@router.get("/", dependencies=[declares("ListAgents")])
 async def list_agents(
     workspace_id: str | None = None,
     current_user: User = Depends(get_current_user_required),
@@ -944,27 +928,23 @@ async def list_agents(
     if not workspace_id:
         return []
 
-    role = await require_workspace_access(current_user.id, workspace_id)
+    await authz.require("ListAgents", user=current_user, workspace=workspace_id, id="-")
 
     # Retrieve agent records from the database (fast)
-    agent_list = await agent_service.list_workspace_agents(
-        context=request_context(current_user),
-        workspace_id=workspace_id,
-    )
+    agent_list = await agent_service.list_workspace_agents(workspace_id=workspace_id)
 
     # Retrieve the cached class registry, expensive only on the very first call
     # (triggers dynamic Python imports for all agent modules).  Subsequent calls
     # return instantly from the process-level cache.
     class_name_to_agent_class = _get_agent_class_registry()
 
-    flags = await _caller_feature_flags(workspace_id, role)
     return [
         _enrich_agent(agent, class_name_to_agent_class)
-        for agent in filter_feature_agents(agent_list, flags)
+        for agent in await _visible_to_caller(agent_list, current_user, workspace_id)
     ]
 
 
-@router.post("/sync")
+@router.post("/sync", dependencies=[declares("SyncAgents"), declares("ListAgents")])
 async def sync_agents(
     workspace_id: str | None = None,
     current_user: User = Depends(get_current_user_required),
@@ -980,69 +960,70 @@ async def sync_agents(
     roster for everyone), but the list returned is scoped to the caller's
     feature access, exactly like ``GET /``. A member syncing the workspace
     therefore never narrows what an owner sees.
+
+    A caller who may list agents but not change them (a viewer) gets the
+    listing without any reconciliation: clients send this once per session
+    for every role.
     """
     if not workspace_id:
         return []
 
-    role = await require_workspace_access(current_user.id, workspace_id)
+    await authz.require("ListAgents", user=current_user, workspace=workspace_id, id="-")
+    may_sync = await authz.allowed("SyncAgents", user=current_user, workspace=workspace_id, id="-")
 
     class_name_to_agent_class = _get_agent_class_registry()
 
     async with _workspace_sync_lock(workspace_id):
-        agent_list = await agent_service.list_workspace_agents(
-            context=request_context(current_user),
-            workspace_id=workspace_id,
-        )
+        agent_list = await agent_service.list_workspace_agents(workspace_id=workspace_id)
 
-        agent_list = await _reconcile_workspace_agents(
-            agent_service=agent_service,
-            current_user=current_user,
-            workspace_id=workspace_id,
-            agent_list=agent_list,
-            class_name_to_agent_class=class_name_to_agent_class,
-            remote_agents=await _discovered_remote_agents(),
-        )
+        if may_sync:
+            agent_list = await _reconcile_workspace_agents(
+                agent_service=agent_service,
+                workspace_id=workspace_id,
+                agent_list=agent_list,
+                class_name_to_agent_class=class_name_to_agent_class,
+                remote_agents=await _discovered_remote_agents(),
+            )
 
-    flags = await _caller_feature_flags(workspace_id, role)
     return [
         _enrich_agent(agent, class_name_to_agent_class)
-        for agent in filter_feature_agents(agent_list, flags)
+        for agent in await _visible_to_caller(agent_list, current_user, workspace_id)
     ]
 
 
-@router.post("/")
+@router.post("/", dependencies=[declares("CreateAgent")])
 async def create_agent(
     agent: AgentCreateInput,
     current_user: User = Depends(get_current_user_required),
     agent_service: AgentService = Depends(get_agent_service),
 ) -> AgentRecord:
-    await require_workspace_access(current_user.id, agent.workspace_id)
-    created_agent = await agent_service.create_agent(
-        context=request_context(current_user),
-        data=agent,
-    )
+    await authz.require("CreateAgent", user=current_user, workspace=agent.workspace_id, id="-")
+    created_agent = await agent_service.create_agent(data=agent)
     logger.debug("Agent created: %s", created_agent)
     return created_agent
 
 
-@router.patch("/{agent_id}")
+async def _load_agent(
+    agent_service: AgentService, current_user: User, action: str, agent_id: str
+) -> AgentRecord:
+    """The agent, once the caller may perform ``action`` on it in its workspace."""
+    agent = await agent_service.get_agent(agent_id=agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    await authz.require(action, user=current_user, workspace=agent.workspace_id, id=agent.id)
+    return agent
+
+
+@router.patch("/{agent_id}", dependencies=[declares("UpdateAgent")])
 async def update_agent(
     agent_id: str,
     updates: AgentUpdateInput,
     current_user: User = Depends(get_current_user_required),
     agent_service: AgentService = Depends(get_agent_service),
 ) -> AgentRecord:
-    existing_agent = await agent_service.get_agent(
-        context=request_context(current_user),
-        agent_id=agent_id,
-    )
-    if not existing_agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
-
-    await require_workspace_access(current_user.id, existing_agent.workspace_id)
+    await _load_agent(agent_service, current_user, "UpdateAgent", agent_id)
 
     updated_agent = await agent_service.update_agent(
-        context=request_context(current_user),
         agent_id=agent_id,
         updates=AgentUpdateInput(
             name=updates.name,
@@ -1060,44 +1041,26 @@ async def update_agent(
     return updated_agent
 
 
-@router.delete("/{agent_id}")
+@router.delete("/{agent_id}", dependencies=[declares("DeleteAgent")])
 async def delete_agent(
     agent_id: str,
     current_user: User = Depends(get_current_user_required),
     agent_service: AgentService = Depends(get_agent_service),
 ) -> dict[str, str]:
-    existing_agent = await agent_service.get_agent(
-        context=request_context(current_user),
-        agent_id=agent_id,
-    )
-    if not existing_agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
-
-    await require_workspace_access(current_user.id, existing_agent.workspace_id)
-    await agent_service.delete_agent(
-        context=request_context(current_user),
-        agent_id=agent_id,
-    )
+    await _load_agent(agent_service, current_user, "DeleteAgent", agent_id)
+    await agent_service.delete_agent(agent_id=agent_id)
     return {"status": "deleted"}
 
 
-@router.get("/{agent_id}")
+@router.get("/{agent_id}", dependencies=[declares("GetAgent")])
 async def get_agent(
     agent_id: str,
     current_user: User = Depends(get_current_user_required),
     agent_service: AgentService = Depends(get_agent_service),
 ) -> AgentRecord:
-    agent = await agent_service.get_agent(
-        context=request_context(current_user),
-        agent_id=agent_id,
-    )
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
-
-    role = await require_workspace_access(current_user.id, agent.workspace_id)
-    # Same rule as the listing: an office agent the caller's role cannot
+    agent = await _load_agent(agent_service, current_user, "GetAgent", agent_id)
+    # Same rule as the listing: an office agent the caller's features do not
     # reach is not addressable by id either, or the gate would only hide it.
-    flags = await _caller_feature_flags(agent.workspace_id, role)
-    if not filter_feature_agents([agent], flags):
+    if not await _visible_to_caller([agent], current_user, agent.workspace_id):
         raise HTTPException(status_code=404, detail="Agent not found")
     return agent

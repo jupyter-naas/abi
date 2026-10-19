@@ -199,7 +199,7 @@ class ResourceGuard:
         """The items the caller may perform ``action`` on, in order (§5.5)."""
         iam = self.iam
         if iam is None:
-            return cast(list[T], items)  # not enforcing: the listing as is
+            return list(items)  # not enforcing: the listing as is
         listed = list(items)
         if not listed or iam.allows_every(self.action(action), self.service, type):
             return listed

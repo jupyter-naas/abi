@@ -1,13 +1,8 @@
 from __future__ import annotations
 
-from uuid import uuid4
-
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
-from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal, get_db
-from naas_abi.apps.nexus.apps.api.app.core.postgres_session_registry import (
-    PostgresSessionRegistry,
-)
+from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__schemas import (
     User,
 )
@@ -21,14 +16,15 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.credentials import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthUserRecord
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService, decode_token
-from naas_abi.apps.nexus.apps.api.app.services.registry import ServiceRegistry
-from naas_abi.apps.nexus.apps.api.app.services.workspaces import WorkspacePermissionError
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz as authz_module
+from naas_abi.apps.nexus.apps.api.app.services.iam.runtime import IAMUnavailableError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token", auto_error=False)
 
 
-def to_user_schema(user: AuthUserRecord) -> User:
+def to_user_schema(user: AuthUserRecord, *, is_superadmin: bool | None = None) -> User:
+    """``is_superadmin`` is IAM's (``builtin.platform_admin``), never the stored flag."""
     return User(
         id=user.id,
         email=user.email,
@@ -37,7 +33,7 @@ def to_user_schema(user: AuthUserRecord) -> User:
         company=user.company,
         role=user.role,
         bio=user.bio,
-        is_superadmin=user.is_superadmin,
+        is_superadmin=bool(is_superadmin),
         created_at=user.created_at,
     )
 
@@ -80,7 +76,20 @@ async def get_current_user(
     user = await auth_service.adapter.get_user_by_id(credential.user_id)
     if user is None:
         return None
+    # ``is_superadmin`` is not asked here: an authorization round trip on every
+    # request, for a flag few routes read. ``to_signed_in_user`` asks for it.
     return to_user_schema(user)
+
+
+async def to_signed_in_user(user: AuthUserRecord) -> User:
+    """The user as the account's own routes show them: with ``is_superadmin``, asked
+    of IAM when the answer is wanted (a profile, a session, a sign-in)."""
+    return to_user_schema(user, is_superadmin=await is_platform_admin(user.id))
+
+
+async def with_platform_role(user: User) -> User:
+    """``user`` with ``is_superadmin`` asked of IAM (see ``to_signed_in_user``)."""
+    return user.model_copy(update={"is_superadmin": await is_platform_admin(user.id)})
 
 
 async def get_current_user_required(
@@ -108,143 +117,46 @@ async def get_current_user_required(
     return current_user
 
 
-async def get_workspace_role(user_id: str, workspace_id: str) -> str | None:
-    async with AsyncSessionLocal() as db:
-        registry = ServiceRegistry.instance()
-        session_registry = PostgresSessionRegistry.instance()
-        session_id = f"sess-{uuid4().hex}"
-        session_registry.bind(session_id=session_id, db=db)
-        token = session_registry.set_current_session(session_id)
-        try:
-            return await registry.workspaces.get_workspace_role(
-                user_id=user_id,
-                workspace_id=workspace_id,
-            )
-        finally:
-            session_registry.reset_current_session(token)
-            session_registry.unbind(session_id)
-
-
-async def require_workspace_access(user_id: str, workspace_id: str) -> str:
-    async with AsyncSessionLocal() as db:
-        registry = ServiceRegistry.instance()
-        session_registry = PostgresSessionRegistry.instance()
-        session_id = f"sess-{uuid4().hex}"
-        session_registry.bind(session_id=session_id, db=db)
-        token = session_registry.set_current_session(session_id)
-        try:
-            return await registry.workspaces.require_workspace_access(
-                user_id=user_id,
-                workspace_id=workspace_id,
-            )
-        except WorkspacePermissionError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You do not have access to this workspace",
-            ) from exc
-        finally:
-            session_registry.reset_current_session(token)
-            session_registry.unbind(session_id)
-
-
-async def require_workspace_platform_drive(user_id: str, workspace_id: str) -> None:
-    """Authorize access to the shared platform drive via a workspace.
-
-    The platform drive is a single tree shared across every workspace; a
-    workspace's members may use it only when ``platform_drive_enabled`` is
-    set on the workspace row.
-    """
-    await require_workspace_access(user_id=user_id, workspace_id=workspace_id)
-    async with AsyncSessionLocal() as db:
-        registry = ServiceRegistry.instance()
-        session_registry = PostgresSessionRegistry.instance()
-        session_id = f"sess-{uuid4().hex}"
-        session_registry.bind(session_id=session_id, db=db)
-        token = session_registry.set_current_session(session_id)
-        try:
-            workspace = await registry.workspaces.get_workspace(workspace_id=workspace_id)
-        finally:
-            session_registry.reset_current_session(token)
-            session_registry.unbind(session_id)
-
-    if workspace is None or not workspace.platform_drive_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Platform drive is not enabled for this workspace",
-        )
+async def is_platform_admin(user_id: str) -> bool:
+    """Whether IAM holds the user as a platform admin: they may manage the
+    system (``nexus:ManageSystem``, which no workspace or org role reaches)."""
+    try:
+        return await authz_module.AUTHZ.allowed("ManageSystem", user=user_id)
+    except IAMUnavailableError:
+        return False  # no IAM, no platform admin; any other failure surfaces
 
 
 async def require_superadmin(
+    request: Request,
     current_user: User = Depends(get_current_user_required),
 ) -> User:
-    """Authorize platform-level admin access.
+    """Authorize platform-level admin access through IAM.
 
-    The ``is_superadmin`` flag is set on the user record (from
-    ``settings.users[].is_superadmin`` in ``config.yaml``, applied by the
-    startup seeder). Used for cross-workspace diagnostic surfaces like the
-    live platform event stream.
+    ``nexus:ReadSystem`` for a read, ``nexus:ManageSystem`` for anything else:
+    held by ``builtin.platform_admin`` alone (the ``users[].is_superadmin`` of
+    the configuration is its attachment).
     """
-    if not current_user.is_superadmin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Platform superadmin role required",
+    action = "ReadSystem" if request.method in ("GET", "HEAD", "OPTIONS") else "ManageSystem"
+    try:
+        await authz_module.AUTHZ.require(
+            action, user=current_user, denied="Platform superadmin role required"
         )
+    except authz_module.AuthzDenied as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Platform superadmin role required"
+        ) from exc
     return current_user
-
-
-async def require_workspace_admin(user_id: str, workspace_id: str) -> None:
-    """Authorize access to admin-only workspace capabilities.
-
-    Used for actions that should be restricted to workspace owners and
-    admins, such as inspecting the system drive (the full object storage
-    tree).
-    """
-    await require_workspace_access(user_id=user_id, workspace_id=workspace_id)
-    role = await get_workspace_role(user_id=user_id, workspace_id=workspace_id)
-    if role not in ("owner", "admin"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Workspace admin role required",
-        )
-
-
-async def require_workspace_system_drive(user_id: str, workspace_id: str) -> None:
-    """Authorize access to the system drive via a workspace.
-
-    The system drive exposes the full object-storage tree and is gated by
-    two conditions: the caller must be a workspace owner/admin AND the
-    workspace must have ``system_drive_enabled`` set to true.
-    """
-    await require_workspace_admin(user_id=user_id, workspace_id=workspace_id)
-    async with AsyncSessionLocal() as db:
-        registry = ServiceRegistry.instance()
-        session_registry = PostgresSessionRegistry.instance()
-        session_id = f"sess-{uuid4().hex}"
-        session_registry.bind(session_id=session_id, db=db)
-        token = session_registry.set_current_session(session_id)
-        try:
-            workspace = await registry.workspaces.get_workspace(workspace_id=workspace_id)
-        finally:
-            session_registry.reset_current_session(token)
-            session_registry.unbind(session_id)
-
-    if workspace is None or not workspace.system_drive_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="System drive is not enabled for this workspace",
-        )
 
 
 __all__ = [
     "decode_token",
+    "is_platform_admin",
+    "require_superadmin",
     "get_auth_service",
     "get_current_user",
     "get_current_user_required",
-    "get_workspace_role",
     "oauth2_scheme",
-    "require_workspace_access",
-    "require_workspace_admin",
-    "require_workspace_platform_drive",
-    "require_workspace_system_drive",
+    "to_signed_in_user",
+    "with_platform_role",
     "to_user_schema",
 ]

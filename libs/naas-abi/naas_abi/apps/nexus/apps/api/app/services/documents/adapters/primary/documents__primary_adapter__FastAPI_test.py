@@ -62,6 +62,15 @@ from pydantic import ValidationError
 pytestmark = pytest.mark.usefixtures("engine_iam")
 
 
+@pytest.fixture(autouse=True)
+def _workspaces(team):
+    """``user-1`` owns the workspaces these tests use; ``team`` holds the roles."""
+    for workspace in ("ws-1", "ws-test"):
+        scope = team.workspace("org-1", workspace)
+        team.grant("user-1", "owner", scope)
+    return team
+
+
 def test_slugify_and_paths() -> None:
     assert _slugify("Q3 Business Review!") == "q3-business-review"
     assert _branch_for("ws-abc", "demo") == "documents/ws-abc/demo"
@@ -366,12 +375,14 @@ def test_ensure_coding_repo_seeds_empty_in_memory() -> None:
     assert [b.name for b in sc.list_branches(repo_id=repo_id)]
 
 
-def _sections_client(monkeypatch, source_control: SourceControlService) -> TestClient:
+def _sections_client(
+    monkeypatch, source_control: SourceControlService, user_id: str = "user-1"
+) -> TestClient:
     app = FastAPI()
     app.state.source_control = source_control
     app.include_router(documents_api.router, prefix="/documents")
     app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
-        id="user-1", email="admin@example.com", name="Test Admin"
+        id=user_id, email="admin@example.com", name="Test Admin"
     )
 
     async def _fake_db():
@@ -379,10 +390,6 @@ def _sections_client(monkeypatch, source_control: SourceControlService) -> TestC
 
     app.dependency_overrides[get_db] = _fake_db
 
-    async def _allow(user_id: str, workspace_id: str) -> str:
-        return "owner"
-
-    monkeypatch.setattr(documents_api, "require_workspace_access", _allow)
     monkeypatch.setattr(documents_api, "_get_coding_environment", lambda _request: None)
     return TestClient(app)
 
@@ -940,10 +947,6 @@ def _sqlite_sections_client(monkeypatch, source_control, session):
 
     app.dependency_overrides[get_db] = _session
 
-    async def _allow(user_id: str, workspace_id: str) -> str:
-        return "owner"
-
-    monkeypatch.setattr(documents_api, "require_workspace_access", _allow)
     monkeypatch.setattr(documents_api, "_probe_sidecar", _only_the_local_sidecar_answers)
     monkeypatch.setattr(documents_api.time, "sleep", lambda *_: None)
     return TestClient(app)

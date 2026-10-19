@@ -10,8 +10,6 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Resp
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
-    get_workspace_role,
-    require_workspace_access,
 )
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.secrets import deprecated_encrypt
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
@@ -25,8 +23,15 @@ from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__pri
     get_files_service,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz, placements
+from naas_abi.apps.nexus.apps.api.app.services.iam.bootstrap import refresh_feature_policies
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
+from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import ROLE_NAMES, MembershipDenied
 from naas_abi.apps.nexus.apps.api.app.services.invites import runtime as invites_runtime
-from naas_abi.apps.nexus.apps.api.app.services.invites.port import NoProviderError
+from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
+    NoProviderError,
+    OrgInvitationExistsError,
+)
 from naas_abi.apps.nexus.apps.api.app.services.invites.service import InvitationService
 from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
     issue_and_send_invite_sign_in,
@@ -66,6 +71,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     WorkspaceUpdateInput,
 )
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
+    LastOwnerError,
     WorkspaceMemberAlreadyExistsError,
     WorkspaceService,
     WorkspaceSlugAlreadyExistsError,
@@ -79,6 +85,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
 router.include_router(resource_access_router)
+
+
+def _member_denied(role: str) -> HTTPException:
+    """IAM refused a change of roles: the owner role is the owner's alone (bug c)."""
+    if role == "owner":
+        return HTTPException(
+            status_code=403, detail="Only owners can grant, change or remove an owner"
+        )
+    return HTTPException(status_code=403, detail="You do not have permission to change this member")
 
 
 def get_workspace_service(db: AsyncSession = Depends(get_db)) -> WorkspaceService:
@@ -167,7 +182,7 @@ class WorkspaceMember(BaseModel):
 
 class WorkspaceMemberInvite(BaseModel):
     email: str = Field(..., min_length=3, max_length=255)
-    role: str = Field(default="member", pattern=r"^(admin|member|viewer)$")
+    role: str = Field(default="member", pattern=r"^(owner|admin|member|viewer)$")
     name: str | None = Field(default=None, min_length=1, max_length=120)
     # The identity provider to invite through; by default the one the email's
     # domain routes to, else the default provider.
@@ -289,16 +304,15 @@ def _to_schema(
     )
 
 
-@router.get("")
+@router.get("", dependencies=[declares("ListWorkspaces")])
 async def list_workspaces(
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
     org_service: OrganizationService = Depends(get_organization_service),
 ) -> list[Workspace]:
     rows = await service.list_workspaces(user_id=current_user.id)
-    roles = await asyncio.gather(
-        *[service.get_workspace_role(user_id=current_user.id, workspace_id=row.id) for row in rows]
-    )
+    held = await service.roles_of(current_user.id)
+    roles = [held.get(row.id) for row in rows]
     overrides = await _load_org_role_overrides([row.organization_id for row in rows], org_service)
     return [
         _to_schema(
@@ -310,14 +324,14 @@ async def list_workspaces(
     ]
 
 
-@router.get("/{workspace_id}")
+@router.get("/{workspace_id}", dependencies=[guard("GetWorkspace")])
 async def get_workspace(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
     org_service: OrganizationService = Depends(get_organization_service),
 ) -> Workspace:
-    role = await require_workspace_access(current_user.id, workspace_id)
+    role = await service.get_workspace_role(current_user.id, workspace_id)
     row = await service.get_workspace(workspace_id=workspace_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
@@ -328,7 +342,7 @@ async def get_workspace(
     )
 
 
-@router.get("/slug/{slug}")
+@router.get("/slug/{slug}", dependencies=[declares("GetWorkspace")])
 async def get_workspace_by_slug(
     slug: str,
     current_user: User = Depends(get_current_user_required),
@@ -338,7 +352,9 @@ async def get_workspace_by_slug(
     row = await service.get_workspace_by_slug(slug=slug)
     if row is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    role = await require_workspace_access(current_user.id, row.id)
+    # The slug names the workspace: a caller who cannot see it learns nothing of it.
+    await authz.require("GetWorkspace", user=current_user, workspace=row.id)
+    role = await service.get_workspace_role(current_user.id, row.id)
     return _to_schema(
         row,
         role,
@@ -346,13 +362,20 @@ async def get_workspace_by_slug(
     )
 
 
-@router.post("")
+@router.post("", dependencies=[declares("CreateWorkspace")])
 async def create_workspace(
     workspace: WorkspaceCreate,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
     org_service: OrganizationService = Depends(get_organization_service),
 ) -> Workspace:
+    # Bug (d): the organization is checked for the caller, never taken from the
+    # body. A workspace without one is the caller's personal workspace, which
+    # needs the right every user has to create their own organization.
+    if workspace.organization_id:
+        await authz.require("CreateWorkspace", user=current_user, org=workspace.organization_id)
+    else:
+        await authz.require("CreateOrganization", user=current_user)
     try:
         record = await service.create_workspace(
             WorkspaceCreateInput(
@@ -372,6 +395,12 @@ async def create_workspace(
         )
     except WorkspaceSlugAlreadyExistsError as exc:
         raise HTTPException(status_code=400, detail="Slug already exists") from exc
+    # What IAM derives from the new workspace: the kernel resources its roles
+    # reach (drives, caches, drafts) and the feature overrides its slug names.
+    await service.adapter.db.flush()
+    await placements.place_new_workspace(service.adapter.db, record.id)
+    if settings.feature_flags.workspace_overrides:
+        await refresh_feature_policies(service.adapter.db)
     return _to_schema(
         record,
         "owner",
@@ -379,24 +408,27 @@ async def create_workspace(
     )
 
 
-@router.delete("/{workspace_id}")
+@router.delete(
+    "/{workspace_id}",
+    dependencies=[
+        guard("DeleteWorkspace", denied="Only the workspace owner can delete the workspace")
+    ],
+)
 async def delete_workspace(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
 ) -> dict[str, str]:
-    role = await require_workspace_access(current_user.id, workspace_id)
-    if role != "owner":
-        raise HTTPException(
-            status_code=403, detail="Only the workspace owner can delete the workspace"
-        )
     deleted = await service.delete_workspace(workspace_id=workspace_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Workspace not found")
     return {"status": "deleted"}
 
 
-@router.patch("/{workspace_id}")
+@router.patch(
+    "/{workspace_id}",
+    dependencies=[guard("UpdateWorkspace", denied="Only admins can update workspace settings")],
+)
 async def update_workspace(
     workspace_id: str,
     updates: WorkspaceUpdate,
@@ -404,9 +436,7 @@ async def update_workspace(
     service: WorkspaceService = Depends(get_workspace_service),
     org_service: OrganizationService = Depends(get_organization_service),
 ) -> Workspace:
-    role = await require_workspace_access(current_user.id, workspace_id)
-    if role not in ("owner", "admin"):
-        raise HTTPException(status_code=403, detail="Only admins can update workspace settings")
+    role = await service.get_workspace_role(current_user.id, workspace_id)
 
     record = await service.update_workspace(
         workspace_id=workspace_id,
@@ -421,13 +451,12 @@ async def update_workspace(
     )
 
 
-@router.get("/{workspace_id}/stats")
+@router.get("/{workspace_id}/stats", dependencies=[guard("GetWorkspaceStats")])
 async def get_workspace_stats(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
 ) -> dict[str, Any]:
-    await require_workspace_access(current_user.id, workspace_id)
     stats = await service.get_workspace_stats(workspace_id=workspace_id)
     if stats is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
@@ -439,13 +468,12 @@ async def get_workspace_stats(
     }
 
 
-@router.get("/{workspace_id}/members")
+@router.get("/{workspace_id}/members", dependencies=[guard("ListWorkspaceMembers", literal="-")])
 async def list_workspace_members(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
 ) -> list[WorkspaceMember]:
-    await require_workspace_access(current_user.id, workspace_id)
     rows = await service.list_workspace_members(workspace_id=workspace_id)
     return [
         WorkspaceMember(
@@ -469,7 +497,12 @@ async def _find_workspace_member(
     return next((m for m in members if m.user_id == user_id), None)
 
 
-@router.post("/{workspace_id}/members/invite")
+@router.post(
+    "/{workspace_id}/members/invite",
+    dependencies=[
+        guard("InviteWorkspaceMember", literal="-", denied="Only admins can invite members")
+    ],
+)
 async def invite_workspace_member(
     workspace_id: str,
     invite: WorkspaceMemberInvite,
@@ -481,10 +514,6 @@ async def invite_workspace_member(
     invites: InvitationService = Depends(invites_runtime.get_invitation_service),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, object]:
-    role = await get_workspace_role(current_user.id, workspace_id)
-    if role not in ["admin", "owner"]:
-        raise HTTPException(status_code=403, detail="Only admins can invite members")
-
     email = invite.email.lower().strip()
     await check_rate_limit(
         get_rate_limit_identifier(request, current_user.id),
@@ -514,7 +543,19 @@ async def invite_workspace_member(
                 inviter_name=current_user.name,
                 organization_name=organization.name if organization else None,
                 workspace_name=workspace.name if workspace else None,
+                may_renew_org_invitation=bool(
+                    workspace is not None
+                    and workspace.organization_id
+                    and await authz.allowed(
+                        "InviteOrganizationMember",
+                        user=current_user,
+                        org=workspace.organization_id,
+                        id="-",
+                    )
+                ),
             )
+        except OrgInvitationExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         except NoProviderError as exc:
             if invite.provider:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -534,7 +575,10 @@ async def invite_workspace_member(
             workspace_id=workspace_id,
             email=email,
             role=invite.role,
+            by=current_user,
         )
+    except MembershipDenied as exc:
+        raise _member_denied(str(exc)) from exc
     except WorkspaceMemberAlreadyExistsError as exc:
         # Re-inviting is how an admin resends an invite that never arrived, so
         # keep the membership as-is and fall through to issue a fresh challenge
@@ -563,26 +607,40 @@ async def invite_workspace_member(
     }
 
 
-@router.delete("/{workspace_id}/members/{user_id}")
+@router.delete(
+    "/{workspace_id}/members/{user_id}",
+    dependencies=[
+        guard("RemoveWorkspaceMember", id="user_id", denied="Only admins can remove members")
+    ],
+)
 async def remove_workspace_member(
     workspace_id: str,
     user_id: str,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
 ) -> dict[str, str]:
-    role = await get_workspace_role(current_user.id, workspace_id)
-    if role not in ["admin", "owner"]:
-        raise HTTPException(status_code=403, detail="Only admins can remove members")
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot remove yourself")
 
-    removed = await service.remove_workspace_member(workspace_id=workspace_id, user_id=user_id)
+    try:
+        removed = await service.remove_workspace_member(
+            workspace_id=workspace_id, user_id=user_id, by=current_user
+        )
+    except MembershipDenied as exc:
+        raise _member_denied(str(exc)) from exc
+    except LastOwnerError as exc:
+        raise HTTPException(status_code=400, detail="A workspace needs an owner") from exc
     if not removed:
         raise HTTPException(status_code=404, detail="Member not found")
     return {"status": "removed"}
 
 
-@router.patch("/{workspace_id}/members/{user_id}")
+@router.patch(
+    "/{workspace_id}/members/{user_id}",
+    dependencies=[
+        guard("UpdateWorkspaceMember", id="user_id", denied="Only admins can update members")
+    ],
+)
 async def update_workspace_member(
     workspace_id: str,
     user_id: str,
@@ -590,42 +648,42 @@ async def update_workspace_member(
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
 ) -> dict[str, str]:
-    role = await get_workspace_role(current_user.id, workspace_id)
-    if role not in ["admin", "owner"]:
-        raise HTTPException(status_code=403, detail="Only admins can update members")
-
-    changed = await service.update_workspace_member(
-        workspace_id=workspace_id,
-        user_id=user_id,
-        updates=updates,
-    )
-    if updates.get("role") in ["admin", "member", "viewer"] and not changed:
+    try:
+        changed = await service.update_workspace_member(
+            workspace_id=workspace_id,
+            user_id=user_id,
+            updates=updates,
+            by=current_user,
+        )
+    except MembershipDenied as exc:
+        raise _member_denied(str(exc)) from exc
+    except LastOwnerError as exc:
+        raise HTTPException(status_code=400, detail="A workspace needs an owner") from exc
+    if updates.get("role") in ROLE_NAMES and not changed:
         raise HTTPException(status_code=404, detail="Member not found")
     return {"status": "updated"}
 
 
-@router.get("/{workspace_id}/servers")
+@router.get("/{workspace_id}/servers", dependencies=[guard("ListServers", literal="-")])
 async def list_inference_servers(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
 ) -> list[InferenceServer]:
-    await require_workspace_access(current_user.id, workspace_id)
     servers = await service.list_inference_servers(workspace_id=workspace_id)
     return [InferenceServer(**server.__dict__) for server in servers]
 
 
-@router.post("/{workspace_id}/servers")
+@router.post(
+    "/{workspace_id}/servers",
+    dependencies=[guard("CreateServer", literal="-", denied="Only admins can add servers")],
+)
 async def create_inference_server(
     workspace_id: str,
     server_data: InferenceServerCreate,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
 ) -> InferenceServer:
-    role = await get_workspace_role(current_user.id, workspace_id)
-    if role not in ["admin", "owner"]:
-        raise HTTPException(status_code=403, detail="Only admins can add servers")
-
     server = await service.create_inference_server(
         workspace_id=workspace_id,
         name=server_data.name,
@@ -640,7 +698,10 @@ async def create_inference_server(
     return InferenceServer(**server.__dict__)
 
 
-@router.patch("/{workspace_id}/servers/{server_id}")
+@router.patch(
+    "/{workspace_id}/servers/{server_id}",
+    dependencies=[guard("UpdateServer", id="server_id", denied="Only admins can update servers")],
+)
 async def update_inference_server(
     workspace_id: str,
     server_id: str,
@@ -648,10 +709,6 @@ async def update_inference_server(
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
 ) -> InferenceServer:
-    role = await get_workspace_role(current_user.id, workspace_id)
-    if role not in ["admin", "owner"]:
-        raise HTTPException(status_code=403, detail="Only admins can update servers")
-
     api_key = None
     if updates.api_key is not None:
         api_key = deprecated_encrypt(updates.api_key) if updates.api_key else None
@@ -672,17 +729,16 @@ async def update_inference_server(
     return InferenceServer(**server.__dict__)
 
 
-@router.delete("/{workspace_id}/servers/{server_id}")
+@router.delete(
+    "/{workspace_id}/servers/{server_id}",
+    dependencies=[guard("DeleteServer", id="server_id", denied="Only admins can delete servers")],
+)
 async def delete_inference_server(
     workspace_id: str,
     server_id: str,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
 ) -> dict:
-    role = await get_workspace_role(current_user.id, workspace_id)
-    if role not in ["admin", "owner"]:
-        raise HTTPException(status_code=403, detail="Only admins can delete servers")
-
     deleted = await service.delete_inference_server(workspace_id=workspace_id, server_id=server_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Server not found")
@@ -695,17 +751,16 @@ ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
 MAX_FILE_SIZE = 5 * 1024 * 1024
 
 
-@router.post("/{workspace_id}/upload-logo")
+@router.post(
+    "/{workspace_id}/upload-logo",
+    dependencies=[guard("UpdateWorkspaceTheme", denied="Only admins can upload logos")],
+)
 async def upload_workspace_logo(
     workspace_id: str,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
 ) -> dict:
-    role = await get_workspace_role(current_user.id, workspace_id)
-    if role not in ["admin", "owner"]:
-        raise HTTPException(status_code=403, detail="Only admins can upload logos")
-
     workspace = await service.get_workspace(workspace_id=workspace_id)
     if workspace is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
@@ -771,11 +826,7 @@ class BackgroundImageCommit(BaseModel):
     zoom: float = Field(default=MIN_ZOOM, ge=MIN_ZOOM, le=MAX_ZOOM)
 
 
-async def _require_workspace_admin(user: User, workspace_id: str) -> str:
-    role = await require_workspace_access(user.id, workspace_id)
-    if role not in ("owner", "admin"):
-        raise HTTPException(status_code=403, detail="Only admins can change the background image")
-    return role
+_BACKGROUND_DENIED = "Only admins can change the background image"
 
 
 def _image_response(raw, *, cache: str) -> Response:
@@ -786,7 +837,10 @@ def _image_response(raw, *, cache: str) -> Response:
     )
 
 
-@router.post("/{workspace_id}/background-image/draft")
+@router.post(
+    "/{workspace_id}/background-image/draft",
+    dependencies=[guard("UpdateWorkspaceTheme", denied=_BACKGROUND_DENIED)],
+)
 async def stage_background_image(
     workspace_id: str,
     file: UploadFile | None = File(default=None),
@@ -795,7 +849,6 @@ async def stage_background_image(
     files_service: FilesService = Depends(get_files_service),
 ) -> BackgroundImageDraft:
     """Upload a local file or download ``url`` into ``.home/tmp`` for preview."""
-    await _require_workspace_admin(current_user, workspace_id)
     if (file is None) == (not url):
         raise HTTPException(status_code=400, detail="Send either a file or a url")
     background = WorkspaceBackgroundImage(files_service, workspace_id)
@@ -814,14 +867,16 @@ async def stage_background_image(
     return BackgroundImageDraft(draft=draft)
 
 
-@router.get("/{workspace_id}/background-image/draft/{name}")
+@router.get(
+    "/{workspace_id}/background-image/draft/{name}",
+    dependencies=[guard("UpdateWorkspaceTheme", denied=_BACKGROUND_DENIED)],
+)
 async def preview_background_image_draft(
     workspace_id: str,
     name: str,
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ) -> Response:
-    await _require_workspace_admin(current_user, workspace_id)
     try:
         raw = WorkspaceBackgroundImage(files_service, workspace_id).read_draft(name)
     except BackgroundImageError as exc:
@@ -829,18 +884,23 @@ async def preview_background_image_draft(
     return _image_response(raw, cache="no-store")
 
 
-@router.delete("/{workspace_id}/background-image/draft")
+@router.delete(
+    "/{workspace_id}/background-image/draft",
+    dependencies=[guard("UpdateWorkspaceTheme", denied=_BACKGROUND_DENIED)],
+)
 async def discard_background_image_draft(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ) -> dict:
-    await _require_workspace_admin(current_user, workspace_id)
     WorkspaceBackgroundImage(files_service, workspace_id).discard()
     return {"message": "Draft discarded"}
 
 
-@router.post("/{workspace_id}/background-image")
+@router.post(
+    "/{workspace_id}/background-image",
+    dependencies=[guard("UpdateWorkspaceTheme", denied=_BACKGROUND_DENIED)],
+)
 async def commit_background_image(
     workspace_id: str,
     payload: BackgroundImageCommit,
@@ -851,7 +911,7 @@ async def commit_background_image(
 ) -> Workspace:
     """Point the workspace at the new draft (moved to ``.home/background-img``, old
     files cleaned up) or at the current wallpaper with new framing."""
-    role = await _require_workspace_admin(current_user, workspace_id)
+    role = await service.get_workspace_role(current_user.id, workspace_id)
     if (payload.draft is None) == (payload.current is None):
         raise HTTPException(status_code=400, detail="Send either a draft or the current image")
     background = WorkspaceBackgroundImage(files_service, workspace_id)
@@ -881,7 +941,7 @@ async def commit_background_image(
     )
 
 
-@router.get("/{workspace_id}/background-image/current")
+@router.get("/{workspace_id}/background-image/current", dependencies=[guard("GetWorkspace")])
 async def get_current_background_image(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
@@ -894,7 +954,6 @@ async def get_current_background_image(
     but a file is still committed under ``.home/background-img`` (a restart
     used to clear the column), point the workspace at the file again.
     """
-    await require_workspace_access(current_user.id, workspace_id)
     record = await service.get_workspace(workspace_id=workspace_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
@@ -911,7 +970,7 @@ async def get_current_background_image(
     return BackgroundImageCurrent(background_image_url=url)
 
 
-@router.get("/{workspace_id}/background-image")
+@router.get("/{workspace_id}/background-image", dependencies=[guard("GetWorkspace")])
 async def get_background_image(
     workspace_id: str,
     v: str,
@@ -919,7 +978,6 @@ async def get_background_image(
     files_service: FilesService = Depends(get_files_service),
 ) -> Response:
     """The committed wallpaper. ``v`` is its file name, so the URL changes on every commit."""
-    await require_workspace_access(current_user.id, workspace_id)
     try:
         raw = WorkspaceBackgroundImage(files_service, workspace_id).read_current(v)
     except BackgroundImageError as exc:

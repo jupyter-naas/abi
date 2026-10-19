@@ -255,6 +255,42 @@ def issuer_source(
     )
 
 
+class JobAccountSource:
+    """The engine's token source, except for an engine module's jobs.
+
+    A job runs as its own service account (``job/<module_id>``, in process); its
+    calls over NATS carry that account's token, not the engine's, so a kernel
+    service decides for the job and the audit names it. Everything else (the
+    engine itself, a call made for a user, which is a delegation) is the engine
+    source's own.
+    """
+
+    def __init__(self, engine: Any, for_account: Callable[[str], Any]) -> None:
+        self._engine = engine
+        self._for_account = for_account
+        self.identity = engine.identity
+
+    def _source(self) -> Any:
+        from naas_abi_core.engine.call_context import current_call_context
+
+        principal = current_call_context().principal
+        name = principal.name or ""
+        if principal.kind == "service_account" and name.startswith("job/"):
+            return self._for_account(name)
+        return self._engine
+
+    def token(self) -> str:
+        return str(self._source().token())
+
+    def token_for(self, user: Any, recipient: Any = None, scope: Any = None) -> str:
+        if user is None:
+            return self.token()
+        return str(self._engine.token_for(user, recipient, scope))
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._engine, name)
+
+
 def _revoked_since(iam: Any) -> Callable[[Any, IssuedToken], bool]:
     """Whether a delegation was made before its user's tokens were revoked
     (IAM's floor): the cache must not hand it out again."""

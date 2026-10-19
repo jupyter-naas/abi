@@ -54,13 +54,18 @@ IdP group bindings are the same idea for a whole group of a provider: the member
 
 ## Rules
 
-- **The route authorizes the inviting person, the service never does.** Today that is the
-  existing membership check (owner or admin of the org or workspace); the calls to IAM and
-  to the provider are then Nexus's own (`as_service_account("api")`, no user), because a
-  Nexus user holds no `iam:*` right until subtask 11 (#65) attaches roles to memberships.
-  When it does, swap the check for IAM's (`iam:AttachPolicy` at the scope, which
-  `create_pending_grant` and `bind_idp_group` already enforce for any caller that is not
-  `api`) and drop `add_membership`: the claimed attachments are the memberships.
+- **The route authorizes the inviting person, the service never does.** The check is IAM's
+  (`InviteOrganizationMember` / `InviteWorkspaceMember`, an admin's level: `declares(...)` on each
+  route, so the route matrix sees it). The calls to IAM and to the provider are then Nexus's own
+  (`as_service_account("api")`, no user), which is why the owner rule is also kept here
+  (`may_grant_owner`). The claimed attachments are the memberships: Nexus keeps no membership row.
+- **Making the person at the provider needs the right to.** The provider's admin API is called as `api` on behalf of
+  the inviting user, so IAM checks `identity:ProvisionUser` for them (not an organization role's); without it, or
+  for an address that is not on a domain the organization verified and routed to that provider, the invitation is
+  pending grants only (`provisioning_skipped`). Never call `provision` for nobody on a user's say-so.
+- **Authorize an invitation at the scope of its roles.** One with an `org_role` is the organization
+  administrators' (`require_invitation_admin`), and a workspace-only invite never rewrites it
+  (`OrgInvitationExistsError`).
 - **Grants first, then the provider.** A failed grant or provisioning call takes back what
   the call made; the email is last and never fails the invitation.
 - **Claim only a verified email.** `runtime.claimer` runs after the sign-in resolved the

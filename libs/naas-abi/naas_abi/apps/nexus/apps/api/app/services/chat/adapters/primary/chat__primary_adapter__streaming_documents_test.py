@@ -120,7 +120,6 @@ def _install_fakes(monkeypatch: pytest.MonkeyPatch, capture: _Capture) -> None:
     monkeypatch.setattr(
         streaming, "build_provider_messages_with_agents", fake_build_provider_messages
     )
-    monkeypatch.setattr(streaming, "request_context", lambda user: SimpleNamespace(user=user))
     monkeypatch.setattr(streaming, "persist_stream_content", fake_persist_stream_content)
     monkeypatch.setattr(streaming, "persist_stream_metadata", fake_persist_stream_metadata)
     monkeypatch.setattr(streaming, "stream_with_abi_inprocess", fake_stream_with_abi_inprocess)

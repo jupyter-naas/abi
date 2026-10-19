@@ -9,11 +9,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
-    require_workspace_access,
 )
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
-from naas_abi.apps.nexus.apps.api.app.services.iam.port import RequestContext, TokenData
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.secrets.adapters.secondary.postgres import (
     SecretsSecondaryAdapterPostgres,
 )
@@ -38,16 +38,7 @@ class SecretsFastAPIPrimaryAdapter:
 
 
 def get_secrets_service(db: AsyncSession = Depends(get_db)) -> SecretsService:
-    return SecretsService(
-        adapter=SecretsSecondaryAdapterPostgres(db=db),
-        workspace_access_checker=require_workspace_access,
-    )
-
-
-def request_context(current_user: User) -> RequestContext:
-    return RequestContext(
-        token_data=TokenData(user_id=current_user.id, scopes={"*"}, is_authenticated=True)
-    )
+    return SecretsService(adapter=SecretsSecondaryAdapterPostgres(db=db))
 
 
 class SecretCreate(BaseModel):
@@ -92,33 +83,31 @@ def _to_secret_response(record: SecretOutput) -> SecretResponse:
     )
 
 
-@router.get("/{workspace_id}")
+@router.get("/{workspace_id}", dependencies=[guard("ListSecrets", literal="-")])
 async def list_secrets(
     workspace_id: str,
-    current_user: User = Depends(get_current_user_required),
     service: SecretsService = Depends(get_secrets_service),
 ) -> list[SecretResponse]:
-    await require_workspace_access(current_user.id, workspace_id)
-    rows = await service.list_secrets(
-        context=request_context(current_user),
-        workspace_id=workspace_id,
-    )
+    rows = await service.list_secrets(workspace_id=workspace_id)
     return [_to_secret_response(row) for row in rows]
 
 
-@router.post("")
+@router.post("", dependencies=[declares("CreateSecret")])
 async def create_secret(
     secret: SecretCreate,
     current_user: User = Depends(get_current_user_required),
     service: SecretsService = Depends(get_secrets_service),
 ) -> SecretResponse:
-    role = await require_workspace_access(current_user.id, secret.workspace_id)
-    if role not in ("admin", "owner"):
-        raise HTTPException(status_code=403, detail="Only admins and owners can manage secrets")
+    await authz.require(
+        "CreateSecret",
+        user=current_user,
+        workspace=secret.workspace_id,
+        id="-",
+        denied="Only admins and owners can manage secrets",
+    )
 
     try:
         row = await service.create_secret(
-            context=request_context(current_user),
             secret=SecretCreateInput(
                 workspace_id=secret.workspace_id,
                 key=secret.key,
@@ -136,24 +125,33 @@ async def create_secret(
     return _to_secret_response(row)
 
 
-@router.put("/{secret_id}")
+async def _authorize_on_secret(
+    service: SecretsService, current_user: User, action: str, secret_id: str
+) -> None:
+    """Authorize ``action`` on a stored secret, in the workspace that holds it."""
+    row = await service.adapter.get_by_id(secret_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Secret not found")
+    await authz.require(
+        action,
+        user=current_user,
+        workspace=row.workspace_id,
+        id=secret_id,
+        denied="Only admins and owners can manage secrets",
+    )
+
+
+@router.put("/{secret_id}", dependencies=[declares("UpdateSecret")])
 async def update_secret(
     secret_id: str,
     update: SecretUpdate,
     current_user: User = Depends(get_current_user_required),
     service: SecretsService = Depends(get_secrets_service),
 ) -> SecretResponse:
-    row = await service.adapter.get_by_id(secret_id)
-    if not row:
-        raise HTTPException(status_code=404, detail="Secret not found")
-
-    role = await require_workspace_access(current_user.id, row.workspace_id)
-    if role not in ("admin", "owner"):
-        raise HTTPException(status_code=403, detail="Only admins and owners can manage secrets")
+    await _authorize_on_secret(service, current_user, "UpdateSecret", secret_id)
 
     try:
         updated = await service.update_secret(
-            context=request_context(current_user),
             secret_id=secret_id,
             update=SecretUpdateInput(
                 value=update.value,
@@ -166,42 +164,36 @@ async def update_secret(
     return _to_secret_response(updated)
 
 
-@router.delete("/{secret_id}")
+@router.delete("/{secret_id}", dependencies=[declares("DeleteSecret")])
 async def delete_secret(
     secret_id: str,
     current_user: User = Depends(get_current_user_required),
     service: SecretsService = Depends(get_secrets_service),
 ) -> dict:
-    row = await service.adapter.get_by_id(secret_id)
-    if not row:
-        raise HTTPException(status_code=404, detail="Secret not found")
-
-    role = await require_workspace_access(current_user.id, row.workspace_id)
-    if role not in ("admin", "owner"):
-        raise HTTPException(status_code=403, detail="Only admins and owners can manage secrets")
+    await _authorize_on_secret(service, current_user, "DeleteSecret", secret_id)
 
     try:
-        await service.delete_secret(
-            context=request_context(current_user),
-            secret_id=secret_id,
-        )
+        await service.delete_secret(secret_id=secret_id)
     except SecretNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Secret not found") from exc
     return {"status": "deleted"}
 
 
-@router.post("/import")
+@router.post("/import", dependencies=[declares("ImportSecrets")])
 async def bulk_import_secrets(
     data: SecretBulkImport,
     current_user: User = Depends(get_current_user_required),
     service: SecretsService = Depends(get_secrets_service),
 ) -> dict:
-    role = await require_workspace_access(current_user.id, data.workspace_id)
-    if role not in ("admin", "owner"):
-        raise HTTPException(status_code=403, detail="Only admins and owners can manage secrets")
+    await authz.require(
+        "ImportSecrets",
+        user=current_user,
+        workspace=data.workspace_id,
+        id="-",
+        denied="Only admins and owners can manage secrets",
+    )
 
     result = await service.bulk_import(
-        context=request_context(current_user),
         data=SecretBulkImportInput(
             workspace_id=data.workspace_id,
             env_content=data.env_content,
@@ -209,8 +201,3 @@ async def bulk_import_secrets(
         now=datetime.now(UTC).replace(tzinfo=None),
     )
     return {"imported": result.imported, "updated": result.updated}
-
-
-@router.get("/test-public")
-async def test_public_endpoint() -> dict:
-    return {"message": "Public secrets endpoint working!"}

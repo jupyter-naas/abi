@@ -13,15 +13,13 @@ from datetime import datetime
 
 import socketio
 from fastapi import FastAPI, HTTPException
-from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
-    require_workspace_access,
-)
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.services.auth.credentials import (
     SESSION,
     bearer_credential,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +45,13 @@ def _workspace_in_session(session: dict, workspace_id: str) -> bool:
     if not isinstance(workspaces, set):
         return False
     return workspace_id in workspaces
+
+
+def _may_broadcast(session: dict, workspace_id: str) -> bool:
+    """Decided by IAM when the user joined the room (``Broadcast``): a viewer
+    follows a workspace but sends nothing into it."""
+    allowed = session.get("broadcast")
+    return isinstance(allowed, set) and workspace_id in allowed
 
 
 @sio.event
@@ -108,30 +113,13 @@ async def _cookie_session_user(environ: dict) -> str | None:
 
 
 async def _accept(sid: str, user_id: str) -> bool:
-    # Resolve the user's superadmin flag once at connect time so the
-    # admin-events room gate doesn't have to re-query on every event.
-    is_superadmin = False
-    try:
-        from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-        from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.secondary.postgres import (
-            AuthSecondaryAdapterPostgres,
-        )
-
-        async with AsyncSessionLocal() as db:
-            adapter = AuthSecondaryAdapterPostgres(db=db)
-            record = await adapter.get_user_by_id(user_id)
-            if record is not None:
-                is_superadmin = bool(record.is_superadmin)
-    except Exception:
-        logger.exception("[WS] failed to resolve user record for sid=%s", sid)
-
     logger.info(f"[WS] Client connected sid={sid} user={user_id}")
 
     # Store user_id with session
     async with sio.session(sid) as session:
         session["user_id"] = user_id
-        session["is_superadmin"] = is_superadmin
         session["workspaces"] = set()
+        session["broadcast"] = set()
 
     return True
 
@@ -180,7 +168,7 @@ async def join_workspace(sid, data):
             return {"error": "unauthorized"}
 
     try:
-        await require_workspace_access(user_id, workspace_id)
+        await authz.require("GetPresence", user=user_id, workspace=workspace_id)
     except HTTPException:
         logger.warning(
             "[WS] Workspace join denied sid=%s user=%s workspace=%s",
@@ -190,12 +178,22 @@ async def join_workspace(sid, data):
         )
         return {"error": "workspace access denied"}
 
+    can_broadcast = await authz.allowed("Broadcast", user=user_id, workspace=workspace_id)
+
     async with sio.session(sid) as session:
         workspaces = session.get("workspaces")
         if not isinstance(workspaces, set):
             workspaces = set()
             session["workspaces"] = workspaces
         workspaces.add(workspace_id)
+        broadcast = session.get("broadcast")
+        if not isinstance(broadcast, set):
+            broadcast = set()
+            session["broadcast"] = broadcast
+        if can_broadcast:
+            broadcast.add(workspace_id)
+        else:
+            broadcast.discard(workspace_id)
 
     # Join Socket.IO room
     sio.enter_room(sid, f"workspace:{workspace_id}")
@@ -236,6 +234,7 @@ async def leave_workspace(sid, data):
     async with sio.session(sid) as session:
         user_id = session.get("user_id")
         session["workspaces"].discard(workspace_id)
+        session.get("broadcast", set()).discard(workspace_id)
 
     # Leave Socket.IO room
     sio.leave_room(sid, f"workspace:{workspace_id}")
@@ -268,6 +267,8 @@ async def typing_start(sid, data):
         user_id = session.get("user_id")
         if not _workspace_in_session(session, workspace_id):
             return {"error": "workspace not joined"}
+        if not _may_broadcast(session, workspace_id):
+            return {"error": "broadcast not allowed"}
 
     # Broadcast to workspace (excluding sender)
     await sio.emit(
@@ -288,6 +289,8 @@ async def typing_stop(sid, data):
         user_id = session.get("user_id")
         if not _workspace_in_session(session, workspace_id):
             return {"error": "workspace not joined"}
+        if not _may_broadcast(session, workspace_id):
+            return {"error": "broadcast not allowed"}
 
     await sio.emit(
         "user_typing",
@@ -307,6 +310,8 @@ async def message_created(sid, data):
     async with sio.session(sid) as session:
         if not _workspace_in_session(session, workspace_id):
             return {"error": "workspace not joined"}
+        if not _may_broadcast(session, workspace_id):
+            return {"error": "broadcast not allowed"}
 
     # Broadcast to all users in workspace
     await sio.emit(
@@ -331,6 +336,8 @@ async def cursor_position(sid, data):
         user_id = session.get("user_id")
         if not _workspace_in_session(session, workspace_id):
             return {"error": "workspace not joined"}
+        if not _may_broadcast(session, workspace_id):
+            return {"error": "broadcast not allowed"}
 
     # Broadcast cursor position
     await sio.emit(
@@ -345,15 +352,12 @@ async def cursor_position(sid, data):
 async def join_admin_events(sid, data=None):
     """Subscribe a connected client to the platform admin event stream.
 
-    Membership is gated by ``user.is_superadmin`` (set via the ``users``
-    section of ``config.yaml``); non-superadmins receive an error and are
-    not added to the room. Once joined, the client receives every
-    ``platform_event`` emitted by the EventService relay.
+    Membership is the platform administrator's (``nexus:ManageSystem``, decided
+    by IAM on every join, so a role granted or taken away after the socket
+    connected counts); anyone else receives an error and is not added to the
+    room. Once joined, the client receives every ``platform_event`` emitted by
+    the EventService relay.
     """
-    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-    from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.secondary.postgres import (
-        AuthSecondaryAdapterPostgres,
-    )
     from naas_abi.apps.nexus.apps.api.app.services.websocket.admin_events import (
         ADMIN_EVENTS_ROOM,
     )
@@ -361,19 +365,7 @@ async def join_admin_events(sid, data=None):
     async with sio.session(sid) as session:
         user_id = session.get("user_id")
 
-    # Re-check is_superadmin against the DB on every join (don't trust the
-    # cached connect-time flag — the user may have been promoted after their
-    # socket connected).
-    is_superadmin = False
-    try:
-        async with AsyncSessionLocal() as db:
-            adapter = AuthSecondaryAdapterPostgres(db=db)
-            record = await adapter.get_user_by_id(user_id) if user_id else None
-            is_superadmin = bool(record.is_superadmin) if record else False
-    except Exception:
-        logger.exception("[WS] admin events: failed to refresh superadmin flag sid=%s", sid)
-
-    if not is_superadmin:
+    if not user_id or not await authz.allowed("ManageSystem", user=user_id):
         logger.warning("[WS] admin events join denied sid=%s user=%s", sid, user_id)
         return {"error": "superadmin required"}
 

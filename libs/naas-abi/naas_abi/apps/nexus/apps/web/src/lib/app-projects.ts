@@ -226,7 +226,8 @@ export const appProjectsApi = {
       method: 'POST',
       body: JSON.stringify({ workspace_id: workspaceId }),
     }),
-  submitConfig: () => call<AppSubmitConfig>(`${base()}submit-config`),
+  submitConfig: (workspaceId: string) =>
+    call<AppSubmitConfig>(`${base()}submit-config?${q({ workspace_id: workspaceId })}`),
   submit: (workspaceId: string, slug: string, module?: string) =>
     call<AppProjectSubmission>(`${base(slug)}/submit`, {
       method: 'POST',

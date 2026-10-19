@@ -120,7 +120,24 @@ def test_platform_and_self_policies_name_registered_actions_only():
     }
 
 
-def test_transitional_policies_say_so():
+def test_engine_and_api_hold_enumerated_statements_only():
     by_id = {p.id: p for p in roles.builtin_policies(registry())}
-    for policy_id in (roles.ENGINE, roles.API, roles.TRANSITIONAL_NEXUS_USER):
-        assert "TRANSITIONAL" in by_id[policy_id].description
+    for policy_id in (roles.ENGINE, roles.API):
+        statements = by_id[policy_id].document.statements
+        assert statements
+        for statement in statements:
+            assert statement.sid, policy_id
+            assert statement.actions != ("*",), (policy_id, statement.sid)
+            assert "*" not in statement.actions
+        assert not any("TRANSITIONAL" in s.description for s in [by_id[policy_id]])
+    api_services = {
+        a.split(":")[0] for s in by_id[roles.API].document.statements for a in s.actions
+    }
+    assert "identity" in api_services and "nexus" in api_services
+    # Nexus does not administer IAM: only the memberships, scopes and placements.
+    assert not any(
+        a == "iam:*" for s in by_id[roles.API].document.statements for a in s.actions
+    )
+    assert any(
+        a == "iam:*" for s in by_id[roles.ENGINE].document.statements for a in s.actions
+    )

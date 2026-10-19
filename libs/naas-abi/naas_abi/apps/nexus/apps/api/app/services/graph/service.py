@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import hashlib
 import re
 import shutil
@@ -17,9 +18,11 @@ from typing import Any
 
 from naas_abi import ABIModule
 from naas_abi.apps.nexus.apps.api.app.services.graph.access import (
-    OWNER_PREDICATE,
     GraphAccessScope,
     workspace_graph_operation,
+)
+from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.nexus_catalog import (
+    NexusCatalogStore,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.scoped_store import (
     WorkspaceGraphStore,
@@ -54,10 +57,14 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     NetworkSchemaEdgeData,
     NetworkSchemaNodeData,
 )
-from naas_abi.apps.nexus.apps.api.app.services.graph.query.sparql_safe import sparql_iri
+from naas_abi.apps.nexus.apps.api.app.services.graph.query.sparql_safe import (
+    sparql_iri,
+    sparql_string_literal,
+)
 from naas_abi.apps.nexus.apps.api.app.services.graph.read_ahead import read_ahead
 from naas_abi.ontologies.modules.NexusPlatformOntology import KnowledgeGraph, KnowledgeGraphRole
 from naas_abi_core import logger
+from naas_abi_core.engine.call_context import current_call_context, use_call_context
 from naas_abi_core.engine.nats_transfer import thread_frames
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
@@ -93,14 +100,16 @@ _TYPE_PRIORITY: dict[str, int] = {
 }
 
 
-
 def _scope_cache_key(triple_store: Any, key: str) -> str:
     namespace = getattr(triple_store, "cache_namespace", "internal")
-    return f"{namespace}_{_GRAPH_CACHE_GENERATION}_{_GRAPH_SCOPE_GENERATIONS.get(namespace, 0)}_{key}"
+    return (
+        f"{namespace}_{_GRAPH_CACHE_GENERATION}_{_GRAPH_SCOPE_GENERATIONS.get(namespace, 0)}_{key}"
+    )
 
 
 _GRAPH_CACHE_GENERATION = 0
 _GRAPH_SCOPE_GENERATIONS: dict[str, int] = {}
+
 
 def _detect_rdf_format(filename: str) -> str:
     fname = filename.lower()
@@ -140,22 +149,23 @@ _ABI_NS = "http://ontology.naas.ai/abi/"
 _ABI_TO_BFO_BUCKET_ROOT: dict[str, str] = {
     f"{_ABI_NS}{abi_name}": f"http://purl.obolibrary.org/obo/{bfo_id}"
     for abi_name, bfo_id in (
-        ("MaterialEntity", "BFO_0000040"),                  # WHO
-        ("Site", "BFO_0000029"),                            # WHERE
+        ("MaterialEntity", "BFO_0000040"),  # WHO
+        ("Site", "BFO_0000029"),  # WHERE
         ("GenericallyDependentContinuant", "BFO_0000031"),  # HOW WE KNOW
-        ("Quality", "BFO_0000019"),                         # HOW IT IS
-        ("Role", "BFO_0000017"),                            # WHY
-        ("Disposition", "BFO_0000017"),                     # WHY
-        ("Process", "BFO_0000015"),                         # WHAT
-        ("TemporalRegion", "BFO_0000008"),                  # WHEN
-        ("TemporalInstant", "BFO_0000008"),                 # zero-dim ⊆ temporal region
+        ("Quality", "BFO_0000019"),  # HOW IT IS
+        ("Role", "BFO_0000017"),  # WHY
+        ("Disposition", "BFO_0000017"),  # WHY
+        ("Process", "BFO_0000015"),  # WHAT
+        ("TemporalRegion", "BFO_0000008"),  # WHEN
+        ("TemporalInstant", "BFO_0000008"),  # zero-dim ⊆ temporal region
     )
 }
 _ABI_BUCKET_VALUES = " ".join(f"<{iri}>" for iri in _ABI_TO_BFO_BUCKET_ROOT)
 
 
 def _escape_sparql_string(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"')
+    """``value`` escaped for the inside of a double-quoted SPARQL string."""
+    return sparql_string_literal(value)[1:-1]
 
 
 def _slugify(value: str) -> str:
@@ -287,7 +297,8 @@ def _refresh_in_background(key: str, builder: Callable[..., Any], **kwargs: Any)
                 _REBUILDS_IN_FLIGHT.discard(key)
 
     try:
-        _REBUILD_EXECUTOR.submit(_run)
+        # The refresh runs as the caller the request named: the kernel checks it.
+        _REBUILD_EXECUTOR.submit(contextvars.copy_context().run, _run)
     except Exception as exc:  # noqa: BLE001 - executor shutting down
         logger.warning(f"Could not schedule background refresh of {key!r}: {exc}")
         with _REBUILDS_LOCK:
@@ -328,9 +339,7 @@ _EXPLORER_FAILED_METRIC_TTL = timedelta(hours=1)
 _EXPLORER_SNAPSHOT_WAIT_SECONDS = 4.0
 # One lane: snapshots are full-graph scans, so they run strictly one at a time
 # across all requests and workspaces rather than competing for Fuseki.
-_EXPLORER_SNAPSHOT_LANE = ThreadPoolExecutor(
-    max_workers=1, thread_name_prefix="explorer-snapshot"
-)
+_EXPLORER_SNAPSHOT_LANE = ThreadPoolExecutor(max_workers=1, thread_name_prefix="explorer-snapshot")
 _EXPLORER_SNAPSHOT_JOBS: dict[str, Future[Any]] = {}
 
 
@@ -371,7 +380,12 @@ def _schedule_explorer_snapshot(
         if job is not None and not job.done():
             return job
         job = _EXPLORER_SNAPSHOT_LANE.submit(
-            _build_explorer_snapshot, key, store, graph_uri, previous
+            contextvars.copy_context().run,
+            _build_explorer_snapshot,
+            key,
+            store,
+            graph_uri,
+            previous,
         )
         _EXPLORER_SNAPSHOT_JOBS[key] = job
 
@@ -434,7 +448,9 @@ def _batch_ontology_labels(triple_store: TripleStoreService, uris: Iterable[str]
     for uri in dict.fromkeys(uris):  # de-dupe, preserve order
         if not uri:
             continue
-        hit, value = _cache_lookup(_scope_cache_key(triple_store, f"ontology_label_{uri}"), _ONTOLOGY_LABEL_TTL)
+        hit, value = _cache_lookup(
+            _scope_cache_key(triple_store, f"ontology_label_{uri}"), _ONTOLOGY_LABEL_TTL
+        )
         if hit and isinstance(value, str):
             labels[uri] = value
         else:
@@ -489,7 +505,9 @@ def _batch_bfo_parents(
     for class_uri in dict.fromkeys(class_uris):
         if not class_uri:
             continue
-        hit, cached = _cache_lookup(_scope_cache_key(triple_store, f"bfo_parent_{class_uri}"), _BFO_PARENT_TTL)
+        hit, cached = _cache_lookup(
+            _scope_cache_key(triple_store, f"bfo_parent_{class_uri}"), _BFO_PARENT_TTL
+        )
         if not hit:
             missing.append(class_uri)
             continue
@@ -528,7 +546,9 @@ def _batch_bfo_parents(
             parent = parents.get(class_uri, "")
             parents[class_uri] = parent
             try:
-                _cache.set_json(_scope_cache_key(triple_store, f"bfo_parent_{class_uri}"), parent or None)
+                _cache.set_json(
+                    _scope_cache_key(triple_store, f"bfo_parent_{class_uri}"), parent or None
+                )
             except Exception:
                 pass
 
@@ -1826,7 +1846,7 @@ def _normalize_role_label(role_label: str | None) -> str:
 
 
 def _get_or_create_knowledge_graph_role(
-    store: TripleStoreService, role_label: str
+    store: NexusCatalogStore, role_label: str
 ) -> KnowledgeGraphRole:
     normalized = _normalize_role_label(role_label)
     if normalized == "admin":
@@ -1839,7 +1859,7 @@ def _get_or_create_knowledge_graph_role(
         GRAPH <{NEXUS_GRAPH_URI}> {{
             ?role rdf:type nexus:KnowledgeGraphRole ;
                   rdfs:label ?label .
-            FILTER(LCASE(STR(?label)) = "{normalized}")
+            FILTER(LCASE(STR(?label)) = "{_escape_sparql_string(normalized)}")
         }}
     }}
     LIMIT 1
@@ -1872,6 +1892,10 @@ class GraphService:
         if self.access_scope is None:
             raise GraphAccessError("A workspace graph scope is required")
         return WorkspaceGraphStore(self._get_catalog_store(), self.access_scope)
+
+    def _get_nexus_store(self) -> NexusCatalogStore:
+        """Nexus's application graph (labels, roles, view filters): Nexus's own."""
+        return NexusCatalogStore(self._get_catalog_store())
 
     def _get_catalog_store(self) -> TripleStoreService:
         if self._triple_store_getter is not None:
@@ -1922,14 +1946,14 @@ class GraphService:
         result["pending"] = sorted(uri for uri, snap in snapshots.items() if snap is None)
         if not graph_uris:
             result["selected_graphs"] = []
-        result["permissions"] = {"can_create_graph": bool(self.access_scope and self.access_scope.allow_create)}
+        result["permissions"] = {
+            "can_create_graph": bool(self.access_scope and self.access_scope.can_create)
+        }
         return result
 
     def _explorer_snapshot_keys(self, graph_uris: list[str]) -> dict[str, str]:
         scoped = self._get_triple_store()
-        return {
-            uri: _scope_cache_key(scoped, f"explorer_snapshot_v3_{uri}") for uri in graph_uris
-        }
+        return {uri: _scope_cache_key(scoped, f"explorer_snapshot_v3_{uri}") for uri in graph_uris}
 
     @workspace_graph_operation()
     async def explorer_overview(self, workspace_id: str, graph_uris: list[str]) -> dict[str, Any]:
@@ -1957,13 +1981,20 @@ class GraphService:
             str(SCHEMA_GRAPH_URI),
             snapshot=lambda _, uri: snapshots[uri],
         )
-        result["permissions"] = {"can_create_graph": bool(self.access_scope and self.access_scope.allow_create)}
+        result["permissions"] = {
+            "can_create_graph": bool(self.access_scope and self.access_scope.can_create)
+        }
         return result
 
     @workspace_graph_operation()
     async def explorer_instances(
-        self, workspace_id: str, graph_uris: list[str], class_uris: list[str],
-        search: str, offset: int, limit: int,
+        self,
+        workspace_id: str,
+        graph_uris: list[str],
+        class_uris: list[str],
+        search: str,
+        offset: int,
+        limit: int,
     ) -> dict[str, Any]:
         from naas_abi.apps.nexus.apps.api.app.services.graph.explorer import (
             instances,
@@ -1992,8 +2023,13 @@ class GraphService:
 
     @workspace_graph_operation()
     async def explorer_network(
-        self, workspace_id: str, graph_uris: list[str], class_uris: list[str],
-        search: str, offset: int, limit: int,
+        self,
+        workspace_id: str,
+        graph_uris: list[str],
+        class_uris: list[str],
+        search: str,
+        offset: int,
+        limit: int,
     ) -> dict[str, Any]:
         from naas_abi.apps.nexus.apps.api.app.services.graph.explorer import (
             network,
@@ -2003,8 +2039,15 @@ class GraphService:
         packs = await self.list_graphs(workspace_id)
         selected = resolve_graphs(packs, graph_uris) if graph_uris else []
         return await asyncio.to_thread(
-            lambda: network(self._get_triple_store(), selected, class_uris,
-                           search, offset, limit, str(SCHEMA_GRAPH_URI)),
+            lambda: network(
+                self._get_triple_store(),
+                selected,
+                class_uris,
+                search,
+                offset,
+                limit,
+                str(SCHEMA_GRAPH_URI),
+            ),
         )
 
     @workspace_graph_operation()
@@ -2024,12 +2067,17 @@ class GraphService:
         return [
             GraphPackData(role_label=pack.role_label, graphs=visible)
             for pack in packs
-            if (visible := [replace(g, can_write=g.uri in self.access_scope.writable)
-                           for g in pack.graphs if g.uri in self.access_scope.readable])
+            if (
+                visible := [
+                    replace(g, can_write=g.uri in self.access_scope.writable)
+                    for g in pack.graphs
+                    if g.uri in self.access_scope.readable
+                ]
+            )
         ]
 
     def _list_graphs_sync(self) -> list[GraphPackData]:
-        store = self._get_catalog_store()
+        store = self._get_nexus_store()
         query = f"""
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -2120,12 +2168,17 @@ class GraphService:
         role_label: str | None = None,
     ) -> GraphInfoData:
         store = self._get_catalog_store()
+        nexus = self._get_nexus_store()
         graph_label = label.strip()
         graph_id = f"{_slugify(graph_label) or 'graph'}-{uuid.uuid4().hex}"
         new_graph_uri = GRAPH_BASE_URI + graph_id
-        store.create_graph(new_graph_uri)
+        # The kernel's create rule places the graph in the workspace the call
+        # names (and refuses a caller who may not create graphs there): the
+        # route authorized this user in ``workspace_id`` before getting here.
+        with use_call_context(replace(current_call_context(), workspace_id=workspace_id)):
+            store.create_graph(new_graph_uri)
         normalized_role = _normalize_role_label(role_label)
-        knowledge_graph_role = _get_or_create_knowledge_graph_role(store, normalized_role)
+        knowledge_graph_role = _get_or_create_knowledge_graph_role(nexus, normalized_role)
         new_graph = KnowledgeGraph(
             _uri=new_graph_uri,
             label=graph_label,
@@ -2134,9 +2187,7 @@ class GraphService:
         )
         if description:
             new_graph.description = _slugify(description)
-        metadata = new_graph.rdf()
-        metadata.add((URIRef(new_graph_uri), URIRef(OWNER_PREDICATE), Literal(workspace_id)))
-        store.insert(metadata, graph_name=NEXUS_GRAPH_URI)
+        nexus.insert(new_graph.rdf(), graph_name=NEXUS_GRAPH_URI)
         return GraphInfoData(
             id=graph_id,
             uri=str(new_graph_uri),
@@ -2159,7 +2210,7 @@ class GraphService:
         }}
         LIMIT 1
         """
-        return any(True for _ in store.query(meta_query))
+        return any(True for _ in self._get_nexus_store().query(meta_query))
 
     @workspace_graph_operation()
     async def get_graph(self, workspace_id: str, graph_uri: str) -> GraphDetailData:
@@ -2173,6 +2224,7 @@ class GraphService:
 
     def _get_graph_sync(self, graph_uri: str) -> GraphDetailData:
         store = self._get_catalog_store()
+        nexus = self._get_nexus_store()
         query = f"""
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX nexus: <http://ontology.naas.ai/nexus/>
@@ -2193,7 +2245,7 @@ class GraphService:
         label: str | None = None
         description: str | None = None
         role_label: str | None = None
-        for row in store.query(query):
+        for row in nexus.query(query):
             assert isinstance(row, ResultRow)
             label = str(row.label) if row.label else None
             description = str(row.description) if row.description else None
@@ -2244,6 +2296,7 @@ class GraphService:
         if uri in _PROTECTED_URIS:
             raise GraphProtectedError("Schema or Nexus graph cannot be edited.")
         store = self._get_catalog_store()
+        nexus = self._get_nexus_store()
 
         description_uri = URIRef("http://ontology.naas.ai/nexus/description")
         role_link_uri = URIRef("http://ontology.naas.ai/nexus/hasKnowledgeGraphRole")
@@ -2267,13 +2320,13 @@ class GraphService:
             }}
         }}
         """
-        for row in store.query(current_query):
+        for row in nexus.query(current_query):
             assert isinstance(row, ResultRow)
             to_remove.add((uri, row.p, row.o))
         if len(to_remove) > 0:
-            store.remove(to_remove, graph_name=NEXUS_GRAPH_URI)
+            nexus.remove(to_remove, graph_name=NEXUS_GRAPH_URI)
 
-        knowledge_graph_role = _get_or_create_knowledge_graph_role(store, normalized_role)
+        knowledge_graph_role = _get_or_create_knowledge_graph_role(nexus, normalized_role)
         to_add = Graph()
         # Ensure the graph is registered as a KnowledgeGraph (idempotent for already-typed
         # graphs; upgrades stray store-only graphs so list_graphs shows the chosen role).
@@ -2284,7 +2337,7 @@ class GraphService:
         if clean_description:
             to_add.add((uri, description_uri, Literal(clean_description)))
         to_add.add((uri, role_link_uri, URIRef(str(knowledge_graph_role._uri))))
-        store.insert(to_add, graph_name=NEXUS_GRAPH_URI)
+        nexus.insert(to_add, graph_name=NEXUS_GRAPH_URI)
         _invalidate_graph_cache(graph_uri)
 
         return GraphDetailData(
@@ -2305,7 +2358,7 @@ class GraphService:
 
     def _remove_subject_and_object_triples(
         self,
-        store: TripleStoreService,
+        store: Any,
         uri: URIRef,
         named_graph: URIRef,
     ) -> None:
@@ -2341,9 +2394,14 @@ class GraphService:
         uri = URIRef(graph_uri)
         if uri in _PROTECTED_URIS:
             raise GraphProtectedError("Schema or Nexus graph cannot be deleted.")
-        store = self._get_catalog_store()
-        store.drop_graph(uri)
-        self._remove_subject_and_object_triples(store, uri, NEXUS_GRAPH_URI)
+        # The kernel drops the graph and its placement; what Nexus kept about it goes too.
+        await asyncio.to_thread(self._get_catalog_store().drop_graph, uri)
+        await asyncio.to_thread(
+            self._remove_subject_and_object_triples,
+            self._get_nexus_store(),
+            uri,
+            NEXUS_GRAPH_URI,
+        )
         _invalidate_graph_cache(graph_uri)
 
     @workspace_graph_operation(write=True)
@@ -3193,13 +3251,17 @@ class GraphService:
             # Fuseki/TDB2 adapter documents that read queries are not serialised
             # by its write-lock (see ApacheJenaTDB2._post_query).
             with ThreadPoolExecutor(max_workers=5) as _pool:
-                f_props = _pool.submit(
+                # Each read runs as the caller (a context is entered by one thread at a time).
+                def _go(fn: Callable[..., Any], *args: Any) -> Future[Any]:
+                    return _pool.submit(contextvars.copy_context().run, fn, *args)
+
+                f_props = _go(
                     _fetch_property_values, store, graph_uri, subject_uris, requested_props
                 )
-                f_obj = _pool.submit(_fetch_object_property_values, store, graph_uri, subject_uris)
-                f_domain = _pool.submit(_fetch_relation_counts, store, graph_uri, subject_uris)
-                f_range = _pool.submit(_fetch_range_relation_counts, store, graph_uri, subject_uris)
-                f_data = _pool.submit(_fetch_data_property_counts, store, graph_uri, subject_uris)
+                f_obj = _go(_fetch_object_property_values, store, graph_uri, subject_uris)
+                f_domain = _go(_fetch_relation_counts, store, graph_uri, subject_uris)
+                f_range = _go(_fetch_range_relation_counts, store, graph_uri, subject_uris)
+                f_data = _go(_fetch_data_property_counts, store, graph_uri, subject_uris)
                 prop_values = f_props.result()
                 object_prop_values = f_obj.result()
                 domain_counts = f_domain.result()
@@ -3853,9 +3915,7 @@ def _export_counts(store: Any, graph_uri: str) -> tuple[int, int]:
     )
 
 
-def _produce_export(
-    store: Any, graph_uri: str, format: str, emit: Callable[[bytes], bool]
-) -> None:
+def _produce_export(store: Any, graph_uri: str, format: str, emit: Callable[[bytes], bool]) -> None:
     """Emit the export in chunks of about ``EXPORT_CHUNK_BYTES``; stop as soon
     as ``emit`` reports the reader gone, which closes the store's export."""
     namespaces = _export_namespaces()

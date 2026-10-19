@@ -107,7 +107,7 @@ def test_render_sign_in_email_embeds_private_host_logo_as_cid(monkeypatch, tmp_p
     monkeypatch.setattr(
         settings,
         "magic_link_email_html_template",
-        "<div>{logo_html}</div><a href=\"{magic_link_url}\">Sign in</a>",
+        '<div>{logo_html}</div><a href="{magic_link_url}">Sign in</a>',
     )
     monkeypatch.setattr(
         sign_in_email,

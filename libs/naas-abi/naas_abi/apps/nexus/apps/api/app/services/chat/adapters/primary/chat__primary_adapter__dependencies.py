@@ -23,29 +23,14 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.chat__schema import (
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat_file_ingestion import (
     ChatFileIngestionService,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam.port import RequestContext, TokenData
+from naas_abi.apps.nexus.apps.api.app.services.chat.port import ChatConversationRecord
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import Message as ProviderMessage
 from naas_abi.apps.nexus.apps.api.app.services.registry import ServiceRegistry, get_service_registry
 from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 from sqlalchemy.ext.asyncio import AsyncSession
-
-
-def request_context(current_user: User) -> RequestContext:
-    session_id = PostgresSessionRegistry.instance().current_session_id()
-    return RequestContext(
-        token_data=TokenData(user_id=current_user.id, scopes={"*"}, is_authenticated=True),
-        session_id=session_id,
-    )
-
-
-def system_request_context(user_id: str) -> RequestContext:
-    session_id = PostgresSessionRegistry.instance().current_session_id()
-    return RequestContext(
-        token_data=TokenData(user_id=user_id, scopes={"*"}, is_authenticated=True),
-        session_id=session_id,
-    )
 
 
 @contextmanager
@@ -60,6 +45,140 @@ def bind_registry(db: AsyncSession):
     finally:
         session_registry.reset_current_session(session_token)
         session_registry.unbind(session_id)
+
+
+async def own_conversation(
+    chat_service: ChatService,
+    current_user: User,
+    conversation_id: str,
+    action: str,
+) -> ChatConversationRecord:
+    """The caller's conversation, once IAM allows ``action`` on it.
+
+    A conversation is personal: one that is not the caller's is "not found",
+    and the owner is known only after loading it, so routes authorize here.
+    """
+    row = await chat_service.get_conversation_for_user(
+        user_id=current_user.id,
+        conversation_id=conversation_id,
+    )
+    if not row:
+        # Not the caller's. Someone outside its workspace is told so (403), a
+        # member of that workspace only that there is no such conversation.
+        other = await chat_service.find_conversation(conversation_id)
+        if other is not None:
+            await authz.require("GetWorkspace", user=current_user, workspace=other.workspace_id)
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    await authz.require(
+        action,
+        user=current_user,
+        workspace=row.workspace_id,
+        id=(row.user_id, row.id),
+    )
+    return row
+
+
+async def conversation_for_file(
+    chat_service: ChatService,
+    current_user: User,
+    conversation_id: str,
+    workspace_id: str | None,
+    now: datetime,
+) -> ChatConversationRecord:
+    """The conversation a file is added to, created in ``workspace_id`` when the
+    client names one that does not exist yet; ``IngestConversationFile`` either way."""
+    row = await chat_service.get_conversation_for_user(
+        user_id=current_user.id,
+        conversation_id=conversation_id,
+    )
+    if not row:
+        if not workspace_id:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        await authz.require(
+            "CreateConversation",
+            user=current_user,
+            workspace=workspace_id,
+            id=(current_user.id, conversation_id),
+        )
+        row = await chat_service.create_conversation(
+            user_id=current_user.id,
+            workspace_id=workspace_id,
+            title="New Conversation",
+            agent="aia",
+            now=now,
+            conversation_id=conversation_id,
+        )
+    await authz.require(
+        "IngestConversationFile",
+        user=current_user,
+        workspace=row.workspace_id,
+        id=(row.user_id, row.id),
+    )
+    return row
+
+
+async def authorize_agent_use(
+    chat_service: ChatService, current_user: User, agent_id: str | None
+) -> None:
+    """``UseAgent`` on a workspace agent, in the workspace that agent belongs to.
+
+    A chat turn runs the agent with its workspace's provider settings, so the
+    agent's own workspace decides, not the workspace the client names. An id
+    that is no workspace agent (an in-process agent) has no workspace to ask.
+    """
+    agent = await chat_service.get_agent(agent_id) if agent_id else None
+    if agent is not None:
+        await authz.require(
+            "UseAgent",
+            user=current_user,
+            workspace=agent.workspace_id,
+            id=agent.id,
+            feature="chat",
+        )
+
+
+async def authorize_turn(
+    chat_service: ChatService, request: ChatRequest, current_user: User
+) -> None:
+    """``SendMessage`` where the turn is stored, ``CreateConversation`` first when
+    it opens the conversation, and ``UseAgent`` on the agent it runs.
+
+    With no workspace and no conversation there is nothing to authorize: the
+    service refuses the request itself (``workspace_id is required``).
+    """
+    conversation = (
+        await chat_service.get_conversation_for_user(
+            user_id=current_user.id, conversation_id=request.conversation_id
+        )
+        if request.conversation_id
+        else None
+    )
+    if conversation is not None:
+        workspaces = {conversation.workspace_id}
+        if request.workspace_id:
+            # The turn also reads settings of the workspace the client names.
+            workspaces.add(request.workspace_id)
+        for workspace in sorted(workspaces):
+            await authz.require(
+                "SendMessage",
+                user=current_user,
+                workspace=workspace,
+                id=(conversation.user_id, conversation.id),
+            )
+    elif request.workspace_id:
+        target = (current_user.id, request.conversation_id or "-")
+        for action in ("CreateConversation", "SendMessage"):
+            await authz.require(
+                action, user=current_user, workspace=request.workspace_id, id=target
+            )
+    await authorize_agent_use(chat_service, current_user, request.agent)
+
+
+async def authorize_turn_standalone(request: ChatRequest, current_user: User) -> None:
+    """``authorize_turn`` for a route that holds no database session itself."""
+    async with AsyncSessionLocal() as db:
+        with bind_registry(db) as registry:
+            await authorize_turn(registry.chat, request, current_user)
 
 
 def get_chat_service(
@@ -158,7 +277,6 @@ def to_complete_chat_input(request: ChatRequest) -> CompleteChatInput:
 
 
 async def resolve_provider(
-    context: RequestContext,
     provider: ProviderConfigRequest | None,
     has_images: bool,
     agent_id: str | None = None,
@@ -167,7 +285,6 @@ async def resolve_provider(
     async with AsyncSessionLocal() as db:
         with bind_registry(db) as registry:
             resolved = await registry.chat.resolve_provider(
-                context=context,
                 provider=provider,
                 has_images=has_images,
                 agent_id=agent_id,
@@ -198,7 +315,7 @@ async def get_or_create_conversation(
         return await chat_service.get_or_create_conversation(
             conversation_id=request.conversation_id,
             workspace_id=request.workspace_id,
-            context=request_context(current_user),
+            user_id=current_user.id,
             request_message=request.message,
             agent=request.agent,
             now=now,
@@ -211,14 +328,14 @@ async def get_or_create_conversation(
 
 async def build_provider_messages_with_agents(
     request: ChatRequest,
-    context: RequestContext,
+    user_id: str,
     current_agent_id: str,
     db: AsyncSession,
     conversation_id: str | None = None,
 ) -> list[ProviderMessage]:
     with bind_registry(db) as registry:
         return await registry.chat.build_provider_messages_with_agents(
-            context=context,
+            user_id=user_id,
             request=to_complete_chat_input(request=request),
             current_agent_id=current_agent_id,
             conversation_id=conversation_id,
@@ -245,7 +362,7 @@ async def persist_stream_content(
         with bind_registry(db) as registry:
             if touch_conversation:
                 await registry.chat.finalize_streaming_response(
-                    context=system_request_context(user_id),
+                    user_id=user_id,
                     conversation_id=conversation_id,
                     assistant_message_id=assistant_msg_id,
                     content=full_response,
@@ -253,7 +370,7 @@ async def persist_stream_content(
                 )
             else:
                 await registry.chat.update_message_content(
-                    context=system_request_context(user_id),
+                    user_id=user_id,
                     conversation_id=conversation_id,
                     message_id=assistant_msg_id,
                     content=full_response,
@@ -275,7 +392,7 @@ async def mark_message_superseded(
     async with AsyncSessionLocal() as db:
         with bind_registry(db) as registry:
             await registry.chat.mark_message_superseded(
-                context=system_request_context(user_id),
+                user_id=user_id,
                 conversation_id=conversation_id,
                 message_id=message_id,
                 superseded_by=superseded_by,
@@ -300,7 +417,7 @@ async def persist_stream_metadata(
     async with AsyncSessionLocal() as db:
         with bind_registry(db) as registry:
             await registry.chat.update_message_metadata(
-                context=system_request_context(user_id),
+                user_id=user_id,
                 conversation_id=conversation_id,
                 message_id=assistant_msg_id,
                 metadata=metadata,

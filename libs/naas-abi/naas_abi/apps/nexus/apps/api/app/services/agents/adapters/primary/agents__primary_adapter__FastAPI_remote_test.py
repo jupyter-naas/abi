@@ -33,10 +33,10 @@ class _Agents:
         self.records = {r.id: r for r in records}
         self.deleted: list[str] = []
 
-    async def list_workspace_agents(self, context, workspace_id):
+    async def list_workspace_agents(self, workspace_id):
         return list(self.records.values())
 
-    async def create_agent(self, context, data):
+    async def create_agent(self, data):
         now = datetime(2026, 10, 1)
         record = AgentRecord(
             id=f"a-{len(self.records) + 1}",
@@ -56,7 +56,7 @@ class _Agents:
         self.records[record.id] = record
         return record
 
-    async def update_agent(self, context, agent_id, updates):
+    async def update_agent(self, agent_id, updates):
         known = {f.name for f in fields(AgentRecord)}
         changes = {
             f.name: getattr(updates, f.name)
@@ -66,7 +66,7 @@ class _Agents:
         self.records[agent_id] = replace(self.records[agent_id], **changes)
         return self.records[agent_id]
 
-    async def delete_agent(self, context, agent_id):
+    async def delete_agent(self, agent_id):
         self.deleted.append(agent_id)
         return self.records.pop(agent_id, None) is not None
 
@@ -111,7 +111,6 @@ def seed(monkeypatch):
     monkeypatch.setattr(sync, "_workspace_slug", slug)
     monkeypatch.setattr(sync, "workspace_seed_for_slug", lambda s: state["seed"])
     monkeypatch.setattr(sync, "_get_engine_default_agent_class_name", lambda: ZEN)
-    monkeypatch.setattr(sync, "request_context", lambda user: None)
 
     def set_seed(agents):
         state["seed"] = SimpleNamespace(agents=agents, default_agent=None)
@@ -123,7 +122,6 @@ def _sync(agents: _Agents, remote_agents):
     return asyncio.run(
         sync._reconcile_workspace_agents(
             agents,
-            SimpleNamespace(id="u-1"),
             "ws",
             list(agents.records.values()),
             {ZEN: _ZenAgent},
@@ -277,7 +275,6 @@ def test_in_process_agents_keep_their_override_over_the_roster(seed):
         asyncio.run(
             sync._reconcile_workspace_agents(
                 agents,
-                SimpleNamespace(id="u-1"),
                 "ws",
                 list(agents.records.values()),
                 {ZEN: _ZenAgent, other: _ZenAgent, "acme.extra.ExtraAgent/ExtraAgent": _ZenAgent},
@@ -287,35 +284,32 @@ def test_in_process_agents_keep_their_override_over_the_roster(seed):
     )
 
     assert result[other].enabled is False  # in the roster, but turned off by hand
-    assert result["acme.extra.ExtraAgent/ExtraAgent"].enabled is True  # not in it, turned on by hand
+    assert (
+        result["acme.extra.ExtraAgent/ExtraAgent"].enabled is True
+    )  # not in it, turned on by hand
     assert result[ZEN].enabled is True
 
 
-def test_toggling_enabled_in_the_ui_records_an_override(monkeypatch):
+@pytest.mark.asyncio
+async def test_toggling_enabled_in_the_ui_records_an_override(team):
     from naas_abi.apps.nexus.apps.api.app.services.agents.port import AgentUpdateInput
 
     captured = []
 
     class _Service:
-        async def get_agent(self, context, agent_id):
-            return _record(agent_id, RESEARCHER.key, provider=REMOTE_PROVIDER, enabled=False)
+        async def get_agent(self, agent_id):
+            return replace(
+                _record(agent_id, RESEARCHER.key, provider=REMOTE_PROVIDER, enabled=False),
+                workspace_id="ws-1",
+            )
 
-        async def update_agent(self, context, agent_id, updates):
+        async def update_agent(self, agent_id, updates):
             captured.append(updates)
             return _record(agent_id, RESEARCHER.key, provider=REMOTE_PROVIDER, override=True)
 
-    async def allow(user_id, workspace_id):
-        return "owner"
-
-    monkeypatch.setattr(sync, "require_workspace_access", allow)
-    monkeypatch.setattr(sync, "request_context", lambda user: None)
-
-    asyncio.run(
-        sync.update_agent("r", AgentUpdateInput(enabled=True), SimpleNamespace(id="u-1"), _Service())
-    )
-    asyncio.run(
-        sync.update_agent("r", AgentUpdateInput(name="R"), SimpleNamespace(id="u-1"), _Service())
-    )
+    admin = SimpleNamespace(id="admin")
+    await sync.update_agent("r", AgentUpdateInput(enabled=True), admin, _Service())
+    await sync.update_agent("r", AgentUpdateInput(name="R"), admin, _Service())
 
     assert (captured[0].enabled, captured[0].enabled_override) == (True, True)
     assert captured[1].enabled_override is None  # renaming is not a toggle

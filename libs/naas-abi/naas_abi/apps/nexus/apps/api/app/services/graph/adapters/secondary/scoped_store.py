@@ -1,10 +1,15 @@
-"""Restrict every Graph data query to the authorized SPARQL dataset."""
+"""Restrict every Graph data query to the workspace's SPARQL dataset.
+
+The kernel's triple store authorizes each call for the signed-in user; this
+narrows it further to the graphs the workspace offers (its view), so a user
+who belongs to several workspaces sees one workspace's graphs at a time.
+"""
 
 from __future__ import annotations
 
 import re
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from functools import lru_cache
 from threading import Lock
 from typing import Any, cast
@@ -15,7 +20,11 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphQuerySpecError,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.sparql_safe import sparql_iri
-from naas_abi_core.services.triple_store.TripleStorePorts import QueryStream
+from naas_abi_core.services.iam.IAMPorts import (
+    PermissionDeniedError,
+    ResourceNotFoundError,
+)
+from naas_abi_core.services.triple_store.TripleStorePorts import Exceptions, QueryStream
 from pyparsing import ParseResults
 from rdflib import Graph, URIRef
 from rdflib.plugins.sparql.parser import parseQuery
@@ -51,6 +60,18 @@ def _graphs_from_values_clause(query: str) -> set[str] | None:
 # parses can corrupt those wrappers and reject valid queries until restart.
 # Serialize parsing only: cached shape checks and store execution stay parallel.
 _PARSE_LOCK = Lock()
+
+# What the kernel answers for a graph the caller may not read.
+_DENIED = (PermissionDeniedError, ResourceNotFoundError, Exceptions.GraphNotFoundError)
+
+
+def _empty(kind: str) -> Result:
+    result = Result(kind)
+    result.vars = []
+    result.bindings = []
+    result.askAnswer = False
+    result.graph = Graph()
+    return result
 
 
 @lru_cache(maxsize=512)
@@ -104,22 +125,28 @@ class WorkspaceGraphStore:
     def query(self, query: str) -> Result | Graph:
         kind, scoped = self._scoped(query)
         if scoped is None:
-            result = Result(kind)
-            result.vars = []
-            result.bindings = []
-            result.askAnswer = False
-            result.graph = Graph()
-            return result
-        return cast(Result | Graph, self._store.query(scoped))
+            return _empty(kind)
+        try:
+            return cast(Result | Graph, self._store.query(scoped))
+        except _DENIED:
+            # A graph the query names that the caller may not read (the schema
+            # graph, unless the workspace was given it) holds nothing for it.
+            return _empty(kind)
 
     @contextmanager
     def query_stream(self, query: str) -> Iterator[QueryStream]:
         """``query``, read incrementally (TripleStoreService.query_stream)."""
         kind, scoped = self._scoped(query)
+        empty = QueryStream(kind, ask_answer=False if kind == "ASK" else None)
         if scoped is None:
-            yield QueryStream(kind, ask_answer=False if kind == "ASK" else None)
+            yield empty
             return
-        with self._store.query_stream(scoped) as result:
+        with ExitStack() as stack:
+            try:
+                result = stack.enter_context(self._store.query_stream(scoped))
+            except _DENIED:
+                yield empty
+                return
             yield result
 
     @contextmanager

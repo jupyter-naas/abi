@@ -5,6 +5,8 @@ Tests that users can only access data in workspaces they belong to.
 Maps to: docs/TEST-PROTOCOL.md Section 3.
 """
 
+import pytest
+
 from tests.conftest import add_workspace_member
 
 
@@ -212,14 +214,14 @@ class TestCrossUserDataLeakage:
     async def test_graph_query_requires_workspace_access(
         self, client, test_user, isolated_workspace
     ):
-        """Graph query endpoint must enforce workspace membership."""
-        response = await client.post(
-            f"/api/graph/query?workspace_id={isolated_workspace['id']}",
-            json={"query": "test", "limit": 10},
+        """Graph endpoints must enforce workspace membership."""
+        response = await client.get(
+            f"/api/graph/list?workspace_id={isolated_workspace['id']}",
             headers=test_user["headers"],
         )
         assert response.status_code == 403
 
+    @pytest.mark.skip(reason="password login answers 410: sign-in moved to the identity providers")
     async def test_login_returns_correct_user_identity(self, client, test_user, second_user):
         """Login as user A returns user A's identity, not someone else's."""
         from tests.conftest import TEST_PASSWORD

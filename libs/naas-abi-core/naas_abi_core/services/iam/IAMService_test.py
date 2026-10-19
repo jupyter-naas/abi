@@ -67,7 +67,6 @@ def test_bootstrap_is_idempotent_and_seeds_the_root_of_trust():
         roles.ENGINE,
         roles.API,
         roles.IDP,
-        roles.TRANSITIONAL_NEXUS_USER,
         roles.MODULE_BOOTSTRAP,
     } <= managed
     assert [c.service for c in store.list_catalogs()] == ["iam"]
@@ -184,16 +183,30 @@ def _nexus_call(user_id: str):
     )
 
 
-def test_a_nexus_user_holds_the_transitional_kernel_grant(h):
-    """TRANSITIONAL until #65: Nexus decides for a user named by its Nexus id."""
+def _member(h, nexus_id: str, role: str = "member", scope: str = "abi:org-1:ws-1"):
+    """A Nexus user holding ``role`` at ``scope``, named on calls by its Nexus id."""
+    record = h.admin("ensure_user", LEGACY_NEXUS_ISSUER, nexus_id)
+    h.attach(f"builtin.{role}", record.id, scope)
+    return record
+
+
+def test_a_nexus_user_holds_only_what_its_roles_grant(h):
+    """No implicit grant: Nexus calls as api on behalf of the user, and the user
+    reaches what their role attachments reach."""
+    graph_a = graph("a")
     with _nexus_call("user-0123456789ab"):
-        assert h.iam.authorize(
-            "model_registry:Chat", "abi:-:-:model_registry:model/m"
-        ).allowed
-        assert h.iam.authorize(QUERY, graph("a")).allowed
+        assert not h.iam.authorize(QUERY, graph_a).allowed
+    _member(h, "user-0123456789ab", "viewer")
+    with _nexus_call("user-0123456789ab"):
+        assert h.iam.authorize(QUERY, graph_a).allowed
+        assert not h.iam.authorize("triple_store:Insert", graph_a).allowed
+        assert not h.iam.authorize(QUERY, graph("a", workspace="ws-2")).allowed
         assert not h.iam.authorize(
             "iam:ListPrincipals", "abi:-:-:iam:principal/x"
         ).allowed
+    _member(h, "user-0123456789ab", "member")
+    with _nexus_call("user-0123456789ab"):
+        assert h.iam.authorize("triple_store:Insert", graph_a).allowed
 
 
 def _approved_module(h, document_, name="module/default/research"):
@@ -218,11 +231,20 @@ def test_a_remote_module_cannot_evict_registrations(h):
 RUN = "abi:-:-:discovery:run/{owner}/default/inv-1"
 
 
+@pytest.fixture
+def discovery(h):
+    from naas_abi_core.services.discovery.iam_catalog import CATALOG
+
+    h.iam._register_catalog(CATALOG)
+
+
 @pytest.mark.parametrize(
     "action", ["discovery:GetAgentRun", "discovery:CancelAgentRun"]
 )
-def test_a_nexus_user_reaches_only_their_own_agent_runs(h, action):
-    """Regression: the transitional grant must not open another user's run."""
+def test_a_nexus_user_reaches_only_their_own_agent_runs(h, discovery, action):
+    """Regression: a workspace member reaches their own runs, never another's."""
+    _member(h, "user-aaaaaaaaaaaa")
+    _member(h, "user-bbbbbbbbbbbb")
     with _nexus_call("user-aaaaaaaaaaaa"):
         assert h.iam.authorize(action, RUN.format(owner="user-aaaaaaaaaaaa")).allowed
         assert not h.iam.authorize(
@@ -236,7 +258,7 @@ def test_a_nexus_user_reaches_only_their_own_agent_runs(h, action):
 @pytest.mark.parametrize(
     "action", ["discovery:GetAgentRun", "discovery:CancelAgentRun"]
 )
-def test_a_module_acting_for_a_user_follows_that_users_runs(h, action):
+def test_a_module_acting_for_a_user_follows_that_users_runs(h, discovery, action):
     """A run started for a user is the user's: a module delegating for that
     user (a delegated token, #62) follows it, and still no one else's."""
     from naas_abi_sdk.module import ModuleDependencies
@@ -252,6 +274,7 @@ def test_a_module_acting_for_a_user_follows_that_users_runs(h, action):
         h, default_manifest(ModuleDependencies(modules=("other",)))
     )
     ada = "user-aaaaaaaaaaaa"
+    _member(h, ada)
     delegated = CallContext(
         principal=Principal(id=account.id, kind="service_account", name=account.name),
         on_behalf_of=Principal(id=ada, kind="user"),
@@ -288,8 +311,8 @@ def test_an_iam_user_holds_no_transitional_grant(h):
     )
 
 
-def test_an_explicit_deny_beats_the_transitional_user_grant(h):
-    record = h.admin("ensure_user", LEGACY_NEXUS_ISSUER, "user-0123456789ab")
+def test_an_explicit_deny_beats_the_users_role(h):
+    record = _member(h, "user-0123456789ab")
     h.grant(record.id, statement("Deny", [QUERY], [graph("a")]))
     with _nexus_call("user-0123456789ab"):
         assert not h.iam.authorize(QUERY, graph("a")).allowed
@@ -502,6 +525,8 @@ def test_scopes_map_workspaces_to_their_org(h):
     h.admin("put_scope", "org-1", "ws-1")
     assert h.iam.workspace_org("ws-1") == "org-1"
     assert h.iam.workspace_org("ws-2") is None
+    # An org's own scope is ``(org, -)``: "-" and "*" name no workspace, so no org.
+    assert h.iam.workspace_org("-") is None and h.iam.workspace_org("*") is None
     with pytest.raises(IAMConflictError):
         h.admin("put_scope", "org-2", "ws-1")
     with pytest.raises(ValueError):
@@ -728,27 +753,23 @@ def _api_for(user_id: str):
     )
 
 
-def test_a_nexus_user_reaches_the_kernel_data_services_until_its_roles_move(h):
-    """TRANSITIONAL (#65): api on behalf of a Nexus user, recorded or not."""
-    secret = "abi:-:-:secret:secret/app%2Fkey"
+def test_api_never_reaches_what_it_does_not_name(h):
+    """api holds enumerated statements, not ``*``: whoever it acts for, it keeps
+    out of IAM's administration and of the seals."""
+    h.iam._register_catalog(__import__("naas_abi_core.services.secret.iam_catalog", fromlist=["CATALOG"]).CATALOG)
+    user = _member(h, "user-aaaaaaaaaaaa", "owner")
+    h.attach(roles.PLATFORM_ADMIN, user.id)
     with _api_for("user-aaaaaaaaaaaa"):
         assert h.iam.authorize(QUERY, graph("a")).allowed
-        assert h.iam.authorize(
-            "document:Get", "abi:-:-:document:document/n/c/1"
+        assert not h.iam.authorize(
+            "iam:DeletePrincipal", "abi:-:-:iam:principal/x"
         ).allowed
-        assert not h.iam.authorize("iam:ListPolicies", "abi:-:-:iam:policy/x").allowed
-        # Seals still hold: the built-in IdP's keys are its own.
         assert not h.iam.authorize(
             "secret:Get", "abi:-:-:secret:secret/idp%2Fk"
         ).allowed
-        assert h.iam.authorize("secret:Get", secret).allowed
-    h.admin("ensure_user", LEGACY_NEXUS_ISSUER, "user-bbbbbbbbbbbb")
-    with _api_for("user-bbbbbbbbbbbb"):
-        assert h.iam.authorize(QUERY, graph("a")).allowed
-    # A user of a real identity provider holds only what is attached to it.
-    bob = h.user("bob")
-    with h.as_(actor="api", on_behalf_of=bob):
-        assert not h.iam.authorize(QUERY, graph("a")).allowed
+        assert not h.iam.authorize(
+            "dataset:QueryUnchecked", "abi:-:-:dataset:catalog/-"
+        ).allowed
 
 
 def test_allows_every_is_a_safe_shortcut(h):
@@ -1293,3 +1314,31 @@ def test_a_trigger_seal_is_the_engines_over_exactly_its_fields(iam):
     # The key is kept: another engine on the same secrets seals the same.
     other = IAMService(iam.store, secrets=iam.secrets)
     assert other.trigger_sealed(fields, seal)
+
+
+def test_a_retired_managed_policy_and_its_attachments_go_at_boot(h):
+    from naas_abi_core.services.iam.IAMPorts import Policy
+    from naas_abi_core.services.iam.policy import PolicyDocument, Statement
+
+    old = Policy(
+        id="builtin.transitional.nexus_user",
+        name="old",
+        document=PolicyDocument(
+            statements=(Statement("Allow", ("triple_store:*",), ("*",), "Old"),)
+        ),
+        managed=True,
+    )
+    h.iam.store.put_managed_policy(old)
+    record = h.admin("ensure_user", LEGACY_NEXUS_ISSUER, "user-0123456789ab")
+    h.iam.store.attach(
+        __import__("naas_abi_core.services.iam.IAMPorts", fromlist=["Attachment"]).Attachment(
+            "att_x", old.id, record.id
+        )
+    )
+    with _nexus_call("user-0123456789ab"):
+        assert h.iam.authorize(QUERY, graph("a")).allowed
+    h.iam.bootstrap()
+    with _nexus_call("user-0123456789ab"):
+        assert not h.iam.authorize(QUERY, graph("a")).allowed
+    with pytest.raises(IAMNotFoundError):
+        h.iam.store.get_policy(old.id)

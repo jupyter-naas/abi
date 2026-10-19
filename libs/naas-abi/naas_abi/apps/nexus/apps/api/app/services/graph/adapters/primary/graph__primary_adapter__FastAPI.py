@@ -10,7 +10,6 @@ from fastapi.responses import StreamingResponse
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
-    require_workspace_access,
 )
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.content_disposition import content_disposition
@@ -19,7 +18,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__dependencies import (  # noqa: E501
     get_graph_service,
-    workspace_graph_service,
+    graph_section_service,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__schemas import (  # noqa: E501
     AddDataPropertyRequest,
@@ -69,6 +68,9 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__pri
     UpdateDataPropertyRequest,
     UpdateObjectPropertyRequest,
 )
+from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary import (
+    graph_placements as _graph_placements,  # noqa: F401  (registers the placement sources)
+)
 from naas_abi.apps.nexus.apps.api.app.services.graph.discovery_triples_export import (
     serialize_discovery_triples,
 )
@@ -99,12 +101,32 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.service import (
     _detect_rdf_format,
     _scope_cache_key,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import CacheExpiredError, CacheNotFoundError
 from naas_abi_core.services.cache.CacheService import CacheService
 from pydantic import BaseModel, Field
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
+
+# What each route authorizes. The graphs themselves are the kernel's: every call
+# below runs as the signed-in user and the triple store decides by where IAM
+# placed the graph (``workspace_graph_service`` asks ``UseFeature`` first and
+# narrows the call to the workspace's own view of the graphs).
+_FEATURE = declares("UseFeature")
+LIST = [_FEATURE, declares("triple_store:ListGraphs")]
+READ = [_FEATURE, declares("triple_store:Query")]
+EXPORT = [_FEATURE, declares("triple_store:Export")]
+CREATE = [_FEATURE, declares("triple_store:CreateGraph")]
+INSERT = [_FEATURE, declares("triple_store:Insert")]
+REMOVE = [_FEATURE, declares("triple_store:Remove")]
+REPLACE = [_FEATURE, declares("triple_store:Remove"), declares("triple_store:Insert")]
+CLEAR = [_FEATURE, declares("triple_store:ClearGraph")]
+DROP = [_FEATURE, declares("triple_store:DropGraph")]
+FEATURE_ONLY = [_FEATURE]
+CACHE = [guard("RefreshGraphCache")]
+
 
 class ExplorerRequest(BaseModel):
     workspace_id: str
@@ -118,13 +140,13 @@ class ExplorerInstancesRequest(ExplorerRequest):
     limit: int = Field(default=50, ge=1, le=100)
 
 
-@router.post("/explorer/catalog")
+@router.post("/explorer/catalog", dependencies=READ)
 async def explorer_catalog(
     request: ExplorerRequest,
     user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> dict[str, Any]:
-    graph_service = await workspace_graph_service(graph_service, user.id, request.workspace_id)
+    graph_service = await graph_section_service(graph_service, user.id, request.workspace_id)
     try:
         return await graph_service.explorer_catalog(request.workspace_id, request.graph_uris)
     except GraphAccessError as exc:
@@ -133,13 +155,13 @@ async def explorer_catalog(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.post("/explorer/overview")
+@router.post("/explorer/overview", dependencies=READ)
 async def explorer_overview(
     request: ExplorerRequest,
     user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> dict[str, Any]:
-    graph_service = await workspace_graph_service(graph_service, user.id, request.workspace_id)
+    graph_service = await graph_section_service(graph_service, user.id, request.workspace_id)
     try:
         return await graph_service.explorer_overview(request.workspace_id, request.graph_uris)
     except GraphAccessError as exc:
@@ -148,17 +170,21 @@ async def explorer_overview(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.post("/explorer/instances")
+@router.post("/explorer/instances", dependencies=READ)
 async def explorer_instances(
     request: ExplorerInstancesRequest,
     user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> dict[str, Any]:
-    graph_service = await workspace_graph_service(graph_service, user.id, request.workspace_id)
+    graph_service = await graph_section_service(graph_service, user.id, request.workspace_id)
     try:
         return await graph_service.explorer_instances(
-            request.workspace_id, request.graph_uris, request.class_uris,
-            request.search, request.offset, request.limit,
+            request.workspace_id,
+            request.graph_uris,
+            request.class_uris,
+            request.search,
+            request.offset,
+            request.limit,
         )
     except GraphAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
@@ -175,17 +201,21 @@ async def explorer_instances(
         raise
 
 
-@router.post("/explorer/network")
+@router.post("/explorer/network", dependencies=READ)
 async def explorer_network(
     request: ExplorerInstancesRequest,
     user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> dict[str, Any]:
-    graph_service = await workspace_graph_service(graph_service, user.id, request.workspace_id)
+    graph_service = await graph_section_service(graph_service, user.id, request.workspace_id)
     try:
         return await graph_service.explorer_network(
-            request.workspace_id, request.graph_uris, request.class_uris,
-            request.search, request.offset, request.limit,
+            request.workspace_id,
+            request.graph_uris,
+            request.class_uris,
+            request.search,
+            request.offset,
+            request.limit,
         )
     except GraphAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
@@ -287,14 +317,14 @@ def _edge_to_schema(edge) -> GraphEdge:
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 
-@router.get("/list")
+@router.get("/list", dependencies=LIST)
 async def list_graphs(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> list[GraphPack]:
     """List all graphs available in the triple store and nexus ontology graph."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, workspace_id)
+    graph_service = await graph_section_service(graph_service, current_user.id, workspace_id)
     try:
         graphs = await graph_service.list_graphs(workspace_id=workspace_id)
     except GraphQuerySpecError as exc:
@@ -307,7 +337,13 @@ async def list_graphs(
         GraphPack(
             role_label=pack.role_label,
             graphs=[
-                GraphInfo(id=g.id, uri=g.uri, label=g.label, role_label=g.role_label, can_write=g.can_write)
+                GraphInfo(
+                    id=g.id,
+                    uri=g.uri,
+                    label=g.label,
+                    role_label=g.role_label,
+                    can_write=g.can_write,
+                )
                 for g in pack.graphs
             ],
         )
@@ -315,14 +351,14 @@ async def list_graphs(
     ]
 
 
-@router.get("/roles")
+@router.get("/roles", dependencies=LIST)
 async def list_graph_roles(
     workspace_id: str = Query(..., description="Workspace ID"),
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> list[str]:
     """List distinct knowledge graph role labels used in the workspace."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, workspace_id)
+    graph_service = await graph_section_service(graph_service, current_user.id, workspace_id)
     try:
         roles = await graph_service.list_graph_roles(workspace_id=workspace_id)
     except GraphQuerySpecError as exc:
@@ -334,14 +370,16 @@ async def list_graph_roles(
     return roles
 
 
-@router.post("/create")
+@router.post("/create", dependencies=CREATE)
 async def create_graph(
     payload: GraphCreate,
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> GraphInfo:
     """Create a new named graph. Label is required; slug is derived from label."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, payload.workspace_id)
+    graph_service = await graph_section_service(
+        graph_service, current_user.id, payload.workspace_id
+    )
     try:
         graph = await graph_service.create_graph(
             workspace_id=payload.workspace_id,
@@ -367,7 +405,7 @@ async def create_graph(
     )
 
 
-@router.get("/detail")
+@router.get("/detail", dependencies=READ)
 async def get_graph_detail(
     workspace_id: str = Query(..., description="Workspace ID"),
     uri: str = Query(..., description="Graph URI"),
@@ -375,7 +413,7 @@ async def get_graph_detail(
     graph_service: GraphService = Depends(get_graph_service),
 ) -> GraphDetail:
     """Full metadata for one graph (label, description, role) — used to pre-fill the edit form."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, workspace_id)
+    graph_service = await graph_section_service(graph_service, current_user.id, workspace_id)
     try:
         graph = await graph_service.get_graph(workspace_id=workspace_id, graph_uri=uri)
     except GraphQuerySpecError as exc:
@@ -395,14 +433,16 @@ async def get_graph_detail(
     )
 
 
-@router.post("/update")
+@router.post("/update", dependencies=INSERT)
 async def update_graph(
     payload: GraphUpdate,
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> GraphDetail:
     """Update a graph's label, description and role in place (URI/id is preserved)."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, payload.workspace_id)
+    graph_service = await graph_section_service(
+        graph_service, current_user.id, payload.workspace_id
+    )
     try:
         graph = await graph_service.update_graph(
             workspace_id=payload.workspace_id,
@@ -430,13 +470,15 @@ async def update_graph(
     )
 
 
-@router.post("/clear")
+@router.post("/clear", dependencies=CLEAR)
 async def clear_graph(
     payload: GraphClear,
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> dict[str, str]:
-    graph_service = await workspace_graph_service(graph_service, current_user.id, payload.workspace_id)
+    graph_service = await graph_section_service(
+        graph_service, current_user.id, payload.workspace_id
+    )
     try:
         await graph_service.clear_graph(workspace_id=payload.workspace_id, graph_uri=payload.uri)
     except GraphQuerySpecError as exc:
@@ -450,7 +492,7 @@ async def clear_graph(
     return {"status": "cleared"}
 
 
-@router.post("/cache/clear")
+@router.post("/cache/clear", dependencies=CACHE)
 async def clear_graph_cache(
     workspace_id: str = Query(..., min_length=1),
     current_user: User = Depends(get_current_user_required),
@@ -461,18 +503,20 @@ async def clear_graph_cache(
     Forces the next request to rebuild from the triple store. Safe to call at any
     time; triggered by the sidebar Refresh button.
     """
-    graph_service = await workspace_graph_service(graph_service, current_user.id, workspace_id)
+    graph_service = await graph_section_service(graph_service, current_user.id, workspace_id)
     await graph_service.clear_cache(workspace_id)
     return {"success": True}
 
 
-@router.post("/delete")
+@router.post("/delete", dependencies=DROP)
 async def delete_graph(
     payload: GraphDelete,
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> dict[str, str]:
-    graph_service = await workspace_graph_service(graph_service, current_user.id, payload.workspace_id)
+    graph_service = await graph_section_service(
+        graph_service, current_user.id, payload.workspace_id
+    )
     try:
         await graph_service.delete_graph(workspace_id=payload.workspace_id, graph_uri=payload.uri)
     except GraphQuerySpecError as exc:
@@ -486,14 +530,16 @@ async def delete_graph(
     return {"status": "deleted"}
 
 
-@router.post("/nodes")
+@router.post("/nodes", dependencies=INSERT)
 async def create_individual(
     payload: IndividualCreate,
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> GraphNode:
     """Insert a new individual into the given named graph."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, payload.workspace_id)
+    graph_service = await graph_section_service(
+        graph_service, current_user.id, payload.workspace_id
+    )
     try:
         node = await graph_service.create_individual(
             workspace_id=payload.workspace_id,
@@ -516,14 +562,16 @@ async def create_individual(
     return _node_to_schema(node)
 
 
-@router.post("/nodes/delete")
+@router.post("/nodes/delete", dependencies=REMOVE)
 async def delete_individual(
     payload: IndividualDelete,
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> dict[str, str]:
     """Delete an individual: remove every triple where it is subject or object in the graph."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, payload.workspace_id)
+    graph_service = await graph_section_service(
+        graph_service, current_user.id, payload.workspace_id
+    )
     try:
         await graph_service.delete_individual(
             workspace_id=payload.workspace_id,
@@ -541,14 +589,16 @@ async def delete_individual(
     return {"status": "deleted"}
 
 
-@router.post("/nodes/data-property/add")
+@router.post("/nodes/data-property/add", dependencies=INSERT)
 async def add_data_property(
     payload: AddDataPropertyRequest,
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> dict[str, str]:
     """Insert a single data property triple on an individual."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, payload.workspace_id)
+    graph_service = await graph_section_service(
+        graph_service, current_user.id, payload.workspace_id
+    )
     try:
         await graph_service.add_data_property(
             workspace_id=payload.workspace_id,
@@ -570,14 +620,16 @@ async def add_data_property(
     return {"status": "added"}
 
 
-@router.post("/nodes/data-property/delete")
+@router.post("/nodes/data-property/delete", dependencies=REMOVE)
 async def delete_data_property(
     payload: DeleteDataPropertyRequest,
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> dict[str, str]:
     """Delete a single data property triple from an individual."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, payload.workspace_id)
+    graph_service = await graph_section_service(
+        graph_service, current_user.id, payload.workspace_id
+    )
     try:
         await graph_service.delete_data_property(
             workspace_id=payload.workspace_id,
@@ -597,14 +649,16 @@ async def delete_data_property(
     return {"status": "deleted"}
 
 
-@router.post("/nodes/data-property/update")
+@router.post("/nodes/data-property/update", dependencies=REPLACE)
 async def update_data_property(
     payload: UpdateDataPropertyRequest,
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> dict[str, str]:
     """Replace a data property value for an individual (delete old triple, insert new)."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, payload.workspace_id)
+    graph_service = await graph_section_service(
+        graph_service, current_user.id, payload.workspace_id
+    )
     try:
         await graph_service.update_data_property(
             workspace_id=payload.workspace_id,
@@ -625,14 +679,16 @@ async def update_data_property(
     return {"status": "updated"}
 
 
-@router.post("/nodes/object-property/add")
+@router.post("/nodes/object-property/add", dependencies=INSERT)
 async def add_object_property(
     payload: AddObjectPropertyRequest,
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> dict[str, str]:
     """Insert a single object property triple on an individual."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, payload.workspace_id)
+    graph_service = await graph_section_service(
+        graph_service, current_user.id, payload.workspace_id
+    )
     try:
         await graph_service.add_object_property(
             workspace_id=payload.workspace_id,
@@ -654,14 +710,16 @@ async def add_object_property(
     return {"status": "added"}
 
 
-@router.post("/nodes/object-property/delete")
+@router.post("/nodes/object-property/delete", dependencies=REMOVE)
 async def delete_object_property(
     payload: DeleteObjectPropertyRequest,
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> dict[str, str]:
     """Delete a single object property triple from an individual."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, payload.workspace_id)
+    graph_service = await graph_section_service(
+        graph_service, current_user.id, payload.workspace_id
+    )
     try:
         await graph_service.delete_object_property(
             workspace_id=payload.workspace_id,
@@ -681,14 +739,16 @@ async def delete_object_property(
     return {"status": "deleted"}
 
 
-@router.post("/nodes/object-property/update")
+@router.post("/nodes/object-property/update", dependencies=REPLACE)
 async def update_object_property(
     payload: UpdateObjectPropertyRequest,
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> dict[str, str]:
     """Replace an object property triple for an individual (delete old triple, insert new)."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, payload.workspace_id)
+    graph_service = await graph_section_service(
+        graph_service, current_user.id, payload.workspace_id
+    )
     try:
         await graph_service.update_object_property(
             workspace_id=payload.workspace_id,
@@ -712,7 +772,7 @@ async def update_object_property(
     return {"status": "updated"}
 
 
-@router.get("/overview")
+@router.get("/overview", dependencies=READ)
 async def get_graph_overview(
     workspace_id: str = Query(..., description="Workspace ID"),
     graph_uri: str = Query(..., description="Graph URI (URL-encoded)"),
@@ -721,7 +781,7 @@ async def get_graph_overview(
     graph_service: GraphService = Depends(get_graph_service),
 ) -> GraphOverview:
     """Get overview of a given graph."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, workspace_id)
+    graph_service = await graph_section_service(graph_service, current_user.id, workspace_id)
     try:
         overview = await graph_service.get_graph_overview(
             workspace_id=workspace_id, graph_uri=graph_uri, limit=limit
@@ -738,7 +798,7 @@ async def get_graph_overview(
     )
 
 
-@router.get("/kpis")
+@router.get("/kpis", dependencies=READ)
 async def get_graph_kpis(
     workspace_id: str = Query(..., description="Workspace ID"),
     graph_uri: str = Query(..., description="Graph URI (URL-encoded)"),
@@ -751,7 +811,7 @@ async def get_graph_kpis(
     immediately with ``stale: true`` while it is rebuilt in the background, so
     only the first request for a graph ever waits on the count queries.
     """
-    graph_service = await workspace_graph_service(graph_service, current_user.id, workspace_id)
+    graph_service = await graph_section_service(graph_service, current_user.id, workspace_id)
     try:
         kpis = await graph_service.get_graph_kpis(workspace_id=workspace_id, graph_uri=graph_uri)
     except GraphQuerySpecError as exc:
@@ -769,7 +829,7 @@ async def get_graph_kpis(
     )
 
 
-@router.get("/network/schema")
+@router.get("/network/schema", dependencies=READ)
 async def get_network_schema(
     workspace_id: str = Query(..., description="Workspace ID"),
     graph_uri: str = Query(..., description="Graph URI (URL-encoded)"),
@@ -783,7 +843,7 @@ async def get_network_schema(
     edge aggregation scans every object-property triple in the graph, which on a
     multi-million-triple graph takes seconds and must never block a response.
     """
-    graph_service = await workspace_graph_service(graph_service, current_user.id, workspace_id)
+    graph_service = await graph_section_service(graph_service, current_user.id, workspace_id)
     try:
         schema = await graph_service.get_network_schema(
             workspace_id=workspace_id, graph_uri=graph_uri
@@ -818,7 +878,7 @@ async def get_network_schema(
     )
 
 
-@router.get("/network")
+@router.get("/network", dependencies=READ)
 async def get_graph_network(
     workspace_id: str = Query(..., description="Workspace ID"),
     graph_uri: str = Query(..., description="Graph URI (URL-encoded)"),
@@ -827,7 +887,7 @@ async def get_graph_network(
     graph_service: GraphService = Depends(get_graph_service),
 ) -> GraphData:
     """Get all nodes and edges for a given graph."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, workspace_id)
+    graph_service = await graph_section_service(graph_service, current_user.id, workspace_id)
     try:
         network = await graph_service.get_graph_network(
             workspace_id=workspace_id, graph_uri=graph_uri, limit=limit
@@ -844,7 +904,7 @@ async def get_graph_network(
     )
 
 
-@router.get("/network/search")
+@router.get("/network/search", dependencies=READ)
 async def search_graph_network(
     workspace_id: str = Query(..., description="Workspace ID"),
     graph_uri: str = Query(..., description="Graph URI (URL-encoded)"),
@@ -854,7 +914,7 @@ async def search_graph_network(
     graph_service: GraphService = Depends(get_graph_service),
 ) -> GraphData:
     """Search nodes by label within a graph. Returns matching individuals and their edges."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, workspace_id)
+    graph_service = await graph_section_service(graph_service, current_user.id, workspace_id)
     try:
         result = await graph_service.search_network(
             workspace_id=workspace_id,
@@ -881,7 +941,7 @@ _EXPORT_FORMAT_META: dict[str, tuple[str, str, str]] = {
 }
 
 
-@router.get("/export")
+@router.get("/export", dependencies=EXPORT)
 async def export_graph(
     workspace_id: str = Query(..., description="Workspace ID"),
     graph_uri: str = Query(..., description="Graph URI to export"),
@@ -894,7 +954,7 @@ async def export_graph(
     The count headers are computed first. Supported formats: ttl (Turtle),
     owl (RDF/XML, built in memory), nt (N-Triples).
     """
-    graph_service = await workspace_graph_service(graph_service, current_user.id, workspace_id)
+    graph_service = await graph_section_service(graph_service, current_user.id, workspace_id)
     rdflib_format, media_type, ext = _EXPORT_FORMAT_META.get(format, _EXPORT_FORMAT_META["ttl"])
     try:
         export = await graph_service.export_graph(
@@ -924,7 +984,7 @@ async def export_graph(
     )
 
 
-@router.post("/analyze")
+@router.post("/analyze", dependencies=FEATURE_ONLY)
 async def analyze_graph_file(
     workspace_id: str = Form(..., description="Workspace ID"),
     file: UploadFile = File(..., description="RDF file to analyse (.ttl, .owl, .rdf, .nt, .n3)"),
@@ -935,7 +995,7 @@ async def analyze_graph_file(
 
     No data is persisted. The file is analysed in-memory only.
     """
-    graph_service = await workspace_graph_service(graph_service, current_user.id, workspace_id)
+    graph_service = await graph_section_service(graph_service, current_user.id, workspace_id)
     content = await file.read()
     fmt = _detect_rdf_format(file.filename or "")
     try:
@@ -964,7 +1024,7 @@ async def analyze_graph_file(
     )
 
 
-@router.post("/import")
+@router.post("/import", dependencies=INSERT)
 async def import_graph_file(
     workspace_id: str = Form(..., description="Workspace ID"),
     graph_uri: str = Form(..., description="Target named graph URI"),
@@ -977,7 +1037,7 @@ async def import_graph_file(
     Only triples whose subject is declared as ``owl:NamedIndividual`` are inserted.
     Returns ``{"status": "imported", "count": N}`` where N is the number of triples inserted.
     """
-    graph_service = await workspace_graph_service(graph_service, current_user.id, workspace_id)
+    graph_service = await graph_section_service(graph_service, current_user.id, workspace_id)
     content = await file.read()
     fmt = _detect_rdf_format(file.filename or "")
     try:
@@ -1001,7 +1061,7 @@ async def import_graph_file(
 # ── Discovery endpoints ──────────────────────────────────────────────────────
 
 
-@router.get("/discovery/classes")
+@router.get("/discovery/classes", dependencies=READ)
 async def discovery_classes(
     workspace_id: str = Query(..., description="Workspace ID"),
     graph_uri: str = Query(..., description="Graph URI"),
@@ -1009,7 +1069,7 @@ async def discovery_classes(
     graph_service: GraphService = Depends(get_graph_service),
 ) -> list[DiscoveryClass]:
     """List RDF classes that have NamedIndividuals in the given graph."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, workspace_id)
+    graph_service = await graph_section_service(graph_service, current_user.id, workspace_id)
     try:
         classes = await graph_service.discover_classes(
             workspace_id=workspace_id, graph_uri=graph_uri
@@ -1023,14 +1083,14 @@ async def discovery_classes(
     return [DiscoveryClass(uri=c.uri, label=c.label, count=c.count) for c in classes]
 
 
-@router.get("/discovery/classes/all")
+@router.get("/discovery/classes/all", dependencies=READ)
 async def discovery_classes_all(
     workspace_id: str = Query(..., description="Workspace ID"),
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> list[DiscoveryClass]:
     """List RDF classes aggregated across all workspace graphs."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, workspace_id)
+    graph_service = await graph_section_service(graph_service, current_user.id, workspace_id)
     try:
         classes = await graph_service.discover_all_classes(workspace_id=workspace_id)
     except GraphQuerySpecError as exc:
@@ -1042,7 +1102,7 @@ async def discovery_classes_all(
     return [DiscoveryClass(uri=c.uri, label=c.label, count=c.count) for c in classes]
 
 
-@router.get("/discovery/class-meta")
+@router.get("/discovery/class-meta", dependencies=READ)
 async def discovery_class_meta(
     workspace_id: str = Query(..., description="Workspace ID"),
     class_uri: str = Query(..., description="Class URI"),
@@ -1050,7 +1110,7 @@ async def discovery_class_meta(
     graph_service: GraphService = Depends(get_graph_service),
 ) -> DiscoveryClassMeta:
     """Return class label and BFO bucket metadata for a class IRI."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, workspace_id)
+    graph_service = await graph_section_service(graph_service, current_user.id, workspace_id)
     try:
         meta = await graph_service.discover_class_meta(
             workspace_id=workspace_id, class_uri=class_uri
@@ -1069,7 +1129,7 @@ async def discovery_class_meta(
     )
 
 
-@router.get("/discovery/class-datatype-properties")
+@router.get("/discovery/class-datatype-properties", dependencies=READ)
 async def discovery_class_datatype_properties(
     workspace_id: str = Query(..., description="Workspace ID"),
     class_uri: str = Query(..., description="Class URI"),
@@ -1077,7 +1137,7 @@ async def discovery_class_datatype_properties(
     graph_service: GraphService = Depends(get_graph_service),
 ) -> list[DiscoveryProperty]:
     """List datatype/annotation properties allowed for instances of a class."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, workspace_id)
+    graph_service = await graph_section_service(graph_service, current_user.id, workspace_id)
     try:
         properties = await graph_service.discover_class_datatype_properties(
             workspace_id=workspace_id, class_uri=class_uri
@@ -1091,7 +1151,7 @@ async def discovery_class_datatype_properties(
     return [DiscoveryProperty(uri=p.uri, label=p.label, kind=p.kind) for p in properties]
 
 
-@router.get("/discovery/class-object-properties")
+@router.get("/discovery/class-object-properties", dependencies=READ)
 async def discovery_class_object_properties(
     workspace_id: str = Query(..., description="Workspace ID"),
     class_uri: str = Query(..., description="Class URI"),
@@ -1099,7 +1159,7 @@ async def discovery_class_object_properties(
     graph_service: GraphService = Depends(get_graph_service),
 ) -> list[DiscoveryClassObjectProperty]:
     """List object properties allowed for a class with schema-derived range options."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, workspace_id)
+    graph_service = await graph_section_service(graph_service, current_user.id, workspace_id)
     try:
         properties = await graph_service.discover_class_object_properties(
             workspace_id=workspace_id, class_uri=class_uri
@@ -1122,14 +1182,16 @@ async def discovery_class_object_properties(
     ]
 
 
-@router.post("/discovery/relation-targets")
+@router.post("/discovery/relation-targets", dependencies=READ)
 async def discovery_relation_targets(
     payload: DiscoveryRelationTargetsRequest,
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> list[DiscoveryRelationTarget]:
     """List individuals that can be used as object-property range values."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, payload.workspace_id)
+    graph_service = await graph_section_service(
+        graph_service, current_user.id, payload.workspace_id
+    )
     try:
         targets = await graph_service.discover_relation_targets(
             workspace_id=payload.workspace_id,
@@ -1156,14 +1218,16 @@ async def discovery_relation_targets(
     ]
 
 
-@router.post("/discovery/properties")
+@router.post("/discovery/properties", dependencies=READ)
 async def discovery_properties(
     payload: DiscoveryPropertiesRequest,
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> list[DiscoveryProperty]:
     """List datatype/annotation properties used by instances of the given classes."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, payload.workspace_id)
+    graph_service = await graph_section_service(
+        graph_service, current_user.id, payload.workspace_id
+    )
     try:
         properties = await graph_service.discover_properties(
             workspace_id=payload.workspace_id,
@@ -1179,14 +1243,16 @@ async def discovery_properties(
     return [DiscoveryProperty(uri=p.uri, label=p.label, kind=p.kind) for p in properties]
 
 
-@router.post("/discovery/instances")
+@router.post("/discovery/instances", dependencies=READ)
 async def discovery_instances(
     payload: DiscoveryInstancesRequest,
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> list[DiscoveryInstance]:
     """Search instances matching selected classes / properties / global search query."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, payload.workspace_id)
+    graph_service = await graph_section_service(
+        graph_service, current_user.id, payload.workspace_id
+    )
     try:
         instances = await graph_service.discover_instances(
             workspace_id=payload.workspace_id,
@@ -1222,14 +1288,16 @@ async def discovery_instances(
     ]
 
 
-@router.post("/discovery/instance-detail")
+@router.post("/discovery/instance-detail", dependencies=READ)
 async def discovery_instance_detail(
     payload: DiscoveryInstanceDetailRequest,
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> DiscoveryInstanceDetail:
     """Fetch full detail for a single instance: all data properties and relations."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, payload.workspace_id)
+    graph_service = await graph_section_service(
+        graph_service, current_user.id, payload.workspace_id
+    )
     try:
         detail = await graph_service.discover_instance_detail(
             workspace_id=payload.workspace_id,
@@ -1268,14 +1336,16 @@ async def discovery_instance_detail(
     )
 
 
-@router.post("/discovery/relation-types")
+@router.post("/discovery/relation-types", dependencies=READ)
 async def discovery_relation_types(
     payload: DiscoveryRelationTypesRequest,
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> list[DiscoveryRelationType]:
     """List object-property relation types found for selected/visible instances."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, payload.workspace_id)
+    graph_service = await graph_section_service(
+        graph_service, current_user.id, payload.workspace_id
+    )
     try:
         relation_types = await graph_service.discover_relation_types(
             workspace_id=payload.workspace_id,
@@ -1292,14 +1362,16 @@ async def discovery_relation_types(
     return [DiscoveryRelationType(uri=r.uri, label=r.label, count=r.count) for r in relation_types]
 
 
-@router.post("/discovery/relations")
+@router.post("/discovery/relations", dependencies=READ)
 async def discovery_relations(
     payload: DiscoveryRelationsRequest,
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> list[DiscoveryRelationRow]:
     """List concrete relation rows (domain → predicate → range) for selected instances."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, payload.workspace_id)
+    graph_service = await graph_section_service(
+        graph_service, current_user.id, payload.workspace_id
+    )
     try:
         relations = await graph_service.discover_relations(
             workspace_id=payload.workspace_id,
@@ -1332,13 +1404,13 @@ async def discovery_relations(
     ]
 
 
-@router.post("/discovery/triples-export")
+@router.post("/discovery/triples-export", dependencies=FEATURE_ONLY)
 async def discovery_triples_export(
     payload: DiscoveryTriplesExportRequest,
     current_user: User = Depends(get_current_user_required),
 ) -> DiscoveryTriplesExportResponse:
     """Serialize discovery preview triples with rdflib (Turtle groups by subject URI)."""
-    await require_workspace_access(current_user.id, payload.workspace_id)
+    await authz.require("UseFeature", user=current_user, workspace=payload.workspace_id, id="graph")
     rows = [t.model_dump() for t in payload.triples]
     fmt = payload.format  # type: ignore[arg-type]
     try:
@@ -1355,14 +1427,16 @@ async def discovery_triples_export(
 # ── Network node endpoints ──────────────────────────────────────────────────
 
 
-@router.post("/network/node-properties")
+@router.post("/network/node-properties", dependencies=READ)
 async def network_node_properties(
     payload: NetworkNodePropertiesRequest,
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> list[DiscoveryProperty]:
     """Return all data properties available for instances of a given class in the network view."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, payload.workspace_id)
+    graph_service = await graph_section_service(
+        graph_service, current_user.id, payload.workspace_id
+    )
     try:
         properties = await graph_service.discover_properties(
             workspace_id=payload.workspace_id,
@@ -1378,14 +1452,16 @@ async def network_node_properties(
     return [DiscoveryProperty(uri=p.uri, label=p.label, kind=p.kind) for p in properties]
 
 
-@router.post("/network/node-instances")
+@router.post("/network/node-instances", dependencies=READ)
 async def network_node_instances(
     payload: NetworkNodeInstancesRequest,
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> list[DiscoveryInstance]:
     """Return instances of a given class with the selected data properties for the network table view."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, payload.workspace_id)
+    graph_service = await graph_section_service(
+        graph_service, current_user.id, payload.workspace_id
+    )
     try:
         instances = await graph_service.discover_instances(
             workspace_id=payload.workspace_id,
@@ -1420,7 +1496,7 @@ async def network_node_instances(
     ]
 
 
-@router.get("/network/parents")
+@router.get("/network/parents", dependencies=READ)
 async def get_network_parents(
     workspace_id: str = Query(..., description="Workspace ID"),
     graph_names: list[str] = Query(default=[], alias="graph_names"),
@@ -1434,7 +1510,7 @@ async def get_network_parents(
     classes (returns rdfs:subClassOf parents from schema graph + edges).
     Call once per progressive expansion level.
     """
-    graph_service = await workspace_graph_service(graph_service, current_user.id, workspace_id)
+    graph_service = await graph_section_service(graph_service, current_user.id, workspace_id)
     try:
         result = await graph_service.get_network_parents(
             workspace_id=workspace_id,
@@ -1459,7 +1535,9 @@ async def get_network_parents(
 def _build_graph_query_service(graph_service: GraphService) -> GraphQueryService:
     """Wire a GraphQueryService over the configured triple store for this request."""
     triple_store = graph_service._get_triple_store()
-    store = GraphQueryTripleStoreAdapter(triple_store, fts_backend=resolve_fts_backend(triple_store))
+    store = GraphQueryTripleStoreAdapter(
+        triple_store, fts_backend=resolve_fts_backend(triple_store)
+    )
 
     async def _owned_graphs(workspace_id: str) -> set[str]:
         assert graph_service.access_scope is not None
@@ -1472,20 +1550,26 @@ def _build_graph_query_service(graph_service: GraphService) -> GraphQueryService
     # local FS fallback; None when TTL <= 0 (caching disabled → the service's no-op caches).
     cache = _resolve_query_cache()
     return GraphQueryService(
-        store, owned_graphs=_owned_graphs, system_graphs=system_graphs,
-        count_cache=cache, page_cache=cache, columns_cache=cache,
+        store,
+        owned_graphs=_owned_graphs,
+        system_graphs=system_graphs,
+        count_cache=cache,
+        page_cache=cache,
+        columns_cache=cache,
         cache_namespace=_scope_cache_key(triple_store, "query"),
     )
 
 
-@router.post("/query")
+@router.post("/query", dependencies=READ)
 async def graph_query(
     payload: GraphQueryRequest,
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> GraphQueryResponse:
     """Compile a ViewQuerySpec to one SPARQL query and return columns + rows + page + count."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, payload.workspace_id)
+    graph_service = await graph_section_service(
+        graph_service, current_user.id, payload.workspace_id
+    )
     service = _build_graph_query_service(graph_service)
     try:
         result = await service.run_query(
@@ -1506,14 +1590,16 @@ async def graph_query(
     return GraphQueryResponse.from_result(result)
 
 
-@router.post("/query/facets")
+@router.post("/query/facets", dependencies=READ)
 async def graph_query_facets(
     payload: GraphFacetsRequest,
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> GraphFacetsResponse:
     """Distinct values + counts for one column under the other columns' filters (Excel dropdown)."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, payload.workspace_id)
+    graph_service = await graph_section_service(
+        graph_service, current_user.id, payload.workspace_id
+    )
     service = _build_graph_query_service(graph_service)
     try:
         result = await service.facets(
@@ -1532,7 +1618,7 @@ async def graph_query_facets(
     return GraphFacetsResponse.from_domain(result)
 
 
-@router.get("/columns")
+@router.get("/columns", dependencies=READ)
 async def graph_columns(
     workspace_id: str = Query(..., description="Workspace ID"),
     graph_uri: list[str] = Query(..., description="Named graph URI(s)"),
@@ -1542,11 +1628,14 @@ async def graph_columns(
     graph_service: GraphService = Depends(get_graph_service),
 ) -> GraphColumnsResponse:
     """Discover selectable columns (ontology ∪ data) for an anchored class + type inference."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, workspace_id)
+    graph_service = await graph_section_service(graph_service, current_user.id, workspace_id)
     service = _build_graph_query_service(graph_service)
     try:
         cols = await service.discover_columns(
-            workspace_id=workspace_id, graph_uris=graph_uri, class_uris=class_uri, force_refresh=force_refresh
+            workspace_id=workspace_id,
+            graph_uris=graph_uri,
+            class_uris=class_uri,
+            force_refresh=force_refresh,
         )
     except GraphAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
@@ -1557,22 +1646,28 @@ async def graph_columns(
     return GraphColumnsResponse.from_domain(class_uri, cols)
 
 
-@router.get("/search")
+@router.get("/search", dependencies=READ)
 async def graph_search(
     workspace_id: str = Query(..., description="Workspace ID"),
     q: str = Query(..., min_length=1, description="Free-text query"),
     class_uri: list[str] = Query(default=[], description="Optional class filter"),
-    graph_uri: list[str] = Query(default=[], description="Optional named graph URI(s); default = all owned"),
+    graph_uri: list[str] = Query(
+        default=[], description="Optional named graph URI(s); default = all owned"
+    ),
     limit: int = Query(default=20, le=100),
     current_user: User = Depends(get_current_user_required),
     graph_service: GraphService = Depends(get_graph_service),
 ) -> GraphSearchResponse:
     """Google-like entity search: classes ∪ individuals across owned graphs, each tagged with kind."""
-    graph_service = await workspace_graph_service(graph_service, current_user.id, workspace_id)
+    graph_service = await graph_section_service(graph_service, current_user.id, workspace_id)
     service = _build_graph_query_service(graph_service)
     try:
         hits = await service.search_entities(
-            workspace_id=workspace_id, graph_uris=graph_uri, query=q, limit=limit, class_uris=class_uri
+            workspace_id=workspace_id,
+            graph_uris=graph_uri,
+            query=q,
+            limit=limit,
+            class_uris=class_uri,
         )
     except GraphAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
@@ -1602,4 +1697,6 @@ async def graph_policy_inventory(
 
     async with AsyncSessionLocal() as db:
         policies = await effective_graph_policies(db)
-    return await asyncio.to_thread(catalog_inventory, graph_service._get_catalog_store(), live_settings(), policies)
+    return await asyncio.to_thread(
+        catalog_inventory, graph_service._get_catalog_store(), live_settings(), policies
+    )

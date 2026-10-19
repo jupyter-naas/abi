@@ -3,27 +3,22 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from datetime import datetime
-from uuid import uuid4
 
 from naas_abi.apps.nexus.apps.api.app.models import (
     OrganizationDomainModel,
-    OrganizationMemberModel,
     OrganizationModel,
     OrganizationRoleFeaturesModel,
     UserModel,
-    WorkspaceMemberModel,
     WorkspaceModel,
 )
 from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     OrganizationCreateInput,
     OrganizationDomainCreateInput,
     OrganizationDomainRecord,
-    OrganizationMemberRecord,
     OrganizationPermissionPort,
     OrganizationRecord,
     OrganizationRoleFeaturesRecord,
     OrganizationUpdateInput,
-    OrganizationWorkspaceMembershipRecord,
     OrganizationWorkspaceRecord,
     UserRecord,
 )
@@ -49,23 +44,18 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             raise RuntimeError("No database session bound in ServiceRegistry context")
         return db
 
-    async def get_organization_role(self, user_id: str, org_id: str) -> str | None:
-        member_result = await self.db.execute(
-            select(OrganizationMemberModel.role)
-            .where(OrganizationMemberModel.organization_id == org_id)
-            .where(OrganizationMemberModel.user_id == user_id)
-        )
-        member_role = member_result.scalar_one_or_none()
-        if member_role is not None:
-            return member_role
+    async def list_all_organizations(self) -> list[OrganizationRecord]:
+        result = await self.db.execute(select(OrganizationModel).order_by(OrganizationModel.name))
+        return [self._to_organization_record(row) for row in result.scalars().all()]
 
-        owner_result = await self.db.execute(
-            select(OrganizationModel.owner_id).where(OrganizationModel.id == org_id)
-        )
-        owner_id = owner_result.scalar_one_or_none()
-        if owner_id == user_id:
-            return "owner"
-        return None
+    async def get_users_by_ids(self, user_ids: list[str]) -> dict[str, UserRecord]:
+        if not user_ids:
+            return {}
+        result = await self.db.execute(select(UserModel).where(UserModel.id.in_(user_ids)))
+        return {
+            user.id: UserRecord(id=user.id, email=user.email, name=user.name)
+            for user in result.scalars().all()
+        }
 
     @staticmethod
     def _to_organization_record(row: OrganizationModel) -> OrganizationRecord:
@@ -98,22 +88,6 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
-
-    async def list_organizations_for_user(self, user_id: str) -> list[OrganizationRecord]:
-        result = await self.db.execute(
-            select(OrganizationModel)
-            .outerjoin(
-                OrganizationMemberModel,
-                OrganizationModel.id == OrganizationMemberModel.organization_id,
-            )
-            .where(
-                (OrganizationModel.owner_id == user_id)
-                | (OrganizationMemberModel.user_id == user_id)
-            )
-            .distinct()
-            .order_by(OrganizationModel.name)
-        )
-        return [self._to_organization_record(row) for row in result.scalars().all()]
 
     async def get_organization_by_id(self, org_id: str) -> OrganizationRecord | None:
         result = await self.db.execute(
@@ -197,21 +171,6 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
         await self.db.flush()
         return self._to_organization_record(row)
 
-    async def list_workspaces_for_org_and_user(
-        self, org_id: str, user_id: str
-    ) -> list[OrganizationWorkspaceRecord]:
-        result = await self.db.execute(
-            select(WorkspaceModel)
-            .outerjoin(WorkspaceMemberModel, WorkspaceModel.id == WorkspaceMemberModel.workspace_id)
-            .where(
-                (WorkspaceModel.organization_id == org_id)
-                & ((WorkspaceModel.owner_id == user_id) | (WorkspaceMemberModel.user_id == user_id))
-            )
-            .distinct()
-            .order_by(WorkspaceModel.name)
-        )
-        return [self._to_workspace_record(row) for row in result.scalars().all()]
-
     async def list_workspaces_for_org(self, org_id: str) -> list[OrganizationWorkspaceRecord]:
         result = await self.db.execute(
             select(WorkspaceModel)
@@ -219,27 +178,6 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             .order_by(WorkspaceModel.name)
         )
         return [self._to_workspace_record(row) for row in result.scalars().all()]
-
-    async def list_workspace_memberships_for_org(
-        self, org_id: str
-    ) -> list[OrganizationWorkspaceMembershipRecord]:
-        result = await self.db.execute(
-            select(
-                WorkspaceMemberModel.user_id,
-                WorkspaceMemberModel.workspace_id,
-                WorkspaceMemberModel.role,
-            )
-            .join(WorkspaceModel, WorkspaceModel.id == WorkspaceMemberModel.workspace_id)
-            .where(WorkspaceModel.organization_id == org_id)
-        )
-        return [
-            OrganizationWorkspaceMembershipRecord(
-                user_id=user_id,
-                workspace_id=workspace_id,
-                role=role,
-            )
-            for user_id, workspace_id, role in result.all()
-        ]
 
     def _to_workspace_record(self, row: WorkspaceModel) -> OrganizationWorkspaceRecord:
         return OrganizationWorkspaceRecord(
@@ -254,26 +192,6 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             logo_emoji=row.logo_emoji,
         )
 
-    async def list_organization_members(self, org_id: str) -> list[OrganizationMemberRecord]:
-        result = await self.db.execute(
-            select(OrganizationMemberModel, UserModel)
-            .join(UserModel, OrganizationMemberModel.user_id == UserModel.id)
-            .where(OrganizationMemberModel.organization_id == org_id)
-            .order_by(OrganizationMemberModel.created_at)
-        )
-        return [
-            OrganizationMemberRecord(
-                id=member.id,
-                organization_id=member.organization_id,
-                user_id=member.user_id,
-                role=member.role,
-                email=user.email,
-                name=user.name,
-                created_at=member.created_at,
-            )
-            for member, user in result.all()
-        ]
-
     async def get_user_by_email(self, email: str) -> UserRecord | None:
         normalized = email.lower().strip()
         result = await self.db.execute(select(UserModel).where(UserModel.email == normalized))
@@ -281,92 +199,6 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
         if user is None:
             return None
         return UserRecord(id=user.id, email=user.email, name=user.name)
-
-    async def is_organization_member(self, org_id: str, user_id: str) -> bool:
-        result = await self.db.execute(
-            select(OrganizationMemberModel.id)
-            .where(OrganizationMemberModel.organization_id == org_id)
-            .where(OrganizationMemberModel.user_id == user_id)
-        )
-        return result.scalar_one_or_none() is not None
-
-    async def add_organization_member(
-        self, org_id: str, user_id: str, role: str, created_at: datetime
-    ) -> OrganizationMemberRecord:
-        row = OrganizationMemberModel(
-            id=str(uuid4()),
-            organization_id=org_id,
-            user_id=user_id,
-            role=role,
-            created_at=created_at,
-        )
-        self.db.add(row)
-        await self.db.flush()
-        user_result = await self.db.execute(select(UserModel).where(UserModel.id == user_id))
-        user = user_result.scalar_one_or_none()
-        return OrganizationMemberRecord(
-            id=row.id,
-            organization_id=row.organization_id,
-            user_id=row.user_id,
-            role=row.role,
-            email=user.email if user else None,
-            name=user.name if user else None,
-            created_at=row.created_at,
-        )
-
-    async def get_organization_member(
-        self, org_id: str, user_id: str
-    ) -> OrganizationMemberRecord | None:
-        result = await self.db.execute(
-            select(OrganizationMemberModel).where(
-                (OrganizationMemberModel.organization_id == org_id)
-                & (OrganizationMemberModel.user_id == user_id)
-            )
-        )
-        row = result.scalar_one_or_none()
-        if row is None:
-            return None
-        user_result = await self.db.execute(select(UserModel).where(UserModel.id == user_id))
-        user = user_result.scalar_one_or_none()
-        return OrganizationMemberRecord(
-            id=row.id,
-            organization_id=row.organization_id,
-            user_id=row.user_id,
-            role=row.role,
-            email=user.email if user else None,
-            name=user.name if user else None,
-            created_at=row.created_at,
-        )
-
-    async def update_organization_member_role(
-        self, org_id: str, user_id: str, role: str
-    ) -> OrganizationMemberRecord | None:
-        result = await self.db.execute(
-            select(OrganizationMemberModel).where(
-                (OrganizationMemberModel.organization_id == org_id)
-                & (OrganizationMemberModel.user_id == user_id)
-            )
-        )
-        row = result.scalar_one_or_none()
-        if row is None:
-            return None
-        row.role = role
-        await self.db.flush()
-        return await self.get_organization_member(org_id=org_id, user_id=user_id)
-
-    async def delete_organization_member(self, org_id: str, user_id: str) -> bool:
-        result = await self.db.execute(
-            select(OrganizationMemberModel).where(
-                (OrganizationMemberModel.organization_id == org_id)
-                & (OrganizationMemberModel.user_id == user_id)
-            )
-        )
-        row = result.scalar_one_or_none()
-        if row is None:
-            return False
-        await self.db.delete(row)
-        await self.db.flush()
-        return True
 
     async def list_organization_domains(self, org_id: str) -> list[OrganizationDomainRecord]:
         result = await self.db.execute(
@@ -491,6 +323,16 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             verified_at=row.verified_at,
             provider=row.provider,
         )
+
+    async def delete_organization(self, org_id: str) -> bool:
+        row = (
+            await self.db.execute(select(OrganizationModel).where(OrganizationModel.id == org_id))
+        ).scalar_one_or_none()
+        if row is None:
+            return False
+        await self.db.delete(row)
+        await self.db.flush()
+        return True
 
     async def delete_organization_domain(self, org_id: str, domain_id: str) -> bool:
         result = await self.db.execute(

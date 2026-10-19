@@ -29,12 +29,6 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.port import (
     ChatPersistencePort,
     ChatSecretRecord,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam.authorization import (
-    ensure_scope,
-    ensure_workspace_access,
-)
-from naas_abi.apps.nexus.apps.api.app.services.iam.port import RequestContext
-from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMService
 from naas_abi.apps.nexus.apps.api.app.services.ollama import (
     DEFAULT_CHAT_MODEL_TAG,
     FALLBACK_CHAT_MODEL_TAGS,
@@ -405,9 +399,7 @@ def _render_sheets_context_block(
     if not slug:
         return ""
     ws = str(sheets.get("workspace_id") or workspace_id or "").strip()
-    default_path = (
-        f"sheets/{ws}/{slug}/workbook.html" if ws else f"sheets/{slug}/workbook.html"
-    )
+    default_path = f"sheets/{ws}/{slug}/workbook.html" if ws else f"sheets/{slug}/workbook.html"
     default_branch = f"sheets/{ws}/{slug}" if ws else f"sheets/{slug}"
     path = str(sheets.get("path") or default_path).strip()
     branch = str(sheets.get("branch") or default_branch).strip()
@@ -513,12 +505,10 @@ class ChatService:
     def __init__(
         self,
         adapter: ChatPersistencePort,
-        iam_service: IAMService | None = None,
         auth_adapter: AuthPersistencePort | None = None,
         skills_service: SkillService | None = None,
     ):
         self.adapter = adapter
-        self.iam_service = iam_service
         self.auth_adapter = auth_adapter
         self.skills_service = skills_service
 
@@ -530,13 +520,12 @@ class ChatService:
         user_id: str | None,
         workspace_id: str | None = None,
         conversation_id: str | None = None,
-        context: RequestContext | None = None,
         client_context: dict | None = None,
     ) -> str:
         system_prompt = explicit_system_prompt or AGENT_SYSTEM_PROMPTS.get(
             agent, AGENT_SYSTEM_PROMPTS["aia"]
         )
-        system_prompt += await self._build_skills_block(context, workspace_id)
+        system_prompt += await self._build_skills_block(user_id, workspace_id)
         slides_block = _render_slides_context_block(client_context, workspace_id)
         if slides_block:
             system_prompt += slides_block
@@ -569,7 +558,6 @@ class ChatService:
         user_id: str | None,
         workspace_id: str | None = None,
         conversation_id: str | None = None,
-        context: RequestContext | None = None,
         client_context: dict | None = None,
     ) -> str | None:
         """Context prepended to the user message for in-process ABI agents.
@@ -579,7 +567,7 @@ class ChatService:
         first-turn user profile must be injected via the user message instead.
         """
         parts: list[str] = []
-        skills_block = await self._build_skills_block(context, workspace_id)
+        skills_block = await self._build_skills_block(user_id, workspace_id)
         if skills_block.strip():
             parts.append(skills_block.strip())
 
@@ -637,9 +625,7 @@ class ChatService:
         )
         return addendum.strip() or None
 
-    async def _build_skills_block(
-        self, context: RequestContext | None, workspace_id: str | None
-    ) -> str:
+    async def _build_skills_block(self, user_id: str | None, workspace_id: str | None) -> str:
         """Skills catalog + the note that creating one belongs to the Skills
         agent, injected fresh into the system prompt on every turn. Keeping it always-resident (rather than a
         one-off prompt expansion at invocation time) is what lets the agent decide
@@ -647,10 +633,11 @@ class ChatService:
         Claude's own Skills stay visible in context instead of being invoked once
         and forgotten."""
         block = _SKILLS_HANDOFF_NOTE
-        if not self.skills_service or not context or not workspace_id:
+        if not self.skills_service or not user_id or not workspace_id:
             return block
         try:
-            skills = await self.skills_service.list_visible_skills(context, workspace_id)
+            # The turn was authorized (SendMessage); the catalog is the caller's own view.
+            skills = await self.skills_service.adapter.list_visible(workspace_id, user_id)
         except Exception:
             logger.warning("Failed to load skills catalog for system prompt", exc_info=True)
             return block
@@ -788,118 +775,66 @@ class ChatService:
 
     async def list_conversations(
         self,
-        context: RequestContext,
+        user_id: str,
         workspace_id: str,
         limit: int,
         offset: int,
     ) -> list[ChatConversationRecord]:
-        await self._ensure_workspace_access(context=context, workspace_id=workspace_id)
         return await self.adapter.list_conversations_by_workspace(
             workspace_id=workspace_id,
-            user_id=context.actor_user_id,
+            user_id=user_id,
             limit=limit,
             offset=offset,
         )
 
     async def create_conversation(
         self,
-        context: RequestContext,
+        user_id: str,
         workspace_id: str,
         title: str,
         agent: str,
         now: datetime,
         conversation_id: str | None = None,
     ) -> ChatConversationRecord:
-        await self._ensure_workspace_access(context=context, workspace_id=workspace_id)
         conv_id = conversation_id or f"conv-{uuid4().hex[:12]}"
         return await self.adapter.create_conversation(
             conversation_id=conv_id,
             workspace_id=workspace_id,
-            user_id=context.actor_user_id,
+            user_id=user_id,
             title=title,
             agent=agent,
             now=now,
         )
 
-    async def get_conversation(
-        self,
-        context: RequestContext,
-        conversation_id: str,
-    ) -> ChatConversationRecord | None:
-        self._ensure_scope(
-            context=context,
-            required_scope="chat.conversation.read",
-            denied_message="Conversation access denied",
-        )
-        return await self.adapter.get_conversation_by_id_for_user(
-            conversation_id,
-            context.actor_user_id,
-        )
+    async def find_conversation(self, conversation_id: str) -> ChatConversationRecord | None:
+        """A conversation whoever owns it: only to tell who may be told it exists
+        (a workspace's members are told it is not theirs, others that they have no
+        access there). Never returned to a caller."""
+        return await self.adapter.get_conversation_by_id(conversation_id)
 
     async def get_conversation_for_user(
         self,
-        context: RequestContext,
+        user_id: str,
         conversation_id: str,
     ) -> ChatConversationRecord | None:
-        self._ensure_scope(
-            context=context,
-            required_scope="chat.conversation.read",
-            denied_message="Conversation access denied",
-        )
+        """The user's own conversation, or None: a conversation is personal."""
         return await self.adapter.get_conversation_by_id_for_user(
             conversation_id,
-            context.actor_user_id,
+            user_id,
         )
 
-    def _ensure_scope(
+    async def _own_conversation(
         self,
-        context: RequestContext,
-        required_scope: str,
-        denied_message: str,
-    ) -> None:
-        ensure_scope(
-            context=context,
-            required_scope=required_scope,
-            denied_message=denied_message,
-            iam_service=self.iam_service,
-        )
-
-    async def _ensure_conversation_access(
-        self,
-        context: RequestContext,
+        user_id: str,
         conversation_id: str,
-        action: str = "chat.conversation.read",
-        required_scope: str | None = None,
     ) -> ChatConversationRecord:
-        self._ensure_scope(
-            context=context,
-            required_scope=required_scope or action,
-            denied_message="Conversation access denied",
-        )
-
         conversation = await self.adapter.get_conversation_by_id_for_user(
             conversation_id,
-            context.actor_user_id,
+            user_id,
         )
         if not conversation:
             raise PermissionError("Conversation not found")
         return conversation
-
-    async def _ensure_workspace_access(
-        self,
-        context: RequestContext,
-        workspace_id: str,
-        action: str = "workspace.read",
-        required_scope: str | None = None,
-    ) -> None:
-        await ensure_workspace_access(
-            context=context,
-            workspace_id=workspace_id,
-            denied_message="Workspace access denied",
-            required_scope=required_scope or action,
-            iam_service=self.iam_service,
-            workspace_service=None,
-        )
 
     @staticmethod
     def _unwrap_json_content(raw: str) -> str:
@@ -915,19 +850,15 @@ class ChatService:
 
     async def list_messages(
         self,
-        context: RequestContext,
+        user_id: str,
         conversation_id: str,
     ) -> list[ChatMessageRecord]:
-        await self._ensure_conversation_access(
-            context,
-            conversation_id,
-            action="chat.message.read",
-        )
+        await self._own_conversation(user_id, conversation_id)
         return await self.adapter.list_messages_by_conversation(conversation_id)
 
     async def get_or_create_conversation(
         self,
-        context: RequestContext,
+        user_id: str,
         conversation_id: str | None,
         workspace_id: str | None,
         request_message: str,
@@ -937,7 +868,7 @@ class ChatService:
         if conversation_id:
             row = await self.adapter.get_conversation_by_id_for_user(
                 conversation_id,
-                context.actor_user_id,
+                user_id,
             )
             if row:
                 if row.agent != agent:
@@ -949,18 +880,12 @@ class ChatService:
                 return row.id
 
             existing_conversation = await self.adapter.get_conversation_by_id(conversation_id)
-            if existing_conversation and existing_conversation.user_id != context.actor_user_id:
+            if existing_conversation and existing_conversation.user_id != user_id:
                 if not workspace_id:
                     raise PermissionError("Conversation not found")
 
-                await self._ensure_workspace_access(
-                    context=context,
-                    workspace_id=workspace_id,
-                    action="chat.conversation.create",
-                )
-
                 created = await self.create_conversation(
-                    context=context,
+                    user_id=user_id,
                     workspace_id=workspace_id,
                     title=conversation_title_from_prompt(request_message),
                     agent=agent,
@@ -971,14 +896,8 @@ class ChatService:
             if not workspace_id:
                 raise ValueError("workspace_id is required")
 
-            await self._ensure_workspace_access(
-                context=context,
-                workspace_id=workspace_id,
-                action="chat.conversation.create",
-            )
-
             await self.create_conversation(
-                context=context,
+                user_id=user_id,
                 conversation_id=conversation_id,
                 workspace_id=workspace_id,
                 title=conversation_title_from_prompt(request_message),
@@ -990,14 +909,8 @@ class ChatService:
         if not workspace_id:
             raise ValueError("workspace_id is required")
 
-        await self._ensure_workspace_access(
-            context=context,
-            workspace_id=workspace_id,
-            action="chat.conversation.create",
-        )
-
         created = await self.create_conversation(
-            context=context,
+            user_id=user_id,
             workspace_id=workspace_id,
             title=conversation_title_from_prompt(request_message),
             agent=agent,
@@ -1017,16 +930,16 @@ class ChatService:
 
     async def get_message(
         self,
-        context: RequestContext,
+        user_id: str,
         conversation_id: str,
         message_id: str,
     ) -> ChatMessageRecord | None:
-        messages = await self.list_messages(context=context, conversation_id=conversation_id)
+        messages = await self.list_messages(user_id=user_id, conversation_id=conversation_id)
         return next((m for m in messages if m.id == message_id), None)
 
     async def update_message_metadata(
         self,
-        context: RequestContext,
+        user_id: str,
         conversation_id: str,
         message_id: str,
         metadata: dict,
@@ -1037,13 +950,9 @@ class ChatService:
         regenerate lineage, reviewer feedback — alive when the frontend PATCHes
         its execution time / steps / sources payload at the end of a stream.
         """
-        await self._ensure_conversation_access(
-            context,
-            conversation_id,
-            action="chat.message.update",
-        )
+        await self._own_conversation(user_id, conversation_id)
         existing = await self.get_message(
-            context=context,
+            user_id=user_id,
             conversation_id=conversation_id,
             message_id=message_id,
         )
@@ -1058,7 +967,7 @@ class ChatService:
 
     async def mark_message_superseded(
         self,
-        context: RequestContext,
+        user_id: str,
         conversation_id: str,
         message_id: str,
         superseded_by: str,
@@ -1069,7 +978,7 @@ class ChatService:
         message so the UI and the model context can skip it.
         """
         return await self.update_message_metadata(
-            context=context,
+            user_id=user_id,
             conversation_id=conversation_id,
             message_id=message_id,
             metadata={SUPERSEDED_BY_KEY: superseded_by},
@@ -1077,7 +986,7 @@ class ChatService:
 
     async def create_message(
         self,
-        context: RequestContext,
+        user_id: str,
         conversation_id: str,
         role: str,
         content: str,
@@ -1086,11 +995,7 @@ class ChatService:
         message_id: str | None = None,
         metadata: dict | None = None,
     ) -> str:
-        await self._ensure_conversation_access(
-            context,
-            conversation_id,
-            action="chat.message.create",
-        )
+        await self._own_conversation(user_id, conversation_id)
         msg_id = message_id or f"msg-{uuid4().hex[:12]}"
         await self.adapter.create_message(
             message_id=msg_id,
@@ -1105,7 +1010,7 @@ class ChatService:
 
     async def create_streaming_message_pair(
         self,
-        context: RequestContext,
+        user_id: str,
         conversation_id: str,
         user_content: str,
         assistant_agent: str | None,
@@ -1124,7 +1029,7 @@ class ChatService:
             assistant_metadata = {REGENERATE_OF_KEY: regenerate_of}
 
         user_msg_id = await self.create_message(
-            context=context,
+            user_id=user_id,
             conversation_id=conversation_id,
             role="user",
             content=user_content,
@@ -1132,7 +1037,7 @@ class ChatService:
             metadata=user_metadata,
         )
         assistant_msg_id = await self.create_message(
-            context=context,
+            user_id=user_id,
             conversation_id=conversation_id,
             role="assistant",
             content="",
@@ -1144,55 +1049,47 @@ class ChatService:
 
     async def update_message_content(
         self,
-        context: RequestContext,
+        user_id: str,
         conversation_id: str,
         message_id: str,
         content: str,
     ) -> bool:
-        await self._ensure_conversation_access(
-            context,
-            conversation_id,
-            action="chat.message.update",
-        )
+        await self._own_conversation(user_id, conversation_id)
         return await self.adapter.update_message_content(message_id, content)
 
     async def finalize_streaming_response(
         self,
-        context: RequestContext,
+        user_id: str,
         conversation_id: str,
         assistant_message_id: str,
         content: str,
         now: datetime,
     ) -> None:
         await self.update_message_content(
-            context=context,
+            user_id=user_id,
             conversation_id=conversation_id,
             message_id=assistant_message_id,
             content=content,
         )
-        await self.touch_conversation(context, conversation_id, now)
+        await self.touch_conversation(user_id, conversation_id, now)
 
     async def touch_conversation(
         self,
-        context: RequestContext,
+        user_id: str,
         conversation_id: str,
         now: datetime,
     ) -> None:
-        await self._ensure_conversation_access(
-            context,
-            conversation_id,
-            action="chat.conversation.update",
-        )
+        await self._own_conversation(user_id, conversation_id)
         await self.adapter.touch_conversation(conversation_id, now)
 
     async def complete_chat_request(
         self,
-        context: RequestContext,
+        user_id: str,
         request: CompleteChatInput,
         now: datetime,
     ) -> CompleteChatResult:
         conversation_id = await self.get_or_create_conversation(
-            context=context,
+            user_id=user_id,
             conversation_id=request.conversation_id,
             workspace_id=request.workspace_id,
             request_message=request.message,
@@ -1201,7 +1098,7 @@ class ChatService:
         )
 
         await self.create_message(
-            context=context,
+            user_id=user_id,
             conversation_id=conversation_id,
             role="user",
             content=request.message,
@@ -1218,7 +1115,6 @@ class ChatService:
 
         has_images = bool(request.images) or any(m.images for m in request.messages if m.images)
         provider = await self.resolve_provider(
-            context=context,
             provider=request.provider,
             has_images=has_images,
             agent_id=request.agent,
@@ -1231,34 +1127,32 @@ class ChatService:
             try:
                 provider_messages = await self.build_provider_messages_with_agents(
                     request=request,
-                    context=context,
+                    user_id=user_id,
                     current_agent_id=request.agent,
                     conversation_id=conversation_id,
                 )
                 provider_messages, context_sources = self._inject_chat_vector_context(
                     provider_messages=provider_messages,
                     conversation_id=conversation_id,
-                    user_id=context.actor_user_id,
+                    user_id=user_id,
                 )
                 prior_messages = list(request.messages or [])
                 system_prompt = await self.build_system_prompt(
                     agent=request.agent,
                     explicit_system_prompt=request.system_prompt,
                     prior_messages=prior_messages,
-                    user_id=context.actor_user_id,
+                    user_id=user_id,
                     workspace_id=request.workspace_id,
                     conversation_id=conversation_id,
-                    context=context,
                     client_context=request.context,
                 )
                 injection_preamble = None
                 if provider.type == "abi":
                     injection_preamble = await self.build_abi_injection_preamble(
                         prior_messages=prior_messages,
-                        user_id=context.actor_user_id,
+                        user_id=user_id,
                         workspace_id=request.workspace_id,
                         conversation_id=conversation_id,
-                        context=context,
                         client_context=request.context,
                     )
 
@@ -1317,7 +1211,7 @@ class ChatService:
             )
 
         assistant_message_id = await self.create_message(
-            context=context,
+            user_id=user_id,
             conversation_id=conversation_id,
             role="assistant",
             content=response_content,
@@ -1329,13 +1223,13 @@ class ChatService:
         )
         if request.regenerate_of:
             await self.mark_message_superseded(
-                context=context,
+                user_id=user_id,
                 conversation_id=conversation_id,
                 message_id=request.regenerate_of,
                 superseded_by=assistant_message_id,
             )
         await self.touch_conversation(
-            context,
+            user_id,
             conversation_id,
             now,
         )
@@ -1352,18 +1246,14 @@ class ChatService:
 
     async def update_conversation(
         self,
-        context: RequestContext,
+        user_id: str,
         conversation_id: str,
         now: datetime,
         title: str | None = None,
         pinned: bool | None = None,
         archived: bool | None = None,
     ) -> None:
-        await self._ensure_conversation_access(
-            context,
-            conversation_id,
-            action="chat.conversation.update",
-        )
+        await self._own_conversation(user_id, conversation_id)
         await self.adapter.update_conversation_fields(
             conversation_id=conversation_id,
             now=now,
@@ -1374,69 +1264,29 @@ class ChatService:
 
     async def delete_conversation_with_messages(
         self,
-        context: RequestContext,
+        user_id: str,
         conversation_id: str,
     ) -> bool:
-        await self._ensure_conversation_access(
-            context,
-            conversation_id,
-            action="chat.conversation.delete",
-        )
+        await self._own_conversation(user_id, conversation_id)
         await self.adapter.delete_messages_by_conversation(conversation_id)
         return await self.adapter.delete_conversation(conversation_id)
 
-    async def get_agent(
-        self,
-        context: RequestContext,
-        agent_id: str,
-    ) -> ChatAgentRecord | None:
-        self._ensure_scope(
-            context=context,
-            required_scope="chat.agent.read",
-            denied_message="Agent access denied",
-        )
-        agent = await self.adapter.get_agent_by_id(agent_id)
-        if agent:
-            await self._ensure_workspace_access(context=context, workspace_id=agent.workspace_id)
-        return agent
+    async def get_agent(self, agent_id: str) -> ChatAgentRecord | None:
+        """The workspace agent row, not yet authorized: the route that runs the
+        turn asks ``UseAgent`` on the agent's own workspace first."""
+        return await self.adapter.get_agent_by_id(agent_id)
 
-    async def get_abi_server(
-        self,
-        context: RequestContext,
-        workspace_id: str,
-    ) -> ChatInferenceServerRecord | None:
-        self._ensure_scope(
-            context=context,
-            required_scope="chat.provider.read",
-            denied_message="Provider access denied",
-        )
-        await self._ensure_workspace_access(context=context, workspace_id=workspace_id)
+    async def get_abi_server(self, workspace_id: str) -> ChatInferenceServerRecord | None:
         return await self.adapter.get_enabled_workspace_abi_server(workspace_id)
 
     async def get_workspace_secret(
         self,
-        context: RequestContext,
         workspace_id: str,
         key: str,
     ) -> ChatSecretRecord | None:
-        self._ensure_scope(
-            context=context,
-            required_scope="chat.secret.read",
-            denied_message="Secret access denied",
-        )
-        await self._ensure_workspace_access(context=context, workspace_id=workspace_id)
         return await self.adapter.get_workspace_secret(workspace_id, key)
 
-    async def list_agent_names_by_ids(
-        self,
-        context: RequestContext,
-        agent_ids: set[str],
-    ) -> dict[str, str]:
-        self._ensure_scope(
-            context=context,
-            required_scope="chat.agent.read",
-            denied_message="Agent access denied",
-        )
+    async def list_agent_names_by_ids(self, agent_ids: set[str]) -> dict[str, str]:
         return await self.adapter.list_agent_names_by_ids(agent_ids)
 
     @staticmethod
@@ -1463,7 +1313,6 @@ class ChatService:
 
     async def resolve_provider(
         self,
-        context: RequestContext,
         provider: Any | None,
         has_images: bool,
         agent_id: str | None = None,
@@ -1489,7 +1338,7 @@ class ChatService:
 
         if agent_id:
             try:
-                agent = await self.get_agent(context=context, agent_id=agent_id)
+                agent = await self.get_agent(agent_id)
                 if agent and agent.provider:
                     workspace_id = agent.workspace_id
                     if agent.provider == "remote" and agent.class_name:
@@ -1513,10 +1362,7 @@ class ChatService:
                         external_agent_ref = (
                             agent.model_id or agent.class_name or agent.name or agent.id
                         )
-                        abi_server = await self.get_abi_server(
-                            context=context,
-                            workspace_id=workspace_id,
-                        )
+                        abi_server = await self.get_abi_server(workspace_id)
                         if abi_server:
                             return ResolvedProvider(
                                 id=f"abi-{abi_server.id}",
@@ -1560,11 +1406,7 @@ class ChatService:
 
                     secret_key = secret_key_map.get(agent.provider)
                     if secret_key and agent.model_id:
-                        secret = await self.get_workspace_secret(
-                            context=context,
-                            workspace_id=workspace_id,
-                            key=secret_key,
-                        )
+                        secret = await self.get_workspace_secret(workspace_id, secret_key)
                         if secret:
                             return ResolvedProvider(
                                 id=f"agent-{agent.provider}",
@@ -1578,10 +1420,7 @@ class ChatService:
                             )
 
                 if not agent and workspace_id and agent_id:
-                    abi_server = await self.get_abi_server(
-                        context=context,
-                        workspace_id=workspace_id,
-                    )
+                    abi_server = await self.get_abi_server(workspace_id)
                     if abi_server:
                         return ResolvedProvider(
                             id=f"abi-{abi_server.id}",
@@ -1669,7 +1508,7 @@ class ChatService:
 
     async def build_provider_messages_with_agents(
         self,
-        context: RequestContext,
+        user_id: str,
         request: CompleteChatInput,
         current_agent_id: str,
         conversation_id: str | None = None,
@@ -1678,7 +1517,7 @@ class ChatService:
         db_messages: list[Any] = []
         if effective_conversation_id:
             rows = await self.list_messages(
-                context=context, conversation_id=effective_conversation_id
+                user_id=user_id, conversation_id=effective_conversation_id
             )
             db_messages = [
                 {
@@ -1726,7 +1565,7 @@ class ChatService:
             m["agent"] for m in source_messages if m["role"] == "assistant" and m.get("agent")
         }
         agent_ids.add(current_agent_id)
-        agents_map = await self.list_agent_names_by_ids(context=context, agent_ids=agent_ids)
+        agents_map = await self.list_agent_names_by_ids(agent_ids)
         current_agent_name = agents_map.get(current_agent_id, "Unknown Agent")
 
         messages: list[ProviderMessage] = []

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
@@ -39,7 +39,7 @@ WS = "ws-1"
 
 
 @pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient:
+def client(team, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient:
     sc = SourceControlService(InMemoryAdapter())
     sc.ensure_repo(owner="abi", name="monorepo")
     service = AppProjectsService(
@@ -53,16 +53,10 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient:
     app.add_api_route("/app-preview/{token}/{path:path}", adapter.serve_app_preview)
     app.add_api_route("/app-preview/{token}", adapter.redirect_app_preview_root)
     app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
-        id="u-1", email="alice@example.com", name="Alice"
+        id="admin", email="alice@example.com", name="Alice"
     )
     app.dependency_overrides[adapter.get_app_projects_service] = lambda: service
 
-    async def _members_only(user_id: str, workspace_id: str) -> str:
-        if workspace_id != WS:
-            raise HTTPException(status_code=403, detail="Not a member")
-        return "member"
-
-    monkeypatch.setattr(adapter, "require_workspace_access", _members_only)
     monkeypatch.setattr(adapter.settings, "secret_key", "test-secret")
     monkeypatch.setattr(auth_service.settings, "secret_key", "test-secret")
     # Preview links are IAM grants: the engine's IAM, for this test.

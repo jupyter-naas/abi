@@ -58,7 +58,6 @@ from naas_abi.apps.nexus.apps.api.app.services.oidc.adapters.secondary.postgres 
 )
 from naas_abi.apps.nexus.apps.api.app.services.oidc.port import UserConflictError
 from naas_abi_core.engine.call_context import as_service_account, current_call_context
-from naas_abi_core.services.iam import roles
 from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
 from naas_abi_core.services.identity.IdentityPorts import SignInError
 from naas_abi_core.services.identity.tests.fake_idp import FakeIdP
@@ -179,9 +178,9 @@ class NexusSignInContract:
         # Every kernel call runs as api on behalf of the principal.
         assert (await client.get("/api/whoami")).json()["user"] == record.id
         assert (await client.get("/api/whoami")).json()["actor"] == "api"
-        # TRANSITIONAL (#65): Nexus still decides what its users may do.
+        # Signing in grants nothing: a user holds the roles of its memberships only.
         attached = [a.policy_id for a in iam.store.list_attachments(principal_id=record.id)]
-        assert roles.TRANSITIONAL_NEXUS_USER in attached
+        assert attached == []
 
     @pytest.mark.asyncio
     async def test_the_same_identity_signs_in_to_the_same_account(self, nexus, harness):

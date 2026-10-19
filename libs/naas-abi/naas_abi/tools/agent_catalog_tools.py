@@ -23,8 +23,7 @@ from naas_abi.agents.feature.runtime import (
     guarded,
     jsonable,
     matches,
-    request_context,
-    require_member,
+    require_action,
     run_db,
     tool_context,
 )
@@ -47,17 +46,16 @@ async def _workspace_agents(db: Any, user_id: str, workspace_id: str) -> Any:
     """
     from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
         caller_feature_flags,
+        feature_keys_of,
         filter_feature_agents,
     )
 
-    role = await require_member(db, user_id, workspace_id)
-    if isinstance(role, dict):
-        return role
+    denied = await require_action(user_id, workspace_id, "ListAgents")
+    if denied is not None:
+        return denied
     with bound_session(db):
-        agents = await _registry().agents.list_workspace_agents(
-            request_context(user_id), workspace_id
-        )
-    flags = await caller_feature_flags(db, workspace_id, role)
+        agents = await _registry().agents.list_workspace_agents(workspace_id)
+    flags = await caller_feature_flags(user_id, workspace_id, feature_keys_of(agents))
     return filter_feature_agents(agents, flags)
 
 

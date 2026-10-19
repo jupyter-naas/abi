@@ -68,6 +68,7 @@ class ChatFileIngestionService:
 
     def upload_and_ingest(
         self,
+        workspace_id: str,
         user_id: str,
         conversation_id: str,
         filename: str,
@@ -84,6 +85,7 @@ class ChatFileIngestionService:
         self.object_storage.put_object(upload_prefix, safe_filename, content)
         source_path = PurePosixPath(upload_prefix, safe_filename).as_posix()
         return self.ingest_from_path(
+            workspace_id=workspace_id,
             user_id=user_id,
             conversation_id=conversation_id,
             source_path=source_path,
@@ -94,6 +96,7 @@ class ChatFileIngestionService:
 
     def ingest_from_path(
         self,
+        workspace_id: str,
         user_id: str,
         conversation_id: str,
         source_path: str,
@@ -106,6 +109,7 @@ class ChatFileIngestionService:
         # Normalise the path to resolve any ".." traversal attempts before
         # checking ownership (e.g. "naas_abi/my-drive/user/../../etc/passwd" must not pass).
         import posixpath
+
         normalized_source = posixpath.normpath(source_path.strip().strip("/"))
         expected_prefix = my_drive_root(user_id)
         if not (
@@ -121,7 +125,9 @@ class ChatFileIngestionService:
             raise ChatFileIngestionError("File not found") from exc
 
         file_sha = hashlib.sha256(file_content).hexdigest()
-        cache_key = build_embedding_cache_key(file_sha, embedding_model, embedding_dimension)
+        cache_key = build_embedding_cache_key(
+            workspace_id, file_sha, embedding_model, embedding_dimension
+        )
         collection_name = build_chat_collection_name(conversation_id)
 
         cache_hit = False
@@ -371,8 +377,7 @@ class ChatFileIngestionService:
                             part = str(pymupdf4llm.to_markdown(tmp.name, pages=pages))
                             parts.append(part)
                             pct = _PDF_PROGRESS_START + int(
-                                (end / total_pages)
-                                * (_PDF_PROGRESS_END - _PDF_PROGRESS_START)
+                                (end / total_pages) * (_PDF_PROGRESS_END - _PDF_PROGRESS_START)
                             )
                             on_progress("converting", pct)
                         return "\n\n".join(parts)
@@ -438,9 +443,11 @@ class ChatFileIngestionService:
                     if name.startswith("ppt/slides/slide") and name.endswith(".xml")
                 ]
                 slide_paths.sort(
-                    key=lambda path: int(re.search(r"slide(\d+)\.xml$", path).group(1))
-                    if re.search(r"slide(\d+)\.xml$", path)
-                    else 0
+                    key=lambda path: (
+                        int(re.search(r"slide(\d+)\.xml$", path).group(1))
+                        if re.search(r"slide(\d+)\.xml$", path)
+                        else 0
+                    )
                 )
 
                 markdown_parts: list[str] = []

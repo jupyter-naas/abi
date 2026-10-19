@@ -172,6 +172,7 @@ async def process_chat_ingestion_job(payload: dict[str, Any]) -> None:
             None,
             contextvars.copy_context().run,
             lambda: ingestion_service.ingest_from_path(
+                workspace_id=str(payload["workspace_id"]),
                 user_id=str(payload["user_id"]),
                 conversation_id=str(payload["conversation_id"]),
                 source_path=str(payload["source_path"]),

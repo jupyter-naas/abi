@@ -20,9 +20,11 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     InvitationNotFoundError,
     InvitationPersistencePort,
     NoProviderError,
+    OrgInvitationExistsError,
     OwnerGrantRefusedError,
     ProviderChoice,
     Provisioned,
+    ProvisioningRefused,
 )
 from naas_abi.apps.nexus.apps.api.app.services.invites.service import InvitationService
 
@@ -35,7 +37,6 @@ class Store(InvitationPersistencePort):
     def __init__(self) -> None:
         self.rows: dict[str, Invitation] = {}
         self.domains: dict[str, str] = {}
-        self.memberships: list[tuple] = []
         self.commits = 0
         self.rollbacks = 0
         self.fail_commit = False
@@ -107,9 +108,6 @@ class Store(InvitationPersistencePort):
     async def user_id_by_email(self, email):
         return None
 
-    async def add_membership(self, **kwargs):
-        self.memberships.append(tuple(sorted(kwargs.items())))
-
     async def commit(self):
         if self.fail_commit:
             raise RuntimeError("the database is down")
@@ -123,17 +121,23 @@ class Directories(DirectoryGateway):
     def __init__(self, *providers: ProviderChoice, default: str | None = None) -> None:
         self.known = Directory(tuple(providers), default)
         self.provisioned: list[tuple[str, str, str | None]] = []
+        self.provisioned_by: list[str | None] = []
+        # The users IAM lets create accounts at a provider (``identity:ProvisionUser``).
+        self.may = {"usr-alice"}
         self.fail: Exception | None = None
 
     async def directory(self):
         return self.known
 
-    async def provision(self, provider, email, name):
+    async def provision(self, provider, email, name, *, by=None):
         if self.fail is not None:
             raise self.fail
         if provider.managed_in_provider:
             return None
+        if by is not None and by not in self.may:
+            raise ProvisioningRefused(f"{by} may not create accounts at {provider.name}")
         self.provisioned.append((provider.name, email, name))
+        self.provisioned_by.append(by)
         return Provisioned(subject="sub-1", created=True)
 
 
@@ -379,22 +383,14 @@ async def test_resending_mails_the_same_invitation_again():
 
 
 @pytest.mark.asyncio
-async def test_a_sign_in_makes_the_memberships_once_and_per_provider():
+async def test_a_sign_in_accepts_the_invitations_once_and_per_provider():
     h = Harness(BUILTIN, OKTA, default="builtin")
     await h.invite()
     await h.invite(provider="okta")
     other = await h.service.claim(user_id="u-bob", email="BOB@example.com", provider="builtin")
     assert [i.provider for i in other] == ["builtin"]
-    assert dict(h.store.memberships[0]) | {} == {
-        "user_id": "u-bob",
-        "organization_id": "org-1",
-        "org_role": "member",
-        "workspace_id": "ws-1",
-        "workspace_role": "member",
-        "now": NOW,
-    }
+    # The memberships are the attachments IAM claimed: the invitation is only marked.
     assert await h.service.claim(user_id="u-bob", email="bob@example.com", provider="builtin") == []
-    assert len(h.store.memberships) == 1
     # The Okta invitation stays for whoever signs in through Okta with that email.
     assert len(await h.service.pending(organization_id="org-1")) == 1
     assert await h.service.claim(user_id="u-x", email="eve@example.com", provider="builtin") == []
@@ -412,9 +408,7 @@ async def test_two_sign_ins_race_for_an_invitation_and_one_wins():
 
     h.store.mark_accepted = lose  # type: ignore[method-assign]
     assert await h.service.claim(user_id="u-bob", email="bob@example.com", provider="builtin") == []
-    assert (
-        h.store.memberships == [] and h.store.rows[invitation.id].accepted_user_id == "someone-else"
-    )
+    assert h.store.rows[invitation.id].accepted_user_id == "someone-else"
 
 
 @pytest.mark.asyncio
@@ -502,3 +496,84 @@ async def test_renewing_does_not_withdraw_what_another_invitation_holds():
     # The first invitation now holds an admin org grant; the member one stays for ws-2.
     assert ("builtin", "bob@example.com", "builtin.member", "abi:org-1:-") in h.grants.live.values()
     assert h.store.rows[first.id].org_role == "admin"
+
+
+# -- who may make accounts at the provider --------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_user_without_the_right_creates_no_account_at_the_provider():
+    """Anyone may own an organization they made: that must not let them create
+    accounts in the provider's directory for addresses they control."""
+    h = Harness()
+    outcome = await h.invite(invited_by="usr-mallory", email="victim@corp.example")
+    assert h.directory.provisioned == []
+    assert outcome.provisioning_skipped and not outcome.user_created
+    # The invitation still stands: grants wait for whoever signs in with that address.
+    assert {g[1] for g in h.grants.live.values()} == {"victim@corp.example"}
+    assert outcome.invitation.status == "pending" and len(h.mailer.sent) == 1
+
+
+@pytest.mark.asyncio
+async def test_an_address_on_a_domain_the_organization_verified_is_provisioned():
+    h = Harness()
+    h.store.domains["corp.example"] = "builtin"
+    outcome = await h.invite(invited_by="usr-mallory", email="bob@corp.example")
+    assert h.directory.provisioned == [("builtin", "bob@corp.example", None)]
+    assert h.directory.provisioned_by == [None]  # Nexus's own call: the domain is proven
+    assert outcome.user_created and not outcome.provisioning_skipped
+    # A domain routed to another provider proves nothing for this one.
+    h2 = Harness(BUILTIN, OKTA)
+    h2.store.domains["corp.example"] = "okta"
+    refused = await h2.invite(
+        invited_by="usr-mallory", email="eve@corp.example", provider="builtin"
+    )
+    assert h2.directory.provisioned == [] and refused.provisioning_skipped
+
+
+@pytest.mark.asyncio
+async def test_a_user_who_holds_the_right_provisions_as_themselves():
+    h = Harness()
+    h.directory.may.add("usr-ops")
+    outcome = await h.invite(invited_by="usr-ops", email="bob@elsewhere.example")
+    assert h.directory.provisioned_by == ["usr-ops"] and outcome.user_created
+
+
+@pytest.mark.asyncio
+async def test_a_provider_that_manages_its_people_is_never_asked():
+    h = Harness(OKTA, default="okta")
+    outcome = await h.invite(invited_by="usr-mallory")
+    assert h.directory.provisioned == [] and not outcome.provisioning_skipped
+
+
+# -- invitations that carry an organization role --------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_invite_never_rewrites_an_organization_invitation():
+    h = Harness()
+    first = (await h.invite(org_role="admin", workspace_role="member")).invitation
+    grants = dict(h.grants.live)
+    with pytest.raises(OrgInvitationExistsError):
+        await h.invite(org_role=None, workspace_role="viewer", invited_by="usr-wsadmin")
+    kept = h.store.rows[first.id]
+    assert (kept.org_role, kept.workspace_role, kept.invited_by) == ("admin", "member", "usr-alice")
+    assert h.grants.live == grants and len(h.grants.live) == 2
+
+
+@pytest.mark.asyncio
+async def test_an_organization_admin_renewing_through_the_workspace_keeps_the_org_role():
+    h = Harness()
+    first = (await h.invite(org_role="admin", workspace_role="member")).invitation
+    renewed = await h.invite(
+        org_role=None,
+        workspace_role="viewer",
+        invited_by="usr-alice",
+        may_renew_org_invitation=True,
+    )
+    assert renewed.renewed and renewed.invitation.id == first.id
+    assert (renewed.invitation.org_role, renewed.invitation.workspace_role) == ("admin", "viewer")
+    assert {(p, s) for _, _, p, s in h.grants.live.values()} == {
+        ("builtin.admin", "abi:org-1:-"),
+        ("builtin.viewer", "abi:org-1:ws-1"),
+    }

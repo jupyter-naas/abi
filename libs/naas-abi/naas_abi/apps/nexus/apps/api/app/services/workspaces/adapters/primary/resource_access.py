@@ -1,4 +1,6 @@
-"""Admin assignment editor. Normal data APIs consume the same saved policies."""
+"""Admin assignment editor. Saved graph assignments are applied to IAM, which
+the graph APIs (through the kernel) enforce; ontology assignments are read by
+the ontology APIs."""
 
 from __future__ import annotations
 
@@ -16,12 +18,19 @@ from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
     get_current_user_required,
-    require_workspace_admin,
+)
+from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary import graph_iam
+from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.graph_grants import (
+    sync_workspace,
+)
+from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.nexus_catalog import (
+    NexusCatalogStore,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.workspace_policy import (
     catalog_graphs,
-    owned_graphs,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ as authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import guard
 from naas_abi.apps.nexus.apps.api.app.services.registry import (
     ServiceRegistry,
     get_service_registry,
@@ -59,18 +68,19 @@ class AssignmentUpdate(BaseModel):
     policy: dict
 
 
-async def authorize_editor(workspace_id: str, user=Depends(get_current_user_required)):
-    await require_workspace_admin(user.id, workspace_id)
-    return user
-
-
-def _graph_catalog(service: Any, workspace_id: str) -> list[dict]:
+def _graph_catalog(service: Any, workspace_id: str, user_id: str, held: set[str]) -> list[dict]:
+    """The graphs ``user_id`` may assign to the workspace: the ones they administer
+    (the level that may drop a graph: their workspace's own, or all for a platform
+    administrator), plus what the workspace already holds. Sharing a graph is a
+    right over the graph, so an administrator cannot hand their workspace another
+    tenant's data by naming it."""
     store = service._get_catalog_store()
     uris = catalog_graphs(store)
-    owned = owned_graphs(store, workspace_id)
+    uris = uris & (graph_iam.allowed("DropGraph", uris, user=user_id) | held)
+    owned = graph_iam.owned_by(workspace_id)
     labels = {
         str(row.g): str(row.label)
-        for row in store.query(
+        for row in NexusCatalogStore(store).query(
             f"SELECT ?g ?label WHERE {{ GRAPH <{NEXUS_GRAPH}> {{ "
             "?g <http://www.w3.org/2000/01/rdf-schema#label> ?label . FILTER(isIRI(?g)) } }"
         )
@@ -89,14 +99,19 @@ def _graph_catalog(service: Any, workspace_id: str) -> list[dict]:
 
 
 async def assignment_catalog(
-    kind: Kind, workspace_id: str, ontologies: Any, graphs: Any
+    kind: Kind,
+    workspace_id: str,
+    ontologies: Any,
+    graphs: Any,
+    *,
+    user_id: str,
+    held: set[str],
 ) -> list[dict]:
     if kind == "graphs":
-        return await asyncio.to_thread(_graph_catalog, graphs, workspace_id)
+        return await asyncio.to_thread(_graph_catalog, graphs, workspace_id, user_id, held)
     items = await ontologies.list_ontology_files()
     identifiers = [
-        normalize_ontology_ref(f"{item.module_name}:{Path(item.path).name}")
-        for item in items
+        normalize_ontology_ref(f"{item.module_name}:{Path(item.path).name}") for item in items
     ]
     counts = Counter(identifiers)
     return [
@@ -126,9 +141,7 @@ def editor_payload(kind: Kind, saved, catalog: list[dict]) -> dict:
             ref
             for ref in refs
             if not any(
-                ontology_matches_seed(
-                    item.get("path", item["id"]), item["module"], [ref]
-                )
+                ontology_matches_seed(item.get("path", item["id"]), item["module"], [ref])
                 for item in catalog
             )
         ]
@@ -149,53 +162,94 @@ def editor_payload(kind: Kind, saved, catalog: list[dict]) -> dict:
     return {**asdict(saved), "data": data, "catalog": catalog}
 
 
-@router.get("/{workspace_id}/resource-access/{kind}")
+async def _require_graph_rights(user: Any, current: dict, data: dict) -> None:
+    """What the catalog check cannot see in a graph assignment.
+
+    * ``read_all`` shares every graph of the workspace's organization with all its
+      members, so turning it on is for platform administrators.
+    * A graph the workspace only reads is still in the catalog (it holds it): moving
+      it to ``write`` hands every writer of the workspace the right to change it,
+      which takes the right to drop it, as sharing it for writing did.
+    """
+    if data["read_all"] and not current["read_all"]:
+        if not await authz.allowed("ManageSystem", user=user):
+            raise HTTPException(403, "Sharing every graph is for platform administrators.")
+    new_writes = set(data["write"]) - set(current["write"])
+    if new_writes:
+        droppable = await asyncio.to_thread(
+            graph_iam.allowed, "DropGraph", new_writes, user=user.id
+        )
+        if new_writes - droppable:
+            raise HTTPException(
+                403, "Writing a graph needs the right to drop it: ask the graph's administrators."
+            )
+
+
+def _held(kind: Kind, data: dict) -> set[str]:
+    return set(data["read"]) | set(data["write"]) if kind == "graphs" else set()
+
+
+# The editor payload carries the assignments and the catalog they are chosen
+# from, so reading it is as much the administrators' as saving it is.
+@router.get(
+    "/{workspace_id}/resource-access/{kind}",
+    dependencies=[guard("UpdateResourceAccess", id="kind")],
+)
 async def get_assignments(
     workspace_id: str,
     kind: Kind,
-    _user=Depends(authorize_editor),
+    user=Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
     ontologies: Any = Depends(get_ontology_service),
     graphs: Any = Depends(get_graph_service),
 ):
     saved = await load_resource_policy(db, workspace_id, kind)
-    catalog = await assignment_catalog(kind, workspace_id, ontologies, graphs)
+    catalog = await assignment_catalog(
+        kind, workspace_id, ontologies, graphs, user_id=user.id, held=_held(kind, saved.data)
+    )
     return editor_payload(kind, saved, catalog)
 
 
-@router.put("/{workspace_id}/resource-access/{kind}")
+@router.put(
+    "/{workspace_id}/resource-access/{kind}",
+    dependencies=[guard("UpdateResourceAccess", id="kind")],
+)
 async def save_assignments(
     workspace_id: str,
     kind: Kind,
     body: AssignmentUpdate,
-    user=Depends(authorize_editor),
+    user=Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
     ontologies: Any = Depends(get_ontology_service),
     graphs: Any = Depends(get_graph_service),
 ):
     current = await load_resource_policy(db, workspace_id, kind)
-    catalog = await assignment_catalog(kind, workspace_id, ontologies, graphs)
+    catalog = await assignment_catalog(
+        kind, workspace_id, ontologies, graphs, user_id=user.id, held=_held(kind, current.data)
+    )
     try:
         data = validate_policy(kind, body.policy)
         known = {item["id"] for item in catalog}
         if kind == "ontologies":
             added = set(data["enabled"]) - set(current.data["enabled"])
         else:
-            added = (set(data["read"]) | set(data["write"])) - (
-                set(current.data["read"]) | set(current.data["write"])
-            )
+            added = _held(kind, data) - _held(kind, current.data)
         if added - known:
             raise ValueError("Select resources from the available catalog.")
+        if kind == "graphs":
+            await _require_graph_rights(user, current.data, data)
         saved = await ResourceAccessService(ResourcePolicyPostgres(db)).save(
             workspace_id,
             kind,
             data,
             body.revision,
             user.id,
-            "admin",
         )
     except PolicyConflictError as exc:
         raise HTTPException(409, str(exc)) from exc
     except (ValueError, ValidationError) as exc:
         raise HTTPException(422, str(exc)) from exc
+    if kind == "graphs":
+        # IAM enforces what was just saved: hold it for the workspace's members.
+        await sync_workspace(db, workspace_id, store=graphs._get_catalog_store())
     return editor_payload(kind, saved, catalog)

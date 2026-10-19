@@ -21,50 +21,34 @@ from collections.abc import Iterable, Mapping
 from typing import TypeVar
 
 from naas_abi.agents.feature.registry import spec_for_class_name
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 
 AgentT = TypeVar("AgentT")
 
 
-async def caller_feature_flags(db: object, workspace_id: str, role: str | None) -> dict[str, bool]:
-    """Feature access this caller holds in this workspace, on an open session.
+def feature_keys_of(agents: Iterable[object]) -> set[str]:
+    """The feature keys the office agents among ``agents`` depend on."""
+    keys: set[str] = set()
+    for agent in agents:
+        spec = spec_for_class_name(getattr(agent, "class_name", None))
+        if spec is not None:
+            keys.update(spec.feature_keys)
+    return keys
 
-    Same resolution the workspace listing sends the frontend (deployment
-    ``role_baseline``, org overlay, workspace overrides), so the agents a
-    user is offered match the sections they can open. Callers that own a
-    session pass it; the HTTP adapter opens one of its own.
+
+async def caller_feature_flags(
+    user: object, workspace_id: str, keys: Iterable[str]
+) -> dict[str, bool]:
+    """Whether the caller may use each of ``keys`` in this workspace, from IAM.
+
+    IAM's ``UseFeature`` is what the workspace listing sends the frontend (the
+    deployment's ``role_baseline``, the org overlay, the workspace overrides),
+    so the agents a user is offered match the sections they can open.
     """
-    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import build_feature_flags
-    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
-    from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
-    from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
-        OrganizationSecondaryAdapterPostgres,
-    )
-    from naas_abi.apps.nexus.apps.api.app.services.organizations.service import OrganizationService
-    from sqlalchemy import select
-
-    result = await db.execute(  # type: ignore[attr-defined]
-        select(WorkspaceModel.slug, WorkspaceModel.organization_id).where(
-            WorkspaceModel.id == workspace_id
-        )
-    )
-    row = result.one_or_none()
-    slug = row[0] if row else None
-    organization_id = row[1] if row else None
-
-    override = None
-    if organization_id:
-        org_service = OrganizationService(adapter=OrganizationSecondaryAdapterPostgres(db=db))
-        record = await org_service.get_role_features(org_id=organization_id)
-        override = record.role_baseline if record is not None else None
-
-    return build_feature_flags(
-        role=role or "member",
-        feature_flags_config=live_settings().feature_flags,
-        workspace_slug=slug,
-        workspace_id=workspace_id,
-        organization_id=organization_id,
-        organization_override=override,
-    )
+    return {
+        key: await authz.allowed("UseFeature", user=user, workspace=workspace_id, id=key)
+        for key in sorted(set(keys))
+    }
 
 
 def feature_agent_visible(class_name: str | None, flags: Mapping[str, bool]) -> bool:

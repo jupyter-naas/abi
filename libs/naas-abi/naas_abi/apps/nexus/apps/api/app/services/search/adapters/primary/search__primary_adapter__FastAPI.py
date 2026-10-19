@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user_required
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares
 from naas_abi.apps.nexus.apps.api.app.services.search.adapters.primary.search__primary_adapter__dependencies import (  # noqa: E501
     get_search_service,
 )
@@ -105,20 +107,28 @@ async def web_search(
     )
 
 
-@router.post("/private")
+@router.post("/private", dependencies=[declares("Search")])
 async def private_search(
     request: PrivateSearchRequest,
-    current_user = Depends(get_current_user_required),
+    current_user=Depends(get_current_user_required),
     search_service: SearchService = Depends(get_search_service),
 ) -> PrivateSearchResponse:
+    if request.workspace_id:
+        # The workspace is in the body, so the check happens here, not in a guard.
+        await authz.require("Search", user=current_user, workspace=request.workspace_id)
     if request.source == "ontology":
         if not request.workspace_id:
-            raise HTTPException(status_code=422, detail="workspace_id is required for private search")
+            raise HTTPException(
+                status_code=422, detail="workspace_id is required for private search"
+            )
         from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__dependencies import (
             workspace_graph_service,
         )
         from naas_abi.apps.nexus.apps.api.app.services.registry import ServiceRegistry
-        graph = await workspace_graph_service(ServiceRegistry.instance().graph, current_user.id, request.workspace_id)
+
+        graph = await workspace_graph_service(
+            ServiceRegistry.instance().graph, current_user.id, request.workspace_id
+        )
         search_service = SearchService(triple_store_getter=graph._get_triple_store)
     response = await search_service.private_search(
         PrivateSearchRequestData(query=request.query, source=request.source)

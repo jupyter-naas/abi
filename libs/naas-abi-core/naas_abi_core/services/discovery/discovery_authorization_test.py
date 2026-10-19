@@ -22,6 +22,7 @@ from naas_abi_core.services.discovery.discovery_service_test import (
     registration,
 )
 from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
+from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
 from naas_abi_core.services.iam.names import parse_resource_name
 from naas_abi_core.services.iam.tests.authorization_contract import contract_iam
 from naas_abi_core.services.iam.tests.iam_harness import IAMHarness, statement
@@ -196,12 +197,15 @@ def test_an_app_is_told_who_the_verified_actor_is():
             answer.caller_principal_kind,
             answer.caller_principal_name,
         ) == ("service_account", "caller-module")
+        # A user holds no policy of their own: a workspace role gives theirs.
+        user = h.user("x")
+        h.attach("builtin.platform.viewer", user.id)
         via_api = CallContext(
             principal=service_account("api"),
-            on_behalf_of=Principal(id="usr_x", kind="user"),
+            on_behalf_of=Principal(id=user.id, kind="user"),
         )
         answer = await service.authorize_app(auth, PROVIDER, via_api)
-        assert (answer.caller_user_id, answer.caller_principal_name) == ("usr_x", "api")
+        assert (answer.caller_user_id, answer.caller_principal_name) == (user.id, "api")
 
     asyncio.run(scenario())
 
@@ -258,12 +262,17 @@ def test_the_runs_a_user_starts_are_the_users():
     asyncio.run(scenario())
 
 
-def test_transitional_holders_never_reach_each_others_runs():
-    """Regression: the TRANSITIONAL grants of Nexus users and remote modules
-    open discovery, but never another principal's agent run."""
+def test_members_and_modules_never_reach_each_others_runs():
+    """Regression: a workspace member's role opens discovery, but never another
+    principal's agent run."""
 
     async def scenario():
-        service = DiscoveryService(MemoryRegistry(), iam=contract_iam())
+        iam = contract_iam()
+        for nexus_id in ("user-aaaaaaaaaaaa", "user-bbbbbbbbbbbb"):
+            with as_service_account("engine"):
+                record = iam.ensure_user(LEGACY_NEXUS_ISSUER, nexus_id)
+                iam.attach_policy("builtin.member", record.id, "abi:org-1:ws-1")
+        service = DiscoveryService(MemoryRegistry(), iam=iam)
         req = await _ready(service)
         lease: dict[str, Any] = {
             "instance_id": "instance",

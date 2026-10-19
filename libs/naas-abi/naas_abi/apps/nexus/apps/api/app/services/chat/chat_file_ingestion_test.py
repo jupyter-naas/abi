@@ -133,7 +133,7 @@ def test_upload_and_ingest_uses_cache_on_second_call() -> None:
     service = _make_service()
 
     first = service.upload_and_ingest(
-        user_id="user-1",
+        workspace_id="ws-1", user_id="user-1",
         conversation_id="conv-1",
         filename="notes.txt",
         content=b"Hello world\n" * 200,
@@ -141,7 +141,7 @@ def test_upload_and_ingest_uses_cache_on_second_call() -> None:
         embedding_dimension=32,
     )
     second = service.ingest_from_path(
-        user_id="user-1",
+        workspace_id="ws-1", user_id="user-1",
         conversation_id="conv-2",
         source_path=first.source_path,
         embedding_model="hash-v1",
@@ -160,7 +160,7 @@ def test_same_file_different_model_is_cache_miss() -> None:
     service = _make_service()
 
     first = service.upload_and_ingest(
-        user_id="user-1",
+        workspace_id="ws-1", user_id="user-1",
         conversation_id="conv-1",
         filename="notes.txt",
         content=b"Hello world\n" * 200,
@@ -168,7 +168,7 @@ def test_same_file_different_model_is_cache_miss() -> None:
         embedding_dimension=32,
     )
     second = service.ingest_from_path(
-        user_id="user-1",
+        workspace_id="ws-1", user_id="user-1",
         conversation_id="conv-2",
         source_path=first.source_path,
         embedding_model="hash-v1",
@@ -177,6 +177,40 @@ def test_same_file_different_model_is_cache_miss() -> None:
 
     assert first.cache_hit is False
     assert second.cache_hit is False
+
+
+def test_the_cache_is_per_workspace() -> None:
+    """A cache entry holds a file's text and is placed in its workspace: another
+    workspace ingesting the same file neither reads nor reuses it."""
+    service = _make_service()
+    first = service.upload_and_ingest(
+        workspace_id="ws-1",
+        user_id="user-1",
+        conversation_id="conv-1",
+        filename="notes.txt",
+        content=b"Hello world\n" * 200,
+        embedding_model="hash-v1",
+        embedding_dimension=32,
+    )
+    other_workspace = service.ingest_from_path(
+        workspace_id="ws-2",
+        user_id="user-1",
+        conversation_id="conv-2",
+        source_path=first.source_path,
+        embedding_model="hash-v1",
+        embedding_dimension=32,
+    )
+    same_workspace = service.ingest_from_path(
+        workspace_id="ws-1",
+        user_id="user-1",
+        conversation_id="conv-3",
+        source_path=first.source_path,
+        embedding_model="hash-v1",
+        embedding_dimension=32,
+    )
+
+    assert other_workspace.cache_hit is False
+    assert same_workspace.cache_hit is True
 
 
 def test_multiple_files_share_same_collection() -> None:
@@ -189,7 +223,7 @@ def test_multiple_files_share_same_collection() -> None:
 
     for i, name in enumerate(["a.txt", "b.txt"]):
         service.upload_and_ingest(
-            user_id="u",
+            workspace_id="ws-1", user_id="u",
             conversation_id="conv-shared",
             filename=name,
             content=f"Content {i}\n".encode() * 200,
@@ -212,11 +246,11 @@ def test_idempotent_ingest_same_file_twice() -> None:
 
     content = b"Stable content\n" * 300
     service.upload_and_ingest(
-        user_id="u", conversation_id="c1", filename="f.txt",
+        workspace_id="ws-1", user_id="u", conversation_id="c1", filename="f.txt",
         content=content, embedding_model="hash-v1", embedding_dimension=32,
     )
     service.upload_and_ingest(
-        user_id="u", conversation_id="c2", filename="f.txt",
+        workspace_id="ws-1", user_id="u", conversation_id="c2", filename="f.txt",
         content=content, embedding_model="hash-v1", embedding_dimension=32,
     )
 
@@ -234,7 +268,7 @@ def test_ingest_from_path_rejects_cross_user_path() -> None:
     service = _make_service()
     with pytest.raises(ChatFileIngestionError, match="belong to user"):
         service.ingest_from_path(
-            user_id="user-1",
+            workspace_id="ws-1", user_id="user-1",
             conversation_id="c",
             source_path="naas_abi/my-drive/user-2/uploads/evil.txt",
             embedding_model="hash-v1",
@@ -246,7 +280,7 @@ def test_ingest_from_path_rejects_path_traversal() -> None:
     service = _make_service()
     with pytest.raises(ChatFileIngestionError, match="belong to user"):
         service.ingest_from_path(
-            user_id="user-1",
+            workspace_id="ws-1", user_id="user-1",
             conversation_id="c",
             source_path="naas_abi/my-drive/user-1/../../etc/passwd",
             embedding_model="hash-v1",
@@ -259,7 +293,7 @@ def test_upload_empty_filename_falls_back_to_untitled() -> None:
     service = _make_service()
     with pytest.raises(ChatFileIngestionError, match="Unsupported file type"):
         service.upload_and_ingest(
-            user_id="u", conversation_id="c", filename="",
+            workspace_id="ws-1", user_id="u", conversation_id="c", filename="",
             content=b"Hello world\n" * 200, embedding_model="hash-v1", embedding_dimension=32,
         )
 
@@ -268,7 +302,7 @@ def test_upload_filename_with_path_separator_keeps_last_segment() -> None:
     """Filenames with path separators are reduced to their last component."""
     service = _make_service()
     result = service.upload_and_ingest(
-        user_id="u", conversation_id="c", filename="../../notes.txt",
+        workspace_id="ws-1", user_id="u", conversation_id="c", filename="../../notes.txt",
         content=b"Hello world\n" * 200, embedding_model="hash-v1", embedding_dimension=32,
     )
     # Only the final component must appear in the stored path
@@ -283,7 +317,7 @@ def test_upload_filename_with_path_separator_keeps_last_segment() -> None:
 def test_ingest_docx_content() -> None:
     service = _make_service()
     result = service.upload_and_ingest(
-        user_id="u",
+        workspace_id="ws-1", user_id="u",
         conversation_id="c",
         filename="doc.docx",
         content=_minimal_docx("Hello DOCX world"),
@@ -297,7 +331,7 @@ def test_ingest_docx_content() -> None:
 def test_ingest_pptx_content() -> None:
     service = _make_service()
     result = service.upload_and_ingest(
-        user_id="u",
+        workspace_id="ws-1", user_id="u",
         conversation_id="c",
         filename="slides.pptx",
         content=_minimal_pptx("Hello PPTX world"),
@@ -311,7 +345,7 @@ def test_ingest_unsupported_extension_raises() -> None:
     service = _make_service()
     with pytest.raises(ChatFileIngestionError, match="Unsupported file type"):
         service.upload_and_ingest(
-            user_id="u", conversation_id="c", filename="archive.zip",
+            workspace_id="ws-1", user_id="u", conversation_id="c", filename="archive.zip",
             content=b"PK\x03\x04", embedding_model="hash-v1", embedding_dimension=32,
         )
 
@@ -320,7 +354,7 @@ def test_ingest_bad_docx_raises() -> None:
     service = _make_service()
     with pytest.raises(ChatFileIngestionError, match="Invalid DOCX"):
         service.upload_and_ingest(
-            user_id="u", conversation_id="c", filename="bad.docx",
+            workspace_id="ws-1", user_id="u", conversation_id="c", filename="bad.docx",
             content=b"not a zip", embedding_model="hash-v1", embedding_dimension=32,
         )
 
@@ -351,7 +385,7 @@ def test_ingest_xlsx_single_sheet() -> None:
         ]
     })
     result = service.upload_and_ingest(
-        user_id="u", conversation_id="c", filename="report.xlsx",
+        workspace_id="ws-1", user_id="u", conversation_id="c", filename="report.xlsx",
         content=content, embedding_model="hash-v1", embedding_dimension=32,
     )
     assert result.chunks_count > 0
@@ -366,7 +400,7 @@ def test_ingest_xlsx_multiple_sheets() -> None:
         "Sheet2": [["X", "Y"], [3, 4]],
     })
     result = service.upload_and_ingest(
-        user_id="u", conversation_id="c", filename="multi.xlsx",
+        workspace_id="ws-1", user_id="u", conversation_id="c", filename="multi.xlsx",
         content=content, embedding_model="hash-v1", embedding_dimension=32,
     )
     assert result.chunks_count > 0
@@ -376,6 +410,6 @@ def test_ingest_xlsx_bad_content_raises() -> None:
     service = _make_service()
     with pytest.raises(ChatFileIngestionError, match="Invalid XLSX"):
         service.upload_and_ingest(
-            user_id="u", conversation_id="c", filename="bad.xlsx",
+            workspace_id="ws-1", user_id="u", conversation_id="c", filename="bad.xlsx",
             content=b"not an xlsx", embedding_model="hash-v1", embedding_dimension=32,
         )

@@ -72,11 +72,7 @@ def _is_private_email_host(hostname: str | None) -> bool:
         return True
     host = hostname.lower().rstrip(".")
     private_hosts = {"localhost", "127.0.0.1", "0.0.0.0", "abi", "::1"}  # nosec B104 - hostname comparison, not a socket bind
-    return (
-        host in private_hosts
-        or host.endswith(".localhost")
-        or host.endswith(".local")
-    )
+    return host in private_hosts or host.endswith(".localhost") or host.endswith(".local")
 
 
 def _guess_mime_type(url_or_name: str, content: bytes) -> str:
@@ -233,9 +229,7 @@ def render_sign_in_email(
         "tab_title": tenant.tab_title,
     }
     safe = _SafeTemplateValues(template_values)
-    subject = apply_dev_subject_prefix(
-        settings.magic_link_email_subject_template.format_map(safe)
-    )
+    subject = apply_dev_subject_prefix(settings.magic_link_email_subject_template.format_map(safe))
     text_body = settings.magic_link_email_text_template.format_map(safe)
     html_body = settings.magic_link_email_html_template.format_map(safe)
     return subject, text_body, html_body, attachments
@@ -349,7 +343,5 @@ async def ensure_user_and_send_invite_email(
 ) -> dict[str, bool]:
     """Create the user if missing, then email OTP/magic-link sign-in."""
     _user, created = await auth_service.ensure_user_for_invite(email, name=name)
-    sent = await issue_and_send_invite_sign_in(
-        auth_service, email, email_service=email_service
-    )
+    sent = await issue_and_send_invite_sign_in(auth_service, email, email_service=email_service)
     return {"user_created": created, "sign_in_email_sent": sent}

@@ -10,8 +10,9 @@ from fastapi.responses import FileResponse
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
-    require_workspace_access,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.ontology.adapters.primary.ontology__primary_adapter__dependencies import (  # noqa: E501
     get_ontology_service,
 )
@@ -41,7 +42,6 @@ from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import 
     OntologyServiceUnavailableError,
 )
 from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology_icons import (
-    EDIT_ROLES,
     OntologyIconsService,
     valid_resource_iri,
 )
@@ -95,10 +95,9 @@ def _edge_to_schema(edge) -> OntologyOverviewGraphEdge:
 
 async def ontology_catalog_scope(
     workspace_id: str = Query(..., min_length=1),
-    current_user: User = Depends(get_current_user_required),
 ) -> list[str]:
-    """Authorize the workspace, then resolve its explicit YAML allowlist."""
-    await require_workspace_access(current_user.id, workspace_id)
+    """The workspace's ontology assignments. The route's own guard has already
+    authorized the caller for the workspace (it runs before this)."""
     return await _catalog_refs_for_workspace(workspace_id)
 
 
@@ -111,7 +110,6 @@ async def _catalog_refs_for_workspace(workspace_id: str) -> list[str]:
     async with AsyncSessionLocal() as db:
         saved = await load_resource_policy(db, workspace_id, "ontologies")
     return list(saved.data["enabled"])
-
 
 
 async def _require_catalog_path(
@@ -127,7 +125,7 @@ async def _require_catalog_path(
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 
-@router.get("")
+@router.get("", dependencies=[guard("ListOntologies", literal="-")])
 async def list_ontology_items(
     ontology_service: OntologyService = Depends(get_ontology_service),
     catalog_refs: list[str] = Depends(ontology_catalog_scope),
@@ -140,7 +138,7 @@ async def list_ontology_items(
     return {"items": [_item_to_schema(i) for i in items]}
 
 
-@router.get("/dictionary")
+@router.get("/dictionary", dependencies=[guard("ListOntologies", literal="-")])
 async def workspace_dictionary(
     workspace_id: str = Query(..., min_length=1),
     ontology_service: OntologyService = Depends(get_ontology_service),
@@ -157,7 +155,7 @@ class BfoBucketRefresh(BaseModel):
     iri: str = Field(min_length=1, max_length=8192)
 
 
-@router.post("/bfo-bucket/refresh")
+@router.post("/bfo-bucket/refresh", dependencies=[guard("RefreshOntologyCache", literal="-")])
 async def refresh_bfo_bucket(
     data: BfoBucketRefresh,
     ontology_service: OntologyService = Depends(get_ontology_service),
@@ -171,7 +169,7 @@ async def refresh_bfo_bucket(
     return {"iri": data.iri, "bfoBucket": bucket}
 
 
-@router.get("/process-slices")
+@router.get("/process-slices", dependencies=[guard("GetOntology", id="path")])
 async def list_process_slices(
     path: str = Query(..., min_length=1, max_length=4096),
     ontology_service: OntologyService = Depends(get_ontology_service),
@@ -181,7 +179,7 @@ async def list_process_slices(
     return {"items": await ontology_service.process_slices(path, catalog_refs=catalog_refs)}
 
 
-@router.get("/classes")
+@router.get("/classes", dependencies=[guard("ListOntologies", literal="-")])
 async def list_classes(
     ontology_path: str | None = Query(None, alias="ontology_path"),
     ontology_service: OntologyService = Depends(get_ontology_service),
@@ -199,7 +197,7 @@ async def list_classes(
     return {"items": [_item_to_schema(i) for i in items]}
 
 
-@router.get("/relationships")
+@router.get("/relationships", dependencies=[guard("ListOntologies", literal="-")])
 async def list_relations(
     ontology_path: str | None = Query(None, alias="ontology_path"),
     ontology_service: OntologyService = Depends(get_ontology_service),
@@ -217,7 +215,7 @@ async def list_relations(
     return {"items": [_item_to_schema(i) for i in items]}
 
 
-@router.get("/ontologies")
+@router.get("/ontologies", dependencies=[guard("ListOntologies", literal="-")])
 async def list_ontology_files(
     ontology_service: OntologyService = Depends(get_ontology_service),
     catalog_refs: list[str] = Depends(ontology_catalog_scope),
@@ -245,7 +243,7 @@ async def list_ontology_files(
     }
 
 
-@router.get("/overview/stats")
+@router.get("/overview/stats", dependencies=[guard("GetOntology", id="ontology_path")])
 async def get_ontology_overview_stats(
     ontology_path: str = Query(..., alias="ontology_path", min_length=1),
     ontology_service: OntologyService = Depends(get_ontology_service),
@@ -258,7 +256,9 @@ async def get_ontology_overview_stats(
     except OntologyPathNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except OntologyServiceUnavailableError as exc:
-        raise HTTPException(status_code=500, detail="Failed to compute ontology overview stats") from exc
+        raise HTTPException(
+            status_code=500, detail="Failed to compute ontology overview stats"
+        ) from exc
     return OntologyOverviewStats(
         name=stats.name,
         path=stats.path,
@@ -271,7 +271,7 @@ async def get_ontology_overview_stats(
     )
 
 
-@router.get("/overview/stats/all")
+@router.get("/overview/stats/all", dependencies=[guard("ListOntologies", literal="-")])
 async def get_all_ontologies_overview_stats(
     ontology_service: OntologyService = Depends(get_ontology_service),
     catalog_refs: list[str] = Depends(ontology_catalog_scope),
@@ -280,7 +280,9 @@ async def get_all_ontologies_overview_stats(
     try:
         stats = await ontology_service.get_all_overview_stats(catalog_refs=catalog_refs)
     except OntologyServiceUnavailableError as exc:
-        raise HTTPException(status_code=500, detail="Failed to compute consolidated ontology overview stats") from exc
+        raise HTTPException(
+            status_code=500, detail="Failed to compute consolidated ontology overview stats"
+        ) from exc
     return OntologyOverviewAggregateStats(
         name=stats.name,
         path=stats.path,
@@ -294,7 +296,7 @@ async def get_all_ontologies_overview_stats(
     )
 
 
-@router.get("/counts/types")
+@router.get("/counts/types", dependencies=[guard("ListOntologies", literal="-")])
 async def get_ontology_type_counts(
     ontology_path: str | None = Query(None, alias="ontology_path"),
     ontology_service: OntologyService = Depends(get_ontology_service),
@@ -308,7 +310,9 @@ async def get_ontology_type_counts(
     except OntologyPathNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except OntologyServiceUnavailableError as exc:
-        raise HTTPException(status_code=500, detail="Failed to compute ontology type counts") from exc
+        raise HTTPException(
+            status_code=500, detail="Failed to compute ontology type counts"
+        ) from exc
     return OntologyTypeCounts(
         name=counts.name,
         path=counts.path,
@@ -317,7 +321,7 @@ async def get_ontology_type_counts(
     )
 
 
-@router.get("/overview/graph")
+@router.get("/overview/graph", dependencies=[guard("ListOntologies", literal="-")])
 async def get_ontology_overview_graph(
     ontology_path: str | None = Query(None, alias="ontology_path"),
     ontology_service: OntologyService = Depends(get_ontology_service),
@@ -347,7 +351,7 @@ async def get_ontology_overview_graph(
     )
 
 
-@router.get("/overview/parents")
+@router.get("/overview/parents", dependencies=[guard("GetOntology", id="ontology_path")])
 async def get_class_parents(
     ontology_path: str = Query(..., alias="ontology_path"),
     class_iris: list[str] = Query(..., alias="class_iris"),
@@ -372,7 +376,7 @@ async def get_class_parents(
     )
 
 
-@router.get("/overview/hierarchy")
+@router.get("/overview/hierarchy", dependencies=[guard("GetOntology", id="ontology_path")])
 async def get_subclassof_hierarchy(
     ontology_path: str = Query(..., alias="ontology_path"),
     class_iris: list[str] = Query(..., alias="class_iris"),
@@ -401,7 +405,7 @@ async def get_subclassof_hierarchy(
     )
 
 
-@router.post("/cache/clear")
+@router.post("/cache/clear", dependencies=[guard("RefreshOntologyCache", literal="-")])
 async def clear_ontology_cache(
     ontology_service: OntologyService = Depends(get_ontology_service),
     catalog_refs: list[str] = Depends(ontology_catalog_scope),
@@ -411,9 +415,10 @@ async def clear_ontology_cache(
     return {"success": True}
 
 
-@router.post("/entity")
+@router.post("/entity", dependencies=[guard("CreateOntologyEntity", literal="-")])
 async def create_entity(
     data: EntityCreate,
+    workspace_id: str = Query(..., min_length=1),
     ontology_service: OntologyService = Depends(get_ontology_service),
 ) -> OntologyItem:
     """Create a new ontology entity."""
@@ -425,9 +430,10 @@ async def create_entity(
     return _item_to_schema(item)
 
 
-@router.post("/relationship")
+@router.post("/relationship", dependencies=[guard("CreateOntologyEntity", literal="-")])
 async def create_relationship(
     data: RelationshipCreate,
+    workspace_id: str = Query(..., min_length=1),
     ontology_service: OntologyService = Depends(get_ontology_service),
 ) -> OntologyItem:
     """Create a new ontology relationship."""
@@ -439,9 +445,10 @@ async def create_relationship(
     return _item_to_schema(item)
 
 
-@router.delete("/{item_id}")
+@router.delete("/{item_id}", dependencies=[guard("DeleteOntologyEntity", id="item_id")])
 async def delete_item(
     item_id: str,
+    workspace_id: str = Query(..., min_length=1),
     ontology_service: OntologyService = Depends(get_ontology_service),
 ) -> dict:
     """Delete an ontology item."""
@@ -449,9 +456,10 @@ async def delete_item(
     return {"success": True}
 
 
-@router.post("/import")
+@router.post("/import", dependencies=[guard("ImportOntology", literal="-")])
 async def import_reference_ontology(
     request: ImportRequest,
+    workspace_id: str = Query(..., min_length=1),
     ontology_service: OntologyService = Depends(get_ontology_service),
 ) -> dict:
     """Import a reference ontology from content (TTL, OWL, RDF)."""
@@ -490,7 +498,7 @@ async def import_reference_ontology(
     ).model_dump()
 
 
-@router.get("/export")
+@router.get("/export", dependencies=[guard("ExportOntology", id="ontology_path")])
 async def export_ontology_file(
     ontology_path: str = Query(..., alias="ontology_path", min_length=1),
     ontology_service: OntologyService = Depends(get_ontology_service),
@@ -525,21 +533,21 @@ MAX_OBJECT_IMAGE_BYTES = 5 * 1024 * 1024
 
 def get_ontology_icons_service() -> OntologyIconsService:
     from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+
     return OntologyIconsService(OntologyIconsPostgres(AsyncSessionLocal))
 
 
-@router.get("/icons")
+@router.get("/icons", dependencies=[guard("ListIcons", literal="-")])
 async def list_ontology_icons(
     workspace_id: str = Query(..., min_length=1),
     current_user: User = Depends(get_current_user_required),
     icons_service: OntologyIconsService = Depends(get_ontology_icons_service),
 ) -> dict:
-    role = await require_workspace_access(current_user.id, workspace_id)
-    return {"items": await icons_service.list_icons(workspace_id, None),
-            "can_edit": role in EDIT_ROLES}
+    can_edit = await authz.allowed("UpdateIcons", user=current_user, workspace=workspace_id, id="-")
+    return {"items": await icons_service.list_icons(workspace_id, None), "can_edit": can_edit}
 
 
-@router.put("/icons")
+@router.put("/icons", dependencies=[declares("UpdateIcons")])
 async def save_ontology_icon(
     updates: OntologyIconUpdate,
     workspace_id: str = Query(..., min_length=1),
@@ -547,7 +555,9 @@ async def save_ontology_icon(
     ontology_service: OntologyService = Depends(get_ontology_service),
     icons_service: OntologyIconsService = Depends(get_ontology_icons_service),
 ) -> dict:
-    role = await require_workspace_access(current_user.id, workspace_id)
+    await authz.require(
+        "UpdateIcons", user=current_user, workspace=workspace_id, id=updates.resource_id
+    )
     if updates.kind != "file" and valid_resource_iri(updates.resource_id):
         allowed: set[tuple[str, str]] = set()
     else:
@@ -557,10 +567,9 @@ async def save_ontology_icon(
         allowed = {(item["type"], item["id"]) for item in dictionary["items"]}
         allowed.update(("file", item.path) for item in files)
     try:
-        await icons_service.save_icon(workspace_id, role, current_user.id, allowed,
-                                      updates.kind, updates.resource_id, updates.icon)
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
+        await icons_service.save_icon(
+            workspace_id, current_user.id, allowed, updates.kind, updates.resource_id, updates.icon
+        )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
@@ -568,20 +577,19 @@ async def save_ontology_icon(
     return {"kind": updates.kind, "resource_id": updates.resource_id, "icon": updates.icon}
 
 
-@router.post("/icons/upload")
+@router.post("/icons/upload", dependencies=[guard("UpdateIcons", literal="-")])
 async def upload_object_image(
     workspace_id: str = Query(..., min_length=1),
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user_required),
 ) -> dict:
-    role = await require_workspace_access(current_user.id, workspace_id)
-    if role not in EDIT_ROLES:
-        raise HTTPException(status_code=403, detail="Only workspace members can upload images.")
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in OBJECT_IMAGE_EXTENSIONS:
-        raise HTTPException(status_code=400, detail="Upload a PNG, JPG, GIF, WEBP, SVG, or AVIF image.")
+        raise HTTPException(
+            status_code=400, detail="Upload a PNG, JPG, GIF, WEBP, SVG, or AVIF image."
+        )
     content = await file.read()
     if len(content) > MAX_OBJECT_IMAGE_BYTES:
         raise HTTPException(status_code=400, detail="Image must be 5MB or smaller.")

@@ -64,13 +64,13 @@ class CodingEnvironmentService(ServiceBase):
         super().__init__()
         self._adapter = adapter
         self._guard = ServiceGuard.of(CATALOG, self)
-        # TRANSITIONAL (#65): environment ownership is read from the
+        # Environment ownership is read from the
         # orchestrator for the calling principal and cached per process, and
         # the Coder adapter keeps its principal bindings per process too. After
         # a restart, or on another replica, an environment is found again once
         # its owner's orchestrator user is ensured (Nexus ensures it before each
         # per-user operation); until then it answers as not found. Persisting
-        # the bindings is left to #65.
+        # the bindings is not done yet.
         self._owners: dict[str, str] = {}  # environment id -> owner principal
 
     @property

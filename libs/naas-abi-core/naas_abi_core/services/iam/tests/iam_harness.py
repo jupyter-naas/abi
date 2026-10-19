@@ -87,6 +87,14 @@ class IAMHarness:
         with as_service_account("engine"):
             return self.iam.attach_policy(policy_id, principal_id, scope)
 
+    def first_party_may(self, service: str) -> None:
+        """Let the engine and api reach a test service the built-in policies do not
+        name (they name the kernel services, and api Nexus's catalog)."""
+        for name in ("engine", "api"):
+            account = self.iam.store.find_service_account(name)
+            assert account is not None
+            self.grant(account.id, statement("Allow", [f"{service}:*"], ["*"]))
+
     def admin(self, method: str, *args, **kwargs):
         with as_service_account("engine"):
             return getattr(self.iam, method)(*args, **kwargs)

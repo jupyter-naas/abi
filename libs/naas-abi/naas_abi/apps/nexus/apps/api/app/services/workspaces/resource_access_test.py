@@ -4,8 +4,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from fastapi import FastAPI, HTTPException
-from httpx import ASGITransport, AsyncClient
+from fastapi import FastAPI
 from naas_abi.apps.nexus.apps.api.app.models import (
     OrganizationModel,
     UserModel,
@@ -50,20 +49,12 @@ class ResourceAccessTests(unittest.IsolatedAsyncioTestCase):
                     hashed_password="unused",
                 )
             )
+            db.add(OrganizationModel(id="org", name="Organization", slug="org", owner_id="admin"))
             db.add(
-                OrganizationModel(
-                    id="org", name="Organization", slug="org", owner_id="admin"
-                )
+                WorkspaceModel(id="a", name="A", slug="a", owner_id="admin", organization_id="org")
             )
             db.add(
-                WorkspaceModel(
-                    id="a", name="A", slug="a", owner_id="admin", organization_id="org"
-                )
-            )
-            db.add(
-                WorkspaceModel(
-                    id="b", name="B", slug="b", owner_id="admin", organization_id="org"
-                )
+                WorkspaceModel(id="b", name="B", slug="b", owner_id="admin", organization_id="org")
             )
             await db.commit()
         self.seed = SimpleNamespace(
@@ -88,7 +79,7 @@ class ResourceAccessTests(unittest.IsolatedAsyncioTestCase):
             first = await repo.load_resource_policy(db, "a", "ontologies")
             self.assertEqual(first.data["enabled"], ["fixture:Public.ttl"])
             await ResourceAccessService(repo.ResourcePolicyPostgres(db)).save(
-                "a", "ontologies", {"enabled": []}, first.revision, "admin", "admin"
+                "a", "ontologies", {"enabled": []}, first.revision, "admin"
             )
         self.seed.ontologies = ["fixture:Private.ttl"]
         async with self.sessions() as db:
@@ -116,9 +107,7 @@ class ResourceAccessTests(unittest.IsolatedAsyncioTestCase):
                 (await repo.load_resource_policy(db, "a", "ontologies")).data,
                 {"enabled": []},
             )
-            self.assertFalse(
-                (await repo.load_resource_policy(db, "a", "graphs")).data["read_all"]
-            )
+            self.assertFalse((await repo.load_resource_policy(db, "a", "graphs")).data["read_all"])
 
     async def test_stale_admin_save_cannot_overwrite_newer_assignments(self):
         async with self.sessions() as db:
@@ -130,73 +119,66 @@ class ResourceAccessTests(unittest.IsolatedAsyncioTestCase):
                 {"read": ["urn:changed"]},
                 saved.revision,
                 "admin",
-                "owner",
             )
             with self.assertRaises(PolicyConflictError):
-                await service.save(
-                    "a", "graphs", {"read_all": True}, saved.revision, "admin", "admin"
-                )
+                await service.save("a", "graphs", {"read_all": True}, saved.revision, "admin")
             self.assertEqual(
                 (await repo.load_resource_policy(db, "a", "graphs")).data["read"],
                 ["urn:changed"],
             )
 
-    async def test_members_cannot_save_and_protected_graphs_cannot_be_granted(self):
+    async def test_protected_graphs_cannot_be_granted(self):
         async with self.sessions() as db:
             saved = await repo.load_resource_policy(db, "a", "graphs")
             service = ResourceAccessService(repo.ResourcePolicyPostgres(db))
-            for role in ["member", "viewer"]:
-                with self.assertRaises(PermissionError):
-                    await service.save(
-                        "a", "graphs", {"read_all": True}, saved.revision, "admin", role
-                    )
             for data in [
                 {"write": [SCHEMA_GRAPH]},
                 {"read": [NEXUS_GRAPH]},
                 {"read": ["*"]},
             ]:
                 with self.assertRaises(ValueError):
-                    await service.save(
-                        "a", "graphs", data, saved.revision, "admin", "admin"
-                    )
+                    await service.save("a", "graphs", data, saved.revision, "admin")
 
     async def test_graph_scope_and_cache_key_follow_saved_revocation(self):
-        from naas_abi.apps.nexus.apps.api.app.services.graph.access_test import (
-            ALPHA,
-            fixtures,
-        )
+        from naas_abi.apps.nexus.apps.api.app.services.graph.access_test import ALPHA
         from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.workspace_policy import (
             load_workspace_scope,
         )
+        from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 
         self.seed.graphs = WorkspaceGraphPolicyConfig(read=[ALPHA], include_owned=False)
-        async with self.sessions() as db:
-            before = await load_workspace_scope(db, fixtures(), "a", "member")
-            self.assertIn(ALPHA, before.readable)
-            saved = await repo.load_resource_policy(db, "a", "graphs")
-            await ResourceAccessService(repo.ResourcePolicyPostgres(db)).save(
-                "a",
-                "graphs",
-                {"include_owned": False},
-                saved.revision,
-                "admin",
-                "admin",
+        nexus = NexusIam()
+        scope = nexus.workspace("org", "a")
+        nexus.grant("admin", "member", scope)
+        with nexus.installed():
+            # ALPHA is shared with the workspace: an Allow statement for its members.
+            from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.graph_grants import (
+                GraphGrants,
             )
-            after = await load_workspace_scope(db, fixtures(), "a", "member")
-            self.assertFalse(after.readable)
-            self.assertNotEqual(before.cache_key, after.cache_key)
-            self.assertEqual(
-                (await repo.effective_graph_policies(db))["org/a"].read, []
-            )
+            grants = GraphGrants()
+            async with self.sessions() as db:
+                before_config = WorkspaceGraphPolicyConfig.model_validate(
+                    (await repo.load_resource_policy(db, "a", "graphs")).data
+                )
+                await grants.apply("a", before_config)
+                before = await load_workspace_scope(db, SimpleNamespace(), "a", "admin")
+                self.assertIn(ALPHA, before.readable)
+                saved = await repo.load_resource_policy(db, "a", "graphs")
+                await ResourceAccessService(repo.ResourcePolicyPostgres(db)).save(
+                    "a", "graphs", {"include_owned": False}, saved.revision, "admin"
+                )
+                await grants.apply("a", WorkspaceGraphPolicyConfig(include_owned=False))
+                after = await load_workspace_scope(db, SimpleNamespace(), "a", "admin")
+                self.assertFalse(after.readable)
+                self.assertNotEqual(before.cache_key, after.cache_key)
+                self.assertEqual((await repo.effective_graph_policies(db))["org/a"].read, [])
 
     async def test_migration_is_idempotent(self):
         from pathlib import Path
 
         # Resolve from this module in the real checkout or staging overlay.
         migration = (
-            Path(__file__).parents[3]
-            / "migrations"
-            / "0044_add_workspace_resource_policies.sql"
+            Path(__file__).parents[3] / "migrations" / "0044_add_workspace_resource_policies.sql"
         )
         async with self.sessions() as db:
             for _ in range(2):
@@ -224,7 +206,9 @@ class ResourceAccessTests(unittest.IsolatedAsyncioTestCase):
                 ]
             )
         )
-        catalog = await http.assignment_catalog("ontologies", "a", ontologies, None)
+        catalog = await http.assignment_catalog(
+            "ontologies", "a", ontologies, None, user_id="admin", held=set()
+        )
         self.assertEqual(catalog[0]["id"], "fixture:public.ttl")
         payload = http.editor_payload(
             "ontologies",
@@ -239,16 +223,12 @@ class ResourceAccessTests(unittest.IsolatedAsyncioTestCase):
             ),
             catalog,
         )
-        self.assertEqual(
-            payload["data"]["enabled"], ["fixture:public.ttl", "missing.ttl"]
-        )
+        self.assertEqual(payload["data"]["enabled"], ["fixture:public.ttl", "missing.ttl"])
         self.assertFalse(payload["catalog"][-1]["available"])
         # A relocated deployment still recognizes the saved qualified assignment.
-        ontologies.list_ontology_files.return_value[
-            0
-        ].path = "/other/ontologies/modules/Public.ttl"
+        ontologies.list_ontology_files.return_value[0].path = "/other/ontologies/modules/Public.ttl"
         moved_catalog = await http.assignment_catalog(
-            "ontologies", "a", ontologies, None
+            "ontologies", "a", ontologies, None, user_id="admin", held=set()
         )
         self.assertEqual(moved_catalog[0]["id"], "fixture:public.ttl")
 
@@ -258,6 +238,13 @@ class ResourceAccessTests(unittest.IsolatedAsyncioTestCase):
         )
 
         ServiceIsolationTest.setUpClass()
+        from naas_abi.apps.nexus.apps.api.app.services.graph.testing import (
+            acting_as_header,
+            knowledge_team,
+        )
+        from naas_abi.apps.nexus.apps.api.app.services.graph.testing import (
+            client as client_of,
+        )
         from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary import (
             resource_access as http,
         )
@@ -269,12 +256,26 @@ class ResourceAccessTests(unittest.IsolatedAsyncioTestCase):
             async with self.sessions() as db:
                 yield db
 
+        class Store:
+            def query(self, _query):
+                return []
+
+            def list_graphs(self):
+                return []
+
         app.dependency_overrides[http.get_db] = get_db
-        app.dependency_overrides[http.get_current_user_required] = lambda: (
-            SimpleNamespace(id="admin")
+        app.dependency_overrides[http.get_graph_service] = lambda: SimpleNamespace(
+            _get_catalog_store=Store
         )
-        app.dependency_overrides[http.get_graph_service] = lambda: SimpleNamespace()
         app.dependency_overrides[http.get_ontology_service] = lambda: SimpleNamespace()
+        acting_as_header(app)
+        async with self.sessions() as db:
+            db.add(
+                WorkspaceModel(
+                    id="ws-1", name="W", slug="ws-1", owner_id="admin", organization_id="org"
+                )
+            )
+            await db.commit()
         rows = [
             {
                 "id": "urn:public",
@@ -284,30 +285,28 @@ class ResourceAccessTests(unittest.IsolatedAsyncioTestCase):
             }
         ]
         with (
-            patch.object(http, "require_workspace_admin", AsyncMock()) as guard,
-            patch.object(
-                http, "assignment_catalog", AsyncMock(return_value=rows)
-            ) as catalog,
+            knowledge_team(),
+            patch.object(http, "assignment_catalog", AsyncMock(return_value=rows)) as catalog,
         ):
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://synthetic"
-            ) as client:
-                uri = "/api/workspaces/a/resource-access/graphs"
-                first = await client.get(uri)
+            uri = "/api/workspaces/ws-1/resource-access/graphs"
+            async with client_of(app, "admin") as admin:
+                first = await admin.get(uri)
                 self.assertEqual(first.status_code, 200, first.text)
                 body = {
                     "revision": first.json()["revision"],
                     "policy": {"read": [], "include_owned": False},
                 }
-                response = await client.put(uri, json=body)
+                response = await admin.put(uri, json=body)
                 self.assertEqual(response.status_code, 200, response.text)
                 self.assertEqual(response.json()["data"]["read"], [])
-                self.assertEqual((await client.put(uri, json=body)).status_code, 409)
+                self.assertEqual((await admin.put(uri, json=body)).status_code, 409)
                 body["revision"] = response.json()["revision"]
                 body["policy"] = {"read": ["urn:not-in-catalog"]}
-                self.assertEqual((await client.put(uri, json=body)).status_code, 422)
-                calls = catalog.await_count
-                guard.side_effect = HTTPException(403, "Workspace admin role required")
-                self.assertEqual((await client.get(uri)).status_code, 403)
-                self.assertEqual((await client.put(uri, json=body)).status_code, 403)
-                self.assertEqual(catalog.await_count, calls)
+                self.assertEqual((await admin.put(uri, json=body)).status_code, 422)
+            calls = catalog.await_count
+            # Reading the assignments is as much the administrators' as saving them.
+            for user in ("member", "viewer", "stranger", "admin2"):
+                async with client_of(app, user) as other:
+                    self.assertEqual((await other.get(uri)).status_code, 403, user)
+                    self.assertEqual((await other.put(uri, json=body)).status_code, 403, user)
+            self.assertEqual(catalog.await_count, calls)

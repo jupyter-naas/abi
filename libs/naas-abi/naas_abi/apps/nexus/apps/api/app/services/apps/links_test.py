@@ -64,7 +64,7 @@ def test_the_limit_of_open_links_is_a_refusal_with_its_own_name(ada, engine_iam)
         )
 
 
-def test_a_link_route_answers_429_at_the_limit_not_500(ada, monkeypatch):
+def test_a_link_route_answers_429_at_the_limit_not_500(nexus_iam, monkeypatch):
     from naas_abi.apps.nexus.apps.api.app.services.apps.adapters.primary import (
         apps__primary_adapter__FastAPI as routes,
     )
@@ -72,12 +72,15 @@ def test_a_link_route_answers_429_at_the_limit_not_500(ada, monkeypatch):
     def full(**_):
         raise links.LinkLimitReached("Too many links are open for this account")
 
+    # The caller may use apps in the workspace the request names: only the
+    # link is refused, and with a 429.
+    nexus_iam.grant("ada", "owner", nexus_iam.workspace("org-1", "ws-1"))
     monkeypatch.setattr(routes, "mint_app_html_access_token", full)
-    user = type("User", (), {"id": ada.id})()
+    user = type("User", (), {"id": "ada"})()
     with pytest.raises(HTTPException) as caught:
         asyncio.run(
             routes.create_app_html_access_token(
-                routes.AppHtmlAccessTokenRequest(), current_user=user
+                routes.AppHtmlAccessTokenRequest(workspace_id="ws-1"), current_user=user
             )
         )
     assert caught.value.status_code == 429

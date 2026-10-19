@@ -6,8 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
-    require_workspace_access,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.websocket.service import WebSocketService
 from pydantic import BaseModel
 
@@ -25,12 +26,12 @@ class BroadcastMessage(BaseModel):
     data: dict[str, Any]
 
 
-@router.post("/broadcast")
+@router.post("/broadcast", dependencies=[declares("Broadcast")])
 async def broadcast_to_workspace(
     message: BroadcastMessage,
     current_user: User = Depends(get_current_user_required),
 ) -> dict[str, str]:
-    await require_workspace_access(current_user.id, message.workspace_id)
+    await authz.require("Broadcast", user=current_user, workspace=message.workspace_id)
     return await service.broadcast_to_workspace(
         workspace_id=message.workspace_id,
         event=message.event,
@@ -38,12 +39,8 @@ async def broadcast_to_workspace(
     )
 
 
-@router.get("/presence/{workspace_id}")
-async def get_presence(
-    workspace_id: str,
-    current_user: User = Depends(get_current_user_required),
-) -> dict[str, Any]:
-    await require_workspace_access(current_user.id, workspace_id)
+@router.get("/presence/{workspace_id}", dependencies=[guard("GetPresence")])
+async def get_presence(workspace_id: str) -> dict[str, Any]:
     users = service.get_workspace_presence(workspace_id)
     return {
         "workspace_id": workspace_id,

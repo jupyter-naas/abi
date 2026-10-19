@@ -6,8 +6,8 @@ import os
 from naas_abi.apps.nexus.apps.api.app.models import (
     ModelCatalogRecordModel,
     SecretModel,
-    WorkspaceMemberModel,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
 from naas_abi.apps.nexus.apps.api.app.services.providers.port import (
     ModelCatalogStorePort,
     ProviderAvailabilityPort,
@@ -22,10 +22,8 @@ class ProvidersSecondaryAdapterPostgres(ProviderAvailabilityPort):
         self.db = db
 
     async def list_workspace_ids_for_user(self, user_id: str) -> list[str]:
-        result = await self.db.execute(
-            select(WorkspaceMemberModel.workspace_id).where(WorkspaceMemberModel.user_id == user_id)
-        )
-        return [row[0] for row in result.fetchall()]
+        """The workspaces the user holds a role in: IAM's, the only source of roles."""
+        return [workspace for _org, workspace in await MEMBERSHIPS.workspaces_of(user_id)]
 
     async def list_secret_keys_for_workspaces(self, workspace_ids: list[str]) -> set[str]:
         if not workspace_ids:

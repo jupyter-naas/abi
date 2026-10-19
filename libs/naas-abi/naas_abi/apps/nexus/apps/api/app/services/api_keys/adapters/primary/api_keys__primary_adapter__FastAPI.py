@@ -26,6 +26,7 @@ from naas_abi.apps.nexus.apps.api.app.services.api_keys.service import (
     ApiKeyService,
     ApiKeysUnavailable,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares
 from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
     ensure_under_limit,
     get_rate_limit_identifier,
@@ -98,7 +99,13 @@ def _unavailable(exc: ApiKeysUnavailable) -> HTTPException:
     return HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
 
 
-@router.get("/api-keys", response_model=list[ApiKeyResponse])
+# Personal keys are the user's own (``builtin.self``: iam:key/<user>/*): the engine's IAM
+# decides in the service, as the user, and the key's own narrowing never widens.
+@router.get(
+    "/api-keys",
+    response_model=list[ApiKeyResponse],
+    dependencies=[declares("iam:ListKeys")],
+)
 async def list_api_keys(
     current_user: User = Depends(get_current_user_required),
     service: ApiKeyService = Depends(get_api_key_service),
@@ -110,7 +117,12 @@ async def list_api_keys(
     return [ApiKeyResponse.of(k) for k in keys]
 
 
-@router.post("/api-keys", response_model=ApiKeyCreated, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/api-keys",
+    response_model=ApiKeyCreated,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[declares("iam:CreateKey")],
+)
 async def create_api_key(
     body: ApiKeyCreate,
     current_user: User = Depends(get_current_user_required),
@@ -139,7 +151,11 @@ async def create_api_key(
     return ApiKeyCreated(key=ApiKeyResponse.of(created.key), secret=created.secret)
 
 
-@router.delete("/api-keys/{key_id}", response_model=ApiKeyResponse)
+@router.delete(
+    "/api-keys/{key_id}",
+    response_model=ApiKeyResponse,
+    dependencies=[declares("iam:RevokeKey")],
+)
 async def revoke_api_key(
     key_id: str,
     current_user: User = Depends(get_current_user_required),

@@ -97,6 +97,18 @@ class InviteOutcome:
     # An invitation to the same person at the same place, made again: the roles
     # may have changed, nothing else was made twice.
     renewed: bool = False
+    # The inviting user may not create accounts at the provider (and the address is
+    # not one the organization proved): the grants wait for the person's sign-in.
+    provisioning_skipped: bool = False
+
+
+class ProvisioningRefused(Exception):
+    """IAM does not let the inviting user create accounts at the provider."""
+
+
+class OrgInvitationExistsError(Exception):
+    """A workspace-only invitation would rewrite the organization invitation that
+    already names this workspace."""
 
 
 class NoProviderError(Exception):
@@ -175,20 +187,6 @@ class InvitationPersistencePort(ABC):
         """The Nexus account that already holds this email."""
 
     @abstractmethod
-    async def add_membership(
-        self,
-        *,
-        user_id: str,
-        organization_id: str | None,
-        org_role: str | None,
-        workspace_id: str | None,
-        workspace_role: str | None,
-        now: datetime,
-    ) -> None:
-        """Make the account a member where the invitation said. A membership
-        it already has is kept."""
-
-    @abstractmethod
     async def commit(self) -> None: ...
 
     @abstractmethod
@@ -203,10 +201,13 @@ class DirectoryGateway(ABC):
 
     @abstractmethod
     async def provision(
-        self, provider: ProviderChoice, email: str, name: str | None
+        self, provider: ProviderChoice, email: str, name: str | None, *, by: str | None = None
     ) -> Provisioned | None:
         """Make the person exist at the provider; None when its people are
-        managed there (``provisioning: none``)."""
+        managed there (``provisioning: none``). ``by``: the user asking, whose
+        right to create accounts at the provider IAM checks (``ProvisioningRefused``
+        when they have none); ``None`` is Nexus's own call, for an address the
+        organization proved it controls."""
 
 
 class GrantsGateway(ABC):

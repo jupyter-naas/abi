@@ -166,12 +166,15 @@ class OrganizationRoleFeaturesRecord:
 
 
 class OrganizationPermissionPort(ABC):
+    """The organizations Nexus keeps. Who belongs to them and with which role is
+    IAM's (``services/iam/memberships``), not this port's."""
+
     @abstractmethod
-    async def get_organization_role(self, user_id: str, org_id: str) -> str | None:
+    async def list_all_organizations(self) -> list[OrganizationRecord]:
         raise NotImplementedError
 
     @abstractmethod
-    async def list_organizations_for_user(self, user_id: str) -> list[OrganizationRecord]:
+    async def get_users_by_ids(self, user_ids: list[str]) -> dict[str, UserRecord]:
         raise NotImplementedError
 
     @abstractmethod
@@ -199,53 +202,11 @@ class OrganizationPermissionPort(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def list_workspaces_for_org_and_user(
-        self, org_id: str, user_id: str
-    ) -> list[OrganizationWorkspaceRecord]:
-        raise NotImplementedError
-
-    @abstractmethod
     async def list_workspaces_for_org(self, org_id: str) -> list[OrganizationWorkspaceRecord]:
         raise NotImplementedError
 
     @abstractmethod
-    async def list_workspace_memberships_for_org(
-        self, org_id: str
-    ) -> list[OrganizationWorkspaceMembershipRecord]:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def list_organization_members(self, org_id: str) -> list[OrganizationMemberRecord]:
-        raise NotImplementedError
-
-    @abstractmethod
     async def get_user_by_email(self, email: str) -> UserRecord | None:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def is_organization_member(self, org_id: str, user_id: str) -> bool:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def add_organization_member(
-        self, org_id: str, user_id: str, role: str, created_at: datetime
-    ) -> OrganizationMemberRecord:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def get_organization_member(
-        self, org_id: str, user_id: str
-    ) -> OrganizationMemberRecord | None:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def update_organization_member_role(
-        self, org_id: str, user_id: str, role: str
-    ) -> OrganizationMemberRecord | None:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def delete_organization_member(self, org_id: str, user_id: str) -> bool:
         raise NotImplementedError
 
     @abstractmethod
@@ -272,6 +233,11 @@ class OrganizationPermissionPort(ABC):
     async def verify_organization_domain(
         self, org_id: str, domain_id: str, verified_at: datetime
     ) -> OrganizationDomainRecord | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def delete_organization(self, org_id: str) -> bool:
+        """Remove an organization row (a failed create takes its row back)."""
         raise NotImplementedError
 
     @abstractmethod

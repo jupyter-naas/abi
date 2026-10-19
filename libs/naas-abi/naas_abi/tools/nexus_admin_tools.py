@@ -2,7 +2,8 @@
 
 Call Nexus services in-process with a fresh DB session. Caller identity comes
 from ``agent_user_id`` (set by the chat stream boundary). Mutating membership
-requires org/workspace owner or admin, matching the FastAPI adapters.
+is IAM's, as for the FastAPI adapters: each change passes the asking user (``by``),
+whose rights IAM checks (an admin can never give, change or take an owner's role).
 """
 
 from __future__ import annotations
@@ -16,6 +17,8 @@ from typing import Any, TypeVar
 
 from langchain_core.tools import BaseTool, tool
 from naas_abi_core.services.agent.context import agent_user_id, agent_workspace_id
+
+from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MembershipDenied
 
 T = TypeVar("T")
 
@@ -220,6 +223,8 @@ def nexus_admin_tools() -> list[BaseTool]:
 
         try:
             return _run_async(_with_db(_run))
+        except MembershipDenied as exc:
+            return {"error": str(exc)}
         except Exception as exc:  # noqa: BLE001
             return _tool_error(exc)
 
@@ -248,6 +253,8 @@ def nexus_admin_tools() -> list[BaseTool]:
 
         try:
             return _run_async(_with_db(_run))
+        except MembershipDenied as exc:
+            return {"error": str(exc)}
         except Exception as exc:  # noqa: BLE001
             return _tool_error(exc)
 
@@ -302,6 +309,8 @@ def nexus_admin_tools() -> list[BaseTool]:
 
         try:
             return _run_async(_with_db(_run))
+        except MembershipDenied as exc:
+            return {"error": str(exc)}
         except Exception as exc:  # noqa: BLE001
             return _tool_error(exc)
 
@@ -338,6 +347,8 @@ def nexus_admin_tools() -> list[BaseTool]:
 
         try:
             return _run_async(_with_db(_run))
+        except MembershipDenied as exc:
+            return {"error": str(exc)}
         except Exception as exc:  # noqa: BLE001
             return _tool_error(exc)
 
@@ -392,6 +403,7 @@ def nexus_admin_tools() -> list[BaseTool]:
                     workspace_id=workspace_id,
                     email=email,
                     role=role,
+                    by=user_id,
                 )
             except WorkspaceMemberAlreadyExistsError:
                 return {"error": "User is already a member", "email": email}
@@ -409,6 +421,8 @@ def nexus_admin_tools() -> list[BaseTool]:
 
         try:
             return _run_async(_with_db(_run))
+        except MembershipDenied as exc:
+            return {"error": str(exc)}
         except Exception as exc:  # noqa: BLE001
             return _tool_error(exc)
 
@@ -438,7 +452,7 @@ def nexus_admin_tools() -> list[BaseTool]:
                     "role": caller_role,
                 }
             removed = await ws.remove_workspace_member(
-                workspace_id=workspace_id, user_id=target
+                workspace_id=workspace_id, user_id=target, by=user_id
             )
             if not removed:
                 return {"error": "Member not found", "user_id": target}
@@ -446,6 +460,8 @@ def nexus_admin_tools() -> list[BaseTool]:
 
         try:
             return _run_async(_with_db(_run))
+        except MembershipDenied as exc:
+            return {"error": str(exc)}
         except Exception as exc:  # noqa: BLE001
             return _tool_error(exc)
 
@@ -484,6 +500,7 @@ def nexus_admin_tools() -> list[BaseTool]:
                 workspace_id=workspace_id,
                 user_id=target,
                 updates={"role": role},
+                by=user_id,
             )
             if not changed:
                 return {"error": "Member not found", "user_id": target}
@@ -496,6 +513,8 @@ def nexus_admin_tools() -> list[BaseTool]:
 
         try:
             return _run_async(_with_db(_run))
+        except MembershipDenied as exc:
+            return {"error": str(exc)}
         except Exception as exc:  # noqa: BLE001
             return _tool_error(exc)
 
@@ -522,6 +541,8 @@ def nexus_admin_tools() -> list[BaseTool]:
 
         try:
             return _run_async(_with_db(_run))
+        except MembershipDenied as exc:
+            return {"error": str(exc)}
         except Exception as exc:  # noqa: BLE001
             return _tool_error(exc)
 
@@ -600,6 +621,7 @@ def nexus_admin_tools() -> list[BaseTool]:
                     email=email,
                     role=role,
                     now=datetime.now(UTC).replace(tzinfo=None),
+                    by=user_id,
                 )
             except OrganizationMemberAlreadyExistsError:
                 return {"error": "User is already a member", "email": email}
@@ -614,6 +636,7 @@ def nexus_admin_tools() -> list[BaseTool]:
                         workspace_id=workspace_id,
                         email=email,
                         role=workspace_role,
+                        by=user_id,
                     )
                 except WorkspaceMemberAlreadyExistsError:
                     workspace_member = None
@@ -633,6 +656,8 @@ def nexus_admin_tools() -> list[BaseTool]:
 
         try:
             return _run_async(_with_db(_run))
+        except MembershipDenied as exc:
+            return {"error": str(exc)}
         except Exception as exc:  # noqa: BLE001
             return _tool_error(exc)
 
@@ -660,7 +685,9 @@ def nexus_admin_tools() -> list[BaseTool]:
                     "organization_id": organization_id,
                     "role": caller_role,
                 }
-            removed = await org.remove_member(org_id=organization_id, user_id=target)
+            removed = await org.remove_member(
+                org_id=organization_id, user_id=target, by=user_id
+            )
             if not removed:
                 return {
                     "error": "Member not found or is the organization owner",
@@ -674,6 +701,8 @@ def nexus_admin_tools() -> list[BaseTool]:
 
         try:
             return _run_async(_with_db(_run))
+        except MembershipDenied as exc:
+            return {"error": str(exc)}
         except Exception as exc:  # noqa: BLE001
             return _tool_error(exc)
 
@@ -714,7 +743,7 @@ def nexus_admin_tools() -> list[BaseTool]:
                     "role": caller_role,
                 }
             member = await org.update_member_role(
-                org_id=organization_id, user_id=target, role=role
+                org_id=organization_id, user_id=target, role=role, by=user_id
             )
             if member is None:
                 return {"error": "Member not found", "user_id": target}
@@ -722,6 +751,8 @@ def nexus_admin_tools() -> list[BaseTool]:
 
         try:
             return _run_async(_with_db(_run))
+        except MembershipDenied as exc:
+            return {"error": str(exc)}
         except Exception as exc:  # noqa: BLE001
             return _tool_error(exc)
 
@@ -780,6 +811,8 @@ def nexus_admin_tools() -> list[BaseTool]:
 
         try:
             return _run_async(_with_db(_run))
+        except MembershipDenied as exc:
+            return {"error": str(exc)}
         except Exception as exc:  # noqa: BLE001
             return _tool_error(exc)
 
