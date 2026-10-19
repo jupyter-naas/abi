@@ -26,17 +26,10 @@ function resolveDefaultWorkspace(request: NextRequest): string {
 
 const legacyRoutes = ['/home', '/maps', '/chat', '/search', '/lab', '/ontology', '/graph', '/apps', '/marketplace', '/help', '/files', '/settings'];
 
-const authRoutes = [
-  '/auth/login',
-  '/auth/magic-link',
-  '/auth/register',
-  '/auth/forgot-password',
-  '/login',
-  '/register',
-];
+const authRoutes = ['/auth/login', '/login'];
 
 const orgWorkspaceRegex = /^\/org\/([^/]+)\/workspace\/([^/]+)(\/.*)?$/;
-const orgAuthRegex = /^\/org\/([^/]+)\/(login|register)(\/.*)?$/;
+const orgAuthRegex = /^\/org\/([^/]+)\/login(\/.*)?$/;
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -64,8 +57,8 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL(`/org/${orgSlug}/workspace`, request.url));
   }
 
-  if (pathname === '/login' || pathname === '/register') {
-    const newUrl = new URL(pathname === '/login' ? '/auth/login' : '/auth/register', request.url);
+  if (pathname === '/login') {
+    const newUrl = new URL('/auth/login', request.url);
     newUrl.search = request.nextUrl.search;
     return NextResponse.redirect(newUrl);
   }
@@ -81,7 +74,7 @@ export function middleware(request: NextRequest) {
 
   // Custom Maps feeds are deployment-registered and may carry private data:
   // return 401 JSON (not a login redirect) when unauthenticated. Route handlers
-  // still require a real Bearer token; this blocks anonymous curl.
+  // still require a real session; this blocks anonymous curl.
   const isProtectedMapsApi = pathname.startsWith('/api/maps/custom/');
   if (isProtectedMapsApi && process.env.NODE_ENV !== 'development' && !hasAuthCookie) {
     return NextResponse.json(
@@ -121,16 +114,6 @@ export function middleware(request: NextRequest) {
     const loginUrl = new URL('/auth/login', request.url);
     loginUrl.searchParams.set('redirect', pathname);
     return NextResponse.redirect(loginUrl);
-  }
-
-  // Let users finish magic-link confirmation even when a stale auth cookie exists.
-  // no-store also keeps the confirmation page out of shared and back/forward
-  // caches, so a resurrected copy can never replay an already-spent token.
-  const isMagicLinkRoute = pathname === '/auth/magic-link' || pathname.startsWith('/auth/magic-link/');
-  if (isMagicLinkRoute) {
-    const res = NextResponse.next();
-    res.headers.set('Cache-Control', 'no-store, must-revalidate');
-    return res;
   }
 
   if (isAuthRoute && hasAuthCookie) {

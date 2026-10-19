@@ -53,11 +53,10 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     const apiUrl = getApiUrl();
     const websocketPath = getWebsocketPath();
 
-    const bearer = useAuthStore.getState().token;
     const socketInstance = io(apiUrl, {
       path: websocketPath,
-      // A cookie session's cookie travels with the handshake instead.
-      ...(bearer ? { auth: { authorization: `Bearer ${bearer}` } } : { withCredentials: true }),
+      // The session's cookie travels with the handshake.
+      withCredentials: true,
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionDelay: 1000,

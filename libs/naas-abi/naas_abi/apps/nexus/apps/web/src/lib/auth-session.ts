@@ -4,8 +4,6 @@
 
 export interface PersistedAuthSnapshot {
   user?: unknown;
-  token?: string | null;
-  refreshToken?: string | null;
   isAuthenticated?: boolean;
 }
 
@@ -22,51 +20,20 @@ export function clearAuthFlagCookie(): void {
 }
 
 /**
- * Whether a visitor landing on the magic-link page should be sent straight to
- * their destination instead of being asked to confirm.
- *
- * A token in the URL always wins. `isAuthenticated` is rehydrated from
- * localStorage and routinely outlives the access token it was stored with, so
- * trusting it here would redirect the user away before the freshly-emailed
- * token is exchanged — the link silently does nothing and they bounce back to
- * the login page, which reads to users as a caching bug.
- */
-export function shouldSkipMagicLinkConfirmation(
-  token: string | null | undefined,
-  isAuthenticated: boolean,
-): boolean {
-  if (token) return false;
-  return isAuthenticated;
-}
-
-/**
- * Zustand persist merge: keep an active in-memory session when storage failed
- * to persist tokens (blocked localStorage, hydration race after magic-link).
+ * Zustand persist merge: take the user and the signed-in flag from storage and
+ * nothing else. A snapshot an older version wrote may hold tokens of the login
+ * Nexus no longer has: they are dropped, never adopted.
  */
 export function mergeAuthPersistedState<T extends PersistedAuthSnapshot>(
   persisted: unknown,
   current: T,
 ): T {
   const stored = (persisted ?? {}) as PersistedAuthSnapshot;
-  const liveHasSession = Boolean(current.token);
-  const storedHasSession = Boolean(stored.token);
-
-  if (liveHasSession && !storedHasSession) {
-    return current;
-  }
-
-  return { ...current, ...stored } as T;
-}
-
-/** Refresh one minute before JWT expiry; the API remains the validation authority. */
-export function shouldRefreshAccessToken(token: string | null, now = Date.now()): boolean {
-  if (!token) return true;
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-    return typeof payload.exp !== 'number' || payload.exp * 1000 <= now + 60000;
-  } catch {
-    return true;
-  }
+  return {
+    ...current,
+    user: stored.user ?? current.user,
+    isAuthenticated: Boolean(stored.isAuthenticated),
+  } as T;
 }
 
 /** A path on this app to land on after sign-in: never another origin. */

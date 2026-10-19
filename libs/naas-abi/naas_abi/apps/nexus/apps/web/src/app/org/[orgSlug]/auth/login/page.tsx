@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { Loader2, AlertCircle, CheckCircle } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
+import { getApiUrl } from '@/lib/config';
 import { useOrganizationStore, OrganizationBranding } from '@/stores/organization';
 
 /**
@@ -26,11 +27,16 @@ export default function OrgLoginPage() {
   const params = useParams();
   const orgSlug = params.orgSlug as string;
 
-  const { requestMagicLink, isLoading, error, clearError, isAuthenticated, logout, user } = useAuthStore();
+  const { routeLogin, signInWithProvider, isLoading, error, clearError, isAuthenticated, logout, user } =
+    useAuthStore();
   const { fetchBranding, brandingLoading, brandingError } = useOrganizationStore();
 
   const [email, setEmail] = useState('');
-  const [linkSent, setLinkSent] = useState(false);
+  const [providers, setProviders] = useState<{ name: string; display_name: string }[]>([]);
+  const [defaultProvider, setDefaultProvider] = useState<string | null>(null);
+  const [providersLoaded, setProvidersLoaded] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
+  const [fieldError, setFieldError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const [branding, setBranding] = useState<OrganizationBranding | null>(null);
   const [shouldCheckAuth, setShouldCheckAuth] = useState(true);
@@ -38,6 +44,14 @@ export default function OrgLoginPage() {
 
   useEffect(() => {
     setMounted(true);
+    fetch(`${getApiUrl()}/api/auth/oidc/providers`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => {
+        setProviders(Array.isArray(d.providers) ? d.providers : []);
+        setDefaultProvider(typeof d.default_provider === 'string' ? d.default_provider : null);
+      })
+      .catch(() => setProviders([]))
+      .finally(() => setProvidersLoaded(true));
   }, []);
 
   // Fetch org branding on mount
@@ -60,7 +74,7 @@ export default function OrgLoginPage() {
         const response = await authFetch('/api/organizations');
         
         if (!response.ok) {
-          // If token is invalid, logout and let them login fresh
+          // If the session is invalid, logout and let them login fresh
           logout();
           setShouldCheckAuth(false);
           return;
@@ -92,14 +106,25 @@ export default function OrgLoginPage() {
     e.preventDefault();
     clearError();
 
-    const success = await requestMagicLink(email);
-    if (success) {
-      setLinkSent(true);
+    const address = email.trim();
+    if (!address) {
+      setFieldError('Email is required');
+      return;
     }
+    setFieldError(null);
+
+    // The organization's verified domain routes to its provider, else the default.
+    const provider = (await routeLogin(address)) ?? defaultProvider;
+    if (!provider) {
+      setFieldError('Choose how to sign in with one of the providers below.');
+      return;
+    }
+    setRedirecting(true);
+    signInWithProvider({ provider, email: address, next: `/org/${orgSlug}/workspace` });
   };
 
   // Show loading state during hydration
-  if (!mounted) {
+  if (!mounted || !providersLoaded) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -279,29 +304,10 @@ export default function OrgLoginPage() {
           </div>
         )}
 
-        {linkSent ? (
-          <div className="space-y-4">
-            <div className="flex items-center justify-center text-emerald-500">
-              <CheckCircle className="h-12 w-12" />
-            </div>
-            <p className="text-center text-sm" style={{ color: mutedTextColor || undefined }}>
-              If an account exists for <strong>{email}</strong>, we sent a sign-in link.
-            </p>
-            <button
-              type="button"
-              onClick={() => setLinkSent(false)}
-              className={cn(
-                'flex h-11 w-full items-center justify-center px-4 text-sm font-medium text-white',
-                !buttonRadius && 'rounded-lg',
-                'hover:opacity-90 transition-all'
-              )}
-              style={{
-                backgroundColor: primaryColor,
-                borderRadius: buttonRadius || undefined,
-              }}
-            >
-              Send another link
-            </button>
+        {providers.length === 0 ? (
+          <div className="flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+            <AlertCircle size={16} />
+            <span>No identity provider is configured. Ask an administrator to set one up.</span>
           </div>
         ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -318,10 +324,13 @@ export default function OrgLoginPage() {
               id="email"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (fieldError) setFieldError(null);
+              }}
               placeholder="you@example.com"
               required
-              disabled={isLoading}
+              disabled={isLoading || redirecting}
               className={cn(
                 'flex h-11 w-full px-4 py-2 text-sm',
                 !inputColor && 'border bg-background',
@@ -333,12 +342,13 @@ export default function OrgLoginPage() {
               )}
               style={inputStyle}
             />
+            {fieldError && <p className="text-xs text-destructive">{fieldError}</p>}
           </div>
 
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={isLoading || !email}
+            disabled={redirecting || !email}
             className={cn(
               'flex h-11 w-full items-center justify-center px-4 text-sm font-medium text-white',
               !buttonRadius && 'rounded-lg',
@@ -352,21 +362,44 @@ export default function OrgLoginPage() {
               '--tw-ring-color': primaryColor,
             } as React.CSSProperties}
           >
-            {isLoading ? (
+            {redirecting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Sending link...
+                Redirecting...
               </>
             ) : (
-              'Send magic link'
+              'Continue'
             )}
           </button>
         </form>
         )}
 
-        <p className="mt-6 text-center text-sm" style={{ color: mutedTextColor || undefined }}>
-          Password sign-in is disabled for this organization.
-        </p>
+        {providers.length > 0 && (
+          <div className="mt-6 space-y-3">
+            {providers.map((provider) => (
+              <button
+                key={provider.name}
+                type="button"
+                disabled={redirecting}
+                onClick={() => {
+                  setRedirecting(true);
+                  signInWithProvider({
+                    provider: provider.name,
+                    email: email.trim() || undefined,
+                    next: `/org/${orgSlug}/workspace`,
+                  });
+                }}
+                className={cn(
+                  'flex h-11 w-full items-center justify-center border px-4 text-sm font-medium transition-all disabled:opacity-50',
+                  !buttonRadius && 'rounded-lg'
+                )}
+                style={{ borderRadius: buttonRadius || undefined, color: textColor || undefined }}
+              >
+                Continue with {provider.display_name}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Footer -- controlled by org config */}

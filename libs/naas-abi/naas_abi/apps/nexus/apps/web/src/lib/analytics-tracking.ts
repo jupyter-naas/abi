@@ -200,28 +200,8 @@ export function trackEvent(
 }
 
 function eventHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  const token = sessionToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
-  else Object.assign(headers, getAuthHeader('POST'));  // a cookie session's CSRF token
-  return headers;
-}
-
-function sessionToken(): string | undefined {
-  try {
-    const fromStore = useAuthStore.getState().token;
-    if (fromStore) return fromStore;
-  } catch {
-    // Store not ready — fall through to the persisted snapshot.
-  }
-  try {
-    const raw = localStorage.getItem('nexus-auth');
-    if (!raw) return undefined;
-    const token = JSON.parse(raw)?.state?.token;
-    return typeof token === 'string' && token ? token : undefined;
-  } catch {
-    return undefined;
-  }
+  // The session's cookie travels with the request; its CSRF token goes in the header.
+  return { 'Content-Type': 'application/json', ...getAuthHeader('POST') };
 }
 
 /**

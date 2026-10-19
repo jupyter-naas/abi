@@ -38,9 +38,6 @@ describe('a cookie session', () => {
     vi.stubGlobal('document', { cookie: '' });
     useAuthStore.setState({
       user: null,
-      token: null,
-      refreshToken: null,
-      sessionKind: null,
       csrfToken: null,
       isAuthenticated: false,
     });
@@ -55,20 +52,18 @@ describe('a cookie session', () => {
     expect(init.credentials).toBe('include');
 
     const state = useAuthStore.getState();
-    expect(state.sessionKind).toBe('cookie');
-    expect(state.csrfToken).toBe('csrf-123');
+        expect(state.csrfToken).toBe('csrf-123');
     expect(hasSession()).toBe(true);
     const persisted = storage.get('nexus-auth') ?? '';
     expect(persisted).not.toContain('csrf-123');
     expect(JSON.parse(persisted).state).toEqual({
       user: SESSION.user,
-      sessionKind: 'cookie',
       isAuthenticated: true,
     });
   });
 
   it('sends the cookie, and the CSRF token on changes only', async () => {
-    useAuthStore.setState({ sessionKind: 'cookie', csrfToken: 'csrf-123', isAuthenticated: true });
+    useAuthStore.setState({ csrfToken: 'csrf-123', isAuthenticated: true });
     fetchMock.mockResolvedValue(json({ ok: true }));
     await authFetch('/api/workspaces');
     await authFetch('/api/workspaces', { method: 'POST', body: '{}' });
@@ -84,7 +79,7 @@ describe('a cookie session', () => {
   });
 
   it('is re-read once on a 401, then signed out', async () => {
-    useAuthStore.setState({ sessionKind: 'cookie', csrfToken: 'csrf-123', isAuthenticated: true });
+    useAuthStore.setState({ csrfToken: 'csrf-123', isAuthenticated: true });
     vi.stubGlobal('window', { location: { pathname: '/workspace/w', href: '' } });
     fetchMock
       .mockResolvedValueOnce(json({ detail: 'Not authenticated' }, 401)) // the request
@@ -92,7 +87,7 @@ describe('a cookie session', () => {
       .mockResolvedValue(json({ status: 'logged out' })); // logout
     const response = await authFetch('/api/workspaces');
     expect(response.status).toBe(401);
-    expect(useAuthStore.getState().sessionKind).toBeNull();
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
     expect(hasSession()).toBe(false);
   });
 
@@ -101,9 +96,9 @@ describe('a cookie session', () => {
       user: null,
       token: 'leaked',
       refreshToken: 'leaked',
-      sessionKind: 'cookie',
+      csrfToken: 'leaked',
       isAuthenticated: true,
-    });
+    } as Parameters<typeof persistedAuthState>[0]);
     expect(JSON.stringify(persisted)).not.toContain('leaked');
   });
 

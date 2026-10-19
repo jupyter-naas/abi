@@ -19,26 +19,24 @@ describe('middleware auth redirects', () => {
     process.env.NODE_ENV = originalNodeEnv;
   });
 
-  it('allows magic-link confirmation when auth cookie is present', () => {
+  it('no longer treats the retired login pages as auth routes', () => {
     process.env.NODE_ENV = 'production';
 
-    const response = middleware(
-      requestFor('/auth/magic-link?token=abc', { 'nexus-auth-flag': 'true' }),
-    );
-    expect(response.status).toBe(200);
-    expect(response.headers.get('location')).toBeNull();
+    for (const path of ['/auth/register', '/auth/magic-link', '/auth/forgot-password']) {
+      const response = middleware(requestFor(path, { 'nexus-auth-flag': 'true' }));
+      expect(response.headers.get('location')).toBeNull();
+    }
   });
 
-  it('marks the magic-link page as uncacheable', () => {
+  it('sends a visitor with no auth cookie from a protected route to the login', () => {
     process.env.NODE_ENV = 'production';
 
-    const response = middleware(
-      requestFor('/auth/magic-link?token=abc', { 'nexus-auth-flag': 'true' }),
-    );
-    expect(response.headers.get('cache-control')).toContain('no-store');
+    const response = middleware(requestFor('/workspace/w/chat'));
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toContain('/auth/login?redirect=');
   });
 
-  it('redirects other auth routes when auth cookie is present', () => {
+  it('redirects the login when auth cookie is present when auth cookie is present', () => {
     process.env.NODE_ENV = 'production';
 
     const response = middleware(

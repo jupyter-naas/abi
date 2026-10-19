@@ -1,21 +1,24 @@
-import { shouldRefreshAccessToken, setAuthFlagCookie } from './auth-session';
-import { syncPersistedAuthSession, useAuthStore } from '@/stores/auth';
+import { setAuthFlagCookie } from './auth-session';
+import { useAuthStore } from '@/stores/auth';
 
-/** Keep sessions renewed, including after browser sleep and network recovery. */
+/**
+ * Keep the session in step with the API, including after browser sleep and
+ * network recovery: the API refreshes it at the provider, this re-reads it
+ * (the user, and the CSRF token, which lives in memory only).
+ */
 export function startAuthSessionLifecycle(): () => void {
   const renew = () => {
     if (!useAuthStore.persist.hasHydrated()) return;
-    syncPersistedAuthSession();
     const state = useAuthStore.getState();
-    if (!state.refreshToken) return;
+    if (!state.isAuthenticated) return;
     setAuthFlagCookie();
-    if (shouldRefreshAccessToken(state.token)) void state.refreshAccessToken();
+    void state.adoptCookieSession();
   };
   const onStorage = (event: StorageEvent) => {
     if (event.key === 'nexus-auth') renew();
   };
   const unsubscribe = useAuthStore.persist.onFinishHydration(renew);
-  const timer = window.setInterval(renew, 30000);
+  const timer = window.setInterval(renew, 300000);
   window.addEventListener('focus', renew);
   window.addEventListener('online', renew);
   window.addEventListener('pageshow', renew);

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Shield, Key, Smartphone, AlertTriangle } from 'lucide-react';
+import { Shield, Smartphone, AlertTriangle } from 'lucide-react';
 import { AccountPageHeader } from '../components/account-page-header';
 import { AccountSectionCard } from '../components/account-section-card';
 import { AccountActionRow } from '../components/account-action-row';
@@ -33,19 +33,6 @@ export default function SecurityPage() {
         title="Security"
         subtitle="Manage your account security settings"
       />
-
-      <AccountSectionCard padded>
-        <AccountActionRow
-          icon={Key}
-          title="Password"
-          description="Last changed 30 days ago"
-          action={
-            <button type="button" className="account-security-outline-button">
-              Change Password
-            </button>
-          }
-        />
-      </AccountSectionCard>
 
       <AccountSectionCard padded>
         <AccountActionRow

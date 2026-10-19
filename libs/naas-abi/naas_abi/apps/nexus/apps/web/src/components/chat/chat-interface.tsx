@@ -1254,7 +1254,6 @@ export function ChatInterface({
     jobId: string,
     filename: string,
     conversationId: string,
-    token: string | null,
   ): Promise<void> => {
     const abortController = new AbortController();
     ingestionAbortRefs.current.set(jobId, abortController);
@@ -1279,7 +1278,6 @@ export function ChatInterface({
           statusResponse = await fetch(
             `${getApiBase()}/api/chat/ingestion-jobs/${jobId}`,
             {
-              headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
               credentials: authCredentials(),
               signal: abortController.signal,
             },
@@ -1340,7 +1338,6 @@ export function ChatInterface({
       conversationId = createSurfaceConversation();
     }
 
-    const token = useAuthStore.getState().token;
     const formData = new FormData();
     formData.append('file', file);
     if (currentWorkspaceId) formData.append('workspace_id', currentWorkspaceId);
@@ -1349,7 +1346,7 @@ export function ChatInterface({
       `${getApiBase()}/api/chat/conversations/${conversationId}/files/upload`,
       {
         method: 'POST',
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : getAuthHeader('POST')) },
+        headers: { ...getAuthHeader('POST') },
         credentials: authCredentials(),
         body: formData,
       },
@@ -1380,17 +1377,15 @@ export function ChatInterface({
       return next;
     });
 
-    await pollIngestionJob(result.job_id, file.name, conversationId, token);
+    await pollIngestionJob(result.job_id, file.name, conversationId);
     setPendingFileAttachments((prev) => [...prev, file.name]);
   };
 
   const fetchMyDriveFiles = async (path = '') => {
     setMyDriveLoading(true);
-    const token = useAuthStore.getState().token;
     try {
       const params = new URLSearchParams({ scope: 'my_drive', path });
       const res = await fetch(`${getApiBase()}/api/files/?${params}`, {
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         credentials: authCredentials(),
       });
       if (!res.ok) return;
@@ -1414,14 +1409,13 @@ export function ChatInterface({
     }
     setShowMyDrivePicker(false);
 
-    const token = useAuthStore.getState().token;
     const res = await fetch(
       `${getApiBase()}/api/chat/conversations/${conversationId}/files/ingest`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : getAuthHeader('POST')),
+          ...getAuthHeader('POST'),
         },
         credentials: authCredentials(),
         body: JSON.stringify({ source_path: sourcePath, workspace_id: currentWorkspaceId }),
@@ -1453,7 +1447,7 @@ export function ChatInterface({
       return next;
     });
 
-    await pollIngestionJob(result.job_id, filename, conversationId, token);
+    await pollIngestionJob(result.job_id, filename, conversationId);
     setPendingFileAttachments((prev) => [...prev, filename]);
   };
 
@@ -2049,7 +2043,6 @@ export function ChatInterface({
     try {
       // Get provider for current agent
       const provider = getProviderForAgent(effectiveAgent);
-      const token = useAuthStore.getState().token;
       const workspaceId = useWorkspaceStore.getState().currentWorkspaceId;
 
       const agentDataForModel = getAgent(effectiveAgent);
@@ -2446,7 +2439,7 @@ export function ChatInterface({
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : getAuthHeader('POST')),
+            ...getAuthHeader('POST'),
           },
           credentials: authCredentials(),
           signal: controller.signal,
@@ -2468,9 +2461,9 @@ export function ChatInterface({
         });
 
         if (!response.ok) {
-          // Auto-logout on 401 (invalid/expired token)
+          // Auto-logout on 401 (the session ended)
           if (response.status === 401) {
-            console.warn('Auth token expired, logging out...');
+            console.warn('Session ended, logging out...');
             useAuthStore.getState().logout();
             window.location.href = '/auth/login';
             return;
@@ -2695,7 +2688,7 @@ export function ChatInterface({
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : getAuthHeader('POST')),
+            ...getAuthHeader('POST'),
           },
           credentials: authCredentials(),
           body: JSON.stringify({

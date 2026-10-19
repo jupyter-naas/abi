@@ -4,14 +4,15 @@ import React from 'react';
 import { act } from 'react-dom/test-utils';
 import { createRoot, type Root } from 'react-dom/client';
 
-// The login page beside an identity provider that is the engine's default: an
-// email goes to a provider only through its organization's verified domain, and
-// every other account keeps the built-in login. The default is a button.
+// The login page is single sign-on only: an email goes to the provider its
+// organization's verified domain names, else the engine's default provider, and
+// every provider is a button.
 
 const push = vi.fn();
+let search = '';
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(search),
 }));
 vi.mock('next/link', () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) =>
@@ -35,10 +36,11 @@ function json(body: unknown): Response {
 }
 
 // The API as it answers with `acme` configured as the default provider.
+let providerList: { name: string; display_name: string }[] = [{ name: 'acme', display_name: 'Acme' }];
+let defaultProvider: string | null = 'acme';
 function api(url: string, init?: RequestInit): Response {
-  if (url.endsWith('/api/auth/config')) return json({ password_auth_enabled: true });
   if (url.endsWith('/api/auth/oidc/providers')) {
-    return json({ providers: [{ name: 'acme', display_name: 'Acme' }], default_provider: 'acme' });
+    return json({ providers: providerList, default_provider: defaultProvider });
   }
   if (url.endsWith('/api/auth/oidc/route')) {
     const { email } = JSON.parse(String(init?.body));
@@ -50,7 +52,6 @@ function api(url: string, init?: RequestInit): Response {
 let root: Root;
 let host: HTMLDivElement;
 const signInWithProvider = vi.fn();
-const login = vi.fn();
 
 async function settle() {
   await act(async () => {
@@ -83,17 +84,19 @@ async function submit() {
   await settle();
 }
 
-describe('the login page with a default identity provider', () => {
+describe('the login page', () => {
   const fetchMock = vi.fn();
 
   beforeEach(() => {
     storage.clear();
     push.mockReset();
+    search = '';
+    providerList = [{ name: 'acme', display_name: 'Acme' }];
+    defaultProvider = 'acme';
     signInWithProvider.mockReset();
-    login.mockReset().mockResolvedValue('w1');
     fetchMock.mockReset().mockImplementation(async (url: string, init?: RequestInit) => api(String(url), init));
     vi.stubGlobal('fetch', fetchMock);
-    useAuthStore.setState({ isAuthenticated: false, signInWithProvider, login });
+    useAuthStore.setState({ isAuthenticated: false, signInWithProvider });
   });
   afterEach(() => {
     act(() => root?.unmount());
@@ -101,22 +104,24 @@ describe('the login page with a default identity provider', () => {
     vi.unstubAllGlobals();
   });
 
-  it('keeps the built-in login for an email no organization domain routes', async () => {
+  it('has no password, code or account-creation field, and calls no retired endpoint', async () => {
     await mount();
-    type('email', 'admin@example.com');
-    type('password', 'Correct-horse-9');
-    await submit();
-
-    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/oidc/route'))).toBe(true);
-    expect(signInWithProvider).not.toHaveBeenCalled();
-    expect(login).toHaveBeenCalledWith('admin@example.com', 'Correct-horse-9');
-    expect(push).toHaveBeenCalledWith('/workspace/w1/chat');
+    expect(host.querySelector('#password')).toBeNull();
+    expect(host.querySelector('#otp')).toBeNull();
+    expect(host.textContent).not.toMatch(/password|magic link|create account/i);
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      'https://api.test/api/auth/oidc/providers',
+    ]);
   });
 
-  it('sends an email of a routed domain to its provider before any password', async () => {
+  it('sends an email of a routed domain to its provider', async () => {
+    providerList = [
+      { name: 'acme', display_name: 'Acme' },
+      { name: 'builtin', display_name: 'ABI' },
+    ];
+    defaultProvider = 'builtin';
     await mount();
     type('email', 'ada@acme.test');
-    type('password', 'whatever');
     await submit();
 
     expect(signInWithProvider).toHaveBeenCalledWith({
@@ -124,10 +129,58 @@ describe('the login page with a default identity provider', () => {
       email: 'ada@acme.test',
       next: undefined,
     });
-    expect(login).not.toHaveBeenCalled();
   });
 
-  it('offers the default provider as a button, never as a redirect', async () => {
+  it('sends any other email to the default provider', async () => {
+    providerList = [
+      { name: 'acme', display_name: 'Acme' },
+      { name: 'builtin', display_name: 'ABI' },
+    ];
+    defaultProvider = 'builtin';
+    await mount();
+    type('email', 'admin@example.com');
+    await submit();
+
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/oidc/route'))).toBe(true);
+    expect(signInWithProvider).toHaveBeenCalledWith({
+      provider: 'builtin',
+      email: 'admin@example.com',
+      next: undefined,
+    });
+  });
+
+  it('asks to pick a provider when none routes and there is no default', async () => {
+    providerList = [
+      { name: 'acme', display_name: 'Acme' },
+      { name: 'builtin', display_name: 'ABI' },
+    ];
+    defaultProvider = null;
+    await mount();
+    type('email', 'admin@example.com');
+    await submit();
+
+    expect(signInWithProvider).not.toHaveBeenCalled();
+    expect(host.textContent).toContain('Choose how to sign in');
+  });
+
+  it('honours the provider an invitation link names, skipping the domain routing', async () => {
+    providerList = [
+      { name: 'acme', display_name: 'Acme' },
+      { name: 'builtin', display_name: 'ABI' },
+    ];
+    search = 'provider=builtin&email=bob%40acme.test&redirect=%2Fworkspace%2Fw';
+    await mount();
+    await submit();
+
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/oidc/route'))).toBe(false);
+    expect(signInWithProvider).toHaveBeenCalledWith({
+      provider: 'builtin',
+      email: 'bob@acme.test',
+      next: '/workspace/w',
+    });
+  });
+
+  it('offers every provider as a button, never as a redirect', async () => {
     await mount();
     const button = [...host.querySelectorAll('button')].find((b) => b.textContent === 'Continue with Acme');
     expect(button).toBeDefined();
@@ -135,5 +188,21 @@ describe('the login page with a default identity provider', () => {
 
     act(() => button!.click());
     expect(signInWithProvider).toHaveBeenCalledWith({ provider: 'acme', email: undefined, next: undefined });
+  });
+
+  it('says so when no identity provider is configured', async () => {
+    providerList = [];
+    defaultProvider = null;
+    await mount();
+    expect(host.textContent).toContain('No identity provider is configured');
+    expect(host.querySelector('form')).toBeNull();
+  });
+
+  it('refuses an address that is not an email', async () => {
+    await mount();
+    type('email', 'not-an-email');
+    await submit();
+    expect(signInWithProvider).not.toHaveBeenCalled();
+    expect(host.textContent).toContain('Enter a valid email address');
   });
 });
