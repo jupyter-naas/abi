@@ -1,6 +1,6 @@
 # Claim checks for published messages above the broker limit
 
-Status: Accepted. Amended 2026-10-15 (#60): payloads are stored in the stream `ABI_CLAIM_CHECKS` under the
+Status: Accepted. Amended 2026-10-15 (step 6): payloads are stored in the stream `ABI_CLAIM_CHECKS` under the
 scope they travel with, not in the object store `abi_claim_checks` (see the amendment at the end).
 
 Date: 2026-10-03

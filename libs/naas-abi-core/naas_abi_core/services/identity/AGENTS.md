@@ -18,7 +18,7 @@ resolves them to IAM users. Authorization stays with IAM (`services/iam`).
   (30 s of skew) and the nonce.
 - **Groups**: the provider's `groups_claim` values map to IAM groups through
   `iam.map_idp_group`; the mapped ids come back with the user (the engine
-  token's `grp`, subtask 8 of #44).
+  token's `grp`).
 - **Suspension**: a token naming a suspended or deleted IAM user is refused.
 - **Relying parties** (Nexus) run authorization code + PKCE through this
   service: it builds the authorization URL, redeems the code, refreshes and
@@ -112,7 +112,7 @@ identity.end_session_url("acme", id_token_hint=..., post_logout_redirect_uri=...
   (the relying-party operations). `exchange_code` and `refresh` resolve the
   user too, so they need `SignIn` **and** `Authenticate`; the authorization URL,
   revocation and end-session need `SignIn` only. A caller with none gets "not found". `api` and
-  `engine` hold them through their transitional policies; a module needs a grant.
+  `engine` hold them through their enumerated policies; a module needs a grant.
   `ProvisionUser` (admin) and `FindProvisionedUser` (read) are an administrator's: the
   inviting person's own rights (`iam:AttachPolicy` at the scope) are checked where the
   invitation is made (Nexus, `abi iam invite`), and the provisioning call is made as `api`

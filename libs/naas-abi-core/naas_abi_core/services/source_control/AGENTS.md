@@ -50,7 +50,7 @@ nothing itself: the owner it calls does.
 - **`ensure_repo`** applies the create rule of RFC §4.4: placed in the call's target
   workspace (exact id and `<id>/*`), on the platform without one. A repository that
   exists with no placement predates IAM and is recorded on the platform, so no
-  workspace can claim it. TRANSITIONAL (#65): a target workspace IAM has no scope
+  workspace can claim it. A target workspace IAM has no scope
   for places the repository on the platform. `delete_repo` drops its placements.
 - **`add_collaborator` is `AddCollaborator`, an admin action.** Nexus grants a member
   write on a workspace repository after its own check, as `api`

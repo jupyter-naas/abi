@@ -585,7 +585,7 @@ def test_every_user_holds_self(h):
     assert not h.allowed("iam:GetPrincipal", f"abi:-:-:iam:principal/{ci.id}", ci)
 
 
-# -- transitional bootstrap ---------------------------------------------------------------------------------------
+# -- engine and api policies ---------------------------------------------------------------------------------------
 
 
 def test_engine_and_api_hold_enumerated_statements_not_a_wildcard(h):

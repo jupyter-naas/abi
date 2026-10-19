@@ -1,7 +1,7 @@
--- Sign-in through the engine's OIDC identity providers (subtask 7 of #44).
+-- Sign-in through the engine's OIDC identity providers (RFC §12).
 -- A user signed in through a provider is one row per (issuer, sub): its id is
 -- its IAM principal id, which principal_id names too. Rows of the built-in
--- login keep both empty until they move to the built-in IdP (subtask 13).
+-- login keep both empty until they move to the built-in IdP (migration 0052).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS principal_id VARCHAR(255);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS idp_provider VARCHAR(64);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS idp_issuer VARCHAR(1024);

@@ -1,6 +1,6 @@
 """Which repositories and environments a Nexus workspace owns, and who may use them.
 
-A repository id from a request is never trusted on its own (bug (b) of #44):
+A repository id from a request is never trusted on its own (a repo id a client names):
 
 * it must belong to the request's workspace: IAM places it there (repositories
   created through Nexus are placed in their workspace), or it is the

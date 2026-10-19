@@ -176,6 +176,12 @@ prerelease_token = "dev"
 module = "naas_abi_core.proto.*"
 ignore_errors = true
 
+# The built-in identity provider is core-free by design: core never depends on
+# it. Only identity's tests import it, and they skip where it is absent.
+[[tool.mypy.overrides]]
+module = "naas_abi_idp.*"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 markers = [
     "integration: marks tests as integration tests (may require external services)",

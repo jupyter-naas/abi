@@ -180,6 +180,7 @@ def test_the_none_adapter_never_provisions():
 
 @pytest.fixture
 def builtin():
+    pytest.importorskip("naas_abi_idp")
     from naas_abi_idp.adapters.memory import (
         MemoryDocumentStore,
         MemoryMailer,

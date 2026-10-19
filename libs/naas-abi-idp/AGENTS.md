@@ -68,7 +68,7 @@ A sign-in challenge, a refresh token, a counter: one document each, changed with
 - 6 digits (`code_length`), emailed, valid 15 minutes, at most 5 active per
   address; stored as an HMAC under `idp/code-key`, so a copy of the documents
   alone yields nothing.
-- **Attempts are counted across every active code** (bug (e) of #44): one
+- **Attempts are counted across every active code** (a vulnerability found in review): one
   budget per address (`max_attempts`, 5), spent *before* a guess is judged and
   given back on success, so parallel guesses cannot all slip through and
   asking for a fresh code does not renew it. The budget spent voids every code

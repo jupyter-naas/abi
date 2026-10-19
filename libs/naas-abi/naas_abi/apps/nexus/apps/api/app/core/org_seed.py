@@ -392,8 +392,8 @@ def sync_platform_admins(iam: Any, users_by_email: dict[str, UserModel]) -> None
     """``users[].is_superadmin`` as IAM's ``builtin.platform_admin`` attachment.
 
     Promoting or demoting in the config attaches or detaches it at the next boot,
-    as ``is_superadmin`` itself is reconciled. Until the OIDC
-    providers of #44: IAM knows a Nexus user as the user of issuer
+    as ``is_superadmin`` itself is reconciled. A user of the old login
+    that has not linked yet: IAM knows it as the user of issuer
     ``urn:abi:nexus`` whose subject is the Nexus user id, the id Nexus names on
     every kernel call it makes for them.
     """

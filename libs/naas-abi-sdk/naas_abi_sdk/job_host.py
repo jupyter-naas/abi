@@ -191,9 +191,8 @@ async def ensure_stream(js: Any, project: str) -> None:
 
 # (operation "trigger" | "cancel", job, run id, headers, stored at or None):
 # raises RPCError when the caller may not. Scheduled ("cron", "every") and
-# "event" triggers are the host's own and are not asked about: until broker
-# permissions (#60) restrict who may publish on a trigger subject, their kind
-# header is trusted.
+# "event" triggers are the host's own and are not asked about: the host drops
+# any trigger the engine did not seal.
 JobAuthorizer = Callable[
     [str, str, str, Mapping[str, str], "datetime | None"], Awaitable[None]
 ]

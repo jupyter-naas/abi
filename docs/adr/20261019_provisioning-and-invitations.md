@@ -36,15 +36,15 @@ group of a provider without inviting its members one by one.
   app (`AuthorizeAppResponse.caller_principal_*`, `HttpRequest.principal_*`), and the admin
   app serves `api` and `engine` only.
 - **Nexus records the invitation** (`invitations`) for the people-management UI: pending list,
-  resend, revoke. At the first sign-in it makes the memberships it stores, until subtask 11
-  (#65) makes the claimed attachments the memberships. The invitation email carries a link and
+  resend, revoke. At the first sign-in it makes the memberships it stores, until step 11
+  (step 11) makes the claimed attachments the memberships. The invitation email carries a link and
   no secret.
 - **IdP group bindings** (`bind_idp_group`): IAM finds or creates the ABI group
   `idp:<provider>:<claim value>`, maps the claim to it and attaches the role at the scope. The
   caller is authorized for the attachment alone.
 - **Who authorizes the inviting person.** Nexus checks their membership today and calls IAM and
   the provider as `api` for nobody (a Nexus user holds no `iam:*` right yet); `abi iam invite`
-  runs as `engine`. After #65, IAM's own check of the attachment replaces the membership check.
+  runs as `engine`. After step 11, IAM's own check of the attachment replaces the membership check.
 
 ## Consequences
 

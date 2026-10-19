@@ -18,7 +18,7 @@ class TestMyIdP(IdentityProviderContract):
 
 It runs against the in-process ``FakeIdP`` on every test run, against Zitadel
 (``zitadel_server.py``) when its pinned binaries are available, and against
-the built-in IdP (subtask 9 of #44).
+the built-in IdP.
 """
 
 from __future__ import annotations

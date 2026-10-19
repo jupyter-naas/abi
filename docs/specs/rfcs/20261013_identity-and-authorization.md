@@ -7,8 +7,8 @@
 - **Builds on:** [`20260910_distributed-modules-nats-jetstream.md`](20260910_distributed-modules-nats-jetstream.md) ("Decisions locked in": checks in the domain service, identity in a `contextvars.ContextVar`, ARN-style names)
 - **Decisions:** [`20261013_authorization-policy-model.md`](../../adr/20261013_authorization-policy-model.md), [`20261013_identity-providers-and-builtin-idp.md`](../../adr/20261013_identity-providers-and-builtin-idp.md), [`20261013_engine-tokens-service-accounts-broker.md`](../../adr/20261013_engine-tokens-service-accounts-broker.md), [`20261013_iam-kernel-service.md`](../../adr/20261013_iam-kernel-service.md)
 
-This RFC is the specification for every subtask of the permission-system job (#44). Subtasks implement it.
-They do not invent grammar, action names or evaluation rules. If one of those has to change, this document
+This RFC is the specification of the permission system. It is delivered in the steps of §14, and the
+implementation does not invent grammar, action names or evaluation rules. If one of those has to change, this document
 changes first, in the same pull request.
 
 ## Problem
@@ -719,10 +719,10 @@ Resource types:
 | `GetSubjectGraph` | read | `graph/<iri>` when `graph_name` is set, else filtered over all graphs | `get_subject_graph` |
 | `Query` | read | the query's dataset, see below | `query` |
 | `QueryStream` | read | as `Query` | stream, operation `query` |
-| `QueryUnchecked` | admin | `catalog/-` | `query`, stream (added in subtask 4) |
+| `QueryUnchecked` | admin | `catalog/-` | `query`, stream (added in step 4) |
 | `QueryView` | read | `view/<name>`, and `Query` rules on the graphs it reads | `query_view` |
 | `Export` | read | `graph/<iri>`, or filtered over all graphs when none is given | stream, operation `export` |
-| `Subscribe` | read | `graph/<iri>`, or every graph for `*` (added in subtask 4) | in process only |
+| `Subscribe` | read | `graph/<iri>`, or every graph for `*` (added in step 4) | in process only |
 | `Insert` | write | `graph/<iri>` (`default` when no graph) | `insert` |
 | `Remove` | write | `graph/<iri>` | `remove` |
 | `CreateGraph` | write | `graph/<iri>` (creates) | `create_graph` |
@@ -763,7 +763,7 @@ targets:
   `graph/*`.
 - A request the parser cannot classify is refused (`INVALID_ARGUMENT`).
 
-Nexus `GraphAccessScope` (`services/graph/access.py`) moves into this check (subtask 4), and the Nexus
+Nexus `GraphAccessScope` (`services/graph/access.py`) moves into this check (step 4), and the Nexus
 graph routes call the kernel as the user.
 
 ##### dataset
@@ -796,7 +796,7 @@ Resource types:
 - file-reading table functions;
 - `ATTACH`.
 
-**As built in subtask 4** (ADR `20261015_data-services-enforce-iam.md`; each service's `AGENTS.md`,
+**As built in step 4** (ADR `20261015_data-services-enforce-iam.md`; each service's `AGENTS.md`,
 "Authorization"):
 
 - The eight data services check in their domain services through `ResourceGuard`
@@ -815,9 +815,9 @@ Resource types:
   added) skips the check, for the engine's own catalog maintenance; both transitional grants deny it.
 - Seals match at any placement (`abi:*:*:…`). Lists of object storage answer `OBJECT_NOT_FOUND` to a caller with
   no Allow for the list action; vector pages may be shorter than `limit` while the cursor continues.
-- TRANSITIONAL changes: `builtin.transitional.nexus_user` (Nexus users reach the kernel data and runtime
-  services until subtask 11), and denies `dataset:QueryUnchecked`. A module's account (`module/<project>/<module_id>`,
-  subtask 6) reaches its own document namespace, `${module.id}`, and the shared `default` dataset namespace
+- Historical, removed in step 11: `builtin.transitional.nexus_user` (Nexus users reached the kernel data and
+  runtime services). `builtin.api` denies `dataset:QueryUnchecked`. A module's account (`module/<project>/<module_id>`,
+  step 6) reaches its own document namespace, `${module.id}`, and the shared `default` dataset namespace
   with the catalog's snapshots (no namespace of its own name) through its approved manifest.
 - Work with no caller gets an identity: Nexus housekeeping as `api`, `abi chat`/`abi run script` as `engine`,
   bus consumers, worker-pool jobs and warmup threads as whoever started them.
@@ -922,7 +922,7 @@ Resource types (all platform):
 
 - `AuthorizeAgent`, `AuthorizeModel` and `AuthorizeApp` stop being authorization: the hosting module asks
   IAM `check` with the caller's context. They remain only as lease checks.
-- Job trigger and cancel messages gain the `Nats-Auth-Token` header (subtask 5).
+- Job trigger and cancel messages gain the `Nats-Auth-Token` header (step 5).
 - Hosting subjects gain the service-account token `<sa>` (§8.4). Callers never build these subjects: they
   read them from the discovery record.
 
@@ -1180,7 +1180,7 @@ Which agents and apps a workspace may use stays a Nexus decision: `nexus:UseAgen
 **Built-in service accounts.**
 
 - `builtin.engine`, `builtin.api` and `builtin.idp` are attached to `engine`, `api` and `idp`.
-- They start as one broad transitional statement each (subtask 3). Subtask 11 replaces them with
+- They started as one broad statement each (step 3). Step 11 replaced them with
   enumerated statements, each with a `sid` that says what needs it.
   - `api` keeps what Nexus does for users. Because of the OBO intersection, the user still bounds every
     call.
@@ -1304,13 +1304,13 @@ The flow:
 | `discovery:TriggerJob`, `ScheduleJob`, `CancelJobRun` | `abi.jobs.<project>.{trigger,schedule,cancel}.>` | — |
 | Everything else | denied | denied (including `$SYS.>`, other `$JS.API.>`, `abi.svc.*.v1.*.owners`) |
 
-- `<sa>` is the service account's ULID part. Hosting subjects gain it as a whole token (subtask 6), because
+- `<sa>` is the service account's ULID part. Hosting subjects gain it as a whole token (step 6), because
   NATS wildcards cannot match part of a token.
 - The broker grants at the operation level. Resource-level decisions stay in the domain services.
 - The old `abi` and `module` users are removed. `nats.conf`, written by `abi dev`, the CLI deploy template
   and `.deploy/docker/nats/nats.conf`, declares `authorization { users, auth_callout { issuer, auth_users } }`.
 
-**As built in subtask 6** (ADR `20261013_engine-tokens-service-accounts-broker.md`, "As built"). Keys, exchange,
+**As built in step 6** (ADR `20261013_engine-tokens-service-accounts-broker.md`, "As built"). Keys, exchange,
 manifests, the callout and §9.1 are implemented as specified, except:
 
 - **The manifest goes to IAM before registration.** The SDK calls `abi.iam.v1.submit_manifest` (`iam:SubmitManifest`
@@ -1345,15 +1345,15 @@ manifests, the callout and §9.1 are implemented as specified, except:
   answers only reply subjects under `_INBOX.`.
 - **Remaining gap.** The server answers a module's JetStream requests on the reply subject it chose, and streams
   capture what lands there; what a module can still aim that way has fixed content (pub acks, empty answers,
-  its own messages under their own subject). NATS accounts would close it: proposed, pending #44's acceptance
+  its own messages under their own subject). NATS accounts would close it: proposed, pending the owner's acceptance
   (ADR `20261013_engine-tokens-service-accounts-broker.md`, "As built").
 - **Services without a registered catalog.** An allowed action grants the service's whole prefix,
-  `abi.svc.<service>.v1.>`, until the service registers its catalog subjects (#58). The event service adds
+  `abi.svc.<service>.v1.>`, until the service registers its catalog subjects (step 4). The event service adds
   `evt.>`.
 - **The `engine` user** may use every subject but `$SYS.>`. It is not narrowed to the kernel subjects yet: the API,
   Nexus and jobs run on it.
 - **Not built here.** The HTTP exchange (`POST /api/iam/token`), `abi.iam.v1.exchange_token` and personal keys
-  (#62).
+  (step 8).
 
 ### 9. Tokens
 
@@ -1364,7 +1364,7 @@ manifests, the callout and §9.1 are implemented as specified, except:
   - Keys have a `kid` of the form `<yyyymmdd>-<8 hex>`. Private keys live in the secret service at
     `iam/signing-keys/<kid>`, sealed to `engine`.
   - Modules never hold a signing key. HS256 and `NATS_JWT_SECRET` are retired with no dual mode: this is a
-    major release, and every first-party module moves in the same subtask.
+    major release, and every first-party module moves in the same step.
 - **Rotation.**
   - Every 30 days (`iam.tokens.key_rotation_days`).
   - A new key is published at least 15 minutes before it signs.
@@ -1465,7 +1465,7 @@ manifests, the callout and §9.1 are implemented as specified, except:
 
 #### 10.1 The type
 
-`naas_abi_sdk.call_context` (subtask 2), re-exported by `naas_abi_core.engine.call_context`: one context
+`naas_abi_sdk.call_context` (step 2), re-exported by `naas_abi_core.engine.call_context`: one context
 variable, so the engine and the SDK clients it runs read the same value. A core installed without the SDK (no
 `nats` extra) runs a verbatim copy, `naas_abi_core/engine/call_context_types.py`.
 
@@ -1496,7 +1496,7 @@ class CallContext:
 _call_context: ContextVar[CallContext]   # default: ANONYMOUS, which every check denies
 ```
 
-Until IAM assigns `sa_` ids (subtask 6), a service account's id is its name (`api`, `engine`, a module), and
+Until IAM assigns `sa_` ids (step 6), a service account's id is its name (`api`, `engine`, a module), and
 an OBO user's id is the one its trusted caller names (a Nexus user id).
 
 **The call's user** is `on_behalf_of` when it is set, else `principal` when it is a user, else none. Services
@@ -1523,7 +1523,7 @@ Every primary adapter sets it **only from verified credentials**:
 | Caller | Source | Result |
 |---|---|---|
 | NATS (kernel services, discovery, module hosts, the SDK) | The `Nats-Auth-Token` header, verified against the JWKS (§9.1), audience accepted by the endpoint (§9.3) | No `act`: principal = `sub`. With `act`: principal = `act.sub`, OBO = `sub`. Groups from IAM plus `grp`. Scope from `abi_scope`. Set by one shared helper in the NATS dispatch path, not per adapter. |
-| Nexus REST | The session cookie's `abi:session` token, or an `abi:delegated:*` token on routes that accept it | principal = `api`, OBO = the user (subtask 2). Every kernel call Nexus makes for the request then runs as `api` on behalf of the user, so the intersection rule (§5.3) applies. Until subtask 7, the user is named only for an unrevoked Nexus session token; a request without one (a link token included) is `ANONYMOUS`, never `api`. |
+| Nexus REST | The session cookie's `abi:session` token, or an `abi:delegated:*` token on routes that accept it | principal = `api`, OBO = the user (step 2). Every kernel call Nexus makes for the request then runs as `api` on behalf of the user, so the intersection rule (§5.3) applies. Until step 7, the user is named only for an unrevoked Nexus session token; a request without one (a link token included) is `ANONYMOUS`, never `api`. |
 | Nexus calling remote agents and apps | An `abi:delegated:agent` or `abi:delegated:app` token exchanged for the target (§9.4) | Sent in the `Nats-Auth-Token` header of the call, and handed to the agent host in `SubmitRequest.delegated_token` for the run's downstream calls |
 | In-process code | Inherits the caller's context. `asyncio.to_thread` copies it; executor submissions use `contextvars.copy_context().run` (already done by `DomainRPCDispatcher`). Background tasks capture it at creation or use `as_service_account`. | unchanged |
 | The SDK module host | Sets the SDK context from the verified incoming invocation. Downstream SDK calls send the delegated token from that context. | principal = the module's service account, OBO = the user |
@@ -1546,17 +1546,17 @@ built-in IdP route), it forwards an allow-list of headers, never a deny-list. Ev
 
 The module learns who is calling only from the delegated token's verified claims.
 
-**Transition (ended in subtask 8).** An `Abi-On-Behalf-Of: <principal id>` header was honoured only when the verified
-caller was `api` or `engine`. Subtask 8 removed it: the user travels in an `abi:delegated:agent` token (`sub` the
+**Transition (ended in step 8).** An `Abi-On-Behalf-Of: <principal id>` header was honoured only when the verified
+caller was `api` or `engine`. Step 8 removed it: the user travels in an `abi:delegated:agent` token (`sub` the
 user, `act` the acting service), and a request that still carries the header is refused as unauthenticated, before
 the domain service, with its own message (`on-behalf-of refused: …`) and a log line (a header naming a user can
 only narrow a call, so dropping it silently would widen it). The core RPC client and the SDK transport of `api` and
 `engine` send a delegation for the current call's user; any other identity calls as itself. A module host runs an
 invocation with the delegation it was handed (`SubmitRequest.delegated_token`).
 - Stage 1 tokens (HS256, `{sub, iat, exp}`) carried no audience, `jti`, groups or `abi_scope`: they are gone with
-  `NATS_JWT_SECRET` (subtask 6).
+  `NATS_JWT_SECRET` (step 6).
 
-**As built in subtask 2.** `naas_abi_core.engine.nats_identity` is the shared helper: `caller_context` verifies
+**As built in step 2.** `naas_abi_core.engine.nats_identity` is the shared helper: `caller_context` verifies
 the token and the header, `nats_rpc.authenticate_request` wraps it for `nats.micro` requests (and answers a
 refusal), and `for_request` adds the trace and target workspace of the request's `context` envelope.
 `DomainRPCDispatcher.call(fn, request, caller)` runs the worker in a copy of the context holding that caller;
@@ -1568,7 +1568,7 @@ engine-hosted jobs (`engine`) and Nexus's configuration seeding (`api`); engine 
 endpoints call their domain services (`EventService`'s stored-level operations, `VectorStoreService`,
 `CacheService`'s tier views), so a check in the domain service covers them.
 
-**As built in subtask 8.** Token exchange is `IAMService.exchange_token` (`services/iam/exchange.py`), reached in process,
+**As built in step 8.** Token exchange is `IAMService.exchange_token` (`services/iam/exchange.py`), reached in process,
 over NATS (`abi.iam.v1.exchange_token`, also in `broker.IAM_ALWAYS` so a module can renew its own delegation) and, for
 scripts, through Nexus `POST /api/iam/token`.
 - **Subjects.** The RFC's `id_token`, `access_token`, `jwt` and `api_key` types, and one more:
@@ -1637,7 +1637,7 @@ services:
       key_rotation_days: 30
 ```
 
-`users[].is_superadmin` in the config becomes a `builtin.platform_admin` attachment at boot (subtask 3).
+`users[].is_superadmin` in the config becomes a `builtin.platform_admin` attachment at boot (step 3).
 
 #### 11.2 Authorizer port
 
@@ -1689,12 +1689,12 @@ A sealed resource is a resource pattern bound to one principal.
 - Caches drop affected entries on receipt, and everything after 60 seconds.
 - A process that sees a revision gap drops its whole cache.
 
-**As built in subtask 3.** `services/iam/` (see its `AGENTS.md`):
+**As built in step 3.** `services/iam/` (see its `AGENTS.md`):
 
 - **Store.** One SQL implementation on SQLAlchemy Core (`adapters/secondary/iam_sql.py`) serves SQLite and
   PostgreSQL; the in-memory adapter passes the same contract. So far the tables are `principals`, `group_members`,
   `group_mappings`, `policies`, `attachments`, `placements`, `scopes`, `catalogs` and `state` (revision,
-  install id); keys, manifests, grants and signing keys come with the subtasks that use them. The Docker
+  install id); keys, manifests, grants and signing keys come with the steps that use them. The Docker
   templates reuse the deployment database through its `POSTGRES_*` secrets, in schema `abi_iam`.
 - **Boot.** The engine loads IAM before every other service and bootstraps it: IAM's catalog, the managed
   policies, the `engine`, `api` and `idp` service accounts and their policies. A serving engine gives its
@@ -1704,11 +1704,12 @@ A sealed resource is a resource pattern bound to one principal.
   seconds and drops them on every change made through it. The NATS primary publishes `abi.iam.v1.changed`.
 - **Built-in policies.** Roles, `builtin.platform_admin`, `builtin.platform.viewer` and `.member` (kept in step
   with workspace and org-wide role attachments), `builtin.idp`. `builtin.self` is held implicitly by every user.
-  Feature policies come with the Nexus catalog (subtask 11).
-- **Transitional grants** (ADR `20261015_iam-transitional-bootstrap.md`): `builtin.engine` and `builtin.api` are
-  one `TransitionalBroadAccess` statement each; a service account IAM has no record of (a remote module)
-  implicitly holds `builtin.transitional.module` until subtask 6; a user named by a Nexus id resolves to the user
-  of issuer `urn:abi:nexus` until subtask 7. Nexus seeding turns `users[].is_superadmin` into
+  Feature policies come with the Nexus catalog (step 11).
+- **Transitional grants, history** (ADR `20261015_iam-transitional-bootstrap.md`, which opens with the final
+  state): `builtin.engine` and `builtin.api` were one `TransitionalBroadAccess` statement each and are now
+  enumerated; a service account IAM has no record of (a remote module) implicitly held
+  `builtin.transitional.module` until step 6; a user named by a Nexus id resolves to the user of the legacy
+  issuer `urn:abi:nexus`, kept for the accounts of the old login while they link. Nexus seeding turns `users[].is_superadmin` into
   `builtin.platform_admin`.
 
 ### 12. Identity providers and the built-in IdP
@@ -1757,7 +1758,7 @@ identity:
   - IAM suspension takes effect immediately.
   - There is no SCIM and no token introspection.
 
-**As built in subtask 7** ([ADR `20261015_nexus-oidc-sessions`](../../adr/20261015_nexus-oidc-sessions.md),
+**As built in step 7** ([ADR `20261015_nexus-oidc-sessions`](../../adr/20261015_nexus-oidc-sessions.md),
 guide [`docs/identity-providers.md`](../../identity-providers.md)):
 
 - `services/identity` is the kernel service that verifies, exposed as `abi.identity.v1.*` with its own
@@ -1767,11 +1768,12 @@ guide [`docs/identity-providers.md`](../../identity-providers.md)):
   holds refuses the sign-in. An unverified one is stored as `<principal id>@unverified.internal`.
 - The Nexus session is server-held (`auth_sessions`). The provider vouches again at most every 10 minutes,
   an IAM suspension ends it within 5 s, and the CSRF token is an HMAC of the cookie's secret.
-- Until subtask 11, Nexus attaches `builtin.transitional.nexus_user` to each user it signs in.
+- Until step 11, Nexus attached `builtin.transitional.nexus_user` to each user it signed in; a user now holds
+  the roles of its memberships only.
 
 #### 12.2 Provisioning
 
-The `provisioning` port has one adapter per provider setting (subtask 10):
+The `provisioning` port has one adapter per provider setting (step 10):
 
 - `builtin` calls the IdP's admin RPCs;
 - `zitadel` and `keycloak` call those providers' admin APIs;
@@ -1780,7 +1782,7 @@ The `provisioning` port has one adapter per provider setting (subtask 10):
 **Pending grants.** An attachment can target `(provider, email)` before the user exists. It is claimed on
 first login by a matching *verified* email, on that provider only.
 
-**As built in subtask 10** ([ADR `20261019_provisioning-and-invitations`](../../adr/20261019_provisioning-and-invitations.md),
+**As built in step 10** ([ADR `20261019_provisioning-and-invitations`](../../adr/20261019_provisioning-and-invitations.md),
 guide [`docs/identity-providers.md`](../../identity-providers.md)):
 
 - `ProvisioningPort` (`ensure_user`, `find_user`) lives in the identity service, exposed as
@@ -1847,7 +1849,7 @@ guide [`docs/identity-providers.md`](../../identity-providers.md)):
 
 | Today | After |
 |---|---|
-| Nexus `users` (email, password hash) | Built-in IdP users with the same email and a new `sub` (`abi user migrate`), and an IAM principal for `(builtin issuer, sub)`. Nexus `users` points to the principal id. They are linked on first login by verified email, inside the built-in provider only. **As built (#67):** no password moves (the IdP signs in with a mailed code, so the hash is dropped with the column). The link is `iam:LinkUser`: the user the old login made (issuer `urn:abi:nexus`) gets the provider's `(issuer, sub)` as one more identity, so its principal, roles, groups and keys stay, and the Nexus row keeps its id (nothing is re-keyed) and gains `principal_id` and the identity. The user the first sign-in made itself is merged into it. Decision: [`20261019_login-moves-out-of-nexus.md`](../../adr/20261019_login-moves-out-of-nexus.md). |
+| Nexus `users` (email, password hash) | Built-in IdP users with the same email and a new `sub` (`abi user migrate`), and an IAM principal for `(builtin issuer, sub)`. Nexus `users` points to the principal id. They are linked on first login by verified email, inside the built-in provider only. **As built (step 13):** no password moves (the IdP signs in with a mailed code, so the hash is dropped with the column). The link is `iam:LinkUser`: the user the old login made (issuer `urn:abi:nexus`) gets the provider's `(issuer, sub)` as one more identity, so its principal, roles, groups and keys stay, and the Nexus row keeps its id (nothing is re-keyed) and gains `principal_id` and the identity. The user the first sign-in made itself is merged into it. Decision: [`20261019_login-moves-out-of-nexus.md`](../../adr/20261019_login-moves-out-of-nexus.md). |
 | `workspace_members.role`, the `workspaces.owner_id` fallback | `builtin.<role>` attachments at scope `abi:<org>:<ws>`; the fallback becomes an explicit owner attachment |
 | `organization_members.role`, `organizations.owner_id` | `builtin.<role>` at scope `abi:<org>:-` |
 | `users.is_superadmin` and `users[].is_superadmin` | `builtin.platform_admin` |
@@ -1856,31 +1858,33 @@ guide [`docs/identity-providers.md`](../../identity-providers.md)):
 | Nexus per-workspace prefixes and namespaces (object storage, documents, vectors, datasets) | workspace placements (`iam:PutPlacement`) |
 | Every other existing container (module and engine namespaces, collections, repos, graphs) | platform placements, so no workspace can claim a name inside them (§4.4) |
 | Remote modules with `NATS_JWT_SECRET` | service accounts, keys and approved manifests. `abi dev up` regenerates them; deployed systems run `abi iam module approve`. |
-| Sessions, refresh tokens, app grants and preview tokens signed with `secret_key` | invalidated: users sign in again. `secret_key` keeps only the workspace-secret encryption until subtask 13 gives that its own key. **As built (#67):** workspace secrets (and the provider tokens of sessions) have `secrets_encryption_key` (generated as `NEXUS_SECRETS_KEY`); at start whatever is still under an old key is re-encrypted under it, and `secret_key` signs and encrypts nothing. |
+| Sessions, refresh tokens, app grants and preview tokens signed with `secret_key` | invalidated: users sign in again. `secret_key` keeps only the workspace-secret encryption until step 13 gives that its own key. **As built (step 13):** workspace secrets (and the provider tokens of sessions) have `secrets_encryption_key` (generated as `NEXUS_SECRETS_KEY`); at start whatever is still under an old key is re-encrypted under it, and `secret_key` signs and encrypts nothing. |
 
 - **Removal.** Nexus's login code, `refresh_tokens`, `magic_link_tokens`, `password_reset_tokens` and the
-  `api_keys` mock are removed in subtask 13 (migration `0052_remove_builtin_login.sql`; also `revoked_tokens`,
+  `api_keys` mock are removed in step 13 (migration `0052_remove_builtin_login.sql`; also `revoked_tokens`,
   `password_changes` and `users.hashed_password`).
-- **Each subtask leaves the branch green.** Each keeps existing remote modules and `make demo-sdk` working.
-  It relies on the transitional broad policies of `api` and `engine` until subtask 11 replaces them.
+- **Each step leaves the branch green.** Each keeps existing remote modules and `make demo-sdk` working.
+  It relies on the transitional broad policies of `api` and `engine` until step 11 replaces them.
 
-### 14. Subtask plan
+### 14. Delivery steps
 
-| # | Shepherd | Subtask | Delivers | Sections |
-|---|---|---|---|---|
-| 1 | #55 | Bring the branch up to date, then write the RFC and ADRs | this RFC, the four ADRs | all |
-| 2 | #56 | Caller identity on every call | `Principal`, `CallContext`, the context variable and helpers; one NATS helper filling it; Nexus middleware (`api` on behalf of the user); the transitional OBO header; event, vector_store and cache NATS endpoints through their services | §10 |
-| 3 | #57 | IAM kernel service: the policy engine | `services/iam`: store, principals, groups, policies, attachments, placements, scopes, catalogs, seals, evaluator, `check`, `filter`, `explain`, built-in roles, `iam/v1` proto, NATS and SDK; transitional broad policies for `api` and `engine` | §2–§7, §11 |
-| 4 | #58 | Enforce IAM in the data services | catalogs and checks for object_storage, document, keyvalue, secret, cache, vector_store, triple_store and dataset; SPARQL dataset restriction; `document_admin` removed; seals enforced | §5, §6.4 |
-| 5 | #59 | Enforce IAM in the runtime services | event, activity_log, email, model_registry, discovery, source_control and coding_environment; agent, model, app and job checks; module-name binding; bug (b) in the kernel; platform tools on behalf of the user | §6.4 |
-| 6 | #60 | Service accounts, module keys and broker permissions | ES256 issuer and JWKS; keys and exchange; manifests and approval; auth callout; `<sa>` in hosting subjects; `NATS_JWT_SECRET` removed; CLI | §8, §9.1–§9.2 |
-| 7 | #61 | OIDC identity providers | `identity.providers`, the verifier, Nexus PKCE client and cookie session, `(issuer, sub)` users, group mapping, the generic identity suite on Zitadel | §12.1 |
-| 8 | #62 | Delegated tokens and API keys | token exchange, delegated audiences, `SubmitRequest.delegated_token`, link grants, coding tokens (bug a), personal API keys; the OBO header removed | §9.3–§9.4 |
-| 9 | #63 | Built-in IdP module | `libs/naas-abi-idp`, the trusted `/idp` route, defaults | §12.3 |
-| 10 | #64 | Provisioning and invitations | the provisioning port, pending grants, People → Invite, group binding UI, the end-to-end demo | §12.2 |
-| 11 | #65 | Nexus authorization on IAM | the Nexus catalog, routers on `require` and `filter`, viewers read-only, features at the API, bugs (c) and (d), role data migrated, enumerated `api` and `engine` policies | §6.5, §7, §13 |
-| 12 | #66 | IAM admin UI in Nexus | policies, attachments, groups, service accounts and keys, approvals, simulator, audit | §3, §8 |
-| 13 | #67 | Move login out of Nexus | user migration to the built-in IdP, login code removed, `secret_key` signs no token | §13 |
+The work is delivered in thirteen steps. Other documents refer to them by number.
+
+| Step | Delivers | Sections |
+|---|---|---|
+| 1 | **Bring the branch up to date, then write the RFC and ADRs**: this RFC, the four ADRs | all |
+| 2 | **Caller identity on every call**: `Principal`, `CallContext`, the context variable and helpers; one NATS helper filling it; Nexus middleware (`api` on behalf of the user); the transitional OBO header; event, vector_store and cache NATS endpoints through their services | §10 |
+| 3 | **IAM kernel service: the policy engine**: `services/iam`: store, principals, groups, policies, attachments, placements, scopes, catalogs, seals, evaluator, `check`, `filter`, `explain`, built-in roles, `iam/v1` proto, NATS and SDK; transitional broad policies for `api` and `engine` | §2–§7, §11 |
+| 4 | **Enforce IAM in the data services**: catalogs and checks for object_storage, document, keyvalue, secret, cache, vector_store, triple_store and dataset; SPARQL dataset restriction; `document_admin` removed; seals enforced | §5, §6.4 |
+| 5 | **Enforce IAM in the runtime services**: event, activity_log, email, model_registry, discovery, source_control and coding_environment; agent, model, app and job checks; module-name binding; bug (b) in the kernel; platform tools on behalf of the user | §6.4 |
+| 6 | **Service accounts, module keys and broker permissions**: ES256 issuer and JWKS; keys and exchange; manifests and approval; auth callout; `<sa>` in hosting subjects; `NATS_JWT_SECRET` removed; CLI | §8, §9.1–§9.2 |
+| 7 | **OIDC identity providers**: `identity.providers`, the verifier, Nexus PKCE client and cookie session, `(issuer, sub)` users, group mapping, the generic identity suite on Zitadel | §12.1 |
+| 8 | **Delegated tokens and API keys**: token exchange, delegated audiences, `SubmitRequest.delegated_token`, link grants, coding tokens (bug a), personal API keys; the OBO header removed | §9.3–§9.4 |
+| 9 | **Built-in IdP module**: `libs/naas-abi-idp`, the trusted `/idp` route, defaults | §12.3 |
+| 10 | **Provisioning and invitations**: the provisioning port, pending grants, People → Invite, group binding UI, the end-to-end demo | §12.2 |
+| 11 | **Nexus authorization on IAM**: the Nexus catalog, routers on `require` and `filter`, viewers read-only, features at the API, bugs (c) and (d), role data migrated, enumerated `api` and `engine` policies | §6.5, §7, §13 |
+| 12 | **IAM admin UI in Nexus**: policies, attachments, groups, service accounts and keys, approvals, simulator, audit | §3, §8 |
+| 13 | **Move login out of Nexus**: user migration to the built-in IdP, login code removed, `secret_key` signs no token | §13 |
 
 ## Alternatives considered
 
@@ -1912,6 +1916,6 @@ guide [`docs/identity-providers.md`](../../identity-providers.md)):
   question of #1314. Placement and identity policies cover workspace-level access. Sharing one object today
   means an explicit statement naming it.
 - **Policy conditions** (`conditions`, reserved in §3.1): IP ranges, time windows, MFA claims. Not needed
-  by any subtask.
+  by any step.
 - **Federation (#1047).** Every ABI server trusting the same IdP issuer is enough for login. Cross-server
   service accounts are not designed here.

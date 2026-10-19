@@ -28,7 +28,7 @@ def _action(name: str, level: str, *subjects: str, description: str = "") -> Act
 
 CATALOG = ActionCatalog(
     service=SERVICE,
-    # 2: ProvisionUser and FindProvisionedUser (#64).
+    # 2: ProvisionUser and FindProvisionedUser.
     version=2,
     resource_types=(
         ResourceType(

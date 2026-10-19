@@ -11,7 +11,7 @@ Related: [`20261019_graph-assignments-on-iam.md`](20261019_graph-assignments-on-
 
 ## Context
 
-Subtask 11 of #44. Before it:
+Step 11. Before it:
 
 - Nexus decided for itself: about 40 inline `role in ("owner", "admin")` checks in three routers,
   `require_workspace_access` (membership only) on about 170 routes, and a scope matcher whose callers built
@@ -63,7 +63,7 @@ Subtask 11 of #44. Before it:
    real IAM. Per-router tests drive the real routers with real roles. The Postgres access suite (`apps/api/tests`)
    runs again.
 
-9. **Credentials and delegation (#62).** Nexus reads the credential kinds a route takes (`accepted_kinds(path)`):
+9. **Credentials and delegation (step 8).** Nexus reads the credential kinds a route takes (`accepted_kinds(path)`):
    a session, a personal API key, or, at the gateway alone, a coding agent's key. The call is `api` acting for the
    user the credential names, and the credential's own limit (`abi_scope` of a key) travels in the call's context, so it
    bounds every Nexus decision as it bounds every kernel one: a key narrowed to reading files reads like its user and
@@ -124,5 +124,5 @@ Subtask 11 of #44. Before it:
 - The shared repository separates workspaces by Nexus's branch naming only, as before; a per-workspace repository is
   the way to make IAM enforce it.
 - `read_all` shares the graphs that exist when applied (see the graph ADR).
-- Remaining transitional pieces belong to later subtasks: the legacy `urn:abi:nexus` issuer (#67), the `api_keys` mock
-  and login code (#67).
+- What remained after this change, and was done by the login removal: the legacy `urn:abi:nexus` issuer (step 13), the `api_keys` mock
+  and login code (step 13).

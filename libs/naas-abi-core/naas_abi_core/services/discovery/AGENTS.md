@@ -27,7 +27,7 @@ platform-level: `module/<project>/<module_id>`, `agent|model|app|job/<project>/<
   provider's context. A module id is held by one principal at a time: another
   principal cannot register it while live instances of it exist (so nobody can
   join a running module and take its requests). A module account
-  (`module/<project>/<module_id>`, from #60) registers only its own module.
+  (`module/<project>/<module_id>`) registers only its own module.
 - **Listing**: `list_modules` and `get_module` show the modules the caller may
   list (`ListModules`, `GetModule`, not found otherwise), each with only the
   agents, apps and jobs it may list (`ListAgents`, `ListApps`, `ListJobs`).
@@ -57,9 +57,8 @@ platform-level: `module/<project>/<module_id>`, `agent|model|app|job/<project>/<
   it. The SDK job host asks before it runs a manual trigger (refused: the run is
   recorded FAILED and the message terminated) or honours a cancel. Engine-hosted
   jobs have no lease: `EngineJobLoader.job_authorizer` runs the same check
-  (`require_job`) in process. Scheduled and event triggers are the host's own:
-  until broker permissions (#60) restrict who may publish on a trigger subject,
-  their kind header is trusted.
+  (`require_job`) in process. Scheduled and event triggers are the host's own and
+  are not asked about: the host drops any trigger the engine did not seal.
 
 ## Eviction (platform administration)
 `evict` removes a registration whatever its lease: `discovery:Evict` on its

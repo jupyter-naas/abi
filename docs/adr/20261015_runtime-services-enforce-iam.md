@@ -2,6 +2,12 @@
 
 Status: Accepted
 
+Final state: the transitional grants this ADR mentions (`builtin.transitional.nexus_user`, the implicit module
+policy, the broad `api` and `engine` statements) are gone, and modules are confined by their service accounts
+and the broker. See the final state at the top of
+[`20261015_iam-transitional-bootstrap.md`](20261015_iam-transitional-bootstrap.md). The text below is the
+history of the change.
+
 Date: 2026-10-15
 
 Discussion: [#1314](https://github.com/jupyter-naas/abi/issues/1314).
@@ -10,7 +16,7 @@ Builds on: [`20261013_iam-kernel-service.md`](20261013_iam-kernel-service.md), [
 
 ## Context
 
-Subtask 5 of #44 makes the runtime services authorize every operation: event, activity_log, email,
+Step 5 makes the runtime services authorize every operation: event, activity_log, email,
 model_registry, discovery (agents, models, apps, jobs), source_control and coding_environment. Before it:
 
 - discovery let anyone invoke a READY agent, model or app, and its admin operations were hard-coded to the
@@ -33,8 +39,8 @@ model_registry, discovery (agents, models, apps, jobs), source_control and codin
    give the same outcome and the same errors (`PERMISSION_DENIED`, the service's own not-found), which a
    generic contract test pins for every service (`services/iam/tests/authorization_contract.py`).
 3. **Placement of new resources.** A create targeting a workspace places the resource there through
-   `iam.workspace_org`. Until #65 registers Nexus's workspaces with `iam:PutScope`, a target workspace IAM
-   has no scope for places the new resource on the platform (TRANSITIONAL). A name an existing placement
+   `iam.workspace_org`. Until step 11 registers Nexus's workspaces with `iam:PutScope`, a target workspace IAM
+   has no scope for places the new resource on the platform. A name an existing placement
    covers keeps it, and a mismatching target workspace is refused.
 4. **Kernel audit events are the engine's.** `EventService.emit` stamps the call's user, workspace and
    trigger, then appends as `engine` and never raises. The caller was authorized for the operation, not for
@@ -45,8 +51,8 @@ model_registry, discovery (agents, models, apps, jobs), source_control and codin
      the events they record.
    - Dagster bodies run as `engine` (`as_engine`).
    - Nexus housekeeping (startup tasks, the identity-graph sync, the chat ingestion job) runs as `api`.
-   - A verified `ABI_API_KEY` holder calls as `api` (TRANSITIONAL until #62 gives API keys their own
-     service accounts).
+   - A verified `ABI_API_KEY` holder calls as `api` (the deployment's one shared key; personal and
+     service keys of step 8 are separate credentials).
    - Thread hops copy the caller's context; agent runs carry it to their tools, so platform tools act for
      the user who is chatting.
 6. **Discovery checks the caller, not the provider.** A hosting module forwards its caller's token and
@@ -55,17 +61,17 @@ model_registry, discovery (agents, models, apps, jobs), source_control and codin
    `OpenApp`. The lease checks stay. A run belongs to the call's user, else the actor. `caller_admin` is
    deprecated: the host relies on discovery's decision.
 7. **Module names are bound to principals.** A module id is held by the principal of its live instances,
-   and a `module/<project>/<module_id>` account (#60) registers only its own module. A strict
+   and a `module/<project>/<module_id>` account (step 6) registers only its own module. A strict
    "token subject equals module id" rule would break every existing module, whose generated ids are
-   `<project>.<name>`. Renewing or unregistering an instance needs its lease. Until #60, a module id that
-   nobody holds can still be registered by any module. Since #60, a module runs on its own
+   `<project>.<name>`. Renewing or unregistering an instance needs its lease. Until step 6, a module id that
+   nobody holds can still be registered by any module. Since step 6, a module runs on its own
    `module/<project>/<module_id>` account, whose bootstrap policy registers that module only. `Evict` is a policy, `discovery:Evict`; the
    transitional module policy denies it, and a discovery with no IAM lets only `api` and `engine` evict.
 8. **Jobs.** A manual trigger or a cancel carries its caller's credentials in the stored message. The job
    host asks discovery (`authorize_job`) before running it, with the token checked as of the time JetStream
    stored the message, since a trigger may be consumed after its token expired. Engine-hosted jobs run the
-   same check in process. Scheduled and event triggers are the host's own and are trusted until #60's
-   broker permissions restrict who may publish on trigger subjects. Since #60, only the engine writes
+   same check in process. Scheduled and event triggers are the host's own and are trusted until step 6's
+   broker permissions restrict who may publish on trigger subjects. Since step 6, only the engine writes
    triggers: it verifies the caller's credentials, stores them in the trigger and seals it, and a job host
    runs no trigger the engine did not seal (`20261013_engine-tokens-service-accounts-broker.md`).
 9. **Models.** Resolving needs `Resolve` and lists are filtered by `ListModels`. In process, each chat
@@ -88,13 +94,13 @@ model_registry, discovery (agents, models, apps, jobs), source_control and codin
 
 - A principal with no policy is denied by every runtime service, in process and over NATS alike, and cannot
   invoke a remote agent, model or app, or trigger a job.
-- Nexus users keep working through `builtin.transitional.nexus_user` until #65 attaches their roles. Their checks
+- Nexus users keep working through `builtin.transitional.nexus_user` until step 11 attaches their roles. Their checks
   are real only where Nexus binds a resource to a workspace itself (bug (b)), or under an explicit Deny.
   Users with IAM ids get real checks today.
 - Activity log actors are principal ids (a Nexus id, `usr_…`, or a service-account name) instead of
   `user:<id>`. The System app reads both.
-- Stage 1 caller tokens are stored inside job trigger messages. #60 and #62 should replace them with
+- Stage 1 caller tokens are stored inside job trigger messages. step 6 and step 8 should replace them with
   narrow delegated grants.
-- Remaining work lands elsewhere: the data services switch their audit events to `emit` (#58); Nexus
-  environment routes check ownership once roles are attached (#65); the transitional grants are removed
-  (#60, #65).
+- Remaining work lands elsewhere: the data services switch their audit events to `emit` (step 4); Nexus
+  environment routes check ownership once roles are attached (step 11); the transitional grants are removed
+  (step 6, step 11).

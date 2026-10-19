@@ -2,6 +2,10 @@
 
 Status: Accepted
 
+Final state: the grants this ADR calls broad or transitional were replaced by enumerated policies and approved
+module manifests. See the final state at the top of
+[`20261015_iam-transitional-bootstrap.md`](20261015_iam-transitional-bootstrap.md).
+
 Date: 2026-10-15
 
 Discussion: [#1314](https://github.com/jupyter-naas/abi/issues/1314).
@@ -10,7 +14,7 @@ Builds on: [`20261013_authorization-policy-model.md`](20261013_authorization-pol
 
 ## Context
 
-**Subtask 4 of #44 makes eight data services enforce IAM:** object storage, document, key-value, secret,
+**Step 4 makes eight data services enforce IAM:** object storage, document, key-value, secret,
 cache, vector store, triple store and dataset. The RFC fixes their catalogs and request-to-resource rules.
 Building them raised questions the RFC leaves to the implementation:
 
@@ -73,8 +77,8 @@ Building them raised questions the RFC leaves to the implementation:
    allowed every dataset skips only the per-dataset checks: a file-reading function reads no dataset, so
    being allowed every dataset says nothing about it.
    - SQL the check cannot vouch for (`DESCRIBE`, `ALTER`, `CALL ducklake_*`, `duckdb_tables()`) needs a new
-     admin action, `QueryUnchecked` on `catalog/-`. The engine holds it through its broad grant; both
-     transitional grants deny it, so neither a Nexus user (through `api`) nor a remote module (#60's default manifest carries the same Deny) reads files on
+     admin action, `QueryUnchecked` on `catalog/-`. The engine holds it through its grant; `builtin.api`
+     denies it, so neither a Nexus user (through `api`) nor a remote module (step 6's default manifest carries the same Deny) reads files on
      the engine host. A module's catalog maintenance of its own tables runs as the engine (the X module's).
    - "Call the adapter" was not enough: an engine-hosted module reaches datasets through a NATS facade, whose
      adapter is itself a client of the checked service.
@@ -129,7 +133,7 @@ Building them raised questions the RFC leaves to the implementation:
   way, and the data services' contract (`services/iam/tests/data_service_contract.py`) proves it per service.
 - **Nothing that runs today breaks:** `engine` and `api` hold their transitional broad policies and Nexus
   users theirs (ADR `20261015_iam-transitional-bootstrap.md`, updated). A remote module is a service account
-  `module/<project>/<module_id>` (#60): it reaches its own document namespace (`${module.id}`, the namespace
+  `module/<project>/<module_id>` (step 6): it reaches its own document namespace (`${module.id}`, the namespace
   its SDK binds) and the shared `default` dataset namespace through its approved manifest, and never
   unchecked dataset SQL.
 - **Work with no caller needs an identity.** Boot runs as `engine`; after boot, Nexus housekeeping runs as
@@ -143,11 +147,11 @@ Building them raised questions the RFC leaves to the implementation:
   check's own, since pyparsing's state is not thread-safe. Broad callers pay none of it, except on a view,
   which is always parsed to refuse an update.
 - **The create rule binds Nexus.** During a request, Nexus sets the target workspace from the path; a create
-  inside a platform container from such a request is refused. Subtask 11 decides which requests target a
+  inside a platform container from such a request is refused. Step 11 decides which requests target a
   workspace.
-- **Audit events go through `EventService.emit`** (subtask 5): stamped with the caller, appended as the
+- **Audit events go through `EventService.emit`** (step 5): stamped with the caller, appended as the
   engine. A caller authorized for the operation needs no right on the event log.
-- **Two guards coexist:** `ResourceGuard` (data services, `enforcement.py`) and subtask 5's `ServiceGuard`
+- **Two guards coexist:** `ResourceGuard` (data services, `enforcement.py`) and step 5's `ServiceGuard`
   (runtime services, `guard.py`), with two contract tests (`data_service_contract.py` and
   `authorization_contract.py`). They share the names, placements and wire codes; merging them is a refactor
   left for later.

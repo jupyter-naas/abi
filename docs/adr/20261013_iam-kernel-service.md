@@ -76,7 +76,7 @@ But IAM differs from other state:
 - **The engine stores one more database.**
   - Backups and the Docker templates include it.
   - PostgreSQL deployments add an `IAM_POSTGRES_DSN` secret.
-- **Nexus's role tables migrate into IAM attachments** (subtask 11 of #44), leaving one source of truth.
+- **Nexus's role tables migrate into IAM attachments** (step 11), leaving one source of truth.
   Nexus keeps profile data, keyed by the IAM principal id.
 - **Suspensions and grants apply right away.** In process they take effect at once, and over NATS within the
   change event's delivery. Bounded caches limit the damage of a missed event.

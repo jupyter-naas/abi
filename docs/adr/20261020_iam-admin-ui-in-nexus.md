@@ -10,7 +10,7 @@ Builds on: [`20261019_nexus-authorization-on-iam.md`](20261019_nexus-authorizati
 
 ## Context
 
-Subtask 12 of #44. IAM can create, read, update and delete principals, groups, service accounts, policies and
+Step 12. IAM can create, read, update and delete principals, groups, service accounts, policies and
 attachments, explain a decision, and approve module permission manifests, but only the CLI and the SDK reach those
 operations. Admins need them in Nexus: policies, who holds them, groups, service accounts and their keys, the
 approvals modules wait for, an access simulator and the history of every change.

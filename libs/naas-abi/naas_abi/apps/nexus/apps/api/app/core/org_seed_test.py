@@ -176,7 +176,7 @@ def test_config_superadmins_become_iam_platform_admins(monkeypatch: pytest.Monke
             on_behalf_of=Principal(id=nexus_user_id, kind="user"),
         )
         with use_call_context(ctx):
-            # Outside the transitional grant every Nexus user holds until #65.
+            # Outside the grants a plain Nexus user holds.
             return iam.authorize("nexus:ManageSystem", "abi:-:-:nexus:system/-").allowed
 
     with as_service_account("api"):

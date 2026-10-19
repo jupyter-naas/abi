@@ -84,8 +84,8 @@ JOB_TRIGGER_KINDS = ("cron", "every", "event")
 # With IAM it is discovery:Evict.
 DEFAULT_ADMIN_IDENTITIES = ("api", "engine")
 
-# The service-account name form of a module (RFC §2): once IAM records module
-# accounts (#60), a module registers only under its own name.
+# The service-account name form of a module (RFC §2): a module account registers
+# only under its own name.
 MODULE_ACCOUNT_PREFIX = "module/"
 AGENT_OPERATIONS = ("submit", "status", "event", "cancel")
 JOB_OPERATIONS = ("trigger", "cancel")
@@ -263,9 +263,9 @@ class DiscoveryService:
     ) -> None:
         """A module id is held by one principal at a time (RFC §6.4, Register).
 
-        A module account (``module/<project>/<module_id>``, recorded by IAM from
-        #60 on) registers only its own module. Until then a module's token names
-        it freely, so a module id is bound to the principal of its live
+        A module account (``module/<project>/<module_id>``, recorded by IAM)
+        registers only its own module. Any other principal may name a module
+        freely, so a module id is bound to the principal of its live
         instances: nobody else can join them, and so nobody can take requests
         meant for a running module.
         """

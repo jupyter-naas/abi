@@ -46,7 +46,7 @@ def kernel_catalogs() -> tuple[ActionCatalog, ...]:
     )
 
     return (
-        # Runtime services (subtask 5).
+        # Runtime services.
         ACTIVITY_LOG,
         CODING_ENVIRONMENT,
         DISCOVERY,
@@ -55,7 +55,7 @@ def kernel_catalogs() -> tuple[ActionCatalog, ...]:
         IDENTITY,
         MODEL_REGISTRY,
         SOURCE_CONTROL,
-        # Data services (subtask 4).
+        # Data services.
         CACHE,
         DATASET,
         DOCUMENT,

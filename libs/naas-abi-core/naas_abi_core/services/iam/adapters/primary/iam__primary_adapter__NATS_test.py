@@ -70,7 +70,7 @@ def test_sdk_modules_reach_iam_over_nats(broker):  # noqa: F811 - imported fixtu
             url, TEST_TOKENS.token("module/acme/people", subject=account.id)
         )
         try:
-            # An administrator (engine's transitional policy) sets things up.
+            # An administrator (the engine's policy) sets things up.
             admin = ServicesProxy(engine, ModuleDependencies(), "admin").iam
             bob = await admin.ensure_user("https://idp.example", "bob")
             policy = await admin.create_policy(

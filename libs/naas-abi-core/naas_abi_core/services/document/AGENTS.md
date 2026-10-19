@@ -285,7 +285,7 @@ principals, in process and over NATS.
 * Names are `namespace/<ns>` and `collection/<ns>/<c>` (placed containers) and
   `document/<ns>/<c>/<id>`. The namespace a view is bound to, or a NATS request
   names, is authorized like any other name: a remote module reaches its own
-  namespace, its `module_id` (`${module.id}` in its approved manifest, #60), and
+  namespace, its `module_id` (`${module.id}` in its approved manifest), and
   no other module's.
 * Namespace administration is `Namespaces`, `EnsureCollection` and
   `DropCollection`, granted by policy. No identity holds it by name: the

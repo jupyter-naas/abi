@@ -49,7 +49,7 @@ the same way for NATS, Nexus REST and in-process callers. Before this change:
    - `principal_id` and `tenant_id` are reserved and ignored.
    - `workspace_id` is the target workspace of a create, an input like any other.
 4. **The on-behalf-of header is refused, not ignored, from untrusted callers.**
-   - Until delegated tokens (subtask 8), only `api` and `engine` may name a user.
+   - Until delegated tokens (step 8), only `api` and `engine` may name a user.
    - From anyone else the call fails as unauthenticated before reaching the domain. A user can only narrow a
      call, so dropping the header would silently widen it.
    - A refusal says so (`on-behalf-of refused: …`) and is logged, so it is not mistaken for a bad token.
@@ -97,5 +97,5 @@ the same way for NATS, Nexus REST and in-process callers. Before this change:
 - **Sync engine clients keep the caller.** `nats_runtime.run_coro` schedules through
   `run_coroutine_threadsafe`, whose callback handle copies the calling thread's context, so a coroutine run
   for a sync caller (the model registry client) sees that caller. A test drives that path.
-- **Stage 1 tokens carry no audience, `jti`, groups or narrowing.** Those fields stay empty until subtask 6
-  issues ES256 engine tokens. Subtask 8 replaces the header with delegated tokens and removes it.
+- **Stage 1 tokens carry no audience, `jti`, groups or narrowing.** Those fields stay empty until step 6
+  issues ES256 engine tokens. Step 8 replaces the header with delegated tokens and removes it.

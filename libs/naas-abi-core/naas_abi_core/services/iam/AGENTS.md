@@ -20,9 +20,8 @@ derived from them (§8, §9.1). User login stays with the identity providers.
 - **IAM authorizes itself** with its own `iam:*` catalog (`iam_catalog.py`).
 
 Every kernel service enforces. The data services (object storage, document,
-key-value, secret, cache, vector store, triple store and dataset; subtask 4 of
-#44) use `enforcement.py`; the runtime services (event, activity_log, email,
-model_registry, discovery, source_control, coding_environment; subtask 5) use
+key-value, secret, cache, vector store, triple store and dataset) use `enforcement.py`; the runtime services (event, activity_log, email,
+model_registry, discovery, source_control, coding_environment) use
 `guard.py`. Each has its catalog in `services/<name>/iam_catalog.py` (see
 "Enforcing in a domain service" and "Enforcing in a data service").
 
@@ -399,11 +398,11 @@ iam.list_idp_bindings(provider=None, policy_id=None)
 - `builtin.module_bootstrap`: a module account before approval (above).
 - Acting on behalf of a user never opens a sealed resource, whoever the actor is.
 - `LEGACY_NEXUS_ISSUER` (`urn:abi:nexus`): a Nexus user named on a call by its Nexus id resolves to IAM's user of
-  that issuer. Nexus has no login of its own since #67: such a user keeps that naming (its Nexus id is what every
+  that issuer. Nexus has no login of its own: such a user keeps that naming (its Nexus id is what every
   row and call names) and is *linked* to the built-in provider's identity at its first sign-in (`link_user`, which
   only the built-in provider's verified email triggers, in Nexus's `OidcSignInService`); a person who never
   signed in stays legacy. Users of an identity provider are IAM users named by their principal id
-  (`services/identity`, #61). Nexus holds no implicit grant for either: a user reaches what its role attachments
+  (`services/identity`). Nexus holds no implicit grant for either: a user reaches what its role attachments
   reach (`services/iam/memberships` in Nexus). `api` holds `iam:LinkUser` (the sign-in rule decides when).
 
 ## Enforcing in a data service (`enforcement.py`)

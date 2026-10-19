@@ -320,7 +320,7 @@ class TokenExchanger:
 
     def _groups(self, group_ids: Sequence[str]) -> tuple[str, ...]:
         """Only ids of active groups: an id of a user or an account in this
-        claim must never lend its policies (the #57 review)."""
+        claim must never lend its policies."""
         return self._iam.active_groups(group_ids)
 
     @staticmethod

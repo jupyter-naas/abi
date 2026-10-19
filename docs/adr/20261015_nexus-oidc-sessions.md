@@ -11,8 +11,8 @@ Guide: [`docs/identity-providers.md`](../identity-providers.md).
 
 ## Context
 
-Subtask 7 of #44 lets users sign in through OIDC providers configured engine-wide under
-`identity.providers`, next to Nexus's built-in login, which stays until subtask 13. Choices the RFC leaves
+Step 7 lets users sign in through OIDC providers configured engine-wide under
+`identity.providers`, next to Nexus's built-in login, which stays until step 13. Choices the RFC leaves
 open:
 
 - **Where the code is redeemed.** A relying party needs the provider's client secret. Nexus runs either
@@ -22,7 +22,7 @@ open:
   ids, and IAM resolves them through the transitional `urn:abi:nexus` issuer.
 - **Emails.** `users.email` is unique, and Nexus finds accounts by email: invitations, members. A
   provider's email is not always verified.
-- **Authorization during the transition.** Until subtask 11, Nexus decides what its users may do, and IAM
+- **Authorization during the transition.** Until step 11, Nexus decides what its users may do, and IAM
   gives Nexus-named users a transitional grant. An IAM user from a provider holds no implicit grant.
 - **CSRF**, with a session in a cookie.
 
@@ -86,9 +86,9 @@ open:
      that serve uploads send a sandbox policy and `nosniff`, and active types (SVG, HTML, XML, script) as
      `attachment`; the security-headers middleware applies the same to any other `/api` response of an
      active type, in front of the global CSP. Sandboxed apps (`/app-*`) keep their own policy.
-7. **TRANSITIONAL (#65).** At each sign-in Nexus attaches `builtin.transitional.nexus_user` to the
+7. **Historical: removed in step 11.** At each sign-in Nexus attaches `builtin.transitional.nexus_user` to the
    principal. The user side of a Nexus call then allows what it allows a built-in login user, until
-   subtask 11 attaches the roles of each membership and detaches it.
+   step 11 attaches the roles of each membership and detaches it.
 8. **Routing.** `organization_domains.provider` sends the logins of a verified domain to a provider.
    Otherwise the built-in login is used, with a "Continue with ..." button per provider. The default
    provider never captures an email: it would shut out every account the provider does not hold. It is
@@ -101,10 +101,10 @@ open:
 - A web app on another site than the API needs `oidc_cookie_samesite: none` and HTTPS on both. The API's
   CORS allows `X-CSRF-Token`.
 - Over NATS the transitional `Abi-On-Behalf-Of` header names the user but not its mapped groups, which
-  travel only in process until delegated tokens (subtask 8).
+  travel only in process until delegated tokens (step 8).
 - Migration `0049_oidc_identity.sql` also creates `organization_domains`, which only the ORM model declared
   before.
 - The generic identity suite (`services/identity/tests/identity_contract.py`) runs against an in-process
   provider on every run and against Zitadel 4.19.4 from its native binary, with PostgreSQL 17.6 from
   Zonky's native builds. The helper pins SHA-256s and caches both under `~/.cache/naas-abi/test-binaries`.
-  Subtask 9 runs the same suite against the built-in IdP.
+  Step 9 runs the same suite against the built-in IdP.

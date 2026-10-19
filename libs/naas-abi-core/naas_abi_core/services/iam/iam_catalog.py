@@ -35,10 +35,10 @@ def _action(
 
 CATALOG = ActionCatalog(
     service=SERVICE,
-    # 2: SubmitManifest, and the subjects of keys and manifests (#60).
-    # 3: RevokeTokens, and the exchange of tokens (#62).
+    # 2: SubmitManifest, and the subjects of keys and manifests.
+    # 3: RevokeTokens, and the exchange of tokens.
     # 4: ClaimPendingGrants, and the subjects of pending grants and IdP group
-    # bindings (#64).
+    # bindings.
     version=4,
     resource_types=(
         ResourceType("principal", id="opaque", placement="platform"),

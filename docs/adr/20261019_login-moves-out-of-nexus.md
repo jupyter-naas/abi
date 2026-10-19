@@ -11,9 +11,9 @@ Supersedes: [`20260924_auth-signup-and-rate-limits.md`](20260924_auth-signup-and
 
 ## Context
 
-Subtask 13 of #44 ends Nexus as an identity provider. By now people can sign in through the engine's OIDC
-providers (the built-in IdP, subtask 9), sessions are cookies the API holds (subtask 7), every narrow credential
-is an IAM grant or key (subtask 8) and invitations make people at the provider (subtask 10). What Nexus still
+Step 13 ends Nexus as an identity provider. By now people can sign in through the engine's OIDC
+providers (the built-in IdP, step 9), sessions are cookies the API holds (step 7), every narrow credential
+is an IAM grant or key (step 8) and invitations make people at the provider (step 10). What Nexus still
 had of its own:
 
 - a password, magic-link and one-time-code login, password reset and public signup (`services/auth`), refresh
@@ -23,7 +23,7 @@ had of its own:
 - a seeder that made `admin@example.com` with a generated password written to `.env`, and the CLI that
   generated, printed and logged in with it;
 - one key, `secret_key`, that signed those sessions *and* derived the Fernet key that encrypts workspace
-  secrets (and, since #61, the provider tokens of cookie sessions).
+  secrets (and, since step 7, the provider tokens of cookie sessions).
 
 ## Decision
 

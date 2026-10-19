@@ -151,7 +151,7 @@ def test_ensure_user_creates_once_and_refreshes_the_profile(h):
 
 
 def test_legacy_nexus_users_resolve_by_their_nexus_id(h):
-    """TRANSITIONAL until OIDC: Nexus names its users by Nexus id on calls."""
+    """Accounts of the old login keep their Nexus id on calls until they link."""
     record = h.admin("ensure_user", LEGACY_NEXUS_ISSUER, "user-0123456789ab")
     h.attach(roles.PLATFORM_ADMIN, record.id)
     from naas_abi_core.engine.call_context import (
@@ -260,7 +260,7 @@ def test_a_nexus_user_reaches_only_their_own_agent_runs(h, discovery, action):
 )
 def test_a_module_acting_for_a_user_follows_that_users_runs(h, discovery, action):
     """A run started for a user is the user's: a module delegating for that
-    user (a delegated token, #62) follows it, and still no one else's."""
+    user (a delegated token) follows it, and still no one else's."""
     from naas_abi_sdk.module import ModuleDependencies
     from naas_abi_sdk.permissions import default_manifest
 

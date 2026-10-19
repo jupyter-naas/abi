@@ -1,4 +1,4 @@
-"""Where each kind of credential is refused (task #62's regression tests).
+"""Where each kind of credential is refused (its regression tests).
 
 A coding agent's key, an app-html link, a preview link and a remote app grant
 each open their own route and nothing else: every one is refused on ``/api/*``

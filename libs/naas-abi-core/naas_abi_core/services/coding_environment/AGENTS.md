@@ -50,7 +50,7 @@ nothing itself: the owner it calls does.
   environment whose owner the service cannot tell is named with owner `-`, which
   only grants on every environment reach.
 - `Provision` is checked on `environment/<principal>/-` as placed (RFC §4.4); the new
-  environment is then placed in the target workspace. TRANSITIONAL (#65): a target
+  environment is then placed in the target workspace. A target
   workspace IAM has no scope for leaves it on the platform.
 - `list_environments` keeps the caller's own; `list_all_environments` needs the
   admin `ListAllEnvironments`. `get_runtime_binding` and `get_harness_binding`

@@ -1,4 +1,4 @@
--- Nexus has no login of its own any more (RFC §13, subtask 13 of #44): people sign
+-- Nexus has no login of its own any more (RFC §13): people sign
 -- in at an identity provider. What the password, magic-link, one-time-code and
 -- refresh-token logins kept goes: their tables, the unused API-key mock (personal
 -- keys are IAM's), and the password hash of every user.

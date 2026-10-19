@@ -7,7 +7,7 @@ statements. IAM regenerates them whenever a catalog changes.
 
 Also here: ``builtin.engine`` and ``builtin.api``, the two first-party service
 accounts, as enumerated statements with a ``sid`` that says what needs each
-(subtask 11, #65). Every caller holds only what its policies allow: no principal
+(RFC §13). Every caller holds only what its policies allow: no principal
 has implicit full access.
 
 ``builtin.module_bootstrap`` is what every module's service account holds,
@@ -521,7 +521,7 @@ def api_policy() -> Policy:
                 "iam:DeletePlacement",
                 "iam:ListPlacements",
                 # The keys Nexus makes for users (links, coding agents, API keys)
-                # and the sessions it ends (#62): the user's side allows them too.
+                # and the sessions it ends: the user's side allows them too.
                 "iam:CreateKey",
                 "iam:ListKeys",
                 "iam:RevokeKey",
@@ -702,7 +702,7 @@ def module_bootstrap_policy() -> Policy:
             ),
             # ``default``, which the SDK uses when a module names none and
             # which modules share, is a module's only dataset namespace until
-            # #60's manifests. Not ``${principal.id}``: a module named by a
+            # a module's approved manifest names its own. Not ``${principal.id}``: a module named by a
             # plain identifier (dev ``sales``) would own a real namespace other
             # principals use. The catalog's snapshots come with it.
             Statement(

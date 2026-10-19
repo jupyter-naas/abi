@@ -109,8 +109,9 @@ from naas_abi_core.services.iam.policy import (
 )
 from naas_abi_core.services.iam.tokens import TokenIssuer, normalize_scope
 
-# TRANSITIONAL (until subtask 7, #61): a Nexus user is named on a call by its
-# Nexus user id. IAM records it as a user of this issuer, subject = that id.
+# The legacy issuer of the accounts of the old Nexus login, kept while they
+# link to an identity provider: such a user is named on a call by its Nexus
+# user id. IAM records it as a user of this issuer, subject = that id.
 LEGACY_NEXUS_ISSUER = "urn:abi:nexus"
 
 _PRINCIPAL_ID = re.compile(r"^(usr|grp|sa)_[0-9a-z]{26}$")
@@ -413,7 +414,7 @@ class IAMService(IIAMService, PolicySource):
                 holders.append((group_id, group_id))
         # Mapped IdP groups travel in the token's grp claim (§2). Only ids of
         # groups count: an id of a user or an account must never lend its
-        # policies (the #57 review).
+        # policies.
         for group_id in sorted(principal.groups):
             if all(group_id != held for held, _ in holders) and self._is_group(
                 group_id
@@ -1690,7 +1691,7 @@ class IAMService(IIAMService, PolicySource):
 
     def _load_floors(self) -> dict[str, datetime]:
         """Floors by the id calls name a principal by: its own, and for a user
-        of the built-in login, the Nexus id its tokens carry (TRANSITIONAL)."""
+        of the old Nexus login not yet linked, the Nexus id its tokens carry."""
         floors: dict[str, datetime] = {}
         for principal_id, floor in self.store.token_floors().items():
             floors[principal_id] = floor
@@ -1848,7 +1849,7 @@ class IAMService(IIAMService, PolicySource):
 
     def resolve_user(self, user_id: str) -> PrincipalRecord | None:
         """The stored user a call names by ``user_id``: its principal id, or for
-        a user of the built-in login, the Nexus id (TRANSITIONAL)."""
+        a user of the old Nexus login not yet linked, the Nexus id."""
         return self._resolve(CallPrincipal(id=user_id, kind="user"))
 
     def resolve_principal(self, principal: CallPrincipal) -> PrincipalRecord | None:
@@ -1857,7 +1858,7 @@ class IAMService(IIAMService, PolicySource):
     @staticmethod
     def user_name(record: PrincipalRecord) -> str:
         """The id calls name ``record`` by: its principal id, or for a user of
-        the built-in login the Nexus id its sessions carry (TRANSITIONAL)."""
+        the old Nexus login not yet linked the Nexus id its sessions carry."""
         if record.issuer == LEGACY_NEXUS_ISSUER and record.subject:
             return record.subject
         return record.id
@@ -2638,7 +2639,7 @@ def _key_spec(
 
 
 def _named_by_nexus(principal: CallPrincipal, record: PrincipalRecord | None) -> bool:
-    """A user Nexus names on a call (TRANSITIONAL): IAM's user of issuer
+    """A user Nexus names on a call by its Nexus id: IAM's user of issuer
     ``urn:abi:nexus``, or a Nexus id IAM has no record of."""
     if record is not None:
         return record.issuer == LEGACY_NEXUS_ISSUER

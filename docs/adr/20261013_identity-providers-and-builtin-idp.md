@@ -70,7 +70,7 @@ someone with just an email, and they sign in with a code sent to that email.
 
 ## Consequences
 
-- **Nexus's login code goes away** (subtask 13 of #44): passwords, magic links, codes, reset, signup and
+- **Nexus's login code goes away** (step 13): passwords, magic links, codes, reset, signup and
   refresh-token tables.
   - Existing users move to the built-in IdP with the same email and a new `sub`, linked on first login by
     verified email within that provider only.
@@ -84,7 +84,7 @@ someone with just an email, and they sign in with a code sent to that email.
 - **The trusted route is the one place** Nexus forwards cookies and form posts to a module. It is bound to the
   `idp` service account and configured, never discovered.
 
-## As built (2026-10-19, #63)
+## As built (2026-10-19, step 9)
 
 Implemented as decided, with these differences and details:
 
@@ -136,6 +136,6 @@ Implemented as decided, with these differences and details:
 Consequences added:
 
 - A person whose email already belongs to a Nexus account cannot sign in through the IdP until
-  accounts are linked (subtask 13 of #44).
+  accounts are linked (step 13).
 - A deployment outside Docker or `abi dev` creates the `module/<project>/idp` account and key
   itself (`abi iam service-account create ... --key`, `abi iam module approve`).

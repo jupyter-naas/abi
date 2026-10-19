@@ -243,8 +243,8 @@ principals, in process and over NATS.
   dataset skips only the per-dataset checks, as a file read reads no dataset.
 * `QueryUnchecked` (admin, on `catalog/-`) skips the SQL check: the engine's own
   catalog maintenance (`DESCRIBE`, `ALTER`, `CALL ducklake_*`). Run it as the
-  engine (`internal_call()`), as the X module does for its tables; both
-  transitional grants deny it.
+  engine (`internal_call()`), as the X module does for its tables; `builtin.api`
+  denies it.
 * `list` keeps the datasets the caller may list.
 
 ## Tests

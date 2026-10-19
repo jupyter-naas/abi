@@ -10,7 +10,7 @@ Builds on: [`20261013_engine-tokens-service-accounts-broker.md`](20261013_engine
 
 ## Context
 
-Subtask 8 of #44 makes every narrow credential an engine-signed token derived from an identity that was
+Step 8 makes every narrow credential an engine-signed token derived from an identity that was
 already verified, with an audience of its own, so that none of them is ever read as a session. Before it:
 
 - the coding-agent token was an HS256 session token with no scope and a 30-day life, minted in four
@@ -68,7 +68,7 @@ already verified, with an audience of its own, so that none of them is ever read
    `ABI_API_KEY` and nothing else: they run an agent, pipeline, workflow or tool and make no IAM decision of their
    own (only the core-service calls made further down are checked), so a personal key's limit and its owner's
    policies would not bound the invocation, nor what it does with the deployment's credentials. Neither
-   personal nor service keys are accepted there until those routes enforce IAM (#65); a service key still
+   personal nor service keys are accepted there until those routes enforce IAM (step 11); a service key still
    serves its account over NATS.
 8. **Nexus reads a credential's kind from its audience and honours it where it belongs**
    (`services/auth/credentials.py`): a session everywhere and on the WebSocket; an API key on `/api/*` but the
@@ -80,7 +80,7 @@ already verified, with an audience of its own, so that none of them is ever read
    suspended); its grants and coding keys are revoked, its API keys with `include_keys`. A token made after the
    floor carries a later `iat`. `revoke_all_user_tokens` calls it. Suspension denies a principal's tokens at
    once, as before.
-10. **Groups in a token are only groups.** `grp` ids that are not active groups are ignored (#57 review): the id
+10. **Groups in a token are only groups.** `grp` ids that are not active groups are ignored (step 3 review): the id
     of a user or an account never lends its policies.
 
 ## Consequences
@@ -93,15 +93,15 @@ already verified, with an audience of its own, so that none of them is ever read
 - Sessions Nexus signed before sessions had an audience stop working at upgrade, as does every earlier link,
   preview token and coding token: users sign in again, links are reopened, environments are reprovisioned or
   their key is remade. This is a major release.
-- A key narrows what the kernel allows; Nexus's own routes still decide by role until #65 puts them on IAM, so
+- A key narrows what the kernel allows; Nexus's own routes still decide by role until step 11 puts them on IAM, so
   an API key's scope does not yet narrow a Nexus-only route. The scope travels with every call the key makes,
   in process and over NATS.
 - IdP groups (`grp`) travel with a session; a personal key carries none (it is not a session), so what a user
-  holds only through an IdP group claim does not reach their API keys until it is a stored membership (#64).
-- `ABI_API_KEY` stays as the one credential of the engine's invocation routes until they enforce IAM (#65);
+  holds only through an IdP group claim does not reach their API keys until it is a stored membership (step 10).
+- `ABI_API_KEY` stays as the one credential of the engine's invocation routes until they enforce IAM (step 11);
   scripts that call Nexus use a personal key on `/api/*`, and scripts that call the kernel use a service key
   over NATS.
-- `api` and `engine` must keep `iam:ExchangeToken` when #65 enumerates their policies.
+- `api` and `engine` must keep `iam:ExchangeToken` when step 11 enumerates their policies.
 - The delegation cache holds a token per user, scope and recipient for half its life (at most 2048); a
   delegation for a suspended user is refused at issue, and an issued one is denied at the next check. The
   exchange that makes or renews one runs outside the source's lock (it calls IAM, which calls with the source's own

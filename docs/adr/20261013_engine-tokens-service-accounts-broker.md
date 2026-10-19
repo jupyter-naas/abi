@@ -94,7 +94,7 @@ It calls remote agents as the shared identity `api`, and passes the end user as 
 - **Nexus's narrow tokens move to the engine issuer.** The 30-day coding-agent JWT (bug a) becomes a
   revocable environment key exchanged for 10-minute `abi:delegated:coding` tokens.
 
-## As built (2026-10-15, #60)
+## As built (2026-10-15, step 6)
 
 Implemented as decided, with these differences:
 
@@ -202,7 +202,7 @@ Implemented as decided, with these differences:
   cancel (unsealed). Another topic's queue can still store a pub ack or an empty message, and another module's
   subscriber can still receive one: bus messages are not authenticated. The JetStream API ignores such
   deliveries (no purge or delete, checked).
-  - **Proposal, pending #44's acceptance:** NATS accounts for modules (modules in their own account, or one
+  - **Proposal, pending the owner's acceptance:** NATS accounts for modules (modules in their own account, or one
     each, with JetStream and the kernel reached through service exports and imports, replies mapped back into
     the module's account). It would close this at the broker; it changes nats.conf in `abi dev`, the deploy
     templates and the demo, and needs cross-account pull consumers.
@@ -224,7 +224,7 @@ Implemented as decided, with these differences:
   reaches an adapter that resolves it as a path or a URL. A module approved for `secret:*` signs as nobody and
   logs in as nobody. The default manifest grants `secret/<module id>/...` only.
 - **Default manifests grant no admin action.** The default `dataset` grant denies `dataset:QueryUnchecked`
-  (#58), the `source_control` grant denies `AddCollaborator` (which grants write on any repository: bug b
+  (step 4), the `source_control` grant denies `AddCollaborator` (which grants write on any repository: bug b
   reached over NATS), and the `email` grant is `Send` alone, since the platform keeps a copy of what it sends,
   sign-in codes included (`ListSent`, `GetSent` and `DeleteSent` are named in a manifest that needs them).
   A Deny cannot be overridden by an Allow of the same policy: a module needing an action writes its own
@@ -257,7 +257,7 @@ Implemented as decided, with these differences:
 - **IAM operations offered to every account** are read-only or self-service (`broker.IAM_ALWAYS`: `token`,
   `jwks`, `submit_manifest`, `get_manifest`, `find_service_account`, `authorize`, `filter`). The others (every
   mutation, every list) reach a module only through the `iam:` action its policy allows, like any service's.
-  `builtin.api` is still `Allow *` on `*` (`TransitionalBroadAccess`): enumerating what Nexus needs is #65's.
+  `builtin.api` was still `Allow *` on `*` (`TransitionalBroadAccess`) at this point; step 11 enumerated it.
 - **Logs hold no key.** The console sink sets loguru's `diagnose=False, backtrace=False`: its defaults print the
   value of every variable on each frame of a traceback, a service key among them. The auth callout and the IAM
   endpoint log a failing decision by exception type, and `PresentedKey`, `NewKey` and `CreatedKey` keep the key
@@ -280,5 +280,5 @@ Implemented as decided, with these differences:
 - **IAM changes reach other engines** on `abi.iam.v1.changed`. `abi iam` publishes it after each write. A
   connected module keeps its broker permissions until it reconnects. The SDK reconnects once its manifest is
   approved.
-- **Not in this change.** Personal keys (`abi_pk_`) and token exchange (#62); moving Nexus's narrow tokens
+- **Not in this change.** Personal keys (`abi_pk_`) and token exchange (step 8); moving Nexus's narrow tokens
   to the engine issuer; `nats_rpc` adapters logging in through the callout (they use the `engine` password).

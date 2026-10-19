@@ -99,6 +99,8 @@ class IdentityIAM(Protocol):
 
     def filter(self, action: str, resources: Iterable[str]) -> FilterResult: ...
 
+    def identity_at(self, principal_id: str, issuer: str) -> str | None: ...
+
 
 def _email(value: str) -> str:
     email = (value or "").strip().lower()
