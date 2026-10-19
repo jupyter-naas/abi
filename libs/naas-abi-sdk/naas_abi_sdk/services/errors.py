@@ -84,6 +84,14 @@ class ProviderUnavailable(ServiceError):
     """The identity provider cannot be reached."""
 
 
+class ProvisioningFailed(ServiceError):
+    """The identity provider's admin API refused or failed a provisioning call."""
+
+
+class Unimplemented(ServiceError, NotImplementedError):
+    """The provider's users are managed in the provider (``provisioning: none``)."""
+
+
 ERRORS = {
     "OBJECT_NOT_FOUND": ObjectNotFound,
     "OBJECT_ALREADY_EXISTS": ObjectAlreadyExists,
@@ -102,6 +110,8 @@ ERRORS = {
     "SUSPENDED": Suspended,
     "SIGN_IN_FAILED": SignInFailed,
     "UNAVAILABLE": ProviderUnavailable,
+    "PROVISIONING_FAILED": ProvisioningFailed,
+    "UNIMPLEMENTED": Unimplemented,
 }
 
 

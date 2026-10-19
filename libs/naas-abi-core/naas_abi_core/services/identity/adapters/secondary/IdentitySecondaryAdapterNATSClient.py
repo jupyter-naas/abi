@@ -18,6 +18,7 @@ from naas_abi_core.services.identity.IdentityPorts import (
     AuthenticatedUser,
     IIdentityService,
     ProviderInfo,
+    ProvisionedUser,
     SignIn,
     VerifiedToken,
 )
@@ -145,3 +146,25 @@ class IdentitySecondaryAdapterNATSClient(NatsRPCClient, IIdentityService):
             state=state,
         )
         return response.url if response.HasField("url") else None
+
+    # -- provisioning -----------------------------------------------------------
+
+    def provision_user(
+        self, provider: str, email: str, *, name: str | None = None
+    ) -> ProvisionedUser:
+        response = self._request(
+            "provision_user", provider=provider, email=email, name=name
+        )
+        return codec.provisioned_from_pb(response.user)
+
+    def find_provisioned_user(
+        self, provider: str, email: str
+    ) -> ProvisionedUser | None:
+        response = self._request(
+            "find_provisioned_user", provider=provider, email=email
+        )
+        return (
+            codec.provisioned_from_pb(response.user)
+            if response.HasField("user")
+            else None
+        )

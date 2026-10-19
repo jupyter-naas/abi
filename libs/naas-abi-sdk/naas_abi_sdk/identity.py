@@ -66,3 +66,19 @@ class IdentityClient:
         return await self._transport.call(
             "abi.identity.v1.end_session_url", request, pb.EndSessionUrlResponse
         )
+
+    async def provision_user(
+        self, request: pb.ProvisionUserRequest
+    ) -> pb.ProvisionUserResponse:
+        return await self._transport.call(
+            "abi.identity.v1.provision_user", request, pb.ProvisionUserResponse
+        )
+
+    async def find_provisioned_user(
+        self, request: pb.FindProvisionedUserRequest
+    ) -> pb.FindProvisionedUserResponse:
+        return await self._transport.call(
+            "abi.identity.v1.find_provisioned_user",
+            request,
+            pb.FindProvisionedUserResponse,
+        )

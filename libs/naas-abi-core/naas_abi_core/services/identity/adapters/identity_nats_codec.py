@@ -20,6 +20,8 @@ from naas_abi_core.services.identity.IdentityPorts import (
     PrincipalSuspendedError,
     ProviderInfo,
     ProviderUnavailableError,
+    ProvisionedUser,
+    ProvisioningError,
     SignIn,
     SignInError,
     TokenRejectedError,
@@ -43,6 +45,8 @@ OPERATIONS = {
     "refresh": "Refresh",
     "revoke": "Revoke",
     "end_session_url": "EndSessionUrl",
+    "provision_user": "ProvisionUser",
+    "find_provisioned_user": "FindProvisionedUser",
 }
 
 
@@ -58,6 +62,8 @@ def error_code(exc: BaseException) -> str:
         return "NOT_FOUND"
     if isinstance(exc, IdentityError):
         return exc.code
+    if isinstance(exc, NotImplementedError):
+        return "UNIMPLEMENTED"
     if isinstance(exc, ValueError):
         return "INVALID_ARGUMENT"
     return "INTERNAL"
@@ -91,6 +97,10 @@ def raise_for(error: Any) -> None:
         raise ProviderUnavailableError(message)
     if code == "INVALID_ARGUMENT":
         raise ValueError(message)
+    if code == "UNIMPLEMENTED":
+        raise NotImplementedError(message)
+    if code == "PROVISIONING_FAILED":
+        raise ProvisioningError(message)
     raise RuntimeError(f"identity NATS RPC failed ({code}): {message}")
 
 
@@ -118,6 +128,28 @@ def provider_from_pb(message: pb.Provider) -> ProviderInfo:
         scopes=tuple(message.scopes),
         groups_claim=message.groups_claim if message.HasField("groups_claim") else None,
         provisioning=message.provisioning,  # type: ignore[arg-type]
+    )
+
+
+def provisioned_to_pb(user: ProvisionedUser) -> pb.ProvisionedUser:
+    return pb.ProvisionedUser(
+        provider=user.provider,
+        email=user.email,
+        subject=user.subject,
+        name=user.name,
+        created=user.created,
+        disabled=user.disabled,
+    )
+
+
+def provisioned_from_pb(message: pb.ProvisionedUser) -> ProvisionedUser:
+    return ProvisionedUser(
+        provider=message.provider,
+        email=message.email,
+        subject=message.subject if message.HasField("subject") else None,
+        name=message.name if message.HasField("name") else None,
+        created=message.created,
+        disabled=message.disabled,
     )
 
 

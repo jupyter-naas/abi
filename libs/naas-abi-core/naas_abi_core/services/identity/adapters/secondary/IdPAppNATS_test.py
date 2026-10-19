@@ -34,7 +34,7 @@ class Discovery:
         return tuple(self.instances), ""
 
 
-def client(instances, account="SA-IDP", monkeypatch=None, answers=None):
+def client(instances, account="SA-IDP", monkeypatch=None, answers=None, app_name="idp"):
     discovery = Discovery(instances)
     calls = []
 
@@ -53,6 +53,7 @@ def client(instances, account="SA-IDP", monkeypatch=None, answers=None):
         host_token=lambda recipient: f"host-{recipient}",
         service_account=lambda: account,
         run=lambda coro, timeout: asyncio.run(coro),
+        app=app_name,
     )
     app._clients = lambda: (object(), discovery)  # type: ignore[method-assign]
     return app, discovery, calls
@@ -85,6 +86,26 @@ def test_only_the_instance_running_as_the_idps_account_is_called(monkeypatch):
         "/jwks.json",
         "a=1",
         "/idp",
+    )
+
+
+def test_the_admin_app_is_called_on_the_same_bound_instance(monkeypatch):
+    app, _, calls = client(
+        [
+            Instance("idp", "SA-OTHER", "evil"),
+            Instance("idp", "SA-IDP", "public-only", apps=(App("idp"),)),
+            Instance("idp", "SA-IDP", "good"),
+        ],
+        monkeypatch=monkeypatch,
+        app_name="admin",
+    )
+    app.request("POST", "/users", body=b"{}")
+    (project, instance, account, request) = calls[0]
+    assert (instance, account, request.app, request.path) == (
+        "good",
+        "SA-IDP",
+        "admin",
+        "/users",
     )
 
 

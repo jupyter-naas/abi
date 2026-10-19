@@ -109,3 +109,19 @@ class IdentityService(ServiceProxy):
             post_logout_redirect_uri=post_logout_redirect_uri,
             state=state,
         )
+
+    async def provision_user(
+        self, provider: str, email: str, *, name: str | None = None
+    ) -> dict[str, Any]:
+        """Make sure the person exists at the provider (an invitation's first
+        step); ``Unimplemented`` when its users are managed in the provider."""
+        return await self._request(
+            "provision_user", provider=provider, email=email, name=name
+        )
+
+    async def find_provisioned_user(
+        self, provider: str, email: str
+    ) -> dict[str, Any] | None:
+        return await self._request(
+            "find_provisioned_user", provider=provider, email=email
+        )

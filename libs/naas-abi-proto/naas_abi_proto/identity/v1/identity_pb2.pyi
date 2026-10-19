@@ -270,3 +270,57 @@ class EndSessionUrlResponse(_message.Message):
     error: _common_pb2.CallError
     url: str
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., url: _Optional[str] = ...) -> None: ...
+
+class ProvisionedUser(_message.Message):
+    __slots__ = ("provider", "email", "subject", "name", "created", "disabled")
+    PROVIDER_FIELD_NUMBER: _ClassVar[int]
+    EMAIL_FIELD_NUMBER: _ClassVar[int]
+    SUBJECT_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    CREATED_FIELD_NUMBER: _ClassVar[int]
+    DISABLED_FIELD_NUMBER: _ClassVar[int]
+    provider: str
+    email: str
+    subject: str
+    name: str
+    created: bool
+    disabled: bool
+    def __init__(self, provider: _Optional[str] = ..., email: _Optional[str] = ..., subject: _Optional[str] = ..., name: _Optional[str] = ..., created: bool = ..., disabled: bool = ...) -> None: ...
+
+class ProvisionUserRequest(_message.Message):
+    __slots__ = ("context", "provider", "email", "name")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    PROVIDER_FIELD_NUMBER: _ClassVar[int]
+    EMAIL_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    provider: str
+    email: str
+    name: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., provider: _Optional[str] = ..., email: _Optional[str] = ..., name: _Optional[str] = ...) -> None: ...
+
+class ProvisionUserResponse(_message.Message):
+    __slots__ = ("error", "user")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    USER_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    user: ProvisionedUser
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., user: _Optional[_Union[ProvisionedUser, _Mapping]] = ...) -> None: ...
+
+class FindProvisionedUserRequest(_message.Message):
+    __slots__ = ("context", "provider", "email")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    PROVIDER_FIELD_NUMBER: _ClassVar[int]
+    EMAIL_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    provider: str
+    email: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., provider: _Optional[str] = ..., email: _Optional[str] = ...) -> None: ...
+
+class FindProvisionedUserResponse(_message.Message):
+    __slots__ = ("error", "user")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    USER_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    user: ProvisionedUser
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., user: _Optional[_Union[ProvisionedUser, _Mapping]] = ...) -> None: ...

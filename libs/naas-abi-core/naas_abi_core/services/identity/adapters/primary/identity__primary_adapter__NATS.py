@@ -173,3 +173,21 @@ class IdentityPrimaryAdapterNATS(ServicePrimary):
             state=_opt(req, "state"),
         )
         return pb.EndSessionUrlResponse(url=url)
+
+    # -- provisioning -----------------------------------------------------------
+
+    def _call_provision_user(
+        self, req: pb.ProvisionUserRequest
+    ) -> pb.ProvisionUserResponse:
+        user = self._identity.provision_user(
+            req.provider, req.email, name=_opt(req, "name")
+        )
+        return pb.ProvisionUserResponse(user=codec.provisioned_to_pb(user))
+
+    def _call_find_provisioned_user(
+        self, req: pb.FindProvisionedUserRequest
+    ) -> pb.FindProvisionedUserResponse:
+        user = self._identity.find_provisioned_user(req.provider, req.email)
+        if user is None:
+            return pb.FindProvisionedUserResponse()
+        return pb.FindProvisionedUserResponse(user=codec.provisioned_to_pb(user))

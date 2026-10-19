@@ -125,6 +125,8 @@ OPERATIONS = {
         "refresh",
         "revoke",
         "end_session_url",
+        "provision_user",
+        "find_provisioned_user",
     ],
     "keyvalue": [
         "get",

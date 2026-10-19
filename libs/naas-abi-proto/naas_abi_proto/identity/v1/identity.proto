@@ -184,3 +184,39 @@ message EndSessionUrlResponse {
   abi.common.v1.CallError error = 1;
   optional string url = 2;
 }
+
+// -- provisioning (an invitation's first step) --------------------------------------------
+
+// A person as the provider holds them: `subject` is the provider's id, the sub
+// of their tokens, when the provider says it.
+message ProvisionedUser {
+  string provider = 1;
+  string email = 2;
+  optional string subject = 3;
+  optional string name = 4;
+  bool created = 5;
+  bool disabled = 6;
+}
+
+// UNIMPLEMENTED when the provider's users are managed in the provider
+// (provisioning: none).
+message ProvisionUserRequest {
+  abi.common.v1.CallContext context = 1;
+  string provider = 2;
+  string email = 3;
+  optional string name = 4;
+}
+message ProvisionUserResponse {
+  abi.common.v1.CallError error = 1;
+  ProvisionedUser user = 2;
+}
+
+message FindProvisionedUserRequest {
+  abi.common.v1.CallContext context = 1;
+  string provider = 2;
+  string email = 3;
+}
+message FindProvisionedUserResponse {
+  abi.common.v1.CallError error = 1;
+  optional ProvisionedUser user = 2;
+}

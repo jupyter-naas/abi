@@ -349,6 +349,8 @@ class Engine(IEngine):
             warm_up_in_background,
         )
         from naas_abi_core.services.identity.adapters.secondary.IdPAppNATS import (
+            IDP_ADMIN_APP,
+            IDP_APP,
             IDP_MODULE,
             IdPAppNATS,
         )
@@ -364,16 +366,20 @@ class Engine(IEngine):
                     return None
             return subject_token(record.id)
 
-        app = IdPAppNATS(
-            nats_url=nats.nats_url,
-            project=project,
-            token=lambda: self.service_credentials("engine").token(),
-            host_token=lambda recipient: self.service_credentials(
-                "engine", audience=host_audience(recipient)
-            ).token(),
-            service_account=service_account,
-        )
-        if identity.attach_builtin_idp(app):
+        def app(name: str) -> IdPAppNATS:
+            return IdPAppNATS(
+                nats_url=nats.nats_url,
+                project=project,
+                token=lambda: self.service_credentials("engine").token(),
+                host_token=lambda recipient: self.service_credentials(
+                    "engine", audience=host_audience(recipient)
+                ).token(),
+                service_account=service_account,
+                app=name,
+            )
+
+        # ``idp``: the sign-in the engine reads; ``admin``: provisioning.
+        if identity.attach_builtin_idp(app(IDP_APP), app(IDP_ADMIN_APP)):
             warm_up_in_background(identity)
 
     def service_credentials(

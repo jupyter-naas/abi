@@ -93,6 +93,7 @@ def vouched_by_first_party(context: CallContext | None = None) -> bool:
     """Whether the call's actor is a first-party account (``api``, ``engine``)
     that verified what it says about its user, such as the user's email."""
     principal = (context if context is not None else current_call_context()).principal
-    return principal.kind == "service_account" and (
-        principal.name or principal.id
-    ) in FIRST_PARTY_ACCOUNTS
+    return (
+        principal.kind == "service_account"
+        and (principal.name or principal.id) in FIRST_PARTY_ACCOUNTS
+    )

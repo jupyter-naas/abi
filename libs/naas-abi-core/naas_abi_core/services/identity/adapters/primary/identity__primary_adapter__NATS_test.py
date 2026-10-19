@@ -102,6 +102,100 @@ def test_a_client_engine_signs_users_in_through_the_serving_engine(broker):  # n
 
 
 @pytest.mark.parametrize("broker", [1024 * 1024], indirect=True)
+def test_provisioning_reaches_the_serving_engine_and_its_refusals_come_back(
+    broker,  # noqa: F811
+):
+    from naas_abi_core.services.identity.IdentityPorts import (
+        ProvisionedUser,
+        ProvisioningPort,
+    )
+    from naas_abi_core.services.identity.IdentityService import IdentityService
+    from naas_abi_core.services.identity.IdentityPorts import IdentityProvider
+    from naas_abi_core.services.identity.adapters.secondary.OIDCHttpHttpx import (
+        OIDCHttpHttpx,
+    )
+
+    url, _ = broker
+
+    class Directory(ProvisioningPort):
+        def __init__(self):
+            self.users: dict[str, ProvisionedUser] = {}
+
+        def ensure_user(self, email, *, name=None):
+            known = self.users.get(email)
+            if known is not None:
+                return known
+            user = ProvisionedUser("acme", email, f"sub-{len(self.users)}", name, True)
+            self.users[email] = ProvisionedUser(
+                "acme", email, user.subject, name, False
+            )
+            return user
+
+        def find_user(self, email):
+            return self.users.get(email)
+
+    iam = bootstrapped_iam()
+    service = IdentityService(
+        [
+            IdentityProvider("acme", "https://acme.example.com", "abi"),
+            IdentityProvider("okta", "https://okta.example.com", "abi"),
+        ],
+        iam,
+        OIDCHttpHttpx(),
+        provisioning={"acme": Directory()},
+    )
+
+    async def scenario():
+        import nats
+
+        nc = await nats.connect(url)
+        primary = IdentityPrimaryAdapterNATS(service, TEST_TOKENS.verifier)
+        await primary.start(nc)
+        api = IdentitySecondaryAdapterNATSClient(url, TEST_TOKENS.source("api"))
+        module = IdentitySecondaryAdapterNATSClient(url, TEST_TOKENS.source("people"))
+        try:
+            created = await asyncio.to_thread(
+                api.provision_user, "acme", "Bob@Example.com", name="Bob"
+            )
+            assert (created.email, created.subject, created.created) == (
+                "bob@example.com",
+                "sub-0",
+                True,
+            )
+            again = await asyncio.to_thread(
+                api.provision_user, "acme", "bob@example.com"
+            )
+            assert again.created is False and again.subject == "sub-0"
+            found = await asyncio.to_thread(
+                api.find_provisioned_user, "acme", "bob@example.com"
+            )
+            assert found is not None and found.name == "Bob"
+            assert (
+                await asyncio.to_thread(
+                    api.find_provisioned_user, "acme", "nobody@example.com"
+                )
+                is None
+            )
+            # A provider managed in the provider: not implemented, over the wire.
+            with pytest.raises(NotImplementedError):
+                await asyncio.to_thread(api.provision_user, "okta", "bob@example.com")
+            with pytest.raises(ValueError):
+                await asyncio.to_thread(api.provision_user, "acme", "nope")
+            # A module with no identity grant cannot provision or even see it.
+            with pytest.raises(UnknownProviderError):
+                await asyncio.to_thread(
+                    module.provision_user, "acme", "eve@example.com"
+                )
+        finally:
+            api.close()
+            module.close()
+            await primary.stop()
+            await nc.close()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("broker", [1024 * 1024], indirect=True)
 def test_sdk_modules_reach_identity_over_nats(broker):  # noqa: F811
     naas_abi_sdk = pytest.importorskip("naas_abi_sdk")
     del naas_abi_sdk

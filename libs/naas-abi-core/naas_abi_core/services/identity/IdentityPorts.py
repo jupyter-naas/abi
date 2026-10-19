@@ -170,6 +170,21 @@ class SignIn:
 
 
 @dataclass(frozen=True)
+class ProvisionedUser:
+    """A person as an identity provider holds them, once an invitation made sure
+    they exist there. ``subject`` is the provider's id for them: the ``sub`` of
+    their tokens, when the provider says it."""
+
+    provider: str
+    email: str
+    subject: str | None = None
+    name: str | None = None
+    # This call made the user; False when the provider already had them.
+    created: bool = False
+    disabled: bool = False
+
+
+@dataclass(frozen=True)
 class HttpJSON:
     """A JSON body and how long it may be cached (``Cache-Control: max-age``)."""
 
@@ -211,6 +226,12 @@ class TokenRejectedError(IdentityError):
     def __init__(self, reason: str, message: str | None = None) -> None:
         self.reason = reason
         super().__init__(message or reason)
+
+
+class ProvisioningError(IdentityError):
+    """The provider's admin API refused or failed a provisioning call."""
+
+    code = "PROVISIONING_FAILED"
 
 
 class SignInError(IdentityError):
@@ -259,6 +280,29 @@ class OIDCHttpPort(ABC):
 
         ``ProviderUnavailableError`` when the endpoint cannot be reached.
         """
+
+
+class ProvisioningPort(ABC):
+    """How ABI makes sure a person exists at an identity provider (secondary):
+    one adapter per ``provisioning`` setting (RFC §12.2).
+
+    ``builtin`` calls the built-in IdP's admin app over NATS, ``zitadel`` and
+    ``keycloak`` their admin APIs; ``none`` raises ``NotImplementedError``,
+    because that provider's users are managed in the provider itself.
+    """
+
+    @abstractmethod
+    def ensure_user(self, email: str, *, name: str | None = None) -> ProvisionedUser:
+        """The provider's user with this email, created when it has none.
+
+        ``ProviderUnavailableError`` when the admin API cannot be reached,
+        ``ProvisioningError`` when it refuses, ``NotImplementedError`` when the
+        provider cannot be provisioned from ABI, ``ValueError`` for an email it
+        will not take."""
+
+    @abstractmethod
+    def find_user(self, email: str) -> ProvisionedUser | None:
+        """The provider's user with this email, if there is one."""
 
 
 class IIdentityService(ABC):
@@ -339,6 +383,20 @@ class IIdentityService(ABC):
         state: str | None = None,
     ) -> str | None:
         """The provider's RP-initiated logout URL, when it offers one."""
+
+    @abstractmethod
+    def provision_user(
+        self, provider: str, email: str, *, name: str | None = None
+    ) -> ProvisionedUser:
+        """Make sure the person exists at the provider (an invitation's first
+        step), per the provider's ``provisioning`` setting: ``NotImplementedError``
+        when its users are managed in the provider (``none``)."""
+
+    @abstractmethod
+    def find_provisioned_user(
+        self, provider: str, email: str
+    ) -> ProvisionedUser | None:
+        """The provider's user with this email, if there is one."""
 
 
 def claim_values(value: Any) -> tuple[str, ...]:

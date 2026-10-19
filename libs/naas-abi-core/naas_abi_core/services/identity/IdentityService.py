@@ -16,7 +16,7 @@ import re
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import replace
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 from urllib.parse import quote_plus, urlencode, urlsplit, urlunsplit
 
 import jwt
@@ -33,12 +33,17 @@ from naas_abi_core.services.identity.IdentityPorts import (
     PrincipalSuspendedError,
     ProviderInfo,
     ProviderMetadata,
+    ProvisionedUser,
+    ProvisioningPort,
     SignIn,
     SignInError,
     TokenRejectedError,
     TokenSet,
     UnknownProviderError,
     VerifiedToken,
+)
+from naas_abi_core.services.identity.adapters.secondary.ProvisioningNone import (
+    ProvisioningNone,
 )
 from naas_abi_core.services.identity.provider_keys import ProviderKeys
 from naas_abi_core.services.identity.token_verifier import (
@@ -89,9 +94,25 @@ class IdentityIAM(Protocol):
         self, provider: str, claim_values: Iterable[str]
     ) -> list[str]: ...
 
+    def claim_pending_grants(self, principal_id: str) -> list[Any]: ...
+
     def get_principal(self, principal_id: str) -> PrincipalRecord: ...
 
     def filter(self, action: str, resources: Iterable[str]) -> FilterResult: ...
+
+
+def _email(value: str) -> str:
+    email = (value or "").strip().lower()
+    if "@" not in email[1:-1] or len(email) > 320 or any(c.isspace() for c in email):
+        raise ValueError(f"{value!r} is not an email address")
+    return email
+
+
+def _text(value: str | None) -> str | None:
+    value = (value or "").strip()
+    if len(value) > 200:
+        raise ValueError("A name is at most 200 characters")
+    return value or None
 
 
 def provider_resource(name: str) -> str:
@@ -111,6 +132,7 @@ class IdentityService(IIdentityService):
         discovery_cache_seconds: float = 3600.0,
         refetch_seconds: float = 30.0,
         clock: Callable[[], float] = time.time,
+        provisioning: Mapping[str, ProvisioningPort] | None = None,
     ) -> None:
         names = [p.name for p in providers]
         if len(set(names)) != len(names):
@@ -123,6 +145,12 @@ class IdentityService(IIdentityService):
                 f"The default provider {default_provider!r} is not configured"
             )
         self._providers = {p.name: p for p in providers}
+        # One adapter per provider's ``provisioning`` setting; a provider with
+        # none configured is managed in the provider itself.
+        self._provisioning: dict[str, ProvisioningPort] = {
+            p.name: (provisioning or {}).get(p.name) or ProvisioningNone(p.name)
+            for p in providers
+        }
         self._iam = iam
         self._http = http
         self._default = default_provider
@@ -173,16 +201,25 @@ class IdentityService(IIdentityService):
         self._provider("identity:GetProvider", name)
         return self._keys[name].metadata()
 
-    def attach_builtin_idp(self, app: IdPApp | None) -> bool:
+    def attach_builtin_idp(
+        self, app: IdPApp | None, admin: IdPApp | None = None
+    ) -> bool:
         """Where requests to the built-in IdP go (over NATS, see
-        ``OIDCHttpBuiltinIdP``); False when no provider is the built-in one."""
+        ``OIDCHttpBuiltinIdP``): its ``idp`` app, and its ``admin`` app for
+        provisioning. False when no provider is the built-in one."""
         from naas_abi_core.services.identity.adapters.secondary.OIDCHttpBuiltinIdP import (
             OIDCHttpBuiltinIdP,
+        )
+        from naas_abi_core.services.identity.adapters.secondary.ProvisioningBuiltinIdP import (
+            ProvisioningBuiltinIdP,
         )
 
         if not isinstance(self._http, OIDCHttpBuiltinIdP):
             return False
         self._http.attach(app)
+        for adapter in self._provisioning.values():
+            if isinstance(adapter, ProvisioningBuiltinIdP):
+                adapter.attach(admin)
         return True
 
     def warm_up(self) -> dict[str, str]:
@@ -229,9 +266,35 @@ class IdentityService(IIdentityService):
                 if verified.groups
                 else []
             )
+            # What an invitation granted this email on this provider, once its
+            # owner has signed in with it verified (IAM checks that itself).
+            self._iam.claim_pending_grants(record.id)
         return AuthenticatedUser(
             principal_id=record.id, token=verified, group_ids=tuple(groups)
         )
+
+    # =========================================================================
+    # Provisioning (an invitation's first step, RFC §12.2)
+    # =========================================================================
+
+    def provision_user(
+        self, provider: str, email: str, *, name: str | None = None
+    ) -> ProvisionedUser:
+        """Make sure the person exists at the provider.
+
+        The caller needs ``identity:ProvisionUser`` on the provider, which is an
+        administrator's: Nexus checks the inviting person's rights itself and
+        calls as ``api``. ``NotImplementedError`` for a provider whose users are
+        managed in the provider (``provisioning: none``).
+        """
+        self._provider("identity:ProvisionUser", provider)
+        return self._provisioning[provider].ensure_user(_email(email), name=_text(name))
+
+    def find_provisioned_user(
+        self, provider: str, email: str
+    ) -> ProvisionedUser | None:
+        self._provider("identity:FindProvisionedUser", provider)
+        return self._provisioning[provider].find_user(_email(email))
 
     def _authorize_token(self, action: str, token: str) -> IdentityProvider:
         """The provider whose issuer the token names, once the caller may

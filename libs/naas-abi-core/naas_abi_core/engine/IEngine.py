@@ -252,7 +252,24 @@ class IEngine:
         def all(
             self,
         ) -> list[
-            ObjectStorageService | None | DatasetService | DocumentService | TripleStoreService | VectorStoreService | Secret | BusService | KeyValueService | EmailService | CacheService | EventService | ActivityLogService | ModelRegistryService | CodingEnvironmentService | SourceControlService | IIAMService | IIdentityService
+            ObjectStorageService
+            | None
+            | DatasetService
+            | DocumentService
+            | TripleStoreService
+            | VectorStoreService
+            | Secret
+            | BusService
+            | KeyValueService
+            | EmailService
+            | CacheService
+            | EventService
+            | ActivityLogService
+            | ModelRegistryService
+            | CodingEnvironmentService
+            | SourceControlService
+            | IIAMService
+            | IIdentityService
         ]:
             return [
                 self.__iam,
@@ -287,7 +304,9 @@ class IEngine:
                 if service is None:
                     continue
                 if isinstance(service, ServicesAware):
-                    service.set_services(dependencies if dependencies is not None else self)
+                    service.set_services(
+                        dependencies if dependencies is not None else self
+                    )
 
     __services: Services
     __modules: dict[str, BaseModule]

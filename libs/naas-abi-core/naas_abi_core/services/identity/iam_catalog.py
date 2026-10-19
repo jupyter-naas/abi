@@ -28,7 +28,8 @@ def _action(name: str, level: str, *subjects: str, description: str = "") -> Act
 
 CATALOG = ActionCatalog(
     service=SERVICE,
-    version=1,
+    # 2: ProvisionUser and FindProvisionedUser (#64).
+    version=2,
     resource_types=(
         ResourceType(
             "provider",
@@ -65,5 +66,15 @@ CATALOG = ActionCatalog(
                 "Exchanging a code or refreshing also needs identity:Authenticate."
             ),
         ),
+        _action(
+            "ProvisionUser",
+            "admin",
+            "provision_user",
+            description=(
+                "Make sure a person exists at the provider (an invitation's first "
+                "step). Nexus checks the inviting person's rights, then calls as api."
+            ),
+        ),
+        _action("FindProvisionedUser", "read", "find_provisioned_user"),
     ),
 )

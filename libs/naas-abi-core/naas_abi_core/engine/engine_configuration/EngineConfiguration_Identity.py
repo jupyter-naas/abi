@@ -10,9 +10,22 @@ identity:
       client_secret: "{{ secret.ACME_OIDC_SECRET }}"
       groups_claim: groups         # optional: the claim IAM maps to groups
       scopes: [openid, email, profile, groups, offline_access]
-      provisioning: none           # builtin | zitadel | keycloak | none (subtask 10)
+      provisioning: none           # builtin | zitadel | keycloak | none
       # provisioning: builtin      # the built-in IdP (naas-abi-idp): its issuer ends
-      #                            # with /idp and is reached over NATS
+      #                            # with /idp and is reached over NATS; its admin app
+      #                            # creates the people an invitation names
+      # provisioning: zitadel      # invitations create the user through Zitadel's API:
+      # admin:
+      #   token: "{{ secret.ZITADEL_PAT }}"   # a machine user's personal access token
+      #   url: https://acme.zitadel.cloud     # default: the issuer
+      #   org_id: "..."                       # default: the token's organization
+      # provisioning: keycloak     # likewise through the realm's admin REST API:
+      # admin:
+      #   client_id: abi-admin                # a service-account client of the realm
+      #   client_secret: "{{ secret.KC_ADMIN_SECRET }}"
+      #   send_actions: true                  # Keycloak mails the verify/password link
+      # provisioning: none         # users are managed in the provider: an invitation
+      #                            # is a pending grant only
       # trust_email: true          # its emails are verified without email_verified (Entra ID)
   verifier:                        # optional tuning
     clock_skew_seconds: 30
@@ -45,12 +58,44 @@ if TYPE_CHECKING:
     from naas_abi_core.services.identity.IdentityPorts import (
         IdentityProvider,
         OIDCHttpPort,
+        ProvisioningPort,
     )
     from naas_abi_core.services.identity.IdentityService import IdentityService
 
 PROVIDER_NAME_PATTERN = r"^[a-z0-9-]{1,32}$"
 # Where Nexus serves the built-in IdP: its issuer is https://<host>/idp.
 BUILTIN_IDP_PATH = "/idp"
+
+
+class ProvisioningAdminConfiguration(BaseModel):
+    """How ABI calls a provider's admin API to create invited people
+    (``provisioning: zitadel | keycloak``)."""
+
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+
+    # The admin API's origin; the issuer's by default (Keycloak: the server
+    # before ``/realms/<realm>``).
+    url: str | None = None
+    # Zitadel: a machine user's personal access token.
+    token: str | None = Field(default=None, repr=False)
+    org_id: str | None = None
+    # Keycloak: a confidential client with the service account on.
+    client_id: str | None = None
+    client_secret: str | None = Field(default=None, repr=False)
+    realm: str | None = None
+    send_actions: bool = True
+
+    @field_validator("url")
+    @classmethod
+    def _url(cls, value: str | None) -> str | None:
+        if value is not None:
+            check_endpoint_url(value, what="identity.providers[].admin.url")
+        return value
+
+    @field_validator("token", "client_secret")
+    @classmethod
+    def _secret(cls, value: str | None) -> str | None:
+        return value or None
 
 
 class IdentityProviderConfiguration(BaseModel):
@@ -65,11 +110,35 @@ class IdentityProviderConfiguration(BaseModel):
     groups_claim: str | None = None
     scopes: list[str] = Field(default_factory=lambda: ["openid", "email", "profile"])
     provisioning: Literal["builtin", "zitadel", "keycloak", "none"] = "none"
+    # The admin API an invitation provisions through (zitadel, keycloak).
+    admin: ProvisioningAdminConfiguration | None = None
     # Shown on the login page; the name when unset.
     display_name: str | None = None
     # The provider only issues emails it controls (Entra ID sends no
     # email_verified): its email then counts as verified.
     trust_email: bool = False
+
+    @model_validator(mode="after")
+    def _admin(self) -> Self:
+        admin = self.admin
+        if self.provisioning in ("builtin", "none"):
+            if admin is not None:
+                raise ValueError(
+                    f"identity.providers[{self.name}].admin is for zitadel and "
+                    f"keycloak: {self.provisioning} needs none"
+                )
+        elif self.provisioning == "zitadel":
+            if admin is None or not admin.token:
+                raise ValueError(
+                    f"identity.providers[{self.name}]: provisioning zitadel needs "
+                    "admin.token (a machine user's personal access token)"
+                )
+        elif admin is None or not (admin.client_id and admin.client_secret):
+            raise ValueError(
+                f"identity.providers[{self.name}]: provisioning keycloak needs "
+                "admin.client_id and admin.client_secret"
+            )
+        return self
 
     @field_validator("issuer")
     @classmethod
@@ -176,6 +245,12 @@ class IdentityConfiguration(BaseModel):
             )
 
             http = OIDCHttpBuiltinIdP(http, builtin)
+        provisioning = {
+            p.name: adapter
+            for p in self.providers
+            if (adapter := _provisioning(p, self.verifier.http_timeout_seconds))
+            is not None
+        }
         service = IdentityService(
             [p.to_provider() for p in self.providers],
             iam,  # type: ignore[arg-type]  # the owner: resolve_idp_groups is IAMService's
@@ -185,10 +260,64 @@ class IdentityConfiguration(BaseModel):
             jwks_cache_seconds=self.verifier.jwks_cache_seconds,
             discovery_cache_seconds=self.verifier.discovery_cache_seconds,
             refetch_seconds=self.verifier.jwks_refetch_seconds,
+            provisioning=provisioning,
         )
         if self.providers:
             warm_up_in_background(service)
         return service
+
+
+def _provisioning(
+    provider: IdentityProviderConfiguration, timeout: float
+) -> ProvisioningPort | None:
+    """The adapter of a provider's ``provisioning`` setting; None for ``none``."""
+    from naas_abi_core.services.identity.adapters.secondary.AdminHttp import (
+        AdminHttp,
+        ClientCredentialsToken,
+    )
+
+    admin = provider.admin
+    if provider.provisioning == "builtin":
+        from naas_abi_core.services.identity.adapters.secondary.ProvisioningBuiltinIdP import (
+            ProvisioningBuiltinIdP,
+        )
+
+        return ProvisioningBuiltinIdP(provider.name)
+    if provider.provisioning == "zitadel" and admin is not None:
+        from naas_abi_core.services.identity.adapters.secondary.ProvisioningZitadel import (
+            ProvisioningZitadel,
+        )
+
+        bearer = {"Authorization": f"Bearer {admin.token}"}
+        return ProvisioningZitadel(
+            provider.name,
+            AdminHttp(
+                admin.url or provider.issuer,
+                headers=lambda: bearer,
+                timeout_seconds=timeout,
+            ),
+            org_id=admin.org_id,
+        )
+    if provider.provisioning == "keycloak" and admin is not None:
+        from naas_abi_core.services.identity.adapters.secondary.ProvisioningKeycloak import (
+            ProvisioningKeycloak,
+            admin_location,
+        )
+
+        server, realm = admin_location(provider.issuer, admin.url, admin.realm)
+        token = ClientCredentialsToken(
+            f"{provider.issuer.rstrip('/')}/protocol/openid-connect/token",
+            admin.client_id or "",
+            admin.client_secret or "",
+            timeout_seconds=timeout,
+        )
+        return ProvisioningKeycloak(
+            provider.name,
+            AdminHttp(server, headers=token.headers, timeout_seconds=timeout),
+            realm,
+            send_actions=admin.send_actions,
+        )
+    return None
 
 
 def warm_up_in_background(service: IdentityService) -> None:

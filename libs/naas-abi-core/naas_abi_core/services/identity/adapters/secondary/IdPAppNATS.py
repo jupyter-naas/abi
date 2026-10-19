@@ -33,6 +33,7 @@ TIMEOUTS = (TimeoutError, asyncio.TimeoutError, concurrent.futures.TimeoutError)
 
 IDP_MODULE = "idp"
 IDP_APP = "idp"
+IDP_ADMIN_APP = "admin"
 CONTRACT_MAJOR = 1
 # Discovery is read at most this often.
 SNAPSHOT_SECONDS = 10.0
@@ -51,10 +52,14 @@ class IdPAppNATS(IdPApp):
         service_account: Callable[[], str | None],
         timeout: float = TIMEOUT_SECONDS,
         run: Callable[..., Any] | None = None,
+        app: str = IDP_APP,
     ) -> None:
         """``service_account``: the subject token of the account the IdP runs
         as (None while it is not created). ``run``: how a coroutine runs to
-        completion from this thread (the engine's NATS runtime by default)."""
+        completion from this thread (the engine's NATS runtime by default).
+        ``app``: the module's app to call: ``idp`` (the public one), or
+        ``admin`` (provisioning)."""
+        self._app = app
         self._url, self._project = nats_url, project
         self._token, self._host_token = token, host_token
         self._service_account = service_account
@@ -109,7 +114,7 @@ class IdPAppNATS(IdPApp):
                 f"(module {IDP_MODULE!r} of project {self._project!r})"
             )
         message = pb.HttpRequest(
-            app=IDP_APP,
+            app=self._app,
             method=method,
             path=path,
             query=query,
@@ -182,7 +187,7 @@ class IdPAppNATS(IdPApp):
                         and instance.status == "READY"
                         and instance.contract_major == CONTRACT_MAJOR
                         and any(
-                            a.name == IDP_APP for a in getattr(instance, "apps", ())
+                            a.name == self._app for a in getattr(instance, "apps", ())
                         )
                     ):
                         found.append((instance.service_account, instance.instance_id))
