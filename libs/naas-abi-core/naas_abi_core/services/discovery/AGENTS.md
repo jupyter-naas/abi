@@ -33,9 +33,18 @@ platform-level: `module/<project>/<module_id>`, `agent|model|app|job/<project>/<
   agents, apps and jobs it may list (`ListAgents`, `ListApps`, `ListJobs`).
 - **Use**: `authorize_agent`, `authorize_model`, `authorize_app` and
   `authorize_job` are a lease check by the hosting module and the check of its
-  **caller**. The host forwards the caller's token and `Abi-On-Behalf-Of` header
-  (`caller_token`, `caller_on_behalf_of`); `caller.py` verifies them as a kernel
-  endpoint does (the header only from `api` or `engine`). Then: `InvokeAgent` on
+  **caller**. The host forwards the token it received (`caller_token`; the
+  `Abi-On-Behalf-Of` header and `caller_on_behalf_of` are gone); `caller.py`
+  verifies it as a kernel endpoint does. It is either a host token
+  (`abi:host:<sa>`, the caller acting alone, addressed to that host) or a
+  **delegation** (`abi:delegated:agent`: `sub` the user, `act` the module acting
+  for them, which is the host itself). Discovery accepts a delegation only from the
+  host whose account it names (`DiscoveryNATS._is_for_host`), so a module that read
+  one from a request replays it nowhere, not even at another host. The caller of
+  the checks below is then the module acting for the user, and both sides must
+  allow (RFC §5.3): the module's own side is `builtin.module_bootstrap`'s
+  `OwnHosted` and `OwnRuns` statements (what it hosts, and the runs of the user it
+  acts for), which open no broker subject. Then: `InvokeAgent` on
   the agent for a submit, `GetAgentRun` / `CancelAgentRun` on the run for a poll
   or a cancel (the host names the run and its recorded owner), `ChatModel`,
   `OpenApp`, `TriggerJob` on the job, `CancelJobRun` on the job run. An invisible

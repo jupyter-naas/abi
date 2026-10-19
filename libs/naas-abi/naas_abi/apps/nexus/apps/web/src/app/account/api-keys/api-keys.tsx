@@ -1,59 +1,120 @@
 'use client';
 
-import { useState } from 'react';
-import { Plus, Copy, Trash2, Eye, EyeOff, Key, Check } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Plus } from 'lucide-react';
+import {
+  ApiKey,
+  ApiKeysError,
+  CreatedApiKey,
+  DEFAULT_EXPIRY_DAYS,
+  MAX_ACTIVE_KEYS,
+  activeKeyCount,
+  createApiKey,
+  listApiKeys,
+  parseScopeJson,
+  revokeApiKey,
+} from '@/lib/api-keys';
+import { getApiUrl } from '@/lib/config';
 import { AccountPageHeader } from '../components/account-page-header';
 import { AccountSectionCard } from '../components/account-section-card';
+import { ApiKeysTable, CreateFormValues, CreateKeyForm, SecretPanel } from './api-keys-view';
 import './api-keys.css';
 
-interface ApiKey {
-  id: string;
-  name: string;
-  key: string;
-  createdAt: Date;
-  lastUsed: Date | null;
+const EMPTY_FORM: CreateFormValues = {
+  name: '',
+  expiresInDays: DEFAULT_EXPIRY_DAYS,
+  access: 'full',
+  scopeText: '',
+};
+
+function messageOf(error: unknown, fallback: string): string {
+  return error instanceof ApiKeysError || error instanceof Error ? error.message : fallback;
 }
 
 export default function ApiKeysPage() {
-  const [keys, setKeys] = useState<ApiKey[]>([
-    {
-      id: '1',
-      name: 'Development',
-      key: 'nx_dev_a1b2c3d4e5f6g7h8i9j0',
-      createdAt: new Date('2024-01-15'),
-      lastUsed: new Date('2024-02-01'),
-    },
-  ]);
-  const [showKey, setShowKey] = useState<string | null>(null);
-  const [copied, setCopied] = useState<string | null>(null);
+  const [keys, setKeys] = useState<ApiKey[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [newKeyName, setNewKeyName] = useState('');
+  const [form, setForm] = useState<CreateFormValues>(EMPTY_FORM);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  // The key just made: its secret lives in memory until dismissed, never in storage.
+  const [created, setCreated] = useState<CreatedApiKey | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
 
-  const handleCopy = (key: string, id: string) => {
-    navigator.clipboard.writeText(key);
-    setCopied(id);
-    setTimeout(() => setCopied(null), 2000);
-  };
+  const load = useCallback(async () => {
+    setLoadError(null);
+    try {
+      setKeys(await listApiKeys());
+    } catch (error) {
+      setLoadError(messageOf(error, 'Could not load your API keys.'));
+    }
+  }, []);
 
-  const handleCreate = () => {
-    if (!newKeyName.trim()) return;
-    const newKey: ApiKey = {
-      id: Math.random().toString(36).substring(2),
-      name: newKeyName,
-      key: `nx_${Math.random().toString(36).substring(2, 26)}`,
-      createdAt: new Date(),
-      lastUsed: null,
-    };
-    setKeys([...keys, newKey]);
-    setNewKeyName('');
-    setShowCreate(false);
-  };
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to revoke this API key?')) {
-      setKeys(keys.filter((k) => k.id !== id));
+  const handleCreate = async () => {
+    setCreateError(null);
+    let scope;
+    if (form.access === 'custom') {
+      const parsed = parseScopeJson(form.scopeText);
+      if (!parsed.ok) {
+        setCreateError(parsed.error);
+        return;
+      }
+      scope = parsed.scope;
+    }
+    setCreating(true);
+    try {
+      const result = await createApiKey({
+        name: form.name,
+        expiresInDays: form.expiresInDays,
+        access: form.access,
+        scope,
+      });
+      setCreated(result);
+      setCopied(false);
+      setShowCreate(false);
+      setForm(EMPTY_FORM);
+      setKeys((current) => [result.key, ...(current ?? [])]);
+    } catch (error) {
+      setCreateError(messageOf(error, 'Could not create the API key.'));
+    } finally {
+      setCreating(false);
     }
   };
+
+  const handleCopy = async () => {
+    if (!created) return;
+    try {
+      await navigator.clipboard.writeText(created.secret);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  const handleRevoke = async (id: string) => {
+    setRevokeError(null);
+    setRevokingId(id);
+    try {
+      const revoked = await revokeApiKey(id);
+      setKeys((current) => (current ?? []).map((key) => (key.id === id ? revoked : key)));
+      setConfirmingId(null);
+    } catch (error) {
+      setRevokeError(messageOf(error, 'Could not revoke the API key.'));
+    } finally {
+      setRevokingId(null);
+    }
+  };
+
+  const atLimit = keys !== null && activeKeyCount(keys) >= MAX_ACTIVE_KEYS;
 
   return (
     <div className="account-api-keys-page">
@@ -62,7 +123,12 @@ export default function ApiKeysPage() {
         subtitle="Manage API keys for programmatic access to NEXUS"
         actions={
           <button
-            onClick={() => setShowCreate(true)}
+            onClick={() => {
+              setCreateError(null);
+              setShowCreate(true);
+            }}
+            disabled={atLimit}
+            title={atLimit ? `You can have ${MAX_ACTIVE_KEYS} active keys: revoke one first` : undefined}
             className="account-api-keys-create-button"
           >
             <Plus size={16} />
@@ -71,123 +137,75 @@ export default function ApiKeysPage() {
         }
       />
 
+      {created && (
+        <SecretPanel
+          created={created}
+          apiBase={getApiUrl()}
+          copied={copied}
+          onCopy={() => void handleCopy()}
+          onDismiss={() => setCreated(null)}
+        />
+      )}
+
       {showCreate && (
         <AccountSectionCard padded>
-          <h3 className="account-api-keys-create-form-title">Create New API Key</h3>
-          <div className="account-api-keys-create-form-row">
-            <input
-              type="text"
-              value={newKeyName}
-              onChange={(e) => setNewKeyName(e.target.value)}
-              placeholder="Key name (e.g., Production, CI/CD)"
-              className="account-api-keys-create-form-input"
-            />
-            <button
-              onClick={handleCreate}
-              className="account-api-keys-create-form-submit"
-            >
-              Create
-            </button>
-            <button
-              onClick={() => setShowCreate(false)}
-              className="account-api-keys-create-form-cancel"
-            >
-              Cancel
-            </button>
-          </div>
+          <CreateKeyForm
+            values={form}
+            pending={creating}
+            error={createError}
+            onChange={setForm}
+            onSubmit={() => void handleCreate()}
+            onCancel={() => {
+              setShowCreate(false);
+              setForm(EMPTY_FORM);
+              setCreateError(null);
+            }}
+          />
         </AccountSectionCard>
       )}
 
+      {revokeError && (
+        <p role="alert" className="account-api-keys-error">
+          {revokeError}
+        </p>
+      )}
+
       <AccountSectionCard flush overflowHidden>
-        {keys.length === 0 ? (
+        {loadError ? (
           <div className="account-api-keys-empty">
-            <Key size={32} className="account-api-keys-empty-icon" />
-            <p className="account-api-keys-empty-text">No API keys created yet</p>
+            <p role="alert" className="account-api-keys-error">
+              {loadError}
+            </p>
+            <button onClick={() => void load()} className="account-api-keys-create-form-cancel">
+              Try again
+            </button>
+          </div>
+        ) : keys === null ? (
+          <div className="account-api-keys-empty" aria-busy="true">
+            <p className="account-api-keys-empty-text">Loading your API keys…</p>
           </div>
         ) : (
-          <table className="account-api-keys-table">
-            <thead>
-              <tr className="account-api-keys-table-head-row">
-                <th className="account-api-keys-table-head-cell">Name</th>
-                <th className="account-api-keys-table-head-cell">Key</th>
-                <th className="account-api-keys-table-head-cell">Created</th>
-                <th className="account-api-keys-table-head-cell">Last Used</th>
-                <th className="account-api-keys-table-head-cell account-api-keys-table-head-cell-actions">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {keys.map((apiKey) => (
-                <tr key={apiKey.id} className="account-api-keys-table-row">
-                  <td className="account-api-keys-table-cell account-api-keys-table-cell-name">
-                    {apiKey.name}
-                  </td>
-                  <td className="account-api-keys-table-cell">
-                    <div className="account-api-keys-key-row">
-                      <code className="account-api-keys-key-code">
-                        {showKey === apiKey.id
-                          ? apiKey.key
-                          : `${apiKey.key.substring(0, 8)}${'•'.repeat(16)}`}
-                      </code>
-                      <button
-                        onClick={() =>
-                          setShowKey(showKey === apiKey.id ? null : apiKey.id)
-                        }
-                        className="account-api-keys-icon-button"
-                        aria-label={showKey === apiKey.id ? 'Hide key' : 'Show key'}
-                      >
-                        {showKey === apiKey.id ? (
-                          <EyeOff size={14} />
-                        ) : (
-                          <Eye size={14} />
-                        )}
-                      </button>
-                      <button
-                        onClick={() => handleCopy(apiKey.key, apiKey.id)}
-                        className="account-api-keys-icon-button"
-                        aria-label="Copy key"
-                      >
-                        {copied === apiKey.id ? (
-                          <Check size={14} className="account-api-keys-icon-button-copied" />
-                        ) : (
-                          <Copy size={14} />
-                        )}
-                      </button>
-                    </div>
-                  </td>
-                  <td className="account-api-keys-table-cell account-api-keys-table-cell-meta">
-                    {apiKey.createdAt.toLocaleDateString()}
-                  </td>
-                  <td className="account-api-keys-table-cell account-api-keys-table-cell-meta">
-                    {apiKey.lastUsed
-                      ? apiKey.lastUsed.toLocaleDateString()
-                      : 'Never'}
-                  </td>
-                  <td className="account-api-keys-table-cell account-api-keys-table-cell-actions">
-                    <button
-                      onClick={() => handleDelete(apiKey.id)}
-                      className="account-api-keys-icon-button account-api-keys-icon-button-delete"
-                      aria-label="Revoke key"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <ApiKeysTable
+            keys={keys}
+            confirmingId={confirmingId}
+            revokingId={revokingId}
+            onAskRevoke={setConfirmingId}
+            onCancelRevoke={() => setConfirmingId(null)}
+            onRevoke={(id) => void handleRevoke(id)}
+          />
         )}
       </AccountSectionCard>
 
       <div className="account-api-keys-usage">
         <h3 className="account-api-keys-usage-title">Using API Keys</h3>
         <p className="account-api-keys-usage-description">
-          Include your API key in the Authorization header:
+          Send a key as a bearer token on any API route except your account and the keys
+          themselves, or exchange it for a short-lived token at <code>/api/iam/token</code>. A key
+          expires (a year at most), can be revoked at any time, and never does more than you can.
         </p>
         <code className="account-api-keys-usage-code">
-          curl -H "Authorization: Bearer nx_your_api_key" \<br />
-          &nbsp;&nbsp;https://api.nexus.naas.ai/v1/chat
+          curl -H "Authorization: Bearer abi_pk_your_api_key" \<br />
+          &nbsp;&nbsp;{getApiUrl().replace(/\/+$/, '')}/api/workspaces
         </code>
       </div>
     </div>

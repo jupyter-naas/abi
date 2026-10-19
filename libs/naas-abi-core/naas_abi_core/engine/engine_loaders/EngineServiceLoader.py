@@ -209,6 +209,21 @@ class EngineServiceLoader:
             coding_environment=self.__configuration.services.coding_environment.load(),
             source_control=self.__configuration.services.source_control.load(),
         )
+        self._wire_identity_exchange(services)
         if self.__configuration.nats is None:
             services.wire_services()
         return services
+
+    @staticmethod
+    def _wire_identity_exchange(services: IEngine.Services) -> None:
+        """IAM exchanges an identity provider's token for a session (RFC §9.4):
+        hand it the identity service, which it holds no reference to."""
+        from naas_abi_core.services.iam.IAMService import IAMService
+        from naas_abi_core.services.identity.token_authenticator import (
+            IdentityTokenAuthenticator,
+        )
+
+        if services.identity_available() and isinstance(services.iam, IAMService):
+            services.iam.identity_authenticator = IdentityTokenAuthenticator(
+                services.identity
+            )

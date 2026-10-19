@@ -1401,7 +1401,7 @@ manifests, the callout and §9.1 are implemented as specified, except:
 |---|---|---|
 | `abi:session` | A Nexus session: a user, after the IdP login | Every Nexus REST route and the WebSocket. Nothing else. |
 | `abi:nats` | Service accounts (key exchange); `api` and `engine` | Every kernel NATS endpoint, discovery, agent, model and app hosts |
-| `abi:delegated:agent` | A module acting for a user (`act` = the module's service account) | Kernel NATS endpoints and module hosts, as actor plus OBO user |
+| `abi:delegated:agent` | A module acting for a user (`act` = the module's service account); also what `api` and `engine` send the kernel for the user they serve | Kernel NATS endpoints and module hosts, as actor plus OBO user |
 | `abi:delegated:app` | Opening a remote app or app-html link | Only the app routes, `discovery:OpenApp` on the app named in `abi_scope` |
 | `abi:delegated:preview` | App-project preview links | Only `/app-preview/…` for that project |
 | `abi:delegated:coding` | A coding environment's agent, for the user who owns the environment | Nexus coding and office routes only, narrowed by `abi_scope` to the environment's workspace and repo |
@@ -1546,18 +1546,15 @@ built-in IdP route), it forwards an allow-list of headers, never a deny-list. Ev
 
 The module learns who is calling only from the delegated token's verified claims.
 
-**Transition.** Until subtask 8 issues delegated tokens, an `Abi-On-Behalf-Of: <principal id>` header is
-honoured only when the verified caller is `api` or `engine`. Subtask 8 removes it.
-
-- From any other caller the call is refused as unauthenticated, before the domain service, with its own
-  message (`on-behalf-of refused: …`) and a log line: a header naming a user can only narrow a call (§5.3),
-  so dropping it silently would widen it.
-- The core RPC client sends the current call's user only when its own identity is `api` or `engine`; another
-  identity calls as itself, as before. The SDK transport sends it only when built with `forward_user=True`,
-  which the engine's kernel-calling transports (model registry, jobs) set. Nexus's transports to agent and
-  app hosts do not: module hosts get the user from delegated tokens (subtask 8).
-- Stage 1 tokens (HS256, `{sub, iat, exp}`) carry no audience, `jti`, groups or `abi_scope`: those fields stay
-  empty until subtask 6.
+**Transition (ended in subtask 8).** An `Abi-On-Behalf-Of: <principal id>` header was honoured only when the verified
+caller was `api` or `engine`. Subtask 8 removed it: the user travels in an `abi:delegated:agent` token (`sub` the
+user, `act` the acting service), and a request that still carries the header is refused as unauthenticated, before
+the domain service, with its own message (`on-behalf-of refused: …`) and a log line (a header naming a user can
+only narrow a call, so dropping it silently would widen it). The core RPC client and the SDK transport of `api` and
+`engine` send a delegation for the current call's user; any other identity calls as itself. A module host runs an
+invocation with the delegation it was handed (`SubmitRequest.delegated_token`).
+- Stage 1 tokens (HS256, `{sub, iat, exp}`) carried no audience, `jti`, groups or `abi_scope`: they are gone with
+  `NATS_JWT_SECRET` (subtask 6).
 
 **As built in subtask 2.** `naas_abi_core.engine.nats_identity` is the shared helper: `caller_context` verifies
 the token and the header, `nats_rpc.authenticate_request` wraps it for `nats.micro` requests (and answers a
@@ -1570,6 +1567,32 @@ when it opens. Model registry chat streams are owned the same way as transfer se
 engine-hosted jobs (`engine`) and Nexus's configuration seeding (`api`); engine boot still runs anonymous. The event, vector_store and cache
 endpoints call their domain services (`EventService`'s stored-level operations, `VectorStoreService`,
 `CacheService`'s tier views), so a check in the domain service covers them.
+
+**As built in subtask 8.** Token exchange is `IAMService.exchange_token` (`services/iam/exchange.py`), reached in process,
+over NATS (`abi.iam.v1.exchange_token`, also in `broker.IAM_ALWAYS` so a module can renew its own delegation) and, for
+scripts, through Nexus `POST /api/iam/token`.
+- **Subjects.** The RFC's `id_token`, `access_token`, `jwt` and `api_key` types, and one more:
+  `urn:abi:params:oauth:token-type:session`, a signed-in user a first-party service vouches for (the subject token is
+  the user's principal id, with `groups` and `session_id`). Nexus's own sessions are not engine tokens, so this is how
+  they are exchanged; only `api` and `engine` may use it.
+- **Delegation to a module host.** The delegate of `api` and `engine` names the module that owns the host (resource
+  `abi:-:-:iam:principal/<sa id>`, or any discovery resource of the module), so a host holds a token good for its module
+  acting for the user. Discovery accepts it only from that host. The module's own side of the check is
+  `builtin.module_bootstrap`'s `OwnHosted` and `OwnRuns`.
+- **Renewal.** A delegation lives ten minutes and is renewed by its actor (same audience, expired ones too) until eight
+  hours after it began (`abi_since`); the SDK does it through the module's service key.
+- **Links.** App, preview and remote-app links are `abi_gk_` grants (`kind=grant`: key table, hashed, eight hours at
+  most, `resource` and `scope`), read straight from IAM in process at every request: opening a link is exchanging its
+  grant, without minting a token nobody would send anywhere.
+- **Coding.** A coding environment's agent holds a personal key of its owner, audience `abi:delegated:coding`,
+  `resource` the sidecar base; Nexus accepts it at the OpenAI gateway only. The 30-day JWT is gone.
+- **Revocation.** `revoke_tokens(principal)`: a per-principal floor, honoured by the verifier and the authorizer
+  (`CallContext.token_issued_at`), plus the principal's grants and coding keys (and API keys with `include_keys`).
+  `revoke_all_user_tokens` calls it; suspension denies at once.
+- **Claims added.** `abi_since` (delegation start), `abi_res` (target), `act.name` (the actor's account name, so a
+  service that asks whether a first party vouches for the user is told by the token).
+- **Scope.** The scope of the credential a call runs under travels with every delegation, so a key reaches no further
+  over NATS than in process. A scope is not narrowed twice.
 
 ### 11. IAM, the kernel service
 

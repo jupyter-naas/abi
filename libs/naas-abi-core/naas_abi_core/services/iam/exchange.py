@@ -122,6 +122,11 @@ class TokenExchanger:
             )
         requested = normalize_scope(request.scope)
         ctx = current_call_context()
+        if request.subject_token_type != TOKEN_TYPE_JWT:
+            # Before the subject is looked at: a requester that may not exchange
+            # must not make IAM ask an identity provider about a token (which
+            # would record its user), nor touch a key.
+            self._authorize(ctx, None, audience)
         subject = handler(ctx, request, audience)
         if audience not in subject.allowed:
             raise PermissionDeniedError(
@@ -129,7 +134,8 @@ class TokenExchanger:
                 audience_resource(audience),
                 message=self._refusal(subject, audience),
             )
-        self._authorize(ctx, subject, audience)
+        if request.subject_token_type == TOKEN_TYPE_JWT:
+            self._authorize(ctx, subject, audience)
         scope = self._narrow(subject, requested)
         actor, actor_name = self._actor(ctx, subject, audience, request.resource)
         resource = subject.resource if subject.resource else request.resource
@@ -162,11 +168,13 @@ class TokenExchanger:
 
     # -- who may exchange -------------------------------------------------------
 
-    def _authorize(self, ctx: CallContext, subject: _Subject, audience: str) -> None:
+    def _authorize(
+        self, ctx: CallContext, subject: _Subject | None, audience: str
+    ) -> None:
         """The requester (the caller, not the user it acts for) needs
         ``iam:ExchangeToken`` on the audience. A module renewing its own
         delegation needs nothing: it only keeps what it was given."""
-        renewing = subject.renewing
+        renewing = subject.renewing if subject is not None else None
         if renewing is not None and ctx.principal.id == renewing.actor:
             return
         requester = replace(ctx, on_behalf_of=None)

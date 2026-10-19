@@ -33,6 +33,7 @@ resolves them to IAM users. Authorization stays with IAM (`services/iam`).
 | `provider_keys.py` | `ProviderKeys`: one provider's discovery document and JWKS, cached; `parse_metadata`, `check_endpoint_url` |
 | `token_verifier.py` | `TokenVerifier`: the ID token checks, for every configured provider |
 | `IdentityService.py` | The domain service: providers, `verify_token`, `authenticate`, the relying-party sign-in |
+| `token_authenticator.py` | `IdentityTokenAuthenticator`: what IAM calls to exchange an IdP token for an `abi:session` token (RFC §9.4); the engine wires it in `EngineServiceLoader` |
 | `iam_catalog.py` | The `identity:*` catalog, registered with the kernel catalogs |
 | `adapters/secondary/OIDCHttpHttpx.py` | `OIDCHttpPort` over httpx |
 | `adapters/secondary/OIDCHttpBuiltinIdP.py` | `OIDCHttpPort` for the built-in IdP (`provisioning: builtin`): its issuer is read over NATS, everything else over the fallback |

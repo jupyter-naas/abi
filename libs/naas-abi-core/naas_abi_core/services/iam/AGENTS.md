@@ -39,7 +39,8 @@ model_registry, discovery, source_control, coding_environment; subtask 5) use
 | `guard.py` | `ServiceGuard`: how a runtime service checks (names, require, filter, create rule, placements) and the shared wire codes |
 | `enforcement.py` | `ResourceGuard`, what a data service enforces with; `scan_allowed`, `own_storage`, `internal_call`, wire codes |
 | `kernel_catalogs.py` | The kernel services' catalogs (`services/<name>/iam_catalog.py`), registered at boot |
-| `keys.py` | Service keys `abi_sk_<key id>_<secret>`: generation, parsing, hashing |
+| `keys.py` | Keys `abi_sk_` (service accounts), `abi_pk_` (personal), `abi_gk_` (link grants): generation, parsing, hashing |
+| `exchange.py` | `TokenExchanger`: RFC 8693 token exchange (§9.4): subjects, audiences, actors, scopes, renewal |
 | `tokens.py` | `TokenIssuer`: ES256 signing keys, their rotation, the JWKS and the tokens it signs |
 | `modules.py` | Module accounts `module/<project>/<module_id>`, manifest hashing, variable binding, namespace placements |
 | `broker.py` | `BrokerPermissions` of an account, derived from its effective policy (§8.4) |
@@ -146,6 +147,67 @@ and org-level `abi:<org>:-` ones do not; an unscoped one is `abi:%2A:%2A:…`,
 `names.ALL_ORGS`, which no `${scope}` expands to, `abi:-:-` included, so only
 the platform admin's grants reach it; no other resource may use `%2A`), `placement_resource`, `scope_resource`,
 `catalog_resource`.
+
+## Token exchange, personal keys and links (§9.3, §9.4)
+
+```python
+issued = iam.exchange_token(
+    TokenExchange(subject_token, subject_token_type, audience, resource=None, scope=None)
+)  # IssuedToken, 10 minutes at most
+iam.revoke_tokens(user_id, include_keys=False)
+iam.create_key(user_id, audience=..., resource=..., scope=..., kind=...)  # personal / grant
+iam.identity_authenticator = ...  # engine wiring: IdP tokens (`IdentityAuthenticator`, services/identity/token_authenticator.py)
+```
+
+- **Requester.** The caller needs `iam:ExchangeToken` on `abi:-:-:iam:audience/<audience>`
+  (only `api` and `engine` hold it, through their broad policies); the user it acts
+  for, when there is one, does not decide. A module renewing the delegation it
+  holds needs nothing: it only keeps what it was given.
+- **Subjects** (`subject_token_type`): `id_token` / `access_token` (an IdP's, only
+  for `abi:session`, via `identity_authenticator`); `…:jwt` (an engine token);
+  `urn:abi:params:oauth:token-type:api_key` (`abi_pk_` or `abi_gk_`);
+  `urn:abi:params:oauth:token-type:session`: a signed-in user a **first-party**
+  (`api`, `engine`) vouches for, the subject token being the user's principal id,
+  plus `groups` and `session_id`. Nexus names its users this way, because its
+  sessions are not engine tokens.
+- **Audiences.** `abi:session` and `abi:delegated:{agent,app,preview,coding,api-key}`
+  (`nats_auth.EXCHANGE_AUDIENCES`). Never back to `abi:session` (an IdP's token
+  only); never from one delegated audience to another; an `abi:session` token goes
+  to every delegated one; a key goes to its own audience only. Key exchange
+  (`exchange_key`, `abi.iam.v1.token`) still issues `abi:nats` and host tokens
+  only.
+- **Agent tokens** (`abi:delegated:agent`): `sub` the user, `act` the actor with
+  its account name, `abi_res` the target. The actor is the module that owns
+  `resource` (a discovery module, agent, app, model or job, or the module's account
+  `abi:-:-:iam:principal/<sa id>`), else the requester; never a request field. Kernel
+  endpoints accept `abi:nats` and this audience (`nats_auth.KERNEL_AUDIENCES`), and
+  evaluate it as the module for the user: both sides must allow. The module's side
+  of what it hosts is `builtin.module_bootstrap`'s `OwnHosted` / `OwnRuns`
+  (`roles.DELEGATION_SIDS`), which `_derive` keeps out of its broker permissions.
+  A module renews its delegation with its own token (same audience, `abi.iam.v1.exchange_token`
+  is in `broker.IAM_ALWAYS`), an expired one too, until `abi_since` + 8 hours
+  (`MAX_DELEGATION_SECONDS`); then it is refused.
+- **Scope** (`abi_scope`, `tokens.normalize_scope`): a list of Allow statements (at most
+  32, 64 patterns each). An exchange only narrows: the subject's own scope is kept,
+  and a scope is not narrowed twice (a statement list has no intersection).
+- **Personal keys** (`kind=personal`, user principals): `audience` `abi:delegated:api-key`
+  (default; five active, a year at most, a year by default) or `abi:delegated:coding`
+  with its environment as `resource` (fifty active). **Grants** (`kind=grant`,
+  `abi_gk_`): `audience` app or preview, always expiring in 8 hours at most
+  (two hundred active): the links of apps and previews. A key may carry `scope`.
+  `iam.list_keys(owner)` lists every kind; callers filter. Users manage their own
+  keys (`builtin.self`: `iam:CreateKey`, `ListKeys`, `RevokeKey` on `key/${principal.id}/*`),
+  a user of the built-in login named by its Nexus id included (recorded on demand).
+- **Revocation.** `revoke_tokens(principal)` sets a floor (`iam_token_floors`): every
+  token of that principal issued at or before it is refused, by the verifier
+  (`iam.verifier()`, `token_revoked`) and by the authorizer (a context whose
+  `token_issued_at` is at or before it is `suspended`), and the principal's grants
+  and coding keys are revoked (their personal API keys too with `include_keys`).
+  A token made after it carries `iat` past the floor (`issue_after_floor`). Suspension
+  and deletion deny a principal's tokens at once as before. `iam:RevokeTokens` is in
+  `builtin.self`.
+- **Groups in a token** (`grp`) are only ids of active groups (`active_groups`,
+  `_is_group`): an id of a user or an account never lends its policies.
 
 ## Service accounts, keys, tokens and manifests
 

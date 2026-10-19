@@ -15,6 +15,7 @@ import subprocess
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from importlib.resources import files
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -75,6 +76,9 @@ class LazyEngine:
     def __getattr__(self, name: str):
         return getattr(self.get(), name)
 
+
+if TYPE_CHECKING:
+    from naas_abi_core.engine.call_context import CallContext
 
 engine = LazyEngine()
 api_runtime_configuration, _nats_mode = _load_api_runtime_configuration()
@@ -251,25 +255,92 @@ oauth2_scheme = api_key_scheme
 
 # Update the token validation dependency
 async def is_token_valid(token: str = Depends(api_key_scheme)):
+    """The credential of a request to the engine's own API (``/agents`` and the
+    other routers): the deployment's key (``ABI_API_KEY``), or a key of IAM.
+
+    * a service account's key (``abi_sk_``): the request runs as that account, so
+      what it may do is what its policies allow (scripts and CI);
+    * a personal key (``abi_pk_``, an API key): as ``api`` for the key's owner,
+      narrowed by the key's scope (RFC §9.3).
+
+    Anything else is refused. Revocation, expiry and suspension take effect at
+    the next request: IAM is asked every time."""
     from naas_abi_core.apps.api.abi_api_key_auth import is_abi_api_token_valid
 
-    if not is_abi_api_token_valid(token):
+    if is_abi_api_token_valid(token):
+        _call_as_api_key_holder()
+        return True
+    context = await asyncio.to_thread(_iam_key_context, token) if token else None
+    if context is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    _call_as_api_key_holder()
+    from naas_abi_core.engine.call_context import set_call_context
+
+    set_call_context(context)
     return True
+
+
+def _iam_key_context(token: str) -> "CallContext | None":
+    """The context a key of IAM stands for, or None for anything IAM refuses
+    (unknown, wrong, revoked, expired, of another purpose, of an inactive
+    principal) and for a process with no IAM of its own."""
+    from naas_abi_core.engine.call_context import (
+        Principal,
+        current_call_context,
+        service_account,
+    )
+    from naas_abi_core.engine.nats_auth import (
+        API_KEY_AUDIENCE,
+        PERSONAL_KEY_PREFIX,
+        SERVICE_KEY_PREFIX,
+    )
+    from naas_abi_core.services.iam.IAMPorts import KeyRefusedError
+
+    if not token.startswith((SERVICE_KEY_PREFIX, PERSONAL_KEY_PREFIX)):
+        return None
+    try:
+        services = engine.get().services
+        iam = services.iam if services.iam_available() else None
+    except Exception:  # noqa: BLE001 - no engine, no keys
+        return None
+    if iam is None or not hasattr(iam, "authenticate_user_key"):
+        return None  # a client-role engine does not hold the keys
+    current = current_call_context()
+    try:
+        if token.startswith(SERVICE_KEY_PREFIX):
+            account, _ = iam.authenticate_key(token)
+            return replace(
+                current,
+                principal=Principal(
+                    id=account.id, kind="service_account", name=account.name
+                ),
+                on_behalf_of=None,
+            )
+        record, owner = iam.authenticate_user_key(token)
+    except KeyRefusedError:
+        return None
+    if record.kind != "personal" or (record.audience or API_KEY_AUDIENCE) != API_KEY_AUDIENCE:
+        return None  # a coding agent's key is for the OpenAI gateway
+    return replace(
+        current,
+        principal=service_account("api"),
+        on_behalf_of=Principal(id=iam.user_name(owner), kind="user"),
+        scope=record.scope,
+    )
 
 
 def _call_as_api_key_holder() -> None:
     """The rest of this request runs as ``api``: the deployment's key holder.
 
-    TRANSITIONAL until #62 gives API keys service accounts of their own. A
-    request already acting for a signed-in user keeps its context. Set in the
-    request's own task, so the endpoint (and a sync endpoint's worker thread,
-    which copies the context) sees it, and no other request does.
+    TRANSITIONAL: the deployment's one shared key (``ABI_API_KEY``) stays until
+    deployments move their scripts to keys of IAM (service accounts, above) and
+    ``api`` is enumerated (#65). A request already acting for a signed-in user
+    keeps its context. Set in the request's own task, so the endpoint (and a
+    sync endpoint's worker thread, which copies the context) sees it, and no
+    other request does.
     """
     from naas_abi_core.engine.call_context import (
         current_call_context,

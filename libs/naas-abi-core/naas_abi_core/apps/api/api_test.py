@@ -390,3 +390,177 @@ def test_an_api_key_caller_acts_as_the_api_account():
         return current_call_context()
 
     assert contextvars.copy_context().run(signed_in) == nexus
+
+
+# -- keys of IAM on the core API (task #62) ------------------------------------------------------
+
+
+@pytest.fixture
+def keyed_api(monkeypatch):
+    """The core API's key check over a real IAM held by its engine."""
+    from types import SimpleNamespace
+
+    from fastapi import Depends, FastAPI
+    from naas_abi_core.apps.api import api
+    from naas_abi_core.engine.call_context import current_call_context
+    from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import (
+        IAMStoreMemory,
+    )
+    from naas_abi_core.services.iam.IAMService import IAMService
+
+    iam = IAMService(IAMStoreMemory())
+    iam.bootstrap()
+    services = SimpleNamespace(iam_available=lambda: True, iam=iam)
+    monkeypatch.setattr(
+        api, "engine", SimpleNamespace(get=lambda: SimpleNamespace(services=services))
+    )
+    monkeypatch.setenv("ABI_API_KEY", "deployment-key")
+    app = FastAPI()
+
+    @app.get("/whoami", dependencies=[Depends(api.is_token_valid)])
+    async def whoami() -> dict:
+        context = current_call_context()
+        return {
+            "principal": context.principal.name or context.principal.id,
+            "on_behalf_of": context.on_behalf_of.id if context.on_behalf_of else None,
+            "scope": list(context.scope) if context.scope is not None else None,
+        }
+
+    return TestClient(app), iam
+
+
+def _get(client, token):
+    return client.get("/whoami", headers={"Authorization": f"Bearer {token}"})
+
+
+def test_a_service_key_calls_as_its_own_account_not_as_api(keyed_api):
+    from naas_abi_core.engine.call_context import as_service_account
+
+    client, iam = keyed_api
+    with as_service_account("engine"):
+        account = iam.create_service_account("ci/nightly")
+        key = iam.create_key(account.id).value
+    body = _get(client, key).json()
+    assert body == {"principal": "ci/nightly", "on_behalf_of": None, "scope": None}
+
+
+def test_a_personal_key_calls_as_api_for_its_owner_narrowed_by_its_scope(keyed_api):
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        as_service_account,
+        service_account,
+        use_call_context,
+        user,
+    )
+
+    client, iam = keyed_api
+    with as_service_account("engine"):
+        ada = iam.ensure_user("https://idp.example", "ada")
+    scope = ({"effect": "Allow", "actions": ["triple_store:Query"], "resources": ["*"]},)
+    with use_call_context(
+        CallContext(principal=service_account("api"), on_behalf_of=user(ada.id))
+    ):
+        key = iam.create_key(ada.id, scope=scope).value
+    body = _get(client, key).json()
+    assert body == {"principal": "api", "on_behalf_of": ada.id, "scope": list(scope)}
+
+
+def test_a_revoked_expired_or_unknown_key_is_refused(keyed_api):
+    from datetime import UTC, datetime, timedelta
+
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        as_service_account,
+        service_account,
+        use_call_context,
+        user,
+    )
+    from naas_abi_core.engine.nats_auth import CODING_AUDIENCE
+
+    client, iam = keyed_api
+    with as_service_account("engine"):
+        ada = iam.ensure_user("https://idp.example", "ada")
+        account = iam.create_service_account("ci/nightly")
+        service_key = iam.create_key(account.id)
+    with use_call_context(
+        CallContext(principal=service_account("api"), on_behalf_of=user(ada.id))
+    ):
+        personal = iam.create_key(ada.id)
+        coding = iam.create_key(
+            ada.id,
+            audience=CODING_AUDIENCE,
+            resource="http://coder:8378",
+            expires_at=datetime.now(UTC) + timedelta(days=1),
+        )
+    assert _get(client, personal.value).status_code == 200
+    with use_call_context(
+        CallContext(principal=service_account("api"), on_behalf_of=user(ada.id))
+    ):
+        iam.revoke_key(ada.id, personal.record.key_id)
+    assert _get(client, personal.value).status_code == 401
+    with as_service_account("engine"):
+        iam.revoke_key(account.id, service_key.record.key_id)
+    assert _get(client, service_key.value).status_code == 401
+    # A coding agent's key is for the OpenAI gateway only.
+    assert _get(client, coding.value).status_code == 401
+    assert _get(client, "abi_pk_aaaaaaaaaaaaaaaa_nope").status_code == 401
+    assert _get(client, "abi_sk_aaaaaaaaaaaaaaaa_nope").status_code == 401
+    assert _get(client, "garbage").status_code == 401
+
+
+def test_a_suspended_owner_s_key_is_refused(keyed_api):
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        as_service_account,
+        service_account,
+        use_call_context,
+        user,
+    )
+
+    client, iam = keyed_api
+    with as_service_account("engine"):
+        ada = iam.ensure_user("https://idp.example", "ada")
+    with use_call_context(
+        CallContext(principal=service_account("api"), on_behalf_of=user(ada.id))
+    ):
+        key = iam.create_key(ada.id).value
+    assert _get(client, key).status_code == 200
+    with as_service_account("engine"):
+        iam.suspend_principal(ada.id)
+    assert _get(client, key).status_code == 401
+
+
+def test_the_deployment_key_still_calls_as_api(keyed_api):
+    client, _ = keyed_api
+    assert _get(client, "deployment-key").json()["principal"] == "api"
+
+
+def test_keys_are_refused_without_the_engines_iam(monkeypatch):
+    from types import SimpleNamespace
+
+    from fastapi import Depends, FastAPI
+    from naas_abi_core.apps.api import api
+
+    monkeypatch.setattr(
+        api,
+        "engine",
+        SimpleNamespace(
+            get=lambda: SimpleNamespace(
+                services=SimpleNamespace(iam_available=lambda: False)
+            )
+        ),
+    )
+    monkeypatch.setenv("ABI_API_KEY", "deployment-key")
+    app = FastAPI()
+
+    @app.get("/x", dependencies=[Depends(api.is_token_valid)])
+    async def x() -> dict:
+        return {}
+
+    client = TestClient(app)
+    assert _get_x(client, "abi_pk_aaaaaaaaaaaaaaaa_nope") == 401
+    assert _get_x(client, "deployment-key") == 200
+
+
+def _get_x(client, token):
+    return client.get("/x", headers={"Authorization": f"Bearer {token}"}).status_code

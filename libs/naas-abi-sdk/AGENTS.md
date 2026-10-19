@@ -14,10 +14,18 @@ Document module namespaces are a programming boundary, not authorization.
 `call_context.py` holds the caller identity of the call being served (`CallContext`,
 one ContextVar that core's `engine/call_context.py` re-exports; core keeps a verbatim
 copy, `engine/call_context_types.py`, for installs without the SDK, so keep them equal).
-`Transport.call` puts the call's trace and workspace in the request's `context`, and
-its user in the `Abi-On-Behalf-Of` header only for `Transport(forward_user=True)`:
-kernel services accept that header only from `api` and `engine`, so only the
-engine's kernel-calling transports set it. Identity never goes in request fields.
+`Transport.call` puts the call's trace and workspace in the request's `context`.
+The call's user travels in a delegated token (`abi:delegated:agent`, RFC §9.4),
+never in a header (the kernel refuses `Abi-On-Behalf-Of`): a transport of `api` or
+`engine` is built with `delegate(user, recipient, scope)`, which returns the token
+to send for the user the call acts for (for a call to a module host, one naming
+that module as the actor); without a delegate a transport calls as itself, and a
+delegation that fails fails the call, never calling as the transport alone. A
+module host runs an invocation with the delegation it was handed
+(`SubmitRequest.delegated_token`, kept only if it names the run's owner:
+`CallContext.delegated_token`), which `Transport.delegated_token` sends for its kernel
+calls and renews through the service key (`ServiceKey.renew_delegation`, up to eight
+hours). Identity never goes in request fields.
 `engine.services.iam` (`services/iam.py`) needs no dependency declaration: IAM
 answers for the module's own verified identity and authorizes its own operations
 (`abi.iam.v1.*`; core's `services/iam/AGENTS.md`).

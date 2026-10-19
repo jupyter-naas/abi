@@ -121,11 +121,12 @@ Every primary runs its domain call as the verified caller: it authenticates the
 request with `nats_rpc.authenticate_request` (built on `engine/nats_identity.py`,
 it answers a refusal itself) and hands that `CallContext`
 (`engine/call_context.py`) to its dispatcher. The actor is the
-token's identity; the user it acts for comes from the `Abi-On-Behalf-Of`
-header, accepted from `api` and `engine` only; trace and target workspace come
-from the request's `context`. Never read identity from request fields
-(`principal_id` and `tenant_id` are reserved). Clients forward the current
-call's user, trace and workspace. Nothing authorizes per secret yet, so the
+token's identity; the user it acts for is named by the token itself: a
+delegated token (`abi:delegated:agent`, `act` the acting service, `sub` the user)
+made by IAM's token exchange, never a header (the old `Abi-On-Behalf-Of` header is
+refused); trace and target workspace come from the request's `context`. Never read identity from request fields
+(`principal_id` and `tenant_id` are reserved). Clients of `api` and `engine` send a
+delegation for the current call's user, and the call's trace and workspace. Nothing authorizes per secret yet, so the
 endpoint is an allowlist (`secret_nats_contract.may_use`, answered
 `PERMISSION_DENIED`): `engine` reaches every name but `idp/...`, `idp` its own,
 any other service account only the names under its own prefix (`<module id>/...`

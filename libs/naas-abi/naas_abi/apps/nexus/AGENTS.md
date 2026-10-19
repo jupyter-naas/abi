@@ -127,6 +127,35 @@ Do not add a second role check at the endpoint when the IAM service already does
   or `withAuth` / `getAuthHeader(method)` + `authCredentials()` for a raw `fetch`, and `selectSession` /
   `hasSession` to know whether someone is signed in. Never read `token` for that.
 
+### Credentials: which kind goes where
+
+Every credential has a kind, its audience, and Nexus honours it only where it belongs
+(`services/auth/credentials.py`, ADR `docs/adr/20261019_delegated-tokens-and-api-keys.md`):
+
+| Kind | Credential | Accepted by |
+|---|---|---|
+| `session` | the cookie of an identity-provider login, a session token (`abi:session`) | every route, and the WebSocket |
+| `api-key` | a personal API key (`abi_pk_…`, or the `abi:delegated:api-key` token it buys at `POST /api/iam/token`) | `/api/*` except the session-only prefixes `/api/auth/` and `/api/iam/` |
+| `coding` | a coding environment's key (`abi_pk_…`, audience `abi:delegated:coding`) | the OpenAI gateway, `/api/v1/*`, which finds the workspace's exec sidecar from the key's `resource` (`coding_environments` row) |
+
+- `RequestIdentityMiddleware` resolves the credential and leaves it on `request.state.nexus_credential`;
+  `accepted_kinds(path)` decides. A real credential of a kind the route does not take is refused with a 403
+  that names it (`nexus_credential_refused`), never read as a session. Never decode a bearer token by hand:
+  `decode_token` returns a session (`aud=abi:session`) and nothing else.
+- Links are IAM grants (`services/apps/links.py`): `/app-html/` links, `/app-preview/` tokens and `/app-remote/`
+  grants are `abi_gk_…` keys of the user, audience `abi:delegated:app` or `preview`, bound to what they open,
+  eight hours at most, revocable, checked again at every request. No secret of Nexus signs one.
+- A coding environment's agent holds a personal key made for it (`services/coding_environment/agent_credentials.py`):
+  bound to its sidecar, narrowed to its workspace, revoked with the environment. There is no thirty-day session
+  token any more.
+- API keys: `services/api_keys/` (`GET/POST /api/iam/api-keys`, `DELETE /api/iam/api-keys/{id}`, session-only;
+  the page is `app/account/api-keys`). IAM keeps them hashed; a key narrows to *read only* or to statements of
+  the owner's writing and never exceeds the owner's policies. `revoke_all_user_tokens` also revokes what the
+  engine issued for the user (`revoke_user_credentials`), keeping their API keys.
+- Calls Nexus makes over NATS for the signed-in user carry a delegation (`engine_credentials.api_delegate`):
+  IAM signs it in process, naming `api`, or for a module host that module, and the user. There is no
+  `Abi-On-Behalf-Of` header.
+
 ### Business workspace vs Code workspace
 
 These are distinct mental models. Do not conflate them in UI copy.
