@@ -24,6 +24,11 @@ message HttpRequest {
   // caller's verified credentials act for (discovery's AuthorizeApp), empty
   // for a caller acting for nobody.
   string user_id = 9;
+  // Likewise the verified actor: whoever holds the credential, which may act
+  // for `user_id`. Replaced by the app host, never read from a request.
+  string principal_id = 13;
+  string principal_kind = 14;
+  string principal_name = 15;
   // The body continues after `body` (its first bytes): pull the rest from
   // body_inbox. The total is at most max_body_bytes.
   bool body_follows = 10;

@@ -1117,6 +1117,9 @@ class DiscoveryService:
             response.caller_identity = run_owner(caller)
             served = caller.user
             response.caller_user_id = served.id if served is not None else ""
+            response.caller_principal_id = caller.principal.id
+            response.caller_principal_kind = caller.principal.kind
+            response.caller_principal_name = caller.principal.name or ""
         return response
 
     def _authorize_app(

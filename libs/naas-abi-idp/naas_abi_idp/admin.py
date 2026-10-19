@@ -5,6 +5,11 @@ only the ``idp`` app at ``/idp``. It is for services (the provisioning port, the
 CLI), which reach it with ``abi.app.v1`` requests and are authorized by
 discovery's ``OpenApp`` on ``abi:-:-:discovery:app/<project>/idp/admin``.
 
+Discovery's ``OpenApp`` is a read-level action, so it is not enough: a service
+account that holds a workspace role holds it too. The app therefore checks the
+verified actor itself (``scope["abi"]["principal"]``, set by the app host from
+discovery's answer): only the engine's own accounts (``ADMIN_ACCOUNTS``)
+administer, never a module, a CI account or a user, whatever discovery allowed.
 It also refuses a call made on behalf of a signed-in user: a user's reach into
 apps is not an admin's (any user may open apps), so a service that acts for
 someone calls as itself, after checking that person's rights on its own.
@@ -29,6 +34,9 @@ from naas_abi_idp.service import IdPService
 
 log = logging.getLogger(__name__)
 
+# The service accounts that administer: the engine's own, which check the rights
+# of whoever they act for before they call (provisioning, ``abi iam``).
+ADMIN_ACCOUNTS = frozenset({"api", "engine"})
 MAX_BODY_BYTES = 64 * 1024
 _STATUS = {NotFound: 404, Conflict: 409, InvalidArgument: 400}
 
@@ -245,13 +253,14 @@ class AdminAPI:
 
 
 class _ServiceOnly:
-    """Refuse a call made for a signed-in user (see the module docstring)."""
+    """Refuse every caller but the engine's own accounts acting for nobody (see
+    the module docstring)."""
 
     def __init__(self, app: Any) -> None:
         self.app = app
 
     async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
-        if scope["type"] == "http" and (scope.get("abi") or {}).get("user_id"):
+        if scope["type"] == "http" and not _may_administer(scope.get("abi")):
             response = JSONResponse(
                 {"error": "forbidden", "message": "The admin API is for services"},
                 status_code=403,
@@ -259,6 +268,17 @@ class _ServiceOnly:
             await response(scope, receive, send)
             return
         await self.app(scope, receive, send)
+
+
+def _may_administer(caller: Any) -> bool:
+    if not isinstance(caller, dict) or caller.get("user_id"):
+        return False
+    principal = caller.get("principal")
+    return (
+        isinstance(principal, dict)
+        and principal.get("kind") == "service_account"
+        and principal.get("name") in ADMIN_ACCOUNTS
+    )
 
 
 async def _body(request: Request) -> dict[str, Any]:

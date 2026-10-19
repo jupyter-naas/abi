@@ -16,7 +16,7 @@ class Header(_message.Message):
     def __init__(self, name: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
 
 class HttpRequest(_message.Message):
-    __slots__ = ("context", "app", "method", "path", "query", "headers", "body", "root_path", "user_id", "body_follows", "body_inbox", "max_body_bytes")
+    __slots__ = ("context", "app", "method", "path", "query", "headers", "body", "root_path", "user_id", "principal_id", "principal_kind", "principal_name", "body_follows", "body_inbox", "max_body_bytes")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     APP_FIELD_NUMBER: _ClassVar[int]
     METHOD_FIELD_NUMBER: _ClassVar[int]
@@ -26,6 +26,9 @@ class HttpRequest(_message.Message):
     BODY_FIELD_NUMBER: _ClassVar[int]
     ROOT_PATH_FIELD_NUMBER: _ClassVar[int]
     USER_ID_FIELD_NUMBER: _ClassVar[int]
+    PRINCIPAL_ID_FIELD_NUMBER: _ClassVar[int]
+    PRINCIPAL_KIND_FIELD_NUMBER: _ClassVar[int]
+    PRINCIPAL_NAME_FIELD_NUMBER: _ClassVar[int]
     BODY_FOLLOWS_FIELD_NUMBER: _ClassVar[int]
     BODY_INBOX_FIELD_NUMBER: _ClassVar[int]
     MAX_BODY_BYTES_FIELD_NUMBER: _ClassVar[int]
@@ -38,10 +41,13 @@ class HttpRequest(_message.Message):
     body: bytes
     root_path: str
     user_id: str
+    principal_id: str
+    principal_kind: str
+    principal_name: str
     body_follows: bool
     body_inbox: str
     max_body_bytes: int
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., app: _Optional[str] = ..., method: _Optional[str] = ..., path: _Optional[str] = ..., query: _Optional[str] = ..., headers: _Optional[_Iterable[_Union[Header, _Mapping]]] = ..., body: _Optional[bytes] = ..., root_path: _Optional[str] = ..., user_id: _Optional[str] = ..., body_follows: bool = ..., body_inbox: _Optional[str] = ..., max_body_bytes: _Optional[int] = ...) -> None: ...
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., app: _Optional[str] = ..., method: _Optional[str] = ..., path: _Optional[str] = ..., query: _Optional[str] = ..., headers: _Optional[_Iterable[_Union[Header, _Mapping]]] = ..., body: _Optional[bytes] = ..., root_path: _Optional[str] = ..., user_id: _Optional[str] = ..., principal_id: _Optional[str] = ..., principal_kind: _Optional[str] = ..., principal_name: _Optional[str] = ..., body_follows: bool = ..., body_inbox: _Optional[str] = ..., max_body_bytes: _Optional[int] = ...) -> None: ...
 
 class HttpResponse(_message.Message):
     __slots__ = ("error", "status", "headers", "body", "body_follows", "body_inbox")

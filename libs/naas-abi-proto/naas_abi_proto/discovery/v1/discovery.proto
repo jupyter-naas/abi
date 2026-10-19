@@ -184,6 +184,11 @@ message AuthorizeAppResponse {
   bool caller_admin = 3;  // Deprecated, always false.
   // The user the verified caller acts for; empty for a caller acting for nobody.
   string caller_user_id = 4;
+  // The verified actor (the holder of the credential), whoever it acts for.
+  // An app that must know who calls it, not only which user, reads it.
+  string caller_principal_id = 5;
+  string caller_principal_kind = 6;  // user | service_account | anonymous
+  string caller_principal_name = 7;  // a service account's name
 }
 // A job host asks before it runs a manual trigger or honours a cancel: the
 // caller's token travels on the trigger message, which may be consumed long

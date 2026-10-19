@@ -96,6 +96,16 @@ async def call_app(
     )
 
 
+@dataclass(frozen=True)
+class Caller:
+    """A request's verified caller, as discovery answered it."""
+
+    user_id: str = ""
+    principal_id: str = ""
+    principal_kind: str = ""
+    principal_name: str = ""
+
+
 @dataclass
 class _Answer:
     status: int
@@ -128,7 +138,7 @@ class AppHost:
         self.idle_seconds = idle_seconds
         self.calls = ConcurrentCalls(max_concurrency)
         # (token, on-behalf-of, app) -> (reuse until, the verified caller's user)
-        self._authorized: dict[tuple[str, str, str], tuple[float, str]] = {}
+        self._authorized: dict[tuple[str, str, str], tuple[float, Caller]] = {}
         self._etags: dict[Path, tuple[float, int, str]] = {}
         self._lifespans: list[_Lifespan] = []
         # Requests whose app still runs: reading an upload, or streaming its answer.
@@ -194,8 +204,13 @@ class AppHost:
                 raise RPCError("MODULE_UNAVAILABLE", "App is draining")
             if request.app not in ("", name):
                 raise RPCError("INVALID_ARGUMENT", "App request names another app")
-            # The user is the one discovery verified, never the request's field.
-            request.user_id = await self._authorize(name, msg.headers or {})
+            # The user and the actor are the ones discovery verified, never the
+            # request's fields.
+            caller = await self._authorize(name, msg.headers or {})
+            request.user_id = caller.user_id
+            request.principal_id = caller.principal_id
+            request.principal_kind = caller.principal_kind
+            request.principal_name = caller.principal_name
             answer = await self._answer(name, request)
             response.status = answer.status
             for key, value in answer.headers:
@@ -214,9 +229,9 @@ class AppHost:
         if msg.reply:
             await reply(msg, response.SerializeToString())
 
-    async def _authorize(self, name: str, headers: dict) -> str:
-        """The user the verified caller acts for ("" for none), once discovery
-        allows it to open this app (discovery:OpenApp)."""
+    async def _authorize(self, name: str, headers: dict) -> Caller:
+        """The verified caller (the actor and the user it acts for, "" for
+        none), once discovery allows it to open this app (discovery:OpenApp)."""
         token = headers.get("Nats-Auth-Token", "")
         key = (token, name)
         now = asyncio.get_running_loop().time()
@@ -233,6 +248,12 @@ class AppHost:
             ),
             discovery_pb.AuthorizeAppResponse,
         )
+        caller = Caller(
+            user_id=response.caller_user_id,
+            principal_id=response.caller_principal_id,
+            principal_kind=response.caller_principal_kind,
+            principal_name=response.caller_principal_name,
+        )
         lifetime = min(AUTHORIZATION_SECONDS, _token_expiry(token) - time.time())
         if lifetime > 0:
             if len(self._authorized) >= MAX_AUTHORIZATIONS:
@@ -241,8 +262,8 @@ class AppHost:
                 }
                 while len(self._authorized) >= MAX_AUTHORIZATIONS:
                     del self._authorized[next(iter(self._authorized))]
-            self._authorized[key] = (now + lifetime, response.caller_user_id)
-        return response.caller_user_id
+            self._authorized[key] = (now + lifetime, caller)
+        return caller
 
     async def _answer(self, name: str, request: pb.HttpRequest) -> _Answer:
         if len(request.body) > MAX_INLINE_REQUEST_BODY:
@@ -447,8 +468,18 @@ class _AsgiCall:
             ],
             "client": None,
             "server": None,
-            # Who asked, as discovery verified it: request.scope["abi"]["user_id"].
-            "abi": {"user_id": request.user_id},
+            # Who asked, as discovery verified it: request.scope["abi"]["user_id"]
+            # and request.scope["abi"]["principal"].
+            "abi": {
+                "user_id": request.user_id,
+                # The actor, as discovery verified it: who holds the credential,
+                # which a service may have used to act for the user above.
+                "principal": {
+                    "id": request.principal_id,
+                    "kind": request.principal_kind,
+                    "name": request.principal_name,
+                },
+            },
         }
 
     async def receive(self) -> dict:

@@ -342,16 +342,22 @@ class AuthorizeAppRequest(_message.Message):
     def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., instance_id: _Optional[str] = ..., lease_token: _Optional[str] = ..., app_name: _Optional[str] = ..., caller_token: _Optional[str] = ...) -> None: ...
 
 class AuthorizeAppResponse(_message.Message):
-    __slots__ = ("error", "caller_identity", "caller_admin", "caller_user_id")
+    __slots__ = ("error", "caller_identity", "caller_admin", "caller_user_id", "caller_principal_id", "caller_principal_kind", "caller_principal_name")
     ERROR_FIELD_NUMBER: _ClassVar[int]
     CALLER_IDENTITY_FIELD_NUMBER: _ClassVar[int]
     CALLER_ADMIN_FIELD_NUMBER: _ClassVar[int]
     CALLER_USER_ID_FIELD_NUMBER: _ClassVar[int]
+    CALLER_PRINCIPAL_ID_FIELD_NUMBER: _ClassVar[int]
+    CALLER_PRINCIPAL_KIND_FIELD_NUMBER: _ClassVar[int]
+    CALLER_PRINCIPAL_NAME_FIELD_NUMBER: _ClassVar[int]
     error: _common_pb2.CallError
     caller_identity: str
     caller_admin: bool
     caller_user_id: str
-    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., caller_identity: _Optional[str] = ..., caller_admin: bool = ..., caller_user_id: _Optional[str] = ...) -> None: ...
+    caller_principal_id: str
+    caller_principal_kind: str
+    caller_principal_name: str
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., caller_identity: _Optional[str] = ..., caller_admin: bool = ..., caller_user_id: _Optional[str] = ..., caller_principal_id: _Optional[str] = ..., caller_principal_kind: _Optional[str] = ..., caller_principal_name: _Optional[str] = ...) -> None: ...
 
 class AuthorizeJobRequest(_message.Message):
     __slots__ = ("context", "instance_id", "lease_token", "job_name", "operation", "run_id", "caller_token", "stored_at")

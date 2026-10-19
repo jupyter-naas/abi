@@ -4,21 +4,68 @@ from starlette.testclient import TestClient
 from naas_abi_idp.admin import AdminAPI
 
 
-class AsUser:
-    """The scope the app host builds: the user is the one discovery verified."""
+class AsCaller:
+    """The scope the app host builds: the user and the actor are the ones
+    discovery verified."""
 
-    def __init__(self, app, user_id):
-        self.app, self.user_id = app, user_id
+    def __init__(self, app, user_id="", name="api", kind="service_account"):
+        self.app, self.user_id, self.name, self.kind = app, user_id, name, kind
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http":
-            scope["abi"] = {"user_id": self.user_id}
+            scope["abi"] = {
+                "user_id": self.user_id,
+                "principal": {"id": self.name, "kind": self.kind, "name": self.name},
+            }
         await self.app(scope, receive, send)
 
 
 @pytest.fixture
 def admin(service):
-    return TestClient(AsUser(AdminAPI(service).app(), ""))
+    return TestClient(AsCaller(AdminAPI(service).app()))
+
+
+@pytest.mark.parametrize("name", ["api", "engine"])
+def test_the_engines_own_accounts_may_administer(service, name):
+    caller = TestClient(AsCaller(AdminAPI(service).app(), name=name))
+    assert caller.get("/users").status_code == 200
+
+
+@pytest.mark.parametrize(
+    "who",
+    [
+        # A module's account that holds a workspace role (so discovery's OpenApp
+        # allows it), a CI account, a user, and a request that names no one.
+        {"name": "module/acme/people"},
+        {"name": "ci/nightly"},
+        {"name": "usr_01", "kind": "user"},
+        {"name": "api", "kind": "user"},
+        {"name": "", "kind": "anonymous"},
+    ],
+)
+def test_no_other_caller_administers_whatever_discovery_allowed(service, who):
+    caller = TestClient(AsCaller(AdminAPI(service).app(), **who))
+    for method, path in (
+        ("get", "/users"),
+        ("post", "/users"),
+        ("patch", "/users/u_x"),
+        ("get", "/groups"),
+        ("post", "/keys/rotate"),
+    ):
+        assert getattr(caller, method)(path).status_code == 403, (who, path)
+
+
+def test_a_call_without_a_verified_principal_is_refused(service):
+    class Bare:
+        def __init__(self, app):
+            self.app = app
+
+        async def __call__(self, scope, receive, send):
+            if scope["type"] == "http":
+                scope["abi"] = {"user_id": ""}
+            await self.app(scope, receive, send)
+
+    assert TestClient(Bare(AdminAPI(service).app())).get("/users").status_code == 403
 
 
 def test_users_are_created_listed_and_disabled(admin, service):
@@ -108,7 +155,7 @@ def test_the_signing_key_rotates(admin, service):
 
 
 def test_a_call_for_a_signed_in_user_is_refused(service):
-    for_user = TestClient(AsUser(AdminAPI(service).app(), "usr_someone"))
+    for_user = TestClient(AsCaller(AdminAPI(service).app(), user_id="usr_someone"))
     assert for_user.get("/users").status_code == 403
     assert for_user.post("/users", json={"email": "a@example.com"}).status_code == 403
     assert service.find_user("a@example.com") is None

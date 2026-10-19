@@ -173,6 +173,39 @@ def test_a_caller_without_a_policy_cannot_use_what_a_ready_module_serves(who):
     asyncio.run(scenario())
 
 
+def test_an_app_is_told_who_the_verified_actor_is():
+    """The app host hands the actor to the app: an app that authorizes more
+    narrowly than OpenApp (the IdP's admin API) must not trust the user alone."""
+
+    async def scenario():
+        iam = contract_iam()
+        h = IAMHarness(iam)
+        service = DiscoveryService(MemoryRegistry(), iam=iam)
+        req = await _ready(service)
+        module = h.service_account("caller-module")
+        # A workspace role gives the account platform viewer: OpenApp on every app.
+        h.attach("builtin.platform.viewer", module.id)
+        auth = pb.AuthorizeAppRequest(
+            instance_id="instance", lease_token=req.lease_token, app_name="console"
+        )
+        answer = await service.authorize_app(
+            auth, PROVIDER, CallContext(principal=service_account("caller-module"))
+        )
+        assert answer.caller_user_id == ""
+        assert (
+            answer.caller_principal_kind,
+            answer.caller_principal_name,
+        ) == ("service_account", "caller-module")
+        via_api = CallContext(
+            principal=service_account("api"),
+            on_behalf_of=Principal(id="usr_x", kind="user"),
+        )
+        answer = await service.authorize_app(auth, PROVIDER, via_api)
+        assert (answer.caller_user_id, answer.caller_principal_name) == ("usr_x", "api")
+
+    asyncio.run(scenario())
+
+
 def test_the_runs_a_user_starts_are_the_users():
     async def scenario():
         iam = contract_iam()

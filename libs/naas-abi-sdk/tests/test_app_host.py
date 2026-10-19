@@ -59,7 +59,11 @@ class FakeMsg:
 def _session():
     call = AsyncMock(
         return_value=discovery_pb.AuthorizeAppResponse(
-            caller_identity="u-7", caller_user_id="u-7"
+            caller_identity="u-7",
+            caller_user_id="u-7",
+            caller_principal_id="sa_api",
+            caller_principal_kind="service_account",
+            caller_principal_name="api",
         )
     )
     return SimpleNamespace(
@@ -167,6 +171,7 @@ def test_a_fastapi_backend_answers_other_paths(tmp_path):
     async def whoami(request: fastapi.Request):
         return {
             "user": request.scope["abi"]["user_id"],
+            "principal": request.scope["abi"]["principal"],
             "q": request.query_params.get("q"),
             "url": str(request.url_for("whoami")),
         }
@@ -179,11 +184,25 @@ def test_a_fastapi_backend_answers_other_paths(tmp_path):
         host = _host(tmp_path, app)
         # The request's user_id is data: the app sees the user discovery verified.
         response = await _send(
-            host, _request("/api/whoami", query="q=1", user_id="forged")
+            host,
+            _request(
+                "/api/whoami",
+                query="q=1",
+                user_id="forged",
+                principal_id="forged",
+                principal_kind="user",
+                principal_name="api",
+            ),
         )
         assert response.status == 200, response.body
         body = json.loads(response.body)
         assert body["user"] == "u-7" and body["q"] == "1"
+        # So is the actor: the account that holds the credential.
+        assert body["principal"] == {
+            "id": "sa_api",
+            "kind": "service_account",
+            "name": "api",
+        }
         # URLs the app generates point back through Nexus.
         assert body["url"].endswith("/app-html/remote/acme.research/console/api/whoami")
         posted = _request("/api/echo", method="POST", body=b'{"a": 1}')
