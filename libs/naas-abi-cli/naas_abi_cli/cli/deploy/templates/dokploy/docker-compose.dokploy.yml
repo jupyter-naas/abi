@@ -272,8 +272,8 @@ services:
       -c 'while true; do
             sleep "$$COMPACT_INTERVAL_SECONDS";
             echo "[fuseki-compact] triggering TDB2 compaction (deleteOld=true)...";
-            curl -fsS -u "admin:$$ADMIN_PASSWORD" -X POST "http://fuseki:3030/$$/compact/ds?deleteOld=true"
-              || echo "[fuseki-compact] compaction request failed";
+            curl -fsS -u "admin:$$ADMIN_PASSWORD" -X POST "http://fuseki:3030/$$/compact/ds?deleteOld=true" ||
+              echo "[fuseki-compact] compaction request failed";
           done'
     networks:
       - abi-network

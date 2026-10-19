@@ -153,6 +153,16 @@ def test_the_stack_runs_the_images_of_the_local_stack(
     assert {name: dokploy[name]["image"] for name in shared} == {
         name: local[name]["image"] for name in shared
     }
+    # What a sidecar runs is a shell script no one reads twice: it must not be
+    # the older copy either (fuseki-compact's `||` on a line of its own is a
+    # shell syntax error that restarts the container forever).
+    # nats: the local stack refuses an empty broker password in a shell wrapper,
+    # this one at interpolation (`${NATS_ABI_PASSWORD:?...}`).
+    scripts = sorted(shared - {"nats"})
+    for key in ("entrypoint", "command"):
+        assert {name: dokploy[name].get(key) for name in scripts} == {
+            name: local[name].get(key) for name in scripts
+        }, key
 
 
 @pytest.mark.parametrize("nats, coding", MODES)
