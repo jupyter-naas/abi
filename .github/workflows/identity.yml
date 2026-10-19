@@ -7,6 +7,7 @@ on:
       - 'libs/naas-abi-core/naas_abi_core/engine/engine_configuration/EngineConfiguration_Identity*.py'
       - 'libs/naas-abi-proto/naas_abi_proto/identity/**'
       - 'libs/naas-abi-sdk/naas_abi_sdk/services/identity.py'
+      - 'libs/naas-abi-idp/**'
       - 'libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/oidc/**'
       - 'libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/auth/**'
       - 'libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/identity_events/**'
@@ -43,12 +44,12 @@ jobs:
         run: uv sync --python 3.12
       - name: Fetch pinned Zitadel and PostgreSQL (SHA-256 checked)
         run: uv run python -m naas_abi_core.services.identity.tests.zitadel_server --fetch
-      - name: Identity service, its NATS endpoints, and the generic suite (in-process provider and Zitadel)
+      - name: Identity service, its NATS endpoints, and the generic suite (in-process provider, the built-in IdP and Zitadel)
         run: |
           uv run pytest --import-mode=importlib -q \
             libs/naas-abi-core/naas_abi_core/services/identity \
             libs/naas-abi-core/naas_abi_core/engine/engine_configuration/EngineConfiguration_Identity_test.py
-      - name: Nexus sign-in through the providers (in-process provider and Zitadel)
+      - name: Nexus sign-in through the providers (in-process provider, the built-in IdP and Zitadel)
         run: |
           uv run pytest --import-mode=importlib -q \
             libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/oidc \

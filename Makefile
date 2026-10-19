@@ -1065,6 +1065,7 @@ clean:
 test-sdk:
 	$(MAKE) -C libs/naas-abi-proto test
 	$(MAKE) -C libs/naas-abi-sdk test
+	$(MAKE) -C libs/naas-abi-idp test
 
 demo-sdk:
 	$(MAKE) -C examples/standalone_module demo

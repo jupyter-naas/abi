@@ -142,7 +142,7 @@ class IdPAppNATS(IdPApp):
                 self._url,
                 self._token,
                 timeout=self._timeout,
-                host_token=self._host_token,
+                host_token=self._host_token,  # type: ignore[arg-type]
             )
             self._client = (transport, DiscoveryClient(transport, self._project))
             self._loop = loop
