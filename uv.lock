@@ -24,6 +24,7 @@ dependencies = [
     { name = "naas-abi" },
     { name = "naas-abi-cli" },
     { name = "naas-abi-core", extra = ["all"] },
+    { name = "naas-abi-idp" },
     { name = "naas-abi-marketplace", extra = ["ai-chatgpt", "ai-claude", "ai-deepseek", "ai-gemini", "ai-gemma", "ai-grok", "ai-llama", "ai-mistral", "ai-perplexity", "ai-qwen", "applications-algolia", "applications-arxiv", "applications-bodo", "applications-github", "applications-gmail", "applications-googlesearch", "applications-linkedin", "applications-postgres", "applications-powerpoint", "applications-pubmed", "applications-twilio", "applications-x", "applications-yahoofinance", "domains-ontology-engineer"] },
     { name = "openpyxl" },
     { name = "pymupdf" },
@@ -60,6 +61,7 @@ requires-dist = [
     { name = "naas-abi", editable = "libs/naas-abi" },
     { name = "naas-abi-cli", editable = "libs/naas-abi-cli" },
     { name = "naas-abi-core", extras = ["all"], editable = "libs/naas-abi-core" },
+    { name = "naas-abi-idp", editable = "libs/naas-abi-idp" },
     { name = "naas-abi-marketplace", extras = ["ai-chatgpt"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["ai-claude"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["ai-deepseek"], editable = "libs/naas-abi-marketplace" },
@@ -3864,6 +3866,35 @@ dev = [
     { name = "python-semantic-release", specifier = ">=9.21.0" },
     { name = "testcontainers", specifier = ">=4.13.2" },
     { name = "types-protobuf" },
+]
+
+[[package]]
+name = "naas-abi-idp"
+version = "0.1.0"
+source = { editable = "libs/naas-abi-idp" }
+dependencies = [
+    { name = "authlib" },
+    { name = "cryptography" },
+    { name = "naas-abi-proto" },
+    { name = "naas-abi-sdk" },
+    { name = "starlette" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "authlib", specifier = ">=1.6,<2" },
+    { name = "cryptography", specifier = ">=43" },
+    { name = "naas-abi-proto", editable = "libs/naas-abi-proto" },
+    { name = "naas-abi-sdk", editable = "libs/naas-abi-sdk" },
+    { name = "starlette", specifier = ">=0.40" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "pytest", specifier = ">=8" },
+    { name = "ruff" },
+    { name = "uvicorn", specifier = ">=0.30" },
 ]
 
 [[package]]
