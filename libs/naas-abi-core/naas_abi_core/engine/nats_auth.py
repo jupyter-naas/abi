@@ -39,6 +39,12 @@ ALGORITHM = "ES256"
 MAX_TOKEN_SECONDS = 600
 CLOCK_SKEW_SECONDS = 30
 NATS_AUDIENCE = "abi:nats"
+# A token addressed to a module host (an agent, a model, an app, a job), which
+# forwards it to discovery to learn who called. Kernel services refuse it
+# (they accept ``abi:nats`` only), so a host that keeps one can use it nowhere
+# else: the caller's own ``abi:nats`` token never reaches a host.
+HOST_AUDIENCE = "abi:host"
+ISSUABLE_AUDIENCES = (NATS_AUDIENCE, HOST_AUDIENCE)
 TOKEN_KINDS = ("user", "service_account")
 JWKS_SUBJECT = "abi.iam.v1.jwks"
 TOKEN_SUBJECT = "abi.iam.v1.token"
@@ -253,6 +259,10 @@ class TokenVerifier(ABC):
         default now: a stored call (a job trigger) is checked as of when it
         was stored."""
 
+    @abstractmethod
+    def for_audiences(self, audiences: Iterable[str]) -> TokenVerifier:
+        """A verifier of the same keys that accepts ``audiences`` only."""
+
 
 class JWKSVerifier(TokenVerifier):
     """Verifies against the engine's JWKS (RFC §9.1).
@@ -297,6 +307,17 @@ class JWKSVerifier(TokenVerifier):
         self._attempted_at = float("-inf")  # last attempt, read or not
         self._failed = False
         self._error = ""
+
+    def for_audiences(self, audiences: Iterable[str]) -> JWKSVerifier:
+        return JWKSVerifier(
+            self._fetch,
+            audiences=audiences,
+            cache_seconds=self._cache_seconds,
+            refetch_seconds=self._refetch_seconds,
+            retry_seconds=self._retry_seconds,
+            stale_seconds=self._stale_seconds,
+            clock=self._clock,
+        )
 
     def verify(self, token: str, *, at: float | None = None) -> TokenClaims:
         if not token or not isinstance(token, str):

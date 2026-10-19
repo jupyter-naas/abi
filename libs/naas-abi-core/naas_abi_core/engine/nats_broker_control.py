@@ -166,7 +166,15 @@ class BrokerControl:
         )
         # The verified credentials the job's host authorizes a trigger or a
         # cancel with (discovery:TriggerJob, CancelJobRun), as of when stored.
-        request.credentials = {AUTH_HEADER: headers.get(AUTH_HEADER, "")}
+        # The caller's own token never goes into the stream: the job's host
+        # (a module) reads it, and would hold the caller's identity everywhere.
+        # What is stored is a host token (``abi:host``) of the same caller,
+        # which only discovery accepts, and only to learn who called.
+        request.credentials = {}
+        if operation in ("trigger", "cancel"):
+            request.credentials[AUTH_HEADER] = await asyncio.to_thread(
+                lambda: self.iam.issue_host_token(caller).token
+            )
         if context.on_behalf_of is not None:
             request.credentials[ON_BEHALF_OF_HEADER] = headers.get(
                 ON_BEHALF_OF_HEADER, ""

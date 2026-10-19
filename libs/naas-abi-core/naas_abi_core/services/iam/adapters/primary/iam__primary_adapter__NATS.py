@@ -26,7 +26,7 @@ import nats
 from google.protobuf.message import DecodeError
 from naas_abi_core import logger
 from naas_abi_core.engine.call_context import ANONYMOUS, CallContext
-from naas_abi_core.engine.nats_auth import TokenVerifier
+from naas_abi_core.engine.nats_auth import NATS_AUDIENCE, TokenVerifier
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import (
     RequestPayloadError,
@@ -133,7 +133,9 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
             if isinstance(exc, RequestPayloadError):
                 code = exc.code
             if code == "INTERNAL":
-                logger.opt(exception=exc).error(f"iam NATS {operation} failed")
+                # The type only: the frames of a key exchange or a key creation
+                # hold the key.
+                logger.error(f"iam NATS {operation} failed ({type(exc).__name__})")
             result = response_type(
                 error=common_pb2.CallError(
                     code=code,
@@ -389,7 +391,7 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
     def _call_token(self, req: pb.TokenRequest) -> pb.TokenResponse:
         import time
 
-        issued = self._iam.exchange_key(req.key)
+        issued = self._iam.exchange_key(req.key, req.audience or NATS_AUDIENCE)
         return pb.TokenResponse(
             access_token=issued.token,
             expires_in=max(0, int(issued.expires_at - time.time())),

@@ -130,10 +130,13 @@ class AuthCallout:
         except IAMError as exc:
             logger.warning(f"Auth callout: refused a connection: {exc}")
             body = {"error": "not authorized"}
-        except Exception:  # noqa: BLE001 - a store error must still be answered
+        except Exception as exc:  # noqa: BLE001 - a store error must still be answered
             # Unanswered, the server holds the connection until its own timeout.
-            logger.opt(exception=True).error(
-                "Auth callout: could not decide a connection; refused"
+            # The type only, never the traceback or the message: the frames
+            # hold the service key the connection logged in with.
+            logger.error(
+                "Auth callout: could not decide a connection; refused "
+                f"({type(exc).__name__})"
             )
             body = {"error": "not authorized"}
         response = encode_jwt(

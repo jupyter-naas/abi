@@ -13,7 +13,7 @@ import base64
 import hashlib
 import hmac
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from naas_abi_core.engine.nats_auth import (
     PERSONAL_KEY_PREFIX,
@@ -34,7 +34,7 @@ MAX_ACTIVE_KEYS = 5
 class NewKey:
     key_id: str
     secret_hash: str
-    value: str  # the whole key, shown once
+    value: str = field(repr=False)  # the whole key, shown once
 
 
 def generate_key(kind: KeyKind = "service") -> NewKey:
@@ -51,7 +51,7 @@ def hash_secret(secret: str) -> str:
 class PresentedKey:
     kind: KeyKind
     key_id: str
-    secret: str
+    secret: str = field(repr=False)
 
     def matches(self, secret_hash: str) -> bool:
         return hmac.compare_digest(hash_secret(self.secret), secret_hash)

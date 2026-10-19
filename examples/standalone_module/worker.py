@@ -703,8 +703,29 @@ class ABIModule(BaseModule):
         else:
             raise AssertionError("document.namespaces answered a module identity")
 
+    async def _broker_refuses(self, subject: str) -> bool:
+        """Whether the broker refuses this module's request on ``subject``: a
+        publish it may not make is a permissions violation on its connection."""
+        nc = await self.engine._client._transport.connect()
+        errors: list[str] = []
+
+        async def on_error(error):
+            errors.append(str(error))
+
+        previous, nc._error_cb = nc._error_cb, on_error
+        try:
+            try:
+                await nc.request(subject, b"", timeout=1)
+            except Exception:  # noqa: BLE001 - refused publishes get no reply
+                pass
+            await asyncio.sleep(0.1)
+        finally:
+            nc._error_cb = previous
+        return any("ermissions violation" in e for e in errors)
+
     async def iam(self):
-        """A module asks IAM about itself; administering IAM is refused to it."""
+        """A module asks IAM about itself; administering IAM is refused to it,
+        by the broker for most operations and by IAM for the rest."""
         from naas_abi_proto.iam.v1 import iam_pb2 as pb
 
         own = "abi:-:-:document:collection/standalone-demo/runs"
@@ -719,12 +740,19 @@ class ABIModule(BaseModule):
             "iam", "filter", action="document:Find", resources=[other, own]
         )
         assert list(filtered.allowed) == [own]
-        # Lists answer with what the caller may see: nothing, for a module.
-        assert not (await self.call("iam", "list_principals", limit=10)).principals
-        assert not (await self.call("iam", "list_groups", limit=10)).groups
-        assert not (await self.call("iam", "list_policies", limit=10)).policies
-        assert not (await self.call("iam", "list_attachments")).attachments
-        assert not (await self.call("iam", "list_placements")).placements
+        # The broker offers a module IAM's self-service and read-only questions
+        # (token, jwks, manifest, authorize, filter) and no more: the lists and
+        # every change are refused before they reach IAM, whoever's token the
+        # module holds (an agent host reads its caller's).
+        at_broker = [
+            "list_principals",
+            "list_groups",
+            "list_policies",
+            "list_attachments",
+            "list_placements",
+            "list_keys",
+            "list_manifests",
+        ]
 
         user, group = "usr_" + "0" * 26, "grp_" + "0" * 26
         document_json = json.dumps(
@@ -809,7 +837,14 @@ class ABIModule(BaseModule):
                 },
             }
         )
+        offered = ("find_service_account", "get_manifest", "submit_manifest")
+        at_broker += [operation for operation in refused if operation not in offered]
+        for operation in at_broker:
+            assert await self._broker_refuses(f"abi.iam.v1.{operation}"), operation
+            self.seen.add(("iam", operation))
         for operation, fields in refused.items():
+            if operation not in offered:
+                continue
             try:
                 await self.call("iam", operation, **fields)
             except RPCError as exc:
@@ -817,9 +852,6 @@ class ABIModule(BaseModule):
                 self.seen.add(("iam", operation))
             else:
                 raise AssertionError(f"iam.{operation} answered a module identity")
-        # Lists of others' keys and manifests are empty to it.
-        assert not (await self.call("iam", "list_keys", principal_id=user)).keys
-        assert not (await self.call("iam", "list_manifests")).manifests
         # The JWKS is public; a key that is not one is refused.
         jwks = json.loads((await self.call("iam", "jwks")).jwks_json)
         assert jwks["issuer"].startswith("urn:abi:engine:") and jwks["keys"]

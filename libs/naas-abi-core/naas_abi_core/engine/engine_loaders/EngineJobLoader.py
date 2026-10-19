@@ -92,7 +92,10 @@ def job_authorizer(iam: Any, verifier: Any, project: str, module_id: str) -> Any
     off the jobs loop.
     """
     from naas_abi_core.engine.call_context import ON_BEHALF_OF_HEADER, use_call_context
-    from naas_abi_core.engine.nats_auth import InvalidServiceTokenError
+    from naas_abi_core.engine.nats_auth import (
+        HOST_AUDIENCE,
+        InvalidServiceTokenError,
+    )
     from naas_abi_core.services.discovery.caller import caller_of
     from naas_abi_core.services.discovery.discovery_service import require_job
     from naas_abi_core.services.discovery.iam_catalog import CATALOG
@@ -101,6 +104,8 @@ def job_authorizer(iam: Any, verifier: Any, project: str, module_id: str) -> Any
     from naas_abi_sdk.transport import RPCError
 
     guard = ServiceGuard(CATALOG, lambda: iam)
+    # A trigger carries a host token the engine wrote, never a caller's own.
+    verifier = verifier.for_audiences((HOST_AUDIENCE,))
 
     def check(operation, job, run_id, headers, stored_at) -> None:
         try:

@@ -1304,9 +1304,14 @@ manifests, the callout and §9.1 are implemented as specified, except:
   another approved topic, are refused, and so is `triple_store`. Bus and event grants follow the action:
   `bus:Publish` publishes, `bus:Consume` subscribes and fetches; `event:Append` publishes live events, the read
   actions subscribe to them.
-- **Secrets of the platform.** The secret service's NATS endpoint refuses names under `iam/` to every caller
-  but `engine` and under `idp/` to every but `idp`: a module granted `secret:*` reads no signing key. The
-  default manifest grants `secret/<module id>/...` only.
+- **Secrets of the platform.** The secret service's NATS endpoint is an allowlist: `engine` reaches every name
+  but the IdP's, `idp` its own, any other account only the names under its own prefix (`<module id>/...`). A
+  module granted `secret:*` reads no signing key and no broker password. The default manifest grants
+  `secret/<module id>/...` only.
+- **A host never holds its caller's token.** Calls to module hosts (agents, models, apps, jobs) carry a token of
+  the audience `abi:host`, which the kernel services refuse; discovery accepts only it as the caller a host
+  forwards. Otherwise a host that serves `api` keeps a token that is `Allow *` on `*`. IAM's mutations are not
+  offered to a module's connection without the `iam:` action.
 - **No response permissions; replies to inboxes only.** A callout user gets no `resp`, and every responder
   answers only reply subjects under `_INBOX.`.
 - **Remaining gap.** The server answers a module's JetStream requests on the reply subject it chose, and streams

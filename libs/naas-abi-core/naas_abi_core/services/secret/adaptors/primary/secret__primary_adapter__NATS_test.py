@@ -63,7 +63,7 @@ class _StubAdapter(ISecretAdapter):
 
 
 def _valid_token() -> str:
-    return TEST_TOKENS.token("api")
+    return TEST_TOKENS.token("engine")
 
 
 def _get_request(key: str = "k") -> bytes:
@@ -298,25 +298,50 @@ def _stub_with_reserved() -> _StubAdapter:
             "iam/signing-keys/20261018-abcd1234": "PEM",
             "iam/job-trigger-seal": "seal",
             "idp/signing-key": "idp-pem",
+            "NATS_ENGINE_PASSWORD": "engine-pw",
+            "NATS_AUTH_PASSWORD": "auth-pw",
+            "NATS_AUTH_CALLOUT_SEED": "SAAseed",
+            "NAAS_API_KEY": "naas",
             "PLAIN": "value",
+            "people/api-key": "mine",
+            "billing/api-key": "theirs",
         }
     )
     return stub
 
 
-def test_a_module_cannot_read_write_remove_or_list_reserved_secrets():
-    for key in (
-        "iam/signing-keys/20261018-abcd1234",
-        "iam/job-trigger-seal",
-        "IAM/job-trigger-seal",
-        " iam/service-keys/engine",
-        "idp/signing-key",
-    ):
+MODULE = "module/default/people"
+FORBIDDEN_TO_A_MODULE = (
+    "iam/signing-keys/20261018-abcd1234",
+    "iam/job-trigger-seal",
+    "IAM/job-trigger-seal",
+    " iam/service-keys/engine",
+    "idp/signing-key",
+    "NATS_ENGINE_PASSWORD",
+    "NATS_AUTH_PASSWORD",
+    "NATS_AUTH_CALLOUT_SEED",
+    "NAAS_API_KEY",
+    "PLAIN",
+    "billing/api-key",
+    # Another name for the same file or URL, or for someone else's secret.
+    "people/../iam/signing-keys/20261018-abcd1234",
+    "people/../billing/api-key",
+    "people//x",
+    "people/%2e%2e/billing/api-key",
+    "people\\..\\iam",
+    "people/x\x00",
+    "people/ ",
+    "people",
+)
+
+
+def test_a_module_reaches_only_the_secrets_under_its_own_name():
+    for key in FORBIDDEN_TO_A_MODULE:
         stub = _stub_with_reserved()
         raw = _call(
             "_handle_get",
             (secret_pb2.GetRequest(key=key).SerializeToString(), stub),
-            account="module/p/m",
+            account=MODULE,
             subject="abi.svc.secret.v1.get",
         )
         response = secret_pb2.GetResponse()
@@ -324,60 +349,87 @@ def test_a_module_cannot_read_write_remove_or_list_reserved_secrets():
         assert response.error.code == "PERMISSION_DENIED", key
         assert not response.found.HasField("value"), key
 
+        before = dict(stub.secrets)
         raw = _call(
             "_handle_set",
             (secret_pb2.SetRequest(key=key, value="x").SerializeToString(), stub),
-            account="module/p/m",
+            account=MODULE,
             subject="abi.svc.secret.v1.set",
         )
         response = secret_pb2.SetResponse()
         response.ParseFromString(raw)
         assert response.error.code == "PERMISSION_DENIED", key
-        assert stub.secrets.get(key) != "x"
+        assert stub.secrets == before, key
 
         raw = _call(
             "_handle_remove",
             (secret_pb2.RemoveRequest(key=key).SerializeToString(), stub),
-            account="module/p/m",
+            account=MODULE,
             subject="abi.svc.secret.v1.remove",
         )
         response = secret_pb2.RemoveResponse()
         response.ParseFromString(raw)
         assert response.error.code == "PERMISSION_DENIED", key
+        assert stub.secrets == before, key
 
     stub = _stub_with_reserved()
     raw = _call(
         "_handle_list",
         (secret_pb2.ListRequest().SerializeToString(), stub),
-        account="module/p/m",
+        account=MODULE,
         subject="abi.svc.secret.v1.list",
     )
     response = secret_pb2.ListResponse()
     response.ParseFromString(raw)
-    assert {e.key for e in response.found.entries} == {"PLAIN"}
+    assert {e.key for e in response.found.entries} == {"people/api-key"}
 
 
-def test_the_api_account_cannot_read_iam_secrets_either():
+def test_a_module_reads_and_writes_its_own_secrets():
+    stub = _stub_with_reserved()
     raw = _call(
         "_handle_get",
-        (
-            secret_pb2.GetRequest(key="iam/job-trigger-seal").SerializeToString(),
-            _stub_with_reserved(),
-        ),
-        account="api",
+        (secret_pb2.GetRequest(key="people/api-key").SerializeToString(), stub),
+        account=MODULE,
         subject="abi.svc.secret.v1.get",
     )
     response = secret_pb2.GetResponse()
     response.ParseFromString(raw)
-    assert response.error.code == "PERMISSION_DENIED"
+    assert response.found.value == "mine"
+    _call(
+        "_handle_set",
+        (secret_pb2.SetRequest(key="people/new", value="v").SerializeToString(), stub),
+        account=MODULE,
+        subject="abi.svc.secret.v1.set",
+    )
+    assert stub.secrets["people/new"] == "v"
 
 
-def test_each_reserved_name_opens_to_its_owner_only():
+def test_no_other_account_reaches_the_platforms_secrets_either():
+    for account in ("api", "ci/nightly"):
+        for key in ("iam/job-trigger-seal", "NATS_ENGINE_PASSWORD", "PLAIN"):
+            raw = _call(
+                "_handle_get",
+                (
+                    secret_pb2.GetRequest(key=key).SerializeToString(),
+                    _stub_with_reserved(),
+                ),
+                account=account,
+                subject="abi.svc.secret.v1.get",
+            )
+            response = secret_pb2.GetResponse()
+            response.ParseFromString(raw)
+            assert response.error.code == "PERMISSION_DENIED", (account, key)
+
+
+def test_the_engine_and_the_idp_reach_what_is_theirs():
     for account, key, allowed in (
         ("engine", "iam/job-trigger-seal", True),
+        ("engine", "NATS_ENGINE_PASSWORD", True),
         ("engine", "idp/signing-key", False),
         ("idp", "idp/signing-key", True),
         ("idp", "iam/job-trigger-seal", False),
+        ("idp", "NATS_ENGINE_PASSWORD", False),
+        ("idp", "idp/../iam/job-trigger-seal", False),
     ):
         raw = _call(
             "_handle_get",

@@ -125,7 +125,7 @@ Implemented as decided, with these differences:
   one in flight when it begins is lost, as in any reconnect.
 - **Subjects a module gets** (`services/iam/broker.py`). A permission ending in `*` also matches a client's
   literal `>` or `*` token, so every grant keeps the account's own tokens before its first wildcard:
-  - IAM's request subjects, one by one (IAM authorizes each operation itself). Never `abi.iam.v1.changed`.
+  - IAM's self-service and read-only request subjects (`IAM_ALWAYS`, below). Never `abi.iam.v1.changed`.
     An engine treats a change notice as a hint: it reads the store's revision and drops its caches when that
     differs from the last one it saw, whatever the notice says (a forged or huge revision stops nothing; a
     restored store counts too);
@@ -156,7 +156,8 @@ Implemented as decided, with these differences:
     submitted or approved). By action: `bus:Publish` publishes on the topic and writes its claim checks;
     `bus:Consume` subscribes to it and fetches from and acknowledges the consumers of its queue stream. A
     module approved for `Publish` alone cannot pull or acknowledge another routing key's work, and a Deny of
-    an action on one topic keeps the module from it there;
+    an action on one topic keeps the module from it there, whichever way the allow spells the topic
+    (`topic/or%64ers` is `topic/orders`);
   - **claim checks** under the scope they travel with: `abi.cc.t.<topic hash>.>` for a topic,
     `abi.cc.j.<project>.<module hash>.>` for a module's job triggers (writers: those who may trigger;
     readers: the host). The SDK stores them in the stream `ABI_CLAIM_CHECKS`; a module reads chunks back
@@ -208,16 +209,20 @@ Implemented as decided, with these differences:
 - **Upgrading remote modules.** A module on an SDK older than this change breaks behind the callout: it reads
   stream info, creates its consumers and streams, publishes its triggers and schedules into the jobs stream and
   reads claim checks by direct get, all refused now. Upgrade every remote module's `naas-abi-sdk` with the
-  engine. Its jobs stream settings are the engine's (no `allow_rollup_hdrs` asked: the server sets it with
+  engine: one on an older SDK also sends its own token to the hosts it calls, which discovery now refuses, so its calls to other modules' agents, models and apps fail until it upgrades. Its jobs stream settings are the engine's (no `allow_rollup_hdrs` asked: the server sets it with
   schedules).
 - **Quotas.** `ABI_CLAIM_CHECKS` has no size limit beyond its seven-day age, and the overflow host's 64 sessions
   and 1 GiB have no per-caller share: one module can fill either for everyone.
-- **Sealed names in the secret service.** The ES256 private halves (`iam/signing-keys/<kid>`), the engine's
-  service key (`iam/service-keys/engine`) and the job-trigger seal key (`iam/job-trigger-seal`) live in the
-  secret service, which checks no IAM per secret yet. Its NATS endpoint therefore refuses every name under
-  `iam/` to any caller but `engine`, and under `idp/` to any but `idp`, in `get`, `set`, `remove` and `list`
-  (`secret_nats_contract.RESERVED_NAMES`), whatever a policy grants: an approved module with `secret:*` signs
-  as nobody. The default manifest grants a module the secrets named `<module id>/...`, never every secret.
+- **The secret endpoint is an allowlist.** The secret service checks no IAM per secret yet, and the store it
+  serves holds the ES256 private halves (`iam/signing-keys/<kid>`), the engine's service key
+  (`iam/service-keys/engine`), the job-trigger seal key, and the dotenv with `NATS_ENGINE_PASSWORD`,
+  `NATS_AUTH_PASSWORD`, `NATS_AUTH_CALLOUT_SEED` and every provider key. Its NATS endpoint therefore serves a
+  caller only what that caller owns, in `get`, `set`, `remove` and `list` (`secret_nats_contract.may_use`):
+  `engine` every name but the IdP's, `idp` its own (`idp/...`), a module the names under `<module id>/`,
+  another service account `<name>/`, a user nothing. A name that is not a plain `a/b` (a dot segment, an empty
+  one, a backslash, a percent escape, a control character) is refused to everyone but `engine`, so no spelling
+  reaches an adapter that resolves it as a path or a URL. A module approved for `secret:*` signs as nobody and
+  logs in as nobody. The default manifest grants `secret/<module id>/...` only.
 - **Default manifests grant no admin action.** The default `dataset` grant denies `dataset:QueryUnchecked`
   (#58), the `source_control` grant denies `AddCollaborator` (which grants write on any repository: bug b
   reached over NATS), and the `email` grant is `Send` alone, since the platform keeps a copy of what it sends,
@@ -227,6 +232,31 @@ Implemented as decided, with these differences:
   (`^[A-Za-z0-9][A-Za-z0-9._-]*$`, never `.` or `..`) and treats such a repository id as not found, so no
   module reaches a path outside the repositories' root through the local adapter or a forge URL. The bus topic
   `triple_store` is reserved for the same reason as the secrets: nothing checks who subscribes to it.
+- **A host never holds a caller's own token.** An agent, a model, an app or a job host reads the
+  `Nats-Auth-Token` of every request it serves, and `api` (Nexus) is `Allow *` on `*`: with `api`'s `abi:nats`
+  token a host could attach a policy to itself, create keys or approve manifests, and name any user. So a call
+  to a host (subjects `abi.agent.`, `abi.mod.`) carries a **host token**: the caller's identity under the
+  audience `abi:host`, which every kernel service refuses (they accept `abi:nats` only). Discovery accepts
+  *only* a host token as the caller a host forwards (`authorize_*`), the engine's job loader likewise, and the
+  RPC overflow host accepts both (a parked request or reply belongs to the caller, and the host reads it for
+  it). A host that keeps one can use it nowhere else. Who mints them:
+  - a module's key buys one at `abi.iam.v1.token` (`TokenRequest.audience`, `abi:host`), cached beside its
+    `abi:nats` token; `Transport.call` picks it by subject;
+  - the serving engine signs `api`'s (`Engine.service_credentials("api", audience="abi:host")`,
+    Nexus's `api_host_token()`); a transport given bare tokens takes a `host_token` and refuses to call a host
+    without one;
+  - the broker control stores a host token of the verified caller in every trigger and cancel it writes, in
+    place of the caller's own token, which no job host sees any more.
+  The `Abi-On-Behalf-Of` header is not a credential by itself: it needs a token of `api` or `engine`, which a
+  host no longer has.
+- **IAM operations offered to every account** are read-only or self-service (`broker.IAM_ALWAYS`: `token`,
+  `jwks`, `submit_manifest`, `get_manifest`, `find_service_account`, `authorize`, `filter`). The others (every
+  mutation, every list) reach a module only through the `iam:` action its policy allows, like any service's.
+  `builtin.api` is still `Allow *` on `*` (`TransitionalBroadAccess`): enumerating what Nexus needs is #65's.
+- **Logs hold no key.** The console sink sets loguru's `diagnose=False, backtrace=False`: its defaults print the
+  value of every variable on each frame of a traceback, a service key among them. The auth callout and the IAM
+  endpoint log a failing decision by exception type, and `PresentedKey`, `NewKey` and `CreatedKey` keep the key
+  out of their `repr`.
 - **Retired signing keys verify what they signed.** A job trigger waits in its stream up to 168 hours and is
   verified as of its stored time. A retired key's public half therefore stays in the JWKS for 169 hours past
   its retirement, marked `abi_retired_at`: verifiers accept it for a call stored before that, never for a

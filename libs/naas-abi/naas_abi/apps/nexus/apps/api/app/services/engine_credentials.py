@@ -24,3 +24,21 @@ def api_token() -> Any:
         return engine.service_credentials(CALLER_IDENTITY).token()
 
     return token
+
+
+def api_host_token() -> Any:
+    """A callable returning a valid ``api`` token addressed to module hosts
+    (``abi:host``), for ``Transport(host_token=...)``.
+
+    Nexus calls remote agents, apps and models with this one: a host reads the
+    token of each request and may forward it to discovery, and the kernel
+    services refuse it. Never hand a host ``api_token()``: ``api`` may do
+    everything, and a host that kept the token would."""
+
+    def token() -> str:
+        from naas_abi import ABIModule
+
+        engine = ABIModule.get_instance().engine
+        return engine.service_credentials(CALLER_IDENTITY, audience="abi:host").token()
+
+    return token

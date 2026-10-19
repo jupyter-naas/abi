@@ -16,8 +16,11 @@ subject of the messages it sends to itself. It answers requests on
 ``_INBOX.>``, where every client receives its replies (and every responder
 answers there only, ``naas_abi_sdk.messages.reply_allowed``).
 
-* **Always**: IAM's request subjects, one by one (IAM authorizes each
-  operation itself; never ``abi.iam.v1.changed``); the engine's broker
+* **Always**: IAM's read-only and self-service request subjects
+  (``IAM_ALWAYS``: ``token``, ``jwks``, ``submit_manifest``, ``get_manifest``,
+  ``find_service_account``, ``authorize``, ``filter``; never a mutation, never
+  ``abi.iam.v1.changed``); the others only for an ``iam:`` action the policy
+  allows; the engine's broker
   control (``abi.broker.v1.<operation>``: it checks each request against the
   same grants); messages to inboxes (``_INBOX.>``: replies, an app's request
   body to pull, a submitter's run updates: random names); its own inbox
@@ -65,7 +68,7 @@ import hashlib
 import json
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 from naas_abi_core.services.iam.catalog import CatalogRegistry
 from naas_abi_core.services.iam.IAMPorts import EffectiveStatement
@@ -132,8 +135,22 @@ BROKER_OPERATIONS = (
     "read_claim_check",
     "verify_trigger",
 )
+# What every account may ask of IAM: its own key exchange, the public JWKS, its
+# own manifest, and read-only questions about the policy as it stands. IAM
+# decides each, but the broker offers nothing that changes IAM: an account
+# holds the others only by the ``iam:`` actions its policy allows, like any
+# other service's.
+IAM_ALWAYS = (
+    "token",
+    "jwks",
+    "submit_manifest",
+    "get_manifest",
+    "find_service_account",
+    "authorize",
+    "filter",
+)
 ALWAYS_PUBLISH = (
-    *(f"abi.iam.v1.{operation}" for operation in IAM_OPERATIONS),
+    *(f"abi.iam.v1.{operation}" for operation in IAM_ALWAYS),
     *(f"abi.broker.v1.{operation}" for operation in BROKER_OPERATIONS),
     # Inboxes it is handed (random names it never subscribes to but its own).
     "_INBOX.>",
@@ -488,8 +505,13 @@ def _bus_topic(
             if subject not in target:
                 target.append(subject)
 
+    # The subjects come from the percent-decoded topic, so a Deny is matched
+    # against every spelling of it: ``topic/or%64ers`` is ``topic/orders``.
+    spellings = {resource, TOPIC_PREFIX + topic, TOPIC_PREFIX + quote(topic, safe="")}
     for name in BUS_ACTIONS if action is None else (action,):
-        if name not in BUS_ACTIONS or denied(f"bus:{name}", resource):
+        if name not in BUS_ACTIONS or any(
+            denied(f"bus:{name}", spelling) for spelling in spellings
+        ):
             continue
         add(topics, (topic,))
         if name == "Publish":
@@ -532,9 +554,12 @@ def _actions(pattern: str, catalogs: CatalogRegistry) -> list[tuple[str, str | N
 
 
 def _subjects(service: str, action: str | None, catalogs: CatalogRegistry) -> list[str]:
-    if service in ("bus", "iam"):
-        return []  # bus: its topics; iam: always reachable (ALWAYS_PUBLISH)
+    if service == "bus":
+        return []  # its topics
     catalog = catalogs.get(service)
+    if service == "iam" and (catalog is None or action is None):
+        # Every operation, but never the change notice (a policy of ``*``).
+        return [f"abi.iam.v1.{op}" for op in IAM_OPERATIONS] if action is None else []
     if catalog is not None and action is not None:
         spec = next((a for a in catalog.actions if a.name == action), None)
         return list(spec.subjects) if spec is not None else []

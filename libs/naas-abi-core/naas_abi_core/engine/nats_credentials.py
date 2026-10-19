@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 
 
 NATS_AUDIENCE = "abi:nats"
+HOST_AUDIENCE = "abi:host"
 
 
 def _auth() -> Any:
@@ -76,12 +77,19 @@ async def _ask(nats_url: str, subject: str, payload: bytes, timeout: float) -> b
         await nc.close()
 
 
-def exchange_key(nats_url: str, key: str, *, timeout: float = 10.0) -> IssuedToken:
-    """An ``abi:nats`` access token for ``key`` (``abi.iam.v1.token``)."""
+def exchange_key(
+    nats_url: str,
+    key: str,
+    *,
+    timeout: float = 10.0,
+    audience: str = NATS_AUDIENCE,
+) -> IssuedToken:
+    """An access token for ``key`` (``abi.iam.v1.token``): ``abi:nats`` for
+    the kernel services, or ``abi:host`` for the module hosts it calls."""
     auth = _auth()
     auth.parse_key(key)  # a malformed key never leaves the process
     pb = _pb()
-    request = pb.TokenRequest(key=key).SerializeToString()
+    request = pb.TokenRequest(key=key, audience=audience).SerializeToString()
     try:
         data = _run(_ask(nats_url, auth.TOKEN_SUBJECT, request, timeout), timeout + 5)
     except Exception as exc:
@@ -100,7 +108,12 @@ def exchange_key(nats_url: str, key: str, *, timeout: float = 10.0) -> IssuedTok
 
 
 def service_key_source(
-    nats_url: str, key: str, *, identity: str | None = None, timeout: float = 10.0
+    nats_url: str,
+    key: str,
+    *,
+    identity: str | None = None,
+    timeout: float = 10.0,
+    audience: str = NATS_AUDIENCE,
 ) -> RenewingTokenSource:
     """A token source exchanging ``key``, renewed at half the token's life.
 
@@ -111,7 +124,7 @@ def service_key_source(
     _, key_id, _ = auth.parse_key(key)
     return auth.RenewingTokenSource(
         identity or f"key:{key_id}",
-        lambda: exchange_key(nats_url, key, timeout=timeout),
+        lambda: exchange_key(nats_url, key, timeout=timeout, audience=audience),
     )
 
 
@@ -144,9 +157,14 @@ def nats_verifier(
     return _auth().JWKSVerifier(jwks_over_nats(nats_url), audiences=audiences)
 
 
-def issuer_source(iam: IAMService, name: str) -> RenewingTokenSource:
-    """Tokens of the engine's own service account ``name``, signed in process."""
-    return _auth().RenewingTokenSource(name, lambda: iam.issue_service_token(name))
+def issuer_source(
+    iam: IAMService, name: str, audience: str = NATS_AUDIENCE
+) -> RenewingTokenSource:
+    """Tokens of the engine's own service account ``name``, signed in process,
+    for ``audience`` (``abi:host`` for the calls it makes to module hosts)."""
+    return _auth().RenewingTokenSource(
+        name, lambda: iam.issue_service_token(name, audience=audience)
+    )
 
 
 def rpc_client(cls: Any, nats_url: str, service_key: str, **options: Any) -> Any:

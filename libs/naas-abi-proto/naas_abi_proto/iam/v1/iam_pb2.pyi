@@ -865,12 +865,14 @@ class RegisterCatalogResponse(_message.Message):
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., registered: bool = ...) -> None: ...
 
 class TokenRequest(_message.Message):
-    __slots__ = ("context", "key")
+    __slots__ = ("context", "key", "audience")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     KEY_FIELD_NUMBER: _ClassVar[int]
+    AUDIENCE_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     key: str
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., key: _Optional[str] = ...) -> None: ...
+    audience: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., key: _Optional[str] = ..., audience: _Optional[str] = ...) -> None: ...
 
 class TokenResponse(_message.Message):
     __slots__ = ("error", "access_token", "expires_in", "principal_id", "name")

@@ -136,10 +136,12 @@ class ABIModule(BaseModule):
         await services.cache.delete("ergonomic")
         assert not await services.cache.exists("ergonomic")
 
-        await services.secret.set("ERGONOMIC_DEMO", "demo-value")
-        assert await services.secret.get("ERGONOMIC_DEMO") == "demo-value"
-        assert (await services.secret.list())["ERGONOMIC_DEMO"] == "demo-value"
-        await services.secret.remove("ERGONOMIC_DEMO")
+        # A module's secrets are named after it: the endpoint serves it no other.
+        name = f"{self.module_id}/ERGONOMIC_DEMO"
+        await services.secret.set(name, "demo-value")
+        assert await services.secret.get(name) == "demo-value"
+        assert (await services.secret.list())[name] == "demo-value"
+        await services.secret.remove(name)
         await services.email.send(
             to_email="demo@example.invalid",
             subject="SDK facade",

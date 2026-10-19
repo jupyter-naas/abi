@@ -69,7 +69,9 @@ def test_a_transport_names_no_user_unless_asked_to():
     rpc, nc = transport(kv.GetResponse().SerializeToString())
     caller = CallContext(principal=service_account("api"), on_behalf_of=user("u"))
     with use_call_context(caller):
-        asyncio.run(rpc.call("abi.svc.keyvalue.v1.get", kv.GetRequest(), kv.GetResponse))
+        asyncio.run(
+            rpc.call("abi.svc.keyvalue.v1.get", kv.GetRequest(), kv.GetResponse)
+        )
     assert "Abi-On-Behalf-Of" not in nc.request.call_args.kwargs["headers"]
 
 
@@ -292,3 +294,36 @@ def test_the_brokers_limit_is_the_only_limit():
     )
     (subject, payload), _ = nc.request.call_args
     assert subject == "set" and len(payload) > 10 * 1024 * 1024
+
+
+def _sent_token(nc):
+    return nc.request.call_args.kwargs["headers"]["Nats-Auth-Token"]
+
+
+def test_a_call_to_a_host_carries_the_host_token_and_a_kernel_call_its_own():
+    """A host reads its caller's token: it is never the one the kernel accepts."""
+    rpc, nc = transport(
+        kv.GetResponse().SerializeToString(), host_token=lambda: "host-token"
+    )
+    for subject in (
+        "abi.agent.default.sa.i.h.v1.submit",
+        "abi.mod.default.sa.i.model.m.chat",
+    ):
+        asyncio.run(rpc.call(subject, kv.GetRequest(key="x"), kv.GetResponse))
+        assert _sent_token(nc) == "host-token", subject
+    for subject in ("abi.svc.keyvalue.v1.get", "abi.discovery.default.v1.list_modules"):
+        asyncio.run(rpc.call(subject, kv.GetRequest(key="x"), kv.GetResponse))
+        assert _sent_token(nc) == "issued-token", subject
+
+
+def test_a_transport_without_a_host_token_makes_no_call_to_a_host():
+    from naas_abi_sdk.transport import NoHostTokenError
+
+    rpc, nc = transport(kv.GetResponse().SerializeToString())
+    with pytest.raises(NoHostTokenError):
+        asyncio.run(
+            rpc.call(
+                "abi.agent.default.sa.i.h.v1.submit", kv.GetRequest(), kv.GetResponse
+            )
+        )
+    nc.request.assert_not_called()

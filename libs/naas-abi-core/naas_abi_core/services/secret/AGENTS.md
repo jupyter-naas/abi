@@ -102,12 +102,13 @@ token's identity; the user it acts for comes from the `Abi-On-Behalf-Of`
 header, accepted from `api` and `engine` only; trace and target workspace come
 from the request's `context`. Never read identity from request fields
 (`principal_id` and `tenant_id` are reserved). Clients forward the current
-call's user, trace and workspace. Nothing authorizes per secret yet, with one
-exception: the endpoint refuses names under `iam/` to any caller but the
-`engine` account and under `idp/` to any but `idp`, in `get`, `set`, `remove`
-and `list` (`secret_nats_contract.RESERVED_NAMES`, answered `PERMISSION_DENIED`).
-IAM keeps its signing keys, the engine's service key and the job-trigger seal key
-there, so a module granted `secret:*` must never reach them.
+call's user, trace and workspace. Nothing authorizes per secret yet, so the
+endpoint is an allowlist (`secret_nats_contract.may_use`, answered
+`PERMISSION_DENIED`): `engine` reaches every name but `idp/...`, `idp` its own,
+any other service account only the names under its own prefix (`<module id>/...`
+for a module), a user nothing; in `get`, `set`, `remove` and `list`. IAM's
+signing keys, the broker's passwords and the callout seed live in this store, so
+a module granted `secret:*` must never reach them.
 
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception

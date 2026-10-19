@@ -9,9 +9,9 @@ there). This is the server side; the matching client is
 
 Security note: callers are authenticated (``naas_abi_core.engine.nats_auth``)
 but not yet authorized per secret -- see ``secret_nats_contract.py``'s
-docstring. A known, temporary gap, not an oversight -- except for the
-reserved names (IAM's signing keys, the IdP's secrets), which only their
-owner reaches, over this endpoint, in every operation.
+docstring. A known, temporary gap, not an oversight -- except that this
+endpoint is an allowlist: a caller other than ``engine`` and ``idp`` reaches
+only the names under its own prefix, in every operation.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ from naas_abi_core.services.secret.adaptors.secret_nats_contract import (
     SERVICE_NAME,
     SERVICE_VERSION,
     SUBJECT_PREFIX,
-    reserved_owner,
+    may_use,
 )
 from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.secret.SecretPorts import (
@@ -64,15 +64,9 @@ class _ReservedSecretError(Exception):
 
 
 def _may_use(key: str) -> bool:
-    """Whether the verified caller owns ``key``, or the name is not reserved."""
-    owner = reserved_owner(key)
-    if owner is None:
-        return True
+    """Whether the verified caller owns ``key`` (``secret_nats_contract.may_use``)."""
     principal = current_call_context().principal
-    return (
-        principal.kind == "service_account"
-        and (principal.name or principal.id) == owner
-    )
+    return may_use(principal.kind, principal.name or principal.id, key)
 
 
 def _checked(key: str) -> str:
@@ -217,7 +211,7 @@ class SecretPrimaryAdapterNATS(ServicePrimary):
                 request,
                 response_cls,
                 "PERMISSION_DENIED",
-                "this secret belongs to a first-party account",
+                "this secret is not the caller's",
                 retryable=False,
             )
             return

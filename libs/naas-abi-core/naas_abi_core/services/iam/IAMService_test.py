@@ -742,6 +742,26 @@ def test_exchange_gives_a_ten_minute_nats_token_for_the_account(h, iam):
     assert iam.store.get_key(value.split("_")[2]).last_used_at is not None
 
 
+def test_a_key_buys_a_host_token_the_kernel_refuses(h, iam):
+    """A host reads its caller's token: what a caller sends to a host is
+    addressed to hosts, and good at no kernel service."""
+    from naas_abi_core.engine.nats_auth import InvalidServiceTokenError
+
+    account = _module(h)
+    value = h.admin("create_key", account.id).value
+    host = iam.exchange_key(value, "abi:host")
+    with pytest.raises(InvalidServiceTokenError):
+        iam.verifier().verify(host.token)  # the kernel's verifier
+    claims = iam.verifier(("abi:host",)).verify(host.token)
+    assert claims.subject == account.id and claims.audience == "abi:host"
+    # And the kernel's token is no host token.
+    own = iam.exchange_key(value)
+    with pytest.raises(InvalidServiceTokenError):
+        iam.verifier(("abi:host",)).verify(own.token)
+    with pytest.raises(ValueError):
+        iam.exchange_key(value, "abi:anything")
+
+
 def test_a_storm_of_exchanges_writes_the_last_use_once(h, iam, monkeypatch):
     value = h.admin("create_key", _module(h).id).value
     touched: list[str] = []

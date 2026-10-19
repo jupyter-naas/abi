@@ -258,7 +258,7 @@ class CreatedKey:
     """A new key: ``value`` is shown once and never stored."""
 
     record: KeyRecord
-    value: str
+    value: str = field(repr=False)
 
 
 @dataclass(frozen=True)

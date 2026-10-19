@@ -92,6 +92,23 @@ def test_the_key_is_exchanged_once_then_again_at_half_life(monkeypatch):
     assert (key.principal_id, key.name) == ("sa_x", "module/acme/people")
 
 
+def test_each_audience_is_exchanged_and_cached_on_its_own():
+    transport, nc = _exchanging(
+        pb.TokenResponse(access_token="kernel", expires_in=600),
+        pb.TokenResponse(access_token="host", expires_in=600),
+    )
+    key = ServiceKey(KEY)
+    assert run(key.access_token(transport)) == "kernel"
+    assert run(key.access_token(transport, "abi:host")) == "host"
+    assert run(key.access_token(transport)) == "kernel"  # cached
+    assert run(key.access_token(transport, "abi:host")) == "host"
+    audiences = [
+        pb.TokenRequest.FromString(call.args[1]).audience
+        for call in nc.request.await_args_list
+    ]
+    assert audiences == ["abi:nats", "abi:host"]
+
+
 def test_a_refused_key_raises_unauthenticated():
     transport, _ = _exchanging(
         pb.TokenResponse(

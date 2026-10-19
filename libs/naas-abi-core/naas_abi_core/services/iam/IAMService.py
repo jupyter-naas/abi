@@ -29,6 +29,8 @@ from naas_abi_core.engine.call_context import (
     Principal as CallPrincipal,
 )
 from naas_abi_core.engine.nats_auth import (
+    HOST_AUDIENCE,
+    ISSUABLE_AUDIENCES,
     NATS_AUDIENCE,
     IssuedToken,
     JWKSVerifier,
@@ -1069,18 +1071,34 @@ class IAMService(IIAMService, PolicySource):
             record.id, kind="service_account", audience=audience, name=record.name
         )
 
-    def exchange_key(self, value: str) -> IssuedToken:
-        """A service account's key for an ``abi:nats`` access token (RFC §8.2).
+    def exchange_key(self, value: str, audience: str = NATS_AUDIENCE) -> IssuedToken:
+        """A service account's key for an access token (RFC §8.2): ``abi:nats``
+        for the kernel services, or ``abi:host`` for the module hosts it calls
+        (a host forwards it to discovery and can use it nowhere else).
 
         The key is the credential: no caller is checked. ``KeyRefusedError``
         for every refusal, whatever its cause.
         """
         principal, _ = self.authenticate_key(value)
+        if audience not in ISSUABLE_AUDIENCES:
+            raise ValueError(f"No tokens for audience {audience!r}")
         return self.tokens.issue(
             principal.id,
             kind="service_account",
-            audience=NATS_AUDIENCE,
+            audience=audience,
             name=principal.name,
+        )
+
+    def issue_host_token(self, caller: CallPrincipal) -> IssuedToken:
+        """A host-audience token for an already verified ``caller``: what the
+        engine stores with a job trigger or cancel, in place of the caller's
+        own ``abi:nats`` token that the job's host would otherwise hold. In
+        process only."""
+        return self.tokens.issue(
+            caller.id,
+            kind=caller.kind,
+            audience=HOST_AUDIENCE,
+            name=caller.name if caller.kind == "service_account" else None,
         )
 
     def authenticate_key(self, value: str) -> tuple[PrincipalRecord, KeyRecord]:

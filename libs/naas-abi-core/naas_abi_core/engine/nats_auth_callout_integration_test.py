@@ -303,12 +303,8 @@ def test_no_key_or_password_logs_in_and_no_module_signs_as_api(stack):
         try:
             claims = iam.verifier().verify(await transport.access_token())
             assert claims.name == "module/default/people"
-            with pytest.raises(RPCError):
-                await transport.call(
-                    "abi.iam.v1.create_service_account",
-                    pb.CreateServiceAccountRequest(name="api2"),
-                    pb.CreateServiceAccountResponse,
-                )
+            # IAM changes are not even offered to it: the broker refuses them.
+            assert await denied(transport, "abi.iam.v1.create_service_account")
         finally:
             await transport.close()
 
@@ -1191,7 +1187,7 @@ def test_a_narrowed_manifest_reaches_the_broker_at_the_next_renewal(stack):
     run(stack, scenario, user_ttl_seconds=30)
 
 
-def test_a_module_with_secret_grants_reads_no_signing_key(stack):
+def test_a_module_with_secret_grants_reads_no_signing_key_or_broker_password(stack):
     from naas_abi_core.services.secret.adaptors.primary.secret__primary_adapter__NATS import (
         SecretPrimaryAdapterNATS,
     )
@@ -1204,6 +1200,9 @@ def test_a_module_with_secret_grants_reads_no_signing_key(stack):
                 "iam/signing-keys/20261018-abcd1234": "PEM",
                 "iam/job-trigger-seal": "seal",
                 "idp/signing-key": "idp",
+                "NATS_ENGINE_PASSWORD": "engine-pw",
+                "NATS_AUTH_PASSWORD": "auth-pw",
+                "NATS_AUTH_CALLOUT_SEED": "SAAseed",
                 "people/api-key": "mine",
             }
 
@@ -1245,7 +1244,14 @@ def test_a_module_with_secret_grants_reads_no_signing_key(stack):
         await primary.start(engine)
         transport = Transport(stack["url"], key, timeout=3)
         try:
-            for name in ("iam/signing-keys/20261018-abcd1234", "iam/job-trigger-seal"):
+            for name in (
+                "iam/signing-keys/20261018-abcd1234",
+                "iam/job-trigger-seal",
+                # What the broker's own logins are made of, in the dotenv.
+                "NATS_ENGINE_PASSWORD",
+                "NATS_AUTH_PASSWORD",
+                "NATS_AUTH_CALLOUT_SEED",
+            ):
                 with pytest.raises(RPCError) as refused:
                     await transport.call(
                         "abi.svc.secret.v1.get",
@@ -1260,6 +1266,7 @@ def test_a_module_with_secret_grants_reads_no_signing_key(stack):
                         secret_pb2.SetResponse,
                     )
             assert secrets.values["iam/job-trigger-seal"] == "seal"
+            assert secrets.values["NATS_ENGINE_PASSWORD"] == "engine-pw"
             listed = await transport.call(
                 "abi.svc.secret.v1.list",
                 secret_pb2.ListRequest(),
@@ -1324,5 +1331,151 @@ def test_bus_grants_follow_the_action_publish_is_not_consume(stack):
         finally:
             await sending.close()
             await receiving.close()
+
+    run(stack, scenario)
+
+
+def test_a_host_that_keeps_apis_token_cannot_use_it_to_change_iam(stack):
+    """Nexus calls a hosted agent as ``api``. The host reads the token of the
+    request: it must be one the kernel refuses, and the host's own connection
+    must not reach the IAM operations that would make it an administrator."""
+    import jwt
+
+    iam = stack["iam"]
+    account, key = module(iam, "module/default/people")
+    approve(iam, account, "module/default/people")
+    api = iam.store.find_service_account("api")
+    assert api is not None
+    host_subject = f"abi.agent.default.{subject_token(account)}.i.h.v1.submit"
+    ADMIN = "builtin.platform_admin"
+
+    async def scenario(served):
+        captured: list[dict] = []
+        hosting = Transport(stack["url"], key, timeout=3)
+        # Nexus runs in the engine: its own tokens, and a token for hosts.
+        nexus = Transport(
+            stack["engine"],
+            lambda: iam.issue_service_token("api").token,
+            host_token=lambda: (
+                iam.issue_service_token("api", audience="abi:host").token
+            ),
+            forward_user=True,
+            timeout=3,
+        )
+        try:
+            nc = await hosting.connect()
+
+            async def host(msg):
+                captured.append(dict(msg.headers or {}))
+                await msg.respond(b"")
+
+            await nc.subscribe(host_subject, cb=host)
+            await nc.flush()
+            await nexus.call(host_subject, kv_pb.GetRequest(key="x"), kv_pb.GetResponse)
+            (headers,) = captured
+            token = headers["Nats-Auth-Token"]
+            claims = jwt.decode(token, options={"verify_signature": False})
+            # What the host holds is addressed to hosts, and is still api's.
+            assert claims["aud"] == "abi:host" and claims["sub"] == api.id
+            # The kernel refuses it: IAM says UNAUTHENTICATED to every change.
+            engine = await nats.connect(stack["engine"])
+            try:
+                attempts = {
+                    "attach_policy": pb.AttachPolicyRequest(
+                        policy_id=ADMIN, principal_id=account
+                    ),
+                    "create_key": pb.CreateKeyRequest(principal_id=api.id),
+                    "approve_manifest": pb.ApproveManifestRequest(principal_id=account),
+                }
+                for operation, request in attempts.items():
+                    reply = await engine.request(
+                        f"abi.iam.v1.{operation}",
+                        request.SerializeToString(),
+                        headers={**headers, "Abi-On-Behalf-Of": "usr_x"},
+                        timeout=3,
+                    )
+                    response = getattr(
+                        pb,
+                        "".join(w.title() for w in operation.split("_")) + "Response",
+                    ).FromString(reply.data)
+                    assert response.error.code == "UNAUTHENTICATED", operation
+                # ... and so does the host's own connection: the broker does not
+                # offer it the operations at all.
+                for operation in attempts:
+                    assert await denied(hosting, f"abi.iam.v1.{operation}"), operation
+                # Nothing changed: the module holds no administrator policy.
+                assert not [
+                    a
+                    for a in iam.store.list_attachments(principal_id=account)
+                    if a.policy_id == ADMIN
+                ]
+                assert len(iam.store.list_keys(api.id)) == 0
+                # Control: api's own token, which no host ever holds, would have.
+                own = iam.issue_service_token("api").token
+                reply = await engine.request(
+                    "abi.iam.v1.create_key",
+                    pb.CreateKeyRequest(principal_id=api.id).SerializeToString(),
+                    headers={"Nats-Auth-Token": own},
+                    timeout=3,
+                )
+                assert not pb.CreateKeyResponse.FromString(reply.data).error.code
+            finally:
+                await engine.close()
+        finally:
+            await hosting.close()
+            await nexus.close()
+
+    run(stack, scenario)
+
+
+def test_a_stored_trigger_holds_a_host_token_never_the_callers_own(stack):
+    """A job's host (a module) reads the trigger it is handed: the engine stores
+    a token addressed to hosts, not the caller's ``abi:nats`` one."""
+    import jwt
+    from naas_abi_sdk.broker_control import BrokerControl as Control
+    from naas_abi_sdk.jobs import job_subjects, store_trigger
+    from naas_abi_sdk.module import ModuleDependencies
+    from naas_abi_sdk.permissions import default_manifest
+
+    iam = stack["iam"]
+    people, people_key = module(iam, "module/default/people")
+    approve(
+        iam,
+        people,
+        "module/default/people",
+        default_manifest(ModuleDependencies(), jobs=["nightly"]),
+    )
+
+    async def scenario(served):
+        transport = Transport(stack["url"], people_key, timeout=5)
+        engine = await nats.connect(stack["engine"])
+        try:
+            await Control(transport).request(
+                "ensure_job",
+                project="default",
+                job="nightly",
+                max_concurrency=1,
+                ack_wait_seconds=30,
+                update=False,
+            )
+            await store_trigger(
+                transport, "default", "people", "nightly", b"{}", {}, kind="manual"
+            )
+            subject = job_subjects("default", "people", "nightly").trigger
+            stored = await engine.jetstream().get_msg(
+                "ABI_JOBS_default", subject=subject
+            )
+            token = stored.headers["Nats-Auth-Token"]
+            claims = jwt.decode(token, options={"verify_signature": False})
+            assert claims["aud"] == "abi:host" and claims["sub"] == people
+            # The kernel refuses it, and discovery accepts it.
+            from naas_abi_core.engine.nats_auth import InvalidServiceTokenError
+
+            with pytest.raises(InvalidServiceTokenError):
+                iam.verifier().verify(token)
+            assert iam.verifier(("abi:host",)).verify(token).subject == people
+        finally:
+            await engine.close()
+            await transport.close()
 
     run(stack, scenario)

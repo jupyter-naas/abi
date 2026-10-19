@@ -13,12 +13,14 @@ the domain, never directly on each other. Both
 instead.
 
 Security note: callers are authenticated (an engine token, verified against
-the JWKS) but not yet authorized per secret: whoever holds a valid token can
-read/write/list the secrets this process's ``Secret`` service exposes, until
-the secret service enforces IAM. The exception is ``RESERVED_NAMES``: IAM's
-signing keys, the engine's service key and the IdP's secrets are open only to
-the account that owns them, whatever a policy says. A known, temporary gap for
-every other secret.
+the JWKS) but the secret service does not check IAM per secret yet. This
+endpoint is therefore an allowlist (``may_use``): the ``engine`` account reaches
+every secret but the IdP's, ``idp`` its own (``idp/...``), and any other caller
+only the names under its own prefix, ``<module id>/...`` for a module,
+``<account name>/...`` for another service account. Everything else the store
+serves (the broker's passwords, the callout seed, IAM's signing keys, every
+provider key) is out of reach of a module, whatever its policy grants. A
+known, temporary gap only for the names a caller owns.
 
 See ``naas_abi_core/proto/secret/v1/secret.proto`` for the full wire
 contract this pairs with.
@@ -33,19 +35,51 @@ SUBJECT_PREFIX = "abi.svc.secret.v1"
 # of this contract must agree on it.
 AUTH_HEADER = "Nats-Auth-Token"
 
-# Secrets sealed to one first-party account (RFC §11.3): name prefix -> the
-# service account that owns it. Compared case-insensitively, after trimming,
-# so no spelling of the name reaches an adapter that normalises it.
-RESERVED_NAMES: dict[str, str] = {
-    "iam/": "engine",
-    "idp/": "idp",
-}
+# Names of the first-party accounts that own part of the store.
+ENGINE = "engine"
+IDP = "idp"
+IDP_PREFIX = "idp/"
 
 
-def reserved_owner(key: str) -> str | None:
-    """The account that owns secret ``key``, or None when it is not reserved."""
-    folded = key.strip().casefold()
-    for prefix, owner in RESERVED_NAMES.items():
-        if folded.startswith(prefix):
-            return owner
-    return None
+def _canonical(key: object) -> str | None:
+    """``key`` when it is a plain ``a/b/c`` name: no dot segment, empty segment,
+    backslash, percent escape, control character or surrounding space. A name
+    an adapter might resolve differently (a path, a URL) is not one."""
+    if not isinstance(key, str) or not key or key != key.strip():
+        return None
+    if any(c in key for c in "\\%\x00") or any(ord(c) < 32 for c in key):
+        return None
+    if any(part in ("", ".", "..") for part in key.split("/")):
+        return None
+    return key
+
+
+def owned_prefix(name: str) -> str | None:
+    """The prefix of the names a non-first-party account owns: ``<module
+    id>/`` for ``module/<project>/<module id>``, ``<name>/`` for any other
+    service account; None for a name that cannot own one."""
+    from naas_abi_core.services.iam.modules import parse_account
+
+    account = parse_account(name)
+    owner = account[1] if account is not None else name
+    return f"{owner}/" if _canonical(owner) is not None else None
+
+
+def may_use(kind: str, name: str | None, key: object) -> bool:
+    """Whether the verified caller (its kind and, for a service account, its
+    name) may get, set, remove or list secret ``key``."""
+    if kind != "service_account" or not name:
+        return False
+    if not isinstance(key, str):
+        return False
+    if name == ENGINE:
+        return not key.strip().casefold().startswith(IDP_PREFIX)
+    if name == IDP:
+        return _canonical(key) is not None and key.startswith(IDP_PREFIX)
+    prefix = owned_prefix(name)
+    if prefix is None or _canonical(key) is None:
+        return False
+    # Never another first party's, whatever the module is called.
+    return key.startswith(prefix) and not key.casefold().startswith(
+        (IDP_PREFIX, "iam/")
+    )

@@ -135,6 +135,13 @@ In this phase every engine keeps its services and adds NATS on top.
    `--without-nats` turns it off): its overlay logs the engine in as `engine`,
    and hands each of the `dev.modules` it starts a key of its own.
 
+   Upgrade the engine and every module's `naas-abi-sdk` together: a module on
+   an older SDK sends its own token to the agents, models and apps it calls, and
+   discovery now accepts only the token addressed to hosts (`abi:host`) the
+   current SDK sends. A module's secrets are the names under `<module id>/`
+   (the secret service serves it nothing else), and the broker offers it no IAM
+   operation that changes anything unless its policy allows the `iam:` action.
+
 4. **Remove the `bus:` section** from `services:`. Configs created by
    `abi new project` declare one: `rabbitmq` in `config.local.yaml`,
    `python_queue` in `config.yaml`. In NATS mode the engine refuses to start

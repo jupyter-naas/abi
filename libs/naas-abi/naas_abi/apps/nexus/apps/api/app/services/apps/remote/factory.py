@@ -28,20 +28,30 @@ def build_remote_app_directory(nats: Any | None) -> RemoteAppDirectory:
 
     def clients() -> tuple[Any, Any, Any, str]:
         from naas_abi.apps.nexus.apps.api.app.services.engine_credentials import (
+            api_host_token,
             api_token,
         )
         from naas_abi_sdk.discovery import DiscoveryClient
         from naas_abi_sdk.transport import Transport
 
         token = api_token()
+        host_token = api_host_token()
 
         # On behalf of the signed-in user: the app host learns the user from
         # discovery, which verifies it (never from HttpRequest.user_id).
         transport = Transport(
-            nats.nats_url, token, timeout=REQUEST_TIMEOUT_SECONDS, forward_user=True
+            nats.nats_url,
+            token,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+            forward_user=True,
+            host_token=host_token,
         )
         uploads = Transport(
-            nats.nats_url, token, timeout=UPLOAD_TIMEOUT_SECONDS, forward_user=True
+            nats.nats_url,
+            token,
+            timeout=UPLOAD_TIMEOUT_SECONDS,
+            forward_user=True,
+            host_token=host_token,
         )
         project = nats.discovery.project
         return DiscoveryClient(transport, project), transport, uploads, project

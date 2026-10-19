@@ -317,7 +317,11 @@ def module_show(ctx: click.Context, account: str, sha256: str | None) -> None:
 
 @module.command("approve")
 @click.argument("account")
-@click.option("--sha256", help="A version; default: the latest pending one.")
+@click.option(
+    "--sha256",
+    help="The version to approve (`list` prints its first 12 characters); default: "
+    "the latest pending one. Name it when you reviewed a particular manifest.",
+)
 @click.option(
     "--document",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),

@@ -394,3 +394,54 @@ def test_a_connection_is_renewed_well_before_the_broker_expires_it():
     # ... and no longer than an access token lives.
     maximum = next(m.le for m in shortest.metadata if hasattr(m, "le"))
     assert maximum <= 600
+
+
+def test_no_account_is_offered_an_iam_mutation_without_its_action():
+    """A module hosting an agent reads its caller's token: whatever that token
+    may do at IAM, the module's own connection must not even reach the
+    operations that change who may do what."""
+    nothing = derive()
+    for operation in (
+        "attach_policy",
+        "detach_policy",
+        "create_key",
+        "revoke_key",
+        "approve_manifest",
+        "reject_manifest",
+        "create_policy",
+        "create_service_account",
+        "put_placement",
+        "register_catalog",
+        "suspend_principal",
+    ):
+        assert f"abi.iam.v1.{operation}" not in nothing.publish, operation
+    assert {s for s in nothing.publish if s.startswith("abi.iam.v1.")} == {
+        f"abi.iam.v1.{op}" for op in broker.IAM_ALWAYS
+    }
+    # ... and gets exactly the one it is allowed.
+    granted = derive(allow(["iam:ListKeys"]), catalogs=kernel_with_iam())
+    assert "abi.iam.v1.list_keys" in granted.publish
+    assert "abi.iam.v1.create_key" not in granted.publish
+
+
+def test_iam_always_names_are_iam_operations():
+    assert set(broker.IAM_ALWAYS) <= set(broker.IAM_OPERATIONS)
+
+
+def kernel_with_iam() -> CatalogRegistry:
+    from naas_abi_core.services.iam.iam_catalog import CATALOG
+
+    registry = kernel()
+    registry.register(CATALOG)
+    return registry
+
+
+def test_a_deny_of_a_topic_holds_whatever_the_allow_spells_it():
+    # ``or%64ers`` decodes to ``orders``: the subjects follow the decoded name.
+    permissions = derive(
+        allow(["bus:*"], ["abi:-:-:bus:topic/or%64ers"]),
+        Statement("Deny", ("bus:Consume",), ("abi:-:-:bus:topic/orders",)),
+    )
+    assert permissions.bus_consume == ()
+    assert permissions.bus_publish == ("orders",)
+    assert not any(s.startswith("orders") for s in permissions.subscribe)

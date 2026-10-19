@@ -37,6 +37,7 @@ from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 from naas_abi_sdk import event_filter
 from naas_abi_sdk.call_context import ON_BEHALF_OF_HEADER
 from naas_abi_sdk.telemetry import client_span
+from naas_abi_sdk.transport import NoHostTokenError
 
 JOB_CONTRACT_MAJOR = 1
 MAX_TRIGGERS = 16
@@ -554,6 +555,8 @@ async def store_trigger(
     )
     if answer is not None:
         return int(answer["seq"])
+    # No engine: stored here, with a token the job's host may read.
+    credentials = await _credentials(transport, on_behalf_of=on_behalf_of, host=True)
     nc = await transport.connect()
     ack = await nc.jetstream().publish(
         job_subjects(project, module_id, job).trigger,
@@ -586,6 +589,7 @@ async def store_cancel(
         run_id=run_id,
     ):
         return
+    credentials = await _credentials(transport, host=True)
     nc = await transport.connect()
     await nc.publish(
         job_subjects(project, module_id, job).cancel,
@@ -664,13 +668,24 @@ class JobContext:
 # --- caller side ----------------------------------------------------------------------
 
 
-async def _credentials(transport: Any, *, on_behalf_of: bool = True) -> dict[str, str]:
+async def _credentials(
+    transport: Any, *, on_behalf_of: bool = True, host: bool = False
+) -> dict[str, str]:
     """The caller's token (and user) a job host authorizes a trigger or a
-    cancel with. Stored with a trigger, so it is checked as of that moment."""
+    cancel with. Stored with a trigger, so it is checked as of that moment.
+
+    The engine is sent the caller's own token, which it verifies (and stores a
+    host token in its place). ``host``: a token addressed to hosts, for what is
+    stored without the engine: a module host reads it."""
     auth_headers = getattr(transport, "auth_headers", None)
     if auth_headers is None:
         return {}
-    headers = dict(await auth_headers())
+    try:
+        headers = dict(await (auth_headers(host=True) if host else auth_headers()))
+    except NoHostTokenError:
+        # Stored without an engine, so on a broker nothing confines (the engine
+        # answers there, and stores a host token itself): the transport's own.
+        headers = dict(await auth_headers())
     if not on_behalf_of:
         headers.pop(ON_BEHALF_OF_HEADER, None)
     return headers

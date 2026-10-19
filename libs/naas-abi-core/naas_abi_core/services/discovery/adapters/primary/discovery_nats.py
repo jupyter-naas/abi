@@ -6,7 +6,11 @@ from typing import Any
 from google.protobuf.message import DecodeError
 from naas_abi_core import logger
 from naas_abi_core.engine.call_context import use_call_context
-from naas_abi_core.engine.nats_auth import InvalidServiceTokenError, TokenVerifier
+from naas_abi_core.engine.nats_auth import (
+    HOST_AUDIENCE,
+    InvalidServiceTokenError,
+    TokenVerifier,
+)
 from naas_abi_core.engine.nats_dispatch import max_concurrent_requests
 from naas_abi_core.engine.nats_identity import caller_context, for_request, refusal
 from naas_abi_core.engine.nats_sessions import stop_delivery
@@ -48,6 +52,10 @@ class DiscoveryNATS:
         max_concurrency: int | None = None,
     ):
         self.service, self.verifier, self.project = service, verifier, project
+        # What a hosting module forwards as its caller's token: addressed to the
+        # hosts (``abi:host``), never the caller's own ``abi:nats`` token, which
+        # a host must not hold. Anything else is refused here.
+        self.caller_verifier = verifier.for_audiences((HOST_AUDIENCE,))
         self.subscriptions: list[Subscription] = []
         self.max_payload = 512 * 1024
         # Calls side by side, as the kernel services (nats.max_concurrent_requests).
@@ -102,7 +110,7 @@ class DiscoveryNATS:
                 caller_of(
                     request.caller_token,
                     request.caller_on_behalf_of,
-                    self.verifier,
+                    self.caller_verifier,
                     at=getattr(request, "stored_at", 0.0),
                 )
                 if operation.startswith("authorize_")

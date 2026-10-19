@@ -36,6 +36,11 @@ CONNECTION_TTL_SECONDS = 600
 RENEW_CONNECTION_SECONDS = 120.0
 TOKEN_SUBJECT = "abi.iam.v1.token"
 KEY_USER = "sa"
+NATS_AUDIENCE = "abi:nats"
+# A token for the module hosts this module calls (an agent, a model, an app, a
+# job's host). The kernel services refuse it: a host that keeps it can use it
+# nowhere else.
+HOST_AUDIENCE = "abi:host"
 SERVICE_KEY_PREFIX = "abi_sk_"
 
 
@@ -52,9 +57,8 @@ class ServiceKey:
             raise ValueError("ABI_SERVICE_KEY must be a service key (abi_sk_...)")
         self.value = value
         self.key_id = key_id
-        self._token = ""
-        self._renew_at = 0.0
-        self._expires_at = 0.0
+        # One token per audience: [token, renew at, expires at].
+        self._tokens: dict[str, list[Any]] = {}
         self._lock: asyncio.Lock | None = None
         # Known after the first exchange: the account the key belongs to.
         self.principal_id = ""
@@ -75,25 +79,32 @@ class ServiceKey:
             "inbox_prefix": self.inbox_prefix,
         }
 
-    async def access_token(self, transport: Transport) -> str:
-        """A token valid a few more minutes, exchanged when half its life is gone."""
+    async def access_token(
+        self, transport: Transport, audience: str = NATS_AUDIENCE
+    ) -> str:
+        """A token valid a few more minutes, exchanged when half its life is
+        gone. ``audience``: ``abi:nats`` for the kernel services, ``abi:host``
+        for the module hosts this module calls (they hold it, so it is good
+        nowhere else)."""
         if self._lock is None:
             self._lock = asyncio.Lock()
         async with self._lock:
-            if self._token and time.time() < self._renew_at:
-                return self._token
+            token, renew_at, expires_at = self._tokens.get(audience, ["", 0.0, 0.0])
+            if token and time.time() < renew_at:
+                return token
             try:
-                await self._exchange(transport)
+                await self._exchange(transport, audience)
             except Exception:
-                if self._token and time.time() < self._expires_at - 5:
-                    return self._token  # the engine may be restarting
+                if token and time.time() < expires_at - 5:
+                    return token  # the engine may be restarting
                 raise
-            return self._token
+            return self._tokens[audience][0]
 
     def invalidate(self) -> None:
-        self._renew_at = 0.0
+        for slot in self._tokens.values():
+            slot[1] = 0.0
 
-    async def _exchange(self, transport: Transport) -> None:
+    async def _exchange(self, transport: Transport, audience: str) -> None:
         from naas_abi_sdk.transport import RPCError
 
         nc = await transport.connect()
@@ -101,16 +112,18 @@ class ServiceKey:
         # Bounded by construction: the key, then one token.
         reply = await nc.request(
             TOKEN_SUBJECT,
-            pb.TokenRequest(key=self.value).SerializeToString(),
+            pb.TokenRequest(key=self.value, audience=audience).SerializeToString(),
             timeout=transport.timeout,
         )
         response = pb.TokenResponse.FromString(reply.data)
         if response.HasField("error") and response.error.code:
             raise RPCError(response.error.code, response.error.message)
         lifetime = max(1, response.expires_in)
-        self._token = response.access_token
-        self._expires_at = started + lifetime
-        self._renew_at = started + lifetime / 2
+        self._tokens[audience] = [
+            response.access_token,
+            started + lifetime / 2,
+            started + lifetime,
+        ]
         self.principal_id, self.name = response.principal_id, response.name
 
 

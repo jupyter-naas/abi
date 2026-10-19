@@ -161,6 +161,14 @@ iam.broker_permissions(principal, key)  # records from authenticate_key; never c
   two minutes. `rotate_key` gives the new key a fresh default life and, at the
   limit of five, revokes the old key first. `last_used_at` is written at most
   once a minute.
+- **Host tokens** (`abi:host`). A call to a module host carries the caller's
+  identity under the audience `abi:host`, never its `abi:nats` token: a host
+  reads the token of every request and `api` may do everything. Kernel
+  primaries verify `abi:nats` only; discovery's `authorize_*` and the engine's
+  job loader verify `abi:host` only (`TokenVerifier.for_audiences`); the overflow
+  host both. `exchange_key(key, audience)` and `issue_service_token(name,
+  audience=...)` mint them, `issue_host_token(principal)` is what the broker
+  control stores in a trigger.
 - **Signing keys** retire 20 minutes after the next one signs, but their public
   half stays in the JWKS 169 hours more (`abi_retired_at`), so job triggers
   stored meanwhile still verify `at` their stored time; a retired key is never
@@ -306,7 +314,10 @@ The engine's broker control (`engine/nats_broker_control.py`,
 and writes the jobs stream for them, checked against `broker_grants`:
 modules never create or change a stream or a consumer. `broker.py` documents what each grant
 reaches; a bus topic under `abi`, `evt`, `_INBOX`, `triple_store`, `$` or `_` is
-refused at submission and approval. Bus and event grants follow the action
+refused at submission and approval. A module's connection is offered `broker.IAM_ALWAYS`
+only (`token`, `jwks`, `submit_manifest`, `get_manifest`,
+`find_service_account`, `authorize`, `filter`); the other IAM operations need
+the matching `iam:` action. Bus and event grants follow the action
 (`bus:Publish` vs `bus:Consume`; `event:Append` publishes, the read actions
 subscribe) and a Deny of an action on a topic is honoured. The secrets IAM keeps
 (`iam/...`) are readable only by `engine` over the secret service's NATS

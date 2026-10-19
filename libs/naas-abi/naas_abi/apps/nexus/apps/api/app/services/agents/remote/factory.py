@@ -27,13 +27,21 @@ def build_remote_agent_directory(nats: Any | None) -> RemoteAgentDirectory:
 
     def discovery_client() -> Any:
         from naas_abi.apps.nexus.apps.api.app.services.engine_credentials import (
+            api_host_token,
             api_token,
         )
         from naas_abi_sdk.discovery import DiscoveryClient
         from naas_abi_sdk.transport import Transport
 
-        # api's own tokens (engine_credentials), on behalf of the signed-in user.
-        transport = Transport(nats.nats_url, api_token(), timeout=30, forward_user=True)
+        # api's own tokens (engine_credentials), on behalf of the signed-in user:
+        # discovery gets api's token, a host a token addressed to hosts.
+        transport = Transport(
+            nats.nats_url,
+            api_token(),
+            timeout=30,
+            forward_user=True,
+            host_token=api_host_token(),
+        )
         return DiscoveryClient(transport, nats.discovery.project)
 
     return DiscoveryRemoteAgentDirectory(discovery_client)

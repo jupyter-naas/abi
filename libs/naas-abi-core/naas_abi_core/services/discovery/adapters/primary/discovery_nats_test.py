@@ -2,6 +2,7 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+from naas_abi_core.engine.nats_auth import HOST_AUDIENCE
 from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.discovery.adapters.primary.discovery_nats import (
     DiscoveryNATS,
@@ -112,12 +113,12 @@ def test_authorize_agent_verifies_the_forwarded_caller_and_its_user():
         service.authorize_agent.return_value = pb.AuthorizeAgentResponse()
         primary = DiscoveryNATS(service, TEST_TOKENS.verifier, "test")
 
-        async def authorize(caller, on_behalf_of=""):
+        async def authorize(caller, on_behalf_of="", audience=HOST_AUDIENCE):
             msg = SimpleNamespace(
                 data=pb.AuthorizeAgentRequest(
                     instance_id="r-1",
                     agent_name="Researcher",
-                    caller_token=TEST_TOKENS.token(caller),
+                    caller_token=TEST_TOKENS.token(caller, audience=audience),
                     caller_on_behalf_of=on_behalf_of,
                 ).SerializeToString(),
                 headers={"Nats-Auth-Token": TEST_TOKENS.token("research")},
@@ -142,6 +143,13 @@ def test_authorize_agent_verifies_the_forwarded_caller_and_its_user():
         # Only a trusted identity names the user it acts for.
         refused = await authorize("orchestrator", "user-1")
         assert refused.error.code == "UNAUTHENTICATED"
+        assert service.authorize_agent.await_count == 2
+        # A host holds a token addressed to hosts, never the caller's own: the
+        # kernel's token (``abi:nats``) is refused here, so a host handed one
+        # would be refused too, and a host token buys nothing at any kernel
+        # service (they accept ``abi:nats`` only).
+        own = await authorize("api", "user-1", audience="abi:nats")
+        assert own.error.code == "UNAUTHENTICATED"
         assert service.authorize_agent.await_count == 2
 
     asyncio.run(scenario())
