@@ -7,7 +7,7 @@ from .bootstrap import maybe_rerun_in_project_context
 from .chat import chat
 from .config import config
 from .deploy import deploy
-from .dev import dev
+from .dev import dev, use_running_dev_overlay
 from .docs import docs
 from .init import init
 from .module import module
@@ -59,6 +59,7 @@ def main():
     if maybe_rerun_in_project_context(sys.argv[1:]):
         return
 
+    use_running_dev_overlay(sys.argv[1:])
     _main()
 
 

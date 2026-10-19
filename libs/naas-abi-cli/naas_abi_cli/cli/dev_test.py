@@ -1275,3 +1275,84 @@ def test_nexus_web_keeps_its_open_key_next_to_nats() -> None:
     ]
 
     assert dev._open_letter_map(started) == {"a": "api", "n": "nexus-web"}
+
+
+# =============================================================================
+# Commands that load the engine while `abi dev up` runs
+# =============================================================================
+
+
+def _running_dev_project(tmp_path: Path, *, alive: bool = True) -> Path:
+    """A project with the overlay `abi dev up` wrote and the api's pid file."""
+    (tmp_path / "pyproject.toml").write_text("[tool.uv.sources]\n")
+    dev_dir = tmp_path / ".abi" / "dev"
+    dev_dir.mkdir(parents=True)
+    overlay = dev_dir / "dev.overlay.yaml"
+    overlay.write_text('{"nats": null}\n')
+    (dev_dir / "instance.json").write_text(
+        '{"project_root": "x", "offset": 1, "ports": {"api": 9880}}'
+    )
+    # PID 1 is alive; a huge pid is not.
+    (dev_dir / "api.pid").write_text("1" if alive else "4194000")
+    return overlay
+
+
+def test_commands_use_the_overlay_of_the_running_dev_stack(
+    monkeypatch, tmp_path
+) -> None:
+    overlay = _running_dev_project(tmp_path)
+    monkeypatch.setenv("ABI_CONFIG_OVERLAY", "")
+
+    dev.use_running_dev_overlay(["chat"])
+
+    assert Path(dev.os.environ["ABI_CONFIG_OVERLAY"]) == overlay
+
+
+def test_a_subfolder_of_the_project_uses_the_overlay_too(monkeypatch, tmp_path) -> None:
+    overlay = _running_dev_project(tmp_path)
+    (tmp_path / "src").mkdir()
+    monkeypatch.chdir(tmp_path / "src")
+    monkeypatch.setenv("ABI_CONFIG_OVERLAY", "")
+
+    dev.use_running_dev_overlay(["agent", "list"])
+
+    assert Path(dev.os.environ["ABI_CONFIG_OVERLAY"]) == overlay
+    assert Path.cwd() == tmp_path / "src"
+
+
+def test_an_overlay_chosen_by_the_caller_wins(monkeypatch, tmp_path) -> None:
+    _running_dev_project(tmp_path)
+    monkeypatch.setenv("ABI_CONFIG_OVERLAY", "/somewhere/else.yaml")
+
+    dev.use_running_dev_overlay(["chat"])
+
+    assert dev.os.environ["ABI_CONFIG_OVERLAY"] == "/somewhere/else.yaml"
+
+
+def test_a_stopped_dev_stack_leaves_its_overlay_alone(monkeypatch, tmp_path) -> None:
+    _running_dev_project(tmp_path, alive=False)
+    monkeypatch.setenv("ABI_CONFIG_OVERLAY", "")
+
+    dev.use_running_dev_overlay(["chat"])
+
+    assert not dev.os.environ.get("ABI_CONFIG_OVERLAY")
+
+
+@pytest.mark.parametrize("command", ["dev", "stack", "start", "new", "deploy"])
+def test_commands_that_do_not_load_the_engine_keep_their_environment(
+    monkeypatch, tmp_path, command: str
+) -> None:
+    _running_dev_project(tmp_path)
+    monkeypatch.setenv("ABI_CONFIG_OVERLAY", "")
+
+    dev.use_running_dev_overlay([command, "up"])
+
+    assert not dev.os.environ.get("ABI_CONFIG_OVERLAY")
+
+
+def test_outside_a_dev_project_nothing_changes(monkeypatch) -> None:
+    monkeypatch.setenv("ABI_CONFIG_OVERLAY", "")
+
+    dev.use_running_dev_overlay(["chat"])
+
+    assert not dev.os.environ.get("ABI_CONFIG_OVERLAY")

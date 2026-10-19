@@ -2320,6 +2320,47 @@ def _running_services(ports: dict[str, int]) -> list[str]:
     return alive
 
 
+# Commands that do not load the engine's configuration, or that start it
+# themselves with their own overlay.
+_NO_DEV_OVERLAY_COMMANDS = frozenset(
+    {"dev", "stack", "start", "stop", "logs", "new", "init", "deploy", "docs"}
+)
+
+
+def use_running_dev_overlay(argv: list[str]) -> None:
+    """Make a command that loads the engine reach the one `abi dev up` runs.
+
+    `abi dev up` starts its own broker on an offset port and hands the API its
+    URL through `.abi/dev/dev.overlay.yaml`; the config the other commands read
+    names the Docker stack's broker (127.0.0.1:4222). While a dev service is
+    alive, those commands read the overlay too, unless the caller set
+    ABI_CONFIG_OVERLAY.
+    """
+    if os.environ.get(CONFIG_OVERLAY_ENV):
+        return
+    if argv and argv[0] in _NO_DEV_OVERLAY_COMMANDS:
+        return
+    from naas_abi_cli.cli.bootstrap import find_abi_project_root
+
+    root = find_abi_project_root()
+    if root is None:
+        return
+    overlay = root / DEV_DIR_NAME / DEV_OVERLAY_FILENAME
+    if not overlay.is_file() or not (root / DEV_DIR_NAME / INSTANCE_FILENAME).is_file():
+        return
+    # The dev helpers read the project root from the working directory.
+    invoked_from = Path.cwd()
+    os.chdir(root)
+    try:
+        alive = _running_services(_load_or_create_instance()["ports"])
+    except (ValueError, KeyError, OSError):
+        return
+    finally:
+        os.chdir(invoked_from)
+    if alive:
+        os.environ[CONFIG_OVERLAY_ENV] = str(overlay)
+
+
 @dev.command("nuke")
 @click.option(
     "-y", "--yes",
