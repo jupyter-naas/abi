@@ -59,7 +59,7 @@ the upgrade test met is in this list.
   RabbitMQ bus adapter and the Dagster app raise `MissingLegacyExtra` (a
   `ModuleNotFoundError` with an install hint), and the module loader leaves
   out orchestrations that import Dagster, with one INFO line per module.
-  Commits `9e8a56cb5`, `2c2d0dbb8`, `a03fa5296`, `703847373`.
+  Commits `d6d5ccdd4`, `f142a6482`, `c7f1f0e4f`, `f3ef4659c`.
 - **Who:** every 2.x project: its `pyproject.toml` asks for
   `naas-abi-core[all]`, and its stack runs Dagster and a `rabbitmq` bus
   (`config.local.yaml`, `config.remote.yaml`).
@@ -82,7 +82,7 @@ the upgrade test met is in this list.
 - **What changed:** `naas-abi-core[all]` includes the `nats` and `otel`
   extras, and `naas-abi` requires `naas-abi-core[nats]`: `naas-abi-proto`,
   `naas-abi-sdk`, `nats-py`, `pyjwt`, `protobuf` and OpenTelemetry. Nexus
-  imports them at startup. Commits `4af52f795`, `6e8491fff`, `655e0356f`.
+  imports them at startup. Commits `12f22c0a5`, `db6db8cf7`, `81847777e`.
 - **Who:** every install. The two new packages are published with 3.0; until
   then they resolve only from path sources (the `.abi` submodule).
 - **NATS off / on:** affected at install time only.
@@ -106,8 +106,8 @@ the upgrade test met is in this list.
 ### New top-level keys: `nats:`, `telemetry:`, `dev:`
 - **What changed:** 2.x ignored unknown top-level keys. `nats:` now switches
   the engine to NATS mode, `telemetry:` configures OpenTelemetry, and `dev:`
-  lists the modules `abi dev up` runs (`extra="forbid"`). Commits `fa818fbaf`,
-  `655e0356f`, `c83a2d58d`.
+  lists the modules `abi dev up` runs (`extra="forbid"`). Commits `f33364df5`,
+  `81847777e`, `6eea78b9a`.
 - **Who:** a config that already used one of these names for something else.
 - **Migration:** rename such a key.
 
@@ -115,7 +115,7 @@ the upgrade test met is in this list.
 - **What changed:** `services.event.event_adapter.config` and
   `services.activity_log.activity_log_adapter.config` are pydantic models, no
   longer dicts. A `custom` adapter that also sets `config:` is refused.
-  Commits `73467e53e`, `60c1edeac`, `185098880`.
+  Commits `f3d07b514`, `604d4ef78`, `50a4c5fb5`.
 - **Who:** code that reads `...config["db_path"]`; configs of custom adapters.
 - **Migration:** read attributes (`config.db_path`) or `config.model_dump()`;
   move a custom adapter's settings to `custom_config:`.
@@ -123,7 +123,7 @@ the upgrade test met is in this list.
 ### Dataset compaction rewrites files with deletes
 - **What changed:** `compaction_delete_threshold` (DuckLake) defaults to 0:
   `compact()` rewrites every data file holding deleted rows, then merges.
-  Commit `300d92782`.
+  Commit `649082350`.
 - **NATS off:** the first Dagster `dataset_compaction_job` after the upgrade
   rewrites more files; the files it replaces stay on disk (the cleanup job is
   NATS only).
@@ -134,8 +134,8 @@ the upgrade test met is in this list.
   `ducklake_cleanup_old_files`.
 
 ### NATS mode validates more
-- **What changed:** with a `nats:` block (commits `2f076a329`, `0a4964a46`,
-  `185098880`):
+- **What changed:** with a `nats:` block (commits `d6fb02f31`, `088ab3454`,
+  `50a4c5fb5`):
   - an explicit `services.bus` must be `nats_jetstream` on the same URL as
     `nats.nats_url`;
   - cache tiers are all local or all `nats_rpc`;
@@ -153,11 +153,11 @@ the upgrade test met is in this list.
 ### Agent memory moves to the Document Service on NATS
 - **What changed:** engine agents built with `memory=None` checkpoint into
   the Document Service (checkpoint schema 2, namespace
-  `naas_abi_core.services.agent`, agent id `engine.v1`). Commit `a1d23ffd2`.
+  `naas_abi_core.services.agent`, agent id `engine.v1`). Commit `638abbbdc`.
   - NATS on: always.
   - NATS off: only without `POSTGRES_URL`, and only when the Document Service
     loads (a module declares it); with `POSTGRES_URL` set, agents keep 2.x's
-    PostgreSQL checkpointer (`1cd7790cf`).
+    PostgreSQL checkpointer (`7000398f4`).
   - A daily `agent_memory_prune` (NATS) keeps each thread's newest 20
     checkpoints: LangGraph's state history beyond them is gone; the
     conversation stays whole.
@@ -175,7 +175,7 @@ the upgrade test met is in this list.
 ### The activity log moves to the Document Service on NATS
 - **What changed:** the default activity log adapter is `document` in NATS
   mode; with NATS off it stays the per-actor SQLite files under
-  `storage/activity_log` (`185098880`, `1cd7790cf`).
+  `storage/activity_log` (`50a4c5fb5`, `7000398f4`).
 - **NATS on:** the earlier history is not shown until `activity_log_migrate`
   runs (`{"data_dir": "storage/activity_log"}`, then with `"apply": true`).
   Copied events are numbered after the ones recorded since the switch.
@@ -184,7 +184,7 @@ the upgrade test met is in this list.
   which only suits a single engine.
 
 ### Dataset values
-- **What changed:** commits `cf948fe61`, `c6582a981`, `300d92782`.
+- **What changed:** commits `97d4ca0f7`, `094058381`, `649082350`.
   - Query results hold portable values on every path, in process and over
     NATS: `Decimal` becomes `float`, bytes become base64 strings, NaN and
     infinities become `None`, UUIDs and intervals become strings, and dates
@@ -207,13 +207,13 @@ the upgrade test met is in this list.
   lines then one triple per line (still Turtle; rdflib's pretty form before).
   The body streams: a store error mid-way ends a 200 response early. Counts
   come in `X-Triple-Count` and `X-Named-Individual-Count`. The API needs a
-  writable temporary directory. Commits `74e1ffe76`, `3f4d95159`.
+  writable temporary directory. Commits `2f70faac6`, `828886396`.
 - **Migration:** parse the file as Turtle rather than diffing it as text;
   check the triple count against `X-Triple-Count`.
 
 ### The old bus's messages stay behind
 - **What changed:** in NATS mode the bus is JetStream whatever `services.bus`
-  says (`1242d0f8a`).
+  says (`70bdf8f2a`).
 - **Migration:** drain RabbitMQ or `python_queue` before phase 2.
 
 ### Nexus database migration `0057_agent_enabled_override`
@@ -226,7 +226,7 @@ the upgrade test met is in this list.
 ### Ports gained abstract methods
 A custom adapter written for 2.x fails at instantiation
 (`TypeError: Can't instantiate abstract class`) until it implements them.
-Commits `6d32eb86e`, `9977c9060`, `82ccb8352`.
+Commits `a36c1f68a`, `c9323acb3`, `1da33738b`.
 
 | Port | New abstract members |
 |---|---|
@@ -237,7 +237,7 @@ Commits `6d32eb86e`, `9977c9060`, `82ccb8352`.
 | `ICodingEnvironmentAdapter` | `list_all_environments()` |
 | `ISourceControlAdapter` | `delete_repo(*, repo_id)` |
 | `ITripleStoreService` (service implementations only) | `query_stream(query)`, `export(graph_name)` |
-| `IDocumentAdapter` | `collection_spec(namespace, collection)`, `namespaces()`; `find(..., max_bytes=)` is passed only to a `find` that takes it, in process and over NATS (`7f01adc51`, `21aa48f63`) |
+| `IDocumentAdapter` | `collection_spec(namespace, collection)`, `namespaces()`; `find(..., max_bytes=)` is passed only to a `find` that takes it, in process and over NATS (`ce7a19203`, `e299c28bf`) |
 
 Custom triple store adapters (`ITripleStorePort`) get defaults and keep
 working.
@@ -246,37 +246,37 @@ working.
 - `query()` on a SELECT returns an `rdflib.query.Result` instead of a
   one-shot iterator, on Oxigraph and Fuseki; Oxigraph answers ASK with an ASK
   result (2.x returned an empty, always truthy iterator). `next(result)`
-  fails; use `iter()` or `list()` (`ad04760e7`, `a81f27757`).
+  fails; use `iter()` or `list()` (`ecffb7536`, `383bf1dd1`).
 - Oxigraph `create_graph` on an existing graph raises
   `GraphAlreadyExistsError` (was `requests.HTTPError`); Fuseki transport errors
   raise `Exceptions.RequestError` (were `requests` exceptions)
-  (`fe216be09`, `551f0a724`).
+  (`ca925a8fc`, `eb958ab28`).
 - The `kg_sparql_query` agent tool returns at most 200 SELECT rows as
   `{"rows": [...], "total_rows": n, "truncated": true}`; ASK returns
   `{"ask": bool}` and CONSTRUCT a list of N-Triples (2.x failed on both)
-  (`0522a9ac8`).
+  (`3c65e3e6b`).
 
 ### Secrets
 - The `dotenv` adapter's `remove()` deletes the key from `.env` (2.x only
   cleared the process environment, so it came back), and `get()` after
-  `set()` or `remove()` returns the new state (`5a4809b4c`). Rewriting `.env`
-  keeps the file's owner (`20492ba1b`).
+  `set()` or `remove()` returns the new state (`fe22c0ca7`). Rewriting `.env`
+  keeps the file's owner (`efc11d2a0`).
 
 ### Modules and the engine
 - `BaseModule` mixes in `JobsMixin`: the names `jobs`, `expose_job`,
   `trigger_job`, `atrigger_job`, `missing_job_handlers` and
   `_job_handlers`/`_bind_job_host` are taken. A module class defining one of
-  them fails or overrides the engine's hooks (`9e48efd01`). With NATS off,
+  them fails or overrides the engine's hooks (`dd61554a0`). With NATS off,
   declared jobs are logged as needing NATS mode.
 - The API app has its own FastAPI lifespan and calls `Engine.shutdown()` at
   exit; code that replaced `app.router.lifespan_context` should wrap it
-  instead (`e16df2c3f`). In NATS mode the API process exits when the broker
+  instead (`035fdb557`). In NATS mode the API process exits when the broker
   stays unreachable (about two minutes) and relies on its supervisor
-  (`7cbfb3501`).
+  (`41cbfe813`).
 - `Engine.load()` calls `shutdown()` when loading fails.
 - Agent routing: an agent or supervisor persisted in a thread is adopted only
   if it is in the current agent's tree; nested sub-agents are reached through
-  their parent (`cf1f1fc76`).
+  their parent (`7b7082581`).
 - `GraphService.export_graph_as_ttl(...)` is replaced by
   `GraphService.export_graph(...)`, which returns counts and an async iterator
   of chunks.
@@ -290,7 +290,7 @@ working.
   (no Dagster), no orchestration in its module, `naas-abi-sdk[agent]` in its
   dependencies. It needs the `.abi` submodule: `--without-abi-submodule` is
   refused with NATS, and a failed submodule add stops the command and removes
-  the folder it created. Commits `1b607fb93`, `4163aea00`.
+  the folder it created. Commits `25f8f1fb3`, `fb9172e8c`.
 - **Who:** scripts that run `abi new project` and expect the 2.x layout.
 - **Migration:** add `--without-nats`; for `abi dev up` on a NATS project,
   install `nats-server` 2.14 or later.
@@ -303,12 +303,12 @@ working.
   and its module key in `.env` when the Docker config (`config.local.yaml`)
   is on NATS; outside a project, a repository of its own (`./<kebab-name>/`,
   as `--standalone`). In a project whose configs have no `nats:` block it
-  still creates an in-engine module and says so (`a203d3afa`, `1f8a5c5c8`);
+  still creates an in-engine module and says so (`e7240c8ae`, `71da49d90`);
   `--remote` forces a remote one, `--in-engine` (alias `--local`) an
   in-engine one. Module names must match
   `^[a-z][a-z0-9-]{0,62}$` once kebab-cased. In a project, the default path
   `.` means `src/<name>` wherever the command runs, and a remote module must
-  live under `src/`. Commits `6b4d376dc`, `4163aea00`.
+  live under `src/`. Commits `ea721a6f7`, `fb9172e8c`.
 - **Who:** scripts that create modules in NATS projects or outside projects.
 - **Migration:** pass `--in-engine` for a classic module; pass the target
   folder explicitly to nest a module elsewhere.
@@ -323,7 +323,7 @@ working.
   `rabbitmq` extras, which rewrites `pyproject.toml` and `uv.lock` and needs
   network access; a `uv` failure is printed and the exit code stays 0. It
   stops before writing anything when `.env` is not writable and prints the
-  `chown` to run (`37f559ff5`). Commit `4163aea00`.
+  `chown` to run (`3f7552ff0`). Commit `fb9172e8c`.
 - **Migration:** commit the dependency change; give `.env` back to your user
   when told (a 2.x container rewrote it as root).
 
@@ -333,9 +333,9 @@ working.
   `.deploy/docker/nats/nats.conf`, `NATS_ABI_PASSWORD` and
   `NATS_MODULE_PASSWORD` in `.env`, a Caddy route for `/app-html/remote/*`,
   MinIO from `pgsty/minio` and `pgsty/mc` (the `quay.io/minio` images are no
-  longer served, `c539455e4`), a working `fuseki-compact`, and an
+  longer served, `97bd5bc82`), a working `fuseki-compact`, and an
   `mcp-server` that mounts the project and listens on `0.0.0.0` in its
-  container (`24b9a5e42`), published on the host's `127.0.0.1:8000` only: it
+  container (`7df789955`), published on the host's `127.0.0.1:8000` only: it
   checks no credential and calls the agents with `ABI_API_KEY`, so reach it
   through a tunnel or a proxy that authenticates.
 - **NATS on:** the NATS stack: `nats` without a profile (the engine waits for
@@ -346,12 +346,12 @@ working.
 
 ### `abi deploy local-up`, `local-down` and `local-logs` use the override file
 - **What changed:** they pass `docker-compose.override.yml` when it exists;
-  2.x's explicit `--file docker-compose.yml` skipped it (`1b607fb93`).
+  2.x's explicit `--file docker-compose.yml` skipped it (`25f8f1fb3`).
 - **Who:** projects whose override file was meant for other commands only.
 
 ### `abi dev up`
-- **What changed:** commits `e63af5230`, `9e7b9cd35`, `c83a2d58d`,
-  `cbe167788`, `3fd2033e8`, `96d6803fd`, `c6f7251b3`.
+- **What changed:** commits `1ef5ae0b5`, `8ec4a1f83`, `6eea78b9a`,
+  `05fb7d56f`, `9b34cc81e`, `58bfb9764`, `ebfeb987b`.
   - The mode follows the config: NATS with a `nats:` block, in-process
     without; `--with-nats` and `--without-nats` choose. NATS mode needs
     `nats-server` 2.14 or later, starts a broker with the two users, writes
@@ -373,12 +373,12 @@ working.
   `nats-server` for NATS projects.
 
 ### Smaller CLI changes
-- The "ABI project detected. Re-running…" notice goes to stderr (`798c4b7aa`).
+- The "ABI project detected. Re-running…" notice goes to stderr (`a0253fd9a`).
 - `abi chat`, `abi run` and `abi agent list` load the engine with
   `ABI_ENGINE_ROLE=auto` (serve when no engine does, else client); set the
-  variable to change it (`185098880`).
+  variable to change it (`50a4c5fb5`).
 - `abi new module --standalone` pins the SDK to `naas-abi-cli-v<version>`
-  (`--abi-ref` overrides, `e4b6ec4d2`).
+  (`--abi-ref` overrides, `4c333eea3`).
 - New commands: `abi module key <module_id>`, `abi agent migrate-memory`,
   `abi agent prune-memory`.
 
@@ -389,25 +389,25 @@ No route was removed or renamed.
 - **App link tokens are not sessions.** A token from
   `POST /api/apps/access-token` (scope `app-html`) no longer authenticates
   `/api/*` or the WebSocket (401); it still opens `/app-html/`. Use the
-  session token or `ABI_API_KEY` (`559dbfb8c`).
+  session token or `ABI_API_KEY` (`f9e6b23ac`).
 - **A user's agent toggle sticks.** `PATCH /api/agents/{id}` with `enabled`
   stores an override that later syncs keep, instead of realigning the agent
   with the workspace `agents:` roster. Agents toggled under 2.x keep following
   the roster until toggled again. To hand control back to the config:
-  `UPDATE agent_configs SET enabled_override = NULL` (`69cffe14d`).
+  `UPDATE agent_configs SET enabled_override = NULL` (`c6cbe455f`).
 - **`/app-html/` through the web app** no longer follows redirects, streams
   bodies, and passes on `Content-Security-Policy`, `Referrer-Policy`,
   `Content-Length`, range and cache headers. A Nexus framed by another site
   needs that origin in `frontend_url` or the CORS origins for its apps to
-  frame (`3df6e1fa5`).
+  frame (`0cc5ec60a`).
 - **Logout and password changes** write a `revoked_tokens` row every time;
   access tokens carry a float `iat`. A verifier of Nexus tokens outside Nexus
-  should allow some clock leeway (`88f8f10cb`, `7c1583347`).
+  should allow some clock leeway (`7719c4082`, `e3439fd4a`).
 - **Apps of a module whose package is `remote`** are hidden, and
-  `/app-html/remote/...` is reserved for remote apps (`88f8f10cb`,
-  `a9437bc7e`).
+  `/app-html/remote/...` is reserved for remote apps (`7719c4082`,
+  `e293b4ef4`).
 - **The graph view's filter preview** runs SPARQL aggregates and subqueries on
-  the store; a store without them shows an empty preview (`74e1ffe76`).
+  the store; a store without them shows an empty preview (`2f70faac6`).
 - **Graph export:** see [Graph export](#graph-export).
 - **Chat with remote agents** (NATS): the `agent` of `POST /api/chat/stream`
   and `POST /api/chat/complete` must be the agent's id for an agent published
@@ -415,7 +415,7 @@ No route was removed or renamed.
   answer with remote agents. When the agent is unavailable or its run fails,
   the stream ends with an error message and `/api/chat/complete` answers with
   the provider marked `(error)`, as for an in-process agent; a failure after
-  the answer is done is only logged (`136d8cf5e`, `642ca5dc3`, `4d1c014f4`).
+  the answer is done is only logged (`2ef173f31`, `72148949b`, `75dd059cc`).
 - New super-admin routes under `/api/admin/system/` (System app: data, jobs,
   traces). Jobs run with
   `POST /api/admin/system/jobs/<module>/<job>/trigger` and
@@ -456,7 +456,7 @@ breaks a 2.x project. Projects that ran earlier builds of the branch must:
 - with NATS off and `POSTGRES_URL` set, expect agent memory back in
   PostgreSQL: earlier builds kept it in the Document Service whenever that
   service loaded, and 3.0 gives `POSTGRES_URL` precedence without NATS
-  (`1cd7790cf`). Conversations held in documents since are not seen; turn
+  (`7000398f4`). Conversations held in documents since are not seen; turn
   NATS on to read them again, or unset `POSTGRES_URL`;
 
 - sign with the module key as the module id (`ABI_MODULE_KEY`, `abi module key
@@ -489,17 +489,17 @@ on the branch:
 
 | Commit | What broke |
 |---|---|
-| `1cd7790cf` | Phase 1 (NATS off) moved agent memory and the activity log to the Document Service: a 2.x Docker deploy's agents forgot every conversation, and no job could copy them without NATS. |
-| `20492ba1b`, `37f559ff5` | A root container rewrote `.env` as root; `abi deploy local --regenerate` then failed with a traceback. |
-| `7f01adc51`, `21aa48f63` | Every query of a 2.x custom document adapter failed on the `max_bytes` keyword, in process and over NATS. |
-| `a203d3afa`, `1f8a5c5c8` | `abi new module` created remote modules in classic projects, where nothing runs them (and, once that was fixed, in-engine modules in projects on NATS natively). |
-| `c539455e4`, `2bcb2ff71` | The generated stack (and the repository's) pulled MinIO images that no longer exist; `fuseki-compact` restarted forever on a shell syntax error. |
-| `28e885211`, `24b9a5e42`, `4b0236741` | The generated (and the repository's) `mcp-server` restarted forever (no project mounted) and listened on 127.0.0.1 only. |
-| `c6f7251b3` | Under `abi dev up`, Dagster could not load a config that templates `PUBLIC_WEB_HOST`, so no orchestration or job loaded. |
-| `a9149c9ca`, `45352a858` | `abi new project` could not install a NATS project: `naas-abi-sdk[agent]` required langchain-core 1 while `naas-abi-core` needs 0.3. |
-| `136d8cf5e`, `4d1c014f4` | `POST /api/chat/complete` answered "Unknown provider type: remote", then returned a module's failure as a successful answer. |
-| `642ca5dc3` | A remote agent's next turn, sent right after the previous one, failed with `CONVERSATION_BUSY`: Nexus stopped reading at `done` and cancelled the finishing run; reading on must not append a late failure to the answer (`4d1c014f4`). |
-| `39807a0d3` | The migration guide's phase 2 started the classic stack's `nats` profile, where the API and Dagster cannot both serve (`EngineAlreadyServing`), and its restart commands left the API on the old code. |
+| `7000398f4` | Phase 1 (NATS off) moved agent memory and the activity log to the Document Service: a 2.x Docker deploy's agents forgot every conversation, and no job could copy them without NATS. |
+| `efc11d2a0`, `3f7552ff0` | A root container rewrote `.env` as root; `abi deploy local --regenerate` then failed with a traceback. |
+| `ce7a19203`, `e299c28bf` | Every query of a 2.x custom document adapter failed on the `max_bytes` keyword, in process and over NATS. |
+| `e7240c8ae`, `71da49d90` | `abi new module` created remote modules in classic projects, where nothing runs them (and, once that was fixed, in-engine modules in projects on NATS natively). |
+| `97bd5bc82`, `9ac32591e` | The generated stack (and the repository's) pulled MinIO images that no longer exist; `fuseki-compact` restarted forever on a shell syntax error. |
+| `e5bd367dd`, `7df789955`, `358379e56` | The generated (and the repository's) `mcp-server` restarted forever (no project mounted) and listened on 127.0.0.1 only. |
+| `ebfeb987b` | Under `abi dev up`, Dagster could not load a config that templates `PUBLIC_WEB_HOST`, so no orchestration or job loaded. |
+| `43426b522`, `460bf7656` | `abi new project` could not install a NATS project: `naas-abi-sdk[agent]` required langchain-core 1 while `naas-abi-core` needs 0.3. |
+| `2ef173f31`, `75dd059cc` | `POST /api/chat/complete` answered "Unknown provider type: remote", then returned a module's failure as a successful answer. |
+| `72148949b` | A remote agent's next turn, sent right after the previous one, failed with `CONVERSATION_BUSY`: Nexus stopped reading at `done` and cancelled the finishing run; reading on must not append a late failure to the answer (`75dd059cc`). |
+| `a365c76b8` | The migration guide's phase 2 started the classic stack's `nats` profile, where the API and Dagster cannot both serve (`EngineAlreadyServing`), and its restart commands left the API on the old code. |
 
 ## Known limits found by the check
 
