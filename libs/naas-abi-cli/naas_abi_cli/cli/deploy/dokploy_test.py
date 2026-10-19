@@ -25,6 +25,7 @@ from naas_abi_cli.cli.deploy.dokploy import (
     DokployDeployError,
     setup_dokploy_deploy,
 )
+from naas_abi_cli.cli.deploy.local import setup_local_deploy
 
 # The secret block `abi new project` writes into config.local.yaml.
 _CONFIG = """\
@@ -121,6 +122,37 @@ MODES = [
     pytest.param(True, True, id="nats-coding"),
     pytest.param(False, True, id="classic-coding"),
 ]
+
+
+def _dir(tmp_path: Path, name: str) -> Path:
+    folder = tmp_path / name
+    folder.mkdir()
+    return folder
+
+
+@pytest.mark.parametrize("nats", [True, False])
+def test_the_stack_runs_the_images_of_the_local_stack(
+    tmp_path: Path, nats: bool
+) -> None:
+    # The two templates are kept by hand: an image one moves to (MinIO's public
+    # images are gone) must not stay behind in the other, where it fails to pull
+    # on the server.
+    dokploy = _deploy(_project(_dir(tmp_path, "a"), nats=nats))["services"]
+    local_project = _dir(tmp_path, "b")
+    setup_local_deploy(str(local_project), base_domain="localhost", nats=nats)
+    local = yaml.safe_load((local_project / "docker-compose.yml").read_text())[
+        "services"
+    ]
+
+    shared = {
+        name
+        for name in dokploy.keys() & local.keys()
+        if "image" in dokploy[name] and "image" in local[name]
+    }
+    assert {"minio", "minio-init", "postgres"} <= shared
+    assert {name: dokploy[name]["image"] for name in shared} == {
+        name: local[name]["image"] for name in shared
+    }
 
 
 @pytest.mark.parametrize("nats, coding", MODES)
