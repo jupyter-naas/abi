@@ -1,4 +1,5 @@
 import asyncio
+import contextvars
 import hashlib
 from collections.abc import Callable
 from threading import Event as ThreadingEvent
@@ -305,7 +306,10 @@ class NATSJetStreamAdapter(IBusAdapter):
             finally:
                 loop.close()
 
-        thread = Thread(target=_consume_loop, daemon=True)
+        # The callback acts as whoever subscribed: a new thread starts with no caller.
+        thread = Thread(
+            target=contextvars.copy_context().run, args=(_consume_loop,), daemon=True
+        )
         thread.start()
         return thread
 
@@ -390,7 +394,10 @@ class NATSJetStreamAdapter(IBusAdapter):
             finally:
                 loop.close()
 
-        thread = Thread(target=_consume_loop, daemon=True)
+        # The callback acts as whoever subscribed: a new thread starts with no caller.
+        thread = Thread(
+            target=contextvars.copy_context().run, args=(_consume_loop,), daemon=True
+        )
         thread.start()
         return thread
 

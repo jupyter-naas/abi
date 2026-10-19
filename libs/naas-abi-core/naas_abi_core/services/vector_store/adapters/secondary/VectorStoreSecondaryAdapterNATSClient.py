@@ -50,6 +50,7 @@ from naas_abi_core.engine.nats_auth import TokenSource
 from naas_abi_core.engine.nats_rpc import NatsRPCClient, NatsRPCError
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.vector_store.v1 import vector_store_pb2
+from naas_abi_core.services.iam.enforcement import raise_authorization_error
 from naas_abi_core.services.vector_store.adapters.vector_store_nats_codec import (
     document_to_pb,
     object_to_pb,
@@ -67,6 +68,7 @@ from naas_abi_core.services.vector_store.adapters.vector_store_stream_codec impo
 )
 from naas_abi_core.services.vector_store.IVectorStorePort import (
     CollectionInfo,
+    CollectionNotFoundError,
     IVectorStorePort,
     SearchResult,
     VectorDocument,
@@ -84,8 +86,12 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
     than an auth failure surfaces as a plain ``RuntimeError`` carrying the
     wire code, matching what an in-process adapter failure would look like
     to ``VectorStoreService`` (a bare exception it republishes as a
-    ``VectorStoreError`` event and reraises).
+    ``VectorStoreError`` event and reraises). The exceptions are the outcomes
+    of authorization (RFC §5.4) and a missing collection.
     """
+    raise_authorization_error(error.code, error.message)
+    if error.code == "COLLECTION_NOT_FOUND":
+        raise CollectionNotFoundError("", message=error.message)
     raise RuntimeError(f"vector_store NATS RPC failed ({error.code}): {error.message}")
 
 

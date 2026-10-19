@@ -14,6 +14,8 @@ object_storage/
 ├── ObjectStorageService.py         # public service + event publishing
 ├── ObjectStorageFactory.py
 ├── ObjectStorageService_test.py
+├── iam_catalog.py                  # IAM action catalog; object_parts builds names
+├── ObjectStorageService_authorization_test.py  # authorization contract
 ├── adapters/secondary/
 │   ├── ObjectStorageSecondaryAdapterFS.py
 │   ├── ObjectStorageSecondaryAdapterS3.py
@@ -81,6 +83,32 @@ ObjectStorageFactory.ObjectStorageServiceR2(
     account_id, access_key_id, secret_access_key, bucket_name, base_prefix="",
 )
 ```
+
+## Authorization
+
+Every operation is checked in the domain service against IAM (RFC
+[§5, §6.4](../../../../../docs/specs/rfcs/20261013_identity-and-authorization.md)),
+for the caller of the current `CallContext`, so in process and over NATS answer
+the same. The catalog is `iam_catalog.py`, registered by the serving engine at
+boot. A caller who cannot see a resource gets `Exceptions.ObjectNotFound` (`OBJECT_NOT_FOUND`); one who can see it but not
+act gets `PermissionDeniedError` (`PERMISSION_DENIED`). A service not wired into
+an engine with IAM (a library use, a NATS facade whose server checks) does not
+check. The contract test is `ObjectStorageService_authorization_test.py`: no policy, granted and denied
+principals, in process and over NATS.
+
+* Each object is `object/<prefix>/<key>` (path): the prefix, stripped of its
+  leading and trailing `/`, joined to the key with one `/`. Nexus places its
+  `workspaces/<ws>/*` and `users/<user>/*` prefixes.
+* `list_objects` and `list_objects_recursive` keep the objects the caller may
+  list; the caller's `queue` is filled after filtering. `list_objects` also
+  shows a folder holding something the caller may list (one `filter` over
+  `<folder>/_` names), and hides an entry a Deny names or a folder whose
+  contents a Deny or a suspension hides (`<folder>/*`). Which entries are
+  folders is the adapter's `folders(entries)`: by default those ending in `/`
+  (S3); the filesystem adapter checks for directories. A caller with no Allow
+  for the list action, or a suspended one, gets `ObjectNotFound`, as for a
+  missing prefix.
+* Streams (`get_object_stream`, `put_object_stream`) have their own actions.
 
 ## Tests
 

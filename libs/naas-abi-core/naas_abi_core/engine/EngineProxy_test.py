@@ -237,6 +237,57 @@ def test_locked_proxies_cannot_reach_the_document_root():
     backend.namespaces.assert_not_called()
 
 
+def test_the_document_root_answers_each_caller_with_what_iam_allows():
+    from unittest.mock import MagicMock
+
+    from naas_abi_core.engine.call_context import (
+        ANONYMOUS,
+        CallContext,
+        service_account,
+        use_call_context,
+    )
+    from naas_abi_core.services.document.DocumentPort import IDocumentAdapter
+    from naas_abi_core.services.document.DocumentService import DocumentService
+    from naas_abi_core.services.document.iam_catalog import CATALOG
+    from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import (
+        IAMStoreMemory,
+    )
+    from naas_abi_core.services.iam.enforcement import internal_call
+    from naas_abi_core.services.iam.IAMService import IAMService
+
+    iam = IAMService(IAMStoreMemory())
+    iam.bootstrap()
+    with internal_call():
+        iam.register_catalog(CATALOG)
+    backend = MagicMock(spec=IDocumentAdapter)
+    backend.namespaces.return_value = ["acme.module", "idp", "naas_abi"]
+    root = DocumentService._for_engine(backend)
+    root.set_services(IEngine.Services(document=root, iam=iam))
+    engine = _DummyEngine(services=IEngine.Services(document=root, iam=iam))
+    proxy = EngineProxy(
+        engine=engine,
+        module_name="naas_abi",
+        module_dependencies=ModuleDependencies(modules=[], services=[]),
+        unlocked=True,
+    )
+
+    # The platform proxy holds the root; IAM decides, for whoever calls.
+    with use_call_context(CallContext(principal=service_account("idp"))):
+        assert proxy.services.document_admin.namespaces() == ["idp"]
+    # Allowed everything else, the engine still never sees a sealed namespace.
+    with use_call_context(CallContext(principal=service_account("engine"))):
+        assert proxy.services.document_admin.namespaces() == [
+            "acme.module",
+            "naas_abi",
+        ]
+    with use_call_context(ANONYMOUS):
+        assert proxy.services.document_admin.namespaces() == []
+    # A caller IAM holds nothing for (a module without an approved manifest)
+    # sees no namespace at all.
+    with use_call_context(CallContext(principal=service_account("acme.module"))):
+        assert proxy.services.document_admin.namespaces() == []
+
+
 def test_engine_proxy_document_view_is_cached_and_rebound_when_root_changes():
     """The scoped per-module DocumentService view is expensive to recreate
     (it binds a namespace), so it must be cached across repeated access and

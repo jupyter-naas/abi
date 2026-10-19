@@ -713,6 +713,71 @@ def test_the_ensure_user_race_authorizes_the_existing_principal(h):
     assert store.get_principal(bob.id).email == "bob@example.com"
 
 
+def _api_for(user_id: str):
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        Principal,
+        use_call_context,
+    )
+
+    return use_call_context(
+        CallContext(
+            principal=Principal(id="api", kind="service_account", name="api"),
+            on_behalf_of=Principal(id=user_id, kind="user"),
+        )
+    )
+
+
+def test_a_nexus_user_reaches_the_kernel_data_services_until_its_roles_move(h):
+    """TRANSITIONAL (#65): api on behalf of a Nexus user, recorded or not."""
+    secret = "abi:-:-:secret:secret/app%2Fkey"
+    with _api_for("user-aaaaaaaaaaaa"):
+        assert h.iam.authorize(QUERY, graph("a")).allowed
+        assert h.iam.authorize(
+            "document:Get", "abi:-:-:document:document/n/c/1"
+        ).allowed
+        assert not h.iam.authorize("iam:ListPolicies", "abi:-:-:iam:policy/x").allowed
+        # Seals still hold: the built-in IdP's keys are its own.
+        assert not h.iam.authorize(
+            "secret:Get", "abi:-:-:secret:secret/idp%2Fk"
+        ).allowed
+        assert h.iam.authorize("secret:Get", secret).allowed
+    h.admin("ensure_user", LEGACY_NEXUS_ISSUER, "user-bbbbbbbbbbbb")
+    with _api_for("user-bbbbbbbbbbbb"):
+        assert h.iam.authorize(QUERY, graph("a")).allowed
+    # A user of a real identity provider holds only what is attached to it.
+    bob = h.user("bob")
+    with h.as_(actor="api", on_behalf_of=bob):
+        assert not h.iam.authorize(QUERY, graph("a")).allowed
+
+
+def test_allows_every_is_a_safe_shortcut(h):
+    bob = h.user("bob")
+    with h.as_(actor="engine"):
+        assert h.iam.allows_every(QUERY, "triple_store", "graph")
+    with h.as_(bob):
+        assert not h.iam.allows_every(QUERY, "triple_store", "graph")
+    h.grant(
+        bob.id, statement("Allow", ["triple_store:*"], ["abi:*:*:triple_store:graph/*"])
+    )
+    with h.as_(bob):
+        assert h.iam.allows_every(QUERY, "triple_store", "graph")
+        assert not h.iam.allows_every("document:Get", "document", "document")
+    # One Deny naming the action, on any graph, ends the shortcut.
+    h.grant(bob.id, statement("Deny", [QUERY], [graph("secret")]))
+    with h.as_(bob):
+        assert not h.iam.allows_every(QUERY, "triple_store", "graph")
+    # A workspace role is not "every graph".
+    alice = h.user("alice")
+    h.attach(roles.VIEWER, alice.id, "abi:org-1:ws-1")
+    with h.as_(alice):
+        assert not h.iam.allows_every(QUERY, "triple_store", "graph")
+    # Sealed types are never "every": the seal owner's own is checked.
+    with h.as_(actor="engine"):
+        assert not h.iam.allows_every("secret:Get", "secret", "secret")
+    # On behalf of a user, both must span the type.
+    with h.as_(actor="engine", on_behalf_of=bob):
+        assert not h.iam.allows_every("document:Get", "document", "document")
 # -- service accounts, keys and the exchange (RFC §8.1, §8.2) -------------------------
 
 

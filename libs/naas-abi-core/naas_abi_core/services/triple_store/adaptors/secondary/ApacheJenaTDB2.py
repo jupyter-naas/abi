@@ -149,13 +149,19 @@ from naas_abi_core.services.triple_store.TripleStorePorts import (
     Exceptions,
     ITripleStorePort,
     OntologyEvent,
+    QueryDataset,
     QueryStream,
     Triple,
+    dataset_parameters,
     graph_export_query,
+    iri_n3,
 )
 from rdflib import BNode, Graph, URIRef
 
 logger = logging.getLogger(__name__)
+
+# Jena's name for a dataset's own default graph, in a dataset description.
+JENA_DEFAULT_GRAPH = "urn:x-arq:DefaultGraph"
 
 
 def _recover_truncated_sparql_results_json(text: str) -> dict[str, Any] | None:
@@ -252,6 +258,11 @@ def _parse_sparql_results_json(text: str) -> dict[str, Any]:
 class ApacheJenaTDB2(ITripleStorePort):
     """HTTP adapter for Apache Jena Fuseki datasets backed by TDB2."""
 
+    # The Fuseki the deployments run sets tdb:unionDefaultGraph: a query's
+    # default graph is the union of the named graphs, so a confined query's
+    # is the union of the graphs its caller may read.
+    union_default_graph = True
+
     def __init__(
         self,
         jena_tdb2_url: str = "http://localhost:3030/ds",
@@ -312,9 +323,7 @@ class ApacheJenaTDB2(ITripleStorePort):
                 # coming up. Treat as transient and retry.
                 last_error = Exceptions.RequestError(
                     operation="connect",
-                    message=(
-                        f"Could not reach Fuseki at {self.query_endpoint}: {exc}"
-                    ),
+                    message=(f"Could not reach Fuseki at {self.query_endpoint}: {exc}"),
                     endpoint=self.query_endpoint,
                     attempts=attempt + 1,
                 )
@@ -342,7 +351,7 @@ class ApacheJenaTDB2(ITripleStorePort):
                     last_error = exc
 
             if attempt < self._CONNECT_MAX_RETRIES:
-                delay = self.retry_delay * (2 ** attempt) + random.uniform(0, 0.1)
+                delay = self.retry_delay * (2**attempt) + random.uniform(0, 0.1)
                 logger.warning(
                     "Fuseki connectivity check failed (attempt %d/%d); "
                     "retrying in %.2fs",
@@ -438,7 +447,7 @@ class ApacheJenaTDB2(ITripleStorePort):
                     acquired = True
                     break
                 if attempt < self.max_retries:
-                    delay = self.retry_delay * (2 ** attempt) + random.uniform(0, 0.1)
+                    delay = self.retry_delay * (2**attempt) + random.uniform(0, 0.1)
                     logger.warning(
                         "Fuseki distributed write lock busy (attempt %d/%d); "
                         "waiting %.2fs",
@@ -481,8 +490,11 @@ class ApacheJenaTDB2(ITripleStorePort):
                     data=sparql.encode("utf-8"),
                     timeout=self.timeout,
                 )
-                if response.status_code in self._RETRYABLE_STATUS_CODES and attempt < self.max_retries:
-                    delay = self.retry_delay * (2 ** attempt) + random.uniform(0, 0.1)
+                if (
+                    response.status_code in self._RETRYABLE_STATUS_CODES
+                    and attempt < self.max_retries
+                ):
+                    delay = self.retry_delay * (2**attempt) + random.uniform(0, 0.1)
                     logger.warning(
                         "Fuseki update returned HTTP %d (attempt %d/%d); retrying in %.2fs",
                         response.status_code,
@@ -509,6 +521,7 @@ class ApacheJenaTDB2(ITripleStorePort):
         *,
         accept: str = "application/sparql-results+json,application/n-triples,text/turtle",
         stream: bool = False,
+        params: list[tuple[str, str]] | None = None,
     ) -> requests.Response:
         """POST to the SPARQL query endpoint, retrying on transient 500/503.
 
@@ -524,12 +537,16 @@ class ApacheJenaTDB2(ITripleStorePort):
                     "Accept": accept,
                 },
                 data=sparql.encode("utf-8"),
+                params=params,
                 timeout=self.timeout,
                 stream=stream,
             )
-            if response.status_code in self._RETRYABLE_STATUS_CODES and attempt < self.max_retries:
+            if (
+                response.status_code in self._RETRYABLE_STATUS_CODES
+                and attempt < self.max_retries
+            ):
                 response.close()
-                delay = self.retry_delay * (2 ** attempt) + random.uniform(0, 0.1)
+                delay = self.retry_delay * (2**attempt) + random.uniform(0, 0.1)
                 logger.warning(
                     "Fuseki query returned HTTP %d (attempt %d/%d); retrying in %.2fs",
                     response.status_code,
@@ -580,7 +597,7 @@ class ApacheJenaTDB2(ITripleStorePort):
 
         return (
             f"{operation} {{\n"
-            + f"  GRAPH <{graph_name!s}> {{\n"
+            + f"  GRAPH {iri_n3(graph_name)} {{\n"
             + "\n".join(statements)
             + "\n  }\n}"
         )
@@ -642,6 +659,17 @@ class ApacheJenaTDB2(ITripleStorePort):
         )
 
     def query(self, query: str) -> Any:
+        return self._query(query)
+
+    def query_dataset(self, query: str, dataset: QueryDataset) -> Any:
+        """``query`` over ``dataset``, sent as SPARQL Protocol parameters."""
+        return self._query(query, self._dataset_parameters(dataset))
+
+    @staticmethod
+    def _dataset_parameters(dataset: QueryDataset) -> list[tuple[str, str]]:
+        return dataset_parameters(dataset, default_graph_iri=JENA_DEFAULT_GRAPH)
+
+    def _query(self, query: str, params: list[tuple[str, str]] | None = None) -> Any:
         is_update = self.__is_update_query(query)
 
         if is_update:
@@ -651,7 +679,7 @@ class ApacheJenaTDB2(ITripleStorePort):
         result_data: dict[str, Any] | None = None
         response: requests.Response | None = None
         for attempt in range(self.max_retries + 1):
-            response = self._post_query(query)
+            response = self._post_query(query, params=params)
             content_type = response.headers.get("Content-Type", "")
 
             if "sparql-results" in content_type:
@@ -749,11 +777,27 @@ class ApacheJenaTDB2(ITripleStorePort):
         Fuseki can answer 200 and abort mid-response; the iterator then raises
         ``Exceptions.RequestError`` after the rows it already yielded.
         """
+        with self._query_stream(query) as result:
+            yield result
+
+    @contextmanager
+    def query_stream_dataset(
+        self, query: str, dataset: QueryDataset
+    ) -> Generator[QueryStream, None, None]:
+        with self._query_stream(query, self._dataset_parameters(dataset)) as result:
+            yield result
+
+    @contextmanager
+    def _query_stream(
+        self, query: str, params: list[tuple[str, str]] | None = None
+    ) -> Generator[QueryStream, None, None]:
         if self.__is_update_query(query):
             with super().query_stream(query) as result:
                 yield result
             return
-        response = self._post_query(query, accept=sparql_stream.ACCEPT, stream=True)
+        response = self._post_query(
+            query, accept=sparql_stream.ACCEPT, stream=True, params=params
+        )
         try:
             yield sparql_stream.read_query_response(
                 response, operation="query", endpoint=self.query_endpoint
@@ -778,10 +822,10 @@ class ApacheJenaTDB2(ITripleStorePort):
 
     def get_subject_graph(self, subject: URIRef, graph_name: str | URIRef) -> Graph:
         query = f"""
-        CONSTRUCT {{ <{subject!s}> ?p ?o . }}
+        CONSTRUCT {{ {iri_n3(subject)} ?p ?o . }}
         WHERE {{ 
-            GRAPH <{graph_name!s}> 
-            {{ <{subject!s}> ?p ?o . }} 
+            GRAPH {iri_n3(graph_name)} 
+            {{ {iri_n3(subject)} ?p ?o . }} 
         }}
         """
         result = self.query(query)
@@ -792,19 +836,19 @@ class ApacheJenaTDB2(ITripleStorePort):
     def create_graph(self, graph_name: URIRef) -> None:
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
-        self.query(f"CREATE GRAPH <{graph_name!s}>")
+        self.query(f"CREATE GRAPH {iri_n3(graph_name)}")
 
     def clear_graph(self, graph_name: URIRef | None = None) -> None:
         if graph_name is None:
             self.query("CLEAR DEFAULT")
         else:
             assert isinstance(graph_name, URIRef)
-            self.query(f"CLEAR GRAPH <{graph_name!s}>")
+            self.query(f"CLEAR GRAPH {iri_n3(graph_name)}")
 
     def drop_graph(self, graph_name: URIRef) -> None:
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
-        self.query(f"DROP GRAPH <{graph_name!s}>")
+        self.query(f"DROP GRAPH {iri_n3(graph_name)}")
 
     def list_graphs(self) -> list[URIRef]:
         # GRAPH ?g { } reads the named-graph catalog (cheap) rather than scanning

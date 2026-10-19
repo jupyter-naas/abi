@@ -16,6 +16,9 @@ dataset/
 ├── DatasetValues.py               # the values a row holds, for every adapter
 ├── DatasetService.py              # public service
 ├── DatasetFactory.py
+├── iam_catalog.py                 # IAM action catalog
+├── sql_references.py              # the datasets a SQL query reads
+├── DatasetService_authorization_test.py  # authorization contract
 ├── DatasetService_test.py
 ├── adapters/secondary/
 │   ├── DatasetSecondaryAdapterDuckLake.py
@@ -208,6 +211,41 @@ Every connection attaches with `AUTOMATIC_MIGRATION`, so the adapter initializes
   stopped. Checks are outside the write path and warnings repeat while over limit.
 - Configure a retention window with DuckLake's `expire_older_than` option, then run `CALL ducklake_expire_snapshots('abi_datasets')` followed by `CALL ducklake_cleanup_old_files('abi_datasets')`. Never expire snapshots still required by restore/audit policy.
 - Moving from a SQLite catalog to PostgreSQL is a metadata migration. A DSN change alone loses snapshot history and any inlined rows.
+
+## Authorization
+
+Every operation is checked in the domain service against IAM (RFC
+[§5, §6.4](../../../../../docs/specs/rfcs/20261013_identity-and-authorization.md)),
+for the caller of the current `CallContext`, so in process and over NATS answer
+the same. The catalog is `iam_catalog.py`, registered by the serving engine at
+boot. A caller who cannot see a resource gets `DatasetNotFoundError` (`DATASET_NOT_FOUND`; `namespace_version` returns None); one who can see it but not
+act gets `PermissionDeniedError` (`PERMISSION_DENIED`). A service not wired into
+an engine with IAM (a library use, a NATS facade whose server checks) does not
+check. The contract test is `DatasetService_authorization_test.py`: no policy, granted and denied
+principals, in process and over NATS.
+
+* `namespace/<ns>` is a placed container holding `dataset/<ns>/<name>`;
+  `catalog/-` is the platform's snapshots (`list_snapshots` is empty without
+  `ListSnapshots`).
+* `create` is a create (§4.4): the first dataset of a new namespace places the
+  namespace in the call's target workspace, or on the platform.
+* `query` and `query_stream` need `Query` on every dataset the SQL reads
+  (`sql_references.py`, DuckDB's parser), through joins, subqueries and CTEs;
+  unqualified names are in the query's namespace. A CTE hides a dataset only in
+  its own query and the queries nested in it (a recursive CTE's anchor does not
+  see it), and may have any name. Every other name must be a dataset of the
+  catalog, looked up by itself and matched without case as DuckDB resolves it:
+  anything else (a DuckDB view such as `duckdb_tables`) is
+  `DatasetNotFoundError`. Other statements, file-reading table functions, names
+  that are not dataset identifiers (`IDENTIFIER_PATTERN`; `FROM '/path/x.csv'`
+  scans the file), `SHOW`, system schemas and three-part names are refused with
+  `ValueError` (`INVALID_ARGUMENT`), for every caller: one allowed every
+  dataset skips only the per-dataset checks, as a file read reads no dataset.
+* `QueryUnchecked` (admin, on `catalog/-`) skips the SQL check: the engine's own
+  catalog maintenance (`DESCRIBE`, `ALTER`, `CALL ducklake_*`). Run it as the
+  engine (`internal_call()`), as the X module does for its tables; both
+  transitional grants deny it.
+* `list` keeps the datasets the caller may list.
 
 ## Tests
 

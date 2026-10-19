@@ -42,6 +42,11 @@ from naas_abi_core.engine.nats_transfer import (
 )
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.object_storage.v1 import object_storage_pb2
+from naas_abi_core.services.iam.enforcement import authorization_error_code
+from naas_abi_core.services.iam.IAMPorts import (
+    PermissionDeniedError,
+    ResourceNotFoundError,
+)
 from naas_abi_core.services.object_storage.adapters.object_storage_nats_contract import (
     AUTH_HEADER,
     SERVICE_NAME,
@@ -189,6 +194,8 @@ class ObjectStoragePrimaryAdapterNATS(ServiceWithTransfers):
 
     @staticmethod
     def _transfer_error(exc):
+        if isinstance(exc, Exceptions.InvalidObjectPath):
+            return "INVALID_ARGUMENT", str(exc)
         if isinstance(exc, Exceptions.ObjectNotFound):
             return "OBJECT_NOT_FOUND", "Object not found"
         if isinstance(exc, Exceptions.ObjectAlreadyExists):
@@ -261,9 +268,24 @@ class ObjectStoragePrimaryAdapterNATS(ServiceWithTransfers):
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
             response = await self._dispatch.call(call, parsed_request, caller)
+        except (PermissionDeniedError, ResourceNotFoundError) as exc:
+            # The caller's authorization outcome (RFC §5.4), decided by the domain.
+            await self._respond_error(
+                request,
+                response_cls,
+                authorization_error_code(exc) or "PERMISSION_DENIED",
+                str(exc),
+                retryable=False,
+            )
+            return
         except Exceptions.ObjectNotFound as exc:
             await self._respond_error(
                 request, response_cls, "OBJECT_NOT_FOUND", str(exc), retryable=False
+            )
+            return
+        except Exceptions.InvalidObjectPath as exc:
+            await self._respond_error(
+                request, response_cls, "INVALID_ARGUMENT", str(exc), retryable=False
             )
             return
         except Exceptions.ObjectAlreadyExists as exc:

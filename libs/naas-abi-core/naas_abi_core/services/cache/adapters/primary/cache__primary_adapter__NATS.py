@@ -57,6 +57,11 @@ from naas_abi_core.services.cache.CachePort import (
     ICacheAdapter,
 )
 from naas_abi_core.services.cache.CacheService import SingleTierCacheService
+from naas_abi_core.services.iam.enforcement import authorization_error_code
+from naas_abi_core.services.iam.IAMPorts import (
+    PermissionDeniedError,
+    ResourceNotFoundError,
+)
 from nats.micro.request import Request
 
 __all__ = [
@@ -236,6 +241,16 @@ class CachePrimaryAdapterNATS(ServicePrimary):
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
             response = await self._dispatch.call(call, parsed_request, caller)
+        except (PermissionDeniedError, ResourceNotFoundError) as exc:
+            # The caller's authorization outcome (RFC §5.4), decided by the domain.
+            await self._respond_error(
+                request,
+                response_cls,
+                authorization_error_code(exc) or "PERMISSION_DENIED",
+                str(exc),
+                retryable=False,
+            )
+            return
         except CacheNotFoundError as exc:
             await self._respond_error(
                 request, response_cls, "CACHE_NOT_FOUND", str(exc), retryable=False
@@ -350,8 +365,14 @@ class CachePrimaryAdapterNATS(ServicePrimary):
             request,
             cache_pb2.DescribeRequest,
             cache_pb2.DescribeResponse,
-            lambda _: cache_pb2.DescribeResponse(tiers=self._tiers),
+            self._call_describe,
         )
+
+    def _call_describe(
+        self, _: cache_pb2.DescribeRequest
+    ) -> cache_pb2.DescribeResponse:
+        self._adapter.require_describe()
+        return cache_pb2.DescribeResponse(tiers=self._tiers)
 
     async def _handle_list_keys(self, request: Request) -> None:
         await self._handle(

@@ -443,7 +443,7 @@ def test_remote_calls_reach_the_cache_service_and_audit_once():
     cache.set_services(
         SimpleNamespace(
             events_available=lambda: True,
-            events=SimpleNamespace(publish=events.append),
+            events=SimpleNamespace(publish=events.append, emit=events.append),
         )
     )
     primary = CachePrimaryAdapterNATS(cache.tier("hot"), SECRET)

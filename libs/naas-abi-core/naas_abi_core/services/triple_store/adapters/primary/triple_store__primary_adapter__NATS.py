@@ -62,6 +62,11 @@ from naas_abi_core.engine.nats_transfer import (
 )
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.triple_store.v1 import triple_store_pb2
+from naas_abi_core.services.iam.enforcement import authorization_error_code
+from naas_abi_core.services.iam.IAMPorts import (
+    PermissionDeniedError,
+    ResourceNotFoundError,
+)
 from naas_abi_core.services.triple_store.adapters.triple_store_nats_contract import (
     AUTH_HEADER,
     SERVICE_NAME,
@@ -172,7 +177,8 @@ def _query_result_to_pb(result: object) -> triple_store_pb2.QueryResult:
         # SELECT
         var_names = [str(v) for v in (result.vars or [])]
         rows = []
-        for row in result:
+        # An update's answer is an empty SELECT with no bindings at all.
+        for row in result if result.bindings is not None else ():
             assert isinstance(row, rdflib.query.ResultRow)
             bindings: dict[str, str] = {}
             for name in row.labels:
@@ -345,6 +351,8 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
             return "REQUEST_ERROR", str(exc)
         if isinstance(exc, Exceptions.GraphNotFoundError):
             return "GRAPH_NOT_FOUND", str(exc)
+        if isinstance(exc, Exceptions.InvalidRequest):
+            return "INVALID_ARGUMENT", str(exc)
         return None
 
     # ------------------------------------------------------------------
@@ -387,6 +395,16 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
             response = await self._dispatch.call(call, parsed_request, caller)
+        except (PermissionDeniedError, ResourceNotFoundError) as exc:
+            # The caller's authorization outcome (RFC §5.4), decided by the domain.
+            await self._respond_error(
+                request,
+                response_cls,
+                authorization_error_code(exc) or "PERMISSION_DENIED",
+                str(exc),
+                retryable=False,
+            )
+            return
         except Exceptions.SubjectNotFoundError as exc:
             await self._respond_error(
                 request, response_cls, "SUBJECT_NOT_FOUND", str(exc), retryable=False
@@ -418,6 +436,12 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
                 "GRAPH_ALREADY_EXISTS",
                 str(exc),
                 retryable=False,
+            )
+            return
+        except Exceptions.InvalidRequest as exc:
+            # A SPARQL request the authorization cannot classify (RFC §6.4).
+            await self._respond_error(
+                request, response_cls, "INVALID_ARGUMENT", str(exc), retryable=False
             )
             return
         except Exceptions.RequestError as exc:
@@ -546,7 +570,7 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
             )
         event = _EVENT_FROM_PB.get(req.event)
         if event is None:
-            raise ValueError(f"Unknown OntologyEventType: {req.event!r}")
+            raise Exceptions.InvalidRequest(f"Unknown OntologyEventType: {req.event!r}")
         handler(
             view=_triple_pattern_from_pb(req.view),
             event=event,

@@ -36,6 +36,7 @@ from naas_abi_core.services.document.DocumentPort import (
     VersionConflict,
 )
 from naas_abi_core.services.document.DocumentService import DocumentService
+from naas_abi_core.services.iam.enforcement import own_storage
 
 NAMESPACE = "naas_abi_core.services.activity_log"
 EVENTS = "events"
@@ -64,8 +65,12 @@ class ActivityLogDocumentAdapter(IActivityLogAdapter):
         self._registry = threading.Lock()
 
     def wire_services(self, services: Any) -> None:
-        """Bind the engine's Document Service (``CacheService`` wires the same way)."""
-        self._documents = services.document.for_namespace(NAMESPACE)
+        """Bind the engine's Document Service (``CacheService`` wires the same way).
+
+        The log's own namespace, used as the engine: callers are authorized
+        on the activity log, not on its storage.
+        """
+        self._documents = own_storage(services.document.for_namespace(NAMESPACE))
         self._ensured = False
 
     def _store(self) -> DocumentService:
@@ -201,7 +206,7 @@ class ActivityLogDocumentAdapter(IActivityLogAdapter):
 
         return {
             ACTIVITY_LOG_JOBS_OWNER: ActivityLogCopyJobs(
-                self, services.document.for_namespace(NAMESPACE)
+                self, own_storage(services.document.for_namespace(NAMESPACE))
             )
         }
 

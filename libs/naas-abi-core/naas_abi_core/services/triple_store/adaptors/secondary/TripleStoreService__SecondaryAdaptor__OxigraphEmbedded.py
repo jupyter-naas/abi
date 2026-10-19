@@ -12,8 +12,10 @@ from naas_abi_core.services.triple_store.TripleStorePorts import (
     Exceptions,
     ITripleStorePort,
     OntologyEvent,
+    QueryDataset,
     QueryStream,
     Triple,
+    iri_n3,
 )
 from rdflib import BNode, Graph, Literal, URIRef
 from rdflib.namespace import XSD
@@ -76,14 +78,16 @@ class TripleStoreService__SecondaryAdaptor__OxigraphEmbedded(ITripleStorePort):
 
         filtered = Graph()
         for s, p, o in triples:
-            if not (isinstance(s, BNode) or isinstance(p, BNode) or isinstance(o, BNode)):
+            if not (
+                isinstance(s, BNode) or isinstance(p, BNode) or isinstance(o, BNode)
+            ):
                 filtered.add((s, p, o))
 
         if len(filtered) == 0:
             return
 
         triples_nt = filtered.serialize(format="nt")
-        delete_query = f"DELETE DATA {{ GRAPH <{self._graph_iri(graph_name)}> {{ {triples_nt} }} }}"
+        delete_query = f"DELETE DATA {{ GRAPH {iri_n3(self._graph_iri(graph_name))} {{ {triples_nt} }} }}"
         with self._lock:
             self._store.update(delete_query)
 
@@ -103,17 +107,17 @@ class TripleStoreService__SecondaryAdaptor__OxigraphEmbedded(ITripleStorePort):
     def get_subject_graph(self, subject: URIRef, graph_name: str | URIRef) -> Graph:
         if graph_name == "*":
             query = f"""
-            CONSTRUCT {{ <{subject}> ?p ?o }}
+            CONSTRUCT {{ {iri_n3(subject)} ?p ?o }}
             WHERE {{
-                {{ <{subject}> ?p ?o }}
+                {{ {iri_n3(subject)} ?p ?o }}
                 UNION
-                {{ GRAPH ?g {{ <{subject}> ?p ?o }} }}
+                {{ GRAPH ?g {{ {iri_n3(subject)} ?p ?o }} }}
             }}
             """
         else:
             query = f"""
-            CONSTRUCT {{ <{subject}> ?p ?o }}
-            WHERE {{ GRAPH <{graph_name}> {{ <{subject}> ?p ?o }} }}
+            CONSTRUCT {{ {iri_n3(subject)} ?p ?o }}
+            WHERE {{ GRAPH {iri_n3(graph_name)} {{ {iri_n3(subject)} ?p ?o }} }}
             """
 
         result = self.query(query)
@@ -123,6 +127,12 @@ class TripleStoreService__SecondaryAdaptor__OxigraphEmbedded(ITripleStorePort):
         return result
 
     def query(self, query: str) -> Any:
+        return self._query(query)
+
+    def query_dataset(self, query: str, dataset: QueryDataset) -> Any:
+        return self._query(query, **_dataset_options(dataset))
+
+    def _query(self, query: str, **options: Any) -> Any:
         from pyoxigraph import (
             QueryBoolean,
             QueryResultsFormat,
@@ -132,7 +142,7 @@ class TripleStoreService__SecondaryAdaptor__OxigraphEmbedded(ITripleStorePort):
         )
 
         with self._lock:
-            result = self._store.query(query)
+            result = self._store.query(query, **options)
 
         if isinstance(result, QueryTriples):
             serialized = result.serialize(format=RdfFormat.N_TRIPLES)
@@ -159,6 +169,18 @@ class TripleStoreService__SecondaryAdaptor__OxigraphEmbedded(ITripleStorePort):
 
     @contextmanager
     def query_stream(self, query: str) -> Iterator[QueryStream]:
+        with self._query_stream(query) as result:
+            yield result
+
+    @contextmanager
+    def query_stream_dataset(
+        self, query: str, dataset: QueryDataset
+    ) -> Iterator[QueryStream]:
+        with self._query_stream(query, **_dataset_options(dataset)) as result:
+            yield result
+
+    @contextmanager
+    def _query_stream(self, query: str, **options: Any) -> Iterator[QueryStream]:
         """Iterate pyoxigraph's lazy result (docs/adr/20261003_nats-streamed-results.md).
 
         pyoxigraph results are bound to the thread that ran the query (another
@@ -168,7 +190,7 @@ class TripleStoreService__SecondaryAdaptor__OxigraphEmbedded(ITripleStorePort):
         from pyoxigraph import QueryBoolean, QuerySolutions, QueryTriples
 
         with self._lock:
-            result = self._store.query(query)
+            result = self._store.query(query, **options)
         if isinstance(result, QueryBoolean):
             yield QueryStream("ASK", ask_answer=bool(result))
         elif isinstance(result, QuerySolutions):
@@ -257,3 +279,15 @@ def _term(node: Any) -> Node:
     if datatype == str(XSD.string):
         return Literal(node.value)
     return Literal(node.value, datatype=URIRef(datatype))
+
+
+def _dataset_options(dataset: QueryDataset) -> dict[str, Any]:
+    """pyoxigraph's ``default_graph`` / ``named_graphs`` for ``dataset``."""
+    from pyoxigraph import DefaultGraph, NamedNode
+
+    default: list[Any] = [DefaultGraph()] if dataset.default_graph else []
+    default += [NamedNode(str(graph)) for graph in dataset.default_graphs]
+    return {
+        "default_graph": default,
+        "named_graphs": [NamedNode(str(graph)) for graph in dataset.named_graphs],
+    }

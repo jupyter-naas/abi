@@ -235,7 +235,7 @@ class IAMService(IIAMService, PolicySource):
         self._seals = tuple(seals)
         self._subjects = _TTLCache(cache_ttl_seconds, cache_size)
         self._policies = _TTLCache(cache_ttl_seconds, cache_size)
-        self._placements = _TTLCache(cache_ttl_seconds, 1)
+        self._placements = _TTLCache(cache_ttl_seconds, 2)
         self._listeners: list[Callable[[int], None]] = []
         self._seen_revision: int | None = None
         self._seal_key: bytes | None = None
@@ -272,6 +272,13 @@ class IAMService(IIAMService, PolicySource):
         """The resources the current caller may perform ``action`` on, in order,
         plus prefix hints a store can push down (RFC §5.5)."""
         return self.authorizer.filter(current_call_context(), action, resources)
+
+    def allows_every(self, action: str, service: str, resource_type: str) -> bool:
+        """Whether the current caller may perform ``action`` on every resource
+        of the type: a whole-store read can then skip per-item checks."""
+        return self.authorizer.allows_every(
+            current_call_context(), action, service, resource_type
+        )
 
     def explain(
         self, action: str, resource: str, *, principal_id: str | None = None
@@ -437,21 +444,38 @@ class IAMService(IIAMService, PolicySource):
     def placement_of(self, service: str, canonical_id: str) -> Placement | None:
         """The placement covering a resource: the exact key, else the longest
         matching prefix, else None (the platform)."""
-        best: Placement | None = None
-        for placement in self._all_placements():
-            if placement.service != service:
-                continue
-            if placement.id_key == canonical_id:
+        exact, prefixes = self._placement_index().get(service, ({}, []))
+        found = exact.get(canonical_id)
+        if found is not None:
+            return found
+        # Longest prefix first: the first match is the most specific.
+        for placement in prefixes:
+            if canonical_id.startswith(placement.id_key[:-1]):
                 return placement
-            if placement.id_key.endswith("*") and canonical_id.startswith(
-                placement.id_key[:-1]
-            ):
-                if best is None or len(placement.id_key) > len(best.id_key):
-                    best = placement
-        return best
+        return None
 
     def _all_placements(self) -> list[Placement]:
         return self._placements.get("all", self.store.list_placements)
+
+    def _placement_index(
+        self,
+    ) -> dict[str, tuple[dict[str, Placement], list[Placement]]]:
+        """Per service: exact keys, and prefixes longest first. Cached with the
+        placements, so naming each item of a list costs no scan."""
+
+        def build() -> dict[str, tuple[dict[str, Placement], list[Placement]]]:
+            index: dict[str, tuple[dict[str, Placement], list[Placement]]] = {}
+            for placement in self._all_placements():
+                exact, prefixes = index.setdefault(placement.service, ({}, []))
+                if placement.id_key.endswith("*"):
+                    prefixes.append(placement)
+                else:
+                    exact[placement.id_key] = placement
+            for _, prefixes in index.values():
+                prefixes.sort(key=lambda p: len(p.id_key), reverse=True)
+            return index
+
+        return self._placements.get("index", build)
 
     def put_placement(
         self, service: str, id_key: str, org: str = NONE, workspace: str = NONE

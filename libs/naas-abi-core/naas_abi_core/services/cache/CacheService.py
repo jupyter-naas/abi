@@ -45,11 +45,14 @@ from naas_abi_core.services.cache.CachePort import (
     ICacheService,
     check_page_limit,
 )
+from naas_abi_core.services.cache.iam_catalog import CATALOG, KEY, SERVICE_TYPE
 from naas_abi_core.services.cache.ontologies.modules.CacheEventOntology import (
     CacheDeleted,
     CacheError,
     CacheSet,
 )
+from naas_abi_core.services.iam.enforcement import ResourceGuard, scan_allowed
+from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
 from naas_abi_core.services.ServiceBase import ServiceBase
 
 if TYPE_CHECKING:
@@ -77,7 +80,9 @@ class SingleTierCacheService:
     """All cache operations scoped to a single adapter/tier.
 
     Instances are never created directly by callers — they are exposed through
-    :attr:`CacheService.hot` and :attr:`CacheService.cold`.
+    :attr:`CacheService.hot` and :attr:`CacheService.cold`. Wired into an
+    engine, ``guard`` authorizes each operation on ``key/<key>`` (RFC §6.4):
+    a key the caller may not see is missing.
     """
 
     def __init__(
@@ -85,10 +90,12 @@ class SingleTierCacheService:
         adapter: ICacheAdapter,
         tier_name: str | None = None,
         event_publisher: Callable[[Any], None] | None = None,
+        guard: ResourceGuard | None = None,
     ) -> None:
         self.adapter = adapter
         self._tier_name = tier_name
         self._event_publisher = event_publisher
+        self._guard = guard
 
         self._deserializers = {
             DataType.TEXT: self._get_text,
@@ -96,6 +103,20 @@ class SingleTierCacheService:
             DataType.BINARY: self._get_binary,
             DataType.PICKLE: self._get_pickle,
         }
+
+    def _require(self, action: str, key: str) -> None:
+        if self._guard is not None:
+            self._guard.require(
+                action,
+                KEY,
+                key,
+                not_found=lambda: CacheNotFoundError(f"Cache not found: {key}"),
+            )
+
+    def require_describe(self) -> None:
+        """Describing the service is administration (``cache:Describe``)."""
+        if self._guard is not None:
+            self._guard.require("Describe", SERVICE_TYPE)
 
     # ------------------------------------------------------------------
     # Event emission helpers
@@ -190,20 +211,23 @@ class SingleTierCacheService:
                     if cached_data.data_type == cache_type:
                         return self._deserializers[cache_type](cached_data)
                     raise CacheNotFoundError("Data type mismatch")
+                except PermissionDeniedError as exc:
+                    # A caller who may not read the key still gets its result,
+                    # computed and not cached.
+                    logger.warning(
+                        f"Cache: not reading {cache_key!r} for this caller: {exc}"
+                    )
+                    return func(*args, **kwargs)
                 except (CacheNotFoundError, CacheExpiredError, ForceRefresh):
                     result = func(*args, **kwargs)
                     if auto_cache:
-                        if cache_type == DataType.TEXT:
-                            self.set_text(cache_key, result)
-                        elif cache_type == DataType.JSON:
-                            self.set_json(cache_key, result)
-                        elif cache_type == DataType.BINARY:
-                            self.set_binary(cache_key, result)
-                        elif cache_type == DataType.PICKLE:
-                            self.set_pickle(cache_key, result)
-                        else:
-                            raise ValueError(
-                                f"cache_type must be specified. Got: {cache_type}"
+                        try:
+                            self._store(cache_type, cache_key, result)
+                        except (PermissionDeniedError, CacheNotFoundError) as exc:
+                            # A caller who may not write the key still gets its
+                            # result, uncached.
+                            logger.warning(
+                                f"Cache: not caching {cache_key!r} for this caller: {exc}"
                             )
                     return result
 
@@ -215,9 +239,22 @@ class SingleTierCacheService:
     # Private helpers
     # ------------------------------------------------------------------
 
+    def _store(self, cache_type: DataType, key: str, value: Any) -> None:
+        if cache_type == DataType.TEXT:
+            self.set_text(key, value)
+        elif cache_type == DataType.JSON:
+            self.set_json(key, value)
+        elif cache_type == DataType.BINARY:
+            self.set_binary(key, value)
+        elif cache_type == DataType.PICKLE:
+            self.set_pickle(key, value)
+        else:
+            raise ValueError(f"cache_type must be specified. Got: {cache_type}")
+
     def _get_cached_data(
         self, key: str, ttl: datetime.timedelta | None = None
     ) -> CachedData:
+        self._require("Get", key)
         try:
             cached_data = self.adapter.get(key)
         except Exception:  # noqa: BLE001
@@ -258,25 +295,43 @@ class SingleTierCacheService:
         return self._deserializers[cached_data.data_type](cached_data)
 
     def exists(self, key: str) -> bool:
+        try:
+            self._require("Exists", key)
+        except CacheNotFoundError:
+            return False
         return self.adapter.exists(key)
 
     def list_keys(
         self, prefix: str = "", *, limit: int = 100, after: str | None = None
     ) -> CacheKeyPage:
-        """A page of this tier's keys, ascending; pass ``page.next_after`` as ``after``."""
+        """A page of this tier's keys, ascending; pass ``page.next_after`` as ``after``.
+
+        Only the keys the caller may list, paged after filtering (RFC §5.5).
+        """
         check_page_limit(limit)
-        return self.adapter.list_keys(prefix, limit=limit, after=after)
+        return _allowed_keys(
+            self._guard,
+            prefix,
+            limit,
+            after,
+            lambda scan, size, cursor: self.adapter.list_keys(
+                scan, limit=size, after=cursor
+            ),
+        )
 
     def get_entry(self, key: str) -> CacheEntry:
         """The stored entry as is: never deserialized (pickle stays opaque), no TTL check."""
+        self._require("Get", key)
         return CacheEntry(self._tier_name or "", self.adapter.get(key))
 
     def delete(self, key: str) -> None:
+        self._require("Delete", key)
         self._run_mutation("delete", key, lambda: self.adapter.delete(key))
         self._emit(CacheDeleted(key=key, tier=self._tier_name))
 
     def put_entry(self, key: str, cached: CachedData) -> None:
         """Store an entry as is, already serialized (a remote tier's ``set``)."""
+        self._require("Set", key)
         self._run_mutation("set", key, lambda: self.adapter.set(key, cached))
         self._emit_cache_set(key, cached)
 
@@ -287,6 +342,7 @@ class SingleTierCacheService:
         cannot do it atomically raises ``NotImplementedError``, and the caller
         decides (``SingleTierCacheService`` falls back on its side).
         """
+        self._require("SetIfAbsent", key)
         wrote = self._run_mutation(
             "set_if_absent", key, lambda: self.adapter.set_if_absent(key, cached)
         )
@@ -308,11 +364,13 @@ class SingleTierCacheService:
 
     def set_text(self, key: str, value: str) -> None:
         assert isinstance(value, str), f"Expected str, got {type(value)}"
+        self._require("Set", key)
         cached = CachedData(key=key, data=value, data_type=DataType.TEXT)
         self._run_mutation("set", key, lambda: self.adapter.set(key, cached))
         self._emit_cache_set(key, cached)
 
     def set_json(self, key: str, value: Any) -> None:
+        self._require("Set", key)
         cached = CachedData(key=key, data=json.dumps(value), data_type=DataType.JSON)
         self._run_mutation("set", key, lambda: self.adapter.set(key, cached))
         self._emit_cache_set(key, cached)
@@ -326,6 +384,7 @@ class SingleTierCacheService:
 
     def set_binary(self, key: str, value: bytes) -> None:
         assert isinstance(value, bytes), f"Expected bytes, got {type(value)}"
+        self._require("Set", key)
         cached = CachedData(
             key=key,
             data=base64.b64encode(value).decode(),
@@ -347,6 +406,7 @@ class SingleTierCacheService:
         return wrote
 
     def set_pickle(self, key: str, value: Any) -> None:
+        self._require("Set", key)
         cached = CachedData(
             key=key,
             data=base64.b64encode(pickle.dumps(value)).decode(),
@@ -356,6 +416,8 @@ class SingleTierCacheService:
         self._emit_cache_set(key, cached)
 
     def _set_if_absent(self, key: str, cached: CachedData) -> bool:
+        self._require("SetIfAbsent", key)
+
         def _do() -> bool:
             try:
                 return self.adapter.set_if_absent(key, cached)
@@ -396,6 +458,9 @@ class CacheService(ServiceBase, ICacheService):
         if not adapters:
             raise ValueError("CacheService requires at least one adapter")
         self._adapters: list[tuple[str, ICacheAdapter]] = adapters
+        # Wired into an engine, every operation is authorized on its key, here
+        # and in each tier view (RFC §6.4).
+        self._guard = ResourceGuard.of(CATALOG, self)
         # One view per configured adapter, in order: names may repeat (an
         # entry's tier defaults to "cold"), positions never do.
         self._views = [
@@ -403,6 +468,7 @@ class CacheService(ServiceBase, ICacheService):
                 adapter,
                 tier_name=tier,
                 event_publisher=self.__publish_event,
+                guard=self._guard,
             )
             for tier, adapter in adapters
         ]
@@ -415,13 +481,21 @@ class CacheService(ServiceBase, ICacheService):
         """Ordered tier adapters for composition; callers cannot mutate the registry."""
         return tuple(self._adapters)
 
+    def __require(self, action: str, key: str) -> None:
+        self._guard.require(
+            action,
+            KEY,
+            key,
+            not_found=lambda: CacheNotFoundError(f"Cache not found: {key}"),
+        )
+
     def __publish_event(self, event: Any) -> None:
         if not self.services_wired:
             return
         if not self.services.events_available():
             return
         try:
-            self.services.events.publish(event)
+            self.services.events.emit(event)
         except Exception as exc:  # noqa: BLE001
             # Cache mutations are the source of truth; event logging must not break them.
             logger.warning(f"CacheService: failed to publish event: {exc}")
@@ -456,6 +530,7 @@ class CacheService(ServiceBase, ICacheService):
             adapter,
             tier_name=tier_name,
             event_publisher=self.__publish_event,
+            guard=self._guard,
         )
 
     def hot_available(self) -> bool:
@@ -517,6 +592,7 @@ class CacheService(ServiceBase, ICacheService):
 
         Raises :class:`CacheNotFoundError` if the key is absent from every tier.
         """
+        self.__require("Get", key)
         for tier_name, adapter in self._adapters:
             try:
                 return SingleTierCacheService(adapter).get(key, ttl)
@@ -535,6 +611,7 @@ class CacheService(ServiceBase, ICacheService):
     def get_entry(self, key: str) -> CacheEntry:
         """The first tier's stored entry (hot first), as is: never deserialized,
         no TTL check. Raises :class:`CacheNotFoundError` when no tier has it."""
+        self.__require("Get", key)
         for tier_name, adapter in self._adapters:
             try:
                 return CacheEntry(tier_name, adapter.get(key))
@@ -557,9 +634,13 @@ class CacheService(ServiceBase, ICacheService):
         Each tier returns its first ``limit`` keys after ``after``; the smallest
         ``limit`` of their union are exactly the merged page. An unavailable tier
         is skipped with a warning (as in ``get``); if every tier fails, the last
-        error is raised.
+        error is raised. Only the keys the caller may list, paged after
+        filtering (RFC §5.5).
         """
         check_page_limit(limit)
+        return _allowed_keys(self._guard, prefix, limit, after, self._merged_keys)
+
+    def _merged_keys(self, prefix: str, limit: int, after: str | None) -> CacheKeyPage:
         merged: set[str] = set()
         more = False
         failure: Exception | None = None
@@ -591,6 +672,10 @@ class CacheService(ServiceBase, ICacheService):
         Unavailable tiers (e.g. Redis connection failure) are treated as
         misses and logged as warnings.
         """
+        try:
+            self.__require("Exists", key)
+        except CacheNotFoundError:
+            return False
         for tier_name, adapter in self._adapters:
             try:
                 if adapter.exists(key):
@@ -609,10 +694,19 @@ class CacheService(ServiceBase, ICacheService):
     # ------------------------------------------------------------------
 
     def delete(self, key: str) -> None:
-        """Delete from *all* tiers to keep them consistent."""
+        """Delete from *all* tiers to keep them consistent.
+
+        A key the caller may not see is a missing key: nothing to delete.
+        """
+        try:
+            self.__require("Delete", key)
+        except CacheNotFoundError:
+            return
         for svc in self._tiers.values():
             try:
                 svc.delete(key)
+            except PermissionDeniedError:
+                raise
             except (CacheNotFoundError, Exception):  # noqa: BLE001,S110
                 pass  # missing in one tier is fine
 
@@ -643,3 +737,22 @@ class CacheService(ServiceBase, ICacheService):
         for _, adapter in self._adapters:
             if hasattr(adapter, "wire_services"):
                 adapter.wire_services(services)
+
+
+def _allowed_keys(
+    guard: ResourceGuard | None,
+    prefix: str,
+    limit: int,
+    after: str | None,
+    fetch: Callable[[str, int, str | None], CacheKeyPage],
+) -> CacheKeyPage:
+    """A page of the keys the caller may list (RFC §5.5), paged after filtering."""
+    if guard is None or guard.iam is None or guard.allows_every("ListKeys", KEY):
+        return fetch(prefix, limit, after)
+
+    def scan(scan_prefix: str, size: int, cursor: str | None):
+        page = fetch(scan_prefix, size, cursor)
+        return page.keys, page.next_after
+
+    keys, next_after = scan_allowed(guard, "ListKeys", KEY, prefix, limit, after, scan)
+    return CacheKeyPage(tuple(keys), next_after)

@@ -9,6 +9,15 @@ import numpy as np
 STREAM_PAGE = 500  # documents per list_vectors call when streaming by default
 
 
+class CollectionNotFoundError(LookupError):
+    """No such collection, or one the caller may not see (wire code
+    ``COLLECTION_NOT_FOUND``)."""
+
+    def __init__(self, collection_name: str, message: str | None = None) -> None:
+        self.collection_name = collection_name
+        super().__init__(message or f"Collection {collection_name!r} not found")
+
+
 @dataclass
 class VectorDocument:
     id: str
@@ -57,7 +66,7 @@ class IVectorStorePort(ABC):
         collection_name: str,
         dimension: int,
         distance_metric: str = "cosine",
-        **kwargs
+        **kwargs,
     ) -> None:
         pass
 
@@ -71,9 +80,7 @@ class IVectorStorePort(ABC):
 
     @abstractmethod
     def store_vectors(
-        self,
-        collection_name: str,
-        documents: list[VectorDocument]
+        self, collection_name: str, documents: list[VectorDocument]
     ) -> None:
         pass
 
@@ -85,16 +92,13 @@ class IVectorStorePort(ABC):
         k: int = 10,
         filter: dict[str, Any] | None = None,
         include_vectors: bool = False,
-        include_metadata: bool = True
+        include_metadata: bool = True,
     ) -> list[SearchResult]:
         pass
 
     @abstractmethod
     def get_vector(
-        self,
-        collection_name: str,
-        vector_id: str,
-        include_vector: bool = True
+        self, collection_name: str, vector_id: str, include_vector: bool = True
     ) -> VectorDocument | None:
         pass
 
@@ -105,16 +109,12 @@ class IVectorStorePort(ABC):
         vector_id: str,
         vector: np.ndarray | None = None,
         metadata: dict[str, Any] | None = None,
-        payload: dict[str, Any] | None = None
+        payload: dict[str, Any] | None = None,
     ) -> None:
         pass
 
     @abstractmethod
-    def delete_vectors(
-        self,
-        collection_name: str,
-        vector_ids: list[str]
-    ) -> None:
+    def delete_vectors(self, collection_name: str, vector_ids: list[str]) -> None:
         pass
 
     @abstractmethod

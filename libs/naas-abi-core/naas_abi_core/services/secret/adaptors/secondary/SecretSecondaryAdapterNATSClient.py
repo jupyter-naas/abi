@@ -5,8 +5,9 @@ Implements ``ISecretAdapter`` by calling out to a remote
 ``naas_abi_core/proto/secret/v1/secret.proto`` for the wire contract and
 ``naas_abi_core/proto/README.md`` for why it lives there.
 
-Security note: no per-secret authorization yet -- see
-``secret_nats_contract.py``'s docstring. A known, temporary gap.
+Authorization: the server's ``Secret`` domain service checks the caller per
+key against IAM (``secret_nats_contract.py``); this client raises the outcome
+(``PermissionDeniedError``, ``ResourceNotFoundError``).
 
 Shared connection, token, timeout, and reply handling live in
 ``naas_abi_core.engine.nats_rpc.NatsRPCClient``. Calls are never replayed
@@ -25,11 +26,13 @@ from naas_abi_core.engine.nats_auth import TokenSource
 from naas_abi_core.engine.nats_rpc import NatsRPCClient
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.secret.v1 import secret_pb2
+from naas_abi_core.services.iam.enforcement import raise_authorization_error
 from naas_abi_core.services.secret.adaptors.secret_nats_contract import (
     AUTH_HEADER,
     SUBJECT_PREFIX,
 )
 from naas_abi_core.services.secret.SecretPorts import (
+    InvalidSecretKey,
     ISecretAdapter,
     SecretAuthenticationError,
 )
@@ -43,8 +46,9 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
     """
     if error.code == "SECRET_AUTH_FAILED":
         raise SecretAuthenticationError(error.message)
-    if error.code == "PERMISSION_DENIED":
-        raise PermissionError(error.message)
+    if error.code == "INVALID_ARGUMENT":
+        raise InvalidSecretKey(error.message)
+    raise_authorization_error(error.code, error.message)
     raise RuntimeError(f"secret NATS RPC failed ({error.code}): {error.message}")
 
 

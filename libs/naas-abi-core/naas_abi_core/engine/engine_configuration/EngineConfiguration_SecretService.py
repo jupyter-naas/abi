@@ -78,11 +78,8 @@ class SecretAdapterNATSConfiguration(BaseModel):
     -- see docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
     (Stage 1) and naas_abi_core/proto/secret/v1/secret.proto.
 
-    Security note: Stage 1's shared-JWT auth has no per-caller
-    authorization -- anyone holding a valid service token can read every
-    secret the remote process exposes. Accepted as a known, temporary
-    Stage 1 gap, not an oversight -- revisit once Stage 2 per-caller
-    authorization exists.
+    Authorization: the remote process's ``Secret`` service checks the
+    caller this client's token names per key against IAM (RFC §6.4).
 
     Plugs into the existing multi-adapter fan-out exactly like dotenv/naas/
     base64 already do -- add it as one more entry in secret_adapters, not

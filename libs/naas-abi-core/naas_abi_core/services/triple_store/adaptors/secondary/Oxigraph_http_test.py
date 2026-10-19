@@ -8,6 +8,7 @@ import time
 import pytest
 from naas_abi_core.services.triple_store.adaptors.secondary.Oxigraph import Oxigraph
 from naas_abi_core.services.triple_store.tests.triple_store__secondary_adapter__generic_test import (
+    ConfinedQueryContract,
     GenericTripleStoreSecondaryAdapterTest,
 )
 
@@ -42,7 +43,7 @@ def endpoint(tmp_path_factory):
     thread.join(timeout=5)
 
 
-class TestOxigraphHTTP(GenericTripleStoreSecondaryAdapterTest):
+class TestOxigraphHTTP(GenericTripleStoreSecondaryAdapterTest, ConfinedQueryContract):
     @pytest.fixture
     def adapter(self, endpoint):
         return Oxigraph(endpoint)

@@ -7,6 +7,7 @@ import threading
 import weakref
 from typing import Any
 
+from naas_abi_core.services.dataset.CatalogMaintenance import catalog_maintenance
 from naas_abi_core.services.dataset.DatasetPort import (
     ColumnSpec,
     DatasetAlreadyExistsError,
@@ -117,19 +118,31 @@ _ensure_lock = threading.Lock()
 
 
 def ensure_x_datasets(dataset: IDatasetPort) -> None:
-    """Create / migrate the X tables once per dataset instance and process."""
+    """Create / migrate the X tables once per dataset instance and process.
+
+    Each dataset call runs as the engine, whoever triggered it: the X tables
+    are the module's own storage, and their maintenance (``DESCRIBE``,
+    ``ALTER``, ``COMMENT``, ``duckdb_tables()``) is SQL only the engine may
+    run (``QueryUnchecked``). Nothing else here does: the lock and the
+    bookkeeping run as the caller.
+    """
     if dataset in _ensured:
         return
     with _ensure_lock:
         if dataset in _ensured:
             return
-        _ensure_x_datasets(dataset)
+        as_engine = catalog_maintenance(dataset)
+        _ensure_x_datasets(as_engine)
+        # The bookkeeping below calls back with the engine's view of the dataset
+        # (a different object): it must read as ensured too, or it would wait
+        # for the lock held here.
         _ensured.add(dataset)
+        _ensured.add(as_engine)
         from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.author_stats import (
             stamp_missing_first_post_at_from_posts,
         )
 
-        stamp_missing_first_post_at_from_posts(dataset)
+        stamp_missing_first_post_at_from_posts(as_engine)
 
 
 def _ensure_x_datasets(dataset: IDatasetPort) -> None:

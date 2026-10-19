@@ -73,7 +73,7 @@ import rdflib
 import requests
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
-from naas_abi_core.services.triple_store.TripleStorePorts import OntologyEvent
+from naas_abi_core.services.triple_store.TripleStorePorts import OntologyEvent, iri_n3
 from naas_abi_core.services.triple_store.TripleStoreService import ITripleStorePort
 from rdflib import Graph, URIRef
 
@@ -623,8 +623,8 @@ class AWSNeptune(ITripleStorePort):
             f"""
             SELECT ?s ?p ?o 
             WHERE  {{
-                GRAPH <{graph_name!s}> {{
-                    <{subject!s}> ?p ?o
+                GRAPH {iri_n3(graph_name)} {{
+                    {iri_n3(subject)} ?p ?o
                 }}
             }}
             """
@@ -702,7 +702,7 @@ class AWSNeptune(ITripleStorePort):
 
         # Combine everything into a SPARQL query
         query = "\n".join(namespaces)
-        query += f"\n\n{query_type.value} {{ GRAPH <{graph_name!s}> {{\n"
+        query += f"\n\n{query_type.value} {{ GRAPH {iri_n3(graph_name)} {{\n"
         query += "\n".join(triples)
         query += "\n}}"
 
@@ -733,7 +733,7 @@ class AWSNeptune(ITripleStorePort):
         assert isinstance(graph_name, URIRef)
 
         result = self.submit_query(
-            {QueryMode.UPDATE.value: f"CREATE GRAPH <{graph_name!s}>"}
+            {QueryMode.UPDATE.value: f"CREATE GRAPH {iri_n3(graph_name)}"}
         )
         print(result.text)
 
@@ -768,7 +768,7 @@ class AWSNeptune(ITripleStorePort):
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
 
-        self.submit_query({QueryMode.UPDATE.value: f"CLEAR GRAPH <{graph_name!s}>"})
+        self.submit_query({QueryMode.UPDATE.value: f"CLEAR GRAPH {iri_n3(graph_name)}"})
 
     def drop_graph(self, graph_name: URIRef) -> None:
         """
@@ -796,7 +796,7 @@ class AWSNeptune(ITripleStorePort):
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
 
-        self.submit_query({QueryMode.UPDATE.value: f"DROP GRAPH <{graph_name!s}>"})
+        self.submit_query({QueryMode.UPDATE.value: f"DROP GRAPH {iri_n3(graph_name)}"})
 
     def copy_graph(self, source_graph_name: URIRef, target_graph_name: URIRef):
         """
@@ -831,7 +831,7 @@ class AWSNeptune(ITripleStorePort):
 
         self.submit_query(
             {
-                QueryMode.UPDATE.value: f"COPY GRAPH <{source_graph_name!s}> TO <{target_graph_name!s}>"
+                QueryMode.UPDATE.value: f"COPY GRAPH {iri_n3(source_graph_name)} TO {iri_n3(target_graph_name)}"
             }
         )
 
@@ -869,7 +869,7 @@ class AWSNeptune(ITripleStorePort):
 
         self.submit_query(
             {
-                QueryMode.UPDATE.value: f"ADD GRAPH <{source_graph_name!s}> TO <{target_graph_name!s}>"
+                QueryMode.UPDATE.value: f"ADD GRAPH {iri_n3(source_graph_name)} TO {iri_n3(target_graph_name)}"
             }
         )
 

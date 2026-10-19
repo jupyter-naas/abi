@@ -41,6 +41,7 @@ from naas_abi_core.engine.nats_sessions import (
     stop_delivery,
     until,
 )
+from naas_abi_core.services.iam.enforcement import authorization_error_code
 from naas_abi_proto.transfer.v1 import transfer_pb2 as pb
 from naas_abi_sdk.messages import reply, reply_allowed
 from naas_abi_sdk.telemetry import ServedTransfer, serve_transfer
@@ -366,6 +367,10 @@ class TransferHost(SessionHost):
             return "UNAUTHENTICATED", refusal(exc, "Invalid service token")
         if isinstance(exc, asyncio.TimeoutError):
             return "DEADLINE_EXCEEDED", "Configured operation deadline exceeded"
+        # The caller's authorization outcome (RFC §5.4), decided by the domain.
+        code = authorization_error_code(exc)
+        if code is not None:
+            return code, str(exc)
         if self.error_mapper:
             mapped = self.error_mapper(exc)
             if mapped:

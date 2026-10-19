@@ -17,10 +17,8 @@ itself lists every service explicitly rather than looping over a registry.
 Every primary verifies its callers' engine tokens against IAM's JWKS: in
 this process when it holds IAM (the serving engine), else over NATS.
 
-``secret`` is exposed too, though the secret service does not authorize per
-secret yet -- anyone holding a valid token can read every secret this
-process's ``Secret`` service is configured with, until it enforces IAM
-(subtask 4 of #44). A known, temporary gap, not an oversight. It
+``secret`` is exposed too; the ``Secret`` domain service it wraps checks each
+caller per key against IAM (RFC §6.4), as every exposed domain service does. It
 also has its own re-exposure guard shape (see ``expose_services`` below):
 ``Secret`` fans out over a *list* of adapters, not one, so only its local
 adapters are served: a NATS client in the fanout is left out, preventing

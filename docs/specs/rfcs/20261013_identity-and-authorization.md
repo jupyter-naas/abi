@@ -719,8 +719,10 @@ Resource types:
 | `GetSubjectGraph` | read | `graph/<iri>` when `graph_name` is set, else filtered over all graphs | `get_subject_graph` |
 | `Query` | read | the query's dataset, see below | `query` |
 | `QueryStream` | read | as `Query` | stream, operation `query` |
+| `QueryUnchecked` | admin | `catalog/-` | `query`, stream (added in subtask 4) |
 | `QueryView` | read | `view/<name>`, and `Query` rules on the graphs it reads | `query_view` |
 | `Export` | read | `graph/<iri>`, or filtered over all graphs when none is given | stream, operation `export` |
+| `Subscribe` | read | `graph/<iri>`, or every graph for `*` (added in subtask 4) | in process only |
 | `Insert` | write | `graph/<iri>` (`default` when no graph) | `insert` |
 | `Remove` | write | `graph/<iri>` | `remove` |
 | `CreateGraph` | write | `graph/<iri>` (creates) | `create_graph` |
@@ -793,6 +795,32 @@ Resource types:
 - a query whose tables it cannot resolve;
 - file-reading table functions;
 - `ATTACH`.
+
+**As built in subtask 4** (ADR `20261015_data-services-enforce-iam.md`; each service's `AGENTS.md`,
+"Authorization"):
+
+- The eight data services check in their domain services through `ResourceGuard`
+  (`services/iam/enforcement.py`), and each passes the data-service contract `services/iam/tests/data_service_contract.py`
+  in process and over NATS. A service not wired into an engine with IAM does not check.
+- `Engine.load` runs as `engine`; the data services' catalogs are among the kernel catalogs registered at boot. A
+  service's own storage in another service (cache entries, the activity log's and the agent memory's namespaces)
+  is used as the engine.
+- SPARQL: adapters take the dataset through `query_dataset` / `query_stream_dataset`; "no graph" is
+  `urn:abi:iam:no-graph`; Fuseki declares a union default graph. The filesystem, object-storage and Neptune
+  adapters cannot confine and refuse a confined caller. `get`, `export()` and `get_subject_graph(s)` read the
+  confined dataset too.
+- Dataset queries are parsed with DuckDB's `json_serialize_sql` for every caller. A caller allowed every dataset
+  skips only the per-dataset checks: the single-`SELECT` rule, the refused table functions and the
+  catalog-only names still hold, since a file read reads no dataset. `QueryUnchecked` on `catalog/-` (admin,
+  added) skips the check, for the engine's own catalog maintenance; both transitional grants deny it.
+- Seals match at any placement (`abi:*:*:…`). Lists of object storage answer `OBJECT_NOT_FOUND` to a caller with
+  no Allow for the list action; vector pages may be shorter than `limit` while the cursor continues.
+- TRANSITIONAL changes: `builtin.transitional.nexus_user` (Nexus users reach the kernel data and runtime
+  services until subtask 11), and denies `dataset:QueryUnchecked`. A module's account (`module/<project>/<module_id>`,
+  subtask 6) reaches its own document namespace, `${module.id}`, and the shared `default` dataset namespace
+  with the catalog's snapshots (no namespace of its own name) through its approved manifest.
+- Work with no caller gets an identity: Nexus housekeeping as `api`, `abi chat`/`abi run script` as `engine`,
+  bus consumers, worker-pool jobs and warmup threads as whoever started them.
 
 ##### event
 

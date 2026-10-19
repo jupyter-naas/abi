@@ -15,6 +15,7 @@ number of Allows; on behalf of a user, actor and user must both be allowed.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Literal
@@ -83,6 +84,33 @@ class Evaluator:
             if self._decide(ctx, actor, user, action, resource).allowed
         ]
         return FilterResult(allowed, self._prefix_hints(ctx, actor, user, action))
+
+    def allows_every(
+        self, ctx: CallContext, action: str, service: str, resource_type: str
+    ) -> bool:
+        """Whether ``action`` is allowed on every resource of the type.
+
+        Conservative: True only when nothing could deny any of them, that is
+        no seal on the type, no narrowing token, no Deny naming the action on
+        either side, and on each side an Allow whose pattern spans every org,
+        workspace and id of the type.
+        """
+        actor = self._source.subject(ctx, "actor")
+        user = self._source.subject(ctx, "user")
+        if actor is None or actor.status != "active" or ctx.scope is not None:
+            return False
+        if ctx.on_behalf_of is not None and (user is None or user.status != "active"):
+            return False
+        if any(
+            _may_name_type(seal.pattern, service, resource_type)
+            for seal in self._source.seals()
+        ):
+            return False
+        user_id = _user_id(ctx)
+        sides = [actor] if user is None else [actor, user]
+        return all(
+            _spans_type(side, action, service, resource_type, user_id) for side in sides
+        )
 
     # -- the algorithm -----------------------------------------------------------
 
@@ -167,6 +195,8 @@ class Evaluator:
         """
         if actor is None or actor.status != "active":
             return []
+        if ctx.on_behalf_of is not None and (user is None or user.status != "active"):
+            return []  # a suspended user lists nothing, through any actor
         user_id = _user_id(ctx)
         sides: list[list[str]] = []
         if ctx.scope is not None:
@@ -321,6 +351,47 @@ def _token_allow(
         if _statement_matches(effective, action, resource, actor.principal_id, user_id):
             return effective
     return None
+
+
+# Stand-ins for an org, a workspace and an id that no literal character
+# matches: a pattern matching them at both lengths has only wildcards there,
+# a "*" among them, so it matches every non-empty value.
+_PROBES = ("\x00", "\x00\x00")
+
+
+# The literal ":<service>:<type>/<id>" end of a pattern (ids hold no raw ":").
+_NAMED_TYPE = re.compile(r":([a-z][a-z0-9_]*):([a-z][a-z0-9_]*)/[^:]*$")
+
+
+def _may_name_type(pattern: str, service: str, resource_type: str) -> bool:
+    """Whether ``pattern`` may match some resource of the type."""
+    named = _NAMED_TYPE.search(pattern)
+    if named is None:
+        return True
+    return named.groups() == (service, resource_type)
+
+
+def _spans_type(
+    subject: Subject,
+    action: str,
+    service: str,
+    resource_type: str,
+    user_id: str | None,
+) -> bool:
+    probes = [f"abi:{p}:{p}:{service}:{resource_type}/{p}" for p in _PROBES]
+    spanning = False
+    for effective in subject.statements:
+        statement = effective.statement
+        if not any(matches(pattern, action) for pattern in statement.actions):
+            continue
+        if statement.effect == "Deny":
+            return False  # it may deny one of them: check each
+        values = _values(effective, subject.principal_id, user_id)
+        for pattern in statement.resources:
+            expanded = substitute(pattern, values)
+            if expanded is not None and all(matches(expanded, p) for p in probes):
+                spanning = True
+    return spanning
 
 
 def _hints(

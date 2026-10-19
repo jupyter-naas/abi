@@ -1,3 +1,4 @@
+import contextvars
 import hashlib
 from collections.abc import Callable
 from threading import RLock, Thread
@@ -172,7 +173,10 @@ class RabbitMQAdapter(IBusAdapter):
                 if connection is not None and connection.is_open:
                     connection.close()
 
-        thread = Thread(target=_consume_loop, daemon=True)
+        # The callback acts as whoever subscribed: a new thread starts with no caller.
+        thread = Thread(
+            target=contextvars.copy_context().run, args=(_consume_loop,), daemon=True
+        )
         thread.start()
         return thread
 
@@ -270,6 +274,9 @@ class RabbitMQAdapter(IBusAdapter):
                 if connection is not None and connection.is_open:
                     connection.close()
 
-        thread = Thread(target=_consume_loop, daemon=True)
+        # The callback acts as whoever subscribed: a new thread starts with no caller.
+        thread = Thread(
+            target=contextvars.copy_context().run, args=(_consume_loop,), daemon=True
+        )
         thread.start()
         return thread

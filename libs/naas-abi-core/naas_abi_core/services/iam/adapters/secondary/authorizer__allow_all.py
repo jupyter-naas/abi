@@ -40,3 +40,8 @@ class AllowAllAuthorizer(IAuthorizer):
 
     def explain(self, ctx: CallContext, action: str, resource: str) -> Explanation:
         return Explanation(True, "allow", action, resource)
+
+    def allows_every(
+        self, ctx: CallContext, action: str, service: str, resource_type: str
+    ) -> bool:
+        return True

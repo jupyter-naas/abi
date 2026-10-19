@@ -20,6 +20,7 @@ from naas_abi_core.services.document.DocumentPort import (
     Value,
     validate_version,
 )
+from naas_abi_core.services.iam.enforcement import raise_authorization_error
 from naas_abi_proto.document.v1 import document_pb2 as pb
 from naas_abi_proto.document.values import encode_data
 
@@ -37,6 +38,7 @@ class DocumentSecondaryAdapterNATSClient(NatsRPCClient):
             f"abi.svc.document.v1.{operation}", request, response_type
         )
         if response.HasField("error"):
+            raise_authorization_error(response.error.code, response.error.message)
             raise ERRORS.get(response.error.code, RuntimeError)(response.error.message)
         return response
 

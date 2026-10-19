@@ -56,6 +56,7 @@ from naas_abi_core.services.dataset.DatasetPort import (
     DatasetAlreadyExistsError,
     DatasetInfo,
     DatasetNotFoundError,
+    DatasetRequestRefused,
     DatasetSchemaError,
     DatasetSnapshotConflictError,
     DatasetSnapshotInfo,
@@ -68,6 +69,7 @@ from naas_abi_core.services.dataset.DatasetPort import (
     RowStream,
     WriteMode,
 )
+from naas_abi_core.services.iam.enforcement import raise_authorization_error
 
 _COLUMN_TYPE_TO_PB: dict[ColumnType, dataset_pb2.ColumnType] = {
     "string": dataset_pb2.COLUMN_TYPE_STRING,
@@ -168,6 +170,9 @@ def _raise_for_error(error: dataset_pb2.DatasetError) -> None:
     code = error.error.code
     message = error.error.message
     detail_case = error.WhichOneof("detail")
+    raise_authorization_error(code, message)
+    if code == "INVALID_ARGUMENT":
+        raise DatasetRequestRefused(message)
     if code == "DATASET_NOT_FOUND" and detail_case == "not_found":
         raise DatasetNotFoundError(error.not_found.name, error.not_found.namespace)
     if code == "DATASET_ALREADY_EXISTS" and detail_case == "already_exists":
@@ -184,6 +189,13 @@ def _raise_for_error(error: dataset_pb2.DatasetError) -> None:
     if code == "DATASET_SCHEMA_ERROR":
         raise DatasetSchemaError(message)
     raise RuntimeError(f"dataset NATS RPC failed ({code}): {message}")
+
+
+def _not_found(message: str) -> DatasetNotFoundError:
+    """The error a stream reports as ``Dataset <namespace>.<name> not found``."""
+    qualified = message.removeprefix("Dataset ").removesuffix(" not found")
+    namespace, _, name = qualified.partition(".")
+    return DatasetNotFoundError(name, namespace)
 
 
 class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
@@ -284,6 +296,9 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
             request.snapshot_id = snapshot_id
 
         def raise_error(error: Any) -> None:
+            raise_authorization_error(error.code, error.message)
+            if error.code == "DATASET_NOT_FOUND":
+                raise DatasetNotFoundError(name, namespace)
             raise NatsRPCError(error.code, error.message)
 
         with self._transfer_stream(
@@ -344,6 +359,11 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
             request.snapshot_id = snapshot_id
 
         def raise_error(error: Any) -> None:
+            raise_authorization_error(error.code, error.message)
+            if error.code == "INVALID_ARGUMENT":
+                raise DatasetRequestRefused(error.message)
+            if error.code == "DATASET_NOT_FOUND":
+                raise _not_found(error.message)
             if error.code == "DATASET_SCHEMA_ERROR":
                 raise DatasetSchemaError(error.message)
             if error.code == "DATASET_SNAPSHOT_NOT_FOUND" and snapshot_id is not None:

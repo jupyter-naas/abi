@@ -820,3 +820,34 @@ def test_start_is_idempotent(monkeypatch):
 def test_every_port_method_has_a_handler(endpoint_name):
     adapter = TripleStorePrimaryAdapterNATS(_StubPort(), SECRET)
     assert hasattr(adapter, f"_handle_{endpoint_name}")
+
+
+def test_an_updates_empty_result_travels_as_an_empty_select():
+    # Adapters answer a SPARQL update with rdflib's bare Result("SELECT"), which
+    # has no bindings at all: it must encode, not fail the call with INTERNAL.
+    import rdflib.query
+    from naas_abi_core.services.triple_store.adapters.primary.triple_store__primary_adapter__NATS import (
+        _query_result_to_pb,
+    )
+
+    encoded = _query_result_to_pb(rdflib.query.Result("SELECT"))
+    assert encoded.result_type == "SELECT"
+    assert not encoded.select.rows
+
+
+def test_only_the_services_own_refusals_cross_as_invalid_argument():
+    from naas_abi_core.services.triple_store.TripleStorePorts import Exceptions
+
+    refused = Exceptions.InvalidRequest("A SPARQL update is not a query")
+    assert TripleStorePrimaryAdapterNATS._transfer_error(refused) == (
+        "INVALID_ARGUMENT",
+        str(refused),
+    )
+    # A backend's ValueError (rdflib, a store's client) may name paths or
+    # connection strings: it is an internal error, logged and never sent.
+    assert (
+        TripleStorePrimaryAdapterNATS._transfer_error(
+            ValueError("bad store at /srv/oxigraph")
+        )
+        is None
+    )

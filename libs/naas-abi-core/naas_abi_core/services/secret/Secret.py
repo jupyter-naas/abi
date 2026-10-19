@@ -21,12 +21,19 @@ Example:
 from typing import Any
 
 from naas_abi_core import logger
+from naas_abi_core.services.iam.enforcement import ResourceGuard
+from naas_abi_core.services.secret.iam_catalog import CATALOG, SECRET
 from naas_abi_core.services.secret.ontologies.modules.SecretEventOntology import (
     SecretError,
     SecretRemoved,
     SecretSet,
 )
-from naas_abi_core.services.secret.SecretPorts import ISecretAdapter, ISecretService
+from naas_abi_core.services.secret.SecretPorts import (
+    SECRET_KEY_PATTERN,
+    ISecretAdapter,
+    ISecretService,
+    checked_key,
+)
 from naas_abi_core.services.ServiceBase import ServiceBase
 
 
@@ -50,6 +57,8 @@ class Secret(ServiceBase, ISecretService):
     def __init__(self, adapters: list[ISecretAdapter]):
         super().__init__()
         self.__adapters = adapters
+        # Wired into an engine, every operation is authorized per key (RFC §6.4).
+        self._guard = ResourceGuard.of(CATALOG, self)
 
     @property
     def adapters(self) -> list[ISecretAdapter]:
@@ -66,7 +75,7 @@ class Secret(ServiceBase, ISecretService):
         if not self.services.events_available():
             return
         try:
-            self.services.events.publish(event)
+            self.services.events.emit(event)
         except Exception as exc:  # noqa: BLE001
             # Secret operations are the source of truth; event logging must never break them.
             logger.warning(f"Secret: failed to publish event: {exc}")
@@ -88,7 +97,15 @@ class Secret(ServiceBase, ISecretService):
         Example:
             >>> secret_service = Secret([EnvVarSecretAdapter()])
             >>> database_url = secret_service.get("DATABASE_URL", "sqlite:///:memory:")
+
+        A caller who may not see the key gets ``default``, as for a missing one.
         """
+        if not SECRET_KEY_PATTERN.fullmatch(key if isinstance(key, str) else ""):
+            return default  # no such key can exist
+        try:
+            self._guard.require("Get", SECRET, key, not_found=_Invisible)
+        except _Invisible:
+            return default
         for adapter in self.__adapters:
             value = adapter.get(key, None)
 
@@ -116,6 +133,8 @@ class Secret(ServiceBase, ISecretService):
             >>> secret_service = Secret([EnvVarSecretAdapter(), FileSecretAdapter()])
             >>> secret_service.set("API_KEY", "your-secret-api-key")
         """
+        checked_key(key)
+        self._guard.require("Set", SECRET, key)
         try:
             for adapter in self.__adapters:
                 adapter.set(key, value)
@@ -143,6 +162,8 @@ class Secret(ServiceBase, ISecretService):
             >>> secret_service = Secret([EnvVarSecretAdapter(), FileSecretAdapter()])
             >>> secret_service.remove("OLD_API_KEY")
         """
+        checked_key(key)
+        self._guard.require("Remove", SECRET, key)
         try:
             for adapter in self.__adapters:
                 adapter.remove(key)
@@ -171,10 +192,19 @@ class Secret(ServiceBase, ISecretService):
             >>> secret_service = Secret([EnvVarSecretAdapter(), FileSecretAdapter()])
             >>> all_secrets = secret_service.list()
             >>> print(f"Found {len(all_secrets)} secrets")
+
+        Wired into an engine, only the keys the caller may list are returned,
+        with a value only where it may also ``Get`` it.
         """
         secrets = {}
 
         for adapter in [adapter for adapter in self.__adapters][::-1]:
             secrets.update(adapter.list())
 
-        return secrets
+        listed = self._guard.filter("List", SECRET, secrets, lambda key: key)
+        readable = set(self._guard.filter("Get", SECRET, listed, lambda key: key))
+        return {key: secrets[key] if key in readable else None for key in listed}
+
+
+class _Invisible(Exception):
+    """A key the caller may not see: ``get`` answers as for a missing one."""

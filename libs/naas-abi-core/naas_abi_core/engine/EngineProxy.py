@@ -96,7 +96,10 @@ class ServicesProxy:
         return self.__engine.services.dataset
 
     def dataset_available(self) -> bool:
-        if not self.__unlocked and DatasetService not in self.__module_dependencies.services:
+        if (
+            not self.__unlocked
+            and DatasetService not in self.__module_dependencies.services
+        ):
             return False
         return self.__engine.services.dataset_available()
 
@@ -112,7 +115,10 @@ class ServicesProxy:
             return self.__document_view
 
     def document_available(self) -> bool:
-        if not self.__unlocked and DocumentService not in self.__module_dependencies.services:
+        if (
+            not self.__unlocked
+            and DocumentService not in self.__module_dependencies.services
+        ):
             return False
         return self.__engine.services.document_available()
 
@@ -165,7 +171,10 @@ class ServicesProxy:
         return self.__engine.services.activity_log
 
     def activity_log_available(self) -> bool:
-        if not self.__unlocked and ActivityLogService not in self.__module_dependencies.services:
+        if (
+            not self.__unlocked
+            and ActivityLogService not in self.__module_dependencies.services
+        ):
             return False
         return self.__engine.services.activity_log_available()
 
@@ -176,7 +185,10 @@ class ServicesProxy:
         return self.__engine.services.events
 
     def events_available(self) -> bool:
-        if not self.__unlocked and EventService not in self.__module_dependencies.services:
+        if (
+            not self.__unlocked
+            and EventService not in self.__module_dependencies.services
+        ):
             return False
         return self.__engine.services.events_available()
 
@@ -225,7 +237,9 @@ class ServicesProxy:
         """The engine's document root: ``namespaces()`` and ``for_namespace(ns)``.
 
         Platform administration across module namespaces, for the unlocked proxy
-        (the platform module) only. Module proxies keep their scoped ``document``.
+        (the platform module) only: in process a module has no identity of its
+        own, so the code keeps other modules to their namespace-bound
+        ``document``. IAM still authorizes every call for its caller.
         """
         if not self.__unlocked:
             raise PermissionError(

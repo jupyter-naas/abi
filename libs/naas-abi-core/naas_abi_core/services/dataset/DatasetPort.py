@@ -30,6 +30,11 @@ WriteMode = Literal["append", "replace", "upsert"]
 IDENTIFIER_PATTERN = r"^[A-Za-z][A-Za-z0-9_]*$"
 
 
+class DatasetRequestRefused(ValueError):
+    """A request refused for what it says: its message is safe to show the
+    caller. Any other ``ValueError`` comes from a backend and is not."""
+
+
 class DatasetNotFoundError(Exception):
     def __init__(self, name: str, namespace: str) -> None:
         self.name = name
@@ -332,7 +337,7 @@ def _require_identifier(value: str, label: str) -> str:
 
     text = str(value).strip()
     if not re.fullmatch(IDENTIFIER_PATTERN, text):
-        raise ValueError(
+        raise DatasetRequestRefused(
             f"{label} {value!r} must match {IDENTIFIER_PATTERN} "
             "(letter, then letters, digits, or underscore)"
         )

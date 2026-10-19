@@ -39,6 +39,7 @@ from naas_abi_core.engine.nats_auth import TokenSource
 from naas_abi_core.engine.nats_rpc import NatsRPCClient, NatsRPCError
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.triple_store.v1 import triple_store_pb2
+from naas_abi_core.services.iam.enforcement import raise_authorization_error
 from naas_abi_core.services.triple_store.adapters.triple_store_nats_contract import (
     AUTH_HEADER,
     SUBJECT_PREFIX,
@@ -148,6 +149,7 @@ def _raise_for_error(
     encodes errors -- the generic adapter contract test asserts on the real
     exception types, not on the wire code.
     """
+    raise_authorization_error(error.code, error.message)
     if error.code == "SUBJECT_NOT_FOUND":
         raise Exceptions.SubjectNotFoundError(error.message)
     if error.code == "SUBSCRIPTION_NOT_FOUND":
@@ -158,6 +160,8 @@ def _raise_for_error(
         raise Exceptions.GraphNotFoundError(error.message)
     if error.code == "GRAPH_ALREADY_EXISTS":
         raise Exceptions.GraphAlreadyExistsError(error.message)
+    if error.code == "INVALID_ARGUMENT":
+        raise Exceptions.InvalidRequest(error.message)
     if error.code == "REQUEST_ERROR":
         if detail is not None:
             raise Exceptions.RequestError(

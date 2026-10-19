@@ -12,15 +12,17 @@ the domain, never directly on each other. Both
 ``adaptors/secondary/SecretSecondaryAdapterNATSClient.py`` import from here
 instead.
 
-Security note: callers are authenticated (an engine token, verified against
-the JWKS) but the secret service does not check IAM per secret yet. This
-endpoint is therefore an allowlist (``may_use``): the ``engine`` account reaches
-every secret but the IdP's, ``idp`` its own (``idp/...``), and any other caller
-only the names under its own prefix, ``<module id>/...`` for a module,
-``<account name>/...`` for another service account. Everything else the store
-serves (the broker's passwords, the callout seed, IAM's signing keys, every
-provider key) is out of reach of a module, whatever its policy grants. A
-known, temporary gap only for the names a caller owns.
+Authorization: whoever calls is checked per key by the ``Secret`` domain
+service against IAM (RFC §6.4), as in process. Before IAM, any holder of a
+service token could read every secret; that gap is closed.
+
+The endpoint also stays an allowlist (``may_use``), a layer before IAM: the
+``engine`` account reaches every secret but the IdP's, ``idp`` its own
+(``idp/...``), and any other caller only the names under its own prefix,
+``<module id>/...`` for a module, ``<account name>/...`` for another service
+account. Everything else the store serves (the broker's passwords, the callout
+seed, IAM's signing keys, every provider key) is out of reach of a module,
+whatever its policy grants.
 
 See ``naas_abi_core/proto/secret/v1/secret.proto`` for the full wire
 contract this pairs with.

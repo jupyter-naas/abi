@@ -21,6 +21,7 @@ For explicit tier access, use `cache.hot.<method>` or `cache.cold.<method>`.
 | `CacheFactory.py` | Pre-wired service builders |
 | `adapters/secondary/` | Concrete adapters |
 | `ontologies/` | RDF event classes |
+| `iam_catalog.py` | IAM action catalog |
 
 ## Port (`CachePort.py`)
 
@@ -89,6 +90,28 @@ cache.tier(name)                → SingleTierCacheService  # ValueError if unkn
 CacheFactory.CacheFS_find_storage(subpath="cache", needle="storage") -> CacheService
 CacheFactory.CacheObjectStorage(object_storage, cache_prefix="cache") -> CacheService
 ```
+
+## Authorization
+
+Every operation is checked in the domain service against IAM (RFC
+[§5, §6.4](../../../../../docs/specs/rfcs/20261013_identity-and-authorization.md)),
+for the caller of the current `CallContext`, so in process and over NATS answer
+the same. The catalog is `iam_catalog.py`, registered by the serving engine at
+boot. A caller who cannot see a resource gets `CacheNotFoundError` (`CACHE_NOT_FOUND`; `exists` is False); one who can see it but not
+act gets `PermissionDeniedError` (`PERMISSION_DENIED`). A service not wired into
+an engine with IAM (a library use, a NATS facade whose server checks) does not
+check. The contract test is `CacheService_authorization_test.py`: no policy, granted and denied
+principals, in process and over NATS.
+
+* Each key is `key/<key>` (opaque); `Describe` is administration of
+  `service/-`.
+* The checks run in the tier views (`hot`, `cold`, `tier_at`, which the NATS
+  tier endpoints serve) and in the multi-tier service. `delete` of a key the
+  caller may not see is a no-op, as for a missing one.
+* The decorator computes the result for a caller who may not read the key, and
+  caches nothing for one who may not write it.
+* The cache's own entries in the key-value or object storage service are used
+  as the engine (`own_storage`): the caller was authorized on the cache key.
 
 ## Tests
 

@@ -55,6 +55,11 @@ from naas_abi_core.engine.nats_transfer import (
 )
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.vector_store.v1 import vector_store_pb2
+from naas_abi_core.services.iam.enforcement import authorization_error_code
+from naas_abi_core.services.iam.IAMPorts import (
+    PermissionDeniedError,
+    ResourceNotFoundError,
+)
 from naas_abi_core.services.vector_store.adapters.vector_store_nats_codec import (
     document_to_pb,
     pb_to_object,
@@ -72,6 +77,7 @@ from naas_abi_core.services.vector_store.adapters.vector_store_stream_codec impo
     document_frames,
 )
 from naas_abi_core.services.vector_store.IVectorStorePort import (
+    CollectionNotFoundError,
     IVectorStorePort,
     VectorDocument,
 )
@@ -127,7 +133,14 @@ class VectorStorePrimaryAdapterNATS(ServiceWithTransfers):
             self._transfer_frames,
             operations=("list_vectors",),
             chunk_bytes=1024 * 1024,
+            error_mapper=self._transfer_error,
         )
+
+    @staticmethod
+    def _transfer_error(exc: Exception) -> tuple[str, str] | None:
+        if isinstance(exc, CollectionNotFoundError):
+            return "COLLECTION_NOT_FOUND", str(exc)
+        return None
 
     async def start(self, nc: nats.NATS) -> None:
         """Register the ``vector_store`` NATS service on ``nc``.
@@ -278,6 +291,25 @@ class VectorStorePrimaryAdapterNATS(ServiceWithTransfers):
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
             response = await self._dispatch.call(call, parsed_request, caller)
+        except (PermissionDeniedError, ResourceNotFoundError) as exc:
+            # The caller's authorization outcome (RFC §5.4), decided by the domain.
+            await self._respond_error(
+                request,
+                response_cls,
+                authorization_error_code(exc) or "PERMISSION_DENIED",
+                str(exc),
+                retryable=False,
+            )
+            return
+        except CollectionNotFoundError as exc:
+            await self._respond_error(
+                request,
+                response_cls,
+                "COLLECTION_NOT_FOUND",
+                str(exc),
+                retryable=False,
+            )
+            return
         except Exception:  # noqa: BLE001 - a handler must never crash the service
             logger.opt(exception=True).error(
                 f"VectorStorePrimaryAdapterNATS: unexpected error handling {request.subject!r}"

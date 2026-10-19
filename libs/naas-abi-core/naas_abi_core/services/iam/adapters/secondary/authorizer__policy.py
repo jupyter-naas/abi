@@ -31,3 +31,8 @@ class PolicyAuthorizer(IAuthorizer):
 
     def explain(self, ctx: CallContext, action: str, resource: str) -> Explanation:
         return self._evaluator.explain(ctx, action, resource)
+
+    def allows_every(
+        self, ctx: CallContext, action: str, service: str, resource_type: str
+    ) -> bool:
+        return self._evaluator.allows_every(ctx, action, service, resource_type)

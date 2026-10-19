@@ -7,11 +7,14 @@ wire contract and ``naas_abi_core/proto/README.md`` for why it lives
 there). This is the server side; the matching client is
 ``SecretSecondaryAdapterNATSClient``.
 
-Security note: callers are authenticated (``naas_abi_core.engine.nats_auth``)
-but not yet authorized per secret -- see ``secret_nats_contract.py``'s
-docstring. A known, temporary gap, not an oversight -- except that this
-endpoint is an allowlist: a caller other than ``engine`` and ``idp`` reaches
-only the names under its own prefix, in every operation.
+Authorization: each call runs as the verified caller, and the ``Secret``
+domain service authorizes it per key against IAM (RFC §6.4): a key the caller
+may not see reads as missing, a refused write answers ``PERMISSION_DENIED`` or
+``NOT_FOUND``, and ``list`` returns only the keys the caller may list.
+So an endpoint with two layers: the allowlist below (a caller other than ``engine``
+and ``idp`` reaches only the names under its own prefix, in every operation, so
+the broker's passwords and IAM's keys are out of a module's reach whatever its
+policy grants), then the domain's per-key check.
 """
 
 from __future__ import annotations
@@ -36,6 +39,11 @@ from naas_abi_core.engine.nats_sessions import ServicePrimary
 from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.secret.v1 import secret_pb2
+from naas_abi_core.services.iam.enforcement import authorization_error_code
+from naas_abi_core.services.iam.IAMPorts import (
+    PermissionDeniedError,
+    ResourceNotFoundError,
+)
 from naas_abi_core.services.secret.adaptors.secret_nats_contract import (
     AUTH_HEADER,
     SERVICE_NAME,
@@ -45,6 +53,7 @@ from naas_abi_core.services.secret.adaptors.secret_nats_contract import (
 )
 from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.secret.SecretPorts import (
+    InvalidSecretKey,
     ISecretAdapter,
     SecretAuthenticationError,
 )
@@ -204,6 +213,21 @@ class SecretPrimaryAdapterNATS(ServicePrimary):
         except SecretAuthenticationError as exc:
             await self._respond_error(
                 request, response_cls, "SECRET_AUTH_FAILED", str(exc), retryable=False
+            )
+            return
+        except InvalidSecretKey as exc:
+            await self._respond_error(
+                request, response_cls, "INVALID_ARGUMENT", str(exc), retryable=False
+            )
+            return
+        except (PermissionDeniedError, ResourceNotFoundError) as exc:
+            # The caller's authorization outcome (RFC §5.4), checked by the domain.
+            await self._respond_error(
+                request,
+                response_cls,
+                authorization_error_code(exc) or "PERMISSION_DENIED",
+                str(exc),
+                retryable=False,
             )
             return
         except _ReservedSecretError:

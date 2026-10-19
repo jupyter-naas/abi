@@ -11,17 +11,21 @@ from naas_abi_core.services.cache.CachePort import (
     check_page_limit,
     paginate_keys,
 )
-
-_ENTRY_FILE = re.compile(r"[0-9a-f]{64}\.json")
+from naas_abi_core.services.iam.enforcement import own_storage
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
 
+_ENTRY_FILE = re.compile(r"[0-9a-f]{64}\.json")
+
 
 class CacheObjectStorageAdapter(ICacheAdapter):
     def __init__(self, object_storage: ObjectStorageService, prefix: str = "cache"):
         self.object_storage = object_storage
+        # The cache's own entries: stored as the engine, the caller was
+        # authorized on the cache key.
+        self._storage = own_storage(object_storage)
         self.prefix = prefix.strip("/")
 
     @staticmethod
@@ -37,7 +41,7 @@ class CacheObjectStorageAdapter(ICacheAdapter):
 
     def __read_entry(self, key: str) -> CachedData:
         try:
-            payload = self.object_storage.get_object(
+            payload = self._storage.get_object(
                 self.__entry_prefix(), self.__entry_key(key)
             )
         except Exceptions.ObjectNotFound as exc:
@@ -49,9 +53,7 @@ class CacheObjectStorageAdapter(ICacheAdapter):
 
     def set(self, key: str, value: CachedData) -> None:
         payload = json.dumps(value.model_dump()).encode("utf-8")
-        self.object_storage.put_object(
-            self.__entry_prefix(), self.__entry_key(key), payload
-        )
+        self._storage.put_object(self.__entry_prefix(), self.__entry_key(key), payload)
 
     def set_if_absent(self, key: str, value: CachedData) -> bool:
         """Best-effort conditional write.
@@ -73,15 +75,13 @@ class CacheObjectStorageAdapter(ICacheAdapter):
 
     def delete(self, key: str) -> None:
         try:
-            self.object_storage.delete_object(
-                self.__entry_prefix(), self.__entry_key(key)
-            )
+            self._storage.delete_object(self.__entry_prefix(), self.__entry_key(key))
         except Exceptions.ObjectNotFound as exc:
             raise CacheNotFoundError(f"Cache not found: {key}") from exc
 
     def exists(self, key: str) -> bool:
         try:
-            self.object_storage.get_object(self.__entry_prefix(), self.__entry_key(key))
+            self._storage.get_object(self.__entry_prefix(), self.__entry_key(key))
             return True
         except Exceptions.ObjectNotFound:
             return False
@@ -93,7 +93,7 @@ class CacheObjectStorageAdapter(ICacheAdapter):
         check_page_limit(limit)
         try:
             # Trailing slash: S3-style listings then return the folder's children.
-            paths = self.object_storage.list_objects(f"{self.__entry_prefix()}/")
+            paths = self._storage.list_objects(f"{self.__entry_prefix()}/")
         except Exceptions.ObjectNotFound:
             paths = []
         keys: list[str] = []
@@ -102,7 +102,7 @@ class CacheObjectStorageAdapter(ICacheAdapter):
             if not _ENTRY_FILE.fullmatch(name):
                 continue
             try:
-                payload = self.object_storage.get_object(self.__entry_prefix(), name)
+                payload = self._storage.get_object(self.__entry_prefix(), name)
             except Exceptions.ObjectNotFound:
                 continue  # deleted while listing
             key = json.loads(payload.decode("utf-8")).get("key")

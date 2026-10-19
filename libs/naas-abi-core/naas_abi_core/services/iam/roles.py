@@ -321,6 +321,16 @@ def idp_policy() -> Policy:
     )
 
 
+# Unchecked dataset SQL reads files on the engine host: never through a
+# transitional grant, whatever ``dataset:*`` it holds.
+_NO_UNCHECKED_SQL = Statement(
+    effect="Deny",
+    actions=("dataset:QueryUnchecked",),
+    resources=("*",),
+    sid="TransitionalNoUncheckedSql",
+)
+
+
 def module_bootstrap_policy() -> Policy:
     """Held by every module's service account, approved or not (RFC §8.3).
 
@@ -345,6 +355,11 @@ def module_bootstrap_policy() -> Policy:
                 resources=("abi:-:-:discovery:module/${module.project}/${module.id}",),
                 sid="OwnRegistration",
             ),
+            # ``default``, which the SDK uses when a module names none and
+            # which modules share, is a module's only dataset namespace until
+            # #60's manifests. Not ``${principal.id}``: a module named by a
+            # plain identifier (dev ``sales``) would own a real namespace other
+            # principals use. The catalog's snapshots come with it.
             Statement(
                 effect="Allow",
                 actions=("iam:SubmitManifest", "iam:GetManifest"),
@@ -438,6 +453,7 @@ def transitional_nexus_user_policy() -> Policy:
                 sid="TransitionalNexusUser",
             ),
             *_transitional_discovery(),
+            _NO_UNCHECKED_SQL,
         ],
     )
 

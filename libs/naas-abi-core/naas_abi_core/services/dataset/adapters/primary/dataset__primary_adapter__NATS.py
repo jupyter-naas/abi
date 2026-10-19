@@ -63,6 +63,7 @@ from naas_abi_core.services.dataset.DatasetPort import (
     DatasetAlreadyExistsError,
     DatasetInfo,
     DatasetNotFoundError,
+    DatasetRequestRefused,
     DatasetSchemaError,
     DatasetSnapshotConflictError,
     DatasetSnapshotInfo,
@@ -74,7 +75,13 @@ from naas_abi_core.services.dataset.DatasetPort import (
     WriteMode,
 )
 from naas_abi_core.services.dataset.DatasetService import DatasetService
+from naas_abi_core.services.iam.enforcement import authorization_error_code
+from naas_abi_core.services.iam.IAMPorts import (
+    PermissionDeniedError,
+    ResourceNotFoundError,
+)
 from nats.micro.request import Request
+from pydantic import ValidationError
 
 __all__ = [
     "AUTH_HEADER",
@@ -176,6 +183,11 @@ def _dataset_snapshot_info_to_pb(
     return pb
 
 
+# What a caller may be told about a request it got wrong: the service's own
+# refusals and the validation of a spec (pydantic's). Any other ``ValueError``
+# comes from a backend (DuckDB, pyarrow) and may name paths or connections.
+REFUSALS = (DatasetRequestRefused, ValidationError)
+
 # The port's exceptions, sent to callers as typed ``DatasetError``s.
 DOMAIN_ERRORS = (
     DatasetNotFoundError,
@@ -183,6 +195,10 @@ DOMAIN_ERRORS = (
     DatasetSnapshotNotFoundError,
     DatasetSnapshotConflictError,
     DatasetSchemaError,
+    # The caller's authorization outcome (RFC §5.4), and a request it refuses.
+    PermissionDeniedError,
+    ResourceNotFoundError,
+    *REFUSALS,
 )
 
 
@@ -354,6 +370,8 @@ class DatasetPrimaryAdapterNATS(ServiceWithTransfers):
 
     @staticmethod
     def _transfer_error(exc: Exception) -> tuple[str, str] | None:
+        if isinstance(exc, REFUSALS):
+            return "INVALID_ARGUMENT", str(exc)
         if isinstance(exc, DatasetSchemaError):
             return "DATASET_SCHEMA_ERROR", str(exc)
         if isinstance(exc, DatasetSnapshotNotFoundError):
@@ -423,6 +441,11 @@ class DatasetPrimaryAdapterNATS(ServiceWithTransfers):
     @classmethod
     def _domain_error(cls, exc: Exception) -> dataset_pb2.DatasetError:
         """The wire error for one of the port's exceptions (``DOMAIN_ERRORS``)."""
+        authorization = authorization_error_code(exc)
+        if authorization is not None:
+            return cls._error(authorization, str(exc), retryable=False)
+        if isinstance(exc, REFUSALS):
+            return cls._error("INVALID_ARGUMENT", str(exc), retryable=False)
         if isinstance(exc, DatasetNotFoundError):
             return cls._error(
                 "DATASET_NOT_FOUND",

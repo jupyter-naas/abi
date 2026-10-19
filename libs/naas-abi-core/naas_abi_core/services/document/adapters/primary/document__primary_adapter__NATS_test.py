@@ -7,6 +7,10 @@ from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.document.adapters.primary.document__primary_adapter__NATS import (
     DocumentPrimaryAdapterNATS,
 )
+from naas_abi_core.services.iam.IAMPorts import (
+    PermissionDeniedError,
+    ResourceNotFoundError,
+)
 from naas_abi_proto.document.v1 import document_pb2 as pb
 
 SECRET = TEST_TOKENS.verifier
@@ -48,75 +52,46 @@ def _namespaces_request(identity):
     )
 
 
-def test_platform_identities_list_namespaces():
+@pytest.mark.parametrize("identity", ["api", "acme.module", "dagster"])
+def test_every_caller_gets_the_domain_answer(identity):
+    # No identity is an administrator by name: the domain service filters.
     service = Mock()
-    service.namespaces.return_value = ["acme.module", "naas_abi"]
-    primary = DocumentPrimaryAdapterNATS(service, SECRET)
-    request = _namespaces_request("api")
-    try:
-        asyncio.run(primary._handle(request, operation="namespaces"))
-        response = pb.NamespacesResponse.FromString(request.respond.call_args.args[0])
-        assert not response.HasField("error")
-        assert list(response.namespaces) == ["acme.module", "naas_abi"]
-    finally:
-        primary._dispatch.close()
-
-
-@pytest.mark.parametrize("identity", ["acme.module", "dagster", "test"])
-def test_other_identities_cannot_list_namespaces(identity):
-    service = Mock()
+    service.namespaces.return_value = ["acme.module"]
     primary = DocumentPrimaryAdapterNATS(service, SECRET)
     request = _namespaces_request(identity)
     try:
         asyncio.run(primary._handle(request, operation="namespaces"))
         response = pb.NamespacesResponse.FromString(request.respond.call_args.args[0])
-        assert response.error.code == "PERMISSION_DENIED"
-        assert not response.error.retryable
-        service.namespaces.assert_not_called()
+        assert not response.HasField("error")
+        assert list(response.namespaces) == ["acme.module"]
+        service.namespaces.assert_called_once()
     finally:
         primary._dispatch.close()
 
 
-def test_admin_identities_are_configurable():
+@pytest.mark.parametrize(
+    "error, code",
+    [
+        (
+            PermissionDeniedError("document:Get", "abi:-:-:document:document/a/b/c"),
+            "PERMISSION_DENIED",
+        ),
+        (ResourceNotFoundError("abi:-:-:document:namespace/a"), "NOT_FOUND"),
+    ],
+)
+def test_authorization_outcomes_keep_their_code(error, code):
     service = Mock()
-    service.namespaces.return_value = []
-    primary = DocumentPrimaryAdapterNATS(service, SECRET, admin_identities={"ops"})
-    allowed, denied = _namespaces_request("ops"), _namespaces_request("api")
-    try:
-        asyncio.run(primary._handle(allowed, operation="namespaces"))
-        asyncio.run(primary._handle(denied, operation="namespaces"))
-        assert not pb.NamespacesResponse.FromString(
-            allowed.respond.call_args.args[0]
-        ).HasField("error")
-        assert (
-            pb.NamespacesResponse.FromString(
-                denied.respond.call_args.args[0]
-            ).error.code
-            == "PERMISSION_DENIED"
-        )
-    finally:
-        primary._dispatch.close()
-
-
-def test_backend_error_is_not_leaked_or_retried():
-    service = Mock()
-    service._for_namespace.return_value.get.side_effect = RuntimeError(
-        "sensitive connection details"
-    )
+    service._for_namespace.return_value.get.side_effect = error
     primary = DocumentPrimaryAdapterNATS(service, SECRET)
     request = SimpleNamespace(
-        data=pb.GetRequest(
-            namespace="module", collection="state", id="one"
-        ).SerializeToString(),
-        headers={"Nats-Auth-Token": TEST_TOKENS.token("test")},
+        data=pb.GetRequest(namespace="a", collection="b", id="c").SerializeToString(),
+        headers={"Nats-Auth-Token": TEST_TOKENS.token("acme.module")},
         respond=AsyncMock(),
     )
     try:
         asyncio.run(primary._handle(request, operation="get"))
         response = pb.GetResponse.FromString(request.respond.call_args.args[0])
-        assert response.error.code == "INTERNAL"
-        assert "sensitive" not in response.error.message
-        assert not response.error.retryable
-        service._for_namespace.return_value.get.assert_called_once()
+        assert response.error.code == code
+        assert response.error.message == str(error)
     finally:
         primary._dispatch.close()

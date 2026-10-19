@@ -7,10 +7,15 @@ from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
+from typing import Any
 
 import rdflib
 from naas_abi_core import logger
+from naas_abi_core.services.iam.enforcement import ResourceGuard
+from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
 from naas_abi_core.services.ServiceBase import ServiceBase
+from naas_abi_core.services.triple_store import sparql_access as sparql
+from naas_abi_core.services.triple_store.iam_catalog import CATALOG, GRAPH, VIEW
 from naas_abi_core.services.triple_store.ontologies.modules.TripleStoreEventOntology import (
     GraphCleared,
     GraphCreated,
@@ -22,12 +27,15 @@ from naas_abi_core.services.triple_store.ontologies.modules.TripleStoreEventOnto
     TripleStoreError,
 )
 from naas_abi_core.services.triple_store.TripleStorePorts import (
+    DatasetRestrictionUnsupported,
     Exceptions,
     ITripleStorePort,
     ITripleStoreService,
     OntologyEvent,
+    QueryDataset,
     QueryStream,
     Triple,
+    checked_iri,
 )
 from rdflib import Graph, URIRef
 
@@ -37,6 +45,7 @@ class _SchemaIndexEntry:
     subject: URIRef
     hash: str
     file_last_update_time: str
+
 
 SCHEMA_TTL = """
 @prefix internal: <http://triple-store.internal#> .
@@ -86,6 +95,19 @@ ASK WHERE {{
 """
 
 
+# What a SPARQL Update may need, besides reading (sparql_access).
+_UPDATE_ACTIONS = (
+    "Query",
+    "Insert",
+    "Remove",
+    "ClearGraph",
+    "DropGraph",
+    "CreateGraph",
+)
+# Every triple of a query's default graph: a confined dump or export.
+_EVERYTHING = "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }"
+
+
 class TripleStoreService(ServiceBase, ITripleStoreService):
     """TripleStoreService provides CRUD operations and SPARQL querying capabilities for ontologies.
 
@@ -103,6 +125,21 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         >>> # ... populate ontology ...
         >>> store.store("my_ontology", ontology)
         >>> results = store.query("SELECT ?s WHERE { ?s a owl:Class }")
+
+    Wired into an engine, every operation is authorized per graph,
+    ``graph/<iri>`` (``graph/default`` for the default graph), RFC §6.4:
+
+    * a SPARQL query (``query``, ``query_stream``, ``query_view``) by a caller
+      who may not read every graph names only graphs it may read (``FROM``,
+      ``FROM NAMED``, ``GRAPH <iri>``; else ``GraphNotFoundError`` or
+      ``PermissionDeniedError``), and runs over the graphs it may read: the
+      store gets the dataset, so ``GRAPH ?g`` and the default graph see only
+      those. ``SERVICE`` needs every graph. A store that cannot confine a
+      query refuses it;
+    * a SPARQL Update needs the matching action on each graph it touches
+      (``sparql_access``);
+    * ``list_graphs``, ``get``, ``export`` and ``get_subject_graph`` without a
+      graph hold only the graphs the caller may read.
     """
 
     def __init__(
@@ -112,7 +149,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         super().__init__()
         self.__triple_store_adapter = triple_store_adapter
         self.__schema_graph = _SCHEMA_GRAPH
-
+        self._guard = ResourceGuard.of(CATALOG, self)
         self._bootstrap_schema_graph()
 
     @property
@@ -171,7 +208,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         try:
             if not self.services.events_available():
                 return
-            self.services.events.publish(event)
+            self.services.events.emit(event)
         except Exception as exc:  # noqa: BLE001
             # Triple store mutations are the source of truth; event logging must not break them.
             logger.warning(f"TripleStoreService: failed to publish event: {exc}")
@@ -191,6 +228,129 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             return exc.detail()
         return str(exc)
 
+    # -- authorization (RFC §6.4) ------------------------------------------------
+
+    def __graph(
+        self, action: str, graph: URIRef | str, *, parsed: bool = False
+    ) -> None:
+        """Require ``action`` on a graph. The name must be an IRI before
+        anything else: the name IAM checks is the one a store runs. That holds
+        for one the SPARQL parser found (``parsed``) too: rdflib keeps the
+        backslash of an escaped prefixed name (``g:\\/x``) that the store drops,
+        so only the literal ``default`` is taken as is."""
+        iri = (
+            str(graph)
+            if parsed and graph == sparql.DEFAULT_GRAPH
+            else checked_iri(graph)
+        )
+        self._guard.require(
+            action,
+            GRAPH,
+            iri,
+            not_found=lambda: Exceptions.GraphNotFoundError(f"Graph {iri} not found"),
+        )
+
+    @staticmethod
+    def __parsed_name(graph: URIRef | str) -> None:
+        """A graph name the SPARQL parser found must be an IRI (see ``__graph``).
+        ``default`` and ``*`` name the default graph and every graph."""
+        if graph not in (sparql.DEFAULT_GRAPH, sparql.EVERY_GRAPH):
+            checked_iri(graph)
+
+    def __every(self, action: str) -> None:
+        if not self._guard.allows_every(action, GRAPH):
+            raise PermissionDeniedError(
+                self._guard.action(action),
+                message=f"{action} on every graph is not allowed to this caller",
+            )
+
+    def __confined(self, action: str) -> bool:
+        """Whether ``action`` must be confined to some graphs for the caller."""
+        return self._guard.iam is not None and not self._guard.allows_every(
+            action, GRAPH
+        )
+
+    def __dataset(self, action: str, shape: sparql.ReadShape) -> QueryDataset:
+        """The graphs a confined read runs over."""
+        if shape.has_dataset:
+            return QueryDataset(False, shape.from_graphs, shape.from_named)
+        named = tuple(
+            self._guard.filter(
+                action,
+                GRAPH,
+                self.__triple_store_adapter.list_graphs(),
+                lambda graph: str(graph),
+            )
+        )
+        union = getattr(self.__triple_store_adapter, "union_default_graph", False)
+        return QueryDataset(
+            self._guard.allowed(action, GRAPH, sparql.DEFAULT_GRAPH),
+            named if union else (),
+            named,
+        )
+
+    def __authorize_request(
+        self, action: str, request: str, *, updates: bool = True
+    ) -> QueryDataset | None:
+        """Authorize a SPARQL request, parsed once (``sparql_access.analyze``).
+
+        An update needs the matching action on each graph it touches; a query
+        names only graphs the caller may read and runs over them. Returns the
+        dataset a confined query runs over, or None when it runs as is.
+
+        ``updates=False`` (a view): an update is refused for every caller,
+        broad ones included, so the request is always parsed.
+        """
+        if self._guard.iam is None:
+            return None
+        analysis = None if updates else self.__analyze(request)
+        if analysis is not None and analysis.update:
+            raise Exceptions.InvalidRequest("A SPARQL update is not a query")
+        actions = (action, *_UPDATE_ACTIONS) if updates else (action,)
+        if all(self._guard.allows_every(a, GRAPH) for a in actions):
+            return None
+        if analysis is None:
+            analysis = self.__analyze(request)
+        if analysis.update:
+            # Every name an IRI before any check: no answer depends on a later one.
+            for need in analysis.needs:
+                self.__parsed_name(need.graph)
+            for need in analysis.needs:
+                if need.graph == sparql.EVERY_GRAPH:
+                    self.__every(need.action)
+                else:
+                    self.__graph(need.action, need.graph, parsed=True)
+            return None
+        if not self.__confined(action):
+            return None
+        shape = analysis.shape
+        for graph in shape.named:
+            self.__parsed_name(graph)
+        for graph in shape.named:
+            self.__graph(action, graph, parsed=True)
+        if shape.service:
+            raise PermissionDeniedError(
+                self._guard.action(action),
+                message=f"SERVICE needs {action} on every graph",
+            )
+        return self.__dataset(action, shape)
+
+    def __analyze(self, request: str) -> sparql.Analysis:
+        return sparql.analyze(
+            request,
+            union_default_graph=getattr(
+                self.__triple_store_adapter, "union_default_graph", False
+            ),
+        )
+
+    def __confined_query(self, query: str, dataset: QueryDataset) -> Any:
+        try:
+            return self.__triple_store_adapter.query_dataset(query, dataset)
+        except DatasetRestrictionUnsupported as exc:
+            raise PermissionDeniedError(
+                self._guard.action("Query"), message=str(exc)
+            ) from exc
+
     def _hash_value(self, value: object) -> str:
         return hashlib.sha256(str(value).encode("utf-8")).hexdigest()[:32]
 
@@ -205,6 +365,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         graph_name: URIRef,
     ) -> None:
         assert graph_name is not None
+        self.__graph("Insert", graph_name)
 
         # Insert the triples into the store
         try:
@@ -240,6 +401,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         graph_name: URIRef,
     ) -> None:
         assert graph_name is not None
+        self.__graph("Remove", graph_name)
 
         # Remove the triples from the store
         try:
@@ -294,9 +456,19 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             raise
 
     def get(self) -> Graph:
-        return self.__triple_store_adapter.get()
+        """The store as its adapter dumps it; only the readable graphs for a
+        caller who may not read every graph."""
+        if not self.__confined("Get"):
+            return self.__triple_store_adapter.get()
+        result = self.__confined_query(
+            _EVERYTHING, self.__dataset("Get", sparql.ReadShape())
+        )
+        return result if isinstance(result, Graph) else Graph() + result.graph
 
     def query(self, query: str) -> rdflib.query.Result:
+        dataset = self.__authorize_request("Query", query)
+        if dataset is not None:
+            return self.__confined_query(query, dataset)
         try:
             return self.__triple_store_adapter.query(query)
         except Exception as exc:
@@ -310,11 +482,20 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
     @contextmanager
     def query_stream(self, query: str) -> Iterator[QueryStream]:
+        dataset = self.__authorize_request("QueryStream", query)
         with ExitStack() as stack:
             try:
                 result = stack.enter_context(
                     self.__triple_store_adapter.query_stream(query)
+                    if dataset is None
+                    else self.__triple_store_adapter.query_stream_dataset(
+                        query, dataset
+                    )
                 )
+            except DatasetRestrictionUnsupported as exc:
+                raise PermissionDeniedError(
+                    self._guard.action("QueryStream"), message=str(exc)
+                ) from exc
             except Exception as exc:
                 self.__report_stream_error(exc)
                 raise
@@ -324,11 +505,27 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
     @contextmanager
     def export(self, graph_name: URIRef | None = None) -> Iterator[Iterator[Triple]]:
+        confined = None
+        if graph_name is not None:
+            self.__graph("Export", graph_name)
+        elif self.__confined("Export"):
+            confined = self.__dataset("Export", sparql.ReadShape())
         with ExitStack() as stack:
             try:
-                triples = stack.enter_context(
-                    self.__triple_store_adapter.export(graph_name)
-                )
+                if confined is None:
+                    triples = stack.enter_context(
+                        self.__triple_store_adapter.export(graph_name)
+                    )
+                else:
+                    triples = stack.enter_context(
+                        self.__triple_store_adapter.query_stream_dataset(
+                            _EVERYTHING, confined
+                        )
+                    ).triples
+            except DatasetRestrictionUnsupported as exc:
+                raise PermissionDeniedError(
+                    self._guard.action("Export"), message=str(exc)
+                ) from exc
             except Exception as exc:
                 self.__report_stream_error(exc, "export", graph_name)
                 raise
@@ -362,6 +559,17 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         )
 
     def query_view(self, view: str, query: str) -> rdflib.query.Result:
+        """``QueryView`` on the view, and ``Query`` rules on the graphs it reads:
+        confined, it runs as a query over the caller's graphs."""
+        self._guard.require(
+            "QueryView",
+            VIEW,
+            view,
+            not_found=lambda: Exceptions.ViewNotFoundError(f"View {view} not found"),
+        )
+        dataset = self.__authorize_request("Query", query, updates=False)
+        if dataset is not None:
+            return self.__confined_query(query, dataset)
         try:
             return self.__triple_store_adapter.query_view(view, query)
         except Exception as exc:
@@ -376,6 +584,16 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
     def create_graph(self, graph_name: URIRef) -> None:
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
+        checked_iri(graph_name)
+        commit = self._guard.create(
+            "CreateGraph",
+            GRAPH,
+            str(graph_name),
+            exists=lambda: graph_name in self.__triple_store_adapter.list_graphs(),
+            not_found=lambda: Exceptions.GraphNotFoundError(
+                f"Graph {graph_name} not found"
+            ),
+        )
 
         try:
             self.__triple_store_adapter.create_graph(graph_name)
@@ -389,11 +607,13 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             )
             raise
 
+        commit()
         self.__publish_event(GraphCreated(graph_name=str(graph_name)))
 
     def clear_graph(self, graph_name: URIRef) -> None:
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
+        self.__graph("ClearGraph", graph_name)
 
         try:
             self.__triple_store_adapter.clear_graph(graph_name)
@@ -410,6 +630,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         self.__publish_event(GraphCleared(graph_name=str(graph_name)))
 
     def drop_graph(self, graph_name: URIRef) -> None:
+        self.__graph("DropGraph", graph_name)
         try:
             self.__triple_store_adapter.drop_graph(graph_name)
         except Exception as exc:
@@ -422,10 +643,17 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             )
             raise
 
+        self._guard.forget(GRAPH, str(graph_name))
         self.__publish_event(GraphDropped(graph_name=str(graph_name)))
 
     def list_graphs(self) -> list[URIRef]:
-        return self.__triple_store_adapter.list_graphs()
+        """The graphs the caller may list (RFC §5.5); never fails for that."""
+        return self._guard.filter(
+            "ListGraphs",
+            GRAPH,
+            self.__triple_store_adapter.list_graphs(),
+            lambda graph: str(graph),
+        )
 
     def subscribe(
         self,
@@ -434,6 +662,14 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         event_type: OntologyEvent | None = None,
         graph_name: URIRef | str = "*",
     ) -> None:
+        """Call ``callback`` with the triples inserted into or removed from
+        ``graph_name``, as N3. The messages carry triples, not graph names, so
+        a subscription is authorized as a read of the graph it names, and of
+        every graph for ``*``. It is checked once, when it is made."""
+        if graph_name == "*":
+            self.__every("Subscribe")
+        else:
+            self.__graph("Subscribe", graph_name)
         _event_type: str = ""
         if event_type == OntologyEvent.INSERT:
             _event_type = "insert"
@@ -456,6 +692,19 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         )
 
     def get_subject_graph(self, subject: str, graph_name: str = "*") -> Graph:
+        """A subject's triples in one graph, or in every graph (``*``); only in
+        the graphs the caller may read."""
+        checked_iri(subject)
+        if graph_name != "*":
+            self.__graph("GetSubjectGraph", graph_name)
+        elif self.__confined("GetSubjectGraph"):
+            named = self.__dataset("GetSubjectGraph", sparql.ReadShape()).named_graphs
+            result = self.__confined_query(
+                f"CONSTRUCT {{ <{subject}> ?p ?o }} "
+                f"WHERE {{ GRAPH ?g {{ <{subject}> ?p ?o }} }}",
+                QueryDataset(False, (), named),
+            )
+            return result if isinstance(result, Graph) else Graph() + result.graph
         return self.__triple_store_adapter.get_subject_graph(
             URIRef(subject), graph_name
         )
@@ -607,13 +856,9 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
             with open(filepath, "r") as file:
                 new_content = file.read()
-            new_content_hash = hashlib.sha256(
-                new_content.encode("utf-8")
-            ).hexdigest()
+            new_content_hash = hashlib.sha256(new_content.encode("utf-8")).hexdigest()
 
-            matching = next(
-                (e for e in entries if e.hash == new_content_hash), None
-            )
+            matching = next((e for e in entries if e.hash == new_content_hash), None)
             primary = matching if matching is not None else entries[0]
             duplicate_subjects = [
                 e.subject for e in entries if e.subject != primary.subject

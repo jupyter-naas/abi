@@ -131,7 +131,8 @@ class RequestIdentityMiddleware:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http":
+        # Websockets too (Socket.IO): their handlers run in this context.
+        if scope["type"] not in ("http", "websocket"):
             await self.app(scope, receive, send)
             return
         with use_call_context(await request_call_context(scope)):

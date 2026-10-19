@@ -41,6 +41,11 @@ from naas_abi_core.engine.nats_sessions import ServicePrimary
 from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.keyvalue.v1 import keyvalue_pb2
+from naas_abi_core.services.iam.enforcement import authorization_error_code
+from naas_abi_core.services.iam.IAMPorts import (
+    PermissionDeniedError,
+    ResourceNotFoundError,
+)
 from naas_abi_core.services.keyvalue.adapters.keyvalue_nats_contract import (
     AUTH_HEADER,
     SERVICE_NAME,
@@ -206,6 +211,16 @@ class KeyValuePrimaryAdapterNATS(ServicePrimary):
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
             response = await self._dispatch.call(call, parsed_request, caller)
+        except (PermissionDeniedError, ResourceNotFoundError) as exc:
+            # The caller's authorization outcome (RFC §5.4), decided by the domain.
+            await self._respond_error(
+                request,
+                response_cls,
+                authorization_error_code(exc) or "PERMISSION_DENIED",
+                str(exc),
+                retryable=False,
+            )
+            return
         except KVNotFoundError as exc:
             await self._respond_error(
                 request, response_cls, "KV_NOT_FOUND", str(exc), retryable=False

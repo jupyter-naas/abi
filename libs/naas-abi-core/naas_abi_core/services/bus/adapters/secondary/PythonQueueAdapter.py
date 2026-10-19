@@ -1,3 +1,4 @@
+import contextvars
 import os
 import sqlite3
 import threading
@@ -176,7 +177,10 @@ class PythonQueueAdapter(IBusAdapter):
                     self._release(message_id)
                     raise
 
-        thread = Thread(target=_consume_loop, daemon=True)
+        # The callback acts as whoever subscribed: a new thread starts with no caller.
+        thread = Thread(
+            target=contextvars.copy_context().run, args=(_consume_loop,), daemon=True
+        )
         thread.start()
         return thread
 
@@ -259,7 +263,10 @@ class PythonQueueAdapter(IBusAdapter):
                         # is the subscriber's responsibility.
                         pass
 
-        thread = Thread(target=_consume_loop, daemon=True)
+        # The callback acts as whoever subscribed: a new thread starts with no caller.
+        thread = Thread(
+            target=contextvars.copy_context().run, args=(_consume_loop,), daemon=True
+        )
         thread.start()
         return thread
 

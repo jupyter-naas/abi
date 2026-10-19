@@ -213,6 +213,17 @@ def test_a_suspended_user_is_denied_even_through_a_broad_actor(h):
     assert not h.allowed(QUERY, graph("a"), actor="api", on_behalf_of=bob)
 
 
+def test_a_suspended_user_gets_no_prefix_hints_through_a_broad_actor(h):
+    """Lists push the hints down: a suspended user must list nothing at once."""
+    bob = h.user()
+    h.grant(bob.id, statement("Allow", [QUERY], [graph("g")]))
+    with h.as_(actor="api", on_behalf_of=bob):
+        assert h.iam.filter(QUERY, ()).prefix_hints
+    h.admin("suspend_principal", bob.id)
+    with h.as_(actor="api", on_behalf_of=bob):
+        assert h.iam.filter(QUERY, ()).prefix_hints == []
+
+
 # -- on behalf of: both must be allowed -----------------------------------------------------------
 
 
@@ -597,6 +608,22 @@ def test_a_module_account_reaches_its_own_registration_and_manifest_only(h):
     # The same policy names nothing for an account that is not a module's.
     ci = h.service_account("ci/nightly")
     assert not h.allowed("discovery:Register", own, ci)
+
+
+def test_a_nexus_user_never_runs_unchecked_dataset_sql(h):
+    """Nexus calls as api on behalf of its user: the user's transitional
+    grant allows every dataset, not SQL the query check cannot vouch for."""
+    from naas_abi_core.engine.call_context import CallContext, service_account, user
+
+    catalog = "abi:-:-:dataset:catalog/-"
+    nexus_call = CallContext(
+        principal=service_account("api"),
+        on_behalf_of=user("nexus-user-1"),  # a Nexus id: the transitional grant
+    )
+    with use_call_context(nexus_call):
+        assert h.iam.authorize("dataset:Query", "abi:-:-:dataset:dataset/a/b").allowed
+        assert not h.iam.authorize("dataset:QueryUnchecked", catalog).allowed
+    assert h.allowed("dataset:QueryUnchecked", catalog, actor="engine")
 
 
 # -- the opt-out ----------------------------------------------------------------------------------------------------

@@ -19,6 +19,9 @@ CRUD + SPARQL facade over RDF named graphs. Publishes domain events on every mut
 | `adaptors/secondary/base/` | Filesystem/ObjectStorage shared helper (`TripleStoreService__SecondaryAdaptor__FileBase`) |
 | `tests/triple_store__secondary_adapter__generic_test.py` | **Generic adapter contract tests** — reuse for new adapters |
 | `ontologies/` | RDF event classes (`TriplesInserted`, `TriplesRemoved`, `GraphCreated`, `GraphCleared`, `GraphDropped`, `SchemaLoaded`, `SchemaRemoved`) |
+| `iam_catalog.py` | IAM action catalog |
+| `sparql_access.py` | What a SPARQL query reads and an update touches, for authorization |
+| `TripleStoreService_authorization_test.py` | Authorization contract: FROM, GRAPH, default graph, streams, exports |
 
 ## Port (`TripleStorePorts.py`)
 
@@ -109,6 +112,46 @@ Endpoints: `POST /query`, `POST /update`, `GET /store`, `POST /store?default` (b
 thread per request; a syntax error is still a 400, an error after the first
 bytes truncates the body. `adaptors/secondary/Oxigraph_http_test.py` runs the
 generic contract against it in-process.
+
+## Authorization
+
+Every operation is checked in the domain service against IAM (RFC
+[§5, §6.4](../../../../../docs/specs/rfcs/20261013_identity-and-authorization.md)),
+for the caller of the current `CallContext`, so in process and over NATS answer
+the same. The catalog is `iam_catalog.py`, registered by the serving engine at
+boot. A caller who cannot see a resource gets `Exceptions.GraphNotFoundError` (`GRAPH_NOT_FOUND`); one who can see it but not
+act gets `PermissionDeniedError` (`PERMISSION_DENIED`). A service not wired into
+an engine with IAM (a library use, a NATS facade whose server checks) does not
+check. The contract test is `TripleStoreService_authorization_test.py`: no policy, granted and denied
+principals, in process and over NATS.
+
+* Each graph is `graph/<iri>` (opaque); the store's default graph is
+  `graph/default`. Views are `view/<name>`, platform-level.
+* SPARQL (`query`, `query_stream`, `query_view`; `sparql_access.py`): for a
+  caller who may not read every graph, every graph the query names (`FROM`,
+  `FROM NAMED`, `GRAPH <iri>`, in `EXISTS` too) must be readable, and the query
+  runs over a `QueryDataset` of the graphs it may read: `GRAPH ?g` and the
+  default graph see nothing else. `SERVICE` needs every graph. An unparsable
+  request is `ValueError` (`INVALID_ARGUMENT`), and so is an update sent to
+  `query_view`, for every caller.
+* The adapter gets the dataset through `query_dataset` /
+  `query_stream_dataset`: SPARQL Protocol `default-graph-uri` and
+  `named-graph-uri` (Oxigraph, ABI's `oxigraph_server`, Fuseki, which declares
+  `union_default_graph`) or pyoxigraph options (embedded). An adapter that
+  cannot confine a query (filesystem, object storage, Neptune) refuses it with
+  `PermissionDeniedError`; callers allowed every graph are unaffected.
+* SPARQL Update needs the matching action on each graph it touches (`INSERT
+  DATA` → `Insert`, `DROP` → `DropGraph`, ...); `DEFAULT`/`NAMED`/`ALL` and
+  graph variables need it on every graph, and so do a `SERVICE` anywhere in
+  `WHERE` (with `USING` too), `LOAD` (`Query` on every graph: its source may be
+  one of the store's graphs) and, on a union-default store, a read of the
+  default graph.
+* Each request is parsed once (`sparql_access.analyze`), under a lock of its
+  own: rdflib's grammar (pyparsing) is not thread-safe. Other rdflib parsing in
+  the process does not take it.
+* `list_graphs`, `get`, `export()` and `get_subject_graph(s)` without a graph
+  hold only readable graphs. `create_graph` places a new graph in the call's
+  target workspace (§4.4); `drop_graph` drops its placement.
 
 ## Tests
 

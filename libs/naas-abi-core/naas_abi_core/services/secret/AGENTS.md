@@ -15,6 +15,8 @@ secret/
 ├── SecretPorts.py     # ISecretService, ISecretAdapter, SecretAuthenticationError
 ├── Secret.py          # public service
 ├── Secret_test.py
+├── iam_catalog.py     # IAM action catalog and seals (idp/, iam/ keys)
+├── Secret_authorization_test.py  # authorization contract
 ├── adaptors/secondary/
 │   ├── Base64Secret.py
 │   ├── NaasSecret.py
@@ -72,6 +74,27 @@ secret = Secret(adapters=[
     NaasSecret(naas_api_key=os.environ["NAAS_API_KEY"]),
 ])
 ```
+
+## Authorization
+
+Every operation is checked in the domain service against IAM (RFC
+[§5, §6.4](../../../../../docs/specs/rfcs/20261013_identity-and-authorization.md)),
+for the caller of the current `CallContext`, so in process and over NATS answer
+the same. The catalog is `iam_catalog.py`, registered by the serving engine at
+boot. A caller who cannot see a resource gets the default, as for a missing key; one who can see it but not
+act gets `PermissionDeniedError` (`PERMISSION_DENIED`). A service not wired into
+an engine with IAM (a library use, a NATS facade whose server checks) does not
+check. The contract test is `Secret_authorization_test.py`: no policy, granted and denied
+principals, in process and over NATS.
+
+* Each key is `secret/<key>` (opaque, so `/` is `%2F`), placed by key prefix.
+* `get` of a key the caller may not see returns `default`; `set` and `remove`
+  raise `ResourceNotFoundError` (`NOT_FOUND`).
+* `list` returns the keys the caller may `List`, with a value only where it may
+  also `Get`.
+* Seals (`SEALS`): `idp/` keys belong to the built-in IdP and `iam/` keys to
+  the engine, wherever a placement puts them; no policy opens them to anyone
+  else, `api` and `engine` included.
 
 ## Tests
 

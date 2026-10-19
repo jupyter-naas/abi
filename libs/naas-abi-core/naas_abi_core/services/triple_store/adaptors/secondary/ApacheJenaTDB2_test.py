@@ -317,6 +317,7 @@ def test_query_recovers_truncated_sparql_json_without_retrying():
 # Retry behaviour
 # ---------------------------------------------------------------------------
 
+
 def _make_500_response(text: str = "Server error (mock)") -> Mock:
     resp = Mock(status_code=500)
     resp.text = text
@@ -324,14 +325,18 @@ def _make_500_response(text: str = "Server error (mock)") -> Mock:
     return resp
 
 
-@patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")
+@patch(
+    "naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep"
+)
 def test_insert_retries_on_500_and_succeeds(mock_sleep):
     adapter = _build_adapter()
     adapter.max_retries = 2
     adapter.retry_delay = 0.1
 
     graph = Graph()
-    graph.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
+    graph.add(
+        (URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C"))
+    )
 
     adapter._session.post.side_effect = [_make_500_response(), _ok_response()]
     adapter.insert(graph)
@@ -340,14 +345,18 @@ def test_insert_retries_on_500_and_succeeds(mock_sleep):
     assert mock_sleep.call_count == 1
 
 
-@patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")
+@patch(
+    "naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep"
+)
 def test_insert_raises_after_all_retries_exhausted(mock_sleep):
     adapter = _build_adapter()
     adapter.max_retries = 2
     adapter.retry_delay = 0.1
 
     graph = Graph()
-    graph.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
+    graph.add(
+        (URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C"))
+    )
 
     adapter._session.post.side_effect = [
         _make_500_response(),
@@ -361,7 +370,9 @@ def test_insert_raises_after_all_retries_exhausted(mock_sleep):
     assert mock_sleep.call_count == 2
 
 
-@patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")
+@patch(
+    "naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep"
+)
 def test_insert_does_not_retry_on_400(mock_sleep):
     adapter = _build_adapter()
     adapter.max_retries = 3
@@ -372,7 +383,9 @@ def test_insert_does_not_retry_on_400(mock_sleep):
     adapter._session.post.return_value = bad_request
 
     graph = Graph()
-    graph.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
+    graph.add(
+        (URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C"))
+    )
 
     with pytest.raises(Exceptions.RequestError):
         adapter.insert(graph)
@@ -385,7 +398,10 @@ def test_insert_does_not_retry_on_400(mock_sleep):
 # RequestError carries the server's diagnostics (status + body)
 # ---------------------------------------------------------------------------
 
-@patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")
+
+@patch(
+    "naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep"
+)
 def test_update_error_captures_status_and_body(mock_sleep):
     adapter = _build_adapter()
     adapter.max_retries = 0  # surface the failure on the first attempt
@@ -394,7 +410,9 @@ def test_update_error_captures_status_and_body(mock_sleep):
     adapter._session.post.return_value = _make_500_response(text=body)
 
     graph = Graph()
-    graph.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
+    graph.add(
+        (URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C"))
+    )
 
     with pytest.raises(Exceptions.RequestError) as exc_info:
         adapter.insert(graph)
@@ -420,7 +438,9 @@ def test_update_error_body_is_truncated():
     adapter._session.post.return_value = _make_500_response(text=huge)
 
     graph = Graph()
-    graph.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
+    graph.add(
+        (URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C"))
+    )
 
     with pytest.raises(Exceptions.RequestError) as exc_info:
         adapter.insert(graph)
@@ -457,6 +477,7 @@ def test_write_lock_is_present():
 # Distributed lock via KeyValueService
 # ---------------------------------------------------------------------------
 
+
 def _build_adapter_with_kv() -> tuple:
     """Return (adapter, mock_kv_service) with a mocked KeyValueService injected."""
     mock_kv = MagicMock()
@@ -483,7 +504,9 @@ def test_distributed_lock_acquired_and_released_on_insert():
     adapter, mock_kv = _build_adapter_with_kv()
 
     graph = Graph()
-    graph.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
+    graph.add(
+        (URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C"))
+    )
     adapter.insert(graph)
 
     assert mock_kv.set_if_not_exists.call_count == 1
@@ -516,7 +539,9 @@ def test_distributed_writes_are_also_serialized_within_process():
 
     adapter._session.post.side_effect = slow_post
     graph = Graph()
-    graph.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
+    graph.add(
+        (URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C"))
+    )
     barrier = threading.Barrier(3)
 
     def insert() -> None:
@@ -534,7 +559,9 @@ def test_distributed_writes_are_also_serialized_within_process():
     assert max_active == 1
 
 
-@patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")
+@patch(
+    "naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep"
+)
 def test_distributed_lock_retries_when_busy_then_succeeds(mock_sleep):
     adapter, mock_kv = _build_adapter_with_kv()
     adapter.max_retries = 2
@@ -543,7 +570,9 @@ def test_distributed_lock_retries_when_busy_then_succeeds(mock_sleep):
     mock_kv.set_if_not_exists.side_effect = [False, True]
 
     graph = Graph()
-    graph.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
+    graph.add(
+        (URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C"))
+    )
     adapter.insert(graph)
 
     assert mock_kv.set_if_not_exists.call_count == 2
@@ -551,7 +580,9 @@ def test_distributed_lock_retries_when_busy_then_succeeds(mock_sleep):
     assert mock_kv.delete_if_value_matches.call_count == 1
 
 
-@patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")
+@patch(
+    "naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep"
+)
 def test_distributed_lock_raises_after_all_attempts_exhausted(mock_sleep):
     adapter, mock_kv = _build_adapter_with_kv()
     adapter.max_retries = 2
@@ -559,9 +590,13 @@ def test_distributed_lock_raises_after_all_attempts_exhausted(mock_sleep):
     mock_kv.set_if_not_exists.return_value = False  # Lock never released.
 
     graph = Graph()
-    graph.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
+    graph.add(
+        (URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C"))
+    )
 
-    with pytest.raises(Exceptions.RequestError, match="distributed write lock") as exc_info:
+    with pytest.raises(
+        Exceptions.RequestError, match="distributed write lock"
+    ) as exc_info:
         adapter.insert(graph)
 
     assert exc_info.value.operation == "acquire_write_lock"
@@ -576,11 +611,15 @@ def test_distributed_lock_released_even_when_http_raises():
 
     err_response = Mock(status_code=500)
     err_response.text = "Server error (mock)"
-    err_response.raise_for_status.side_effect = requests.HTTPError(response=err_response)
+    err_response.raise_for_status.side_effect = requests.HTTPError(
+        response=err_response
+    )
     adapter._session.post.return_value = err_response
 
     graph = Graph()
-    graph.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
+    graph.add(
+        (URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C"))
+    )
 
     with pytest.raises(Exceptions.RequestError):
         adapter.insert(graph)
@@ -614,11 +653,14 @@ def test_dataset_lock_key_is_stable_and_url_scoped():
 # clear_graph default graph
 # ---------------------------------------------------------------------------
 
+
 def test_raise_for_status_decodes_invalid_utf8_error_bodies():
     adapter = _build_adapter()
     response = Mock(status_code=400)
     response.content = b"Graph does not exist: \xff"
-    response.text = Mock(side_effect=UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid"))
+    response.text = Mock(
+        side_effect=UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid")
+    )
 
     with pytest.raises(Exceptions.RequestError) as exc_info:
         adapter._raise_for_status(
@@ -636,7 +678,9 @@ def test_clear_graph_with_name_emits_clear_graph():
     adapter = _build_adapter()
     graph_name = URIRef("http://example.org/graphs/g1")
 
-    with patch.object(adapter, "query", return_value=rdflib.query.Result("SELECT")) as mock_query:
+    with patch.object(
+        adapter, "query", return_value=rdflib.query.Result("SELECT")
+    ) as mock_query:
         adapter.clear_graph(graph_name)
 
     mock_query.assert_called_once_with(f"CLEAR GRAPH <{graph_name!s}>")
@@ -645,7 +689,9 @@ def test_clear_graph_with_name_emits_clear_graph():
 def test_clear_graph_without_name_emits_clear_default():
     adapter = _build_adapter()
 
-    with patch.object(adapter, "query", return_value=rdflib.query.Result("SELECT")) as mock_query:
+    with patch.object(
+        adapter, "query", return_value=rdflib.query.Result("SELECT")
+    ) as mock_query:
         adapter.clear_graph()
 
     mock_query.assert_called_once_with("CLEAR DEFAULT")
@@ -659,6 +705,7 @@ def test_clear_graph_without_name_emits_clear_default():
 # failure must surface the server's own body so the cause is diagnosable.
 # ---------------------------------------------------------------------------
 
+
 def _build_adapter_with_get(get_side_effect: list) -> ApacheJenaTDB2:
     """Build an adapter, driving the boot-time GET probe with ``get_side_effect``."""
     mock_session = MagicMock()
@@ -671,7 +718,9 @@ def _build_adapter_with_get(get_side_effect: list) -> ApacheJenaTDB2:
         return ApacheJenaTDB2(jena_tdb2_url="http://localhost:3030/ds", timeout=30)
 
 
-@patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")
+@patch(
+    "naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep"
+)
 def test_test_connection_retries_transient_500_then_succeeds(mock_sleep):
     # First probe 500s (Fuseki still attaching), second succeeds → construction
     # completes without raising.
@@ -681,7 +730,9 @@ def test_test_connection_retries_transient_500_then_succeeds(mock_sleep):
     assert mock_sleep.call_count == 1
 
 
-@patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")
+@patch(
+    "naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep"
+)
 def test_test_connection_retries_connection_error_then_succeeds(mock_sleep):
     # A refused connection while the server is coming up is transient, not fatal.
     adapter = _build_adapter_with_get(
@@ -692,7 +743,9 @@ def test_test_connection_retries_connection_error_then_succeeds(mock_sleep):
     assert mock_sleep.call_count == 1
 
 
-@patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")
+@patch(
+    "naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep"
+)
 @patch.object(ApacheJenaTDB2, "_CONNECT_MAX_RETRIES", 2)
 def test_test_connection_raises_request_error_after_retries_exhausted(mock_sleep):
     # A dataset that stays broken must surface a RequestError carrying the
@@ -710,7 +763,9 @@ def test_test_connection_raises_request_error_after_retries_exhausted(mock_sleep
     assert mock_sleep.call_count == 2
 
 
-@patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")
+@patch(
+    "naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep"
+)
 def test_test_connection_does_not_retry_non_retryable_status(mock_sleep):
     # A 401/404 is not transient — surface it immediately, no back-off.
     unauthorized = Mock(status_code=401)
@@ -763,7 +818,9 @@ def test_query_stream_reads_fuseki_tsv_as_it_arrives():
     response.close.assert_called_once()
 
 
-@patch("naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep")
+@patch(
+    "naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.time.sleep"
+)
 def test_query_stream_retries_a_busy_fuseki_before_reading_any_row(mock_sleep):
     adapter = _build_adapter()
     busy = _streaming_response("text/plain", ["busy"], status=503)
@@ -805,3 +862,36 @@ def test_export_streams_a_graph_as_n_triples_without_query():
         ]
     sent = adapter._session.post.call_args.kwargs["data"].decode()
     assert "GRAPH <http://example.org/graph/g>" in sent
+
+
+def test_a_confined_query_sends_its_dataset_as_protocol_parameters():
+    # RFC §6.4: the parameters take precedence over the query's own FROM; the
+    # union default graph is limited to the readable graphs, and Jena's name
+    # for its own default graph joins it when that is readable too.
+    from naas_abi_core.services.triple_store.TripleStorePorts import (
+        NO_GRAPH,
+        QueryDataset,
+    )
+
+    adapter = _build_adapter()
+    response = _ok_response()
+    response.headers = {"Content-Type": "application/sparql-results+json"}
+    response.text = '{"head":{"vars":["s"]},"results":{"bindings":[]}}'
+    adapter._session.post.return_value = response
+    a, b = URIRef("http://g/a"), URIRef("http://g/b")
+
+    adapter.query_dataset(
+        "SELECT ?s WHERE { ?s ?p ?o }", QueryDataset(True, (a,), (a, b))
+    )
+    assert adapter._session.post.call_args.kwargs["params"] == [
+        ("default-graph-uri", "http://g/a"),
+        ("default-graph-uri", "urn:x-arq:DefaultGraph"),
+        ("named-graph-uri", "http://g/a"),
+        ("named-graph-uri", "http://g/b"),
+    ]
+
+    adapter.query_dataset("SELECT ?s WHERE { ?s ?p ?o }", QueryDataset())
+    assert adapter._session.post.call_args.kwargs["params"] == [
+        ("default-graph-uri", str(NO_GRAPH)),
+        ("named-graph-uri", str(NO_GRAPH)),
+    ]

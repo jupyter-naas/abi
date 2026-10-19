@@ -863,3 +863,34 @@ def test_user_posts_kind_filter_applies_after_match_wins(dataset) -> None:
     assert [post["tweet_id"] for post in posts] == ["1", "2"]
     assert posts[0]["kind"] == "matched"
     assert ds_api.user_posts(dataset, "nobody") == (None, 0, [])
+
+
+def test_a_users_request_migrates_the_x_tables_with_iam_enforced(dataset) -> None:
+    """The first request may be a Nexus user's (api on behalf of the user),
+    who may not run catalog maintenance SQL: ensure_x_datasets runs it as the
+    engine, as the module's own storage."""
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        service_account,
+        use_call_context,
+        user,
+    )
+    from naas_abi_core.engine.IEngine import IEngine
+    from naas_abi_core.services.dataset.iam_catalog import CATALOG
+    from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import (
+        IAMStoreMemory,
+    )
+    from naas_abi_core.services.iam.enforcement import internal_call
+    from naas_abi_core.services.iam.IAMService import IAMService
+
+    iam = IAMService(IAMStoreMemory())
+    iam.bootstrap()
+    with internal_call():
+        iam.register_catalog(CATALOG)
+    dataset.set_services(IEngine.Services(iam=iam))
+    nexus_call = CallContext(
+        principal=service_account("api"), on_behalf_of=user("nexus-1")
+    )
+    with use_call_context(nexus_call):
+        ensure_x_datasets(dataset)
+        assert ds_api.search_users(dataset, "") is not None

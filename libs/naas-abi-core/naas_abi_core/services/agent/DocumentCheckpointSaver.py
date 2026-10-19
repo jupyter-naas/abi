@@ -35,6 +35,7 @@ from naas_abi_core.services.document.DocumentPort import (
     VersionConflict,
 )
 from naas_abi_core.services.document.DocumentService import DocumentService
+from naas_abi_core.services.iam.enforcement import own_storage
 from naas_abi_sdk.langgraph_documents import (
     BLOBS,
     CHECKPOINT_PAGE,
@@ -98,9 +99,14 @@ class DocumentCheckpointSaver(BaseCheckpointSaver):
 
     @classmethod
     def for_engine(cls, root: DocumentService) -> DocumentCheckpointSaver:
-        """The saver every engine-hosted agent shares, its collections ensured."""
+        """The saver every engine-hosted agent shares, its collections ensured.
+
+        The engine's memory namespace, used as the engine: an agent's caller
+        is authorized on the agent, not on its checkpoints.
+        """
         saver = cls(
-            root.for_namespace(ENGINE_MEMORY_NAMESPACE), agent_id=ENGINE_MEMORY_ID
+            own_storage(root.for_namespace(ENGINE_MEMORY_NAMESPACE)),
+            agent_id=ENGINE_MEMORY_ID,
         )
         saver.setup()
         return saver

@@ -16,6 +16,7 @@ Bytes-in / bytes-out key-value store with optional TTL and atomic compare-and-se
 | `adapters/secondary/RedisAdapter.py` | Redis backend (requires `redis` package) |
 | `tests/` | Service + generic adapter contract tests |
 | `ontologies/` | Event classes |
+| `iam_catalog.py` | IAM action catalog |
 
 ## Port (`KeyValuePorts.py`)
 
@@ -84,6 +85,23 @@ from naas_abi_core.services.keyvalue.adapters.secondary.RedisAdapter import Redi
 kv = KeyValueService(PythonAdapter())
 kv = KeyValueService(RedisAdapter(redis_url="redis://localhost:6379/0"))
 ```
+
+## Authorization
+
+Every operation is checked in the domain service against IAM (RFC
+[§5, §6.4](../../../../../docs/specs/rfcs/20261013_identity-and-authorization.md)),
+for the caller of the current `CallContext`, so in process and over NATS answer
+the same. The catalog is `iam_catalog.py`, registered by the serving engine at
+boot. A caller who cannot see a resource gets `KVNotFoundError` (`KV_NOT_FOUND`; `exists` is False); one who can see it but not
+act gets `PermissionDeniedError` (`PERMISSION_DENIED`). A service not wired into
+an engine with IAM (a library use, a NATS facade whose server checks) does not
+check. The contract test is `KeyValueService_authorization_test.py`: no policy, granted and denied
+principals, in process and over NATS.
+
+* Each key is `key/<key>` (opaque), placed by key prefix.
+* `list_keys` pages after filtering: it scans only the key prefixes the
+  caller's Allows name (`ResourceGuard.id_prefixes`), then drops what a Deny or
+  a placement excludes.
 
 ## Tests
 

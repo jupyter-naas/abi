@@ -410,6 +410,10 @@ class _FakeEventService:
     def __init__(self) -> None:
         self.published: list = []
 
+    def emit(self, event):
+        # EventService.emit: the audit event a service records, then publish.
+        return self.publish(event)
+
     def publish(self, event) -> None:
         self.published.append(event)
 
@@ -539,6 +543,10 @@ def test_publisher_exception_does_not_break_mutation() -> None:
     """If the EventService blows up, the cache write must still succeed."""
 
     class _ExplodingEvents:
+        def emit(self, event):
+            # EventService.emit: the audit event a service records, then publish.
+            return self.publish(event)
+
         def publish(self, event):
             raise RuntimeError("event bus down")
 

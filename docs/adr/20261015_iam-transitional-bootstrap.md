@@ -40,13 +40,18 @@ attached or implicit, each named TRANSITIONAL in the code, in its description an
 2. **`builtin.transitional.module` (TRANSITIONAL, replaced by approved manifests in subtask 6).**
    - It is held implicitly by a service account IAM has no record of and that is not a built-in one: today,
      a remote module.
-   - It allows the module's own namespaces: `document:*` on `abi:-:-:document:{namespace,collection,document}/${principal.id}…`
-     and `dataset:*` on its dataset namespace. `${principal.id}` is the module's name until subtask 6.
+   - It allows the module's own document namespace: `document:*` on
+     `abi:-:-:document:{namespace,collection,document}/${principal.id}…`, and the shared dataset namespace below.
    - It allows every action of the kernel services a module can declare (object storage, key-value, secret,
-     cache, vector store, triple store, event, activity log, email, model registry, discovery, source control,
-     coding environment), on any resource. Its declared services are not visible to the engine, so it gets
-     all of them. Subtask 5 denies it `discovery:Evict`: evicting another module's registration is the
-     platform's.
+     cache, vector store, triple store, event, activity log, email, model registry, source control, coding
+     environment), on any resource, and discovery as item 4 says. Its declared services are not visible to the
+     engine, so it gets all of them. Subtask 5 denies it `discovery:Evict`: evicting another module's
+     registration is the platform's.
+   - **Subtask 4** (data services) made it hold while it lasted, and what it learned carries over to the
+     approved manifests of #60: a module's only dataset namespace is the shared `default` one (a `module_id`
+     is not a dataset identifier), and unchecked dataset SQL (`dataset:QueryUnchecked`) is denied to it,
+     since it reads files on the engine host. #60's default dataset manifest says the same, with the Deny
+     `NoDatasetAdmin`.
    - It allows nothing on `iam:*`.
    - Once IAM records the account (subtask 6 creates it), the implicit policy stops: the account holds what
      is attached to it.
@@ -60,7 +65,7 @@ attached or implicit, each named TRANSITIONAL in the code, in its description an
      `urn:abi:nexus` (`LEGACY_NEXUS_ISSUER`) with that id as subject.
    - Nexus seeding records its configured users that way. It attaches `builtin.platform_admin` to each
      `users[].is_superadmin` and detaches it when the flag goes, as `is_superadmin` itself is reconciled.
-4. **`builtin.transitional.nexus_user` (TRANSITIONAL, removed by subtask 11). Added by subtask 5.**
+4. **`builtin.transitional.nexus_user` (TRANSITIONAL, removed by subtask 11). Added by subtasks 4 and 5.**
    - Nexus calls run as `api` on behalf of the user, so the user must be allowed too (§5.3). A Nexus user
      holds no role until subtask 11 attaches the roles of its memberships, so without this every Nexus call
      of a user who is not a platform admin would be denied once a service enforces.
@@ -70,11 +75,15 @@ attached or implicit, each named TRANSITIONAL in the code, in its description an
      and subtask 11 detaches it with the rest.
    - It allows every action of the kernel services a module can declare, plus document and dataset, on any
      resource: Nexus keeps deciding what such a user may do, with its own membership checks, as before
-     IAM. It allows nothing on `iam:*`. Seals and explicit Denies hold.
+     IAM. It allows nothing on `iam:*`. Seals and explicit Denies hold. It denies `dataset:QueryUnchecked`
+     (sid `TransitionalNoUncheckedSql`), as #60's default dataset manifest does: a Nexus user's dataset SQL is
+     always checked.
    - Discovery is the exception, for both transitional grants: they reach every module, agent, model, app
      and job, but agent runs only on `run/${principal.id}/*` and `run/${user.id}/*` (its own, and those of
      the user it acts for, whom a run started for a user belongs to), so no holder reads or cancels another
-     principal's run.
+     principal's run. Discovery is therefore not in the list of kernel services granted `<service>:*`; both
+     policies take it from `_transitional_discovery()` alone, and adding `discovery` back to that list would
+     grant every run again.
    - Registering is bound by discovery itself: a live module id belongs to the principal of its instances,
      and renewing or unregistering needs the instance's lease. A module id nobody holds can still be
      registered by any transitional module, until subtask 6's `module/<project>/<module_id>` accounts

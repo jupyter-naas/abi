@@ -37,6 +37,7 @@ from naas_abi_core.engine.nats_auth import TokenSource
 from naas_abi_core.engine.nats_rpc import NatsRPCClient
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.object_storage.v1 import object_storage_pb2
+from naas_abi_core.services.iam.enforcement import raise_authorization_error
 from naas_abi_core.services.object_storage.adapters.object_storage_nats_contract import (
     AUTH_HEADER,
     SUBJECT_PREFIX,
@@ -82,6 +83,9 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
     encodes errors -- the generic adapter contract test asserts on the real
     exception types, not on the wire code.
     """
+    raise_authorization_error(error.code, error.message)
+    if error.code == "INVALID_ARGUMENT":
+        raise Exceptions.InvalidObjectPath(error.message)
     if error.code == "OBJECT_NOT_FOUND":
         raise Exceptions.ObjectNotFound(error.message)
     if error.code == "OBJECT_ALREADY_EXISTS":

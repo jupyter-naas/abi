@@ -158,6 +158,30 @@ def test_decisions_are_about_the_verified_caller(iam_host):
 
 
 @BROKER
+def test_a_remote_caller_gets_the_prefix_hints_in_process_gives(iam_host):
+    """Services push lists down from ``filter(action, ()).prefix_hints``, and
+    read none as "nothing can be allowed": the client must carry them."""
+    engine = iam_host.client("engine")
+    people = engine.create_service_account("people")
+    policy = engine.create_policy(
+        "people-graphs",
+        document(statement("Allow", ["triple_store:Query"], [graph("people-*")])),
+    )
+    engine.attach_policy(policy.id, people.id)
+    module = iam_host.client("people", subject=people.id)
+    remote = module.filter("triple_store:Query", ()).prefix_hints
+    with use_call_context(
+        CallContext(
+            principal=Principal(id=people.id, kind="service_account", name="people")
+        )
+    ):
+        assert remote == iam_host.service.filter("triple_store:Query", ()).prefix_hints
+    assert remote
+    iam_host.client("engine").create_service_account("nobody")
+    assert iam_host.client("nobody").filter("triple_store:Query", ()).prefix_hints == []
+
+
+@BROKER
 def test_api_calls_on_behalf_of_the_current_user(iam_host):
     engine = iam_host.client("engine")
     bob = engine.ensure_user("https://idp.example", "bob")

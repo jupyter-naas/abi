@@ -228,3 +228,33 @@ def removed_actions(old: ActionCatalog, new: ActionCatalog) -> list[str]:
     """The actions ``old`` has and ``new`` drops, qualified."""
     kept = {a.name for a in new.actions}
     return [old.qualified(a.name) for a in old.actions if a.name not in kept]
+
+
+def service_action(
+    name: str,
+    level: Level,
+    resource_types: tuple[str, ...],
+    *subjects: str,
+    creates: bool = False,
+    description: str = "",
+) -> ActionSpec:
+    """An ``ActionSpec`` for a service catalog; ``subjects`` in full."""
+    return ActionSpec(
+        name=name,
+        level=level,
+        resource_types=resource_types,
+        creates=creates,
+        subjects=subjects,
+        description=description,
+    )
+
+
+def stream_subjects(transfer_prefix: str) -> tuple[str, ...]:
+    """A service's transfer subjects, which its stream actions travel on (§6.4)."""
+    return (
+        f"{transfer_prefix}.open",
+        *(
+            f"{transfer_prefix}.*.{operation}"
+            for operation in ("write", "start", "read", "close")
+        ),
+    )

@@ -15,6 +15,8 @@ vector_store/
 ├── IVectorStorePort.py
 ├── VectorStoreService.py
 ├── VectorStoreFactory.py
+├── iam_catalog.py                  # IAM action catalog
+├── VectorStoreService_authorization_test.py  # authorization contract
 ├── adapters/
 │   ├── QdrantAdapter.py
 │   ├── QdrantInMemoryAdapter.py
@@ -99,6 +101,31 @@ VectorStoreFactory.create_adapter() -> IVectorStorePort   # env-driven (VECTOR_S
 VectorStoreFactory.get_service() -> VectorStoreService    # singleton
 VectorStoreFactory.reset()                                # clear singleton
 ```
+
+## Authorization
+
+Every operation is checked in the domain service against IAM (RFC
+[§5, §6.4](../../../../../docs/specs/rfcs/20261013_identity-and-authorization.md)),
+for the caller of the current `CallContext`, so in process and over NATS answer
+the same. The catalog is `iam_catalog.py`, registered by the serving engine at
+boot. A caller who cannot see a resource gets `CollectionNotFoundError` (`COLLECTION_NOT_FOUND`; `get_document` returns None); one who can see it but not
+act gets `PermissionDeniedError` (`PERMISSION_DENIED`). A service not wired into
+an engine with IAM (a library use, a NATS facade whose server checks) does not
+check. The contract test is `VectorStoreService_authorization_test.py`: no policy, granted and denied
+principals, in process and over NATS.
+
+* `collection/<name>` is a placed container, created through
+  `CreateCollection` (§4.4: a new collection is placed in the call's target
+  workspace, or on the platform; the placement is dropped with the
+  collection). Vectors are `vector/<collection>/<id>`, a batch checked with one
+  filter; one denial fails it.
+* `list_vectors` and the stream first need the collection to be visible, then
+  keep the vectors the caller may list: a page can be shorter than `limit`
+  while `next_cursor` continues.
+* `search` and `count` are checked once, on the collection: hits are not
+  filtered.
+* `initialize` of a store not yet initialized and `close` are administration
+  of `service/-`.
 
 ## Tests
 

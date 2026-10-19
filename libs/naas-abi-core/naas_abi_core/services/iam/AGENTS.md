@@ -19,9 +19,12 @@ derived from them (§8, §9.1). User login stays with the identity providers.
   Never take identity from a request field.
 - **IAM authorizes itself** with its own `iam:*` catalog (`iam_catalog.py`).
 
-The runtime services (event, activity_log, email, model_registry, discovery,
-source_control, coding_environment) enforce through `guard.py` (subtask 5 of
-#44); the data services follow in subtask 4.
+Every kernel service enforces. The data services (object storage, document,
+key-value, secret, cache, vector store, triple store and dataset; subtask 4 of
+#44) use `enforcement.py`; the runtime services (event, activity_log, email,
+model_registry, discovery, source_control, coding_environment; subtask 5) use
+`guard.py`. Each has its catalog in `services/<name>/iam_catalog.py` (see
+"Enforcing in a domain service" and "Enforcing in a data service").
 
 ## Files
 
@@ -33,7 +36,8 @@ source_control, coding_environment) enforce through `guard.py` (subtask 5 of
 | `evaluator.py` | The algorithm of RFC §5.3: `check`, `filter`, `explain` over a `PolicySource` |
 | `roles.py` | Built-in managed policies generated from the catalogs, and the TRANSITIONAL ones |
 | `iam_catalog.py` | IAM's own `iam:*` catalog and the code-declared seals (§11.3) |
-| `guard.py` | `ServiceGuard`: how a domain service checks (names, require, filter, create rule, placements) and the shared wire codes |
+| `guard.py` | `ServiceGuard`: how a runtime service checks (names, require, filter, create rule, placements) and the shared wire codes |
+| `enforcement.py` | `ResourceGuard`, what a data service enforces with; `scan_allowed`, `own_storage`, `internal_call`, wire codes |
 | `kernel_catalogs.py` | The kernel services' catalogs (`services/<name>/iam_catalog.py`), registered at boot |
 | `keys.py` | Service keys `abi_sk_<key id>_<secret>`: generation, parsing, hashing |
 | `tokens.py` | `TokenIssuer`: ES256 signing keys, their rotation, the JWKS and the tokens it signs |
@@ -51,7 +55,8 @@ source_control, coding_environment) enforce through `guard.py` (subtask 5 of
 | `adapters/iam_nats_codec.py` | Records and errors on the wire, shared by both NATS sides |
 | `tests/iam__secondary_adapter__generic_test.py` | The `IAMStore` contract every adapter passes |
 | `tests/iam_harness.py`, `conftest.py` | A bootstrapped service on the memory store, and helpers |
-| `tests/authorization_contract.py` | The contract every enforcing service passes: no policy, granted, denied, in process and over NATS |
+| `tests/authorization_contract.py` | The contract every runtime service passes per operation: no policy, granted, denied, in process and over NATS |
+| `tests/data_service_contract.py` | The data services' contract: a table of cases for no policy, granted and denied principals, list filtering, in process and over NATS |
 
 ## Ports
 
@@ -107,8 +112,15 @@ iam = engine.services.iam  # IIAMService, no dependency declaration needed
 iam.require("triple_store:Query", name, not_found=lambda: GraphNotFound(iri))
 allowed = iam.filter("triple_store:ListGraphs", names).allowed
 iam.authorize(action, resource)  # Decision
+iam.allows_every(action, "triple_store", "graph")  # a safe shortcut: False when unsure
 iam.explain(action, resource, principal_id=...)  # needs iam:Explain on the principal
+iam.placement_of(service, canonical_id)  # the covering placement, or None (serving engine)
 ```
+
+`allows_every` is True only when nothing can deny: no seal on the type, no
+narrowing token, no Deny naming the action, and on each side an Allow spanning
+every org, workspace and id of the type (`engine`, `api` and the transitional
+grants today). Services use it to skip per-item work.
 
 Administration (each needs its `iam:*` action): `ensure_user`,
 `create_service_account`, `get_principal`, `list_principals`,
@@ -259,7 +271,8 @@ class MyService(ServiceBase):
   a call (IAM's user of issuer `urn:abi:nexus`, or a Nexus id IAM has no
   record of; on a Nexus call, `api` on behalf of that user). Nexus
   still decides what such a user may do, so the user side of the intersection
-  allows every kernel service, document and dataset included; never `iam:*`.
+  allows every kernel service, document and dataset included; never `iam:*` or
+  `dataset:QueryUnchecked` (a Nexus user's dataset SQL is always checked).
   It reaches discovery's modules, agents, models, apps and jobs, but only its
   holder's own agent runs. Seals and explicit Denies hold. Removed by
   subtask 11 (#65), which attaches the roles of each membership.
@@ -268,6 +281,41 @@ class MyService(ServiceBase):
   users move to the built-in IdP (#67). Users of an identity provider are IAM
   users named by their principal id (`services/identity`, #61); Nexus attaches
   `builtin.transitional.nexus_user` to each at sign-in, for #65 to detach.
+
+## Enforcing in a data service (`enforcement.py`)
+
+The data services use `ResourceGuard`, kept close to `ServiceGuard` above. A
+domain service builds `ResourceGuard.of(CATALOG, self)`
+(`ServiceBase.wired_iam`: the engine's IAM once the service is wired, else
+None, and a service without IAM does not check: a library use, or a NATS
+facade whose server checks). Then:
+
+- `guard.require(action, type, parts, not_found=...)` before the backend is
+  touched (`require_all` for a batch, one `filter`); `guard.name(type, parts)`
+  places the name (`placement_of`, indexed by service).
+- `guard.filter(action, type, items, parts_of)` for lists; `guard.id_prefixes`
+  and `scan_allowed(...)` push the caller's prefixes down to a key scan and page
+  after filtering; `guard.require_visible` checks a container before listing it.
+- `guard.create(action, type, parts, container=..., exists=...,
+  container_exists=...)` applies the create rule of §4.4 and returns `commit()`,
+  which records the placement once the backend created the resource;
+  `guard.forget` drops it on drop.
+- A service's own storage in another service (the cache's entries, the activity
+  log's and the agent memory's namespaces) is used through `own_storage(...)`,
+  as the engine for no user and no target workspace.
+- NATS primaries answer `PermissionDeniedError` as `PERMISSION_DENIED` and
+  `ResourceNotFoundError` as `NOT_FOUND` (`authorization_error_code`); clients raise
+  them back (`raise_authorization_error`); transfer streams map them for every
+  service.
+- Register the catalog: add it to `kernel_catalogs()`, which the engine
+  registers at boot. Boot (`Engine.load`) runs as `engine`.
+- Work that runs for no caller needs an identity, or every data service denies
+  it: Nexus startup tasks and its chat ingestion jobs run as `api`, `abi chat`
+  and `abi run script` as `engine` (`naas_abi_cli.cli.local_operator.as_local_operator`),
+  and bus consumer threads, worker-pool jobs and the intent-index warmup as
+  whoever subscribed, submitted or started them (they copy the context).
+- Prove it with `tests/data_service_contract.py`: a subclass beside the domain
+  service (`<Service>_authorization_test.py`) gives the hooks and the cases.
 
 ## Adapters and configuration
 

@@ -39,7 +39,7 @@ def _publishing_into(events: list) -> Any:
 
     return SimpleNamespace(
         events_available=lambda: True,
-        events=SimpleNamespace(publish=events.append),
+        events=SimpleNamespace(publish=events.append, emit=events.append),
     )
 
 

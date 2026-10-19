@@ -7,8 +7,10 @@ its attachment's scope, so a workspace admin can manage that workspace's roles.
 
 from __future__ import annotations
 
+from naas_abi_core.services.document.iam_catalog import SEALS as DOCUMENT_SEALS
 from naas_abi_core.services.iam.catalog import ActionCatalog, ActionSpec, ResourceType
 from naas_abi_core.services.iam.IAMPorts import Seal
+from naas_abi_core.services.secret.iam_catalog import SEALS as SECRET_SEALS
 
 SERVICE = "iam"
 SUBJECT_PREFIX = "abi.iam.v1"
@@ -105,11 +107,6 @@ CATALOG = ActionCatalog(
     ),
 )
 
-# Sealed in code (RFC §11.3): no policy, no API and no OBO user opens them.
-SEALS: tuple[Seal, ...] = (
-    Seal("abi:-:-:document:namespace/idp", "idp"),
-    Seal("abi:-:-:document:collection/idp/*", "idp"),
-    Seal("abi:-:-:document:document/idp/*", "idp"),
-    Seal("abi:-:-:secret:secret/idp%2F*", "idp"),
-    Seal("abi:-:-:secret:secret/iam%2F*", "engine"),
-)
+# Sealed in code (RFC §11.3), each next to its service: no policy, no API and
+# no OBO user opens them.
+SEALS: tuple[Seal, ...] = (*DOCUMENT_SEALS, *SECRET_SEALS)

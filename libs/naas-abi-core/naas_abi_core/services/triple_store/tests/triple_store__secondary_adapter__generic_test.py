@@ -215,3 +215,54 @@ class GenericTripleStoreSecondaryAdapterTest(ABC):
                 assert set(triples) == set(g)
         finally:
             adapter.remove(g, graph_name)
+
+
+class ConfinedQueryContract:
+    """``query_dataset`` / ``query_stream_dataset`` (RFC §6.4): an adapter that
+    confines queries reads only the graphs of the dataset it is given, whatever
+    the query names. Mixed into an adapter's generic test."""
+
+    @staticmethod
+    def _seed(adapter, marker: str) -> tuple[URIRef, URIRef, URIRef]:
+        readable = URIRef(f"http://test.example.org/{marker}/readable")
+        hidden = URIRef(f"http://test.example.org/{marker}/hidden")
+        predicate = URIRef(f"http://test.example.org/{marker}/p")
+        for graph in (readable, hidden):
+            g = Graph()
+            g.add((URIRef(f"{graph}/s"), predicate, Literal(str(graph))))
+            adapter.insert(g, graph)
+        return readable, hidden, predicate
+
+    def test_a_confined_query_reads_only_its_dataset(self, adapter):
+        from naas_abi_core.services.triple_store.TripleStorePorts import QueryDataset
+
+        readable, hidden, p = self._seed(adapter, uuid.uuid4().hex)
+        only = QueryDataset(False, (readable,), (readable,))
+
+        def objects(query: str, dataset: QueryDataset) -> list[str]:
+            return sorted(str(row[0]) for row in adapter.query_dataset(query, dataset))
+
+        any_graph = f"SELECT ?o WHERE {{ GRAPH ?g {{ ?s <{p}> ?o }} }}"
+        assert objects(any_graph, only) == [str(readable)]
+        # The dataset wins over the query's own FROM and GRAPH <iri>.
+        assert objects(f"SELECT ?o FROM <{hidden}> WHERE {{ ?s <{p}> ?o }}", only) == [
+            str(readable)
+        ]
+        assert (
+            objects(f"SELECT ?o WHERE {{ GRAPH <{hidden}> {{ ?s <{p}> ?o }} }}", only)
+            == []
+        )
+        # No graph at all reads nothing, the default graph included.
+        nothing = QueryDataset()
+        assert objects(any_graph, nothing) == []
+        assert objects(f"SELECT ?o WHERE {{ ?s <{p}> ?o }}", nothing) == []
+
+    def test_a_confined_stream_reads_only_its_dataset(self, adapter):
+        from naas_abi_core.services.triple_store.TripleStorePorts import QueryDataset
+
+        readable, _hidden, p = self._seed(adapter, uuid.uuid4().hex)
+        with adapter.query_stream_dataset(
+            f"CONSTRUCT {{ ?s <{p}> ?o }} WHERE {{ GRAPH ?g {{ ?s <{p}> ?o }} }}",
+            QueryDataset(False, (), (readable,)),
+        ) as result:
+            assert sorted(str(o) for _, _, o in result.triples) == [str(readable)]

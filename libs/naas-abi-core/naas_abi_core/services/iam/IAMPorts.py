@@ -629,6 +629,14 @@ class IAuthorizer(ABC):
     @abstractmethod
     def explain(self, ctx: CallContext, action: str, resource: str) -> Explanation: ...
 
+    def allows_every(
+        self, ctx: CallContext, action: str, service: str, resource_type: str
+    ) -> bool:
+        """Whether ``ctx`` may perform ``action`` on every resource of the type,
+        whatever its id and placement. A shortcut for whole-store reads: False
+        whenever unsure, so a caller falls back to ``check`` and ``filter``."""
+        return False
+
 
 class PolicySource(ABC):
     """The policy authorizer's view of IAM's state, cached by ``IAMService``."""
@@ -687,6 +695,11 @@ class IIAMService(ABC):
 
     @abstractmethod
     def filter(self, action: str, resources: Iterable[str]) -> FilterResult: ...
+
+    def allows_every(self, action: str, service: str, resource_type: str) -> bool:
+        """Whether the caller may perform ``action`` on every resource of
+        ``service``'s ``resource_type``; False whenever unsure."""
+        return False
 
     @abstractmethod
     def explain(

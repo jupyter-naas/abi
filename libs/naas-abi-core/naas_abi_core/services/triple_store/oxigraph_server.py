@@ -12,7 +12,8 @@ secondary adapter at:
 ``libs/naas-abi-core/naas_abi_core/services/triple_store/adaptors/secondary/Oxigraph.py``
 
 Endpoints:
-  POST /query   — SPARQL query;  body=sparql-query, Accept controls format
+  POST /query   — SPARQL query;  body=sparql-query, Accept controls format;
+                  default-graph-uri / named-graph-uri confine its dataset
   POST /update  — SPARQL update; body=sparql-update
   GET  /store          — dump default graph (text/turtle)
   POST /store?default  — bulk insert default graph (application/n-triples)
@@ -37,7 +38,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
-from pyoxigraph import QueryResultsFormat, QueryTriples, RdfFormat, Store
+from pyoxigraph import NamedNode, QueryResultsFormat, QueryTriples, RdfFormat, Store
 from starlette.concurrency import run_in_threadpool
 
 logger = logging.getLogger(__name__)
@@ -188,17 +189,32 @@ def create_app(store_path: str) -> FastAPI:
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    def _dataset_options(request: Request) -> dict:
+        """SPARQL Protocol dataset parameters, as Oxigraph's server reads them:
+        ``default-graph-uri`` replaces the default graph, ``named-graph-uri``
+        the named graphs; either absent keeps the store's."""
+        options: dict = {}
+        defaults = request.query_params.getlist("default-graph-uri")
+        named = request.query_params.getlist("named-graph-uri")
+        if defaults:
+            options["default_graph"] = [NamedNode(iri) for iri in defaults]
+        if named:
+            options["named_graphs"] = [NamedNode(iri) for iri in named]
+        return options
+
     # ------------------------------------------------------------------
     # SPARQL query (SELECT/CONSTRUCT/ASK/DESCRIBE)
     # ------------------------------------------------------------------
-    def _query_into(query_str: str, accept: str, announce, writer) -> None:
+    def _query_into(
+        query_str: str, accept: str, announce, writer, options: dict | None = None
+    ) -> None:
         """Run query + serialize on ONE thread (see ``_streamed``).
 
         pyoxigraph's query result (``QuerySolutions``/``QueryTriples``) is *unsendable* —
         it's bound to the thread that produced it and panics the interpreter if touched
         from another thread. So the whole query→serialize chain stays on one thread.
         """
-        result = store.query(query_str)
+        result = store.query(query_str, **(options or {}))
         # CONSTRUCT / DESCRIBE → RDF format. SELECT / ASK → results format.
         if isinstance(result, QueryTriples):
             rdf_fmt, media = _rdf_format_for_accept(accept)
@@ -209,11 +225,14 @@ def create_app(store_path: str) -> FastAPI:
         announce(media)
         result.serialize(writer, format=res_fmt)
 
-    async def _run_query(query_str: str, accept: str) -> Response:
+    async def _run_query(query_str: str, accept: str, request: Request) -> Response:
         if not query_str:
             raise HTTPException(status_code=400, detail="empty SPARQL query")
+        options = _dataset_options(request)
         return await _streamed(
-            lambda announce, writer: _query_into(query_str, accept, announce, writer)
+            lambda announce, writer: _query_into(
+                query_str, accept, announce, writer, options
+            )
         )
 
     @app.get("/query")
@@ -221,7 +240,7 @@ def create_app(store_path: str) -> FastAPI:
         """SPARQL 1.1 protocol: GET /query?query=...  (URL-encoded)."""
         query_str = (request.query_params.get("query") or "").strip()
         accept = request.headers.get("accept", "")
-        return await _run_query(query_str, accept)
+        return await _run_query(query_str, accept, request)
 
     @app.post("/query")
     async def query_post(request: Request) -> Response:
@@ -239,7 +258,7 @@ def create_app(store_path: str) -> FastAPI:
         else:
             query_str = (await request.body()).decode("utf-8").strip()
         accept = request.headers.get("accept", "")
-        return await _run_query(query_str, accept)
+        return await _run_query(query_str, accept, request)
 
     # ------------------------------------------------------------------
     # SPARQL update (INSERT/DELETE/CREATE/DROP/...)

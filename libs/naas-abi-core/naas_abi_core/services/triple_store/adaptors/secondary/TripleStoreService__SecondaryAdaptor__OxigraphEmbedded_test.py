@@ -5,6 +5,7 @@ from naas_abi_core.services.triple_store.adaptors.secondary.TripleStoreService__
     TripleStoreService__SecondaryAdaptor__OxigraphEmbedded,
 )
 from naas_abi_core.services.triple_store.tests.triple_store__secondary_adapter__generic_test import (
+    ConfinedQueryContract,
     GenericTripleStoreSecondaryAdapterTest,
 )
 from rdflib import Graph, Literal, URIRef
@@ -17,7 +18,7 @@ def _build_graph(subject: URIRef, index: int) -> Graph:
 
 
 class TestTripleStoreServiceSecondaryAdaptorOxigraphEmbedded(
-    GenericTripleStoreSecondaryAdapterTest
+    GenericTripleStoreSecondaryAdapterTest, ConfinedQueryContract
 ):
     @pytest.fixture
     def adapter(self, tmp_path):

@@ -47,6 +47,7 @@ from naas_abi_core.services.cache.CachePort import (
     ICacheAdapter,
     check_page_limit,
 )
+from naas_abi_core.services.iam.enforcement import raise_authorization_error
 
 _DATA_TYPE_TO_PB: dict[DataType, cache_pb2.DataType] = {
     DataType.TEXT: cache_pb2.DATA_TYPE_TEXT,
@@ -84,6 +85,7 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
     errors -- the integration test asserts on the real exception types, not
     on the wire code.
     """
+    raise_authorization_error(error.code, error.message)
     if error.code == "CACHE_NOT_FOUND":
         raise CacheNotFoundError(error.message)
     if error.code == "CACHE_EXPIRED":

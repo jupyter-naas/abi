@@ -32,6 +32,7 @@ from naas_abi_core.engine.nats_auth import TokenSource
 from naas_abi_core.engine.nats_rpc import NatsRPCClient
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.keyvalue.v1 import keyvalue_pb2
+from naas_abi_core.services.iam.enforcement import raise_authorization_error
 from naas_abi_core.services.keyvalue.adapters.keyvalue_nats_contract import (
     AUTH_HEADER,
     SUBJECT_PREFIX,
@@ -55,6 +56,7 @@ def _raise_for_error(
     encodes errors -- the generic adapter contract test asserts on the real
     exception types, not on the wire code.
     """
+    raise_authorization_error(error.code, error.message)
     if error.code == "KV_NOT_FOUND":
         raise KVNotFoundError(error.message)
     if error.code == "INVALID_ARGUMENT":

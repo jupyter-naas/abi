@@ -46,9 +46,12 @@ from naas_abi_core.services.triple_store.TripleStorePorts import (
     Exceptions,
     ITripleStorePort,
     OntologyEvent,
+    QueryDataset,
     QueryStream,
     Triple,
+    dataset_parameters,
     graph_export_query,
+    iri_n3,
 )
 from rdflib import BNode, Graph, URIRef
 
@@ -260,7 +263,7 @@ class Oxigraph(ITripleStorePort):
                 )
         else:
             # Build INSERT DATA query
-            insert_query = f"INSERT DATA {{\n  GRAPH <{graph_name!s}> {{\n"
+            insert_query = f"INSERT DATA {{\n  GRAPH {iri_n3(graph_name)} {{\n"
 
             for s, p, o in triples:
                 if isinstance(s, BNode) or isinstance(p, BNode) or isinstance(o, BNode):
@@ -307,7 +310,7 @@ class Oxigraph(ITripleStorePort):
                 )
         else:
             # Build DELETE DATA query
-            delete_query = f"DELETE DATA {{\n  GRAPH <{graph_name!s}> {{\n"
+            delete_query = f"DELETE DATA {{\n  GRAPH {iri_n3(graph_name)} {{\n"
 
             for s, p, o in triples:
                 if isinstance(s, BNode) or isinstance(p, BNode) or isinstance(o, BNode):
@@ -377,6 +380,15 @@ class Oxigraph(ITripleStorePort):
         """
 
     def query(self, query: str) -> rdflib.query.Result:  # type: ignore
+        return self._query(query)
+
+    def query_dataset(self, query: str, dataset: QueryDataset) -> rdflib.query.Result:
+        """``query`` over ``dataset``, sent as SPARQL Protocol parameters."""
+        return self._query(query, dataset_parameters(dataset, default_graph_iri=None))
+
+    def _query(
+        self, query: str, params: list[tuple[str, str]] | None = None
+    ) -> rdflib.query.Result:  # type: ignore
         """
         Execute a SPARQL query against Oxigraph.
 
@@ -423,6 +435,7 @@ class Oxigraph(ITripleStorePort):
                     "Content-Type": "application/sparql-query",
                     "Accept": "application/sparql-results+json,application/n-triples",
                 },
+                params=params,
                 data=query.encode("utf-8"),
                 timeout=self.timeout,
             )
@@ -523,6 +536,21 @@ class Oxigraph(ITripleStorePort):
     def query_stream(self, query: str) -> Iterator[QueryStream]:
         """Read a query's result as Oxigraph writes it: TSV rows or N-Triples,
         parsed line by line (docs/adr/20261003_nats-streamed-results.md)."""
+        with self._query_stream(query) as result:
+            yield result
+
+    @contextmanager
+    def query_stream_dataset(
+        self, query: str, dataset: QueryDataset
+    ) -> Iterator[QueryStream]:
+        params = dataset_parameters(dataset, default_graph_iri=None)
+        with self._query_stream(query, params) as result:
+            yield result
+
+    @contextmanager
+    def _query_stream(
+        self, query: str, params: list[tuple[str, str]] | None = None
+    ) -> Iterator[QueryStream]:
         if _is_update(query):
             with super().query_stream(query) as result:
                 yield result
@@ -533,6 +561,7 @@ class Oxigraph(ITripleStorePort):
                 "Content-Type": "application/sparql-query",
                 "Accept": sparql_stream.ACCEPT,
             },
+            params=params,
             data=query.encode("utf-8"),
             timeout=self.timeout,
             stream=True,
@@ -589,8 +618,8 @@ class Oxigraph(ITripleStorePort):
             >>> print(f"Alice has {len(alice_graph)} properties")
         """
         query = f"""
-        CONSTRUCT {{ <{subject!s}> ?p ?o }}
-        WHERE {{ GRAPH <{graph_name!s}> {{ <{subject!s}> ?p ?o }} }}
+        CONSTRUCT {{ {iri_n3(subject)} ?p ?o }}
+        WHERE {{ GRAPH {iri_n3(graph_name)} {{ {iri_n3(subject)} ?p ?o }} }}
         """
 
         result = self.query(query)
@@ -605,7 +634,7 @@ class Oxigraph(ITripleStorePort):
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
         try:
-            self.query(f"CREATE GRAPH <{graph_name!s}>")
+            self.query(f"CREATE GRAPH {iri_n3(graph_name)}")
         except requests.exceptions.HTTPError as exc:
             # The server refuses CREATE GRAPH on an existing graph, empty ones
             # included (which list_graphs, reading triples, does not show).
@@ -618,12 +647,12 @@ class Oxigraph(ITripleStorePort):
     def clear_graph(self, graph_name: URIRef) -> None:
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
-        self.query(f"CLEAR GRAPH <{graph_name!s}>")
+        self.query(f"CLEAR GRAPH {iri_n3(graph_name)}")
 
     def drop_graph(self, graph_name: URIRef) -> None:
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
-        self.query(f"DROP GRAPH <{graph_name!s}>")
+        self.query(f"DROP GRAPH {iri_n3(graph_name)}")
 
     def list_graphs(self) -> list[URIRef]:
         result = self.query("SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s ?p ?o } }")

@@ -5,6 +5,7 @@ from naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2 impor
     ApacheJenaTDB2,
 )
 from naas_abi_core.services.triple_store.tests.triple_store__secondary_adapter__generic_test import (
+    ConfinedQueryContract,
     GenericTripleStoreSecondaryAdapterTest,
 )
 from testcontainers.core.container import DockerContainer
@@ -39,7 +40,9 @@ def jena_tdb2_url():
 
 
 @pytest.mark.integration
-class TestApacheJenaTDB2Integration(GenericTripleStoreSecondaryAdapterTest):
+class TestApacheJenaTDB2Integration(
+    GenericTripleStoreSecondaryAdapterTest, ConfinedQueryContract
+):
     @pytest.fixture
     def adapter(self, jena_tdb2_url):
         return ApacheJenaTDB2(jena_tdb2_url=jena_tdb2_url, timeout=10)

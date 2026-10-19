@@ -145,6 +145,10 @@ class _FakeEventService:
     def __init__(self) -> None:
         self.published: list = []
 
+    def emit(self, event):
+        # EventService.emit: the audit event a service records, then publish.
+        return self.publish(event)
+
     def publish(self, event) -> None:
         self.published.append(event)
 
@@ -270,6 +274,10 @@ def test_adapter_exception_emits_vector_store_error_and_reraises() -> None:
 
 def test_publisher_exception_does_not_break_operation() -> None:
     class _ExplodingEvents:
+        def emit(self, event):
+            # EventService.emit: the audit event a service records, then publish.
+            return self.publish(event)
+
         def publish(self, event):
             raise RuntimeError("event bus down")
 

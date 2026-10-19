@@ -3,7 +3,7 @@ from threading import Lock
 from typing import Any
 
 from dotenv import dotenv_values, find_dotenv, set_key, unset_key
-from naas_abi_core.services.secret.SecretPorts import ISecretAdapter
+from naas_abi_core.services.secret.SecretPorts import ISecretAdapter, checked_key
 from naas_abi_core.utils.Logger import logger
 
 
@@ -37,12 +37,14 @@ class DotenvSecretSecondaryAdaptor(ISecretAdapter):
         return default
 
     def set(self, key: str, value: str):
+        checked_key(key)
         with self._lock:
             os.environ[key] = value
             set_key(self.path, key, value)
             self.secrets[key] = value
 
     def remove(self, key: str):
+        checked_key(key)
         with self._lock:
             unset_key(self.path, key)
             self.secrets.pop(key, None)

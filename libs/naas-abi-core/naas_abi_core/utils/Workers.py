@@ -1,3 +1,4 @@
+import contextvars
 import uuid
 from collections.abc import Callable
 from enum import Enum
@@ -70,7 +71,8 @@ class Job:
 
 class WorkerPool:
     def __init__(self, num_workers: int):
-        self.job_queue: Queue[Job] = Queue()
+        # Each job runs in the context it was submitted from: its caller.
+        self.job_queue: Queue[tuple[Job, contextvars.Context]] = Queue()
         self.workers: list[Thread] = []
         self.shutdown_event = Event()
 
@@ -85,15 +87,15 @@ class WorkerPool:
         while not self.shutdown_event.is_set():
             try:
                 # Get job from queue with timeout to check shutdown periodically
-                job = self.job_queue.get(timeout=1.0)
-                job.execute()
+                job, context = self.job_queue.get(timeout=1.0)
+                context.run(job.execute)
                 self.job_queue.task_done()
             except Empty:
                 continue
 
     def submit(self, job: Job):
-        """Submit a job to the worker pool"""
-        self.job_queue.put(job)
+        """Submit a job to the worker pool, to run as its submitter"""
+        self.job_queue.put((job, contextvars.copy_context()))
 
     def submit_all(self, jobs: list[Job]) -> Queue[Job]:
         """Submit multiple jobs to the worker pool"""
