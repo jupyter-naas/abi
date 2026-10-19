@@ -241,3 +241,91 @@ def test_invalidate_all_drops_every_entry(tmp_path) -> None:
 
     assert client.get("/api/agents/", headers={CACHE_HEADER: "1"}).headers[CACHE_HEADER] == "MISS"
     assert calls["n"] == 2
+
+
+# -- entries are the reach of a plain session, per set of groups --------------------------------
+
+
+def _credentialed(tmp_path):
+    """The real resolvers over credentials a stand-in identity middleware sets
+    from the ``X-Test-Credential`` header (``kind[:groups][:limited]``)."""
+    from naas_abi.apps.nexus.apps.api.app.services.auth.credentials import Credential
+
+    calls = {"agents": 0}
+    app = FastAPI()
+
+    @app.get("/api/agents/")
+    def list_agents():
+        calls["agents"] += 1
+        return {"calls": calls["agents"]}
+
+    cache = CacheService(adapters=[(TIER_COLD, CacheFSAdapter(str(tmp_path)))])
+    app.add_middleware(SettingsCacheMiddleware, cache_resolver=lambda: cache)
+
+    class Identity:
+        def __init__(self, inner):
+            self.inner = inner
+
+        async def __call__(self, scope, receive, send):
+            raw = Headers(scope=scope).get("x-test-credential")
+            if raw:
+                kind, groups, limited = (raw.split(":") + ["", ""])[:3]
+                scope.setdefault("state", {})["nexus_credential"] = Credential(
+                    kind=kind,  # type: ignore[arg-type]
+                    user_id="alice",
+                    groups=frozenset(g for g in groups.split(",") if g),
+                    scope=({"effect": "Allow", "actions": ["*"], "resources": ["ws-1"]},)
+                    if limited
+                    else None,
+                )
+            await self.inner(scope, receive, send)
+
+    app.add_middleware(Identity)
+    return TestClient(app), calls
+
+
+def _as(client, credential: str):
+    return client.get(
+        "/api/agents/", headers={"X-Test-Credential": credential, CACHE_HEADER: "1"}
+    )
+
+
+def test_a_limited_key_never_reads_or_fills_the_sessions_entry(tmp_path) -> None:
+    client, calls = _credentialed(tmp_path)
+
+    assert _as(client, "session").headers[CACHE_HEADER] == "MISS"
+    assert _as(client, "session").headers[CACHE_HEADER] == "HIT"
+    # The same user's key, narrowed to one workspace: answered live, never from the
+    # session's entry (which holds everything the user may see)...
+    for limited in ("api-key::limited", "session::limited", "coding", "api-key"):
+        response = _as(client, limited)
+        assert CACHE_HEADER not in response.headers, limited
+    live = calls["agents"]
+    assert _as(client, "api-key::limited").json()["calls"] == live + 1
+    # ...and what the key's request returned fills nothing for the session.
+    assert _as(client, "session").headers[CACHE_HEADER] == "HIT"
+    assert _as(client, "session").json()["calls"] == 1
+
+
+def test_sessions_with_other_groups_do_not_share_an_entry(tmp_path) -> None:
+    client, _ = _credentialed(tmp_path)
+
+    assert _as(client, "session:sales").headers[CACHE_HEADER] == "MISS"
+    assert _as(client, "session:sales").headers[CACHE_HEADER] == "HIT"
+    assert _as(client, "session:ops").headers[CACHE_HEADER] == "MISS"
+    assert _as(client, "session:ops,sales").headers[CACHE_HEADER] == "MISS"
+    assert _as(client, "session:sales").json() == _as(client, "session:sales").json()
+    assert _as(client, "session").headers[CACHE_HEADER] == "MISS"
+
+
+def test_any_credential_still_refreshes_and_invalidates_its_user(tmp_path) -> None:
+    client, _ = _credentialed(tmp_path)
+    assert _as(client, "session").headers[CACHE_HEADER] == "MISS"
+    assert _as(client, "session").headers[CACHE_HEADER] == "HIT"
+
+    refreshed = client.post(
+        "/api/settings-cache/refresh", headers={"X-Test-Credential": "api-key"}
+    )
+
+    assert refreshed.status_code == 204
+    assert _as(client, "session").headers[CACHE_HEADER] == "MISS"

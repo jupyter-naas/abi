@@ -4,8 +4,11 @@ Opt-in: only GET requests carrying ``X-Nexus-Cache: 1`` are cached. The web app 
 that header from settings pages only, so the rest of the app always reads live data.
 
 Keys are per user (the user ``RequestIdentityMiddleware`` verified, which wraps this
-one; a request with none is never cached) and include the full path and query string, so role-dependent answers never leak
-between users.
+one; a request with none is never cached), per set of IdP groups, and include the full
+path and query string, so role-dependent answers never leak between users. Only a plain
+session is cached: an API key, a coding key or any credential with a ``scope`` (it narrows
+what the user sees) is answered live and never reads or fills a session's entries;
+every credential can still reload and invalidate its user's entries.
 
 Invalidation uses two generation counters stored in the cache itself:
 
@@ -124,6 +127,23 @@ def default_user_resolver(scope: Scope) -> str | None:
     return str(user_id) if user_id else None
 
 
+def default_entry_variant(scope: Scope) -> str | None:
+    """What an entry depends on besides the user, or None: do not cache.
+
+    An answer is cached only for a plain session (the reach of the user), and
+    apart per set of IdP groups. A key or token with a ``scope`` narrows what the
+    user may see, and a coding or API-key credential reaches fewer routes: their
+    requests never read or fill the session's entries.
+    """
+    credential = (scope.get("state") or {}).get("nexus_credential")
+    if credential is None:
+        return ""  # no credential in the scope: the resolver of the user speaks alone
+    if getattr(credential, "kind", None) != "session" or getattr(credential, "scope", None) is not None:
+        return None
+    groups = "\n".join(sorted(str(g) for g in getattr(credential, "groups", ()) or ()))
+    return hashlib.sha256(groups.encode()).hexdigest()[:16]
+
+
 def is_settings_path(path: str) -> bool:
     return any(
         path == prefix or path.startswith(prefix + "/") or path.startswith(prefix + "?")
@@ -137,11 +157,13 @@ class SettingsCacheMiddleware:
         app: ASGIApp,
         cache_resolver: Callable[[], Any] = default_cache_resolver,
         user_resolver: Callable[[Scope], str | None] = default_user_resolver,
+        entry_variant: Callable[[Scope], str | None] = default_entry_variant,
         ttl: datetime.timedelta = DEFAULT_TTL,
     ) -> None:
         self.app = app
         self.cache_resolver = cache_resolver
         self.user_resolver = user_resolver
+        self.entry_variant = entry_variant
         self.ttl = ttl
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
@@ -167,11 +189,12 @@ class SettingsCacheMiddleware:
             await self.app(scope, receive, send)
             return
         user_id = self.user_resolver(scope)
-        if not user_id:
+        variant = self.entry_variant(scope)
+        if not user_id or variant is None:
             await self.app(scope, receive, send)
             return
 
-        key = await self._entry_key(user_id, path, scope.get("query_string", b""))
+        key = await self._entry_key(user_id, variant, path, scope.get("query_string", b""))
         if key is None:
             await self.app(scope, receive, send)
             return
@@ -250,7 +273,9 @@ class SettingsCacheMiddleware:
     # Cache access (blocking cache I/O runs in the threadpool)
     # ------------------------------------------------------------------
 
-    async def _entry_key(self, user_id: str, path: str, query_string: bytes) -> str | None:
+    async def _entry_key(
+        self, user_id: str, variant: str, path: str, query_string: bytes
+    ) -> str | None:
         try:
             global_gen = await self._generation(_GLOBAL_GENERATION_KEY)
             user_gen = await self._generation(_user_generation_key(user_id))
@@ -258,7 +283,7 @@ class SettingsCacheMiddleware:
             logger.warning("Settings cache unavailable, serving live: %s", exc)
             return None
         query = "&".join(sorted(query_string.decode("latin-1").split("&"))) if query_string else ""
-        digest = hashlib.sha256(f"{user_id}|{path}?{query}".encode()).hexdigest()
+        digest = hashlib.sha256(f"{user_id}|{variant}|{path}?{query}".encode()).hexdigest()
         return f"{_KEY_PREFIX}:entry:{global_gen}:{user_gen}:{digest}"
 
     async def _generation(self, key: str) -> int:

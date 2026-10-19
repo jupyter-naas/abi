@@ -403,6 +403,14 @@ curl -I http://localhost:8000/uploads/logos/test.png
 
 ## Authentication Issues
 
+### Workspace secrets "unreadable" after upgrading (several replicas)
+
+**Symptom:** the API logs `... encrypted under a key that is not known` or a replica cannot decrypt workspace secrets after the upgrade.
+
+**Cause:** workspace secrets moved to their own key (`NEXUS_SECRETS_KEY`). With one secret store per replica and no key set, each replica generated its own and re-encrypted the shared database under it.
+
+**Fix:** set the same `NEXUS_SECRETS_KEY` (or `secrets_encryption_key`) on every replica, and keep the old `SECRET_KEY` set, before the first start of the new version. If it already happened, set the key of the replica that holds the readable data everywhere and restart.
+
 ### Can't login
 
 **Symptom:** The login page shows an error, no provider, or the code never arrives

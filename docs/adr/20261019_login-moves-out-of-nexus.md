@@ -67,7 +67,10 @@ had of its own:
    provider configured the invite answers 400. Someone who already has an account is added directly, and told
    so by an email with a sign-in link (no code, no secret).
 7. **Settings cache keys are the verified user** (`RequestIdentityMiddleware`'s credential), where they were
-   the unverified `sub` of a bearer token: a cookie session is cached like any other.
+   the unverified `sub` of a bearer token: a cookie session is cached like any other. Only a plain session is
+   cached (`kind == session`, no `scope`), apart per set of IdP groups; a key, a coding key or a narrowed
+   credential is answered live and never reads or fills a session's entries, so a key's narrowing cannot be
+   bypassed by the user's own cached list.
 
 ## Consequences
 
@@ -76,6 +79,13 @@ had of its own:
   and tokens signed before the upgrade end: people sign in again.
 - A project that configured the removed settings loads and logs which keys were ignored; its `.env` may keep an
   old `NEXUS_USER_*_PASSWORD` that nothing reads: it can be deleted.
+- **A deployment with several replicas whose secret store is per replica must set `NEXUS_SECRETS_KEY` before
+  upgrading** (or `secrets_encryption_key`): otherwise each replica generates its own key and re-encrypts the shared
+  database under it, and the others find the values unreadable. The same goes for `SECRET_KEY`, which must stay set
+  (identically) until every replica has started once.
+- An organization whose domain routes to an external provider cannot link its old accounts (only the built-in
+  provider proves an address by mailing a code): its people sign in as new accounts, or an administrator links them
+  with `iam.link_user`.
 - `secret_key` can be unset once the start logged that nothing is left under it. Losing
   `NEXUS_SECRETS_KEY` loses the workspace secrets, as losing `secret_key` did.
 - `iam.link_user` and `iam.identity_at` run in the engine that holds IAM (not over NATS): Nexus calls them
