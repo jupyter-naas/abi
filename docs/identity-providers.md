@@ -171,7 +171,17 @@ section of an organization's or workspace's members page; from a terminal
 IAM creates an ABI group mapped to that claim value and attaches
 `builtin.<role>` to it at the scope, so everyone whose token carries the group
 holds the role there for as long as their session's last verification (10
-minutes at most). Only admins of that organization or workspace bind there.
+minutes at most). Only admins of that organization or workspace bind there. The role comes with the
+session's groups claim: a personal API key is not a session and carries no IdP
+groups, so a person who holds a role only through a bound group does not hold it
+through their keys.
+
+From a terminal, `abi iam invite`, `abi iam invitation list|revoke` and `abi iam
+group bind|unbind|list` call the running engine like `abi chat` does (against `abi
+dev up`, export `ABI_CONFIG_OVERLAY=.abi/dev/dev.overlay.yaml` and the dev stack's
+`OXIGRAPH_URL` first, so the command joins the dev engine instead of starting its
+own). `abi iam invite` keeps the pending grants and creates the person at the
+provider; `abi user invite` is the Nexus invitation with its email and its list.
 
 ## Okta
 

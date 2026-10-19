@@ -13,7 +13,7 @@ the ID token's ``email_verified`` is what lets an invitation attach.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 from urllib.parse import quote
 
@@ -143,7 +143,7 @@ class ProvisioningKeycloak(ProvisioningPort):
         )
 
 
-def _created_id(headers: dict[str, str]) -> str | None:
+def _created_id(headers: Mapping[str, str]) -> str | None:
     location = next((v for k, v in headers.items() if k.lower() == "location"), "")
     return location.rstrip("/").rsplit("/", 1)[-1] or None
 

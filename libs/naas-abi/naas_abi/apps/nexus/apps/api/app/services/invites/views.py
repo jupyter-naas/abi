@@ -6,9 +6,14 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from fastapi import HTTPException
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     Invitation,
     InviteOutcome,
+)
+from naas_abi_core.services.identity.IdentityPorts import (
+    ProviderUnavailableError,
+    ProvisioningError,
 )
 from pydantic import BaseModel, Field
 
@@ -97,3 +102,15 @@ def invite_result(outcome: InviteOutcome) -> dict[str, Any]:
         "sign_in_email_sent": outcome.sign_in_email_sent,
         "renewed": outcome.renewed,
     }
+
+
+# What an invitation raises when the provider could not make the person: nothing
+# was granted (the service took its grants back), and the admin may try again.
+PROVIDER_FAILURES = (ProviderUnavailableError, ProvisioningError)
+
+
+def provider_failure(exc: Exception) -> HTTPException:
+    return HTTPException(
+        status_code=502,
+        detail=f"The identity provider could not create the user: {exc}",
+    )

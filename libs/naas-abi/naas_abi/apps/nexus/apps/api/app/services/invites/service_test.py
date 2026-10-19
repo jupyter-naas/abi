@@ -191,20 +191,20 @@ class Harness:
         )
 
     async def invite(self, **overrides):
-        fields = dict(
-            email="Bob@Example.com",
-            name=None,
-            provider=None,
-            organization_id="org-1",
-            org_role="member",
-            workspace_id="ws-1",
-            workspace_role="member",
-            invited_by="usr-alice",
-            inviter_name="Alice",
-            organization_name="Acme",
-            workspace_name="Research",
-        )
-        fields.update(overrides)
+        fields = {
+            "email": "Bob@Example.com",
+            "name": None,
+            "provider": None,
+            "organization_id": "org-1",
+            "org_role": "member",
+            "workspace_id": "ws-1",
+            "workspace_role": "member",
+            "invited_by": "usr-alice",
+            "inviter_name": "Alice",
+            "organization_name": "Acme",
+            "workspace_name": "Research",
+            **overrides,
+        }
         return await self.service.invite(**fields)
 
 

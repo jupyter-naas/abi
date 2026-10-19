@@ -111,15 +111,21 @@ A sign-in challenge, a refresh token, a counter: one document each, changed with
 | App | Reached by | Authorized by |
 |---|---|---|
 | `idp` | browsers and relying parties, through Nexus at `/idp` (a dedicated trusted route) | nobody: a login page has no user yet |
-| `admin` | services over NATS (`abi.app.v1` requests to the app, as every module app) | discovery's `discovery:OpenApp` on `abi:-:-:discovery:app/<project>/idp/admin`; the app also refuses a call made on behalf of a signed-in user |
+| `admin` | services over NATS (`abi.app.v1` requests to the app, as every module app) | discovery's `discovery:OpenApp` on `abi:-:-:discovery:app/<project>/idp/admin`, **and the app itself**: only the engine's own accounts (`api`, `engine`: `admin.ADMIN_ACCOUNTS`) acting for nobody; a user, a module account or a CI account is refused whatever discovery allowed |
 
 The admin API (JSON): `GET/POST /users`, `GET /users/{id}`, `GET /users/by-email`,
 `PATCH /users/{id}`, `POST /users/{id}/disable|enable`, `GET/POST /groups`,
 `DELETE /groups/{id}`, `PUT/DELETE /groups/{group}/members/{user_id}`,
 `GET/POST /clients`, `POST /clients/{id}/disable|enable`, `POST /keys/rotate`.
-Errors are `{"error": <code>, "message": ...}` (400, 404, 409). The default
-manifest of a module that depends on `idp` denies the admin app
-(`naas_abi_sdk.permissions`).
+Errors are `{"error": <code>, "message": ...}` (400, 404, 409). `OpenApp` is a
+read-level action, which a service account holds once it holds a workspace role
+(`builtin.platform.viewer`), so discovery's answer is not enough: the app host hands
+the app the verified actor (`scope["abi"]["principal"]`: `id`, `kind`, `name`, from
+discovery's `AuthorizeApp`), and `admin.py` checks it itself. Test:
+`tests/test_admin.py` (a module account that holds `viewer` gets 403). The default
+manifest of a module that depends on `idp` also denies the admin app
+(`naas_abi_sdk.permissions`). Its caller is the provisioning port of the engine's
+identity service (`ProvisioningBuiltinIdP`).
 
 ### The trusted route and the engine
 

@@ -1026,10 +1026,10 @@ All resource types are platform-level unless their scope says otherwise.
 | `ListPrincipals`, `ListGroups`, `ListPolicies`, `ListAttachments`, `ListKeys`, `ListManifests`, `ListPlacements` | list | each item |
 | `GetPrincipal`, `GetGroup`, `GetPolicy`, `GetManifest`, `Explain`, `Simulate` | read | the item (`Explain`/`Simulate`: the principal asked about) |
 | `ExchangeToken` | write | `audience/<session, nats, agent, app, preview, coding, api-key>` (§9.4) |
-| `CreateUser` (the user of a verified `(issuer, sub)`; token exchange creates it as `engine`), `CreateServiceAccount`, `DeletePrincipal`, `SuspendPrincipal`, `ResumePrincipal`, `LinkUser` | admin | `principal/…` |
+| `CreateUser` (the user of a verified `(issuer, sub)`; token exchange creates it as `engine`), `CreateServiceAccount`, `DeletePrincipal`, `SuspendPrincipal`, `ResumePrincipal`, `LinkUser`, `ClaimPendingGrants` (the identity service, at a sign-in: §12.2) | admin | `principal/…` |
 | `CreateGroup`, `DeleteGroup`, `AddGroupMember`, `RemoveGroupMember`, `MapIdpGroup`, `UnmapIdpGroup` | admin | `group/…` |
 | `CreatePolicy`, `UpdatePolicy`, `DeletePolicy` | admin | `policy/…` |
-| `AttachPolicy`, `DetachPolicy` | admin | `attachment/<policy>/<principal>` |
+| `AttachPolicy`, `DetachPolicy` | admin | `attachment/<policy>/<principal>`; for a pending grant the principal part is `pending:<provider>:<email>`, for an IdP group binding `idp:<provider>:<claim value>` (§12.2) |
 | `CreateKey`, `RevokeKey` | admin | `key/<principal>/<key>` |
 | `ApproveManifest`, `RejectManifest` | admin | `manifest/…` |
 | `PutPlacement`, `DeletePlacement` | admin | `placement/…` |
@@ -1779,6 +1779,21 @@ The `provisioning` port has one adapter per provider setting (subtask 10):
 
 **Pending grants.** An attachment can target `(provider, email)` before the user exists. It is claimed on
 first login by a matching *verified* email, on that provider only.
+
+**As built in subtask 10** ([ADR `20261019_provisioning-and-invitations`](../../adr/20261019_provisioning-and-invitations.md),
+guide [`docs/identity-providers.md`](../../identity-providers.md)):
+
+- `ProvisioningPort` (`ensure_user`, `find_user`) lives in the identity service, exposed as
+  `abi.identity.v1.provision_user` and `find_provisioned_user` (`identity:ProvisionUser`, `FindProvisionedUser`).
+  Zitadel and Keycloak take their admin credentials from `identity.providers[].admin`.
+- A pending grant is `(provider, email, policy, scope)` in IAM (`create_pending_grant`, `list_pending_grants`,
+  `revoke_pending_grant`), authorized as the attachment it stands for. `claim_pending_grants` runs inside
+  `identity.authenticate`, reading provider and verified email from the user's own record.
+- `bind_idp_group(provider, claim_value, policy, scope)` attaches a role to an ABI group mapped to an IdP group
+  claim value; Nexus (the "Identity provider groups" section) and `abi iam group bind` use it.
+- Nexus: `POST .../members/invite` provisions, grants and records an `invitations` row for a person with no
+  account; `/api/invitations/...` lists, resends and revokes. `abi iam invite` is the lower level.
+- The IdP's admin app checks the verified caller itself: `api` and `engine` only.
 
 #### 12.3 The built-in IdP
 

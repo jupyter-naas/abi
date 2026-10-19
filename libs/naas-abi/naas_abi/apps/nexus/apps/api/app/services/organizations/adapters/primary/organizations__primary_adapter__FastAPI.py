@@ -19,11 +19,15 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService
 from naas_abi.apps.nexus.apps.api.app.services.invites import runtime as invites_runtime
-from naas_abi.apps.nexus.apps.api.app.services.invites.views import invite_result
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import NoProviderError
 from naas_abi.apps.nexus.apps.api.app.services.invites.service import InvitationService
 from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
     issue_and_send_invite_sign_in,
+)
+from naas_abi.apps.nexus.apps.api.app.services.invites.views import (
+    PROVIDER_FAILURES,
+    invite_result,
+    provider_failure,
 )
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
     OrganizationSecondaryAdapterPostgres,
@@ -839,6 +843,8 @@ async def invite_org_member(
             if invite.provider:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
             outcome = None
+        except PROVIDER_FAILURES as exc:
+            raise provider_failure(exc) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if outcome is not None:

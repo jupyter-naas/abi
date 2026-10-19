@@ -591,3 +591,24 @@ async def test_an_idp_group_is_bound_to_a_role_and_its_members_arrive_with_it(ne
     )
     assert removed.json()["bindings"] == []
     assert not [a for a in iam.store.list_attachments(principal_id=groups[0]) if a.scope]
+
+
+@pytest.mark.asyncio
+async def test_a_provider_that_cannot_make_the_person_leaves_nothing_behind(nexus, idp, alice):
+    _, iam, sessions = nexus
+    from naas_abi_core.services.identity.IdentityPorts import ProviderUnavailableError
+
+    class Down:
+        def ensure_user(self, email, *, name=None):
+            raise ProviderUnavailableError("The built-in identity provider is not reachable yet")
+
+        find_user = ensure_user
+
+    identity = invites_runtime.RUNTIME.directory._identity()
+    identity._provisioning["builtin"] = Down()
+    failed = await invite_bob(alice)
+    assert failed.status_code == 502, failed.text
+    assert "could not create the user" in failed.json()["detail"]
+    with as_service_account("engine"):
+        assert iam.list_pending_grants() == []
+    assert (await alice.get(f"/api/invitations/organizations/{ORG}")).json()["invitations"] == []

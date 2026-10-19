@@ -37,14 +37,17 @@ resolves them to IAM users. Authorization stays with IAM (`services/iam`).
 | `iam_catalog.py` | The `identity:*` catalog, registered with the kernel catalogs |
 | `adapters/secondary/OIDCHttpHttpx.py` | `OIDCHttpPort` over httpx |
 | `adapters/secondary/OIDCHttpBuiltinIdP.py` | `OIDCHttpPort` for the built-in IdP (`provisioning: builtin`): its issuer is read over NATS, everything else over the fallback |
-| `adapters/secondary/IdPAppNATS.py` | The IdP's `idp` app called over NATS as the engine, bound to the instance running as `module/<project>/idp` |
+| `adapters/secondary/IdPAppNATS.py` | An app of the IdP module (`idp`, `admin`) called over NATS as the engine, bound to the instance running as `module/<project>/idp` |
+| `adapters/secondary/AdminHttp.py` | A provider's admin API over httpx (fixed base URL, no redirects, bounded answers) and `ClientCredentialsToken` |
+| `adapters/secondary/ProvisioningBuiltinIdP.py`, `ProvisioningZitadel.py`, `ProvisioningKeycloak.py`, `ProvisioningNone.py` | `ProvisioningPort` for each `provisioning` setting |
 | `adapters/secondary/IdentitySecondaryAdapterNATSClient.py` | `IIdentityService` over NATS, for client-role engines |
 | `adapters/primary/identity__primary_adapter__NATS.py` | `abi.identity.v1.*` |
 | `adapters/identity_nats_codec.py` | Records and errors on the wire |
 | `tests/identity_contract.py` | **The generic identity suite** every provider passes, and its `IdentityProviderHarness` |
 | `tests/fake_idp.py` | An OIDC provider over real HTTP in this process (RS256/ES256, rotation, PKCE, refresh, revocation) |
 | `tests/zitadel_server.py` | Zitadel and PostgreSQL from pinned native binaries, and the Zitadel harness |
-| `tests/builtin_idp_server.py` | The built-in IdP (`naas-abi-idp`) over real HTTP in this process, and its harness |
+| `tests/builtin_idp_server.py` | The built-in IdP (`naas-abi-idp`) over real HTTP in this process, its harness, and `AdminApp` (its admin app called in process) |
+| `tests/zitadel_provisioning_test.py` | The Zitadel adapter against the pinned Zitadel binary |
 
 Engine configuration: `engine/engine_configuration/EngineConfiguration_Identity.py`.
 
@@ -53,6 +56,15 @@ Engine configuration: `engine/engine_configuration/EngineConfiguration_Identity.
 **`OIDCHttpPort`** (secondary): `get_json(url) -> HttpJSON(body, max_age)` and
 `post_form(url, data, basic_auth=) -> (status, body)`; both raise
 `ProviderUnavailableError` when the provider cannot be reached.
+
+**`ProvisioningPort`** (secondary): `ensure_user(email, name=)` makes the person exist at
+the provider (creating them when it has none) and `find_user(email)` looks. One adapter
+per provider's `provisioning` setting (RFC §12.2): `builtin` calls the IdP's admin app
+over NATS, `zitadel` and `keycloak` their admin APIs, `none` raises `NotImplementedError`
+(that provider's users are managed in the provider). A `ProvisionedUser` names the
+provider's id for the person (the `sub` of their tokens), whether this call created them
+and whether the provider has them disabled. Errors: `ProviderUnavailableError`,
+`ProvisioningError`, `ValueError` for an address the provider refuses.
 
 **`IIdentityService`**: what callers use, implemented in process by
 `IdentityService` and over NATS by `IdentitySecondaryAdapterNATSClient`.
@@ -88,6 +100,8 @@ sign_in = identity.exchange_code(
 sign_in.user, sign_in.tokens.refresh_token, sign_in.refresh_at
 identity.refresh("acme", refresh_token=..., principal_id=sign_in.user.principal_id)
 identity.revoke("acme", refresh_token=...)
+identity.provision_user("acme", "bob@example.com", name="Bob")  # ProvisionedUser
+identity.find_provisioned_user("acme", "bob@example.com")  # or None
 identity.end_session_url("acme", id_token_hint=..., post_logout_redirect_uri=...)
 ```
 
@@ -99,6 +113,14 @@ identity.end_session_url("acme", id_token_hint=..., post_logout_redirect_uri=...
   user too, so they need `SignIn` **and** `Authenticate`; the authorization URL,
   revocation and end-session need `SignIn` only. A caller with none gets "not found". `api` and
   `engine` hold them through their transitional policies; a module needs a grant.
+  `ProvisionUser` (admin) and `FindProvisionedUser` (read) are an administrator's: the
+  inviting person's own rights (`iam:AttachPolicy` at the scope) are checked where the
+  invitation is made (Nexus, `abi iam invite`), and the provisioning call is made as `api`
+  or `engine` for nobody.
+- **Pending grants.** `authenticate` (so a code exchange and a refresh too) calls
+  `iam.claim_pending_grants` for the user it resolved, as the engine: what an invitation
+  granted that email on that provider attaches at the first sign-in with it verified
+  (`services/iam/AGENTS.md`).
 - **`refresh_at`** is the ID token's expiry, at most ten minutes after the
   sign-in: a relying party re-verifies at the provider by then (RFC §9.2).
 - **A refresh** that returns an ID token must name the same user
@@ -125,7 +147,9 @@ identity:
       client_secret: "{{ secret.ACME_OIDC_SECRET }}"   # omit for a public client
       groups_claim: groups            # a claim name, or a dotted path
       scopes: [openid, email, profile, offline_access]
-      provisioning: none              # builtin | zitadel | keycloak | none (subtask 10)
+      provisioning: none              # builtin | zitadel | keycloak | none
+      # admin:                        # zitadel: token (+ url, org_id); keycloak: client_id,
+      #   token: "{{ secret.ZITADEL_PAT }}"  # client_secret (+ url, realm, send_actions)
   verifier:
     clock_skew_seconds: 30
     jwks_cache_seconds: 300
@@ -151,6 +175,17 @@ provider's discovery document may only name endpoints below its issuer
 elsewhere. Only the discovery instance whose service account is
 `module/<project>/idp` is called.
 
+**Provisioning** (`provisioning:`): `builtin` needs nothing more (the serving engine
+attaches the IdP's `admin` app next to its `idp` app, `Engine.__attach_builtin_idp`; the IdP
+admits only the engine's own accounts, `naas_abi_idp.admin`); `zitadel` needs
+`admin.token` (a machine user's personal access token, `ORG_USER_MANAGER`), `keycloak`
+`admin.client_id` and `admin.client_secret` (a service-account client with
+`manage-users` and `view-users`); `none` takes no `admin`. Validated at load. Zitadel makes
+the user with an unverified email and `sendCode`, Keycloak with `emailVerified: false` and
+its verify/update-password mail, so only the mailbox's owner verifies it; the built-in IdP
+verifies by mailing a code at every sign-in. Over NATS a refusal of a provider that
+cannot be provisioned is the wire code `UNIMPLEMENTED` (`NotImplementedError`).
+
 Plugging in Okta, Entra, Zitadel or Keycloak:
 [`docs/identity-providers.md`](../../../../../docs/identity-providers.md).
 
@@ -167,8 +202,9 @@ Proto `naas-abi-proto/naas_abi_proto/identity/v1/identity.proto`, subjects
 ```bash
 uv run pytest libs/naas-abi-core/naas_abi_core/services/identity --import-mode=importlib -q
 uv run pytest libs/naas-abi-core/naas_abi_core/engine/engine_configuration/EngineConfiguration_Identity_test.py -q
-# The generic suite against Zitadel (downloads pinned binaries, ~70 MB, once):
-ABI_REQUIRE_ZITADEL=1 uv run pytest libs/naas-abi-core/naas_abi_core/services/identity/tests/zitadel_contract_test.py -q
+# The generic suite, and the provisioning adapter, against Zitadel (downloads pinned binaries, ~70 MB, once):
+ABI_REQUIRE_ZITADEL=1 uv run pytest libs/naas-abi-core/naas_abi_core/services/identity/tests/zitadel_contract_test.py libs/naas-abi-core/naas_abi_core/services/identity/tests/zitadel_provisioning_test.py -q
+uv run pytest libs/naas-abi-core/naas_abi_core/services/identity/IdentityService_provisioning_test.py --import-mode=importlib -q
 ```
 
 - The generic suite (`tests/identity_contract.py`) runs against `FakeIdP` on

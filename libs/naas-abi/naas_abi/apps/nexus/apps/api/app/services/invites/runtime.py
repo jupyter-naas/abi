@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import urlencode
 
+from fastapi import Depends
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
@@ -27,7 +28,6 @@ from naas_abi.apps.nexus.apps.api.app.services.oidc.adapters.secondary.engine im
     default_iam,
     default_identity,
 )
-from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
