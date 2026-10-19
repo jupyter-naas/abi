@@ -906,3 +906,28 @@ def test_a_token_made_right_after_a_revocation_is_not_cut_off_with_the_old_ones(
     # And a key exchange right after is as good.
     key = _key(h, bob)
     assert _verify(iam, _by_key(iam, key.value).token, API_KEY_AUDIENCE)
+
+
+def test_a_request_cannot_rebind_what_a_key_is_bound_to(h, iam, bob):
+    key = _key(h, bob, audience=CODING_AUDIENCE, resource="env-1")
+    token = _exchange(
+        iam,
+        subject_token=key.value,
+        subject_token_type=TOKEN_TYPE_API_KEY,
+        audience=CODING_AUDIENCE,
+        resource="env-2",
+    ).token
+    assert _verify(iam, token, CODING_AUDIENCE).resource == "env-1"
+    plain = _key(h, bob)
+    claims = _verify(
+        iam,
+        _exchange(
+            iam,
+            subject_token=plain.value,
+            subject_token_type=TOKEN_TYPE_API_KEY,
+            audience=API_KEY_AUDIENCE,
+            resource="anything",
+        ).token,
+        API_KEY_AUDIENCE,
+    )
+    assert claims.resource is None

@@ -24,7 +24,7 @@ allow too (RFC §5.3); a scope narrows further.
 from __future__ import annotations
 
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
@@ -39,7 +39,6 @@ from naas_abi_core.engine.nats_auth import (
     AGENT_AUDIENCE,
     API_KEY_AUDIENCE,
     CLOCK_SKEW_SECONDS,
-    CODING_AUDIENCE,
     DELEGATED_AUDIENCES,
     EXCHANGE_AUDIENCES,
     MAX_DELEGATION_SECONDS,
@@ -138,7 +137,12 @@ class TokenExchanger:
             self._authorize(ctx, subject, audience)
         scope = self._narrow(subject, requested)
         actor, actor_name = self._actor(ctx, subject, audience, request.resource)
-        resource = subject.resource if subject.resource else request.resource
+        # What a key is bound to is the key's own, never the request's.
+        resource = (
+            subject.resource
+            if subject.key is not None
+            else subject.resource or request.resource
+        )
         now = iam.tokens.now()
         since = subject.since if subject.since is not None else int(now.timestamp())
         not_after = None
@@ -382,15 +386,3 @@ class TokenExchanger:
         if record is None or not record.active:
             raise KeyRefusedError()
         return record
-
-
-def exchange_audience_names() -> Mapping[str, str]:
-    """Audience -> what it is for, for documentation and the API-keys page."""
-    return {
-        SESSION_AUDIENCE: "a Nexus session",
-        AGENT_AUDIENCE: "a module acting for a user",
-        "abi:delegated:app": "opening a remote app or an app-html link",
-        "abi:delegated:preview": "an app project's preview",
-        CODING_AUDIENCE: "a coding environment's agent",
-        API_KEY_AUDIENCE: "a personal API key",
-    }

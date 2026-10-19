@@ -132,3 +132,29 @@ def test_a_client_role_engine_carries_the_users_it_serves(iam, monkeypatch):
     assert claims.subject == bob.id and claims.audience == AGENT_AUDIENCE
     assert claims.actor_name == "engine"
     assert [c.subject_token for c in calls] == [bob.id]
+
+
+def test_a_cached_delegation_is_dropped_when_the_users_tokens_are_revoked(iam):
+    """The cache holds a delegation for half its life: one made before a
+    revocation must not be handed out after it, or every call of a user who
+    signed in again would be refused until it expired."""
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        service_account,
+        use_call_context,
+    )
+    from naas_abi_core.engine.call_context import user as as_user
+
+    bob = _user(iam)
+    source = nats_credentials.issuer_source(iam, "api")
+    first = source.token_for(bob)
+    assert source.token_for(bob) == first  # cached
+    with use_call_context(
+        CallContext(principal=service_account("api"), on_behalf_of=as_user(bob.id))
+    ):
+        iam.revoke_tokens(bob.id)
+    second = source.token_for(bob)
+    assert second != first
+    assert iam.verifier().verify(second).subject == bob.id
+    with pytest.raises(Exception, match="revoked"):
+        iam.verifier().verify(first)

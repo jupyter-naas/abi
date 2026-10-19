@@ -297,12 +297,3 @@ async def revoke_user_credentials(user_id: str, *, include_keys: bool = False) -
         logger.error(f"The engine's tokens of user {user_id} were not revoked: {exc}")
         return False
     return True
-
-
-# -- what a refused credential says --------------------------------------------------------------
-
-
-async def kind_of_bearer(token: str) -> CredentialKind | None:
-    """The kind of a valid bearer token, whether or not a route accepts it."""
-    credential = await bearer_credential(token)
-    return credential.kind if credential is not None else None

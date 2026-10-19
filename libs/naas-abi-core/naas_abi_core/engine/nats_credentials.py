@@ -236,7 +236,26 @@ def issuer_source(
         name,
         lambda: iam.issue_service_token(name, audience=audience),
         delegate=delegation(iam, name) if delegates else None,
+        revoked=_revoked_since(iam) if delegates else None,
     )
+
+
+def _revoked_since(iam: Any) -> Callable[[Any, IssuedToken], bool]:
+    """Whether a delegation was made before its user's tokens were revoked
+    (IAM's floor): the cache must not hand it out again."""
+
+    def revoked(user: Any, issued: IssuedToken) -> bool:
+        import jwt
+
+        try:
+            issued_at = int(
+                jwt.decode(issued.token, options={"verify_signature": False})["iat"]
+            )
+        except (jwt.InvalidTokenError, KeyError, TypeError, ValueError):
+            return True
+        return bool(iam.revoked_since(user.id, issued_at))
+
+    return revoked
 
 
 def rpc_client(cls: Any, nats_url: str, service_key: str, **options: Any) -> Any:

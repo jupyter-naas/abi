@@ -626,15 +626,19 @@ class RenewingTokenSource(TokenSource):
         fetch: Callable[[], IssuedToken],
         *,
         delegate: Callable[[Any, str | None, Any], IssuedToken] | None = None,
+        revoked: Callable[[Any, IssuedToken], bool] | None = None,
         clock: Callable[[], float] = time.time,
     ) -> None:
         """``delegate(user, recipient, scope)``: a token carrying ``user`` (token
-        exchange). Without one, ``token_for`` is the source's own token."""
+        exchange). Without one, ``token_for`` is the source's own token.
+        ``revoked(user, issued)``: whether a delegation held in the cache has
+        been revoked since (the user's tokens were), so it is made again."""
         if not identity:
             raise ValueError("A token source names its identity")
         self.identity = identity
         self._fetch = fetch
         self._delegate = delegate
+        self._delegation_revoked = revoked
         self._clock = clock
         self._lock = threading.Lock()
         self._current: IssuedToken | None = None
@@ -677,7 +681,14 @@ class RenewingTokenSource(TokenSource):
         with self._lock:
             now = self._clock()
             held = self._delegations.get(key)
-            if held is not None and now < held[1]:
+            if (
+                held is not None
+                and now < held[1]
+                and not (
+                    self._delegation_revoked is not None
+                    and self._delegation_revoked(user, held[0])
+                )
+            ):
                 self._delegations.move_to_end(key)
                 return held[0].token
             try:
