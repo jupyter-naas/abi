@@ -836,6 +836,30 @@ class ABIModule(BaseModule):
                     "subject_token_type": "urn:abi:params:oauth:token-type:session",
                     "audience": "abi:delegated:agent",
                 },
+                # Invitations: pending grants and IdP group bindings are an
+                # administrator's, never a module's.
+                "create_pending_grant": {
+                    "provider": "acme",
+                    "email": "bob@example.com",
+                    "policy_id": "builtin.member",
+                    "scope": "abi:org-demo:ws-demo",
+                },
+                "list_pending_grants": {"provider": "acme"},
+                "revoke_pending_grant": {"grant_id": "pgr_" + "0" * 26},
+                "claim_pending_grants": {"principal_id": user},
+                "bind_idp_group": {
+                    "provider": "acme",
+                    "claim_value": "Sales",
+                    "policy_id": "builtin.member",
+                    "scope": "abi:org-demo:ws-demo",
+                },
+                "unbind_idp_group": {
+                    "provider": "acme",
+                    "claim_value": "Sales",
+                    "policy_id": "builtin.member",
+                    "scope": "abi:org-demo:ws-demo",
+                },
+                "list_idp_bindings": {"provider": "acme"},
                 "get_manifest": {"principal_id": user},
                 "approve_manifest": {"principal_id": user},
                 "reject_manifest": {"principal_id": user},
@@ -910,6 +934,8 @@ class ABIModule(BaseModule):
             },
             "revoke": {"provider": "acme", "refresh_token": "r"},
             "end_session_url": {"provider": "acme"},
+            "provision_user": {"provider": "acme", "email": "bob@example.com"},
+            "find_provisioned_user": {"provider": "acme", "email": "bob@example.com"},
         }
         for operation, fields in refused.items():
             try:
