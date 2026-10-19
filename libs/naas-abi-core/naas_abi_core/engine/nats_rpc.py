@@ -429,7 +429,9 @@ class NatsRPCClient:
         """The token of a call: the source's own, or, for a source that carries
         users (``api``, ``engine``) and a call made for one, a delegation that
         names the user and this process as the actor."""
-        return self._credentials.token_for(user)
+        return self._credentials.token_for(
+            user, None, current_call_context().scope if user is not None else None
+        )
 
     # ------------------------------------------------------------------
     # RPC plumbing.

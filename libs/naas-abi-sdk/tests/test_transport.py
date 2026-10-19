@@ -65,7 +65,7 @@ def test_the_current_calls_trace_and_workspace_travel_with_the_call():
 def test_a_delegating_transport_sends_the_token_that_carries_the_user():
     seen = []
 
-    def delegate(who, recipient):
+    def delegate(who, recipient, scope=None):
         seen.append((who.id, recipient))
         return f"delegation-for-{who.id}"
 
@@ -84,7 +84,7 @@ def test_a_delegating_transport_sends_the_token_that_carries_the_user():
 def test_a_delegate_may_be_asynchronous_and_names_the_host_it_calls():
     seen = []
 
-    async def delegate(who, recipient):
+    async def delegate(who, recipient, scope=None):
         seen.append(recipient)
         return "delegation-for-a-host"
 
@@ -107,7 +107,7 @@ def test_a_delegate_may_be_asynchronous_and_names_the_host_it_calls():
 def test_without_a_user_the_transport_calls_as_itself():
     rpc, nc = transport(
         kv.GetResponse().SerializeToString(),
-        delegate=lambda who, recipient: pytest.fail("no user to carry"),
+        delegate=lambda who, recipient, scope: pytest.fail("no user to carry"),
     )
     with use_call_context(CallContext(principal=service_account("engine"))):
         asyncio.run(
@@ -117,7 +117,7 @@ def test_without_a_user_the_transport_calls_as_itself():
 
 
 def test_a_delegation_that_fails_fails_the_call_instead_of_dropping_the_user():
-    def refuse(who, recipient):
+    def refuse(who, recipient, scope=None):
         raise PermissionError("user suspended")
 
     rpc, nc = transport(kv.GetResponse().SerializeToString(), delegate=refuse)
@@ -487,3 +487,22 @@ def test_a_transport_without_a_host_token_makes_no_call_to_a_host():
             )
         )
     nc.request.assert_not_called()
+
+
+def test_a_delegation_carries_the_scope_of_the_calls_credential():
+    seen = []
+
+    def delegate(who, recipient, scope=None):
+        seen.append(scope)
+        return "delegation"
+
+    rpc, _ = transport(kv.GetResponse().SerializeToString(), delegate=delegate)
+    scope = ({"effect": "Allow", "actions": ["keyvalue:Get"], "resources": ["*"]},)
+    caller = CallContext(
+        principal=service_account("api"), on_behalf_of=user("usr-ada"), scope=scope
+    )
+    with use_call_context(caller):
+        asyncio.run(
+            rpc.call("abi.svc.keyvalue.v1.get", kv.GetRequest(), kv.GetResponse)
+        )
+    assert seen == [scope]

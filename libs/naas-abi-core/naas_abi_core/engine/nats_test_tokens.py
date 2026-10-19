@@ -93,7 +93,7 @@ class TestTokens:
         delegate = None
         if delegating if delegating is not None else name in ("api", "engine"):
 
-            def delegate(user, recipient):  # type: ignore[misc]
+            def delegate(user, recipient, scope=None):  # type: ignore[misc]
                 return self.issue(
                     user.id,
                     kind="user",

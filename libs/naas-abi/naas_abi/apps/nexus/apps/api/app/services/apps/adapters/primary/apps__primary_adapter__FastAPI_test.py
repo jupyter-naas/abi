@@ -80,23 +80,30 @@ def test_a_remote_app_opens_under_a_grant_for_the_user(monkeypatch: pytest.Monke
     import asyncio
     from types import SimpleNamespace
 
-    from naas_abi.apps.nexus.apps.api.app.services.apps.remote import http_routes
     from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import (
-        RemoteAppGrant,
         read_remote_app_grant,
     )
+    from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
+    from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import IAMStoreMemory
+    from naas_abi_core.services.iam.IAMService import IAMService
 
-    monkeypatch.setattr(http_routes, "current_secret_key", lambda: "s3cret")
+    iam = IAMService(IAMStoreMemory())
+    iam.bootstrap()
+    monkeypatch.setattr(credentials, "IAM", lambda: iam)
     body = adapter.RemoteAppGrantRequest(module_id="acme.research", app="console")
 
     answer = asyncio.run(adapter.create_remote_app_grant(body, SimpleNamespace(id="u-1")))
 
     _, prefix, grant, rest = answer.path.split("/", 3)
     assert (prefix, rest) == ("app-remote", "acme.research/console/")
-    assert read_remote_app_grant(grant, secret="s3cret") == RemoteAppGrant(
-        "u-1", "acme.research", "console"
+    opened = read_remote_app_grant(grant)
+    assert opened is not None
+    assert (opened.user_id, opened.module_id, opened.app) == ("u-1", "acme.research", "console")
+    # Eight hours at most, whatever the configuration says.
+    assert (
+        answer.expires_in
+        == min(adapter.nexus_config.settings.remote_app_grant_expire_minutes, 8 * 60) * 60
     )
-    assert answer.expires_in == adapter.nexus_config.settings.remote_app_grant_expire_minutes * 60
 
 
 @pytest.mark.parametrize(

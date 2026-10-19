@@ -14,6 +14,11 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.secondary.postgres import (
     AuthSecondaryAdapterPostgres,
 )
+from naas_abi.apps.nexus.apps.api.app.services.auth.credentials import (
+    Credential,
+    accepted_kinds,
+    bearer_credential,
+)
 from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthUserRecord
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService, decode_token
 from naas_abi.apps.nexus.apps.api.app.services.registry import ServiceRegistry
@@ -41,22 +46,38 @@ def get_auth_service(db: AsyncSession = Depends(get_db)) -> AuthService:
     return AuthService(adapter=AuthSecondaryAdapterPostgres(db=db))
 
 
+async def request_credential(request: Request, token: str | None) -> Credential | None:
+    """The credential of this request, as ``RequestIdentityMiddleware`` resolved
+    it (it leaves the answer on ``request.state``); resolved here when the
+    middleware did not run, from the bearer token, for the kinds this route
+    takes."""
+    state = request.state
+    credential = getattr(state, "nexus_credential", None)
+    if credential is not None:
+        return credential
+    if getattr(state, "nexus_credential_refused", None) is not None:
+        return None
+    if token:
+        found = await bearer_credential(token)
+        if found is not None and found.kind in accepted_kinds(request.url.path):
+            return found
+        if found is not None:
+            state.nexus_credential_refused = found.kind
+    return None
+
+
 async def get_current_user(
     request: Request,
     token: str | None = Depends(oauth2_scheme),
     auth_service: AuthService = Depends(get_auth_service),
 ) -> User | None:
-    """The bearer token's user, else the session cookie's (``services/oidc``),
-    as ``RequestIdentityMiddleware`` resolved it for this request."""
-    if token:
-        user = await auth_service.get_user_from_access_token(token)
-    else:
-        session = getattr(request.state, "nexus_session", None)
-        user = (
-            await auth_service.adapter.get_user_by_id(session.user_id)
-            if session is not None
-            else None
-        )
+    """The user of the request's credential: a session (the bearer token, else
+    the session cookie, as ``RequestIdentityMiddleware`` resolved it), or the API
+    key or coding key the route takes (``services/auth/credentials.py``)."""
+    credential = await request_credential(request, token)
+    if credential is None:
+        return None
+    user = await auth_service.adapter.get_user_by_id(credential.user_id)
     if user is None:
         return None
     return to_user_schema(user)
@@ -70,6 +91,14 @@ async def get_current_user_required(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="CSRF token missing or invalid",
+            )
+        refused = getattr(request.state, "nexus_credential_refused", None)
+        if refused is not None:
+            # A real credential, of a kind this route does not take: a key on
+            # the account, a coding agent's key anywhere but the gateway.
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"A {refused} credential cannot be used here",
             )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

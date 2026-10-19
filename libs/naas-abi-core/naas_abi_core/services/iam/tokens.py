@@ -153,16 +153,22 @@ class TokenIssuer:
         session: str | None = None,
         since: int | None = None,
         resource: str | None = None,
+        min_issued_at: int | None = None,
     ) -> IssuedToken:
         """A signed token for ``subject``; callers decide who may have one.
 
         ``not_after``: the token never outlives this (epoch seconds), whatever
         its ttl: the end of a delegation that may only be renewed so long.
+        ``min_issued_at``: ``iat`` is at least this: a token made right after a
+        revocation must not share its second, or the revocation (which cuts off
+        every token issued at or before it) would refuse it too.
         """
         ttl = min(ttl_seconds or self._ttl, self._ttl)
         now = self._clock()
         key = self._current_key(now)
         issued_at = epoch(now)
+        if min_issued_at is not None:
+            issued_at = max(issued_at, min_issued_at)
         expires_at = issued_at + ttl
         if not_after is not None:
             expires_at = min(expires_at, not_after)

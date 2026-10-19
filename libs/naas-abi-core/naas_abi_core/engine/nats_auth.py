@@ -28,7 +28,7 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -595,13 +595,20 @@ class TokenSource(ABC):
     def token(self) -> str:
         """A token valid for at least a few more minutes."""
 
-    def token_for(self, user: Any, recipient: str | None = None) -> str:
+    def token_for(
+        self,
+        user: Any,
+        recipient: str | None = None,
+        scope: Sequence[Mapping[str, Any]] | None = None,
+    ) -> str:
         """The token of a call made for ``user`` (a ``Principal``): a delegation
         that carries the user, for a source allowed to hold them (``api``,
         ``engine``). Any other source calls as itself: its own token.
 
         ``recipient``: the ``<sa>`` of the module host the call is for (a
-        delegation names the module that acts)."""
+        delegation names the module that acts). ``scope``: the narrowing of the
+        credential the call is made under (an API key's), which the delegation
+        keeps: a call never reaches further over NATS than it does in process."""
         return self.token()
 
 
@@ -618,10 +625,10 @@ class RenewingTokenSource(TokenSource):
         identity: str,
         fetch: Callable[[], IssuedToken],
         *,
-        delegate: Callable[[Any, str | None], IssuedToken] | None = None,
+        delegate: Callable[[Any, str | None, Any], IssuedToken] | None = None,
         clock: Callable[[], float] = time.time,
     ) -> None:
-        """``delegate(user, recipient)``: a token carrying ``user`` (token
+        """``delegate(user, recipient, scope)``: a token carrying ``user`` (token
         exchange). Without one, ``token_for`` is the source's own token."""
         if not identity:
             raise ValueError("A token source names its identity")
@@ -635,7 +642,8 @@ class RenewingTokenSource(TokenSource):
         # (user id, groups, recipient) -> (token, renew at). Bounded: a long
         # running API serves many users.
         self._delegations: OrderedDict[
-            tuple[str, tuple[str, ...], str | None], tuple[IssuedToken, float]
+            tuple[str, tuple[str, ...], str | None, str | None],
+            tuple[IssuedToken, float],
         ] = OrderedDict()
 
     def token(self) -> str:
@@ -652,10 +660,20 @@ class RenewingTokenSource(TokenSource):
                 self._renew_at = now + max(1.0, (issued.expires_at - now) / 2)
             return self._current.token
 
-    def token_for(self, user: Any, recipient: str | None = None) -> str:
+    def token_for(
+        self,
+        user: Any,
+        recipient: str | None = None,
+        scope: Sequence[Mapping[str, Any]] | None = None,
+    ) -> str:
         if user is None or self._delegate is None:
             return self.token()
-        key = (user.id, tuple(sorted(user.groups)), recipient)
+        key = (
+            user.id,
+            tuple(sorted(user.groups)),
+            recipient,
+            json.dumps(list(scope), sort_keys=True) if scope is not None else None,
+        )
         with self._lock:
             now = self._clock()
             held = self._delegations.get(key)
@@ -663,7 +681,7 @@ class RenewingTokenSource(TokenSource):
                 self._delegations.move_to_end(key)
                 return held[0].token
             try:
-                issued = self._delegate(user, recipient)
+                issued = self._delegate(user, recipient, scope)
             except Exception:
                 # A delegation that cannot be renewed keeps the valid one; one
                 # that cannot be made is an error, never the source's own token

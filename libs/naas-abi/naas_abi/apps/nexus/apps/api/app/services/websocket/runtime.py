@@ -14,13 +14,14 @@ from datetime import datetime
 import socketio
 from fastapi import FastAPI, HTTPException
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
-    decode_token,
     require_workspace_access,
 )
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
-from naas_abi.apps.nexus.apps.api.app.services.auth.service import is_session_token
-from naas_abi.apps.nexus.apps.api.app.services.refresh_token import is_access_token_revoked
+from naas_abi.apps.nexus.apps.api.app.services.auth.credentials import (
+    SESSION,
+    bearer_credential,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -73,25 +74,19 @@ async def connect(sid, environ, auth):
             return False
         return await _accept(sid, cookie_user)
 
-    payload = decode_token(token)
-    if not payload:
+    # The socket takes a session and nothing else: not an API key, not a coding
+    # agent's key, not a link (app, preview, remote app grant), not an agent's
+    # delegation. A session token that is expired, revoked, or of a suspended
+    # user is no credential at all.
+    credential = await bearer_credential(token)
+    if credential is None:
         logger.warning("[WS] Invalid token; rejecting connection")
         return False
-    if not is_session_token(payload):
-        logger.warning("[WS] Scoped token; rejecting connection")
+    if credential.kind != SESSION:
+        logger.warning(f"[WS] A {credential.kind} credential is no session; rejecting connection")
         return False
 
-    user_id = payload.get("sub")
-    jti = payload.get("jti")
-    if not user_id:
-        logger.warning("[WS] Token missing subject; rejecting connection")
-        return False
-
-    if jti and await is_access_token_revoked(jti):
-        logger.warning("[WS] Token revoked; rejecting connection")
-        return False
-
-    return await _accept(sid, user_id)
+    return await _accept(sid, credential.user_id)
 
 
 async def _cookie_session_user(environ: dict) -> str | None:

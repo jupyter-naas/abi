@@ -26,6 +26,7 @@ hard-coded category map.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import Iterator
@@ -132,7 +133,7 @@ def _resolve_manifest_url(raw_url: str | None, module_path: str, app_name: str) 
     ``naas_abi_marketplace/ai/chatgpt`` in the URL.
     """
     if raw_url and raw_url.startswith("html:"):
-        filename = raw_url[len("html:"):]
+        filename = raw_url[len("html:") :]
         module_path_url = module_path.replace(".", "/")
         return f"/app-html/{module_path_url}/{app_name}/{filename}"
     return raw_url
@@ -310,10 +311,7 @@ def _scan_apps_html_paths() -> dict[str, str]:
             if not manifest_path.is_file():
                 continue
             for asset_file in app_dir.rglob("*"):
-                if (
-                    not asset_file.is_file()
-                    or asset_file.suffix.lower() not in _APP_ASSET_SUFFIXES
-                ):
+                if not asset_file.is_file() or asset_file.suffix.lower() not in _APP_ASSET_SUFFIXES:
                     continue
                 rel = asset_file.relative_to(app_dir).as_posix()
                 url_key = f"{module_path_url}/{app_dir.name}/{rel}"
@@ -414,13 +412,14 @@ class AppsFastAPIPrimaryAdapter:
 
 
 class AppHtmlAccessTokenRequest(BaseModel):
-    """Mint a short-lived JWT for ``/app-html/`` (Bearer or ``?token=``)."""
+    """Mint a link for ``/app-html/`` (Bearer or ``?token=``): an IAM grant, not a JWT."""
 
     expires_minutes: int | None = Field(
         default=None,
         ge=1,
-        le=24 * 60,
-        description="Lifetime; defaults to app_html_access_token_expire_minutes",
+        le=8 * 60,
+        description="Lifetime, eight hours at most; defaults to "
+        "app_html_access_token_expire_minutes",
     )
     path_prefix: str | None = Field(
         default=None,
@@ -440,9 +439,11 @@ async def create_app_html_access_token(
     body: AppHtmlAccessTokenRequest,
     current_user: User = Depends(get_current_user_required),
 ) -> AppHtmlAccessTokenResponse:
-    """Issue a time-limited JWT accepted by ``/app-html/`` (alongside ABI_API_KEY)."""
+    """Issue a time-limited link accepted by ``/app-html/`` (alongside ABI_API_KEY):
+    a revocable IAM grant for this user, never a session."""
     try:
-        token, expires_in = mint_app_html_access_token(
+        token, expires_in = await asyncio.to_thread(
+            mint_app_html_access_token,
             user_id=current_user.id,
             expires_minutes=body.expires_minutes,
             path_prefix=body.path_prefix,
@@ -479,9 +480,10 @@ async def create_remote_app_grant(
         remote_app_grant_url,
     )
 
+    path = await asyncio.to_thread(remote_app_grant_url, current_user.id, body.module_id, body.app)
     return RemoteAppGrantResponse(
-        path=remote_app_grant_url(current_user.id, body.module_id, body.app),
-        expires_in=nexus_config.settings.remote_app_grant_expire_minutes * 60,
+        path=path,
+        expires_in=min(nexus_config.settings.remote_app_grant_expire_minutes, 8 * 60) * 60,
     )
 
 
@@ -558,15 +560,11 @@ async def list_apps(
     if workspace_id:
         seed = workspace_seed_for_slug(workspace_slug)
         if seed is not None and seed.apps:
-            seed_apps = {
-                str(app_id).strip() for app_id in seed.apps if str(app_id).strip()
-            }
+            seed_apps = {str(app_id).strip() for app_id in seed.apps if str(app_id).strip()}
 
     results: list[AppInfo] = []
     for app in catalog:
-        update: dict = {
-            "enabled": resolve_app_enabled(app.app_id, enabled_by_app_id, seed_apps)
-        }
+        update: dict = {"enabled": resolve_app_enabled(app.app_id, enabled_by_app_id, seed_apps)}
 
         # Manifest values take precedence; only fall back to runtime config
         # when the manifest omits the credential.

@@ -1150,6 +1150,24 @@ class IAMService(IIAMService, PolicySource):
             if principal_id
         )
 
+    def issue_after_floor(self, *principal_ids: str | None) -> int | None:
+        """The earliest ``iat`` a token for these principals may carry: one
+        second past their latest revocation, so a token made right after
+        ``revoke_tokens`` is not cut off with the ones it revoked. None when no
+        revocation applies."""
+        floors = self._token_floors()
+        latest = max(
+            (floors[p].timestamp() for p in principal_ids if p and p in floors),
+            default=None,
+        )
+        return None if latest is None else int(latest) + 1
+
+    def revoked_since(self, principal_id: str, issued_at: int) -> bool:
+        """Whether ``revoke_tokens`` cut off what was issued to or for
+        ``principal_id`` (the id a call names it by) at ``issued_at``: for the
+        sessions a service signs itself."""
+        return self._revoked_since(principal_id, issued_at)
+
     def _revoked_since(self, principal_id: str, issued_at: int) -> bool:
         floor = self._token_floors().get(principal_id)
         return floor is not None and issued_at <= floor.timestamp()
@@ -1183,7 +1201,11 @@ class IAMService(IIAMService, PolicySource):
         if record is None or not record.active:
             raise IAMNotFoundError(f"No active service account {name!r}")
         return self.tokens.issue(
-            record.id, kind="service_account", audience=audience, name=record.name
+            record.id,
+            kind="service_account",
+            audience=audience,
+            name=record.name,
+            min_issued_at=self.issue_after_floor(record.id),
         )
 
     def exchange_key(self, value: str, audience: str = NATS_AUDIENCE) -> IssuedToken:
@@ -1203,6 +1225,7 @@ class IAMService(IIAMService, PolicySource):
             kind="service_account",
             audience=audience,
             name=principal.name,
+            min_issued_at=self.issue_after_floor(principal.id),
         )
 
     def issue_host_token(

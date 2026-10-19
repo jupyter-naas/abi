@@ -36,11 +36,11 @@ def api_delegate() -> Any:
     suspended: such a call fails, it is never made as ``api`` alone. Replaces
     the ``Abi-On-Behalf-Of`` header, which the kernel no longer accepts."""
 
-    def delegate(user: Any, recipient: str | None = None) -> str:
+    def delegate(user: Any, recipient: str | None = None, scope: Any = None) -> str:
         from naas_abi import ABIModule
 
         engine = ABIModule.get_instance().engine
-        return str(engine.service_credentials(CALLER_IDENTITY).token_for(user, recipient))
+        return str(engine.service_credentials(CALLER_IDENTITY).token_for(user, recipient, scope))
 
     return delegate
 

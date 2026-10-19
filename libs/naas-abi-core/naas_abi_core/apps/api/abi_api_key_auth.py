@@ -18,15 +18,17 @@ logger = logging.getLogger(__name__)
 # Cookie stamped when a scoped ``?token=`` JWT opens ``/app-html/`` so SPA
 # asset / soft-nav requests keep working without re-attaching the query param.
 APP_HTML_TOKEN_COOKIE = "abi_app_html_token"
-# Email share links use 24h JWTs; cookie lifetime matches that ceiling.
-APP_HTML_TOKEN_COOKIE_MAX_AGE = 24 * 60 * 60
+# A link is an IAM grant, eight hours at most; the cookie matches that ceiling.
+APP_HTML_TOKEN_COOKIE_MAX_AGE = 8 * 60 * 60
 
 # Extra validators (e.g. Nexus JWT) registered at startup. Signature:
 # ``(token, request) -> bool``.
 _EXTRA_APP_HTML_TOKEN_VALIDATORS: list[Callable[[str, Request], bool]] = []
 
 
-def register_app_html_token_validator(validator: Callable[[str, Request], bool]) -> None:
+def register_app_html_token_validator(
+    validator: Callable[[str, Request], bool],
+) -> None:
     """Register an additional ``/app-html/`` token checker (Nexus JWT, etc.)."""
     _EXTRA_APP_HTML_TOKEN_VALIDATORS.append(validator)
 

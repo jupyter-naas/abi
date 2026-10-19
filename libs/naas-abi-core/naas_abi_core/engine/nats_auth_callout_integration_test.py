@@ -1770,3 +1770,136 @@ def test_a_stored_triggers_token_is_good_at_its_jobs_host_only(stack):
             await billing_transport.close()
 
     run(stack, scenario, discovery=True)
+
+
+def test_a_remote_agent_called_from_nexus_sees_the_end_user_and_their_policy_limits_it(
+    stack,
+):
+    """Nexus calls module M's agent for a signed-in user. M's host forwards what it
+    received to discovery, which decides for M acting for that user: the caller is
+    the user, never ``api``, and a user whose policy does not allow the agent (or
+    denies it) is refused, with ``api``'s own rights out of it."""
+    from naas_abi_core.engine import nats_credentials
+    from naas_abi_core.engine.call_context import service_account, user
+    from naas_abi_proto.discovery.v1 import discovery_pb2 as dpb
+    from naas_abi_sdk.agent_host import AgentHost
+    from naas_abi_sdk.discovery import DiscoveryClient, DiscoverySession
+
+    iam = stack["iam"]
+    mal, mal_key = module(iam, "module/default/mal")
+    approve(iam, mal, "module/default/mal")
+    with as_service_account("engine"):
+        allowed = iam.ensure_user("https://idp.example", "allowed")
+        nothing = iam.ensure_user("https://idp.example", "nothing")
+        denied_user = iam.ensure_user("https://idp.example", "denied")
+
+    def grant_policies() -> None:
+        from naas_abi_core.services.iam.kernel_catalogs import register_kernel_catalogs
+
+        register_kernel_catalogs(iam)  # as the engine does at boot
+        with as_service_account("engine"):
+            invoke = iam.create_policy(
+                "invoke",
+                {
+                    "version": "2026-10-13",
+                    "statements": [
+                        {
+                            "effect": "Allow",
+                            "actions": ["discovery:InvokeAgent"],
+                            "resources": ["abi:-:-:discovery:agent/default/mal/*"],
+                        }
+                    ],
+                },
+            )
+            refuse = iam.create_policy(
+                "refuse",
+                {
+                    "version": "2026-10-13",
+                    "statements": [
+                        {
+                            "effect": "Allow",
+                            "actions": ["discovery:InvokeAgent"],
+                            "resources": ["abi:-:-:discovery:agent/default/mal/*"],
+                        },
+                        {
+                            "effect": "Deny",
+                            "actions": ["discovery:InvokeAgent"],
+                            "resources": ["abi:-:-:discovery:agent/default/mal/Agent"],
+                        },
+                    ],
+                },
+            )
+            iam.attach_policy(invoke.id, allowed.id)
+            iam.attach_policy(refuse.id, denied_user.id)
+
+    descriptor = dpb.ModuleDescriptor(
+        module_id="mal",
+        package_version="1",
+        contract_major=1,
+        agents=[
+            dpb.AgentDescriptor(
+                name="Agent", contract_major=1, capabilities=["agent.invoke.v1"]
+            )
+        ],
+    )
+
+    async def scenario(served):
+        grant_policies()
+        transport = Transport(stack["url"], mal_key, timeout=3)
+        session = DiscoverySession(DiscoveryClient(transport, "default"), descriptor)
+        api_tokens = nats_credentials.issuer_source(iam, "api")
+        nexus = Transport(
+            stack["engine"],
+            lambda: iam.issue_service_token("api").token,
+            host_token=lambda recipient: (
+                iam.issue_service_token("api", audience=host_audience(recipient)).token
+            ),
+            delegate=api_tokens.token_for,
+            timeout=3,
+        )
+        try:
+            await session.register()
+            session.initialized = True
+            await session.renew()  # READY: a submit needs a ready provider
+            host = AgentHost(session, None, {})
+            captured: list[dict] = []
+            nc = await transport.connect()
+            subject = f"abi.agent.default.{subject_token(mal)}.i.h.v1.submit"
+
+            async def serves(msg):
+                captured.append(dict(msg.headers or {}))
+                await msg.respond(b"")
+
+            await nc.subscribe(subject, cb=serves)
+            await nc.flush()
+
+            async def asked_as(record):
+                with use_call_context(
+                    CallContext(
+                        principal=service_account("api"), on_behalf_of=user(record.id)
+                    )
+                ):
+                    await nexus.call(
+                        subject, kv_pb.GetRequest(key="x"), kv_pb.GetResponse
+                    )
+                return await host._authorize("Agent", captured[-1], "submit")
+
+            # The user whose policy allows the agent: they are the caller.
+            identity, _ = await asked_as(allowed)
+            assert identity == allowed.id
+            # No policy, and a policy that denies it: refused, whatever api may do.
+            for record in (nothing, denied_user):
+                with pytest.raises(RPCError) as refused:
+                    await asked_as(record)
+                assert refused.value.code in ("AGENT_NOT_FOUND", "PERMISSION_DENIED")
+            # Control: api acting for nobody is not limited by anyone's policy, so
+            # it is the delegation, not api's own rights, that limited the above.
+            await nexus.call(subject, kv_pb.GetRequest(key="x"), kv_pb.GetResponse)
+            alone, _ = await host._authorize("Agent", captured[-1], "submit")
+            api = iam.store.find_service_account("api")
+            assert api is not None and alone == api.id
+        finally:
+            await transport.close()
+            await nexus.close()
+
+    run(stack, scenario, discovery=True)

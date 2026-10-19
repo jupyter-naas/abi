@@ -92,3 +92,14 @@ def test_host_audience_sources_do_not_delegate(iam):
     bob = _user(iam)
     # A host token is the account's own, never a user's.
     assert source.token_for(bob) == source.token()
+
+
+def test_the_scope_of_a_call_travels_in_its_delegation(iam):
+    bob = _user(iam)
+    scope = (
+        {"effect": "Allow", "actions": ["triple_store:Query"], "resources": ["*"]},
+    )
+    source = nats_credentials.issuer_source(iam, "api")
+    claims = iam.verifier().verify(source.token_for(bob, None, scope))
+    assert claims.scope == scope
+    assert iam.verifier().verify(source.token_for(bob)).scope is None

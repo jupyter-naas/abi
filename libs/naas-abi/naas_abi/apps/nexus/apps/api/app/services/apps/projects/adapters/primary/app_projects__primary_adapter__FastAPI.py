@@ -1,7 +1,7 @@
 """App projects HTTP adapter: ``/api/app-projects`` and ``/app-preview/``.
 
 Every route checks workspace membership, like Slides. The preview route is
-public by URL but gated by a scoped token in the path (see
+public by URL but gated by a link in the path (an IAM grant, see
 ``preview_token.py``); it serves the live draft in an opaque origin
 (``Content-Security-Policy: sandbox``), so an app's code can never read the
 Nexus session.
@@ -9,6 +9,7 @@ Nexus session.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 import mimetypes
@@ -24,7 +25,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
     require_workspace_access,
 )
-from naas_abi.apps.nexus.apps.api.app.core.config import current_secret_key, settings
+from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.services.apps.projects.factory import (
     AppProjectsUnavailableError,
     build_app_projects_service,
@@ -533,9 +534,9 @@ async def preview_token(
     await require_workspace_access(current_user.id, body.workspace_id)
     key = _key(body.workspace_id, slug)
     await _run(service.get_project, key)  # 404 before minting
-    minutes = settings.app_preview_token_expire_minutes
-    token = mint_preview_token(
-        secret=current_secret_key(),
+    minutes = min(settings.app_preview_token_expire_minutes, 8 * 60)
+    token = await asyncio.to_thread(
+        mint_preview_token,
         user_id=str(current_user.id),
         workspace_id=key.workspace_id,
         slug=key.slug,
@@ -570,7 +571,7 @@ async def serve_app_preview(
     path: str = "",
     service: AppProjectsService = Depends(get_app_projects_service),
 ) -> Response:
-    grant = read_preview_token(token, secret=current_secret_key())
+    grant = await asyncio.to_thread(read_preview_token, token)
     if grant is None:
         raise HTTPException(status_code=401, detail="Preview link expired. Reload the editor.")
     try:

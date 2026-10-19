@@ -155,29 +155,44 @@ def get_password_hash(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
+# The audience of the one token Nexus signs itself: a user's session. Every other
+# credential (a link, a preview, a coding agent's key, an API key) is made by
+# IAM for an audience of its own, and no route that takes a session takes one
+# (``credentials.py``).
+SESSION_AUDIENCE = "abi:session"
+
+
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> tuple[str, str]:
+    """A session token: ``aud`` is ``abi:session``, whatever ``data`` says."""
     to_encode = data.copy()
     jti = f"jti-{uuid4().hex[:16]}"
-    expire = datetime.now(UTC) + (
-        expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
-    )
-    to_encode.update({"exp": expire, "jti": jti})
+    now = datetime.now(UTC)
+    expire = now + (expires_delta or timedelta(minutes=settings.access_token_expire_minutes))
+    to_encode.update({"exp": expire, "iat": now, "jti": jti, "aud": SESSION_AUDIENCE})
     token = jwt.encode(to_encode, current_secret_key(), algorithm="HS256")
     return token, jti
 
 
 def decode_token(token: str) -> dict | None:
+    """The claims of a session token, else None: a token of another audience, or
+    of none (every token Nexus signed before sessions had one), is not one."""
     try:
-        payload = jwt.decode(token, current_secret_key(), algorithms=["HS256"])
-        return payload
+        payload = jwt.decode(
+            token,
+            current_secret_key(),
+            algorithms=["HS256"],
+            audience=SESSION_AUDIENCE,
+        )
     except JWTError:
         return None
+    return payload if payload.get("aud") == SESSION_AUDIENCE else None
 
 
 def is_session_token(payload: dict) -> bool:
-    """A user's session token. A scoped one (an ``app-html`` link token) opens
-    only what its scope names, never the API or the WebSocket."""
-    return "scope" not in payload
+    """A user's session token: the session audience, and no scope. A token that
+    names a scope or another audience opens only what it names, never the API
+    or the WebSocket."""
+    return payload.get("aud") == SESSION_AUDIENCE and "scope" not in payload
 
 
 def now_utc_naive() -> datetime:

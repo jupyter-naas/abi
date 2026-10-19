@@ -4,17 +4,21 @@
 * ``/app-remote/<grant>/<module_id>/<app>/<path>`` serves the app. The page
   runs sandboxed in an opaque origin (``SANDBOX``), away from the Nexus session,
   so the browser sends it no cookie: the grant in the path is its credential
-  (``grant.py``), and relative URLs carry it.
+  (``grant.py``, an IAM grant: revocable, eight hours at most, checked again at
+  every request), and relative URLs carry it.
 * ``/app-html/remote/<module_id>/<app>/<path>``, the catalog URL, runs the
   usual ``/app-html/`` access check and redirects to a fresh grant.
 
-The module gets the user's id, never the user's credential. Headers pass on
+The request is forwarded for the grant's user, narrowed to opening that app
+(the grant's scope): the host receives a delegation naming its module and the
+user (RFC §9.4), never the user's credential and never a header. Headers pass on
 allow-lists both ways. The module's cookies stay on its own path, under names
 of their own, and only those come back to it.
 """
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 from collections.abc import AsyncIterator, Iterator
@@ -24,12 +28,13 @@ from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 from fastapi import HTTPException, Request
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
-from naas_abi.apps.nexus.apps.api.app.core.config import current_secret_key
+from naas_abi.apps.nexus.apps.api.app.services.apps import links
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.factory import (
     get_remote_app_directory,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import (
     GRANT_ROUTE_PREFIX,
+    RemoteAppGrant,
     grant_root,
     is_segment,
     mint_remote_app_grant,
@@ -46,6 +51,13 @@ from naas_abi_core.apps.api.abi_api_key_auth import (
     APP_HTML_TOKEN_COOKIE,
     extract_abi_api_token,
 )
+from naas_abi_core.engine.call_context import (
+    CallContext,
+    service_account,
+    use_call_context,
+    user,
+)
+from naas_abi_core.engine.nats_auth import APP_AUDIENCE
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 _log = logging.getLogger(__name__)
@@ -90,18 +102,27 @@ _RETURNED = frozenset(
 APP_COOKIE_PREFIX = "abi_app."
 
 
-def _presented_user(request: Request) -> tuple[str, datetime | None]:
+async def _presented_user(request: Request) -> tuple[str, datetime | None]:
     """The signed-in user behind the request and when their credential
-    expires; no user for an ABI_API_KEY caller."""
-    from naas_abi.apps.nexus.apps.api.app.services.auth.service import decode_token
+    expires; no user for an ABI_API_KEY caller. A session token, or a link (an
+    ``/app-html/`` grant: a share link stays a share link)."""
+    from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
+        decode_token,
+        is_session_token,
+    )
 
     token = extract_abi_api_token(request)
-    payload = decode_token(token) if token else None
-    if not isinstance(payload, dict):
+    if not token:
         return "", None
-    subject, exp = payload.get("sub"), payload.get("exp")
-    expires = datetime.fromtimestamp(exp, UTC) if isinstance(exp, int | float) else None
-    return (subject if isinstance(subject, str) else ""), expires
+    payload = decode_token(token)
+    if isinstance(payload, dict) and is_session_token(payload):
+        subject, exp = payload.get("sub"), payload.get("exp")
+        expires = datetime.fromtimestamp(exp, UTC) if isinstance(exp, int | float) else None
+        return (subject if isinstance(subject, str) else ""), expires
+    link = await links.aopen_link(token, APP_AUDIENCE)
+    if link is not None and link.resource.startswith(links.APP_HTML_ROOT):
+        return link.user_id, link.expires_at
+    return "", None
 
 
 def _is_forwarded(name: str) -> bool:
@@ -242,21 +263,22 @@ async def _rest(head: bytes, stream: AsyncIterator[bytes]) -> AsyncIterator[byte
             yield chunk
 
 
-def _granted_user(grant: str, module_id: str, app: str) -> str:
-    granted = read_remote_app_grant(grant, secret=current_secret_key())
+async def _granted(grant: str, module_id: str, app: str) -> RemoteAppGrant:
+    granted = await asyncio.to_thread(read_remote_app_grant, grant)
     if granted is None or (granted.module_id, granted.app) != (module_id, app):
         raise HTTPException(
             status_code=401,
             detail="This app link has expired. Open the app again.",
             headers=SECURITY_HEADERS,
         )
-    return granted.user_id
+    return granted
 
 
 async def serve_remote_app(
     grant: str, module_id: str, app: str, path: str, request: Request
 ) -> Response:
-    user_id = _granted_user(grant, module_id, app)
+    granted = await _granted(grant, module_id, app)
+    user_id = granted.user_id
     root = grant_root(grant, module_id, app)
     directory = get_remote_app_directory()
     limit = await directory.upload_limit(module_id, app)
@@ -277,12 +299,21 @@ async def serve_remote_app(
         max_body_bytes=limit if rest is not None else 0,
         root_path=root,
     )
+    # For the grant's user, narrowed to opening this app: the transport gives
+    # the host a delegation naming its module and the user.
+    acting = CallContext(
+        principal=service_account("api"),
+        on_behalf_of=user(user_id),
+        scope=granted.scope,
+        triggered_via="api",
+    )
     try:
-        if rest is None:
-            answer = await directory.forward(module_id, app, forwarded)
-        else:
-            with _uploads.slot(module_id):
+        with use_call_context(acting):
+            if rest is None:
                 answer = await directory.forward(module_id, app, forwarded)
+            else:
+                with _uploads.slot(module_id):
+                    answer = await directory.forward(module_id, app, forwarded)
     except RemoteAppUnavailable as exc:
         if exc.status >= 500:
             _log.warning("Remote app %s/%s: %s", module_id, app, exc.reason)
@@ -303,7 +334,7 @@ async def redirect_remote_app_root(
     grant: str, module_id: str, app: str, request: Request
 ) -> Response:
     """``.../<app>`` -> ``.../<app>/``: relative links in the entry page resolve."""
-    _granted_user(grant, module_id, app)
+    await _granted(grant, module_id, app)
     query = f"?{request.url.query}" if request.url.query else ""
     return RedirectResponse(
         f"{request.url.path}/{query}", status_code=307, headers=SECURITY_HEADERS
@@ -315,7 +346,6 @@ def remote_app_grant_url(
 ) -> str:
     """The app's root under a fresh grant, ending with ``/``."""
     grant = mint_remote_app_grant(
-        secret=current_secret_key(),
         user_id=user_id,
         module_id=module_id,
         app=app,
@@ -331,11 +361,15 @@ async def open_remote_app(module_id: str, app: str, request: Request, path: str 
     that was presented (a share link stays a share link)."""
     if not is_segment(module_id, app):
         raise HTTPException(status_code=404, detail="Not Found")
-    user_id, expires = _presented_user(request)
+    user_id, expires = await _presented_user(request)
     if not user_id:
         raise HTTPException(status_code=403, detail="A remote app opens for a signed-in user")
     query = _query(request)
-    target = remote_app_grant_url(user_id, module_id, app, not_after=expires) + path
+    try:
+        grant_url = await asyncio.to_thread(remote_app_grant_url, user_id, module_id, app, expires)
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    target = grant_url + path
     return RedirectResponse(f"{target}?{query}" if query else target, status_code=307)
 
 

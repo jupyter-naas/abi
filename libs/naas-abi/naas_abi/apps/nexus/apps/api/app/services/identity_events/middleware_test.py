@@ -42,7 +42,9 @@ def _app() -> FastAPI:
 
 def test_identity_is_set_for_the_request_and_cleared_after(monkeypatch) -> None:
     monkeypatch.setattr(
-        mw, "_decode_token", lambda token: {"sub": "usr-1"} if token == "good" else None
+        mw,
+        "_decode_token",
+        lambda token: {"sub": "usr-1", "aud": "abi:session"} if token == "good" else None,
     )
     client = TestClient(_app())
 
@@ -64,7 +66,7 @@ def test_identity_is_set_for_the_request_and_cleared_after(monkeypatch) -> None:
 
 
 def test_sync_endpoints_see_it_too_and_query_workspace_works(monkeypatch) -> None:
-    monkeypatch.setattr(mw, "_decode_token", lambda token: {"sub": "usr-1"})
+    monkeypatch.setattr(mw, "_decode_token", lambda token: {"sub": "usr-1", "aud": "abi:session"})
     client = TestClient(_app())
 
     body = client.get("/api/files?workspace_id=ws-9", headers={"Authorization": "Bearer t"}).json()
@@ -102,7 +104,7 @@ def _seen_with(monkeypatch, payload, revoked=False):
 
 
 def test_a_session_token_names_its_user(monkeypatch) -> None:
-    body = _seen_with(monkeypatch, {"sub": "usr-1", "jti": "j1"})
+    body = _seen_with(monkeypatch, {"sub": "usr-1", "jti": "j1", "aud": "abi:session"})
     assert (body["principal"], body["on_behalf_of"], body["user"]) == (
         "api",
         "usr-1",
@@ -111,7 +113,9 @@ def test_a_session_token_names_its_user(monkeypatch) -> None:
 
 
 def test_a_scoped_link_token_names_no_user(monkeypatch) -> None:
-    body = _seen_with(monkeypatch, {"sub": "usr-1", "jti": "j1", "scope": "app-html"})
+    body = _seen_with(
+        monkeypatch, {"sub": "usr-1", "jti": "j1", "aud": "abi:session", "scope": "app-html"}
+    )
     assert (body["principal"], body["on_behalf_of"], body["user"]) == (
         "anonymous",
         None,
@@ -120,12 +124,18 @@ def test_a_scoped_link_token_names_no_user(monkeypatch) -> None:
 
 
 def test_a_revoked_token_names_no_user(monkeypatch) -> None:
-    body = _seen_with(monkeypatch, {"sub": "usr-1", "jti": "j1"}, revoked=True)
+    body = _seen_with(
+        monkeypatch, {"sub": "usr-1", "jti": "j1", "aud": "abi:session"}, revoked=True
+    )
     assert (body["principal"], body["on_behalf_of"]) == ("anonymous", None)
 
 
 def test_a_failed_revocation_check_names_no_user(monkeypatch) -> None:
-    body = _seen_with(monkeypatch, {"sub": "usr-1", "jti": "j1"}, revoked=RuntimeError("db down"))
+    body = _seen_with(
+        monkeypatch,
+        {"sub": "usr-1", "jti": "j1", "aud": "abi:session"},
+        revoked=RuntimeError("db down"),
+    )
     assert (body["principal"], body["on_behalf_of"]) == ("anonymous", None)
 
 

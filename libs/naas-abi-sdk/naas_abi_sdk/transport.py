@@ -84,13 +84,15 @@ class Transport:
         token: str | Callable[[], str] | ServiceKey,
         timeout: float = 10.0,
         *,
-        delegate: Callable[[Principal, str | None], str | Awaitable[str]] | None = None,
+        delegate: Callable[[Principal, str | None, Any], str | Awaitable[str]]
+        | None = None,
         renew_seconds: float = RENEW_CONNECTION_SECONDS,
         host_token: str | Callable[[], str] | None = None,
         **connection_options: Any,
     ) -> None:
-        """``delegate(user, recipient)``: a token that carries the user the
-        current call acts for, sent in place of this transport's own token: a
+        """``delegate(user, recipient, scope)``: a token that carries the user
+        the current call acts for (and the scope of the credential it runs
+        under), sent in place of this transport's own token: a
         delegation (``abi:delegated:agent``) acting as this transport's
         identity for a kernel service, or, with ``recipient`` (a call to a
         module host), acting as that module. Only for a transport holding a
@@ -267,7 +269,7 @@ class Transport:
             return await self._fresh_delegation(context.delegated_token)
         if self.delegate is None:
             return None
-        token = self.delegate(served, host)
+        token = self.delegate(served, host, context.scope)
         if inspect.isawaitable(token):
             token = await token
         return cast(str, token)

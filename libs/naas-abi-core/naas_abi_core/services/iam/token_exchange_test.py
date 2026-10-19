@@ -890,3 +890,19 @@ def test_what_a_module_holds_for_a_delegation_opens_no_broker_subject(h, iam, pe
         )
     )
     assert context.principal.id == people.id
+
+
+def test_a_token_made_right_after_a_revocation_is_not_cut_off_with_the_old_ones(
+    h, iam, bob
+):
+    old = _delegated_for(iam, bob)
+    with h.as_(actor="api", on_behalf_of=bob):
+        iam.revoke_tokens(bob.id)
+    # The same second: the new token's iat is past the floor.
+    new = _delegated_for(iam, bob)
+    assert _verify(iam, new)
+    with pytest.raises(InvalidServiceTokenError, match="revoked"):
+        _verify(iam, old)
+    # And a key exchange right after is as good.
+    key = _key(h, bob)
+    assert _verify(iam, _by_key(iam, key.value).token, API_KEY_AUDIENCE)

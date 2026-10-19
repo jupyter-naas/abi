@@ -180,7 +180,9 @@ def delegation(iam: Any, identity: str) -> Callable[[Any, str | None], IssuedTok
     from naas_abi_core.services.iam.IAMPorts import TOKEN_TYPE_SESSION, TokenExchange
     from naas_abi_core.services.iam.names import resource_name
 
-    def delegate(user: Any, recipient: str | None = None) -> IssuedToken:
+    def delegate(
+        user: Any, recipient: str | None = None, scope: Any = None
+    ) -> IssuedToken:
         resource = None
         if recipient is not None:
             if not _HOST_ULID.fullmatch(recipient):
@@ -192,6 +194,7 @@ def delegation(iam: Any, identity: str) -> Callable[[Any, str | None], IssuedTok
             audience=_auth().AGENT_AUDIENCE,
             resource=resource,
             groups=tuple(sorted(user.groups)),
+            scope=scope,
         )
         # As the account: the exchange is its own, never the signed-in user's.
         with as_service_account(identity):

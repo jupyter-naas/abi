@@ -3,25 +3,27 @@
 A remote module's page runs sandboxed in an opaque origin, so the browser sends
 it no cookie: the grant rides in the URL path, and relative URLs carry it. The
 module's own JavaScript can read it, so it must never work as a session token:
+it is an IAM grant (``apps/links.py``), ``abi_gk_<id>_<secret>``, of the user who
+opened the app,
 
-* it is signed with a key derived from the API secret, never the secret
-  itself, so ``decode_token`` (sessions, WebSocket, gateway) rejects it;
-* it carries no ``sub``: the user id is ``uid``;
-* it opens one app of one module, as one user, until it expires.
+* for the audience ``abi:delegated:app`` only, which no route that takes a
+  session takes;
+* bound to one app of one module (``resource``), and narrowed to
+  ``discovery:OpenApp`` on it (``scope``);
+* stored hashed by IAM, eight hours at most, revocable, and ended with its owner.
 """
 
 from __future__ import annotations
 
-import hashlib
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 
-from jose import JWTError, jwt
+from naas_abi.apps.nexus.apps.api.app.services.apps import links
+from naas_abi_core.engine.nats_auth import APP_AUDIENCE
 
 GRANT_SCOPE = "app-remote"
 GRANT_ROUTE_PREFIX = "/app-remote"
-_ALGORITHM = "HS256"
 # URL segments: a module id (dots allowed, never "." or "..") and an app name.
 MODULE_ID_PATTERN = r"^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,127}$"
 APP_NAME_PATTERN = r"^[A-Za-z0-9_-]{1,64}$"
@@ -33,10 +35,7 @@ class RemoteAppGrant:
     user_id: str
     module_id: str
     app: str
-
-
-def _key(secret: str) -> str:
-    return hashlib.sha256(f"{secret}:{GRANT_SCOPE}".encode()).hexdigest()
+    scope: tuple[dict, ...] | None = None
 
 
 def is_segment(module_id: str, app: str) -> bool:
@@ -46,43 +45,43 @@ def is_segment(module_id: str, app: str) -> bool:
 
 def mint_remote_app_grant(
     *,
-    secret: str,
     user_id: str,
     module_id: str,
     app: str,
     minutes: int = 60,
     not_after: datetime | None = None,
 ) -> str:
-    """A grant for one user; it never outlives ``not_after`` (the credential
-    it was exchanged for)."""
+    """A grant for one user to open one app; it never outlives ``not_after`` (the
+    credential it was exchanged for)."""
     if not user_id:
         raise ValueError("a remote app grant needs a user")
-    expires = datetime.now(UTC) + timedelta(minutes=max(1, min(minutes, 24 * 60)))
-    if not_after is not None:
-        expires = min(expires, not_after)
-    claims = {
-        "scope": GRANT_SCOPE,
-        "uid": user_id,
-        "mod": module_id,
-        "app": app,
-        "exp": expires,
-    }
-    return jwt.encode(claims, _key(secret), algorithm=_ALGORITHM)
+    if not is_segment(module_id, app):
+        raise ValueError("a remote app grant names one module and one app")
+    value, _ = links.mint_link(
+        user_id=user_id,
+        audience=APP_AUDIENCE,
+        resource=links.remote_app_resource(module_id, app),
+        scope=links.remote_app_scope(module_id, app),
+        minutes=minutes,
+        not_after=not_after,
+        description=f"remote app: {module_id}/{app}"[:200],
+    )
+    return value
 
 
-def read_remote_app_grant(token: str, *, secret: str) -> RemoteAppGrant | None:
-    try:
-        claims = jwt.decode(token, _key(secret), algorithms=[_ALGORITHM])
-    except JWTError:
+def read_remote_app_grant(token: str) -> RemoteAppGrant | None:
+    """What a grant opens, for whom; None when IAM refuses it (unknown, revoked,
+    expired, of another audience, its user suspended) or it is no remote app's."""
+    link = links.open_link(token, APP_AUDIENCE)
+    if link is None:
         return None
-    if claims.get("scope") != GRANT_SCOPE or "sub" in claims:
+    prefix = f"{links.REMOTE_APP}/"
+    if not link.resource.startswith(prefix):
         return None
-    uid, module_id, app = claims.get("uid"), claims.get("mod"), claims.get("app")
-    if not (isinstance(uid, str) and isinstance(module_id, str) and isinstance(app, str)):
+    module_id, _, app = link.resource.removeprefix(prefix).partition("/")
+    if not is_segment(module_id, app):
         return None
-    if not (uid and module_id and app):
-        return None
-    return RemoteAppGrant(user_id=uid, module_id=module_id, app=app)
+    return RemoteAppGrant(user_id=link.user_id, module_id=module_id, app=app, scope=link.scope)
 
 
 def grant_root(grant: str, module_id: str, app: str) -> str:

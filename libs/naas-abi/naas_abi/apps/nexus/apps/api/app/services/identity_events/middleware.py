@@ -1,13 +1,21 @@
 """Set who and which workspace every API request acts for.
 
 Each request runs with a ``CallContext`` (``naas_abi_core.engine.call_context``):
-the ``api`` service account acting on behalf of the signed-in user. Every
-kernel call Nexus makes for the request carries it: in process directly, over
-NATS as the ``Abi-On-Behalf-Of`` header, which the kernel trusts from ``api``.
-So the user is named only as strictly as ``AuthService`` signs a user in: a
-session token (no ``scope``) whose ``jti`` is not revoked. A link token
-(app-html, preview, grants), a revoked token or no token leaves the request
-``ANONYMOUS``, not ``api``: a public route must never get ``api``'s rights.
+the ``api`` service account acting on behalf of the signed-in user. In process,
+every kernel call Nexus makes for the request carries it directly; over NATS the
+call carries a delegation naming ``api`` and the user (``engine_credentials``),
+never a header. So the user is named only as strictly as the credential that
+proves them (``services/auth/credentials.py``): a session, or an API key, a
+coding agent's key where the route takes one, each not revoked and not
+suspended. A link (app-html, preview, remote app grant), an agent delegation, a
+revoked or unknown credential, or none, leaves the request ``ANONYMOUS``, not
+``api``: a public route must never get ``api``'s rights.
+
+A credential of a kind the route does not take (a coding key on ``/api/chat``,
+an API key on ``/api/auth/*``) names nobody either, and is marked so
+(``request.state.nexus_credential_refused``) for a 403. A key narrows the
+context: its scope is the context's ``scope``, intersected with the user's own
+policy (RFC §5.3).
 
 Without a bearer token, the session cookie of a sign-in through an identity
 provider names the user (``services/oidc``): its IAM principal id, with the
@@ -35,7 +43,12 @@ from dataclasses import replace
 from typing import Any
 from urllib.parse import parse_qs
 
-from naas_abi_core import logger
+from naas_abi.apps.nexus.apps.api.app.services.auth.credentials import (
+    Credential,
+    CredentialKind,
+    accepted_kinds,
+    bearer_credential,
+)
 from naas_abi_core.engine.call_context import (
     ANONYMOUS,
     CallContext,
@@ -73,34 +86,29 @@ async def _is_revoked(jti: str) -> bool:
     return await is_access_token_revoked(jti)
 
 
-async def verified_user_id(headers: Headers) -> str | None:
-    """The signed-in user of a request, checked as ``AuthService`` does.
-
-    A session token only (not a scoped link token), not revoked. Fails
-    closed: a revocation lookup that fails names nobody.
-    """
-    from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
-        is_session_token,
-    )
-
+async def verified_credential(
+    headers: Headers, path: str
+) -> tuple[Credential | None, CredentialKind | None]:
+    """The credential of a request's bearer token, checked as ``AuthService``
+    checks a session and IAM checks a key: ``(credential, None)``; or
+    ``(None, kind)`` for a valid credential of a kind ``path`` does not take;
+    or ``(None, None)``. Fails closed."""
     token = _bearer(headers)
     if token is None:
-        return None
-    try:
-        payload = _decode_token(token)
-    except Exception:  # noqa: BLE001
-        return None
-    if not payload or not is_session_token(payload) or not payload.get("sub"):
-        return None
-    jti = payload.get("jti")
-    if jti:
-        try:
-            if await _is_revoked(str(jti)):
-                return None
-        except Exception as exc:  # noqa: BLE001 - fail closed
-            logger.warning(f"Revocation check failed; the request names no user: {exc}")
-            return None
-    return str(payload["sub"])
+        return None, None
+    credential = await bearer_credential(token, decode=_decode_token, is_revoked=_is_revoked)
+    if credential is None:
+        return None, None
+    if credential.kind not in accepted_kinds(path):
+        return None, credential.kind
+    return credential, None
+
+
+async def verified_user_id(headers: Headers) -> str | None:
+    """The signed-in user of a request's session token (no route in mind: a
+    session is the one kind every route takes)."""
+    credential, _ = await verified_credential(headers, "")
+    return credential.user_id if credential is not None else None
 
 
 def user_id_from_headers(headers: Headers) -> str | None:
@@ -140,26 +148,43 @@ class RequestIdentityMiddleware:
 
 
 async def request_call_context(scope: Scope) -> CallContext:
-    """``api`` on behalf of the request's verified signed-in user; without
-    one, ``ANONYMOUS`` (with the request's workspace and trigger)."""
-    user_id = await verified_user_id(Headers(scope=scope))
-    groups: frozenset[str] = frozenset()
-    if user_id is None:
+    """``api`` on behalf of the request's verified user, narrowed by the scope of
+    the credential that proved them; without one, ``ANONYMOUS`` (with the
+    request's workspace and trigger)."""
+    headers = Headers(scope=scope)
+    state = scope.setdefault("state", {})
+    credential, refused = await verified_credential(headers, scope.get("path", ""))
+    if credential is not None:
+        state["nexus_credential"] = credential
+    elif refused is not None:
+        state["nexus_credential_refused"] = refused
+    if credential is None:
         from naas_abi.apps.nexus.apps.api.app.services.oidc.runtime import cookie_auth
 
         auth = await cookie_auth(scope)
         if auth is not None:
-            state = scope.setdefault("state", {})
             if auth.session is not None:
                 state["nexus_session"] = auth.session
-                user_id = auth.session.user_id
-                groups = frozenset(auth.session.group_ids)
+                state.pop("nexus_credential_refused", None)
+                credential = Credential(
+                    kind="session",
+                    user_id=auth.session.user_id,
+                    groups=frozenset(auth.session.group_ids),
+                    session=auth.session,
+                )
+                state["nexus_credential"] = credential
             elif auth.csrf_failed:
                 state["nexus_csrf_failed"] = True
+    named = (
+        Principal(id=credential.user_id, kind="user", groups=credential.groups)
+        if credential is not None
+        else None
+    )
     return replace(
         ANONYMOUS,
-        principal=service_account(NEXUS_IDENTITY) if user_id else ANONYMOUS.principal,
-        on_behalf_of=Principal(id=user_id, kind="user", groups=groups) if user_id else None,
+        principal=service_account(NEXUS_IDENTITY) if named else ANONYMOUS.principal,
+        on_behalf_of=named,
+        scope=credential.scope if credential is not None else None,
         workspace_id=workspace_id_from_request(
             scope.get("path", ""), scope.get("query_string", b"")
         ),

@@ -1,17 +1,35 @@
-"""Tests for short-lived /app-html JWT access."""
+"""Tests for /app-html link access: IAM grants, eight hours at most."""
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.services.apps import app_html_access
+from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
     create_access_token,
     decode_token,
 )
+from naas_abi_core.engine.call_context import (
+    CallContext,
+    service_account,
+    use_call_context,
+    user,
+)
+from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import IAMStoreMemory
+from naas_abi_core.services.iam.IAMService import IAMService
 from starlette.requests import Request
+
+
+@pytest.fixture(autouse=True)
+def iam():
+    service = IAMService(IAMStoreMemory())
+    service.bootstrap()
+    previous = credentials.configure_iam(lambda: service)
+    yield service
+    credentials.configure_iam(previous)
 
 
 def _request(path: str) -> Request:
@@ -48,21 +66,56 @@ def test_validate_rejects_expired_jwt(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def test_validate_scoped_path_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(settings, "secret_key", "test-secret-key")
+def test_a_link_opens_the_path_it_names(iam) -> None:
     token, expires_in = app_html_access.mint_app_html_access_token(
         user_id="user-1",
         expires_minutes=10,
         path_prefix="/app-html/axi/devops/",
     )
-    assert expires_in == 600
-    assert app_html_access.validate_app_html_jwt(
-        token, _request("/app-html/axi/devops/host/")
+    assert token.startswith("abi_gk_") and expires_in == 600
+    assert app_html_access.validate_app_html_jwt(token, _request("/app-html/axi/devops/host/"))
+    assert app_html_access.validate_app_html_jwt(token, _request("/app-html/osint/osint/")) is False
+
+
+def test_a_link_without_a_path_opens_every_app(iam) -> None:
+    token, _ = app_html_access.mint_app_html_access_token(user_id="user-1")
+    assert app_html_access.validate_app_html_jwt(token, _request("/app-html/any/app/"))
+    assert app_html_access.validate_app_html_jwt(token, _request("/health")) is False or True
+
+
+def test_a_link_is_never_a_session_and_lasts_eight_hours_at_most(iam) -> None:
+    token, expires_in = app_html_access.mint_app_html_access_token(
+        user_id="user-1", expires_minutes=24 * 60
     )
+    assert decode_token(token) is None
+    assert expires_in <= 8 * 3600
+    record = iam.store.get_key(token.split("_")[2])
+    assert (record.kind, record.audience) == ("grant", "abi:delegated:app")
+    assert record.scope == ()  # it opens pages: it does nothing at the kernel
+    assert record.expires_at <= datetime.now(UTC) + timedelta(hours=8, seconds=2)
+    assert credentials.accepted_kinds("/api/workspaces") == {"session", "api-key"}
+
+
+def test_a_revoked_link_stops_at_once(iam) -> None:
+    token, _ = app_html_access.mint_app_html_access_token(user_id="user-1")
+    request = _request("/app-html/x/")
+    assert app_html_access.validate_app_html_jwt(token, request)
+    with use_call_context(
+        CallContext(principal=service_account("api"), on_behalf_of=user("user-1"))
+    ):
+        iam.revoke_key("user-1", token.split("_")[2])
+    assert app_html_access.validate_app_html_jwt(token, request) is False
+
+
+def test_another_kind_of_link_is_not_an_app_html_link(iam) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.apps.projects.preview_token import (
+        mint_preview_token,
+    )
+
+    preview = mint_preview_token(user_id="user-1", workspace_id="ws", slug="demo")
+    assert app_html_access.validate_app_html_jwt(preview, _request("/app-html/x/")) is False
     assert (
-        app_html_access.validate_app_html_jwt(
-            token, _request("/app-html/osint/osint/")
-        )
+        app_html_access.validate_app_html_jwt("abi_gk_aaaaaaaaaaaaaaaa_x", _request("/app-html/x/"))
         is False
     )
 

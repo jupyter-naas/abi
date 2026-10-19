@@ -1,40 +1,35 @@
-"""JWT validators and minting for time-limited ``/app-html/`` access."""
+"""Links for time-limited ``/app-html/`` access: IAM grants (``links.py``).
+
+The link is a grant of the user who made it, for the audience
+``abi:delegated:app``, bound to the path it opens (``resource``: a prefix below
+``/app-html/``) and narrowed to nothing at the kernel: it opens pages, it does
+not act as the user. Eight hours at most, revocable, and never a session.
+"""
 
 from __future__ import annotations
 
-from datetime import timedelta
-
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from naas_abi.apps.nexus.apps.api.app.services.apps import links
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
-    create_access_token,
     decode_token,
+    is_session_token,
 )
 from naas_abi_core.apps.api.abi_api_key_auth import register_app_html_token_validator
+from naas_abi_core.engine.nats_auth import APP_AUDIENCE, GRANT_KEY_PREFIX
 from starlette.requests import Request
-
-APP_HTML_TOKEN_SCOPE = "app-html"
 
 
 def validate_app_html_jwt(token: str, request: Request) -> bool:
-    """Accept Nexus user JWTs and scoped ``app-html`` JWTs (``exp`` enforced by jose)."""
+    """Accept a user's session token, or a link (an ``abi:delegated:app`` grant)
+    that opens the requested path. Name kept: it validates what a request to
+    ``/app-html/`` presents, a token or a grant."""
+    if token.startswith(GRANT_KEY_PREFIX):
+        link = links.open_link(token, APP_AUDIENCE)
+        if link is None or not link.resource.startswith(links.APP_HTML_ROOT):
+            return False
+        return request.url.path.startswith(link.resource)
     payload = decode_token(token)
-    if not payload or not payload.get("sub"):
-        return False
-
-    scope = payload.get("scope")
-    # Scoped tokens must explicitly target app-html; bare session JWTs are OK.
-    if scope is not None and scope != APP_HTML_TOKEN_SCOPE:
-        return False
-
-    path_prefix = payload.get("path_prefix")
-    if path_prefix:
-        prefix = str(path_prefix)
-        if not prefix.startswith("/app-html/"):
-            return False
-        if not request.url.path.startswith(prefix):
-            return False
-
-    return True
+    return bool(payload and is_session_token(payload) and payload.get("sub"))
 
 
 def mint_app_html_access_token(
@@ -43,24 +38,23 @@ def mint_app_html_access_token(
     expires_minutes: int | None = None,
     path_prefix: str | None = None,
 ) -> tuple[str, int]:
-    """Return ``(jwt, expires_in_seconds)`` for ``/app-html/`` access."""
+    """Return ``(grant, expires_in_seconds)`` for ``/app-html/`` access: a link
+    for ``user_id`` that opens ``path_prefix`` (default: every app), at most
+    eight hours."""
     minutes = expires_minutes or settings.app_html_access_token_expire_minutes
-    minutes = max(1, min(minutes, 24 * 60))
-    claims: dict[str, str] = {
-        "sub": user_id,
-        "scope": APP_HTML_TOKEN_SCOPE,
-    }
+    resource = links.APP_HTML_ROOT
     if path_prefix:
-        prefix = path_prefix.strip()
-        if not prefix.startswith("/app-html/"):
+        resource = path_prefix.strip()
+        if not resource.startswith(links.APP_HTML_ROOT):
             raise ValueError("path_prefix must start with /app-html/")
-        claims["path_prefix"] = prefix
-
-    token, _ = create_access_token(
-        data=claims,
-        expires_delta=timedelta(minutes=minutes),
+    return links.mint_link(
+        user_id=user_id,
+        audience=APP_AUDIENCE,
+        resource=resource,
+        scope=(),
+        minutes=minutes,
+        description=f"app-html link: {resource}"[:200],
     )
-    return token, minutes * 60
 
 
 def register_nexus_app_html_jwt_auth() -> None:

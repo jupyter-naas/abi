@@ -65,6 +65,14 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient:
     monkeypatch.setattr(adapter, "require_workspace_access", _members_only)
     monkeypatch.setattr(adapter.settings, "secret_key", "test-secret")
     monkeypatch.setattr(auth_service.settings, "secret_key", "test-secret")
+    # Preview links are IAM grants: the engine's IAM, for this test.
+    from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
+    from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import IAMStoreMemory
+    from naas_abi_core.services.iam.IAMService import IAMService
+
+    iam = IAMService(IAMStoreMemory())
+    iam.bootstrap()
+    monkeypatch.setattr(credentials, "IAM", lambda: iam)
     return TestClient(app)
 
 

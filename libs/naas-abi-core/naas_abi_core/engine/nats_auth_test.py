@@ -371,7 +371,7 @@ def test_a_delegating_source_carries_the_user_and_renews_at_half_life():
     now = [1000.0]
     issued: list[tuple[str, str | None]] = []
 
-    def delegate(user, recipient):
+    def delegate(user, recipient, scope=None):
         issued.append((user.id, recipient))
         return IssuedToken(f"t{len(issued)}", now[0] + 600)
 
@@ -393,7 +393,7 @@ def test_a_delegating_source_carries_the_user_and_renews_at_half_life():
 
 
 def test_a_delegation_that_cannot_be_made_is_an_error_not_the_sources_own_token():
-    def refuse(user, recipient):
+    def refuse(user, recipient, scope=None):
         raise InvalidServiceTokenError("user is suspended")
 
     source = RenewingTokenSource(
@@ -407,7 +407,7 @@ def test_a_delegation_failing_to_renew_keeps_the_valid_token():
     now = [1000.0]
     calls = [0]
 
-    def delegate(user, recipient):
+    def delegate(user, recipient, scope=None):
         calls[0] += 1
         if calls[0] > 1:
             raise ConnectionError("engine restarting")
@@ -431,8 +431,28 @@ def test_the_delegation_cache_is_bounded():
     source = RenewingTokenSource(
         "api",
         lambda: IssuedToken("own", time.time() + 600),
-        delegate=lambda u, r: IssuedToken(u.id, time.time() + 600),
+        delegate=lambda u, r, s: IssuedToken(u.id, time.time() + 600),
     )
     for index in range(5000):
         source.token_for(_user(f"u{index}"))
     assert len(source._delegations) <= 2048
+
+
+def test_a_delegation_keeps_the_scope_of_the_credential_the_call_runs_under():
+    seen = []
+
+    def delegate(user, recipient, scope=None):
+        seen.append(scope)
+        return IssuedToken(f"t{len(seen)}", time.time() + 600)
+
+    source = RenewingTokenSource(
+        "api", lambda: IssuedToken("own", time.time() + 600), delegate=delegate
+    )
+    read = ({"effect": "Allow", "actions": ["a:B"], "resources": ["*"]},)
+    other = ({"effect": "Allow", "actions": ["a:C"], "resources": ["*"]},)
+    assert source.token_for(_user(), None, read) == "t1"
+    assert source.token_for(_user(), None, read) == "t1"
+    # A narrower credential never shares a token with a wider one.
+    assert source.token_for(_user()) == "t2"
+    assert source.token_for(_user(), None, other) == "t3"
+    assert seen == [read, None, other]

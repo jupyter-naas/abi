@@ -9,14 +9,12 @@ import pytest
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
-from jose import jwt
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote import http_routes as http
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.adapters.in_memory import (
     InMemoryRemoteAppDirectory,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import (
     RemoteAppGrant,
-    _key,
     mint_remote_app_grant,
     read_remote_app_grant,
     redact_grant_path,
@@ -26,19 +24,32 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import (
     AppResponse,
     RemoteApp,
 )
+from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
 from naas_abi_core.apps.api.abi_api_key_auth import APP_HTML_TOKEN_COOKIE
+from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import IAMStoreMemory
+from naas_abi_core.services.iam.IAMService import IAMService
 
 CONSOLE = RemoteApp("acme.research", "console")
-SECRET = "s3cret-for-tests"
+
+# The engine's IAM, where grants live: one for this module's tests.
+IAM = IAMService(IAMStoreMemory())
+IAM.bootstrap()
 
 
 @pytest.fixture(autouse=True)
-def secret(monkeypatch):
-    monkeypatch.setattr(http, "current_secret_key", lambda: SECRET)
+def engine_iam():
+    previous = credentials.configure_iam(lambda: IAM)
+    yield IAM
+    credentials.configure_iam(previous)
 
 
 def _grant(module_id: str = "acme.research", app: str = "console", user_id: str = "u-42") -> str:
-    return mint_remote_app_grant(secret=SECRET, user_id=user_id, module_id=module_id, app=app)
+    # Also called while the module loads (parameters), before any fixture ran.
+    previous = credentials.configure_iam(lambda: IAM)
+    try:
+        return mint_remote_app_grant(user_id=user_id, module_id=module_id, app=app)
+    finally:
+        credentials.configure_iam(previous)
 
 
 GRANT = _grant()
@@ -137,23 +148,29 @@ def test_the_grant_opens_its_own_app_only(forwarded):
 def test_a_grant_is_never_a_session_token(monkeypatch):
     from naas_abi.apps.nexus.apps.api.app.services.auth import service as auth_service
 
-    monkeypatch.setattr(auth_service.settings, "secret_key", SECRET)
     assert auth_service.decode_token(GRANT) is None
     session, _ = auth_service.create_access_token(
         {"sub": "u-42", "scope": "app-remote", "uid": "u-42", "mod": "acme.research", "app": "x"}
     )
-    assert read_remote_app_grant(session, secret=SECRET) is None
+    assert read_remote_app_grant(session) is None
+    # Nor does it act as one at the API: its audience is its own.
+    assert credentials.accepted_kinds("/api/chat") == {"session", "api-key"}
 
 
 def _presenting(monkeypatch, user_id: str, minutes_left: float | None = 60) -> None:
     expires = None if minutes_left is None else datetime.now(UTC) + timedelta(minutes=minutes_left)
-    monkeypatch.setattr(http, "_presented_user", lambda request: (user_id, expires))
+
+    async def presented(request):
+        return user_id, expires
+
+    monkeypatch.setattr(http, "_presented_user", presented)
 
 
 def _grant_of(response) -> tuple[str, str, dict]:
     _, prefix, grant, rest = response.headers["location"].split("/", 3)
-    claims = jwt.get_unverified_claims(grant)
-    return prefix, rest, {"grant": grant, **claims}
+    key_id = grant.split("_")[2]
+    record = IAM.store.get_key(key_id)
+    return prefix, rest, {"grant": grant, "key": record, "exp": record.expires_at.timestamp()}
 
 
 def test_the_catalog_url_redirects_to_a_fresh_grant(monkeypatch, forwarded):
@@ -166,9 +183,16 @@ def test_the_catalog_url_redirects_to_a_fresh_grant(monkeypatch, forwarded):
     assert response.status_code == 307
     prefix, rest, claims = _grant_of(response)
     assert (prefix, rest) == ("app-remote", "acme.research/console/index.html?q=1")
-    assert read_remote_app_grant(claims["grant"], secret=SECRET) == RemoteAppGrant(
-        "u-7", "acme.research", "console"
+    assert read_remote_app_grant(claims["grant"]) == RemoteAppGrant(
+        "u-7", "acme.research", "console", read_remote_app_grant(claims["grant"]).scope
     )
+    # It opens this app and does nothing else at the kernel.
+    scope = read_remote_app_grant(claims["grant"]).scope
+    assert scope is not None and scope[0]["actions"] == ["discovery:OpenApp"]
+    assert scope[0]["resources"] == ["abi:-:-:discovery:app/*/acme.research/console"]
+    # IAM keeps it hashed: eight hours at most.
+    assert claims["key"].kind == "grant" and claims["key"].audience == "abi:delegated:app"
+    assert claims["exp"] <= (datetime.now(UTC) + timedelta(hours=8)).timestamp() + 1
 
 
 def test_a_grant_never_outlives_the_credential_it_was_exchanged_for(monkeypatch, forwarded):
@@ -180,6 +204,58 @@ def test_a_grant_never_outlives_the_credential_it_was_exchanged_for(monkeypatch,
     assert claims["exp"] <= (datetime.now(UTC) + timedelta(minutes=1)).timestamp() + 1
 
 
+def test_a_revoked_grant_stops_at_the_next_request(forwarded):
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        service_account,
+        use_call_context,
+        user,
+    )
+
+    client = _client()
+    grant = _grant(user_id="u-revoked")
+    root = f"/app-remote/{grant}/acme.research/console"
+    assert client.get(f"{root}/").status_code == 200
+    with use_call_context(
+        CallContext(principal=service_account("api"), on_behalf_of=user("u-revoked"))
+    ):
+        IAM.revoke_key("u-revoked", grant.split("_")[2])
+    assert client.get(f"{root}/").status_code == 401
+
+
+def test_a_suspended_user_s_grant_stops_too(forwarded):
+    from naas_abi_core.engine.call_context import as_service_account
+
+    client = _client()
+    grant = _grant(user_id="u-suspended")
+    root = f"/app-remote/{grant}/acme.research/console"
+    assert client.get(f"{root}/").status_code == 200
+    with as_service_account("engine"):
+        record = IAM.resolve_user("u-suspended")
+        IAM.suspend_principal(record.id)
+    assert client.get(f"{root}/").status_code == 401
+
+
+def test_the_request_is_forwarded_for_the_grants_user_narrowed_to_opening_the_app(
+    monkeypatch,
+):
+    from naas_abi_core.engine.call_context import current_call_context
+
+    seen = []
+
+    async def answer(request: AppRequest) -> AppResponse:
+        seen.append(current_call_context())
+        return AppResponse(200, (), b"ok")
+
+    _directory(monkeypatch, answer)
+    assert _client().get(f"{ROOT}/").status_code == 200
+    [context] = seen
+    assert context.principal.id == "api"
+    assert context.on_behalf_of is not None and context.on_behalf_of.id == "u-42"
+    assert context.scope is not None
+    assert context.scope[0]["actions"] == ["discovery:OpenApp"]
+
+
 def test_the_catalog_url_needs_a_user(monkeypatch, forwarded):
     _presenting(monkeypatch, "", minutes_left=None)  # ABI_API_KEY
 
@@ -189,21 +265,24 @@ def test_the_catalog_url_needs_a_user(monkeypatch, forwarded):
     assert "location" not in response.headers
 
 
-def test_a_grant_is_minted_and_read_for_a_user_only():
+def test_a_grant_is_minted_and_read_for_a_user_and_an_app_only():
+    from naas_abi.apps.nexus.apps.api.app.services.apps import links
+    from naas_abi_core.engine.nats_auth import PREVIEW_AUDIENCE
+
     with pytest.raises(ValueError):
-        mint_remote_app_grant(secret=SECRET, user_id="", module_id="acme.research", app="console")
-    anonymous = jwt.encode(
-        {
-            "scope": "app-remote",
-            "uid": "",
-            "mod": "acme.research",
-            "app": "console",
-            "exp": datetime.now(UTC) + timedelta(minutes=5),
-        },
-        _key(SECRET),
-        algorithm="HS256",
+        mint_remote_app_grant(user_id="", module_id="acme.research", app="console")
+    with pytest.raises(ValueError):
+        mint_remote_app_grant(user_id="u-1", module_id="acme/research", app="console")
+    # A preview link, or a link bound to anything else, is no remote app grant.
+    preview, _ = links.mint_link(
+        user_id="u-1",
+        audience=PREVIEW_AUDIENCE,
+        resource=links.preview_resource("ws", "demo"),
+        minutes=5,
     )
-    assert read_remote_app_grant(anonymous, secret=SECRET) is None
+    assert read_remote_app_grant(preview) is None
+    assert read_remote_app_grant("abi_gk_aaaaaaaaaaaaaaaa_nope") is None
+    assert read_remote_app_grant("") is None
 
 
 @pytest.mark.parametrize(
@@ -495,20 +574,40 @@ def test_uploads_to_one_module_are_capped():
     assert uploads.active == {}
 
 
-def test_the_user_and_expiry_come_from_the_nexus_token(monkeypatch):
+def test_the_user_and_expiry_come_from_the_nexus_token_or_a_link(monkeypatch):
+    import asyncio
+
+    from naas_abi.apps.nexus.apps.api.app.services.apps.app_html_access import (
+        mint_app_html_access_token,
+    )
     from naas_abi.apps.nexus.apps.api.app.services.auth import service
 
     monkeypatch.setattr(
         service,
         "decode_token",
-        lambda token: {"sub": "u-7", "exp": 1_900_000_000} if token == "jwt" else None,
+        lambda token: (
+            {"sub": "u-7", "exp": 1_900_000_000, "aud": "abi:session"} if token == "jwt" else None
+        ),
     )
     request = type("R", (), {})()
 
     monkeypatch.setattr(http, "extract_abi_api_token", lambda r: "jwt")
-    assert http._presented_user(request) == ("u-7", datetime.fromtimestamp(1_900_000_000, UTC))
+    assert asyncio.run(http._presented_user(request)) == (
+        "u-7",
+        datetime.fromtimestamp(1_900_000_000, UTC),
+    )
     monkeypatch.setattr(http, "extract_abi_api_token", lambda r: "abi-api-key")
-    assert http._presented_user(request) == ("", None)
+    assert asyncio.run(http._presented_user(request)) == ("", None)
+    # A share link (an /app-html/ grant) names its user and ends when it does.
+    link, _ = mint_app_html_access_token(user_id="u-8", expires_minutes=30)
+    monkeypatch.setattr(http, "extract_abi_api_token", lambda r: link)
+    user_id, expires = asyncio.run(http._presented_user(request))
+    assert user_id == "u-8" and expires is not None
+    assert abs((expires - datetime.now(UTC)).total_seconds() - 1800) < 5
+    # A link of another kind is not one.
+    grant = _grant(user_id="u-8")
+    monkeypatch.setattr(http, "extract_abi_api_token", lambda r: grant)
+    assert asyncio.run(http._presented_user(request)) == ("", None)
 
 
 # -- the grant is a credential: never in logs or traces ------------------------

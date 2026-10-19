@@ -19,7 +19,6 @@ import mimetypes
 import re
 import secrets
 import time
-from datetime import timedelta
 from importlib import resources
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
@@ -42,7 +41,7 @@ from naas_abi.apps.nexus.apps.api.app.core.config import (
 )
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.models import CodingEnvironmentModel
-from naas_abi.apps.nexus.apps.api.app.services.auth.service import create_access_token
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment import agent_credentials
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment.repo_access import (
     ensure_shared_repo,
 )
@@ -1836,7 +1835,10 @@ async def evaluate_workbook_preview(
         workbook = parse_workbook_html(body.html)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    if len(workbook.sheets) > 256 or sum(len(row) for tab in workbook.sheets for row in tab.rows) > 100_000:
+    if (
+        len(workbook.sheets) > 256
+        or sum(len(row) for tab in workbook.sheets for row in tab.rows) > 100_000
+    ):
         raise HTTPException(status_code=422, detail="Calculate up to 100,000 cells")
 
     def calculate() -> dict:
@@ -2484,13 +2486,14 @@ async def _ensure_runtime_impl(
         repo_url = _git_clone_url(sc, repo_id, username=username, token=token)
         ws_secret = secrets.token_hex(16)
         ws_base = expected_base
-        claims: dict[str, str] = {"sub": current_user.id}
-        if ws_base:
-            claims["ws_base"] = ws_base
-            claims["ws_secret"] = ws_secret
-        agent_token, _ = create_access_token(
-            data=claims,
-            expires_delta=timedelta(days=settings.coding_agent_token_days),
+        # The agent in the workspace holds a key of the user's made for this
+        # environment (``coding_environment.agent_credentials``), never a
+        # session token: bound to the sidecar, narrowed to this workspace.
+        agent_token = agent_credentials.mint_agent_key(
+            user_id=current_user.id,
+            workspace_id=workspace_id,
+            sidecar_base=ws_base,
+            label=label,
         )
         params: dict[str, str] = {
             "repo_url": repo_url,

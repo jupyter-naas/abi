@@ -26,7 +26,6 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
 )
-from naas_abi.apps.nexus.apps.api.app.services.auth.service import decode_token
 from naas_abi.apps.nexus.apps.api.app.services.chat.service import render_user_context_block
 from naas_abi_core.services.agent.context import (
     coder_workspace_base,
@@ -89,9 +88,8 @@ def _user_context_preamble(current_user: User, messages: list[ChatMessage]) -> s
 
     Only the profile half of what Nexus injects can be answered here. The
     skills catalog is scoped to a workspace and an OpenAI chat-completions
-    request names none: the token minted for a coding workspace claims ``sub``,
-    ``ws_base`` and ``ws_secret``, and nothing in it identifies a Nexus
-    workspace. The note that ships alongside the catalog would be worse than
+    request names none: the credential minted for a coding workspace names its
+    user and its sidecar, and nothing in it identifies a Nexus workspace. The note that ships alongside the catalog would be worse than
     absent, because it points at the Skills agent and Settings > Skills, a
     Nexus UI that an editor client does not have.
 
@@ -230,16 +228,45 @@ def _resolve_chat_id(messages: list[ChatMessage]) -> str:
     return uuid.uuid4().hex
 
 
-def _workspace_target(request: Request) -> tuple[str | None, str | None]:
-    """Resolve the caller's coding-workspace sidecar (base URL + secret) from
-    the bearer token claims injected at provision time. Server-derived only —
-    never from a client-supplied field."""
-    header = request.headers.get("authorization", "")
-    token = header[7:] if header.lower().startswith("bearer ") else ""
-    claims = decode_token(token) if token else None
-    if not claims:
+async def _sidecar_of(user_id: str, sidecar_base: str) -> tuple[str | None, str | None]:
+    """The exec sidecar Nexus bound to ``user_id``'s workspace at ``sidecar_base``
+    when it provisioned it: ``(base, secret)``, or nothing for an unknown one."""
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.models import CodingEnvironmentModel
+    from sqlalchemy import select
+
+    async with AsyncSessionLocal() as db:
+        row = (
+            (
+                await db.execute(
+                    select(CodingEnvironmentModel).where(
+                        CodingEnvironmentModel.user_id == user_id,
+                        CodingEnvironmentModel.sidecar_base == sidecar_base,
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
+    if row is None or not row.sidecar_base or not row.sidecar_secret:
         return None, None
-    return claims.get("ws_base"), claims.get("ws_secret")
+    return str(row.sidecar_base), str(row.sidecar_secret)
+
+
+async def _workspace_target(request: Request) -> tuple[str | None, str | None]:
+    """Resolve the caller's coding-workspace sidecar (base URL + secret).
+
+    The coding environment's own credential names its workspace: its key is
+    bound to the sidecar (``resource``) when Nexus provisions it, and IAM signs
+    that into the token, so the base is server-derived, never client-supplied;
+    the secret is the one Nexus stored for that sidecar. Any other credential
+    (a session, an API key) names no workspace."""
+    from naas_abi.apps.nexus.apps.api.app.services.auth.credentials import CODING
+
+    credential = getattr(request.state, "nexus_credential", None)
+    if credential is None or credential.kind != CODING or not credential.resource:
+        return None, None
+    return await _sidecar_of(credential.user_id, credential.resource)
 
 
 @router.get("/models")
@@ -269,7 +296,7 @@ async def chat_completions(
     chat_id = _resolve_chat_id(body.messages)
     thread_id = f"openai-{chat_id}"
     marker = f"\n\n{_chat_marker(chat_id)}"
-    ws_base, ws_secret = _workspace_target(request)
+    ws_base, ws_secret = await _workspace_target(request)
     preamble = _user_context_preamble(current_user, body.messages)
 
     if body.stream:

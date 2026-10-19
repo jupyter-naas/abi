@@ -58,7 +58,9 @@ async def create_refresh_token(
     token_hash = hash_token(token)
     token_id = f"rt-{uuid4().hex[:12]}"
     now = datetime.now(UTC).replace(tzinfo=None)
-    expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(days=settings.refresh_token_expire_days)
+    expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(
+        days=settings.refresh_token_expire_days
+    )
 
     async with async_engine.begin() as conn:
         await conn.execute(
@@ -165,7 +167,11 @@ async def revoke_refresh_token(token: str, reason: str = "user_requested") -> No
 
 async def revoke_all_user_tokens(user_id: str, reason: str = "password_change") -> None:
     """
-    Revoke all refresh tokens for a user (e.g., on password change).
+    Revoke all of a user's tokens (e.g., on password change): their refresh
+    tokens, and what the engine issued to or for them (access tokens, the
+    delegations made for them, their links and their coding agents' keys), which
+    stop at the next check instead of within ten minutes. Their personal API
+    keys are kept: changing a password is no reason to break a script.
 
     Args:
         user_id: User ID
@@ -182,9 +188,16 @@ async def revoke_all_user_tokens(user_id: str, reason: str = "password_change") 
             """),
             {"now": now, "reason": reason, "user_id": user_id},
         )
+    from naas_abi.apps.nexus.apps.api.app.services.auth.credentials import (
+        revoke_user_credentials,
+    )
+
+    await revoke_user_credentials(user_id)
 
 
-async def revoke_access_token(jti: str, user_id: str, expires_at: datetime, reason: str = "logout") -> None:
+async def revoke_access_token(
+    jti: str, user_id: str, expires_at: datetime, reason: str = "logout"
+) -> None:
     """
     Revoke an access token immediately (add to blacklist).
 
@@ -215,6 +228,7 @@ async def revoke_access_token(jti: str, user_id: str, expires_at: datetime, reas
 async def is_access_token_revoked(jti: str) -> bool:
     """Check if an access token has been revoked."""
     from naas_abi.apps.nexus.apps.api.app.core.database import async_engine
+
     async with async_engine.begin() as conn:
         result = await conn.execute(
             text("SELECT 1 FROM revoked_tokens WHERE jti = :jti"),

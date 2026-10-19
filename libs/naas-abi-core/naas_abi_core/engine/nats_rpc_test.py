@@ -715,7 +715,7 @@ def test_a_delegation_that_fails_is_a_failed_call_not_the_clients_own_identity()
     )
     from naas_abi_core.engine.nats_rpc import NatsRPCClient
 
-    def refuse(who, recipient):
+    def refuse(who, recipient, scope=None):
         raise InvalidServiceTokenError("suspended")
 
     client = NatsRPCClient(

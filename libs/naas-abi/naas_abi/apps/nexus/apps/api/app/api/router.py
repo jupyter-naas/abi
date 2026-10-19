@@ -19,6 +19,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints import (
     websocket,
 )
 from naas_abi.apps.nexus.apps.api.app.services.agents.handlers import router as agents_router
+from naas_abi.apps.nexus.apps.api.app.services.api_keys.handlers import router as api_keys_router
 from naas_abi.apps.nexus.apps.api.app.services.apps.handlers import router as apps_router
 from naas_abi.apps.nexus.apps.api.app.services.apps.projects.handlers import (
     router as app_projects_router,
@@ -64,6 +65,8 @@ api_router = APIRouter()
 
 # Include endpoint routers
 api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
+# Personal API keys and their token endpoint: session-only, like the account.
+api_router.include_router(api_keys_router, prefix="/iam", tags=["iam"])
 # Sign-in through the engine's identity providers, next to the built-in login.
 api_router.include_router(oidc_router, prefix="/auth/oidc", tags=["auth"])
 api_router.include_router(organizations.router, prefix="/organizations", tags=["organizations"])
