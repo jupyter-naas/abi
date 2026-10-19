@@ -5,8 +5,12 @@
   cookie; the engine builds the authorization URL and redeems the code with
   the provider's client secret, which Nexus never holds.
 * **A user** is one Nexus row per ``(issuer, sub)``, whose id is its IAM
-  principal id. Nothing is linked across providers or to a built-in account:
-  a verified email another account holds refuses the sign-in.
+  principal id. Nothing is linked across providers: a verified email another
+  account holds refuses the sign-in. The one exception is the move of the old
+  built-in login's users (RFC §13): at the *built-in* provider, which proves an
+  address by mailing it a code, the verified email of a row no provider signs in
+  yet links the identity to that row and to its IAM user, which keeps its roles,
+  groups and data (``_link_legacy_user``).
 * **The session** is a random secret in an httpOnly cookie; Nexus stores its
   SHA-256, the user, and the provider's refresh token, encrypted. The provider
   vouches for the user again at least every ten minutes (``refresh_at``); a
@@ -23,7 +27,7 @@ import hashlib
 import hmac
 import secrets
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 
 from email_validator import EmailNotValidError, validate_email
@@ -36,6 +40,7 @@ from naas_abi.apps.nexus.apps.api.app.services.oidc.port import (
     PrincipalGateway,
     SessionRecord,
     UserConflictError,
+    UserSuspendedError,
 )
 from naas_abi_core import logger
 from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
@@ -176,13 +181,16 @@ class OidcSignInService:
 
     async def route(self, email: str | None) -> str | None:
         """The provider an email's login goes to: the one its verified
-        organization domain names, else none (the built-in login, with the
-        providers offered as buttons). The default provider is never an email's
-        route: it would lock out every account the provider does not hold."""
+        organization domain names, else the engine's default provider (Nexus has
+        no login of its own: whoever no domain maps signs in there), else none."""
         if not email or "@" not in email:
             return None
         domain = email.rsplit("@", 1)[1].strip().lower()
-        return await self.adapter.provider_for_domain(domain) if domain else None
+        mapped = await self.adapter.provider_for_domain(domain) if domain else None
+        if mapped is not None:
+            return mapped
+        _, default = await self.identity.providers()
+        return default
 
     # =========================================================================
     # Sign-in
@@ -259,10 +267,15 @@ class OidcSignInService:
             )
         except Exception as exc:  # noqa: BLE001 - mapped for the login page
             raise _login_error(exc) from exc
-        user = await self._nexus_user(signed.user)
+        user, principal_id = await self._nexus_user(signed.user, request.provider)
+        authenticated = (
+            signed.user
+            if principal_id == signed.user.principal_id
+            else replace(signed.user, principal_id=principal_id)
+        )
         if self._on_signed_in is not None:
             try:
-                await self._on_signed_in(user, signed.user)
+                await self._on_signed_in(user, authenticated)
             except Exception as exc:  # noqa: BLE001 - the session stands; the invitation stays pending
                 logger.opt(exception=exc).error("Claiming the user's invitations failed")
         secret = secrets.token_urlsafe(32)
@@ -271,7 +284,7 @@ class OidcSignInService:
             SessionRecord(
                 id=digest(secret),
                 user_id=user.id,
-                principal_id=signed.user.principal_id,
+                principal_id=principal_id,
                 provider=request.provider,
                 group_ids=signed.user.group_ids,
                 refresh_token_enc=self._sealed(signed.tokens.refresh_token),
@@ -290,8 +303,11 @@ class OidcSignInService:
             expires_at=expires_at,
         )
 
-    async def _nexus_user(self, signed_in: AuthenticatedUser) -> OidcUser:
-        """The Nexus row of ``(issuer, sub)``: its id is the principal id."""
+    async def _nexus_user(
+        self, signed_in: AuthenticatedUser, provider: str
+    ) -> tuple[OidcUser, str]:
+        """The Nexus row of ``(issuer, sub)`` and the IAM principal that signs
+        in: for a row a provider created, its id is the principal id."""
         token = signed_in.token
         verified_email = (
             token.email.lower()
@@ -308,7 +324,11 @@ class OidcSignInService:
                     email = verified_email
             if email or name != existing.name:
                 await self.adapter.update_user(existing.id, email=email, name=name, now=now)
-            return existing
+            return existing, signed_in.principal_id
+        if verified_email:
+            legacy = await self.adapter.legacy_user_by_email(verified_email)
+            if legacy is not None and await self._is_builtin(provider):
+                return await self._link_legacy_user(legacy, signed_in, provider)
         if verified_email and await self.adapter.email_taken(verified_email):
             # Never linked automatically: an admin links accounts (iam:LinkUser).
             raise OidcLoginError(
@@ -316,7 +336,7 @@ class OidcSignInService:
                 f"{verified_email} already belongs to another account",
             )
         try:
-            return await self.adapter.create_user(
+            created = await self.adapter.create_user(
                 user_id=signed_in.principal_id,
                 email=verified_email or f"{signed_in.principal_id}@{PLACEHOLDER_EMAIL_DOMAIN}",
                 name=name,
@@ -332,6 +352,48 @@ class OidcSignInService:
             raise OidcLoginError(
                 "email_in_use", f"{verified_email} already belongs to another account"
             ) from exc
+        return created, signed_in.principal_id
+
+    async def _is_builtin(self, provider: str) -> bool:
+        """The built-in provider (``provisioning: builtin``) mails every sign-in
+        a code, so its ``email_verified`` means the person reads that mailbox:
+        the one provider whose verified email may take over a built-in login's
+        account."""
+        providers, _ = await self.identity.providers()
+        return any(p.name == provider and p.provisioning == "builtin" for p in providers)
+
+    async def _link_legacy_user(
+        self, legacy: OidcUser, signed_in: AuthenticatedUser, provider: str
+    ) -> tuple[OidcUser, str]:
+        """The identity becomes one more identity of the legacy user's IAM
+        principal (which keeps its roles, groups and keys), and of its row (which
+        keeps its id, email and data)."""
+        token = signed_in.token
+        try:
+            principal_id = await self.principals.link(
+                legacy.id,
+                provider=provider,
+                issuer=token.issuer,
+                subject=token.subject,
+                email=legacy.email,
+                display_name=token.display_name,
+            )
+            linked = await self.adapter.link_user(
+                legacy.id,
+                principal_id=principal_id,
+                provider=provider,
+                issuer=token.issuer,
+                subject=token.subject,
+                now=self._clock(),
+            )
+        except UserSuspendedError as exc:
+            raise OidcLoginError("suspended", "This account is suspended") from exc
+        except UserConflictError as exc:
+            raise OidcLoginError(
+                "email_in_use", f"{legacy.email} already belongs to another account"
+            ) from exc
+        logger.info(f"Linked the account {legacy.id} to {provider} identity {principal_id}")
+        return linked, principal_id
 
     # =========================================================================
     # Sessions

@@ -161,6 +161,66 @@ class OidcSessionSecondaryAdapterPostgres(OidcSessionPersistencePort):
             values["name"] = name
         await self.db.execute(update(UserModel).where(UserModel.id == user_id).values(**values))
 
+    async def legacy_user_by_email(self, email: str) -> OidcUser | None:
+        model = (
+            await self.db.execute(
+                select(UserModel).where(
+                    func.lower(UserModel.email) == email.lower(),
+                    UserModel.principal_id.is_(None),
+                    UserModel.idp_issuer.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
+        return _user(model) if model is not None else None
+
+    async def link_user(
+        self,
+        user_id: str,
+        *,
+        principal_id: str,
+        provider: str,
+        issuer: str,
+        subject: str,
+        now: datetime,
+    ) -> OidcUser:
+        try:
+            linked = await self.db.execute(
+                update(UserModel)
+                .where(
+                    UserModel.id == user_id,
+                    UserModel.principal_id.is_(None),
+                    UserModel.idp_issuer.is_(None),
+                )
+                .values(
+                    principal_id=principal_id,
+                    idp_provider=provider,
+                    idp_issuer=issuer,
+                    idp_subject=subject,
+                    updated_at=now,
+                )
+                .execution_options(synchronize_session=False)
+            )
+            await self.db.flush()
+        except IntegrityError as exc:
+            await self.db.rollback()
+            raise UserConflictError(user_id) from exc
+        model = (
+            await self.db.execute(
+                select(UserModel)
+                .where(UserModel.id == user_id)
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one_or_none()
+        if model is None:
+            raise UserConflictError(user_id)
+        if linked.rowcount != 1 and (  # type: ignore[attr-defined]
+            model.principal_id != principal_id
+            or model.idp_issuer != issuer
+            or model.idp_subject != subject
+        ):
+            raise UserConflictError(user_id)
+        return _user(model)
+
     async def provider_for_domain(self, domain: str) -> str | None:
         return (
             await self.db.execute(

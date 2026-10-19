@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from dataclasses import replace
 from datetime import timedelta
 from urllib.parse import parse_qs, urlsplit
 
@@ -30,15 +31,6 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__FastAPI import (  # noqa: E501
     router as auth_router,
-)
-from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.secondary.postgres import (
-    AuthSecondaryAdapterPostgres,
-)
-from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
-    AuthService,
-    InvalidCredentialsError,
-    get_password_hash,
-    verify_password,
 )
 from naas_abi.apps.nexus.apps.api.app.services.identity_events.middleware import (
     RequestIdentityMiddleware,
@@ -64,6 +56,7 @@ from naas_abi_core.services.identity.tests.fake_idp import FakeIdP
 from naas_abi_core.services.identity.tests.identity_contract import (
     bootstrapped_iam,
     identity_service,
+    provider_of,
 )
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -103,8 +96,11 @@ def _app() -> FastAPI:
     return app
 
 
-class NexusSignInContract:
-    """Subclasses give a ``harness`` fixture whose redirect URI is ``CALLBACK``."""
+class NexusHarness:
+    """The fixtures of a sign-in against ``harness``, whose redirect URI is ``CALLBACK``."""
+
+    # The ``provisioning`` setting the provider is configured with.
+    provisioning = "none"
 
     @pytest_asyncio.fixture
     async def nexus(self, harness, tmp_path, monkeypatch):
@@ -120,7 +116,8 @@ class NexusSignInContract:
         monkeypatch.setattr(settings, "oidc_redirect_uri", None)
 
         iam = bootstrapped_iam()
-        identity = identity_service(harness, iam)
+        provider = replace(provider_of(harness), provisioning=self.provisioning)
+        identity = identity_service(harness, iam, providers=[provider])
         test_runtime = runtime.OidcRuntime(lambda: identity, lambda: iam)
         test_runtime.principals._cache_seconds = 0
         previous = runtime.configure(test_runtime)
@@ -144,6 +141,11 @@ class NexusSignInContract:
         callback = harness.sign_in(started.headers["location"], user)
         assert callback.startswith(CALLBACK)
         return await client.get(callback)
+
+
+
+class NexusSignInContract(NexusHarness):
+    """Every provider's sign-in: subclasses give the ``harness`` fixture."""
 
     # -- the sign-in ------------------------------------------------------------
 
@@ -173,7 +175,6 @@ class NexusSignInContract:
                 harness.issuer,
                 user.subject,
             )
-            assert row.hashed_password == ""
 
         # Every kernel call runs as api on behalf of the principal.
         assert (await client.get("/api/whoami")).json()["user"] == record.id
@@ -347,32 +348,17 @@ class NexusSignInContract:
         client, _, sessions = nexus
         email = f"ivy-{os.urandom(3).hex()}@example.com"
         async with sessions() as db:
-            db.add(UserModel(id="legacy-ivy", email=email, name="Ivy", hashed_password="x"))
+            db.add(UserModel(id="legacy-ivy", email=email, name="Ivy"))
             await db.commit()
         landed = await self._sign_in(client, harness, harness.create_user(email))
         assert landed.headers["location"] == f"{WEB}/auth/login?sso_error=email_in_use"
-
-    @pytest.mark.asyncio
-    async def test_the_built_in_login_never_opens_a_provider_account(
-        self, nexus, harness, monkeypatch
-    ):
-        client, _, sessions = nexus
-        user = harness.create_user(f"jo-{os.urandom(3).hex()}@example.com")
-        await self._sign_in(client, harness, user)
-        monkeypatch.setattr(settings, "auth_password_enabled", True)
-        async with sessions() as db:
-            auth = AuthService(AuthSecondaryAdapterPostgres(db=db))
-            with pytest.raises(InvalidCredentialsError):
-                await auth.login_user(user.email, "", None, None)
-            assert await auth.forgot_password(user.email) is None
-            assert await auth.request_magic_link(user.email) is None
 
     @pytest.mark.asyncio
     async def test_an_email_domain_routes_to_its_provider(self, nexus, harness):
         client, _, sessions = nexus
         async with sessions() as db:
             db.add(
-                UserModel(id="owner-1", email="owner@example.com", name="O", hashed_password="x")
+                UserModel(id="owner-1", email="owner@example.com", name="O")
             )
             db.add(OrganizationModel(id="org-1", name="Acme", slug="acme", owner_id="owner-1"))
             db.add(
@@ -420,7 +406,7 @@ class NexusSignInContract:
         await self._sign_in(client, harness, user)
         assert (await client.get("/api/whoami")).json()["groups"] == [group.id]
 
-    # -- the default provider never captures the built-in logins -----------------
+    # -- an email no domain maps goes to the default provider ----------------------
 
     @pytest.fixture
     def with_default(self, nexus, harness):
@@ -431,45 +417,50 @@ class NexusSignInContract:
         identity._default = previous
 
     @pytest.mark.asyncio
-    async def test_an_email_without_a_domain_mapping_is_not_routed_to_the_default(
+    async def test_an_email_without_a_domain_mapping_goes_to_the_default_provider(
         self, nexus, harness, with_default
     ):
         client, _, _ = nexus
         providers = (await client.get("/api/auth/oidc/providers")).json()
-        # The login page offers it as a button...
         assert providers["default_provider"] == harness.provider_name
-        # ...but no email is sent there on its own: the built-in login stays open.
+        # Nexus has no login of its own: whoever the domains do not map signs in
+        # at the default provider.
         for email in ("admin@example.com", "someone@elsewhere.test"):
             routed = await client.post("/api/auth/oidc/route", json={"email": email})
-            assert routed.json() == {"provider": None}
+            assert routed.json() == {"provider": harness.provider_name}
         started = await client.get("/api/auth/oidc/login", params={"email": "admin@example.com"})
-        assert started.headers["location"] == f"{WEB}/auth/login?sso_error=no_provider"
-        # /login with neither provider nor email is the default's button.
+        assert urlsplit(started.headers["location"]).netloc == urlsplit(harness.issuer).netloc
         bare = await client.get("/api/auth/oidc/login")
         assert urlsplit(bare.headers["location"]).netloc == urlsplit(harness.issuer).netloc
 
     @pytest.mark.asyncio
-    async def test_a_built_in_account_is_not_sent_to_the_default_provider(
+    async def test_a_verified_domain_wins_over_the_default_provider(
         self, nexus, harness, with_default
     ):
         client, _, sessions = nexus
         async with sessions() as db:
+            db.add(UserModel(id="owner-2", email="owner2@example.com", name="O"))
+            db.add(OrganizationModel(id="org-2", name="Acme", slug="acme2", owner_id="owner-2"))
             db.add(
-                UserModel(
-                    id="usr_seeded",
-                    email="admin@example.com",
-                    name="Admin",
-                    hashed_password=get_password_hash("Correct-horse-9"),
+                OrganizationDomainModel(
+                    id="d-3",
+                    organization_id="org-2",
+                    domain="corp.example",
+                    is_verified=True,
+                    provider="elsewhere",
                 )
             )
             await db.commit()
-            # The built-in login still opens it (its own tests cover the rest).
-            seeded = await AuthSecondaryAdapterPostgres(db=db).get_user_by_email(
-                "admin@example.com"
-            )
-            assert seeded is not None and verify_password("Correct-horse-9", seeded.hashed_password)
+        routed = await client.post("/api/auth/oidc/route", json={"email": "a@corp.example"})
+        assert routed.json() == {"provider": "elsewhere"}
+
+    @pytest.mark.asyncio
+    async def test_without_a_default_an_unmapped_email_has_no_provider(self, nexus, harness):
+        client, _, _ = nexus
         routed = await client.post("/api/auth/oidc/route", json={"email": "admin@example.com"})
-        assert routed.json() == {"provider": None}  # the form goes on to the password
+        assert routed.json() == {"provider": None}
+        started = await client.get("/api/auth/oidc/login", params={"email": "admin@example.com"})
+        assert started.headers["location"] == f"{WEB}/auth/login?sso_error=no_provider"
 
     # -- sign-ins that cannot start are sent back to the login page --------------
 
@@ -581,6 +572,183 @@ class NexusSignInContract:
                         "subject": "sub-two",
                     }
                 )
+
+
+LEGACY_ISSUER = "urn:abi:nexus"
+
+
+class NexusFirstSignInContract(NexusHarness):
+    """A user of the old built-in login signs in for the first time through the
+    built-in provider: matched by the verified email, linked to the principal
+    that holds its roles, nothing else (RFC §13)."""
+
+    provisioning = "builtin"
+
+    async def _legacy_user(self, sessions, iam, email, *, user_id="user-legacy-1"):
+        async with sessions() as db:
+            db.add(UserModel(id=user_id, email=email, name="Legacy"))
+            await db.commit()
+        with as_service_account("engine"):
+            principal = iam.ensure_user(LEGACY_ISSUER, user_id, provider="nexus")
+            iam.attach_policy("builtin.member", principal.id, "abi:acme:ws1")
+        return principal
+
+    @pytest.mark.asyncio
+    async def test_the_first_sign_in_links_the_account_and_keeps_its_roles(
+        self, nexus, harness
+    ):
+        client, iam, sessions = nexus
+        email = f"lea-{os.urandom(3).hex()}@example.com"
+        principal = await self._legacy_user(sessions, iam, email)
+        user = harness.create_user(email)
+
+        landed = await self._sign_in(client, harness, user)
+        assert landed.headers["location"].startswith(f"{WEB}/auth/callback"), landed.headers
+
+        me = (await client.get("/api/auth/me")).json()
+        assert me["id"] == "user-legacy-1"  # its data stays where it was
+        assert me["email"] == email
+        record = iam.store.find_user(harness.issuer, user.subject)
+        assert record is not None and record.id == principal.id
+        async with sessions() as db:
+            row = (await db.execute(select(UserModel).where(UserModel.id == me["id"]))).scalar_one()
+            assert (row.principal_id, row.idp_issuer, row.idp_subject) == (
+                principal.id,
+                harness.issuer,
+                user.subject,
+            )
+            assert len((await db.execute(select(UserModel))).scalars().all()) == 1
+        # Every kernel call names the Nexus id, which IAM resolves to the same user.
+        assert (await client.get("/api/whoami")).json()["user"] == "user-legacy-1"
+        held = {(a.policy_id, a.scope) for a in iam.store.list_attachments(principal_id=principal.id)}
+        assert ("builtin.member", "abi:acme:ws1") in held
+        assert [
+            p.id for p in iam.store.list_principals("user", limit=100).items if p.status == "active"
+        ] == [principal.id]
+
+    @pytest.mark.asyncio
+    async def test_the_second_sign_in_is_the_same_account(self, nexus, harness):
+        client, iam, sessions = nexus
+        email = f"mo-{os.urandom(3).hex()}@example.com"
+        principal = await self._legacy_user(sessions, iam, email)
+        user = harness.create_user(email)
+        await self._sign_in(client, harness, user)
+        client.cookies.clear()
+        await self._sign_in(client, harness, user)
+        assert (await client.get("/api/auth/me")).json()["id"] == "user-legacy-1"
+        # The session is vouched for by the linked principal.
+        session = (await client.get("/api/auth/oidc/session")).json()
+        assert session["user"]["id"] == "user-legacy-1"
+        async with sessions() as db:
+            stored = (await db.execute(select(AuthSessionModel))).scalars().all()
+            assert {s.principal_id for s in stored} == {principal.id}
+        with as_service_account("engine"):
+            iam.suspend_principal(principal.id)
+        assert (await client.get("/api/auth/me")).status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_the_email_must_match_exactly_the_verified_one(self, nexus, harness):
+        client, iam, sessions = nexus
+        await self._legacy_user(sessions, iam, "someone@example.com")
+        user = harness.create_user(f"nia-{os.urandom(3).hex()}@example.com")
+        await self._sign_in(client, harness, user)
+        me = (await client.get("/api/auth/me")).json()
+        assert me["id"] != "user-legacy-1"  # another person: another account
+
+    @pytest.mark.asyncio
+    async def test_a_suspended_account_is_not_opened_by_the_link(self, nexus, harness):
+        client, iam, sessions = nexus
+        email = f"oz-{os.urandom(3).hex()}@example.com"
+        principal = await self._legacy_user(sessions, iam, email)
+        with as_service_account("engine"):
+            iam.suspend_principal(principal.id)
+        landed = await self._sign_in(client, harness, harness.create_user(email))
+        assert landed.headers["location"] == f"{WEB}/auth/login?sso_error=suspended"
+        assert (await client.get("/api/auth/me")).status_code == 401
+        async with sessions() as db:
+            row = (await db.execute(select(UserModel))).scalar_one()
+            assert row.principal_id is None  # not linked
+
+
+class TestFirstSignInWithBuiltinIdP(NexusFirstSignInContract):
+    @pytest.fixture(scope="class")
+    def harness(self):
+        pytest.importorskip("naas_abi_idp")
+        from naas_abi_core.services.identity.tests.builtin_idp_server import (
+            BuiltinIdPHarness,
+        )
+
+        with BuiltinIdPHarness(redirect_uri=CALLBACK) as idp:
+            yield idp
+
+
+class TestFirstSignInWithFakeIdPSettingBuiltin(NexusFirstSignInContract):
+    """The provider's own email_verified decides: here a setting of ``builtin``
+    on a provider whose users may be unverified."""
+
+    @pytest.fixture(scope="class")
+    def harness(self):
+        with FakeIdP(redirect_uri=CALLBACK) as idp:
+            yield idp
+
+    @pytest.mark.asyncio
+    async def test_a_linked_account_is_not_linked_again_to_another_identity(
+        self, nexus, harness
+    ):
+        client, iam, sessions = nexus
+        email = f"pat-{os.urandom(3).hex()}@example.com"
+        await self._legacy_user(sessions, iam, email)
+        await self._sign_in(client, harness, harness.create_user(email))
+        client.cookies.clear()
+        # Another identity of the same provider claiming the same address (a
+        # second account of the provider): the email is held by a linked account.
+        other = harness.create_user(email)
+        landed = await self._sign_in(client, harness, other)
+        assert landed.headers["location"] == f"{WEB}/auth/login?sso_error=email_in_use"
+
+    @pytest.mark.asyncio
+    async def test_an_unverified_email_never_links(self, nexus, harness):
+        client, iam, sessions = nexus
+        email = f"quo-{os.urandom(3).hex()}@example.com"
+        await self._legacy_user(sessions, iam, email)
+        user = harness.create_user(email)
+        harness._users[user.subject].email_verified = False
+        await self._sign_in(client, harness, user)
+        # The unverified address is not used: the sign-in is a new account.
+        me = (await client.get("/api/auth/me")).json()
+        assert me["id"] != "user-legacy-1"
+        async with sessions() as db:
+            legacy = (
+                await db.execute(select(UserModel).where(UserModel.id == "user-legacy-1"))
+            ).scalar_one()
+            assert legacy.principal_id is None
+
+
+class TestSettingsOtherThanBuiltinNeverLink(NexusHarness):
+    """Only the built-in provider proves an address by mailing it a code."""
+
+    @pytest.fixture(scope="class")
+    def harness(self):
+        with FakeIdP(redirect_uri=CALLBACK) as idp:
+            yield idp
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("provisioning", ["none", "zitadel", "keycloak"])
+    async def test_a_verified_email_of_another_provider_is_refused(
+        self, nexus, harness, monkeypatch, provisioning
+    ):
+        client, iam, sessions = nexus
+        identity = runtime.RUNTIME.identity._identity()
+        configured = identity._providers[harness.provider_name]
+        monkeypatch.setattr(
+            identity, "_providers", {harness.provider_name: replace(configured, provisioning=provisioning)}
+        )
+        email = f"rex-{os.urandom(3).hex()}@example.com"
+        async with sessions() as db:
+            db.add(UserModel(id="user-legacy-2", email=email, name="Legacy"))
+            await db.commit()
+        landed = await self._sign_in(client, harness, harness.create_user(email))
+        assert landed.headers["location"] == f"{WEB}/auth/login?sso_error=email_in_use"
 
 
 class TestNexusSignInWithFakeIdP(NexusSignInContract):

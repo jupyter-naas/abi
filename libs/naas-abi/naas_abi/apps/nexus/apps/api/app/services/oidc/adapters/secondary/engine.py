@@ -14,6 +14,8 @@ from typing import Any, TypeVar
 from naas_abi.apps.nexus.apps.api.app.services.oidc.port import (
     IdentityGateway,
     PrincipalGateway,
+    UserConflictError,
+    UserSuspendedError,
 )
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.identity.IdentityPorts import (
@@ -161,6 +163,49 @@ class EngineIAMPrincipals(PrincipalGateway):
         if len(self._active) > 10_000:
             self._active.clear()
         return active
+
+    async def link(
+        self,
+        user_id: str,
+        *,
+        provider: str,
+        issuer: str,
+        subject: str,
+        email: str,
+        display_name: str | None,
+    ) -> str:
+        iam = self._iam()
+        if iam is None:
+            raise UserConflictError(user_id)
+
+        def link_user() -> str:
+            from naas_abi_core.services.iam.IAMPorts import IAMConflictError
+            from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
+
+            # The IAM user of the Nexus id: found as it is (no write), or made
+            # as the memberships make it.
+            record = iam.resolve_user(user_id) or iam.ensure_user(
+                LEGACY_NEXUS_ISSUER, user_id, provider="nexus"
+            )
+            if record.status != "active":
+                raise UserSuspendedError(record.id)
+            try:
+                linked = iam.link_user(
+                    record.id,
+                    issuer,
+                    subject,
+                    provider=provider,
+                    email=email,
+                    email_verified=True,
+                    display_name=display_name,
+                )
+            except IAMConflictError as exc:
+                raise UserConflictError(user_id) from exc
+            return str(linked.id)
+
+        principal_id = await _as_api(link_user)
+        self.forget(principal_id)
+        return principal_id
 
     def forget(self, principal_id: str) -> None:
         self._active.pop(principal_id, None)

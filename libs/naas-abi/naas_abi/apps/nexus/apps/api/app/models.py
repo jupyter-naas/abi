@@ -151,7 +151,7 @@ class UserModel(Base):
     id = Column(String, primary_key=True)
     email = Column(String, unique=True, nullable=False, index=True)
     name = Column(String, nullable=False)
-    hashed_password = Column(String, nullable=False)
+    hashed_password = Column(String, nullable=False, default="")
     avatar = Column(String, nullable=True)
     company = Column(String, nullable=True)
     role = Column(String, nullable=True)

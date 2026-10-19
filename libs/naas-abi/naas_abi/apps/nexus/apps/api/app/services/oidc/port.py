@@ -99,6 +99,26 @@ class OidcSessionPersistencePort(ABC):
         """Refresh the profile a provider states; ``None`` keeps a field."""
 
     @abstractmethod
+    async def legacy_user_by_email(self, email: str) -> OidcUser | None:
+        """The user of the old built-in login this address belongs to: a row no
+        identity provider signs in yet (no principal, no identity)."""
+
+    @abstractmethod
+    async def link_user(
+        self,
+        user_id: str,
+        *,
+        principal_id: str,
+        provider: str,
+        issuer: str,
+        subject: str,
+        now: datetime,
+    ) -> OidcUser:
+        """Record the identity a legacy user signs in with, once: the row keeps
+        its id, email and data. When a concurrent sign-in linked it first, that
+        link if it is this one; ``UserConflictError`` if it is another."""
+
+    @abstractmethod
     async def provider_for_domain(self, domain: str) -> str | None:
         """The provider a verified organization domain routes to, if any."""
 
@@ -181,8 +201,28 @@ class IdentityGateway(ABC):
     ) -> str | None: ...
 
 
+class UserSuspendedError(Exception):
+    """The IAM user of an account is suspended or deleted."""
+
+
 class PrincipalGateway(ABC):
     """What Nexus asks IAM about the users it signs in."""
+
+    @abstractmethod
+    async def link(
+        self,
+        user_id: str,
+        *,
+        provider: str,
+        issuer: str,
+        subject: str,
+        email: str,
+        display_name: str | None,
+    ) -> str:
+        """Make the identity one more identity of the IAM user of the Nexus user
+        ``user_id`` (the user of the old built-in login: its roles, groups and
+        keys stay), and return that user's principal id. ``UserSuspendedError``
+        for a suspended one; ``UserConflictError`` when IAM refuses the link."""
 
     @abstractmethod
     async def is_active(self, principal_id: str) -> bool:
