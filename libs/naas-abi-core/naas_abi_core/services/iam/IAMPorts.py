@@ -529,6 +529,9 @@ class IAMStore(ABC):
     ) -> list[PendingGrant]: ...
 
     @abstractmethod
+    def get_pending_grant(self, grant_id: str) -> PendingGrant | None: ...
+
+    @abstractmethod
     def remove_pending_grant(self, grant_id: str) -> bool:
         """True when the grant was there."""
 

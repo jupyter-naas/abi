@@ -851,6 +851,13 @@ class IAMStoreSQL(IAMStore):
         with self._read() as conn:
             return [_pending_grant(row) for row in conn.execute(query)]
 
+    def get_pending_grant(self, grant_id: str) -> PendingGrant | None:
+        with self._read() as conn:
+            row = conn.execute(
+                select(pending_grants).where(pending_grants.c.id == grant_id)
+            ).first()
+        return _pending_grant(row) if row is not None else None
+
     def remove_pending_grant(self, grant_id: str) -> bool:
         return self._delete(
             delete(pending_grants).where(pending_grants.c.id == grant_id)

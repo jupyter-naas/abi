@@ -415,3 +415,55 @@ def test_idp_groups_are_bound_listed_and_unbound(run, service):
         != 0
     )
     assert "Data readers" not in run("group", "list").output
+
+
+def test_a_failing_provider_takes_back_only_the_grants_this_command_made(
+    service, identity
+):
+    first = CliRunner().invoke(
+        iam,
+        [
+            "invite",
+            "bob@example.com",
+            "--org",
+            "acme",
+            "--org-role",
+            "member",
+            "--no-provision",
+        ],
+        obj={"services_opener": lambda: _opened(service, identity)},
+        catch_exceptions=False,
+    )
+    assert first.exit_code == 0
+    identity.fail = RuntimeError("the provider is down")
+    again = CliRunner().invoke(
+        iam,
+        [
+            "invite",
+            "bob@example.com",
+            "--org",
+            "acme",
+            "--org-role",
+            "member",
+            "--workspace",
+            "ws1",
+            "--role",
+            "viewer",
+        ],
+        obj={"services_opener": lambda: _opened(service, identity)},
+    )
+    assert again.exit_code != 0
+    # The org grant of the earlier invitation stays; the workspace one is gone.
+    assert [(g.policy_id, g.scope) for g in service.store.list_pending_grants()] == [
+        ("builtin.member", "abi:acme:-")
+    ]
+
+
+def test_a_provider_warning_is_shown(run, identity):
+    from types import SimpleNamespace
+
+    identity.provision_user = lambda provider, email, *, name=None: SimpleNamespace(
+        email=email, created=True, subject="u", warning="no mail server"
+    )
+    result = run("invite", "bob@example.com", "--org", "acme", "--org-role", "member")
+    assert "warning: no mail server" in result.output

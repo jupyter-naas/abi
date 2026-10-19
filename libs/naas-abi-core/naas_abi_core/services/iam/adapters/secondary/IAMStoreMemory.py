@@ -387,6 +387,10 @@ class IAMStoreMemory(IAMStore):
                 key=lambda g: g.id,
             )
 
+    def get_pending_grant(self, grant_id: str) -> PendingGrant | None:
+        with self._lock:
+            return self._pending.get(grant_id)
+
     def remove_pending_grant(self, grant_id: str) -> bool:
         with self._lock:
             if grant_id not in self._pending:

@@ -612,3 +612,80 @@ async def test_a_provider_that_cannot_make_the_person_leaves_nothing_behind(nexu
     with as_service_account("engine"):
         assert iam.list_pending_grants() == []
     assert (await alice.get(f"/api/invitations/organizations/{ORG}")).json()["invitations"] == []
+
+
+@pytest.mark.asyncio
+async def test_an_admin_cannot_invite_an_owner_but_an_owner_can(nexus, idp, alice):
+    _, iam, sessions = nexus
+    carol_user = idp.create_user("carol@example.com")
+    carol = await sign_in(idp, carol_user)
+    me = (await carol.get("/api/auth/me")).json()
+    async with sessions() as db:
+        db.add(
+            OrganizationMemberModel(id="om-c", organization_id=ORG, user_id=me["id"], role="admin")
+        )
+        await db.commit()
+    refused = await carol.post(
+        f"/api/organizations/{ORG}/members/invite",
+        json={"email": "dave@example.com", "role": "owner"},
+    )
+    assert refused.status_code == 403, refused.text
+    assert idp.service.find_user("dave@example.com") is None
+    with as_service_account("engine"):
+        assert iam.list_pending_grants() == []
+    # An admin still invites members and admins; an owner invites an owner.
+    assert (
+        await carol.post(
+            f"/api/organizations/{ORG}/members/invite",
+            json={"email": "erin@example.com", "role": "admin"},
+        )
+    ).status_code == 200
+    granted = await alice.post(
+        f"/api/organizations/{ORG}/members/invite",
+        json={"email": "dave@example.com", "role": "owner"},
+    )
+    assert granted.status_code == 200, granted.text
+    with as_service_account("engine"):
+        held = {(g.email, g.policy_id) for g in iam.list_pending_grants()}
+    assert ("dave@example.com", roles.OWNER) in held
+
+
+@pytest.mark.asyncio
+async def test_two_workspace_invitations_of_one_person_survive_one_revoke(nexus, idp, alice):
+    _, iam, sessions = nexus
+    async with sessions() as db:
+        owner = (
+            await db.execute(select(UserModel.id).where(UserModel.email == "alice@example.com"))
+        ).scalar_one()
+        db.add(
+            WorkspaceModel(id="ws-2", name="Ops", slug="ops", owner_id=owner, organization_id=ORG)
+        )
+        await db.commit()
+    first = (await invite_bob(alice)).json()["invitation"]
+    second = (await invite_bob(alice, workspace_id="ws-2")).json()["invitation"]
+    assert (await alice.delete(f"/api/invitations/{first['id']}")).status_code == 200
+    with as_service_account("engine"):
+        held = {(g.policy_id, g.scope) for g in iam.list_pending_grants()}
+    assert held == {(roles.MEMBER, f"abi:{ORG}:-"), (roles.MEMBER, f"abi:{ORG}:ws-2")}
+    assert (await alice.delete(f"/api/invitations/{second['id']}")).status_code == 200
+    with as_service_account("engine"):
+        assert iam.list_pending_grants() == []
+
+
+@pytest.mark.asyncio
+async def test_unbinding_answers_like_binding(nexus, idp, alice):
+    path = f"/api/idp-groups/workspaces/{WS}"
+    params = {"provider": "builtin", "group": "eng", "role": "viewer"}
+    # Not bound: 404. A role that cannot be bound here, or an unknown provider: 400.
+    assert (await alice.delete(path, params=params)).status_code == 404
+    assert (await alice.delete(path, params={**params, "role": "owner"})).status_code == 400
+    assert (await alice.delete(path, params={**params, "provider": "Bad Name"})).status_code == 400
+    assert (await alice.delete(path, params={**params, "provider": "nope"})).status_code == 404
+    bound = await alice.put(path, json={"provider": "builtin", "group": "eng", "role": "viewer"})
+    assert bound.status_code == 200
+    assert (await alice.delete(path, params=params)).json()["bindings"] == []
+    assert (
+        await alice.delete(
+            f"/api/idp-groups/organizations/{ORG}", params={**params, "role": "viewer"}
+        )
+    ).status_code == 400

@@ -19,7 +19,10 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService
 from naas_abi.apps.nexus.apps.api.app.services.invites import runtime as invites_runtime
-from naas_abi.apps.nexus.apps.api.app.services.invites.port import NoProviderError
+from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
+    NoProviderError,
+    OwnerGrantRefusedError,
+)
 from naas_abi.apps.nexus.apps.api.app.services.invites.service import InvitationService
 from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
     issue_and_send_invite_sign_in,
@@ -838,7 +841,10 @@ async def invite_org_member(
                 inviter_name=current_user.name,
                 organization_name=org.name if org else None,
                 workspace_name=workspace.name if workspace else None,
+                may_grant_owner=role == "owner",
             )
+        except OwnerGrantRefusedError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
         except NoProviderError as exc:
             if invite.provider:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc

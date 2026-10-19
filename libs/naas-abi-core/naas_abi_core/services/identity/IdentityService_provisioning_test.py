@@ -32,14 +32,12 @@ from naas_abi_core.services.identity.adapters.secondary.ProvisioningKeycloak imp
     ProvisioningKeycloak,
     admin_location,
 )
-from naas_abi_core.services.identity.adapters.secondary.ProvisioningNone import (
-    ProvisioningNone,
-)
 from naas_abi_core.services.identity.IdentityPorts import (
     IdentityProvider,
     ProviderUnavailableError,
     ProvisionedUser,
     ProvisioningError,
+    ProvisioningNone,
     ProvisioningPort,
 )
 from naas_abi_core.services.identity.IdentityService import IdentityService
@@ -328,11 +326,24 @@ def test_keycloak_creates_an_unverified_user_and_mails_the_actions():
     assert fake.token_requests == 1  # one token served every call
 
 
-def test_keycloak_without_a_mail_server_still_provisions():
+def test_keycloak_without_a_mail_server_still_provisions_and_says_so():
     fake = FakeKeycloak()
-    fake.mail_status = 500
+    fake.mail_status = 400
     created = keycloak(fake).ensure_user("bob@example.com")
     assert created.created and created.subject == "kc-1"
+    assert "could not send the verification email" in created.warning
+    assert "HTTP 400" in created.warning
+
+
+def test_keycloak_that_cannot_be_reached_for_the_mail_says_so():
+    fake = FakeKeycloak()
+    fake.mail_status = 503
+    created = keycloak(fake).ensure_user("bob@example.com")
+    assert created.created and "could not send" in created.warning
+
+
+def test_a_delivered_mail_leaves_no_warning():
+    assert keycloak(FakeKeycloak()).ensure_user("bob@example.com").warning is None
 
 
 def test_keycloak_actions_can_be_turned_off():
@@ -539,3 +550,14 @@ def test_a_sign_in_with_an_unverified_email_claims_nothing(idp, iam):
         a.policy_id == roles.MEMBER
         for a in iam.store.list_attachments(principal_id=signed.user.principal_id)
     )
+
+
+def test_an_error_while_claiming_does_not_fail_a_valid_sign_in(idp, iam, monkeypatch):
+    service = identity_service(idp, iam)
+
+    def broken(principal_id):
+        raise RuntimeError("a conflict with a manual attach")
+
+    monkeypatch.setattr(iam, "claim_pending_grants", broken)
+    signed = sign_in(service, idp, idp.create_user(address()))
+    assert signed.user.principal_id

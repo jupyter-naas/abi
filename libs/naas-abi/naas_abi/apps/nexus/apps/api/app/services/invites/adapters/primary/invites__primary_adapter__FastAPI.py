@@ -62,6 +62,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.pos
     WorkspaceSecondaryAdapterPostgres,
 )
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import WorkspaceService
+from naas_abi_core.services.iam.IAMPorts import IAMNotFoundError, PermissionDeniedError
 from naas_abi_core.services.identity.IdentityPorts import ProviderUnavailableError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -240,20 +241,52 @@ async def _bindings(invites: InvitationService, scope: str, roles: list[str]) ->
     )
 
 
+async def _change(
+    invites: InvitationService,
+    scope: str,
+    roles: list[str],
+    *,
+    provider: str,
+    group: str,
+    role: str,
+    unbind: bool,
+) -> GroupBindingsView:
+    """Bind or unbind, answering the same way for both: a role that cannot be
+    bound here, a provider or group name that is refused, a right IAM withholds,
+    or a binding that is not there are the caller's to read, never a 500."""
+    if role not in roles:
+        raise HTTPException(status_code=400, detail=f"role must be one of {', '.join(roles)}")
+    try:
+        if unbind:
+            if not await invites.unbind_group(
+                provider=provider, group=group, role=role, scope=scope
+            ):
+                raise HTTPException(status_code=404, detail="No such binding")
+        else:
+            await invites.bind_group(provider=provider, group=group, role=role, scope=scope)
+    except (NoProviderError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except PermissionDeniedError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except IAMNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ProviderUnavailableError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return await _bindings(invites, scope, roles)
+
+
 async def _bind(
     invites: InvitationService, body: GroupBindingInput, scope: str, roles: list[str]
 ) -> GroupBindingsView:
-    if body.role not in roles:
-        raise HTTPException(status_code=400, detail=f"role must be one of {', '.join(roles)}")
-    try:
-        await invites.bind_group(
-            provider=body.provider, group=body.group, role=body.role, scope=scope
-        )
-    except NoProviderError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return await _bindings(invites, scope, roles)
+    return await _change(
+        invites,
+        scope,
+        roles,
+        provider=body.provider,
+        group=body.group,
+        role=body.role,
+        unbind=False,
+    )
 
 
 @idp_groups_router.get("/organizations/{org_id}")
@@ -290,8 +323,15 @@ async def unbind_org_group(
     db: AsyncSession = Depends(get_db),
 ) -> GroupBindingsView:
     await require_org_admin(current_user, org_id, db)
-    await invites.unbind_group(provider=provider, group=group, role=role, scope=org_scope(org_id))
-    return await _bindings(invites, org_scope(org_id), ORG_ROLES)
+    return await _change(
+        invites,
+        org_scope(org_id),
+        ORG_ROLES,
+        provider=provider,
+        group=group,
+        role=role,
+        unbind=True,
+    )
 
 
 async def _workspace_scope(workspace_id: str, db: AsyncSession) -> str:
@@ -338,5 +378,6 @@ async def unbind_workspace_group(
 ) -> GroupBindingsView:
     await require_workspace_admin(current_user, workspace_id, db)
     scope = await _workspace_scope(workspace_id, db)
-    await invites.unbind_group(provider=provider, group=group, role=role, scope=scope)
-    return await _bindings(invites, scope, WORKSPACE_ROLES)
+    return await _change(
+        invites, scope, WORKSPACE_ROLES, provider=provider, group=group, role=role, unbind=True
+    )

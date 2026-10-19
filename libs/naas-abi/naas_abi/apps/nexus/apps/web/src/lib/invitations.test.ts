@@ -57,13 +57,14 @@ describe('classifyInviteAnswer', () => {
 });
 
 describe('inviteSuccessMessage', () => {
-  const invited = (provider: InviteProvider, emailSent: boolean, renewed = false) =>
+  const invited = (provider: InviteProvider, emailSent: boolean, renewed = false, warning: string | null = null) =>
     classifyInviteAnswer({
       invitation,
       provider,
       sign_in_email_sent: emailSent,
       user_created: false,
       renewed,
+      provisioning_warning: warning,
     }) as Extract<ReturnType<typeof classifyInviteAnswer>, { kind: 'invited' }>;
 
   it('says who signs in where, and that they were emailed', () => {
@@ -84,6 +85,12 @@ describe('inviteSuccessMessage', () => {
     expect(message).toContain('managed in the identity provider');
     expect(message).toContain('must exist there');
     expect(message).not.toContain('emailed');
+  });
+
+  it('shows what the provider could not do for the invitee', () => {
+    const message = inviteSuccessMessage(invited(builtin, true, false, 'Keycloak could not send the verification email'));
+    expect(message).toContain('Warning: Keycloak could not send the verification email.');
+    expect(inviteSuccessMessage(invited(builtin, true))).not.toContain('Warning');
   });
 
   it('says renewed for an invitation made again', () => {

@@ -17,6 +17,7 @@ from collections.abc import Callable, Mapping
 from typing import Any
 from urllib.parse import quote
 
+from naas_abi_core import logger
 from naas_abi_core.services.identity.adapters.secondary.AdminHttp import AdminHttp
 from naas_abi_core.services.identity.IdentityPorts import (
     ProviderUnavailableError,
@@ -92,31 +93,47 @@ class ProvisioningKeycloak(ProvisioningPort):
         if user_id is None:
             created = self.find_user(email)
             user_id = created.subject if created else None
-        if user_id and self._send_actions:
-            self._mail_actions(user_id)
+        warning = (
+            self._mail_actions(user_id, email)
+            if user_id and self._send_actions
+            else None
+        )
         return ProvisionedUser(
             provider=self._provider,
             email=email,
             subject=user_id,
             name=f"{first} {last}".strip(),
             created=True,
+            warning=warning,
         )
 
     # -- plumbing ---------------------------------------------------------------------
 
-    def _mail_actions(self, user_id: str) -> None:
+    def _mail_actions(self, user_id: str, email: str) -> str | None:
         """Keycloak's own invitation mail. The user exists and the invitation
         attaches whatever happens here, so a mail server that is not set up is
-        not an error of the invitation."""
+        not an error of the invitation: it is a warning the admin sees (without
+        the mail the person has no link to verify their address, and an
+        unverified address claims nothing)."""
         try:
-            self._http.request(
+            status, body, _ = self._http.request(
                 "PUT",
                 f"/admin/realms/{self._realm}/users/{quote(user_id, safe='')}"
                 "/execute-actions-email",
                 json_body=list(ACTIONS),
             )
-        except ProviderUnavailableError:
-            pass
+        except ProviderUnavailableError as exc:
+            reason = str(exc)
+        else:
+            if status < 400:
+                return None
+            detail = body.get("errorMessage") if isinstance(body, dict) else None
+            reason = f"HTTP {status}{': ' + str(detail) if detail else ''}"
+        logger.warning(f"Keycloak did not mail {email} its verification link: {reason}")
+        return (
+            "Keycloak could not send the verification email "
+            f"({reason}): the person must verify their address before the invitation applies"
+        )
 
     def _user(
         self, found: dict[str, Any], email: str, *, created: bool

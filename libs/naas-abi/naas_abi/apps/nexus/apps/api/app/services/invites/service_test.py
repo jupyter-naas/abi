@@ -11,6 +11,7 @@ import pytest
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     Directory,
     DirectoryGateway,
+    GrantMade,
     GrantsGateway,
     IdpBindingView,
     Invitation,
@@ -19,6 +20,7 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     InvitationNotFoundError,
     InvitationPersistencePort,
     NoProviderError,
+    OwnerGrantRefusedError,
     ProviderChoice,
     Provisioned,
 )
@@ -35,6 +37,8 @@ class Store(InvitationPersistencePort):
         self.domains: dict[str, str] = {}
         self.memberships: list[tuple] = []
         self.commits = 0
+        self.rollbacks = 0
+        self.fail_commit = False
 
     async def add(self, invitation, *, now):
         self.rows[invitation.id] = replace(invitation, created_at=now)
@@ -107,7 +111,12 @@ class Store(InvitationPersistencePort):
         self.memberships.append(tuple(sorted(kwargs.items())))
 
     async def commit(self):
+        if self.fail_commit:
+            raise RuntimeError("the database is down")
         self.commits += 1
+
+    async def rollback(self):
+        self.rollbacks += 1
 
 
 class Directories(DirectoryGateway):
@@ -139,9 +148,13 @@ class Grants(GrantsGateway):
         self.made += 1
         if self.fail_on == self.made:
             raise PermissionError("denied")
+        key = (provider, email, policy_id, scope)
+        held = next((i for i, v in self.live.items() if v == key), None)
+        if held is not None:
+            return GrantMade(held, created=False)  # IAM keeps one grant per role and scope
         grant_id = f"g{self.made}"
-        self.live[grant_id] = (provider, email, policy_id, scope)
-        return grant_id
+        self.live[grant_id] = key
+        return GrantMade(grant_id, created=True)
 
     async def revoke(self, grant_id):
         self.live.pop(grant_id, None)
@@ -422,3 +435,70 @@ async def test_group_bindings_go_to_iam_as_builtin_roles_at_their_scope():
     assert h.grants.bound == set()
     with pytest.raises(NoProviderError):
         await h.service.bind_group(provider="nope", group="g", role="viewer", scope="abi:o:w")
+
+
+@pytest.mark.asyncio
+async def test_only_an_owner_invites_an_owner():
+    h = Harness()
+    for roles in ({"org_role": "owner"}, {"workspace_role": "owner"}):
+        with pytest.raises(OwnerGrantRefusedError):
+            await h.invite(**roles)
+    # Nothing was granted, provisioned or recorded.
+    assert h.grants.live == {} and h.store.rows == {} and h.directory.provisioned == []
+    assert (await h.invite(org_role="owner", may_grant_owner=True)).invitation.org_role == "owner"
+
+
+@pytest.mark.asyncio
+async def test_two_invitations_share_the_org_grant_and_one_revoke_keeps_it():
+    h = Harness()
+    first = (await h.invite(workspace_id="ws-1")).invitation
+    second = (await h.invite(workspace_id="ws-2")).invitation
+    org_grant = next(i for i, v in h.grants.live.items() if v[3] == "abi:org-1:-")
+    assert org_grant in first.grant_ids and org_grant in second.grant_ids
+    await h.service.revoke(first.id)
+    # The workspace grant of the first goes; the org one the second relies on stays.
+    assert {v[3] for v in h.grants.live.values()} == {"abi:org-1:-", "abi:org-1:ws-2"}
+    await h.service.revoke(second.id)
+    assert h.grants.live == {}
+
+
+@pytest.mark.asyncio
+async def test_a_failed_second_invitation_leaves_the_first_ones_grants():
+    h = Harness()
+    first = (await h.invite(workspace_id="ws-1")).invitation
+    before = dict(h.grants.live)
+    h.directory.fail = RuntimeError("the provider is down")
+    with pytest.raises(RuntimeError):
+        await h.invite(workspace_id="ws-2")
+    # Only the workspace grant the failed call made is taken back.
+    assert h.grants.live == before
+    assert set(h.store.rows[first.id].grant_ids) <= set(h.grants.live)
+
+
+@pytest.mark.asyncio
+async def test_a_database_that_fails_after_the_grants_takes_them_back():
+    h = Harness()
+    held = (await h.invite(workspace_id="ws-1")).invitation
+    before = dict(h.grants.live)
+    h.store.fail_commit = True
+    with pytest.raises(RuntimeError):
+        await h.invite(workspace_id="ws-2")
+    assert h.store.rollbacks == 1
+    assert h.grants.live == before and h.store.rows[held.id].status == "pending"
+    # And a first invitation whose record cannot be kept leaves no grant at all.
+    fresh = Harness()
+    fresh.store.fail_commit = True
+    with pytest.raises(RuntimeError):
+        await fresh.invite()
+    assert fresh.grants.live == {}
+
+
+@pytest.mark.asyncio
+async def test_renewing_does_not_withdraw_what_another_invitation_holds():
+    h = Harness()
+    first = (await h.invite(workspace_id="ws-1")).invitation
+    await h.invite(workspace_id="ws-2")
+    await h.invite(workspace_id="ws-1", workspace_role="admin", org_role="admin")
+    # The first invitation now holds an admin org grant; the member one stays for ws-2.
+    assert ("builtin", "bob@example.com", "builtin.member", "abi:org-1:-") in h.grants.live.values()
+    assert h.store.rows[first.id].org_role == "admin"

@@ -498,15 +498,23 @@ def invite(
         if role:
             scopes.append((role, _scope(services, org, workspace)))
         made: list[Any] = []
+        created: list[Any] = []  # only these are this command's to take back
         try:
             for policy, scope in scopes:
-                made.append(
-                    services.iam.create_pending_grant(
-                        chosen, email, f"builtin.{policy}", scope
+                held = any(
+                    g.scope == scope
+                    for g in services.iam.list_pending_grants(
+                        provider=chosen, email=email, policy_id=f"builtin.{policy}"
                     )
                 )
+                grant = services.iam.create_pending_grant(
+                    chosen, email, f"builtin.{policy}", scope
+                )
+                made.append(grant)
+                if not held:
+                    created.append(grant)
         except Exception:
-            for grant in made:
+            for grant in created:
                 services.iam.revoke_pending_grant(grant.id)
             raise
         for grant in made:
@@ -524,13 +532,15 @@ def invite(
             )
             return
         except Exception:
-            for grant in made:
+            for grant in created:
                 services.iam.revoke_pending_grant(grant.id)
             raise
         state = "created" if user.created else "already existed"
         click.echo(
             f"{chosen}: {user.email} {state} ({user.subject or 'no id'})", err=True
         )
+        if getattr(user, "warning", None):
+            click.echo(f"warning: {user.warning}", err=True)
 
 
 @iam.group("invitation")

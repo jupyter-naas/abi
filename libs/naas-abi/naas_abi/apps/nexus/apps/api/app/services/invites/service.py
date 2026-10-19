@@ -22,7 +22,7 @@ as ``api`` for nobody (``GrantsGateway``).
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection, Iterable
 from datetime import datetime
 from uuid import uuid4
 
@@ -34,6 +34,7 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.names import (
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     Directory,
     DirectoryGateway,
+    GrantMade,
     GrantsGateway,
     IdpBindingView,
     Invitation,
@@ -43,6 +44,7 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     InvitationPersistencePort,
     InviteOutcome,
     NoProviderError,
+    OwnerGrantRefusedError,
     ProviderChoice,
 )
 from naas_abi_core import logger
@@ -120,12 +122,20 @@ class InvitationService:
         inviter_name: str | None = None,
         organization_name: str | None = None,
         workspace_name: str | None = None,
+        may_grant_owner: bool = False,
     ) -> InviteOutcome:
         """Invite ``email`` and send the invitation. Inviting again someone
-        already invited here renews the invitation (new roles, a new email)."""
+        already invited here renews the invitation (new roles, a new email).
+
+        ``may_grant_owner``: the inviting person is an owner. The grants are
+        written as Nexus's own, so IAM's rule that only an owner makes an owner
+        cannot see who asked: the route says it, and nobody else gets ``owner``.
+        """
         email = email.lower().strip()
         if org_role is None and workspace_role is None:
             raise ValueError("An invitation names a role in an organization or a workspace")
+        if "owner" in (org_role, workspace_role) and not may_grant_owner:
+            raise OwnerGrantRefusedError("Only an owner can invite an owner")
         choice = await self.choose(email, provider, organization_id)
         now = self._clock()
         scopes = _scopes(organization_id, org_role, workspace_id, workspace_role)
@@ -135,40 +145,51 @@ class InvitationService:
             organization_id=organization_id,
             workspace_id=workspace_id,
         )
-        grant_ids = await self._grant(choice.name, email, scopes)
+        elsewhere = await self._held_elsewhere(
+            email, choice.name, existing.id if existing else None
+        )
+        made = await self._grant(choice.name, email, scopes)
+        grant_ids = [g.id for g in made]
         try:
             provisioned = await self.directory.provision(choice, email, name)
-        except Exception:
-            # Nothing was made for this call: take back what it granted.
-            await self._revoke(grant_ids, keep=existing.grant_ids if existing else ())
-            raise
-        if existing is None:
-            invitation = await self.persistence.add(
-                Invitation(
-                    id=str(uuid4()),
-                    email=email,
-                    provider=choice.name,
-                    organization_id=organization_id,
+            if existing is None:
+                invitation = await self.persistence.add(
+                    Invitation(
+                        id=str(uuid4()),
+                        email=email,
+                        provider=choice.name,
+                        organization_id=organization_id,
+                        org_role=org_role,
+                        workspace_id=workspace_id,
+                        workspace_role=workspace_role,
+                        invited_by=invited_by,
+                        grant_ids=tuple(grant_ids),
+                    ),
+                    now=now,
+                )
+            else:
+                invitation = await self.persistence.update(
+                    existing.id,
                     org_role=org_role,
-                    workspace_id=workspace_id,
                     workspace_role=workspace_role,
+                    grant_ids=grant_ids,
                     invited_by=invited_by,
-                    grant_ids=tuple(grant_ids),
-                ),
-                now=now,
+                    now=now,
+                )
+            await self.persistence.commit()
+        except Exception:
+            # Nothing was made for this call: take back the grants it made, and
+            # only those (another invitation, or the one renewed, may hold the
+            # rest), so IAM never holds a grant no invitation lists.
+            await self.persistence.rollback()
+            await self._revoke(
+                [g.id for g in made if g.created],
+                keep={*elsewhere, *(existing.grant_ids if existing else ())},
             )
-        else:
+            raise
+        if existing is not None:
             # The roles may have changed: what the old ones granted goes.
-            await self._revoke(existing.grant_ids, keep=grant_ids)
-            invitation = await self.persistence.update(
-                existing.id,
-                org_role=org_role,
-                workspace_role=workspace_role,
-                grant_ids=grant_ids,
-                invited_by=invited_by,
-                now=now,
-            )
-        await self.persistence.commit()
+            await self._revoke(existing.grant_ids, keep={*grant_ids, *elsewhere})
         sent = await self._mail(
             invitation,
             choice,
@@ -182,21 +203,29 @@ class InvitationService:
             user_created=bool(provisioned and provisioned.created),
             sign_in_email_sent=sent,
             renewed=existing is not None,
+            warning=provisioned.warning if provisioned else None,
         )
 
-    async def _grant(self, provider: str, email: str, scopes: list[tuple[str, str]]) -> list[str]:
-        made: list[str] = []
+    async def _held_elsewhere(self, email: str, provider: str, except_id: str | None) -> set[str]:
+        """The pending grants other invitations of this person rely on: IAM keeps
+        one grant per role and scope, so an invitation to a workspace and one to
+        another workspace of the same org share the org-level one."""
+        others = await self.persistence.pending_for(email=email, provider=provider)
+        return {g for i in others if i.id != except_id for g in i.grant_ids}
+
+    async def _grant(
+        self, provider: str, email: str, scopes: list[tuple[str, str]]
+    ) -> list[GrantMade]:
+        made: list[GrantMade] = []
         try:
             for role, scope in scopes:
                 made.append(await self.grants.grant(provider, email, role_policy(role), scope))
         except Exception:
-            await self._revoke(made)
+            await self._revoke([g.id for g in made if g.created])
             raise
         return made
 
-    async def _revoke(
-        self, ids: tuple[str, ...] | list[str], *, keep: tuple[str, ...] | list[str] = ()
-    ) -> None:
+    async def _revoke(self, ids: Iterable[str], *, keep: Collection[str] = ()) -> None:
         for grant_id in ids:
             if grant_id in keep:
                 continue
@@ -278,7 +307,9 @@ class InvitationService:
         invitation = await self.get(invitation_id)
         if invitation.status != "pending":
             raise InvitationNotFoundError(invitation_id)
-        await self._revoke(invitation.grant_ids)
+        # What another invitation of this person still lists stays.
+        elsewhere = await self._held_elsewhere(invitation.email, invitation.provider, invitation.id)
+        await self._revoke(invitation.grant_ids, keep=elsewhere)
         await self.persistence.mark_revoked(invitation.id, now=self._clock())
         await self.persistence.commit()
         return invitation

@@ -63,6 +63,18 @@ class Provisioned:
 
     subject: str | None
     created: bool
+    # Something the invitation could not do for them (the provider's own mail).
+    warning: str | None = None
+
+
+@dataclass(frozen=True)
+class GrantMade:
+    """A pending grant of an invitation. ``created`` is False when IAM already
+    held the same grant (an earlier invitation of the same person): it is then
+    not this call's to take back."""
+
+    id: str
+    created: bool
 
 
 @dataclass(frozen=True)
@@ -80,6 +92,8 @@ class InviteOutcome:
     provider: ProviderChoice
     user_created: bool = False
     sign_in_email_sent: bool = False
+    # What the provider could not do for the invitee, for the admin to see.
+    warning: str | None = None
     # An invitation to the same person at the same place, made again: the roles
     # may have changed, nothing else was made twice.
     renewed: bool = False
@@ -92,6 +106,10 @@ class NoProviderError(Exception):
 
 class InvitationNotFoundError(Exception):
     pass
+
+
+class OwnerGrantRefusedError(Exception):
+    """Only an owner makes an owner: an admin's invitation names a lower role."""
 
 
 class InvitationPersistencePort(ABC):
@@ -173,6 +191,9 @@ class InvitationPersistencePort(ABC):
     @abstractmethod
     async def commit(self) -> None: ...
 
+    @abstractmethod
+    async def rollback(self) -> None: ...
+
 
 class DirectoryGateway(ABC):
     """The engine's identity service, as Nexus calls it for invitations."""
@@ -193,8 +214,10 @@ class GrantsGateway(ABC):
     ``api``, once the route authorized the inviting person."""
 
     @abstractmethod
-    async def grant(self, provider: str, email: str, policy_id: str, scope: str | None) -> str:
-        """A pending grant; its id."""
+    async def grant(
+        self, provider: str, email: str, policy_id: str, scope: str | None
+    ) -> GrantMade:
+        """The pending grant, and whether this call made it."""
 
     @abstractmethod
     async def revoke(self, grant_id: str) -> None: ...

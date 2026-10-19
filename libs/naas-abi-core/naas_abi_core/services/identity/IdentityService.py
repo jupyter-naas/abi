@@ -21,12 +21,10 @@ from urllib.parse import quote_plus, urlencode, urlsplit, urlunsplit
 
 import jwt
 
+from naas_abi_core import logger
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.IAMPorts import FilterResult, PrincipalRecord
 from naas_abi_core.services.iam.names import resource_name
-from naas_abi_core.services.identity.adapters.secondary.ProvisioningNone import (
-    ProvisioningNone,
-)
 from naas_abi_core.services.identity.iam_catalog import SERVICE
 from naas_abi_core.services.identity.IdentityPorts import (
     AuthenticatedUser,
@@ -37,6 +35,7 @@ from naas_abi_core.services.identity.IdentityPorts import (
     ProviderInfo,
     ProviderMetadata,
     ProvisionedUser,
+    ProvisioningNone,
     ProvisioningPort,
     SignIn,
     SignInError,
@@ -268,7 +267,10 @@ class IdentityService(IIdentityService):
             )
             # What an invitation granted this email on this provider, once its
             # owner has signed in with it verified (IAM checks that itself).
-            self._iam.claim_pending_grants(record.id)
+            try:
+                self._iam.claim_pending_grants(record.id)
+            except Exception as exc:  # noqa: BLE001 - a valid sign-in stands; the grants wait
+                logger.warning(f"Pending grants of {record.id} were not claimed: {exc}")
         return AuthenticatedUser(
             principal_id=record.id, token=verified, group_ids=tuple(groups)
         )

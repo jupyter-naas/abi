@@ -13,6 +13,7 @@ from typing import Any, TypeVar
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     Directory,
     DirectoryGateway,
+    GrantMade,
     GrantsGateway,
     IdpBindingView,
     ProviderChoice,
@@ -72,7 +73,9 @@ class EngineDirectoryGateway(DirectoryGateway):
             user = await _as_api(lambda: service.provision_user(provider.name, email, name=name))
         except NotImplementedError:
             return None
-        return Provisioned(subject=user.subject, created=user.created)
+        return Provisioned(
+            subject=user.subject, created=user.created, warning=getattr(user, "warning", None)
+        )
 
 
 class EngineGrantsGateway(GrantsGateway):
@@ -85,10 +88,26 @@ class EngineGrantsGateway(GrantsGateway):
             raise ProviderUnavailableError("The engine's IAM service is not loaded")
         return service
 
-    async def grant(self, provider: str, email: str, policy_id: str, scope: str | None) -> str:
+    async def grant(
+        self, provider: str, email: str, policy_id: str, scope: str | None
+    ) -> GrantMade:
         iam = self._service()
-        grant = await _as_api(lambda: iam.create_pending_grant(provider, email, policy_id, scope))
-        return str(grant.id)
+
+        def make() -> GrantMade:
+            held = next(
+                (
+                    g
+                    for g in iam.list_pending_grants(
+                        provider=provider, email=email, policy_id=policy_id
+                    )
+                    if g.scope == scope
+                ),
+                None,
+            )
+            grant = iam.create_pending_grant(provider, email, policy_id, scope)
+            return GrantMade(id=str(grant.id), created=held is None)
+
+        return await _as_api(make)
 
     async def revoke(self, grant_id: str) -> None:
         iam = self._service()

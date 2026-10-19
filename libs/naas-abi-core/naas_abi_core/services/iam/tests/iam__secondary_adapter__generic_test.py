@@ -308,6 +308,8 @@ class IAMStoreContract(ABC):
         assert store.list_pending_grants(policy_id=read.id, provider="builtin") == (
             sorted([first, unscoped], key=lambda g: g.id)
         )
+        assert store.get_pending_grant(first.id) == first
+        assert store.get_pending_grant("pgr_missing") is None
         with pytest.raises(IAMConflictError):  # an invitee still names it
             store.delete_policy(read.id)
         assert store.remove_pending_grant(unscoped.id) is True

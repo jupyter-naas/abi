@@ -54,6 +54,8 @@ export type InviteAnswer =
       userCreated: boolean;
       emailSent: boolean;
       renewed: boolean;
+      // What the provider could not do for them (its own mail), if anything.
+      warning: string | null;
     }
   | { kind: 'member' };
 
@@ -74,6 +76,7 @@ export function classifyInviteAnswer(data: unknown): InviteAnswer {
       userCreated: answer.user_created === true,
       emailSent: answer.sign_in_email_sent === true,
       renewed: answer.renewed === true,
+      warning: typeof answer.provisioning_warning === 'string' ? answer.provisioning_warning : null,
     };
   }
   return { kind: 'member' };
@@ -113,14 +116,16 @@ export function inviteSuccessMessage(answer: Extract<InviteAnswer, { kind: 'invi
   const sentence = answer.emailSent
     ? ` They were emailed, and sign in with ${provider.display_name} using this email.`
     : ` No email could be sent: tell them to sign in with ${provider.display_name} using this email.`;
+  const warning = answer.warning ? ` Warning: ${answer.warning}.` : '';
   if (provider.managed_in_provider) {
     return (
       `${lead} Access is granted once they sign in with this email.` +
       ` People of ${provider.display_name} are managed in the identity provider: ` +
-      `their account must exist there.${answer.emailSent ? ' They were emailed.' : ''}`
+      `their account must exist there.${answer.emailSent ? ' They were emailed.' : ''}` +
+      warning
     );
   }
-  return lead + sentence;
+  return lead + sentence + warning;
 }
 
 /** The roles an invitation carries, for a list: "Org admin · Workspace member". */

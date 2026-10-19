@@ -281,3 +281,58 @@ def test_unbinding_removes_the_role_it_gave(h, ada):
         reader,
         groups=frozenset({binding.group_id}),
     )
+
+
+def test_unbinding_never_touches_a_hand_made_group_that_maps_the_same_claim(h, ada):
+    # A group an administrator made and mapped to the same claim, with a role at ws1.
+    analysts = h.group("analysts")
+    h.admin("map_idp_group", "acme", "eng", analysts.id)
+    h.attach(roles.VIEWER, analysts.id, W1)
+    binding = h.admin("bind_idp_group", "acme", "eng", roles.VIEWER, W1)
+    assert binding.group_id != analysts.id
+    with h.as_(ada):
+        assert h.iam.unbind_idp_group("acme", "eng", roles.VIEWER, W1) is True
+        assert h.iam.unbind_idp_group("acme", "eng", roles.VIEWER, W1) is False
+    held = {
+        (a.policy_id, a.scope)
+        for a in h.iam.store.list_attachments(principal_id=analysts.id)
+    }
+    assert (roles.VIEWER, W1) in held
+    # Nor does it list as a binding.
+    assert h.admin("list_idp_bindings") == []
+
+
+def test_listing_bindings_skips_hand_made_groups(h):
+    analysts = h.group("analysts")
+    h.admin("map_idp_group", "acme", "eng", analysts.id)
+    h.attach(roles.VIEWER, analysts.id, W1)
+    assert h.admin("list_idp_bindings") == []
+    binding = h.admin("bind_idp_group", "acme", "eng", roles.MEMBER, W2)
+    assert [b.group_id for b in h.admin("list_idp_bindings")] == [binding.group_id]
+
+
+def test_a_sign_in_costs_nothing_when_nobody_was_invited(h, monkeypatch):
+    bob = sign_in(h)
+    calls = []
+    original = h.iam.store.list_pending_grants
+    monkeypatch.setattr(
+        h.iam.store,
+        "list_pending_grants",
+        lambda **kw: calls.append(kw) or original(**kw),
+    )
+    assert h.admin("claim_pending_grants", bob.id) == []
+    assert h.admin("claim_pending_grants", bob.id) == []
+    assert calls == [{}]  # the index was read once, and rebuilt only on a change
+    h.admin("create_pending_grant", "builtin", BOB, roles.MEMBER, W1)
+    assert len(h.admin("claim_pending_grants", bob.id)) == 1
+
+
+def test_a_grant_is_revoked_by_id_without_listing_every_grant(h, monkeypatch):
+    grant = h.admin("create_pending_grant", "builtin", BOB, roles.MEMBER, W1)
+
+    def forbidden(**_):
+        raise AssertionError("every grant was loaded")
+
+    monkeypatch.setattr(h.iam.store, "list_pending_grants", forbidden)
+    assert h.admin("revoke_pending_grant", grant.id) is True
+    assert h.admin("revoke_pending_grant", grant.id) is False

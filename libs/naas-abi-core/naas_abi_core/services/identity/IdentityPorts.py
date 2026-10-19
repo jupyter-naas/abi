@@ -182,6 +182,9 @@ class ProvisionedUser:
     # This call made the user; False when the provider already had them.
     created: bool = False
     disabled: bool = False
+    # What the provider could not do for the person (its own mail), for the
+    # inviting admin to see; the user exists either way.
+    warning: str | None = None
 
 
 @dataclass(frozen=True)
@@ -303,6 +306,29 @@ class ProvisioningPort(ABC):
     @abstractmethod
     def find_user(self, email: str) -> ProvisionedUser | None:
         """The provider's user with this email, if there is one."""
+
+
+class ProvisioningNone(ProvisioningPort):
+    """``provisioning: none``: the provider's users are managed in the provider.
+
+    ABI never creates a user there: an invitation to such a provider is a pending
+    grant only, which attaches when the invited person signs in with that email
+    verified. The default of a provider with no adapter."""
+
+    def __init__(self, provider: str) -> None:
+        self._provider = provider
+
+    def ensure_user(self, email: str, *, name: str | None = None) -> ProvisionedUser:
+        raise NotImplementedError(
+            f"Users of provider {self._provider!r} are managed in the identity "
+            "provider (provisioning: none)"
+        )
+
+    def find_user(self, email: str) -> ProvisionedUser | None:
+        raise NotImplementedError(
+            f"Users of provider {self._provider!r} are managed in the identity "
+            "provider (provisioning: none)"
+        )
 
 
 class IIdentityService(ABC):

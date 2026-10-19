@@ -285,6 +285,7 @@ class IAMService(IIAMService, PolicySource):
         self._policies = _TTLCache(cache_ttl_seconds, cache_size)
         self._placements = _TTLCache(cache_ttl_seconds, 2)
         self._floors = _TTLCache(cache_ttl_seconds, 1)
+        self._pending_index: tuple[int, frozenset[tuple[str, str]]] | None = None
         self._listeners: list[Callable[[int], None]] = []
         self._seen_revision: int | None = None
         self._seal_key: bytes | None = None
@@ -1250,9 +1251,7 @@ class IAMService(IIAMService, PolicySource):
         return [g for g in found if _grant_resource(g) in allowed]
 
     def revoke_pending_grant(self, grant_id: str) -> bool:
-        grant = next(
-            (g for g in self.store.list_pending_grants() if g.id == grant_id), None
-        )
+        grant = self.store.get_pending_grant(grant_id)
         if grant is None:
             return False
         self.require(
@@ -1286,9 +1285,15 @@ class IAMService(IIAMService, PolicySource):
             or not user.provider
         ):
             return []
+        email = user.email.strip().lower()
+        # Every sign-in asks: the common answer (no invitation for this person)
+        # costs one read of the revision, the index of who has pending grants
+        # being rebuilt only when the store changed.
+        if (user.provider, email) not in self._pending_keys():
+            return []
         claimed: list[Attachment] = []
         for grant in self.store.list_pending_grants(
-            provider=user.provider, email=user.email.strip().lower()
+            provider=user.provider, email=email
         ):
             attachment = self.store.claim_pending_grant(
                 grant.id, principal_id, new_id("att")
@@ -1301,6 +1306,19 @@ class IAMService(IIAMService, PolicySource):
         if claimed:
             self._changed()
         return claimed
+
+    def _pending_keys(self) -> frozenset[tuple[str, str]]:
+        revision = self.store.revision()
+        held = self._pending_index
+        if held is None or held[0] != revision:
+            held = (
+                revision,
+                frozenset(
+                    (g.provider, g.email) for g in self.store.list_pending_grants()
+                ),
+            )
+            self._pending_index = held
+        return held[1]
 
     def bind_idp_group(
         self, provider: str, claim_value: str, policy_id: str, scope: str | None = None
@@ -1324,11 +1342,8 @@ class IAMService(IIAMService, PolicySource):
         self, provider: str, claim_value: str, scope: str | None
     ) -> PrincipalRecord:
         name = _bound_group(provider, claim_value)
-        for group_id in self.store.resolve_idp_groups(provider, [claim_value]):
-            record = self.store.get_principal(group_id)
-            if record.kind == "group" and record.status == "active":
-                if record.name == name:
-                    return record
+        for group_id in self._binding_groups(provider, claim_value):
+            return self.store.get_principal(group_id)
         org = None
         if scope is not None:
             org = scope_fields(scope)[0]
@@ -1347,14 +1362,29 @@ class IAMService(IIAMService, PolicySource):
         if scope is not None:
             validate_scope(scope)
         self._require_detach_binding(policy_id, provider, claim_value, scope)
+        # Only the groups bindings made: the caller was authorized for these, not
+        # for a hand-made group that maps the same claim.
         removed = False
-        for group_id in self.store.resolve_idp_groups(provider, [claim_value]):
+        for group_id in self._binding_groups(provider, claim_value):
             if self.store.detach(policy_id, group_id, scope):
+                self._sync_platform_roles(group_id)
                 removed = True
         if removed:
-            self._sync_bound_roles(provider, claim_value)
             self._changed()
         return removed
+
+    def _binding_groups(self, provider: str, claim_value: str) -> list[str]:
+        name = _bound_group(provider, claim_value)
+        found: list[str] = []
+        for group_id in self.store.resolve_idp_groups(provider, [claim_value]):
+            record = self.store.get_principal(group_id)
+            if (
+                record.kind == "group"
+                and record.status == "active"
+                and record.name == name
+            ):
+                found.append(group_id)
+        return found
 
     def _require_detach_binding(
         self, policy_id: str, provider: str, claim_value: str, scope: str | None
@@ -1365,10 +1395,6 @@ class IAMService(IIAMService, PolicySource):
             not_found=lambda: IAMNotFoundError("Binding not found"),
         )
 
-    def _sync_bound_roles(self, provider: str, claim_value: str) -> None:
-        for group_id in self.store.resolve_idp_groups(provider, [claim_value]):
-            self._sync_platform_roles(group_id)
-
     def list_idp_bindings(
         self, *, provider: str | None = None, policy_id: str | None = None
     ) -> list[IdpBinding]:
@@ -1377,12 +1403,18 @@ class IAMService(IIAMService, PolicySource):
         while True:
             page = self.store.list_principals("group", limit=500, after=after)
             for group in page.items:
-                if group.status != "active":
+                # Only the groups bindings made (hand-made groups that map a claim
+                # are managed as groups). Following up: a store query for them,
+                # instead of one read of the mappings per group.
+                if group.status != "active" or not (group.name or "").startswith(
+                    "idp:"
+                ):
                     continue
                 mappings = [
                     m
                     for m in self.store.list_idp_group_mappings(group.id)
                     if provider in (None, m.provider)
+                    and group.name == _bound_group(m.provider, m.claim_value)
                 ]
                 if not mappings:
                     continue

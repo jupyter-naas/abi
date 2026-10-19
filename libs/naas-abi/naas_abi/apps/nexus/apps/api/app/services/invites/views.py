@@ -101,6 +101,7 @@ def invite_result(outcome: InviteOutcome) -> dict[str, Any]:
         "user_created": outcome.user_created,
         "sign_in_email_sent": outcome.sign_in_email_sent,
         "renewed": outcome.renewed,
+        "provisioning_warning": outcome.warning,
     }
 
 

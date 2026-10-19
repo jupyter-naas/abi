@@ -66,6 +66,14 @@ IdP group bindings are the same idea for a whole group of a provider: the member
 - **Claim only a verified email.** `runtime.claimer` runs after the sign-in resolved the
   user and checks that the provider verified the address Nexus stored; IAM's own claim
   checks the same on its side.
+- **Only an owner invites an owner.** The grants are written as `api`, so IAM cannot see who asked:
+  the route passes `may_grant_owner` (the caller is an org owner) and the service refuses `owner`
+  otherwise (`OwnerGrantRefusedError`, 403).
+- **Grants are shared, so they are counted.** IAM keeps one pending grant per provider, email, role
+  and scope, so invitations of one person to two workspaces share the org-level grant. Revoking an
+  invitation, renewing it, or rolling a failed one back withdraws only grants that no other pending
+  invitation of that person lists, and a failed call takes back only the grants it made
+  (`GrantMade.created`). The invitation row and the grants are written together or not at all.
 - Re-inviting the same email at the same place renews the invitation (roles may change; the
   grants it no longer needs are withdrawn).
 

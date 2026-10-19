@@ -272,20 +272,22 @@ class EndSessionUrlResponse(_message.Message):
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., url: _Optional[str] = ...) -> None: ...
 
 class ProvisionedUser(_message.Message):
-    __slots__ = ("provider", "email", "subject", "name", "created", "disabled")
+    __slots__ = ("provider", "email", "subject", "name", "created", "disabled", "warning")
     PROVIDER_FIELD_NUMBER: _ClassVar[int]
     EMAIL_FIELD_NUMBER: _ClassVar[int]
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     CREATED_FIELD_NUMBER: _ClassVar[int]
     DISABLED_FIELD_NUMBER: _ClassVar[int]
+    WARNING_FIELD_NUMBER: _ClassVar[int]
     provider: str
     email: str
     subject: str
     name: str
     created: bool
     disabled: bool
-    def __init__(self, provider: _Optional[str] = ..., email: _Optional[str] = ..., subject: _Optional[str] = ..., name: _Optional[str] = ..., created: bool = ..., disabled: bool = ...) -> None: ...
+    warning: str
+    def __init__(self, provider: _Optional[str] = ..., email: _Optional[str] = ..., subject: _Optional[str] = ..., name: _Optional[str] = ..., created: bool = ..., disabled: bool = ..., warning: _Optional[str] = ...) -> None: ...
 
 class ProvisionUserRequest(_message.Message):
     __slots__ = ("context", "provider", "email", "name")

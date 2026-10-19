@@ -196,6 +196,8 @@ message ProvisionedUser {
   optional string name = 4;
   bool created = 5;
   bool disabled = 6;
+  // What the provider could not do for the person (its own mail).
+  optional string warning = 7;
 }
 
 // UNIMPLEMENTED when the provider's users are managed in the provider

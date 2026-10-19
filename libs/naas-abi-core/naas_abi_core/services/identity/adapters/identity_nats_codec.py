@@ -139,6 +139,7 @@ def provisioned_to_pb(user: ProvisionedUser) -> pb.ProvisionedUser:
         name=user.name,
         created=user.created,
         disabled=user.disabled,
+        warning=user.warning,
     )
 
 
@@ -150,6 +151,7 @@ def provisioned_from_pb(message: pb.ProvisionedUser) -> ProvisionedUser:
         name=message.name if message.HasField("name") else None,
         created=message.created,
         disabled=message.disabled,
+        warning=message.warning if message.HasField("warning") else None,
     )
 
 

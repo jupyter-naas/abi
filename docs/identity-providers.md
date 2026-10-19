@@ -123,7 +123,7 @@ happen, and the provider's `provisioning` setting decides the second:
    |---|---|
    | `builtin` | creates the user through the built-in IdP's admin app, over NATS |
    | `zitadel` | creates a human user through Zitadel's user API; Zitadel mails the verification code |
-   | `keycloak` | creates the user through the realm's admin REST API and asks Keycloak to mail its "verify email, update password" link |
+   | `keycloak` | creates the user through the realm's admin REST API and asks Keycloak to mail its "verify email, update password" link (if that mail fails, the invitation still stands and the admin is warned: until the person verifies the address, the invitation claims nothing) |
    | `none` | nothing: the provider's users are managed in the provider |
 
    With `none` an invitation is a pending grant only, and the Nexus invite

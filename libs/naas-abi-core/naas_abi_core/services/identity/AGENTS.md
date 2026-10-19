@@ -39,7 +39,7 @@ resolves them to IAM users. Authorization stays with IAM (`services/iam`).
 | `adapters/secondary/OIDCHttpBuiltinIdP.py` | `OIDCHttpPort` for the built-in IdP (`provisioning: builtin`): its issuer is read over NATS, everything else over the fallback |
 | `adapters/secondary/IdPAppNATS.py` | An app of the IdP module (`idp`, `admin`) called over NATS as the engine, bound to the instance running as `module/<project>/idp` |
 | `adapters/secondary/AdminHttp.py` | A provider's admin API over httpx (fixed base URL, no redirects, bounded answers) and `ClientCredentialsToken` |
-| `adapters/secondary/ProvisioningBuiltinIdP.py`, `ProvisioningZitadel.py`, `ProvisioningKeycloak.py`, `ProvisioningNone.py` | `ProvisioningPort` for each `provisioning` setting |
+| `adapters/secondary/ProvisioningBuiltinIdP.py`, `ProvisioningZitadel.py`, `ProvisioningKeycloak.py` | `ProvisioningPort` for each `provisioning` setting; `none` is `ProvisioningNone` in `IdentityPorts.py`, the default of a provider with no adapter |
 | `adapters/secondary/IdentitySecondaryAdapterNATSClient.py` | `IIdentityService` over NATS, for client-role engines |
 | `adapters/primary/identity__primary_adapter__NATS.py` | `abi.identity.v1.*` |
 | `adapters/identity_nats_codec.py` | Records and errors on the wire |

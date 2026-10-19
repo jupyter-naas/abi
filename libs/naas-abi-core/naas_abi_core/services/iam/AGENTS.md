@@ -314,7 +314,9 @@ class MyService(ServiceBase):
 ## Invitations and IdP group bindings (RFC §12.2)
 
 ```python
-grant = iam.create_pending_grant("builtin", "bob@example.com", "builtin.member", "abi:acme:ws1")
+grant = iam.create_pending_grant(
+    "builtin", "bob@example.com", "builtin.member", "abi:acme:ws1"
+)
 iam.list_pending_grants(provider=None, email=None, policy_id=None)
 iam.revoke_pending_grant(grant.id)
 iam.claim_pending_grants(principal_id)  # the identity service, at a sign-in
@@ -348,8 +350,15 @@ iam.list_idp_bindings(provider=None, policy_id=None)
   attachment alone (`attachment/<policy>/idp:<provider>:<claim value>`): creating
   the group and its mapping is part of that one operation, so a workspace admin never
   needs `iam:CreateGroup` or `iam:MapIdpGroup`. One group serves every binding of a
-  claim value; unbinding detaches at that scope only. IAM's companions of the roles
+  claim value; unbinding detaches at that scope only, and only from the groups bindings
+  made (named `idp:<provider>:<claim value>`): a hand-made group that maps the same claim is
+  never touched, nor listed. IAM's companions of the roles
   (`builtin.platform.*` on the group) are not listed as bindings.
+- `claim_pending_grants` runs at every sign-in and refresh, so its common answer (no
+  invitation for this person) costs one read of the store revision: the index of who has pending
+  grants is rebuilt only when the revision changed. `get_pending_grant` finds one grant by id.
+  `list_idp_bindings` still reads the mappings of each `idp:` group; a store query for them is a
+  follow-up.
 - A policy a pending grant names cannot be deleted. NATS: `create_pending_grant`,
   `list_pending_grants`, `revoke_pending_grant`, `claim_pending_grants`,
   `bind_idp_group`, `unbind_idp_group`, `list_idp_bindings`; the broker offers each
