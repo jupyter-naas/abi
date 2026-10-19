@@ -29,6 +29,8 @@ __pycache__/
 *.so
 .Python
 build/
+# The docs section on building (docs/site/docs/user-guide/build/) is not a build output.
+!/docs/site/docs/user-guide/build/
 develop-eggs/
 dist/
 downloads/
