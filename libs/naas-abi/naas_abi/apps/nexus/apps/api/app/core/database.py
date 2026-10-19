@@ -57,6 +57,11 @@ _ALTER_CONSTRAINT_RE = re.compile(
 )
 
 
+# ``ALTER TABLE t DROP COLUMN c``: neither SQLite nor older PostgreSQL drivers
+# phrase "already dropped" like "already exists", so a rerun is told apart here.
+_DROP_COLUMN_RE = re.compile(r"^\s*ALTER\s+TABLE\s+\S+\s+DROP\s+COLUMN\b", re.IGNORECASE)
+
+
 def _adapt_statement_for_dialect(statement: str, dialect: str) -> list[str]:
     """Return the statement(s) to actually execute for the active dialect.
 
@@ -114,17 +119,12 @@ KNOWN_TABLES = frozenset(
         "ontologies",
         "graph_nodes",
         "graph_edges",
-        "api_keys",
         "provider_configs",
         "agent_configs",
         "app_configs",
         "secrets",
-        "refresh_tokens",
-        "revoked_tokens",
-        "magic_link_tokens",
         "audit_logs",
         "rate_limit_events",
-        "password_changes",
         "workspace_secrets",
         "model_catalog",
         "organization_role_features",
@@ -285,6 +285,11 @@ async def init_db() -> None:
                         "already exists" in error_msg
                         or "duplicate" in error_msg
                         or "duplicate column" in error_msg
+                        # A column a migration drops, dropped by an earlier run.
+                        or (
+                            _DROP_COLUMN_RE.match(statement)
+                            and ("no such column" in error_msg or "does not exist" in error_msg)
+                        )
                     ):
                         skipped += 1
                     else:

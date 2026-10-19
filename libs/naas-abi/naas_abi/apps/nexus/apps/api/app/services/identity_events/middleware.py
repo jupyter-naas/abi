@@ -40,7 +40,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import replace
-from typing import Any
 from urllib.parse import parse_qs
 
 from naas_abi.apps.nexus.apps.api.app.services.auth.credentials import (
@@ -64,12 +63,6 @@ _WORKSPACE_PATH = re.compile(r"/workspaces/([^/?#]+)")
 NEXUS_IDENTITY = "api"
 
 
-def _decode_token(token: str) -> dict[str, Any] | None:
-    from naas_abi.apps.nexus.apps.api.app.services.auth.service import decode_token
-
-    return decode_token(token)
-
-
 def _bearer(headers: Headers) -> str | None:
     auth = headers.get("authorization") or ""
     scheme, _, token = auth.partition(" ")
@@ -78,52 +71,22 @@ def _bearer(headers: Headers) -> str | None:
     return token.strip()
 
 
-async def _is_revoked(jti: str) -> bool:
-    from naas_abi.apps.nexus.apps.api.app.services.refresh_token import (
-        is_access_token_revoked,
-    )
-
-    return await is_access_token_revoked(jti)
-
-
 async def verified_credential(
     headers: Headers, path: str
 ) -> tuple[Credential | None, CredentialKind | None]:
-    """The credential of a request's bearer token, checked as ``AuthService``
-    checks a session and IAM checks a key: ``(credential, None)``; or
+    """The credential of a request's bearer token, checked as IAM checks a key
+    or an engine token: ``(credential, None)``; or
     ``(None, kind)`` for a valid credential of a kind ``path`` does not take;
     or ``(None, None)``. Fails closed."""
     token = _bearer(headers)
     if token is None:
         return None, None
-    credential = await bearer_credential(token, decode=_decode_token, is_revoked=_is_revoked)
+    credential = await bearer_credential(token)
     if credential is None:
         return None, None
     if credential.kind not in accepted_kinds(path):
         return None, credential.kind
     return credential, None
-
-
-async def verified_user_id(headers: Headers) -> str | None:
-    """The signed-in user of a request's session token (no route in mind: a
-    session is the one kind every route takes)."""
-    credential, _ = await verified_credential(headers, "")
-    return credential.user_id if credential is not None else None
-
-
-def user_id_from_headers(headers: Headers) -> str | None:
-    """The bearer token's ``sub``, unchecked beyond its signature: a cache key
-    (settings_cache), never identity. Identity is ``verified_user_id``."""
-    auth = headers.get("authorization") or ""
-    scheme, _, token = auth.partition(" ")
-    if scheme.lower() != "bearer" or not token.strip():
-        return None
-    try:
-        payload = _decode_token(token.strip())
-    except Exception:  # noqa: BLE001
-        return None
-    sub = (payload or {}).get("sub")
-    return str(sub) if sub else None
 
 
 def workspace_id_from_request(path: str, query_string: bytes) -> str | None:

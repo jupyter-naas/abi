@@ -13,7 +13,6 @@ from types import SimpleNamespace  # noqa: E402
 from unittest.mock import patch  # noqa: E402
 from uuid import uuid4
 
-import bcrypt
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -61,7 +60,6 @@ db_module.AsyncSessionLocal = async_sessionmaker(
 
 # Patch the engine in the auth module (it imports engine at module level for sync helpers)
 import naas_abi.apps.nexus.apps.api.app.api.endpoints.auth as auth_module  # noqa: E402
-from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import create_access_token  # noqa: E402
 
 # Now we can safely import the app
 from naas_abi.apps.nexus.apps.api.app.main import app  # noqa: E402
@@ -77,14 +75,6 @@ initialize_nexus_service_registry()
 
 
 # ============================================
-# Constants
-# ============================================
-
-TEST_PASSWORD = "testpass123"
-TEST_PASSWORD_HASH = bcrypt.hashpw(TEST_PASSWORD.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-
-
-# ============================================
 # Fixtures
 # ============================================
 
@@ -95,14 +85,36 @@ CURRENT_IAM: list = []
 
 
 @pytest.fixture(autouse=True)
+def secrets_key(monkeypatch):
+    """The key the API resolves at start; nothing is encrypted without one."""
+    from naas_abi.apps.nexus.apps.api.app.core import config
+
+    monkeypatch.setattr(config.settings, "secrets_encryption_key", "a-secrets-key-for-tests")
+
+
+@pytest.fixture(autouse=True)
 def iam_world():
+    from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
     from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 
     nexus = NexusIam()
     CURRENT_IAM[:] = [nexus]
-    with nexus.installed():
-        yield nexus
-    CURRENT_IAM.clear()
+    # The sessions the tests present are the engine's: this IAM issues and checks them.
+    previous = credentials.configure_iam(lambda: nexus.iam)
+    try:
+        with nexus.installed():
+            yield nexus
+    finally:
+        credentials.configure_iam(previous)
+        CURRENT_IAM.clear()
+
+
+def _session(user_id: str) -> dict:
+    """A signed-in user: the engine's session token for them (``abi:session``)."""
+    from naas_abi.apps.nexus.apps.api.app.services.auth.testing import session_token
+
+    token = session_token(CURRENT_IAM[0].iam, user_id)
+    return {"token": token, "headers": {"Authorization": f"Bearer {token}"}}
 
 
 def _grant(workspace_id: str, user_id: str, role: str) -> None:
@@ -170,21 +182,14 @@ def test_user():
     with db_module.engine.connect() as conn:
         conn.execute(
             text("""
-                INSERT INTO users (id, email, name, hashed_password, created_at, updated_at)
-                VALUES (:id, :email, :name, :password, NOW(), NOW())
+                INSERT INTO users (id, email, name, created_at, updated_at)
+                VALUES (:id, :email, :name, NOW(), NOW())
             """),
-            {"id": user_id, "email": email, "name": name, "password": TEST_PASSWORD_HASH},
+            {"id": user_id, "email": email, "name": name},
         )
         conn.commit()
 
-    token, _ = create_access_token(data={"sub": user_id})
-    return {
-        "id": user_id,
-        "email": email,
-        "name": name,
-        "token": token,
-        "headers": {"Authorization": f"Bearer {token}"},
-    }
+    return {"id": user_id, "email": email, "name": name, **_session(user_id)}
 
 
 @pytest.fixture
@@ -197,21 +202,14 @@ def second_user():
     with db_module.engine.connect() as conn:
         conn.execute(
             text("""
-                INSERT INTO users (id, email, name, hashed_password, created_at, updated_at)
-                VALUES (:id, :email, :name, :password, NOW(), NOW())
+                INSERT INTO users (id, email, name, created_at, updated_at)
+                VALUES (:id, :email, :name, NOW(), NOW())
             """),
-            {"id": user_id, "email": email, "name": name, "password": TEST_PASSWORD_HASH},
+            {"id": user_id, "email": email, "name": name},
         )
         conn.commit()
 
-    token, _ = create_access_token(data={"sub": user_id})
-    return {
-        "id": user_id,
-        "email": email,
-        "name": name,
-        "token": token,
-        "headers": {"Authorization": f"Bearer {token}"},
-    }
+    return {"id": user_id, "email": email, "name": name, **_session(user_id)}
 
 
 @pytest.fixture

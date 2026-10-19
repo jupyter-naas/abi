@@ -13,11 +13,6 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.credentials import (
     accepted_kinds,
     bearer_credential,
 )
-from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
-    create_access_token,
-    decode_token,
-    is_session_token,
-)
 from naas_abi_core.engine.call_context import (
     CallContext,
     as_service_account,
@@ -43,7 +38,7 @@ from naas_abi_core.services.iam.IAMService import IAMService
 
 
 @pytest.fixture
-def iam(monkeypatch):
+def iam():
     service = IAMService(IAMStoreMemory())
     service.bootstrap()
     previous = credentials.configure_iam(lambda: service)
@@ -75,15 +70,10 @@ def _vouched(iam, record, audience, **fields):
         ).token
 
 
-async def _never_revoked(jti: str) -> bool:
-    return False
-
-
 def credential(token):
     import asyncio
 
-    # The revocation list of access tokens is Nexus's database: none here.
-    return asyncio.run(bearer_credential(token, is_revoked=_never_revoked))
+    return asyncio.run(bearer_credential(token))
 
 
 # -- which route takes which kind ---------------------------------------------------------------
@@ -96,7 +86,7 @@ def test_the_routes_take_the_kinds_they_were_made_for():
     assert accepted_kinds("/api/v1/chat/completions") == {SESSION, API_KEY, CODING}
     # The account and the credentials' own administration take no key.
     assert accepted_kinds("/api/auth/me") == {SESSION}
-    assert accepted_kinds("/api/auth/logout") == {SESSION}
+    assert accepted_kinds("/api/auth/oidc/logout") == {SESSION}
     assert accepted_kinds("/api/iam/api-keys") == {SESSION}
     # Anything that is not the API (the WebSocket, an app) takes a session only.
     assert accepted_kinds("/socket.io/") == {SESSION}
@@ -104,59 +94,72 @@ def test_the_routes_take_the_kinds_they_were_made_for():
     assert accepted_kinds("/health") == {SESSION}
 
 
-# -- the session Nexus signs --------------------------------------------------------------------
+# -- Nexus signs nothing ------------------------------------------------------------------------
+
+# What an older Nexus signed with its ``secret_key``: read by nobody any more.
+OLD_SECRET = "the-key-nexus-used-to-sign-with"
 
 
-def test_a_session_token_is_a_session_and_names_its_user():
-    token, jti = create_access_token({"sub": "usr-1"})
-    payload = decode_token(token)
-    assert payload is not None and payload["aud"] == SESSION_AUDIENCE
-    assert is_session_token(payload)
-    found = credential(token)
-    assert found is not None and (found.kind, found.user_id) == (SESSION, "usr-1")
-    assert found.token_id == jti
-
-
-def test_a_token_made_before_sessions_had_an_audience_is_no_session():
+def _old_jwt(**claims):
     from jose import jwt
-    from naas_abi.apps.nexus.apps.api.app.core.config import current_secret_key
 
-    old = jwt.encode(
-        {"sub": "usr-1", "jti": "j", "exp": datetime.now(UTC) + timedelta(hours=1)},
-        current_secret_key(),
+    return jwt.encode(
+        {"jti": "j", "exp": datetime.now(UTC) + timedelta(hours=1), **claims},
+        OLD_SECRET,
         algorithm="HS256",
     )
-    assert decode_token(old) is None
-    assert credential(old) is None
 
 
 @pytest.mark.parametrize(
     "claims",
     [
+        {"sub": "usr-1", "aud": "abi:session"},  # a session
+        {"sub": "usr-1"},  # one made before sessions had an audience
         {"sub": "usr-1", "scope": "app-html"},  # an app-html link
         {"sub": "usr-1", "scope": "app-html", "path_prefix": "/app-html/x/"},
         {"sub": "usr-1", "aud": "abi:delegated:coding"},
     ],
 )
-def test_a_link_or_another_audience_signed_with_the_secret_is_no_session(claims):
-    from jose import jwt
-    from naas_abi.apps.nexus.apps.api.app.core.config import current_secret_key
-
-    token = jwt.encode(
-        {**claims, "jti": "j", "exp": datetime.now(UTC) + timedelta(hours=1)},
-        current_secret_key(),
-        algorithm="HS256",
-    )
-    assert credential(token) is None
+def test_a_token_signed_with_the_old_secret_is_no_credential(claims):
+    assert credential(_old_jwt(**claims)) is None
 
 
-def test_create_access_token_never_signs_another_audience():
-    token, _ = create_access_token({"sub": "usr-1", "aud": "abi:delegated:coding"})
-    assert decode_token(token)["aud"] == SESSION_AUDIENCE
+def test_the_secret_key_signs_and_reads_no_token():
+    """RFC §13: ``secret_key`` signs no token. Nothing in Nexus imports a JWT
+    signer with it, and no module makes or reads a session of its own."""
+    import re
+    from pathlib import Path
+
+    from naas_abi.apps.nexus.apps.api import app
+
+    root = Path(app.__file__).parent
+    signers = re.compile(r"jwt\.encode\(|HS256|create_access_token|decode_token|current_secret_key")
+    offenders = [
+        str(path.relative_to(root))
+        for path in root.rglob("*.py")
+        if not path.name.endswith("_test.py")
+        and "tests" not in path.parts
+        and signers.search(path.read_text(encoding="utf-8"))
+    ]
+    assert offenders == []
 
 
-def test_a_session_token_revoked_by_its_users_floor_is_no_session(iam, ada):
-    token, _ = create_access_token({"sub": ada.id})
+def test_the_session_modules_of_the_old_login_are_gone():
+    import importlib
+
+    for name in ("refresh_token", "auth.default_passwords"):
+        with pytest.raises(ModuleNotFoundError):
+            importlib.import_module(
+                f"naas_abi.apps.nexus.apps.api.app.services.{name}"
+            )
+    from naas_abi.apps.nexus.apps.api.app.services.auth import service
+
+    for name in ("create_access_token", "decode_token", "is_session_token", "verify_password"):
+        assert not hasattr(service, name)
+
+
+def test_a_session_revoked_by_its_users_floor_is_no_session(iam, ada):
+    token = _vouched(iam, ada, SESSION_AUDIENCE)
     assert credential(token) is not None
     with _acting_for(ada):
         iam.revoke_tokens(ada.id)
@@ -164,28 +167,15 @@ def test_a_session_token_revoked_by_its_users_floor_is_no_session(iam, ada):
 
 
 def test_a_sign_in_right_after_a_revocation_is_a_session(iam, ada):
-    """A password change revokes the user's tokens and signs them in again in
-    the same second: the new session's ``iat`` has whole seconds and must not
-    fall at or before the floor."""
-    old, _ = create_access_token({"sub": ada.id})
+    """The sessions of a user the engine just revoked, and a sign-in in the same
+    second: the new session's ``iat`` has whole seconds and must not fall at or
+    before the floor."""
+    old = _vouched(iam, ada, SESSION_AUDIENCE)
     with _acting_for(ada):
         iam.revoke_tokens(ada.id)
-    new, _ = create_access_token({"sub": ada.id})
+    new = _vouched(iam, ada, SESSION_AUDIENCE)
     assert credential(old) is None
     assert credential(new) is not None
-
-
-def test_a_suspended_user_has_no_session(iam, ada):
-    token, _ = create_access_token({"sub": ada.id})
-    with as_service_account("engine"):
-        iam.suspend_principal(ada.id)
-    assert credential(token) is None
-
-
-def test_a_nexus_user_iam_never_heard_of_keeps_a_session(iam):
-    token, _ = create_access_token({"sub": "9f2d5c0e-0000-4000-8000-000000000001"})
-    found = credential(token)
-    assert found is not None and found.kind == SESSION
 
 
 # -- engine tokens ------------------------------------------------------------------------------

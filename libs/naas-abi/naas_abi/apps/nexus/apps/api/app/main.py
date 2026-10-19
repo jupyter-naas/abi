@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from naas_abi.apps.nexus.apps.api.app.api.router import api_router
-from naas_abi.apps.nexus.apps.api.app.core.config import settings, validate_settings_on_startup
+from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import init_db
 from naas_abi.apps.nexus.apps.api.app.core.frame_headers import embed_csp, is_embeddable
 from naas_abi.apps.nexus.apps.api.app.core.logging import configure_logging
@@ -291,29 +291,46 @@ async def _prefetch_agent_class_registry() -> None:
         _log.exception("Background agent registry pre-fetch failed (non-fatal)")
 
 
-async def _reencrypt_secrets_under_default_keys() -> None:
-    """Move workspace secrets encrypted under a published default key to the real key."""
-    from naas_abi.apps.nexus.apps.api.app.core.config import current_secret_key
+async def _move_secrets_to_the_secrets_key(app: FastAPI) -> None:
+    """Move what the old ``secret_key`` encrypted under the secrets key (RFC §13):
+    workspace secrets and the provider tokens of sessions. Idempotent, and cheap
+    once nothing is left under an old key."""
     from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-    from naas_abi.apps.nexus.apps.api.app.core.secret_key import (
-        INSECURE_SECRET_KEYS,
-        is_insecure_secret_key,
+    from naas_abi.apps.nexus.apps.api.app.core.secret_key import legacy_secret_keys
+    from naas_abi.apps.nexus.apps.api.app.services.secrets.migration import (
+        move_to_secrets_key,
     )
-    from naas_abi.apps.nexus.apps.api.app.services.secrets.adapters.secondary.postgres import (
-        SecretsSecondaryAdapterPostgres,
-    )
-    from naas_abi.apps.nexus.apps.api.app.services.secrets.service import SecretsService
 
-    if is_insecure_secret_key(current_secret_key()):
-        return
+    log = logging.getLogger(__name__)
+    old_keys = getattr(app.state, "legacy_secret_keys", None)
+    if old_keys is None:
+        # No engine store to ask: the configured key and the published defaults.
+        old_keys = legacy_secret_keys(settings.secret_key, _NoStore())
     async with AsyncSessionLocal() as db:
-        service = SecretsService(adapter=SecretsSecondaryAdapterPostgres(db=db))
-        rewritten = await service.reencrypt_from_keys(sorted(INSECURE_SECRET_KEYS))
-    if rewritten:
-        logging.getLogger(__name__).warning(
-            "Re-encrypted %d workspace secret(s) that were stored under a default key.",
-            rewritten,
+        moved = await move_to_secrets_key(db, old_keys)
+        await db.commit()
+    if moved.secrets or moved.session_tokens:
+        log.warning(
+            "Re-encrypted %d workspace secret(s) and %d session token(s) under the secrets "
+            "key (NEXUS_SECRETS_KEY): the old SECRET_KEY encrypts nothing and signs nothing now.",
+            moved.secrets,
+            moved.session_tokens,
         )
+    if moved.unreadable:
+        log.warning(
+            "%d stored secret(s) or session token(s) are encrypted under a key that is "
+            "not known. If you had set SECRET_KEY, set it again to the old value: they move "
+            "at the next start.",
+            moved.unreadable,
+        )
+
+
+class _NoStore:
+    def get(self, key: str, default: object = None) -> object:
+        return default
+
+    def set(self, key: str, value: str) -> None:  # pragma: no cover - never written
+        raise RuntimeError("no secret store")
 
 
 async def _prepare_iam() -> None:
@@ -335,6 +352,32 @@ async def _prepare_iam() -> None:
                 log.info("Role data moved into IAM: %s", report)
     except Exception:
         log.exception("Nexus could not set up its authorization in IAM: every request is refused")
+
+
+async def _hint_unlinked_users() -> None:
+    """Accounts of the old login that no identity provider signs in yet: they are
+    linked at the first sign-in through the built-in provider, once the provider
+    knows them (``abi user migrate``). Said once at start, beyond the people the
+    configuration lists (those are made at the provider by the seeds)."""
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.services.oidc.adapters.secondary.postgres import (
+        OidcSessionSecondaryAdapterPostgres,
+    )
+
+    try:
+        async with AsyncSessionLocal() as db:
+            unlinked = await OidcSessionSecondaryAdapterPostgres(db).list_legacy_users()
+    except Exception:  # noqa: BLE001 - a hint, never a reason not to start
+        return
+    configured = {str(u.email).strip().lower() for u in settings.users}
+    waiting = [u for u in unlinked if u.email.lower() not in configured]
+    if waiting:
+        logging.getLogger(__name__).warning(
+            "%d account(s) of the old login are not linked to an identity provider yet. "
+            "Run `abi user migrate` (then `--apply`): each person signs in with the code "
+            "the built-in provider mails them, and keeps their roles and data.",
+            len(waiting),
+        )
 
 
 async def _place_workspace_resources() -> None:
@@ -359,7 +402,6 @@ async def _startup(app: FastAPI) -> None:
     initialize_nexus_service_registry()
 
     # Validate critical security settings
-    validate_settings_on_startup()
 
     # Initialize database (run migrations) with retry logic
     try:
@@ -370,11 +412,12 @@ async def _startup(app: FastAPI) -> None:
         print("  API will not start without database connection.")
         raise
 
-    await _reencrypt_secrets_under_default_keys()
+    await _move_secrets_to_the_secrets_key(app)
 
     # Nexus's authorization lives in IAM: its action catalog and feature policies,
     # and (once) the memberships and superadmin flags it kept itself before.
     await _prepare_iam()
+    await _hint_unlinked_users()
 
     # Apply config-driven user/org/workspace seeds from config.yaml.
     from naas_abi.apps.nexus.apps.api.app.core.org_seed import apply_configuration_seeds
@@ -391,7 +434,7 @@ async def _startup(app: FastAPI) -> None:
     with as_service_account("api"):
         via = event_triggered_via.set("configuration")
         try:
-            await apply_configuration_seeds(getattr(app.state, "secret_service", None))
+            await apply_configuration_seeds()
         finally:
             event_triggered_via.reset(via)
 

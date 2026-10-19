@@ -96,7 +96,6 @@ async def _seed_user(maker, user_id="usr-1", **extra) -> None:
                 id=user_id,
                 email=f"{user_id}@example.com",
                 name="Alice",
-                hashed_password="x",
                 **extra,
             )
         )
@@ -141,12 +140,12 @@ async def test_profile_changes_name_the_fields_but_never_log_personal_values(env
         user = await session.get(UserModel, "usr-1")
         user.name = "Alice Martin"
         user.email = "alice.martin@example.com"
-        user.hashed_password = "y"
+        user.company = "Acme"
         await session.commit()
 
     event = _payloads(events)[-1]
     assert _kind(event) == "UpdateUser"
-    assert sorted(event["changed_fields"]) == ["email", "name", "password"]
+    assert sorted(event["changed_fields"]) == ["company", "email", "name"]
     raw = json.dumps(event)
     assert "Alice Martin" not in raw and "alice.martin@" not in raw
     assert event["updates"] == [str(user_account_iri("usr-1"))]
@@ -278,7 +277,7 @@ async def test_app_and_agent_configuration(env) -> None:
 async def test_rolled_back_changes_log_nothing(env) -> None:
     maker, events, published = env
     async with maker() as session:
-        session.add(UserModel(id="usr-1", email="a@example.com", name="A", hashed_password="x"))
+        session.add(UserModel(id="usr-1", email="a@example.com", name="A"))
         await session.flush()
         await session.rollback()
 

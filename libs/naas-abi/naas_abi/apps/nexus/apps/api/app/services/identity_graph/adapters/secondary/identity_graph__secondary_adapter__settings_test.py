@@ -23,10 +23,9 @@ class _ModuleConfig(BaseModel):
 def _settings() -> Settings:
     return Settings(
         database_url="postgresql+asyncpg://nexus:s3cr3t-pw@postgres:5432/nexus",
-        secret_key="k" * 40,
+        secrets_encryption_key="k" * 40,
         frontend_url="https://bob.example.com",
-        magic_link_allow_signup=False,
-        magic_link_email_app_name="BOB Platform",
+        email_app_name="BOB Platform",
         tenant={
             "tab_title": "Bob AI Platform",
             "primary_color": "#0057B8",
@@ -38,7 +37,7 @@ def _settings() -> Settings:
             "workspace_overrides": {"adqcc": {"agents": False}},
         },
         users=[
-            {"email": "alice@example.com", "name": "Alice", "store_credentials_in_secrets": False},
+            {"email": "alice@example.com", "name": "Alice"},
             {"email": "Bob@Example.com", "name": "Bob"},
         ],
         organizations=[
@@ -79,7 +78,7 @@ def test_secrets_never_reach_the_graph() -> None:
     platform = _load()
 
     assert "nexus_config.database_url" not in platform.settings
-    assert "nexus_config.secret_key" not in platform.settings
+    assert "nexus_config.secrets_encryption_key" not in platform.settings
     assert not any("s3cr3t" in value for value in platform.settings.values())
     assert not any(key.endswith("secret") or "password" in key for key in platform.settings)
 
@@ -88,8 +87,7 @@ def test_module_and_nexus_settings_are_flattened() -> None:
     platform = _load()
 
     assert platform.settings["abi_agent_model"] == "qwen-3.8"
-    assert platform.settings["nexus_config.magic_link_allow_signup"] == "false"
-    assert platform.settings["nexus_config.magic_link_email_app_name"] == "BOB Platform"
+    assert platform.settings["nexus_config.email_app_name"] == "BOB Platform"
     # Typed sections are modelled as their own classes, not as settings.
     assert not any(
         k.startswith(("nexus_config.users", "nexus_config.organizations"))
@@ -108,10 +106,6 @@ def test_feature_flags_tenant_and_seeds_are_typed() -> None:
     assert platform.role_baseline["viewer"] == ["chat"]
     assert platform.workspace_overrides == {"adqcc": {"agents": False}}
     assert platform.tenant["tab_title"] == "Bob AI Platform"
-    assert platform.credential_storage_by_email == {
-        "alice@example.com": False,
-        "bob@example.com": True,
-    }
     seed = platform.workspace_seeds["adqcc"]
     assert seed.default_agent == "external.adqcc AdqccAgent"
     assert seed.agents == ["external.adqcc AdqccAgent", "bob BobAgent"]

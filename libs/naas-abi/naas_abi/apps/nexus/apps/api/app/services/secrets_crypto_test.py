@@ -10,7 +10,7 @@ from naas_abi.apps.nexus.apps.api.app.services import secrets_crypto
 @pytest.fixture
 def secret_key(monkeypatch: pytest.MonkeyPatch):
     def use(key: str) -> None:
-        monkeypatch.setattr(config, "settings", SimpleNamespace(secret_key=key))
+        monkeypatch.setattr(config, "settings", SimpleNamespace(secrets_encryption_key=key))
 
     return use
 

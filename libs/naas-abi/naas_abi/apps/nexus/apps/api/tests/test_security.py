@@ -7,7 +7,10 @@ Maps to: docs/TEST-PROTOCOL.md Section 5.
 """
 
 from jose import jwt
-from naas_abi.apps.nexus.apps.api.app.core.config import settings
+
+# What an older Nexus signed its tokens with: it signs nothing now, and no token
+# carrying that signature (or any HS256 one) opens the API.
+OLD_SECRET = "the-key-nexus-used-to-sign-with"
 
 
 class TestJWTSecurity:
@@ -26,11 +29,21 @@ class TestJWTSecurity:
         )
         assert response.status_code == 401
 
+    async def test_a_session_signed_with_the_old_secret_is_refused(self, client, test_user):
+        """What Nexus used to sign (a session, with the right audience) is no credential."""
+        old = jwt.encode(
+            {"sub": test_user["id"], "aud": "abi:session", "jti": "j", "exp": 9999999999},
+            OLD_SECRET,
+            algorithm="HS256",
+        )
+        response = await client.get("/api/auth/me", headers={"Authorization": f"Bearer {old}"})
+        assert response.status_code == 401
+
     async def test_token_without_sub_claim(self, client):
         """Token without 'sub' claim is rejected."""
         token = jwt.encode(
             {"exp": 9999999999},
-            settings.secret_key,
+            OLD_SECRET,
             algorithm="HS256",
         )
         response = await client.get(
@@ -43,7 +56,7 @@ class TestJWTSecurity:
         """Token for a user that doesn't exist is rejected."""
         token = jwt.encode(
             {"sub": "user-does-not-exist", "exp": 9999999999},
-            settings.secret_key,
+            OLD_SECRET,
             algorithm="HS256",
         )
         response = await client.get(
@@ -150,7 +163,7 @@ class TestCORS:
     async def test_cors_preflight_from_allowed_origin(self, client):
         """CORS preflight from allowed origin succeeds."""
         response = await client.options(
-            "/api/auth/login",
+            "/api/auth/me",
             headers={
                 "Origin": "http://localhost:3000",
                 "Access-Control-Request-Method": "POST",
@@ -163,7 +176,7 @@ class TestCORS:
     async def test_cors_no_wildcard_with_credentials(self, client):
         """CORS should not use wildcard origin when credentials are enabled."""
         response = await client.options(
-            "/api/auth/login",
+            "/api/auth/me",
             headers={
                 "Origin": "http://localhost:3000",
                 "Access-Control-Request-Method": "POST",

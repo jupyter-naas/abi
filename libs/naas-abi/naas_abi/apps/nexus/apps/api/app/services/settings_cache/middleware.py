@@ -3,8 +3,8 @@
 Opt-in: only GET requests carrying ``X-Nexus-Cache: 1`` are cached. The web app sends
 that header from settings pages only, so the rest of the app always reads live data.
 
-Keys are per user (the bearer token's ``sub``, not the token itself, which rotates)
-and include the full path and query string, so role-dependent answers never leak
+Keys are per user (the user ``RequestIdentityMiddleware`` verified, which wraps this
+one; a request with none is never cached) and include the full path and query string, so role-dependent answers never leak
 between users.
 
 Invalidation uses two generation counters stored in the cache itself:
@@ -117,12 +117,11 @@ def invalidate_on_startup(cache_resolver: Callable[[], Any] = default_cache_reso
         logger.warning("Settings cache: startup invalidation failed: %s", exc)
 
 
-def default_user_resolver(headers: Headers) -> str | None:
-    from naas_abi.apps.nexus.apps.api.app.services.identity_events.middleware import (
-        user_id_from_headers,
-    )
-
-    return user_id_from_headers(headers)
+def default_user_resolver(scope: Scope) -> str | None:
+    """The user the request's credential proved (``RequestIdentityMiddleware``)."""
+    credential = (scope.get("state") or {}).get("nexus_credential")
+    user_id = getattr(credential, "user_id", None)
+    return str(user_id) if user_id else None
 
 
 def is_settings_path(path: str) -> bool:
@@ -137,7 +136,7 @@ class SettingsCacheMiddleware:
         self,
         app: ASGIApp,
         cache_resolver: Callable[[], Any] = default_cache_resolver,
-        user_resolver: Callable[[Headers], str | None] = default_user_resolver,
+        user_resolver: Callable[[Scope], str | None] = default_user_resolver,
         ttl: datetime.timedelta = DEFAULT_TTL,
     ) -> None:
         self.app = app
@@ -167,7 +166,7 @@ class SettingsCacheMiddleware:
         if method != "GET" or headers.get(CACHE_HEADER) != "1":
             await self.app(scope, receive, send)
             return
-        user_id = self.user_resolver(headers)
+        user_id = self.user_resolver(scope)
         if not user_id:
             await self.app(scope, receive, send)
             return
@@ -196,7 +195,7 @@ class SettingsCacheMiddleware:
         if method != "POST":
             await _send_plain(send, 405)
             return
-        user_id = self.user_resolver(Headers(scope=scope))
+        user_id = self.user_resolver(scope)
         if not user_id:
             await _send_plain(send, 401)
             return

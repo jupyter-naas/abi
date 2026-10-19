@@ -107,8 +107,6 @@ class PlatformSnapshot:
     organization_overrides: dict[str, dict[str, list[str]]] = field(default_factory=dict)
     tenant: dict[str, Any] = field(default_factory=dict)
     settings: dict[str, str] = field(default_factory=dict)
-    # email -> store_credentials_in_secrets, from the users seed
-    credential_storage_by_email: dict[str, bool] = field(default_factory=dict)
     # workspace slug -> seed
     workspace_seeds: dict[str, IdentityWorkspaceSeed] = field(default_factory=dict)
 

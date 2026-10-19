@@ -8,7 +8,6 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.projects.preview_token impor
     read_preview_token,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
-from naas_abi.apps.nexus.apps.api.app.services.auth import service as auth_service
 from naas_abi_core.engine.call_context import (
     CallContext,
     as_service_account,
@@ -53,16 +52,22 @@ def test_a_preview_link_is_an_iam_grant_that_opens_one_draft_and_nothing_at_the_
 
 def test_a_preview_token_is_never_a_session_token_nor_an_api_credential() -> None:
     """The previewed app can read its URL; the token must not open the API."""
+    import asyncio
+
     token = _mint()
-    assert auth_service.decode_token(token) is None
+    assert asyncio.run(credentials.bearer_credential(token)) is None
     assert credentials.accepted_kinds("/api/workspaces") == {"session", "api-key"}
 
 
-def test_a_session_token_is_not_a_preview_token() -> None:
-    session, _ = auth_service.create_access_token(
-        {"sub": "u-1", "scope": "app-preview", "uid": "u-1", "ws": "ws-1", "slug": "demo"}
+def test_a_token_signed_with_the_old_secret_is_not_a_preview_token() -> None:
+    from jose import jwt
+
+    old = jwt.encode(
+        {"sub": "u-1", "scope": "app-preview", "uid": "u-1", "ws": "ws-1", "slug": "demo"},
+        "the-key-nexus-used-to-sign-with",
+        algorithm="HS256",
     )
-    assert read_preview_token(session) is None
+    assert read_preview_token(old) is None
 
 
 def test_another_kind_of_link_is_not_a_preview_token() -> None:

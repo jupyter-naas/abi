@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__schemas import (
     User,
@@ -15,12 +15,23 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.credentials import (
     bearer_credential,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthUserRecord
-from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService, decode_token
+from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz as authz_module
 from naas_abi.apps.nexus.apps.api.app.services.iam.runtime import IAMUnavailableError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token", auto_error=False)
+_bearer = HTTPBearer(
+    auto_error=False,
+    scheme_name="ApiKey",
+    description="A personal API key (abi_pk_...). The web app signs in with a cookie.",
+)
+
+
+async def bearer_token(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> str | None:
+    """The bearer token of the request, if any (``credentials.py`` says what it is)."""
+    return credentials.credentials if credentials is not None else None
 
 
 def to_user_schema(user: AuthUserRecord, *, is_superadmin: bool | None = None) -> User:
@@ -64,7 +75,7 @@ async def request_credential(request: Request, token: str | None) -> Credential 
 
 async def get_current_user(
     request: Request,
-    token: str | None = Depends(oauth2_scheme),
+    token: str | None = Depends(bearer_token),
     auth_service: AuthService = Depends(get_auth_service),
 ) -> User | None:
     """The user of the request's credential: a session (the bearer token, else
@@ -149,13 +160,12 @@ async def require_superadmin(
 
 
 __all__ = [
-    "decode_token",
+    "bearer_token",
     "is_platform_admin",
     "require_superadmin",
     "get_auth_service",
     "get_current_user",
     "get_current_user_required",
-    "oauth2_scheme",
     "to_signed_in_user",
     "with_platform_role",
     "to_user_schema",

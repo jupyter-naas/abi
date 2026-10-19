@@ -184,6 +184,29 @@ class NexusSignInContract(NexusHarness):
         assert attached == []
 
     @pytest.mark.asyncio
+    async def test_sign_ins_and_outs_are_audited(self, nexus, harness):
+        from sqlalchemy import text
+
+        client, _, sessions = nexus
+        user = harness.create_user(f"aud-{os.urandom(3).hex()}@example.com")
+        await self._sign_in(client, harness, user)
+        csrf = (await client.get("/api/auth/oidc/session")).json()["csrf_token"]
+        await client.post("/api/auth/oidc/logout", headers={"X-CSRF-Token": csrf})
+        started = await client.get(
+            "/api/auth/oidc/login", params={"provider": harness.provider_name}
+        )
+        client.cookies.clear()
+        await client.get(harness.sign_in(started.headers["location"], user))  # another browser
+
+        async with sessions() as db:
+            rows = (
+                await db.execute(text("SELECT action, success, details FROM audit_logs ORDER BY id"))
+            ).all()
+        actions = sorted((r.action, bool(r.success)) for r in rows)
+        assert actions == [("login", False), ("login", True), ("logout", True)]
+        assert any("browser_mismatch" in (r.details or "") for r in rows)
+
+    @pytest.mark.asyncio
     async def test_the_same_identity_signs_in_to_the_same_account(self, nexus, harness):
         client, _, _ = nexus
         user = harness.create_user(f"bea-{os.urandom(3).hex()}@example.com")
@@ -749,6 +772,69 @@ class TestSettingsOtherThanBuiltinNeverLink(NexusHarness):
             await db.commit()
         landed = await self._sign_in(client, harness, harness.create_user(email))
         assert landed.headers["location"] == f"{WEB}/auth/login?sso_error=email_in_use"
+
+
+class TestLinkingTheRows:
+    """The Nexus rows of the old login: found by email, linked once."""
+
+    @pytest_asyncio.fixture
+    async def db(self, tmp_path):
+        from naas_abi.apps.nexus.apps.api.app.core.database import Base
+        from sqlalchemy.ext.asyncio import AsyncSession
+
+        engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'rows.db'}")
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            session.add(UserModel(id="u-ada", email="Ada@Example.com", name="Ada"))
+            session.add(UserModel(id="u-bob", email="bob@example.com", name="Bob"))
+            session.add(
+                UserModel(
+                    id="usr_1",
+                    email="carl@example.com",
+                    name="Carl",
+                    principal_id="usr_1",
+                    idp_issuer="https://idp.example",
+                    idp_subject="s-carl",
+                )
+            )
+            await session.commit()
+            yield session
+        await engine.dispose()
+
+    @pytest.mark.asyncio
+    async def test_only_the_rows_no_provider_signs_in_are_legacy(self, db) -> None:
+        adapter = OidcSessionSecondaryAdapterPostgres(db)
+
+        assert [u.id for u in await adapter.list_legacy_users()] == ["u-ada", "u-bob"]
+        assert (await adapter.legacy_user_by_email("ADA@example.com")).id == "u-ada"  # type: ignore[union-attr]
+        assert await adapter.legacy_user_by_email("carl@example.com") is None
+        assert await adapter.legacy_user_by_email("nobody@example.com") is None
+
+    @pytest.mark.asyncio
+    async def test_a_row_is_linked_once_to_one_identity(self, db) -> None:
+        adapter = OidcSessionSecondaryAdapterPostgres(db)
+        fields = {
+            "principal_id": "usr_ada",
+            "provider": "builtin",
+            "issuer": "https://idp.example",
+            "subject": "s-ada",
+            "now": datetime_now(),
+        }
+
+        linked = await adapter.link_user("u-ada", **fields)
+        again = await adapter.link_user("u-ada", **fields)  # a second sign-in of the same person
+
+        assert (linked.id, linked.principal_id, linked.email) == ("u-ada", "usr_ada", "Ada@Example.com")
+        assert again == linked
+        assert await adapter.legacy_user_by_email("ada@example.com") is None
+        # Another identity cannot take a linked row, nor can one identity take two rows.
+        with pytest.raises(UserConflictError):
+            await adapter.link_user("u-ada", **{**fields, "subject": "s-other", "principal_id": "usr_x"})
+        with pytest.raises(UserConflictError):
+            await adapter.link_user("u-bob", **fields)
+        with pytest.raises(UserConflictError):
+            await adapter.link_user("u-missing", **{**fields, "subject": "s-m", "principal_id": "usr_m"})
 
 
 class TestNexusSignInWithFakeIdP(NexusSignInContract):

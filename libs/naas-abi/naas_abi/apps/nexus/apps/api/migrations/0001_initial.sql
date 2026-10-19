@@ -129,24 +129,6 @@ CREATE INDEX IF NOT EXISTS idx_graph_edges_source ON graph_edges(source_id);
 CREATE INDEX IF NOT EXISTS idx_graph_edges_target ON graph_edges(target_id);
 
 -- ============================================
--- API Keys
--- ============================================
-CREATE TABLE IF NOT EXISTS api_keys (
-    id VARCHAR(255) PRIMARY KEY,
-    user_id VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    workspace_id VARCHAR(255) REFERENCES workspaces(id) ON DELETE CASCADE,
-    name VARCHAR(255) NOT NULL,
-    key_hash VARCHAR(255) NOT NULL,
-    key_prefix VARCHAR(255) NOT NULL, -- First 8 chars for display
-    last_used_at VARCHAR(255),
-    expires_at VARCHAR(255),
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
-CREATE INDEX IF NOT EXISTS idx_api_keys_workspace ON api_keys(workspace_id);
-
--- ============================================
 -- Provider Configurations (per workspace)
 -- ============================================
 CREATE TABLE IF NOT EXISTS provider_configs (

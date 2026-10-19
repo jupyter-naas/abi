@@ -23,7 +23,7 @@ class Provisioned:
 
 class Provider:
     def __init__(self, existing=()):
-        self.people = {e: False for e in existing}
+        self.people = dict.fromkeys(existing, False)
         self.calls: list[tuple[str, str]] = []
 
     def provision(self, email, name):

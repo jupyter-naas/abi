@@ -4,16 +4,7 @@ from collections.abc import Callable
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
-    CurrentPasswordInvalidError,
-    EmailAlreadyRegisteredError,
-    EmailAlreadyTakenError,
-    EmailChangeNotAllowedError,
-    ExpiredResetTokenError,
-    InvalidCredentialsError,
-    InvalidResetTokenError,
-    UserNotFoundError,
-)
+from naas_abi.apps.nexus.apps.api.app.services.auth.service import UserNotFoundError
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat__schema import (
     ChatForbidden,
     ChatNotFound,
@@ -108,14 +99,7 @@ EXCEPTION_TO_HTTP: dict[type[Exception], tuple[int, DetailResolver]] = {
     IAMDeniedError: (403, lambda _exc: "This credential is not allowed to do that"),
     SecretAlreadyExistsError: (400, lambda _exc: "Secret with this key already exists"),
     SecretNotFoundError: (404, lambda _exc: "Secret not found"),
-    EmailAlreadyRegisteredError: (400, lambda _exc: "Email already registered"),
-    EmailAlreadyTakenError: (400, lambda _exc: "Email already taken"),
-    EmailChangeNotAllowedError: (400, lambda _exc: "The email cannot be changed here"),
     UserNotFoundError: (404, lambda _exc: "User not found"),
-    InvalidCredentialsError: (401, lambda _exc: "Invalid email or password"),
-    CurrentPasswordInvalidError: (401, lambda _exc: "Current password is incorrect"),
-    InvalidResetTokenError: (400, lambda _exc: "Invalid or expired reset token"),
-    ExpiredResetTokenError: (400, lambda _exc: "Reset token has expired"),
 }
 
 

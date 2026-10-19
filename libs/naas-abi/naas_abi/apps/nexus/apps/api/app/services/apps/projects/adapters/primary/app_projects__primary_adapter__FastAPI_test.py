@@ -21,7 +21,6 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.projects.adapters.secondary.
 from naas_abi.apps.nexus.apps.api.app.services.apps.projects.service import (
     AppProjectsService,
 )
-from naas_abi.apps.nexus.apps.api.app.services.auth import service as auth_service
 from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (
     ObjectStorageSecondaryAdapterFS,
 )
@@ -57,8 +56,6 @@ def client(team, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient:
     )
     app.dependency_overrides[adapter.get_app_projects_service] = lambda: service
 
-    monkeypatch.setattr(adapter.settings, "secret_key", "test-secret")
-    monkeypatch.setattr(auth_service.settings, "secret_key", "test-secret")
     # Preview links are IAM grants: the engine's IAM, for this test.
     from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
     from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import IAMStoreMemory
@@ -177,10 +174,20 @@ def test_preview_token_is_the_only_key(client: TestClient) -> None:
     token = path.split("/")[2]
 
     assert client.get("/app-preview/forged-token/").status_code == 401
-    session, _ = auth_service.create_access_token({"sub": "u-1"})
-    assert client.get(f"/app-preview/{session}/").status_code == 401
-    # The preview token opens nothing else: it is not a session token.
-    assert auth_service.decode_token(token) is None
+    from jose import jwt
+
+    old_session = jwt.encode(
+        {"sub": "u-1", "aud": "abi:session", "jti": "j"},
+        "the-key-nexus-used-to-sign-with",
+        algorithm="HS256",
+    )
+    assert client.get(f"/app-preview/{old_session}/").status_code == 401
+    # The preview token opens nothing else: it is not a session.
+    import asyncio
+
+    from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
+
+    assert asyncio.run(credentials.bearer_credential(token)) is None
 
 
 def test_media_types() -> None:

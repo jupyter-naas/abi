@@ -1,92 +1,44 @@
 """
-Authentication tests for magic-link login and token validation.
+Authentication: Nexus has no login of its own (RFC §13).
+
+People sign in at an identity provider (``/api/auth/oidc``, covered by
+``app/services/oidc/oidc_sign_in_test.py``); the API reads the session cookie that
+sign-in sets, a personal API key, or a session token the engine issued. Nothing
+here makes a password, magic-link or one-time-code session.
 Maps to: docs/TEST-PROTOCOL.md Section 2.
 """
 
+import pytest
 
-class TestMagicLink:
-    async def test_request_magic_link(self, client, test_user):
-        response = await client.post(
-            "/api/auth/magic-link/request",
-            json={"email": test_user["email"]},
-        )
-        assert response.status_code == 200
-        assert response.json()["status"] == "success"
+REMOVED_LOGIN_ROUTES = [
+    ("POST", "/api/auth/login", {"email": "a@example.com", "password": "whatever"}),
+    ("POST", "/api/auth/register", {"email": "a@example.com", "password": "whatever1", "name": "A"}),
+    ("POST", "/api/auth/token", None),
+    ("POST", "/api/auth/refresh", {"refresh_token": "x"}),
+    ("POST", "/api/auth/magic-link/request", {"email": "a@example.com"}),
+    ("POST", "/api/auth/magic-link/verify", {"token": "x"}),
+    ("POST", "/api/auth/otp/verify", {"email": "a@example.com", "code": "123456"}),
+    ("POST", "/api/auth/forgot-password", {"email": "a@example.com"}),
+    ("POST", "/api/auth/reset-password", {"token": "x", "new_password": "whatever1"}),
+    ("POST", "/api/auth/change-password", {"current_password": "x", "new_password": "whatever1"}),
+    ("POST", "/api/auth/logout", None),
+    ("GET", "/api/auth/config", None),
+]
 
-    async def test_request_magic_link_unknown_user_does_not_create_token(self, client):
-        import naas_abi.apps.nexus.apps.api.app.core.database as db_module
-        from sqlalchemy import text
 
-        email = "not-registered@example.com"
-        response = await client.post(
-            "/api/auth/magic-link/request",
-            json={"email": email},
-        )
-        assert response.status_code == 200
-        assert response.json()["status"] == "success"
+class TestNoBuiltInLogin:
+    @pytest.mark.parametrize(("method", "path", "body"), REMOVED_LOGIN_ROUTES)
+    async def test_the_login_routes_are_gone(self, client, test_user, method, path, body):
+        response = await client.request(method, path, json=body)
+        assert response.status_code in (404, 405), (path, response.status_code, response.text)
+        # And they hand out no token, whoever asks.
+        assert "access_token" not in response.text
+        assert "refresh_token" not in response.text
 
-        with db_module.engine.connect() as conn:
-            user_row = conn.execute(
-                text("SELECT id FROM users WHERE email = :email"),
-                {"email": email},
-            ).fetchone()
-            assert user_row is None
-
-    async def test_verify_magic_link(self, client, test_user):
-        import naas_abi.apps.nexus.apps.api.app.core.database as db_module
-        from sqlalchemy import text
-
-        await client.post("/api/auth/magic-link/request", json={"email": test_user["email"]})
-
-        with db_module.engine.connect() as conn:
-            row = conn.execute(
-                text(
-                    "SELECT token FROM magic_link_tokens WHERE user_id = :user_id ORDER BY created_at DESC LIMIT 1"
-                ),
-                {"user_id": test_user["id"]},
-            ).fetchone()
-            assert row is not None
-            hashed_token = row[0]
-
-        # Adapter accepts both hashed and plain token for backward compatibility.
-        response = await client.post(
-            "/api/auth/magic-link/verify",
-            json={"token": hashed_token},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert "access_token" in data
-        assert data["user"]["id"] == test_user["id"]
-
-    async def test_password_login_is_disabled(self, client, test_user):
-        response = await client.post(
-            "/api/auth/login",
-            json={"email": test_user["email"], "password": "whatever"},
-        )
-        assert response.status_code == 410
-
-    async def test_verify_otp(self, client, test_user, monkeypatch):
-        from naas_abi.apps.nexus.apps.api.app.services.auth import service as auth_service_module
-
-        monkeypatch.setattr(auth_service_module, "generate_otp_code", lambda length=None: "482913")
-
-        await client.post("/api/auth/magic-link/request", json={"email": test_user["email"]})
-
-        response = await client.post(
-            "/api/auth/otp/verify",
-            json={"email": test_user["email"], "code": "482913"},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert "access_token" in data
-        assert data["user"]["id"] == test_user["id"]
-
-        # One-time use: same code cannot be reused.
-        replay = await client.post(
-            "/api/auth/otp/verify",
-            json={"email": test_user["email"], "code": "482913"},
-        )
-        assert replay.status_code == 400
+    async def test_the_signed_in_users_own_routes_stay(self, client, test_user):
+        for path in ("/api/auth/me", "/api/auth/oidc/providers"):
+            response = await client.get(path, headers=test_user["headers"])
+            assert response.status_code == 200, path
 
 
 class TestProtectedEndpoints:
@@ -98,7 +50,7 @@ class TestProtectedEndpoints:
         assert response.status_code == 401
 
     async def test_valid_token_returns_data(self, client, test_user, test_workspace):
-        """AUTH-04: Accessing protected endpoint with valid token works."""
+        """AUTH-04: Accessing protected endpoint with a session of the engine works."""
         response = await client.get(
             f"/api/chat/conversations?workspace_id={test_workspace['id']}",
             headers=test_user["headers"],
@@ -113,20 +65,19 @@ class TestProtectedEndpoints:
         )
         assert response.status_code == 401
 
-    async def test_expired_token_returns_401(self, client):
-        """Expired token returns 401."""
-        from datetime import timedelta
+    async def test_a_revoked_session_returns_401(self, client, test_user, test_workspace):
+        """The engine ends every token of a user at once (a suspension, a revocation)."""
+        from naas_abi_core.engine.call_context import as_service_account
 
-        from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import create_access_token
+        from tests.conftest import CURRENT_IAM
 
-        token, _ = create_access_token(
-            data={"sub": "user-test"}, expires_delta=timedelta(seconds=-1)
-        )
-        response = await client.get(
-            "/api/chat/conversations?workspace_id=ws-test",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert response.status_code == 401
+        iam = CURRENT_IAM[0].iam
+        path = f"/api/chat/conversations?workspace_id={test_workspace['id']}"
+        assert (await client.get(path, headers=test_user["headers"])).status_code == 200
+        record = iam.resolve_user(test_user["id"])
+        with as_service_account("engine"):
+            iam.suspend_principal(record.id)
+        assert (await client.get(path, headers=test_user["headers"])).status_code == 401
 
 
 class TestGetMe:

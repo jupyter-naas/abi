@@ -10,30 +10,22 @@ from __future__ import annotations
 
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.services.apps import links
-from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
-from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
-    decode_token,
-    is_session_token,
-)
 from naas_abi_core.apps.api.abi_api_key_auth import register_app_html_token_validator
 from naas_abi_core.engine.nats_auth import APP_AUDIENCE, GRANT_KEY_PREFIX
 from starlette.requests import Request
 
 
 def validate_app_html_jwt(token: str, request: Request) -> bool:
-    """Accept a user's session token, or a link (an ``abi:delegated:app`` grant)
-    that opens the requested path. Name kept: it validates what a request to
-    ``/app-html/`` presents, a token or a grant."""
-    if token.startswith(GRANT_KEY_PREFIX):
-        link = links.open_link(token, APP_AUDIENCE)
-        if link is None or not link.resource.startswith(links.APP_HTML_ROOT):
-            return False
-        return request.url.path.startswith(link.resource)
-    payload = decode_token(token)
-    if not (payload and is_session_token(payload) and payload.get("sub")):
+    """Accept a link (an ``abi:delegated:app`` grant) that opens the requested
+    path. Name kept: it validates what a request to ``/app-html/`` presents. A
+    session is no credential here: the page's own link is, which the web app
+    makes for the signed-in user."""
+    if not token.startswith(GRANT_KEY_PREFIX):
         return False
-    # Not a session its user's revocation or suspension has ended.
-    return credentials.session_allowed_by_iam(str(payload["sub"]), payload.get("iat"))
+    link = links.open_link(token, APP_AUDIENCE)
+    if link is None or not link.resource.startswith(links.APP_HTML_ROOT):
+        return False
+    return request.url.path.startswith(link.resource)
 
 
 def mint_app_html_access_token(

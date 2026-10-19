@@ -96,7 +96,6 @@ PLATFORM = PlatformSnapshot(
     organization_overrides={"org-1": {"member": ["chat", "slides"]}},
     tenant={"tab_title": "Bob AI Platform", "primary_color": "#0057B8", "show_powered_by": False},
     settings={"abi_agent_model": "qwen-3.8", "nexus_config.magic_link_allow_signup": "false"},
-    credential_storage_by_email={"alice@example.com": False},
     workspace_seeds={
         "acme": IdentityWorkspaceSeed(
             default_agent="bob BobAgent",
@@ -165,7 +164,6 @@ def test_person_carries_the_user_account_with_its_profile() -> None:
     assert (account, NEXUS.user_id, Literal("usr-1")) in graph
     assert (account, NEXUS.company, Literal("Acme")) in graph
     assert (account, NEXUS.job_title, Literal("CTO")) in graph
-    assert (account, NEXUS.store_credentials_in_secrets, Literal(False)) in graph
 
 
 def test_user_id_in_an_event_resolves_to_the_person() -> None:

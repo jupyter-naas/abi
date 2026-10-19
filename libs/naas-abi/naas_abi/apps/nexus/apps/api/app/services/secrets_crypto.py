@@ -5,7 +5,7 @@ import hashlib
 from collections.abc import Iterable
 
 from cryptography.fernet import Fernet, InvalidToken
-from naas_abi.apps.nexus.apps.api.app.core.config import current_secret_key
+from naas_abi.apps.nexus.apps.api.app.core.config import current_secrets_key
 
 
 def _fernet_for(secret_key: str) -> Fernet:
@@ -14,7 +14,7 @@ def _fernet_for(secret_key: str) -> Fernet:
 
 
 def get_fernet() -> Fernet:
-    return _fernet_for(current_secret_key())
+    return _fernet_for(current_secrets_key())
 
 
 def encrypt_secret_value(value: str) -> str:

@@ -132,10 +132,14 @@ def test_the_modules_own_policy_does_not_replace_the_sandbox(monkeypatch):
 
 
 def test_the_grant_opens_its_own_app_only(forwarded):
-    from naas_abi.apps.nexus.apps.api.app.services.auth import service as auth_service
+    from jose import jwt
 
     client = _client()
-    session, _ = auth_service.create_access_token({"sub": "u-42"})
+    session = jwt.encode(
+        {"sub": "u-42", "aud": "abi:session", "jti": "j"},
+        "the-key-nexus-used-to-sign-with",
+        algorithm="HS256",
+    )
 
     assert client.get("/app-remote/forged/acme.research/console/").status_code == 401
     assert client.get(f"/app-remote/{session}/acme.research/console/").status_code == 401
@@ -146,13 +150,17 @@ def test_the_grant_opens_its_own_app_only(forwarded):
 
 
 def test_a_grant_is_never_a_session_token(monkeypatch):
-    from naas_abi.apps.nexus.apps.api.app.services.auth import service as auth_service
+    import asyncio
 
-    assert auth_service.decode_token(GRANT) is None
-    session, _ = auth_service.create_access_token(
-        {"sub": "u-42", "scope": "app-remote", "uid": "u-42", "mod": "acme.research", "app": "x"}
+    from jose import jwt
+
+    assert asyncio.run(credentials.bearer_credential(GRANT)) is None
+    old = jwt.encode(
+        {"sub": "u-42", "scope": "app-remote", "uid": "u-42", "mod": "acme.research", "app": "x"},
+        "the-key-nexus-used-to-sign-with",
+        algorithm="HS256",
     )
-    assert read_remote_app_grant(session) is None
+    assert read_remote_app_grant(old) is None
     # Nor does it act as one at the API: its audience is its own.
     assert credentials.accepted_kinds("/api/chat") == {"session", "api-key"}
 
@@ -574,28 +582,29 @@ def test_uploads_to_one_module_are_capped():
     assert uploads.active == {}
 
 
-def test_the_user_and_expiry_come_from_the_nexus_token_or_a_link(monkeypatch):
+def _engine_session(user_id: str) -> str:
+    from naas_abi.apps.nexus.apps.api.app.services.auth.testing import session_token
+
+    return session_token(credentials.IAM(), user_id)
+
+
+def test_the_user_and_expiry_come_from_the_engine_session_or_a_link(monkeypatch):
     import asyncio
 
     from naas_abi.apps.nexus.apps.api.app.services.apps.app_html_access import (
         mint_app_html_access_token,
     )
-    from naas_abi.apps.nexus.apps.api.app.services.auth import service
+    from naas_abi_core.engine.call_context import as_service_account
 
-    monkeypatch.setattr(
-        service,
-        "decode_token",
-        lambda token: (
-            {"sub": "u-7", "exp": 1_900_000_000, "aud": "abi:session"} if token == "jwt" else None
-        ),
-    )
+    iam = credentials.IAM()
+    with as_service_account("engine"):
+        ada = iam.ensure_user("https://idp.example", "ada")
     request = type("R", (), {})()
 
-    monkeypatch.setattr(http, "extract_abi_api_token", lambda r: "jwt")
-    assert asyncio.run(http._presented_user(request)) == (
-        "u-7",
-        datetime.fromtimestamp(1_900_000_000, UTC),
-    )
+    monkeypatch.setattr(http, "extract_abi_api_token", lambda r: _engine_session(ada.id))
+    user_id, expires = asyncio.run(http._presented_user(request))
+    assert user_id == ada.id and expires is not None
+    assert 0 < (expires - datetime.now(UTC)).total_seconds() <= 600  # ten minutes at most
     monkeypatch.setattr(http, "extract_abi_api_token", lambda r: "abi-api-key")
     assert asyncio.run(http._presented_user(request)) == ("", None)
     # A share link (an /app-html/ grant) names its user and ends when it does.
@@ -613,8 +622,6 @@ def test_the_user_and_expiry_come_from_the_nexus_token_or_a_link(monkeypatch):
 def test_a_session_its_user_revoked_names_no_user_to_open_an_app_for(monkeypatch):
     import asyncio
 
-    from naas_abi.apps.nexus.apps.api.app.services.auth import credentials, service
-    from naas_abi.apps.nexus.apps.api.app.services.auth.service import create_access_token
     from naas_abi_core.engine.call_context import (
         CallContext,
         as_service_account,
@@ -623,14 +630,10 @@ def test_a_session_its_user_revoked_names_no_user_to_open_an_app_for(monkeypatch
         user,
     )
 
-    async def never_revoked(jti: str) -> bool:  # the list of access tokens is a database
-        return False
-
-    monkeypatch.setattr(service, "is_access_token_revoked", never_revoked)
     iam = credentials.IAM()
     with as_service_account("engine"):
         ada = iam.ensure_user("https://idp.example", "ada")
-    token, _ = create_access_token({"sub": ada.id})
+    token = _engine_session(ada.id)
     request = type("R", (), {})()
     monkeypatch.setattr(http, "extract_abi_api_token", lambda r: token)
     assert asyncio.run(http._presented_user(request))[0] == ada.id

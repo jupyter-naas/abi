@@ -19,16 +19,16 @@ ROLE_WORDS = {
 }
 
 
-def _role(role: str | None) -> str:
+def role_words(role: str | None) -> str:
     return ROLE_WORDS.get(role or "", f"a {role}" if role else "a member")
 
 
 def _where(mail: InvitationMail) -> str:
     parts: list[str] = []
     if mail.workspace_name:
-        parts.append(f"{_role(mail.workspace_role)} of the workspace {mail.workspace_name}")
+        parts.append(f"{role_words(mail.workspace_role)} of the workspace {mail.workspace_name}")
     if mail.organization_name:
-        parts.append(f"{_role(mail.organization_role)} of {mail.organization_name}")
+        parts.append(f"{role_words(mail.organization_role)} of {mail.organization_name}")
     return " and ".join(parts) or "a member"
 
 

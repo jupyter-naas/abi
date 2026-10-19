@@ -64,11 +64,11 @@ _OP_ORDER = {"create": 0, "update": 1, "delete": 2}
 _BOOKKEEPING = {"id", "created_at", "updated_at"}
 # Named in changed_fields, value never logged.
 _PERSONAL: dict[str, set[str]] = {
-    "user": {"name", "email", "avatar", "company", "role", "bio", "hashed_password"},
+    "user": {"name", "email", "avatar", "company", "role", "bio"},
     "agent": {"system_prompt"},
 }
 _FIELD_ALIASES: dict[str, dict[str, str]] = {
-    "user": {"hashed_password": "password", "role": "job_title"},
+    "user": {"role": "job_title"},
 }
 
 Change = dict[str, tuple[Any, Any]]

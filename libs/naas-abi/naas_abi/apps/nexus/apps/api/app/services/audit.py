@@ -8,7 +8,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from fastapi import Request
-from naas_abi.apps.nexus.apps.api.app.core.database import async_engine
+from naas_abi.apps.nexus.apps.api.app.core import database
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from sqlalchemy import text
 
@@ -26,7 +26,7 @@ async def log_audit_event(
     Log an audit event.
 
     Args:
-        action: Action type ('login', 'logout', 'register', 'password_change', etc.)
+        action: Action type ('login', 'logout', 'token_revocation', etc.)
         user_id: User performing the action
         resource_type: Type of resource affected ('user', 'workspace', 'conversation', etc.)
         resource_id: ID of the resource
@@ -46,7 +46,8 @@ async def log_audit_event(
     details_json = json.dumps(details) if details else None
 
     try:
-        async with async_engine.begin() as conn:
+        # Read when called: the engine of the database in use, not the one at import.
+        async with database.async_engine.begin() as conn:
             await conn.execute(
                 text("""
                     INSERT INTO audit_logs
@@ -72,7 +73,7 @@ async def log_audit_event(
         print(f"Audit log failed: {e}")
 
 
-async def log_login(user_id: str, success: bool, request: Request | None = None, details: dict | None = None) -> None:
+async def log_login(user_id: str | None, success: bool, request: Request | None = None, details: dict | None = None) -> None:
     """Log a login attempt."""
     await log_audit_event("login", user_id=user_id, success=success, request=request, details=details)
 
@@ -80,28 +81,6 @@ async def log_login(user_id: str, success: bool, request: Request | None = None,
 async def log_logout(user_id: str, request: Request | None = None) -> None:
     """Log a logout."""
     await log_audit_event("logout", user_id=user_id, request=request)
-
-
-async def log_register(user_id: str, request: Request | None = None) -> None:
-    """Log a new user registration."""
-    await log_audit_event("register", user_id=user_id, resource_type="user", resource_id=user_id, request=request)
-
-
-async def log_password_change(user_id: str, request: Request | None = None, forced: bool = False) -> None:
-    """Log a password change."""
-    await log_audit_event(
-        "password_change",
-        user_id=user_id,
-        resource_type="user",
-        resource_id=user_id,
-        request=request,
-        details={"forced": forced}
-    )
-
-
-async def log_token_refresh(user_id: str, request: Request | None = None) -> None:
-    """Log a token refresh."""
-    await log_audit_event("token_refresh", user_id=user_id, request=request)
 
 
 async def log_token_revocation(user_id: str, reason: str, request: Request | None = None) -> None:

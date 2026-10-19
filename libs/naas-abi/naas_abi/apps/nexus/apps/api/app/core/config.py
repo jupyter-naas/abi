@@ -2,13 +2,11 @@
 Application configuration using pydantic-settings.
 """
 
-import sys
 from functools import lru_cache
 from typing import Any, Literal
 
-from naas_abi.apps.nexus.apps.api.app.core.secret_key import INSECURE_SECRET_KEYS
 from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Namespace under which ABI serves the seed decks it ships. Reserved: a
@@ -16,9 +14,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 ABI_SLIDES_TEMPLATE_NAMESPACE = "abi"
 ABI_DOCUMENTS_TEMPLATE_NAMESPACE = "abi"
 ABI_SHEETS_TEMPLATE_NAMESPACE = "abi"
-
-# Known-insecure secret keys that must be rejected
-_INSECURE_SECRETS = INSECURE_SECRET_KEYS
 
 
 class TenantConfig(BaseModel):
@@ -331,7 +326,15 @@ class UserSeedConfig(BaseModel):
     role: str | None = None
     bio: str | None = None
     is_superadmin: bool = False
-    store_credentials_in_secrets: bool = True
+
+    @model_validator(mode="before")
+    @classmethod
+    def _ignore_the_stored_password_setting(cls, data: Any) -> Any:
+        """No password is made for a configured user any more (they sign in at the
+        built-in identity provider): the old setting is accepted and ignored."""
+        if isinstance(data, dict) and "store_credentials_in_secrets" in data:
+            data = {k: v for k, v in data.items() if k != "store_credentials_in_secrets"}
+        return data
 
 
 class OrganizationMemberSeedConfig(BaseModel):
@@ -500,15 +503,17 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus"  # PostgreSQL only
 
-    # Authentication
-    secret_key: str = "change-me-in-production"
-    auth_password_enabled: bool = False
-    # Self-service sign-up via /api/auth/register. Off: accounts come from
-    # invitations or the config seed.
-    auth_signup_enabled: bool = False
-    magic_link_allow_signup: bool = False
-    access_token_expire_minutes: int = 30  # 30 minutes (short-lived)
-    refresh_token_expire_days: int = 30  # 30 days (long-lived)
+    # Nexus has no login of its own: people sign in at an identity provider
+    # (``identity.providers``, ``oidc_*`` below). Nothing here signs a token.
+    #
+    # Encrypts workspace secrets and the provider tokens of sessions (Fernet). Its
+    # own key, never ``secret_key``: empty, it is generated and kept in the engine's
+    # secret store as ``NEXUS_SECRETS_KEY`` (``core/secret_key.py``).
+    secrets_encryption_key: str = ""
+    # Before RFC §13 this key signed Nexus's tokens and encrypted the secrets. It
+    # signs nothing now, and is read at start only to move what it encrypted under
+    # ``secrets_encryption_key``; unset it once Nexus logged that it had.
+    secret_key: str = ""
     # Lifetime of a link for opening /app-html apps (Bearer or ?token=): an IAM
     # grant: a longer setting is accepted and clamped to eight hours.
     app_html_access_token_expire_minutes: int = Field(default=60, ge=1, le=24 * 60)
@@ -528,56 +533,8 @@ class Settings(BaseSettings):
     app_preview_token_expire_minutes: int = Field(default=60, ge=1, le=24 * 60)
     # Lifetime of an /app-remote/ grant (a remote module's app, reopened to renew).
     remote_app_grant_expire_minutes: int = Field(default=8 * 60, ge=1, le=24 * 60)
-    magic_link_expire_minutes: int = 15
-    magic_link_max_active: int = 5
-    magic_link_path: str = "/auth/magic-link"
-    otp_code_length: int = Field(default=6, ge=4, le=10)
-    otp_max_attempts: int = Field(default=5, ge=1)
-    log_otp_codes_when_email_unavailable: bool = False
-    magic_link_email_app_name: str = "NEXUS"
-    magic_link_email_subject_template: str = "Your {app_name} sign-in code"
-    magic_link_email_text_template: str = (
-        "Your {app_name} sign-in code is: {otp_code}\n\n"
-        "Enter this code in the app to continue.\n\n"
-        "Or use this magic link:\n{magic_link_url}\n\n"
-        "This code and link expire in {expire_minutes} minutes."
-    )
-    # Placeholders: app_name, otp_code, magic_link_url, expire_minutes,
-    # primary_color, accent_color, background_color, login_card_color,
-    # login_border_radius, logo_html, logo_url, login_footer_text, tab_title.
-    # Use only inline styles (no CSS {{ }} blocks) — templates use str.format_map.
-    magic_link_email_html_template: str = (
-        '<!DOCTYPE html><html><body style="margin:0;padding:0;'
-        'background-color:{background_color};'
-        'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">'
-        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-        'style="background-color:{background_color};padding:48px 16px;">'
-        '<tr><td align="center">'
-        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-        'style="max-width:440px;background-color:{login_card_color};'
-        'padding:40px 48px;border-radius:{login_border_radius}px;">'
-        '<tr><td align="center" style="padding-bottom:24px;">{logo_html}</td></tr>'
-        '<tr><td align="center" style="padding-bottom:24px;">'
-        '<p style="margin:0;font-size:28px;font-weight:600;color:#1a1a1a;">Welcome</p>'
-        '<p style="margin:8px 0 0;font-size:14px;color:#737373;">Sign in to continue</p>'
-        "</td></tr>"
-        '<tr><td align="center" style="padding-bottom:8px;">'
-        '<p style="margin:0;font-size:14px;color:#737373;">Your sign-in code</p>'
-        '<p style="margin:12px 0 0;font-size:28px;letter-spacing:6px;'
-        'font-weight:700;color:#1a1a1a;">{otp_code}</p>'
-        "</td></tr>"
-        '<tr><td align="center" style="padding:24px 0;">'
-        '<a href="{magic_link_url}" style="display:inline-block;background-color:{primary_color};'
-        "color:#ffffff;text-decoration:none;padding:12px 24px;font-size:14px;"
-        'font-weight:500;border-radius:{login_border_radius}px;">Sign in</a>'
-        "</td></tr>"
-        '<tr><td align="center">'
-        '<p style="margin:0;font-size:12px;color:#737373;">'
-        "This code and link expire in {expire_minutes} minutes.</p>"
-        "</td></tr></table>"
-        '<p style="margin:24px 0 0;font-size:12px;color:#737373;">{login_footer_text}</p>'
-        "</td></tr></table></body></html>"
-    )
+    # The name an email Nexus sends (an invitation) calls the application.
+    email_app_name: str = "NEXUS"
 
     # Outgoing email "From" metadata. Transport details (host, credentials,
     # adapter type) live in the engine config under `services.email`.
@@ -586,7 +543,7 @@ class Settings(BaseSettings):
 
     # Rate Limiting
     rate_limit_enabled: bool = True
-    rate_limit_login_attempts: int = 5  # Max failed attempts per account per window
+    rate_limit_attempts: int = 5  # Max attempts per account (or inviting user) per window
     rate_limit_ip_attempts: int = 20  # Max attempts per client IP per window
     rate_limit_window_seconds: int = 300  # 5-minute window
 
@@ -642,43 +599,17 @@ def get_settings() -> Settings:
 settings = get_settings()
 
 
-def current_secret_key() -> str:
-    """The signing/encryption key, read at call time.
+def current_secrets_key() -> str:
+    """The key that encrypts workspace secrets, read at call time.
 
     ``naas_abi`` replaces ``settings`` after this module is imported, so a
-    module-level ``from ... import settings`` can hold a stale object.
+    module-level ``from ... import settings`` can hold a stale object. Empty only
+    before the API resolved it at start: nothing is encrypted under no key.
     """
-    return settings.secret_key
-
-
-def validate_settings_on_startup() -> None:
-    """Validate critical settings before the app starts serving requests.
-
-    Called during app lifespan startup. Refuses to start if SECRET_KEY
-    is a known-insecure value in non-development environments.
-    """
-    if settings.secret_key in _INSECURE_SECRETS:
-        if settings.environment != "development":
-            print(
-                "\n"
-                "=" * 60 + "\n"
-                "FATAL: SECRET_KEY is insecure.\n"
-                "\n"
-                "You are running in a non-development environment with a\n"
-                "default or empty SECRET_KEY. This allows anyone to forge\n"
-                "authentication tokens.\n"
-                "\n"
-                "Generate a secure key:\n"
-                '  python -c "import secrets; print(secrets.token_urlsafe(64))"\n'
-                "\n"
-                "Set it in your .env file:\n"
-                "  SECRET_KEY=<your-generated-key>\n"
-                "=" * 60 + "\n"
-            )
-            sys.exit(1)
-        else:
-            print(
-                "WARNING: Using insecure default SECRET_KEY. "
-                "This is acceptable for local development only. "
-                "Set SECRET_KEY in .env before deploying."
-            )
+    key = settings.secrets_encryption_key
+    if not key:
+        raise RuntimeError(
+            "No secrets encryption key is loaded: the API resolves it at start "
+            "(core/secret_key.py)"
+        )
+    return key

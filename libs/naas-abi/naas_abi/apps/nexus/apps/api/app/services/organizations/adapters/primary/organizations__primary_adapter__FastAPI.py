@@ -14,24 +14,18 @@ from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
     KNOWN_FEATURE_KEYS,
     resolve_role_baseline,
 )
-from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
-    get_auth_service,
-)
-from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.bootstrap import refresh_feature_policies
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MembershipDenied
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_scope
 from naas_abi.apps.nexus.apps.api.app.services.invites import runtime as invites_runtime
+from naas_abi.apps.nexus.apps.api.app.services.invites.mail import send_added_notice
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     NoProviderError,
     OwnerGrantRefusedError,
 )
 from naas_abi.apps.nexus.apps.api.app.services.invites.service import InvitationService
-from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
-    issue_and_send_invite_sign_in,
-)
 from naas_abi.apps.nexus.apps.api.app.services.invites.views import (
     PROVIDER_FAILURES,
     invite_result,
@@ -856,7 +850,6 @@ async def invite_org_member(
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
     workspace_service: WorkspaceService = Depends(get_workspace_service_for_org_invite),
-    auth_service: AuthService = Depends(get_auth_service),
     email_service: EmailService | None = Depends(_get_email_service),
     invites: InvitationService = Depends(invites_runtime.get_invitation_service),
 ) -> OrganizationMember | dict[str, object]:
@@ -881,8 +874,8 @@ async def invite_org_member(
 
     # Someone with no account yet is invited through an identity provider: the
     # provider makes them exist, IAM holds the roles for their email, and the
-    # first sign-in claims them. Without a provider (or for an existing account)
-    # the account is made, or found, here as before.
+    # first sign-in claims them. Someone who already has an account is added
+    # directly.
     if await invites.persistence.user_id_by_email(email) is None:
         org = await service.get_organization(org_id)
         workspace = (
@@ -908,17 +901,14 @@ async def invite_org_member(
         except OwnerGrantRefusedError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         except NoProviderError as exc:
-            if invite.provider:
-                raise HTTPException(status_code=400, detail=str(exc)) from exc
-            outcome = None
+            # Nobody is signed up here: without an identity provider there is
+            # nowhere for the person to sign in.
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         except PROVIDER_FAILURES as exc:
             raise provider_failure(exc) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        if outcome is not None:
-            return invite_result(outcome)
-
-    _user, user_created = await auth_service.ensure_user_for_invite(email, name=invite.name)
+        return invite_result(outcome)
 
     try:
         member = await service.invite_member(
@@ -931,9 +921,9 @@ async def invite_org_member(
     except MembershipDenied as exc:
         raise _member_denied(str(exc)) from exc
     except OrganizationMemberAlreadyExistsError as exc:
-        # Re-inviting is how an admin resends an invite that never arrived, so
-        # keep the membership as-is and fall through to issue a fresh challenge
-        # rather than rejecting the only retry path they have.
+        # Re-inviting is how an admin resends the notice that never arrived, so
+        # keep the membership as-is and send it again rather than rejecting the
+        # only retry path they have.
         member = await _find_org_member(service, org_id=org_id, user_id=exc.user_id)
         if member is None:
             raise HTTPException(status_code=400, detail="User is already a member") from exc
@@ -957,15 +947,23 @@ async def invite_org_member(
         if ws_member is not None:
             workspace_member_id = ws_member.id
 
-    sign_in_email_sent = await issue_and_send_invite_sign_in(
-        auth_service,
+    org = await service.get_organization(org_id)
+    workspace = (
+        await workspace_service.get_workspace(invite.workspace_id) if invite.workspace_id else None
+    )
+    sign_in_email_sent = await send_added_notice(
         email,
+        inviter_name=current_user.name,
+        organization_name=org.name if org else None,
+        organization_role=invite.role,
+        workspace_name=workspace.name if workspace else None,
+        workspace_role=invite.workspace_role if invite.workspace_id else None,
         email_service=email_service or _get_email_service(request),
     )
 
     return OrganizationMember(
         **member.__dict__,
-        user_created=user_created,
+        user_created=False,
         sign_in_email_sent=sign_in_email_sent,
         workspace_member_id=workspace_member_id,
     )

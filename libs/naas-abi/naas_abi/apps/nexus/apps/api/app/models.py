@@ -151,14 +151,15 @@ class UserModel(Base):
     id = Column(String, primary_key=True)
     email = Column(String, unique=True, nullable=False, index=True)
     name = Column(String, nullable=False)
-    hashed_password = Column(String, nullable=False, default="")
     avatar = Column(String, nullable=True)
     company = Column(String, nullable=True)
     role = Column(String, nullable=True)
     bio = Column(String, nullable=True)
     is_superadmin = Column(Boolean, nullable=False, default=False, server_default="false")
     # A user signed in through an identity provider: one row per (issuer, sub),
-    # whose id is its IAM principal id. Empty for the built-in login's users.
+    # whose id is its IAM principal id. The rows of the old built-in login keep
+    # their id (and every row that points at it) and get their identity at the
+    # first sign-in through the built-in provider (``services/oidc``).
     principal_id = Column(String(255), nullable=True, unique=True)
     idp_provider = Column(String(64), nullable=True)
     idp_issuer = Column(String(1024), nullable=True)
@@ -186,12 +187,6 @@ class UserModel(Base):
     )
     conversations = relationship(
         "ConversationModel", back_populates="user", cascade="all, delete-orphan"
-    )
-    password_reset_tokens = relationship(
-        "PasswordResetTokenModel", back_populates="user", cascade="all, delete-orphan"
-    )
-    magic_link_tokens = relationship(
-        "MagicLinkTokenModel", back_populates="user", cascade="all, delete-orphan"
     )
 
 
@@ -235,40 +230,6 @@ class AuthSessionModel(Base):
     last_seen_at = Column(DateTime(timezone=False), nullable=True)
     revoked_at = Column(DateTime(timezone=False), nullable=True)
     user_agent = Column(String(512), nullable=True)
-
-
-# ============================================
-# Password Reset Tokens
-# ============================================
-
-
-class PasswordResetTokenModel(Base):
-    __tablename__ = "password_reset_tokens"
-
-    id = Column(String, primary_key=True)
-    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    token = Column(String, nullable=False, unique=True, index=True)
-    expires_at = Column(DateTime(timezone=False), nullable=False)
-    used = Column(Boolean, nullable=False, default=False)
-    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
-
-    # Relationships
-    user = relationship("UserModel", back_populates="password_reset_tokens")
-
-
-class MagicLinkTokenModel(Base):
-    __tablename__ = "magic_link_tokens"
-
-    id = Column(String, primary_key=True)
-    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    token = Column(String, nullable=False, unique=True, index=True)
-    otp_code_hash = Column(String, nullable=True)
-    otp_attempts = Column(Integer, nullable=False, default=0)
-    expires_at = Column(DateTime(timezone=False), nullable=False)
-    used = Column(Boolean, nullable=False, default=False)
-    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
-
-    user = relationship("UserModel", back_populates="magic_link_tokens")
 
 
 # ============================================
@@ -636,27 +597,6 @@ class GraphEdgeModel(Base):
     target_node = relationship(
         "GraphNodeModel", foreign_keys=[target_id], back_populates="edges_as_target"
     )
-
-
-# ============================================
-# API Keys
-# ============================================
-
-
-class ApiKeyModel(Base):
-    __tablename__ = "api_keys"
-
-    id = Column(String, primary_key=True)
-    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    workspace_id = Column(
-        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True
-    )
-    name = Column(String, nullable=False)
-    key_hash = Column(String, nullable=False)
-    key_prefix = Column(String, nullable=False)
-    last_used_at = Column(String, nullable=True)
-    expires_at = Column(String, nullable=True)
-    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
 
 
 # ============================================

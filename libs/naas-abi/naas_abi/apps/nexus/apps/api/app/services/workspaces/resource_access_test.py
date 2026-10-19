@@ -46,7 +46,6 @@ class ResourceAccessTests(unittest.IsolatedAsyncioTestCase):
                     id="admin",
                     name="Admin",
                     email="a@example.org",
-                    hashed_password="unused",
                 )
             )
             db.add(OrganizationModel(id="org", name="Organization", slug="org", owner_id="admin"))

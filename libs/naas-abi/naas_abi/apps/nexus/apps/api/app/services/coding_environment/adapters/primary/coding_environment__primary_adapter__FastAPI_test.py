@@ -315,13 +315,11 @@ def test_the_agent_holds_a_key_of_the_user_bound_to_its_sidecar_never_a_session(
     import asyncio
 
     from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
-    from naas_abi.apps.nexus.apps.api.app.services.auth.service import decode_token
 
     base = "http://coder-ada-demo:8378"
     key = asyncio.run(ce_api._mint_agent_token("user-9", "ws-1", base, label="demo"))
 
     assert key.startswith("abi_pk_")
-    assert decode_token(key) is None  # no session, whatever it is presented to
     found = asyncio.run(credentials.bearer_credential(key))
     assert found is not None
     assert (found.kind, found.user_id, found.resource) == ("coding", "user-9", base)

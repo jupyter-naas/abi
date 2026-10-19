@@ -10,13 +10,13 @@ from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from naas_abi.apps.nexus.apps.api.app.services.api_keys.adapters.primary import router
 from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
-from naas_abi.apps.nexus.apps.api.app.services.auth import service as auth_service
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
     get_auth_service,
     get_current_user_required,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthUserRecord
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService
+from naas_abi.apps.nexus.apps.api.app.services.auth.testing import session_token
 from naas_abi.apps.nexus.apps.api.app.services.identity_events.middleware import (
     RequestIdentityMiddleware,
 )
@@ -26,15 +26,10 @@ from naas_abi_core.services.iam.IAMService import IAMService
 
 
 @pytest.fixture
-def iam(monkeypatch):
+def iam():
     service = IAMService(IAMStoreMemory())
     service.bootstrap()
     previous = credentials.configure_iam(lambda: service)
-
-    async def never_revoked(jti: str) -> bool:
-        return False
-
-    monkeypatch.setattr(auth_service, "is_access_token_revoked", never_revoked)
     yield service
     credentials.configure_iam(previous)
 
@@ -78,7 +73,6 @@ def client(iam, ada, attempts):
         id=user_id,
         email=f"{user_id}@example.com",
         name="Ada",
-        hashed_password="x",
         created_at=datetime.utcnow(),
     )
     app.dependency_overrides[get_auth_service] = lambda: AuthService(adapter=adapter)
@@ -95,8 +89,7 @@ def client(iam, ada, attempts):
 
 
 def session_headers(user_id: str) -> dict[str, str]:
-    token, _ = auth_service.create_access_token({"sub": user_id})
-    return {"Authorization": f"Bearer {token}"}
+    return {"Authorization": f"Bearer {session_token(credentials.IAM(), user_id)}"}
 
 
 def create(client, ada, **body):
@@ -360,11 +353,14 @@ def test_a_revoked_key_buys_no_token(client, ada):
     assert response.status_code == 401
 
 
-def test_without_the_engine_the_routes_say_so(client, ada):
+def test_without_the_engine_nobody_is_signed_in_and_the_token_route_says_so(client, ada):
+    headers = session_headers(ada.id)  # made while there still is an engine
     previous = credentials.configure_iam(lambda: None)
     try:
-        response = client.get("/api/iam/api-keys", headers=session_headers(ada.id))
-        assert response.status_code == 503
+        # No engine, no one to vouch for a session: nobody is signed in...
+        response = client.get("/api/iam/api-keys", headers=headers)
+        assert response.status_code == 401
+        # ...and the public token endpoint says why it cannot answer.
         token = client.post(
             "/api/iam/token",
             data={"grant_type": "client_credentials", "client_secret": "abi_pk_x_y"},

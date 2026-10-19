@@ -13,6 +13,7 @@ from naas_abi.apps.nexus.apps.api.app.services.settings_cache.middleware import 
 )
 from naas_abi_core.services.cache.adapters.secondary.CacheFSAdapter import CacheFSAdapter
 from naas_abi_core.services.cache.CacheService import TIER_COLD, CacheService
+from starlette.datastructures import Headers
 
 
 def _build(tmp_path, ttl: datetime.timedelta = datetime.timedelta(hours=24)):
@@ -45,8 +46,8 @@ def _build(tmp_path, ttl: datetime.timedelta = datetime.timedelta(hours=24)):
     app.add_middleware(
         SettingsCacheMiddleware,
         cache_resolver=lambda: cache,
-        user_resolver=lambda headers: (
-            (headers.get("authorization") or "").removeprefix("Bearer ") or None
+        user_resolver=lambda scope: (
+            (Headers(scope=scope).get("authorization") or "").removeprefix("Bearer ") or None
         ),
         ttl=ttl,
     )

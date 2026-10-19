@@ -273,9 +273,9 @@ class OrganizationService:
         *,
         by: Any,
     ) -> OrganizationMemberRecord | None:
-        """Give an existing user by email a role. Callers that support
-        create-on-invite must ensure the user exists (via
-        AuthService.ensure_user_for_invite) first. ``MembershipDenied`` when IAM
+        """Give an existing user by email a role. Someone with no account is
+        invited through an identity provider instead (``services/invites``).
+        ``MembershipDenied`` when IAM
         refuses ``by`` this role (granting ``owner`` is the owner's)."""
         normalized_email = email.lower().strip()
         user = await self.adapter.get_user_by_email(email=normalized_email)

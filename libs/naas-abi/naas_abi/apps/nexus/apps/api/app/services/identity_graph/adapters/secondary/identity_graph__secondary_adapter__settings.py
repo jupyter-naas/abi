@@ -144,10 +144,5 @@ class PlatformConfigurationSourceSettings(PlatformConfigurationSourcePort):
                 k: v for k, v in (settings.get("tenant") or {}).items() if not _SECRET_KEY.search(k)
             },
             settings=flat,
-            credential_storage_by_email={
-                str(user["email"]).lower(): bool(user.get("store_credentials_in_secrets", True))
-                for user in settings.get("users") or []
-                if user.get("email")
-            },
             workspace_seeds=seeds,
         )

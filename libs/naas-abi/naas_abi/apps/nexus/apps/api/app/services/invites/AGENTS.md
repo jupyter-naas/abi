@@ -34,15 +34,16 @@ IdP group bindings are the same idea for a whole group of a provider: the member
 | `adapters/secondary/postgres.py` | The `invitations` table (`migrations/0051_add_invitations.sql`) |
 | `adapters/secondary/engine.py` | The engine's identity and IAM, as `api` for nobody |
 | `adapters/secondary/mailer.py` | The invitation mail through the engine's email service |
-| `sign_in_email.py` | The legacy invite mail (magic link and code), still used without a provider |
+| `mail.py` | The email service, the dev-frontend subject mark, and the notice mailed to someone who already had an account (`send_added_notice`) |
 
 ## Routes
 
 - `POST /api/organizations/{org}/members/invite` and
   `POST /api/workspaces/{ws}/members/invite` (optional `provider`). For an email with no
   Nexus account they answer `{"status": "invited", "invitation", "provider", "user_created",
-  "sign_in_email_sent", "renewed"}`; someone who already has an account is added directly as
-  before; with no provider configured the account is created in Nexus as before.
+  "sign_in_email_sent", "renewed"}`; someone who already has an account is added directly and
+  mailed a notice with a sign-in link (`sign_in_email_sent`); with no provider configured an invite of
+  someone with no account answers 400: Nexus has no login of its own to fall back to.
 - `GET /api/invitations/providers` → `{enabled, default_provider, providers:[{name,
   display_name, provisioning, managed_in_provider}]}`; `managed_in_provider` is
   `provisioning: none`, which the UI explains.

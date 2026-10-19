@@ -5,13 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.services.apps import app_html_access
 from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
-from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
-    create_access_token,
-    decode_token,
-)
 from naas_abi_core.engine.call_context import (
     CallContext,
     service_account,
@@ -44,26 +39,33 @@ def _request(path: str) -> Request:
     )
 
 
-def test_validate_accepts_user_session_jwt(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(settings, "secret_key", "test-secret-key")
-    token, _ = create_access_token(
-        data={"sub": "user-1"},
-        expires_delta=timedelta(minutes=15),
-    )
-    assert app_html_access.validate_app_html_jwt(token, _request("/app-html/axi/devops/host/"))
+def test_a_session_opens_no_app_html_page(iam: IAMService) -> None:
+    """The page's own link is the credential (the web app makes one for the
+    signed-in user): a session is never put in an iframe's URL. Neither a token the
+    engine issued for a session nor one signed with Nexus's old secret opens one."""
+    from jose import jwt
+    from naas_abi_core.engine.call_context import as_service_account
+    from naas_abi_core.services.iam.IAMPorts import TOKEN_TYPE_SESSION, TokenExchange
 
-
-def test_validate_rejects_expired_jwt(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(settings, "secret_key", "test-secret-key")
-    token, _ = create_access_token(
-        data={"sub": "user-1"},
-        expires_delta=timedelta(minutes=-1),
+    with as_service_account("engine"):
+        ada = iam.ensure_user("https://idp.example", "ada")
+    with as_service_account("api"):
+        session = iam.exchange_token(
+            TokenExchange(ada.id, TOKEN_TYPE_SESSION, "abi:session")
+        ).token
+    old = jwt.encode(
+        {
+            "sub": "user-1",
+            "aud": "abi:session",
+            "jti": "j",
+            "exp": datetime.now(UTC) + timedelta(minutes=15),
+        },
+        "the-key-nexus-used-to-sign-with",
+        algorithm="HS256",
     )
-    assert decode_token(token) is None
-    assert (
-        app_html_access.validate_app_html_jwt(token, _request("/app-html/axi/devops/host/"))
-        is False
-    )
+    request = _request("/app-html/axi/devops/host/")
+    assert app_html_access.validate_app_html_jwt(session, request) is False
+    assert app_html_access.validate_app_html_jwt(old, request) is False
 
 
 def test_a_link_opens_the_path_it_names(iam) -> None:
@@ -87,7 +89,6 @@ def test_a_link_is_never_a_session_and_lasts_eight_hours_at_most(iam) -> None:
     token, expires_in = app_html_access.mint_app_html_access_token(
         user_id="user-1", expires_minutes=24 * 60
     )
-    assert decode_token(token) is None
     assert expires_in <= 8 * 3600
     record = iam.store.get_key(token.split("_")[2])
     assert (record.kind, record.audience) == ("grant", "abi:delegated:app")
@@ -126,27 +127,3 @@ def test_mint_rejects_invalid_path_prefix() -> None:
             user_id="user-1",
             path_prefix="/not-app-html/",
         )
-
-
-def test_a_session_ended_by_its_users_revocation_or_suspension_opens_nothing(
-    monkeypatch: pytest.MonkeyPatch, iam: IAMService
-) -> None:
-    """The floor and suspension that end a session at the API end it here too:
-    a session stolen before a password change must not open an app after it."""
-    from naas_abi_core.engine.call_context import as_service_account
-
-    monkeypatch.setattr(settings, "secret_key", "test-secret-key")
-    with as_service_account("engine"):
-        ada = iam.ensure_user("https://idp.example", "ada")
-    request = _request("/app-html/axi/devops/host/")
-    token, _ = create_access_token(data={"sub": ada.id}, expires_delta=timedelta(minutes=15))
-    assert app_html_access.validate_app_html_jwt(token, request)
-    with use_call_context(CallContext(principal=service_account("api"), on_behalf_of=user(ada.id))):
-        iam.revoke_tokens(ada.id)
-    assert not app_html_access.validate_app_html_jwt(token, request)
-    # The session made after the revocation is good, until the user is suspended.
-    fresh, _ = create_access_token(data={"sub": ada.id}, expires_delta=timedelta(minutes=15))
-    assert app_html_access.validate_app_html_jwt(fresh, request)
-    with as_service_account("engine"):
-        iam.suspend_principal(ada.id)
-    assert not app_html_access.validate_app_html_jwt(fresh, request)

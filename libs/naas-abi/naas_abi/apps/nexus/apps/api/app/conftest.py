@@ -7,6 +7,15 @@ import pytest_asyncio
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 
 
+@pytest.fixture(autouse=True)
+def secrets_key(monkeypatch):
+    """The key the API resolves at start (``core/secret_key.py``); nothing is
+    encrypted without one."""
+    from naas_abi.apps.nexus.apps.api.app.core import config
+
+    monkeypatch.setattr(config.settings, "secrets_encryption_key", "a-secrets-key-for-tests")
+
+
 @pytest.fixture
 def nexus_iam():
     """A real IAM installed as Nexus's: orgs, workspaces and role attachments are

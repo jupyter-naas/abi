@@ -51,7 +51,6 @@ async def api(team, nexus_db, monkeypatch):
                     id=user,
                     email=f"{user}@example.com",
                     name=user.title(),
-                    hashed_password="x",
                     created_at=now,
                     updated_at=now,
                 )
@@ -71,7 +70,7 @@ async def api(team, nexus_db, monkeypatch):
         )
         await db.commit()
 
-    # Rate limits and sign-in mail live elsewhere: out of scope here.
+    # Rate limits and the notice mail live elsewhere: out of scope here.
     async def no_limit(*_args, **_kwargs) -> None:
         return None
 
@@ -80,7 +79,7 @@ async def api(team, nexus_db, monkeypatch):
 
     for module in (workspaces_module, organizations_module):
         monkeypatch.setattr(module, "check_rate_limit", no_limit)
-        monkeypatch.setattr(module, "issue_and_send_invite_sign_in", no_mail)
+        monkeypatch.setattr(module, "send_added_notice", no_mail)
 
     app = FastAPI()
     app.include_router(workspaces_router, prefix="/api/workspaces")
@@ -94,7 +93,7 @@ async def api(team, nexus_db, monkeypatch):
 
     app.dependency_overrides[get_db] = session
     app.dependency_overrides[get_current_user_required] = lambda: SimpleNamespace(
-        id=current["id"], email=f"{current['id']}@example.com"
+        id=current["id"], email=f"{current['id']}@example.com", name=current["id"].title()
     )
 
     def as_(user: str) -> AsyncClient:

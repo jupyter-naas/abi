@@ -5,8 +5,8 @@ only where it belongs:
 
 | Kind      | Credential                                                        | Accepted by                                  |
 |-----------|-------------------------------------------------------------------|----------------------------------------------|
-| session   | a Nexus session: the cookie of an identity-provider login, a      | every route and the WebSocket                |
-|           | session token (``abi:session``)                                   |                                              |
+| session   | the cookie of an identity-provider sign-in, or a session token    | every route and the WebSocket                |
+|           | the engine issued for one (``abi:session``, ES256)                |                                              |
 | api-key   | a personal API key (``abi_pk_``) or the ``abi:delegated:api-key`` | ``/api/*`` but the session-only routes       |
 |           | token it is exchanged for                                         |                                              |
 | coding    | a coding environment's key or its ``abi:delegated:coding`` token  | the OpenAI gateway, ``/api/v1/*``            |
@@ -15,8 +15,8 @@ Everything else is refused here: an app-html link, a preview link, a remote app
 grant (they open their own routes, ``apps/links.py``), an agent delegation (it
 is for the kernel and the module hosts). None of them is a session: the browser
 or an app's JavaScript can read them, a coding agent runs in a container.
-``is_session_token`` and ``decode_token`` (``service.py``) know the one kind
-Nexus signs itself, until the login code leaves Nexus (#67).
+Nexus signs no token itself: it has no login (RFC §13), and ``secret_key`` signs
+nothing.
 
 A session-only route is one that must never be reached with a key: the account
 (``/api/auth/*``), the IAM administration and the API-key management
@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import weakref
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -91,6 +91,8 @@ class Credential:
     # What it is bound to: a coding environment's sidecar.
     resource: str | None = None
     token_id: str | None = None
+    # When the token it came from expires (epoch seconds); None for a cookie.
+    expires_at: int | None = None
     # The engine's ``Credential`` of a cookie session, for the CSRF rule.
     session: Any = field(default=None, compare=False, repr=False)
 
@@ -141,24 +143,6 @@ def refuse_a_limited_credential(what: str) -> None:
         raise PermissionDeniedError(message=f"A credential with a limit cannot {what}")
 
 
-def session_allowed_by_iam(user_id: str, issued_at: Any) -> bool:
-    """What the engine's IAM says about a session Nexus signed: it was issued
-    after the last revocation of its user's tokens, and the user is not
-    suspended. For the places that read a session token outside the API's
-    bearer check (``/app-html/``); blocking, so called from a thread."""
-    iam = IAM()
-    if iam is None:
-        return True
-    revoked_since = getattr(iam, "revoked_since", None)
-    if (
-        revoked_since is not None
-        and isinstance(issued_at, int | float)
-        and revoked_since(user_id, int(issued_at))
-    ):
-        return False
-    return _active(iam, user_id)
-
-
 def _active(iam: Any, user_id: str) -> bool:
     """False for a user IAM knows and has suspended or deleted. A user it has no
     record of (a Nexus user of the built-in login) is not suspended."""
@@ -174,15 +158,9 @@ def _active(iam: Any, user_id: str) -> bool:
 
 async def bearer_credential(
     token: str,
-    *,
-    decode: Callable[[str], dict | None] | None = None,
-    is_revoked: Callable[[str], Awaitable[bool]] | None = None,
 ) -> Credential | None:
     """The credential a bearer token is, or None: unknown, expired, revoked,
-    suspended, or a kind this API does not read at all. Fails closed.
-
-    ``decode`` and ``is_revoked`` are Nexus's own session-token functions, by
-    default those of ``service.py`` and ``refresh_token``."""
+    suspended, or a kind this API does not read at all. Fails closed."""
     token = token.strip()
     if not token:
         return None
@@ -191,7 +169,7 @@ async def bearer_credential(
             return await asyncio.to_thread(_key_credential, token)
         if _is_engine_token(token):
             return await asyncio.to_thread(_engine_credential, token)
-        return await _session_credential(token, decode, is_revoked)
+        return None
     except Exception as exc:  # noqa: BLE001 - fail closed
         logger.warning(f"A credential could not be checked; it names no user: {exc}")
         return None
@@ -215,6 +193,7 @@ def _credential_of(claims: TokenClaims) -> Credential | None:
         scope=tuple(dict(s) for s in claims.scope) if claims.scope is not None else None,
         resource=claims.resource,
         token_id=claims.token_id,
+        expires_at=claims.expires_at,
     )
 
 
@@ -257,27 +236,6 @@ def _key_credential(value: str) -> Credential | None:
     except InvalidServiceTokenError:
         return None
     return _credential_of(claims)
-
-
-async def _session_credential(
-    token: str,
-    decode: Callable[[str], dict | None] | None,
-    is_revoked: Callable[[str], Awaitable[bool]] | None,
-) -> Credential | None:
-    """A session token Nexus signed itself: the audience ``abi:session`` and no
-    scope, not revoked, issued after the last revocation of its user's tokens."""
-    from naas_abi.apps.nexus.apps.api.app.services.auth import service
-
-    payload = (decode or service.decode_token)(token)
-    if not payload or not service.is_session_token(payload) or not payload.get("sub"):
-        return None
-    user_id = str(payload["sub"])
-    jti = payload.get("jti")
-    if jti and await (is_revoked or service.is_access_token_revoked)(str(jti)):
-        return None
-    if not await asyncio.to_thread(session_allowed_by_iam, user_id, payload.get("iat")):
-        return None
-    return Credential(kind=SESSION, user_id=user_id, token_id=str(jti) if jti else None)
 
 
 # -- ending a user's credentials -----------------------------------------------------------------

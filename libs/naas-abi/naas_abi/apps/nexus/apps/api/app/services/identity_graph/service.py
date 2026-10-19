@@ -314,13 +314,6 @@ class _Builder:
             "job_title": user.job_title,
             "bio": user.bio,
         }
-        credential_storage = (
-            self.platform.credential_storage_by_email.get(user.email.lower())
-            if self.platform
-            else None
-        )
-        if credential_storage is not None:
-            profile["store_credentials_in_secrets"] = credential_storage
         self.add(
             User(
                 _uri=str(account),

@@ -16,7 +16,6 @@ import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from jose import jwt as jose_jwt
-from naas_abi.apps.nexus.apps.api.app.core.config import current_secret_key
 from naas_abi.apps.nexus.apps.api.app.services.apps import links
 from naas_abi.apps.nexus.apps.api.app.services.apps.app_html_access import (
     mint_app_html_access_token,
@@ -28,7 +27,6 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import (
     mint_remote_app_grant,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
-from naas_abi.apps.nexus.apps.api.app.services.auth import service as auth_service
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
     get_auth_service,
     get_current_user_required,
@@ -73,15 +71,10 @@ SIDECAR = "http://coder-ada-x:8378"
 
 
 @pytest.fixture
-def iam(monkeypatch):
+def iam():
     service = IAMService(IAMStoreMemory())
     service.bootstrap()
     previous = credentials.configure_iam(lambda: service)
-
-    async def never_revoked(jti: str) -> bool:
-        return False
-
-    monkeypatch.setattr(auth_service, "is_access_token_revoked", never_revoked)
     yield service
     credentials.configure_iam(previous)
 
@@ -101,7 +94,6 @@ def client(iam, ada):
         id=user_id,
         email="ada@example.com",
         name="Ada",
-        hashed_password="x",
         created_at=datetime.utcnow(),
     )
     app.dependency_overrides[get_auth_service] = lambda: AuthService(adapter=adapter)
@@ -137,11 +129,15 @@ def _engine_token(iam, record, audience, **fields) -> str:
         return iam.exchange_token(TokenExchange(session, TOKEN_TYPE_JWT, audience, **fields)).token
 
 
+# What an older Nexus signed with its ``secret_key``: sessions, links, coding agents.
+# Nexus signs nothing now (RFC §13), and none of it is read.
+OLD_SECRET = "the-key-nexus-used-to-sign-with"
+
+
 def _legacy_jwt(**claims) -> str:
-    """What Nexus signed with its secret before sessions had an audience."""
     return jose_jwt.encode(
         {"jti": "j", "exp": datetime.now(UTC) + timedelta(days=30), **claims},
-        current_secret_key(),
+        OLD_SECRET,
         algorithm="HS256",
     )
 
@@ -160,9 +156,8 @@ def credentials_of(iam, record) -> dict[str, str]:
         app_link, _ = mint_app_html_access_token(user_id=record.id)
         preview = mint_preview_token(user_id=record.id, workspace_id="ws-1", slug="demo")
         remote = mint_remote_app_grant(user_id=record.id, module_id="acme.research", app="console")
-    session, _ = auth_service.create_access_token({"sub": record.id})
     return {
-        "session": session,
+        "legacy_session_jwt": _legacy_jwt(sub=record.id, aud=SESSION_AUDIENCE),
         "engine_session": _engine_token(iam, record, SESSION_AUDIENCE),
         "api_key": personal,
         "api_key_token": _engine_token(iam, record, API_KEY_AUDIENCE),
@@ -201,6 +196,7 @@ def _authenticated(response) -> bool:
 # -- the credentials that are no session -------------------------------------------------------
 
 NO_SESSION = [
+    "legacy_session_jwt",
     "coding_key",
     "coding_token",
     "legacy_coding_jwt",
@@ -240,11 +236,10 @@ def test_none_of_them_names_a_user_to_the_kernel_either(client, iam, ada, kind):
 
 
 def test_the_session_is_accepted_everywhere(client, iam, ada):
-    for kind in ("session", "engine_session"):
-        token = credentials_of(iam, ada)[kind]
-        for route in ROUTES:
-            response = _get(client, route, token)
-            assert _authenticated(response), (kind, route, response.text)
+    token = credentials_of(iam, ada)["engine_session"]
+    for route in ROUTES:
+        response = _get(client, route, token)
+        assert _authenticated(response), (route, response.text)
     context = client.seen[ROUTES["api"]]
     assert context.principal.id == "api"
     assert context.on_behalf_of is not None and context.on_behalf_of.id == ada.id
@@ -315,16 +310,16 @@ def test_a_suspended_user_s_keys_and_tokens_all_stop(client, iam, ada):
     made = credentials_of(iam, ada)
     with as_service_account("engine"):
         iam.suspend_principal(ada.id)
-    for kind in ("session", "engine_session", "api_key", "api_key_token", "coding_key"):
+    for kind in ("engine_session", "api_key", "api_key_token", "coding_key"):
         assert _get(client, "gateway", made[kind]).status_code in (401, 403), kind
 
 
 def test_revoking_all_of_a_users_tokens_stops_their_sessions_and_agents(client, iam, ada):
     made = credentials_of(iam, ada)
-    assert _authenticated(_get(client, "api", made["session"]))
+    assert _authenticated(_get(client, "api", made["engine_session"]))
     assert _authenticated(_get(client, "gateway", made["coding_key"]))
     assert asyncio.run(credentials.revoke_user_credentials(ada.id)) is True
-    for kind in ("session", "engine_session", "api_key_token", "coding_key", "coding_token"):
+    for kind in ("engine_session", "api_key_token", "coding_key", "coding_token"):
         assert _get(client, "gateway", made[kind]).status_code in (401, 403), kind
     # A personal API key is the user's to keep.
     assert _authenticated(_get(client, "api", made["api_key"]))
@@ -357,15 +352,13 @@ def test_the_websocket_takes_nothing_but_a_session(iam, ada, socket, kind):
 
 def test_the_websocket_takes_a_session(iam, ada, socket):
     made = credentials_of(iam, ada)
-    assert connect(made["session"]) is True
     assert connect(made["engine_session"]) is True
-    assert socket == [ada.id, ada.id]
+    assert socket == [ada.id]
 
 
 def test_the_websocket_refuses_a_session_revoked_since(iam, ada, socket):
     made = credentials_of(iam, ada)
     asyncio.run(credentials.revoke_user_credentials(ada.id))
-    assert connect(made["session"]) is False
     assert connect(made["engine_session"]) is False
     assert socket == []
 

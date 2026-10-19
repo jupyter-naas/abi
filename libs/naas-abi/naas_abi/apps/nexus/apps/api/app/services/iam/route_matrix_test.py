@@ -40,8 +40,6 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 ACCOUNT_ROUTES: dict[tuple[str, str], str] = {
     ("GET", "/api/auth/me"): "the signed-in user's own profile",
     ("PATCH", "/api/auth/me"): "the signed-in user edits their own profile",
-    ("POST", "/api/auth/change-password"): "the signed-in user's own password",
-    ("POST", "/api/auth/logout"): "ends the caller's own session",
     ("POST", "/api/auth/upload-avatar"): "the signed-in user's own avatar",
     ("DELETE", "/api/auth/avatar"): "the signed-in user's own avatar",
     ("GET", "/api/admin/me"): "whether the caller is a platform admin; answers false, never 403",

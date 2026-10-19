@@ -11,9 +11,6 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
 )
-from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
-    get_auth_service,
-)
 from naas_abi.apps.nexus.apps.api.app.services.invites import runtime as invites_runtime
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.primary import (
     organizations__primary_adapter__FastAPI as org_api,
@@ -54,11 +51,9 @@ def _client(members: list[OrganizationMemberRecord]) -> TestClient:
                 i: SimpleNamespace(id=i, email="invitee@example.com", name="Invitee") for i in ids
             }
         ),
+        get_organization_by_id=AsyncMock(return_value=SimpleNamespace(id="org-1", name="Acme")),
     )
     service = OrganizationService(adapter=adapter)
-
-    auth_service = AsyncMock()
-    auth_service.ensure_user_for_invite.return_value = (SimpleNamespace(id="viewer"), False)
 
     app = FastAPI()
     app.include_router(org_api.router, prefix="/organizations")
@@ -67,7 +62,6 @@ def _client(members: list[OrganizationMemberRecord]) -> TestClient:
     )
     app.dependency_overrides[org_api.get_organization_service] = lambda: service
     app.dependency_overrides[org_api.get_workspace_service_for_org_invite] = lambda: AsyncMock()
-    app.dependency_overrides[get_auth_service] = lambda: auth_service
     app.dependency_overrides[org_api._get_email_service] = lambda: None
     # The invitee already has an account: the invitation service has nothing to do.
     app.dependency_overrides[invites_runtime.get_invitation_service] = lambda: SimpleNamespace(
@@ -84,7 +78,7 @@ def _no_rate_limit(monkeypatch) -> None:
 def test_reinviting_an_existing_member_resends_instead_of_400(monkeypatch, team) -> None:
     """Re-inviting is the admin's only resend path, so it must not be rejected."""
     send = AsyncMock(return_value=True)
-    monkeypatch.setattr(org_api, "issue_and_send_invite_sign_in", send)
+    monkeypatch.setattr(org_api, "send_added_notice", send)
 
     client = _client([EXISTING])
     resp = client.post(
@@ -96,14 +90,17 @@ def test_reinviting_an_existing_member_resends_instead_of_400(monkeypatch, team)
     body = resp.json()
     assert body["user_id"] == "viewer"
     assert body["sign_in_email_sent"] is True
+    assert body["user_created"] is False
     send.assert_awaited_once()
+    assert send.await_args.args == ("invitee@example.com",)
+    assert send.await_args.kwargs["organization_role"] == "member"
 
 
-def test_inviting_someone_without_a_role_grants_it_and_sends_the_sign_in(
+def test_inviting_someone_without_a_role_grants_it_and_sends_the_notice(
     monkeypatch, nexus_iam
 ) -> None:
     send = AsyncMock(return_value=True)
-    monkeypatch.setattr(org_api, "issue_and_send_invite_sign_in", send)
+    monkeypatch.setattr(org_api, "send_added_notice", send)
     nexus_iam.user("newcomer")
     client = _client([])
     service = client.app.dependency_overrides[org_api.get_organization_service]()
@@ -111,9 +108,6 @@ def test_inviting_someone_without_a_role_grants_it_and_sends_the_sign_in(
         return_value=SimpleNamespace(id="newcomer", email="new@example.com", name="New")
     )
     service.adapter.get_users_by_ids = AsyncMock(return_value={})
-    client.app.dependency_overrides[get_auth_service] = lambda: SimpleNamespace(
-        ensure_user_for_invite=AsyncMock(return_value=(SimpleNamespace(id="newcomer"), True))
-    )
 
     resp = client.post(
         "/organizations/org-1/members/invite", json={"email": "new@example.com", "role": "member"}
@@ -125,10 +119,9 @@ def test_inviting_someone_without_a_role_grants_it_and_sends_the_sign_in(
     send.assert_awaited_once()
 
 
-def test_send_failure_propagates_so_the_challenge_is_not_left_live(monkeypatch) -> None:
-    """The route delegates delivery, so the helper's invalidate-then-raise wins."""
+def test_a_send_failure_propagates(monkeypatch) -> None:
     send = AsyncMock(side_effect=RuntimeError("smtp down"))
-    monkeypatch.setattr(org_api, "issue_and_send_invite_sign_in", send)
+    monkeypatch.setattr(org_api, "send_added_notice", send)
 
     client = _client([EXISTING])
     with pytest.raises(RuntimeError):
@@ -138,6 +131,31 @@ def test_send_failure_propagates_so_the_challenge_is_not_left_live(monkeypatch) 
         )
 
     send.assert_awaited_once()
+
+
+def test_someone_with_no_account_needs_an_identity_provider() -> None:
+    """Nexus has no login of its own: with no provider to sign in at, an invitation
+    of a person it does not know is refused, never answered with a local account."""
+    from naas_abi.apps.nexus.apps.api.app.services.invites.port import NoProviderError
+
+    async def no_provider(**_kwargs):
+        raise NoProviderError("No identity provider is configured")
+
+    client = _client([])
+    client.app.dependency_overrides[invites_runtime.get_invitation_service] = lambda: SimpleNamespace(
+        persistence=SimpleNamespace(user_id_by_email=AsyncMock(return_value=None)),
+        invite=no_provider,
+    )
+    service = client.app.dependency_overrides[org_api.get_organization_service]()
+    service.get_organization = AsyncMock(return_value=SimpleNamespace(name="Acme"))
+
+    resp = client.post(
+        "/organizations/org-1/members/invite",
+        json={"email": "stranger@example.com", "role": "member"},
+    )
+
+    assert resp.status_code == 400
+    assert "No identity provider is configured" in resp.json()["detail"]
 
 
 def test_already_exists_error_carries_the_user_id() -> None:

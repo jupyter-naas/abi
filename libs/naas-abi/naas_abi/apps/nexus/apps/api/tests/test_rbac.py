@@ -5,7 +5,6 @@ Tests that users can only access data in workspaces they belong to.
 Maps to: docs/TEST-PROTOCOL.md Section 3.
 """
 
-import pytest
 
 from tests.conftest import add_workspace_member
 
@@ -220,33 +219,6 @@ class TestCrossUserDataLeakage:
             headers=test_user["headers"],
         )
         assert response.status_code == 403
-
-    @pytest.mark.skip(reason="password login answers 410: sign-in moved to the identity providers")
-    async def test_login_returns_correct_user_identity(self, client, test_user, second_user):
-        """Login as user A returns user A's identity, not someone else's."""
-        from tests.conftest import TEST_PASSWORD
-
-        # Login as test_user
-        response = await client.post(
-            "/api/auth/login",
-            json={"email": test_user["email"], "password": TEST_PASSWORD},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["user"]["id"] == test_user["id"]
-        assert data["user"]["email"] == test_user["email"]
-
-        # Login as second_user
-        response = await client.post(
-            "/api/auth/login",
-            json={"email": second_user["email"], "password": TEST_PASSWORD},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["user"]["id"] == second_user["id"]
-        assert data["user"]["email"] == second_user["email"]
-        # Make sure it's NOT test_user's data
-        assert data["user"]["id"] != test_user["id"]
 
 
 class TestSecretsIsolation:

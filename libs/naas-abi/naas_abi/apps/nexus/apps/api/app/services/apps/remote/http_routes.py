@@ -104,10 +104,9 @@ APP_COOKIE_PREFIX = "abi_app."
 
 async def _presented_user(request: Request) -> tuple[str, datetime | None]:
     """The signed-in user behind the request and when their credential
-    expires; no user for an ABI_API_KEY caller. A session token, or a link (an
-    ``/app-html/`` grant: a share link stays a share link)."""
+    expires; no user for an ABI_API_KEY caller. A session token the engine
+    issued, or a link (an ``/app-html/`` grant: a share link stays a share link)."""
     from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
-    from naas_abi.apps.nexus.apps.api.app.services.auth.service import decode_token
 
     token = extract_abi_api_token(request)
     if not token:
@@ -116,9 +115,7 @@ async def _presented_user(request: Request) -> tuple[str, datetime | None]:
     # user's last revocation, the user not suspended.
     found = await credentials.bearer_credential(token)
     if found is not None and found.kind == credentials.SESSION:
-        payload = decode_token(token) or {}
-        exp = payload.get("exp")
-        expires = datetime.fromtimestamp(exp, UTC) if isinstance(exp, int | float) else None
+        expires = datetime.fromtimestamp(found.expires_at, UTC) if found.expires_at else None
         return found.user_id, expires
     link = await links.aopen_link(token, APP_AUDIENCE)
     if link is not None and link.resource.startswith(links.APP_HTML_ROOT):

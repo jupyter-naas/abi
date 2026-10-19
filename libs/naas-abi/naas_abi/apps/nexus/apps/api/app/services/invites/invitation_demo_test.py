@@ -510,7 +510,7 @@ async def test_an_unknown_provider_is_refused_and_nothing_is_made(nexus, idp, al
 async def test_someone_who_already_has_an_account_is_added_as_before(nexus, idp, alice):
     _, _, sessions = nexus
     async with sessions() as db:
-        db.add(UserModel(id="u-old", email="bob@example.com", name="Bob", hashed_password="x"))
+        db.add(UserModel(id="u-old", email="bob@example.com", name="Bob"))
         await db.commit()
     result = await invite_bob(alice)
     assert result.status_code == 200, result.text

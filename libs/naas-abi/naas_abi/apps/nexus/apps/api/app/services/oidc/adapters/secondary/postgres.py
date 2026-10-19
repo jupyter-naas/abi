@@ -129,8 +129,6 @@ class OidcSessionSecondaryAdapterPostgres(OidcSessionPersistencePort):
             id=user_id,
             email=email,
             name=name,
-            # No password: the provider signs the user in.
-            hashed_password="",
             principal_id=principal_id,
             idp_provider=provider,
             idp_issuer=issuer,

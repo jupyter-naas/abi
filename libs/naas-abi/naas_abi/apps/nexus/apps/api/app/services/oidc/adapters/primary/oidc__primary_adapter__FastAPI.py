@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+from naas_abi.apps.nexus.apps.api.app.services.audit import log_login, log_logout
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
     to_signed_in_user,
 )
@@ -125,9 +126,18 @@ async def callback(
             user_agent=request.headers.get("user-agent"),
         )
     except OidcLoginError as exc:
+        await log_login(
+            None,
+            success=False,
+            request=request,
+            details={"method": "oidc", "reason": exc.code},
+        )
         response = RedirectResponse(_frontend("/auth/login", sso_error=exc.code), status_code=302)
         response.delete_cookie(BINDING_COOKIE, path=_BINDING_PATH)
         return response
+    await log_login(
+        signed_in.user_id, success=True, request=request, details={"method": "oidc"}
+    )
     response = RedirectResponse(
         _frontend("/auth/callback", next=signed_in.next_path), status_code=302
     )
@@ -165,10 +175,13 @@ async def get_session(request: Request, db: AsyncSession = Depends(get_db)) -> d
 async def logout(request: Request, db: AsyncSession = Depends(get_db)) -> JSONResponse:
     if getattr(request.state, "nexus_csrf_failed", False):
         raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
+    session = getattr(request.state, "nexus_session", None)
     end_session_url = await runtime.RUNTIME.service(db).logout(
         runtime.session_secret(request.headers),
         post_logout_redirect_uri=_frontend("/auth/login"),
     )
+    if session is not None:
+        await log_logout(session.user_id, request)
     response = JSONResponse({"status": "logged out", "end_session_url": end_session_url})
     response.delete_cookie(settings.oidc_session_cookie, path="/", **_cookie_options())
     return response

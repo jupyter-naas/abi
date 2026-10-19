@@ -47,14 +47,13 @@ async def test_load_snapshot_reads_every_identity_table(tmp_path, nexus_iam) -> 
                 id="usr-1",
                 email="alice@example.com",
                 name="Alice",
-                hashed_password="x",
                 company="Acme",
                 role="CTO",
                 is_superadmin=True,
                 created_at=T0,
             ),
             UserModel(
-                id="usr-2", email="bob@example.com", name="Bob", hashed_password="x", created_at=T1
+                id="usr-2", email="bob@example.com", name="Bob", created_at=T1
             ),
             OrganizationModel(
                 id="org-1",

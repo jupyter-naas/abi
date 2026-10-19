@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
-from naas_abi.apps.nexus.apps.api.app.services.auth import credentials, service
+from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment import agent_credentials
 from naas_abi.apps.nexus.apps.api.app.services.openai_gateway.adapters.primary import (
     openai_gateway__primary_adapter__FastAPI as gateway,
@@ -22,11 +22,7 @@ SIDECAR = "http://coder-ada-slides-demo:8378"
 
 
 @pytest.fixture
-def iam(monkeypatch):
-    async def never_revoked(jti: str) -> bool:
-        return False
-
-    monkeypatch.setattr(service, "is_access_token_revoked", never_revoked)
+def iam():
     iam = IAMService(IAMStoreMemory())
     iam.bootstrap()
     previous = credentials.configure_iam(lambda: iam)

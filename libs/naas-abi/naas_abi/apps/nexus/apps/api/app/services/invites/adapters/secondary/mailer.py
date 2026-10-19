@@ -10,13 +10,13 @@ from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.services.invites.invitation_email import (
     render_invitation,
 )
+from naas_abi.apps.nexus.apps.api.app.services.invites.mail import (
+    apply_dev_subject_prefix,
+    resolve_email_service,
+)
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     InvitationMail,
     InvitationMailer,
-)
-from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
-    apply_dev_subject_prefix,
-    resolve_email_service,
 )
 from naas_abi_core.engine.call_context import as_service_account, use_call_context
 from naas_abi_core.services.email.EmailService import EmailService
@@ -34,7 +34,7 @@ class EngineInvitationMailer(InvitationMailer):
         if service is None:
             logger.info("Email service unavailable: no invitation email for %s", mail.to_email)
             return False
-        subject, text, html = render_invitation(mail, app_name=settings.magic_link_email_app_name)
+        subject, text, html = render_invitation(mail, app_name=settings.email_app_name)
 
         def send() -> None:
             # Nexus's own mail, as its account: an invitation is not the

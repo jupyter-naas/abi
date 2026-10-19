@@ -130,6 +130,11 @@ class Memberships:
                     return None
                 # Roles are for users: never a service account or a group.
                 return str(record.id) if record.kind == "user" else None
+            # Found as it is first: ensuring it would write the profile of the old
+            # login over the one an identity provider vouches for (a linked user).
+            record = iam.resolve_user(user_id)
+            if record is not None:
+                return str(record.id) if record.kind == "user" else None
             if not vouched:
                 return None
             return str(iam.ensure_user(LEGACY_NEXUS_ISSUER, user_id, provider="nexus").id)

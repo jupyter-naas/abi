@@ -884,7 +884,6 @@ def _user_record(
         id="user-1",
         email=email,
         name=name,
-        hashed_password="x",
         created_at=datetime.now(),
         company=company,
         role=role,

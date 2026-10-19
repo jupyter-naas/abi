@@ -15,10 +15,6 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.secrets import deprecated_en
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.feature_flags import build_feature_flags
-from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
-    get_auth_service,
-)
-from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService
 from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__primary_adapter__dependencies import (  # noqa: E501
     get_files_service,
 )
@@ -28,14 +24,12 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.bootstrap import refresh_feat
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import ROLE_NAMES, MembershipDenied
 from naas_abi.apps.nexus.apps.api.app.services.invites import runtime as invites_runtime
+from naas_abi.apps.nexus.apps.api.app.services.invites.mail import send_added_notice
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     NoProviderError,
     OrgInvitationExistsError,
 )
 from naas_abi.apps.nexus.apps.api.app.services.invites.service import InvitationService
-from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
-    issue_and_send_invite_sign_in,
-)
 from naas_abi.apps.nexus.apps.api.app.services.invites.views import (
     PROVIDER_FAILURES,
     invite_result,
@@ -509,7 +503,6 @@ async def invite_workspace_member(
     request: Request,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
-    auth_service: AuthService = Depends(get_auth_service),
     email_service: EmailService | None = Depends(_get_email_service),
     invites: InvitationService = Depends(invites_runtime.get_invitation_service),
     db: AsyncSession = Depends(get_db),
@@ -522,7 +515,7 @@ async def invite_workspace_member(
     await check_rate_limit(f"email:{email}", "/api/workspaces/members/invite")
 
     # Someone with no account yet is invited through an identity provider (see
-    # the organization invite); otherwise the account is made, or found, here.
+    # the organization invite); someone who has one is added directly.
     if await invites.persistence.user_id_by_email(email) is None:
         workspace = await service.get_workspace(workspace_id)
         organization = (
@@ -557,17 +550,14 @@ async def invite_workspace_member(
         except OrgInvitationExistsError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except NoProviderError as exc:
-            if invite.provider:
-                raise HTTPException(status_code=400, detail=str(exc)) from exc
-            outcome = None
+            # Nobody is signed up here: without an identity provider there is
+            # nowhere for the person to sign in.
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         except PROVIDER_FAILURES as exc:
             raise provider_failure(exc) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        if outcome is not None:
-            return invite_result(outcome)
-
-    _user, user_created = await auth_service.ensure_user_for_invite(email, name=invite.name)
+        return invite_result(outcome)
 
     already_member = False
     try:
@@ -580,9 +570,9 @@ async def invite_workspace_member(
     except MembershipDenied as exc:
         raise _member_denied(str(exc)) from exc
     except WorkspaceMemberAlreadyExistsError as exc:
-        # Re-inviting is how an admin resends an invite that never arrived, so
-        # keep the membership as-is and fall through to issue a fresh challenge
-        # rather than rejecting the only retry path they have.
+        # Re-inviting is how an admin resends the notice that never arrived, so
+        # keep the membership as-is and send it again rather than rejecting the
+        # only retry path they have.
         member = await _find_workspace_member(
             service, workspace_id=workspace_id, user_id=exc.user_id
         )
@@ -593,16 +583,19 @@ async def invite_workspace_member(
     if member is None:
         raise HTTPException(status_code=500, detail="Failed to create or find user for invite")
 
-    sign_in_email_sent = await issue_and_send_invite_sign_in(
-        auth_service,
+    workspace = await service.get_workspace(workspace_id)
+    sign_in_email_sent = await send_added_notice(
         email,
+        inviter_name=current_user.name,
+        workspace_name=workspace.name if workspace else None,
+        workspace_role=invite.role,
         email_service=email_service or _get_email_service(request),
     )
 
     return {
         "status": "already_member" if already_member else "invited",
         "member_id": member.id,
-        "user_created": user_created,
+        "user_created": False,
         "sign_in_email_sent": sign_in_email_sent,
     }
 

@@ -21,7 +21,6 @@ def _record() -> AuthUserRecord:
         id="u1",
         email="u1@example.com",
         name="U1",
-        hashed_password="x",
         created_at=now,
     )
 
