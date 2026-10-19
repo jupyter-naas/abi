@@ -62,17 +62,26 @@ from rich.text import Text
 from naas_abi_cli.cli.admin_credentials import (
     ensure_admin_credentials,
     ensure_api_key,
+    ensure_idp_client_secret,
     ensure_nats_callout_seed,
     ensure_nats_passwords,
     nats_callout_issuer,
     nats_login,
 )
 from naas_abi_cli.cli.dev_modules import (
+    IDP_ISSUER_ENV,
+    builtin_identity,
+    configured_identity,
     configured_nats,
+    has_identity_providers,
+    idp_environment,
+    is_builtin_idp,
     load_dev_modules,
     module_command,
     module_environment,
     read_overlay,
+    wants_builtin_idp,
+    with_builtin_idp,
 )
 
 DEV_DIR_NAME = ".abi/dev"
@@ -471,6 +480,27 @@ def _project_declares_nats() -> bool:
     return _project_nats() is not None
 
 
+def _project_identity() -> dict | None:
+    """The project config's own `identity:` block (secrets left empty, not
+    validated); None without one, or when the config cannot be read here."""
+    import jinja2
+    import yaml
+
+    config = _project_config()
+    if config is None:
+        return None
+    try:
+        return configured_identity(config)
+    except (OSError, ValueError, jinja2.TemplateError, yaml.YAMLError):
+        return None
+
+
+def _api_origin(ports: dict[str, int]) -> str:
+    """Where the browser reaches the API, and so where the built-in IdP's
+    issuer URL (`<origin>/idp`) and its redirect back to Nexus live."""
+    return f"http://{BROWSER_HOST}:{ports['api']}"
+
+
 def _jaeger_ports(query_port: int) -> dict[str, int]:
     return {
         "query": query_port,
@@ -486,6 +516,7 @@ def _write_dev_overlay(
     callout_seed: str | None = None,
     tracing: bool = False,
     nats_off: bool = False,
+    identity: dict | None = None,
 ) -> Path:
     """The blocks the engine merges over the project config (ABI_CONFIG_OVERLAY).
 
@@ -495,9 +526,12 @@ def _write_dev_overlay(
     as they come (`services.iam.modules.auto_approve`, dev only). `nats: null`
     with `nats_off`, which turns a project's own block off (`--without-nats`);
     `telemetry:` when `tracing`. JSON is valid YAML, so no YAML writer is
-    needed. Holds passwords and the seed: owner-only.
+    needed. Holds passwords and the seed: owner-only. ``identity``: the built-in
+    IdP as the engine's identity provider, for a project that names none.
     """
     overlay: dict = {}
+    if identity is not None:
+        overlay["identity"] = identity
     if nats_off:
         overlay["nats"] = None
     if nats_passwords is not None:
@@ -744,6 +778,10 @@ def _launch_api(
     env["ABI_DEV_PUBLIC_API_ORIGIN"] = api_origin
     env["PUBLIC_API_HOST"] = f"{BROWSER_HOST}:{spec.port}"
     env["NEXUS_API_URL"] = api_origin
+    # The built-in IdP's issuer (config: `{{ secret.ABI_IDP_ISSUER }}`): Nexus
+    # serves it at /idp on this origin. Like the origins above, only when the
+    # .env does not say otherwise (the dotenv adapter reads .env first).
+    env[IDP_ISSUER_ENV] = f"{api_origin}/idp"
     cmd = ["uv", "run", "python", "-m", "naas_abi_core.apps.api.api"]
     return _spawn(spec, cmd, _project_root(), env)
 
@@ -1042,6 +1080,8 @@ def _dev_modules(strict: bool = True) -> dict:
         raise click.ClickException(
             f"Invalid `dev.modules` in the project config: {exc}"
         ) from exc
+    # The built-in IdP, unless the project declares it or has providers of its own.
+    modules = with_builtin_idp(modules, _project_identity())
     clashes = sorted(set(modules) & set(KNOWN_SERVICES))
     if clashes:
         raise click.ClickException(
@@ -1115,11 +1155,20 @@ def _start_module(module, overlay: dict) -> ServiceSpec:
     if existing and _pid_alive(existing):
         click.echo(f"{module.name}: already running (pid {existing})")
         return spec
+    base = dict(os.environ)
+    if is_builtin_idp(module):
+        # Only the IdP is told the secret of the client Nexus signs in with.
+        base.update(
+            idp_environment(
+                _api_origin(_load_or_create_instance()["ports"]),
+                ensure_idp_client_secret(_project_root() / ".env"),
+            )
+        )
     env = module_environment(
         module,
         overlay,
         _project_root(),
-        os.environ,
+        base,
         service_key=_module_key(module, overlay),
     )
     pid = _spawn(spec, module_command(module), _project_root(), env)
@@ -1999,6 +2048,13 @@ def dev_up(
     # the api process spawns and reads .env via the dotenv adapter.
     admin_email, admin_password = _ensure_default_admin_env()
     _ensure_default_api_key_env()
+    # The built-in IdP, the default identity provider in NATS mode: its client
+    # secret is generated into .env (the engine's config reads it from there),
+    # and a project that names no provider gets it through the overlay.
+    identity = _project_identity()
+    builtin_idp = with_nats and wants_builtin_idp(identity)
+    if builtin_idp:
+        ensure_idp_client_secret(_project_root() / ".env")
 
     started: list[ServiceSpec] = []
     try:
@@ -2020,6 +2076,12 @@ def dev_up(
                     else None,
                     tracing=with_tracing,
                     nats_off=nats_off,
+                    identity=builtin_identity(
+                        f"{_api_origin(ports)}/idp",
+                        ensure_idp_client_secret(env_path),
+                    )
+                    if builtin_idp and not has_identity_providers(identity)
+                    else None,
                 )
             spec = _start_service(name, ports, log_level, selected, config_overlay)
             started.append(spec)

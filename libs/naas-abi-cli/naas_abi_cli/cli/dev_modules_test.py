@@ -129,3 +129,76 @@ def test_an_invalid_dev_block_is_reported(tmp_path, monkeypatch):
 
     with pytest.raises(ValueError, match="module"):
         load_dev_modules()
+
+
+# -- the built-in identity provider ---------------------------------------------
+
+
+def test_the_builtin_idp_runs_unless_the_project_has_providers_of_its_own():
+    from naas_abi_cli.cli.dev_modules import has_identity_providers, wants_builtin_idp
+
+    assert (
+        wants_builtin_idp(None)
+        and wants_builtin_idp({})
+        and wants_builtin_idp({"providers": []})
+    )
+    assert wants_builtin_idp(
+        {"providers": [{"name": "builtin", "provisioning": "builtin"}]}
+    )
+    assert not wants_builtin_idp(
+        {"providers": [{"name": "okta", "provisioning": "none"}]}
+    )
+    assert not wants_builtin_idp({"providers": [{"name": "okta"}]})
+    assert has_identity_providers({"providers": [{"name": "okta"}]})
+    assert not has_identity_providers({"providers": []}) and not has_identity_providers(
+        None
+    )
+
+
+def test_the_idp_dev_module_is_added_unless_the_project_declares_it():
+    from naas_abi_cli.cli.dev_modules import IDP_MODULE, with_builtin_idp
+
+    added = with_builtin_idp({"probe": MODULE}, None)
+    assert list(added) == ["probe", "idp"]
+    assert (added["idp"].module, added["idp"].identity) == (IDP_MODULE, "idp")
+    declared = DevModuleConfiguration(name="login", module=IDP_MODULE, module_id="idp")
+    assert with_builtin_idp({"login": declared}, None) == {"login": declared}
+    okta = {"providers": [{"name": "okta", "provisioning": "none"}]}
+    assert with_builtin_idp({"probe": MODULE}, okta) == {"probe": MODULE}
+
+
+def test_the_identity_block_and_the_idp_environment_agree():
+    from naas_abi_cli.cli.dev_modules import builtin_identity, idp_environment
+
+    origin = "http://localhost:9942"
+    block = builtin_identity(f"{origin}/idp", "s3cret-s3cret-s3cret-s3cret")
+    provider = block["providers"][0]
+    assert block["default_provider"] == provider["name"] == "builtin"
+    assert provider["provisioning"] == "builtin"
+    env = idp_environment(origin, "s3cret-s3cret-s3cret-s3cret")
+    assert env["ABI_IDP_ISSUER"] == provider["issuer"] == f"{origin}/idp"
+    assert env["ABI_IDP_CLIENT_ID"] == provider["client_id"]
+    assert env["ABI_IDP_CLIENT_SECRET"] == provider["client_secret"]
+    assert env["ABI_IDP_REDIRECT_URIS"] == f"{origin}/api/auth/oidc/callback"
+    # The block validates as the engine's configuration.
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration_Identity import (
+        IdentityConfiguration,
+    )
+
+    IdentityConfiguration.model_validate(block)
+
+
+def test_the_idp_module_gets_its_configuration_and_other_modules_do_not(tmp_path):
+    from naas_abi_cli.cli.dev_modules import idp_environment, implicit_idp_module
+
+    env = module_environment(
+        implicit_idp_module(),
+        OVERLAY,
+        tmp_path,
+        {**idp_environment("http://localhost:9942", "x" * 32)},
+        service_key=KEY,
+    )
+    assert env["ABI_IDP_ISSUER"] == "http://localhost:9942/idp"
+    assert env["ABI_SERVICE_KEY"] == KEY
+    plain = module_environment(MODULE, OVERLAY, tmp_path, {}, service_key=KEY)
+    assert not any(key.startswith("ABI_IDP_") for key in plain)

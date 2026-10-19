@@ -60,6 +60,50 @@ def test_a_generated_stack_runs_on_nats_by_default(tmp_path: Path) -> None:
     assert "NATS_JWT_SECRET" not in env
 
 
+def test_a_generated_nats_stack_runs_the_idp_in_its_own_container(
+    tmp_path: Path,
+) -> None:
+    setup_local_deploy(str(tmp_path), base_domain="localhost", nats=True)
+    compose = (tmp_path / "docker-compose.yml").read_text()
+    idp = _services(tmp_path / "docker-compose.yml")["idp"]
+
+    # SDK-only: built from the provider's folder with the proto and SDK contexts.
+    assert idp["build"] == {
+        "context": "./.abi/libs/naas-abi-idp",
+        "additional_contexts": {
+            "abi_proto": "./.abi/libs/naas-abi-proto",
+            "abi_sdk": "./.abi/libs/naas-abi-sdk",
+        },
+    }
+    # Nothing of the engine's is mounted: not the project, not .env, not storage.
+    assert "volumes" not in idp and "env_file" not in idp
+    assert idp["networks"] == ["abi-network"] and idp["restart"] == "unless-stopped"
+    environment = dict(e.split("=", 1) for e in idp["environment"])
+    assert environment["ABI_NATS_URL"] == "nats://nats:4222"  # no login in the URL
+    assert environment["ABI_SERVICE_KEY"] == "${IDP_SERVICE_KEY:-}"
+    assert re.fullmatch(r"[A-Za-z0-9_-]{1,64}", environment["ABI_DISCOVERY_PROJECT"])
+    assert environment["ABI_IDP_ISSUER"] == "${NEXUS_API_URL}/idp"
+    assert (
+        environment["ABI_IDP_REDIRECT_URIS"]
+        == "${NEXUS_API_URL}/api/auth/oidc/callback"
+    )
+    assert environment["ABI_IDP_CLIENT_SECRET"].startswith("${ABI_IDP_CLIENT_SECRET")
+    # No broker password or signing secret is handed to it.
+    assert not any(
+        "NATS_ENGINE_PASSWORD" in e or "NATS_AUTH" in e for e in idp["environment"]
+    )
+    assert idp["depends_on"] == {"abi": {"condition": "service_healthy"}}
+    assert "module/" in compose  # the comment says which account to create
+    env = _env_values(tmp_path / ".env")
+    assert len(env["ABI_IDP_CLIENT_SECRET"]) >= 24
+    assert "IDP_SERVICE_KEY" not in env  # an operator creates it (a module's key)
+
+
+def test_a_classic_stack_has_no_idp(tmp_path: Path) -> None:
+    setup_local_deploy(str(tmp_path), base_domain="localhost", nats=False)
+    assert "idp" not in _services(tmp_path / "docker-compose.yml")
+
+
 def test_a_classic_stack_keeps_nats_opt_in(tmp_path: Path) -> None:
     setup_local_deploy(str(tmp_path), base_domain="localhost", nats=False)
     services = _services(tmp_path / "docker-compose.yml")

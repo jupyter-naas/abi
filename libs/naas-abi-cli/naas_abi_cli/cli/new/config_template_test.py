@@ -234,3 +234,33 @@ def test_classic_configs_keep_their_bus_and_no_nats(filename: str) -> None:
         "python_queue",
         "rabbitmq",
     }
+
+
+def test_docker_configs_make_the_builtin_idp_the_default_provider() -> None:
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration_Identity import (
+        IdentityConfiguration,
+    )
+
+    for filename in ("config.local.yaml", "config.remote.yaml"):
+        block = _render(filename)["identity"]
+        # The two secrets the config names are in .env (the deploy generates them).
+        block["providers"][0]["issuer"] = block["providers"][0]["issuer"].replace(
+            "{{ secret.NEXUS_API_URL }}", "https://api.localhost"
+        )
+        block["providers"][0]["client_secret"] = "s" * 32
+        config = IdentityConfiguration.model_validate(block)
+        provider = config.providers[0]
+        assert config.default_provider == provider.name == "builtin", filename
+        assert provider.provisioning == "builtin" and provider.issuer.endswith("/idp")
+        assert "groups" in provider.scopes and "offline_access" in provider.scopes
+        assert "identity" not in _render(filename, nats=False), filename
+
+
+def test_the_dev_config_names_no_provider_so_abi_dev_up_adds_the_builtin_one() -> None:
+    # Active YAML would need ABI_IDP_ISSUER, which only `abi dev up` sets; the
+    # block is a comment, and the dev overlay supplies it.
+    assert "identity" not in _render("config.yaml")
+    assert (
+        "identity:"
+        in open(os.path.join(_TEMPLATES_DIR, "config.yaml"), encoding="utf-8").read()
+    )

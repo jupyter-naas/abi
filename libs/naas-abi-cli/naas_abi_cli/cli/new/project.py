@@ -11,6 +11,7 @@ import naas_abi_cli
 from naas_abi_cli.cli.admin_credentials import (
     ADMIN_PASSWORD_KEY,
     ensure_admin_credentials,
+    ensure_idp_client_secret,
     ensure_nats_callout_seed,
     ensure_nats_passwords,
 )
@@ -276,13 +277,17 @@ def new_project(
         # seed. Modules log in with their own service keys.
         ensure_nats_passwords(env_path)
         ensure_nats_callout_seed(env_path)
+        # The secret of the client ABI signs in to the built-in identity
+        # provider with (`abi dev up` runs it; docker-compose runs it too).
+        ensure_idp_client_secret(env_path)
 
     # Run dependency install without shell to avoid quoting issues on paths with spaces.
     # ai-openrouter is the marketplace extra the generated config.yaml enables:
     # one gateway key serves both defaults — Gemma 4 for chat and
     # text-embedding-3-small for embeddings.
     # naas-abi-core[all] includes the nats extra. A NATS project also adds the
-    # SDK with its agent extra, which the remote modules under src/ import.
+    # SDK with its agent extra (the remote modules under src/ import it) and
+    # naas-abi-idp, the built-in identity provider.
     subprocess.run(
         [
             "uv",
@@ -291,7 +296,9 @@ def new_project(
             "naas-abi-marketplace[ai-openrouter]",
             "naas-abi",
             "naas-abi-cli",
-            *(["naas-abi-sdk[agent]"] if with_nats else []),
+            # The SDK with its agent extra, which the remote modules under src/
+            # import, and the built-in identity provider `abi dev up` runs.
+            *(["naas-abi-sdk[agent]", "naas-abi-idp"] if with_nats else []),
         ],
         cwd=project_path,
         check=True,

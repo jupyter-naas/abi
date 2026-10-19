@@ -20,6 +20,10 @@ ADMIN_PASSWORD_KEY = f"NEXUS_USER_{_ADMIN_PREFIX}_PASSWORD"
 # Written by older `abi deploy local` templates; nothing reads it any more.
 _LEGACY_ADMIN_PASSWORD_KEY = "NEXUS_USER_ADMIN_PASSWORD"
 API_KEY = "ABI_API_KEY"
+# The secret of the client ABI (Nexus, as a relying party) signs in to the
+# built-in IdP with: read by the engine (identity.providers) and by the IdP
+# module, which hashes it. Generated once per project.
+IDP_CLIENT_SECRET = "ABI_IDP_CLIENT_SECRET"
 # The broker's static users and the .env keys of their passwords: the engine's
 # processes (engine), and the engine's auth callout responder (auth). Every
 # other connection (modules, scripts) logs in with a service key and is
@@ -115,6 +119,17 @@ def ensure_api_key(env_path: Path) -> str:
     key = secrets.token_urlsafe(32)
     _write(env_path, _set(lines, API_KEY, key))
     return key
+
+
+def ensure_idp_client_secret(env_path: Path) -> str:
+    """Return ``ABI_IDP_CLIENT_SECRET`` from ``.env``, generating it when missing."""
+    lines = _read(env_path)
+    secret = _value(lines, IDP_CLIENT_SECRET)
+    if secret and len(secret) >= 24:
+        return secret
+    secret = secrets.token_urlsafe(32)
+    _write(env_path, _set(lines, IDP_CLIENT_SECRET, secret))
+    return secret
 
 
 def ensure_nats_callout_seed(env_path: Path) -> str:

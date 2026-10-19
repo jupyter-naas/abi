@@ -21,6 +21,7 @@ _FRAMEWORK_PACKAGES = {
     "naas-abi-cli",
     "naas-abi-proto",
     "naas-abi-sdk",
+    "naas-abi-idp",
 }
 
 
@@ -298,6 +299,9 @@ def test_new_project_runs_on_nats_by_default(tmp_path, monkeypatch) -> None:
     assert env["NATS_ENGINE_PASSWORD"] and env["NATS_AUTH_PASSWORD"]
     assert env["NATS_AUTH_CALLOUT_SEED"].startswith("SA")
     assert "naas-abi-sdk[agent]" in _uv_add(commands)
+    # The built-in identity provider `abi dev up` runs, and its client's secret.
+    assert "naas-abi-idp" in _uv_add(commands)
+    assert len(env["ABI_IDP_CLIENT_SECRET"]) >= 24
     assert "nats-server" in result.output
     # The project's own module holds the default agent the engine loads.
     module = (tmp_path / "demo" / "src" / "demo" / "__init__.py").read_text()
@@ -316,7 +320,9 @@ def test_new_project_without_nats_is_the_classic_project(tmp_path, monkeypatch) 
         assert "\nnats:" not in _config(tmp_path, name), name
     assert 'adapter: "python_queue"' in _config(tmp_path)
     assert "NATS_AUTH_CALLOUT_SEED" not in _env(tmp_path)
+    assert "ABI_IDP_CLIENT_SECRET" not in _env(tmp_path)
     assert not any("naas-abi-sdk" in arg for arg in _uv_add(commands))
+    assert not any("naas-abi-idp" in arg for arg in _uv_add(commands))
     assert "nats-server" not in result.output
 
 

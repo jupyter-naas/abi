@@ -1191,3 +1191,70 @@ def test_a_module_is_ready_when_alive_and_has_no_url() -> None:
     assert table.row_count == 2
     assert dev._display_url(started[1]) == "dev module"
     assert dev._open_letter_map(started) == {"a": "api"}
+
+
+# -- the built-in identity provider ---------------------------------------------
+
+
+def test_the_overlay_adds_the_builtin_idp_as_the_identity_provider(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(dev, "_dev_dir", lambda: tmp_path)
+    monkeypatch.setattr(dev, "_discovery_project", lambda: "zen")
+    ports = dict(dev.SERVICE_PORT_BASES)
+    block = dev.builtin_identity(f"{dev._api_origin(ports)}/idp", "secret-" * 5)
+    path = dev._write_dev_overlay(
+        ports,
+        nats_passwords={"NATS_ENGINE_PASSWORD": "e", "NATS_AUTH_PASSWORD": "a"},
+        callout_seed="SAA-seed",
+        identity=block,
+    )
+    overlay = dev.read_overlay(path)
+    assert overlay["identity"]["providers"][0]["provisioning"] == "builtin"
+    assert (
+        overlay["identity"]["providers"][0]["issuer"]
+        == f"http://localhost:{ports['api']}/idp"
+    )
+    without = dev._write_dev_overlay(
+        ports,
+        nats_passwords={"NATS_ENGINE_PASSWORD": "e", "NATS_AUTH_PASSWORD": "a"},
+        callout_seed="SAA-seed",
+    )
+    assert "identity" not in dev.read_overlay(without)
+
+
+def test_only_the_idp_module_is_told_the_client_secret(monkeypatch, tmp_path) -> None:
+    spawned: dict = {}
+    monkeypatch.setattr(dev, "_dev_dir", lambda: tmp_path)
+    monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
+    monkeypatch.setattr(dev, "_read_pid", lambda spec: None)
+    monkeypatch.setattr(
+        dev, "_load_or_create_instance", lambda: {"ports": {"api": 9942}}
+    )
+    monkeypatch.setattr(
+        dev,
+        "_spawn",
+        lambda spec, cmd, cwd, env: spawned.update({spec.name: env}) or 4242,
+    )
+    monkeypatch.setattr(
+        dev, "_module_key", lambda module, overlay: "abi_sk_" + "a" * 16 + "_k"
+    )
+    overlay = {
+        "nats": {"nats_url": "nats://127.0.0.1:13042", "discovery": {"project": "zen"}}
+    }
+
+    from naas_abi_cli.cli.dev_modules import implicit_idp_module
+
+    dev._start_module(implicit_idp_module(), overlay)
+    dev._start_module(_modules("researcher")["researcher"], overlay)
+
+    secret = (
+        (tmp_path / ".env").read_text().split("ABI_IDP_CLIENT_SECRET=")[1].split()[0]
+    )
+    assert spawned["idp"]["ABI_IDP_CLIENT_SECRET"] == secret
+    assert spawned["idp"]["ABI_IDP_ISSUER"] == "http://localhost:9942/idp"
+    assert (
+        spawned["idp"]["ABI_IDP_REDIRECT_URIS"]
+        == "http://localhost:9942/api/auth/oidc/callback"
+    )
+    assert not any(k.startswith("ABI_IDP_") for k in spawned["researcher"])

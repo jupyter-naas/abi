@@ -36,6 +36,14 @@ if TYPE_CHECKING:
 # Never passed on to a module: broker logins, the callout seed, IAM's secrets.
 _WITHHELD_PREFIXES = ("NATS_", "iam/", "ABI_SERVICE_KEY")
 
+# The built-in identity provider (libs/naas-abi-idp), the default provider of
+# `abi dev up`. It runs as the module account module/<project>/idp.
+IDP_MODULE = "naas_abi_idp"
+IDP_NAME = "idp"
+IDP_CLIENT_ID = "abi"
+IDP_ISSUER_ENV = "ABI_IDP_ISSUER"
+IDP_PROVIDER = "builtin"
+
 
 def load_dev_modules() -> dict[str, DevModuleConfiguration]:
     """The enabled `dev.modules`, by name, from the config the engine loads;
@@ -75,6 +83,93 @@ def configured_discovery_project(config_file: str | Path) -> str | None:
     discovery = (configured_nats(config_file) or {}).get("discovery")
     project = discovery.get("project") if isinstance(discovery, dict) else None
     return project if isinstance(project, str) and project else None
+
+
+def configured_identity(config_file: str | Path) -> dict | None:
+    """The top-level ``identity:`` block of a project config, rendered without
+    secrets and not validated; None when the config has none."""
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+        EngineConfiguration,
+    )
+
+    path = Path(config_file)
+    data = EngineConfiguration.render_without_secrets(
+        path.read_text(encoding="utf-8"), base_dir=str(path.resolve().parent)
+    )
+    identity = data.get("identity") if isinstance(data, dict) else None
+    return identity if isinstance(identity, dict) else None
+
+
+def has_identity_providers(identity: dict | None) -> bool:
+    return bool((identity or {}).get("providers"))
+
+
+def wants_builtin_idp(identity: dict | None) -> bool:
+    """Whether ``abi dev up`` runs the built-in IdP: the project names it
+    (``provisioning: builtin``), or names no provider at all, in which case the
+    dev overlay configures it. A project with providers of its own gets none."""
+    providers = (identity or {}).get("providers") or []
+    if not providers:
+        return True
+    return any(
+        isinstance(p, dict) and p.get("provisioning") == "builtin" for p in providers
+    )
+
+
+def is_builtin_idp(module: DevModuleConfiguration) -> bool:
+    return module.module == IDP_MODULE
+
+
+def implicit_idp_module() -> DevModuleConfiguration:
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration_Dev import (
+        DevModuleConfiguration,
+    )
+
+    return DevModuleConfiguration(name=IDP_NAME, module=IDP_MODULE, module_id=IDP_NAME)
+
+
+def with_builtin_idp(
+    modules: dict[str, DevModuleConfiguration], identity: dict | None
+) -> dict[str, DevModuleConfiguration]:
+    """``modules``, plus the built-in IdP when ``abi dev up`` should run it and
+    the project does not declare it as a dev module itself."""
+    if not wants_builtin_idp(identity) or any(
+        is_builtin_idp(m) for m in modules.values()
+    ):
+        return modules
+    return {**modules, IDP_NAME: implicit_idp_module()}
+
+
+def builtin_identity(issuer: str, client_secret: str) -> dict:
+    """The ``identity`` block the dev overlay adds when the project has none."""
+    return {
+        "default_provider": IDP_PROVIDER,
+        "providers": [
+            {
+                "name": IDP_PROVIDER,
+                "display_name": "Email code",
+                "issuer": issuer,
+                "client_id": IDP_CLIENT_ID,
+                "client_secret": client_secret,
+                "groups_claim": "groups",
+                "scopes": ["openid", "email", "profile", "groups", "offline_access"],
+                "provisioning": "builtin",
+            }
+        ],
+    }
+
+
+def idp_environment(api_origin: str, client_secret: str) -> dict[str, str]:
+    """What the built-in IdP module is told: where it is served, the client ABI
+    signs in as, and (dev only, the mail goes to a local file) that an address
+    may register itself. ``api_origin``: where the browser reaches the API."""
+    return {
+        IDP_ISSUER_ENV: f"{api_origin}/idp",
+        "ABI_IDP_CLIENT_ID": IDP_CLIENT_ID,
+        "ABI_IDP_CLIENT_SECRET": client_secret,
+        "ABI_IDP_REDIRECT_URIS": f"{api_origin}/api/auth/oidc/callback",
+        "ABI_IDP_SIGNUP": "1",
+    }
 
 
 def read_overlay(path: Path) -> dict:

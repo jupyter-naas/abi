@@ -37,9 +37,11 @@ _FRAMEWORK_PACKAGES = {
     "naas-abi-core",
     "naas-abi-marketplace",
     "naas-abi-cli",
-    # Not on PyPI yet; naas-abi-core's nats extra (in [all]) needs both.
+    # Not on PyPI yet; naas-abi-core's nats extra (in [all]) needs the first two.
     "naas-abi-proto",
     "naas-abi-sdk",
+    # The built-in identity provider `abi dev up` runs.
+    "naas-abi-idp",
 }
 
 

@@ -39,7 +39,23 @@ nats:
     lease_seconds: 180
   # The broker's HTTP monitoring port, read by the Nexus System app. No auth.
   monitoring_url: "http://127.0.0.1:8222"
-{% endif %}{% raw %}
+
+# Sign-in. `abi dev up` runs the built-in identity provider (naas-abi-idp, a
+# module over NATS: users sign in with a code emailed to them, which the local
+# email adapter writes to storage/email/) and, since this config names no
+# identity provider, makes it the default one. To use your own provider
+# (Okta, Entra, Zitadel, Keycloak: docs/identity-providers.md), add an
+# `identity:` block with it: `abi dev up` then runs no built-in IdP, unless a
+# provider there has `provisioning: builtin`.
+{% raw %}# identity:
+#   default_provider: builtin
+#   providers:
+#     - name: builtin
+#       issuer: "{{ secret.ABI_IDP_ISSUER }}"   # set by `abi dev up`: <api origin>/idp
+#       client_id: abi
+#       client_secret: "{{ secret.ABI_IDP_CLIENT_SECRET }}"  # generated into .env
+#       provisioning: builtin
+{% endraw %}{% endif %}{% raw %}
 opencode:
   auth_file_path: "~/.local/share/opencode/auth.json"
   # The coding agent reuses the same gateway key as the rest of the project.

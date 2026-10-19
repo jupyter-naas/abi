@@ -13,6 +13,7 @@ import naas_abi_cli
 
 from ..admin_credentials import (
     ensure_admin_credentials,
+    ensure_idp_client_secret,
     ensure_nats_callout_seed,
     ensure_nats_passwords,
     generate_admin_password,
@@ -154,6 +155,24 @@ def _ensure_headscale_service(docker_compose_target_path: str) -> None:
 
     with open(docker_compose_target_path, "w", encoding="utf-8") as compose_file:
         compose_file.write(compose_with_service)
+
+
+def _discovery_project(project_path: str) -> str:
+    """The discovery project of the project's config (``nats.discovery.project``),
+    else its folder name as a subject-safe token."""
+    from naas_abi_cli.cli.dev_modules import configured_discovery_project
+
+    for name in ("config.local.yaml", "config.yaml"):
+        path = os.path.join(project_path, name)
+        if os.path.exists(path):
+            try:
+                configured = configured_discovery_project(path)
+            except Exception:  # noqa: BLE001 - a config the CLI cannot render here
+                configured = None
+            if configured:
+                return configured
+    folder = re.sub(r"[^A-Za-z0-9_-]+", "-", os.path.basename(project_path)).strip("-")
+    return (folder or "dev")[:64]
 
 
 def project_uses_nats(project_path: str) -> bool | None:
@@ -506,6 +525,9 @@ def setup_local_deploy(
         "INCLUDE_HEADSCALE": include_headscale,
         "INCLUDE_CODING": include_coding,
         "NATS": nats,
+        # The discovery project the stack's modules register in (the built-in
+        # identity provider's service account is module/<project>/idp).
+        "DISCOVERY_PROJECT": _discovery_project(project_path),
         "CODING_WORKSPACE_DOCKER_NETWORK": coding_network,
         "POSTGRES_PASSWORD": str(uuid4()),
         "MINIO_ROOT_PASSWORD": str(uuid4()),
@@ -593,6 +615,9 @@ def setup_local_deploy(
     # and the account seed its auth callout signs admitted modules with.
     ensure_nats_passwords(Path(local_env_target_path))
     ensure_nats_callout_seed(Path(local_env_target_path))
+    # The secret of the client ABI signs in to the built-in identity provider
+    # with: the engine's config and the `idp` service both read it from .env.
+    ensure_idp_client_secret(Path(local_env_target_path))
 
     persisted_public_api_host = (
         _get_env_var(local_env_target_path, "PUBLIC_API_HOST")

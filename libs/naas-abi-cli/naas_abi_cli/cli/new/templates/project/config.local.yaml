@@ -39,6 +39,22 @@ nats:
   # The broker's HTTP monitoring port, read by the Nexus System app. No auth:
   # reachable on the Compose network and on 127.0.0.1 only.
   monitoring_url: "http://nats:8222"
+
+# The built-in identity provider (naas-abi-idp): users sign in with a code
+# emailed to them. It runs as a module over NATS (the `idp` service of docker-compose.yml); Nexus serves it at
+# /idp on the API host, and the engine reads it through NATS. Its client secret
+# is generated into .env.
+identity:
+  default_provider: builtin
+  providers:
+    - name: builtin
+      display_name: "Email code"
+      issuer: "{% raw %}{{ secret.NEXUS_API_URL }}{% endraw %}/idp"
+      client_id: abi
+      client_secret: "{% raw %}{{ secret.ABI_IDP_CLIENT_SECRET }}{% endraw %}"
+      groups_claim: groups
+      scopes: [openid, email, profile, groups, offline_access]
+      provisioning: builtin
 {% endif %}{% raw %}
 opencode:
   auth_file_path: "~/.local/share/opencode/auth.json"

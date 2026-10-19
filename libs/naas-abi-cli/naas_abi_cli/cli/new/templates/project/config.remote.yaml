@@ -35,6 +35,22 @@ nats:
     project: "{{ project_name_snake }}"
     lease_seconds: 180
   # monitoring_url: "http://<host>:8222"  # the broker's monitoring port (no auth)
+
+# The built-in identity provider (naas-abi-idp): users sign in with a code
+# emailed to them. It runs as a module over NATS (run `naas_abi_idp` next to the engine, with its own service key); Nexus serves it at
+# /idp on the API host, and the engine reads it through NATS. Its client secret
+# is generated into .env.
+identity:
+  default_provider: builtin
+  providers:
+    - name: builtin
+      display_name: "Email code"
+      issuer: "{% raw %}{{ secret.NEXUS_API_URL }}{% endraw %}/idp"
+      client_id: abi
+      client_secret: "{% raw %}{{ secret.ABI_IDP_CLIENT_SECRET }}{% endraw %}"
+      groups_claim: groups
+      scopes: [openid, email, profile, groups, offline_access]
+      provisioning: builtin
 {% endif %}{% raw %}
 opencode:
   auth_file_path: "~/.local/share/opencode/auth.json"
