@@ -144,6 +144,7 @@ After adding an ADR, run `npm run adr-index` and commit the regenerated `adr.md`
 | Workflow, job | Runs |
 |---|---|
 | `pull_request.yml`, `document-tests` | `make test-document-core`, `make test-event-core` and `make test-agent-memory-core` on PostgreSQL 17, Python 3.11 and 3.12 |
+| `pull_request.yml`, `cli-tests` | The CLI's suite (`cd libs/naas-abi-cli && uv run pytest`), including the test that every command and option has a row in the CLI reference |
 | `pull_request.yml`, `check` | `make check` (ruff, mypy, bandit, the Nexus web build) and `make test-integration-core` (testcontainers), Python 3.11 and 3.12. The API tests and the container API initialisation test are disabled there. |
 | `pull_request.yml`, `container-scan` | Builds the image and scans it with Trivy |
 | `standalone_sdk.yml`, `packages` | proto and SDK tests on 3.10 to 3.12, the optional extras, and the wheel builds |
@@ -151,4 +152,4 @@ After adding an ADR, run `npm run adr-index` and commit the regenerated `adr.md`
 | `cli_e2e.yml` | `scripts/cli_smoke.sh` for `nats` and `without-nats`, on every PR into `main` |
 | `docs.yml` | `npm run check:adr-index`, the docs build and `npm run check:redirects` when `docs/site` changes |
 
-No workflow runs `make test` (the whole suite), `pnpm test`, the Nexus API tests or the CLI suite (`uv run pytest libs/naas-abi-cli`, which holds the CLI reference completeness test): run them yourself when you change those areas.
+No workflow runs `make test` (the whole suite), `pnpm test` or the Nexus API tests: run them yourself when you change those areas.
