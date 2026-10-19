@@ -232,23 +232,28 @@ Implemented as decided, with these differences:
   (`^[A-Za-z0-9][A-Za-z0-9._-]*$`, never `.` or `..`) and treats such a repository id as not found, so no
   module reaches a path outside the repositories' root through the local adapter or a forge URL. The bus topic
   `triple_store` is reserved for the same reason as the secrets: nothing checks who subscribes to it.
-- **A host never holds a caller's own token.** An agent, a model, an app or a job host reads the
-  `Nats-Auth-Token` of every request it serves, and `api` (Nexus) is `Allow *` on `*`: with `api`'s `abi:nats`
-  token a host could attach a policy to itself, create keys or approve manifests, and name any user. So a call
-  to a host (subjects `abi.agent.`, `abi.mod.`) carries a **host token**: the caller's identity under the
-  audience `abi:host`, which every kernel service refuses (they accept `abi:nats` only). Discovery accepts
-  *only* a host token as the caller a host forwards (`authorize_*`), the engine's job loader likewise, and the
-  RPC overflow host accepts both (a parked request or reply belongs to the caller, and the host reads it for
-  it). A host that keeps one can use it nowhere else. Who mints them:
-  - a module's key buys one at `abi.iam.v1.token` (`TokenRequest.audience`, `abi:host`), cached beside its
-    `abi:nats` token; `Transport.call` picks it by subject;
-  - the serving engine signs `api`'s (`Engine.service_credentials("api", audience="abi:host")`,
-    Nexus's `api_host_token()`); a transport given bare tokens takes a `host_token` and refuses to call a host
-    without one;
-  - the broker control stores a host token of the verified caller in every trigger and cancel it writes, in
-    place of the caller's own token, which no job host sees any more.
+- **A host never holds a caller's own token, nor one made for another host.** An agent, a model, an app or a
+  job host reads the `Nats-Auth-Token` of every request it serves, and `api` (Nexus) is `Allow *` on `*`: with
+  `api`'s `abi:nats` token a host could attach a policy to itself, create keys or approve manifests, and name any
+  user. So a call to a host (subjects `abi.agent.<project>.<sa>...`, `abi.mod.<project>.<sa>...`) carries a
+  **host token**: the caller's identity under the audience `abi:host:<sa>`, `<sa>` being the host's subject
+  token, the one its subjects carry. Every kernel service refuses it (they accept `abi:nats` only). One token
+  per host matters because the broker lets a module that holds any `InvokeAgent`, `ChatModel` or `OpenApp`
+  grant publish to every agent or model subject of the project (resource checks happen at the host, through
+  discovery): a token that named no host could be replayed at any of them, with an on-behalf-of user.
+  - Discovery accepts a host token only as the caller a host forwards (`authorize_*`) **and only from the host it
+    names**: the token's audience must equal `abi:host:<subject token of the account whose lease calls>`. The
+    engine's job loader checks the same for the jobs it hosts (the engine's). The RPC overflow host accepts the
+    family (a parked request or reply is bound to the caller's identity, and the host reads it for the caller).
+  - A module's key buys one per host at `abi.iam.v1.token` (`TokenRequest.audience`), cached per audience;
+    `Transport.call` reads the host from the subject. The serving engine signs `api`'s
+    (`Engine.service_credentials("api", audience=host_audience(sa))`, Nexus's `api_host_token()`, a function of
+    the host's `<sa>`); a transport given bare tokens takes a `host_token` and refuses to call a host without one.
+  - The broker control stores, in every trigger and cancel, a host token of the verified caller addressed to
+    the job's host (the module's account, else the engine's), never the caller's own token. Written without an
+    engine, behind the callout, nothing is stored: the SDK raises (it is the engine's to write).
   The `Abi-On-Behalf-Of` header is not a credential by itself: it needs a token of `api` or `engine`, which a
-  host no longer has.
+  host no longer has for any other host.
 - **IAM operations offered to every account** are read-only or self-service (`broker.IAM_ALWAYS`: `token`,
   `jwks`, `submit_manifest`, `get_manifest`, `find_service_account`, `authorize`, `filter`). The others (every
   mutation, every list) reach a module only through the `iam:` action its policy allows, like any service's.

@@ -147,7 +147,10 @@ def test_a_large_upload_streams_through_the_app(broker, tmp_path):
         api, _ = _app()
         host = await _module(broker, tmp_path, api)
         nexus = Transport(
-            broker, "nexus-token", timeout=60, host_token="nexus-host-token"
+            broker,
+            "nexus-token",
+            timeout=60,
+            host_token=lambda recipient: "nexus-host-token",
         )
         try:
             payload = bytes(range(256)) * (20 * MB // 256)  # 20 MB
@@ -202,7 +205,10 @@ def test_an_upload_above_its_limit_is_413(broker, tmp_path):
         api, _ = _app()
         host = await _module(broker, tmp_path, api)
         nexus = Transport(
-            broker, "nexus-token", timeout=60, host_token="nexus-host-token"
+            broker,
+            "nexus-token",
+            timeout=60,
+            host_token=lambda recipient: "nexus-host-token",
         )
         try:
             source = BodySource(await nexus.connect())
@@ -244,7 +250,10 @@ def test_a_large_download_and_a_large_file_stream_back(broker, tmp_path):
         api, _ = _app()
         host = await _module(broker, tmp_path, api)
         nexus = Transport(
-            broker, "nexus-token", timeout=60, host_token="nexus-host-token"
+            broker,
+            "nexus-token",
+            timeout=60,
+            host_token=lambda recipient: "nexus-host-token",
         )
         try:
             download = await call_app(
@@ -274,7 +283,10 @@ def test_leaving_an_endless_stream_stops_the_app(broker, tmp_path):
         api, seen = _app()
         host = await _module(broker, tmp_path, api)
         nexus = Transport(
-            broker, "nexus-token", timeout=60, host_token="nexus-host-token"
+            broker,
+            "nexus-token",
+            timeout=60,
+            host_token=lambda recipient: "nexus-host-token",
         )
         try:
             response = await call_app(
@@ -303,7 +315,10 @@ def test_an_idle_app_is_504(broker, tmp_path):
         api, _ = _app()
         host = await _module(broker, tmp_path, api, idle_seconds=0.5)
         nexus = Transport(
-            broker, "nexus-token", timeout=60, host_token="nexus-host-token"
+            broker,
+            "nexus-token",
+            timeout=60,
+            host_token=lambda recipient: "nexus-host-token",
         )
         try:
             response = await call_app(
@@ -321,7 +336,10 @@ def test_an_idle_app_is_504(broker, tmp_path):
 def test_a_holder_that_stops_answering_fails_the_pull(broker):
     async def scenario():
         nexus = Transport(
-            broker, "nexus-token", timeout=60, host_token="nexus-host-token"
+            broker,
+            "nexus-token",
+            timeout=60,
+            host_token=lambda recipient: "nexus-host-token",
         )
         try:
             nc = await nexus.connect()

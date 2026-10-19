@@ -161,14 +161,17 @@ iam.broker_permissions(principal, key)  # records from authenticate_key; never c
   two minutes. `rotate_key` gives the new key a fresh default life and, at the
   limit of five, revokes the old key first. `last_used_at` is written at most
   once a minute.
-- **Host tokens** (`abi:host`). A call to a module host carries the caller's
-  identity under the audience `abi:host`, never its `abi:nats` token: a host
-  reads the token of every request and `api` may do everything. Kernel
-  primaries verify `abi:nats` only; discovery's `authorize_*` and the engine's
-  job loader verify `abi:host` only (`TokenVerifier.for_audiences`); the overflow
-  host both. `exchange_key(key, audience)` and `issue_service_token(name,
-  audience=...)` mint them, `issue_host_token(principal)` is what the broker
-  control stores in a trigger.
+- **Host tokens** (`abi:host:<sa>`). A call to a module host carries the
+  caller's identity under the audience of that host, never its `abi:nats`
+  token: a host reads the token of every request and `api` may do everything,
+  and a token that named no host could be replayed at the others. Kernel
+  primaries verify `abi:nats` only; discovery's `authorize_*` verifies the
+  family (`for_audiences((), prefixes=(HOST_AUDIENCE_PREFIX,))`) and then
+  requires the audience to be the calling host's own; the engine's job loader
+  likewise for the engine; the overflow host accepts both. `exchange_key(key,
+  audience)` and `issue_service_token(name, audience=...)` mint them
+  (`nats_auth.host_audience(sa)`), `issue_host_token(principal, sa)` is what the
+  broker control stores in a trigger (the job's host, else the engine).
 - **Signing keys** retire 20 minutes after the next one signs, but their public
   half stays in the JWKS 169 hours more (`abi_retired_at`), so job triggers
   stored meanwhile still verify `at` their stored time; a retired key is never

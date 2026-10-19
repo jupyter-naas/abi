@@ -33,7 +33,6 @@ if TYPE_CHECKING:
 
 
 NATS_AUDIENCE = "abi:nats"
-HOST_AUDIENCE = "abi:host"
 
 
 def _auth() -> Any:
@@ -85,7 +84,7 @@ def exchange_key(
     audience: str = NATS_AUDIENCE,
 ) -> IssuedToken:
     """An access token for ``key`` (``abi.iam.v1.token``): ``abi:nats`` for
-    the kernel services, or ``abi:host`` for the module hosts it calls."""
+    the kernel services, or ``abi:host:<recipient>`` for one module host."""
     auth = _auth()
     auth.parse_key(key)  # a malformed key never leaves the process
     pb = _pb()
@@ -161,7 +160,8 @@ def issuer_source(
     iam: IAMService, name: str, audience: str = NATS_AUDIENCE
 ) -> RenewingTokenSource:
     """Tokens of the engine's own service account ``name``, signed in process,
-    for ``audience`` (``abi:host`` for the calls it makes to module hosts)."""
+    for ``audience`` (``abi:host:<recipient>`` for the calls it makes to one module
+    host)."""
     return _auth().RenewingTokenSource(
         name, lambda: iam.issue_service_token(name, audience=audience)
     )

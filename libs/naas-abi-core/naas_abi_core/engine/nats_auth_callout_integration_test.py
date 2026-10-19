@@ -22,6 +22,7 @@ from naas_abi_core.engine.call_context import (
     as_service_account,
     use_call_context,
 )
+from naas_abi_core.engine.nats_auth import host_audience
 from naas_abi_core.engine.nats_auth_callout import AuthCallout
 from naas_abi_core.engine.nats_broker_control import BrokerControl
 from naas_abi_core.engine.nats_nkeys import KeyPair
@@ -110,7 +111,7 @@ def approve(iam: IAMService, account_id: str, name: str, document=DOCUMENT) -> N
         iam.approve_manifest(account_id)
 
 
-def run(stack, scenario, **callout_options):
+def run(stack, scenario, *, discovery=False, **callout_options):
     async def main():
         from naas_abi_core.engine import nats_overflow
         from naas_abi_core.engine.nats_rpc import request_payload
@@ -139,9 +140,20 @@ def run(stack, scenario, **callout_options):
         await engine.subscribe(KV_GET, cb=kernel)
         await engine.subscribe(KV_SET, cb=kernel)
         await engine.flush()
+        registry = None
+        if discovery:
+            from naas_abi_core.services.discovery.discovery_factory import (
+                start_discovery,
+            )
+
+            registry = await start_discovery(
+                engine, stack["iam"].verifier(), "default", 20, iam=stack["iam"]
+            )
         try:
             return await scenario(served)
         finally:
+            if registry is not None:
+                await registry.stop()
             await overflow.stop()
             await primary.stop()
             await control.stop()
@@ -1356,8 +1368,8 @@ def test_a_host_that_keeps_apis_token_cannot_use_it_to_change_iam(stack):
         nexus = Transport(
             stack["engine"],
             lambda: iam.issue_service_token("api").token,
-            host_token=lambda: (
-                iam.issue_service_token("api", audience="abi:host").token
+            host_token=lambda recipient: (
+                iam.issue_service_token("api", audience=host_audience(recipient)).token
             ),
             forward_user=True,
             timeout=3,
@@ -1376,7 +1388,8 @@ def test_a_host_that_keeps_apis_token_cannot_use_it_to_change_iam(stack):
             token = headers["Nats-Auth-Token"]
             claims = jwt.decode(token, options={"verify_signature": False})
             # What the host holds is addressed to hosts, and is still api's.
-            assert claims["aud"] == "abi:host" and claims["sub"] == api.id
+            assert claims["sub"] == api.id
+            assert claims["aud"] == host_audience(subject_token(account))
             # The kernel refuses it: IAM says UNAUTHENTICATED to every change.
             engine = await nats.connect(stack["engine"])
             try:
@@ -1467,15 +1480,248 @@ def test_a_stored_trigger_holds_a_host_token_never_the_callers_own(stack):
             )
             token = stored.headers["Nats-Auth-Token"]
             claims = jwt.decode(token, options={"verify_signature": False})
-            assert claims["aud"] == "abi:host" and claims["sub"] == people
+            # Addressed to the job's host alone.
+            assert claims["sub"] == people
+            assert claims["aud"] == host_audience(subject_token(people))
             # The kernel refuses it, and discovery accepts it.
-            from naas_abi_core.engine.nats_auth import InvalidServiceTokenError
+            from naas_abi_core.engine.nats_auth import (
+                HOST_AUDIENCE_PREFIX,
+                InvalidServiceTokenError,
+            )
 
             with pytest.raises(InvalidServiceTokenError):
                 iam.verifier().verify(token)
-            assert iam.verifier(("abi:host",)).verify(token).subject == people
+            hosts = iam.verifier().for_audiences((), prefixes=(HOST_AUDIENCE_PREFIX,))
+            assert hosts.verify(token).subject == people
         finally:
             await engine.close()
             await transport.close()
 
     run(stack, scenario)
+
+
+def test_a_host_token_is_good_at_the_host_it_names_and_nowhere_else(stack):
+    """Module M hosts an agent and reads the token Nexus sends it (``api``'s,
+    with an on-behalf-of user). M may call other agents' subjects (it holds an
+    ``InvokeAgent`` grant, which the broker turns into every agent subject of
+    the project). It replays the token at P's agent: P's host forwards it to
+    discovery, which refuses it, because it names M. The same token, forwarded
+    by M, is accepted."""
+    from naas_abi_core.engine.call_context import service_account, user
+    from naas_abi_proto.discovery.v1 import discovery_pb2 as dpb
+    from naas_abi_sdk.agent_host import AgentHost
+    from naas_abi_sdk.discovery import (
+        DiscoveryClient,
+        DiscoverySession,
+    )
+    from naas_abi_sdk.transport import RPCError
+
+    iam = stack["iam"]
+    mal, mal_key = module(iam, "module/default/mal")
+    victim, victim_key = module(iam, "module/default/victim")
+    reach = {
+        "version": "2026-10-13",
+        "statements": [
+            {
+                "effect": "Allow",
+                "actions": ["discovery:InvokeAgent"],
+                # Its dependency: not P. The broker's subjects are wider.
+                "resources": ["abi:-:-:discovery:agent/default/dependency/*"],
+            }
+        ],
+    }
+    approve(iam, mal, "module/default/mal", reach)
+    approve(iam, victim, "module/default/victim")
+
+    def descriptor(module_id: str) -> dpb.ModuleDescriptor:
+        return dpb.ModuleDescriptor(
+            module_id=module_id,
+            package_version="1",
+            contract_major=1,
+            agents=[dpb.AgentDescriptor(name="Agent", contract_major=1)],
+        )
+
+    async def scenario(served):
+        mal_transport = Transport(stack["url"], mal_key, timeout=3)
+        victim_transport = Transport(stack["url"], victim_key, timeout=3)
+        mal_session = DiscoverySession(
+            DiscoveryClient(mal_transport, "default"), descriptor("mal")
+        )
+        victim_session = DiscoverySession(
+            DiscoveryClient(victim_transport, "default"), descriptor("victim")
+        )
+        nexus = Transport(
+            stack["engine"],
+            lambda: iam.issue_service_token("api").token,
+            host_token=lambda recipient: (
+                iam.issue_service_token("api", audience=host_audience(recipient)).token
+            ),
+            forward_user=True,
+            timeout=3,
+        )
+        try:
+            await mal_session.register()
+            await victim_session.register()
+            assert mal_session.service_account == subject_token(mal)
+            mal_host = AgentHost(mal_session, None, {})
+            victim_host = AgentHost(victim_session, None, {})
+
+            captured: list[dict] = []
+            nc = await mal_transport.connect()
+            mal_subject = f"abi.agent.default.{subject_token(mal)}.i.h.v1.submit"
+
+            async def mal_serves(msg):
+                captured.append(dict(msg.headers or {}))
+                await msg.respond(b"")
+
+            await nc.subscribe(mal_subject, cb=mal_serves)
+            await nc.flush()
+            with use_call_context(
+                CallContext(
+                    principal=service_account("api"), on_behalf_of=user("usr_ada")
+                )
+            ):
+                await nexus.call(
+                    mal_subject, kv_pb.GetRequest(key="x"), kv_pb.GetResponse
+                )
+            (headers,) = captured
+            assert headers["Abi-On-Behalf-Of"] == "usr_ada"
+
+            # P serves the agent M replays the token at: what M sends is what
+            # P's host forwards to discovery.
+            outcome: list[object] = []
+            victim_nc = await victim_transport.connect()
+            victim_subject = f"abi.agent.default.{subject_token(victim)}.i.h.v1.submit"
+
+            async def victim_serves(msg):
+                try:
+                    outcome.append(
+                        await victim_host._authorize(
+                            "Agent", dict(msg.headers), "submit"
+                        )
+                    )
+                except RPCError as exc:
+                    outcome.append(exc)
+                await msg.respond(b"")
+
+            await victim_nc.subscribe(victim_subject, cb=victim_serves)
+            await victim_nc.flush()
+            # M's broker lets it publish there: the grant is wider than P's agent.
+            assert not await denied(mal_transport, victim_subject)
+            await nc.request(victim_subject, b"", headers=headers, timeout=3)
+            (refused,) = outcome
+            assert isinstance(refused, RPCError)
+            assert refused.code == "UNAUTHENTICATED"
+
+            # The host the token names accepts it (and decides on the policy:
+            # api as ada may not invoke an agent no policy gives her).
+            with pytest.raises(RPCError) as decided:
+                await mal_host._authorize("Agent", headers, "submit")
+            assert decided.value.code != "UNAUTHENTICATED"
+        finally:
+            for session in (mal_session, victim_session):
+                if session.task is not None:
+                    session.task.cancel()
+            await nexus.close()
+            await mal_transport.close()
+            await victim_transport.close()
+
+    run(stack, scenario, discovery=True)
+
+
+def test_a_stored_triggers_token_is_good_at_its_jobs_host_only(stack):
+    """The token stored with a trigger names the job's host. Another module's
+    job host that reads it (a trigger lands on its consumer, or it is handed
+    one) cannot forward it to discovery as its own caller."""
+    from naas_abi_proto.discovery.v1 import discovery_pb2 as dpb
+    from naas_abi_sdk.broker_control import BrokerControl as Control
+    from naas_abi_sdk.discovery import DiscoveryClient, DiscoverySession
+    from naas_abi_sdk.jobs import Every, JobDescriptor, job_subjects, store_trigger
+    from naas_abi_sdk.module import ModuleDependencies
+    from naas_abi_sdk.permissions import default_manifest
+    from naas_abi_sdk.transport import RPCError
+
+    iam = stack["iam"]
+    people, people_key = module(iam, "module/default/people")
+    billing, billing_key = module(iam, "module/default/billing")
+    approve(
+        iam,
+        people,
+        "module/default/people",
+        default_manifest(ModuleDependencies(), jobs=["nightly"]),
+    )
+    approve(
+        iam,
+        billing,
+        "module/default/billing",
+        default_manifest(ModuleDependencies(), jobs=["invoice"]),
+    )
+
+    def descriptor(module_id: str, job: str) -> dpb.ModuleDescriptor:
+        return dpb.ModuleDescriptor(
+            module_id=module_id,
+            package_version="1",
+            contract_major=1,
+            jobs=[JobDescriptor(job, triggers=(Every("1h"),)).to_pb()],
+        )
+
+    async def scenario(served):
+        people_transport = Transport(stack["url"], people_key, timeout=5)
+        billing_transport = Transport(stack["url"], billing_key, timeout=5)
+        people_session = DiscoverySession(
+            DiscoveryClient(people_transport, "default"),
+            descriptor("people", "nightly"),
+        )
+        billing_session = DiscoverySession(
+            DiscoveryClient(billing_transport, "default"),
+            descriptor("billing", "invoice"),
+        )
+        engine = await nats.connect(stack["engine"])
+        try:
+            await people_session.register()
+            await billing_session.register()
+            await Control(people_transport).request(
+                "ensure_job",
+                project="default",
+                job="nightly",
+                max_concurrency=1,
+                ack_wait_seconds=30,
+                update=False,
+            )
+            await store_trigger(
+                people_transport, "default", "people", "nightly", b"{}", {}
+            )
+            subject = job_subjects("default", "people", "nightly").trigger
+            stored = await engine.jetstream().get_msg(
+                "ABI_JOBS_default", subject=subject
+            )
+            token = stored.headers["Nats-Auth-Token"]
+
+            def asking(session, job):
+                return session.client._call(
+                    "authorize_job",
+                    dpb.AuthorizeJobRequest(
+                        instance_id=session.instance_id,
+                        lease_token=session.lease_token,
+                        job_name=job,
+                        operation="trigger",
+                        caller_token=token,
+                    ),
+                    dpb.AuthorizeJobResponse,
+                )
+
+            # billing's host, handed people's trigger: refused as a forgery.
+            with pytest.raises(RPCError) as refused:
+                await asking(billing_session, "invoice")
+            assert refused.value.code == "UNAUTHENTICATED"
+            # people's own host: accepted (discovery goes on to decide).
+            await asking(people_session, "nightly")
+        finally:
+            await engine.close()
+            for session in (people_session, billing_session):
+                if session.task is not None:
+                    session.task.cancel()
+            await people_transport.close()
+            await billing_transport.close()
+
+    run(stack, scenario, discovery=True)

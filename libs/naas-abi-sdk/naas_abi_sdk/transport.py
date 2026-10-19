@@ -16,11 +16,11 @@ from nats.errors import MaxPayloadError, NoRespondersError
 from naas_abi_sdk import no_responders, overflow
 from naas_abi_sdk.call_context import current_call_context, on_behalf_of_header
 from naas_abi_sdk.credentials import (
-    HOST_AUDIENCE,
     NATS_AUDIENCE,
     RENEW_CONNECTION_SECONDS,
     SERVICE_KEY_PREFIX,
     ServiceKey,
+    host_audience,
 )
 from naas_abi_sdk.lifeline import Lifeline
 from naas_abi_sdk.messages import message_size
@@ -36,10 +36,20 @@ logger = logging.getLogger(__name__)
 
 Response = TypeVar("Response", bound=Message)
 
-# Subjects module hosts serve (agents, models, apps). A call to one carries a
-# token addressed to hosts, never the caller's own: the host reads it, and may
-# forward it to discovery, but kernel services refuse it.
+# Subjects module hosts serve (agents, models, apps): abi.agent.<project>.<sa>...
+# and abi.mod.<project>.<sa>.... A call to one carries a token addressed to that
+# host (``<sa>``), never the caller's own: the host reads it, and may forward it
+# to discovery, but kernel services refuse it and discovery accepts it from
+# that host only.
 HOST_SUBJECT_PREFIXES = ("abi.agent.", "abi.mod.")
+
+
+def host_recipient(subject: str) -> str | None:
+    """The ``<sa>`` of the host a subject addresses, None for any other."""
+    if not subject.startswith(HOST_SUBJECT_PREFIXES):
+        return None
+    parts = subject.split(".", 4)
+    return parts[3] if len(parts) > 3 and parts[3] else None
 
 
 class RPCError(RuntimeError):
@@ -80,10 +90,11 @@ class Transport:
         identity (``api``, ``engine``) that calls kernel services: they
         refuse the header from anyone else, and no module host needs it.
 
-        ``host_token``: the token a call to a module host carries
-        (``abi:host``), for a transport given a token instead of a key: a key
-        buys one itself. Without one such a transport makes no call to a host:
-        its own token must never reach one.
+        ``host_token``: for a transport given a token instead of a key, what a
+        call to a module host carries: a token, or a function of the host's
+        ``<sa>`` returning the token addressed to that host (a key buys one
+        itself). Without one such a transport makes no call to a host: its own
+        token must never reach one.
 
         ``renew_seconds``: a connection logged in with a service key
         reconnects this often, so the broker computes its subjects again
@@ -171,21 +182,25 @@ class Transport:
 
         return closed
 
-    async def access_token(self, audience: str = NATS_AUDIENCE) -> str:
+    async def access_token(
+        self, audience: str = NATS_AUDIENCE, recipient: str | None = None
+    ) -> str:
         """The token calls carry: the key's, exchanged as needed, else the
-        one this transport was given. ``audience``: ``abi:host`` for a call
-        to a module host."""
+        one this transport was given. ``recipient``: the ``<sa>`` of the module
+        host a call is for, which gets a token addressed to it alone."""
+        if recipient is not None:
+            audience = host_audience(recipient)
         if self.credentials is not None:
             return await self.credentials.access_token(self, audience)
-        if audience == HOST_AUDIENCE:
-            if self.host_token is None:
+        if recipient is not None:
+            source = self.host_token
+            if source is None:
                 raise NoHostTokenError(
                     "This transport holds no host token: it cannot call a module "
                     "host without handing it a token the kernel services accept"
                 )
-            source = self.host_token
-        else:
-            source = self.token
+            return cast(str, source(recipient) if callable(source) else source)
+        source = self.token
         return cast(str, source() if callable(source) else source)
 
     async def reconnect(self) -> None:
@@ -222,13 +237,13 @@ class Transport:
                     await self.connection.close()
 
     async def auth_headers(
-        self, current: Any = None, *, host: bool = False
+        self, current: Any = None, *, host: str | None = None
     ) -> dict[str, str]:
         """This transport's credentials for a message it sends itself: its
         token (a service key's, exchanged as needed), and the current call's
-        user when it forwards users. ``host``: for a message a module host will
-        read, so the token is addressed to hosts."""
-        token = await self.access_token(HOST_AUDIENCE if host else NATS_AUDIENCE)
+        user when it forwards users. ``host``: the ``<sa>`` of the module host that
+        will read the message, so the token is addressed to it alone."""
+        token = await self.access_token(recipient=host)
         if not token or "\r" in token or "\n" in token:
             raise ValueError("A nonempty service token without newlines is required")
         headers = {"Nats-Auth-Token": token}
@@ -258,9 +273,7 @@ class Transport:
         if not context.workspace_id and current.workspace_id:
             context.workspace_id = current.workspace_id
         context.timeout_ms = int(self.timeout * 1000)
-        headers = await self.auth_headers(
-            current, host=subject.startswith(HOST_SUBJECT_PREFIXES)
-        )
+        headers = await self.auth_headers(current, host=host_recipient(subject))
         payload = outgoing.SerializeToString()
         # The span covers the whole exchange; the trace travels in the headers.
         with client_span(

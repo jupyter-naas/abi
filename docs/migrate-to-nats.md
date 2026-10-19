@@ -137,8 +137,8 @@ In this phase every engine keeps its services and adds NATS on top.
 
    Upgrade the engine and every module's `naas-abi-sdk` together: a module on
    an older SDK sends its own token to the agents, models and apps it calls, and
-   discovery now accepts only the token addressed to hosts (`abi:host`) the
-   current SDK sends. A module's secrets are the names under `<module id>/`
+   discovery now accepts only the token addressed to that host (`abi:host:<sa>`)
+   the current SDK sends. A module's secrets are the names under `<module id>/`
    (the secret service serves it nothing else), and the broker offers it no IAM
    operation that changes anything unless its policy allows the `iam:` action.
 

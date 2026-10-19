@@ -18,7 +18,7 @@ from uuid import uuid4
 
 from naas_abi_core.engine.call_context import ON_BEHALF_OF_HEADER
 from naas_abi_core.engine.nats_auth import (
-    HOST_AUDIENCE,
+    HOST_AUDIENCE_PREFIX,
     NATS_AUDIENCE,
     TokenVerifier,
 )
@@ -67,10 +67,13 @@ class OverflowHost(TransferHost):
         idle_seconds: float = 60.0,
         max_sessions: int = 64,
     ) -> None:
-        # An upload or a parked reply belongs to the caller; a module host
-        # reading or parking one for its caller presents the caller's host
-        # token (``abi:host``), the caller itself its own ``abi:nats`` one.
-        verifier = verifier.for_audiences((NATS_AUDIENCE, HOST_AUDIENCE))
+        # An upload or a parked reply belongs to the caller (its identity binds
+        # the session); a module host reading or parking one for its caller
+        # presents the caller's host token (``abi:host:<host>``), the caller
+        # itself its own ``abi:nats`` one.
+        verifier = verifier.for_audiences(
+            (NATS_AUDIENCE,), prefixes=(HOST_AUDIENCE_PREFIX,)
+        )
         super().__init__(
             overflow.PREFIX,
             verifier,

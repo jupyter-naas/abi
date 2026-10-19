@@ -29,11 +29,11 @@ from naas_abi_core.engine.call_context import (
     Principal as CallPrincipal,
 )
 from naas_abi_core.engine.nats_auth import (
-    HOST_AUDIENCE,
-    ISSUABLE_AUDIENCES,
     NATS_AUDIENCE,
     IssuedToken,
     JWKSVerifier,
+    host_audience,
+    issuable_audience,
 )
 from naas_abi_core.services.iam import broker, keys, modules, roles
 from naas_abi_core.services.iam.adapters.secondary.authorizer__policy import (
@@ -1064,6 +1064,8 @@ class IAMService(IIAMService, PolicySource):
         """A token for the engine's own service account ``name`` (``engine``,
         ``api``), for code running in this process. Not exposed over NATS:
         remote callers exchange a key."""
+        if not issuable_audience(audience):
+            raise ValueError(f"No tokens for audience {audience!r}")
         record = self.store.find_service_account(name)
         if record is None or not record.active:
             raise IAMNotFoundError(f"No active service account {name!r}")
@@ -1073,14 +1075,15 @@ class IAMService(IIAMService, PolicySource):
 
     def exchange_key(self, value: str, audience: str = NATS_AUDIENCE) -> IssuedToken:
         """A service account's key for an access token (RFC §8.2): ``abi:nats``
-        for the kernel services, or ``abi:host`` for the module hosts it calls
-        (a host forwards it to discovery and can use it nowhere else).
+        for the kernel services, or ``abi:host:<recipient>`` for one module
+        host it calls (the host forwards it to discovery, which accepts it from
+        that host only, and no kernel service accepts it).
 
         The key is the credential: no caller is checked. ``KeyRefusedError``
         for every refusal, whatever its cause.
         """
         principal, _ = self.authenticate_key(value)
-        if audience not in ISSUABLE_AUDIENCES:
+        if not issuable_audience(audience):
             raise ValueError(f"No tokens for audience {audience!r}")
         return self.tokens.issue(
             principal.id,
@@ -1089,15 +1092,15 @@ class IAMService(IIAMService, PolicySource):
             name=principal.name,
         )
 
-    def issue_host_token(self, caller: CallPrincipal) -> IssuedToken:
-        """A host-audience token for an already verified ``caller``: what the
-        engine stores with a job trigger or cancel, in place of the caller's
-        own ``abi:nats`` token that the job's host would otherwise hold. In
-        process only."""
+    def issue_host_token(self, caller: CallPrincipal, recipient: str) -> IssuedToken:
+        """A token for one host (``recipient``: its subject token) for an
+        already verified ``caller``: what the engine stores with a job trigger
+        or cancel, in place of the caller's own ``abi:nats`` token that the
+        job's host would otherwise hold. In process only."""
         return self.tokens.issue(
             caller.id,
             kind=caller.kind,
-            audience=HOST_AUDIENCE,
+            audience=host_audience(recipient),
             name=caller.name if caller.kind == "service_account" else None,
         )
 

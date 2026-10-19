@@ -37,10 +37,18 @@ RENEW_CONNECTION_SECONDS = 120.0
 TOKEN_SUBJECT = "abi.iam.v1.token"
 KEY_USER = "sa"
 NATS_AUDIENCE = "abi:nats"
-# A token for the module hosts this module calls (an agent, a model, an app, a
-# job's host). The kernel services refuse it: a host that keeps it can use it
-# nowhere else.
-HOST_AUDIENCE = "abi:host"
+# A token for one module host this module calls (an agent, a model, an app):
+# ``abi:host:<the host's subject token>``, the ``<sa>`` of its subjects. The
+# kernel services refuse it and discovery accepts it from that host only, so a
+# host that keeps it can use it nowhere else.
+HOST_AUDIENCE_PREFIX = "abi:host:"
+MAX_AUDIENCES = 256
+
+
+def host_audience(recipient: str) -> str:
+    return HOST_AUDIENCE_PREFIX + recipient
+
+
 SERVICE_KEY_PREFIX = "abi_sk_"
 
 
@@ -83,9 +91,9 @@ class ServiceKey:
         self, transport: Transport, audience: str = NATS_AUDIENCE
     ) -> str:
         """A token valid a few more minutes, exchanged when half its life is
-        gone. ``audience``: ``abi:nats`` for the kernel services, ``abi:host``
-        for the module hosts this module calls (they hold it, so it is good
-        nowhere else)."""
+        gone. ``audience``: ``abi:nats`` for the kernel services,
+        ``host_audience(<sa>)`` for the one module host it calls (it holds the
+        token, so it is good nowhere else)."""
         if self._lock is None:
             self._lock = asyncio.Lock()
         async with self._lock:
@@ -98,6 +106,10 @@ class ServiceKey:
                 if token and time.time() < expires_at - 5:
                     return token  # the engine may be restarting
                 raise
+            if len(self._tokens) > MAX_AUDIENCES:  # one per host called
+                now = time.time()
+                for key in [k for k, v in self._tokens.items() if v[2] < now]:
+                    del self._tokens[key]
             return self._tokens[audience][0]
 
     def invalidate(self) -> None:

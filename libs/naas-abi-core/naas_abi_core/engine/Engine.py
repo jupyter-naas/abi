@@ -328,10 +328,11 @@ class Engine(IEngine):
         ``api``) for in-process callers over NATS, such as Nexus. Signed here
         when this engine holds IAM; a client-role engine has ``engine`` only.
 
-        ``audience``: ``"abi:host"`` for the calls it makes to module hosts
-        (agents, apps, models, jobs): the kernel services refuse such a token,
-        so a host that keeps it can use it nowhere else. By default the
-        ``abi:nats`` token the kernel services accept, never sent to a host."""
+        ``audience``: ``nats_auth.host_audience(<host's subject token>)`` for a
+        call to one module host (agent, app, model): the kernel services refuse
+        such a token and discovery accepts it from that host only, so a host
+        that keeps it can use it nowhere else. By default the ``abi:nats``
+        token the kernel services accept, never sent to a host."""
         from naas_abi_core.engine import nats_credentials
         from naas_abi_core.services.iam.IAMService import IAMService
 
@@ -340,7 +341,7 @@ class Engine(IEngine):
         if audience is not None and audience != nats_credentials.NATS_AUDIENCE:
             if not holds_iam:
                 # The engine's key buys a host token over NATS, as any module's.
-                return self.__engine_host_credentials(name)
+                return self.__engine_host_credentials(name, audience)
             sources = self.__dict__.setdefault("_service_sources", {})
             if (name, audience) not in sources:
                 sources[(name, audience)] = nats_credentials.issuer_source(
@@ -356,9 +357,9 @@ class Engine(IEngine):
             sources[name] = nats_credentials.issuer_source(cast(IAMService, iam), name)
         return sources[name]
 
-    def __engine_host_credentials(self, name: str) -> Any:
-        """A client-role engine's host-audience tokens: the engine key's
-        exchange for ``abi:host``."""
+    def __engine_host_credentials(self, name: str, audience: str) -> Any:
+        """A client-role engine's tokens for one host: the engine key's
+        exchange for ``audience``."""
         from naas_abi_core.engine import nats_credentials
 
         if name != "engine":
@@ -374,7 +375,7 @@ class Engine(IEngine):
             nats.nats_url,
             key,
             identity="engine",
-            audience=nats_credentials.HOST_AUDIENCE,
+            audience=audience,
         )
 
     def __engine_credentials(self, client: bool = False) -> Any:

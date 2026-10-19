@@ -2,11 +2,12 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from naas_abi_core.engine.nats_auth import HOST_AUDIENCE
+from naas_abi_core.engine.nats_auth import host_audience
 from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.discovery.adapters.primary.discovery_nats import (
     DiscoveryNATS,
 )
+from naas_abi_core.services.iam.modules import subject_token
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 
 SECRET = TEST_TOKENS.verifier
@@ -107,13 +108,17 @@ def test_an_overflow_uploaded_request_is_refused_as_too_large():
     asyncio.run(scenario())
 
 
+# The host forwarding is "research" (its token below): tokens for it name it.
+HOST = host_audience(subject_token("research"))
+
+
 def test_authorize_agent_verifies_the_forwarded_caller_and_its_user():
     async def scenario():
         service = AsyncMock()
         service.authorize_agent.return_value = pb.AuthorizeAgentResponse()
         primary = DiscoveryNATS(service, TEST_TOKENS.verifier, "test")
 
-        async def authorize(caller, on_behalf_of="", audience=HOST_AUDIENCE):
+        async def authorize(caller, on_behalf_of="", audience=HOST):
             msg = SimpleNamespace(
                 data=pb.AuthorizeAgentRequest(
                     instance_id="r-1",
@@ -150,6 +155,12 @@ def test_authorize_agent_verifies_the_forwarded_caller_and_its_user():
         # service (they accept ``abi:nats`` only).
         own = await authorize("api", "user-1", audience="abi:nats")
         assert own.error.code == "UNAUTHENTICATED"
+        # ... and so is one made for another host: a module that read api's
+        # token from a request to its own agent replays it nowhere else.
+        elsewhere = await authorize(
+            "api", "user-1", audience=host_audience(subject_token("another-host"))
+        )
+        assert elsewhere.error.code == "UNAUTHENTICATED"
         assert service.authorize_agent.await_count == 2
 
     asyncio.run(scenario())

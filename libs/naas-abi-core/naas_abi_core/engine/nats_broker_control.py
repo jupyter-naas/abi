@@ -168,12 +168,19 @@ class BrokerControl:
         # cancel with (discovery:TriggerJob, CancelJobRun), as of when stored.
         # The caller's own token never goes into the stream: the job's host
         # (a module) reads it, and would hold the caller's identity everywhere.
-        # What is stored is a host token (``abi:host``) of the same caller,
-        # which only discovery accepts, and only to learn who called.
+        # What is stored is a host token of the same caller addressed to the
+        # job's host alone (``abi:host:<its subject token>``): no kernel
+        # service accepts it, and discovery accepts it only from that host.
         request.credentials = {}
         if operation in ("trigger", "cancel"):
+            project, module_id = fields.get("project"), fields.get("module_id")
+            if not isinstance(project, str) or not isinstance(module_id, str):
+                raise Refused("INVALID_ARGUMENT", "a project and a module id")
+            recipient = await asyncio.to_thread(
+                self._host_recipient, project, module_id
+            )
             request.credentials[AUTH_HEADER] = await asyncio.to_thread(
-                lambda: self.iam.issue_host_token(caller).token
+                lambda: self.iam.issue_host_token(caller, recipient).token
             )
         if context.on_behalf_of is not None:
             request.credentials[ON_BEHALF_OF_HEADER] = headers.get(
@@ -199,6 +206,18 @@ class BrokerControl:
         else:
             raise Refused("NOT_FOUND", f"unknown operation {operation!r}")
         return {}
+
+    def _host_recipient(self, project: str, module_id: str) -> str:
+        """The subject token of the account hosting ``module_id``'s jobs: its
+        module account, else the engine's (a core module's jobs run in it)."""
+        from naas_abi_core.services.iam.modules import account_name, subject_token
+
+        record = self.iam.store.find_service_account(account_name(project, module_id))
+        if record is None:
+            record = self.iam.store.find_service_account("engine")
+        if record is None:
+            raise Refused("UNAVAILABLE", "IAM is not bootstrapped")
+        return subject_token(record.id)
 
     async def _grants_of(self, caller: Principal) -> broker.BrokerPermissions:
         """The caller's grants, computed again whenever the store changed."""

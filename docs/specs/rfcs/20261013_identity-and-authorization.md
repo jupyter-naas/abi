@@ -1309,8 +1309,9 @@ manifests, the callout and §9.1 are implemented as specified, except:
   module granted `secret:*` reads no signing key and no broker password. The default manifest grants
   `secret/<module id>/...` only.
 - **A host never holds its caller's token.** Calls to module hosts (agents, models, apps, jobs) carry a token of
-  the audience `abi:host`, which the kernel services refuse; discovery accepts only it as the caller a host
-  forwards. Otherwise a host that serves `api` keeps a token that is `Allow *` on `*`. IAM's mutations are not
+  the audience `abi:host:<sa>`, one per host, which the kernel services refuse; discovery accepts only it as the
+  caller a host forwards, and only from the host it names (so a module that read `api`'s token cannot replay it
+  at another host). Otherwise a host that serves `api` keeps a token that is `Allow *` on `*`. IAM's mutations are not
   offered to a module's connection without the `iam:` action.
 - **No response permissions; replies to inboxes only.** A callout user gets no `resp`, and every responder
   answers only reply subjects under `_INBOX.`.

@@ -744,22 +744,34 @@ def test_exchange_gives_a_ten_minute_nats_token_for_the_account(h, iam):
 
 def test_a_key_buys_a_host_token_the_kernel_refuses(h, iam):
     """A host reads its caller's token: what a caller sends to a host is
-    addressed to hosts, and good at no kernel service."""
-    from naas_abi_core.engine.nats_auth import InvalidServiceTokenError
+    addressed to that host, and good at no kernel service."""
+    from naas_abi_core.engine.nats_auth import (
+        HOST_AUDIENCE_PREFIX,
+        InvalidServiceTokenError,
+        host_audience,
+    )
 
     account = _module(h)
     value = h.admin("create_key", account.id).value
-    host = iam.exchange_key(value, "abi:host")
+    mine = host_audience("HOSTA")
+    host = iam.exchange_key(value, mine)
     with pytest.raises(InvalidServiceTokenError):
         iam.verifier().verify(host.token)  # the kernel's verifier
-    claims = iam.verifier(("abi:host",)).verify(host.token)
-    assert claims.subject == account.id and claims.audience == "abi:host"
+    anywhere = iam.verifier().for_audiences((), prefixes=(HOST_AUDIENCE_PREFIX,))
+    claims = anywhere.verify(host.token)
+    assert claims.subject == account.id and claims.audience == mine
+    # A token for one host names that host, and no other.
+    assert iam.exchange_key(value, host_audience("HOSTB")).token != host.token
+    assert anywhere.verify(
+        iam.exchange_key(value, host_audience("HOSTB")).token
+    ).audience == host_audience("HOSTB")
     # And the kernel's token is no host token.
     own = iam.exchange_key(value)
     with pytest.raises(InvalidServiceTokenError):
-        iam.verifier(("abi:host",)).verify(own.token)
-    with pytest.raises(ValueError):
-        iam.exchange_key(value, "abi:anything")
+        anywhere.verify(own.token)
+    for audience in ("abi:anything", "abi:host", "abi:host:", "abi:host:a b"):
+        with pytest.raises(ValueError):
+            iam.exchange_key(value, audience)
 
 
 def test_a_storm_of_exchanges_writes_the_last_use_once(h, iam, monkeypatch):

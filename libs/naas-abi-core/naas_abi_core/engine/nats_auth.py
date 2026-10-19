@@ -22,6 +22,7 @@ import base64
 import json
 import math
 import os
+import re
 import secrets
 import threading
 import time
@@ -39,12 +40,34 @@ ALGORITHM = "ES256"
 MAX_TOKEN_SECONDS = 600
 CLOCK_SKEW_SECONDS = 30
 NATS_AUDIENCE = "abi:nats"
-# A token addressed to a module host (an agent, a model, an app, a job), which
-# forwards it to discovery to learn who called. Kernel services refuse it
-# (they accept ``abi:nats`` only), so a host that keeps one can use it nowhere
-# else: the caller's own ``abi:nats`` token never reaches a host.
-HOST_AUDIENCE = "abi:host"
-ISSUABLE_AUDIENCES = (NATS_AUDIENCE, HOST_AUDIENCE)
+# A token addressed to one module host (an agent, a model, an app, a job's
+# host), which forwards it to discovery to learn who called. Its audience names
+# the host: ``abi:host:<host's subject token>`` (the ``<sa>`` of the subjects it
+# serves). Kernel services refuse it (they accept ``abi:nats`` only), and
+# discovery accepts it only from the host it names, so a host that keeps one
+# can use it nowhere else: not at the kernel, not at another host.
+HOST_AUDIENCE_PREFIX = "abi:host:"
+_RECIPIENT = re.compile(r"[A-Za-z0-9_-]{1,64}")
+
+
+def host_audience(recipient: str) -> str:
+    """The audience of a token for the host whose subjects carry ``recipient``."""
+    if not _RECIPIENT.fullmatch(recipient or ""):
+        raise ValueError(f"Not a host recipient: {recipient!r}")
+    return HOST_AUDIENCE_PREFIX + recipient
+
+
+def is_host_audience(audience: str) -> bool:
+    return audience.startswith(HOST_AUDIENCE_PREFIX) and bool(
+        _RECIPIENT.fullmatch(audience[len(HOST_AUDIENCE_PREFIX) :])
+    )
+
+
+def issuable_audience(audience: str) -> bool:
+    """The audiences a key or the engine mints tokens for."""
+    return audience == NATS_AUDIENCE or is_host_audience(audience)
+
+
 TOKEN_KINDS = ("user", "service_account")
 JWKS_SUBJECT = "abi.iam.v1.jwks"
 TOKEN_SUBJECT = "abi.iam.v1.token"
@@ -260,8 +283,11 @@ class TokenVerifier(ABC):
         was stored."""
 
     @abstractmethod
-    def for_audiences(self, audiences: Iterable[str]) -> TokenVerifier:
-        """A verifier of the same keys that accepts ``audiences`` only."""
+    def for_audiences(
+        self, audiences: Iterable[str], prefixes: Iterable[str] = ()
+    ) -> TokenVerifier:
+        """A verifier of the same keys that accepts ``audiences`` (and the
+        audiences that start with one of ``prefixes``) only."""
 
 
 class JWKSVerifier(TokenVerifier):
@@ -284,6 +310,7 @@ class JWKSVerifier(TokenVerifier):
         fetch: Callable[[], Mapping[str, Any]],
         *,
         audiences: Iterable[str] = (NATS_AUDIENCE,),
+        audience_prefixes: Iterable[str] = (),
         cache_seconds: float = 300.0,
         refetch_seconds: float = 30.0,
         retry_seconds: float = 5.0,
@@ -292,7 +319,8 @@ class JWKSVerifier(TokenVerifier):
     ) -> None:
         self._fetch = fetch
         self.audiences = frozenset(audiences)
-        if not self.audiences:
+        self.audience_prefixes = tuple(audience_prefixes)
+        if not self.audiences and not self.audience_prefixes:
             raise ValueError("A verifier accepts at least one audience")
         self._cache_seconds = cache_seconds
         self._refetch_seconds = refetch_seconds
@@ -308,10 +336,13 @@ class JWKSVerifier(TokenVerifier):
         self._failed = False
         self._error = ""
 
-    def for_audiences(self, audiences: Iterable[str]) -> JWKSVerifier:
+    def for_audiences(
+        self, audiences: Iterable[str], prefixes: Iterable[str] = ()
+    ) -> JWKSVerifier:
         return JWKSVerifier(
             self._fetch,
             audiences=audiences,
+            audience_prefixes=prefixes,
             cache_seconds=self._cache_seconds,
             refetch_seconds=self._refetch_seconds,
             retry_seconds=self._retry_seconds,
@@ -370,7 +401,9 @@ class JWKSVerifier(TokenVerifier):
             raise InvalidServiceTokenError(
                 "token was not valid when the call was stored"
             )
-        if claims.audience not in self.audiences:
+        if claims.audience not in self.audiences and not any(
+            claims.audience.startswith(prefix) for prefix in self.audience_prefixes
+        ):
             raise InvalidServiceTokenError(
                 f"token audience {claims.audience!r} is not accepted here"
             )

@@ -541,9 +541,9 @@ message TokenRequest {
   abi.common.v1.CallContext context = 1;
   string key = 2;
   // The token's audience: "abi:nats" (default) for the kernel services, or
-  // "abi:host" for the module hosts a caller addresses (an agent, a model, an
-  // app, a job): a host token the kernel services refuse, so a host that keeps
-  // it can use it nowhere but in discovery's check of its caller.
+  // "abi:host:<sa>" for the one module host a caller addresses (an agent, a
+  // model, an app; <sa> is the subject token its subjects carry): a token the
+  // kernel services refuse and discovery accepts from that host only.
   string audience = 3;
 }
 message TokenResponse {

@@ -300,20 +300,31 @@ def _sent_token(nc):
     return nc.request.call_args.kwargs["headers"]["Nats-Auth-Token"]
 
 
-def test_a_call_to_a_host_carries_the_host_token_and_a_kernel_call_its_own():
-    """A host reads its caller's token: it is never the one the kernel accepts."""
+def test_a_call_to_a_host_carries_a_token_for_that_host_only():
+    """A host reads its caller's token: it is never the one the kernel accepts,
+    nor one made for another host."""
     rpc, nc = transport(
-        kv.GetResponse().SerializeToString(), host_token=lambda: "host-token"
+        kv.GetResponse().SerializeToString(),
+        host_token=lambda recipient: f"for-{recipient}",
     )
-    for subject in (
-        "abi.agent.default.sa.i.h.v1.submit",
-        "abi.mod.default.sa.i.model.m.chat",
+    for subject, recipient in (
+        ("abi.agent.default.SAONE.i.h.v1.submit", "SAONE"),
+        ("abi.mod.default.SATWO.i.model.m.chat", "SATWO"),
     ):
         asyncio.run(rpc.call(subject, kv.GetRequest(key="x"), kv.GetResponse))
-        assert _sent_token(nc) == "host-token", subject
+        assert _sent_token(nc) == f"for-{recipient}", subject
     for subject in ("abi.svc.keyvalue.v1.get", "abi.discovery.default.v1.list_modules"):
         asyncio.run(rpc.call(subject, kv.GetRequest(key="x"), kv.GetResponse))
         assert _sent_token(nc) == "issued-token", subject
+
+
+def test_the_host_a_subject_addresses():
+    from naas_abi_sdk.transport import host_recipient
+
+    assert host_recipient("abi.agent.default.SA.inst.digest.v1.submit") == "SA"
+    assert host_recipient("abi.mod.default.SA.inst.app.x.http") == "SA"
+    assert host_recipient("abi.svc.keyvalue.v1.get") is None
+    assert host_recipient("abi.agent.default") is None
 
 
 def test_a_transport_without_a_host_token_makes_no_call_to_a_host():

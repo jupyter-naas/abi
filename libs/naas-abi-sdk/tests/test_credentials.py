@@ -99,14 +99,14 @@ def test_each_audience_is_exchanged_and_cached_on_its_own():
     )
     key = ServiceKey(KEY)
     assert run(key.access_token(transport)) == "kernel"
-    assert run(key.access_token(transport, "abi:host")) == "host"
+    assert run(key.access_token(transport, "abi:host:HOSTA")) == "host"
     assert run(key.access_token(transport)) == "kernel"  # cached
-    assert run(key.access_token(transport, "abi:host")) == "host"
+    assert run(key.access_token(transport, "abi:host:HOSTA")) == "host"
     audiences = [
         pb.TokenRequest.FromString(call.args[1]).audience
         for call in nc.request.await_args_list
     ]
-    assert audiences == ["abi:nats", "abi:host"]
+    assert audiences == ["abi:nats", "abi:host:HOSTA"]
 
 
 def test_a_refused_key_raises_unauthenticated():

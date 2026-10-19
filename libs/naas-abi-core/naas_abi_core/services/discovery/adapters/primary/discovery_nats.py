@@ -7,9 +7,10 @@ from google.protobuf.message import DecodeError
 from naas_abi_core import logger
 from naas_abi_core.engine.call_context import use_call_context
 from naas_abi_core.engine.nats_auth import (
-    HOST_AUDIENCE,
+    HOST_AUDIENCE_PREFIX,
     InvalidServiceTokenError,
     TokenVerifier,
+    host_audience,
 )
 from naas_abi_core.engine.nats_dispatch import max_concurrent_requests
 from naas_abi_core.engine.nats_identity import caller_context, for_request, refusal
@@ -20,6 +21,7 @@ from naas_abi_core.services.discovery.discovery_service import (
     DiscoveryService,
 )
 from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
+from naas_abi_core.services.iam.modules import subject_token
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 from naas_abi_sdk import overflow
 from naas_abi_sdk.concurrency import ConcurrentCalls
@@ -52,10 +54,13 @@ class DiscoveryNATS:
         max_concurrency: int | None = None,
     ):
         self.service, self.verifier, self.project = service, verifier, project
-        # What a hosting module forwards as its caller's token: addressed to the
-        # hosts (``abi:host``), never the caller's own ``abi:nats`` token, which
-        # a host must not hold. Anything else is refused here.
-        self.caller_verifier = verifier.for_audiences((HOST_AUDIENCE,))
+        # What a hosting module forwards as its caller's token: addressed to
+        # that host (``abi:host:<host>``), never the caller's own ``abi:nats``
+        # token, which a host must not hold, nor one made for another host.
+        # Anything else is refused here.
+        self.caller_verifier = verifier.for_audiences(
+            (), prefixes=(HOST_AUDIENCE_PREFIX,)
+        )
         self.subscriptions: list[Subscription] = []
         self.max_payload = 512 * 1024
         # Calls side by side, as the kernel services (nats.max_concurrent_requests).
@@ -116,6 +121,12 @@ class DiscoveryNATS:
                 if operation.startswith("authorize_")
                 else None
             )
+            if forwarded is not None and forwarded.audience != host_audience(
+                subject_token(owner)
+            ):
+                # Made for another host (or for none): a host that read it from
+                # a request replays it nowhere, not even at another host.
+                raise InvalidServiceTokenError("the caller's token is for another host")
             with use_call_context(for_request(context, request)):
                 handler = getattr(self.service, operation)
                 if forwarded is not None:

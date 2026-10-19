@@ -138,8 +138,9 @@ minutes, renewed at half its life. The broker gives the connection only the
 subjects its approved policy allows, for a few minutes: the transport reconnects
 itself every two minutes, so a revoked key or a narrowed manifest reaches the
 broker within minutes. A call to another module's agent, model or app carries a
-token addressed to hosts (`abi:host`), exchanged with the same key: the host
-reads it, and no kernel service accepts it.
+token addressed to that host (`abi:host:<sa>`, from its subject), exchanged
+with the same key: the host reads it, no kernel service accepts it, and
+discovery accepts it from that host only.
 
 At start the module submits its permission manifest, a policy document, and
 waits until an admin approves it (`abi iam module approve

@@ -91,10 +91,15 @@ def job_authorizer(iam: Any, verifier: Any, project: str, module_id: str) -> Any
     the engine's JWKS (``verifier``). A refusal is an ``RPCError`` the host records; IAM is asked
     off the jobs loop.
     """
-    from naas_abi_core.engine.call_context import ON_BEHALF_OF_HEADER, use_call_context
+    from naas_abi_core.engine.call_context import (
+        ON_BEHALF_OF_HEADER,
+        as_service_account,
+        use_call_context,
+    )
     from naas_abi_core.engine.nats_auth import (
-        HOST_AUDIENCE,
+        HOST_AUDIENCE_PREFIX,
         InvalidServiceTokenError,
+        host_audience,
     )
     from naas_abi_core.services.discovery.caller import caller_of
     from naas_abi_core.services.discovery.discovery_service import require_job
@@ -104,8 +109,19 @@ def job_authorizer(iam: Any, verifier: Any, project: str, module_id: str) -> Any
     from naas_abi_sdk.transport import RPCError
 
     guard = ServiceGuard(CATALOG, lambda: iam)
-    # A trigger carries a host token the engine wrote, never a caller's own.
-    verifier = verifier.for_audiences((HOST_AUDIENCE,))
+    # A trigger carries a host token the engine wrote, never a caller's own,
+    # and one addressed to this host: the engine's, whose jobs these are.
+    verifier = verifier.for_audiences((), prefixes=(HOST_AUDIENCE_PREFIX,))
+    recipient: list[str] = []
+
+    def host_token_audience() -> str:
+        from naas_abi_core.services.iam.modules import subject_token
+
+        if not recipient:
+            with as_service_account("engine"):
+                account = iam.find_service_account("engine")
+            recipient.append(subject_token(account.id))
+        return host_audience(recipient[0])
 
     def check(operation, job, run_id, headers, stored_at) -> None:
         try:
@@ -115,6 +131,8 @@ def job_authorizer(iam: Any, verifier: Any, project: str, module_id: str) -> Any
                 verifier,
                 at=stored_at.timestamp() if stored_at is not None else None,
             )
+            if caller.audience != host_token_audience():
+                raise InvalidServiceTokenError("the caller's token is for another host")
         except InvalidServiceTokenError as exc:
             raise RPCError("UNAUTHENTICATED", str(exc)) from exc
         try:
