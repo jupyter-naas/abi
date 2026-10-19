@@ -121,6 +121,15 @@ Implemented as decided, with these differences and details:
   Wrong guesses count against the address, across every active code, before they are judged
   (so parallel guesses spend one budget); the budget spent voids all codes. Registering with
   just an email is `signup_enabled` (on in `abi dev up`, off elsewhere).
+- **Who may sign in at the route.** Nexus (the origins of its redirect URI and of the web app) and
+  the origins named in `idp_client_origins`; `/authorize` refuses any other `redirect_uri`.
+  The CSP `form-action` is Nexus's and applies to the redirect after a post, so a relying party
+  it does not list could not complete a sign-in.
+- **Per-IP limits.** Failures (wrong guesses, unregistered addresses) spend a tight budget, code
+  requests a loose one: a peer that many people share is not locked out by ordinary sign-ins.
+  The address is the one uvicorn resolves through `FORWARDED_ALLOW_IPS`.
+- **Credentials changes end sessions.** A new password or email ends the user's provider
+  sessions and revokes their refresh tokens, as disabling does.
 - **Tokens.** ID and access tokens are ES256, ten minutes at most; refresh tokens rotate and a
   replay revokes the family; PKCE (S256) is required of every client; no introspection.
 

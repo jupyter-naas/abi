@@ -597,6 +597,9 @@ class Settings(BaseSettings):
     oidc_session_max_age_hours: int = Field(default=7 * 24, ge=1, le=90 * 24)
     # Where providers send the browser back; default {api_url}/api/auth/oidc/callback.
     oidc_redirect_uri: str | None = None
+    # Origins of other relying parties of the built-in IdP (/idp); Nexus's own
+    # (the redirect URI's and the web app's) are implied.
+    idp_client_origins: list[str] = Field(default_factory=list)
 
     def model_post_init(self, __context: Any) -> None:
         """Adjust settings based on environment after initialization (pydantic v2 hook)."""

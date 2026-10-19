@@ -125,6 +125,7 @@ class BuiltinIdPHarness:
                 f"{base}/email", data={"csrf": csrf.group(1), "email": user.login}
             )
             assert sent.status_code == 200, sent.text
+            self.service.flush_mail()  # the mail leaves in the background
             done = browser.post(
                 f"{base}/code",
                 data={

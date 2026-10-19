@@ -1,5 +1,12 @@
+import threading
+
 import pytest
 
+from naas_abi_idp.adapters.memory import (
+    MemoryDocumentStore,
+    MemoryMailer,
+    MemorySecretStore,
+)
 from naas_abi_idp.ports import (
     Conflict,
     InvalidArgument,
@@ -7,6 +14,7 @@ from naas_abi_idp.ports import (
     NotFound,
     RateLimited,
 )
+from naas_abi_idp.service import IdPService
 
 
 def test_a_user_is_registered_with_just_an_email(service):
@@ -263,3 +271,166 @@ def test_purge_removes_what_expired(service, clock, mailer):
     service.save_auth_request({"client_id": "abi"})
     clock.advance(24 * 3600)
     assert service.purge_expired() >= 3
+
+
+# -- review round 1 --------------------------------------------------------------
+
+
+def test_a_client_an_admin_disabled_stays_disabled_across_a_restart(
+    service, configuration
+):
+    service.set_client_disabled("abi", True)
+    service.seed_clients(configuration.clients)  # the module starts again
+    assert service.get_client("abi").disabled is True
+    service.set_client_disabled("abi", False)
+    service.seed_clients(configuration.clients)
+    assert service.get_client("abi").disabled is False
+
+
+def _signed_in(service, email="alice@example.com", **kwargs):
+    user = service.create_user(email, **kwargs)
+    cookie, _ = service.create_session(user, ["otp"])
+    refresh = service.issue_refresh_token("abi", user.id, "openid offline_access")
+    return user, cookie, refresh
+
+
+def test_a_new_password_ends_the_sessions_and_the_refresh_tokens(service):
+    user, cookie, refresh = _signed_in(service, password="correct horse battery")
+    assert service.get_session(cookie) is not None and service.find_refresh_token(
+        refresh
+    )
+    service.update_user(user.id, password="another long password")
+    assert service.get_session(cookie) is None
+    assert service.find_refresh_token(refresh) is None
+
+
+def test_a_new_email_ends_the_sessions_and_the_refresh_tokens(service):
+    user, cookie, refresh = _signed_in(service)
+    service.update_user(user.id, email="alice@elsewhere.example")
+    assert service.get_session(cookie) is None
+    assert service.find_refresh_token(refresh) is None
+
+
+def test_a_rename_or_the_same_email_keeps_the_user_signed_in(service):
+    user, cookie, refresh = _signed_in(service)
+    service.update_user(user.id, name="Alice B", email="ALICE@example.com")
+    assert service.get_session(cookie) is not None
+    assert service.find_refresh_token(refresh) is not None
+
+
+def test_a_shared_client_address_is_not_locked_out_by_ordinary_sign_ins(service):
+    """A proxy not trusted to forward the real address is every user's: its
+    counter must not fill with successful sends."""
+    config = service.configuration
+    config.rate_limit_email_sends = 100
+    for i in range(config.rate_limit_ip_attempts + 5):
+        service.create_user(f"user{i}@example.com")
+        assert service.request_code(f"user{i}@example.com", "10.9.9.9") is True
+
+
+def test_only_failures_spend_the_tight_client_budget_and_requests_a_loose_one(service):
+    config = service.configuration
+    config.rate_limit_email_sends = 100
+    for i in range(config.rate_limit_ip_attempts):
+        assert service.request_code(f"ghost{i}@example.com", "10.9.9.8") is False
+    with pytest.raises(RateLimited):
+        service.request_code("ghost-x@example.com", "10.9.9.8")
+    config.rate_limit_ip_sends = 3
+    service.create_user("real@example.com")
+    for _ in range(3):
+        service.request_code("real@example.com", "10.9.9.7")
+    with pytest.raises(RateLimited):
+        service.request_code("real@example.com", "10.9.9.7")
+
+
+class _CountingStore(MemoryDocumentStore):
+    def __init__(self):
+        super().__init__()
+        self.ops: list[str] = []
+
+    def get(self, collection, id):
+        self.ops.append("read")
+        return super().get(collection, id)
+
+    def find(self, collection, where=None, *, limit=100, after=None):
+        self.ops.append("read")
+        return super().find(collection, where, limit=limit, after=after)
+
+    def create(self, collection, id, data):
+        self.ops.append("write")
+        return super().create(collection, id, data)
+
+    def replace(self, doc, collection, data):
+        self.ops.append("write")
+        return super().replace(doc, collection, data)
+
+
+def test_a_registered_and_an_unknown_address_cost_the_store_the_same(
+    configuration, clock
+):
+    config = configuration
+    config.background_mail = True
+    store, mailer = _CountingStore(), MemoryMailer()
+    service = IdPService(store, MemorySecretStore(), mailer, config, clock=clock)
+    service.create_user("known@example.com")
+    service.keys.code_key()
+    runs = {}
+    for email in ("known@example.com", "unknown@example.com"):
+        store.ops.clear()
+        service.request_code(email, None)
+        runs[email] = list(store.ops)
+    service.flush_mail()
+    assert runs["known@example.com"] == runs["unknown@example.com"]
+    assert [m.to for m in mailer.sent] == ["known@example.com"]
+
+
+def test_the_mail_leaves_in_the_background_and_a_failure_drops_the_code(
+    configuration, clock
+):
+    configuration.background_mail = True
+    mailer = MemoryMailer()
+    service = IdPService(
+        MemoryDocumentStore(), MemorySecretStore(), mailer, configuration, clock=clock
+    )
+    service.create_user("alice@example.com")
+    release = threading.Event()
+    original = mailer.send
+
+    def slow(mail):
+        release.wait(5)
+        original(mail)
+
+    mailer.send = slow  # type: ignore[method-assign]
+    assert (
+        service.request_code("alice@example.com", None) is True
+    )  # answered before it is sent
+    assert mailer.sent == []
+    release.set()
+    service.flush_mail()
+    code = mailer.last_code("alice@example.com")
+    assert service.verify_code("alice@example.com", code, None)
+
+    mailer.fail = True
+    mailer.send = original  # type: ignore[method-assign]
+    assert service.request_code("alice@example.com", None) is True  # no error shown
+    service.flush_mail()
+    assert len(mailer.sent) == 1  # the failed one was never kept
+    page = service.store.find("challenges")
+    assert page.items == [] or all(not d.data["codes"] for d in page.items)
+
+
+def test_wrong_types_are_refused_not_crashed_on(service):
+    for call in (
+        lambda: service.create_user(5),
+        lambda: service.create_user("a@example.com", name=5),
+        lambda: service.create_user("a@example.com", password=5),
+        lambda: service.create_group(5),
+        lambda: service.create_group("ok", description=5),
+        lambda: service.create_client(5),
+    ):
+        with pytest.raises(InvalidArgument):
+            call()
+    user = service.create_user("b@example.com")
+    for field in ("name", "email", "password"):
+        with pytest.raises(InvalidArgument):
+            service.update_user(user.id, **{field: 5})

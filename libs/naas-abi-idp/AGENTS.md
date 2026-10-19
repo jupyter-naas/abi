@@ -74,9 +74,17 @@ A sign-in challenge, a refresh token, a counter: one document each, changed with
   asking for a fresh code does not renew it. The budget spent voids every code
   and locks the address for `rate_limit_window_seconds` (300). The counter is
   per address whether or not it is registered: the answer never says.
-- Limits: sends per address (5 / window), attempts per client IP (20 / window).
-  The IP comes from `x-abi-client-ip`, which the trusted route sets from the
-  connection.
+- Limits: sends per address (5 / window); per client IP, failures against a tight
+  budget (wrong guesses, requests for unregistered addresses: 20 / window) and
+  code requests against a loose one (`rate_limit_ip_sends`, 100 / window), so a
+  peer many users share is not locked out by their ordinary sign-ins. The IP
+  comes from `x-abi-client-ip`, which the trusted route sets from the connection
+  as uvicorn resolved it (`FORWARDED_ALLOW_IPS`).
+- The mail leaves in the background (`background_mail`) and an unregistered
+  address costs the store what a registered one does, so neither the page nor
+  its timing tells them apart.
+- A new password or email ends the user's provider sessions and revokes their
+  refresh tokens, as disabling does.
 - Self-registration with just an email: `signup_enabled` (off; `abi dev up`
   turns it on). Otherwise a user exists because the admin API created them.
 - Password sign-in is optional (`password_login_enabled`, off): scrypt hashes,
@@ -121,7 +129,11 @@ manifest of a module that depends on `idp` denies the admin app
   instance's), only while a provider has `provisioning: builtin`, only an
   allow-list of paths, only `abi_idp_*` cookies on path `/idp`, no Domain, always
   `HttpOnly` and `SameSite=Lax`, Nexus's own CSP (no script, no framing), no
-  Nexus session cookie ever reaches the module. The module is hidden from the
+  Nexus session cookie ever reaches the module, `Secure` wherever the issuer is
+  https. It serves Nexus as the relying party (its redirect URI's origin and the
+  web app's) and the origins in `idp_client_origins`; `/authorize` refuses any
+  other `redirect_uri`, which would end in a blocked redirect (a CSP
+  `form-action` applies to the redirect after a post). The module is hidden from the
   apps catalog and no generic route opens it (`INTERNAL_MODULES`).
 - **The engine** reads the issuer's discovery document, JWKS and token endpoint
   over NATS, through the `idp` app (`IdPAppNATS`, `OIDCHttpBuiltinIdP` in core's

@@ -21,13 +21,18 @@ What makes it safe to let one module do that:
 * **Which headers.** Requests: content negotiation, ``Content-Type``,
   ``User-Agent``, the module's cookies, and ``Authorization`` on its token
   endpoints only (a client's own credential there). The client address is set
-  here, from the connection, never taken from the request. Responses:
+  here, never taken from the request: it is ``request.client.host``, which
+  uvicorn resolves from ``X-Forwarded-For`` only for the proxies in
+  ``FORWARDED_ALLOW_IPS`` (the setting the rest of Nexus's rate limits use). Responses:
   ``Content-Type``, ``Cache-Control``, ``Pragma``, ``ETag``, ``Vary``,
   ``Retry-After``, ``WWW-Authenticate``, ``Location`` (an http(s) URL) and the
   cookies above.
 * **Which policy.** The page's Content-Security-Policy is Nexus's, not the
   module's: no script, no object, no framing, and a form may only post to this
-  origin and the Nexus origins (the sign-in redirects to them).
+  origin and the relying parties' origins (the sign-in redirects to them).
+* **Which relying parties.** Nexus's (the origins of its redirect URI and of
+  the web app) and those listed in ``idp_client_origins``. ``/authorize`` refuses
+  any other ``redirect_uri``: its sign-in would end in a blocked redirect.
 * **No user.** The module is told nothing of who is signed in to Nexus: it
   answers a browser, not a Nexus user.
 """
@@ -107,18 +112,27 @@ def _origin(url: str | None) -> str | None:
     return None
 
 
-def content_security_policy() -> str:
-    """No script and nothing but the page itself; a form posts here, and the
-    sign-in it ends redirects to the Nexus origins, which must be allowed or the
-    browser blocks the redirect after the post."""
+def relying_party_origins() -> list[str]:
+    """The origins that may sign in here: Nexus's (where the redirect URI and the
+    web app are) and the ones the config adds (``idp_client_origins``). This
+    route serves them and no other relying party: a login page's forms are
+    allowed to redirect to exactly these (a browser applies ``form-action`` to
+    the redirect after a post), and ``/authorize`` refuses the rest."""
     from naas_abi.apps.nexus.apps.api.app.services.oidc.runtime import redirect_uri
 
-    origins = [
-        o
-        for o in (_origin(redirect_uri()), _origin(str(nexus_config.settings.frontend_url)))
-        if o
+    settings = nexus_config.settings
+    candidates = [
+        _origin(redirect_uri()),
+        _origin(str(settings.frontend_url)),
+        *(_origin(o) for o in getattr(settings, "idp_client_origins", ())),
     ]
-    form_action = " ".join(dict.fromkeys(["'self'", *origins]))
+    return list(dict.fromkeys(o for o in candidates if o))
+
+
+def content_security_policy() -> str:
+    """No script and nothing but the page itself; a form posts here, and the
+    sign-in it ends redirects to a relying party's origin (``relying_party_origins``)."""
+    form_action = " ".join(dict.fromkeys(["'self'", *relying_party_origins()]))
     return (
         "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' https: data:; "
         f"base-uri 'none'; form-action {form_action}; frame-ancestors 'none'"
@@ -165,27 +179,40 @@ def _location(value: str) -> str | None:
     parts = urlsplit(value)
     if parts.scheme in ("http", "https") and parts.netloc:
         return value
-    if not parts.scheme and not parts.netloc and value.startswith("/") and not value.startswith("//"):
+    if (
+        not parts.scheme
+        and not parts.netloc
+        and value.startswith("/")
+        and not value.startswith("//")
+    ):
         return value
     return None
 
 
 def module_cookie(value: str, *, secure: bool) -> str | None:
     """The module's ``Set-Cookie``, normalized, or None when it is not one the
-    route lets through: another name, another path, a domain."""
+    route lets through: another name, another path, a domain. ``Secure`` stays
+    when the module set it or the caller says so."""
     name, separator, rest = value.partition("=")
     name = name.strip()
     if not separator or not _COOKIE_NAME.match(name):
         return None
     content, *attributes = rest.split(";")
-    if not _COOKIE_VALUE.match(content.strip()):
+    content = content.strip()
+    # A cookie being cleared has an empty value, which Starlette quotes (name="").
+    if len(content) >= 2 and content[0] == content[-1] == '"':
+        content = content[1:-1]
+    if not _COOKIE_VALUE.match(content):
         return None
     path = max_age = None
+    module_secure = False
     for attribute in attributes:
         key, _, attribute_value = attribute.partition("=")
         key, attribute_value = key.strip().lower(), attribute_value.strip()
         if key == "domain":
             return None
+        if key == "secure":
+            module_secure = True
         if key == "path":
             path = attribute_value
         elif key == "max-age" and attribute_value.lstrip("-").isdigit():
@@ -197,10 +224,10 @@ def module_cookie(value: str, *, secure: bool) -> str | None:
         or ".." in path.split("/")
     ):
         return None
-    cookie = f"{name}={content.strip()}; Path={path}; HttpOnly; SameSite=Lax"
+    cookie = f"{name}={content}; Path={path}; HttpOnly; SameSite=Lax"
     if max_age is not None:
         cookie += f"; Max-Age={max_age}"
-    if secure:
+    if secure or module_secure:
         cookie += "; Secure"
     return cookie
 
@@ -230,6 +257,13 @@ async def serve_idp(path: str, request: Request) -> Response:
     query = request.url.query
     if len(query.encode()) > MAX_QUERY_BYTES:
         return _refuse(414, "The URL is too long")
+    if below == "/authorize" and _origin(request.query_params.get("redirect_uri")) not in (
+        relying_party_origins()
+    ):
+        # Not a relying party this route serves: its sign-in would end in a
+        # blocked redirect (form-action), so it never starts. Others are added
+        # with `idp_client_origins`.
+        return _refuse(400, "This application may not sign in here.")
     declared = request.headers.get("content-length", "")
     if declared.isdigit() and int(declared) > MAX_BODY_BYTES:
         return _refuse(413, "The request is too large")
@@ -258,12 +292,17 @@ async def serve_idp(path: str, request: Request) -> Response:
     except RemoteAppUnavailable as exc:
         if exc.status >= 500:
             _log.warning("The built-in IdP: %s", exc.reason)
-        return _refuse(502 if exc.status == 404 else exc.status, "The identity provider did not answer.")
+        return _refuse(
+            502 if exc.status == 404 else exc.status, "The identity provider did not answer."
+        )
     if answer.body_stream is not None:
         with contextlib.suppress(Exception):
             await answer.body_stream.aclose()  # type: ignore[attr-defined]
         return _refuse(502, "The identity provider answered with a stream.")
-    secure = request.url.scheme == "https"
+    # Secure follows the issuer (https where it is served), not only the hop
+    # uvicorn sees: behind a TLS-terminating proxy that sends no forwarded
+    # headers the request itself looks like http.
+    secure = request.url.scheme == "https" or urlsplit(target.issuer).scheme == "https"
     response = Response(content=answer.body, status_code=min(max(answer.status, 200), 599))
     for name, value in answer.headers:
         lower = name.lower()

@@ -251,6 +251,10 @@ identity:
 - **Elsewhere**: run `python -m naas_abi_idp` as a module with its
   `ABI_IDP_*` settings (see its guide). It needs a broker, the engine's email
   service for the codes, and a public `https://<API host>/idp`.
+- The route serves Nexus as the relying party. To let another application sign in
+  at the built-in IdP, register it through the admin API and list its origin in
+  Nexus's `idp_client_origins` (a login page's forms may only redirect to listed
+  origins).
 - Users are created by the provider's admin API (over NATS, for the
   provisioning port) or, in dev, by signing up. A person whose email already
   belongs to a Nexus account gets "already belongs to another account": accounts

@@ -110,6 +110,12 @@ class IdPConfiguration(ModuleConfiguration):
     rate_limit_window_seconds: int = 300
     rate_limit_email_sends: int = 5
     rate_limit_ip_attempts: int = 20
+    # Code requests per client IP: loose, since a proxy's address is every
+    # user's when it is not trusted to forward the real one.
+    rate_limit_ip_sends: int = 100
+    # The mail of a code leaves in the background, so the answer's timing does
+    # not tell registered addresses apart. Off for a caller that wants the error.
+    background_mail: bool = True
     # Self-registration with just an email (Nexus's magic_link_allow_signup).
     signup_enabled: bool = False
     password_login_enabled: bool = False

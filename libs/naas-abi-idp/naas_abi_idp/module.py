@@ -82,6 +82,11 @@ class ABIModule(BaseModule[IdPConfiguration]):
         self.expose_app("admin", AdminAPI(self.service).app())
         log.info("Identity provider ready at %s", config.issuer)
 
+    async def on_unloaded(self) -> None:
+        service = getattr(self, "service", None)
+        if service is not None:  # the codes still being mailed go out first
+            await asyncio.to_thread(service.flush_mail)
+
     async def run(self) -> None:
         while True:
             await asyncio.sleep(MAINTENANCE_SECONDS)

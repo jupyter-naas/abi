@@ -1,4 +1,5 @@
 import asyncio
+import concurrent.futures
 from dataclasses import dataclass, field
 
 import pytest
@@ -145,4 +146,47 @@ def test_a_streamed_answer_is_refused(monkeypatch):
         },
     )
     with pytest.raises(ProviderUnavailableError, match="streamed"):
+        app.request("GET", "/jwks.json")
+
+
+@pytest.mark.parametrize(
+    "timeout",
+    [TimeoutError, asyncio.TimeoutError, concurrent.futures.TimeoutError],
+)
+def test_every_kind_of_timeout_moves_on_to_the_next_instance(monkeypatch, timeout):
+    """On Python 3.10 nats-py raises asyncio.TimeoutError, not the builtin."""
+    app, _, calls = client(
+        [Instance("idp", "SA-IDP", "slow"), Instance("idp", "SA-IDP", "fast")],
+        monkeypatch=monkeypatch,
+        answers={"slow": timeout()},
+    )
+    for _ in range(6):
+        app._snapshot = None
+        assert app.request("GET", "/jwks.json").status == 200
+    assert "fast" in {c[1] for c in calls}
+
+
+@pytest.mark.parametrize(
+    "timeout",
+    [TimeoutError, asyncio.TimeoutError, concurrent.futures.TimeoutError],
+)
+def test_a_wait_that_runs_out_is_a_provider_outage_not_a_raw_error(
+    monkeypatch, timeout
+):
+    app, _, _ = client([Instance("idp", "SA-IDP", "a")], monkeypatch=monkeypatch)
+
+    def run(coro, timeout_seconds=None, **_):
+        coro.close()
+        raise timeout()
+
+    app._run = run  # type: ignore[method-assign]
+    with pytest.raises(ProviderUnavailableError, match="in time"):
+        app.request("GET", "/jwks.json")
+
+    app, _, _ = client(
+        [Instance("idp", "SA-IDP", "a"), Instance("idp", "SA-IDP", "b")],
+        monkeypatch=monkeypatch,
+        answers={"a": timeout(), "b": timeout()},
+    )
+    with pytest.raises(ProviderUnavailableError):
         app.request("GET", "/jwks.json")

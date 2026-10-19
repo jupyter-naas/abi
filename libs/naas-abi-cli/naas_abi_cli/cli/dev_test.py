@@ -211,6 +211,24 @@ def test_dagster_binds_the_ipv4_literal(monkeypatch) -> None:
     assert cmd[cmd.index("--host") + 1] == "127.0.0.1"
 
 
+def test_every_service_that_loads_the_engine_config_gets_the_idp_issuer(
+    monkeypatch,
+) -> None:
+    """A config naming `{{ secret.ABI_IDP_ISSUER }}` hard-fails to render in a
+    process that lacks it and has no TTY: dagster loads the same config."""
+    captured: dict = {}
+    monkeypatch.setattr(
+        dev, "_spawn", lambda spec, cmd, cwd, env: captured.update(env=env) or 1234
+    )
+    issuer = f"http://localhost:{PORTS['api']}/idp"
+
+    dev._launch_dagster(_spec("dagster", PORTS["dagster"]), PORTS)
+    assert captured["env"]["ABI_IDP_ISSUER"] == issuer
+    captured.clear()
+    dev._launch_api(_spec("api", PORTS["api"]), PORTS)
+    assert captured["env"]["ABI_IDP_ISSUER"] == issuer
+
+
 # =============================================================================
 # Boot visibility
 #

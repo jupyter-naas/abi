@@ -118,3 +118,61 @@ def test_bad_bodies(admin):
     assert admin.post("/users", content="not json").status_code == 400
     assert admin.post("/users", content="[1]").status_code == 400
     assert admin.post("/users", content=b"x" * 70000).status_code == 400
+
+
+@pytest.mark.parametrize(
+    "method, path, body",
+    [
+        ("post", "/users", {"email": 5}),
+        ("post", "/users", {"email": ["a@example.com"]}),
+        ("post", "/users", {"email": "a@example.com", "name": 5}),
+        ("post", "/users", {"email": "a@example.com", "name": {"x": 1}}),
+        ("post", "/users", {"email": "a@example.com", "password": 12345678901}),
+        ("post", "/users", {"email": "a@example.com", "groups": "admins"}),
+        ("post", "/users", {"email": "a@example.com", "groups": [1]}),
+        ("post", "/groups", {"name": 5}),
+        ("post", "/groups", {"name": "ok", "description": 5}),
+        ("post", "/clients", {"name": 5}),
+        ("post", "/clients", {"name": "ci", "confidential": "yes"}),
+        ("post", "/clients", {"name": "ci", "grant_types": "client_credentials"}),
+        ("post", "/clients", {"name": "ci", "scopes": [1]}),
+        (
+            "post",
+            "/clients",
+            {
+                "name": "ci",
+                "redirect_uris": [None],
+                "grant_types": ["authorization_code"],
+            },
+        ),
+    ],
+)
+def test_a_field_of_the_wrong_type_is_a_400_never_a_500(admin, method, path, body):
+    response = getattr(admin, method)(path, json=body)
+    assert response.status_code == 400, response.text
+    assert response.json()["error"] == "invalid_argument"
+
+
+@pytest.mark.parametrize("field", ["name", "email", "password"])
+@pytest.mark.parametrize("value", [5, True, ["x"], {"x": 1}])
+def test_updating_a_user_with_a_wrong_type_is_a_400(admin, field, value):
+    user = admin.post("/users", json={"email": "bob@example.com"}).json()
+    response = admin.patch(f"/users/{user['id']}", json={field: value})
+    assert response.status_code == 400, response.text
+    assert response.json()["error"] == "invalid_argument"
+
+
+def test_a_password_change_through_the_admin_api_ends_the_users_sessions(
+    admin, service
+):
+    user = admin.post("/users", json={"email": "bob@example.com"}).json()
+    cookie, _ = service.create_session(service.get_user(user["id"]), ["otp"])
+    assert admin.patch(f"/users/{user['id']}", json={"name": "Bob"}).status_code == 200
+    assert service.get_session(cookie) is not None
+    assert (
+        admin.patch(
+            f"/users/{user['id']}", json={"password": "a long new password"}
+        ).status_code
+        == 200
+    )
+    assert service.get_session(cookie) is None

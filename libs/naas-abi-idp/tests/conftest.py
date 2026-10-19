@@ -41,6 +41,9 @@ def mailer() -> MemoryMailer:
 def configuration() -> IdPConfiguration:
     return IdPConfiguration(
         issuer=ISSUER,
+        # Mail leaves synchronously here, so a test reads it at once; the
+        # background default has its own tests (test_service.py).
+        background_mail=False,
         clients=[
             ClientConfiguration(
                 client_id="abi",

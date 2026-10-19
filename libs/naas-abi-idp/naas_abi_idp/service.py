@@ -13,6 +13,7 @@ import re
 import secrets
 import time
 from collections.abc import Callable, Iterable
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from uuid import uuid4
 
@@ -70,6 +71,8 @@ _ATTEMPTS = 8
 
 
 def normalize_email(value: str) -> str:
+    if value is not None and not isinstance(value, str):
+        raise InvalidArgument("An email address is a string")
     email = (value or "").strip().lower()
     if len(email) > 254 or not EMAIL.match(email):
         raise InvalidArgument("Enter a valid email address")
@@ -107,6 +110,10 @@ class IdPService:
             store, secrets_, rotation_days=configuration.key_rotation_days, clock=clock
         )
         self.limits = RateLimiter(store, configuration.rate_limit_window_seconds, clock)
+        self._mail_pool = ThreadPoolExecutor(
+            max_workers=4, thread_name_prefix="idp-mail"
+        )
+        self._mail_pending: set[Future[None]] = set()
         for spec in COLLECTIONS:
             store.ensure(spec)
 
@@ -123,6 +130,8 @@ class IdPService:
         password: str | None = None,
         disabled: bool = False,
     ) -> User:
+        if name is not None and not isinstance(name, str):
+            raise InvalidArgument("name is a string")
         email = normalize_email(email)
         group_ids = [self._group(g).id for g in dict.fromkeys(groups)]
         user = User(
@@ -169,16 +178,32 @@ class IdPService:
         email: str | None = None,
         password: str | None = None,
     ) -> User:
+        for field, value in (("name", name), ("email", email), ("password", password)):
+            if value is not None and not isinstance(value, str):
+                raise InvalidArgument(f"{field} is a string")
+        credentials_changed = False
+
         def change(user: User) -> User:
+            nonlocal credentials_changed
+            credentials_changed = False  # the closure may run again on a retry
             if name is not None:
                 user.name = name.strip()[:128]
             if email is not None:
-                user.email = normalize_email(email)
+                new_email = normalize_email(email)
+                credentials_changed |= new_email != user.email
+                user.email = new_email
             if password is not None:
                 user.password_hash = hash_secret(_password(password))
+                credentials_changed = True
             return user
 
-        return self._update_user(user_id, change)
+        updated = self._update_user(user_id, change)
+        if credentials_changed:
+            # A new password or email is how a compromised account is taken
+            # back: what was signed in with the old ones must not stay signed in.
+            self._end_user_sessions(user_id)
+            self._revoke_user_refresh_tokens(user_id)
+        return updated
 
     def set_disabled(self, user_id: str, disabled: bool) -> User:
         """Disabling ends the user's sessions at once; their refresh tokens stop
@@ -208,7 +233,9 @@ class IdPService:
     # =========================================================================
 
     def create_group(self, name: str, description: str = "") -> Group:
-        name = (name or "").strip()
+        if not isinstance(name, str) or not isinstance(description, str):
+            raise InvalidArgument("A group's name and description are strings")
+        name = name.strip()
         if not GROUP_NAME.match(name):
             raise InvalidArgument(
                 "A group name is 1 to 64 letters, digits, space . _ : -"
@@ -307,6 +334,8 @@ class IdPService:
                 grant_types=list(wanted.grant_types),
                 scopes=list(wanted.scopes),
                 secret_hash=secret_hash,
+                # What an admin disabled stays disabled across restarts.
+                disabled=existing.disabled if existing else False,
                 source="config",
             )
             if doc is None:
@@ -325,6 +354,8 @@ class IdPService:
     ) -> tuple[Client, str | None]:
         """A client for a service account (or a relying party). Its secret is
         returned once and never stored in clear."""
+        if not isinstance(name, str):
+            raise InvalidArgument("name is a string")
         grants = list(dict.fromkeys(grant_types))
         if not grants or set(grants) - set(GRANT_TYPES):
             raise InvalidArgument(f"grant_types are among {', '.join(GRANT_TYPES)}")
@@ -376,42 +407,80 @@ class IdPService:
     def request_code(self, email: str, client_ip: str | None) -> bool:
         """Email a sign-in code to a registered address (or register it, when
         sign-up is on). Whether anything was sent is for the caller to log, never
-        to show: the answer must not tell registered addresses apart.
+        to show.
+
+        The answer does not tell registered addresses apart, in content or in
+        time: the same work is done for every address (a code, the mail, a write
+        to the store), and the mail itself leaves in the background
+        (``background_mail``), so how long sending takes is not in the answer.
 
         Raises ``RateLimited`` past the budgets of the address and the client.
+        A client address counts failures (an address that is not registered)
+        against a tight budget and every request against a loose one, so one peer
+        that many people share (a proxy not listed in ``FORWARDED_ALLOW_IPS``)
+        is not locked out by their ordinary sign-ins.
         """
         email = normalize_email(email)
         config = self.configuration
         self.limits.consume(f"send:{email}", config.rate_limit_email_sends)
         if client_ip:
-            self.limits.consume(f"ip:{client_ip}", config.rate_limit_ip_attempts)
+            self.limits.consume(f"ip-send:{client_ip}", config.rate_limit_ip_sends)
         user = self.find_user(email)
         if user is None and config.signup_enabled:
             try:
                 user = self.create_user(email)
             except Conflict:
                 user = self.find_user(email)
-        if user is None or user.disabled:
-            return False
         code = f"{secrets.randbelow(10**config.code_length):0{config.code_length}d}"
         digest = code_digest(self.keys.code_key(), email, code)
-        self._add_code(email, digest)
         branding = config.branding_for(email)
-        try:
-            self.mailer.send(
-                Mail(
-                    to=email,
-                    subject=pages.code_subject(branding),
-                    text=pages.code_text(branding, code, config.code_ttl_seconds // 60),
-                    html=pages.code_html(branding, code, config.code_ttl_seconds // 60),
-                    from_email=config.from_email,
-                    from_name=config.from_name or branding.app_name,
-                )
-            )
-        except Exception:
-            self._drop_code(email, digest)  # a code nobody received guards nothing
-            raise
+        mail = Mail(
+            to=email,
+            subject=pages.code_subject(branding),
+            text=pages.code_text(branding, code, config.code_ttl_seconds // 60),
+            html=pages.code_html(branding, code, config.code_ttl_seconds // 60),
+            from_email=config.from_email,
+            from_name=config.from_name or branding.app_name,
+        )
+        if user is None or user.disabled:
+            if client_ip:
+                self.limits.consume(f"ip:{client_ip}", config.rate_limit_ip_attempts)
+            # The store traffic of a real send: one read and one write.
+            self.limits.consume(f"decoy:{email}", 10**9)
+            return False
+        self._add_code(email, digest)
+        self._deliver(mail, email, digest)
         return True
+
+    def _deliver(self, mail: Mail, email: str, digest: str) -> None:
+        """Send the code's mail. A code nobody received guards nothing: when the
+        mail fails, the code is dropped (raised in the caller's thread, or logged
+        when the mail leaves in the background)."""
+
+        def send() -> None:
+            try:
+                self.mailer.send(mail)
+            except Exception:
+                self._drop_code(email, digest)
+                raise
+
+        if not self.configuration.background_mail:
+            send()
+            return
+
+        def background() -> None:
+            try:
+                send()
+            except Exception:
+                log.exception("Could not send a sign-in code")
+
+        future = self._mail_pool.submit(background)
+        self._mail_pending.add(future)
+        future.add_done_callback(self._mail_pending.discard)
+
+    def flush_mail(self, timeout: float = 10.0) -> None:
+        """Wait for the mail still leaving (tests, and a clean stop)."""
+        wait(list(self._mail_pending), timeout=timeout)
 
     def verify_code(self, email: str, code: str, client_ip: str | None) -> User:
         """The user a sign-in code opens. A wrong guess counts against the
@@ -780,7 +849,7 @@ def _name_of(email: str) -> str:
 
 
 def _password(value: str | None) -> str:
-    if value is None or len(value) < 10 or len(value) > 256:
+    if not isinstance(value, str) or len(value) < 10 or len(value) > 256:
         raise InvalidArgument("A password is 10 to 256 characters")
     return value
 

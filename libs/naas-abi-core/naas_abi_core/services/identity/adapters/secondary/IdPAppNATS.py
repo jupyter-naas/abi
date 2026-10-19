@@ -14,6 +14,7 @@ shared NATS loop (``engine.nats_runtime``).
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import random
 import time
 from collections.abc import Callable, Mapping
@@ -24,6 +25,11 @@ from naas_abi_core.services.identity.adapters.secondary.OIDCHttpBuiltinIdP impor
     IdPApp,
 )
 from naas_abi_core.services.identity.IdentityPorts import ProviderUnavailableError
+
+# What a wait that ran out raises, by Python: before 3.11 nats-py raises
+# asyncio.TimeoutError, and a future's result concurrent.futures.TimeoutError,
+# neither a subclass of the builtin.
+TIMEOUTS = (TimeoutError, asyncio.TimeoutError, concurrent.futures.TimeoutError)
 
 IDP_MODULE = "idp"
 IDP_APP = "idp"
@@ -69,11 +75,17 @@ class IdPAppNATS(IdPApp):
         root_path: str = "",
     ) -> AppAnswer:
         coroutine = self._request(method, path, query, body, headers or {}, root_path)
-        if self._run is not None:
-            return self._run(coroutine, timeout=self._timeout + 5)  # type: ignore[no-any-return]
-        from naas_abi_core.engine import nats_runtime
+        try:
+            if self._run is not None:
+                return self._run(coroutine, timeout=self._timeout + 5)  # type: ignore[no-any-return]
+            from naas_abi_core.engine import nats_runtime
 
-        return nats_runtime.run_coro(coroutine, timeout=self._timeout + 5)  # type: ignore[no-any-return]
+            return nats_runtime.run_coro(coroutine, timeout=self._timeout + 5)  # type: ignore[no-any-return]
+        except TIMEOUTS as exc:
+            # The runtime's own wait ran out: an outage, whatever Python this is.
+            raise ProviderUnavailableError(
+                "The built-in identity provider did not answer in time"
+            ) from exc
 
     async def _request(
         self,
@@ -117,7 +129,7 @@ class IdPAppNATS(IdPApp):
                     message,
                     service_account=service_account,
                 )
-            except (RPCError, NoRespondersError, TimeoutError) as exc:
+            except (RPCError, NoRespondersError, *TIMEOUTS) as exc:
                 last = str(exc) or type(exc).__name__
                 self._snapshot = None  # that instance is gone or going
                 continue

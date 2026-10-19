@@ -478,6 +478,10 @@ class NexusConfig(BaseModel):
     oidc_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     oidc_session_max_age_hours: int = Field(default=7 * 24, ge=1, le=90 * 24)
     oidc_redirect_uri: str | None = None
+    # Origins of relying parties other than Nexus that sign in at the built-in
+    # IdP (/idp): a login page's forms may redirect there, and /idp/authorize
+    # refuses any redirect_uri on another origin. Nexus's own are implied.
+    idp_client_origins: list[str] = Field(default_factory=list)
 
     enable_security_headers: bool = True
     content_security_policy: str | None = None

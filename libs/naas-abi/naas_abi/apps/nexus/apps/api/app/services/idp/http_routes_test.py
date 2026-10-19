@@ -46,8 +46,13 @@ def target_binding(**errors) -> IdpBinding:
 
 
 @pytest.fixture(autouse=True)
-def bound():
+def bound(monkeypatch):
     previous = binding.configure(target_binding())
+    # Nexus is the relying party: its redirect URI's origin is the one served.
+    monkeypatch.setattr(
+        "naas_abi.apps.nexus.apps.api.app.services.oidc.runtime.redirect_uri",
+        lambda: "https://abi.example/api/auth/oidc/callback",
+    )
     yield
     binding.configure(previous)
 
@@ -172,7 +177,7 @@ def test_a_path_answers_its_methods_only(monkeypatch):
 def test_the_module_gets_its_cookies_and_not_the_nexus_session(monkeypatch):
     client, seen = serve(monkeypatch)
     response = client.get(
-        "/idp/authorize?client_id=abi",
+        "/idp/authorize?client_id=abi&redirect_uri=https%3A%2F%2Fabi.example%2Fapi%2Fauth%2Foidc%2Fcallback",
         headers={
             "Cookie": "nexus_session=SECRET; abi_idp_login=rid-1; abi_idp_session=s-1; "
             "abi_app.x=1; abi_idp_bad=a;b",
@@ -188,15 +193,29 @@ def test_the_module_gets_its_cookies_and_not_the_nexus_session(monkeypatch):
     assert headers["cookie"] == "abi_idp_login=rid-1; abi_idp_session=s-1; abi_idp_bad=a"
     assert "nexus_session" not in headers["cookie"]
     names = {k.lower() for k in headers}
-    assert names <= {"accept", "accept-language", "content-type", "user-agent", "cookie", "x-abi-client-ip"}
-    assert seen.requests[0].query == "client_id=abi"
+    assert names <= {
+        "accept",
+        "accept-language",
+        "content-type",
+        "user-agent",
+        "cookie",
+        "x-abi-client-ip",
+    }
+    assert (
+        seen.requests[0].query
+        == "client_id=abi&redirect_uri=https%3A%2F%2Fabi.example%2Fapi%2Fauth%2Foidc%2Fcallback"
+    )
 
 
 def test_the_client_address_comes_from_the_connection_never_the_request(monkeypatch):
     client, seen = serve(monkeypatch)
     client.get(
-        "/idp/authorize",
-        headers={"X-Abi-Client-Ip": "1.2.3.4", "X-Real-Ip": "1.2.3.4", "X-Forwarded-For": "1.2.3.4"},
+        "/idp/authorize?redirect_uri=https%3A%2F%2Fabi.example%2Fapi%2Fauth%2Foidc%2Fcallback",
+        headers={
+            "X-Abi-Client-Ip": "1.2.3.4",
+            "X-Real-Ip": "1.2.3.4",
+            "X-Forwarded-For": "1.2.3.4",
+        },
     )
     headers = dict(seen.requests[0].headers)
     assert headers["x-abi-client-ip"] == "testclient"  # the peer, not what it said
@@ -209,7 +228,10 @@ def test_a_clients_credential_goes_to_its_token_endpoints_only(monkeypatch):
     client.post("/idp/revoke", content="token=x", headers=auth)
     client.get("/idp/userinfo", headers={"Authorization": "Bearer t"})
     client.post("/idp/login/email", content="email=a", headers=auth)
-    client.get("/idp/authorize", headers={"Authorization": "Bearer t"})
+    client.get(
+        "/idp/authorize?redirect_uri=https%3A%2F%2Fabi.example%2Fapi%2Fauth%2Foidc%2Fcallback",
+        headers={"Authorization": "Bearer t"},
+    )
     sent = [any(k == "authorization" for k, _ in r.headers) for r in seen.requests]
     assert sent == [True, True, True, False, False]
     assert seen.requests[0].body == b"grant_type=client_credentials"
@@ -217,14 +239,19 @@ def test_a_clients_credential_goes_to_its_token_endpoints_only(monkeypatch):
 
 def test_large_requests_are_refused(monkeypatch):
     client, seen = serve(monkeypatch)
-    assert client.post("/idp/login/email", content=b"x" * (http.MAX_BODY_BYTES + 1)).status_code == 413
+    assert (
+        client.post("/idp/login/email", content=b"x" * (http.MAX_BODY_BYTES + 1)).status_code == 413
+    )
     assert client.get("/idp/authorize?" + "a=" + "b" * http.MAX_QUERY_BYTES).status_code == 414
     assert seen.requests == []
 
 
 def test_no_user_is_passed_on(monkeypatch):
     client, seen = serve(monkeypatch)
-    client.get("/idp/authorize", headers={"X-User-Id": "usr_1"})
+    client.get(
+        "/idp/authorize?redirect_uri=https%3A%2F%2Fabi.example%2Fapi%2Fauth%2Foidc%2Fcallback",
+        headers={"X-User-Id": "usr_1"},
+    )
     assert seen.requests[0].user_id == ""
 
 
@@ -249,7 +276,12 @@ def test_the_modules_response_headers_pass_on_an_allow_list(monkeypatch):
     response = client.get("/idp/login")
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["retry-after"] == "30"
-    for name in ("access-control-allow-origin", "strict-transport-security", "clear-site-data", "refresh"):
+    for name in (
+        "access-control-allow-origin",
+        "strict-transport-security",
+        "clear-site-data",
+        "refresh",
+    ):
         assert name not in response.headers
     assert response.headers["x-frame-options"] == "DENY"
 
@@ -270,12 +302,26 @@ def test_the_policy_is_nexuss_and_stricter_than_the_modules_wish(monkeypatch):
 @pytest.mark.parametrize(
     "cookie, expected",
     [
-        ("abi_idp_login=abc; Path=/idp; HttpOnly; SameSite=Lax; Max-Age=900",
-         "abi_idp_login=abc; Path=/idp; HttpOnly; SameSite=Lax; Max-Age=900; Secure"),
-        ("abi_idp_session=abc; Path=/idp", "abi_idp_session=abc; Path=/idp; HttpOnly; SameSite=Lax; Secure"),
-        ("abi_idp_session=; Path=/idp; Max-Age=0", "abi_idp_session=; Path=/idp; HttpOnly; SameSite=Lax; Max-Age=0; Secure"),
-        ("abi_idp_session=abc; Path=/idp; SameSite=None", "abi_idp_session=abc; Path=/idp; HttpOnly; SameSite=Lax; Secure"),
-        ("abi_idp_login=abc; Path=/idp/login", "abi_idp_login=abc; Path=/idp/login; HttpOnly; SameSite=Lax; Secure"),
+        (
+            "abi_idp_login=abc; Path=/idp; HttpOnly; SameSite=Lax; Max-Age=900",
+            "abi_idp_login=abc; Path=/idp; HttpOnly; SameSite=Lax; Max-Age=900; Secure",
+        ),
+        (
+            "abi_idp_session=abc; Path=/idp",
+            "abi_idp_session=abc; Path=/idp; HttpOnly; SameSite=Lax; Secure",
+        ),
+        (
+            "abi_idp_session=; Path=/idp; Max-Age=0",
+            "abi_idp_session=; Path=/idp; HttpOnly; SameSite=Lax; Max-Age=0; Secure",
+        ),
+        (
+            "abi_idp_session=abc; Path=/idp; SameSite=None",
+            "abi_idp_session=abc; Path=/idp; HttpOnly; SameSite=Lax; Secure",
+        ),
+        (
+            "abi_idp_login=abc; Path=/idp/login",
+            "abi_idp_login=abc; Path=/idp/login; HttpOnly; SameSite=Lax; Secure",
+        ),
         ("nexus_session=abc; Path=/idp", None),
         ("abi_app.x=abc; Path=/idp", None),
         ("abi_idp_login=abc; Path=/", None),
@@ -293,6 +339,13 @@ def test_the_modules_cookies_stay_on_its_path(cookie, expected):
 
 
 def test_set_cookie_is_not_secure_over_plain_http_and_foreign_cookies_are_dropped(monkeypatch):
+    binding.configure(
+        IdpBinding(
+            lambda: [SimpleNamespace(provisioning="builtin", issuer="http://localhost:8000/idp")],
+            lambda: "proj",
+            lambda project: TARGET.service_account,
+        )
+    )
     client = answering(
         monkeypatch,
         (
@@ -322,7 +375,10 @@ def test_set_cookie_is_not_secure_over_plain_http_and_foreign_cookies_are_droppe
 )
 def test_a_redirect_is_followed_only_to_a_web_url(monkeypatch, location, kept):
     client = answering(monkeypatch, (("Location", location),), status=302, body=b"")
-    response = client.get("/idp/authorize", follow_redirects=False)
+    response = client.get(
+        "/idp/authorize?redirect_uri=https%3A%2F%2Fabi.example%2Fapi%2Fauth%2Foidc%2Fcallback",
+        follow_redirects=False,
+    )
     assert response.status_code == 302
     assert ("location" in response.headers) is kept
     if kept:
@@ -392,11 +448,17 @@ def test_an_instance_of_module_idp_under_another_account_is_never_called():
     calls: list = []
     directory = _real_directory(instances, calls)
     for _ in range(8):
-        asyncio.run(directory.forward("idp", "idp", AppRequest("GET", "/jwks.json"), service_account="SA-IDP"))
+        asyncio.run(
+            directory.forward(
+                "idp", "idp", AppRequest("GET", "/jwks.json"), service_account="SA-IDP"
+            )
+        )
     assert {c[0] for c in calls} == {"good"}
     with pytest.raises(RemoteAppUnavailable):
         asyncio.run(
-            directory.forward("idp", "idp", AppRequest("GET", "/jwks.json"), service_account="SA-NOBODY")
+            directory.forward(
+                "idp", "idp", AppRequest("GET", "/jwks.json"), service_account="SA-NOBODY"
+            )
         )
 
 
@@ -458,4 +520,188 @@ def test_the_api_middleware_does_not_sandbox_or_download_the_login_pages(monkeyp
 
 def test_the_trusted_path_is_the_idp_prefix_only():
     assert is_idp_path("/idp") and is_idp_path("/idp/login")
-    assert not is_idp_path("/idpx") and not is_idp_path("/api/idp") and not is_idp_path("/app-remote/g/idp/idp/")
+    assert (
+        not is_idp_path("/idpx")
+        and not is_idp_path("/api/idp")
+        and not is_idp_path("/app-remote/g/idp/idp/")
+    )
+
+
+# -- through the real module -----------------------------------------------------
+
+import re  # noqa: E402
+
+import httpx  # noqa: E402
+
+
+@pytest.fixture
+def idp_stack(monkeypatch):
+    """The real provider (naas-abi-idp, in memory) behind the route, with two
+    registered clients: Nexus's and another application's."""
+    pytest.importorskip("naas_abi_idp")
+    from naas_abi_idp.adapters.memory import (
+        MemoryDocumentStore,
+        MemoryMailer,
+        MemorySecretStore,
+    )
+    from naas_abi_idp.configuration import ClientConfiguration, IdPConfiguration
+    from naas_abi_idp.service import IdPService
+    from naas_abi_idp.web import IdPWeb
+
+    monkeypatch.setenv("AUTHLIB_INSECURE_TRANSPORT", "1")
+    mailer = MemoryMailer()
+    configuration = IdPConfiguration(
+        issuer=TARGET.issuer,
+        background_mail=False,
+        clients=[
+            ClientConfiguration(
+                client_id="abi",
+                secret="abi-secret-abi-secret",
+                redirect_uris=["https://abi.example/api/auth/oidc/callback"],
+            ),
+            ClientConfiguration(
+                client_id="other",
+                secret="other-secret-other-secret",
+                redirect_uris=["https://other.example/cb"],
+            ),
+        ],
+    )
+    service = IdPService(MemoryDocumentStore(), MemorySecretStore(), mailer, configuration)
+    service.seed_clients(configuration.clients)
+    service.create_user("alice@example.com")
+    asgi = IdPWeb(service).app()
+
+    class Real(InMemoryRemoteAppDirectory):
+        async def forward(self, module_id, app, request, *, service_account=None):
+            assert (module_id, app, service_account) == ("idp", "idp", "SA-IDP")
+            transport = httpx.ASGITransport(app=asgi, root_path=request.root_path)
+            async with httpx.AsyncClient(transport=transport, base_url="http://idp") as client:
+                answer = await client.request(
+                    request.method,
+                    request.root_path
+                    + request.path
+                    + (f"?{request.query}" if request.query else ""),
+                    headers=dict(request.headers),
+                    content=request.body,
+                )
+            return AppResponse(
+                answer.status_code, tuple(answer.headers.multi_items()), answer.content
+            )
+
+    monkeypatch.setattr(http, "get_remote_app_directory", lambda: Real())
+    monkeypatch.setattr(
+        "naas_abi.apps.nexus.apps.api.app.services.oidc.runtime.redirect_uri",
+        lambda: "https://abi.example/api/auth/oidc/callback",
+    )
+    monkeypatch.setattr(http.nexus_config.settings, "frontend_url", "https://abi-web.example")
+    monkeypatch.setattr(http.nexus_config.settings, "idp_client_origins", [], raising=False)
+    app = FastAPI()
+    app.add_api_route("/idp/{path:path}", http.serve_idp, methods=http.METHODS)
+    return TestClient(app, base_url="https://abi.example", follow_redirects=False), mailer, service
+
+
+def _authorize(client, **overrides):
+    params = {
+        "response_type": "code",
+        "client_id": "abi",
+        "redirect_uri": "https://abi.example/api/auth/oidc/callback",
+        "scope": "openid email",
+        "state": "s",
+        "code_challenge": "x" * 43,
+        "code_challenge_method": "S256",
+        **overrides,
+    }
+    return client.get("/idp/authorize", params=params)
+
+
+def _sign_in(client, mailer, response):
+    csrf = re.search(r'name="csrf" value="([^"]+)"', response.text).group(1)
+    client.post("/idp/login/email", data={"csrf": csrf, "email": "alice@example.com"})
+    code = mailer.last_code("alice@example.com")
+    return client.post(
+        "/idp/login/code", data={"csrf": csrf, "email": "alice@example.com", "code": code}
+    )
+
+
+def test_signing_in_through_the_route_sets_the_session_and_clears_the_login_cookie(idp_stack):
+    client, mailer, _ = idp_stack
+    page = _authorize(client)
+    assert page.status_code == 200 and "abi_idp_login" in client.cookies
+    done = _sign_in(client, mailer, page)
+    assert done.status_code == 302 and "code=" in done.headers["location"]
+    cookies = done.headers.get_list("set-cookie")
+    # The module's real cookie headers (Starlette quotes an empty value to clear one).
+    session = next(c for c in cookies if c.startswith("abi_idp_session=") and "Max-Age=0" not in c)
+    assert "HttpOnly" in session and "SameSite=Lax" in session and "Path=/idp" in session
+    assert "Secure" in session
+    cleared = next(c for c in cookies if c.startswith("abi_idp_login="))
+    assert cleared.startswith("abi_idp_login=;") and "Max-Age=0" in cleared
+    assert "abi_idp_login" not in client.cookies  # the browser dropped it
+    assert "abi_idp_session" in client.cookies
+
+
+def test_signing_out_clears_the_session_cookie(idp_stack):
+    client, mailer, _ = idp_stack
+    _sign_in(client, mailer, _authorize(client))
+    assert "abi_idp_session" in client.cookies
+    out = client.get("/idp/logout")
+    assert out.status_code == 200
+    assert any(
+        c.startswith("abi_idp_session=;") and "Max-Age=0" in c
+        for c in out.headers.get_list("set-cookie")
+    )
+    assert "abi_idp_session" not in client.cookies
+    assert _authorize(client).status_code == 200  # no session: the login page again
+
+
+def test_the_cookies_are_secure_where_the_issuer_is_https_whatever_the_hop_looks_like(
+    idp_stack,
+):
+    client, _, _ = idp_stack
+    plain = TestClient(client.app, base_url="http://abi.example", follow_redirects=False)
+    page = _authorize(plain)  # a TLS-terminating proxy that forwards no scheme
+    login = next(c for c in page.headers.get_list("set-cookie") if c.startswith("abi_idp_login="))
+    assert "Secure" in login and "HttpOnly" in login and "SameSite=Lax" in login
+
+
+def test_only_the_relying_parties_the_route_serves_start_a_sign_in(idp_stack, monkeypatch):
+    client, mailer, service = idp_stack
+    # Nexus's own client: fine, and its forms may redirect back to it.
+    ok = _authorize(client)
+    assert ok.status_code == 200
+    assert (
+        "form-action 'self' https://abi.example https://abi-web.example;"
+        in (ok.headers["content-security-policy"])
+    )
+    # Another registered client: refused up front, never a sign-in that ends in a
+    # CSP block on the redirect after the post.
+    other = _authorize(client, client_id="other", redirect_uri="https://other.example/cb")
+    assert other.status_code == 400
+    assert "may not sign in here" in other.text
+    assert _authorize(client, redirect_uri="https://evil.example/cb").status_code == 400
+    missing = client.get("/idp/authorize", params={"client_id": "abi", "response_type": "code"})
+    assert missing.status_code == 400
+    # Added in the config, it works, and the policy follows.
+    monkeypatch.setattr(
+        http.nexus_config.settings, "idp_client_origins", ["https://other.example"], raising=False
+    )
+    allowed = _authorize(client, client_id="other", redirect_uri="https://other.example/cb")
+    assert allowed.status_code == 200
+    assert "https://other.example" in allowed.headers["content-security-policy"]
+    done = _sign_in(client, mailer, allowed)
+    assert done.status_code == 302 and done.headers["location"].startswith(
+        "https://other.example/cb?"
+    )
+
+
+def test_a_cookie_clearing_in_starlettes_own_form_is_accepted():
+    from starlette.responses import Response
+
+    response = Response()
+    response.delete_cookie("abi_idp_login", path="/idp", secure=True, httponly=True, samesite="lax")
+    header = response.headers["set-cookie"]
+    assert '=""' in header  # what the module really sends
+    kept = http.module_cookie(header, secure=True)
+    assert (
+        kept is not None and kept.startswith("abi_idp_login=; Path=/idp;") and "Max-Age=0" in kept
+    )

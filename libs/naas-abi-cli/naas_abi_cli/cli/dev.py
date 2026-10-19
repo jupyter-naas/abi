@@ -812,6 +812,10 @@ def _launch_dagster(
     # `--log-level` (left at its default so the daemon doesn't drown the pane).
     env["LOG_LEVEL"] = _resolve_log_level(log_level)
     env["OXIGRAPH_URL"] = _oxigraph_url(ports)
+    # Dagster loads the project's engine config too: a config that names the
+    # built-in IdP's issuer as `{{ secret.ABI_IDP_ISSUER }}` hard-fails here
+    # (no TTY to ask) without it.
+    env[IDP_ISSUER_ENV] = f"{_api_origin(ports)}/idp"
     cmd = [
         "uv",
         "run",

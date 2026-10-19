@@ -78,9 +78,9 @@ class AdminAPI:
                 201,
                 self.service.create_user(
                     _text(body, "email"),
-                    name=body.get("name"),
+                    name=_optional_text(body, "name"),
                     groups=_list(body, "groups"),
-                    password=body.get("password"),
+                    password=_optional_text(body, "password"),
                 ).public(),
             ),
             body=True,
@@ -105,9 +105,9 @@ class AdminAPI:
             request,
             lambda body: self.service.update_user(
                 user_id,
-                name=body.get("name"),
-                email=body.get("email"),
-                password=body.get("password"),
+                name=_optional_text(body, "name"),
+                email=_optional_text(body, "email"),
+                password=_optional_text(body, "password"),
             ).public(),
             body=True,
         )
@@ -141,7 +141,7 @@ class AdminAPI:
             lambda body: (
                 201,
                 self.service.create_group(
-                    _text(body, "name"), str(body.get("description", ""))
+                    _text(body, "name"), _optional_text(body, "description") or ""
                 ).to_doc(),
             ),
             body=True,
@@ -178,7 +178,7 @@ class AdminAPI:
                 redirect_uris=_list(body, "redirect_uris"),
                 grant_types=_list(body, "grant_types") or ["client_credentials"],
                 scopes=_list(body, "scopes"),
-                confidential=bool(body.get("confidential", True)),
+                confidential=_flag(body, "confidential", True),
             )
             # The secret is shown once: only its hash is kept.
             return 201, {**client.public(), "client_secret": secret}
@@ -282,6 +282,20 @@ def _text(body: dict[str, Any], key: str) -> str:
     value = body.get(key)
     if not isinstance(value, str) or not value.strip():
         raise InvalidArgument(f"{key} is required")
+    return value
+
+
+def _optional_text(body: dict[str, Any], key: str) -> str | None:
+    value = body.get(key)
+    if value is not None and not isinstance(value, str):
+        raise InvalidArgument(f"{key} is a string")
+    return value
+
+
+def _flag(body: dict[str, Any], key: str, default: bool) -> bool:
+    value = body.get(key, default)
+    if not isinstance(value, bool):
+        raise InvalidArgument(f"{key} is true or false")
     return value
 
 
