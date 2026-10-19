@@ -85,14 +85,24 @@ class Project:
         return any_config_uses_nats(str(self.root))
 
     def discovery_project(self) -> str:
-        """The configured discovery project, else the project's own name."""
+        """The configured discovery project, else the project's own name.
+
+        The Docker stack's config comes first: its engine hosts the discovery the
+        module's compose service registers in. `config.yaml` is what `abi dev up`
+        reads, and it hands its modules the project from there itself.
+        """
         from naas_abi_cli.cli.dev_modules import configured_discovery_project
 
-        try:
-            configured = configured_discovery_project(self.config)
-        except _CONFIG_ERRORS:  # an unreadable config falls back to the name
-            configured = None
-        return configured or to_snake_case(self.root.name) or "default"
+        for config in (self.root / "config.local.yaml", self.config):
+            if not config.is_file():
+                continue
+            try:
+                configured = configured_discovery_project(config)
+            except _CONFIG_ERRORS:  # an unreadable config is skipped
+                continue
+            if configured:
+                return configured
+        return to_snake_case(self.root.name) or "default"
 
 
 def find_project(start: Path) -> Project | None:

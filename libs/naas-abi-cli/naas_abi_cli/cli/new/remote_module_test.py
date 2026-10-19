@@ -212,6 +212,25 @@ def test_the_module_gets_a_compose_service_in_the_override(tmp_path: Path) -> No
     assert (root / "docker-compose.yml").read_text() == "services: {}\n"
 
 
+def test_the_compose_service_joins_the_discovery_project_of_the_docker_config(
+    tmp_path: Path,
+) -> None:
+    # A project moved to NATS by hand names its discovery project in the config
+    # the Docker engine reads; config.yaml (`abi dev up`) may not name one.
+    root = _project(tmp_path, nats=False)
+    (root / "config.local.yaml").write_text(
+        _NATS_CONFIG.replace('"acme"', '"acme_stack"'), encoding="utf-8"
+    )
+    (root / ".env").write_text(f"NATS_JWT_SECRET={'s' * 48}\n")
+
+    _invoke(_new_module, root, "research")
+
+    service = yaml.safe_load((root / COMPOSE_OVERRIDE).read_text())["services"][
+        "research"
+    ]
+    assert "ABI_DISCOVERY_PROJECT=acme_stack" in service["environment"]
+
+
 def test_without_the_engines_secret_no_key_is_made_up(tmp_path: Path) -> None:
     root = _project(tmp_path)
 

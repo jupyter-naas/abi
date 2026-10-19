@@ -401,9 +401,16 @@ nats:
   nats_url: "nats://abi:{{ secret.NATS_ABI_PASSWORD }}@nats:4222"
   jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
   discovery:
-    project: default
+    project: my_project   # your project's name; modules register in this one
     lease_seconds: 180
 ```
+
+The `project` is the namespace modules register in. `abi new module` gives each
+module's service the project named in `config.local.yaml` (else `config.yaml`,
+else the folder name), so set it before you create modules, or change
+`ABI_DISCOVERY_PROJECT` in `docker-compose.override.yml` to match. A module
+whose project is not the engine's cannot reach discovery: it fails with
+`no responders available` and restarts.
 
 Discovery runs in the engine that serves the kernel services, so it has a
 single owner even when other engines (the CLI's, a client engine) read the same
