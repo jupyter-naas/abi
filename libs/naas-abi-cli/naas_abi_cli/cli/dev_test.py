@@ -62,6 +62,10 @@ def test_api_env_points_the_frontend_at_localhost(monkeypatch) -> None:
     env = captured["env"]
     assert env["FRONTEND_URL"] == f"http://localhost:{PORTS['nexus-web']}"
     assert env["PUBLIC_WEB_HOST"] == f"localhost:{PORTS['nexus-web']}"
+    # Nexus's redirect URI at the identity providers is built from it, and the
+    # built-in IdP's issuer lives on the same origin.
+    assert env["API_URL"] == f"http://localhost:{PORTS['api']}"
+    assert env["ABI_IDP_ISSUER"] == f"http://localhost:{PORTS['api']}/idp"
 
 
 def test_api_allows_both_loopback_origins_for_cors(monkeypatch) -> None:

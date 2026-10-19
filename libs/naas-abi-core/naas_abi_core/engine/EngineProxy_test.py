@@ -398,3 +398,27 @@ def test_engine_proxy_grants_identity_without_declared_dependency():
         module_name="test_module",
         module_dependencies=ModuleDependencies(modules=[], services=[]),
     ).services.identity_available()
+
+
+def test_only_the_unlocked_proxy_reaches_the_engines_service_credentials():
+    """Nexus signs its own NATS calls as ``api`` through the platform module's
+    proxy; any other module holds none of the engine's identities."""
+    engine = _DummyEngine(services=IEngine.Services())
+    asked: list = []
+    engine.service_credentials = lambda name, audience=None: (
+        asked.append(  # type: ignore[attr-defined]
+            (name, audience)
+        )
+        or "credentials"
+    )
+    deps = ModuleDependencies(modules=[], services=[])
+
+    unlocked = EngineProxy(
+        engine=engine, module_name="naas_abi", module_dependencies=deps, unlocked=True
+    )
+    assert unlocked.service_credentials("api", "abi:host:x") == "credentials"
+    assert asked == [("api", "abi:host:x")]
+    with pytest.raises(PermissionError):
+        EngineProxy(
+            engine=engine, module_name="other", module_dependencies=deps
+        ).service_credentials("api")

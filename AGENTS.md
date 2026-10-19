@@ -6,6 +6,7 @@ Guidance for coding agents in `/Users/XXXX/abi`.
 
 - Python monorepo managed with `uv`.
 - Main packages: `libs/naas-abi-core`, `libs/naas-abi`, `libs/naas-abi-cli`, `libs/naas-abi-marketplace`.
+- Core-free packages (SDK modules over NATS, never importing `naas_abi_core`): `libs/naas-abi-sdk`, `libs/naas-abi-proto`, and `libs/naas-abi-idp`, the built-in OIDC identity provider ([AGENTS.md](libs/naas-abi-idp/AGENTS.md)).
 - Root project links local packages via editable `tool.uv.sources` in `pyproject.toml`.
 - Python target is `>=3.10,<4`.
 - Frontend: Next.js app at `libs/naas-abi/naas_abi/apps/nexus/apps/web` (requires `pnpm`).
@@ -44,6 +45,10 @@ Core services live under `libs/naas-abi-core/naas_abi_core/services/`. Each has 
 | `vector_store` | Vector DB facade (Qdrant / SQLite-vec) | [services/vector_store/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/vector_store/AGENTS.md) |
 
 Every service AGENTS.md follows the same structure: **Purpose → Files → Port → Service API → Adapters → Factory → Tests → Adding a new adapter** — so once you've read one, you know how to navigate them all.
+
+## Built-in identity provider
+
+`libs/naas-abi-idp` is an SDK module, not a core service: the default OIDC provider of `abi dev up` and small installs (email-code sign-in, authorization code + PKCE, refresh tokens, JWKS, client credentials, an admin app for provisioning). It runs as `module/<project>/idp`, its data and keys are sealed to that account, Nexus serves it at `/idp` and the engine reads it over NATS. Read [libs/naas-abi-idp/AGENTS.md](libs/naas-abi-idp/AGENTS.md) before touching it, `services/identity/AGENTS.md` for the engine's side, and `docs/identity-providers.md` for plugging in another provider.
 
 ## Marketplace Map
 

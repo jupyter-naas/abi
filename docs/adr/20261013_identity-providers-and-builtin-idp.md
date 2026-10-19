@@ -83,3 +83,50 @@ someone with just an email, and they sign in with a code sent to that email.
 - **CI downloads a Zitadel binary** for the identity tests, as it does `nats-server`.
 - **The trusted route is the one place** Nexus forwards cookies and form posts to a module. It is bound to the
   `idp` service account and configured, never discovered.
+
+## As built (2026-10-19, #63)
+
+Implemented as decided, with these differences and details:
+
+- **It runs as a module account, not as a service account named `idp`.** The module `idp`
+  (`libs/naas-abi-idp`, `module_id = "idp"`) runs as `module/<project>/idp`, like every
+  remote module: it submits its permission manifest (the default one for `document`,
+  `secret` and `email`), an admin approves it (`abi dev up` does), the broker confines it,
+  and discovery binds the module id to that account. The built-in account `idp` (policy
+  `builtin.idp`) stays for a deployment that prefers it.
+  - The seals of its namespace (`document`) and secrets (`secret`, `idp/`) name the account
+    `idp` **and** the module id `idp` (`Seal.module_id`), and the secret endpoint's
+    allow-list treats a module account of that id as the IdP (`secret_nats_contract.is_idp`).
+    Module id `idp` is therefore reserved: an admin creates its account, nothing else does.
+    `api` and `engine` read neither, whatever their policies say.
+- **The trusted route** is `/idp/...` on the API host (`services/idp`). Allow-lists decide
+  which paths, request headers, response headers and cookies pass; the CSP is Nexus's; the
+  API's sandboxing of active content and its global CSP skip this path alone. Only the
+  instance running as `module/<project>/idp` is served, and only while a provider has
+  `provisioning: builtin`. The module's apps leave the apps catalog and no generic remote-app
+  route opens them (`INTERNAL_MODULES`).
+- **The admin RPCs are a second app of the module** (`admin`, JSON over `abi.app.v1`), never on
+  the public route. Discovery's `OpenApp` on that app authorizes the caller; the app also
+  refuses a call made on behalf of a user, since any user may open apps. The default manifest
+  of a module that depends on `idp` denies it.
+- **The engine reads the IdP over NATS.** `OIDCHttpBuiltinIdP` replaces the HTTP port for the
+  built-in provider's issuer, through `IdPAppNATS`, attached by the serving engine once its
+  NATS runtime is up. A built-in provider's discovery document may only name endpoints below
+  its issuer. At most one provider is built-in, and its issuer path is `/idp`.
+- **Defaults.** `abi dev up` runs the module and, for a project that names no provider,
+  configures it through the dev overlay (the project's config stays untouched);
+  `abi new project` generates the client secret and depends on `naas-abi-idp`; the Docker
+  stack runs it in its own SDK-only container, and its Docker configs name it.
+- **Codes.** Six digits, 15 minutes, stored as an HMAC under a key in the secret service.
+  Wrong guesses count against the address, across every active code, before they are judged
+  (so parallel guesses spend one budget); the budget spent voids all codes. Registering with
+  just an email is `signup_enabled` (on in `abi dev up`, off elsewhere).
+- **Tokens.** ID and access tokens are ES256, ten minutes at most; refresh tokens rotate and a
+  replay revokes the family; PKCE (S256) is required of every client; no introspection.
+
+Consequences added:
+
+- A person whose email already belongs to a Nexus account cannot sign in through the IdP until
+  accounts are linked (subtask 13 of #44).
+- A deployment outside Docker or `abi dev` creates the `module/<project>/idp` account and key
+  itself (`abi iam service-account create ... --key`, `abi iam module approve`).

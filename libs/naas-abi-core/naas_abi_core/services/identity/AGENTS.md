@@ -35,12 +35,15 @@ resolves them to IAM users. Authorization stays with IAM (`services/iam`).
 | `IdentityService.py` | The domain service: providers, `verify_token`, `authenticate`, the relying-party sign-in |
 | `iam_catalog.py` | The `identity:*` catalog, registered with the kernel catalogs |
 | `adapters/secondary/OIDCHttpHttpx.py` | `OIDCHttpPort` over httpx |
+| `adapters/secondary/OIDCHttpBuiltinIdP.py` | `OIDCHttpPort` for the built-in IdP (`provisioning: builtin`): its issuer is read over NATS, everything else over the fallback |
+| `adapters/secondary/IdPAppNATS.py` | The IdP's `idp` app called over NATS as the engine, bound to the instance running as `module/<project>/idp` |
 | `adapters/secondary/IdentitySecondaryAdapterNATSClient.py` | `IIdentityService` over NATS, for client-role engines |
 | `adapters/primary/identity__primary_adapter__NATS.py` | `abi.identity.v1.*` |
 | `adapters/identity_nats_codec.py` | Records and errors on the wire |
 | `tests/identity_contract.py` | **The generic identity suite** every provider passes, and its `IdentityProviderHarness` |
 | `tests/fake_idp.py` | An OIDC provider over real HTTP in this process (RS256/ES256, rotation, PKCE, refresh, revocation) |
 | `tests/zitadel_server.py` | Zitadel and PostgreSQL from pinned native binaries, and the Zitadel harness |
+| `tests/builtin_idp_server.py` | The built-in IdP (`naas-abi-idp`) over real HTTP in this process, and its harness |
 
 Engine configuration: `engine/engine_configuration/EngineConfiguration_Identity.py`.
 
@@ -136,6 +139,17 @@ does not stop the engine). The serving engine exposes it over NATS
 (`EngineNATSLoader`); a client-role engine gets the NATS client; modules in a
 serving engine get the owner itself (`EngineNATSDependencies`), like IAM.
 
+**The built-in IdP** (`provisioning: builtin`, `libs/naas-abi-idp`): at most one
+provider, its issuer path is `/idp` (Nexus serves it there). The service's HTTP
+port becomes `OIDCHttpBuiltinIdP`: a URL below the issuer goes through the
+module's `idp` app over NATS (the serving engine attaches `IdPAppNATS` in
+`Engine.__serve`, after its NATS runtime is up; before that the provider is
+"down" and read again on first use), any other URL over httpx. A built-in
+provider's discovery document may only name endpoints below its issuer
+(`parse_metadata`), so it cannot send the engine, or the client secret,
+elsewhere. Only the discovery instance whose service account is
+`module/<project>/idp` is called.
+
 Plugging in Okta, Entra, Zitadel or Keycloak:
 [`docs/identity-providers.md`](../../../../../docs/identity-providers.md).
 
@@ -159,7 +173,8 @@ ABI_REQUIRE_ZITADEL=1 uv run pytest libs/naas-abi-core/naas_abi_core/services/id
 - The generic suite (`tests/identity_contract.py`) runs against `FakeIdP` on
   every run, and against Zitadel when its binaries can be fetched (skipped
   otherwise; `ABI_REQUIRE_ZITADEL=1` turns the skip into a failure, as CI sets).
-- **Another provider** (the built-in IdP, subtask 9): implement
+- The built-in IdP runs the same suite (`tests/builtin_idp_contract_test.py`).
+- **Another provider**: implement
   `IdentityProviderHarness` (`create_user`, `sign_in`, `rotate_signing_key`,
   `other_client`) and subclass `IdentityProviderContract` with a `harness`
   fixture.

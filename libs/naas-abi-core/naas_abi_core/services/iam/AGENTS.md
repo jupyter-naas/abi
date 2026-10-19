@@ -257,7 +257,12 @@ class MyService(ServiceBase):
 - `builtin.self`: held implicitly by every user (RFC §7 "Self" column).
 - `builtin.platform.viewer` / `.member`: attached and detached by IAM in step
   with workspace and org-wide role attachments.
-- `builtin.idp`: the built-in IdP's own namespace, secrets and sender.
+- `builtin.idp`: the built-in IdP's own namespace, secrets and sender, for the
+  built-in account `idp`. By default the IdP (`libs/naas-abi-idp`) runs as the
+  module account `module/<project>/idp` with its approved manifest instead; the
+  seals (`Seal.module_id`) and the secret endpoint (`secret_nats_contract.is_idp`)
+  name both, so the module id `idp` is reserved: an admin creates its account,
+  nothing else does.
 - Feature policies (`builtin.features.*`) come with the Nexus catalog (#65).
 
 - `builtin.module_bootstrap`: a module account before approval (above).

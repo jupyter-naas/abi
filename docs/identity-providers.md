@@ -4,7 +4,8 @@ ABI does not keep passwords for the people who sign in through an identity
 provider (IdP). The engine trusts the OIDC providers you configure under
 `identity.providers`, and Nexus signs people in through them with the
 authorization code flow and PKCE. This page shows how to plug in Okta,
-Microsoft Entra ID, Zitadel and Keycloak.
+Microsoft Entra ID, Zitadel and Keycloak. Installs with no provider use the
+[built-in IdP](#the-built-in-idp).
 
 Design: RFC [`20261013_identity-and-authorization`](specs/rfcs/20261013_identity-and-authorization.md) §12.1,
 ADRs [`20261013_identity-providers-and-builtin-idp`](adr/20261013_identity-providers-and-builtin-idp.md)
@@ -207,6 +208,56 @@ Zitadel is the reference external provider of ABI's identity tests (below).
   scopes: [openid, email, profile]
 ```
 
+## The built-in IdP
+
+Where nobody runs Okta or Zitadel (`abi dev up`, small installs) the engine can
+trust the **built-in IdP**, the `naas-abi-idp` module
+(`libs/naas-abi-idp`, [its guide](../libs/naas-abi-idp/AGENTS.md)). People
+register with just an email and sign in with a six-digit code emailed to them;
+password sign-in is optional. It speaks standard OIDC (authorization code with
+PKCE, refresh tokens, discovery, an ES256 JWKS) and client credentials for
+service accounts, so the engine verifies it exactly as it verifies any
+provider. It keeps its users, groups and keys in a Document Service namespace
+and secrets of its own, which not even `api` or `engine` can read.
+
+```yaml
+identity:
+  default_provider: builtin
+  providers:
+    - name: builtin
+      display_name: Email code
+      issuer: https://abi.example.com/idp      # https://<API host>/idp, always
+      client_id: abi
+      client_secret: "{{ secret.ABI_IDP_CLIENT_SECRET }}"
+      groups_claim: groups
+      scopes: [openid, email, profile, groups, offline_access]
+      provisioning: builtin
+```
+
+- **The issuer is `https://<API host>/idp`** (http on localhost only). Nexus
+  serves it there, on a dedicated route, and forwards to the module over NATS;
+  the engine reads its discovery document and keys over NATS too. Only the
+  instance running as the service account `module/<project>/idp` answers.
+- **`abi dev up`** runs it for you, with no configuration, whenever the project
+  names no other provider: it starts the module, generates the client secret into
+  `.env`, and adds the block above through the dev overlay. Mail goes to the
+  engine's email adapter (a file under `storage/email/` with the default
+  config). Registering an email is enough in dev (`ABI_IDP_SIGNUP`).
+- **Docker**: `abi deploy local` generates `ABI_IDP_CLIENT_SECRET` and runs the
+  module in its own container (the `idp` service); create its service key once
+  the stack is up (`abi iam service-account create module/<project>/idp --key`,
+  into `.env` as `IDP_SERVICE_KEY`, then `abi iam module approve
+  module/<project>/idp` and `docker compose up -d idp`).
+- **Elsewhere**: run `python -m naas_abi_idp` as a module with its
+  `ABI_IDP_*` settings (see its guide). It needs a broker, the engine's email
+  service for the codes, and a public `https://<API host>/idp`.
+- Users are created by the provider's admin API (over NATS, for the
+  provisioning port) or, in dev, by signing up. A person whose email already
+  belongs to a Nexus account gets "already belongs to another account": accounts
+  are never linked automatically.
+- Out of scope: SAML, brokering other providers, MFA policies. For those, plug in
+  a provider above.
+
 ## Nexus session settings
 
 | Setting | Default | |
@@ -224,8 +275,9 @@ token the web app sends on every change (`X-CSRF-Token`) lives in memory only.
 The generic identity suite
 (`libs/naas-abi-core/naas_abi_core/services/identity/tests/identity_contract.py`)
 checks a provider end to end: discovery, key rotation, token checks, groups,
-suspension and a full PKCE sign-in. It runs against an in-process provider on
-every test run, and against Zitadel from a pinned native binary, with
+suspension and a full PKCE sign-in. It runs against an in-process provider and
+against the built-in IdP on every test run, and against Zitadel from a pinned
+native binary, with
 PostgreSQL from pinned native binaries too (no Docker):
 
 ```bash

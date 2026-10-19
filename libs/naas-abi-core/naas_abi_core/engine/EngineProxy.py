@@ -315,6 +315,17 @@ class EngineProxy:
             )
         return self.__engine.job_owners()
 
+    def service_credentials(self, name: str = "engine", audience: str | None = None):
+        """``Engine.service_credentials``: the tokens of the engine's service
+        accounts (``api`` for Nexus), for the unlocked proxy (the platform
+        module) only. A module holds none of the engine's identities."""
+        if not self.__unlocked:
+            raise PermissionError(
+                f"Module {self.__module_name} is not the platform module: "
+                "the engine's service credentials need the unlocked engine proxy"
+            )
+        return self.__engine.service_credentials(name, audience)  # type: ignore[attr-defined]
+
     @property
     def configuration(self):
         configuration = getattr(self.__engine, "configuration", None)

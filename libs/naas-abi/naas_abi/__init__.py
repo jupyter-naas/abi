@@ -511,7 +511,16 @@ class NexusConfig(BaseModel):
 # Settings the Nexus ``Settings`` also reads from the environment. Passing
 # NexusConfig's defaults for them as init kwargs would shadow ``SECRET_KEY`` /
 # ``ENVIRONMENT`` / ``NEXUS_ENV``, so they are forwarded only when set in yaml.
-_ENV_OVERRIDABLE_NEXUS_FIELDS = ("secret_key", "environment", "nexus_env")
+# ``api_url`` and ``frontend_url`` too: ``abi dev up`` binds each worktree's own
+# ports and tells the API through ``API_URL`` / ``FRONTEND_URL``, which the
+# sign-in redirect URI (``<api_url>/api/auth/oidc/callback``) must follow.
+_ENV_OVERRIDABLE_NEXUS_FIELDS = (
+    "secret_key",
+    "environment",
+    "nexus_env",
+    "api_url",
+    "frontend_url",
+)
 
 
 def nexus_settings_kwargs(nexus_config: NexusConfig) -> dict[str, Any]:

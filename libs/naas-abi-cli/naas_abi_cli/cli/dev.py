@@ -778,6 +778,8 @@ def _launch_api(
     env["ABI_DEV_PUBLIC_API_ORIGIN"] = api_origin
     env["PUBLIC_API_HOST"] = f"{BROWSER_HOST}:{spec.port}"
     env["NEXUS_API_URL"] = api_origin
+    # Nexus's own API URL, which the sign-in redirect URI is built from.
+    env["API_URL"] = api_origin
     # The built-in IdP's issuer (config: `{{ secret.ABI_IDP_ISSUER }}`): Nexus
     # serves it at /idp on this origin. Like the origins above, only when the
     # .env does not say otherwise (the dotenv adapter reads .env first).
