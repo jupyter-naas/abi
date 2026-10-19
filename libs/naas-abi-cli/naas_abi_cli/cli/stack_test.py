@@ -57,6 +57,7 @@ def compose(monkeypatch) -> FakeCompose:
     fake = FakeCompose()
     monkeypatch.setattr(stack_module, "run_compose", fake)
     monkeypatch.setattr(stack_module, "_get_error_services", list)
+    monkeypatch.setattr(stack_module, "_can_open_a_browser", lambda: True)
     monkeypatch.setattr(stack_module.webbrowser, "open", lambda url: True)
     monkeypatch.setattr(stack_module, "_nexus_web_url", lambda: "http://nexus/")
     return fake
@@ -170,6 +171,7 @@ def test_start_help_labels_the_legacy_stack(command) -> None:
 def test_start_stack_opens_nexus_when_compose_succeeds(monkeypatch) -> None:
     opened: list[str] = []
 
+    monkeypatch.setattr(stack_module, "_can_open_a_browser", lambda: True)
     monkeypatch.setattr(stack_module, "run_compose", lambda args: None)
     monkeypatch.setattr(stack_module, "_get_error_services", list)
     monkeypatch.setattr(stack_module.webbrowser, "open", lambda url: opened.append(url))
@@ -178,6 +180,48 @@ def test_start_stack_opens_nexus_when_compose_succeeds(monkeypatch) -> None:
     stack_module._start_stack()
 
     assert opened == ["http://nexus/"]
+
+
+def test_start_stack_on_a_headless_host_prints_the_url_instead(
+    monkeypatch, capsys
+) -> None:
+    # On Linux without a display, webbrowser falls back to a terminal browser
+    # (www-browser, lynx, w3m) that holds the command until someone quits it.
+    opened: list[str] = []
+
+    monkeypatch.setattr(stack_module, "_can_open_a_browser", lambda: False)
+    monkeypatch.setattr(stack_module, "run_compose", lambda args: None)
+    monkeypatch.setattr(stack_module, "_get_error_services", list)
+    monkeypatch.setattr(stack_module.webbrowser, "open", lambda url: opened.append(url))
+    monkeypatch.setattr(stack_module, "_nexus_web_url", lambda: "http://nexus/")
+
+    stack_module._start_stack()
+
+    assert opened == []
+    assert "http://nexus/" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "platform, environment, expected",
+    [
+        ("linux", {}, False),
+        ("linux", {"DISPLAY": ":0"}, True),
+        ("linux", {"WAYLAND_DISPLAY": "wayland-0"}, True),
+        ("linux", {"BROWSER": "firefox"}, True),
+        ("darwin", {}, True),
+        ("win32", {}, True),
+    ],
+)
+def test_a_browser_opens_where_there_is_a_graphical_session(
+    monkeypatch, platform: str, environment: dict[str, str], expected: bool
+) -> None:
+    for name in ("DISPLAY", "WAYLAND_DISPLAY", "BROWSER", "WSL_DISTRO_NAME"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(stack_module.sys, "platform", platform)
+
+    assert stack_module._can_open_a_browser() is expected
 
 
 def test_nexus_web_url_url_encodes_email(monkeypatch) -> None:

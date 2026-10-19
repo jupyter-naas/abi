@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 import webbrowser
 from functools import lru_cache
 from pathlib import Path
@@ -197,6 +198,22 @@ def _start_legacy_stack(project: Path) -> None:
     )
 
 
+def _can_open_a_browser() -> bool:
+    """Whether `webbrowser` would reach a graphical browser.
+
+    On Linux without a display it falls back to a terminal browser, which holds
+    `abi stack start` until someone quits it: a server reached over SSH.
+    """
+    if sys.platform in ("darwin", "win32") or os.environ.get("BROWSER"):
+        return True
+    # WSL hands the URL to the Windows browser.
+    return bool(
+        os.environ.get("DISPLAY")
+        or os.environ.get("WAYLAND_DISPLAY")
+        or os.environ.get("WSL_DISTRO_NAME")
+    )
+
+
 def _start_stack(legacy: bool = False) -> None:
     project = Path.cwd()
     _ensure_stack_secrets(project)
@@ -231,8 +248,11 @@ def _start_stack(legacy: bool = False) -> None:
             continue
 
         url = _nexus_web_url()
-        webbrowser.open(url)
-        click.echo(f"Opened {url}")
+        if _can_open_a_browser():
+            webbrowser.open(url)
+            click.echo(f"Opened {url}")
+        else:
+            click.echo(f"Open {url}")
         return
 
 
