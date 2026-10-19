@@ -124,7 +124,10 @@ x-abi-template: &abi_template
     test: ["CMD-SHELL", "for i in 1 2 3; do curl -fsS http://localhost:9879/ >/dev/null || exit 1; sleep 2; done"]
     interval: 10s
     timeout: 15s
-    start_period: 30s
+    # A first boot loads every module and ontology: about three minutes. Failed
+    # probes inside start_period do not count, and `docker compose up` fails
+    # as soon as the engine is reported unhealthy.
+    start_period: 5m
     retries: 10
   networks:
     - abi-network

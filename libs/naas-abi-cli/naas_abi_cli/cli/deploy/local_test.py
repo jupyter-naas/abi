@@ -57,6 +57,27 @@ def test_a_generated_stack_runs_on_nats_by_default(tmp_path: Path) -> None:
     assert len(_env_values(tmp_path / ".env")["NATS_JWT_SECRET"]) >= 32
 
 
+def _seconds(duration: str) -> int:
+    value, unit = re.fullmatch(r"(\d+)([sm])", duration).groups()  # type: ignore[union-attr]
+    return int(value) * (60 if unit == "m" else 1)
+
+
+@pytest.mark.parametrize("nats", [True, False])
+def test_the_engine_has_time_to_boot_before_it_is_unhealthy(
+    tmp_path: Path, nats: bool
+) -> None:
+    # A first boot loads every module and ontology and runs the Nexus
+    # migrations: about three minutes on a laptop. An engine reported unhealthy
+    # before that makes `docker compose up` fail on a stack that is coming up.
+    setup_local_deploy(str(tmp_path), base_domain="localhost", nats=nats)
+    health = _services(tmp_path / "docker-compose.yml")["abi"]["healthcheck"]
+
+    budget = _seconds(health["start_period"]) + health["retries"] * _seconds(
+        health["interval"]
+    )
+    assert budget >= 300
+
+
 def test_a_classic_stack_keeps_nats_opt_in(tmp_path: Path) -> None:
     setup_local_deploy(str(tmp_path), base_domain="localhost", nats=False)
     services = _services(tmp_path / "docker-compose.yml")
