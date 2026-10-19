@@ -54,6 +54,12 @@ export default function LoginForm() {
   const [redirecting, setRedirecting] = useState(false);
   const ssoError = ssoErrorMessage(searchParams.get('sso_error'));
   const nextPath = searchParams.get('redirect') ?? undefined;
+  // ?provider=<name> (an invitation's sign-in link): that provider, if configured.
+  const requestedProvider = searchParams.get('provider');
+  const linkedProvider =
+    requestedProvider && providers.some((p) => p.name === requestedProvider)
+      ? requestedProvider
+      : null;
 
   useEffect(() => {
     setMounted(true);
@@ -116,7 +122,8 @@ export default function LoginForm() {
     if (Object.keys(errors).length > 0) return;
 
     if (providers.length > 0) {
-      const provider = await routeLogin(email.trim());
+      // An invitation's link names the provider: no routing by domain then.
+      const provider = linkedProvider ?? (await routeLogin(email.trim()));
       if (provider) {
         setRedirecting(true);
         signInWithProvider({ provider, email: email.trim(), next: nextPath });

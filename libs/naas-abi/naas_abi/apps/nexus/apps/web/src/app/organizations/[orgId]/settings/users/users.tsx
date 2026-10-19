@@ -17,12 +17,17 @@ import {
   ChevronDown,
   Search,
   Download,
+  Mail,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 import { useOrganizationStore } from '@/stores/organization';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useConfirm } from '@/components/ui/dialogs';
+import { IdpGroupBindings } from '@/components/invitations/idp-group-bindings';
+import { PendingInvitations } from '@/components/invitations/pending-invitations';
+import { useInviteProviders } from '@/components/invitations/use-invite-providers';
+import { inviteSuccessMessage, providerHint } from '@/lib/invitations';
 import { ColumnResizeHandle } from '@/components/shell/column-resize-handle';
 import { ColumnFilterPopover } from '@/components/graph/explore/ColumnFilterPopover';
 import { useIsMobile } from '@/hooks/use-is-mobile';
@@ -118,7 +123,7 @@ export default function OrgUsersPage() {
   const authUser = useAuthStore((s) => s.user);
   const {
     fetchMembers,
-    inviteMember,
+    inviteToOrganization,
     removeMember,
     membersCache,
     membersLoading,
@@ -133,6 +138,9 @@ export default function OrgUsersPage() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<InviteRole>('member');
   const [inviteError, setInviteError] = useState('');
+  const [inviteNotice, setInviteNotice] = useState('');
+  const [invitationsKey, setInvitationsKey] = useState(0);
+  const providers = useInviteProviders(showInviteModal);
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteWorkspaceIds, setInviteWorkspaceIds] = useState<string[]>([]);
   const [inviteQuery, setInviteQuery] = useState('');
@@ -339,6 +347,7 @@ export default function OrgUsersPage() {
     setInviteWorkspaceIds([]);
     setInviteQuery('');
     setActionError('');
+    setInviteNotice('');
     setShowInviteModal(true);
   };
 
@@ -363,12 +372,36 @@ export default function OrgUsersPage() {
     setInviteError('');
     setInviteLoading(true);
     try {
-      const member = await inviteMember(orgId, inviteEmail.trim(), inviteRole);
-      if (!member) {
-        throw new Error('Failed to add user');
-      }
-      if (inviteWorkspaceIds.length > 0) {
-        await putMemberWorkspaces(member.userId, inviteWorkspaceIds);
+      const email = inviteEmail.trim();
+      const provider = providers.providerToSend();
+      const { member, answer } = await inviteToOrganization(orgId, {
+        email,
+        role: inviteRole,
+        provider,
+        workspaceId: inviteWorkspaceIds[0],
+        workspaceRole: inviteWorkspaceIds[0] ? 'member' : undefined,
+      });
+      if (answer.kind === 'invited') {
+        // No account yet: the invitation holds the roles until they sign in,
+        // one invitation per workspace picked.
+        for (const workspaceId of inviteWorkspaceIds.slice(1)) {
+          await inviteToOrganization(orgId, {
+            email,
+            role: inviteRole,
+            provider,
+            workspaceId,
+            workspaceRole: 'member',
+          });
+        }
+        setInviteNotice(inviteSuccessMessage(answer));
+        setInvitationsKey((key) => key + 1);
+      } else {
+        if (!member) {
+          throw new Error('Failed to add user');
+        }
+        if (inviteWorkspaceIds.length > 0) {
+          await putMemberWorkspaces(member.userId, inviteWorkspaceIds);
+        }
       }
       await loadMemberWorkspaces();
       closeInviteModal();
@@ -609,6 +642,13 @@ export default function OrgUsersPage() {
           </div>
         )}
 
+        {inviteNotice && (
+          <div className="org-settings-users-alert" role="status">
+            <Mail size={16} />
+            <span>{inviteNotice}</span>
+          </div>
+        )}
+
         {hasActiveFilters && (
           <p className="org-settings-users-filter-meta">
             {visibleMembers.length} of {members.length}{' '}
@@ -800,6 +840,15 @@ export default function OrgUsersPage() {
           Add User creates the account if needed, emails a sign-in code, and
           assigns the workspaces you pick. Filter from the column headers.
         </p>
+
+        <PendingInvitations
+          scope="organizations"
+          id={orgId}
+          canManage={canManage}
+          refreshKey={invitationsKey}
+        />
+
+        <IdpGroupBindings scope="organizations" id={orgId} canManage={canManage} />
       </div>
 
       {openPickerUserId &&
@@ -953,8 +1002,9 @@ export default function OrgUsersPage() {
               Add User
             </h3>
             <p className="org-settings-users-modal-hint">
-              Enter any email. If they are new, we create their account and send
-              a sign-in code. Pick the workspaces they should join.
+              {providers.known.enabled
+                ? 'Enter any email. If they are new, their identity provider creates their account, and their roles apply when they first sign in with this email. Pick the workspaces they should join.'
+                : 'Enter any email. If they are new, we create their account and send a sign-in code. Pick the workspaces they should join.'}
             </p>
             {inviteError && (
               <div className="org-settings-users-alert" role="alert">
@@ -974,6 +1024,25 @@ export default function OrgUsersPage() {
                   autoFocus
                 />
               </label>
+              {providers.choosable && (
+                <label className="org-settings-field">
+                  <span className="org-settings-field-label">Identity provider</span>
+                  <select
+                    value={providers.picked ?? ''}
+                    onChange={(event) => providers.setPicked(event.target.value)}
+                    className="org-settings-input"
+                  >
+                    {providers.known.providers.map((p) => (
+                      <option key={p.name} value={p.name}>
+                        {p.display_name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {providers.known.enabled && providerHint(providers.chosen) && (
+                <p className="org-settings-users-modal-hint">{providerHint(providers.chosen)}</p>
+              )}
               <label className="org-settings-field">
                 <span className="org-settings-field-label">Role</span>
                 <select

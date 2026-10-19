@@ -1,0 +1,424 @@
+"""``InvitationService``: choosing a provider, the grants an invitation holds,
+renewing, revoking and claiming. Fakes stand for the ports."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import replace
+from datetime import datetime
+
+import pytest
+from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
+    Directory,
+    DirectoryGateway,
+    GrantsGateway,
+    IdpBindingView,
+    Invitation,
+    InvitationMail,
+    InvitationMailer,
+    InvitationNotFoundError,
+    InvitationPersistencePort,
+    NoProviderError,
+    ProviderChoice,
+    Provisioned,
+)
+from naas_abi.apps.nexus.apps.api.app.services.invites.service import InvitationService
+
+NOW = datetime(2026, 10, 19, 12, 0)
+BUILTIN = ProviderChoice("builtin", "Built-in", "builtin")
+OKTA = ProviderChoice("okta", "Okta", "none")
+
+
+class Store(InvitationPersistencePort):
+    def __init__(self) -> None:
+        self.rows: dict[str, Invitation] = {}
+        self.domains: dict[str, str] = {}
+        self.memberships: list[tuple] = []
+        self.commits = 0
+
+    async def add(self, invitation, *, now):
+        self.rows[invitation.id] = replace(invitation, created_at=now)
+        return self.rows[invitation.id]
+
+    async def get(self, invitation_id):
+        return self.rows.get(invitation_id)
+
+    async def find_pending(self, *, email, provider, organization_id, workspace_id):
+        return next(
+            (
+                i
+                for i in self.rows.values()
+                if (i.email, i.provider, i.organization_id, i.workspace_id, i.status)
+                == (email, provider, organization_id, workspace_id, "pending")
+            ),
+            None,
+        )
+
+    async def list(self, *, organization_id=None, workspace_id=None, status="pending"):
+        return [
+            i
+            for i in self.rows.values()
+            if organization_id in (None, i.organization_id)
+            and workspace_id in (None, i.workspace_id)
+            and status in (None, i.status)
+        ]
+
+    async def pending_for(self, *, email, provider):
+        return [
+            i
+            for i in self.rows.values()
+            if (i.email, i.provider, i.status) == (email, provider, "pending")
+        ]
+
+    async def update(self, invitation_id, *, org_role, workspace_role, grant_ids, invited_by, now):
+        self.rows[invitation_id] = replace(
+            self.rows[invitation_id],
+            org_role=org_role,
+            workspace_role=workspace_role,
+            grant_ids=tuple(grant_ids),
+            invited_by=invited_by,
+        )
+        return self.rows[invitation_id]
+
+    async def mark_accepted(self, invitation_id, *, user_id, now):
+        row = self.rows[invitation_id]
+        if row.status != "pending":
+            return False
+        self.rows[invitation_id] = replace(row, status="accepted", accepted_user_id=user_id)
+        return True
+
+    async def mark_revoked(self, invitation_id, *, now):
+        row = self.rows[invitation_id]
+        if row.status != "pending":
+            return False
+        self.rows[invitation_id] = replace(row, status="revoked")
+        return True
+
+    async def provider_for_domain(self, domain, organization_id):
+        return self.domains.get(domain)
+
+    async def organization_of_workspace(self, workspace_id):
+        return "org-1"
+
+    async def user_id_by_email(self, email):
+        return None
+
+    async def add_membership(self, **kwargs):
+        self.memberships.append(tuple(sorted(kwargs.items())))
+
+    async def commit(self):
+        self.commits += 1
+
+
+class Directories(DirectoryGateway):
+    def __init__(self, *providers: ProviderChoice, default: str | None = None) -> None:
+        self.known = Directory(tuple(providers), default)
+        self.provisioned: list[tuple[str, str, str | None]] = []
+        self.fail: Exception | None = None
+
+    async def directory(self):
+        return self.known
+
+    async def provision(self, provider, email, name):
+        if self.fail is not None:
+            raise self.fail
+        if provider.managed_in_provider:
+            return None
+        self.provisioned.append((provider.name, email, name))
+        return Provisioned(subject="sub-1", created=True)
+
+
+class Grants(GrantsGateway):
+    def __init__(self) -> None:
+        self.live: dict[str, tuple] = {}
+        self.bound: set[tuple] = set()
+        self.fail_on: int | None = None
+        self.made = 0
+
+    async def grant(self, provider, email, policy_id, scope):
+        self.made += 1
+        if self.fail_on == self.made:
+            raise PermissionError("denied")
+        grant_id = f"g{self.made}"
+        self.live[grant_id] = (provider, email, policy_id, scope)
+        return grant_id
+
+    async def revoke(self, grant_id):
+        self.live.pop(grant_id, None)
+
+    async def bind(self, provider, claim_value, policy_id, scope):
+        self.bound.add((provider, claim_value, policy_id, scope))
+
+    async def unbind(self, provider, claim_value, policy_id, scope):
+        key = (provider, claim_value, policy_id, scope)
+        found = key in self.bound
+        self.bound.discard(key)
+        return found
+
+    async def bindings(self, scopes: Sequence[str]):
+        return [
+            IdpBindingView(p, c, pol.removeprefix("builtin."), s, "grp")
+            for p, c, pol, s in sorted(self.bound)
+            if s in scopes
+        ]
+
+
+class Mailer(InvitationMailer):
+    def __init__(self) -> None:
+        self.sent: list[InvitationMail] = []
+        self.fail = False
+
+    async def send(self, mail):
+        if self.fail:
+            raise RuntimeError("mail is down")
+        self.sent.append(mail)
+        return True
+
+
+class Harness:
+    def __init__(self, *providers: ProviderChoice, default: str | None = None) -> None:
+        self.store, self.grants, self.mailer = Store(), Grants(), Mailer()
+        self.directory = Directories(*(providers or (BUILTIN,)), default=default)
+        self.service = InvitationService(
+            self.store,
+            self.directory,
+            self.grants,
+            self.mailer,
+            sign_in_url=lambda email, provider: (
+                f"https://web/auth/login?email={email}&provider={provider}"
+            ),
+            clock=lambda: NOW,
+        )
+
+    async def invite(self, **overrides):
+        fields = dict(
+            email="Bob@Example.com",
+            name=None,
+            provider=None,
+            organization_id="org-1",
+            org_role="member",
+            workspace_id="ws-1",
+            workspace_role="member",
+            invited_by="usr-alice",
+            inviter_name="Alice",
+            organization_name="Acme",
+            workspace_name="Research",
+        )
+        fields.update(overrides)
+        return await self.service.invite(**fields)
+
+
+@pytest.mark.asyncio
+async def test_an_invitation_grants_provisions_records_and_mails():
+    h = Harness()
+    outcome = await h.invite(name="Bob B")
+    assert outcome.user_created and outcome.sign_in_email_sent and not outcome.renewed
+    invitation = outcome.invitation
+    assert (invitation.email, invitation.provider, invitation.status) == (
+        "bob@example.com",
+        "builtin",
+        "pending",
+    )
+    assert set(h.grants.live.values()) == {
+        ("builtin", "bob@example.com", "builtin.member", "abi:org-1:-"),
+        ("builtin", "bob@example.com", "builtin.member", "abi:org-1:ws-1"),
+    }
+    assert set(invitation.grant_ids) == set(h.grants.live)
+    assert h.directory.provisioned == [("builtin", "bob@example.com", "Bob B")]
+    (mail,) = h.mailer.sent
+    assert (mail.to_email, mail.organization_name, mail.workspace_name) == (
+        "bob@example.com",
+        "Acme",
+        "Research",
+    )
+    assert mail.sign_in_url == "https://web/auth/login?email=bob@example.com&provider=builtin"
+    assert h.store.commits == 1
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_only_invitation_grants_the_workspace_role_only():
+    h = Harness()
+    await h.invite(org_role=None, workspace_role="viewer")
+    assert {(p, s) for _, _, p, s in h.grants.live.values()} == {
+        ("builtin.viewer", "abi:org-1:ws-1")
+    }
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_without_an_organization_sits_in_the_reserved_org():
+    h = Harness()
+    await h.invite(organization_id=None, org_role=None, workspace_role="member")
+    assert {s for *_, s in h.grants.live.values()} == {"abi:_none:ws-1"}
+
+
+@pytest.mark.asyncio
+async def test_an_invitation_names_a_role_somewhere():
+    with pytest.raises(ValueError):
+        await Harness().invite(org_role=None, workspace_role=None)
+    with pytest.raises(ValueError):
+        await Harness().invite(organization_id=None, workspace_id=None)
+
+
+@pytest.mark.asyncio
+async def test_a_provider_whose_people_are_managed_there_gets_grants_only():
+    h = Harness(OKTA)
+    outcome = await h.invite()
+    assert outcome.provider.managed_in_provider and outcome.user_created is False
+    assert h.directory.provisioned == []
+    assert len(h.grants.live) == 2
+    assert h.mailer.sent[0].managed_in_provider is True
+
+
+@pytest.mark.asyncio
+async def test_the_provider_is_the_asked_one_then_the_domains_then_the_default_then_the_only_one():
+    h = Harness(BUILTIN, OKTA, default="builtin")
+    assert (await h.service.choose("a@x.org", "okta", None)).name == "okta"
+    assert (await h.service.choose("a@x.org", None, None)).name == "builtin"
+    h.store.domains["acme.com"] = "okta"
+    assert (await h.service.choose("a@acme.com", None, "org-1")).name == "okta"
+    with pytest.raises(NoProviderError):
+        await h.service.choose("a@x.org", "nope", None)
+    assert (await Harness(OKTA).service.choose("a@x.org", None, None)).name == "okta"
+    with pytest.raises(NoProviderError, match="Name the identity provider"):
+        await Harness(BUILTIN, OKTA).service.choose("a@x.org", None, None)
+    none = Harness()
+    none.directory.known = Directory()
+    with pytest.raises(NoProviderError, match="No identity provider"):
+        await none.service.choose("a@x.org", None, None)
+
+
+@pytest.mark.asyncio
+async def test_when_no_provider_is_configured_nothing_is_made():
+    h = Harness()
+    h.directory.known = Directory()
+    with pytest.raises(NoProviderError, match="No identity provider"):
+        await h.invite()
+    assert h.grants.live == {} and h.store.rows == {}
+
+
+@pytest.mark.asyncio
+async def test_a_refused_grant_takes_back_the_ones_already_made():
+    h = Harness()
+    h.grants.fail_on = 2
+    with pytest.raises(PermissionError):
+        await h.invite()
+    assert h.grants.live == {} and h.store.rows == {} and h.mailer.sent == []
+    assert h.directory.provisioned == []
+
+
+@pytest.mark.asyncio
+async def test_a_provider_that_refuses_to_provision_leaves_no_grant_behind():
+    h = Harness()
+    h.directory.fail = RuntimeError("the provider is down")
+    with pytest.raises(RuntimeError):
+        await h.invite()
+    assert h.grants.live == {} and h.store.rows == {} and h.mailer.sent == []
+
+
+@pytest.mark.asyncio
+async def test_inviting_again_renews_the_invitation_and_replaces_its_grants():
+    h = Harness()
+    first = (await h.invite()).invitation
+    again = await h.invite(workspace_role="admin", invited_by="usr-carol")
+    assert again.renewed and again.invitation.id == first.id
+    assert again.invitation.workspace_role == "admin" and again.invitation.invited_by == "usr-carol"
+    assert {(p, s) for _, _, p, s in h.grants.live.values()} == {
+        ("builtin.member", "abi:org-1:-"),
+        ("builtin.admin", "abi:org-1:ws-1"),
+    }
+    assert set(again.invitation.grant_ids) == set(h.grants.live)
+    assert len(h.store.rows) == 1 and len(h.mailer.sent) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_failed_email_does_not_fail_the_invitation():
+    h = Harness()
+    h.mailer.fail = True
+    outcome = await h.invite()
+    assert outcome.sign_in_email_sent is False
+    assert outcome.invitation.status == "pending" and len(h.grants.live) == 2
+
+
+@pytest.mark.asyncio
+async def test_revoking_withdraws_the_grants_and_only_once():
+    h = Harness()
+    invitation = (await h.invite()).invitation
+    await h.service.revoke(invitation.id)
+    assert h.grants.live == {} and h.store.rows[invitation.id].status == "revoked"
+    assert await h.service.pending(organization_id="org-1") == []
+    with pytest.raises(InvitationNotFoundError):
+        await h.service.revoke(invitation.id)
+    with pytest.raises(InvitationNotFoundError):
+        await h.service.resend(invitation.id)
+    with pytest.raises(InvitationNotFoundError):
+        await h.service.revoke("unknown")
+
+
+@pytest.mark.asyncio
+async def test_resending_mails_the_same_invitation_again():
+    h = Harness()
+    invitation = (await h.invite()).invitation
+    assert await h.service.resend(invitation.id, inviter_name="Alice") is True
+    assert len(h.mailer.sent) == 2 and len(h.grants.live) == 2
+    h.directory.known = Directory()
+    with pytest.raises(NoProviderError):
+        await h.service.resend(invitation.id)
+
+
+@pytest.mark.asyncio
+async def test_a_sign_in_makes_the_memberships_once_and_per_provider():
+    h = Harness(BUILTIN, OKTA, default="builtin")
+    await h.invite()
+    await h.invite(provider="okta")
+    other = await h.service.claim(user_id="u-bob", email="BOB@example.com", provider="builtin")
+    assert [i.provider for i in other] == ["builtin"]
+    assert dict(h.store.memberships[0]) | {} == {
+        "user_id": "u-bob",
+        "organization_id": "org-1",
+        "org_role": "member",
+        "workspace_id": "ws-1",
+        "workspace_role": "member",
+        "now": NOW,
+    }
+    assert await h.service.claim(user_id="u-bob", email="bob@example.com", provider="builtin") == []
+    assert len(h.store.memberships) == 1
+    # The Okta invitation stays for whoever signs in through Okta with that email.
+    assert len(await h.service.pending(organization_id="org-1")) == 1
+    assert await h.service.claim(user_id="u-x", email="eve@example.com", provider="builtin") == []
+
+
+@pytest.mark.asyncio
+async def test_two_sign_ins_race_for_an_invitation_and_one_wins():
+    h = Harness()
+    invitation = (await h.invite()).invitation
+    original = h.store.mark_accepted
+
+    async def lose(invitation_id, *, user_id, now):
+        await original(invitation_id, user_id="someone-else", now=now)
+        return False
+
+    h.store.mark_accepted = lose  # type: ignore[method-assign]
+    assert await h.service.claim(user_id="u-bob", email="bob@example.com", provider="builtin") == []
+    assert (
+        h.store.memberships == [] and h.store.rows[invitation.id].accepted_user_id == "someone-else"
+    )
+
+
+@pytest.mark.asyncio
+async def test_group_bindings_go_to_iam_as_builtin_roles_at_their_scope():
+    h = Harness()
+    await h.service.bind_group(
+        provider="builtin", group=" Data readers ", role="viewer", scope="abi:org-1:ws-1"
+    )
+    assert h.grants.bound == {("builtin", "Data readers", "builtin.viewer", "abi:org-1:ws-1")}
+    found = await h.service.bindings(["abi:org-1:ws-1", "abi:org-1:-"])
+    assert [(b.provider, b.claim_value, b.role) for b in found] == [
+        ("builtin", "Data readers", "viewer")
+    ]
+    assert await h.service.bindings(["abi:org-1:ws-2"]) == []
+    assert await h.service.unbind_group(
+        provider="builtin", group="Data readers", role="viewer", scope="abi:org-1:ws-1"
+    )
+    assert h.grants.bound == set()
+    with pytest.raises(NoProviderError):
+        await h.service.bind_group(provider="nope", group="g", role="viewer", scope="abi:o:w")

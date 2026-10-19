@@ -6,6 +6,7 @@
 import { create } from 'zustand';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from './auth';
+import { classifyInviteAnswer, type InviteAnswer } from '@/lib/invitations';
 
 const getApiBase = () => getApiUrl();
 const normalize = (url?: string | null) =>
@@ -101,9 +102,25 @@ interface OrganizationState {
   
   // Member actions
   fetchMembers: (orgId: string) => Promise<OrganizationMember[]>;
+  // Adds the person as a member, or invites them when they have no account yet
+  // (null: invited, see inviteToOrganization for what to tell the admin).
   inviteMember: (orgId: string, email: string, role: 'admin' | 'member') => Promise<OrganizationMember | null>;
+  inviteToOrganization: (
+    orgId: string,
+    invite: OrganizationInvite,
+  ) => Promise<{ member: OrganizationMember | null; answer: InviteAnswer }>;
   updateMemberRole: (orgId: string, userId: string, role: 'owner' | 'admin' | 'member') => Promise<OrganizationMember | null>;
   removeMember: (orgId: string, userId: string) => Promise<boolean>;
+}
+
+export interface OrganizationInvite {
+  email: string;
+  role: 'admin' | 'member';
+  // The identity provider to invite through (only named when there is a choice).
+  provider?: string;
+  // A workspace of the organization to add them to, with the role they get there.
+  workspaceId?: string;
+  workspaceRole?: 'admin' | 'member' | 'viewer';
 }
 
 export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
@@ -334,11 +351,22 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
   },
 
   inviteMember: async (orgId: string, email: string, role: 'admin' | 'member'): Promise<OrganizationMember | null> => {
+    const { member } = await get().inviteToOrganization(orgId, { email, role });
+    return member;
+  },
+
+  inviteToOrganization: async (orgId: string, invite: OrganizationInvite) => {
     try {
       const response = await authFetch(`/api/organizations/${orgId}/members/invite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, role }),
+        body: JSON.stringify({
+          email: invite.email,
+          role: invite.role,
+          provider: invite.provider,
+          workspace_id: invite.workspaceId,
+          workspace_role: invite.workspaceRole,
+        }),
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
@@ -352,6 +380,13 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
         throw new Error(message);
       }
       const data = await response.json();
+
+      // Someone with no account yet is invited, not added: there is no member
+      // to show until they sign in.
+      const answer = classifyInviteAnswer(data);
+      if (answer.kind === 'invited') {
+        return { member: null, answer };
+      }
 
       const member: OrganizationMember = {
         id: data.id,
@@ -382,7 +417,7 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
         };
       });
 
-      return member;
+      return { member, answer };
     } catch (error) {
       console.error('Failed to invite member:', error);
       throw error;

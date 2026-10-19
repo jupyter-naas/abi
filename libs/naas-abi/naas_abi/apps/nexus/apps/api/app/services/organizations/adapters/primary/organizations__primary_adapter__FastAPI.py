@@ -21,6 +21,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService
 from naas_abi.apps.nexus.apps.api.app.services.invites import runtime as invites_runtime
 from naas_abi.apps.nexus.apps.api.app.services.invites.views import invite_result
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import NoProviderError
+from naas_abi.apps.nexus.apps.api.app.services.invites.service import InvitationService
 from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
     issue_and_send_invite_sign_in,
 )
@@ -787,7 +788,7 @@ async def invite_org_member(
     workspace_service: WorkspaceService = Depends(get_workspace_service_for_org_invite),
     auth_service: AuthService = Depends(get_auth_service),
     email_service: EmailService | None = Depends(_get_email_service),
-    db: AsyncSession = Depends(get_db),
+    invites: InvitationService = Depends(invites_runtime.get_invitation_service),
 ) -> OrganizationMember | dict[str, object]:
     role = await require_org_access(current_user.id, org_id, service)
     if role not in ("owner", "admin"):
@@ -813,7 +814,6 @@ async def invite_org_member(
     # provider makes them exist, IAM holds the roles for their email, and the
     # first sign-in claims them. Without a provider (or for an existing account)
     # the account is made, or found, here as before.
-    invites = invites_runtime.RUNTIME.service(db)
     if await invites.persistence.user_id_by_email(email) is None:
         org = await service.get_organization(org_id)
         workspace = (

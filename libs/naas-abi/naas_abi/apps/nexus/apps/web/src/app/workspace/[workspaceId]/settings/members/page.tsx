@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Shield, User, Crown, Trash2, AlertCircle } from 'lucide-react';
+import { Plus, Shield, User, Crown, Trash2, AlertCircle, Mail } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -9,6 +9,10 @@ import { useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { useConfirm } from '@/components/ui/dialogs';
 import { Input, Select } from '@/components/ui/input';
+import { IdpGroupBindings } from '@/components/invitations/idp-group-bindings';
+import { PendingInvitations } from '@/components/invitations/pending-invitations';
+import { useInviteProviders } from '@/components/invitations/use-invite-providers';
+import { classifyInviteAnswer, inviteSuccessMessage, providerHint } from '@/lib/invitations';
 import {
   SettingsEmpty,
   SettingsLoading,
@@ -64,6 +68,9 @@ export default function MembersPage() {
   const [showInvite, setShowInvite] = useState(false);
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState('');
+  const [inviteNotice, setInviteNotice] = useState('');
+  const [invitationsKey, setInvitationsKey] = useState(0);
+  const providers = useInviteProviders(showInvite);
   const [actionError, setActionError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -126,7 +133,11 @@ export default function MembersPage() {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }),
+          body: JSON.stringify({
+            email: inviteEmail.trim(),
+            role: inviteRole,
+            provider: providers.providerToSend(),
+          }),
         }
       );
 
@@ -134,6 +145,11 @@ export default function MembersPage() {
         throw new Error(await readApiError(response, 'Failed to send invite'));
       }
 
+      // Someone with no account yet is invited, not added: they show in the
+      // pending invitations until they sign in.
+      const answer = classifyInviteAnswer(await response.json().catch(() => null));
+      setInviteNotice(answer.kind === 'invited' ? inviteSuccessMessage(answer) : '');
+      setInvitationsKey((key) => key + 1);
       await refreshMembers();
       setInviteEmail('');
       setInviteRole('member');
@@ -221,6 +237,7 @@ export default function MembersPage() {
           <Button
             onClick={() => {
               setInviteError('');
+              setInviteNotice('');
               setShowInvite(true);
             }}
             disabled={!canManage}
@@ -238,14 +255,28 @@ export default function MembersPage() {
         </SettingsNotice>
       )}
 
+      {inviteNotice && (
+        <SettingsNotice tone="info" icon={<Mail size={14} />}>
+          {inviteNotice}
+        </SettingsNotice>
+      )}
+
       {showInvite && canManage && (
         <SettingsSection
           title="Invite New Member"
           description={
-            <>
-              Creates the account if needed and emails a sign-in code. Same API as{' '}
-              <code>abi workspace members add</code> / <code>POST /api/workspaces/{'{id}'}/members/invite</code>.
-            </>
+            providers.known.enabled ? (
+              <>
+                The person is created at the identity provider if needed, and their role applies
+                when they first sign in with this email. Same API as{' '}
+                <code>abi workspace members add</code> / <code>POST /api/workspaces/{'{id}'}/members/invite</code>.
+              </>
+            ) : (
+              <>
+                Creates the account if needed and emails a sign-in code. Same API as{' '}
+                <code>abi workspace members add</code> / <code>POST /api/workspaces/{'{id}'}/members/invite</code>.
+              </>
+            )
           }
         >
           {inviteError && (
@@ -262,6 +293,20 @@ export default function MembersPage() {
               placeholder="email@example.com"
               className="flex-1"
             />
+            {providers.choosable && (
+              <Select
+                value={providers.picked ?? ''}
+                onChange={(e) => providers.setPicked(e.target.value)}
+                className="sm:w-48"
+                aria-label="Identity provider"
+              >
+                {providers.known.providers.map((p) => (
+                  <option key={p.name} value={p.name}>
+                    {p.display_name}
+                  </option>
+                ))}
+              </Select>
+            )}
             <Select
               value={inviteRole}
               onChange={(e) => setInviteRole(e.target.value as typeof inviteRole)}
@@ -284,6 +329,9 @@ export default function MembersPage() {
               Cancel
             </Button>
           </div>
+          {providers.known.enabled && providerHint(providers.chosen) && (
+            <p className="mt-3 text-xs text-muted-foreground">{providerHint(providers.chosen)}</p>
+          )}
         </SettingsSection>
       )}
 
@@ -392,6 +440,15 @@ export default function MembersPage() {
         </div>
         </div>
       )}
+
+      <PendingInvitations
+        scope="workspaces"
+        id={workspaceId}
+        canManage={canManage}
+        refreshKey={invitationsKey}
+      />
+
+      <IdpGroupBindings scope="workspaces" id={workspaceId} canManage={canManage} />
 
       <SettingsSection title="Role Permissions">
         <div className="grid gap-3 sm:grid-cols-3">

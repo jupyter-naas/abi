@@ -14,6 +14,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
     get_auth_service,
 )
+from naas_abi.apps.nexus.apps.api.app.services.invites import runtime as invites_runtime
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.primary import (
     organizations__primary_adapter__FastAPI as org_api,
 )
@@ -57,6 +58,10 @@ def _client(members: list[OrganizationMemberRecord]) -> TestClient:
     app.dependency_overrides[org_api.get_workspace_service_for_org_invite] = lambda: AsyncMock()
     app.dependency_overrides[get_auth_service] = lambda: auth_service
     app.dependency_overrides[org_api._get_email_service] = lambda: None
+    # The invitee already has an account: the invitation service has nothing to do.
+    app.dependency_overrides[invites_runtime.get_invitation_service] = lambda: SimpleNamespace(
+        persistence=SimpleNamespace(user_id_by_email=AsyncMock(return_value="user-2"))
+    )
     return TestClient(app)
 
 

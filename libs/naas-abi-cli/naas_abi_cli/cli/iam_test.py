@@ -180,3 +180,238 @@ def test_a_project_missing_other_secrets_still_opens_its_iam(tmp_path, monkeypat
         notify()  # no broker login without the secrets: nothing to tell
     finally:
         service.close()
+
+
+# -- invitations and IdP groups --------------------------------------------------------
+
+
+class FakeIdentity:
+    default_provider = "builtin"
+
+    def __init__(self, provisioning: str = "builtin") -> None:
+        self.provisioning = provisioning
+        self.provisioned: list[tuple[str, str, str | None]] = []
+        self.fail: Exception | None = None
+
+    def list_providers(self):
+        from types import SimpleNamespace
+
+        return [SimpleNamespace(name="builtin"), SimpleNamespace(name="okta")]
+
+    def provision_user(self, provider, email, *, name=None):
+        from types import SimpleNamespace
+
+        if self.fail is not None:
+            raise self.fail
+        if self.provisioning == "none":
+            raise NotImplementedError(
+                f"Users of {provider!r} are managed in the identity provider"
+            )
+        self.provisioned.append((provider, email, name))
+        return SimpleNamespace(email=email, created=True, subject="u_1")
+
+
+@pytest.fixture
+def identity():
+    return FakeIdentity()
+
+
+@pytest.fixture
+def engine(service, identity):
+    from types import SimpleNamespace
+
+    closed = []
+    opened = (
+        SimpleNamespace(iam=service, identity=identity),
+        lambda: closed.append(True),
+    )
+    return opened, closed
+
+
+@pytest.fixture
+def run(engine):
+    opened, closed = engine
+
+    def invoke(*args):
+        result = CliRunner().invoke(
+            iam,
+            list(args),
+            obj={"services_opener": lambda: opened},
+            catch_exceptions=False,
+        )
+        result.closed = bool(closed)
+        return result
+
+    return invoke
+
+
+def test_inviting_keeps_the_roles_and_creates_the_person(run, service, identity):
+    result = run(
+        "invite",
+        "Bob@Example.com",
+        "--org",
+        "acme",
+        "--org-role",
+        "member",
+        "--workspace",
+        "ws1",
+        "--role",
+        "viewer",
+        "--name",
+        "Bob",
+    )
+    assert result.exit_code == 0, result.output
+    assert result.closed
+    grants = service.store.list_pending_grants()
+    assert {(g.provider, g.email, g.policy_id, g.scope) for g in grants} == {
+        ("builtin", "bob@example.com", "builtin.member", "abi:acme:-"),
+        ("builtin", "bob@example.com", "builtin.viewer", "abi:acme:ws1"),
+    }
+    assert identity.provisioned == [("builtin", "Bob@Example.com", "Bob")]
+    assert "created" in result.output
+
+
+def test_a_provider_managed_in_the_provider_keeps_the_grants_only(
+    run, service, identity
+):
+    identity.provisioning = "none"
+    result = run(
+        "invite",
+        "bob@example.com",
+        "--workspace",
+        "ws1",
+        "--org",
+        "acme",
+        "--role",
+        "member",
+    )
+    assert result.exit_code == 0, result.output
+    assert len(service.store.list_pending_grants()) == 1
+    assert "managed in the identity provider" in result.output
+
+
+def test_no_provision_keeps_the_grants_only(run, service, identity):
+    result = run(
+        "invite",
+        "bob@example.com",
+        "--org",
+        "acme",
+        "--org-role",
+        "admin",
+        "--no-provision",
+    )
+    assert result.exit_code == 0 and identity.provisioned == []
+    assert len(service.store.list_pending_grants()) == 1
+
+
+def test_a_provider_that_fails_takes_the_grants_back(run, service, identity):
+    identity.fail = RuntimeError("the provider is down")
+    result = CliRunner().invoke(
+        iam,
+        ["invite", "bob@example.com", "--org", "acme", "--org-role", "member"],
+        obj={
+            "services_opener": lambda: run.__closure__ and (_opened(service, identity))
+        },
+    )
+    assert result.exit_code != 0
+    assert service.store.list_pending_grants() == []
+
+
+def _opened(service, identity):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(iam=service, identity=identity), lambda: None
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ("invite", "bob@example.com"),
+        ("invite", "bob@example.com", "--org-role", "member"),
+        ("invite", "bob@example.com", "--role", "member"),
+        ("invite", "bob@example.com", "--workspace", "ws1", "--role", "member"),
+    ],
+)
+def test_an_invitation_must_say_where(run, service, args):
+    assert run(*args).exit_code != 0
+    assert service.store.list_pending_grants() == []
+
+
+def test_a_workspace_iam_knows_needs_no_org(run, service):
+    with as_service_account("engine"):
+        service.put_scope("acme", "ws1")
+    result = run("invite", "bob@example.com", "--workspace", "ws1", "--role", "member")
+    assert result.exit_code == 0, result.output
+    assert [g.scope for g in service.store.list_pending_grants()] == ["abi:acme:ws1"]
+
+
+def test_pending_grants_are_listed_and_revoked(run, service):
+    run(
+        "invite",
+        "bob@example.com",
+        "--org",
+        "acme",
+        "--org-role",
+        "member",
+        "--no-provision",
+    )
+    listed = run("invitation", "list", "--email", "BOB@example.com").output.split("\t")
+    grant_id = listed[0]
+    assert grant_id.startswith("pgr_") and "builtin.member" in listed
+    assert run("invitation", "list", "--provider", "okta").output == ""
+    assert run("invitation", "revoke", grant_id).exit_code == 0
+    assert run("invitation", "revoke", grant_id).exit_code != 0
+    assert service.store.list_pending_grants() == []
+
+
+def test_idp_groups_are_bound_listed_and_unbound(run, service):
+    bound = run(
+        "group",
+        "bind",
+        "acme",
+        "Data readers",
+        "--org",
+        "o",
+        "--workspace",
+        "w",
+        "--role",
+        "viewer",
+    )
+    assert bound.exit_code == 0, bound.output
+    assert bound.output.split("\t")[:2] == ["acme", "Data readers"]
+    assert service.resolve_idp_groups("acme", ["Data readers"])
+    assert "abi:o:w" in run("group", "list").output
+    assert run("group", "list", "--provider", "other").output == ""
+    org_level = run("group", "bind", "acme", "Admins", "--org", "o", "--role", "admin")
+    assert "abi:o:-" in org_level.output
+    assert (
+        run(
+            "group",
+            "unbind",
+            "acme",
+            "Data readers",
+            "--org",
+            "o",
+            "--workspace",
+            "w",
+            "--role",
+            "viewer",
+        ).exit_code
+        == 0
+    )
+    assert (
+        run(
+            "group",
+            "unbind",
+            "acme",
+            "Data readers",
+            "--org",
+            "o",
+            "--workspace",
+            "w",
+            "--role",
+            "viewer",
+        ).exit_code
+        != 0
+    )
+    assert "Data readers" not in run("group", "list").output

@@ -107,6 +107,72 @@ Some directories issue only addresses they control but send no
 to count its `email` as verified. Do not set it on a provider where users can
 choose their own address.
 
+## Invitations and provisioning
+
+An administrator invites someone who has no account yet (Nexus: People →
+Invite, or `abi user invite`; the lower level `abi iam invite`). Three things
+happen, and the provider's `provisioning` setting decides the second:
+
+1. **IAM keeps the roles** as *pending grants*: `builtin.<role>` at the
+   organization's or workspace's scope, for that email on that provider. They
+   attach to whoever first signs in through that provider with the address
+   **verified**, never on another provider and never on an unverified address.
+2. **The person is created at the provider** through the provisioning port:
+
+   | `provisioning` | What an invitation does at the provider |
+   |---|---|
+   | `builtin` | creates the user through the built-in IdP's admin app, over NATS |
+   | `zitadel` | creates a human user through Zitadel's user API; Zitadel mails the verification code |
+   | `keycloak` | creates the user through the realm's admin REST API and asks Keycloak to mail its "verify email, update password" link |
+   | `none` | nothing: the provider's users are managed in the provider |
+
+   With `none` an invitation is a pending grant only, and the Nexus invite
+   dialog says that this provider manages its users: the person's account must
+   exist there before they can sign in with the address.
+3. **Nexus records the invitation** (who, where, as what), emails the invitee a
+   link to sign in, and lists it as pending until they do: it can be resent or
+   revoked (which withdraws the pending grants). At the first sign-in Nexus
+   makes the memberships it stores.
+
+The provider is the one asked for (`provider` in the invite), else the one the
+email's verified organization domain routes to, else `default_provider`, else
+the only provider. A person who already has a Nexus account is added as before.
+Without any provider the invitation creates the account in Nexus, as it did.
+
+`zitadel` and `keycloak` need credentials for the provider's admin API, under
+`admin:` in the provider's entry:
+
+```yaml
+- name: zitadel
+  provisioning: zitadel
+  admin:
+    token: "{{ secret.ZITADEL_ADMIN_PAT }}"   # a machine user's personal access token
+    # url: https://<instance>.zitadel.cloud   # default: the issuer
+    # org_id: "..."                           # default: the token's organization
+- name: keycloak
+  provisioning: keycloak
+  admin:
+    client_id: abi-admin                      # confidential client, service account on
+    client_secret: "{{ secret.KEYCLOAK_ADMIN_SECRET }}"
+    # send_actions: false                     # do not ask Keycloak to mail the link
+```
+
+The Zitadel machine user needs the `ORG_USER_MANAGER` role (or
+`IAM_USER_MANAGER`); the Keycloak client's service account needs the
+`realm-management` roles `manage-users` and `view-users`. Both secrets stay in
+the secret service. The built-in IdP's admin app accepts only the engine's own
+accounts (`api`, `engine`), whatever discovery allowed: a module that holds a
+workspace role cannot administer the IdP.
+
+**Binding IdP groups to roles.** Instead of inviting people one by one, bind a
+group of the provider to a role: in Nexus, the "Identity provider groups"
+section of an organization's or workspace's members page; from a terminal
+`abi iam group bind acme "Data readers" --workspace W --org O --role viewer`.
+IAM creates an ABI group mapped to that claim value and attaches
+`builtin.<role>` to it at the scope, so everyone whose token carries the group
+holds the role there for as long as their session's last verification (10
+minutes at most). Only admins of that organization or workspace bind there.
+
 ## Okta
 
 1. **Applications → Create App Integration**: OIDC, **Web Application**.
@@ -182,6 +248,9 @@ have no custom one. Its tokens cannot carry a custom groups claim.
   client_secret: "{{ secret.ZITADEL_OIDC_CLIENT_SECRET }}"
   groups_claim: urn:zitadel:iam:org:project:roles
   scopes: [openid, email, profile, offline_access]
+  provisioning: zitadel                             # invitations create the user
+  admin:
+    token: "{{ secret.ZITADEL_ADMIN_PAT }}"
 ```
 
 Zitadel is the reference external provider of ABI's identity tests (below).
@@ -206,6 +275,10 @@ Zitadel is the reference external provider of ABI's identity tests (below).
   client_secret: "{{ secret.KEYCLOAK_OIDC_CLIENT_SECRET }}"
   groups_claim: groups
   scopes: [openid, email, profile]
+  provisioning: keycloak                            # invitations create the user
+  admin:
+    client_id: abi-admin
+    client_secret: "{{ secret.KEYCLOAK_ADMIN_SECRET }}"
 ```
 
 ## The built-in IdP
@@ -256,7 +329,7 @@ identity:
   Nexus's `idp_client_origins` (a login page's forms may only redirect to listed
   origins).
 - Users are created by the provider's admin API (over NATS, for the
-  provisioning port) or, in dev, by signing up. A person whose email already
+  provisioning port: an invitation creates the person) or, in dev, by signing up. A person whose email already
   belongs to a Nexus account gets "already belongs to another account": accounts
   are never linked automatically.
 - Out of scope: SAML, brokering other providers, MFA policies. For those, plug in

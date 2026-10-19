@@ -16,6 +16,18 @@ cache at once instead of within a minute.
     abi iam module list --status pending
     abi iam module approve module/acme/people [--document narrowed.yaml]
     abi iam module reject module/acme/people --reason "too wide"
+    abi iam invite bob@example.com --workspace W --org O --role member
+    abi iam invitation list [--email bob@example.com]
+    abi iam invitation revoke pgr_...
+    abi iam group bind acme "Data readers" --workspace W --org O --role viewer
+    abi iam group unbind acme "Data readers" --workspace W --org O --role viewer
+    abi iam group list
+
+``invite`` and ``group`` act through the engine's services (RFC §12.2), like
+``abi chat``: the running engine when there is one, as its own account. They
+work with IAM's own names, an org id and a workspace id (the ones Nexus shows),
+and never send mail: the Nexus invite (``abi user invite``) sends the
+invitation email and keeps the invitation list.
 """
 
 from __future__ import annotations
@@ -154,6 +166,78 @@ def _when(value: datetime | None) -> str:
 def _show_key(value: str) -> None:
     click.echo(value)
     click.echo("Shown once: store it now (as ABI_SERVICE_KEY for a module).", err=True)
+
+
+ServicesOpener = Callable[[], tuple[Any, Callable[[], None]]]
+
+
+def open_engine_services() -> tuple[Any, Callable[[], None]]:
+    """The engine's services (IAM and identity), and how to let go of them: the
+    serving engine's over NATS when one runs, else this process's own."""
+    from naas_abi_core.engine.Engine import Engine
+
+    from naas_abi_cli.cli.engine_role import use_auto_engine_role
+
+    use_auto_engine_role()
+    engine = Engine()
+    engine.load(module_names=[])
+    return engine.services, engine.shutdown
+
+
+@contextmanager
+def _services(ctx: click.Context) -> Iterator[Any]:
+    from naas_abi_core.engine.call_context import as_service_account
+    from naas_abi_core.services.iam.IAMPorts import IAMError
+    from naas_abi_core.services.identity.IdentityPorts import IdentityError
+
+    opener: ServicesOpener = (ctx.obj or {}).get(
+        "services_opener", open_engine_services
+    )
+    services, close = opener()
+    try:
+        with as_service_account("engine"):
+            yield services
+    except NotImplementedError as exc:
+        raise click.ClickException(str(exc)) from exc
+    except (IAMError, IdentityError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    finally:
+        close()
+
+
+def _scope(services: Any, org: str | None, workspace: str | None) -> str:
+    """``abi:<org>:-`` for an org's own roles, ``abi:<org>:<workspace>`` for a
+    workspace's: the org is named, or IAM knows the workspace's."""
+    from naas_abi_core.services.iam.names import scope_name
+
+    if workspace is None:
+        if org is None:
+            raise click.UsageError("Name --org, or --workspace")
+        return scope_name(org, "-")
+    org = org or services.iam.workspace_org(workspace)
+    if org is None:
+        raise click.UsageError(
+            f"IAM does not know workspace {workspace!r}: name its organization with --org"
+        )
+    return scope_name(org, workspace)
+
+
+def _provider(services: Any, named: str | None) -> str:
+    if named:
+        return named
+    known = services.identity.list_providers()
+    if services.identity.default_provider:
+        return str(services.identity.default_provider)
+    if len(known) == 1:
+        return str(known[0].name)
+    raise click.UsageError(
+        "Name the identity provider with --provider ("
+        + (", ".join(p.name for p in known) or "none is configured")
+        + ")"
+    )
+
+
+ROLES = click.Choice(["owner", "admin", "member", "viewer"])
 
 
 @click.group("iam")
@@ -360,6 +444,205 @@ def module_reject(
         click.echo(
             f"rejected module/{rejected.project}/{rejected.module_id} {rejected.sha256[:12]}"
         )
+
+
+# -- invitations ----------------------------------------------------------------------------
+
+
+@iam.command("invite")
+@click.argument("email")
+@click.option("--org", help="The organization id.")
+@click.option("--org-role", type=ROLES, help="The role in the organization itself.")
+@click.option("--workspace", help="The workspace id.")
+@click.option("--role", type=ROLES, help="The role in the workspace.")
+@click.option(
+    "--provider", help="The identity provider; default: the engine's default."
+)
+@click.option("--name", help="Their display name, where the provider needs one.")
+@click.option(
+    "--no-provision",
+    is_flag=True,
+    help="Only keep the pending grants: do not create the person at the provider.",
+)
+@click.pass_context
+def invite(
+    ctx: click.Context,
+    email: str,
+    org: str | None,
+    org_role: str | None,
+    workspace: str | None,
+    role: str | None,
+    provider: str | None,
+    name: str | None,
+    no_provision: bool,
+) -> None:
+    """Invite EMAIL: roles that wait for them, and an account at their provider.
+
+    The roles attach when they first sign in through the provider with this
+    address verified. Where the provider's people are managed in the provider
+    (provisioning: none) only the pending grants are kept.
+    """
+    if not org_role and not role:
+        raise click.UsageError(
+            "Name a role: --org-role (with --org) or --role (with --workspace)"
+        )
+    if org_role and not org:
+        raise click.UsageError("--org-role needs --org")
+    if role and not workspace:
+        raise click.UsageError("--role needs --workspace")
+    with _services(ctx) as services:
+        chosen = _provider(services, provider)
+        scopes: list[tuple[str, str]] = []
+        if org_role:
+            scopes.append((org_role, _scope(services, org, None)))
+        if role:
+            scopes.append((role, _scope(services, org, workspace)))
+        made: list[Any] = []
+        try:
+            for policy, scope in scopes:
+                made.append(
+                    services.iam.create_pending_grant(
+                        chosen, email, f"builtin.{policy}", scope
+                    )
+                )
+        except Exception:
+            for grant in made:
+                services.iam.revoke_pending_grant(grant.id)
+            raise
+        for grant in made:
+            click.echo(f"{grant.id}\t{grant.policy_id}\t{grant.scope}\t{grant.email}")
+        if no_provision:
+            click.echo("not provisioned: --no-provision", err=True)
+            return
+        try:
+            user = services.identity.provision_user(chosen, email, name=name)
+        except NotImplementedError:
+            click.echo(
+                f"Users of {chosen} are managed in the identity provider: they sign in "
+                "with this address once their account exists there.",
+                err=True,
+            )
+            return
+        except Exception:
+            for grant in made:
+                services.iam.revoke_pending_grant(grant.id)
+            raise
+        state = "created" if user.created else "already existed"
+        click.echo(
+            f"{chosen}: {user.email} {state} ({user.subject or 'no id'})", err=True
+        )
+
+
+@iam.group("invitation")
+def invitation() -> None:
+    """The roles that wait for people who have not signed in yet."""
+
+
+@invitation.command("list")
+@click.option("--email")
+@click.option("--provider")
+@click.pass_context
+def invitation_list(
+    ctx: click.Context, email: str | None, provider: str | None
+) -> None:
+    """List pending grants: id, role, scope, provider, email."""
+    with _services(ctx) as services:
+        for grant in services.iam.list_pending_grants(provider=provider, email=email):
+            click.echo(
+                f"{grant.id}\t{grant.policy_id}\t{grant.scope}\t{grant.provider}\t{grant.email}"
+            )
+
+
+@invitation.command("revoke")
+@click.argument("grant_id")
+@click.pass_context
+def invitation_revoke(ctx: click.Context, grant_id: str) -> None:
+    """Withdraw a pending grant."""
+    with _services(ctx) as services:
+        if not services.iam.revoke_pending_grant(grant_id):
+            raise click.ClickException(f"No pending grant {grant_id}")
+        click.echo(f"revoked {grant_id}")
+
+
+# -- IdP groups ---------------------------------------------------------------------------------
+
+
+@iam.group("group")
+def group() -> None:
+    """Bind an identity provider's groups to roles."""
+
+
+def _binding_options(command: Callable[..., Any]) -> Callable[..., Any]:
+    for option in reversed(
+        (
+            click.argument("provider"),
+            click.argument("claim_value", metavar="GROUP"),
+            click.option("--org", help="The organization id."),
+            click.option(
+                "--workspace", help="The workspace id (with --org unless IAM knows it)."
+            ),
+            click.option("--role", type=ROLES, required=True),
+        )
+    ):
+        command = option(command)
+    return command
+
+
+@group.command("bind")
+@_binding_options
+@click.pass_context
+def group_bind(
+    ctx: click.Context,
+    provider: str,
+    claim_value: str,
+    org: str | None,
+    workspace: str | None,
+    role: str,
+) -> None:
+    """Give the members of PROVIDER's group GROUP a role in an org or a workspace.
+
+    Without --workspace the role is the organization's own (--org).
+    """
+    with _services(ctx) as services:
+        binding = services.iam.bind_idp_group(
+            provider, claim_value, f"builtin.{role}", _scope(services, org, workspace)
+        )
+        click.echo(
+            f"{binding.provider}\t{binding.claim_value}\t{binding.policy_id}\t{binding.scope}"
+        )
+
+
+@group.command("unbind")
+@_binding_options
+@click.pass_context
+def group_unbind(
+    ctx: click.Context,
+    provider: str,
+    claim_value: str,
+    org: str | None,
+    workspace: str | None,
+    role: str,
+) -> None:
+    """Take that role from the members of GROUP."""
+    with _services(ctx) as services:
+        removed = services.iam.unbind_idp_group(
+            provider, claim_value, f"builtin.{role}", _scope(services, org, workspace)
+        )
+        if not removed:
+            raise click.ClickException("No such binding")
+        click.echo("unbound")
+
+
+@group.command("list")
+@click.option("--provider")
+@click.pass_context
+def group_list(ctx: click.Context, provider: str | None) -> None:
+    """List bindings: provider, group, role, scope."""
+    with _services(ctx) as services:
+        for binding in services.iam.list_idp_bindings(provider=provider):
+            click.echo(
+                f"{binding.provider}\t{binding.claim_value}\t{binding.policy_id}\t{binding.scope}"
+            )
 
 
 # -- abi dev up ---------------------------------------------------------------------------

@@ -1,10 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Shield, Crown, UserCircle, Trash2, AlertCircle } from 'lucide-react';
+import { Plus, Shield, Crown, UserCircle, Trash2, AlertCircle, Mail } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useOrganizationStore } from '@/stores/organization';
+import { PendingInvitations } from '@/components/invitations/pending-invitations';
+import { IdpGroupBindings } from '@/components/invitations/idp-group-bindings';
+import { useInviteProviders } from '@/components/invitations/use-invite-providers';
+import { inviteSuccessMessage, providerHint } from '@/lib/invitations';
 
 export default function OrgUsersPage() {
   const authUser = useAuthStore((s) => s.user);
@@ -12,7 +16,7 @@ export default function OrgUsersPage() {
     organizations,
     fetchOrganizations,
     fetchMembers,
-    inviteMember,
+    inviteToOrganization,
     removeMember,
     membersCache,
     membersLoading,
@@ -28,6 +32,9 @@ export default function OrgUsersPage() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'admin' | 'member'>('member');
   const [inviteError, setInviteError] = useState('');
+  const [inviteNotice, setInviteNotice] = useState('');
+  const [invitationsKey, setInvitationsKey] = useState(0);
+  const providers = useInviteProviders(showInviteModal);
   const [inviteLoading, setInviteLoading] = useState(false);
 
   useEffect(() => {
@@ -47,7 +54,17 @@ export default function OrgUsersPage() {
     setInviteLoading(true);
 
     try {
-      await inviteMember(org.id, inviteEmail.trim(), inviteRole);
+      const { answer } = await inviteToOrganization(org.id, {
+        email: inviteEmail.trim(),
+        role: inviteRole,
+        provider: providers.providerToSend(),
+      });
+      if (answer.kind === 'invited') {
+        setInviteNotice(inviteSuccessMessage(answer));
+        setInvitationsKey((key) => key + 1);
+      } else {
+        setInviteNotice('');
+      }
       setShowInviteModal(false);
       setInviteEmail('');
       setInviteRole('member');
@@ -91,7 +108,10 @@ export default function OrgUsersPage() {
           </p>
         </div>
         <button
-          onClick={() => setShowInviteModal(true)}
+          onClick={() => {
+            setInviteNotice('');
+            setShowInviteModal(true);
+          }}
           disabled={!canManage}
           title={
             canManage
@@ -104,6 +124,13 @@ export default function OrgUsersPage() {
           Add User
         </button>
       </div>
+
+      {inviteNotice && (
+        <div className="flex items-start gap-2 rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
+          <Mail size={16} className="mt-0.5 shrink-0" />
+          <span>{inviteNotice}</span>
+        </div>
+      )}
 
       <div className="rounded-xl border bg-card">
         <div className="border-b px-4 py-3">
@@ -176,12 +203,23 @@ export default function OrgUsersPage() {
         )}
       </div>
 
+      <PendingInvitations
+        scope="organizations"
+        id={org.id}
+        canManage={canManage}
+        refreshKey={invitationsKey}
+      />
+
+      <IdpGroupBindings scope="organizations" id={org.id} canManage={canManage} />
+
       {showInviteModal && canManage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-lg">
             <h3 className="text-lg font-semibold mb-2">Add User</h3>
             <p className="mb-4 text-xs text-muted-foreground">
-              Creates the account if needed and emails a sign-in code. Same API as{' '}
+              {providers.known.enabled
+                ? 'The identity provider creates the account if needed; the role applies when they first sign in with this email. Same API as'
+                : 'Creates the account if needed and emails a sign-in code. Same API as'}{' '}
               <code>POST /api/organizations/{'{id}'}/members/invite</code>.
             </p>
 
@@ -203,6 +241,26 @@ export default function OrgUsersPage() {
                   className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/30"
                 />
               </div>
+
+              {providers.choosable && (
+                <div>
+                  <label className="block text-sm font-medium mb-2">Identity provider</label>
+                  <select
+                    value={providers.picked ?? ''}
+                    onChange={(e) => providers.setPicked(e.target.value)}
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/30"
+                  >
+                    {providers.known.providers.map((p) => (
+                      <option key={p.name} value={p.name}>
+                        {p.display_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {providers.known.enabled && providerHint(providers.chosen) && (
+                <p className="text-xs text-muted-foreground">{providerHint(providers.chosen)}</p>
+              )}
 
               <div>
                 <label className="block text-sm font-medium mb-2">Role</label>

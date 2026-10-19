@@ -71,8 +71,7 @@ idp_groups_router = APIRouter()
 ADMIN_ROLES = ("owner", "admin")
 
 
-def get_invitations(db: AsyncSession = Depends(get_db)) -> InvitationService:
-    return runtime.RUNTIME.service(db)
+get_invitations = runtime.get_invitation_service
 
 
 def organizations(db: AsyncSession) -> OrganizationService:

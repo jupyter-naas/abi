@@ -28,6 +28,7 @@ from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService
 from naas_abi.apps.nexus.apps.api.app.services.invites import runtime as invites_runtime
 from naas_abi.apps.nexus.apps.api.app.services.invites.views import invite_result
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import NoProviderError
+from naas_abi.apps.nexus.apps.api.app.services.invites.service import InvitationService
 from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
     issue_and_send_invite_sign_in,
 )
@@ -473,6 +474,7 @@ async def invite_workspace_member(
     service: WorkspaceService = Depends(get_workspace_service),
     auth_service: AuthService = Depends(get_auth_service),
     email_service: EmailService | None = Depends(_get_email_service),
+    invites: InvitationService = Depends(invites_runtime.get_invitation_service),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, object]:
     role = await get_workspace_role(current_user.id, workspace_id)
@@ -488,7 +490,6 @@ async def invite_workspace_member(
 
     # Someone with no account yet is invited through an identity provider (see
     # the organization invite); otherwise the account is made, or found, here.
-    invites = invites_runtime.RUNTIME.service(db)
     if await invites.persistence.user_id_by_email(email) is None:
         workspace = await service.get_workspace(workspace_id)
         organization = (
