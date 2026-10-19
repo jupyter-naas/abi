@@ -17,6 +17,7 @@ from nats.aio.subscription import Subscription
 from nats.js.errors import BadRequestError, NotFoundError
 
 from naas_abi_sdk import claim_check
+from naas_abi_sdk.broker_flush import flush_to_broker
 from naas_abi_sdk.streams import REFUSED, not_created
 from naas_abi_sdk.transport import Transport
 
@@ -86,7 +87,7 @@ class BusClient:
 
         async def send():
             await nc.publish(self.subject(topic, routing_key), body, headers=headers)
-            await nc.flush()
+            await flush_to_broker(nc)
 
         await asyncio.wait_for(send(), self._transport.timeout)
 
@@ -101,7 +102,7 @@ class BusClient:
         async def subscribe():
             nc = await self._transport.connect()
             sub = await nc.subscribe(self.subject(topic, routing_key))
-            await nc.flush()
+            await flush_to_broker(nc)
             return ClaimCheckedSubscription(nc, sub)
 
         return await asyncio.wait_for(subscribe(), self._transport.timeout)

@@ -263,8 +263,9 @@ class TransferHost(SessionHost):
         self.subscriptions.clear()
         if subscribed and self.nc is not None:
             # Once stop returns the broker has dropped the subjects: a request
-            # finds no responder, never a host that no longer answers. Bounded,
-            # so a reconnecting connection cannot eat the shutdown's grace.
+            # finds no responder, never a host that no longer answers, unless
+            # the broker did not answer within STOP_FLUSH_SECONDS (a
+            # reconnecting connection must not eat the shutdown's grace).
             with contextlib.suppress(NATSError, asyncio.TimeoutError):
                 await flush_to_broker(self.nc, timeout=STOP_FLUSH_SECONDS)
         self.shared_subscriptions.clear()

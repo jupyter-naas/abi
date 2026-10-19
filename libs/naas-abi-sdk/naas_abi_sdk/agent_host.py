@@ -21,6 +21,7 @@ from naas_abi_proto.discovery.v1 import discovery_pb2 as discovery_pb
 
 from naas_abi_sdk import overflow
 from naas_abi_sdk.agent import TERMINAL, agent_subject
+from naas_abi_sdk.broker_flush import flush_to_broker
 from naas_abi_sdk.concurrency import DEFAULT_LIMIT, ConcurrentCalls
 from naas_abi_sdk.messages import reply
 from naas_abi_sdk.services.errors import DocumentNotFound, VersionConflict
@@ -193,7 +194,7 @@ class AgentHost:
                             ),
                         )
                     )
-            await nc.flush()
+            await flush_to_broker(nc)
         except BaseException:
             for sub in pending:
                 await sub.unsubscribe()

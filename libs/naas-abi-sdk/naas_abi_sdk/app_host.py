@@ -41,6 +41,7 @@ from naas_abi_sdk.app_streams import (
     pull_body,
 )
 from naas_abi_sdk.apps import AppDescriptor
+from naas_abi_sdk.broker_flush import flush_to_broker
 from naas_abi_sdk.concurrency import DEFAULT_LIMIT, ConcurrentCalls
 from naas_abi_sdk.messages import reply
 from naas_abi_sdk.transport import RPCError, is_inbox
@@ -218,7 +219,7 @@ class AppHost:
                         cb=self._receiver(name),
                     )
                 )
-            await nc.flush()
+            await flush_to_broker(nc)
         except BaseException:
             await self.close()
             raise

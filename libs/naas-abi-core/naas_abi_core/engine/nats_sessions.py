@@ -13,7 +13,8 @@ deadline passes (``nats.engine.drain_seconds``), then closes what is left. A
 kernel primary (``ServicePrimary``) counts the one-shot calls it has received as
 sessions.
 
-No NATS import: the engine loads this module in every mode.
+No NATS import: the engine loads this module in every mode (``flush_to_broker``
+is the SDK's, which imports nothing from nats-py).
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from typing import Any
 from uuid import uuid4
 
 from naas_abi_core import logger
+from naas_abi_sdk.broker_flush import flush_to_broker
 
 # How often a host looks whether its sessions have finished.
 POLL_SECONDS = 0.05
@@ -67,21 +69,6 @@ async def until(done: Callable[[], bool]) -> None:
         await asyncio.sleep(POLL_SECONDS)
 
 
-async def flush_to_broker(nc: Any, timeout: int = 10) -> None:
-    """Return once the broker has processed what ``nc`` sent so far: its
-    SUBs serve, its UNSUBs stop delivery.
-
-    ``Client.flush`` alone does not promise it: it writes its PING straight
-    to the socket, ahead of the SUBs and UNSUBs still buffered for the
-    flusher task, so the PONG can come back first (seen on nats-server 2.14:
-    a request right after it found no responder, or one that had left).
-    Reaches into nats-py: ``Client._flush_pending``.
-    """
-    # On the socket (bounded: nats-py's own wait has no limit by default)...
-    await asyncio.wait_for(nc._flush_pending(force_flush=True), timeout)
-    await nc.flush(timeout=timeout)  # ...and processed by the broker
-
-
 async def stop_delivery(subscriptions: Iterable[Any]) -> None:
     """End nats-py ``subscriptions`` at the broker, keeping what it delivered.
 
@@ -93,7 +80,7 @@ async def stop_delivery(subscriptions: Iterable[Any]) -> None:
     (reproduced with concurrent requests on nats-server 2.14).
 
     Reaches into nats-py: ``Subscription._conn`` and ``_id``,
-    ``Client._send_unsubscribe`` and ``_flush_pending``.
+    ``Client._send_unsubscribe`` and, in ``flush_to_broker``, ``_flush_pending``.
     """
     connections: dict[int, Any] = {}
     for subscription in subscriptions:

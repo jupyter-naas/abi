@@ -17,6 +17,7 @@ from naas_abi_core.services.discovery.discovery_service import (
 )
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 from naas_abi_sdk import overflow
+from naas_abi_sdk.broker_flush import flush_to_broker
 from naas_abi_sdk.concurrency import ConcurrentCalls
 from naas_abi_sdk.messages import reply
 from nats.aio.client import Client
@@ -64,7 +65,7 @@ class DiscoveryNATS:
                         cb=self.calls.callback(partial(self._handle, operation)),
                     )
                 )
-            await nc.flush()
+            await flush_to_broker(nc)
         except BaseException:
             await self.stop()
             raise

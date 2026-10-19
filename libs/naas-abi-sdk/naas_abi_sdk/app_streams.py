@@ -22,6 +22,7 @@ from naas_abi_proto.app.v1 import app_pb2 as pb
 from nats.errors import NoRespondersError
 from nats.errors import TimeoutError as NATSTimeoutError
 
+from naas_abi_sdk.broker_flush import flush_to_broker
 from naas_abi_sdk.messages import reply
 from naas_abi_sdk.transport import RPCError
 
@@ -101,7 +102,7 @@ class BodySource:
     async def start(self) -> None:
         self._last_pull = asyncio.get_running_loop().time()
         self._subscription = await self.nc.subscribe(self.inbox, cb=self._on_pull)
-        await self.nc.flush()
+        await flush_to_broker(self.nc)
         self._watchdog = asyncio.create_task(self._watch())
 
     async def put(self, data: bytes) -> None:
