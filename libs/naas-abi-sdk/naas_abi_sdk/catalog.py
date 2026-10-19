@@ -96,6 +96,8 @@ OPERATIONS = {
         "register_catalog",
         "token",
         "jwks",
+        "exchange_token",
+        "revoke_tokens",
         "find_service_account",
         "create_key",
         "list_keys",

@@ -9,6 +9,7 @@ import json
 from datetime import datetime
 from typing import Any
 
+from naas_abi_core.engine.nats_auth import InvalidServiceTokenError
 from naas_abi_core.services.iam.catalog import (
     ActionCatalog,
     ActionSpec,
@@ -79,6 +80,8 @@ OPERATIONS = {
     "register_catalog": "RegisterCatalog",
     "token": "Token",
     "jwks": "Jwks",
+    "exchange_token": "ExchangeToken",
+    "revoke_tokens": "RevokeTokens",
     "find_service_account": "FindServiceAccount",
     "create_key": "CreateKey",
     "list_keys": "ListKeys",
@@ -105,7 +108,7 @@ ERRORS: dict[str, type[Exception]] = {
 
 
 def error_code(exc: BaseException) -> str:
-    if isinstance(exc, KeyRefusedError):
+    if isinstance(exc, (KeyRefusedError, InvalidServiceTokenError)):
         return "UNAUTHENTICATED"
     if isinstance(exc, PermissionDeniedError):
         return "PERMISSION_DENIED"
@@ -120,14 +123,20 @@ def error_code(exc: BaseException) -> str:
     return "INTERNAL"
 
 
-def raise_for(error: Any) -> None:
-    """Raise the exception a ``CallError`` stands for."""
+def raise_for(error: Any, *, subject_refusal: bool = False) -> None:
+    """Raise the exception a ``CallError`` stands for.
+
+    ``subject_refusal``: the call exchanged a token, so an ``UNAUTHENTICATED``
+    that is not the key refusal is a subject that failed verification
+    (``InvalidServiceTokenError``), as in process."""
     cls = ERRORS.get(error.code)
     if cls is PermissionDeniedError:
         raise PermissionDeniedError(message=error.message)
     if cls is KeyRefusedError and error.message == "invalid key":
         raise KeyRefusedError()
     if cls is KeyRefusedError:  # a refused token, not a refused key
+        if subject_refusal:
+            raise InvalidServiceTokenError(error.message)
         cls = None
     if cls is not None:
         raise cls(error.message)
@@ -397,6 +406,14 @@ def explanation_from_pb(message: pb.Explanation) -> Explanation:
     )
 
 
+def scope_to_json(scope: Any) -> str | None:
+    return json.dumps(list(scope), sort_keys=True) if scope is not None else None
+
+
+def scope_from_json(text: str | None) -> tuple[dict[str, Any], ...] | None:
+    return tuple(json.loads(text)) if text is not None else None
+
+
 def key_to_pb(record: KeyRecord) -> pb.Key:
     return _stamped(
         pb.Key(
@@ -404,6 +421,9 @@ def key_to_pb(record: KeyRecord) -> pb.Key:
             principal_id=record.principal_id,
             kind=record.kind,
             description=record.description,
+            audience=record.audience or "",
+            resource=record.resource or "",
+            scope_json=scope_to_json(record.scope),
         ),
         created_at=record.created_at,
         expires_at=record.expires_at,
@@ -423,6 +443,9 @@ def key_from_pb(message: pb.Key) -> KeyRecord:
         expires_at=_datetime(message, "expires_at"),
         last_used_at=_datetime(message, "last_used_at"),
         revoked_at=_datetime(message, "revoked_at"),
+        audience=message.audience or None,
+        resource=message.resource or None,
+        scope=scope_from_json(_optional(message, "scope_json")),
     )
 
 

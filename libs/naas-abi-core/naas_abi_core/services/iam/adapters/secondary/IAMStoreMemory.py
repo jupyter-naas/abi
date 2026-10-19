@@ -45,6 +45,7 @@ class IAMStoreMemory(IAMStore):
         self._scopes: dict[tuple[str, str], ScopeRecord] = {}
         self._catalogs: dict[str, ActionCatalog] = {}
         self._keys: dict[str, KeyRecord] = {}
+        self._token_floors: dict[str, datetime] = {}
         self._manifests: dict[tuple[str, str], ManifestRecord] = {}
         self._signing_keys: dict[str, SigningKeyRecord] = {}
         self._revision = 0
@@ -461,6 +462,21 @@ class IAMStoreMemory(IAMStore):
         with self._lock:
             if key_id in self._keys:
                 self._keys[key_id] = replace(self._keys[key_id], last_used_at=at)
+
+    # -- token floors -----------------------------------------------------------------
+
+    def set_token_floor(self, principal_id: str, not_before: datetime) -> None:
+        with self._lock:
+            if principal_id not in self._principals:
+                raise IAMNotFoundError(f"Principal {principal_id} not found")
+            current = self._token_floors.get(principal_id)
+            if current is None or current < not_before:
+                self._write()
+                self._token_floors[principal_id] = not_before
+
+    def token_floors(self) -> dict[str, datetime]:
+        with self._lock:
+            return dict(self._token_floors)
 
     # -- manifests --------------------------------------------------------------------
 

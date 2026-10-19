@@ -40,6 +40,36 @@ ALGORITHM = "ES256"
 MAX_TOKEN_SECONDS = 600
 CLOCK_SKEW_SECONDS = 30
 NATS_AUDIENCE = "abi:nats"
+# A Nexus session: a user after an identity-provider login. The only audience
+# the Nexus API and WebSocket accept.
+SESSION_AUDIENCE = "abi:session"
+# Narrow credentials derived by token exchange (RFC 8693, §9.4), each with its
+# own audience and none of them a session:
+# * agent: a module acting for a user (``act`` is the module's account); also
+#   what a first-party service sends the kernel for the user it serves.
+# * app / preview: opening a remote app or an app-html link, a project preview.
+# * coding: a coding environment's agent, for the user who owns it.
+# * api-key: a personal API key.
+AGENT_AUDIENCE = "abi:delegated:agent"
+APP_AUDIENCE = "abi:delegated:app"
+PREVIEW_AUDIENCE = "abi:delegated:preview"
+CODING_AUDIENCE = "abi:delegated:coding"
+API_KEY_AUDIENCE = "abi:delegated:api-key"
+DELEGATED_AUDIENCES = (
+    AGENT_AUDIENCE,
+    APP_AUDIENCE,
+    PREVIEW_AUDIENCE,
+    CODING_AUDIENCE,
+    API_KEY_AUDIENCE,
+)
+# What token exchange may issue; key exchange issues none of these.
+EXCHANGE_AUDIENCES = (SESSION_AUDIENCE, *DELEGATED_AUDIENCES)
+# What every kernel NATS endpoint accepts: a service's own token, or a module
+# acting for a user.
+KERNEL_AUDIENCES = (NATS_AUDIENCE, AGENT_AUDIENCE)
+# The longest a chain of renewals of one delegation lives (``abi_since``): a
+# run outlives its ten-minute token by renewing it, up to this.
+MAX_DELEGATION_SECONDS = 8 * 3600
 # A token addressed to one module host (an agent, a model, an app, a job's
 # host), which forwards it to discovery to learn who called. Its audience names
 # the host: ``abi:host:<host's subject token>`` (the ``<sa>`` of the subjects it
@@ -61,6 +91,10 @@ def is_host_audience(audience: str) -> bool:
     return audience.startswith(HOST_AUDIENCE_PREFIX) and bool(
         _RECIPIENT.fullmatch(audience[len(HOST_AUDIENCE_PREFIX) :])
     )
+
+
+def is_delegated_audience(audience: str) -> bool:
+    return audience in DELEGATED_AUDIENCES
 
 
 def issuable_audience(audience: str) -> bool:
@@ -89,6 +123,10 @@ class TokenClaims:
 
     ``name`` (claim ``abi_name``) is a service account's name (``engine``,
     ``module/acme/people``), set by IAM. ``actor`` is ``act.sub``.
+    ``since`` (``abi_since``): when the delegation began, kept across renewals
+    so they stop after ``MAX_DELEGATION_SECONDS``. ``resource`` (``abi_res``):
+    the target the exchange was for, for audit and for the routes that bind a
+    token to one thing.
     """
 
     issuer: str
@@ -103,6 +141,8 @@ class TokenClaims:
     groups: tuple[str, ...] = ()
     scope: tuple[Mapping[str, Any], ...] | None = None
     session: str | None = None
+    since: int | None = None
+    resource: str | None = None
 
     @property
     def lifetime(self) -> int:
@@ -129,6 +169,10 @@ class TokenClaims:
             payload["abi_scope"] = [dict(s) for s in self.scope]
         if self.session is not None:
             payload["sid"] = self.session
+        if self.since is not None:
+            payload["abi_since"] = self.since
+        if self.resource is not None:
+            payload["abi_res"] = self.resource
         return payload
 
     @classmethod
@@ -154,6 +198,11 @@ class TokenClaims:
             if isinstance(value, bool) or not isinstance(value, int):
                 raise InvalidServiceTokenError(f"token has no valid {name!r} claim")
             return value
+
+        def optional_integer(name: str) -> int | None:
+            if payload.get(name) is None:
+                return None
+            return integer(name)
 
         kind = text("kind")
         if kind not in TOKEN_KINDS:
@@ -190,6 +239,8 @@ class TokenClaims:
             groups=tuple(groups),
             scope=tuple(scope) if scope is not None else None,
             session=optional_text("sid"),
+            since=optional_integer("abi_since"),
+            resource=optional_text("abi_res"),
         )
 
 
@@ -300,7 +351,12 @@ class JWKSVerifier(TokenVerifier):
 
     When the JWKS cannot be read, the keys already known keep verifying for
     ``stale_seconds`` past their cache, and the next attempt waits
-    ``retry_seconds``. One thread fetches at a time, outside the lock every
+    ``retry_seconds``.
+
+    ``revoked``: asked about every token that otherwise verifies; true refuses
+    it. The engine's own verifier knows IAM's revocations (a principal's
+    tokens revoked at once, ``IAMService.token_revoked``); one that only has
+    the JWKS cannot, and tokens live ten minutes at most. One thread fetches at a time, outside the lock every
     ``verify`` takes: the others keep verifying with the keys they have, or
     wait for that one fetch when they have none.
     """
@@ -311,6 +367,7 @@ class JWKSVerifier(TokenVerifier):
         *,
         audiences: Iterable[str] = (NATS_AUDIENCE,),
         audience_prefixes: Iterable[str] = (),
+        revoked: Callable[[TokenClaims], bool] | None = None,
         cache_seconds: float = 300.0,
         refetch_seconds: float = 30.0,
         retry_seconds: float = 5.0,
@@ -320,6 +377,7 @@ class JWKSVerifier(TokenVerifier):
         self._fetch = fetch
         self.audiences = frozenset(audiences)
         self.audience_prefixes = tuple(audience_prefixes)
+        self._revoked = revoked
         if not self.audiences and not self.audience_prefixes:
             raise ValueError("A verifier accepts at least one audience")
         self._cache_seconds = cache_seconds
@@ -343,6 +401,7 @@ class JWKSVerifier(TokenVerifier):
             self._fetch,
             audiences=audiences,
             audience_prefixes=prefixes,
+            revoked=self._revoked,
             cache_seconds=self._cache_seconds,
             refetch_seconds=self._refetch_seconds,
             retry_seconds=self._retry_seconds,
@@ -410,6 +469,8 @@ class JWKSVerifier(TokenVerifier):
         # PyJWT checked exp, nbf and iat against the wall clock, with the skew.
         if claims.lifetime > MAX_TOKEN_SECONDS or claims.lifetime <= 0:
             raise InvalidServiceTokenError("token lifetime exceeds ten minutes")
+        if self._revoked is not None and self._revoked(claims):
+            raise InvalidServiceTokenError("token was revoked")
         return claims
 
     def _key(self, kid: str) -> tuple[Any, str, float | None]:
@@ -507,6 +568,7 @@ class IssuedToken:
     expires_at: float
     principal_id: str = ""
     name: str = ""
+    audience: str = ""
 
 
 class TokenSource(ABC):
@@ -582,12 +644,14 @@ class StaticTokenSource(TokenSource):
 
 SERVICE_KEY_PREFIX = "abi_sk_"
 PERSONAL_KEY_PREFIX = "abi_pk_"
+# The link of an app or a preview: a key of a user's, valid for hours.
+GRANT_KEY_PREFIX = "abi_gk_"
 
 
 def parse_key(key: str) -> tuple[str, str, str]:
-    """``(prefix, key id, secret)`` of an ``abi_sk_``/``abi_pk_`` key;
+    """``(prefix, key id, secret)`` of an ``abi_sk_``/``abi_pk_``/``abi_gk_`` key;
     ``ValueError`` when it is not one."""
-    for prefix in (SERVICE_KEY_PREFIX, PERSONAL_KEY_PREFIX):
+    for prefix in (SERVICE_KEY_PREFIX, PERSONAL_KEY_PREFIX, GRANT_KEY_PREFIX):
         if key.startswith(prefix):
             key_id, sep, secret = key[len(prefix) :].partition("_")
             if (
@@ -598,7 +662,7 @@ def parse_key(key: str) -> tuple[str, str, str]:
                 and secret
             ):
                 return prefix, key_id, secret
-    raise ValueError("not an ABI key (abi_sk_<key id>_<secret>)")
+    raise ValueError("not an ABI key (abi_<sk|pk|gk>_<key id>_<secret>)")
 
 
 def epoch(value: datetime) -> int:

@@ -11,6 +11,7 @@ from naas_abi_core.engine.nats_auth import (
     RenewingTokenSource,
     SigningKey,
     TokenClaims,
+    is_delegated_audience,
     parse_key,
     sign_token,
 )
@@ -51,6 +52,8 @@ def test_round_trip_keeps_every_claim(key):
         groups=("grp_01jabcdefghjkmnpqrstvwxyz0",),
         scope=({"effect": "Allow", "actions": ["a:B"], "resources": ["*"]},),
         session="s1",
+        since=1_700_000_000,
+        resource="abi:-:-:discovery:module/p/acme.people",
     )
     verified = verifier_for(key).verify(sign_token(key, original))
     assert verified == original
@@ -287,6 +290,8 @@ def test_parse_key():
         "abcdefghijklmnop",
         "c2VjcmV0_-x",
     )
+    assert parse_key("abi_pk_abcdefghijklmnop_c2VjcmV0")[0] == "abi_pk_"
+    assert parse_key("abi_gk_abcdefghijklmnop_c2VjcmV0")[0] == "abi_gk_"
     for bad in (
         "",
         "abi_sk_short_x",
@@ -295,3 +300,49 @@ def test_parse_key():
     ):
         with pytest.raises(ValueError):
             parse_key(bad)
+
+
+def test_delegated_audiences_are_a_closed_family():
+    from naas_abi_core.engine import nats_auth
+
+    assert nats_auth.SESSION_AUDIENCE == "abi:session"
+    assert set(nats_auth.DELEGATED_AUDIENCES) == {
+        "abi:delegated:agent",
+        "abi:delegated:app",
+        "abi:delegated:preview",
+        "abi:delegated:coding",
+        "abi:delegated:api-key",
+    }
+    assert all(is_delegated_audience(a) for a in nats_auth.DELEGATED_AUDIENCES)
+    assert not is_delegated_audience("abi:session")
+    assert not is_delegated_audience("abi:delegated:other")
+    assert not is_delegated_audience("abi:nats")
+    # Key exchange never mints them: they come from token exchange only.
+    assert not nats_auth.issuable_audience("abi:session")
+    assert not any(
+        nats_auth.issuable_audience(a) for a in nats_auth.DELEGATED_AUDIENCES
+    )
+    # Kernel services accept service tokens and agent delegations, nothing else.
+    assert nats_auth.KERNEL_AUDIENCES == ("abi:nats", "abi:delegated:agent")
+
+
+def test_a_revoked_token_is_refused(key):
+    token = sign_token(key, claims(audience="abi:nats", token_id="gone"))
+    revoked = verifier_for(key, revoked=lambda c: c.token_id == "gone")
+    with pytest.raises(InvalidServiceTokenError, match="revoked"):
+        revoked.verify(token)
+    # The check survives for_audiences: a narrower verifier is no escape.
+    with pytest.raises(InvalidServiceTokenError, match="revoked"):
+        revoked.for_audiences(("abi:nats",)).verify(token)
+    other = sign_token(key, claims(token_id="fine"))
+    assert revoked.verify(other).token_id == "fine"
+
+
+def test_a_stored_call_is_checked_for_revocation_too(key):
+    # ``at``: a job trigger is checked as of its stored time, and still asked
+    # whether the credential was revoked since.
+    token = sign_token(key, claims())
+    seen = []
+    verifier = verifier_for(key, revoked=lambda c: seen.append(c.issued_at) or False)
+    verifier.verify(token, at=time.time())
+    assert len(seen) == 1

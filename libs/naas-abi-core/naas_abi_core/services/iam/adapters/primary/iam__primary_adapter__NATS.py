@@ -37,6 +37,11 @@ from naas_abi_core.engine.nats_rpc import (
 from naas_abi_core.engine.nats_sessions import ServicePrimary
 from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.services.iam.adapters import iam_nats_codec as codec
+from naas_abi_core.services.iam.IAMPorts import (
+    GRANT_TYPE_TOKEN_EXCHANGE,
+    TOKEN_TYPE_JWT,
+    TokenExchange,
+)
 from naas_abi_core.services.iam.IAMService import IAMService
 from naas_abi_proto.common.v1 import common_pb2
 from naas_abi_proto.iam.v1 import iam_pb2 as pb
@@ -399,6 +404,40 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
             name=issued.name,
         )
 
+    def _call_exchange_token(
+        self, req: pb.ExchangeTokenRequest
+    ) -> pb.ExchangeTokenResponse:
+        import time
+
+        if req.grant_type and req.grant_type != GRANT_TYPE_TOKEN_EXCHANGE:
+            raise ValueError(f"grant_type must be {GRANT_TYPE_TOKEN_EXCHANGE}")
+        issued = self._iam.exchange_token(
+            TokenExchange(
+                subject_token=req.subject_token,
+                subject_token_type=req.subject_token_type,
+                audience=req.audience,
+                resource=req.resource or None,
+                scope=codec.scope_from_json(_opt(req, "scope_json")),
+                groups=tuple(req.groups),
+                session_id=req.session_id or None,
+                ttl_seconds=req.ttl_seconds or None,
+            )
+        )
+        return pb.ExchangeTokenResponse(
+            access_token=issued.token,
+            issued_token_type=TOKEN_TYPE_JWT,
+            token_type="Bearer",
+            expires_in=max(0, int(issued.expires_at - time.time())),
+            audience=issued.audience,
+            principal_id=issued.principal_id,
+        )
+
+    def _call_revoke_tokens(
+        self, req: pb.RevokeTokensRequest
+    ) -> pb.RevokeTokensResponse:
+        self._iam.revoke_tokens(req.principal_id, include_keys=req.include_keys)
+        return pb.RevokeTokensResponse()
+
     def _call_jwks(self, req: pb.JwksRequest) -> pb.JwksResponse:
         return pb.JwksResponse(jwks_json=json.dumps(self._iam.jwks(), sort_keys=True))
 
@@ -417,7 +456,13 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
             else None
         )
         created = self._iam.create_key(
-            req.principal_id, description=req.description, expires_at=expires_at
+            req.principal_id,
+            description=req.description,
+            expires_at=expires_at,
+            kind=req.kind or None,  # type: ignore[arg-type]
+            audience=req.audience or None,
+            resource=req.resource or None,
+            scope=codec.scope_from_json(_opt(req, "scope_json")),
         )
         return pb.CreateKeyResponse(
             key=codec.key_to_pb(created.record), value=created.value

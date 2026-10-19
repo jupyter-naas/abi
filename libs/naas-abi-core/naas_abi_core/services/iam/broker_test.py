@@ -406,6 +406,7 @@ def test_no_account_is_offered_an_iam_mutation_without_its_action():
         "detach_policy",
         "create_key",
         "revoke_key",
+        "revoke_tokens",
         "approve_manifest",
         "reject_manifest",
         "create_policy",

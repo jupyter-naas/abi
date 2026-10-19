@@ -176,6 +176,29 @@ keys = Table(
     Column("revoked_at", DateTime(timezone=True)),
 )
 
+# What narrows a personal or grant key (RFC §9.3, §9.4). A table of its own, so
+# an install that already has ``iam_keys`` needs no migration.
+key_narrowing = Table(
+    "iam_key_narrowing",
+    metadata,
+    Column("key_id", String(32), ForeignKey("iam_keys.key_id"), primary_key=True),
+    Column("audience", Text),
+    Column("resource", Text),
+    # JSON: the token's abi_scope. NULL: no narrowing.
+    Column("scope", Text),
+)
+
+# Tokens of a principal issued at or before the floor are revoked (§2: revoke
+# all of a user's tokens, delegated ones included).
+token_floors = Table(
+    "iam_token_floors",
+    metadata,
+    Column(
+        "principal_id", String(64), ForeignKey("iam_principals.id"), primary_key=True
+    ),
+    Column("not_before", DateTime(timezone=True), nullable=False),
+)
+
 manifests = Table(
     "iam_manifests",
     metadata,
@@ -287,6 +310,7 @@ def _attachment(row: Row) -> Attachment:
 
 
 def _key(row: Row) -> KeyRecord:
+    scope = json.loads(row.scope) if row.scope is not None else None
     return KeyRecord(
         key_id=row.key_id,
         principal_id=row.principal_id,
@@ -297,6 +321,9 @@ def _key(row: Row) -> KeyRecord:
         expires_at=_aware(row.expires_at),
         last_used_at=_aware(row.last_used_at),
         revoked_at=_aware(row.revoked_at),
+        audience=row.audience,
+        resource=row.resource,
+        scope=tuple(scope) if scope is not None else None,
     )
 
 
@@ -880,17 +907,41 @@ class IAMStoreSQL(IAMStore):
                     revoked_at=record.revoked_at,
                 )
             )
+            if (record.audience, record.resource, record.scope) != (None, None, None):
+                conn.execute(
+                    insert(key_narrowing).values(
+                        key_id=record.key_id,
+                        audience=record.audience,
+                        resource=record.resource,
+                        scope=json.dumps(list(record.scope), sort_keys=True)
+                        if record.scope is not None
+                        else None,
+                    )
+                )
         return self.get_key(record.key_id)
+
+    @staticmethod
+    def _keys_query() -> Any:
+        return select(
+            keys,
+            key_narrowing.c.audience,
+            key_narrowing.c.resource,
+            key_narrowing.c.scope,
+        ).select_from(
+            keys.outerjoin(key_narrowing, key_narrowing.c.key_id == keys.c.key_id)
+        )
 
     def get_key(self, key_id: str) -> KeyRecord:
         with self._read() as conn:
-            row = conn.execute(select(keys).where(keys.c.key_id == key_id)).first()
+            row = conn.execute(
+                self._keys_query().where(keys.c.key_id == key_id)
+            ).first()
         if row is None:
             raise IAMNotFoundError(f"Key {key_id} not found")
         return _key(row)
 
     def list_keys(self, principal_id: str | None = None) -> list[KeyRecord]:
-        query = select(keys).order_by(keys.c.created_at, keys.c.key_id)
+        query = self._keys_query().order_by(keys.c.created_at, keys.c.key_id)
         if principal_id is not None:
             query = query.where(keys.c.principal_id == principal_id)
         with self._read() as conn:
@@ -912,6 +963,42 @@ class IAMStoreSQL(IAMStore):
             conn.execute(
                 update(keys).where(keys.c.key_id == key_id).values(last_used_at=at)
             )
+
+    # -- token floors -----------------------------------------------------------------
+
+    def set_token_floor(self, principal_id: str, not_before: datetime) -> None:
+        with self._change() as conn:
+            if (
+                conn.execute(
+                    select(principals.c.id).where(principals.c.id == principal_id)
+                ).first()
+                is None
+            ):
+                raise IAMNotFoundError(f"Principal {principal_id} not found")
+            current = conn.execute(
+                select(token_floors.c.not_before).where(
+                    token_floors.c.principal_id == principal_id
+                )
+            ).first()
+            if current is None:
+                conn.execute(
+                    insert(token_floors).values(
+                        principal_id=principal_id, not_before=not_before
+                    )
+                )
+            elif _aware(current.not_before) < not_before:
+                conn.execute(
+                    update(token_floors)
+                    .where(token_floors.c.principal_id == principal_id)
+                    .values(not_before=not_before)
+                )
+
+    def token_floors(self) -> dict[str, datetime]:
+        with self._read() as conn:
+            return {
+                row.principal_id: _aware(row.not_before)  # type: ignore[misc]
+                for row in conn.execute(select(token_floors))
+            }
 
     # -- manifests --------------------------------------------------------------------
 

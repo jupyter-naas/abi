@@ -114,7 +114,11 @@ PLATFORM_TYPES: tuple[_PlatformRow, ...] = (
         ("actor/${principal.id}",),
         self_=("Query", "QueryStream", "Record"),
     ),
-    _PlatformRow("iam", ("principal/${principal.id}",), self_=("GetPrincipal",)),
+    _PlatformRow(
+        "iam",
+        ("principal/${principal.id}",),
+        self_=("GetPrincipal", "RevokeTokens"),
+    ),
     _PlatformRow(
         "iam",
         ("key/${principal.id}/*",),

@@ -9,14 +9,17 @@ client's identity, and the current call's user when that identity may name one
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Mapping
+import time
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
+from naas_abi_core.engine.nats_auth import IssuedToken
 from naas_abi_core.engine.nats_rpc import NatsRPCClient
 from naas_abi_core.services.iam.adapters import iam_nats_codec as codec
 from naas_abi_core.services.iam.catalog import ActionCatalog
 from naas_abi_core.services.iam.IAMPorts import (
+    GRANT_TYPE_TOKEN_EXCHANGE,
     Attachment,
     CreatedKey,
     Decision,
@@ -24,6 +27,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     FilterResult,
     GroupMapping,
     IIAMService,
+    KeyKind,
     KeyRecord,
     ManifestRecord,
     ManifestStatus,
@@ -34,6 +38,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalKind,
     PrincipalRecord,
     ScopeRecord,
+    TokenExchange,
 )
 from naas_abi_core.services.iam.policy import PolicyDocument
 from naas_abi_proto.iam.v1 import iam_pb2 as pb
@@ -48,7 +53,9 @@ def _document_text(document: Any) -> str:
 
 
 class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
-    def _request(self, operation: str, **fields: Any) -> Any:
+    def _request(
+        self, operation: str, *, _subject_refusal: bool = False, **fields: Any
+    ) -> Any:
         name = codec.OPERATIONS[operation]
         request = getattr(pb, f"{name}Request")(context=self._context(), **fields)
         response = self._call(
@@ -57,7 +64,7 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
             getattr(pb, f"{name}Response"),
         )
         if response.HasField("error") and response.error.code:
-            codec.raise_for(response.error)
+            codec.raise_for(response.error, subject_refusal=_subject_refusal)
         return response
 
     # -- decisions ------------------------------------------------------------------
@@ -321,9 +328,19 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
         *,
         description: str = "",
         expires_at: datetime | None = None,
+        kind: KeyKind | None = None,
+        audience: str | None = None,
+        resource: str | None = None,
+        scope: Sequence[Mapping[str, Any]] | None = None,
     ) -> CreatedKey:
         request = pb.CreateKeyRequest(
-            context=self._context(), principal_id=principal_id, description=description
+            context=self._context(),
+            principal_id=principal_id,
+            description=description,
+            kind=kind or "",
+            audience=audience or "",
+            resource=resource or "",
+            scope_json=codec.scope_to_json(scope),
         )
         if expires_at is not None:
             request.expires_at.FromDatetime(expires_at)
@@ -391,6 +408,33 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
             "reject_manifest", principal_id=principal_id, sha256=sha256, reason=reason
         )
         return codec.manifest_from_pb(response.manifest)
+
+    def exchange_token(self, request: TokenExchange) -> IssuedToken:
+        response = self._request(
+            "exchange_token",
+            _subject_refusal=True,
+            grant_type=GRANT_TYPE_TOKEN_EXCHANGE,
+            subject_token=request.subject_token,
+            subject_token_type=request.subject_token_type,
+            audience=request.audience,
+            resource=request.resource or "",
+            scope_json=codec.scope_to_json(request.scope),
+            groups=list(request.groups),
+            session_id=request.session_id or "",
+            ttl_seconds=request.ttl_seconds or 0,
+        )
+        return IssuedToken(
+            response.access_token,
+            time.time() + response.expires_in,
+            response.principal_id,
+            "",
+            response.audience,
+        )
+
+    def revoke_tokens(self, principal_id: str, *, include_keys: bool = False) -> None:
+        self._request(
+            "revoke_tokens", principal_id=principal_id, include_keys=include_keys
+        )
 
     def jwks(self) -> dict[str, Any]:
         return json.loads(self._request("jwks").jwks_json)

@@ -211,6 +211,110 @@ def test_api_calls_on_behalf_of_the_current_user(iam_host):
 
 
 @BROKER
+def test_token_exchange_and_revocation_over_nats(iam_host):
+    from naas_abi_core.engine.nats_auth import (
+        AGENT_AUDIENCE,
+        API_KEY_AUDIENCE,
+        InvalidServiceTokenError,
+    )
+    from naas_abi_core.services.iam.IAMPorts import (
+        TOKEN_TYPE_API_KEY,
+        TOKEN_TYPE_JWT,
+        TOKEN_TYPE_SESSION,
+        KeyRefusedError,
+        TokenExchange,
+    )
+
+    engine = iam_host.client("engine")
+    bob = engine.ensure_user("https://idp.example", "bob")
+    api = iam_host.client("api")
+    issued = api.exchange_token(
+        TokenExchange(
+            subject_token=bob.id,
+            subject_token_type=TOKEN_TYPE_SESSION,
+            audience=AGENT_AUDIENCE,
+            scope=(
+                {
+                    "effect": "Allow",
+                    "actions": ["triple_store:Query"],
+                    "resources": ["*"],
+                },
+            ),
+        )
+    )
+    claims = iam_host.service.verifier().verify(issued.token)
+    assert claims.subject == bob.id and claims.actor is not None
+    assert claims.scope is not None and claims.scope[0]["actions"] == [
+        "triple_store:Query"
+    ]
+    assert issued.audience == AGENT_AUDIENCE and issued.expires_at > 0
+
+    # A refused subject is a refused credential, not a failure of the call.
+    with pytest.raises(KeyRefusedError):
+        api.exchange_token(
+            TokenExchange(
+                subject_token="abi_pk_aaaaaaaaaaaaaaaa_x",
+                subject_token_type=TOKEN_TYPE_API_KEY,
+                audience=API_KEY_AUDIENCE,
+            )
+        )
+    with pytest.raises(InvalidServiceTokenError):
+        api.exchange_token(
+            TokenExchange(
+                subject_token="not.a.jwt",
+                subject_token_type=TOKEN_TYPE_JWT,
+                audience=API_KEY_AUDIENCE,
+            )
+        )
+    # The requester needs the action: a module does not hold it.
+    account = engine.create_service_account("module/acme/people")
+    module = iam_host.client("module/acme/people", subject=account.id)
+    with pytest.raises(PermissionDeniedError):
+        module.exchange_token(
+            TokenExchange(
+                subject_token=bob.id,
+                subject_token_type=TOKEN_TYPE_SESSION,
+                audience=AGENT_AUDIENCE,
+            )
+        )
+
+    engine.revoke_tokens(bob.id)
+    with pytest.raises(InvalidServiceTokenError, match="revoked"):
+        iam_host.service.verifier().verify(issued.token)
+
+
+@BROKER
+def test_a_personal_key_is_created_and_listed_over_nats(iam_host):
+    from datetime import UTC, datetime, timedelta
+
+    from naas_abi_core.engine.nats_auth import CODING_AUDIENCE
+
+    engine = iam_host.client("engine")
+    bob = engine.ensure_user("https://idp.example", "bob")
+    scope = (
+        {"effect": "Allow", "actions": ["triple_store:Query"], "resources": ["*"]},
+    )
+    created = engine.create_key(
+        bob.id,
+        description="env",
+        audience=CODING_AUDIENCE,
+        resource="env-1",
+        scope=scope,
+        expires_at=datetime.now(UTC) + timedelta(days=30),
+    )
+    assert created.value.startswith("abi_pk_")
+    [listed] = engine.list_keys(bob.id)
+    assert (listed.kind, listed.audience, listed.resource) == (
+        "personal",
+        CODING_AUDIENCE,
+        "env-1",
+    )
+    assert listed.scope == scope and listed.secret_hash == ""
+    with pytest.raises(ValueError, match="audience"):
+        engine.create_key(bob.id, audience="abi:session")
+
+
+@BROKER
 def test_invalid_policies_list_every_error(iam_host):
     engine = iam_host.client("engine")
     with pytest.raises(ValueError) as invalid:

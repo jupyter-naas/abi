@@ -16,22 +16,31 @@ import threading
 import time
 from collections import OrderedDict
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, TypeVar
 
 from naas_abi_core import logger
 from naas_abi_core.engine.call_context import (
     CallContext,
+    as_service_account,
     current_call_context,
 )
 from naas_abi_core.engine.call_context import (
     Principal as CallPrincipal,
 )
 from naas_abi_core.engine.nats_auth import (
+    API_KEY_AUDIENCE,
+    APP_AUDIENCE,
+    CODING_AUDIENCE,
+    DELEGATED_AUDIENCES,
+    KERNEL_AUDIENCES,
     NATS_AUDIENCE,
+    PREVIEW_AUDIENCE,
+    SESSION_AUDIENCE,
     IssuedToken,
     JWKSVerifier,
+    TokenClaims,
     host_audience,
     issuable_audience,
 )
@@ -44,6 +53,7 @@ from naas_abi_core.services.iam.catalog import (
     CatalogRegistry,
     removed_actions,
 )
+from naas_abi_core.services.iam.exchange import TokenExchanger
 from naas_abi_core.services.iam.iam_catalog import CATALOG, SEALS
 from naas_abi_core.services.iam.IAMPorts import (
     KIND_PREFIXES,
@@ -59,7 +69,9 @@ from naas_abi_core.services.iam.IAMPorts import (
     IAMSecrets,
     IAMStore,
     IAuthorizer,
+    IdentityAuthenticator,
     IIAMService,
+    KeyKind,
     KeyRecord,
     KeyRefusedError,
     ManifestRecord,
@@ -75,6 +87,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     ScopeRecord,
     Seal,
     Subject,
+    TokenExchange,
     new_id,
 )
 from naas_abi_core.services.iam.names import (
@@ -92,7 +105,7 @@ from naas_abi_core.services.iam.policy import (
     parse_policy_document,
     within_scope,
 )
-from naas_abi_core.services.iam.tokens import TokenIssuer
+from naas_abi_core.services.iam.tokens import TokenIssuer, normalize_scope
 
 # TRANSITIONAL (until subtask 7, #61): a Nexus user is named on a call by its
 # Nexus user id. IAM records it as a user of this issuer, subject = that id.
@@ -236,6 +249,7 @@ class IAMService(IIAMService, PolicySource):
         self._subjects = _TTLCache(cache_ttl_seconds, cache_size)
         self._policies = _TTLCache(cache_ttl_seconds, cache_size)
         self._placements = _TTLCache(cache_ttl_seconds, 2)
+        self._floors = _TTLCache(cache_ttl_seconds, 1)
         self._listeners: list[Callable[[int], None]] = []
         self._seen_revision: int | None = None
         self._seal_key: bytes | None = None
@@ -259,6 +273,17 @@ class IAMService(IIAMService, PolicySource):
             rotation_days=key_rotation_days,
         )
         self.auto_approve = auto_approve
+        # What reads an identity provider's token, for the exchange to a session
+        # (set by the engine once the identity service is loaded).
+        self.identity_authenticator: IdentityAuthenticator | None = None
+        self._exchanger = TokenExchanger(self)
+        # Whatever a token exchange accepts as its subject: a session or any
+        # delegated token, and tokens a revocation cut off are refused.
+        self.exchange_verifier = JWKSVerifier(
+            self.jwks,
+            audiences=(SESSION_AUDIENCE, *DELEGATED_AUDIENCES),
+            revoked=self.token_revoked,
+        )
 
     # =========================================================================
     # Decisions: the caller is the current CallContext.
@@ -322,7 +347,17 @@ class IAMService(IIAMService, PolicySource):
         if principal is None:
             return None
         key = (principal.kind, principal.id, principal.name, principal.groups)
-        return self._subjects.get(key, lambda: self._compute_subject(principal))
+        subject = self._subjects.get(key, lambda: self._compute_subject(principal))
+        issued_at = ctx.token_issued_at
+        if (
+            issued_at is not None
+            and subject.status == "active"
+            and self._revoked_since(principal.id, issued_at)
+        ):
+            # The token was issued before its principal's tokens were revoked:
+            # it is no longer honoured, however long the call that holds it runs.
+            return replace(subject, status="suspended")
+        return subject
 
     def _compute_subject(
         self, principal: CallPrincipal, *, fresh: bool = False
@@ -337,9 +372,13 @@ class IAMService(IIAMService, PolicySource):
             holders.append((record.id, None))
             for group_id in self.store.groups_of(record.id):
                 holders.append((group_id, group_id))
-        # Mapped IdP groups travel in the token's grp claim (§2).
+        # Mapped IdP groups travel in the token's grp claim (§2). Only ids of
+        # groups count: an id of a user or an account must never lend its
+        # policies (the #57 review).
         for group_id in sorted(principal.groups):
-            if all(group_id != held for held, _ in holders):
+            if all(group_id != held for held, _ in holders) and self._is_group(
+                group_id
+            ):
                 holders.append((group_id, group_id))
         active_groups = {
             group_id for _, group_id in holders if group_id and self._active(group_id)
@@ -418,6 +457,24 @@ class IAMService(IIAMService, PolicySource):
             return self.store.get_principal(principal_id).active
         except IAMNotFoundError:
             return False
+
+    def _is_group(self, principal_id: str) -> bool:
+        try:
+            return self.store.get_principal(principal_id).kind == "group"
+        except IAMNotFoundError:
+            return False
+
+    def active_groups(self, group_ids: Iterable[str]) -> tuple[str, ...]:
+        """The ids among ``group_ids`` that are active groups, sorted, once each."""
+        found = set()
+        for group_id in group_ids:
+            try:
+                record = self.store.get_principal(group_id)
+            except IAMNotFoundError:
+                continue
+            if record.kind == "group" and record.active:
+                found.add(record.id)
+        return tuple(sorted(found))
 
     def _resolve(self, principal: CallPrincipal) -> PrincipalRecord | None:
         """The stored principal a call names, if IAM has one."""
@@ -1078,9 +1135,41 @@ class IAMService(IIAMService, PolicySource):
         """The public signing keys and the issuer. Public: no action needed."""
         return self.tokens.jwks()
 
-    def verifier(self, audiences: Iterable[str] = (NATS_AUDIENCE,)) -> JWKSVerifier:
-        """A verifier reading this process's JWKS, with no NATS hop."""
-        return JWKSVerifier(self.jwks, audiences=audiences)
+    def verifier(self, audiences: Iterable[str] = KERNEL_AUDIENCES) -> JWKSVerifier:
+        """A verifier reading this process's JWKS, with no NATS hop. By default
+        it accepts what every kernel endpoint does: a service's own token and a
+        module's delegation for a user. It refuses what was revoked."""
+        return JWKSVerifier(self.jwks, audiences=audiences, revoked=self.token_revoked)
+
+    def token_revoked(self, claims: TokenClaims) -> bool:
+        """Whether ``revoke_tokens`` cut this token off: it was issued at or
+        before the floor of its subject or of its actor."""
+        return any(
+            self._revoked_since(principal_id, claims.issued_at)
+            for principal_id in (claims.subject, claims.actor)
+            if principal_id
+        )
+
+    def _revoked_since(self, principal_id: str, issued_at: int) -> bool:
+        floor = self._token_floors().get(principal_id)
+        return floor is not None and issued_at <= floor.timestamp()
+
+    def _token_floors(self) -> dict[str, datetime]:
+        return self._floors.get("floors", self._load_floors)
+
+    def _load_floors(self) -> dict[str, datetime]:
+        """Floors by the id calls name a principal by: its own, and for a user
+        of the built-in login, the Nexus id its tokens carry (TRANSITIONAL)."""
+        floors: dict[str, datetime] = {}
+        for principal_id, floor in self.store.token_floors().items():
+            floors[principal_id] = floor
+            try:
+                record = self.store.get_principal(principal_id)
+            except IAMNotFoundError:
+                continue
+            if record.issuer == LEGACY_NEXUS_ISSUER and record.subject:
+                floors[record.subject] = max(floor, floors.get(record.subject, floor))
+        return floors
 
     def issue_service_token(
         self, name: str, *, audience: str = NATS_AUDIENCE
@@ -1135,6 +1224,17 @@ class IAMService(IIAMService, PolicySource):
         cached. Records the key's last use, at most once a minute: a storm of
         reconnects or exchanges writes nothing to the store.
         """
+        record, principal = self._authenticate(value, ("service",), "service_account")
+        return principal, record
+
+    def authenticate_user_key(self, value: str) -> tuple[KeyRecord, PrincipalRecord]:
+        """The key and the active user of a valid ``abi_pk_`` or ``abi_gk_`` key.
+        ``KeyRefusedError``, one message, for every refusal."""
+        return self._authenticate(value, ("personal", "grant"), "user")
+
+    def _authenticate(
+        self, value: str, kinds: tuple[KeyKind, ...], owner_kind: PrincipalKind
+    ) -> tuple[KeyRecord, PrincipalRecord]:
         try:
             presented = keys.parse(value)
             record = self.store.get_key(presented.key_id)
@@ -1143,11 +1243,11 @@ class IAMService(IIAMService, PolicySource):
             raise KeyRefusedError() from None
         now = datetime.now(UTC)
         if (
-            presented.kind != "service"
-            or record.kind != "service"
+            presented.kind not in kinds
+            or record.kind != presented.kind
             or not presented.matches(record.secret_hash)
             or not record.usable(now)
-            or principal.kind != "service_account"
+            or principal.kind != owner_kind
             or not principal.active
         ):
             raise KeyRefusedError()
@@ -1156,7 +1256,70 @@ class IAMService(IIAMService, PolicySource):
             or now - record.last_used_at >= _LAST_USED_RESOLUTION
         ):
             self.store.touch_key(record.key_id, now)
-        return principal, record
+        return record, principal
+
+    # =========================================================================
+    # Token exchange (RFC §9.4) and revocation
+    # =========================================================================
+
+    def exchange_token(self, request: TokenExchange) -> IssuedToken:
+        return self._exchanger.exchange(request)
+
+    def revoke_tokens(self, principal_id: str, *, include_keys: bool = False) -> None:
+        """Every token issued so far to or for ``principal_id`` stops working
+        (the next verification refuses it), and so do its links and coding
+        keys, which would otherwise mint new ones. Personal API keys are kept
+        unless ``include_keys``: changing a password is no reason to break a
+        script. Needs ``iam:RevokeTokens``, which every user holds on
+        themselves."""
+        self.require(
+            "iam:RevokeTokens",
+            principal_resource(principal_id),
+            not_found=lambda: IAMNotFoundError(f"Principal {principal_id} not found"),
+        )
+        record = self._user_or_account(principal_id, create=True)
+        now = self.tokens.now()
+        self.store.set_token_floor(record.id, now)
+        for key in self.store.list_keys(record.id):
+            ends = (
+                include_keys
+                or key.kind == "grant"
+                or (key.kind == "personal" and key.audience == CODING_AUDIENCE)
+            )
+            if ends and key.revoked_at is None:
+                self.store.revoke_key(key.key_id, now)
+        self._changed()
+
+    def resolve_user(self, user_id: str) -> PrincipalRecord | None:
+        """The stored user a call names by ``user_id``: its principal id, or for
+        a user of the built-in login, the Nexus id (TRANSITIONAL)."""
+        return self._resolve(CallPrincipal(id=user_id, kind="user"))
+
+    def resolve_principal(self, principal: CallPrincipal) -> PrincipalRecord | None:
+        return self._resolve(principal)
+
+    @staticmethod
+    def user_name(record: PrincipalRecord) -> str:
+        """The id calls name ``record`` by: its principal id, or for a user of
+        the built-in login the Nexus id its sessions carry (TRANSITIONAL)."""
+        if record.issuer == LEGACY_NEXUS_ISSUER and record.subject:
+            return record.subject
+        return record.id
+
+    def _user_or_account(self, principal_id: str, *, create: bool) -> PrincipalRecord:
+        """The principal named ``principal_id``; a built-in login user IAM has
+        no record of yet is recorded (as engine) when ``create``."""
+        try:
+            return self._get_principal(principal_id)
+        except IAMNotFoundError:
+            pass
+        legacy = self.store.find_user(LEGACY_NEXUS_ISSUER, principal_id)
+        if legacy is not None:
+            return legacy
+        if create and not _PRINCIPAL_ID.match(principal_id):
+            with as_service_account("engine"):
+                return self.ensure_user(LEGACY_NEXUS_ISSUER, principal_id)
+        raise IAMNotFoundError(f"Principal {principal_id} not found")
 
     # =========================================================================
     # Job trigger seals (RFC §8.4)
@@ -1236,16 +1399,42 @@ class IAMService(IIAMService, PolicySource):
         *,
         description: str = "",
         expires_at: datetime | None = None,
+        kind: KeyKind | None = None,
+        audience: str | None = None,
+        resource: str | None = None,
+        scope: Sequence[Mapping[str, Any]] | None = None,
     ) -> CreatedKey:
-        """A new key for a service account; its value is in the result only.
+        """A new key; its value is in the result only.
 
-        At most five active keys. ``ci/*`` accounts' keys expire in 90 days
-        unless told otherwise; module keys never do by default.
+        * A service account's key is ``service``: at most five active;
+          ``ci/*`` keys expire in 90 days unless told otherwise, module keys
+          never do.
+        * A user's key is ``personal`` (default): an API key for
+          ``abi:delegated:api-key``, or a coding environment's with
+          ``audience=abi:delegated:coding`` and the environment as ``resource``.
+          It always expires, in a year at most (the default). Five active API
+          keys, fifty coding keys.
+        * ``kind="grant"``: the link of an app or a preview (audience app or
+          preview), always expiring, in 8 hours at most.
+
+        ``scope`` narrows every token the key buys.
         """
-        principal = self._require_key_owner(principal_id)
-        return self._create_key(
-            principal, description=description, expires_at=expires_at, check=True
+        named = principal_id
+        found = self._find_key_owner(principal_id)
+        owner_kind = found.kind if found is not None else self._unrecorded_kind(named)
+        spec = _key_spec(owner_kind, kind, audience, resource, scope, expires_at)
+        new = keys.generate_key(spec.kind)
+        self.require(
+            "iam:CreateKey",
+            key_resource(named, new.key_id),
+            not_found=lambda: IAMNotFoundError(f"Principal {principal_id} not found"),
         )
+        owner = (
+            found if found is not None else self._user_or_account(named, create=True)
+        )
+        if owner.status == "deleted":
+            raise IAMConflictError(f"Principal {principal_id} is deleted")
+        return self._store_key(owner, new, spec, description, expires_at)
 
     def _create_key(
         self,
@@ -1253,26 +1442,32 @@ class IAMService(IIAMService, PolicySource):
         *,
         description: str = "",
         expires_at: datetime | None = None,
-        check: bool = False,
     ) -> CreatedKey:
-        new = keys.generate_key("service")
-        if check:
-            self.require(
-                "iam:CreateKey",
-                key_resource(principal.id, new.key_id),
-                not_found=lambda: IAMNotFoundError(
-                    f"Principal {principal.id} not found"
-                ),
-            )
+        """A service key made by the engine itself (its own, the engine's)."""
+        spec = _key_spec(principal.kind, None, None, None, None, expires_at)
+        return self._store_key(
+            principal, keys.generate_key("service"), spec, description, expires_at
+        )
+
+    def _store_key(
+        self,
+        principal: PrincipalRecord,
+        new: keys.NewKey,
+        spec: _KeySpec,
+        description: str,
+        expires_at: datetime | None,
+    ) -> CreatedKey:
         now = datetime.now(UTC)
-        if expires_at is None and (principal.name or "").startswith("ci/"):
-            expires_at = now + _CI_KEY_EXPIRY
-        if expires_at is not None and expires_at <= now:
-            raise ValueError("A key cannot expire in the past")
-        active = [k for k in self.store.list_keys(principal.id) if k.usable(now)]
-        if len(active) >= keys.MAX_ACTIVE_KEYS:
+        expires_at = spec.expiry(now, expires_at, principal.name)
+        bucket = spec.bucket
+        active = [
+            k
+            for k in self.store.list_keys(principal.id)
+            if k.usable(now) and _bucket(k) == bucket
+        ]
+        if len(active) >= spec.limit:
             raise IAMConflictError(
-                f"{principal.id} holds {keys.MAX_ACTIVE_KEYS} active keys: "
+                f"{principal.id} holds {spec.limit} active keys of this kind: "
                 "revoke one first"
             )
         record = self.store.create_key(
@@ -1280,16 +1475,35 @@ class IAMService(IIAMService, PolicySource):
                 key_id=new.key_id,
                 principal_id=principal.id,
                 secret_hash=new.secret_hash,
+                kind=spec.kind,
                 description=description,
                 created_at=now,
                 expires_at=expires_at,
+                audience=spec.audience,
+                resource=spec.resource,
+                scope=spec.scope,
             )
         )
         self._changed()
         return CreatedKey(record, new.value)
 
+    def _find_key_owner(self, principal_id: str) -> PrincipalRecord | None:
+        try:
+            return self._get_principal(principal_id)
+        except IAMNotFoundError:
+            return self.store.find_user(LEGACY_NEXUS_ISSUER, principal_id)
+
+    @staticmethod
+    def _unrecorded_kind(principal_id: str) -> PrincipalKind | None:
+        """A principal IAM has no record of: only a user of the built-in login
+        (a Nexus id) is recorded on demand."""
+        return None if _PRINCIPAL_ID.match(principal_id) else "user"
+
     def list_keys(self, principal_id: str) -> list[KeyRecord]:
-        found = self.store.list_keys(principal_id)
+        owner = self._find_key_owner(principal_id)
+        if owner is None:
+            return []
+        found = self.store.list_keys(owner.id)
         allowed = set(
             self.filter(
                 "iam:ListKeys", (key_resource(principal_id, k.key_id) for k in found)
@@ -1304,26 +1518,16 @@ class IAMService(IIAMService, PolicySource):
         self.require(
             "iam:RevokeKey", key_resource(principal_id, key_id), not_found=missing
         )
+        owner = self._find_key_owner(principal_id)
         try:
             record = self.store.get_key(key_id)
         except IAMNotFoundError:
             raise missing() from None
-        if record.principal_id != principal_id:
+        if owner is None or record.principal_id != owner.id:
             raise missing()
         revoked = self.store.revoke_key(key_id, datetime.now(UTC))
         self._changed()
         return revoked
-
-    def _require_key_owner(self, principal_id: str) -> PrincipalRecord:
-        try:
-            principal = self._get_principal(principal_id)
-        except IAMNotFoundError:
-            principal = None
-        if principal is None or principal.kind != "service_account":
-            raise IAMNotFoundError(f"Service account {principal_id} not found")
-        if principal.status == "deleted":
-            raise IAMConflictError(f"Principal {principal_id} is deleted")
-        return principal
 
     # =========================================================================
     # Module permission manifests (RFC §8.3)
@@ -1670,6 +1874,7 @@ class IAMService(IIAMService, PolicySource):
         self._subjects.clear()
         self._policies.clear()
         self._placements.clear()
+        self._floors.clear()
 
     def refresh_if_changed(self) -> bool:
         """Drop the caches when the store's revision differs from the last one
@@ -1730,6 +1935,95 @@ class IAMService(IIAMService, PolicySource):
 
     def close(self) -> None:
         self.store.close()
+
+
+# Keys a principal may hold at once, per bucket: a service account's keys, a
+# user's API keys, coding keys (one per environment), grants (one per open link).
+_KEY_LIMITS = {"service": 5, "api-key": 5, "coding": 50, "grant": 200}
+_PERSONAL_YEAR = timedelta(days=365)
+_GRANT_LIFE = timedelta(hours=8)
+
+
+@dataclass(frozen=True)
+class _KeySpec:
+    kind: KeyKind
+    audience: str | None
+    resource: str | None
+    scope: tuple[dict[str, Any], ...] | None
+
+    @property
+    def bucket(self) -> str:
+        if self.kind == "service":
+            return "service"
+        if self.kind == "grant":
+            return "grant"
+        return "coding" if self.audience == CODING_AUDIENCE else "api-key"
+
+    @property
+    def limit(self) -> int:
+        return _KEY_LIMITS[self.bucket]
+
+    def expiry(
+        self, now: datetime, requested: datetime | None, name: str | None
+    ) -> datetime | None:
+        """When the key expires: what was asked for within the kind's limit,
+        else the kind's default (RFC §8.1)."""
+        if requested is not None and requested <= now:
+            raise ValueError("A key cannot expire in the past")
+        if self.kind == "service":
+            if requested is None and (name or "").startswith("ci/"):
+                return now + timedelta(days=90)
+            return requested
+        if self.kind == "grant":
+            if requested is None:
+                raise ValueError("A grant always expires: say when")
+            if requested > now + _GRANT_LIFE:
+                raise ValueError("A grant lasts at most 8 hours")
+            return requested
+        if requested is None:
+            return now + _PERSONAL_YEAR
+        if requested > now + _PERSONAL_YEAR + timedelta(days=1):
+            raise ValueError("A personal key lasts one year at most")
+        return requested
+
+
+def _bucket(key: KeyRecord) -> str:
+    return _KeySpec(key.kind, key.audience, key.resource, key.scope).bucket  # type: ignore[arg-type]
+
+
+def _key_spec(
+    owner_kind: PrincipalKind | None,
+    kind: KeyKind | None,
+    audience: str | None,
+    resource: str | None,
+    scope: Sequence[Mapping[str, Any]] | None,
+    expires_at: datetime | None,
+) -> _KeySpec:
+    """What a key is, checked: the kinds an owner may hold, the audience each
+    reaches and what it names."""
+    if owner_kind == "service_account":
+        if kind not in (None, "service") or audience or resource or scope is not None:
+            raise ValueError(
+                "A service account's key is a service key: no kind, audience, "
+                "resource or scope"
+            )
+        return _KeySpec("service", None, None, None)
+    if owner_kind != "user":
+        raise IAMNotFoundError("Only users and service accounts hold keys")
+    kind = kind or "personal"
+    if kind == "service":
+        raise ValueError("A user holds personal keys and grants: not kind service")
+    narrowed = normalize_scope(scope)
+    if kind == "grant":
+        if audience not in (APP_AUDIENCE, PREVIEW_AUDIENCE):
+            raise ValueError("A grant's audience is app or preview")
+        return _KeySpec("grant", audience, resource, narrowed)
+    audience = audience or API_KEY_AUDIENCE
+    if audience not in (API_KEY_AUDIENCE, CODING_AUDIENCE):
+        raise ValueError("A personal key's audience is api-key or coding")
+    if audience == CODING_AUDIENCE and not resource:
+        raise ValueError("A coding key names its environment: say the resource")
+    return _KeySpec("personal", audience, resource, narrowed)
 
 
 def _named_by_nexus(principal: CallPrincipal, record: PrincipalRecord | None) -> bool:

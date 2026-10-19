@@ -240,6 +240,20 @@ class IamClient:
     async def jwks(self, request: pb.JwksRequest) -> pb.JwksResponse:
         return await self._transport.call("abi.iam.v1.jwks", request, pb.JwksResponse)
 
+    async def exchange_token(
+        self, request: pb.ExchangeTokenRequest
+    ) -> pb.ExchangeTokenResponse:
+        return await self._transport.call(
+            "abi.iam.v1.exchange_token", request, pb.ExchangeTokenResponse
+        )
+
+    async def revoke_tokens(
+        self, request: pb.RevokeTokensRequest
+    ) -> pb.RevokeTokensResponse:
+        return await self._transport.call(
+            "abi.iam.v1.revoke_tokens", request, pb.RevokeTokensResponse
+        )
+
     async def find_service_account(
         self, request: pb.FindServiceAccountRequest
     ) -> pb.FindServiceAccountResponse:

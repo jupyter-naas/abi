@@ -17,7 +17,7 @@ subject of the messages it sends to itself. It answers requests on
 answers there only, ``naas_abi_sdk.messages.reply_allowed``).
 
 * **Always**: IAM's read-only and self-service request subjects
-  (``IAM_ALWAYS``: ``token``, ``jwks``, ``submit_manifest``, ``get_manifest``,
+  (``IAM_ALWAYS``: ``token``, ``exchange_token``, ``jwks``, ``submit_manifest``, ``get_manifest``,
   ``find_service_account``, ``authorize``, ``filter``; never a mutation, never
   ``abi.iam.v1.changed``); the others only for an ``iam:`` action the policy
   allows; the engine's broker
@@ -92,6 +92,7 @@ IAM_OPERATIONS = (
     "delete_scope",
     "detach_policy",
     "ensure_user",
+    "exchange_token",
     "explain",
     "filter",
     "find_service_account",
@@ -117,6 +118,7 @@ IAM_OPERATIONS = (
     "remove_group_member",
     "resume_principal",
     "revoke_key",
+    "revoke_tokens",
     "submit_manifest",
     "suspend_principal",
     "token",
@@ -136,12 +138,15 @@ BROKER_OPERATIONS = (
     "verify_trigger",
 )
 # What every account may ask of IAM: its own key exchange, the public JWKS, its
-# own manifest, and read-only questions about the policy as it stands. IAM
+# own manifest, the renewal of a delegation it holds (``exchange_token``: IAM
+# asks for ``iam:ExchangeToken`` of anyone else, and a token exchange changes
+# nothing stored), and read-only questions about the policy as it stands. IAM
 # decides each, but the broker offers nothing that changes IAM: an account
 # holds the others only by the ``iam:`` actions its policy allows, like any
 # other service's.
 IAM_ALWAYS = (
     "token",
+    "exchange_token",
     "jwks",
     "submit_manifest",
     "get_manifest",

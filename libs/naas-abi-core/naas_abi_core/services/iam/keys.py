@@ -1,7 +1,8 @@
 """Service-account and personal keys (RFC §8.1).
 
-``abi_sk_<key id>_<secret>`` (service accounts) and ``abi_pk_<key id>_<secret>``
-(personal API keys, #62): the key id is 16 lowercase base32 characters, the
+``abi_sk_<key id>_<secret>`` (service accounts), ``abi_pk_<key id>_<secret>``
+(personal API keys) and ``abi_gk_<key id>_<secret>`` (the link grants of apps and
+previews, all of a user's): the key id is 16 lowercase base32 characters, the
 secret 32 random bytes in base64url without padding. IAM stores the key id and
 ``sha256(secret)``; a 256-bit secret needs no slow hash. Comparison is
 constant-time.
@@ -16,6 +17,7 @@ import os
 from dataclasses import dataclass, field
 
 from naas_abi_core.engine.nats_auth import (
+    GRANT_KEY_PREFIX,
     PERSONAL_KEY_PREFIX,
     SERVICE_KEY_PREFIX,
     parse_key,
@@ -25,7 +27,9 @@ from naas_abi_core.services.iam.IAMPorts import KeyKind
 PREFIXES: dict[KeyKind, str] = {
     "service": SERVICE_KEY_PREFIX,
     "personal": PERSONAL_KEY_PREFIX,
+    "grant": GRANT_KEY_PREFIX,
 }
+_KIND_OF_PREFIX: dict[str, KeyKind] = {v: k for k, v in PREFIXES.items()}
 # Active keys a principal may hold at once (RFC §8.1): enough to rotate.
 MAX_ACTIVE_KEYS = 5
 
@@ -60,5 +64,4 @@ class PresentedKey:
 def parse(value: str) -> PresentedKey:
     """``ValueError`` for anything that is not an ABI key."""
     prefix, key_id, secret = parse_key(value)
-    kind: KeyKind = "service" if prefix == SERVICE_KEY_PREFIX else "personal"
-    return PresentedKey(kind, key_id, secret)
+    return PresentedKey(_KIND_OF_PREFIX[prefix], key_id, secret)

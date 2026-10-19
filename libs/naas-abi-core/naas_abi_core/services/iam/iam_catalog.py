@@ -37,7 +37,8 @@ def _action(
 CATALOG = ActionCatalog(
     service=SERVICE,
     # 2: SubmitManifest, and the subjects of keys and manifests (#60).
-    version=2,
+    # 3: RevokeTokens, and the exchange of tokens (#62).
+    version=3,
     resource_types=(
         ResourceType("principal", id="opaque", placement="platform"),
         ResourceType("group", id="opaque", placement="platform"),
@@ -69,7 +70,8 @@ CATALOG = ActionCatalog(
         _action("GetManifest", "read", ("manifest",), "get_manifest"),
         _action("Explain", "read", ("principal",), "explain"),
         _action("Simulate", "read", ("principal",)),
-        _action("ExchangeToken", "write", ("audience",)),
+        _action("ExchangeToken", "write", ("audience",), "exchange_token"),
+        _action("RevokeTokens", "admin", ("principal",), "revoke_tokens"),
         _action("CreateUser", "admin", ("principal",), "ensure_user", creates=True),
         _action(
             "CreateServiceAccount",

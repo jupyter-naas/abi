@@ -197,7 +197,7 @@ class Explanation(_message.Message):
     def __init__(self, allowed: bool = ..., reason: _Optional[str] = ..., action: _Optional[str] = ..., resource: _Optional[str] = ..., statement: _Optional[_Union[DecidingStatement, _Mapping]] = ...) -> None: ...
 
 class Key(_message.Message):
-    __slots__ = ("key_id", "principal_id", "kind", "description", "created_at", "expires_at", "last_used_at", "revoked_at")
+    __slots__ = ("key_id", "principal_id", "kind", "description", "created_at", "expires_at", "last_used_at", "revoked_at", "audience", "resource", "scope_json")
     KEY_ID_FIELD_NUMBER: _ClassVar[int]
     PRINCIPAL_ID_FIELD_NUMBER: _ClassVar[int]
     KIND_FIELD_NUMBER: _ClassVar[int]
@@ -206,6 +206,9 @@ class Key(_message.Message):
     EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
     LAST_USED_AT_FIELD_NUMBER: _ClassVar[int]
     REVOKED_AT_FIELD_NUMBER: _ClassVar[int]
+    AUDIENCE_FIELD_NUMBER: _ClassVar[int]
+    RESOURCE_FIELD_NUMBER: _ClassVar[int]
+    SCOPE_JSON_FIELD_NUMBER: _ClassVar[int]
     key_id: str
     principal_id: str
     kind: str
@@ -214,7 +217,10 @@ class Key(_message.Message):
     expires_at: _timestamp_pb2.Timestamp
     last_used_at: _timestamp_pb2.Timestamp
     revoked_at: _timestamp_pb2.Timestamp
-    def __init__(self, key_id: _Optional[str] = ..., principal_id: _Optional[str] = ..., kind: _Optional[str] = ..., description: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., last_used_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., revoked_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    audience: str
+    resource: str
+    scope_json: str
+    def __init__(self, key_id: _Optional[str] = ..., principal_id: _Optional[str] = ..., kind: _Optional[str] = ..., description: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., last_used_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., revoked_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., audience: _Optional[str] = ..., resource: _Optional[str] = ..., scope_json: _Optional[str] = ...) -> None: ...
 
 class Manifest(_message.Message):
     __slots__ = ("principal_id", "sha256", "module_id", "project", "document_json", "status", "submitted_at", "decided_at", "decided_by", "reason")
@@ -902,6 +908,64 @@ class JwksResponse(_message.Message):
     jwks_json: str
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., jwks_json: _Optional[str] = ...) -> None: ...
 
+class ExchangeTokenRequest(_message.Message):
+    __slots__ = ("context", "grant_type", "subject_token", "subject_token_type", "audience", "resource", "scope_json", "groups", "session_id", "ttl_seconds")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    GRANT_TYPE_FIELD_NUMBER: _ClassVar[int]
+    SUBJECT_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    SUBJECT_TOKEN_TYPE_FIELD_NUMBER: _ClassVar[int]
+    AUDIENCE_FIELD_NUMBER: _ClassVar[int]
+    RESOURCE_FIELD_NUMBER: _ClassVar[int]
+    SCOPE_JSON_FIELD_NUMBER: _ClassVar[int]
+    GROUPS_FIELD_NUMBER: _ClassVar[int]
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    TTL_SECONDS_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    grant_type: str
+    subject_token: str
+    subject_token_type: str
+    audience: str
+    resource: str
+    scope_json: str
+    groups: _containers.RepeatedScalarFieldContainer[str]
+    session_id: str
+    ttl_seconds: int
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., grant_type: _Optional[str] = ..., subject_token: _Optional[str] = ..., subject_token_type: _Optional[str] = ..., audience: _Optional[str] = ..., resource: _Optional[str] = ..., scope_json: _Optional[str] = ..., groups: _Optional[_Iterable[str]] = ..., session_id: _Optional[str] = ..., ttl_seconds: _Optional[int] = ...) -> None: ...
+
+class ExchangeTokenResponse(_message.Message):
+    __slots__ = ("error", "access_token", "issued_token_type", "token_type", "expires_in", "audience", "principal_id")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    ACCESS_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    ISSUED_TOKEN_TYPE_FIELD_NUMBER: _ClassVar[int]
+    TOKEN_TYPE_FIELD_NUMBER: _ClassVar[int]
+    EXPIRES_IN_FIELD_NUMBER: _ClassVar[int]
+    AUDIENCE_FIELD_NUMBER: _ClassVar[int]
+    PRINCIPAL_ID_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    access_token: str
+    issued_token_type: str
+    token_type: str
+    expires_in: int
+    audience: str
+    principal_id: str
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., access_token: _Optional[str] = ..., issued_token_type: _Optional[str] = ..., token_type: _Optional[str] = ..., expires_in: _Optional[int] = ..., audience: _Optional[str] = ..., principal_id: _Optional[str] = ...) -> None: ...
+
+class RevokeTokensRequest(_message.Message):
+    __slots__ = ("context", "principal_id", "include_keys")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    PRINCIPAL_ID_FIELD_NUMBER: _ClassVar[int]
+    INCLUDE_KEYS_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    principal_id: str
+    include_keys: bool
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., principal_id: _Optional[str] = ..., include_keys: bool = ...) -> None: ...
+
+class RevokeTokensResponse(_message.Message):
+    __slots__ = ("error",)
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ...) -> None: ...
+
 class FindServiceAccountRequest(_message.Message):
     __slots__ = ("context", "name")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
@@ -919,16 +983,24 @@ class FindServiceAccountResponse(_message.Message):
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., principal: _Optional[_Union[Principal, _Mapping]] = ...) -> None: ...
 
 class CreateKeyRequest(_message.Message):
-    __slots__ = ("context", "principal_id", "description", "expires_at")
+    __slots__ = ("context", "principal_id", "description", "expires_at", "kind", "audience", "resource", "scope_json")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     PRINCIPAL_ID_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
+    KIND_FIELD_NUMBER: _ClassVar[int]
+    AUDIENCE_FIELD_NUMBER: _ClassVar[int]
+    RESOURCE_FIELD_NUMBER: _ClassVar[int]
+    SCOPE_JSON_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     principal_id: str
     description: str
     expires_at: _timestamp_pb2.Timestamp
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., principal_id: _Optional[str] = ..., description: _Optional[str] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    kind: str
+    audience: str
+    resource: str
+    scope_json: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., principal_id: _Optional[str] = ..., description: _Optional[str] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., kind: _Optional[str] = ..., audience: _Optional[str] = ..., resource: _Optional[str] = ..., scope_json: _Optional[str] = ...) -> None: ...
 
 class CreateKeyResponse(_message.Message):
     __slots__ = ("error", "key", "value")

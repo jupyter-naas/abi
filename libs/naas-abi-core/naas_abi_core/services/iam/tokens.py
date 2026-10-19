@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import base64
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -58,6 +58,57 @@ def issuer_name(install_id: str) -> str:
     return f"urn:abi:engine:{install_id}"
 
 
+# What a token's ``abi_scope`` may hold: a few Allow statements, so a token
+# stays small and cheap to evaluate.
+MAX_SCOPE_STATEMENTS = 32
+MAX_SCOPE_PATTERNS = 64
+MAX_PATTERN_LENGTH = 512
+
+
+def normalize_scope(
+    scope: Sequence[Mapping[str, Any]] | None,
+) -> tuple[dict[str, Any], ...] | None:
+    """``scope`` as the claim stores it, or ``ValueError`` naming what is wrong.
+
+    A list of Allow statements, each with ``actions`` and ``resources`` as
+    non-empty lists of strings (the evaluator reads nothing else, so a stricter
+    shape here is only a friendlier error). ``None`` is no narrowing; ``()``
+    allows nothing.
+    """
+    if scope is None:
+        return None
+    if isinstance(scope, (str, bytes, Mapping)) or not isinstance(scope, Sequence):
+        raise ValueError("scope must be a list of Allow statements")  # noqa: TRY004 - payload validation
+    if len(scope) > MAX_SCOPE_STATEMENTS:
+        raise ValueError(f"scope holds at most {MAX_SCOPE_STATEMENTS} statements")
+    statements: list[dict[str, Any]] = []
+    for index, statement in enumerate(scope):
+        where = f"scope statement {index}"
+        if not isinstance(statement, Mapping):
+            raise ValueError(f"{where} must be an object")  # noqa: TRY004 - payload validation
+        if statement.get("effect") != "Allow":
+            raise ValueError(f"{where}: effect must be Allow (a scope only narrows)")
+        normalized: dict[str, Any] = {"effect": "Allow"}
+        for field in ("actions", "resources"):
+            patterns = statement.get(field)
+            if (
+                not isinstance(patterns, (list, tuple))
+                or not patterns
+                or len(patterns) > MAX_SCOPE_PATTERNS
+                or not all(
+                    isinstance(p, str) and 0 < len(p) <= MAX_PATTERN_LENGTH
+                    for p in patterns
+                )
+            ):
+                raise ValueError(
+                    f"{where}: {field} must be a list of 1 to "
+                    f"{MAX_SCOPE_PATTERNS} patterns"
+                )
+            normalized[field] = list(patterns)
+        statements.append(normalized)
+    return tuple(statements)
+
+
 class TokenIssuer:
     def __init__(
         self,
@@ -82,6 +133,10 @@ class TokenIssuer:
 
     # -- issuing ------------------------------------------------------------------
 
+    def now(self) -> datetime:
+        """The issuer's clock: what ``iat`` and every cap on a token are read from."""
+        return self._clock()
+
     def issue(
         self,
         subject: str,
@@ -90,12 +145,26 @@ class TokenIssuer:
         audience: str,
         name: str | None = None,
         ttl_seconds: int | None = None,
+        not_after: int | None = None,
+        actor: str | None = None,
+        groups: Sequence[str] = (),
+        scope: Sequence[Mapping[str, Any]] | None = None,
+        session: str | None = None,
+        since: int | None = None,
+        resource: str | None = None,
     ) -> IssuedToken:
-        """A signed token for ``subject``; callers decide who may have one."""
+        """A signed token for ``subject``; callers decide who may have one.
+
+        ``not_after``: the token never outlives this (epoch seconds), whatever
+        its ttl: the end of a delegation that may only be renewed so long.
+        """
         ttl = min(ttl_seconds or self._ttl, self._ttl)
         now = self._clock()
         key = self._current_key(now)
         issued_at = epoch(now)
+        expires_at = issued_at + ttl
+        if not_after is not None:
+            expires_at = min(expires_at, not_after)
         claims = TokenClaims(
             issuer=self.issuer,
             subject=subject,
@@ -103,11 +172,21 @@ class TokenIssuer:
             kind=kind,
             token_id=new_token_id(),
             issued_at=issued_at,
-            expires_at=issued_at + ttl,
+            expires_at=expires_at,
             name=name,
+            actor=actor,
+            groups=tuple(groups),
+            scope=tuple(scope) if scope is not None else None,
+            session=session,
+            since=issued_at if since is None else since,
+            resource=resource,
         )
         return IssuedToken(
-            sign_token(key, claims), float(claims.expires_at), subject, name or ""
+            sign_token(key, claims),
+            float(claims.expires_at),
+            subject,
+            name or "",
+            audience,
         )
 
     def jwks(self) -> dict[str, Any]:

@@ -144,7 +144,11 @@ message Explanation {
 }
 
 // A key's record; the key itself is only ever in CreateKeyResponse.value.
-// kind: service (abi_sk_) | personal (abi_pk_).
+// kind: service (abi_sk_) | personal (abi_pk_) | grant (abi_gk_, a link).
+// audience, resource and scope_json: what narrows a personal key or a grant
+// (RFC §9.3): the one audience it is exchanged for, the environment or link
+// target it is bound to, and the token's abi_scope as a JSON list of Allow
+// statements (absent: no narrowing).
 message Key {
   string key_id = 1;
   string principal_id = 2;
@@ -154,6 +158,9 @@ message Key {
   google.protobuf.Timestamp expires_at = 6;
   google.protobuf.Timestamp last_used_at = 7;
   google.protobuf.Timestamp revoked_at = 8;
+  string audience = 9;
+  string resource = 10;
+  optional string scope_json = 11;
 }
 
 // A module's permission manifest version (RFC §8.3); document_json is the
@@ -566,6 +573,53 @@ message JwksResponse {
   string jwks_json = 2;
 }
 
+// abi.iam.v1.exchange_token: RFC 8693 token exchange (RFC §9.4). The requester
+// is the caller (the Nats-Auth-Token); it needs iam:ExchangeToken on the
+// audience. subject_token_type: the RFC's id_token, access_token or jwt, or
+// urn:abi:params:oauth:token-type:api_key (an abi_pk_ or abi_gk_ key) or
+// urn:abi:params:oauth:token-type:session (a signed-in user a first-party
+// service vouches for: the subject token is the user's principal id, groups and
+// session_id what that service saw). audience: abi:session or one of
+// abi:delegated:{agent,app,preview,coding,api-key}. resource: the discovery
+// resource an agent token is for (the acting module is read off it). scope_json:
+// the token's abi_scope. Errors: UNAUTHENTICATED (a refused subject),
+// PERMISSION_DENIED, INVALID_ARGUMENT.
+message ExchangeTokenRequest {
+  abi.common.v1.CallContext context = 1;
+  string grant_type = 2;
+  string subject_token = 3;
+  string subject_token_type = 4;
+  string audience = 5;
+  string resource = 6;
+  optional string scope_json = 7;
+  repeated string groups = 8;
+  string session_id = 9;
+  int32 ttl_seconds = 10;
+}
+message ExchangeTokenResponse {
+  abi.common.v1.CallError error = 1;
+  string access_token = 2;
+  string issued_token_type = 3;
+  string token_type = 4;
+  // Seconds; at most 600.
+  int32 expires_in = 5;
+  string audience = 6;
+  // The user the token names.
+  string principal_id = 7;
+}
+
+// abi.iam.v1.revoke_tokens: every token issued so far to or for the principal
+// stops working, and so do its links and coding keys (its personal API keys
+// too with include_keys). iam:RevokeTokens on the principal.
+message RevokeTokensRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+  bool include_keys = 3;
+}
+message RevokeTokensResponse {
+  abi.common.v1.CallError error = 1;
+}
+
 // -- service accounts and keys (RFC §8.1) ---------------------------------------------
 
 message FindServiceAccountRequest {
@@ -582,6 +636,12 @@ message CreateKeyRequest {
   string principal_id = 2;
   string description = 3;
   google.protobuf.Timestamp expires_at = 4;
+  // A user's keys (RFC §9.3): kind personal (default) or grant, the audience,
+  // the resource it is bound to and its scope. A service account's: none.
+  string kind = 5;
+  string audience = 6;
+  string resource = 7;
+  optional string scope_json = 8;
 }
 message CreateKeyResponse {
   abi.common.v1.CallError error = 1;

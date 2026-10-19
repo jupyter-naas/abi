@@ -18,12 +18,13 @@ from __future__ import annotations
 import os
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal
 
 from naas_abi_core.engine.call_context import CallContext
+from naas_abi_core.engine.nats_auth import IssuedToken
 from naas_abi_core.services.iam.catalog import ActionCatalog, CatalogRegistry
 from naas_abi_core.services.iam.policy import PolicyDocument, Statement
 
@@ -200,15 +201,72 @@ class Page:
     next_after: str | None = None
 
 
-KeyKind = Literal["service", "personal"]
+KeyKind = Literal["service", "personal", "grant"]
+
+# RFC 8693 token exchange (RFC §9.4): the kinds of subject token.
+GRANT_TYPE_TOKEN_EXCHANGE = "urn:ietf:params:oauth:grant-type:token-exchange"
+TOKEN_TYPE_JWT = "urn:ietf:params:oauth:token-type:jwt"  # an engine token
+TOKEN_TYPE_ID_TOKEN = "urn:ietf:params:oauth:token-type:id_token"  # an IdP's
+TOKEN_TYPE_ACCESS_TOKEN = "urn:ietf:params:oauth:token-type:access_token"  # an IdP's
+TOKEN_TYPE_API_KEY = "urn:abi:params:oauth:token-type:api_key"  # abi_pk_, abi_gk_
+# A signed-in user of a first-party service (Nexus), who that service verified:
+# the subject token is the user's principal id.
+TOKEN_TYPE_SESSION = "urn:abi:params:oauth:token-type:session"
+SUBJECT_TOKEN_TYPES = (
+    TOKEN_TYPE_JWT,
+    TOKEN_TYPE_ID_TOKEN,
+    TOKEN_TYPE_ACCESS_TOKEN,
+    TOKEN_TYPE_API_KEY,
+    TOKEN_TYPE_SESSION,
+)
+
+
+@dataclass(frozen=True)
+class TokenExchange:
+    """A token exchange request (RFC §9.4).
+
+    ``resource``: the discovery resource a token for ``abi:delegated:agent`` is
+    for (a module, one of its agents, apps or models); IAM reads the acting
+    module off it. ``scope``: the token's ``abi_scope``, a list of Allow
+    statements; an exchange only narrows. ``groups`` and ``session_id`` are
+    taken from a ``session`` subject only: they are what the first-party
+    service verified at sign-in.
+    """
+
+    subject_token: str
+    subject_token_type: str
+    audience: str
+    resource: str | None = None
+    scope: Sequence[Mapping[str, Any]] | None = None
+    groups: Sequence[str] = ()
+    session_id: str | None = None
+    ttl_seconds: int | None = None
+
+
+class IdentityAuthenticator(ABC):
+    """What IAM asks to read an identity provider's token (``services/identity``
+    implements it): who the token is, as an IAM principal id, and the ids of the
+    IAM groups the provider's groups claim maps to."""
+
+    @abstractmethod
+    def authenticate_token(
+        self, token: str, token_type: str
+    ) -> tuple[str, tuple[str, ...]]:
+        """``(principal id, group ids)``; ``InvalidServiceTokenError`` for a
+        token no provider vouches for."""
 
 
 @dataclass(frozen=True)
 class KeyRecord:
     """A key (RFC §8.1): only ``sha256(secret)`` is stored; the key is shown once.
 
-    ``kind``: ``service`` (``abi_sk_``, a service account's) or ``personal``
-    (``abi_pk_``, a user's, from #62).
+    ``kind``: ``service`` (``abi_sk_``, a service account's), ``personal``
+    (``abi_pk_``, a user's) or ``grant`` (``abi_gk_``, the link of an app or a
+    preview, a user's too). A personal or grant key is exchanged for a token of
+    its ``audience`` only (``abi:delegated:api-key`` by default for a personal
+    key), bound to ``resource`` when it names one, and narrowed by ``scope``
+    (a list of Allow statements, the token's ``abi_scope``; ``None`` is no
+    narrowing, ``()`` allows nothing).
     """
 
     key_id: str
@@ -220,6 +278,9 @@ class KeyRecord:
     expires_at: datetime | None = None
     last_used_at: datetime | None = None
     revoked_at: datetime | None = None
+    audience: str | None = None
+    resource: str | None = None
+    scope: tuple[Mapping[str, Any], ...] | None = None
 
     def usable(self, now: datetime) -> bool:
         """Neither revoked nor expired at ``now``."""
@@ -472,6 +533,18 @@ class IAMStore(ABC):
     @abstractmethod
     def touch_key(self, key_id: str, at: datetime) -> None:
         """Record ``last_used_at``. Bookkeeping, not a grant: the revision stays."""
+
+    # -- token floors ---------------------------------------------------------
+
+    @abstractmethod
+    def set_token_floor(self, principal_id: str, not_before: datetime) -> None:
+        """Every token of ``principal_id`` issued at or before ``not_before`` is
+        revoked. A floor never moves back. ``IAMNotFoundError`` for an unknown
+        principal."""
+
+    @abstractmethod
+    def token_floors(self) -> dict[str, datetime]:
+        """Every principal's floor, by principal id."""
 
     # -- manifests --------------------------------------------------------------
 
@@ -883,7 +956,18 @@ class IIAMService(ABC):
         *,
         description: str = "",
         expires_at: datetime | None = None,
-    ) -> CreatedKey: ...
+        kind: KeyKind | None = None,
+        audience: str | None = None,
+        resource: str | None = None,
+        scope: Sequence[Mapping[str, Any]] | None = None,
+    ) -> CreatedKey:
+        """A new key; its value is in the result only.
+
+        A service account's key is ``service``. A user's is ``personal`` (an
+        API key, or a coding environment's with ``audience`` coding and its
+        ``resource``) or ``grant`` (the link of an app or a preview, at most 8
+        hours). ``scope`` narrows every token the key buys.
+        """
 
     @abstractmethod
     def list_keys(self, principal_id: str) -> list[KeyRecord]: ...
@@ -908,11 +992,22 @@ class IIAMService(ABC):
         if old is None:
             raise IAMNotFoundError(f"Key {key_id} not found")
         description = old.description if description is None else description
+        # A personal key keeps what it is for: its audience, environment and scope.
+        narrowing: dict[str, Any] = {}
+        if old.kind != "service":
+            narrowing = {
+                "kind": old.kind,
+                "audience": old.audience,
+                "resource": old.resource,
+                "scope": old.scope,
+            }
         try:
-            created = self.create_key(principal_id, description=description)
+            created = self.create_key(
+                principal_id, description=description, **narrowing
+            )
         except IAMConflictError:
             self.revoke_key(principal_id, key_id)
-            return self.create_key(principal_id, description=description)
+            return self.create_key(principal_id, description=description, **narrowing)
         self.revoke_key(principal_id, key_id)
         return created
 
@@ -940,6 +1035,19 @@ class IIAMService(ABC):
     def reject_manifest(
         self, principal_id: str, sha256: str | None = None, *, reason: str = ""
     ) -> ManifestRecord: ...
+
+    @abstractmethod
+    def exchange_token(self, request: TokenExchange) -> IssuedToken:
+        """A narrow, engine-signed token for an identity that was already
+        verified (RFC 8693, §9.4). The requester is the current caller, and
+        needs ``iam:ExchangeToken`` on the audience (its own user, when it acts
+        for one, does not decide)."""
+
+    @abstractmethod
+    def revoke_tokens(self, principal_id: str, *, include_keys: bool = False) -> None:
+        """Cut off every token issued so far to or for ``principal_id``
+        (delegated ones included), and end its links and coding keys.
+        ``include_keys``: its personal API keys too."""
 
     @abstractmethod
     def jwks(self) -> dict[str, Any]:

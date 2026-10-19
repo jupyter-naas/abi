@@ -99,6 +99,7 @@ def token_context(claims: TokenClaims) -> CallContext:
         on_behalf_of=on_behalf_of,
         audience=claims.audience,
         token_id=claims.token_id,
+        token_issued_at=claims.issued_at,
         scope=claims.scope,
     )
 

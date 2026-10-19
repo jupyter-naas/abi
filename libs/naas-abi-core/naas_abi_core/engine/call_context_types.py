@@ -78,6 +78,9 @@ class CallContext:
     on_behalf_of: Principal | None = None  # the user, when acting for one
     audience: str | None = None
     token_id: str | None = None  # the token's jti, for audit
+    # When the token was issued (its iat): IAM refuses a token issued before
+    # its principal's tokens were revoked.
+    token_issued_at: int | None = None
     scope: tuple[Statement, ...] | None = None  # abi_scope narrowing
     # The target workspace of a create: a request input, not identity.
     workspace_id: str | None = None

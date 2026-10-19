@@ -113,6 +113,7 @@ def test_platform_and_self_policies_name_registered_actions_only():
     self_policy = next(p for p in roles.builtin_policies(found) if p.id == roles.SELF)
     assert actions_of(self_policy) == {
         "iam:GetPrincipal",
+        "iam:RevokeTokens",
         "iam:ListKeys",
         "iam:CreateKey",
         "iam:RevokeKey",

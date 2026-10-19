@@ -366,6 +366,54 @@ class IAMStoreContract(ABC):
         with pytest.raises(IAMNotFoundError):
             store.get_key("missingmissingmi")
 
+    def test_a_narrow_key_keeps_its_audience_resource_and_scope(self, store: IAMStore):
+        bob = store.create_principal(user())
+        scope = (
+            {"effect": "Allow", "actions": ["triple_store:Query"], "resources": ["*"]},
+        )
+        created = store.create_key(
+            KeyRecord(
+                "abcdefghijklmnop",
+                bob.id,
+                "a" * 64,
+                kind="personal",
+                audience="abi:delegated:coding",
+                resource="env-1",
+                scope=scope,
+            )
+        )
+        assert store.get_key("abcdefghijklmnop") == created
+        assert created.audience == "abi:delegated:coding"
+        assert created.resource == "env-1"
+        assert created.scope == scope
+        plain = store.create_key(KeyRecord("qrstuvwxyz234567", bob.id, "b" * 64))
+        assert (plain.audience, plain.resource, plain.scope) == (None, None, None)
+        assert {k.key_id for k in store.list_keys(bob.id)} == {
+            "abcdefghijklmnop",
+            "qrstuvwxyz234567",
+        }
+        # An empty scope is not no scope: it allows nothing.
+        empty = store.create_key(
+            KeyRecord("zzzzzzzzzzzzzzzz", bob.id, "c" * 64, kind="grant", scope=())
+        )
+        assert store.get_key(empty.key_id).scope == ()
+
+    def test_token_floors_only_move_forward(self, store: IAMStore):
+        bob = store.create_principal(user())
+        assert store.token_floors() == {}
+        first = datetime(2026, 1, 1, tzinfo=UTC)
+        start = store.revision()
+        store.set_token_floor(bob.id, first)
+        assert store.token_floors() == {bob.id: first}
+        assert store.revision() > start
+        store.set_token_floor(bob.id, first - timedelta(days=1))
+        assert store.token_floors() == {bob.id: first}
+        later = first + timedelta(hours=1)
+        store.set_token_floor(bob.id, later)
+        assert store.token_floors() == {bob.id: later}
+        with pytest.raises(IAMNotFoundError):
+            store.set_token_floor(new_id("usr"), first)
+
     def test_revoking_a_key_keeps_the_first_time(self, store: IAMStore):
         sa = store.create_principal(service_account())
         store.create_key(KeyRecord("abcdefghijklmnop", sa.id, "a" * 64))
