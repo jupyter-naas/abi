@@ -34,7 +34,7 @@ class AdminHttp:
         client: httpx.Client | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
-        self._headers = headers or (lambda: {})
+        self._headers = headers or (dict)
         self._max_bytes = max_bytes
         self._client = client or httpx.Client(
             timeout=timeout_seconds,

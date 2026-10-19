@@ -1,0 +1,125 @@
+"""The engine's identity and IAM services, as Nexus calls them for invitations.
+
+Nexus decided whether the inviting person may invite (the route did), so these
+calls are Nexus's own: ``api`` acting for nobody. The services are blocking:
+each call runs in a worker thread.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
+from typing import Any, TypeVar
+
+from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
+    Directory,
+    DirectoryGateway,
+    GrantsGateway,
+    IdpBindingView,
+    ProviderChoice,
+    Provisioned,
+)
+from naas_abi_core.engine.call_context import as_service_account
+from naas_abi_core.services.identity.IdentityPorts import ProviderUnavailableError
+from starlette.concurrency import run_in_threadpool
+
+NEXUS_IDENTITY = "api"
+BUILTIN_PREFIX = "builtin."
+_T = TypeVar("_T")
+
+
+async def _as_api(fn: Callable[[], _T]) -> _T:
+    def call() -> _T:
+        with as_service_account(NEXUS_IDENTITY):
+            return fn()
+
+    return await run_in_threadpool(call)
+
+
+class EngineDirectoryGateway(DirectoryGateway):
+    def __init__(self, identity: Callable[[], Any | None]) -> None:
+        self._identity = identity
+
+    def _service(self) -> Any:
+        service = self._identity()
+        if service is None:
+            raise ProviderUnavailableError("The engine's identity service is not loaded")
+        return service
+
+    async def directory(self) -> Directory:
+        service = self._identity()
+        if service is None:
+            return Directory()
+        try:
+            providers, default = await _as_api(
+                lambda: (service.list_providers(), service.default_provider)
+            )
+        except ProviderUnavailableError:
+            return Directory()
+        return Directory(
+            providers=tuple(
+                ProviderChoice(p.name, p.display_name, p.provisioning) for p in providers
+            ),
+            default=default,
+        )
+
+    async def provision(
+        self, provider: ProviderChoice, email: str, name: str | None
+    ) -> Provisioned | None:
+        if provider.managed_in_provider:
+            return None  # its people are made in the provider: no call to make
+        service = self._service()
+        try:
+            user = await _as_api(lambda: service.provision_user(provider.name, email, name=name))
+        except NotImplementedError:
+            return None
+        return Provisioned(subject=user.subject, created=user.created)
+
+
+class EngineGrantsGateway(GrantsGateway):
+    def __init__(self, iam: Callable[[], Any | None]) -> None:
+        self._iam = iam
+
+    def _service(self) -> Any:
+        service = self._iam()
+        if service is None:
+            raise ProviderUnavailableError("The engine's IAM service is not loaded")
+        return service
+
+    async def grant(self, provider: str, email: str, policy_id: str, scope: str | None) -> str:
+        iam = self._service()
+        grant = await _as_api(lambda: iam.create_pending_grant(provider, email, policy_id, scope))
+        return str(grant.id)
+
+    async def revoke(self, grant_id: str) -> None:
+        iam = self._service()
+        await _as_api(lambda: iam.revoke_pending_grant(grant_id))
+
+    async def bind(
+        self, provider: str, claim_value: str, policy_id: str, scope: str | None
+    ) -> None:
+        iam = self._service()
+        await _as_api(lambda: iam.bind_idp_group(provider, claim_value, policy_id, scope))
+
+    async def unbind(
+        self, provider: str, claim_value: str, policy_id: str, scope: str | None
+    ) -> bool:
+        iam = self._service()
+        return bool(
+            await _as_api(lambda: iam.unbind_idp_group(provider, claim_value, policy_id, scope))
+        )
+
+    async def bindings(self, scopes: Sequence[str]) -> list[IdpBindingView]:
+        iam = self._service()
+        wanted = set(scopes)
+        found = await _as_api(lambda: iam.list_idp_bindings())
+        return [
+            IdpBindingView(
+                provider=b.provider,
+                claim_value=b.claim_value,
+                role=b.policy_id.removeprefix(BUILTIN_PREFIX),
+                scope=b.scope,
+                group_id=b.group_id,
+            )
+            for b in found
+            if b.scope in wanted and b.policy_id.startswith(BUILTIN_PREFIX)
+        ]

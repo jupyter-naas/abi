@@ -24,6 +24,9 @@ import jwt
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.IAMPorts import FilterResult, PrincipalRecord
 from naas_abi_core.services.iam.names import resource_name
+from naas_abi_core.services.identity.adapters.secondary.ProvisioningNone import (
+    ProvisioningNone,
+)
 from naas_abi_core.services.identity.iam_catalog import SERVICE
 from naas_abi_core.services.identity.IdentityPorts import (
     AuthenticatedUser,
@@ -41,9 +44,6 @@ from naas_abi_core.services.identity.IdentityPorts import (
     TokenSet,
     UnknownProviderError,
     VerifiedToken,
-)
-from naas_abi_core.services.identity.adapters.secondary.ProvisioningNone import (
-    ProvisioningNone,
 )
 from naas_abi_core.services.identity.provider_keys import ProviderKeys
 from naas_abi_core.services.identity.token_verifier import (

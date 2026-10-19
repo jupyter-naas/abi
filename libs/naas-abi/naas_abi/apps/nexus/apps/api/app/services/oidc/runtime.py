@@ -69,6 +69,9 @@ class OidcRuntime:
         self.principals = EngineIAMPrincipals(iam)
 
     def service(self, db: AsyncSession) -> OidcSignInService:
+        from naas_abi.apps.nexus.apps.api.app.services.invites import runtime as invites
+
+        claim = invites.RUNTIME.claimer(db)
         return OidcSignInService(
             OidcSessionSecondaryAdapterPostgres(db),
             self.identity,
@@ -77,6 +80,7 @@ class OidcRuntime:
             session_max_age=timedelta(hours=settings.oidc_session_max_age_hours),
             encrypt=encrypt_secret_value,
             decrypt=try_decrypt_secret_value,
+            on_signed_in=claim,
         )
 
 

@@ -1,0 +1,354 @@
+"""Invitations: an email is invited to an organization and/or a workspace.
+
+The invited person may not exist yet, so nothing is attached to an account:
+
+1. IAM keeps **pending grants**, the roles as ``builtin.<role>`` policies at the
+   org's or workspace's scope, for that email on that provider. They attach to
+   whoever first signs in through the provider with that email verified
+   (``IAMService.claim_pending_grants``, run by the engine's identity service),
+   and to nobody else.
+2. The **provisioning** port makes the person exist at the provider (the
+   built-in IdP's admin app, Zitadel, Keycloak), unless the provider's people
+   are managed in the provider (``provisioning: none``): then the grants alone
+   wait for them there.
+3. Nexus keeps the **invitation** (who invited whom, where, as what) to list,
+   resend and revoke it, and makes the memberships Nexus still stores once the
+   person signs in (``claim``).
+
+The service never decides whether the inviting person may invite: the route
+did, before it called (RFC §6.5), and IAM's checks of the grants it writes run
+as ``api`` for nobody (``GrantsGateway``).
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from datetime import datetime
+from uuid import uuid4
+
+from naas_abi.apps.nexus.apps.api.app.services.invites.names import (
+    org_scope,
+    role_policy,
+    workspace_scope,
+)
+from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
+    Directory,
+    DirectoryGateway,
+    GrantsGateway,
+    IdpBindingView,
+    Invitation,
+    InvitationMail,
+    InvitationMailer,
+    InvitationNotFoundError,
+    InvitationPersistencePort,
+    InviteOutcome,
+    NoProviderError,
+    ProviderChoice,
+)
+from naas_abi_core import logger
+
+Clock = Callable[[], datetime]
+SignInUrl = Callable[[str, str], str]
+
+
+class InvitationService:
+    def __init__(
+        self,
+        persistence: InvitationPersistencePort,
+        directory: DirectoryGateway,
+        grants: GrantsGateway,
+        mailer: InvitationMailer,
+        *,
+        sign_in_url: SignInUrl,
+        clock: Clock,
+    ) -> None:
+        self.persistence = persistence
+        self.directory = directory
+        self.grants = grants
+        self.mailer = mailer
+        self._sign_in_url = sign_in_url
+        self._clock = clock
+
+    # =========================================================================
+    # Providers
+    # =========================================================================
+
+    async def providers(self) -> Directory:
+        return await self.directory.directory()
+
+    async def choose(
+        self, email: str, requested: str | None, organization_id: str | None
+    ) -> ProviderChoice:
+        """The provider an invitation goes through: the one asked for, else the
+        one the organization's verified domain of the email's routes to, else
+        the default, else the only one. ``NoProviderError`` when there is none."""
+        known = await self.directory.directory()
+        if requested:
+            found = known.get(requested)
+            if found is None:
+                raise NoProviderError(f"{requested!r} is not an identity provider")
+            return found
+        domain = email.rsplit("@", 1)[-1]
+        routed = await self.persistence.provider_for_domain(domain, organization_id)
+        for name in (routed, known.default):
+            found = known.get(name) if name else None
+            if found is not None:
+                return found
+        if len(known.providers) == 1:
+            return known.providers[0]
+        raise NoProviderError(
+            "Name the identity provider to invite through"
+            if known.providers
+            else "No identity provider is configured"
+        )
+
+    # =========================================================================
+    # Inviting
+    # =========================================================================
+
+    async def invite(
+        self,
+        *,
+        email: str,
+        name: str | None,
+        provider: str | None,
+        organization_id: str | None,
+        org_role: str | None,
+        workspace_id: str | None,
+        workspace_role: str | None,
+        invited_by: str | None,
+        inviter_name: str | None = None,
+        organization_name: str | None = None,
+        workspace_name: str | None = None,
+    ) -> InviteOutcome:
+        """Invite ``email`` and send the invitation. Inviting again someone
+        already invited here renews the invitation (new roles, a new email)."""
+        email = email.lower().strip()
+        if org_role is None and workspace_role is None:
+            raise ValueError("An invitation names a role in an organization or a workspace")
+        choice = await self.choose(email, provider, organization_id)
+        now = self._clock()
+        scopes = _scopes(organization_id, org_role, workspace_id, workspace_role)
+        existing = await self.persistence.find_pending(
+            email=email,
+            provider=choice.name,
+            organization_id=organization_id,
+            workspace_id=workspace_id,
+        )
+        grant_ids = await self._grant(choice.name, email, scopes)
+        try:
+            provisioned = await self.directory.provision(choice, email, name)
+        except Exception:
+            # Nothing was made for this call: take back what it granted.
+            await self._revoke(grant_ids, keep=existing.grant_ids if existing else ())
+            raise
+        if existing is None:
+            invitation = await self.persistence.add(
+                Invitation(
+                    id=str(uuid4()),
+                    email=email,
+                    provider=choice.name,
+                    organization_id=organization_id,
+                    org_role=org_role,
+                    workspace_id=workspace_id,
+                    workspace_role=workspace_role,
+                    invited_by=invited_by,
+                    grant_ids=tuple(grant_ids),
+                ),
+                now=now,
+            )
+        else:
+            # The roles may have changed: what the old ones granted goes.
+            await self._revoke(existing.grant_ids, keep=grant_ids)
+            invitation = await self.persistence.update(
+                existing.id,
+                org_role=org_role,
+                workspace_role=workspace_role,
+                grant_ids=grant_ids,
+                invited_by=invited_by,
+                now=now,
+            )
+        await self.persistence.commit()
+        sent = await self._mail(
+            invitation,
+            choice,
+            inviter_name=inviter_name,
+            organization_name=organization_name,
+            workspace_name=workspace_name,
+        )
+        return InviteOutcome(
+            invitation=invitation,
+            provider=choice,
+            user_created=bool(provisioned and provisioned.created),
+            sign_in_email_sent=sent,
+            renewed=existing is not None,
+        )
+
+    async def _grant(self, provider: str, email: str, scopes: list[tuple[str, str]]) -> list[str]:
+        made: list[str] = []
+        try:
+            for role, scope in scopes:
+                made.append(await self.grants.grant(provider, email, role_policy(role), scope))
+        except Exception:
+            await self._revoke(made)
+            raise
+        return made
+
+    async def _revoke(
+        self, ids: tuple[str, ...] | list[str], *, keep: tuple[str, ...] | list[str] = ()
+    ) -> None:
+        for grant_id in ids:
+            if grant_id in keep:
+                continue
+            try:
+                await self.grants.revoke(grant_id)
+            except Exception as exc:  # noqa: BLE001 - a grant already gone is gone
+                logger.warning(f"Could not revoke pending grant {grant_id}: {exc}")
+
+    async def _mail(
+        self,
+        invitation: Invitation,
+        choice: ProviderChoice,
+        *,
+        inviter_name: str | None,
+        organization_name: str | None,
+        workspace_name: str | None,
+    ) -> bool:
+        try:
+            return await self.mailer.send(
+                InvitationMail(
+                    to_email=invitation.email,
+                    provider=choice,
+                    inviter_name=inviter_name,
+                    organization_name=organization_name,
+                    organization_role=invitation.org_role,
+                    workspace_name=workspace_name,
+                    workspace_role=invitation.workspace_role,
+                    sign_in_url=self._sign_in_url(invitation.email, choice.name),
+                    managed_in_provider=choice.managed_in_provider,
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 - the invitation stands; the admin may resend
+            logger.warning(f"Invitation email to {invitation.email} failed: {exc}")
+            return False
+
+    # =========================================================================
+    # Listing, resending, revoking
+    # =========================================================================
+
+    async def pending(
+        self, *, organization_id: str | None = None, workspace_id: str | None = None
+    ) -> list[Invitation]:
+        return await self.persistence.list(
+            organization_id=organization_id, workspace_id=workspace_id, status="pending"
+        )
+
+    async def get(self, invitation_id: str) -> Invitation:
+        invitation = await self.persistence.get(invitation_id)
+        if invitation is None:
+            raise InvitationNotFoundError(invitation_id)
+        return invitation
+
+    async def resend(
+        self,
+        invitation_id: str,
+        *,
+        inviter_name: str | None = None,
+        organization_name: str | None = None,
+        workspace_name: str | None = None,
+    ) -> bool:
+        invitation = await self.get(invitation_id)
+        if invitation.status != "pending":
+            raise InvitationNotFoundError(invitation_id)
+        known = await self.directory.directory()
+        choice = known.get(invitation.provider)
+        if choice is None:
+            raise NoProviderError(f"{invitation.provider!r} is not an identity provider")
+        return await self._mail(
+            invitation,
+            choice,
+            inviter_name=inviter_name,
+            organization_name=organization_name,
+            workspace_name=workspace_name,
+        )
+
+    async def revoke(self, invitation_id: str) -> Invitation:
+        """Withdraw an invitation and what it granted. A person who already
+        signed in keeps their membership: that is removed as any member is."""
+        invitation = await self.get(invitation_id)
+        if invitation.status != "pending":
+            raise InvitationNotFoundError(invitation_id)
+        await self._revoke(invitation.grant_ids)
+        await self.persistence.mark_revoked(invitation.id, now=self._clock())
+        await self.persistence.commit()
+        return invitation
+
+    # =========================================================================
+    # The first sign-in
+    # =========================================================================
+
+    async def claim(self, *, user_id: str, email: str, provider: str) -> list[Invitation]:
+        """Make the memberships Nexus stores for the invitations of ``email`` on
+        ``provider``. The caller vouches that the provider verified the address
+        (IAM's grants wait for the same proof)."""
+        accepted: list[Invitation] = []
+        for invitation in await self.persistence.pending_for(
+            email=email.lower().strip(), provider=provider
+        ):
+            now = self._clock()
+            if not await self.persistence.mark_accepted(invitation.id, user_id=user_id, now=now):
+                continue  # another sign-in of this person took it
+            await self.persistence.add_membership(
+                user_id=user_id,
+                organization_id=invitation.organization_id,
+                org_role=invitation.org_role,
+                workspace_id=invitation.workspace_id,
+                workspace_role=invitation.workspace_role,
+                now=now,
+            )
+            accepted.append(invitation)
+        if accepted:
+            await self.persistence.commit()
+        return accepted
+
+    # =========================================================================
+    # IdP group bindings
+    # =========================================================================
+
+    async def bind_group(self, *, provider: str, group: str, role: str, scope: str) -> None:
+        known = await self.directory.directory()
+        if known.get(provider) is None:
+            raise NoProviderError(f"{provider!r} is not an identity provider")
+        await self.grants.bind(provider, group.strip(), role_policy(role), scope)
+
+    async def unbind_group(self, *, provider: str, group: str, role: str, scope: str) -> bool:
+        return await self.grants.unbind(provider, group.strip(), role_policy(role), scope)
+
+    async def bindings(self, scopes: list[str]) -> list[IdpBindingView]:
+        return await self.grants.bindings(scopes)
+
+    @staticmethod
+    def org_scope(organization_id: str) -> str:
+        return org_scope(organization_id)
+
+    @staticmethod
+    def workspace_scope(organization_id: str | None, workspace_id: str) -> str:
+        return workspace_scope(organization_id, workspace_id)
+
+
+def _scopes(
+    organization_id: str | None,
+    org_role: str | None,
+    workspace_id: str | None,
+    workspace_role: str | None,
+) -> list[tuple[str, str]]:
+    found: list[tuple[str, str]] = []
+    if org_role is not None:
+        if organization_id is None:
+            raise ValueError("An organization role needs an organization")
+        found.append((org_role, org_scope(organization_id)))
+    if workspace_role is not None:
+        if workspace_id is None:
+            raise ValueError("A workspace role needs a workspace")
+        found.append((workspace_role, workspace_scope(organization_id, workspace_id)))
+    return found

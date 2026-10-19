@@ -39,6 +39,10 @@ from naas_abi.apps.nexus.apps.api.app.services.documents.handlers import (
     router as documents_router,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.handlers import router as files_router
+from naas_abi.apps.nexus.apps.api.app.services.invites.adapters.primary.invites__primary_adapter__FastAPI import (  # noqa: E501
+    idp_groups_router,
+    invitations_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.handlers import (
     router as maps_layouts_router,
 )
@@ -74,6 +78,9 @@ api_router.include_router(
     organizations.public_router, prefix="/organizations", tags=["organizations-public"]
 )
 api_router.include_router(workspaces_router, prefix="/workspaces", tags=["workspaces"])
+# Invitations through the engine's identity providers, and IdP groups bound to roles.
+api_router.include_router(invitations_router, prefix="/invitations", tags=["invitations"])
+api_router.include_router(idp_groups_router, prefix="/idp-groups", tags=["invitations"])
 api_router.include_router(chat_router, prefix="/chat", tags=["chat"])
 api_router.include_router(
     coding_environment_router, prefix="/coding-environments", tags=["coding-environments"]

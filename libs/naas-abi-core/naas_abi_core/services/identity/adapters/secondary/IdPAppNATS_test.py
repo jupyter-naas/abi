@@ -100,7 +100,7 @@ def test_the_admin_app_is_called_on_the_same_bound_instance(monkeypatch):
         app_name="admin",
     )
     app.request("POST", "/users", body=b"{}")
-    (project, instance, account, request) = calls[0]
+    (_project, instance, account, request) = calls[0]
     assert (instance, account, request.app, request.path) == (
         "good",
         "SA-IDP",

@@ -928,3 +928,33 @@ class MapsSettingsModel(Base):
     settings = Column(Text, nullable=False)  # JSON {"hidden_layouts": [...]}
     updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+
+# ============================================
+# Invitations
+# ============================================
+
+
+class InvitationModel(Base):
+    """An email invited to an organization and/or a workspace through one identity
+    provider. IAM holds the roles as pending grants (``grant_ids``) until the
+    person signs in."""
+
+    __tablename__ = "invitations"
+
+    id = Column(String, primary_key=True)
+    email = Column(String(320), nullable=False)
+    provider = Column(String(64), nullable=False)
+    organization_id = Column(
+        String, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True
+    )
+    org_role = Column(String(16), nullable=True)
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True)
+    workspace_role = Column(String(16), nullable=True)
+    invited_by = Column(String, nullable=True)
+    grant_ids = Column(Text, nullable=False, default="[]")  # JSON list of IAM pending grant ids
+    status = Column(String(16), nullable=False, default="pending")  # pending, accepted, revoked
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+    accepted_at = Column(DateTime(timezone=False), nullable=True)
+    accepted_user_id = Column(String, nullable=True)

@@ -25,6 +25,9 @@ from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__pri
     get_files_service,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService
+from naas_abi.apps.nexus.apps.api.app.services.invites import runtime as invites_runtime
+from naas_abi.apps.nexus.apps.api.app.services.invites.views import invite_result
+from naas_abi.apps.nexus.apps.api.app.services.invites.port import NoProviderError
 from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
     issue_and_send_invite_sign_in,
 )
@@ -161,6 +164,9 @@ class WorkspaceMemberInvite(BaseModel):
     email: str = Field(..., min_length=3, max_length=255)
     role: str = Field(default="member", pattern=r"^(admin|member|viewer)$")
     name: str | None = Field(default=None, min_length=1, max_length=120)
+    # The identity provider to invite through; by default the one the email's
+    # domain routes to, else the default provider.
+    provider: str | None = Field(default=None, min_length=1, max_length=32)
 
 
 class InferenceServer(BaseModel):
@@ -288,9 +294,7 @@ async def list_workspaces(
     roles = await asyncio.gather(
         *[service.get_workspace_role(user_id=current_user.id, workspace_id=row.id) for row in rows]
     )
-    overrides = await _load_org_role_overrides(
-        [row.organization_id for row in rows], org_service
-    )
+    overrides = await _load_org_role_overrides([row.organization_id for row in rows], org_service)
     return [
         _to_schema(
             row,
@@ -366,9 +370,7 @@ async def create_workspace(
     return _to_schema(
         record,
         "owner",
-        organization_override=await _load_org_role_override(
-            record.organization_id, org_service
-        ),
+        organization_override=await _load_org_role_override(record.organization_id, org_service),
     )
 
 
@@ -410,9 +412,7 @@ async def update_workspace(
     return _to_schema(
         record,
         role,
-        organization_override=await _load_org_role_override(
-            record.organization_id, org_service
-        ),
+        organization_override=await _load_org_role_override(record.organization_id, org_service),
     )
 
 
@@ -473,6 +473,7 @@ async def invite_workspace_member(
     service: WorkspaceService = Depends(get_workspace_service),
     auth_service: AuthService = Depends(get_auth_service),
     email_service: EmailService | None = Depends(_get_email_service),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, object]:
     role = await get_workspace_role(current_user.id, workspace_id)
     if role not in ["admin", "owner"]:
@@ -484,6 +485,40 @@ async def invite_workspace_member(
         "/api/workspaces/members/invite",
     )
     await check_rate_limit(f"email:{email}", "/api/workspaces/members/invite")
+
+    # Someone with no account yet is invited through an identity provider (see
+    # the organization invite); otherwise the account is made, or found, here.
+    invites = invites_runtime.RUNTIME.service(db)
+    if await invites.persistence.user_id_by_email(email) is None:
+        workspace = await service.get_workspace(workspace_id)
+        organization = (
+            await get_organization_service(db).get_organization(workspace.organization_id)
+            if workspace is not None and workspace.organization_id
+            else None
+        )
+        try:
+            outcome = await invites.invite(
+                email=email,
+                name=invite.name,
+                provider=invite.provider,
+                organization_id=workspace.organization_id if workspace else None,
+                org_role=None,
+                workspace_id=workspace_id,
+                workspace_role=invite.role,
+                invited_by=current_user.id,
+                inviter_name=current_user.name,
+                organization_name=organization.name if organization else None,
+                workspace_name=workspace.name if workspace else None,
+            )
+        except NoProviderError as exc:
+            if invite.provider:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            outcome = None
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if outcome is not None:
+            return invite_result(outcome)
+
     _user, user_created = await auth_service.ensure_user_for_invite(email, name=invite.name)
 
     already_member = False

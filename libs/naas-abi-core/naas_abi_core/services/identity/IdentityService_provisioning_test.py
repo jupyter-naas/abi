@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 import pytest
+
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_Identity import (
     IdentityConfiguration,
@@ -20,9 +21,6 @@ from naas_abi_core.services.iam.tests.iam_harness import document, statement
 from naas_abi_core.services.identity.adapters.secondary.AdminHttp import (
     AdminHttp,
     ClientCredentialsToken,
-)
-from naas_abi_core.services.identity.adapters.secondary.OIDCHttpBuiltinIdP import (
-    AppAnswer,
 )
 from naas_abi_core.services.identity.adapters.secondary.OIDCHttpHttpx import (
     OIDCHttpHttpx,
@@ -45,6 +43,7 @@ from naas_abi_core.services.identity.IdentityPorts import (
     ProvisioningPort,
 )
 from naas_abi_core.services.identity.IdentityService import IdentityService
+from naas_abi_core.services.identity.tests.builtin_idp_server import AdminApp
 from naas_abi_core.services.identity.tests.fake_idp import FakeIdP
 from naas_abi_core.services.identity.tests.identity_contract import (
     CALLER,
@@ -179,52 +178,6 @@ def test_the_none_adapter_never_provisions():
 
 
 # -- the built-in IdP ------------------------------------------------------------------
-
-
-class AdminApp:
-    """The IdP's admin app, as the module serves it, called in this process."""
-
-    def __init__(self, service: Any, *, name: str = "engine") -> None:
-        from naas_abi_idp.admin import AdminAPI
-        from starlette.testclient import TestClient
-
-        class As:
-            def __init__(self, app: Any) -> None:
-                self.app = app
-
-            async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
-                if scope["type"] == "http":
-                    scope["abi"] = {
-                        "user_id": "",
-                        "principal": {
-                            "id": name,
-                            "kind": "service_account",
-                            "name": name,
-                        },
-                    }
-                await self.app(scope, receive, send)
-
-        self.client = TestClient(As(AdminAPI(service).app()))
-
-    def request(
-        self,
-        method: str,
-        path: str,
-        *,
-        query: str = "",
-        body: bytes = b"",
-        headers=None,
-        root_path: str = "",
-    ) -> AppAnswer:
-        response = self.client.request(
-            method,
-            path + (f"?{query}" if query else ""),
-            content=body,
-            headers=dict(headers or {}),
-        )
-        return AppAnswer(
-            response.status_code, tuple(response.headers.items()), response.content
-        )
 
 
 @pytest.fixture

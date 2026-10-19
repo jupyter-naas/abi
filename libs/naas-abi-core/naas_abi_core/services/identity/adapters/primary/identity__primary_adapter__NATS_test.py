@@ -105,15 +105,15 @@ def test_a_client_engine_signs_users_in_through_the_serving_engine(broker):  # n
 def test_provisioning_reaches_the_serving_engine_and_its_refusals_come_back(
     broker,  # noqa: F811
 ):
+    from naas_abi_core.services.identity.adapters.secondary.OIDCHttpHttpx import (
+        OIDCHttpHttpx,
+    )
     from naas_abi_core.services.identity.IdentityPorts import (
+        IdentityProvider,
         ProvisionedUser,
         ProvisioningPort,
     )
     from naas_abi_core.services.identity.IdentityService import IdentityService
-    from naas_abi_core.services.identity.IdentityPorts import IdentityProvider
-    from naas_abi_core.services.identity.adapters.secondary.OIDCHttpHttpx import (
-        OIDCHttpHttpx,
-    )
 
     url, _ = broker
 

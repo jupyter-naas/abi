@@ -27,6 +27,58 @@ def free_port() -> int:
         return int(sock.getsockname()[1])
 
 
+class AdminApp:
+    """The built-in IdP's ``admin`` app as the module serves it, called in this
+    process (an ``IdPApp``): the caller is ``name``, a service account of the
+    engine by default."""
+
+    def __init__(self, service: Any, *, name: str = "engine") -> None:
+        from naas_abi_idp.admin import AdminAPI
+        from starlette.testclient import TestClient
+
+        class As:
+            def __init__(self, app: Any) -> None:
+                self.app = app
+
+            async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+                if scope["type"] == "http":
+                    scope["abi"] = {
+                        "user_id": "",
+                        "principal": {
+                            "id": name,
+                            "kind": "service_account",
+                            "name": name,
+                        },
+                    }
+                await self.app(scope, receive, send)
+
+        self.client = TestClient(As(AdminAPI(service).app()))
+
+    def request(
+        self,
+        method: str,
+        path: str,
+        *,
+        query: str = "",
+        body: bytes = b"",
+        headers=None,
+        root_path: str = "",
+    ) -> Any:
+        response = self.client.request(
+            method,
+            path + (f"?{query}" if query else ""),
+            content=body,
+            headers=dict(headers or {}),
+        )
+        from naas_abi_core.services.identity.adapters.secondary.OIDCHttpBuiltinIdP import (
+            AppAnswer,
+        )
+
+        return AppAnswer(
+            response.status_code, tuple(response.headers.items()), response.content
+        )
+
+
 class BuiltinIdPHarness:
     provider_name = "builtin"
     groups_claim: str | None = "groups"
@@ -35,9 +87,12 @@ class BuiltinIdPHarness:
     client_secret: str | None = "contract-secret-contract-secret"
     redirect_uri = "http://127.0.0.1:9/callback"
 
-    def __init__(self, redirect_uri: str | None = None) -> None:
+    def __init__(self, redirect_uri: str | None = None, mailer: Any = None) -> None:
+        """``mailer``: where the sign-in mail goes (a ``Mailer`` with
+        ``last_code``); in memory by default."""
         if redirect_uri is not None:
             self.redirect_uri = redirect_uri
+        self._mailer = mailer
         self.port = free_port()
         self.issuer = f"http://127.0.0.1:{self.port}/idp"
         self._server: Any = None
@@ -56,7 +111,7 @@ class BuiltinIdPHarness:
         from starlette.applications import Starlette
         from starlette.routing import Mount
 
-        self.mailer = MemoryMailer()
+        self.mailer = self._mailer or MemoryMailer()
         configuration = IdPConfiguration(
             issuer=self.issuer,
             clients=[

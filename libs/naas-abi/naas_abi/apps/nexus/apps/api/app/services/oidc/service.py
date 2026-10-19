@@ -22,7 +22,7 @@ import base64
 import hashlib
 import hmac
 import secrets
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -157,6 +157,7 @@ class OidcSignInService:
         encrypt: Callable[[str], str],
         decrypt: Callable[[str], str | None],
         clock: Callable[[], datetime] = now_naive,
+        on_signed_in: Callable[[OidcUser, AuthenticatedUser], Awaitable[None]] | None = None,
     ) -> None:
         self.adapter = adapter
         self.identity = identity
@@ -166,6 +167,8 @@ class OidcSignInService:
         self._encrypt = encrypt
         self._decrypt = decrypt
         self._clock = clock
+        # What a first sign-in sets in motion beyond the session (invitations).
+        self._on_signed_in = on_signed_in
 
     # =========================================================================
     # Routing
@@ -262,6 +265,11 @@ class OidcSignInService:
         except Exception as exc:  # noqa: BLE001 - no session for a user IAM refused
             logger.opt(exception=exc).error("IAM refused a signed-in user's transitional grant")
             raise OidcLoginError("sign_in_failed", "The sign-in could not be completed") from exc
+        if self._on_signed_in is not None:
+            try:
+                await self._on_signed_in(user, signed.user)
+            except Exception as exc:  # noqa: BLE001 - the session stands; the invitation stays pending
+                logger.opt(exception=exc).error("Claiming the user's invitations failed")
         secret = secrets.token_urlsafe(32)
         expires_at = now + self.session_max_age
         await self.adapter.create_session(

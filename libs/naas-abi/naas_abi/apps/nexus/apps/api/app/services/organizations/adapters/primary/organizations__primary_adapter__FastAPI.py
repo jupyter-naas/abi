@@ -18,6 +18,9 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
     get_auth_service,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService
+from naas_abi.apps.nexus.apps.api.app.services.invites import runtime as invites_runtime
+from naas_abi.apps.nexus.apps.api.app.services.invites.views import invite_result
+from naas_abi.apps.nexus.apps.api.app.services.invites.port import NoProviderError
 from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
     issue_and_send_invite_sign_in,
 )
@@ -209,6 +212,9 @@ class OrganizationMemberInvite(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     workspace_id: str | None = Field(default=None, min_length=1)
     workspace_role: str = Field(default="member", pattern=r"^(admin|member|viewer)$")
+    # The identity provider to invite through; by default the one the email's
+    # domain routes to, else the default provider.
+    provider: str | None = Field(default=None, min_length=1, max_length=32)
 
 
 class OrganizationMemberUpdate(BaseModel):
@@ -781,7 +787,8 @@ async def invite_org_member(
     workspace_service: WorkspaceService = Depends(get_workspace_service_for_org_invite),
     auth_service: AuthService = Depends(get_auth_service),
     email_service: EmailService | None = Depends(_get_email_service),
-) -> OrganizationMember:
+    db: AsyncSession = Depends(get_db),
+) -> OrganizationMember | dict[str, object]:
     role = await require_org_access(current_user.id, org_id, service)
     if role not in ("owner", "admin"):
         raise HTTPException(status_code=403, detail="Only admins can invite members")
@@ -801,6 +808,41 @@ async def invite_org_member(
                 status_code=400,
                 detail="workspace_id must belong to this organization",
             )
+
+    # Someone with no account yet is invited through an identity provider: the
+    # provider makes them exist, IAM holds the roles for their email, and the
+    # first sign-in claims them. Without a provider (or for an existing account)
+    # the account is made, or found, here as before.
+    invites = invites_runtime.RUNTIME.service(db)
+    if await invites.persistence.user_id_by_email(email) is None:
+        org = await service.get_organization(org_id)
+        workspace = (
+            await workspace_service.get_workspace(invite.workspace_id)
+            if invite.workspace_id
+            else None
+        )
+        try:
+            outcome = await invites.invite(
+                email=email,
+                name=invite.name,
+                provider=invite.provider,
+                organization_id=org_id,
+                org_role=invite.role,
+                workspace_id=invite.workspace_id,
+                workspace_role=invite.workspace_role if invite.workspace_id else None,
+                invited_by=current_user.id,
+                inviter_name=current_user.name,
+                organization_name=org.name if org else None,
+                workspace_name=workspace.name if workspace else None,
+            )
+        except NoProviderError as exc:
+            if invite.provider:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            outcome = None
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if outcome is not None:
+            return invite_result(outcome)
 
     _user, user_created = await auth_service.ensure_user_for_invite(email, name=invite.name)
 
@@ -1002,7 +1044,10 @@ async def set_org_domain_provider(
     if row is None:
         raise HTTPException(status_code=404, detail="Domain not found")
     return OrganizationDomain(
-        **{**row.__dict__, "verification_token": row.verification_token if not row.is_verified else None}
+        **{
+            **row.__dict__,
+            "verification_token": row.verification_token if not row.is_verified else None,
+        }
     )
 
 
