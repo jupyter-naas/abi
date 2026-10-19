@@ -6,6 +6,8 @@ and generated SDK dataclasses, never engine domain objects. See services/AGENTS.
 Generated artifacts are checked in; regenerate with `make generate` in the proto package.
 Use UV. `make deps`, `make test`, `make lint`, and `make build` are the local gates.
 Tests live under tests/. Update the standalone module demonstration when adding endpoints.
+After subscribing (or publishing) and before saying so, `await flush_to_broker(nc)` (`broker_flush.py`), never `nc.flush()`:
+nats-py's PING overtakes the buffered SUBs, so a request right after could find no responder. Core re-uses it.
 
 LangGraph support lives in langgraph.py and is opt-in via [langgraph]; never import
 it from package __init__ or make it a base dependency. Only async graph execution
