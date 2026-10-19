@@ -241,11 +241,8 @@ curl http://localhost:8000/health
 curl http://localhost:8000/docs
 # If FastAPI docs load, API is running
 
-# 5. Check specific endpoint
-PASSWORD=$(grep '^NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD=' .env | cut -d= -f2-)
-curl -X POST http://localhost:8000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d "{\"email\":\"admin@example.com\",\"password\":\"$PASSWORD\"}"
+# 5. Check the sign-in providers endpoint
+curl http://localhost:8000/api/auth/oidc/providers
 ```
 
 ### CORS errors
@@ -408,52 +405,58 @@ curl -I http://localhost:8000/uploads/logos/test.png
 
 ### Can't login
 
-**Symptom:** Login button does nothing or shows error
+**Symptom:** The login page shows an error, no provider, or the code never arrives
+
+Nexus has no password: you enter your email, the identity provider emails a 6-digit code, and the browser comes back signed in.
 
 **Solutions:**
 
 ```bash
-# 1. Check demo users exist
+# 1. Is a provider configured? (the login page says "No identity provider is configured" otherwise)
+curl http://localhost:8000/api/auth/oidc/providers
+# Should list a provider and a default_provider
+
+# 2. Where is the code? In `abi dev` the mail is a file in storage/email:
+abi dev code                        # newest code mailed to admin@example.com
+abi dev code --email bob@example.com
+
+# 3. "email already belongs to another account"
+# An account of the old password / magic-link login that is not linked yet, and a
+# provider that is not the built-in one (only the built-in provider's verified email
+# links it). Use the built-in provider, or ask an admin.
+
+# 4. The person does not exist at the built-in provider (signup is off)
+abi user migrate            # dry run: who would be made there
+abi user migrate --apply    # make the old accounts exist there, same email
+# Their first sign-in with the mailed code links the account; roles and data stay.
+
+# 5. Check the user row exists
 docker exec nexus-postgres psql -U nexus -d nexus -c "SELECT email FROM users;"
 
-# 2. Check local admin credentials (generated into .env; there is no default)
-# Email: admin@example.com (NEXUS_USER_ADMIN_EXAMPLE_COM_EMAIL)
-# Password: NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD
-PASSWORD=$(grep '^NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD=' .env | cut -d= -f2-)
-
-# 3. Check API login endpoint
-curl -X POST http://localhost:8000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d "{\"email\":\"admin@example.com\",\"password\":\"$PASSWORD\"}"
-# Should return {"access_token": "...", "refresh_token": "..."}
-
-# 4. Check browser console for errors
+# 6. Check browser console for errors
 # Look for network errors or CORS issues
-
-# 5. Reset demo data
-make db-reset
 ```
 
 ### Session expired immediately
 
-**Symptom:** Login works but immediately redirected back
+**Symptom:** Sign-in works but you are immediately sent back to the login page
 
 **Solutions:**
 
 ```bash
-# 1. Check SECRET_KEY is set
-cat apps/api/.env | grep SECRET_KEY
-# Should be at least 32 characters
+# 1. The session is the httpOnly cookie (nexus_session): check it is set and sent
+# DevTools → Application → Cookies. It is Secure, so use HTTPS or localhost.
 
-# 2. Check token expiration
-# Default is 1 day - inspect JWT token at jwt.io
-
-# 3. Check system time
+# 2. Check system time
 date
-# If time is wrong, JWT validation will fail
+# If time is wrong, the provider's tokens fail validation
 
-# 4. Clear browser cookies
+# 3. Clear browser cookies
 # DevTools → Application → Cookies → Clear All
+
+# 4. Check the provider is reachable: the session is re-checked at the provider
+# every 10 minutes at most, and ends if the provider refuses
+make logs | grep -i "session"
 
 # 5. Check for multiple API instances
 ps aux | grep uvicorn
@@ -462,26 +465,22 @@ ps aux | grep uvicorn
 
 ### "Unauthorized" on every request
 
-**Symptom:** 401 errors after login
+**Symptom:** 401 errors after sign-in
 
 **Solutions:**
 
 ```bash
-# 1. Check auth header is sent
-# Browser DevTools → Network → Request Headers
-# Should include: Authorization: Bearer <token>
+# 1. The browser sends the cookie, not a bearer token
+# Frontend should use credentials: 'include' for fetch, and X-CSRF-Token on writes
 
-# 2. Check token is valid
-# Copy token from localStorage
-# Decode at jwt.io - check expiration
+# 2. A script? Use a personal API key (abi_pk_..., Account → API keys)
+curl http://localhost:8000/api/workspaces -H "Authorization: Bearer abi_pk_..."
+# /api/auth/* and /api/iam/* take a signed-in session only, never a key (403)
 
-# 3. Check CORS credentials
-# Frontend should use credentials: 'include' for fetch
+# 3. Suspended or revoked: the engine ends every token of a suspended user at once
+# Ask an admin, then sign in again
 
-# 4. Logout and login again
-# Tokens might be corrupted
-
-# 5. Check API authentication middleware
+# 4. Check API authentication middleware
 make logs | grep "401"
 ```
 

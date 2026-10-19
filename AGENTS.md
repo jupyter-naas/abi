@@ -48,7 +48,7 @@ Every service AGENTS.md follows the same structure: **Purpose → Files → Port
 
 ## Built-in identity provider
 
-`libs/naas-abi-idp` is an SDK module, not a core service: the default OIDC provider of `abi dev up` and small installs (email-code sign-in, authorization code + PKCE, refresh tokens, JWKS, client credentials, an admin app for provisioning). It runs as `module/<project>/idp`, its data and keys are sealed to that account, Nexus serves it at `/idp` and the engine reads it over NATS. The IAM admin pages (policies, attachments, groups, service accounts and keys, module approvals, simulator, audit) are Nexus `services/iam_admin`: [libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam_admin/AGENTS.md](libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam_admin/AGENTS.md). Invitations (`services/identity` provisioning port, IAM pending grants, Nexus `services/invites`) create people there: see [libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/invites/AGENTS.md](libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/invites/AGENTS.md). Read [libs/naas-abi-idp/AGENTS.md](libs/naas-abi-idp/AGENTS.md) before touching it, `services/identity/AGENTS.md` for the engine's side, and `docs/identity-providers.md` for plugging in another provider.
+`libs/naas-abi-idp` is an SDK module, not a core service: the default OIDC provider of `abi dev up` and small installs (email-code sign-in, authorization code + PKCE, refresh tokens, JWKS, client credentials, an admin app for provisioning). It runs as `module/<project>/idp`, its data and keys are sealed to that account, Nexus serves it at `/idp` and the engine reads it over NATS. It is how everyone signs in to Nexus: Nexus has no login of its own (ADR `20261019_login-moves-out-of-nexus.md`), and accounts of the old login are linked at their first sign-in (`abi user migrate`, `iam.link_user`). The IAM admin pages (policies, attachments, groups, service accounts and keys, module approvals, simulator, audit) are Nexus `services/iam_admin`: [libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam_admin/AGENTS.md](libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam_admin/AGENTS.md). Invitations (`services/identity` provisioning port, IAM pending grants, Nexus `services/invites`) create people there: see [libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/invites/AGENTS.md](libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/invites/AGENTS.md). Read [libs/naas-abi-idp/AGENTS.md](libs/naas-abi-idp/AGENTS.md) before touching it, `services/identity/AGENTS.md` for the engine's side, and `docs/identity-providers.md` for plugging in another provider.
 
 ## Marketplace Map
 
@@ -227,23 +227,16 @@ def unsupported_method(self, arg: str) -> None:
 
 After `abi stack start`, the web UI is at `http://localhost:3042`.
 
-There is no default password. The only seeded account is `admin@example.com`; its password is generated per project and stored in `.env` as `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`:
+Nexus has no login of its own and no password: people sign in at an identity provider (`identity.providers`; the built-in one, `libs/naas-abi-idp`, is the default of `abi dev up`, `abi deploy local` and `abi new project`). The only seeded account is `admin@example.com` (`users:` in the configuration): the API makes it exist at the built-in provider when it starts, and its first sign-in links it to the account, which keeps the roles configured there. Enter the address on the login page; the provider emails a 6-digit code. In `abi dev` the mail is a file in `storage/email`, and the code is one command away:
 
 ```bash
-grep NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD .env
+abi dev code            # the newest sign-in code mailed to admin@example.com
+abi dev code --email bob@example.com
 ```
 
-Password login is enabled via `auth_password_enabled: true` in `config.local.yaml`. Set it to `false` to switch back to magic link.
+Self-registration is off in Nexus (there is no signup route): add people by invitation (`abi user invite`, the Nexus invite UI) or through `users:` in the configuration. Whether the provider lets anyone register is the provider's setting (`ABI_IDP_SIGNUP`; `abi dev up` turns it on). Scripts use a personal API key (`abi_pk_`, made in Nexus under Account, API keys): `NEXUS_ACCESS_TOKEN=abi_pk_... abi workspace list`.
 
-Self-registration is off (`auth_signup_enabled: false`): add people by invitation or through `users:` in the config. Sign-in endpoints are rate limited in every environment (5 failures per account and 20 attempts per IP per 5 minutes); `rate_limit_enabled: false` turns this off for local debugging.
-
-**How the password is set:** `abi new project`, `abi dev up` and `abi deploy local` generate it into `.env`. On first boot the seeder creates the account with that value; if the key is missing it generates one and writes it back. Published defaults (`admin`, `Admin1234!`) are never accepted: login refuses them, and on boot the seeder replaces them with a generated password written to `.env`.
-
-If you see "Incorrect email or password", read the current value from `.env` (it may have just been rotated), or wipe and reseed when there is no data to keep:
-```bash
-docker volume rm abi_postgres_data
-abi stack start
-```
+An older project upgrades with `abi user migrate` (dry run), then `abi user migrate --apply`: each account of the old password / magic-link login is made at the built-in provider with the same email; the person's first sign-in with the mailed code links it and keeps roles, groups and data. The API logs a reminder at start while accounts are not linked. `secret_key` no longer signs or encrypts anything: workspace secrets use `secrets_encryption_key` (generated as `NEXUS_SECRETS_KEY`; the API re-encrypts what is still under the old key at start).
 
 ## Stack Management
 
@@ -384,8 +377,8 @@ Run all four services with `uv run abi dev up -d`, then `abi dev status` / `abi 
 
 Non-obvious gotchas discovered during setup:
 
-- **`.env` is required and gitignored.** It is auto-created on first `abi dev up`, seeding only the admin login. The engine renders `config.yaml` through Jinja and **hard-fails non-interactively (no TTY) on missing `{{ secret.X }}` in active (non-comment) YAML**. Full-line YAML comments are left unrendered, so commented-out modules can keep example `{{ secret.X }}` placeholders. Root config is keyless-clean for AI/integrations; remaining deploy placeholders are in `.env.example` (`NAAS_API_KEY`, `ABI_API_KEY`, `NEXUS_API_URL`). Copy those if missing.
+- **`.env` is required and gitignored.** It is auto-created on first `abi dev up` (API key, broker passwords, the identity provider's client secret). The engine renders `config.yaml` through Jinja and **hard-fails non-interactively (no TTY) on missing `{{ secret.X }}` in active (non-comment) YAML**. Full-line YAML comments are left unrendered, so commented-out modules can keep example `{{ secret.X }}` placeholders. Root config is keyless-clean for AI/integrations; remaining deploy placeholders are in `.env.example` (`NAAS_API_KEY`, `ABI_API_KEY`, `NEXUS_API_URL`). Copy those if missing.
 - **For capable cloud models:** set `global_config.ai_mode: "cloud"`, uncomment a cloud provider module in `config.yaml`, replace `SECRET_REF` with a real Jinja secret, and add its key via environment secrets or `.env`.
 - **First API boot is slow (~2-3 min):** the worker loads every module/ontology and runs Nexus SQLite migrations before serving. Watch `abi dev logs api`; it is ready when `/docs` returns 200 (`GET http://localhost:<api-port>/docs`).
 - **Ports are offset per worktree** (see `abi dev ports`), so they are not the config defaults. `abi dev` injects `OXIGRAPH_URL` into each service; the `config.yaml` default `:7878` is not the live port. To run a test that builds its own engine against the live triple store, pass `OXIGRAPH_URL=http://127.0.0.1:<oxigraph-port>`.
-- **Login:** `admin@example.com` with the password generated into `.env` as `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD` (printed by `abi dev up`). There is no default password. Web UI is the `nexus-web` port.
+- **Login:** `admin@example.com` at the built-in identity provider, with the code it emails: `uv run abi dev code` prints the newest one (dev mail is a file in `storage/email`). There is no password. Web UI is the `nexus-web` port.

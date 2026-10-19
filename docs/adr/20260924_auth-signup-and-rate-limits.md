@@ -1,6 +1,8 @@
 # Sign-up lock and brute-force limits
 
-Status: Accepted
+Status: Accepted (see below)
+
+> Superseded by [`20261019_login-moves-out-of-nexus.md`](20261019_login-moves-out-of-nexus.md): Nexus has no signup, password or sign-in rate limits any more.
 
 Date: 2026-09-24
 

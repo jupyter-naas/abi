@@ -173,9 +173,13 @@ Module id `idp` is reserved to this module: the seals and the secret endpoint
 treat any account `module/<project>/idp` as the IdP, and only an admin creates
 accounts.
 
-Until the Nexus login is moved (subtask 13 of #44) a Nexus user whose email an
-IdP user shares gets "email already belongs to another account": accounts are
-never linked automatically.
+**Accounts of the old Nexus login** move here (ADR `20261019_login-moves-out-of-nexus.md`):
+`abi user migrate --apply` makes each of them exist as an IdP user with the same email
+(`ProvisioningBuiltinIdP`), and at their first sign-in, with the address verified by the
+code mailed to it, Nexus links the identity to the existing account and IAM user
+(`iam.link_user`), which keep their roles and data. This is the only provider whose
+verified email links an existing account; another provider's gets "email already belongs
+to another account". Configured users (`users:`) are made here by the API at start.
 
 ## Tests
 

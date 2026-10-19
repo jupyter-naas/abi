@@ -52,7 +52,7 @@ abi dev up
 
 ### Web UI
 
-The main interface. Chat with Abi, switch agents, manage your workspace, and access your knowledge graph. Open [http://localhost:3042](http://localhost:3042) and log in as `admin@example.com` with the password generated into `.env` (`NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`).
+The main interface. Chat with Abi, switch agents, manage your workspace, and access your knowledge graph. Open [http://localhost:3042](http://localhost:3042) and sign in as `admin@example.com` with the code the identity provider emails (no password; `abi dev code` prints it).
 
 <div align="center">
   <img src="docs/site/static/abi/Screenshot_Local_WebUI.png" alt="ABI web UI" width="800">
@@ -186,10 +186,10 @@ api        http://127.0.0.1:9879   ● ready
 dagster    http://127.0.0.1:11000  ● ready
 nexus-web  http://127.0.0.1:12000  ● ready
 
-Login: admin@example.com / <generated password>
+Sign in: admin@example.com, with the emailed code (`abi dev code`)
 ```
 
-The admin password is generated for this project and written to `.env` as `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`; the Nexus seed picks it up on first boot. There is no default password.
+There is no admin password: the built-in identity provider emails a 6-digit code to the address, and in `abi dev` the mail is a file in `storage/email`.
 
 ### Hotkeys
 

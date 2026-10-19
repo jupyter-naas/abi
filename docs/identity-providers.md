@@ -61,10 +61,9 @@ The login page asks for an email first:
    to that provider. Set it as an organization admin with
    `PUT /api/organizations/{org_id}/domains/{domain_id}/provider` and
    `{"provider": "acme"}` (or `null`).
-2. Otherwise the built-in Nexus login (password or emailed code) is used. The
-   default provider never captures an email by itself: it would lock out every
-   account the provider does not hold, including the seeded admin (there is
-   always a break-glass login).
+2. Otherwise the email goes to `default_provider`. Nexus has no login of its
+   own to fall back to, so with no verified domain and no default provider the
+   login page says that no provider is configured.
 
 The login page also offers a "Continue with ..." button for each provider, the
 default one included. `/api/auth/oidc/login` with neither `provider` nor
@@ -75,11 +74,12 @@ default one included. `/api/auth/oidc/login` with neither `provider` nor
 - **A user is `(issuer, sub)`, never an email.** The first sign-in creates the
   IAM user (`usr_...`) and a Nexus account with the same id. No password is
   stored.
-- **Accounts are never linked automatically.** The same person signing in
+- **Accounts are never linked across providers.** The same person signing in
   through two providers gets two accounts. A sign-in whose verified email
-  already belongs to another account (a built-in login account, or another
-  provider's) is refused with "email already belongs to another account" until
-  an administrator links them.
+  already belongs to another account (another provider's, or an account of the
+  old Nexus login) is refused with "email already belongs to another account"
+  until an administrator links them, with one exception: see
+  [Accounts of the old Nexus login](#accounts-of-the-old-nexus-login).
 - **Groups.** Map a value of the provider's groups claim to an IAM group:
 
   ```python
@@ -91,8 +91,8 @@ default one included. `/api/auth/oidc/login` with neither `provider` nor
 - **Offboarding.** Disabling a user at the provider ends their Nexus session at
   the next refresh, within 10 minutes. Suspending the IAM user ends it within
   5 seconds, and every kernel call for the user is denied at once.
-- **The built-in login never opens a provider's account:** no password, code,
-  magic link or reset reaches it.
+- **Nexus has no login of its own:** no password, code, magic link or reset
+  exists in Nexus, so none reaches a provider's account.
 
 ### Emails
 
@@ -106,6 +106,27 @@ Some directories issue only addresses they control but send no
 `email_verified` claim (Entra ID). Set `trust_email: true` on such a provider
 to count its `email` as verified. Do not set it on a provider where users can
 choose their own address.
+
+## Accounts of the old Nexus login
+
+Before the login moved out of Nexus, people signed in with a password, a magic
+link or an emailed code. Those accounts keep their roles, groups and data by being
+linked to the built-in provider at their first sign-in:
+
+```bash
+abi user migrate            # dry run: who would be made at the built-in provider
+abi user migrate --apply    # make them exist there, with the same email
+```
+
+The command creates nobody twice (run it again whenever accounts were added) and
+moves no password. The person then signs in with the code the provider mails to
+their address. At that first sign-in, when the provider verifies the address, Nexus
+links the identity to the existing account and its IAM user: the account keeps its
+id, email, roles, groups and data. Only the built-in provider links an account this
+way, because it proves an address by mailing it a code (`provisioning: builtin`); another
+provider's verified email never does. The API logs a reminder at start while
+accounts are not linked yet, and the users of `users:` in the configuration are
+made at the built-in provider by the API itself.
 
 ## Invitations and provisioning
 
@@ -136,8 +157,9 @@ happen, and the provider's `provisioning` setting decides the second:
 
 The provider is the one asked for (`provider` in the invite), else the one the
 email's verified organization domain routes to, else `default_provider`, else
-the only provider. A person who already has a Nexus account is added as before.
-Without any provider the invitation creates the account in Nexus, as it did.
+the only provider. A person who already has a Nexus account is added directly
+and mailed a notice with a sign-in link. Without any provider, inviting someone
+with no account answers 400: there is nowhere for them to sign in.
 
 `zitadel` and `keycloak` need credentials for the provider's admin API, under
 `admin:` in the provider's entry:

@@ -127,7 +127,8 @@ identity.end_session_url("acme", id_token_hint=..., post_logout_redirect_uri=...
   (`subject_changed` otherwise). One that returns none (OIDC Core §12.2) is
   accepted: the provider took the refresh token and the subject cannot change,
   so the service only checks that the session's principal is an active user of
-  this provider's issuer. `tokens.id_token` is then `None` and no groups are
+  this provider's issuer: its own identity there, or one linked to it
+  (`iam.identity_at`; a user of Nexus's old login linked at its first sign-in). `tokens.id_token` is then `None` and no groups are
   re-read: the relying party keeps the ones it holds.
 - **Key cache.** The JWKS is cached for its `Cache-Control: max-age` (300 s
   when none, an hour at most; `no-store`, `no-cache` and `max-age=0` mean no

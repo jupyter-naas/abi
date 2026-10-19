@@ -28,18 +28,27 @@ def legacy(h):
 
 
 def sign_in(h, subject="s1", **profile):
-    profile = {"provider": "builtin", "email": "bob@example.com", "email_verified": True} | profile
+    profile = {
+        "provider": "builtin",
+        "email": "bob@example.com",
+        "email_verified": True,
+    } | profile
     return h.user(subject, **profile)
 
 
 def link(h, record, subject="s1", **profile):
-    profile = {"provider": "builtin", "email": "bob@example.com", "email_verified": True} | profile
+    profile = {
+        "provider": "builtin",
+        "email": "bob@example.com",
+        "email_verified": True,
+    } | profile
     return h.admin("link_user", record.id, ISSUER, subject, **profile)
 
 
 def held(h, record) -> set[tuple[str, str | None]]:
     return {
-        (a.policy_id, a.scope) for a in h.iam.store.list_attachments(principal_id=record.id)
+        (a.policy_id, a.scope)
+        for a in h.iam.store.list_attachments(principal_id=record.id)
     }
 
 
@@ -58,7 +67,9 @@ def test_the_identity_resolves_to_the_existing_user_and_its_roles(h, legacy):
     assert h.iam.resolve_user("user-0123456789ab").id == legacy.id
 
 
-def test_a_sign_in_that_already_made_its_own_user_is_merged_into_the_existing_one(h, legacy):
+def test_a_sign_in_that_already_made_its_own_user_is_merged_into_the_existing_one(
+    h, legacy
+):
     made = sign_in(h)
     assert made.id != legacy.id
     h.attach(roles.VIEWER, made.id, "abi:acme:ws2")
@@ -112,7 +123,9 @@ def test_linking_twice_is_the_same_link(h, legacy):
     assert link(h, legacy).id == link(h, legacy).id == legacy.id
 
 
-def test_a_user_is_linked_through_another_identity_only_once_per_issuer_subject(h, legacy):
+def test_a_user_is_linked_through_another_identity_only_once_per_issuer_subject(
+    h, legacy
+):
     link(h, legacy, subject="s1")
     # A second identity at the same provider (another subject) is another link,
     # for the same user: nothing forbids it, and neither is lost.
@@ -135,7 +148,11 @@ def test_a_suspended_user_stays_suspended_through_the_link(h, legacy):
 
 
 def test_the_link_gives_the_user_what_its_roles_reach(h, legacy):
-    from naas_abi_core.engine.call_context import CallContext, Principal, use_call_context
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        Principal,
+        use_call_context,
+    )
 
     link(h, legacy)
     h.first_party_may("triple_store")

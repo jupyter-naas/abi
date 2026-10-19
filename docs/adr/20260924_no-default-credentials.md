@@ -1,6 +1,8 @@
 # No default credentials
 
-Status: Accepted
+Status: Accepted (see below)
+
+> Partly superseded by [`20261019_login-moves-out-of-nexus.md`](20261019_login-moves-out-of-nexus.md): the seeded admin has no password at all (it signs in at the built-in identity provider); the rule that no published default is ever accepted stays for API keys.
 
 Date: 2026-09-24
 

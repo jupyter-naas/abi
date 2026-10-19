@@ -106,14 +106,20 @@ Do not add a role check at the endpoint: declare the action (`guard`, `declares`
 
 ### Sign-in through identity providers
 
-`services/oidc/` makes Nexus an OIDC client of the engine's providers (`identity.providers`, guide
-`docs/identity-providers.md`, ADR `docs/adr/20261015_nexus-oidc-sessions.md`), next to the built-in login of
-`services/auth/`:
+Nexus has **no login of its own** (ADR `docs/adr/20261019_login-moves-out-of-nexus.md`): no password, magic link,
+one-time code, reset, signup or refresh token, and no token signed with `secret_key`. `services/auth/` keeps the
+signed-in user's account (`/api/auth/me`, the avatar) and `credentials.py`. `services/oidc/` makes Nexus an OIDC
+client of the engine's providers (`identity.providers`, guide `docs/identity-providers.md`, ADR
+`docs/adr/20261015_nexus-oidc-sessions.md`):
 
 - `/api/auth/oidc/{providers,route,login,callback,session,logout}`. The engine redeems the code: Nexus never
   holds a client secret.
 - One `users` row per `(issuer, sub)`, whose id is the IAM principal id (`principal_id`, `idp_issuer`,
-  `idp_subject`). `AuthUserRecord.external` marks it: the built-in login never opens it.
+  `idp_subject`). The rows of the old login keep their id and are **linked at their first sign-in** through the
+  built-in provider, by its verified email, and nowhere else (`OidcSignInService._link_legacy_user`,
+  `iam.link_user`): they keep their roles, groups, keys and data. `abi user migrate [--apply]` makes those people
+  exist at the built-in provider first (`services/oidc/migration.py`). An email no verified domain maps goes to
+  the default provider (`route`).
 - The session is the `nexus_session` httpOnly cookie, stored in `auth_sessions` and resolved by
   `RequestIdentityMiddleware`, which leaves it on `request.state.nexus_session`. `get_current_user` reads it
   when there is no bearer token.
@@ -123,9 +129,13 @@ Do not add a role check at the endpoint: declare the action (`guard`, `declares`
   types; the security-headers middleware does the same for any `/api` response of an active type.
 - A cookie request that changes state needs `X-CSRF-Token` (from `GET /api/auth/oidc/session`); without it
   `get_current_user_required` answers 403.
-- The web app's cookie sessions (`sessionKind: 'cookie'` in `stores/auth.ts`) keep no token: use `authFetch`,
-  or `withAuth` / `getAuthHeader(method)` + `authCredentials()` for a raw `fetch`, and `selectSession` /
-  `hasSession` to know whether someone is signed in. Never read `token` for that.
+- The web app holds the cookie session only and keeps no token (`stores/auth.ts`): use `authFetch`, or
+  `withAuth` / `getAuthHeader(method)` + `authCredentials()` for a raw `fetch`, and `selectSession` /
+  `hasSession` to know whether someone is signed in.
+- **Keys**: workspace secrets and the provider tokens of sessions are encrypted under `secrets_encryption_key`
+  (`core/secret_key.py`, generated as `NEXUS_SECRETS_KEY`); `services/secrets/migration.py` moves what is still
+  under the old `secret_key` at start. `secret_key` signs nothing and encrypts nothing
+  (`credentials_test.py::test_the_secret_key_signs_and_reads_no_token` scans for a signer).
 
 ### Credentials: which kind goes where
 
@@ -134,14 +144,15 @@ Every credential has a kind, its audience, and Nexus honours it only where it be
 
 | Kind | Credential | Accepted by |
 |---|---|---|
-| `session` | the cookie of an identity-provider login, a session token (`abi:session`) | every route, and the WebSocket |
+| `session` | the cookie of an identity-provider login, a session token the engine issued (`abi:session`) | every route, and the WebSocket |
 | `api-key` | a personal API key (`abi_pk_…`, or the `abi:delegated:api-key` token it buys at `POST /api/iam/token`) | `/api/*` except the session-only prefixes `/api/auth/` and `/api/iam/` |
 | `coding` | a coding environment's key (`abi_pk_…`, audience `abi:delegated:coding`) | the OpenAI gateway, `/api/v1/*`, which finds the workspace's exec sidecar from the key's `resource` (`coding_environments` row) |
 
 - `RequestIdentityMiddleware` resolves the credential and leaves it on `request.state.nexus_credential`;
   `accepted_kinds(path)` decides. A real credential of a kind the route does not take is refused with a 403
   that names it (`nexus_credential_refused`), never read as a session. Never decode a bearer token by hand:
-  `decode_token` returns a session (`aud=abi:session`) and nothing else.
+  `bearer_credential` verifies it against the engine's IAM (keys and `abi:session` tokens the engine issued),
+  and a token signed by Nexus does not exist.
 - Links are IAM grants (`services/apps/links.py`): `/app-html/` links, `/app-preview/` tokens and `/app-remote/`
   grants are `abi_gk_…` keys of the user, audience `abi:delegated:app` or `preview`, bound to what they open,
   eight hours at most, revocable, checked again at every request. No secret of Nexus signs one.
@@ -393,7 +404,7 @@ Org **Users** and workspace **Members** are UI channels over the same Nexus HTTP
 
 Notes:
 
-- Invite **creates** the user when missing, adds membership, and emails OTP / magic-link sign-in (same challenge as `/api/auth/magic-link/request`). Optional `workspace_id` on org invite also adds workspace membership.
+- Invite of an email with **no account** goes through an identity provider (`services/invites`): the provider makes the person, IAM holds the roles, the first sign-in claims them; with no provider configured it answers 400. Someone who **already has an account** is added directly and told by an email with a sign-in link (no code: the provider mails it). Optional `workspace_id` on org invite also adds workspace membership.
 - UI must hide or disable Add / Invite for non-admins; API still returns `403`.
 - **Agents:** `invite_organization_member` / `invite_workspace_member` in `naas_abi/tools/nexus_admin_tools.py` use the same create-on-invite path in-process.
 

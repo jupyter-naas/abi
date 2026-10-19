@@ -12,7 +12,7 @@ make up         # Start servers
 
 Visit http://localhost:3000
 
-**Login:** admin@example.com, password from `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD` in `.env` (generated; there is no default)
+**Login:** admin@example.com, then the 6-digit code the identity provider emails (no password; in `abi dev`, `abi dev code` prints it)
 
 ## What Is This?
 

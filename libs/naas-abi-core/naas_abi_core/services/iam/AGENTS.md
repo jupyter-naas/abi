@@ -128,8 +128,12 @@ narrowing token, no Deny naming the action, and on each side an Allow spanning
 every org, workspace and id of the type (`engine` and `api` today). Services use it
 to skip per-item work.
 
-Administration (each needs its `iam:*` action): `ensure_user`,
-`create_service_account`, `get_principal`, `list_principals`,
+Administration (each needs its `iam:*` action): `ensure_user`, `link_user`
+(`iam:LinkUser`, in process only: gives a user of the built-in login (issuer `urn:abi:nexus`) one more
+identity, `iam_identity_links`, which `find_user` answers first, so its principal, roles, groups and keys follow it
+to an identity provider; the user a first sign-in made for that identity is merged into it, retired, and one
+holding keys refuses the link; `identity_at(principal, issuer)` names the subject by which a provider knows a
+user, its own or linked), `create_service_account`, `get_principal`, `list_principals`,
 `suspend_principal`, `resume_principal`, `delete_principal` (keeps the id, drops
 attachments and memberships), groups (`create_group`, `add_group_member`,
 `map_idp_group`, ...; groups cannot contain groups), policies (`create_policy`
@@ -395,9 +399,12 @@ iam.list_idp_bindings(provider=None, policy_id=None)
 - `builtin.module_bootstrap`: a module account before approval (above).
 - Acting on behalf of a user never opens a sealed resource, whoever the actor is.
 - `LEGACY_NEXUS_ISSUER` (`urn:abi:nexus`): a Nexus user named on a call by its Nexus id resolves to IAM's user of
-  that issuer, until the built-in login's users move to the built-in IdP (#67). Users of an identity provider are IAM
-  users named by their principal id (`services/identity`, #61). Nexus holds no implicit grant for either: a user
-  reaches what its role attachments reach (`services/iam/memberships` in Nexus).
+  that issuer. Nexus has no login of its own since #67: such a user keeps that naming (its Nexus id is what every
+  row and call names) and is *linked* to the built-in provider's identity at its first sign-in (`link_user`, which
+  only the built-in provider's verified email triggers, in Nexus's `OidcSignInService`); a person who never
+  signed in stays legacy. Users of an identity provider are IAM users named by their principal id
+  (`services/identity`, #61). Nexus holds no implicit grant for either: a user reaches what its role attachments
+  reach (`services/iam/memberships` in Nexus). `api` holds `iam:LinkUser` (the sign-in rule decides when).
 
 ## Enforcing in a data service (`enforcement.py`)
 

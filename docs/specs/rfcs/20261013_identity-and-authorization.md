@@ -1847,7 +1847,7 @@ guide [`docs/identity-providers.md`](../../identity-providers.md)):
 
 | Today | After |
 |---|---|
-| Nexus `users` (email, password hash) | Built-in IdP users with the same email and a new `sub`, the password hash moved to the IdP, and an IAM principal for `(builtin issuer, sub)`. Nexus `users` points to the principal id. They are linked on first login by verified email, inside the built-in provider only. |
+| Nexus `users` (email, password hash) | Built-in IdP users with the same email and a new `sub` (`abi user migrate`), and an IAM principal for `(builtin issuer, sub)`. Nexus `users` points to the principal id. They are linked on first login by verified email, inside the built-in provider only. **As built (#67):** no password moves (the IdP signs in with a mailed code, so the hash is dropped with the column). The link is `iam:LinkUser`: the user the old login made (issuer `urn:abi:nexus`) gets the provider's `(issuer, sub)` as one more identity, so its principal, roles, groups and keys stay, and the Nexus row keeps its id (nothing is re-keyed) and gains `principal_id` and the identity. The user the first sign-in made itself is merged into it. Decision: [`20261019_login-moves-out-of-nexus.md`](../../adr/20261019_login-moves-out-of-nexus.md). |
 | `workspace_members.role`, the `workspaces.owner_id` fallback | `builtin.<role>` attachments at scope `abi:<org>:<ws>`; the fallback becomes an explicit owner attachment |
 | `organization_members.role`, `organizations.owner_id` | `builtin.<role>` at scope `abi:<org>:-` |
 | `users.is_superadmin` and `users[].is_superadmin` | `builtin.platform_admin` |
@@ -1856,10 +1856,11 @@ guide [`docs/identity-providers.md`](../../identity-providers.md)):
 | Nexus per-workspace prefixes and namespaces (object storage, documents, vectors, datasets) | workspace placements (`iam:PutPlacement`) |
 | Every other existing container (module and engine namespaces, collections, repos, graphs) | platform placements, so no workspace can claim a name inside them (§4.4) |
 | Remote modules with `NATS_JWT_SECRET` | service accounts, keys and approved manifests. `abi dev up` regenerates them; deployed systems run `abi iam module approve`. |
-| Sessions, refresh tokens, app grants and preview tokens signed with `secret_key` | invalidated: users sign in again. `secret_key` keeps only the workspace-secret encryption until subtask 13 gives that its own key. |
+| Sessions, refresh tokens, app grants and preview tokens signed with `secret_key` | invalidated: users sign in again. `secret_key` keeps only the workspace-secret encryption until subtask 13 gives that its own key. **As built (#67):** workspace secrets (and the provider tokens of sessions) have `secrets_encryption_key` (generated as `NEXUS_SECRETS_KEY`); at start whatever is still under an old key is re-encrypted under it, and `secret_key` signs and encrypts nothing. |
 
 - **Removal.** Nexus's login code, `refresh_tokens`, `magic_link_tokens`, `password_reset_tokens` and the
-  `api_keys` mock are removed in subtask 13.
+  `api_keys` mock are removed in subtask 13 (migration `0052_remove_builtin_login.sql`; also `revoked_tokens`,
+  `password_changes` and `users.hashed_password`).
 - **Each subtask leaves the branch green.** Each keeps existing remote modules and `make demo-sdk` working.
   It relies on the transitional broad policies of `api` and `engine` until subtask 11 replaces them.
 

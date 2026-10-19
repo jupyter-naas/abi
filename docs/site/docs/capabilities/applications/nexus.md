@@ -45,64 +45,26 @@ The web frontend is served at `http://localhost:9879` (or your configured port).
 
 ### Local development
 
-The local stack seeds a single admin account, `admin@example.com`, on first start. There is no default password: it is generated per project and read from `.env` at seed time via `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`. Published defaults such as `admin` or `Admin1234!` are refused at login and replaced on boot.
+Nexus has no login of its own: no password, magic link or one-time code. People sign in at an identity provider (`identity.providers`); the built-in one is the default of `abi dev up`, `abi deploy local` and `abi new project`. The login page takes an email, the provider emails a 6-digit code, and the browser returns with an httpOnly session cookie.
 
-### Password login vs. magic link
+The local stack seeds a single admin account, `admin@example.com` (`users:` in the configuration). The API makes it exist at the built-in provider when it starts, and its first sign-in links it to the Nexus account, which keeps the roles configured there. There is no password.
 
-`config.local.yaml` controls which method is active:
+### Retrieving the sign-in code locally
 
-```yaml
-nexus_config:
-  auth_password_enabled: true   # password form
-  # auth_password_enabled: false  # magic link form
-```
-
-Switch by editing the flag and restarting the backend:
+In `abi dev` the provider's mail is a file in `storage/email`. Print the newest code:
 
 ```bash
-docker compose restart abi
+abi dev code                         # mailed to admin@example.com
+abi dev code --email bob@example.com
 ```
 
-No frontend rebuild required. The login page fetches `/api/auth/config` at runtime.
+### Scripts
 
-### Retrieving a magic link locally
+A script uses a personal API key (`abi_pk_...`, made in Nexus under Account, API keys) as `Authorization: Bearer abi_pk_...`. The `/api/auth/*` and `/api/iam/*` routes take a signed-in session only.
 
-When `auth_password_enabled: false` and SMTP is not configured (the default for local dev), magic links are generated but not emailed. Retrieve the latest token directly from the database:
+### Upgrading accounts of the old login
 
-```bash
-docker compose exec postgres psql -U abi -d nexus \
-  -c "SELECT token, expires_at FROM magic_link_tokens ORDER BY created_at DESC LIMIT 1;"
-```
-
-Then open:
-
-```
-http://localhost:3042/auth/magic-link?token=<token>
-```
-
-Tokens expire after 15 minutes.
-
----
-
-## Tenant branding
-
-Nexus supports per-deployment white-labeling configured in `config.yaml`:
-
-```yaml
-modules:
-  - module: "naas_abi.modules.core.nexus"
-    enabled: true
-    config:
-      tenant:
-        title: "My AI Platform"
-        logo_url: "https://cdn.example.com/logo.png"
-        primary_color: "#22c55e"
-        favicon_url: "https://cdn.example.com/favicon.ico"
-```
-
-No frontend rebuild required. Branding changes take effect on config update and service restart.
-
-See [ADR: Tenant Provisioning](/updates/config-driven-tenant-provisioning).
+Accounts of the removed password / magic-link login are moved with `abi user migrate` (a dry run) then `abi user migrate --apply`: each is made at the built-in provider with the same email. The person's first sign-in with the mailed code links the account, which keeps its roles, groups and data. Only the built-in provider links an account by verified email. The old settings (`auth_password_enabled`, `auth_signup_enabled`, `magic_link_*`, `otp_*`) are ignored with a warning.
 
 ---
 

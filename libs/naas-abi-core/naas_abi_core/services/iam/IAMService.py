@@ -812,9 +812,10 @@ class IAMService(IIAMService, PolicySource):
                 f"{source.id} holds keys: revoke or delete them before linking"
             )
         for attachment in self.store.list_attachments(principal_id=source.id):
-            if self._find_attachment(
-                attachment.policy_id, target.id, attachment.scope
-            ) is None:
+            if (
+                self._find_attachment(attachment.policy_id, target.id, attachment.scope)
+                is None
+            ):
                 self.store.attach(
                     Attachment(
                         new_id("att"),
