@@ -36,7 +36,7 @@ class AdminHttp:
         self.base_url = base_url.rstrip("/")
         self._headers = headers or (dict)
         self._max_bytes = max_bytes
-        self._client = client or httpx.Client(
+        self._httpx = client or httpx.Client(
             timeout=timeout_seconds,
             follow_redirects=False,
             headers={"Accept": "application/json", "User-Agent": "naas-abi-identity"},
@@ -57,7 +57,7 @@ class AdminHttp:
             raise ValueError("An admin API path starts with /")
         url = self.base_url + path
         try:
-            response = self._client.request(
+            response = self._httpx.request(
                 method,
                 url,
                 json=json_body,
@@ -101,7 +101,7 @@ class ClientCredentialsToken:
         self._credentials = (client_id, client_secret)
         self._skew = skew_seconds
         self._clock = clock
-        self._client = client or httpx.Client(
+        self._httpx = client or httpx.Client(
             timeout=timeout_seconds, follow_redirects=False
         )
         self._lock = threading.Lock()
@@ -116,7 +116,7 @@ class ClientCredentialsToken:
 
     def _fetch(self, now: float) -> tuple[str, float]:
         try:
-            response = self._client.post(
+            response = self._httpx.post(
                 self._url,
                 data={"grant_type": "client_credentials"},
                 auth=httpx.BasicAuth(*self._credentials),
