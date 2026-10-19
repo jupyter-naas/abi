@@ -369,6 +369,8 @@ async def open_remote_app(module_id: str, app: str, request: Request, path: str 
         grant_url = await asyncio.to_thread(remote_app_grant_url, user_id, module_id, app, expires)
     except ValueError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except links.LinkLimitReached as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
     target = grant_url + path
     return RedirectResponse(f"{target}?{query}" if query else target, status_code=307)
 

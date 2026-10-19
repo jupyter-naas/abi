@@ -1233,6 +1233,7 @@ class IAMService(IIAMService, PolicySource):
         caller: CallPrincipal,
         recipient: str,
         on_behalf_of: CallPrincipal | None = None,
+        scope: Sequence[Mapping[str, Any]] | None = None,
     ) -> IssuedToken:
         """A token for one host (``recipient``: its subject token) for an
         already verified ``caller``: what the engine stores with a job trigger
@@ -1240,7 +1241,8 @@ class IAMService(IIAMService, PolicySource):
         job's host would otherwise hold. With ``on_behalf_of`` the token names
         that user and ``caller`` as the one acting for them, as a delegation
         does, but is addressed to the host alone: no kernel service accepts it.
-        In process only."""
+        ``scope`` is the limit the caller's own credential carried (a key's),
+        which what the job runs for the user stays within. In process only."""
         if on_behalf_of is None:
             return self.tokens.issue(
                 caller.id,
@@ -1255,6 +1257,7 @@ class IAMService(IIAMService, PolicySource):
             actor=caller.id,
             actor_name=caller.name if caller.kind == "service_account" else None,
             groups=self.active_groups(on_behalf_of.groups),
+            scope=scope,
         )
 
     def authenticate_key(self, value: str) -> tuple[PrincipalRecord, KeyRecord]:
@@ -1500,11 +1503,10 @@ class IAMService(IIAMService, PolicySource):
         now = datetime.now(UTC)
         expires_at = spec.expiry(now, expires_at, principal.name)
         bucket = spec.bucket
-        active = [
-            k
-            for k in self.store.list_keys(principal.id)
-            if k.usable(now) and _bucket(k) == bucket
-        ]
+        held = self.store.list_keys(principal.id)
+        if spec.kind == "grant":
+            held = self._prune_grants(held, now)
+        active = [k for k in held if k.usable(now) and _bucket(k) == bucket]
         if len(active) >= spec.limit:
             raise IAMConflictError(
                 f"{principal.id} holds {spec.limit} active keys of this kind: "
@@ -1526,6 +1528,24 @@ class IAMService(IIAMService, PolicySource):
         )
         self._changed()
         return CreatedKey(record, new.value)
+
+    def _prune_grants(self, held: list[KeyRecord], now: datetime) -> list[KeyRecord]:
+        """``held`` without the grants (links) that ended more than a day ago,
+        expired or revoked: nothing can use them, and a user who opens many
+        links would otherwise keep them, and have them listed at every mint,
+        for good. Within the day they stay, for whoever looks into a link."""
+        cutoff = now - _GRANT_RETENTION
+        dead = [
+            k.key_id
+            for k in held
+            if k.kind == "grant"
+            and not k.usable(now)
+            and min(t for t in (k.revoked_at, k.expires_at) if t is not None) < cutoff
+        ]
+        if not dead:
+            return held
+        self.store.delete_keys(dead)
+        return [k for k in held if k.key_id not in set(dead)]
 
     def _find_key_owner(self, principal_id: str) -> PrincipalRecord | None:
         try:
@@ -1992,6 +2012,7 @@ class IAMService(IIAMService, PolicySource):
 _KEY_LIMITS = {"service": 5, "api-key": 5, "coding": 50, "grant": 1000}
 _PERSONAL_YEAR = timedelta(days=365)
 _GRANT_LIFE = timedelta(hours=8)
+_GRANT_RETENTION = timedelta(days=1)
 
 
 @dataclass(frozen=True)

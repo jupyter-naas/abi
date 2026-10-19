@@ -853,3 +853,71 @@ def test_a_stream_keeps_the_user_it_was_opened_for(monkeypatch):
     finally:
         client.close()
     assert users and set(users) == {"usr-ada"}
+
+
+def test_a_stream_keeps_the_scope_it_was_opened_with(monkeypatch):
+    """A read-only key's stream is as narrow over NATS as in process: frames
+    read from another thread, after the caller's context ended, still carry the
+    opener's scope in their delegation."""
+    import threading
+
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        service_account,
+        use_call_context,
+        user,
+    )
+    from naas_abi_core.engine.nats_rpc import NatsRPCClient
+    from naas_abi_proto.transfer.v1 import transfer_pb2
+
+    read_only = (
+        {"effect": "Allow", "actions": ["object_storage:Get*"], "resources": ["*"]},
+    )
+    seen = []
+
+    class Source:
+        identity = "api"
+
+        def token(self):
+            return "own"
+
+        def token_for(self, who, recipient=None, scope=None):
+            seen.append((who.id if who is not None else None, scope))
+            return "t"
+
+    client = NatsRPCClient("nats://unused:4222", Source())
+    replies = {
+        transfer_pb2.OpenResponse: transfer_pb2.OpenResponse(id="s", chunk_bytes=1024),
+        transfer_pb2.StartResponse: transfer_pb2.StartResponse(),
+        transfer_pb2.ReadResponse: transfer_pb2.ReadResponse(done=True),
+        transfer_pb2.CloseResponse: transfer_pb2.CloseResponse(),
+    }
+
+    def fake_rpc(msg, response_cls, transfer):
+        return replies[response_cls]
+
+    monkeypatch.setattr(client, "_rpc_request", lambda *a, **k: None)
+    monkeypatch.setattr(client, "_rpc_parse", fake_rpc)
+    monkeypatch.setattr(
+        client,
+        "_run_coro",
+        lambda coro, **_: (coro.close(), SimpleNamespace(max_payload=1 << 20))[1],
+    )
+    ada = CallContext(
+        principal=service_account("api"),
+        on_behalf_of=user("usr-ada"),
+        scope=read_only,
+    )
+    try:
+        with use_call_context(ada):
+            stream = client._transfer_stream("abi.t", "get", b"", lambda e: None)
+            frames = stream.__enter__()
+        reader = threading.Thread(
+            target=lambda: (list(frames), stream.__exit__(None, None, None))
+        )
+        reader.start()
+        reader.join()
+    finally:
+        client.close()
+    assert len(seen) >= 4  # open, start, read, close
+    assert all(who == "usr-ada" and scope == read_only for who, scope in seen)

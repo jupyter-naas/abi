@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from contextlib import contextmanager
 from threading import Event as ThreadingEvent
@@ -425,13 +425,21 @@ class NatsRPCClient:
     # Auth: the credentials renew their token at half its life.
     # ------------------------------------------------------------------
 
-    def _current_token(self, user: Principal | None = None) -> str:
+    def _current_token(
+        self,
+        user: Principal | None = None,
+        scope: Sequence[Mapping[str, Any]] | None | _CurrentUser = CURRENT_USER,
+    ) -> str:
         """The token of a call: the source's own, or, for a source that carries
         users (``api``, ``engine``) and a call made for one, a delegation that
-        names the user and this process as the actor."""
-        return self._credentials.token_for(
-            user, None, current_call_context().scope if user is not None else None
-        )
+        names the user and this process as the actor. ``scope``: what limits
+        the call (a key's), as the current call's by default; a stream passes
+        the one it captured with its user."""
+        if user is None:
+            return self._credentials.token_for(None, None, None)
+        if isinstance(scope, _CurrentUser):
+            scope = current_call_context().scope
+        return self._credentials.token_for(user, None, scope)
 
     # ------------------------------------------------------------------
     # RPC plumbing.
@@ -457,6 +465,10 @@ class NatsRPCClient:
         delegation; any other identity calls as itself."""
         return current_call_context().user
 
+    def _served_scope(self) -> Sequence[Mapping[str, Any]] | None:
+        """The limit of the current call (a scoped key's), read with the user."""
+        return current_call_context().scope
+
     def _deadline(self, timeout_seconds: float | None) -> float:
         return self._timeout_seconds if timeout_seconds is None else timeout_seconds
 
@@ -469,15 +481,17 @@ class NatsRPCClient:
         transfer: TransferTrace | None = None,
         timeout_seconds: float | None = None,
         user: Principal | None | _CurrentUser = CURRENT_USER,
+        scope: Sequence[Mapping[str, Any]] | None | _CurrentUser = CURRENT_USER,
     ) -> _ResponseT:
         """One request/reply. ``timeout_seconds`` replaces the client's default
         deadline for this call only (a long operation); overflow chunks keep
         the default, each being small. ``user``: the user the call acts for,
-        captured once for a whole stream; by default the current call's."""
+        captured once for a whole stream; by default the current call's. So is
+        ``scope``, the limit that travels with it."""
         payload = request.SerializeToString()
         if isinstance(user, _CurrentUser):
             user = self._served_user()
-        token = self._current_token(user)
+        token = self._current_token(user, scope)
         call_headers = {self._auth_header: token}
         headers = dict(call_headers)
         # The span starts in the calling thread, whose context holds the parent
@@ -693,6 +707,7 @@ class NatsRPCClient:
             # may be read from another thread, or after the caller's context.
             envelope = self._context()
             served = self._served_user()
+            limit = self._served_scope()
 
             def exchange(request: Any, response_cls: Any) -> Any:
                 name = type(request).__name__.removesuffix("Request").lower()
@@ -703,6 +718,7 @@ class NatsRPCClient:
                     response_cls,
                     transfer=trace,
                     user=served,
+                    scope=limit,
                 )
                 if response.HasField("error"):
                     raise_error(response.error)

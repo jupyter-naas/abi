@@ -463,6 +463,13 @@ class IAMStoreMemory(IAMStore):
             if key_id in self._keys:
                 self._keys[key_id] = replace(self._keys[key_id], last_used_at=at)
 
+    def delete_keys(self, key_ids: Sequence[str]) -> int:
+        with self._lock:
+            found = [key_id for key_id in key_ids if key_id in self._keys]
+            for key_id in found:
+                del self._keys[key_id]
+            return len(found)
+
     # -- token floors -----------------------------------------------------------------
 
     def set_token_floor(self, principal_id: str, not_before: datetime) -> None:

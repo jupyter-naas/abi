@@ -185,6 +185,27 @@ def test_a_client_engine_reaches_every_service_through_nats_and_loads_none(
     engine.shutdown()
 
 
+def test_a_client_engine_carries_users_with_an_iam_that_calls_by_its_key_alone(
+    parts,
+):
+    """The engine's tokens carry the users it serves through the serving
+    engine's IAM, and that IAM is called with the engine's own key: asked
+    through the delegating source, a delegation would wait on itself."""
+    parts.claim.return_value = None
+    engine = new_engine()
+
+    engine.load()
+
+    credentials = engine._Engine__credentials
+    iam = engine._Engine__client_iam
+    assert credentials._delegate is not None
+    assert iam._credentials is not credentials
+    assert iam._credentials._delegate is None
+    assert iam._credentials.identity == credentials.identity == "engine"
+    engine.shutdown()
+    assert engine._Engine__client_iam is None
+
+
 def test_a_client_engine_leaves_the_ontologies_to_the_serving_engine(
     parts, monkeypatch
 ):

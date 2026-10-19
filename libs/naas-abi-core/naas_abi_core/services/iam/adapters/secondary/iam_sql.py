@@ -964,6 +964,15 @@ class IAMStoreSQL(IAMStore):
                 update(keys).where(keys.c.key_id == key_id).values(last_used_at=at)
             )
 
+    def delete_keys(self, key_ids: Sequence[str]) -> int:
+        ids = list(key_ids)
+        if not ids:
+            return 0
+        with self._write() as conn:
+            conn.execute(delete(key_narrowing).where(key_narrowing.c.key_id.in_(ids)))
+            result = conn.execute(delete(keys).where(keys.c.key_id.in_(ids)))
+        return int(result.rowcount or 0)
+
     # -- token floors -----------------------------------------------------------------
 
     def set_token_floor(self, principal_id: str, not_before: datetime) -> None:

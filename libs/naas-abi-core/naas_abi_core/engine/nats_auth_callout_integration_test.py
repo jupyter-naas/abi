@@ -1607,6 +1607,31 @@ def test_a_trigger_for_a_user_stores_a_host_token_naming_the_user_and_the_caller
             hosts = iam.verifier().for_audiences((), prefixes=(HOST_AUDIENCE_PREFIX,))
             verified = hosts.verify(token)
             assert verified.subject == "usr_admin" and verified.actor == api.id
+            assert verified.scope is None
+            # A key's limit goes into the stored token: the job runs for the
+            # user within what the key may do, not within what the user may.
+            read_only = (
+                {
+                    "effect": "Allow",
+                    "actions": ["triple_store:Query"],
+                    "resources": ["*"],
+                },
+            )
+            with use_call_context(
+                CallContext(
+                    principal=service_account("api"),
+                    on_behalf_of=user("usr_admin"),
+                    scope=read_only,
+                )
+            ):
+                await store_trigger(
+                    nexus, "default", "people", "nightly", b"{}", {}, kind="manual"
+                )
+            stored = await engine.jetstream().get_msg(
+                "ABI_JOBS_default", subject=subject
+            )
+            scoped = hosts.verify(stored.headers["Nats-Auth-Token"])
+            assert scoped.subject == "usr_admin" and scoped.scope == read_only
         finally:
             await engine.close()
             await hosting.close()

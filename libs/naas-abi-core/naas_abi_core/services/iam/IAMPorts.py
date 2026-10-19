@@ -534,6 +534,12 @@ class IAMStore(ABC):
     def touch_key(self, key_id: str, at: datetime) -> None:
         """Record ``last_used_at``. Bookkeeping, not a grant: the revision stays."""
 
+    @abstractmethod
+    def delete_keys(self, key_ids: Sequence[str]) -> int:
+        """Forget keys that can no longer be used (expired or revoked), with
+        their narrowing; the number deleted. Housekeeping, not a grant: the
+        revision stays. Unknown ids are skipped."""
+
     # -- token floors ---------------------------------------------------------
 
     @abstractmethod

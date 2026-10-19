@@ -44,14 +44,22 @@ AUTHORIZATION_SECONDS = 5.0
 MAX_AUTHORIZATIONS = 1024
 
 
-def _delegation(token: str, caller: str) -> CallContext | None:
+# An account's subject token when it is the account's own ULID (``sa_<ULID>``);
+# anything else cannot be turned back into an account id here.
+_OWN_ACCOUNT = re.compile(r"[0-9A-Za-z]{26}")
+
+
+def _delegation(token: str, caller: str, own: str = "") -> CallContext | None:
     """The context a run executes in, from the delegation its submitter handed
     over, or None (the run calls as the module itself).
 
     The engine verifies every token it is sent; the host only checks that this
     one is a delegation for the run's owner (``caller``: the user discovery
-    named), so a submitter cannot make the host call as someone else. Anything
-    else is dropped, never an error: the run is the module's own."""
+    named), so a submitter cannot make the host call as someone else, and that
+    it names this host's own account as the actor (``own``: the account's
+    subject token, from its discovery record; a delegation for another module
+    is not this host's to carry). Anything else is dropped, never an error: the
+    run is the module's own."""
     if not token:
         return None
     try:
@@ -67,6 +75,7 @@ def _delegation(token: str, caller: str) -> CallContext | None:
         or claims.get("sub") != caller
         or not isinstance(actor, str)
         or not actor
+        or (_OWN_ACCOUNT.fullmatch(own or "") and actor != f"sa_{own}")
     ):
         return None
     return CallContext(
@@ -611,7 +620,9 @@ class AgentHost:
                 run.watchers.add(req.updates_inbox)
             run.progress_at = asyncio.get_running_loop().time()
             self.runs[key] = run
-            delegation = _delegation(req.delegated_token, caller)
+            delegation = _delegation(
+                req.delegated_token, caller, self.session.service_account
+            )
             if delegation is None:
                 run.task = asyncio.create_task(self._execute(name, req, run))
             else:

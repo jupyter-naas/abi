@@ -681,25 +681,23 @@ class RenewingTokenSource(TokenSource):
         with self._lock:
             now = self._clock()
             held = self._delegations.get(key)
-            if (
-                held is not None
-                and now < held[1]
-                and not (
-                    self._delegation_revoked is not None
-                    and self._delegation_revoked(user, held[0])
-                )
-            ):
+            if held is not None and now < held[1]:
                 self._delegations.move_to_end(key)
-                return held[0].token
-            try:
-                issued = self._delegate(user, recipient, scope)
-            except Exception:
-                # A delegation that cannot be renewed keeps the valid one; one
-                # that cannot be made is an error, never the source's own token
-                # (which would drop the user and widen the call).
-                if held is not None and now < held[0].expires_at - 5:
-                    return held[0].token
-                raise
+                kept: IssuedToken | None = held[0]
+            else:
+                kept = None
+        # The revocation check and the exchange are calls to IAM: neither runs
+        # with the lock held, so a slow or re-entrant one blocks no other user.
+        if kept is not None and not (
+            self._delegation_revoked is not None
+            and self._delegation_revoked(user, kept)
+        ):
+            return kept.token
+        # A delegation that cannot be made or renewed is an error, never the
+        # held token (the user may be suspended) and never the source's own
+        # token (which would drop the user and widen the call).
+        issued = self._delegate(user, recipient, scope)
+        with self._lock:
             self._delegations[key] = (
                 issued,
                 now + max(1.0, (issued.expires_at - now) / 2),
@@ -707,7 +705,7 @@ class RenewingTokenSource(TokenSource):
             self._delegations.move_to_end(key)
             while len(self._delegations) > MAX_DELEGATIONS:
                 self._delegations.popitem(last=False)
-            return issued.token
+        return issued.token
 
     def invalidate(self) -> None:
         """Fetch a new token on next use (after the server refused this one)."""

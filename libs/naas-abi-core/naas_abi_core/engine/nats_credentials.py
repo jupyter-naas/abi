@@ -147,6 +147,21 @@ def client_engine_source(
     )
 
 
+def client_engine_credentials(
+    nats_url: str, key: str, *, timeout: float = 10.0, call_timeout: float = 10.0
+) -> tuple[RenewingTokenSource, Any]:
+    """``(source, iam)`` of a client-role engine: the IAM client is built from
+    the engine's key alone (a source that needs no delegation), and the source
+    that carries users is made from it. The caller closes ``iam``."""
+    from naas_abi_core.services.iam.adapters.secondary.IAMSecondaryAdapterNATSClient import (
+        IAMSecondaryAdapterNATSClient,
+    )
+
+    own = service_key_source(nats_url, key, identity="engine", timeout=timeout)
+    iam = IAMSecondaryAdapterNATSClient(nats_url, own, timeout_seconds=call_timeout)
+    return client_engine_source(nats_url, key, iam, timeout=timeout), iam
+
+
 def jwks_over_nats(
     nats_url: str, *, timeout: float = 10.0
 ) -> Callable[[], dict[str, Any]]:

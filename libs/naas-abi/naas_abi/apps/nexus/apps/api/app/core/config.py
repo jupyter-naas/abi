@@ -510,8 +510,8 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30  # 30 minutes (short-lived)
     refresh_token_expire_days: int = 30  # 30 days (long-lived)
     # Lifetime of a link for opening /app-html apps (Bearer or ?token=): an IAM
-    # grant, eight hours at most.
-    app_html_access_token_expire_minutes: int = Field(default=60, ge=1, le=8 * 60)
+    # grant: a longer setting is accepted and clamped to eight hours.
+    app_html_access_token_expire_minutes: int = Field(default=60, ge=1, le=24 * 60)
     # HMAC secret for opening Cloudflare Pages portals from Nexus (empty = off).
     pages_sso_secret: str = ""
     pages_sso_expire_seconds: int = Field(default=300, ge=30, le=15 * 60)
@@ -525,9 +525,9 @@ class Settings(BaseSettings):
     apps_submit_api_base: str = "https://api.github.com"
     apps_submit_web_base: str = "https://github.com"
     # Lifetime of an /app-preview/ token (the editor re-mints on reload).
-    app_preview_token_expire_minutes: int = Field(default=60, ge=1, le=8 * 60)
+    app_preview_token_expire_minutes: int = Field(default=60, ge=1, le=24 * 60)
     # Lifetime of an /app-remote/ grant (a remote module's app, reopened to renew).
-    remote_app_grant_expire_minutes: int = Field(default=8 * 60, ge=1, le=8 * 60)
+    remote_app_grant_expire_minutes: int = Field(default=8 * 60, ge=1, le=24 * 60)
     magic_link_expire_minutes: int = 15
     magic_link_max_active: int = 5
     magic_link_path: str = "/auth/magic-link"

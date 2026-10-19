@@ -62,6 +62,8 @@ class Engine(IEngine):
     __agent_checkpointer: BaseCheckpointSaver | None = None
     # NATS mode: the engine's own tokens (see __engine_credentials).
     __credentials: Any = None
+    # A client-role engine's IAM facade: it calls with the engine's key alone.
+    __client_iam: Any = None
 
     @property
     def configuration(self) -> EngineConfiguration:
@@ -458,9 +460,12 @@ class Engine(IEngine):
                     "engine's key in the secret service), or set nats.service_key."
                 )
             # The IAM of a client-role engine is the serving engine's, over NATS:
-            # it asks for the delegations of the users this engine serves.
-            self.__credentials = nats_credentials.client_engine_source(
-                nats.nats_url, key, self.__services.iam
+            # it asks for the delegations of the users this engine serves. It
+            # calls with the engine's own key, never through a delegating source.
+            self.__credentials, self.__client_iam = (
+                nats_credentials.client_engine_credentials(
+                    nats.nats_url, key, call_timeout=nats.client_timeout_seconds
+                )
             )
         return self.__credentials
 
@@ -673,6 +678,9 @@ class Engine(IEngine):
         if self.__nats_dependencies is not None:
             self.__nats_dependencies.close()
             self.__nats_dependencies = None
+        if self.__client_iam is not None:
+            self.__client_iam.close()
+            self.__client_iam = None
         nats_runtime.close()
 
 

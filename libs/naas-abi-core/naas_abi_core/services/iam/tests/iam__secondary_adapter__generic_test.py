@@ -433,6 +433,34 @@ class IAMStoreContract(ABC):
         assert store.get_key("abcdefghijklmnop").last_used_at == at
         assert store.revision() == start
 
+    def test_deleting_keys_forgets_them_and_their_narrowing(self, store: IAMStore):
+        bob = store.create_principal(user())
+        for key_id in ("abcdefghijklmnop", "qrstuvwxyz234567", "zzzzzzzzzzzzzzzz"):
+            store.create_key(
+                KeyRecord(
+                    key_id,
+                    bob.id,
+                    "a" * 64,
+                    kind="grant",
+                    audience="abi:delegated:app",
+                    resource=f"/app-html/{key_id}",
+                    scope=(),
+                )
+            )
+        start = store.revision()
+        assert store.delete_keys(["abcdefghijklmnop", "missingmissingmi"]) == 1
+        assert store.delete_keys([]) == 0
+        assert store.revision() == start  # housekeeping, not a grant
+        assert {k.key_id for k in store.list_keys(bob.id)} == {
+            "qrstuvwxyz234567",
+            "zzzzzzzzzzzzzzzz",
+        }
+        with pytest.raises(IAMNotFoundError):
+            store.get_key("abcdefghijklmnop")
+        # The id is free again, and no narrowing of the old key comes back.
+        again = store.create_key(KeyRecord("abcdefghijklmnop", bob.id, "b" * 64))
+        assert (again.audience, again.resource, again.scope) == (None, None, None)
+
     def test_manifests_round_trip(self, store: IAMStore):
         sa = store.create_principal(service_account())
         document = {"version": "2026-10-13", "statements": []}

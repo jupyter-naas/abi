@@ -98,4 +98,22 @@ already verified, with an audience of its own, so that none of them is ever read
   service keys.
 - `api` and `engine` must keep `iam:ExchangeToken` when #65 enumerates their policies.
 - The delegation cache holds a token per user, scope and recipient for half its life (at most 2048); a
-  delegation for a suspended user is refused at issue, and an issued one is denied at the next check.
+  delegation for a suspended user is refused at issue, and an issued one is denied at the next check. The
+  exchange that makes or renews one runs outside the source's lock (it calls IAM, which calls with the source's own
+  token), and a delegation that cannot be renewed fails the call: the held token is not handed out on the
+  strength of an exchange that no longer says yes.
+- A key's limit (`abi_scope`) travels the whole way: with a NATS stream (captured with its user when the stream
+  opens, read by whichever thread reads the frames) and into the host token stored with a job trigger, so what
+  a job runs for the user stays within what the key may do.
+- A session token Nexus signs right after the user's tokens were revoked (a password change signs them in again in
+  the same second) gets an `iat` at the first second the floor lets through, not the second it was made in.
+- A key may be exchanged without naming an audience (`audience=""`, key subjects only): the token is the one of
+  the key's own audience, so a caller that cannot tell an API key from a coding key authenticates it once. The
+  requester then needs `iam:ExchangeToken` on every audience (`api` and `engine` do).
+- Links are IAM grants and are made at every click: making one forgets the user's links that expired or were
+  revoked more than a day ago (`IAMStore.delete_keys`), and the limit of 1000 live links is a refusal
+  (`LinkLimitReached`, answered 429 by the routes), not a server error.
+- `app_html_access_token_expire_minutes`, `app_preview_token_expire_minutes` and `remote_app_grant_expire_minutes`
+  keep their old ceiling of a day, so a deployment that set more than eight hours still boots; the link made is
+  clamped to eight hours.
+- A module host carries a delegation only when it names the host's own account as the actor.

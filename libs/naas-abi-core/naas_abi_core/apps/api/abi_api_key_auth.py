@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import logging
 import os
 from collections.abc import Callable
+from typing import NamedTuple
 
 from fastapi import HTTPException, status
 from fastapi.security.utils import get_authorization_scheme_param
@@ -65,20 +67,40 @@ def is_abi_api_token_valid(token: str | None) -> bool:
     return hmac.compare_digest(token.encode(), expected.encode())
 
 
-def is_app_html_request_authorized(request: Request) -> bool:
-    """True when ``ABI_API_KEY`` matches or any registered JWT validator accepts."""
+class AppHtmlCheck(NamedTuple):
+    """What a request to ``/app-html/`` presents, checked once."""
+
+    token: str | None
+    authorized: bool
+    # A scoped credential that arrived as ``?token=`` (not the API key): it is
+    # kept in a cookie so the page's own requests carry it.
+    stamp: bool
+
+
+def check_app_html_request(request: Request) -> AppHtmlCheck:
+    """Whether ``ABI_API_KEY`` matches or a registered validator accepts, and
+    whether the credential is to be stamped into the cookie. The validators may
+    ask IAM: this runs once per request, and off the event loop when called from
+    the middleware."""
     token = extract_abi_api_token(request)
     if is_abi_api_token_valid(token):
-        return True
+        return AppHtmlCheck(token, True, False)
     if not token:
-        return False
+        return AppHtmlCheck(token, False, False)
     for validator in tuple(_EXTRA_APP_HTML_TOKEN_VALIDATORS):
         try:
             if validator(token, request):
-                return True
+                return AppHtmlCheck(
+                    token, True, request.query_params.get("token") == token
+                )
         except Exception as exc:  # noqa: BLE001 — never fail open on validator bugs
             logger.debug("app-html token validator error: %s", exc)
-    return False
+    return AppHtmlCheck(token, False, False)
+
+
+def is_app_html_request_authorized(request: Request) -> bool:
+    """True when ``ABI_API_KEY`` matches or any registered JWT validator accepts."""
+    return check_app_html_request(request).authorized
 
 
 def require_abi_api_token(request: Request) -> None:
@@ -89,24 +111,6 @@ def require_abi_api_token(request: Request) -> None:
             detail="Invalid authentication credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
-
-def _should_stamp_app_html_cookie(request: Request, token: str | None) -> bool:
-    """Stamp cookie only for scoped JWTs arriving via ``?token=`` (not API keys)."""
-    if not token:
-        return False
-    if is_abi_api_token_valid(token):
-        return False
-    if request.query_params.get("token") != token:
-        return False
-    # Must be accepted by a registered JWT validator (not a random string).
-    for validator in tuple(_EXTRA_APP_HTML_TOKEN_VALIDATORS):
-        try:
-            if validator(token, request):
-                return True
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("app-html cookie stamp validator error: %s", exc)
-    return False
 
 
 def _stamp_app_html_token_cookie(
@@ -140,16 +144,17 @@ class AppHtmlAbiKeyMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         path = request.url.path
         if path.startswith("/app-html/") and request.method != "OPTIONS":
-            if not is_app_html_request_authorized(request):
+            check = await asyncio.to_thread(check_app_html_request, request)
+            if not check.authorized:
                 return JSONResponse(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     content={"detail": "Invalid authentication credentials"},
                     headers={"WWW-Authenticate": "Bearer"},
                 )
-            token = extract_abi_api_token(request)
             response = await call_next(request)
-            if _should_stamp_app_html_cookie(request, token):
-                assert token is not None
-                _stamp_app_html_token_cookie(response, token=token, request=request)
+            if check.stamp and check.token is not None:
+                _stamp_app_html_token_cookie(
+                    response, token=check.token, request=request
+                )
             return response
         return await call_next(request)

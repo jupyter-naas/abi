@@ -74,6 +74,11 @@ _MAX_PRINCIPAL_ID = 256
 _DISCOVERY_MODULE_TYPES = ("module", "agent", "app", "model", "job")
 
 
+# The audience a requester is checked on before a key is looked at, when the
+# key's own audience is the one asked for: only one that may exchange for any.
+ANY_AUDIENCE = "*"
+
+
 def audience_resource(audience: str) -> str:
     """What ``iam:ExchangeToken`` is checked on, for ``audience``."""
     return resource_name("iam", "audience", audience)
@@ -105,7 +110,11 @@ class TokenExchanger:
     def exchange(self, request: TokenExchange) -> IssuedToken:
         iam = self._iam
         audience = request.audience
-        if audience not in EXCHANGE_AUDIENCES:
+        # A key may be exchanged without naming an audience: the token is the
+        # one of its own, read from the key (a caller that cannot tell an API
+        # key from a coding key authenticates it once, not once per guess).
+        of_the_key = not audience and request.subject_token_type == TOKEN_TYPE_API_KEY
+        if not of_the_key and audience not in EXCHANGE_AUDIENCES:
             raise ValueError(f"No tokens for audience {audience!r}")
         handler = {
             TOKEN_TYPE_SESSION: self._vouched,
@@ -125,8 +134,11 @@ class TokenExchanger:
             # Before the subject is looked at: a requester that may not exchange
             # must not make IAM ask an identity provider about a token (which
             # would record its user), nor touch a key.
-            self._authorize(ctx, None, audience)
+            self._authorize(ctx, None, audience or ANY_AUDIENCE)
         subject = handler(ctx, request, audience)
+        if of_the_key:
+            (audience,) = subject.allowed
+            self._authorize(ctx, subject, audience)
         if audience not in subject.allowed:
             raise PermissionDeniedError(
                 ACTION,
@@ -279,7 +291,7 @@ class TokenExchanger:
     def _key(self, ctx: CallContext, request: TokenExchange, audience: str) -> _Subject:
         record, owner = self._iam.authenticate_user_key(request.subject_token)
         target = record.audience or API_KEY_AUDIENCE
-        if audience != target:
+        if audience and audience != target:
             raise KeyRefusedError()
         if request.scope is not None:
             raise ValueError("scope: a key's own narrowing is final")

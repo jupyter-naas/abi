@@ -1,3 +1,4 @@
+import threading
 import time
 from typing import Any
 
@@ -403,14 +404,17 @@ def test_a_delegation_that_cannot_be_made_is_an_error_not_the_sources_own_token(
         source.token_for(_user())
 
 
-def test_a_delegation_failing_to_renew_keeps_the_valid_token():
+def test_a_delegation_failing_to_renew_is_an_error_not_the_held_token():
+    """Past half its life a delegation is made again; if that fails (the user
+    was suspended, the engine is away) the call fails: the held token is not
+    handed out on the strength of an exchange that no longer says yes."""
     now = [1000.0]
     calls = [0]
 
     def delegate(user, recipient, scope=None):
         calls[0] += 1
         if calls[0] > 1:
-            raise ConnectionError("engine restarting")
+            raise InvalidServiceTokenError("user is suspended")
         return IssuedToken("t1", now[0] + 600)
 
     source = RenewingTokenSource(
@@ -420,11 +424,33 @@ def test_a_delegation_failing_to_renew_keeps_the_valid_token():
         clock=lambda: now[0],
     )
     assert source.token_for(_user()) == "t1"
-    now[0] += 400  # past half, still valid
+    now[0] += 100  # within the first half: held
     assert source.token_for(_user()) == "t1"
-    now[0] += 250  # expired
-    with pytest.raises(ConnectionError):
+    now[0] += 250  # past half, still valid
+    with pytest.raises(InvalidServiceTokenError, match="suspended"):
         source.token_for(_user())
+
+
+def test_a_delegation_is_made_without_holding_the_sources_lock():
+    """The exchange calls IAM, which calls with this source's own token: a
+    delegation made under the lock would wait on itself, and every other user
+    would wait for it."""
+    source: RenewingTokenSource
+
+    def delegate(user, recipient, scope=None):
+        assert source.token() == "own"  # the lock is free
+        return IssuedToken(f"d-{user.id}", time.time() + 600)
+
+    source = RenewingTokenSource(
+        "engine",
+        lambda: IssuedToken("own", time.time() + 600),
+        delegate=delegate,
+    )
+    done: list[str] = []
+    worker = threading.Thread(target=lambda: done.append(source.token_for(_user("a"))))
+    worker.start()
+    worker.join(5)
+    assert done == ["d-a"]
 
 
 def test_the_delegation_cache_is_bounded():

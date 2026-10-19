@@ -182,7 +182,7 @@ class BrokerControl:
             request.credentials[AUTH_HEADER] = await asyncio.to_thread(
                 lambda: (
                     self.iam.issue_host_token(
-                        caller, recipient, context.on_behalf_of
+                        caller, recipient, context.on_behalf_of, context.scope
                     ).token
                 )
             )

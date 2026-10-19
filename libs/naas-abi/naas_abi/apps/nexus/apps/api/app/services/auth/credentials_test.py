@@ -163,6 +163,18 @@ def test_a_session_token_revoked_by_its_users_floor_is_no_session(iam, ada):
     assert credential(token) is None
 
 
+def test_a_sign_in_right_after_a_revocation_is_a_session(iam, ada):
+    """A password change revokes the user's tokens and signs them in again in
+    the same second: the new session's ``iat`` has whole seconds and must not
+    fall at or before the floor."""
+    old, _ = create_access_token({"sub": ada.id})
+    with _acting_for(ada):
+        iam.revoke_tokens(ada.id)
+    new, _ = create_access_token({"sub": ada.id})
+    assert credential(old) is None
+    assert credential(new) is not None
+
+
 def test_a_suspended_user_has_no_session(iam, ada):
     token, _ = create_access_token({"sub": ada.id})
     with as_service_account("engine"):
@@ -276,6 +288,30 @@ def test_a_coding_key_is_a_coding_credential_bound_to_its_environment(iam, ada):
     found = credential(created.value)
     assert found is not None
     assert (found.kind, found.resource) == (CODING, "http://coder-ada-x:8378")
+
+
+def test_a_key_is_authenticated_once_whichever_audience_it_has(iam, ada, monkeypatch):
+    """The key says which audience it is for: a coding key is not tried as an
+    API key first (a full authentication, hash and owner, thrown away)."""
+    calls = []
+    real = iam.authenticate_user_key
+
+    def counted(value):
+        calls.append(value)
+        return real(value)
+
+    monkeypatch.setattr(iam, "authenticate_user_key", counted)
+    api = _key(iam, ada)
+    coding = _key(
+        iam,
+        ada,
+        audience=CODING_AUDIENCE,
+        resource="http://coder-ada-x:8378",
+        expires_at=datetime.now(UTC) + timedelta(days=30),
+    )
+    assert credential(api.value).kind == API_KEY
+    assert credential(coding.value).kind == CODING
+    assert calls == [api.value, coding.value]
 
 
 def test_a_revoked_key_is_no_credential_on_the_next_request(iam, ada):

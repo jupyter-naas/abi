@@ -49,6 +49,7 @@ from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
 from naas_abi.apps.nexus.apps.api.app.services.apps.app_html_access import (
     mint_app_html_access_token,
 )
+from naas_abi.apps.nexus.apps.api.app.services.apps.links import LinkLimitReached
 from naas_abi.apps.nexus.apps.api.app.services.apps.pages_sso import (
     mint_pages_sso_token,
 )
@@ -453,6 +454,8 @@ async def create_app_html_access_token(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LinkLimitReached as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
     return AppHtmlAccessTokenResponse(
         access_token=token,
         expires_in=expires_in,
@@ -483,7 +486,12 @@ async def create_remote_app_grant(
         remote_app_grant_url,
     )
 
-    path = await asyncio.to_thread(remote_app_grant_url, current_user.id, body.module_id, body.app)
+    try:
+        path = await asyncio.to_thread(
+            remote_app_grant_url, current_user.id, body.module_id, body.app
+        )
+    except LinkLimitReached as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
     return RemoteAppGrantResponse(
         path=path,
         expires_in=min(nexus_config.settings.remote_app_grant_expire_minutes, 8 * 60) * 60,

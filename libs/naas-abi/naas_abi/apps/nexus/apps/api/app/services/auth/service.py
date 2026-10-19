@@ -4,6 +4,7 @@ import hmac
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import cast
 from uuid import uuid4
 
 import bcrypt
@@ -162,13 +163,35 @@ def get_password_hash(password: str) -> str:
 SESSION_AUDIENCE = "abi:session"
 
 
+def _first_second_after_revocation(user_id: object) -> int | None:
+    """The first whole second at which the engine's IAM accepts a token of this
+    user, after a revocation of their tokens; None without one."""
+    if not user_id:
+        return None
+    from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
+
+    iam = credentials.IAM()
+    issue_after = getattr(iam, "issue_after_floor", None)
+    if issue_after is None:
+        return None
+    return cast(int | None, issue_after(str(user_id)))
+
+
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> tuple[str, str]:
     """A session token: ``aud`` is ``abi:session``, whatever ``data`` says."""
     to_encode = data.copy()
     jti = f"jti-{uuid4().hex[:16]}"
     now = datetime.now(UTC)
-    expire = now + (expires_delta or timedelta(minutes=settings.access_token_expire_minutes))
-    to_encode.update({"exp": expire, "iat": now, "jti": jti, "aud": SESSION_AUDIENCE})
+    # A sign-in right after the user's tokens were revoked: ``iat`` has whole
+    # seconds, so it is never before the first second the floor lets through.
+    issued = now
+    first = _first_second_after_revocation(to_encode.get("sub"))
+    if first is not None and first > int(now.timestamp()):
+        issued = datetime.fromtimestamp(first, UTC)
+    expire = max(now, issued) + (
+        expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
+    )
+    to_encode.update({"exp": expire, "iat": issued, "jti": jti, "aud": SESSION_AUDIENCE})
     token = jwt.encode(to_encode, current_secret_key(), algorithm="HS256")
     return token, jti
 

@@ -34,7 +34,7 @@ from naas_abi_core.engine.call_context import (
     user,
 )
 from naas_abi_core.engine.nats_auth import APP_AUDIENCE, PREVIEW_AUDIENCE
-from naas_abi_core.services.iam.IAMPorts import KeyRefusedError
+from naas_abi_core.services.iam.IAMPorts import IAMConflictError, KeyRefusedError
 
 # IAM's limit for a grant: a link is reopened to renew, never kept.
 MAX_MINUTES = 8 * 60
@@ -47,6 +47,10 @@ REMOTE_APP = "app-remote"  # app-remote/<module id>/<app>
 
 class LinksUnavailable(RuntimeError):
     """IAM is not there to make or read a link (an engine-less process)."""
+
+
+class LinkLimitReached(RuntimeError):
+    """The user holds as many live links as IAM allows: some must end first."""
 
 
 @dataclass(frozen=True)
@@ -111,18 +115,23 @@ def mint_link(
     if expires_at <= now + timedelta(seconds=1):
         raise ValueError("The credential this link would open from has expired")
     iam = _iam()
-    with use_call_context(
-        CallContext(principal=service_account("api"), on_behalf_of=user(user_id))
-    ):
-        created = iam.create_key(
-            user_id,
-            description=description or f"link: {resource}"[:200],
-            kind="grant",
-            audience=audience,
-            resource=resource,
-            scope=scope,
-            expires_at=expires_at,
-        )
+    try:
+        with use_call_context(
+            CallContext(principal=service_account("api"), on_behalf_of=user(user_id))
+        ):
+            created = iam.create_key(
+                user_id,
+                description=description or f"link: {resource}"[:200],
+                kind="grant",
+                audience=audience,
+                resource=resource,
+                scope=scope,
+                expires_at=expires_at,
+            )
+    except IAMConflictError as exc:
+        raise LinkLimitReached(
+            "Too many links are open for this account: wait for some to expire"
+        ) from exc
     return created.value, int((expires_at - now).total_seconds())
 
 

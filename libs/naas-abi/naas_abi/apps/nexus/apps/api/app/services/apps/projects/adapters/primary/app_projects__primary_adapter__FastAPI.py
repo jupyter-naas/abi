@@ -26,6 +26,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     require_workspace_access,
 )
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from naas_abi.apps.nexus.apps.api.app.services.apps.links import LinkLimitReached
 from naas_abi.apps.nexus.apps.api.app.services.apps.projects.factory import (
     AppProjectsUnavailableError,
     build_app_projects_service,
@@ -535,13 +536,16 @@ async def preview_token(
     key = _key(body.workspace_id, slug)
     await _run(service.get_project, key)  # 404 before minting
     minutes = min(settings.app_preview_token_expire_minutes, 8 * 60)
-    token = await asyncio.to_thread(
-        mint_preview_token,
-        user_id=str(current_user.id),
-        workspace_id=key.workspace_id,
-        slug=key.slug,
-        minutes=minutes,
-    )
+    try:
+        token = await asyncio.to_thread(
+            mint_preview_token,
+            user_id=str(current_user.id),
+            workspace_id=key.workspace_id,
+            slug=key.slug,
+            minutes=minutes,
+        )
+    except LinkLimitReached as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
     return PreviewTokenResponse(path=f"/app-preview/{token}/", expires_in=minutes * 60)
 
 

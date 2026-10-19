@@ -913,3 +913,27 @@ def test_a_delegation_that_is_not_for_the_run_owner_is_dropped(token):
         assert context.delegated_token is None and context.user is None
 
     asyncio.run(scenario())
+
+
+ULID = "01J8Z3K5M7N9P2Q4R6S8T0V2WX"
+
+
+def test_a_delegation_names_this_hosts_own_account_or_is_dropped():
+    """A submitter may hand over a delegation made for another module (it is
+    verified by the engine, but it is not this host's to carry): only one that
+    names this host's own account as the actor becomes the run's context."""
+
+    async def scenario(actor, kept):
+        seen = Seen()
+        owner = host(Documents(), seen)
+        owner.session.service_account = ULID
+        token = _delegation_token(act=actor)
+        await owner._submit("agent", "key", "caller", _delegated_request(token))
+        await owner.runs["key"].task
+        [context] = seen.contexts
+        assert (context.delegated_token == token) is kept
+        assert (context.user is not None) is kept
+
+    asyncio.run(scenario(f"sa_{ULID}", True))
+    asyncio.run(scenario("sa_01J8Z3K5M7N9P2Q4R6S8T0V2WY", False))
+    asyncio.run(scenario("engine", False))

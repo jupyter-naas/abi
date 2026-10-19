@@ -505,6 +505,32 @@ def _by_key(iam, value, audience=None, **fields):
     )
 
 
+def test_a_key_without_an_audience_buys_the_token_of_its_own(h, iam, bob):
+    api = _key(h, bob)
+    coding = _key(h, bob, audience=CODING_AUDIENCE, resource="env-1")
+    for created, audience in ((api, API_KEY_AUDIENCE), (coding, CODING_AUDIENCE)):
+        issued = _exchange(
+            iam,
+            subject_token=created.value,
+            subject_token_type=TOKEN_TYPE_API_KEY,
+            audience="",
+        )
+        assert _verify(iam, issued.token, audience).audience == audience
+    # Only a requester that may exchange for any audience (api, engine) can
+    # leave it out: a narrower one names the audience it was granted.
+    with h.as_(actor="module/acme/people"), pytest.raises(PermissionDeniedError):
+        iam.exchange_token(
+            TokenExchange(
+                subject_token=api.value,
+                subject_token_type=TOKEN_TYPE_API_KEY,
+                audience="",
+            )
+        )
+    # It is only for keys: no other subject has an audience of its own.
+    with pytest.raises(ValueError, match="audience"):
+        _vouched(iam, bob.id, "")
+
+
 def test_a_personal_key_is_shown_once_hashed_and_buys_an_api_key_token(h, iam, bob):
     created = _key(h, bob, description="ci")
     assert created.value.startswith(f"abi_pk_{created.record.key_id}_")
@@ -616,6 +642,82 @@ def test_a_grant_lasts_at_most_eight_hours(h, iam, bob):
             kind="grant",
             audience=API_KEY_AUDIENCE,
             expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+
+
+def test_making_a_link_forgets_the_links_that_ended_long_ago(h, iam, bob):
+    """Links are made at every click: those that expired or were revoked a day
+    ago can be used by nobody, and are not kept (nor counted, nor listed, at
+    each new one). Recent ones stay for whoever looks into them."""
+    from naas_abi_core.services.iam.IAMPorts import KeyRecord
+
+    now = datetime.now(UTC)
+
+    def stored(key_id, **fields):
+        iam.store.create_key(
+            KeyRecord(
+                key_id=key_id,
+                principal_id=bob.id,
+                secret_hash="x",
+                kind="grant",
+                audience=APP_AUDIENCE,
+                created_at=now - timedelta(days=3),
+                **fields,
+            )
+        )
+
+    stored("expired-long-ago", expires_at=now - timedelta(days=2))
+    stored(
+        "revoked-long-ago",
+        expires_at=now + timedelta(hours=1),
+        revoked_at=now - timedelta(days=2),
+    )
+    stored("expired-just-now", expires_at=now - timedelta(minutes=5))
+    stored("live", expires_at=now + timedelta(hours=1))
+    personal = _key(h, bob)  # another kind is never pruned
+
+    fresh = _key(
+        h,
+        bob,
+        kind="grant",
+        audience=APP_AUDIENCE,
+        expires_at=now + timedelta(hours=1),
+    )
+
+    kept = {k.key_id for k in iam.store.list_keys(bob.id)}
+    assert kept == {
+        "expired-just-now",
+        "live",
+        personal.record.key_id,
+        fresh.record.key_id,
+    }
+
+
+def test_the_links_a_user_holds_at_once_are_capped_with_a_conflict(h, iam, bob):
+    from naas_abi_core.services.iam import IAMService as module
+
+    now = datetime.now(UTC)
+    held = [
+        module.KeyRecord(
+            key_id=f"link-{index}",
+            principal_id=bob.id,
+            secret_hash="x",
+            kind="grant",
+            audience=APP_AUDIENCE,
+            created_at=now,
+            expires_at=now + timedelta(hours=1),
+        )
+        for index in range(module._KEY_LIMITS["grant"])
+    ]
+    for record in held:
+        iam.store.create_key(record)
+    with pytest.raises(IAMConflictError):
+        _key(
+            h,
+            bob,
+            kind="grant",
+            audience=APP_AUDIENCE,
+            expires_at=now + timedelta(hours=1),
         )
 
 
@@ -931,3 +1033,29 @@ def test_a_request_cannot_rebind_what_a_key_is_bound_to(h, iam, bob):
         API_KEY_AUDIENCE,
     )
     assert claims.resource is None
+
+
+# -- a job trigger stores a host token that keeps the caller's limit ---------------------------
+
+
+def test_a_host_token_for_a_job_keeps_the_scope_of_the_call_that_stored_it(
+    h, iam, bob, people
+):
+    """A read-only key triggers a job: what the job later runs for the user is
+    as narrow as the key, not as wide as the user."""
+    from naas_abi_core.engine.call_context import service_account, user
+    from naas_abi_core.engine.nats_auth import HOST_AUDIENCE_PREFIX
+    from naas_abi_core.services.iam.modules import subject_token
+
+    read_only = ({"effect": "Allow", "actions": [QUERY], "resources": ["*"]},)
+    recipient = subject_token(people.id)
+    hosts = iam.verifier().for_audiences((), prefixes=(HOST_AUDIENCE_PREFIX,))
+    api = service_account("api")
+
+    scoped = iam.issue_host_token(api, recipient, user(bob.id), read_only)
+    claims = hosts.verify(scoped.token)
+    assert claims.subject == bob.id and claims.scope == read_only
+    assert token_context(claims).scope == read_only
+
+    unscoped = iam.issue_host_token(api, recipient, user(bob.id))
+    assert hosts.verify(unscoped.token).scope is None

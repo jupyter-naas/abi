@@ -212,24 +212,24 @@ def _key_credential(value: str) -> Credential | None:
     iam = IAM()
     if iam is None:
         return None
-    for audience in (API_KEY_AUDIENCE, CODING_AUDIENCE):
-        try:
-            with as_service_account("api"):
-                issued = iam.exchange_token(
-                    TokenExchange(
-                        subject_token=value,
-                        subject_token_type=TOKEN_TYPE_API_KEY,
-                        audience=audience,
-                    )
+    try:
+        # No audience named: the key's own (an API key's, or a coding agent's),
+        # so the key is authenticated once whichever it is.
+        with as_service_account("api"):
+            issued = iam.exchange_token(
+                TokenExchange(
+                    subject_token=value,
+                    subject_token_type=TOKEN_TYPE_API_KEY,
+                    audience="",
                 )
-        except KeyRefusedError:
-            continue  # not this audience's key, or no key at all
-        try:
-            claims = _verifier(iam).verify(issued.token)
-        except InvalidServiceTokenError:
-            return None
-        return _credential_of(claims)
-    return None
+            )
+    except KeyRefusedError:
+        return None
+    try:
+        claims = _verifier(iam).verify(issued.token)
+    except InvalidServiceTokenError:
+        return None
+    return _credential_of(claims)
 
 
 async def _session_credential(
