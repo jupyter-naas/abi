@@ -1989,7 +1989,7 @@ class IAMService(IIAMService, PolicySource):
 
 # Keys a principal may hold at once, per bucket: a service account's keys, a
 # user's API keys, coding keys (one per environment), grants (one per open link).
-_KEY_LIMITS = {"service": 5, "api-key": 5, "coding": 50, "grant": 200}
+_KEY_LIMITS = {"service": 5, "api-key": 5, "coding": 50, "grant": 1000}
 _PERSONAL_YEAR = timedelta(days=365)
 _GRANT_LIFE = timedelta(hours=8)
 

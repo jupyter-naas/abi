@@ -83,11 +83,13 @@ def test_authenticated_request_is_recorded_under_user_actor(app_with_middleware)
     app, service = app_with_middleware
     client = TestClient(app)
 
-    async def verified(headers):
-        return "user-123"
+    async def verified(headers, path):
+        from naas_abi.apps.nexus.apps.api.app.services.auth.credentials import Credential
+
+        return Credential(kind="session", user_id="user-123"), None
 
     with patch(
-        "naas_abi.apps.nexus.apps.api.app.services.identity_events.middleware.verified_user_id",
+        "naas_abi.apps.nexus.apps.api.app.services.identity_events.middleware.verified_credential",
         verified,
     ):
         response = client.get("/hello", headers={"Authorization": "Bearer fake"})
@@ -106,11 +108,11 @@ def test_invalid_bearer_token_falls_back_to_anonymous(app_with_middleware):
     app, service = app_with_middleware
     client = TestClient(app)
 
-    async def unverified(headers):
-        return None
+    async def unverified(headers, path):
+        return None, None
 
     with patch(
-        "naas_abi.apps.nexus.apps.api.app.services.identity_events.middleware.verified_user_id",
+        "naas_abi.apps.nexus.apps.api.app.services.identity_events.middleware.verified_credential",
         unverified,
     ):
         response = client.get("/hello", headers={"Authorization": "Bearer bad"})

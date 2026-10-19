@@ -113,7 +113,9 @@ def _abandon_engine() -> None:
     try:
         runtime_engine.shutdown()
     except Exception as exc:  # noqa: BLE001 - the start failure is what to report
-        logger.warning(f"api: shutting down the engine of a failed start failed: {exc!r}")
+        logger.warning(
+            f"api: shutting down the engine of a failed start failed: {exc!r}"
+        )
 
 
 @asynccontextmanager
@@ -298,6 +300,7 @@ def _iam_key_context(token: str) -> "CallContext | None":
         SERVICE_KEY_PREFIX,
     )
     from naas_abi_core.services.iam.IAMPorts import KeyRefusedError
+    from naas_abi_core.services.iam.IAMService import IAMService
 
     if not token.startswith((SERVICE_KEY_PREFIX, PERSONAL_KEY_PREFIX)):
         return None
@@ -306,7 +309,7 @@ def _iam_key_context(token: str) -> "CallContext | None":
         iam = services.iam if services.iam_available() else None
     except Exception:  # noqa: BLE001 - no engine, no keys
         return None
-    if iam is None or not hasattr(iam, "authenticate_user_key"):
+    if not isinstance(iam, IAMService):
         return None  # a client-role engine does not hold the keys
     current = current_call_context()
     try:
@@ -322,7 +325,10 @@ def _iam_key_context(token: str) -> "CallContext | None":
         record, owner = iam.authenticate_user_key(token)
     except KeyRefusedError:
         return None
-    if record.kind != "personal" or (record.audience or API_KEY_AUDIENCE) != API_KEY_AUDIENCE:
+    if (
+        record.kind != "personal"
+        or (record.audience or API_KEY_AUDIENCE) != API_KEY_AUDIENCE
+    ):
         return None  # a coding agent's key is for the OpenAI gateway
     return replace(
         current,

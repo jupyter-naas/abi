@@ -59,6 +59,8 @@ from naas_abi_core.services.source_control.SourceControlService import (
 )
 from pydantic import ValidationError
 
+pytestmark = pytest.mark.usefixtures("engine_iam")
+
 
 def test_slugify_and_paths() -> None:
     assert _slugify("Q3 Business Review!") == "q3-business-review"
@@ -241,9 +243,7 @@ def test_a_source_namespace_is_refused_at_config_time(namespace: str) -> None:
         SlidesTemplateSourceConfig(namespace=namespace, path="seeds/templates")
 
 
-def test_a_missing_source_directory_does_not_hide_the_abi_seeds(
-    tmp_path, monkeypatch
-) -> None:
+def test_a_missing_source_directory_does_not_hide_the_abi_seeds(tmp_path, monkeypatch) -> None:
     """A stale path in config.yaml must degrade to ABI's seeds, not to nothing."""
     _configure_sources(monkeypatch, ("acme", tmp_path / "does-not-exist"))
 
@@ -262,9 +262,7 @@ def test_friendly_coding_detail_hides_raw_coder_json() -> None:
     assert _friendly_coding_detail(WorkspaceNameConflictError(raw)) == (
         "Reconnecting to existing runtime…"
     )
-    assert _friendly_coding_detail(Exception(raw)) == (
-        "Reconnecting to existing runtime…"
-    )
+    assert _friendly_coding_detail(Exception(raw)) == ("Reconnecting to existing runtime…")
 
 
 def test_friendly_git_detail_rewrites_raw_repo_id() -> None:
@@ -486,9 +484,7 @@ def test_wait_for_sidecar_retries_until_ready(monkeypatch) -> None:
         sleeps.append,
     )
     assert (
-        _wait_for_sidecar(
-            "http://coder-x-slides-demo:8378", "secret", attempts=5, interval_s=0.01
-        )
+        _wait_for_sidecar("http://coder-x-slides-demo:8378", "secret", attempts=5, interval_s=0.01)
         is True
     )
     assert calls["n"] == 3
@@ -507,9 +503,7 @@ def test_wait_for_sidecar_gives_up(monkeypatch) -> None:
         lambda *_: None,
     )
     assert (
-        _wait_for_sidecar(
-            "http://coder-x-slides-demo:8378", "secret", attempts=3, interval_s=0.01
-        )
+        _wait_for_sidecar("http://coder-x-slides-demo:8378", "secret", attempts=3, interval_s=0.01)
         is False
     )
 
@@ -526,8 +520,7 @@ def test_sidecar_tool_helpers_require_binding() -> None:
         is False
     )
     assert (
-        _sidecar_tool_call("file:///tmp", "s", "read_file", {"path": "x"}).get("error")
-        or ""
+        _sidecar_tool_call("file:///tmp", "s", "read_file", {"path": "x"}).get("error") or ""
     ).startswith("invalid sidecar base url")
 
 
@@ -574,9 +567,7 @@ def test_clone_url_uses_the_local_checkout_when_git_is_on_disk() -> None:
     and the deck view shows "Coder runtime unavailable".
     """
     sc = _FakeRepoSC("file:///tmp/git/abi/monorepo")
-    url = slides_api._git_clone_url(
-        sc, "abi/monorepo", username="git", token="local"
-    )
+    url = slides_api._git_clone_url(sc, "abi/monorepo", username="git", token="local")
     assert url == "file:///tmp/git/abi/monorepo"
     assert "forgejo" not in url
     # Three slashes and no fourth component: the username and token must not be
@@ -587,9 +578,7 @@ def test_clone_url_uses_the_local_checkout_when_git_is_on_disk() -> None:
 
 def test_clone_url_keeps_authenticated_http_for_a_real_forge() -> None:
     sc = _FakeRepoSC("http://forgejo:3000/abi/monorepo.git")
-    url = slides_api._git_clone_url(
-        sc, "abi/monorepo", username="git", token="tok en"
-    )
+    url = slides_api._git_clone_url(sc, "abi/monorepo", username="git", token="tok en")
     assert url.startswith("http://git:tok%20en@")
     assert url.endswith("/abi/monorepo.git")
 
@@ -599,9 +588,7 @@ def test_clone_url_falls_back_when_the_adapter_cannot_describe_the_repo() -> Non
         def ensure_repo(self, **_kwargs):
             raise RuntimeError("nope")
 
-    url = slides_api._git_clone_url(
-        _Broken(), "abi/monorepo", username="git", token="t"
-    )
+    url = slides_api._git_clone_url(_Broken(), "abi/monorepo", username="git", token="t")
     assert url.startswith("http://git:t@")
 
 
@@ -649,9 +636,7 @@ class _FakeLocalCoding:
 
         del user_id, template_id
         self.provisioned.append(dict(params or {}))
-        return WorkspaceStatus(
-            id="env-local-1", name=name, phase="running", agent_ready=True
-        )
+        return WorkspaceStatus(id="env-local-1", name=name, phase="running", agent_ready=True)
 
     def get_runtime_binding(self, *, workspace_id: str):
         del workspace_id
@@ -729,9 +714,7 @@ def test_runtime_reports_the_adapter_binding_for_lookup(monkeypatch) -> None:
         "/slides/projects",
         json={"workspace_id": "ws-test", "title": "Bound deck", "slug": "bound-deck"},
     )
-    client.post(
-        "/slides/projects/bound-deck/runtime", params={"workspace_id": "ws-test"}
-    )
+    client.post("/slides/projects/bound-deck/runtime", params={"workspace_id": "ws-test"})
     assert captured.get("base") == _LOCAL_SIDECAR_BASE, captured
     assert captured.get("secret") == _LOCAL_SIDECAR_SECRET, captured
 
@@ -821,9 +804,7 @@ def _sqlite_slides_client(monkeypatch, source_control, session):
     return TestClient(app)
 
 
-def test_runtime_rebinds_when_the_same_environment_is_adopted_twice(
-    monkeypatch, tmp_path
-) -> None:
+def test_runtime_rebinds_when_the_same_environment_is_adopted_twice(monkeypatch, tmp_path) -> None:
     """Re-provisioning the same environment id must update, not collide.
 
     The persist step only deleted the prior row ``if old.id != status.id``,
@@ -870,11 +851,7 @@ def test_runtime_rebinds_when_the_same_environment_is_adopted_twice(
 
         await anyio.to_thread.run_sync(_call)
 
-        rows = (
-            (await session.execute(select(CodingEnvironmentModel)))
-            .scalars()
-            .all()
-        )
+        rows = (await session.execute(select(CodingEnvironmentModel))).scalars().all()
         count = len(rows)
         base = rows[0].sidecar_base if rows else None
         secret = rows[0].sidecar_secret if rows else None
@@ -913,9 +890,7 @@ def _write_folder_template(directory: Path, stem: str, name: str) -> Path:
     return directory
 
 
-def test_create_and_apply_template_copies_catalog_assets(
-    tmp_path, monkeypatch
-) -> None:
+def test_create_and_apply_template_copies_catalog_assets(tmp_path, monkeypatch) -> None:
     source_dir = _write_folder_template(tmp_path / "office", "pixel-v1", "Pixel")
     _configure_sources(monkeypatch, ("office", source_dir))
 
@@ -1117,15 +1092,11 @@ def test_history_uses_conventional_commits_and_diff_resolves_head(monkeypatch) -
     base_sha = created.json()["commit_sha"]
     assert base_sha
 
-    history = client.get(
-        "/slides/projects/diff-deck/history", params={"workspace_id": "ws-test"}
-    )
+    history = client.get("/slides/projects/diff-deck/history", params={"workspace_id": "ws-test"})
     assert history.status_code == 200, history.text
     assert history.json()[0]["message"].startswith("feat(slides): create")
 
-    deck = client.get(
-        "/slides/projects/diff-deck/deck", params={"workspace_id": "ws-test"}
-    )
+    deck = client.get("/slides/projects/diff-deck/deck", params={"workspace_id": "ws-test"})
     assert deck.status_code == 200, deck.text
     saved = client.put(
         "/slides/projects/diff-deck/deck",
@@ -1138,9 +1109,7 @@ def test_history_uses_conventional_commits_and_diff_resolves_head(monkeypatch) -
     assert saved.status_code == 200, saved.text
     assert saved.json()["commit_sha"] != base_sha
 
-    history2 = client.get(
-        "/slides/projects/diff-deck/history", params={"workspace_id": "ws-test"}
-    )
+    history2 = client.get("/slides/projects/diff-deck/history", params={"workspace_id": "ws-test"})
     # A free-text message with no Conventional Commits type is bucketed as
     # `chore(slides): ...` rather than saved as raw free text. put_deck also
     # commits a metadata touch on top, so the branch tip is that commit, not
@@ -1193,9 +1162,7 @@ def test_deck_version_bumps_from_conventional_commit_history(monkeypatch) -> Non
     # Seed commit is `feat(slides): create ...` -> one minor bump.
     assert version.json() == {"version": "0.1.0", "commit_count": 1}
 
-    deck = client.get(
-        "/slides/projects/version-deck/deck", params={"workspace_id": "ws-test"}
-    )
+    deck = client.get("/slides/projects/version-deck/deck", params={"workspace_id": "ws-test"})
     assert deck.status_code == 200, deck.text
     saved = client.put(
         "/slides/projects/version-deck/deck",

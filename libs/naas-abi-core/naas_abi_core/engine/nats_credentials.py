@@ -114,17 +114,36 @@ def service_key_source(
     identity: str | None = None,
     timeout: float = 10.0,
     audience: str = NATS_AUDIENCE,
+    delegate: Callable[[Any, str | None, Any], IssuedToken] | None = None,
 ) -> RenewingTokenSource:
     """A token source exchanging ``key``, renewed at half the token's life.
 
     ``identity`` names the source before the first exchange (connection
-    names); it defaults to the key id.
+    names); it defaults to the key id. ``delegate``: how it carries a user
+    (``delegation``), for the one source that may: a client-role engine's.
     """
     auth = _auth()
     _, key_id, _ = auth.parse_key(key)
     return auth.RenewingTokenSource(
         identity or f"key:{key_id}",
         lambda: exchange_key(nats_url, key, timeout=timeout, audience=audience),
+        delegate=delegate,
+    )
+
+
+def client_engine_source(
+    nats_url: str, key: str, iam: Any, *, timeout: float = 10.0
+) -> RenewingTokenSource:
+    """The tokens of a client-role engine (RFC §8.2): its key exchanged at the
+    serving engine, which also exchanges for the users it serves. ``iam`` is the
+    engine's IAM client, which calls with this very key's token: the delegation
+    is asked of the serving engine as ``engine``, whose policy decides."""
+    return service_key_source(
+        nats_url,
+        key,
+        identity="engine",
+        timeout=timeout,
+        delegate=delegation(iam, "engine"),
     )
 
 
@@ -168,7 +187,9 @@ class DelegationError(Exception):
     account alone, which would widen it."""
 
 
-def delegation(iam: Any, identity: str) -> Callable[[Any, str | None], IssuedToken]:
+def delegation(
+    iam: Any, identity: str
+) -> Callable[[Any, str | None, Any], IssuedToken]:
     """What a first-party ``identity`` calls to carry a user it verified: a
     token exchange for ``abi:delegated:agent`` (RFC §9.4), as ``identity``.
 

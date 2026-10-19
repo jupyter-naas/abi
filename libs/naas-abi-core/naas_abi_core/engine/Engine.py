@@ -457,8 +457,10 @@ class Engine(IEngine):
                     "service key: start the serving engine first (it keeps the "
                     "engine's key in the secret service), or set nats.service_key."
                 )
-            self.__credentials = nats_credentials.service_key_source(
-                nats.nats_url, key, identity="engine"
+            # The IAM of a client-role engine is the serving engine's, over NATS:
+            # it asks for the delegations of the users this engine serves.
+            self.__credentials = nats_credentials.client_engine_source(
+                nats.nats_url, key, self.__services.iam
             )
         return self.__credentials
 

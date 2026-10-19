@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import AsyncMock
 
 import pytest
@@ -138,9 +138,7 @@ async def test_ensure_user_for_invite_creates_user_without_workspace() -> None:
     )
     service = AuthService(adapter=adapter)
 
-    user, created = await service.ensure_user_for_invite(
-        "NEW@example.com", name="Emma Petit"
-    )
+    user, created = await service.ensure_user_for_invite("NEW@example.com", name="Emma Petit")
 
     assert created is True
     assert user.id == "user-new"
@@ -190,9 +188,7 @@ async def test_request_magic_link_public_signup_creates_default_workspace(
 
     assert challenge
     adapter.create_user_with_default_workspace.assert_awaited_once()
-    assert (
-        adapter.create_user_with_default_workspace.await_args.kwargs["name"] == "Unknown"
-    )
+    assert adapter.create_user_with_default_workspace.await_args.kwargs["name"] == "Unknown"
     adapter.create_user.assert_not_called()
     adapter.create_magic_link_token.assert_awaited_once()
     adapter.commit.assert_awaited_once()
@@ -214,9 +210,7 @@ async def test_request_magic_link_create_if_missing_true_skips_workspace(
     )
     service = AuthService(adapter=adapter)
 
-    challenge = await service.request_magic_link(
-        "invitee@example.com", create_if_missing=True
-    )
+    challenge = await service.request_magic_link("invitee@example.com", create_if_missing=True)
 
     assert challenge
     adapter.create_user.assert_awaited_once()
@@ -519,12 +513,12 @@ async def test_a_wrong_code_counts_against_every_active_code(monkeypatch) -> Non
 
 
 def test_a_scoped_token_opens_no_api_route(monkeypatch) -> None:
-    """An app-html link token sits in a page URL: it must not act as a session."""
+    """An app-html link token sits in a page URL: it must not act as a session.
+    (The links of today are IAM grants; this one is what Nexus used to sign.)"""
     from fastapi import Depends, FastAPI
     from fastapi.testclient import TestClient
-    from naas_abi.apps.nexus.apps.api.app.services.apps.app_html_access import (
-        mint_app_html_access_token,
-    )
+    from jose import jwt as jose_jwt
+    from naas_abi.apps.nexus.apps.api.app.core.config import current_secret_key
     from naas_abi.apps.nexus.apps.api.app.services.auth import service as auth_service
     from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
         get_auth_service,
@@ -544,7 +538,17 @@ def test_a_scoped_token_opens_no_api_route(monkeypatch) -> None:
 
     app.dependency_overrides[get_auth_service] = lambda: AuthService(adapter=adapter)
     client = TestClient(app)
-    scoped, _ = mint_app_html_access_token(user_id="u-1", path_prefix="/app-html/remote/acme/")
+    scoped = jose_jwt.encode(
+        {
+            "sub": "u-1",
+            "scope": "app-html",
+            "path_prefix": "/app-html/remote/acme/",
+            "jti": "j",
+            "exp": datetime.utcnow() + timedelta(hours=1),
+        },
+        current_secret_key(),
+        algorithm="HS256",
+    )
     session, _ = auth_service.create_access_token({"sub": "u-1"})
 
     refused = client.get("/api/me", headers={"Authorization": f"Bearer {scoped}"})

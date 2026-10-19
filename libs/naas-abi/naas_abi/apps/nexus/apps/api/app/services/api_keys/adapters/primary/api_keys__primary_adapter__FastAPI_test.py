@@ -46,7 +46,30 @@ def ada(iam):
 
 
 @pytest.fixture
-def client(iam, ada):
+def attempts(monkeypatch):
+    """The rate limit's database, in memory: failed exchanges per caller."""
+    from naas_abi.apps.nexus.apps.api.app.services.api_keys.adapters.primary import (
+        api_keys__primary_adapter__FastAPI as adapter,
+    )
+
+    seen: list[tuple[str, str]] = []
+
+    async def ensure(identifier: str, endpoint: str, limit: int) -> None:
+        from fastapi import HTTPException
+
+        if sum(1 for entry in seen if entry == (identifier, endpoint)) >= limit:
+            raise HTTPException(status_code=429, detail="Too many attempts.")
+
+    async def record(identifier: str, endpoint: str) -> None:
+        seen.append((identifier, endpoint))
+
+    monkeypatch.setattr(adapter, "ensure_under_limit", ensure)
+    monkeypatch.setattr(adapter, "record_attempt", record)
+    return seen
+
+
+@pytest.fixture
+def client(iam, ada, attempts):
     app = FastAPI()
     app.add_middleware(RequestIdentityMiddleware)
     app.include_router(router, prefix="/api/iam")
@@ -349,3 +372,18 @@ def test_without_the_engine_the_routes_say_so(client, ada):
         assert token.status_code == 503
     finally:
         credentials.configure_iam(previous)
+
+
+def test_failed_exchanges_are_rate_limited_and_good_ones_are_not_counted(client, ada, attempts):
+    from naas_abi.apps.nexus.apps.api.app.core.config import settings
+
+    secret = create(client, ada).json()["secret"]
+    good = {"grant_type": "client_credentials", "client_secret": secret}
+    bad = {"grant_type": "client_credentials", "client_secret": "abi_pk_aaaaaaaaaaaaaaaa_x"}
+    for _ in range(3):
+        assert client.post("/api/iam/token", data=good).status_code == 200
+    assert attempts == []
+    for _ in range(settings.rate_limit_ip_attempts):
+        assert client.post("/api/iam/token", data=bad).status_code == 401
+    # Over the limit, even the right key waits.
+    assert client.post("/api/iam/token", data=good).status_code == 429

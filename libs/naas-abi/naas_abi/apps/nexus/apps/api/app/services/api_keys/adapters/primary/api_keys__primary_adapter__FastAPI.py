@@ -19,11 +19,17 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
 )
+from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.services.api_keys.service import (
     MAX_DAYS,
     ApiKey,
     ApiKeyService,
     ApiKeysUnavailable,
+)
+from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
+    ensure_under_limit,
+    get_rate_limit_identifier,
+    record_attempt,
 )
 from naas_abi_core import logger
 from naas_abi_core.services.iam.IAMPorts import (
@@ -36,6 +42,8 @@ from pydantic import BaseModel, Field
 
 router = APIRouter()
 _service = ApiKeyService()
+# The rate limit's name for failed exchanges at the token endpoint.
+TOKEN_ENDPOINT = "iam_token"
 
 
 def get_api_key_service() -> ApiKeyService:
@@ -182,11 +190,15 @@ async def token(
     secret = fields.get("client_secret", "")
     if not secret:
         raise HTTPException(status_code=400, detail="invalid_request")
+    # Failed exchanges count against the caller's address, as sign-in does.
+    caller = get_rate_limit_identifier(request)
+    await ensure_under_limit(caller, TOKEN_ENDPOINT, settings.rate_limit_ip_attempts)
     try:
         issued = await run_in_threadpool(service.exchange, secret)
     except ApiKeysUnavailable as exc:
         raise _unavailable(exc) from exc
     except (KeyRefusedError, PermissionDeniedError):
+        await record_attempt(caller, TOKEN_ENDPOINT)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="invalid_client",

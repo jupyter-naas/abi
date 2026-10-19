@@ -194,7 +194,7 @@ iam.identity_authenticator = ...  # engine wiring: IdP tokens (`IdentityAuthenti
   (default; five active, a year at most, a year by default) or `abi:delegated:coding`
   with its environment as `resource` (fifty active). **Grants** (`kind=grant`,
   `abi_gk_`): `audience` app or preview, always expiring in 8 hours at most
-  (two hundred active): the links of apps and previews. A key may carry `scope`.
+  (a thousand active): the links of apps and previews. A key may carry `scope`.
   `iam.list_keys(owner)` lists every kind; callers filter. Users manage their own
   keys (`builtin.self`: `iam:CreateKey`, `ListKeys`, `RevokeKey` on `key/${principal.id}/*`),
   a user of the built-in login named by its Nexus id included (recorded on demand).

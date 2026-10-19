@@ -826,6 +826,16 @@ class ABIModule(BaseModule):
                 "find_service_account": {"name": "engine"},
                 "create_key": {"principal_id": user},
                 "revoke_key": {"principal_id": user, "key_id": "a" * 16},
+                "revoke_tokens": {"principal_id": user},
+                # A token exchange is offered to every module (it renews the
+                # delegation it holds), and refused to one that holds no
+                # iam:ExchangeToken for the audience.
+                "exchange_token": {
+                    "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
+                    "subject_token": user,
+                    "subject_token_type": "urn:abi:params:oauth:token-type:session",
+                    "audience": "abi:delegated:agent",
+                },
                 "get_manifest": {"principal_id": user},
                 "approve_manifest": {"principal_id": user},
                 "reject_manifest": {"principal_id": user},
@@ -837,7 +847,12 @@ class ABIModule(BaseModule):
                 },
             }
         )
-        offered = ("find_service_account", "get_manifest", "submit_manifest")
+        offered = (
+            "find_service_account",
+            "get_manifest",
+            "submit_manifest",
+            "exchange_token",
+        )
         at_broker += [operation for operation in refused if operation not in offered]
         for operation in at_broker:
             assert await self._broker_refuses(f"abi.iam.v1.{operation}"), operation

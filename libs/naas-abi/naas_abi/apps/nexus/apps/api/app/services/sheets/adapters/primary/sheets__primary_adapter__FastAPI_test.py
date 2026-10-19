@@ -59,6 +59,8 @@ from naas_abi_core.services.source_control.SourceControlService import (
 )
 from pydantic import ValidationError
 
+pytestmark = pytest.mark.usefixtures("engine_iam")
+
 
 def test_slugify_and_paths() -> None:
     assert _slugify("Q3 Business Review!") == "q3-business-review"

@@ -986,7 +986,7 @@ class IAMStoreSQL(IAMStore):
                         principal_id=principal_id, not_before=not_before
                     )
                 )
-            elif _aware(current.not_before) < not_before:
+            elif (held := _aware(current.not_before)) is not None and held < not_before:
                 conn.execute(
                     update(token_floors)
                     .where(token_floors.c.principal_id == principal_id)

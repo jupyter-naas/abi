@@ -1539,6 +1539,82 @@ def test_a_stored_trigger_holds_a_host_token_never_the_callers_own(stack):
     run(stack, scenario)
 
 
+def test_a_trigger_for_a_user_stores_a_host_token_naming_the_user_and_the_caller(stack):
+    """Nexus triggers a job for a signed-in admin: the stored token names the user
+    (``sub``) and the caller (``act``), addressed to the job's host alone, so the
+    host checks the user's policy as of when it was stored."""
+    import jwt
+    from naas_abi_core.engine import nats_credentials
+    from naas_abi_core.engine.call_context import service_account, user
+    from naas_abi_core.engine.nats_auth import HOST_AUDIENCE_PREFIX
+    from naas_abi_sdk.broker_control import BrokerControl as Control
+    from naas_abi_sdk.jobs import job_subjects, store_trigger
+    from naas_abi_sdk.module import ModuleDependencies
+    from naas_abi_sdk.permissions import default_manifest
+
+    iam = stack["iam"]
+    people, people_key = module(iam, "module/default/people")
+    approve(
+        iam,
+        people,
+        "module/default/people",
+        default_manifest(ModuleDependencies(), jobs=["nightly"]),
+    )
+    api = iam.store.find_service_account("api")
+    assert api is not None
+    api_tokens = nats_credentials.issuer_source(iam, "api")
+
+    async def scenario(served):
+        hosting = Transport(stack["url"], people_key, timeout=5)
+        nexus = Transport(
+            stack["engine"],
+            lambda: iam.issue_service_token("api").token,
+            delegate=api_tokens.token_for,
+            timeout=5,
+        )
+        engine = await nats.connect(stack["engine"])
+        try:
+            await Control(hosting).request(
+                "ensure_job",
+                project="default",
+                job="nightly",
+                max_concurrency=1,
+                ack_wait_seconds=30,
+                update=False,
+            )
+            with use_call_context(
+                CallContext(
+                    principal=service_account("api"), on_behalf_of=user("usr_admin")
+                )
+            ):
+                await store_trigger(
+                    nexus, "default", "people", "nightly", b"{}", {}, kind="manual"
+                )
+            subject = job_subjects("default", "people", "nightly").trigger
+            stored = await engine.jetstream().get_msg(
+                "ABI_JOBS_default", subject=subject
+            )
+            token = stored.headers["Nats-Auth-Token"]
+            assert "Abi-On-Behalf-Of" not in stored.headers
+            claims = jwt.decode(token, options={"verify_signature": False})
+            assert (claims["sub"], claims["act"]["sub"]) == ("usr_admin", api.id)
+            assert claims["aud"] == host_audience(subject_token(people))
+            # No kernel service accepts it; discovery does, from that host.
+            from naas_abi_core.engine.nats_auth import InvalidServiceTokenError
+
+            with pytest.raises(InvalidServiceTokenError):
+                iam.verifier().verify(token)
+            hosts = iam.verifier().for_audiences((), prefixes=(HOST_AUDIENCE_PREFIX,))
+            verified = hosts.verify(token)
+            assert verified.subject == "usr_admin" and verified.actor == api.id
+        finally:
+            await engine.close()
+            await hosting.close()
+            await nexus.close()
+
+    run(stack, scenario)
+
+
 def test_a_host_token_is_good_at_the_host_it_names_and_nowhere_else(stack):
     """Module M hosts an agent and reads the token Nexus sends it (a delegation
     naming M and the user). M may call other agents' subjects (it holds an

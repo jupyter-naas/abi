@@ -24,6 +24,7 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ("POST", "/api/auth/login"): "sign-in",
     ("POST", "/api/auth/token"): "OAuth2 password sign-in",
     ("POST", "/api/auth/refresh"): "exchanges a refresh token",
+    ("POST", "/api/iam/token"): "OAuth2 token endpoint: a personal API key is the credential",
     ("POST", "/api/auth/forgot-password"): "password reset request",
     ("POST", "/api/auth/reset-password"): "password reset with a token",
     ("POST", "/api/auth/magic-link/request"): "sign-in code request",

@@ -103,3 +103,32 @@ def test_the_scope_of_a_call_travels_in_its_delegation(iam):
     claims = iam.verifier().verify(source.token_for(bob, None, scope))
     assert claims.scope == scope
     assert iam.verifier().verify(source.token_for(bob)).scope is None
+
+
+def test_a_client_role_engine_carries_the_users_it_serves(iam, monkeypatch):
+    """Its key is exchanged at the serving engine, and so are its delegations:
+    without one it would call as ``engine`` alone and drop the user."""
+    from naas_abi_core.engine.nats_auth import IssuedToken
+
+    bob = _user(iam)
+    own = iam.issue_service_token("engine")
+    monkeypatch.setattr(
+        nats_credentials,
+        "exchange_key",
+        lambda *args, **kwargs: IssuedToken(own.token, own.expires_at),
+    )
+    calls = []
+
+    class ServingEngine:  # the IAM client: only what the delegation calls
+        def exchange_token(self, request):
+            calls.append(request)
+            return iam.exchange_token(request)
+
+    source = nats_credentials.client_engine_source(
+        "nats://unused", "abi_sk_aaaaaaaaaaaaaaaa_c2VjcmV0", ServingEngine()
+    )
+    assert source.token() == own.token
+    claims = iam.verifier().verify(source.token_for(bob))
+    assert claims.subject == bob.id and claims.audience == AGENT_AUDIENCE
+    assert claims.actor_name == "engine"
+    assert [c.subject_token for c in calls] == [bob.id]
