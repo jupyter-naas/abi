@@ -202,6 +202,8 @@ abi stack tui                    # interactive terminal UI
 
 ### `abi stack start`
 
+It starts the stack, waits until it is ready, then opens Nexus in the browser. On a Linux host without a display (a server reached over SSH) it prints the URL instead.
+
 `--legacy`: legacy, for the ABI repository's own stack. Also starts the `legacy` Compose profile (Dagster, RabbitMQ) and runs the engine without NATS, with its bus on RabbitMQ, through the generated overlay `.abi/stack/legacy.overlay.yaml`. A generated project refuses it. Default: the stack on NATS.
 
 ### `abi stack status`
@@ -290,7 +292,7 @@ Writes the project's Docker Compose stack, `.deploy/` and the stack's variables 
 | Option | Effect |
 |---|---|
 | `-e`, `--env NAME` | The config environment (default `local`: `config.local.yaml`, else `config.yaml`). |
-| `--regenerate` | Re-render from the current templates, after a backup. Never touches `docker-compose.override.yml`. |
+| `--regenerate` | Re-render from the current templates, after a backup in `.abi-backups/` (it holds a copy of `.env` and ignores itself in git). Never touches `docker-compose.override.yml`. |
 | `--no-backup` | With `--regenerate`: no backup. |
 | `--headscale` | Include a Headscale service. |
 | `--coding` | Include coding workspaces: Coder, Forgejo, Actions CI. |
@@ -398,7 +400,7 @@ abi chat naas_abi AbiAgent       # an agent, by module and name
 
 `abi chat [MODULE_NAME] [AGENT_NAME]`. It loads an engine with `ABI_ENGINE_ROLE=auto`: it serves when no engine runs, and is a NATS client of the running one otherwise.
 
-In a NATS project it reaches the broker named in `config.yaml` (`127.0.0.1:4222`, the Docker stack's). `abi dev up` runs its own broker on another port and writes it to `.abi/dev/dev.overlay.yaml`: while it runs, set `ABI_CONFIG_OVERLAY=.abi/dev/dev.overlay.yaml` for `abi chat`, `abi agent list` and `abi run script`, or they cannot connect. To load the engine in-process, with no broker at all, point `ABI_CONFIG_OVERLAY` at a file that holds `nats: null`.
+In a NATS project it reaches the broker named in `config.yaml` (`127.0.0.1:4222`, the Docker stack's). `abi dev up` runs its own broker on another port and writes it to `.abi/dev/dev.overlay.yaml`: while a dev service runs, every command that loads the engine (`abi chat`, `abi agent list`, `abi run script`, ...) reads that overlay too, unless `ABI_CONFIG_OVERLAY` is already set. Run them from the project root. To load the engine in-process, with no broker at all, point `ABI_CONFIG_OVERLAY` at a file that holds `nats: null`.
 
 ## `abi run`
 

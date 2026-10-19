@@ -132,11 +132,7 @@ In Nexus, or from the terminal:
 abi chat
 ```
 
-`abi chat` (and `abi agent list`, `abi run script`) reads the project's `config.yaml`, whose broker is `127.0.0.1:4222`: the Docker stack's. It is a client of that engine. Under `abi dev up` the broker has its own port, which only the generated overlay knows, so point the command at it:
-
-```bash
-ABI_CONFIG_OVERLAY=.abi/dev/dev.overlay.yaml abi chat
-```
+`abi chat` (and `abi agent list`, `abi run script`) is a client of the engine that runs. Under `abi dev up` the broker has its own port, which the generated overlay (`.abi/dev/dev.overlay.yaml`) knows: while a dev service runs, these commands read the overlay too, so no setting is needed. Against the Docker stack, they use the broker `config.yaml` names, `127.0.0.1:4222`.
 
 Without any engine running, it starts its own (it needs a broker: see [`abi chat`](/user-guide/reference/cli#abi-chat)).
 
