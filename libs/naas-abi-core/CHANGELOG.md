@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.44.0 (2026-10-20)
+
+### Bug Fixes
+
+- **slides**: Satisfy CI lint checks
+  ([`48c9102`](https://github.com/jupyter-naas/abi/commit/48c9102a3614a96edb8b0daafb030bc2299d8fa4))
+
+### Features
+
+- **slides**: Preserve semantic editor contributions
+  ([`6f244f6`](https://github.com/jupyter-naas/abi/commit/6f244f6b5165e2fd98850b6c00f3b9cbd1a0057e))
+
+
 ## v2.43.0 (2026-10-14)
 
 ### Chores
