@@ -2,6 +2,9 @@
 
 <!-- version list -->
 
+## v3.0.0 (2026-10-20)
+
+
 ### Upgrade notes (3.0)
 
 - `naas-abi` requires `naas-abi-core[nats]` instead of `naas-abi-core[dagster]`:
