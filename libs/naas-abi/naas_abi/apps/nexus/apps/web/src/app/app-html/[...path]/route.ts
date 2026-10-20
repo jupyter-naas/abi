@@ -137,9 +137,9 @@ export async function GET(
 
 export async function HEAD(
   request: NextRequest,
-  { params }: { params: { path: string[] } },
+  { params }: { params: Promise<{ path: string[] }> },
 ) {
-  return proxy(request, params);
+  return proxy(request, await params);
 }
 
 export async function POST(
