@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v3.61.0 (2026-10-20)
+
+### Bug Fixes
+
+- **cli**: Point the dokploy messages at the site, fix a cron example in the module template
+  ([`1c7d986`](https://github.com/jupyter-naas/abi/commit/1c7d986ec06b3e9908714a5bac42947950077bdc))
+
+### Build System
+
+- **marketplace**: Type-check the Dagster orchestrations with the legacy extra
+  ([`cfb15ac`](https://github.com/jupyter-naas/abi/commit/cfb15aca2a990b930c13327223a70bd1ba400a3a))
+
+### Chores
+
+- Project lockfiles follow the 2.x versions main released
+  ([`db051c0`](https://github.com/jupyter-naas/abi/commit/db051c0bd348f9a411321ea59061bf28e5cbc694))
+
+- **nexus-map**: Commit staged changes and push
+  ([`df724fe`](https://github.com/jupyter-naas/abi/commit/df724fe722b9bf76d6508ac88c6ae26b2aa3a29f))
+
+
 ## v3.60.0 (2026-10-13)
 
 ### Features
