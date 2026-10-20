@@ -74,9 +74,13 @@ dependency order (proto, SDK, core, marketplace, naas-abi, CLI). Versions alread
 
 Publishing a GitHub release starts two workflows, `build_abi_container.yml` and
 `build_nexus_web_container.yml`, which push the images to `ghcr.io` tagged with the release version. A
-release cut from `main` also moves `:latest`, and `deploy_api.yml` then deploys it to Naas
-Spaces. Only `main` does that; the v2 branch's images are tagged `v2` and with their exact
-version.
+release cut from `main` also moves `:latest`. Only `main` does that; the v2 branch's images are
+tagged `v2` and with their exact version.
+
+`deploy_api.yml` (the workflow named "ABI API") deployed `:latest` to a Naas space after each such
+release. It is **disabled** since 2026-10-20: its last successful run was in January 2026 and
+nothing used it. Enable it in the Actions tab to bring the deploy back; it needs a working space
+first, since it waits for the API to answer.
 
 ## Check a release without cutting it
 

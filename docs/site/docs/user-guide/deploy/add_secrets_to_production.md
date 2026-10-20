@@ -74,7 +74,7 @@ abi secrets naas list --naas-api-key "$NAAS_API_KEY"
 
 ## From the repository's GitHub Actions
 
-The ABI repository deploys its own API to a Naas space with `.github/workflows/deploy_api.yml`, after a release (see [Releasing](/developer-guide/releasing/release-process#containers-and-the-api-deploy)). It reads the secrets stored in the repository settings. To add a new one:
+The ABI repository could deploy its own API to a Naas space with `.github/workflows/deploy_api.yml`, after a release (see [Releasing](/developer-guide/releasing/release-process#containers-and-the-api-deploy)). That workflow is disabled in the repository's Actions settings; enable it first. It reads the secrets stored in the repository settings. To add a new one:
 
 1. In the repository, open **Settings > Secrets and variables > Actions** and add the secret.
 2. Open `.github/workflows/deploy_api.yml`.
