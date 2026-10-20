@@ -1,4 +1,6 @@
-name: Build Nexus Web Container
+# 2.x maintenance line: images are tagged :v2 and with their exact version,
+# never :latest, which belongs to main.
+name: Build Nexus Web Container (v2)
 
 on:
   release:
@@ -49,6 +51,6 @@ jobs:
           push: true
           platforms: linux/amd64, linux/arm64
           tags: |
-            ${{ steps.tags.outputs.image }}:latest
+            ${{ steps.tags.outputs.image }}:v2
             ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.version_tag }}
             ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.release_tag }}
