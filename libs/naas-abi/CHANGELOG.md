@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.88.0 (2026-10-20)
+
+### Features
+
+- **org-branding**: Integrate org branding cache for border radius and theme
+  ([`ab80e93`](https://github.com/jupyter-naas/abi/commit/ab80e93d31ece6228d0d033a03c4aa0103a86b99))
+
+
 ## v2.87.0 (2026-10-15)
 
 ### Bug Fixes
