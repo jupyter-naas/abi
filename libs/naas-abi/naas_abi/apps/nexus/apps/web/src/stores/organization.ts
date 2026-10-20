@@ -5,6 +5,7 @@
 
 import { create } from 'zustand';
 import { getApiUrl } from '@/lib/config';
+import { invalidateOrgBranding } from '@/lib/org-branding';
 import { authFetch } from './auth';
 
 const getApiBase = () => getApiUrl();
@@ -361,6 +362,7 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
         createdAt: org.created_at, updatedAt: org.updated_at,
       };
 
+      invalidateOrgBranding(orgId);
       // Update in local state
       set((state) => ({
         organizations: state.organizations.map((o) => o.id === orgId ? updated : o),

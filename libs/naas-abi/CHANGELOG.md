@@ -17,6 +17,37 @@
 - Guide: [Migrate from 2.x to 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/migrate-to-3.md).
   Every change: [Breaking changes in 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/breaking-changes-3.md).
 
+## v2.89.0 (2026-10-20)
+
+### Bug Fixes
+
+- **slides**: Guard semantic text edits and improve image quality
+  ([`d1a017e`](https://github.com/jupyter-naas/abi/commit/d1a017e071ff0dea7f90162431e02c62f0ae4104))
+
+- **slides**: Refresh preview after image replacement
+  ([`194a482`](https://github.com/jupyter-naas/abi/commit/194a4824fd5178480e52e3b69ad0bec425274a69))
+
+- **slides**: Satisfy ABI lint checks
+  ([`087fd50`](https://github.com/jupyter-naas/abi/commit/087fd50860dbf10530996253258473a75ac060bd))
+
+### Features
+
+- **slides**: Preserve semantic editor contributions
+  ([`6f244f6`](https://github.com/jupyter-naas/abi/commit/6f244f6b5165e2fd98850b6c00f3b9cbd1a0057e))
+
+### Refactoring
+
+- **slides**: Keep ABI implementation generic
+  ([`146c6ae`](https://github.com/jupyter-naas/abi/commit/146c6ae486aab67bcd69251f97548aa83bb0a37b))
+
+
+## v2.88.0 (2026-10-20)
+
+### Features
+
+- **org-branding**: Integrate org branding cache for border radius and theme
+  ([`ab80e93`](https://github.com/jupyter-naas/abi/commit/ab80e93d31ece6228d0d033a03c4aa0103a86b99))
+
 ## v2.87.0 (2026-10-15)
 
 ### Bug Fixes
