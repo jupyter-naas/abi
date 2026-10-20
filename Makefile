@@ -123,6 +123,7 @@ help:
 	@echo "  test-api                 Run API-specific tests"
 	@echo "  test-local-embedded-core Run no-docker local embedded core e2e test"
 	@echo "  test-integration-core    Run core integration tests (testcontainers)"
+	@echo "  test-document-core       Run document tests (set DOCUMENT_TEST_POSTGRES_DSN for PostgreSQL)"
 	@echo "  test-api-init            Test API initialization with production secrets"
 	@echo "  test-api-init-container  Test API initialization in containerized environment"
 	@echo "  ftest                    Interactive test selector using fzf (fuzzy finder)"
@@ -561,6 +562,12 @@ test-integration-core: deps check-docker
 	@ echo "🔍 Running core integration tests (testcontainers)..."
 	@ cd libs/naas-abi-core && uv sync --all-extras && uv run pytest naas_abi_core/services/triple_store/adaptors/secondary/ApacheJenaTDB2_integration_test.py naas_abi_core/services/triple_store/adaptors/secondary/Oxigraph_integration_test.py -m integration -v
 
+# Run document unit tests and the optional PostgreSQL adapter contract
+test-document-core:
+	@ uv run --project libs/naas-abi-core --all-extras python -m pytest -c libs/naas-abi-core/pyproject.toml libs/naas-abi-core/naas_abi_core/services/document libs/naas-abi-core/naas_abi_core/engine/engine_configuration/EngineConfiguration_DocumentService_test.py libs/naas-abi-core/naas_abi_core/engine/EngineProxy_test.py -q
+
+.PHONY: test-document-core
+
 # Test API initialization with production secrets
 test-api-init: deps
 	@ echo "🔍 Testing API initialization with production secrets..."
@@ -580,10 +587,14 @@ test-api-init-container: build
 TTL_FILES := $(shell find libs -name '*.ttl' -not -path '*/.venv/*' 2>/dev/null)
 PY_FILES := $(patsubst %.ttl, %.py, $(TTL_FILES))
 
+# One ruff for generating and for gating: `make check` lints with $(RUFF), so
+# generated code must be fixed with the same version or it fails the gate.
+RUFF ?= uvx ruff
+
 onto2py-force: onto2py-clean $(PY_FILES) onto2py-ruff-fix
 
 onto2py-ruff-fix: $(PY_FILES)
-	@uv run ruff check --fix $(PY_FILES)
+	@$(RUFF) check --fix $(PY_FILES)
 
 onto2py-clean:
 	@rm -f $(PY_FILES)
@@ -596,6 +607,9 @@ onto2py: $(PY_FILES)
 %.py: %.ttl
 	@printf "📦 Converting ttl to py for $< ... "
 	@uv run python -m naas_abi_core.utils.onto2py.onto2py '$<'
+	@# The generator emits Optional/List and stub `pass`es that the gate rejects;
+	@# fix the module and the class stubs generated next to it (ontologies/classes).
+	@$(RUFF) check --fix --quiet '$@' $$(d='$(dir $<)../classes'; [ -d "$$d" ] && echo "$$d") || true
 
 # Test command for debugging
 hello:
@@ -634,7 +648,7 @@ check-core: deps
 	@echo ""
 	@echo "\033[1;4m🔍 Running code quality checks...\033[0m\n"
 	@echo "📝 Linting with ruff..."
-	@uvx ruff check libs/naas-abi-core libs/naas-abi-cli libs/naas-abi --exclude "libs/naas-abi-cli/naas_abi_cli/cli/new/templates" --exclude "**/sandbox/**"
+	@$(RUFF) check libs/naas-abi-core libs/naas-abi-cli libs/naas-abi --exclude "libs/naas-abi-cli/naas_abi_cli/cli/new/templates" --exclude "**/sandbox/**"
 
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
 	@echo "• Checking naas_abi_core..."
@@ -659,7 +673,7 @@ check-marketplace: deps
 	@echo ""
 	@echo "\n\033[1;4m🔍 Running code quality checks...\033[0m\n"
 	@echo "📝 Linting with ruff..."
-	@uvx ruff check libs/naas-abi-marketplace \
+	@$(RUFF) check libs/naas-abi-marketplace \
 		--exclude libs/naas-abi-marketplace/naas_abi_marketplace/domains \
 		--exclude libs/naas-abi-marketplace/naas_abi_marketplace/__demo__ \
 		--exclude libs/naas-abi-marketplace/naas_abi_marketplace/sandbox \
@@ -681,7 +695,7 @@ check-marketplace: deps
 
 # Code formatting with ruff
 fmt: deps
-	@ uvx ruff format
+	@ $(RUFF) format
 
 # Security scanning with bandit
 bandit:

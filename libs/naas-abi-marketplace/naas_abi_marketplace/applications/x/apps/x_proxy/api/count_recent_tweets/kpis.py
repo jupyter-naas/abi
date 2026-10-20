@@ -42,6 +42,7 @@ def publish(ctx: SnapshotContext) -> dict:
                 )
             cur_total = sum(p["value"] for p in cur_pts)
             prev_total = sum(p["value"] for p in prev_pts)
+            has_previous = bool(prev_pts) and not all_time
             cur_mean = cur_total / len(cur_pts) if cur_pts else 0.0
             prev_mean = prev_total / len(prev_pts) if prev_pts else 0.0
             top = max(cur_pts, key=lambda p: p["value"]) if cur_pts else None
@@ -56,14 +57,14 @@ def publish(ctx: SnapshotContext) -> dict:
                             "id": "total",
                             "label": "Total Tweets",
                             "value": cur_total,
-                            "prev_value": None if all_time else prev_total,
-                            "delta": None if all_time else cur_total - prev_total,
+                            "prev_value": prev_total if has_previous else None,
+                            "delta": (cur_total - prev_total if has_previous else None),
                             "hint": (
                                 "all ingested counts"
                                 if all_time
                                 else (
                                     f"{prev_total} prev. period"
-                                    if prev_pts
+                                    if has_previous
                                     else "no prior period"
                                 )
                             ),
@@ -72,16 +73,18 @@ def publish(ctx: SnapshotContext) -> dict:
                             "id": "mean",
                             "label": f"Mean / {unit}",
                             "value": round(cur_mean, 1),
-                            "prev_value": None if all_time else round(prev_mean, 1),
+                            "prev_value": (
+                                round(prev_mean, 1) if has_previous else None
+                            ),
                             "delta": (
-                                None if all_time else round(cur_mean - prev_mean, 1)
+                                round(cur_mean - prev_mean, 1) if has_previous else None
                             ),
                             "hint": (
                                 "all ingested counts"
                                 if all_time
                                 else (
                                     f"{round(prev_mean, 1)} prev. period"
-                                    if prev_pts
+                                    if has_previous
                                     else "no prior period"
                                 )
                             ),

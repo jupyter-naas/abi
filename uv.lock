@@ -3598,7 +3598,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi"
-version = "2.64.1"
+version = "2.87.0"
 source = { editable = "libs/naas-abi" }
 dependencies = [
     { name = "aiosqlite" },
@@ -3616,6 +3616,7 @@ dependencies = [
     { name = "naas-abi-marketplace" },
     { name = "ollama" },
     { name = "openai" },
+    { name = "openpyxl" },
     { name = "psycopg2-binary" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -3653,6 +3654,7 @@ requires-dist = [
     { name = "naas-abi-marketplace", editable = "libs/naas-abi-marketplace" },
     { name = "ollama", specifier = ">=0.1.0" },
     { name = "openai", specifier = ">=1.10.0" },
+    { name = "openpyxl", specifier = ">=3.1.5,<4" },
     { name = "psycopg2-binary", specifier = ">=2.9.9" },
     { name = "pydantic", specifier = ">=2.5.0" },
     { name = "pydantic-settings", specifier = ">=2.1.0" },
@@ -3682,7 +3684,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-cli"
-version = "2.21.4"
+version = "2.28.0"
 source = { editable = "libs/naas-abi-cli" }
 dependencies = [
     { name = "naas-abi" },
@@ -3708,7 +3710,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-core"
-version = "2.33.0"
+version = "2.43.0"
 source = { editable = "libs/naas-abi-core" }
 dependencies = [
     { name = "click" },
@@ -3842,7 +3844,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-marketplace"
-version = "3.43.0"
+version = "3.60.0"
 source = { editable = "libs/naas-abi-marketplace" }
 dependencies = [
     { name = "ijson" },

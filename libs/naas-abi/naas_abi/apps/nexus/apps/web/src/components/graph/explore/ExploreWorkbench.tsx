@@ -11,10 +11,11 @@ import {
   updateView,
   type SavedView,
   type SearchHit,
+  searchEntities,
 } from '@/lib/graph-query/client'
 import { discoveredToColumns } from '@/lib/graph-query/columns'
 import { specFromState, stateFromSpec, type ExploreState } from '@/lib/graph-query/explore-state'
-import type { ViewQuerySpec } from '@/lib/graph-query/types'
+import type { Column, ViewQuerySpec } from '@/lib/graph-query/types'
 import { BuilderPanel } from './BuilderPanel'
 import { downloadCsv, rowsToCsv } from './csv'
 import { ResultsTable } from './ResultsTable'
@@ -22,6 +23,7 @@ import { SaveViewDialog } from './SaveViewDialog'
 import { SearchBar } from './SearchBar'
 import { InstanceDrawer } from './InstanceDrawer'
 import { useExplore } from './use-explore'
+import './composer-feedback.css'
 
 const DEFAULT_COLUMN_COUNT = 6
 
@@ -63,10 +65,19 @@ export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbench
   // History stack of inspected individual IRIs; the last is shown. Empty ⇒ drawer closed.
   const [inspectStack, setInspectStack] = useState<string[]>([])
   const openIndividualFull = useCallback(
-    (uri: string) => {
-      router.push(`/workspace/${workspaceId}/graph/individuals?selected=${encodeURIComponent(uri)}`)
+    async (uri: string) => {
+      try {
+        // Resolve the containing graph instead of guessing in a cross-graph view.
+        const response = await searchEntities({ workspaceId, graphUris: state.graphUris, query: uri })
+        const hit = response.results.find(item => item.kind === 'individual' && item.uri === uri)
+        if (!hit) throw new Error('This instance was not found in the selected graphs.')
+        const query = new URLSearchParams({ graph: hit.graph_uri, selected: uri, class: hit.class_uri })
+        router.push(`/workspace/${workspaceId}/graph/individuals?${query}`)
+      } catch (error) {
+        setSaveError(error instanceof Error ? error.message : 'Could not open this instance.')
+      }
     },
-    [router, workspaceId],
+    [router, workspaceId, state.graphUris],
   )
 
   const refreshViews = useCallback(() => {
@@ -85,26 +96,34 @@ export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbench
     if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('views-changed'))
   }, [refreshViews])
 
-  // ── Auto-seed default columns once per anchor ────────────────────────────────
-  // On the first class pick, seed a few default columns. After a drill the carried columns
-  // are already present, so we append the new grain's defaults (deduping ids) — you keep the
-  // columns from earlier levels AND get the grain's own.
+  // Each new root selection gets defaults, including Reset → same class. A root
+  // object remains stable while columns are edited, so removing columns stays intentional.
   const anchorKey = `${state.graphUris.join('|')}::${state.classUris.join('|')}`
-  const seededAnchor = useRef<string | null>(null)
+  const rootSelection = state.spine[0]
+  const seededRoot = useRef<typeof rootSelection | null>(null)
+  const fallbackRoot = useRef<typeof rootSelection | null>(null)
+  const fallbackColumns = useRef<Column[] | null>(null)
   useEffect(() => {
-    // Only seed once the discovered columns belong to the CURRENT grain (never a previous
-    // grain's columns still in flight after a drill).
-    if (explore.discoveredFor !== anchorKey) return
-    if (discovered.length === 0 || state.classUris.length === 0) return
-    if (seededAnchor.current === anchorKey) return
-    // Auto-seed default columns ONLY at the root (initial class pick). After a drill we keep
-    // exactly the columns carried from the prior level — no surprise extra columns / duplicates.
-    if (state.spine.length <= 1 && state.columns.length === 0) {
+    if (!rootSelection || state.spine.length > 1 || !state.graphUris.length) return
+    if (seededRoot.current !== rootSelection) {
+      seededRoot.current = rootSelection
+      if (!state.columns.length) {
+        // A label projection is optional: even an instance without a label remains a row.
+        fallbackRoot.current = rootSelection
+        const columns: Column[] = [{ id: 'label', label: 'Label', datatype: 'string',
+          source: { kind: 'property', predicate: 'http://www.w3.org/2000/01/rdf-schema#label' } }]
+        fallbackColumns.current = columns
+        dispatch({ type: 'setColumns', columns })
+        return
+      }
+    }
+    if (fallbackRoot.current !== rootSelection || explore.discoveredFor !== anchorKey || !discovered.length) return
+    // Do not replace edits made while discovery was loading.
+    if (state.columns === fallbackColumns.current) {
       dispatch({ type: 'setColumns', columns: discoveredToColumns(discovered.slice(0, DEFAULT_COLUMN_COUNT)) })
     }
-    seededAnchor.current = anchorKey
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [discovered, explore.discoveredFor, anchorKey])
+    fallbackRoot.current = null
+  }, [rootSelection, state.spine.length, state.graphUris.length, state.columns, discovered, explore.discoveredFor, anchorKey, dispatch])
 
   // Columns the filter popover may facet (list mode, dimension columns only).
   const facetableById = useMemo(() => {
@@ -137,21 +156,14 @@ export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbench
         const stored = (view.state ?? {}) as { spec?: ViewQuerySpec; spine?: unknown[] }
         const spec = stored.spec ?? ('mode' in (view.state ?? {}) ? (view.state as unknown as ViewQuerySpec) : null)
         if (!spec || !('mode' in spec)) return
-        const grain =
-          spec.mode === 'list'
-            ? spec.root.kind === 'class'
-              ? spec.root.class_uris.join('|')
-              : ''
-            : spec.fact.kind === 'class'
-              ? spec.fact.class_uris.join('|')
-              : ''
-        seededAnchor.current = `${spec.graph_uris.join('|')}::${grain}`
         const base = stateFromSpec(spec)
         // Restore the drill breadcrumb when it was persisted (keeps spec lowering identical).
         const restored =
           Array.isArray(stored.spine) && stored.spine.length > 0
             ? { ...base, spine: stored.spine as ExploreState['spine'] }
             : base
+        seededRoot.current = restored.spine[0]
+        fallbackRoot.current = null
         dispatch({ type: 'load', state: restored })
         setActiveViewId(view.id)
         setActiveViewDescription(view.description ?? '')
@@ -412,7 +424,7 @@ export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbench
             </button>
             <button
               onClick={explore.refresh}
-              disabled={!explore.runnable || running}
+              disabled={!state.classUris.length || running || explore.discoveredLoading}
               className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50"
               data-testid="explore-refresh"
             >
@@ -546,8 +558,17 @@ export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbench
           classesLoading={explore.classesLoading}
           discovered={discovered}
           discoveredLoading={explore.discoveredLoading}
+          discoveryError={explore.discoveryError}
+          onRetryDiscovery={explore.retryDiscovery}
           loadFields={explore.discoverColumnsFor}
         />
+
+        {explore.discoveryError && (
+          <div className="composer-discovery-error" role="alert">
+            <span>Columns could not be loaded: {explore.discoveryError}</span>
+            <button type="button" onClick={explore.retryDiscovery}>Retry columns</button>
+          </div>
+        )}
 
         {error && (
           <div
@@ -603,6 +624,8 @@ export function ExploreWorkbench({ workspaceId, viewIdToLoad }: ExploreWorkbench
                   <span className="flex items-center gap-2">
                     <Loader2 className="animate-spin" /> Running…
                   </span>
+                ) : error ? (
+                  'Results could not be loaded. Use Refresh to try again.'
                 ) : !canSave ? (
                   'Pick a graph and a class to start exploring.'
                 ) : state.columns.length === 0 ? (

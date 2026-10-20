@@ -81,6 +81,15 @@ describe('pane send workspace scoping', () => {
     expect(useWorkspaceStore.getState().slidesPaneConversationByKey['ws-a::deck-a']).toBe(id);
   });
 
+  it('binds a Sheets draft to its workbook', () => {
+    useWorkspaceStore.setState({ sheetsPaneConversationByKey: {} });
+    const id = useWorkspaceStore.getState().createConversation(undefined, {
+      surface: 'pane', sheetsSlug: 'budget',
+    });
+    expect(useWorkspaceStore.getState().conversations.find(c => c.id === id)?.sheetsSlug).toBe('budget');
+    expect(useWorkspaceStore.getState().sheetsPaneConversationByKey['ws-a::budget']).toBe(id);
+  });
+
   it('stamps a pane draft with the open documents slug', () => {
     useWorkspaceStore.setState({
       documentsPaneConversationByKey: {},

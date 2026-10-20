@@ -8,6 +8,7 @@ from naas_abi_core.services.dataset.adapters.secondary.DatasetSecondaryAdapterDu
 )
 from naas_abi_core.services.dataset.DatasetPort import (
     ColumnSpec,
+    DatasetNotFoundError,
     DatasetSchemaError,
     DatasetSpec,
     PartitionSpec,
@@ -169,6 +170,49 @@ class TestDatasetSecondaryAdapterDuckLake(DatasetSecondaryAdapterContract):
         written = adapter.write("events", [])
 
         assert written.snapshot_id == created.snapshot_id
+
+    def test_describe_reads_one_table_from_the_metadata_catalog(
+        self, adapter, monkeypatch
+    ):
+        """duckdb_tables() lists every table in the lake: seconds at a few hundred."""
+        adapter.create(
+            DatasetSpec(name="events", columns=(ColumnSpec(name="id", type="integer"),))
+        )
+        statements: list[str] = []
+        real_read = adapter._read
+
+        class Recording:
+            def __init__(self, con):
+                self._con = con
+
+            def execute(self, sql, *args):
+                statements.append(sql)
+                return self._con.execute(sql, *args)
+
+        monkeypatch.setattr(
+            adapter,
+            "_read",
+            lambda operation: real_read(lambda con: operation(Recording(con))),
+        )
+
+        assert adapter.describe("events").name == "events"
+        assert not any("duckdb_tables" in sql for sql in statements)
+
+    def test_describe_sees_a_recreated_table_not_the_dropped_one(self, adapter):
+        adapter.create(
+            DatasetSpec(name="events", columns=(ColumnSpec(name="id", type="integer"),))
+        )
+        adapter.drop("events")
+        with pytest.raises(DatasetNotFoundError):
+            adapter.describe("events")
+
+        adapter.create(
+            DatasetSpec(
+                name="events", columns=(ColumnSpec(name="label", type="string"),)
+            )
+        )
+
+        assert [c.name for c in adapter.describe("events").columns] == ["label"]
 
     def test_reads_reuse_a_single_connection_across_calls(self, adapter, monkeypatch):
         import duckdb

@@ -9,13 +9,14 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from naas_abi.apps.nexus.apps.api.app.api.router import api_router
 from naas_abi.apps.nexus.apps.api.app.core.config import settings, validate_settings_on_startup
 from naas_abi.apps.nexus.apps.api.app.core.database import init_db
+from naas_abi.apps.nexus.apps.api.app.core.frame_headers import embed_csp, is_embeddable
 from naas_abi.apps.nexus.apps.api.app.core.logging import configure_logging
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat_ingestion_worker import (
     start_chat_ingestion_consumer,
@@ -75,8 +76,192 @@ async def _sync_model_catalog() -> None:
             "✓ Model catalog synced at startup (%d override divergence warning(s))",
             len(warnings),
         )
+        # Settings pages opened while this ran may have cached the old catalog.
+        await asyncio.to_thread(_invalidate_settings_cache)
     except Exception:
         _log.exception("Background model catalog sync failed (non-fatal)")
+
+
+def _invalidate_settings_cache() -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.settings_cache.middleware import (
+        invalidate_on_startup,
+    )
+
+    invalidate_on_startup()
+
+
+async def _sync_identity_graph() -> None:
+    """Rebuild graph/nexus-identity from Postgres and the running configuration:
+    users and persons, organizations, workspaces, memberships and access roles,
+    features and policies, and their setup processes. Event payloads only hold
+    ids; this graph resolves them to people.
+    """
+    _log = logging.getLogger(__name__)
+    try:
+        from naas_abi import ABIModule
+        from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+        from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+        from naas_abi.apps.nexus.apps.api.app.services.identity_graph.adapters.secondary.identity_graph__secondary_adapter__postgres import (  # noqa: E501
+            IdentitySourceSecondaryAdapterPostgres,
+        )
+        from naas_abi.apps.nexus.apps.api.app.services.identity_graph.adapters.secondary.identity_graph__secondary_adapter__settings import (  # noqa: E501
+            PlatformConfigurationSourceSettings,
+        )
+        from naas_abi.apps.nexus.apps.api.app.services.identity_graph.adapters.secondary.identity_graph__secondary_adapter__triplestore import (  # noqa: E501
+            IdentityGraphStoreSecondaryAdapterTripleStore,
+        )
+        from naas_abi.apps.nexus.apps.api.app.services.identity_graph.service import (
+            IdentityGraphService,
+        )
+
+        async with AsyncSessionLocal() as session:
+            service = IdentityGraphService(
+                source=IdentitySourceSecondaryAdapterPostgres(session),
+                store=IdentityGraphStoreSecondaryAdapterTripleStore(
+                    lambda: ABIModule.get_instance().engine.services.triple_store
+                ),
+                platform=PlatformConfigurationSourceSettings(
+                    settings_getter=live_settings,
+                    module_config_getter=lambda: ABIModule.get_instance().configuration,
+                ),
+            )
+            # Boot races Fuseki writes from schema load and seeds. A single
+            # CLEAR/DROP can lose the dataset lock; retry rather than skip.
+            delays = (0.0, 2.0, 8.0)
+            result = None
+            for attempt, delay in enumerate(delays):
+                if delay:
+                    await asyncio.sleep(delay)
+                try:
+                    result = await service.sync()
+                    break
+                except Exception:
+                    if attempt == len(delays) - 1:
+                        raise
+                    _log.warning(
+                        "Identity graph sync failed (attempt %d/%d); retrying",
+                        attempt + 1,
+                        len(delays),
+                        exc_info=True,
+                    )
+        assert result is not None
+        _log.info(
+            "✓ Identity graph synced (%d users, %d organizations, %d workspaces, %d memberships, %d triples)",
+            result.users,
+            result.organizations,
+            result.workspaces,
+            result.memberships,
+            result.triples,
+        )
+    except Exception:
+        _log.exception("Background identity graph sync failed (non-fatal)")
+
+
+_identity_graph_sync_task: asyncio.Task | None = None
+
+
+def _schedule_identity_graph_sync(_published: int = 0, delay_seconds: float = 2.0) -> None:
+    """Rebuild the identity graph shortly after identity events, coalescing bursts
+    (a config seed or a bulk invite commits many changes in a row)."""
+    global _identity_graph_sync_task
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    if _identity_graph_sync_task is not None and not _identity_graph_sync_task.done():
+        return
+
+    async def _later() -> None:
+        await asyncio.sleep(delay_seconds)
+        await _sync_identity_graph()
+
+    _identity_graph_sync_task = loop.create_task(_later())
+
+
+def _install_drive_writers() -> None:
+    """Keep .manifest.json and the default folders in every workspace drive and My Drive."""
+    _log = logging.getLogger(__name__)
+    try:
+        from naas_abi import ABIModule
+        from naas_abi.apps.nexus.apps.api.app.services.files.drives.my_drive import MyDriveWriter
+        from naas_abi.apps.nexus.apps.api.app.services.files.drives.workspace_drive import (
+            WorkspaceDriveWriter,
+        )
+
+        def get_storage():  # noqa: ANN202 - the engine's ObjectStorageService
+            return ABIModule.get_instance().engine.services.object_storage
+
+        WorkspaceDriveWriter(get_storage=get_storage).install()
+        MyDriveWriter(get_storage=get_storage).install()
+        _log.info("✓ Drive writers installed")
+    except Exception:
+        _log.exception("Unable to install the drive writers")
+
+
+async def _backfill_drives() -> None:
+    """Write missing workspace and My Drive defaults, and the platform drive's staff folders."""
+    _log = logging.getLogger(__name__)
+    try:
+        from naas_abi import ABIModule
+        from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+        from naas_abi.apps.nexus.apps.api.app.services.files.drives.my_drive import (
+            backfill_my_drives,
+        )
+        from naas_abi.apps.nexus.apps.api.app.services.files.drives.platform_drive import (
+            backfill_platform_drive,
+        )
+        from naas_abi.apps.nexus.apps.api.app.services.files.drives.workspace_drive import (
+            backfill_workspace_drives,
+        )
+
+        storage = ABIModule.get_instance().engine.services.object_storage
+        async with AsyncSessionLocal() as session:
+            workspaces = await backfill_workspace_drives(session, storage)
+            users = await backfill_my_drives(session, storage)
+        platform = await backfill_platform_drive(storage)
+        if any(workspaces.values()) or any(users.values()) or any(platform.values()):
+            _log.info(
+                "✓ Drives backfilled: workspaces %s, my drives %s, platform %s",
+                workspaces,
+                users,
+                platform,
+            )
+    except Exception:
+        _log.exception("Drive backfill failed")
+
+
+def _install_identity_event_capture() -> None:
+    """Publish a nexus identity-and-access event for every committed change to
+    users, organizations, workspaces, memberships and workspace configuration."""
+    _log = logging.getLogger(__name__)
+    try:
+        from urllib.parse import urlsplit
+
+        from naas_abi import ABIModule
+        from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+        from naas_abi.apps.nexus.apps.api.app.services.identity_events.capture import (
+            IdentityEventCapture,
+        )
+        from naas_abi.apps.nexus.apps.api.app.services.identity_graph.iris import (
+            deployment_site_iri,
+        )
+
+        engine = ABIModule.get_instance().engine
+        if not engine.services.events_available():
+            _log.warning("EventService not configured; identity events disabled")
+            return
+        event_service = engine.services.events
+        host = urlsplit(getattr(live_settings(), "frontend_url", "") or "").hostname or "unknown"
+
+        IdentityEventCapture(
+            # Late-bound: the admin relay wraps publish() after this runs.
+            publish=lambda event: event_service.publish(event),
+            site_iri=str(deployment_site_iri(host)),
+            on_published=_schedule_identity_graph_sync,
+        ).install()
+        _log.info("✓ Identity event capture installed")
+    except Exception:
+        _log.exception("Unable to install identity event capture (non-fatal)")
 
 
 async def _prefetch_agent_class_registry() -> None:
@@ -98,6 +283,31 @@ async def _prefetch_agent_class_registry() -> None:
         _log.info("✓ Agent class registry pre-populated at startup")
     except Exception:
         _log.exception("Background agent registry pre-fetch failed (non-fatal)")
+
+
+async def _reencrypt_secrets_under_default_keys() -> None:
+    """Move workspace secrets encrypted under a published default key to the real key."""
+    from naas_abi.apps.nexus.apps.api.app.core.config import current_secret_key
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.core.secret_key import (
+        INSECURE_SECRET_KEYS,
+        is_insecure_secret_key,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.secrets.adapters.secondary.postgres import (
+        SecretsSecondaryAdapterPostgres,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.secrets.service import SecretsService
+
+    if is_insecure_secret_key(current_secret_key()):
+        return
+    async with AsyncSessionLocal() as db:
+        service = SecretsService(adapter=SecretsSecondaryAdapterPostgres(db=db))
+        rewritten = await service.reencrypt_from_keys(sorted(INSECURE_SECRET_KEYS))
+    if rewritten:
+        logging.getLogger(__name__).warning(
+            "Re-encrypted %d workspace secret(s) that were stored under a default key.",
+            rewritten,
+        )
 
 
 async def _startup(app: FastAPI) -> None:
@@ -122,10 +332,55 @@ async def _startup(app: FastAPI) -> None:
         print("  API will not start without database connection.")
         raise
 
+    await _reencrypt_secrets_under_default_keys()
+
     # Apply config-driven user/org/workspace seeds from config.yaml.
     from naas_abi.apps.nexus.apps.api.app.core.org_seed import apply_configuration_seeds
 
-    await apply_configuration_seeds(getattr(app.state, "secret_service", None))
+    # Before seeds: users, workspaces and memberships the configuration creates
+    # or changes are logged as identity events, triggered via "configuration".
+    _install_identity_event_capture()
+    # Also before seeds, so users and workspaces the configuration creates get their drives set up.
+    _install_drive_writers()
+    from naas_abi_core.services.event.context import event_triggered_via
+
+    via = event_triggered_via.set("configuration")
+    try:
+        await apply_configuration_seeds(getattr(app.state, "secret_service", None))
+    finally:
+        event_triggered_via.reset(via)
+
+    # Maps feeds, layers and basemaps declared by modules (artifacts/maps/{layers/**,basemaps/*}/manifest.json),
+    # then config Maps ids (workspaces[].maps) that nothing provides. Both only
+    # log errors, never fail the start.
+    from naas_abi.apps.nexus.apps.api.app.services.maps.adapters.primary.workspace_defaults import (  # noqa: E501
+        report_unknown_workspace_map_ids,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.maps.manifests import (
+        register_module_manifests,
+    )
+
+    try:
+        from naas_abi import ABIModule
+
+        abi_module = ABIModule.get_instance()
+        modules = [
+            abi_module,
+            *(m for m in abi_module.engine.modules.values() if m is not abi_module),
+        ]
+    except Exception:  # noqa: BLE001 - standalone Nexus: no ABI engine, no module manifests
+        modules = []
+    register_module_manifests(app, modules)
+    report_unknown_workspace_map_ids(app)
+
+    # An ABI restart clears the settings pages' 24h API cache (after seeds, which
+    # may have changed users, workspaces and organizations).
+    await asyncio.to_thread(_invalidate_settings_cache)
+
+    # After seeds, so seeded users/workspaces are in the graph on first boot.
+    asyncio.create_task(_sync_identity_graph())
+    # After seeds too: users and workspaces created before the drive writers get theirs.
+    asyncio.create_task(_backfill_drives())
 
     try:
         start_chat_ingestion_consumer(app)
@@ -219,8 +474,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             # Prevent MIME type sniffing
             response.headers["X-Content-Type-Options"] = "nosniff"
 
-            # Prevent clickjacking — allow /app-html/ assets to be embedded in iframes
-            if request.url.path.startswith("/app-html/"):
+            # Prevent clickjacking — allow /app-html/ and /app-preview/ assets
+            # to be embedded in iframes.
+            embeddable = is_embeddable(request.url.path)
+            if embeddable:
                 ancestors = ["'self'"]
                 frontend = str(getattr(settings, "frontend_url", "") or "").rstrip("/")
                 if frontend:
@@ -242,8 +499,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                             ancestors.append(ref_origin)
                     except Exception:
                         pass
-                response.headers["Content-Security-Policy"] = (
-                    f"frame-ancestors {' '.join(ancestors)};"
+                response.headers["Content-Security-Policy"] = embed_csp(
+                    response.headers.get("Content-Security-Policy"), ancestors
                 )
             else:
                 response.headers["X-Frame-Options"] = "DENY"
@@ -260,8 +517,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                     "max-age=31536000; includeSubDomains"
                 )
 
-            # CSP (if configured) — skip bundled app HTML; embed CSP set above.
-            if not request.url.path.startswith("/app-html/"):
+            # CSP (if configured) — skip bundled and preview app HTML; embed CSP set above.
+            if not embeddable:
                 if settings.content_security_policy:
                     response.headers["Content-Security-Policy"] = settings.content_security_policy
                 elif settings.environment == "production":
@@ -345,8 +602,8 @@ def _configure_middleware(app: FastAPI) -> None:
         "allow_origins": cors_origins,
         "allow_credentials": True,
         "allow_methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        "allow_headers": ["Authorization", "Content-Type", "Accept", "X-Requested-With"],
-        "expose_headers": ["Content-Length", "Content-Range"],
+        "allow_headers": ["Authorization", "Content-Type", "Accept", "X-Requested-With", "X-Nexus-Cache"],
+        "expose_headers": ["Content-Length", "Content-Range", "X-Nexus-Cache"],
     }
     # In local development the web dev server can bind any free port (the allocator bumps
     # to the next port when one is still in TIME_WAIT after a restart), so accept any
@@ -354,6 +611,13 @@ def _configure_middleware(app: FastAPI) -> None:
     if settings.nexus_env == "local" or settings.environment == "development":
         cors_kwargs["allow_origin_regex"] = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
     logger.info(f"[CORS] Configured origins: {cors_origins} (regex: {cors_kwargs.get('allow_origin_regex')})")
+    # Settings pages' 24h API cache. Added before CORS so it sits inside it: cached
+    # answers still go out through CORS and get its headers.
+    from naas_abi.apps.nexus.apps.api.app.services.settings_cache.middleware import (
+        SettingsCacheMiddleware,
+    )
+
+    app.add_middleware(SettingsCacheMiddleware)
     app.add_middleware(CORSMiddleware, **cors_kwargs)
     app.add_middleware(SecurityHeadersMiddleware)
 
@@ -365,6 +629,13 @@ def _configure_middleware(app: FastAPI) -> None:
     )
 
     app.add_middleware(HttpActivityLogMiddleware)
+
+    # Who and which workspace each request acts for, stamped on every event.
+    from naas_abi.apps.nexus.apps.api.app.services.identity_events.middleware import (
+        RequestIdentityMiddleware,
+    )
+
+    app.add_middleware(RequestIdentityMiddleware)
 
 
 async def serve_app_html(path: str) -> FileResponse:
@@ -410,12 +681,59 @@ async def serve_provider_logo(provider_id: str) -> FileResponse:
 def _register_routes(app: FastAPI) -> None:
     # Include API router
     app.include_router(api_router, prefix="/api")
+    # Graph map layers: always mounted (empty until a module registers one), so
+    # the web's request is a list, not a 404. Needs the ABI engine.
+    try:
+        from naas_abi.apps.nexus.apps.api.app.services.maps.adapters.primary.fastapi import (
+            install_maps_layers,
+        )
+
+        install_maps_layers(app)
+    except ValueError:
+        logging.getLogger(__name__).info("Maps graph layers: no ABI engine, not mounted")
 
     app.add_api_route("/health", health_check, methods=["GET"])
-    app.add_api_route("/api/ollama/status", ollama_status, methods=["GET"])
-    app.add_api_route("/api/ollama/pull", ollama_pull_model, methods=["POST"])
-    app.add_api_route("/api/ollama/ensure-ready", ollama_ensure_ready, methods=["POST"])
-    app.add_api_route("/app-html/{path:path}", serve_app_html, methods=["GET"])
+    from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
+        get_current_user_required,
+        require_superadmin,
+    )
+    from naas_abi_core.apps.api.abi_api_key_auth import require_abi_api_token
+
+    # Status reveals the internal Ollama URL and models: signed-in users only.
+    # Pulling models and starting the server act on the host: superadmins only.
+    app.add_api_route(
+        "/api/ollama/status",
+        ollama_status,
+        methods=["GET"],
+        dependencies=[Depends(get_current_user_required)],
+    )
+    app.add_api_route(
+        "/api/ollama/pull",
+        ollama_pull_model,
+        methods=["POST"],
+        dependencies=[Depends(require_superadmin)],
+    )
+    app.add_api_route(
+        "/api/ollama/ensure-ready",
+        ollama_ensure_ready,
+        methods=["POST"],
+        dependencies=[Depends(require_superadmin)],
+    )
+    # The core API's middleware already guards /app-html/; checking here too keeps
+    # the route closed when Nexus is served without that middleware.
+    app.add_api_route(
+        "/app-html/{path:path}",
+        serve_app_html,
+        methods=["GET"],
+        dependencies=[Depends(require_abi_api_token)],
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.apps.projects.adapters.primary.app_projects__primary_adapter__FastAPI import (
+        redirect_app_preview_root,
+        serve_app_preview,
+    )
+
+    app.add_api_route("/app-preview/{token}/{path:path}", serve_app_preview, methods=["GET"])
+    app.add_api_route("/app-preview/{token}", redirect_app_preview_root, methods=["GET"])
     app.add_api_route("/provider-logos/{provider_id}", serve_provider_logo, methods=["GET"])
 
 

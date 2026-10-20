@@ -95,7 +95,8 @@ def test_individual_hit_matched_by_uri_fragment_when_no_label() -> None:
             _row(
                 uri=DOC + "inv_99",
                 cls=DOC + "Invoice",
-                label=DOC + "inv_99",  # COALESCE(rdfs:label, STR(uri)) fell back to the URI
+                label=DOC
+                + "inv_99",  # COALESCE(rdfs:label, STR(uri)) fell back to the URI
                 g=G,
             )
         ],
@@ -111,12 +112,16 @@ def test_individual_hit_matched_by_uri_fragment_when_no_label() -> None:
 def test_individual_search_scans_all_string_data_properties() -> None:
     # The individuals query must match over EVERY literal-valued property (not only rdfs:label)
     # or the URI — so an individual is found by its description/title/name/etc.
-    store = _RoutedStore(individuals=[_row(uri=DOC + "x", cls=DOC + "Doc", label="x", g=G)])
+    store = _RoutedStore(
+        individuals=[_row(uri=DOC + "x", cls=DOC + "Doc", label="x", g=G)]
+    )
     search_entities(store, graph_uris=[G], query="acme", limit=20)
     ind_q = next(q for q in store.queries if "GROUP BY ?cls" not in q)
-    assert "?uri ?mp ?mv" in ind_q  # scans an arbitrary property ?mp with literal value ?mv
+    assert (
+        "?uri ?mp ?mv" in ind_q
+    )  # scans an arbitrary property ?mp with literal value ?mv
     assert "isLiteral(?mv)" in ind_q
-    assert "CONTAINS(LCASE(STR(?mv))" in ind_q  # the literal value is the match target
+    assert "REPLACE(LCASE(STR(?mv))" in ind_q  # the literal value is the match target
 
 
 def test_classes_first_then_individuals_and_sorting() -> None:
@@ -138,15 +143,101 @@ def test_classes_first_then_individuals_and_sorting() -> None:
     # classes sorted by -count: Offer(9) then Order(2)
     assert [h.uri for h in hits if h.kind == "class"] == [DOC + "Offer", DOC + "Order"]
     # individuals sorted by label: Alpha then Beta
-    assert [h.label for h in hits if h.kind == "individual"] == ["Alpha order", "Beta order"]
+    assert [h.label for h in hits if h.kind == "individual"] == [
+        "Alpha order",
+        "Beta order",
+    ]
 
 
 def test_limit_caps_each_kind() -> None:
     store = _RoutedStore(
         classes=[_row(cls=DOC + f"C{i}", g=G, cnt=i) for i in range(5)],
-        individuals=[_row(uri=DOC + f"i{i}", cls=DOC + "C0", label=f"item {i}", g=G) for i in range(5)],
+        individuals=[
+            _row(uri=DOC + f"i{i}", cls=DOC + "C0", label=f"item {i}", g=G)
+            for i in range(5)
+        ],
     )
     hits = search_entities(store, graph_uris=[G], query="", limit=2)
     # 2 classes + 2 individuals (query "" trivially matches via the store fake)
     assert sum(1 for h in hits if h.kind == "class") == 2
     assert sum(1 for h in hits if h.kind == "individual") == 2
+
+
+def _real_store():
+    """Exercise actual SPARQL semantics, including grouping and graph boundaries."""
+    from pyoxigraph import NamedNode, RdfFormat, Store
+
+    class MemoryStore(_RoutedStore):
+        def __init__(self):
+            super().__init__()
+            self.db = Store()
+            self.db.load(
+                input="""@prefix ex: <http://example.org/> .
+                @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+                ex:visible {
+                    ex:GPT_4 a ex:AIModelInstance, ex:Model ; rdfs:label "GPT-4", "GPT 4" .
+                    ex:GPT_4o_Aug_24 a ex:AIModelInstance ; rdfs:label "GPT-4o (Aug '24)" .
+                    ex:GPT_4_unlabelled a ex:AIModelInstance .
+                    ex:other a ex:Document ; ex:description "A GPT-4 document" .
+                    ex:AIModelInstance rdfs:label "AI model instance" .
+                }
+                ex:hidden { ex:secret a ex:AIModelInstance ; rdfs:label "GPT-4 private" . }
+            """,
+                format=RdfFormat.TRIG,
+            )
+
+        def select(self, sparql):
+            self.queries.append(sparql)
+            result = self.db.query(sparql)
+            return [
+                {
+                    v.value: Binding(row[v].value, isinstance(row[v], NamedNode))
+                    for v in result.variables
+                    if row[v] is not None
+                }
+                for row in result
+            ]
+
+    return MemoryStore()
+
+
+def test_separator_insensitive_search_and_unlabelled_uris():
+    store = _real_store()
+    for query in ["GPT4", "gpt-4", "GPT_4", "gpt 4"]:
+        hits = search_entities(
+            store, graph_uris=["http://example.org/visible"], query=query
+        )
+        individuals = [h for h in hits if h.kind == "individual"]
+        assert {h.uri for h in individuals} == {
+            "http://example.org/GPT_4",
+            "http://example.org/GPT_4o_Aug_24",
+            "http://example.org/GPT_4_unlabelled",
+            "http://example.org/other",
+        }
+        assert len(individuals) == 4  # multi-type, multi-label instance appears once
+        assert all(h.graph_uri == "http://example.org/visible" for h in individuals)
+
+
+def test_search_class_labels_and_explicit_class_scope():
+    store = _real_store()
+    hits = search_entities(
+        store, graph_uris=["http://example.org/visible"], query="AI model"
+    )
+    assert hits[0].label == "AI model instance"
+    assert hits[0].instance_count == 3
+    hits = search_entities(
+        store,
+        graph_uris=["http://example.org/visible"],
+        query="GPT4",
+        class_uris=["http://example.org/Document"],
+    )
+    assert [h.uri for h in hits] == ["http://example.org/other"]
+
+
+def test_search_text_is_literal_not_sparql():
+    store = _real_store()
+    assert not search_entities(
+        store,
+        graph_uris=["http://example.org/visible"],
+        query='" ) } UNION { ?s ?p ?o } #',
+    )

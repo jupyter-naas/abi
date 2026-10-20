@@ -2,14 +2,21 @@ from __future__ import annotations
 
 import hmac
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from uuid import uuid4
 
 import bcrypt
 from jose import JWTError, jwt
-from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from naas_abi.apps.nexus.apps.api.app.core.config import current_secret_key, settings
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
+from naas_abi.apps.nexus.apps.api.app.services.auth.account_fallbacks import (
+    FALLBACK_FIELDS,
+    effective_account_values,
+)
+from naas_abi.apps.nexus.apps.api.app.services.auth.default_passwords import (
+    is_known_default_password,
+)
 from naas_abi.apps.nexus.apps.api.app.services.auth.port import (
     AuthPersistencePort,
     AuthUserRecord,
@@ -120,6 +127,31 @@ class ExpiredOtpError(ValueError):
         return "expired_otp"
 
 
+@dataclass
+class SuperadminChangeError(ValueError):
+    reason: str  # cannot_demote_self | last_superadmin
+
+    def __str__(self) -> str:
+        return self.reason
+
+
+@dataclass
+class SignupDisabledError(PermissionError):
+    def __str__(self) -> str:
+        return "signup_disabled"
+
+
+@dataclass
+class DefaultPasswordNotAllowedError(ValueError):
+    def __str__(self) -> str:
+        return "default_password_not_allowed"
+
+
+def _reject_default_password(password: str) -> None:
+    if is_known_default_password(password):
+        raise DefaultPasswordNotAllowedError()
+
+
 def generate_otp_code(length: int | None = None) -> str:
     digits = length if length is not None else settings.otp_code_length
     if digits < 4 or digits > 10:
@@ -142,13 +174,13 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> t
         expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
     )
     to_encode.update({"exp": expire, "jti": jti})
-    token = jwt.encode(to_encode, settings.secret_key, algorithm="HS256")
+    token = jwt.encode(to_encode, current_secret_key(), algorithm="HS256")
     return token, jti
 
 
 def decode_token(token: str) -> dict | None:
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
+        payload = jwt.decode(token, current_secret_key(), algorithms=["HS256"])
         return payload
     except JWTError:
         return None
@@ -173,6 +205,9 @@ class AuthService:
         if not settings.auth_password_enabled:
             raise PasswordAuthenticationDisabledError()
 
+        if not settings.auth_signup_enabled:
+            raise SignupDisabledError()
+        _reject_default_password(password)
         normalized_email = email.lower()
         if await self.adapter.user_exists_with_email(normalized_email):
             raise EmailAlreadyRegisteredError()
@@ -220,6 +255,10 @@ class AuthService:
 
         if not verify_password(password, user.hashed_password):
             raise InvalidCredentialsError(reason="invalid_password", user_id=user.id)
+        if is_known_default_password(password):
+            # A published default must never open a session, even if an old
+            # install still has it on the account.
+            raise InvalidCredentialsError(reason="default_password", user_id=user.id)
 
         access_token, jti = create_access_token(data={"sub": user.id})
         refresh_token = await create_refresh_token(
@@ -244,6 +283,8 @@ class AuthService:
         user = await self.adapter.get_user_by_email(email.lower())
         if user is None or not verify_password(password, user.hashed_password):
             raise InvalidCredentialsError(reason="invalid_credentials")
+        if is_known_default_password(password):
+            raise InvalidCredentialsError(reason="default_password")
         access_token, _ = create_access_token(data={"sub": user.id})
         return access_token
 
@@ -267,8 +308,8 @@ class AuthService:
         user_id: str,
         name: str | None,
         email: str | None,
-        company: str | None,
-        role: str | None,
+        organization: str | None,
+        job_title: str | None,
         bio: str | None,
     ) -> AuthUserRecord:
         normalized_email = email.lower() if email is not None else None
@@ -282,8 +323,8 @@ class AuthService:
             user_id=user_id,
             name=name,
             email=normalized_email,
-            company=company,
-            role=role,
+            organization=organization,
+            job_title=job_title,
             bio=bio,
         )
         if updated_user is None:
@@ -337,6 +378,7 @@ class AuthService:
         if not settings.auth_password_enabled:
             raise PasswordAuthenticationDisabledError()
 
+        _reject_default_password(new_password)
         user = await self.adapter.get_user_by_id(user_id)
         if user is None:
             raise UserNotFoundError(user_id=user_id)
@@ -390,6 +432,7 @@ class AuthService:
         if not settings.auth_password_enabled:
             raise PasswordAuthenticationDisabledError()
 
+        _reject_default_password(new_password)
         reset_token = await self.adapter.get_password_reset_token(token)
         if reset_token is None:
             raise InvalidResetTokenError()
@@ -415,6 +458,45 @@ class AuthService:
             user_id=user_id,
             avatar_url=avatar_url,
             now=now_utc_naive(),
+        )
+        if updated is None:
+            raise UserNotFoundError(user_id=user_id)
+        await self.adapter.commit()
+        return updated
+
+    async def list_users(self) -> list[AuthUserRecord]:
+        return await self.adapter.list_users()
+
+    async def get_user(self, user_id: str) -> AuthUserRecord | None:
+        return await self.adapter.get_user_by_id(user_id)
+
+    async def with_account_fallbacks(self, user: AuthUserRecord) -> AuthUserRecord:
+        """The account as shown to its owner: empty picture, organization and job
+        title filled from their organization member profiles (org -> account only)."""
+        if all(getattr(user, field) for field in FALLBACK_FIELDS):
+            return user
+        profiles = await self.adapter.list_member_profiles(user.id)
+        effective = effective_account_values(
+            {field: getattr(user, field) for field in FALLBACK_FIELDS}, profiles
+        )
+        return replace(user, **effective)
+
+    async def set_superadmin(
+        self, *, actor_id: str, user_id: str, is_superadmin: bool
+    ) -> AuthUserRecord:
+        """Promote or demote a platform superadmin. Never leaves the platform without one."""
+        user = await self.adapter.get_user_by_id(user_id)
+        if user is None:
+            raise UserNotFoundError(user_id=user_id)
+        if user.is_superadmin == is_superadmin:
+            return user
+        if not is_superadmin:
+            if user_id == actor_id:
+                raise SuperadminChangeError(reason="cannot_demote_self")
+            if await self.adapter.count_superadmins() <= 1:
+                raise SuperadminChangeError(reason="last_superadmin")
+        updated = await self.adapter.set_user_superadmin(
+            user_id=user_id, is_superadmin=is_superadmin, now=now_utc_naive()
         )
         if updated is None:
             raise UserNotFoundError(user_id=user_id)
@@ -600,10 +682,12 @@ class AuthService:
                 break
 
         if matched is None:
-            latest = active[0]
-            attempts = await self.adapter.increment_magic_link_otp_attempts(latest.id)
-            if attempts >= settings.otp_max_attempts:
-                await self.adapter.mark_magic_link_token_used(latest.id)
+            # Charge every active code: otherwise requesting a fresh code would
+            # hand an attacker a new guess budget against the older ones.
+            for magic_token in active:
+                attempts = await self.adapter.increment_magic_link_otp_attempts(magic_token.id)
+                if attempts >= settings.otp_max_attempts:
+                    await self.adapter.mark_magic_link_token_used(magic_token.id)
             await self.adapter.commit()
             raise InvalidOtpError()
 

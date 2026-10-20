@@ -2,6 +2,307 @@
 
 <!-- version list -->
 
+## v3.60.0 (2026-10-13)
+
+### Features
+
+- **people-app**: Add workspace_id support and enhance app navigation config
+  ([`6ac1869`](https://github.com/jupyter-naas/abi/commit/6ac1869beabc89e40f9ee434f84343218dc64b88))
+
+
+## v3.59.0 (2026-10-09)
+
+### Features
+
+- **people**: Add support for workspace_dataset backend
+  ([`7172bf2`](https://github.com/jupyter-naas/abi/commit/7172bf2a4897177b72cbb61fd1595a6d3d6be28b))
+
+- **people-intel**: Add support for include_suffixes in graph config and workspace manifest
+  ([`ac6e604`](https://github.com/jupyter-naas/abi/commit/ac6e6042f0f2ed92ac97fa889d9a559443ea05ba))
+
+### Refactoring
+
+- **people**: Improve error handling and logging in people resolver and results page
+  ([`723148c`](https://github.com/jupyter-naas/abi/commit/723148c14a68403ae320f4dd68fef9b3b8ba1ff5))
+
+- **people-intel**: Enhance people API routes with authentication and context
+  ([`9de46e2`](https://github.com/jupyter-naas/abi/commit/9de46e257b99d3f0fe16007e69359e0a018050d5))
+
+- **people-intel**: Update multiple modules and scripts for improvements and fixes
+  ([`ed96de9`](https://github.com/jupyter-naas/abi/commit/ed96de9d594768c4053bf24850114b88a122b52c))
+
+- **people-intel**: Update README and CSS for theme chrome variables
+  ([`473d488`](https://github.com/jupyter-naas/abi/commit/473d488dc721cf7c9c099d865f8aab1879f2ebe9))
+
+
+## v3.58.0 (2026-10-07)
+
+### Features
+
+- **intel-processes**: Add organization and people logo pipelines and utilities
+  ([`d39062b`](https://github.com/jupyter-naas/abi/commit/d39062ba961596f4661354af9a1a47922b1723b3))
+
+- **people**: Add optional LinkedIn contact link in search results
+  ([`c0d1cc1`](https://github.com/jupyter-naas/abi/commit/c0d1cc12224e98ffc3d1c49af22baf2a3d0b4b86))
+
+- **people**: Add support for organization logos from graph
+  ([`aa4d605`](https://github.com/jupyter-naas/abi/commit/aa4d6052b4c21646b9870ee55de1b665275cff1b))
+
+- **people**: Enhance graph visualization with ring clustering and image scaling
+  ([`e58d31a`](https://github.com/jupyter-naas/abi/commit/e58d31a7366f1c254a6bc48907fce8930e73d141))
+
+- **people**: Update search views and network API
+  ([`b8f3a2a`](https://github.com/jupyter-naas/abi/commit/b8f3a2a805921940ebca0aa0d57fdcba1eb08cdb))
+
+- **search**: Add highlight toggle and improve search UI
+  ([`41f5a62`](https://github.com/jupyter-naas/abi/commit/41f5a62214dedc9d55b26be1441bd8d0a4537c5c))
+
+
+## v3.57.1 (2026-10-06)
+
+### Bug Fixes
+
+- **people**: Remove deprecated cco:ont00000562 type from Person individuals
+  ([`8637f71`](https://github.com/jupyter-naas/abi/commit/8637f716b6f0f41918fc88000cc38f40b74739ac))
+
+
+## v3.57.0 (2026-10-05)
+
+### Features
+
+- **people**: Add network search API and network graph data
+  ([`ec50d40`](https://github.com/jupyter-naas/abi/commit/ec50d40d0fce92eb7dd6bddc7dcd26ac0341d375))
+
+
+## v3.56.0 (2026-10-05)
+
+### Chores
+
+- Commit staged changes
+  ([`50d907d`](https://github.com/jupyter-naas/abi/commit/50d907d0cb5df755ed38cc2565adf0150a535c8a))
+
+- Update naas-abi version and improve people app API mount docs
+  ([`2916982`](https://github.com/jupyter-naas/abi/commit/29169822869cdc4a5f48332c5cbfff70a1cd46a7))
+
+### Features
+
+- **people-web**: Add tab overflow handling for results page tabs
+  ([`9d2b60b`](https://github.com/jupyter-naas/abi/commit/9d2b60ba0833e2cffa3fb24c5ad8fd1bf4c653ac))
+
+### Refactoring
+
+- Move wsr to a module
+  ([`4093027`](https://github.com/jupyter-naas/abi/commit/4093027f1485ef58ffbd2e6e2497df8d50a2757f))
+
+- **ontologies**: Improve module ontology consolidation and path resolution
+  ([`7d3bc9a`](https://github.com/jupyter-naas/abi/commit/7d3bc9a3eb346e7f116e1f0fa5839c4c6011e64e))
+
+- **ontologies**: Update and add DocumentContentEntity ontology modules and related classes
+  ([`fa6df3c`](https://github.com/jupyter-naas/abi/commit/fa6df3c6605687d2e814aa92e4c856c31e8898c1))
+
+- **ontologies**: Update and add multiple ontology classes and processes
+  ([`41f436a`](https://github.com/jupyter-naas/abi/commit/41f436a71c5cd42eba37f84a1fbb499a341dc4ca))
+
+- **ontologies**: Update multiple ontology and process modules
+  ([`41a95b3`](https://github.com/jupyter-naas/abi/commit/41a95b31bf70d199fc568d22e9db03e990eb8e3e))
+
+- **ontologies**: Update people and personnel ontologies and related scripts
+  ([`121a6b9`](https://github.com/jupyter-naas/abi/commit/121a6b990367f1590eada4250d47e2d73810bb3c))
+
+- **organizations**: Move intelligence ontologies to modules/organizations
+  ([`2e9ec7d`](https://github.com/jupyter-naas/abi/commit/2e9ec7d8a1f67e1836c60d76d84f10d589d78941))
+
+- **people**: Commit staged changes for intelligence people module
+  ([`b7ff703`](https://github.com/jupyter-naas/abi/commit/b7ff7031725e0193eecf01f044cc0bdf3a2199af))
+
+- **people**: Move personnel cockpit components and scripts to intelligence people module
+  ([`990c1f3`](https://github.com/jupyter-naas/abi/commit/990c1f3260c7fc3143a5214cd5c6cf2ed7dee9a3))
+
+- **people**: Update multiple scripts, pipelines, ontologies, and demos
+  ([`3c49986`](https://github.com/jupyter-naas/abi/commit/3c49986a2e7820e9024183c20cb9d3a6a71ebd9f))
+
+- **people/web/lib**: Update API base handling and avatar image URL
+  ([`8b51270`](https://github.com/jupyter-naas/abi/commit/8b51270b9c827057f25317aa762883707fb7527b))
+
+
+## v3.55.0 (2026-10-01)
+
+
+## v3.54.0 (2026-09-30)
+
+### Bug Fixes
+
+- **scripts**: Minor cleanup in _engine_bootstrap.py and audit_envelope_bookkeeping.py
+  ([`953755a`](https://github.com/jupyter-naas/abi/commit/953755a32c0a55250aea9eed5059e476f4f5980b))
+
+- **x_proxy**: Add count buckets sync and fallback for timeseries
+  ([`2a6bae4`](https://github.com/jupyter-naas/abi/commit/2a6bae43b2445e669853ad085d16f294e6015813))
+
+- **x_proxy**: Dedupe users by username with correct rank order
+  ([`e37530a`](https://github.com/jupyter-naas/abi/commit/e37530a32ebaabc6c98eb273c48f1945d0817121))
+
+- **x_proxy**: Merge username case variants in facet values and related fixes
+  ([`6e26a21`](https://github.com/jupyter-naas/abi/commit/6e26a21665b0bd70c89d52924c1b919e90a2fbe2))
+
+- **x_proxy**: Rename variable for clarity in count_endpoint_timeseries usage
+  ([`c1540df`](https://github.com/jupyter-naas/abi/commit/c1540df09fbe6d752b19cd5e9fb2e4dd48f59dd8))
+
+### Documentation
+
+- **x**: Update AGENTS.md with count buckets only usage
+  ([`5623434`](https://github.com/jupyter-naas/abi/commit/56234348067352a50ce500827c32ecb7c0a13d8f))
+
+### Features
+
+- **x**: Add --count-envelopes-only and --skip-count-envelopes flags to backfill_x_datasets.py
+  ([`5623434`](https://github.com/jupyter-naas/abi/commit/56234348067352a50ce500827c32ecb7c0a13d8f))
+
+- **x/scripts**: Add engine bootstrap and improve backfill and bookkeeping scripts
+  ([`76aa9ad`](https://github.com/jupyter-naas/abi/commit/76aa9adb2d9106cceff970192889bb0a1ced032d))
+
+- **x_proxy**: Add dataset-backed X Proxy HTTP endpoints and compaction orchestration
+  ([`1c319c5`](https://github.com/jupyter-naas/abi/commit/1c319c5db0079e04f9482f2b5fa1b0050b020c16))
+
+- **x_proxy**: Add first_post_at to author stats and backfill
+  ([`020ca95`](https://github.com/jupyter-naas/abi/commit/020ca95cc0d55a08ba550ca391f36ce67c07fb9a))
+
+- **x_proxy**: Add robust hourly count bucket normalization and merging
+  ([`f19d9d0`](https://github.com/jupyter-naas/abi/commit/f19d9d00eff9296b4c7dcca0e8e335a050993893))
+
+- **x_proxy**: Enhance user and tweet search filtering and stats
+  ([`d720a58`](https://github.com/jupyter-naas/abi/commit/d720a58d05f1f80a2f3d3cce9ec8ed913ed0e8b7))
+
+### Testing
+
+- **x_proxy**: Update tests for cache and routes with minor fixes
+  ([`b65d5d4`](https://github.com/jupyter-naas/abi/commit/b65d5d45b4d591faeef0e0fb81b40243e5a925b3))
+
+
+## v3.53.1 (2026-09-23)
+
+### Bug Fixes
+
+- **x/orchestrations**: Improve dataset sync and app publish logic in
+  XSearchRecentTweetsEventOrchestration
+  ([`9692ab0`](https://github.com/jupyter-naas/abi/commit/9692ab0c3c639927bb4afb6e38c33e0e585b95d6))
+
+
+## v3.53.0 (2026-09-23)
+
+### Features
+
+- **x_proxy**: Add envelope_paths_in_dataset bulk lookup and recent tweets file filtering
+  ([`b466ef4`](https://github.com/jupyter-naas/abi/commit/b466ef4fa3210cf66ff82d8118d54ba5050a6a0e))
+
+
+## v3.52.0 (2026-09-22)
+
+### Features
+
+- **x_reprocess**: Add observability and progress logging to envelope reprocessing
+  ([`b4f4998`](https://github.com/jupyter-naas/abi/commit/b4f49985cedeb3276d69c9b916a65b3692e1dde8))
+
+
+## v3.51.0 (2026-09-22)
+
+### Bug Fixes
+
+- Ruff error
+  ([`ec392bb`](https://github.com/jupyter-naas/abi/commit/ec392bb417000518a4cb75d3a827a73d39f81874))
+
+- Ruff errors
+  ([`5789a1e`](https://github.com/jupyter-naas/abi/commit/5789a1eb2b27053c2aed20dda1169976e00c0a9b))
+
+- Ruff EXE001 flag
+  ([`abe806f`](https://github.com/jupyter-naas/abi/commit/abe806f484482b03a0f1e66d1b9c6c43bddb5949))
+
+- **canonical**: Dedupe authors in canonical dataset query
+  ([`db60b19`](https://github.com/jupyter-naas/abi/commit/db60b1958827c97e0507848acc29aff1d66cd198))
+
+- **dataset**: Add check and refresh for dataset-spec COMMENT in DuckLake tables
+  ([`f7f6042`](https://github.com/jupyter-naas/abi/commit/f7f604290e553ede370ead8df194bb11aadc9eb3))
+
+- **graph-explorer**: Update graph explorer and related services with enhancements and fixes
+  ([`ba578e3`](https://github.com/jupyter-naas/abi/commit/ba578e32a07db36be1810ff62349e4b0fd86a4c2))
+
+- **sync**: Reorder imports for clarity in dataset sync and test scripts
+  ([`deab3a4`](https://github.com/jupyter-naas/abi/commit/deab3a4d4ef4536fb56aaa574780602b5063427c))
+
+- **x**: Fix errors and add pending-from-audit option to backfill_x_datasets
+  ([`442f6d7`](https://github.com/jupyter-naas/abi/commit/442f6d700c58353998b92c791b4b4d7288807627))
+
+- **x/scripts**: Update docs and suppress LangChain deprecation warnings
+  ([`de35b58`](https://github.com/jupyter-naas/abi/commit/de35b58614a99531749d5ffe79eeb0afc131c7a4))
+
+- **x_proxy**: Apply staged changes including deletions and refactors
+  ([`2dd0122`](https://github.com/jupyter-naas/abi/commit/2dd01222956e1ea267630a094fc3e2bf1a87eb9a))
+
+- **x_proxy**: Deduplicate authors in dataset queries and add tests
+  ([`b29f57b`](https://github.com/jupyter-naas/abi/commit/b29f57b648106966ef2bf512cbf238438669f474))
+
+- **x_proxy**: Update imports and fix references in envelope bookkeeping and related scripts
+  ([`f65f62f`](https://github.com/jupyter-naas/abi/commit/f65f62f2de834a2b85f5be8ea2cc77355a2bba38))
+
+### Features
+
+- **orchestrations**: Add default run configs for launchpad jobs
+  ([`58d8a21`](https://github.com/jupyter-naas/abi/commit/58d8a216b7383bda7a0fb324067607ecdcb7714a))
+
+- **x/orchestrations**: Add skip_graph_map option and improve file reprocessing logic
+  ([`b0dabef`](https://github.com/jupyter-naas/abi/commit/b0dabef8171442c7e68e94e74de85aa05d9867d7))
+
+- **x_proxy**: Add envelope bookkeeping audit and tests
+  ([`c339afc`](https://github.com/jupyter-naas/abi/commit/c339afc026ba7612ff71066687f1925bea30f8ef))
+
+
+## v3.50.0 (2026-09-21)
+
+### Bug Fixes
+
+- **x-proxy-dataset**: Apply various minor fixes and updates
+  ([`6becfb5`](https://github.com/jupyter-naas/abi/commit/6becfb51527d799a4222f2c5243a690935d19386))
+
+- **x-proxy-dataset-service**: Minor code cleanups and fixes
+  ([`a7528e5`](https://github.com/jupyter-naas/abi/commit/a7528e5b1ec3ecd1356e59ad78cc0730de96c94f))
+
+### Chores
+
+- **scripts**: Remove shebang lines from x dataset scripts
+  ([`82e237c`](https://github.com/jupyter-naas/abi/commit/82e237c5acb848de2d4d7b7a74cf780b2b1cc66e))
+
+
+## v3.49.1 (2026-09-18)
+
+### Bug Fixes
+
+- **x_proxy**: Update script paths in build.sh
+  ([`8b320e8`](https://github.com/jupyter-naas/abi/commit/8b320e8145003bf230eed2ecd47e5167c58046ef))
+
+
+## v3.49.0 (2026-09-17)
+
+### Features
+
+- **bedrock**: Add GPT-5.6 Sol model support on Amazon Bedrock
+  ([`42a9fdf`](https://github.com/jupyter-naas/abi/commit/42a9fdf21c40f8d7090583932a4ef33ffda1a689))
+
+- **nexus-build-app**: Add role-based visibility for office agents
+  ([`02276d4`](https://github.com/jupyter-naas/abi/commit/02276d49c4f37924f647eb3ca8101dd2155a2f18))
+
+### Testing
+
+- **x-agent**: Add hermetic fixtures and skip routing tests for XAgent
+  ([`15636a1`](https://github.com/jupyter-naas/abi/commit/15636a16952bcc34536e875bc89907c0bcafa6ac))
+
+
+## v3.48.1 (2026-09-14)
+
+### Bug Fixes
+
+- **x_proxy**: Update UserDetail component and config for improved feed handling
+  ([`dc29d09`](https://github.com/jupyter-naas/abi/commit/dc29d09b52dde5da7325414606242bf1bda5e477))
+
+
 ## v3.48.0 (2026-09-13)
 
 ### Features

@@ -1,63 +1,31 @@
 {
   "schema_version": "1.0",
-  "data_version": "2026-08-19 17:25",
+  "data_version": "2026-10-02 17:30",
   "person": {
     "first_name": "Bob",
     "last_name": "Martin",
-    "full_name": "Bob Martin",
-    "linkedin_profile_url": "https://demo.example/profiles/bob_martin"
+    "full_name": "Bob Martin"
   },
-  "records": [
+  "employer": "Demo",
+  "service_line": "Strategy",
+  "grade": "Partner",
+  "roster": {
+    "employee_id": "E-10428",
+    "job_title": "CEO",
+    "job_family": "Executive",
+    "hire_date": "2023-04-01",
+    "termination_date": null,
+    "status": "active"
+  },
+  "employments": [
     {
-      "process_type": "ActOfWorking",
       "organization": "Demo",
+      "client": null,
       "title": "CEO",
-      "contract_type": "Permanent",
-      "site": "World",
-      "start": "2023-04-01",
-      "end": null,
-      "duration": "3 yrs",
-      "mission_label": "Set product strategy and partnerships for the Demo data platform.",
-      "mission": "Set product strategy and partnerships for the Demo data platform.",
-      "skills": [
-        "Strategy",
-        "Data Engineering"
-      ],
-      "source": "https://demo.example/profiles/bob_martin"
-    },
-    {
-      "process_type": "ActOfWorking",
-      "organization": "Global Advisors",
-      "title": "Senior Advisor, Data & AI",
-      "contract_type": "Part-time",
-      "site": "Remote",
-      "start": "2024-11-01",
-      "end": null,
-      "duration": "1 yr",
-      "mission_label": "Advise enterprise clients on trustworthy AI adoption.",
-      "mission": "Advise enterprise clients on trustworthy AI adoption.",
-      "skills": [
-        "AI Strategy",
-        "Business Intelligence"
-      ],
-      "source": "https://demo.example/profiles/bob_martin"
-    },
-    {
-      "process_type": "ActOfWorking",
-      "organization": "Nexus Labs",
-      "title": "Founder",
-      "contract_type": null,
-      "site": "Paris",
-      "start": "2016-11-01",
-      "end": "2023-04-30",
-      "duration": "6 yrs",
-      "mission_label": "Founded an automation services company for business teams.",
-      "mission": "Founded an automation services company for business teams.",
-      "skills": [
-        "Strategy",
-        "Data Engineering"
-      ],
-      "source": "https://demo.example/profiles/bob_martin"
+      "contract_type": "Permanent (CDI)",
+      "job_family": "Executive",
+      "remuneration_amount": 120000,
+      "remuneration_currency": "EUR"
     }
   ]
 }

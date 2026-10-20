@@ -10,17 +10,20 @@ Launch the job manually from the Dagster launchpad to override ``prefix`` /
 
 Unlike :class:`XSearchRecentTweetsEventOrchestration` (which maps one envelope
 per ObjectPut event as files land), this orchestration sweeps **all** files
-under a prefix in one run. Use it to backfill / re-ingest the graph after a
-mapping change without re-querying the X API.
+under a prefix in one run — a **fallback** when event ingestion missed puts.
+It maps the graph, syncs namespace ``x`` datasets for successfully processed
+paths, and republishes the app only when ``app_publish`` is on and at least one
+file was mapped this sweep.
 
 Skip-existing: before reprocessing, the job lists the folder, queries the graph
 for the ``x:file_path`` of every ``x:SearchResultSet`` already mapped, and feeds
 only the envelopes whose path is **not** yet in the graph to
 :class:`XSearchRecentTweetsPipeline` in ``file_path`` mode (via the shared
-``run_search_pipeline_for_file`` helper). That rebuilds the full SearchQuery /
-SearchResultSet / SearchRecentTweets / Tweet structure from each new file. Set
-``skip_existing: false`` to force a full re-run over every file (the pipeline's
-label-based dedupe still makes a re-run a no-op).
+``run_search_pipeline_for_file`` helper). Envelopes already in the graph but
+missing from ``envelopes_v1`` are **not** remapped; they are synced to Dataset
+Service on this sweep instead. Set ``skip_existing: false`` to force a full
+re-run over every file (the pipeline's label-based dedupe still makes a re-run a
+no-op).
 
 ``max_age_hours`` (optional) further limits the sweep to envelopes whose
 filename timestamp (``<iso-ts>_<slug>.json``) falls within the last N hours.
@@ -44,7 +47,9 @@ Launchpad example (for an entry named ``reprocess_envelopes``)::
 import posixpath
 import re
 import signal
+import time
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TypeVar
 
@@ -62,13 +67,88 @@ from naas_abi_marketplace.applications.x.orchestrations.utils import (
     run_search_pipeline_for_file,
     safe_name,
 )
+from naas_abi_marketplace.applications.x.orchestrations.utils._common import (
+    envelope_paths_in_dataset,
+    normalize_envelope_path,
+    sync_x_dataset_paths_batched,
+)
 
 _ENVELOPE_EXTENSIONS = (".json", ".ndjson", ".json.gz", ".ndjson.gz")
 # ``2026-07-23T15:46:04.705264+00:00_<slug>.json`` or underscored older form
 # ``2026-06-29T17_58_45.974146+00_00_<slug>.json``.
 _ENVELOPE_TS_RE = re.compile(r"^(?P<ts>\d{4}-\d{2}-\d{2}T[\d_:.+-]+?)_")
 _REPROCESS_MAX_RUNTIME_SECONDS = 5 * 60
+_LIST_ENVELOPE_PROGRESS_INTERVAL_S = 30.0
+_DATASET_PROBE_PROGRESS_EVERY = 25
 T = TypeVar("T")
+
+
+def _reprocess_log(
+    log: Callable[[str], None] | None,
+    *,
+    config_name: str,
+    run_id: str,
+    phase: str,
+    message: str,
+) -> None:
+    """Emit to Dagster step logs (stderr) and the shared application logger."""
+    line = (
+        f"XSearchRecentTweetsFilesOrchestration[{config_name}] "
+        f"run_id={run_id} phase={phase}: {message}"
+    )
+    if log is not None:
+        log(line)
+    logger.info(line)
+
+
+@dataclass
+class _ListEnvelopeProgress:
+    """Counters for long recursive object-storage listing sweeps."""
+
+    log: Callable[[str], None] | None
+    config_name: str
+    run_id: str
+    started_at: float = field(default_factory=time.monotonic)
+    last_logged_at: float = field(default_factory=time.monotonic)
+    list_calls: int = 0
+    keys_seen: int = 0
+    envelopes_kept: int = 0
+    skipped_age: int = 0
+    prefixes_visited: int = 0
+
+    def note_list_call(self) -> None:
+        self.list_calls += 1
+
+    def note_prefix_visited(self) -> None:
+        self.prefixes_visited += 1
+
+    def note_key(self) -> None:
+        self.keys_seen += 1
+
+    def note_envelope_kept(self) -> None:
+        self.envelopes_kept += 1
+
+    def note_skipped_age(self) -> None:
+        self.skipped_age += 1
+
+    def maybe_log_progress(self, *, force: bool = False) -> None:
+        now = time.monotonic()
+        if not force and (now - self.last_logged_at) < _LIST_ENVELOPE_PROGRESS_INTERVAL_S:
+            if self.keys_seen == 0 or self.keys_seen % 500 != 0:
+                return
+        self.last_logged_at = now
+        elapsed = now - self.started_at
+        _reprocess_log(
+            self.log,
+            config_name=self.config_name,
+            run_id=self.run_id,
+            phase="list_envelopes",
+            message=(
+                f"progress elapsed={elapsed:.1f}s list_calls={self.list_calls} "
+                f"prefixes_visited={self.prefixes_visited} keys_seen={self.keys_seen} "
+                f"envelopes_kept={self.envelopes_kept} skipped_age={self.skipped_age}"
+            ),
+        )
 
 
 class OrchestrationTimeoutError(TimeoutError):
@@ -80,6 +160,8 @@ def _with_signal_timeout(
     timeout_seconds: float,
     run_id: str,
     fn: Callable[[], T],
+    log: Callable[[str], None] | None = None,
+    config_name: str = "reprocess_envelopes",
 ) -> T:
     """Run ``fn`` under a SIGALRM wall-clock timeout (Linux/Unix only)."""
     if timeout_seconds <= 0:
@@ -87,15 +169,39 @@ def _with_signal_timeout(
             f"X file reprocessing exceeded {timeout_seconds}s (run_id={run_id})."
         )
     if not hasattr(signal, "SIGALRM"):
+        _reprocess_log(
+            log,
+            config_name=config_name,
+            run_id=run_id,
+            phase="timeout",
+            message=(
+                f"SIGALRM unavailable on this platform; "
+                f"configured limit {timeout_seconds}s not enforced"
+            ),
+        )
         return fn()
 
     previous_handler = signal.getsignal(signal.SIGALRM)
 
     def _handler(_signum, _frame) -> None:  # pragma: no cover - raised by signal
+        _reprocess_log(
+            log,
+            config_name=config_name,
+            run_id=run_id,
+            phase="timeout",
+            message=f"SIGALRM fired after {timeout_seconds}s wall-clock limit",
+        )
         raise OrchestrationTimeoutError(
             f"X file reprocessing exceeded {timeout_seconds}s (run_id={run_id})."
         )
 
+    _reprocess_log(
+        log,
+        config_name=config_name,
+        run_id=run_id,
+        phase="timeout",
+        message=f"arming SIGALRM wall-clock limit {timeout_seconds}s",
+    )
     signal.signal(signal.SIGALRM, _handler)
     signal.setitimer(signal.ITIMER_REAL, timeout_seconds)
     try:
@@ -192,12 +298,163 @@ def _within_max_age(file_path: str, cutoff: datetime) -> bool:
     return ts is not None and ts >= cutoff
 
 
+def _path_is_envelope(file_path: str) -> bool:
+    return file_path.lower().endswith(_ENVELOPE_EXTENSIONS)
+
+
+def _full_object_path(prefix: str, key: str) -> str:
+    prefix = prefix.rstrip("/")
+    if key.startswith(prefix):
+        return key
+    return posixpath.join(prefix, key)
+
+
+def _filter_dir_envelopes_by_cutoff(
+    envelope_paths: list[str],
+    cutoff: datetime,
+    *,
+    progress: _ListEnvelopeProgress | None = None,
+) -> tuple[list[str], int]:
+    """Keep in-window envelopes; stop after the newest contiguous in-window run."""
+    if not envelope_paths:
+        return [], 0
+    sortable: list[tuple[datetime | None, str]] = [
+        (_envelope_path_timestamp(path), path) for path in envelope_paths
+    ]
+
+    def _sort_key(item: tuple[datetime | None, str]) -> tuple[int, datetime]:
+        ts, _ = item
+        if ts is None:
+            return (0, datetime.min.replace(tzinfo=UTC))
+        return (1, ts)
+
+    sortable.sort(key=_sort_key, reverse=True)
+    kept: list[str] = []
+    for ts, path in sortable:
+        if ts is None or ts < cutoff:
+            break
+        kept.append(path)
+        if progress is not None:
+            progress.note_envelope_kept()
+    skipped = len(envelope_paths) - len(kept)
+    if progress is not None and skipped:
+        for _ in range(skipped):
+            progress.note_skipped_age()
+    return kept, skipped
+
+
+def _list_envelopes_in_prefix_dir(
+    object_storage,
+    prefix: str,
+    *,
+    cutoff: datetime,
+    progress: _ListEnvelopeProgress | None = None,
+) -> tuple[list[str], int]:
+    """List envelope files under one prefix directory, bounded by *cutoff*."""
+    prefix = prefix.rstrip("/")
+    try:
+        if progress is not None:
+            progress.note_list_call()
+        keys = object_storage.list_objects(prefix) or []
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            f"XSearchRecentTweetsFilesOrchestration: list_objects({prefix!r}) "
+            f"failed ({exc})"
+        )
+        return [], 0
+    if progress is not None:
+        progress.note_prefix_visited()
+        for _ in keys:
+            progress.note_key()
+
+    local_envelopes: list[str] = []
+    paths: list[str] = []
+    skipped_age = 0
+    for key in keys:
+        if not key:
+            continue
+        full_path = _full_object_path(prefix, key)
+        base = posixpath.basename(full_path.rstrip("/"))
+        if base == ".nexus_folder":
+            continue
+        if full_path.endswith("/") or not _path_is_envelope(full_path):
+            child_paths, child_skipped = _list_envelopes_in_prefix_dir(
+                object_storage,
+                full_path.rstrip("/"),
+                cutoff=cutoff,
+                progress=progress,
+            )
+            paths.extend(child_paths)
+            skipped_age += child_skipped
+            continue
+        local_envelopes.append(full_path)
+
+    kept, skipped = _filter_dir_envelopes_by_cutoff(
+        local_envelopes, cutoff, progress=progress
+    )
+    paths.extend(kept)
+    return paths, skipped_age + skipped
+
+
+def _list_envelope_paths_within_cutoff(
+    object_storage,
+    prefix: str,
+    *,
+    cutoff: datetime,
+    progress: _ListEnvelopeProgress | None = None,
+) -> tuple[list[str], int]:
+    """Two-level slug/file listing with per-directory age cutoffs."""
+    prefix = prefix.rstrip("/")
+    try:
+        if progress is not None:
+            progress.note_list_call()
+        top_keys = object_storage.list_objects(prefix) or []
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            f"XSearchRecentTweetsFilesOrchestration: list_objects({prefix!r}) "
+            f"failed ({exc})"
+        )
+        return [], 0
+    if progress is not None:
+        progress.note_prefix_visited()
+        for _ in top_keys:
+            progress.note_key()
+
+    paths: list[str] = []
+    skipped_age = 0
+    for key in top_keys:
+        if not key:
+            continue
+        full_path = _full_object_path(prefix, key)
+        base = posixpath.basename(full_path.rstrip("/"))
+        if base == ".nexus_folder":
+            continue
+        if full_path.endswith("/") or not _path_is_envelope(full_path):
+            child_prefix = full_path.rstrip("/")
+            child_paths, child_skipped = _list_envelopes_in_prefix_dir(
+                object_storage,
+                child_prefix,
+                cutoff=cutoff,
+                progress=progress,
+            )
+            paths.extend(child_paths)
+            skipped_age += child_skipped
+            continue
+        kept, skipped = _filter_dir_envelopes_by_cutoff(
+            [full_path], cutoff, progress=progress
+        )
+        paths.extend(kept)
+        skipped_age += skipped
+    return paths, skipped_age
+
+
 def _list_envelope_paths(
     object_storage,
     prefix: str,
     *,
     cutoff: datetime | None = None,
     _seen: set[str] | None = None,
+    progress: _ListEnvelopeProgress | None = None,
 ) -> tuple[list[str], int]:
     """Full object-storage paths of every envelope file under *prefix*.
 
@@ -213,12 +470,20 @@ def _list_envelope_paths(
     run :func:`_filter_paths_by_max_age` as a second filename pass.
     """
     prefix = prefix.rstrip("/")
+    if cutoff is not None:
+        return _list_envelope_paths_within_cutoff(
+            object_storage, prefix, cutoff=cutoff, progress=progress
+        )
     seen = _seen if _seen is not None else set()
     if not prefix or prefix in seen:
         return [], 0
     seen.add(prefix)
+    if progress is not None:
+        progress.note_prefix_visited()
 
     try:
+        if progress is not None:
+            progress.note_list_call()
         all_keys = object_storage.list_objects(prefix) or []
     except Exception as exc:  # noqa: BLE001
         logger.warning(
@@ -232,6 +497,9 @@ def _list_envelope_paths(
     for k in all_keys:
         if not k:
             continue
+        if progress is not None:
+            progress.note_key()
+            progress.maybe_log_progress()
         full_path = k if k.startswith(prefix) else posixpath.join(prefix, k)
         base = posixpath.basename(full_path.rstrip("/"))
         # Nexus folder markers are zero-byte placeholders, not real prefixes.
@@ -243,6 +511,7 @@ def _list_envelope_paths(
                 full_path.rstrip("/"),
                 cutoff=cutoff,
                 _seen=seen,
+                progress=progress,
             )
             paths.extend(child_paths)
             skipped_age += child_skipped
@@ -250,13 +519,21 @@ def _list_envelope_paths(
         if full_path.lower().endswith(_ENVELOPE_EXTENSIONS):
             if cutoff is not None and not _within_max_age(full_path, cutoff):
                 skipped_age += 1
+                if progress is not None:
+                    progress.note_skipped_age()
                 continue
             paths.append(full_path)
+            if progress is not None:
+                progress.note_envelope_kept()
             continue
         # Non-envelope child with no trailing slash — likely a slug dir (FS
         # adapter) or an unrelated file. Recurse; empty/missing dirs no-op.
         child_paths, child_skipped = _list_envelope_paths(
-            object_storage, full_path, cutoff=cutoff, _seen=seen
+            object_storage,
+            full_path,
+            cutoff=cutoff,
+            _seen=seen,
+            progress=progress,
         )
         paths.extend(child_paths)
         skipped_age += child_skipped
@@ -315,8 +592,12 @@ def _mapped_file_paths(triple_store, graph_name: str, namespace: str) -> set[str
 def _reprocess_files(
     config: XSearchRecentTweetsFilesConfiguration,
     op_cfg: dict | None = None,
+    *,
+    run_id: str = "unknown-run",
+    log: Callable[[str], None] | None = None,
 ) -> dict:
     op_cfg = op_cfg or {}
+    run_started = time.monotonic()
     module = ABIModule.get_instance()
     object_storage = module.engine.services.object_storage
     # Launchpad values win; otherwise fall back to this entry's config defaults.
@@ -333,71 +614,276 @@ def _reprocess_files(
     if max_age_hours is not None:
         cutoff = datetime.now(UTC) - timedelta(hours=int(max_age_hours))
 
-    paths, skipped_age = _list_envelope_paths(object_storage, prefix, cutoff=cutoff)
+    _reprocess_log(
+        log,
+        config_name=config.name,
+        run_id=run_id,
+        phase="run",
+        message=(
+            f"started prefix={prefix!r} skip_existing={skip_existing} "
+            f"max_age_hours={max_age_hours} persist={persist} graph_name={graph_name!r}"
+        ),
+    )
+
+    list_started = time.monotonic()
+    list_progress = _ListEnvelopeProgress(log, config.name, run_id)
+    _reprocess_log(
+        log,
+        config_name=config.name,
+        run_id=run_id,
+        phase="list_envelopes",
+        message=f"started prefix={prefix!r} max_age_hours={max_age_hours}",
+    )
+    paths, skipped_age = _list_envelope_paths(
+        object_storage, prefix, cutoff=cutoff, progress=list_progress
+    )
+    list_progress.maybe_log_progress(force=True)
+    _reprocess_log(
+        log,
+        config_name=config.name,
+        run_id=run_id,
+        phase="list_envelopes",
+        message=(
+            f"done elapsed={time.monotonic() - list_started:.2f}s "
+            f"recent_envelopes={len(paths)} skipped_age={skipped_age}"
+        ),
+    )
+
     # Second filename-timestamp check (same rule) after listing.
     if cutoff is not None:
+        recheck_started = time.monotonic()
+        before = len(paths)
         paths, skipped_recheck = _filter_paths_by_max_age(paths, cutoff=cutoff)
         skipped_age += skipped_recheck
+        _reprocess_log(
+            log,
+            config_name=config.name,
+            run_id=run_id,
+            phase="age_recheck",
+            message=(
+                f"done elapsed={time.monotonic() - recheck_started:.2f}s "
+                f"before={before} after={len(paths)} skipped={skipped_recheck}"
+            ),
+        )
 
-    # Reprocess only files not already in the graph: drop every path that is the
-    # x:file_path of an x:SearchResultSet already mapped into graph_name.
-    skipped = 0
+    # skip_existing: map only paths not in the graph; dataset-sync paths that are
+    # in the graph but missing from envelopes_v1 (same gap as ObjectPut Events).
+    paths_dataset_only: list[str] = []
+    skipped_fully_projected = 0
     if skip_existing:
+        mapped_started = time.monotonic()
+        _reprocess_log(
+            log,
+            config_name=config.name,
+            run_id=run_id,
+            phase="mapped_paths_query",
+            message=f"started graph_name={graph_name!r}",
+        )
         mapped = _mapped_file_paths(
             module.engine.services.triple_store,
             graph_name,
             module.configuration.ontology_namespace,
         )
-        before = len(paths)
-        paths = [p for p in paths if p not in mapped]
-        skipped = before - len(paths)
+        _reprocess_log(
+            log,
+            config_name=config.name,
+            run_id=run_id,
+            phase="mapped_paths_query",
+            message=(
+                f"done elapsed={time.monotonic() - mapped_started:.2f}s "
+                f"mapped_paths={len(mapped)}"
+            ),
+        )
+
+        probe_started = time.monotonic()
+        _reprocess_log(
+            log,
+            config_name=config.name,
+            run_id=run_id,
+            phase="dataset_projection_probe",
+            message=f"started candidates={len(paths)} bulk_lookup=true",
+        )
+        ingested_in_dataset = envelope_paths_in_dataset(module, paths)
+        to_map: list[str] = []
+        for index, path in enumerate(paths, start=1):
+            normalized = normalize_envelope_path(path)
+            if path not in mapped:
+                to_map.append(path)
+            elif normalized in ingested_in_dataset:
+                skipped_fully_projected += 1
+            else:
+                paths_dataset_only.append(path)
+            if index == len(paths) or index % _DATASET_PROBE_PROGRESS_EVERY == 0:
+                _reprocess_log(
+                    log,
+                    config_name=config.name,
+                    run_id=run_id,
+                    phase="dataset_projection_probe",
+                    message=(
+                        f"progress {index}/{len(paths)} elapsed="
+                        f"{time.monotonic() - probe_started:.1f}s "
+                        f"to_map={len(to_map)} fully_projected={skipped_fully_projected} "
+                        f"dataset_only={len(paths_dataset_only)} "
+                        f"ingested_in_dataset={len(ingested_in_dataset)}"
+                    ),
+                )
+        paths = to_map
+        _reprocess_log(
+            log,
+            config_name=config.name,
+            run_id=run_id,
+            phase="dataset_projection_probe",
+            message=(
+                f"done elapsed={time.monotonic() - probe_started:.2f}s "
+                f"to_map={len(paths)} fully_projected={skipped_fully_projected} "
+                f"dataset_only={len(paths_dataset_only)}"
+            ),
+        )
 
     age_note = (
         f", {skipped_age} older than {max_age_hours}h skipped" if max_age_hours else ""
     )
-    logger.info(
-        f"XSearchRecentTweetsFilesOrchestration[{config.name}]: {len(paths)} "
-        f"envelope(s) under {prefix!r} to reprocess via "
-        f"XSearchRecentTweetsPipeline ({skipped} already in graph skipped"
-        f"{age_note})"
+    _reprocess_log(
+        log,
+        config_name=config.name,
+        run_id=run_id,
+        phase="plan",
+        message=(
+            f"{len(paths)} envelope(s) under {prefix!r} to map via "
+            f"XSearchRecentTweetsPipeline ({skipped_fully_projected} fully projected "
+            f"skipped, {len(paths_dataset_only)} dataset-only catch-up{age_note})"
+        ),
     )
 
     processed = 0
     failed = 0
-    for file_path in paths:
+    processed_paths: list[str] = []
+    map_started = time.monotonic()
+    _reprocess_log(
+        log,
+        config_name=config.name,
+        run_id=run_id,
+        phase="map_envelopes",
+        message=f"started count={len(paths)}",
+    )
+    for index, file_path in enumerate(paths, start=1):
+        file_started = time.monotonic()
         try:
             run_search_pipeline_for_file(
                 file_path, persist=persist, graph_name=graph_name
             )
             processed += 1
+            processed_paths.append(file_path)
+            _reprocess_log(
+                log,
+                config_name=config.name,
+                run_id=run_id,
+                phase="map_envelopes",
+                message=(
+                    f"mapped {index}/{len(paths)} elapsed="
+                    f"{time.monotonic() - file_started:.2f}s path={file_path!r}"
+                ),
+            )
         except OrchestrationTimeoutError:
             raise
         except Exception as exc:  # noqa: BLE001
             # Don't let one bad envelope abort the whole reprocess run.
             failed += 1
-            logger.warning(
-                f"XSearchRecentTweetsFilesOrchestration[{config.name}]: failed to "
-                f"reprocess {file_path!r} ({exc}); continuing"
+            _reprocess_log(
+                log,
+                config_name=config.name,
+                run_id=run_id,
+                phase="map_envelopes",
+                message=(
+                    f"failed {index}/{len(paths)} path={file_path!r} ({exc}); "
+                    f"continuing"
+                ),
             )
+    _reprocess_log(
+        log,
+        config_name=config.name,
+        run_id=run_id,
+        phase="map_envelopes",
+        message=(
+            f"done elapsed={time.monotonic() - map_started:.2f}s "
+            f"processed={processed} failed={failed}"
+        ),
+    )
 
+    dataset_paths = processed_paths + paths_dataset_only
     summary = {
         "prefix": prefix,
         "processed": processed,
-        "skipped": skipped,
+        "skipped": skipped_fully_projected,
+        "dataset_only": len(paths_dataset_only),
         "skipped_age": skipped_age,
         "max_age_hours": max_age_hours,
         "failed": failed,
     }
-    # Once per sweep rather than once per file: the sweep can map hundreds of
-    # envelopes, and the dataset is rebuilt from the final graph state anyway.
+    # Fallback when ObjectPut ingestion missed envelopes: graph + dataset for
+    # every path mapped this sweep, plus dataset-only catch-up for graph-mapped
+    # paths missing from envelopes_v1.
+    if dataset_paths:
+        sync_started = time.monotonic()
+        _reprocess_log(
+            log,
+            config_name=config.name,
+            run_id=run_id,
+            phase="dataset_sync",
+            message=f"started paths={len(dataset_paths)} batch_size=64",
+        )
+        summary["dataset"] = sync_x_dataset_paths_batched(
+            module, dataset_paths, batch_size=64
+        )
+        _reprocess_log(
+            log,
+            config_name=config.name,
+            run_id=run_id,
+            phase="dataset_sync",
+            message=(
+                f"done elapsed={time.monotonic() - sync_started:.2f}s "
+                f"summary={summary['dataset']}"
+            ),
+        )
+    else:
+        summary["dataset"] = {"skipped": True, "reason": "no_paths_to_sync"}
+        _reprocess_log(
+            log,
+            config_name=config.name,
+            run_id=run_id,
+            phase="dataset_sync",
+            message="skipped (no paths to sync)",
+        )
+    # Republish static app snapshots only when this sweep actually mapped
+    # something (same gate as primary event path, but optional via app_publish).
+    _reprocess_log(
+        log,
+        config_name=config.name,
+        run_id=run_id,
+        phase="app_publish",
+        message="started",
+    )
     summary["app"] = republish_x_app_after_pipeline(
         module,
         source=f"XSearchRecentTweetsFilesOrchestration[{config.name}]",
         app_publish=launchpad_override(op_cfg, "app_publish", config.app_publish),
         ran=processed > 0,
     )
-    logger.info(
-        f"XSearchRecentTweetsFilesOrchestration[{config.name}]: done — {summary}"
+    _reprocess_log(
+        log,
+        config_name=config.name,
+        run_id=run_id,
+        phase="app_publish",
+        message=f"done result={summary['app']}",
+    )
+    _reprocess_log(
+        log,
+        config_name=config.name,
+        run_id=run_id,
+        phase="run",
+        message=(
+            f"done elapsed={time.monotonic() - run_started:.2f}s summary={summary}"
+        ),
     )
     return summary
 
@@ -418,6 +904,23 @@ def _trigger_description(config: XSearchRecentTweetsFilesConfiguration) -> str:
         f"file already mapped as the x:file_path of an x:SearchResultSet, and "
         f"feed the rest to XSearchRecentTweetsPipeline."
     )
+
+
+def _default_files_run_config(
+    entry_config: XSearchRecentTweetsFilesConfiguration,
+) -> dict:
+    """Launchpad defaults for one files-reprocess job (single op, step 1)."""
+    safe = safe_name(entry_config.name)
+    op_name = f"x_reprocess_recent_tweets_files_op_{safe}"
+    body: dict[str, object] = {
+        "prefix": entry_config.prefix,
+        "persist": entry_config.persist,
+        "skip_existing": entry_config.skip_existing,
+        "app_publish": entry_config.app_publish,
+    }
+    if entry_config.max_age_hours is not None:
+        body["max_age_hours"] = entry_config.max_age_hours
+    return {"ops": {op_name: {"config": body}}}
 
 
 def _build_reprocess_files_definitions(
@@ -451,13 +954,30 @@ def _build_reprocess_files_definitions(
 
     @dg.op(name=op_name, config_schema=_FILES_CONFIG_SCHEMA)
     def reprocess_files_op(context) -> dict:
+        run_id = str(getattr(context, "run_id", "unknown-run"))
+        op_log = context.log.info
+
+        def _run() -> dict:
+            return _reprocess_files(
+                config,
+                context.op_config or {},
+                run_id=run_id,
+                log=op_log,
+            )
+
         return _with_signal_timeout(
             timeout_seconds=_REPROCESS_MAX_RUNTIME_SECONDS,
-            run_id=str(getattr(context, "run_id", "unknown-run")),
-            fn=lambda: _reprocess_files(config, context.op_config or {}),
+            run_id=run_id,
+            fn=_run,
+            log=op_log,
+            config_name=config.name,
         )
 
-    @dg.job(name=job_name, executor_def=dg.in_process_executor)
+    @dg.job(
+        name=job_name,
+        executor_def=dg.in_process_executor,
+        config=_default_files_run_config(config),
+    )
     def reprocess_files_job():
         reprocess_files_op()
 

@@ -29,8 +29,8 @@ def to_user_schema(user: AuthUserRecord) -> User:
         email=user.email,
         name=user.name,
         avatar=user.avatar,
-        company=user.company,
-        role=user.role,
+        organization=user.organization,
+        job_title=user.job_title,
         bio=user.bio,
         is_superadmin=user.is_superadmin,
         created_at=user.created_at,
@@ -59,6 +59,27 @@ async def get_current_user_required(current_user: User | None = Depends(get_curr
             headers={"WWW-Authenticate": "Bearer"},
         )
     return current_user
+
+
+async def get_current_user_released(token: str | None = Depends(oauth2_scheme)) -> User:
+    """``get_current_user_required`` on its own short-lived session.
+
+    The request does not keep a pooled connection while it runs. Use it on hot
+    read paths that fire many requests at once (Maps layer data, logos): with
+    the request-scoped session, every waiting request holds a connection and
+    the pool runs dry.
+    """
+    async with AsyncSessionLocal() as db:
+        user = await AuthService(
+            adapter=AuthSecondaryAdapterPostgres(db=db)
+        ).get_user_from_access_token(token)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return to_user_schema(user)
 
 
 async def get_workspace_role(user_id: str, workspace_id: str) -> str | None:
@@ -132,10 +153,10 @@ async def require_superadmin(
 ) -> User:
     """Authorize platform-level admin access.
 
-    The ``is_superadmin`` flag is set on the user record (from
-    ``settings.users[].is_superadmin`` in ``config.yaml``, applied by the
-    startup seeder). Used for cross-workspace diagnostic surfaces like the
-    live platform event stream.
+    The ``is_superadmin`` flag is set on the user record: managed in Admin >
+    Users, and promoted on boot for operators listed in config ``users``.
+    Used for cross-workspace diagnostic surfaces like the live platform event
+    stream.
     """
     if not current_user.is_superadmin:
         raise HTTPException(

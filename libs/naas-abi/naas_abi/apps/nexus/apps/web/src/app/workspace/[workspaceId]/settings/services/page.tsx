@@ -1,6 +1,10 @@
-import { redirect } from 'next/navigation';
-import { DOCKER_SERVICES } from '@/lib/docker-services';
+'use client';
 
-export default function ServicesPage({ params }: { params: { workspaceId: string } }) {
-  redirect(`/workspace/${params.workspaceId}/settings/services/${DOCKER_SERVICES[0]?.id ?? ''}`);
+import { useParams } from 'next/navigation';
+import { OrgSettingsRedirect } from '@/components/settings/org-settings-redirect';
+
+/** Services moved to Organization Settings > Services; keep the old URL working. */
+export default function ServicesRedirect() {
+  const workspaceId = useParams()?.workspaceId as string;
+  return <OrgSettingsRedirect workspaceId={workspaceId} path="services" />;
 }

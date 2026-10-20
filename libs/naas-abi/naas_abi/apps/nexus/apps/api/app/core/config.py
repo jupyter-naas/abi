@@ -6,6 +6,9 @@ import sys
 from functools import lru_cache
 from typing import Any, Literal
 
+from naas_abi.apps.nexus.apps.api.app.core.secret_key import INSECURE_SECRET_KEYS
+from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
+from naas_abi.apps.nexus.maps_seed_config import WorkspaceMapsSeedConfig
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -13,18 +16,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # configured source claiming it would shadow rows the picker depends on.
 ABI_SLIDES_TEMPLATE_NAMESPACE = "abi"
 ABI_DOCUMENTS_TEMPLATE_NAMESPACE = "abi"
+ABI_SHEETS_TEMPLATE_NAMESPACE = "abi"
 
 # Known-insecure secret keys that must be rejected
-_INSECURE_SECRETS = frozenset(
-    {
-        "",
-        "change-me-in-production",
-        "change-me-in-production-use-a-long-random-string",
-        "secret",
-        "password",
-        "changeme",
-    }
-)
+_INSECURE_SECRETS = INSECURE_SECRET_KEYS
 
 
 class TenantConfig(BaseModel):
@@ -122,6 +117,25 @@ class DocumentsTemplateSourceConfig(BaseModel):
         return value
 
 
+class SheetsTemplateSourceConfig(BaseModel):
+    """One directory of Nexus Sheets seed workbooks, contributed by config."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    namespace: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=32)
+    path: str = Field(min_length=1)
+
+    @field_validator("namespace")
+    @classmethod
+    def _namespace_is_not_reserved(cls, value: str) -> str:
+        if value == ABI_SHEETS_TEMPLATE_NAMESPACE:
+            raise ValueError(
+                f"'{ABI_SHEETS_TEMPLATE_NAMESPACE}' is reserved for the seeds "
+                "ABI ships. Pick another namespace for this source."
+            )
+        return value
+
+
 class ModelPricingEntry(BaseModel):
     """LLM token cost for one model (USD per 1M tokens, May 2026 rates)."""
 
@@ -199,17 +213,37 @@ class MarketplaceConfig(BaseModel):
     # Prices in USD per 1M tokens (May 2026 rates).
     model_pricing: dict[str, ModelPricingEntry] = Field(
         default_factory=lambda: {
-            "gpt-4o":           ModelPricingEntry(input_per_million=2.50,  output_per_million=10.00, label="GPT-4o"),
-            "gpt-4o-mini":      ModelPricingEntry(input_per_million=0.15,  output_per_million=0.60,  label="GPT-4o mini"),
-            "gpt-4":            ModelPricingEntry(input_per_million=30.00, output_per_million=60.00, label="GPT-4"),
-            "gpt-3.5-turbo":    ModelPricingEntry(input_per_million=0.50,  output_per_million=1.50,  label="GPT-3.5 Turbo"),
-            "o1":               ModelPricingEntry(input_per_million=15.00, output_per_million=60.00, label="o1"),
-            "o3-mini":          ModelPricingEntry(input_per_million=1.10,  output_per_million=4.40,  label="o3-mini"),
-            "claude-opus":      ModelPricingEntry(input_per_million=15.00, output_per_million=75.00, label="Claude Opus"),
-            "claude-sonnet":    ModelPricingEntry(input_per_million=3.00,  output_per_million=15.00, label="Claude Sonnet"),
-            "claude-haiku":     ModelPricingEntry(input_per_million=0.25,  output_per_million=1.25,  label="Claude Haiku"),
-            "gemini-1.5-pro":   ModelPricingEntry(input_per_million=3.50,  output_per_million=10.50, label="Gemini 1.5 Pro"),
-            "gemini-1.5-flash": ModelPricingEntry(input_per_million=0.075, output_per_million=0.30,  label="Gemini Flash"),
+            "gpt-4o": ModelPricingEntry(
+                input_per_million=2.50, output_per_million=10.00, label="GPT-4o"
+            ),
+            "gpt-4o-mini": ModelPricingEntry(
+                input_per_million=0.15, output_per_million=0.60, label="GPT-4o mini"
+            ),
+            "gpt-4": ModelPricingEntry(
+                input_per_million=30.00, output_per_million=60.00, label="GPT-4"
+            ),
+            "gpt-3.5-turbo": ModelPricingEntry(
+                input_per_million=0.50, output_per_million=1.50, label="GPT-3.5 Turbo"
+            ),
+            "o1": ModelPricingEntry(input_per_million=15.00, output_per_million=60.00, label="o1"),
+            "o3-mini": ModelPricingEntry(
+                input_per_million=1.10, output_per_million=4.40, label="o3-mini"
+            ),
+            "claude-opus": ModelPricingEntry(
+                input_per_million=15.00, output_per_million=75.00, label="Claude Opus"
+            ),
+            "claude-sonnet": ModelPricingEntry(
+                input_per_million=3.00, output_per_million=15.00, label="Claude Sonnet"
+            ),
+            "claude-haiku": ModelPricingEntry(
+                input_per_million=0.25, output_per_million=1.25, label="Claude Haiku"
+            ),
+            "gemini-1.5-pro": ModelPricingEntry(
+                input_per_million=3.50, output_per_million=10.50, label="Gemini 1.5 Pro"
+            ),
+            "gemini-1.5-flash": ModelPricingEntry(
+                input_per_million=0.075, output_per_million=0.30, label="Gemini Flash"
+            ),
         }
     )
 
@@ -230,6 +264,7 @@ FeatureKey = Literal[
     "code",
     "slides",
     "documents",
+    "sheets",
 ]
 
 
@@ -254,6 +289,7 @@ class FeatureFlagsConfig(BaseModel):
             "settings",
             "slides",
             "documents",
+            "sheets",
         ]
     )
     role_baseline: dict[str, list[FeatureKey]] = Field(
@@ -273,6 +309,7 @@ class FeatureFlagsConfig(BaseModel):
                 "settings",
                 "slides",
                 "documents",
+                "sheets",
             ],
             "admin": [
                 "maps",
@@ -289,17 +326,37 @@ class FeatureFlagsConfig(BaseModel):
                 "settings",
                 "slides",
                 "documents",
+                "sheets",
             ],
-            "member": ["maps", "chat", "files", "datasets", "skills", "slides", "documents"],
-            "viewer": ["maps", "chat", "files", "datasets", "skills", "slides", "documents"],
+            "member": [
+                "maps",
+                "chat",
+                "files",
+                "datasets",
+                "skills",
+                "slides",
+                "documents",
+                "sheets",
+            ],
+            "viewer": [
+                "maps",
+                "chat",
+                "files",
+                "datasets",
+                "skills",
+                "slides",
+                "documents",
+                "sheets",
+            ],
         }
     )
+    # Deprecated: workspace feature overrides are managed in Organization
+    # Settings > Workspaces (workspaces.feature_overrides). Still read as a
+    # fallback for workspaces that never saved any.
     workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)
     # Per-organization role_baseline overlays. Does not replace deployment
     # role_baseline; keyed by organization id.
-    organization_overrides: dict[str, dict[str, list[FeatureKey]]] = Field(
-        default_factory=dict
-    )
+    organization_overrides: dict[str, dict[str, list[FeatureKey]]] = Field(default_factory=dict)
 
 
 class UserSeedConfig(BaseModel):
@@ -310,15 +367,15 @@ class UserSeedConfig(BaseModel):
     email: EmailStr
     name: str
     avatar: str | None = None
-    company: str | None = None
-    role: str | None = None
+    organization: str | None = None
+    job_title: str | None = None
     bio: str | None = None
     is_superadmin: bool = False
     store_credentials_in_secrets: bool = True
 
 
 class OrganizationMemberSeedConfig(BaseModel):
-    """Organization member assignment."""
+    """Deprecated: organization members are managed in the platform."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -327,7 +384,7 @@ class OrganizationMemberSeedConfig(BaseModel):
 
 
 class WorkspaceMemberSeedConfig(BaseModel):
-    """Workspace member assignment."""
+    """Deprecated: workspace members are managed in the platform."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -340,9 +397,15 @@ class WorkspaceSeedConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    name: str
     slug: str
+    # Name, owner, group and branding are managed in the app; config.workspaces.yaml
+    # snapshots them (core/workspaces_import replays it). Still accepted here,
+    # bootstrap only; a workspace created without a name is named after its slug.
+    name: str | None = None
+    # Defaults to the organization owner. Org owners and admins reach every
+    # workspace of their org without a membership row.
     owner_email: EmailStr | None = None
+    # Deprecated and ignored by the seed (kept so older configs still load).
     members: list[WorkspaceMemberSeedConfig] = Field(default_factory=list)
 
     logo_url: str | None = None
@@ -353,13 +416,21 @@ class WorkspaceSeedConfig(BaseModel):
     background_image_url: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
+    # Group in the workspace lists ("Others" when empty). Bootstrap only: applied
+    # when the workspace has no group yet, so a group changed in the UI stays.
+    group: str | None = Field(default=None, max_length=100)
     default_agent: str | None = None
     agents: list[str] | None = None
     apps: list[str] | None = None
+    # Initial assignments only; saved workspace resource policies take precedence.
     # Ontology catalog ids (``module:filename.ttl``). Exclusive when a list
-    # is set: listed on, others off. ``None`` keeps the full engine listing.
-    # An empty list shows none. owl:imports are not implied; name every file.
-    ontologies: list[str] | None = None
+    # is set: listed on, others off. Missing, null and empty lists show none.
+    # owl:imports are not implied; explicitly list shared dependency files too.
+    ontologies: list[str] | None = Field(default_factory=list)
+    # Exact data graph grants. Missing policy exposes owned graphs only.
+    graphs: WorkspaceGraphPolicyConfig = Field(default_factory=WorkspaceGraphPolicyConfig)
+    # Initial Maps feeds and custom basemaps (see WorkspaceMapsSeedConfig).
+    maps: WorkspaceMapsSeedConfig | None = None
 
 
 class OrganizationSeedConfig(BaseModel):
@@ -370,6 +441,7 @@ class OrganizationSeedConfig(BaseModel):
     name: str
     slug: str
     owner_email: EmailStr | None = None
+    # Deprecated and ignored by the seed (kept so older configs still load).
     members: list[OrganizationMemberSeedConfig] = Field(default_factory=list)
     workspaces: list[WorkspaceSeedConfig] = Field(default_factory=list)
 
@@ -418,23 +490,20 @@ class Settings(BaseSettings):
 
     # Extra Slides seed trees for the template picker. Additive: ABI's own
     # seeds are always served, so this list holds only what a deploy adds.
-    slides_template_sources: list[SlidesTemplateSourceConfig] = Field(
-        default_factory=list
-    )
-    documents_template_sources: list[DocumentsTemplateSourceConfig] = Field(
-        default_factory=list
-    )
+    slides_template_sources: list[SlidesTemplateSourceConfig] = Field(default_factory=list)
+    documents_template_sources: list[DocumentsTemplateSourceConfig] = Field(default_factory=list)
     # Empty keeps ABI's own seed as the New Document default. A deploy that
     # adds sources can point this at one of those ids so a plain create
     # matches the picker, without ABI naming that source.
-    documents_default_template_id: str | None = Field(
-        default=None, max_length=96
-    )
+    documents_default_template_id: str | None = Field(default=None, max_length=96)
     # Qualified ids or bare stems omitted from the Documents picker. Create
     # and apply still accept them, so existing documents keep working.
     documents_hidden_template_ids: list[str] = Field(default_factory=list)
+    sheets_template_sources: list[SheetsTemplateSourceConfig] = Field(default_factory=list)
 
-    # User seed configs (upserted by email on startup)
+    # Bootstrap users (created by email on startup). Keep this to platform
+    # operators: everyone else is invited from the platform. is_superadmin
+    # only promotes; demote with PATCH /api/admin/users/{id}.
     users: list[UserSeedConfig] = Field(default_factory=list)
 
     # Organization seed configs (upserted by slug on startup)
@@ -480,6 +549,9 @@ class Settings(BaseSettings):
     # Authentication
     secret_key: str = "change-me-in-production"
     auth_password_enabled: bool = False
+    # Self-service sign-up via /api/auth/register. Off: accounts come from
+    # invitations or the config seed.
+    auth_signup_enabled: bool = False
     magic_link_allow_signup: bool = False
     access_token_expire_minutes: int = 30  # 30 minutes (short-lived)
     refresh_token_expire_days: int = 30  # 30 days (long-lived)
@@ -488,6 +560,17 @@ class Settings(BaseSettings):
     # HMAC secret for opening Cloudflare Pages portals from Nexus (empty = off).
     pages_sso_secret: str = ""
     pages_sso_expire_seconds: int = Field(default=300, ge=30, le=15 * 60)
+    # Apps builder: "Submit" sends an app project to its source repository
+    # (GitHub owner/name) as a review branch. Off unless both the repo and
+    # APPS_SUBMIT_TOKEN (env only, never in config files) are set.
+    apps_submit_repo: str = ""
+    apps_submit_base_branch: str = "main"
+    apps_submit_token: str = ""
+    apps_submit_open_pull_request: bool = True
+    apps_submit_api_base: str = "https://api.github.com"
+    apps_submit_web_base: str = "https://github.com"
+    # Lifetime of an /app-preview/ token (the editor re-mints on reload).
+    app_preview_token_expire_minutes: int = Field(default=60, ge=1, le=24 * 60)
     magic_link_expire_minutes: int = 15
     magic_link_max_active: int = 5
     magic_link_path: str = "/auth/magic-link"
@@ -508,7 +591,7 @@ class Settings(BaseSettings):
     # Use only inline styles (no CSS {{ }} blocks) — templates use str.format_map.
     magic_link_email_html_template: str = (
         '<!DOCTYPE html><html><body style="margin:0;padding:0;'
-        'background-color:{background_color};'
+        "background-color:{background_color};"
         'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
         'style="background-color:{background_color};padding:48px 16px;">'
@@ -546,14 +629,12 @@ class Settings(BaseSettings):
 
     # Rate Limiting
     rate_limit_enabled: bool = True
-    rate_limit_login_attempts: int = 5  # Max login attempts per window
+    rate_limit_login_attempts: int = 5  # Max failed attempts per account per window
+    rate_limit_ip_attempts: int = 20  # Max attempts per client IP per window
     rate_limit_window_seconds: int = 300  # 5-minute window
 
     def model_post_init(self, __context: Any) -> None:
         """Adjust settings based on environment after initialization (pydantic v2 hook)."""
-        # Disable rate limiting in development to avoid blocking during hot reload
-        if self.environment == "development" or self.nexus_env == "local":
-            self.rate_limit_enabled = False
         # Make Ollama autostart opt-in and local-only
         # - Enable by setting ENABLE_OLLAMA_AUTOSTART=true
         # - Force OFF unless environment is development or nexus_env is local
@@ -590,6 +671,15 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
+
+
+def current_secret_key() -> str:
+    """The signing/encryption key, read at call time.
+
+    ``naas_abi`` replaces ``settings`` after this module is imported, so a
+    module-level ``from ... import settings`` can hold a stale object.
+    """
+    return settings.secret_key
 
 
 def validate_settings_on_startup() -> None:

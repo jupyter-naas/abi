@@ -28,6 +28,8 @@ def _counts(
     out: dict[str, int] = {}
     for row in rows:
         key = (row.get("value") or "").strip() or "-"
+        if column == "username" and key != "-":
+            key = key.lower()
         try:
             out[key] = int(row.get("count") or 0)
         except (TypeError, ValueError):
@@ -70,6 +72,7 @@ def publish(ctx: SnapshotContext) -> dict:
             author_bars = []
             for row in cur_authors:
                 username = (row.get("value") or "").strip() or "-"
+                username_key = username.lower() if username != "-" else username
                 try:
                     value = int(row.get("count") or 0)
                 except (TypeError, ValueError):
@@ -79,7 +82,9 @@ def publish(ctx: SnapshotContext) -> dict:
                         "label": f"@{username}",
                         "value": value,
                         "delta": (
-                            None if all_time else value - prev_authors.get(username, 0)
+                            None
+                            if all_time
+                            else value - prev_authors.get(username_key, 0)
                         ),
                         "href": (
                             f"https://x.com/{username}"

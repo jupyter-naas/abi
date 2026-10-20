@@ -7,17 +7,27 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
-  Check,
   CheckCircle,
   Cloud,
-  Search,
   SlidersHorizontal,
-  X,
   XCircle,
 } from 'lucide-react';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  SettingsEmpty,
+  SettingsLoading,
+  SettingsNotice,
+  SettingsPageHeader,
+  SettingsFilterSelect,
+  SettingsTableToolbar,
+  countLabel,
+  settingsTable,
+} from '@/components/settings/settings-ui';
 
 const getApiBase = () => getApiUrl();
 
@@ -314,7 +324,7 @@ export function ModelsPanel() {
     // description column wraps to multiple lines).
     return (
       <div className="flex items-center">
-        <div className="flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-lg border bg-muted">
+        <div className="flex h-9 w-9 flex-none items-center justify-center overflow-hidden border border-border bg-muted">
           {src ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -356,15 +366,15 @@ export function ModelsPanel() {
         return <span className="text-muted-foreground">{formatContext(model.context_window)}</span>;
       case 'status':
         return model.configured ? (
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-green-100 dark:bg-green-950 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-300">
+          <Badge variant="primary">
             <CheckCircle size={12} />
             Configured
-          </div>
+          </Badge>
         ) : (
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 dark:bg-amber-950 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">
+          <Badge variant="warning">
             <XCircle size={12} />
             Not configured
-          </div>
+          </Badge>
         );
       default:
         return null;
@@ -372,166 +382,105 @@ export function ModelsPanel() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <p className="text-muted-foreground">Loading models...</p>
-      </div>
-    );
+    return <SettingsLoading label="Loading models…" />;
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <div className="flex items-center gap-2">
-          <h2 className="text-lg font-semibold">Models</h2>
-          <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
-            {sortedModels.length}
-          </span>
-          <span className="rounded-full bg-green-100 dark:bg-green-950 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-300">
-            {configuredCount} configured
-          </span>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          All AI models discovered from naas_abi_marketplace.ai modules
-        </p>
-      </div>
+      <SettingsPageHeader
+        title="Models"
+        badge={`${configuredCount} configured`}
+        description="All AI models discovered from naas_abi_marketplace.ai modules"
+      />
 
       {error && (
-        <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30">
-          <AlertCircle size={20} className="mt-0.5 flex-shrink-0 text-red-600 dark:text-red-500" />
-          <div className="text-sm">
-            <p className="font-medium text-red-800 dark:text-red-200">Failed to load models</p>
-            <p className="text-red-700 dark:text-red-300">{error}</p>
-          </div>
-        </div>
+        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+          <p className="font-medium">Failed to load models</p>
+          <p>{error}</p>
+        </SettingsNotice>
       )}
 
       {models.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
-          <Cloud size={48} className="mb-4 text-muted-foreground/30" />
-          <h3 className="mb-2 font-medium">No models discovered</h3>
-          <p className="text-sm text-muted-foreground">
-            The naas_abi_marketplace.ai catalog is empty or unreachable.
-          </p>
-        </div>
+        <SettingsEmpty
+          icon={<Cloud size={40} className="opacity-40" />}
+          title="No models discovered"
+          description="The naas_abi_marketplace.ai catalog is empty or unreachable."
+        />
       ) : (
-        <div>
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="relative flex-1">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search by model, provider, or canonical id..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-lg border bg-background pl-10 pr-10 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  <X size={16} />
-                </button>
-              )}
-            </div>
-
-            <select
-              value={providerFilter}
-              onChange={(e) => setProviderFilter(e.target.value)}
-              className="rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-            >
-              <option value="all">All providers</option>
-              {providers.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-
-            <div className="flex rounded-lg border bg-background p-0.5">
-              {STATUS_FILTERS.map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => setStatusFilter(opt.value)}
-                  className={cn(
-                    'px-3 py-1.5 text-sm rounded-md transition-colors',
-                    statusFilter === opt.value
-                      ? 'bg-muted font-medium text-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
+        <div className="space-y-4">
+          <SettingsTableToolbar
+            search={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchPlaceholder="Search by model, provider, or canonical id..."
+            filters={
+              <>
+                <SettingsFilterSelect
+                  label="Provider"
+                  value={providerFilter}
+                  onChange={setProviderFilter}
+                  options={[{ value: 'all', label: 'All providers' }, ...providers.map((p) => ({ value: p.id, label: p.name }))]}
+                  className="sm:w-48"
+                />
+                <SettingsFilterSelect
+                  label="Status"
+                  value={statusFilter}
+                  onChange={(value) => setStatusFilter(value as StatusFilter)}
+                  options={STATUS_FILTERS}
+                />
+                <div className="relative" ref={columnsMenuRef}>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setColumnsMenuOpen((open) => !open)}
+                    className={cn(columnsMenuOpen && 'bg-muted')}
+                  >
+                    <SlidersHorizontal size={16} />
+                    Columns
+                    <Badge>{orderedVisibleColumns.length}</Badge>
+                  </Button>
+                  {columnsMenuOpen && (
+                    <div className="absolute right-0 z-20 mt-2 w-56 border border-border bg-popover p-1 shadow-lg">
+                      <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                        Toggle columns
+                      </div>
+                      {COLUMN_META.map((col) => {
+                        const checked = visibleColumns.has(col.key);
+                        const isLast = checked && visibleColumns.size === 1;
+                        return (
+                          <Checkbox
+                            key={col.key}
+                            checked={checked}
+                            onCheckedChange={() => toggleColumn(col.key)}
+                            disabled={isLast}
+                            label={col.label}
+                            className="flex w-full px-2 py-1.5 hover:bg-muted"
+                          />
+                        );
+                      })}
+                    </div>
                   )}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="relative" ref={columnsMenuRef}>
-              <button
-                onClick={() => setColumnsMenuOpen((open) => !open)}
-                className={cn(
-                  'inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm transition-colors hover:bg-muted',
-                  columnsMenuOpen && 'bg-muted'
-                )}
-              >
-                <SlidersHorizontal size={16} />
-                Columns
-                <span className="rounded-full bg-muted px-1.5 text-xs text-muted-foreground">
-                  {orderedVisibleColumns.length}
-                </span>
-              </button>
-              {columnsMenuOpen && (
-                <div className="absolute right-0 z-20 mt-2 w-56 rounded-lg border bg-background p-1 shadow-lg">
-                  <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                    Toggle columns
-                  </div>
-                  {COLUMN_META.map((col) => {
-                    const checked = visibleColumns.has(col.key);
-                    const isLast = checked && visibleColumns.size === 1;
-                    return (
-                      <button
-                        key={col.key}
-                        onClick={() => toggleColumn(col.key)}
-                        disabled={isLast}
-                        className={cn(
-                          'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted',
-                          isLast && 'cursor-not-allowed opacity-50'
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border',
-                            checked ? 'border-primary bg-primary text-primary-foreground' : 'border-input'
-                          )}
-                        >
-                          {checked && <Check size={12} />}
-                        </span>
-                        {col.label}
-                      </button>
-                    );
-                  })}
                 </div>
-              )}
-            </div>
-          </div>
+              </>
+            }
+            meta={`${countLabel(sortedModels.length, models.length, 'model')} · ${configuredCount} configured · ${providers.length} providers`}
+          />
 
-          <div className="rounded-lg border overflow-x-auto">
-            <table className="w-full">
+          <div className={settingsTable.wrapper}>
+            <table className={settingsTable.table}>
               <thead>
-                <tr className="border-b bg-muted/50 text-left text-sm">
+                <tr className={settingsTable.headRow}>
                   {orderedVisibleColumns.map((col) =>
                     col.sortBy ? (
-                      <th key={col.key} className={cn('p-3 font-medium', columnWidthClass(col.key))}>
+                      <th key={col.key} className={cn(settingsTable.th, columnWidthClass(col.key))}>
                         <button
                           onClick={() => handleSort(col.sortBy!)}
-                          className="inline-flex items-center gap-1.5 hover:text-foreground"
+                          className="inline-flex items-center gap-1.5 uppercase hover:text-foreground"
                         >
                           {col.label}
                           {renderSortIcon(col.sortBy)}
                         </button>
                       </th>
                     ) : (
-                      <th key={col.key} className={cn('p-3 font-medium', columnWidthClass(col.key))}>
+                      <th key={col.key} className={cn(settingsTable.th, columnWidthClass(col.key))}>
                         {col.label}
                       </th>
                     )
@@ -555,12 +504,12 @@ export function ModelsPanel() {
                       <tr
                         key={`${model.provider_id}-${model.canonical_id}`}
                         onClick={() => openModel(model)}
-                        className="cursor-pointer border-b transition-colors last:border-0 hover:bg-muted/50"
+                        className={cn(settingsTable.row, 'cursor-pointer')}
                       >
                         {orderedVisibleColumns.map((col) => (
                           <td
                             key={col.key}
-                            className={cn('p-3 align-top text-sm', columnWidthClass(col.key))}
+                            className={cn(settingsTable.td, 'align-top', columnWidthClass(col.key))}
                           >
                             {renderCell(col.key, model, provider)}
                           </td>
@@ -575,17 +524,16 @@ export function ModelsPanel() {
         </div>
       )}
 
-      <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-900 dark:bg-blue-950/30">
-        <AlertCircle size={20} className="mt-0.5 flex-shrink-0 text-blue-600 dark:text-blue-500" />
-        <div className="text-sm">
-          <p className="font-medium text-blue-800 dark:text-blue-200">Models come from the marketplace catalog</p>
-          <p className="text-blue-700 dark:text-blue-300">
+      <SettingsNotice icon={<AlertCircle size={14} />}>
+        <div>
+          <p className="font-medium text-foreground">Models come from the marketplace catalog</p>
+          <p>
             Every provider module in <code>naas_abi_marketplace.ai.*</code> is listed here. Models tagged
             <strong> Not configured</strong> are visible but unusable until the owning module is enabled in
             <code> config.yaml</code> and its API key is present in <strong>Settings → Secrets</strong>.
           </p>
         </div>
-      </div>
+      </SettingsNotice>
     </div>
   );
 }

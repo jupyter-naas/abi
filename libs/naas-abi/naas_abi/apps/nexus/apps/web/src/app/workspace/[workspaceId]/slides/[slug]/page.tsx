@@ -107,51 +107,57 @@ async function ensureSlidesRuntime(
     environment_id?: string | null;
   } = {};
   for (let i = 0; i < attempts; i++) {
-    const res = await authFetch(
-      `/api/slides/projects/${encodeURIComponent(slug)}/runtime?workspace_id=${encodeURIComponent(workspaceId)}`,
-      { method: 'POST' },
-    );
-    const body = (await res.json().catch(() => ({}))) as {
-      ensured?: boolean;
-      sidecar_ready?: boolean;
-      detail?: string;
-      phase?: string;
-      coder_workspace?: string;
-      branch?: string;
-      coder_ui_url?: string;
-      environment_id?: string;
-    };
-    lastMeta = {
-      coder_workspace: body.coder_workspace ?? lastMeta.coder_workspace,
-      branch: body.branch ?? lastMeta.branch,
-      coder_ui_url: body.coder_ui_url ?? lastMeta.coder_ui_url,
-      environment_id: body.environment_id ?? lastMeta.environment_id,
-    };
-    if (res.ok && body.ensured) {
-      const result = {
-        ensured: true,
-        sidecar_ready: Boolean(body.sidecar_ready),
-        detail: friendlyRuntimeDetail(body.detail) ?? null,
-        phase: body.phase ?? null,
+    try {
+      const res = await authFetch(
+        `/api/slides/projects/${encodeURIComponent(slug)}/runtime?workspace_id=${encodeURIComponent(workspaceId)}`,
+        { method: 'POST' },
+      );
+      const body = (await res.json().catch(() => ({}))) as {
+        ensured?: boolean;
+        sidecar_ready?: boolean;
+        detail?: string;
+        phase?: string;
+        coder_workspace?: string;
+        branch?: string;
+        coder_ui_url?: string;
+        environment_id?: string;
+      };
+      lastMeta = {
         coder_workspace: body.coder_workspace ?? lastMeta.coder_workspace,
         branch: body.branch ?? lastMeta.branch,
         coder_ui_url: body.coder_ui_url ?? lastMeta.coder_ui_url,
         environment_id: body.environment_id ?? lastMeta.environment_id,
       };
-      // Settle only when sidecar is healthy. Returning on the first
-      // ensured=true stuck the degraded banner while :8378 was still starting.
-      if (result.sidecar_ready) {
+      if (res.ok && body.ensured) {
+        const result = {
+          ensured: true,
+          sidecar_ready: Boolean(body.sidecar_ready),
+          detail: friendlyRuntimeDetail(body.detail) ?? null,
+          phase: body.phase ?? null,
+          coder_workspace: body.coder_workspace ?? lastMeta.coder_workspace,
+          branch: body.branch ?? lastMeta.branch,
+          coder_ui_url: body.coder_ui_url ?? lastMeta.coder_ui_url,
+          environment_id: body.environment_id ?? lastMeta.environment_id,
+        };
+        // Settle only when sidecar is healthy. Returning on the first
+        // ensured=true stuck the degraded banner while :8378 was still starting.
+        if (result.sidecar_ready) {
+          return result;
+        }
+        lastEnsured = result;
+        if (i < attempts - 1) {
+          await new Promise((r) => setTimeout(r, 1500 * Math.min(i + 1, 4)));
+          continue;
+        }
         return result;
       }
-      lastEnsured = result;
-      if (i < attempts - 1) {
-        await new Promise((r) => setTimeout(r, 1500 * Math.min(i + 1, 4)));
-        continue;
-      }
-      return result;
+      lastDetail =
+        friendlyRuntimeDetail(body.detail) || `Runtime ensure failed (${res.status})`;
+    } catch (err) {
+      // Network / connection-reset during optional Coder ensure must not trip
+      // the workspace Async Error overlay; Preview already loaded from Forgejo.
+      lastDetail = friendlyRuntimeDetail((err as Error)?.message) || 'Runtime ensure unavailable';
     }
-    lastDetail =
-      friendlyRuntimeDetail(body.detail) || `Runtime ensure failed (${res.status})`;
     if (i < attempts - 1) {
       await new Promise((r) => setTimeout(r, 1200 * (i + 1)));
     }
@@ -257,15 +263,15 @@ export default function SlidesEditorPage() {
       if (runtime.ensured && runtime.sidecar_ready) {
         setRuntimeStatus('ready', runtime.phase ? `Runtime ${runtime.phase}` : null);
       } else if (runtime.ensured) {
+        // Sidecar still warming; Forgejo HTML already drives Preview.
         setRuntimeStatus(
           'degraded',
-          runtime.detail || 'Runtime up but sidecar not ready; Abi falls back to Forgejo',
+          runtime.detail || 'Live edit sidecar warming; Preview uses saved HTML.',
         );
       } else {
-        setRuntimeStatus(
-          'error',
-          runtime.detail || 'Coder runtime unavailable; Abi can still edit via Forgejo',
-        );
+        // Local / no coding sidecar: Preview is Forgejo HTML. Do not surface a
+        // "Coder runtime unavailable" banner — Coder is deploy-only.
+        setRuntimeStatus('idle', null);
       }
     },
     [setRuntimeMeta, setRuntimeStatus, slug],
@@ -281,7 +287,7 @@ export default function SlidesEditorPage() {
         setRefreshing(true);
       } else {
         setLoading(true);
-        setRuntimeStatus('ensuring');
+        setRuntimeStatus('idle', null);
       }
       setError(null);
       try {
@@ -340,9 +346,19 @@ export default function SlidesEditorPage() {
         setLoading(false);
         setRefreshing(false);
         if (ensureRuntime) {
-          const runtime = await ensureSlidesRuntime(workspaceId, slug, quiet ? 2 : 6);
-          if (gen !== loadGenRef.current) return;
-          applyRuntime(runtime);
+          // Fire-and-forget: Preview already has Forgejo HTML. Coder ensure is
+          // optional (deployed sidecar) and must not block or alarm locally.
+          void ensureSlidesRuntime(workspaceId, slug, quiet ? 2 : 6)
+            .then((runtime) => {
+              if (gen !== loadGenRef.current) return;
+              applyRuntime(runtime);
+            })
+            .catch(() => {
+              if (gen !== loadGenRef.current) return;
+              applyRuntime({ ensured: false, detail: null });
+            });
+        } else {
+          setRuntimeStatus('idle', null);
         }
       } catch (e) {
         if (gen !== loadGenRef.current) return;
@@ -354,7 +370,8 @@ export default function SlidesEditorPage() {
             : message,
         );
         if (!quiet && !isGitWriteRaceDetail(message)) {
-          setRuntimeStatus('error', message);
+          // Missing slug / auth / forgejo — show as page error, not Coder.
+          setRuntimeStatus('idle', null);
         } else if (!quiet) {
           setRuntimeStatus('degraded', friendlyRuntimeDetail(message));
         }
@@ -817,8 +834,8 @@ export default function SlidesEditorPage() {
           {runtimeStatus === 'error'
             ? runtimeDetail && isGitWriteRaceDetail(runtimeDetail)
               ? runtimeDetail
-              : `Coder runtime unavailable: ${runtimeDetail || 'Abi will edit via Forgejo until Coder is back.'}`
-            : `Slides runtime degraded: ${runtimeDetail || 'Sidecar not ready; Abi falls back to Forgejo.'}`}
+              : `Slides live-edit unavailable: ${runtimeDetail || 'Preview still uses saved HTML.'}`
+            : `Slides live-edit degraded: ${runtimeDetail || 'Sidecar not ready; Preview uses saved HTML.'}`}
         </div>
       )}
 

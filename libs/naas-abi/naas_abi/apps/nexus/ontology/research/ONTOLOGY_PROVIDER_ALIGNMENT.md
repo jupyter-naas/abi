@@ -214,7 +214,7 @@ nexus:AIModel a owl:Class ;
     rdfs:subClassOf bfo:BFO_0000040 ;
     rdfs:label "AI Model"@en ;
     skos:definition "A trained neural network capable of generating responses"@en ;
-    skos:example "GPT-4o, Claude Opus, ForvisMazars_Corporate"@en .
+    skos:example "GPT-4o, Claude Opus, Corporate Agent"@en .
 
 nexus:AIAgent a owl:Class ;
     rdfs:subClassOf bfo:BFO_0000040 ;
@@ -484,7 +484,7 @@ nexus:AssistantRole a owl:Class ;
 nexus:OrchestratorRole a owl:Class ;
     rdfs:subClassOf nexus:AgentRole ;
     rdfs:label "Orchestrator Role"@en ;
-    skos:example "BOB - Forvis Mazars orchestrator"@en .
+    skos:example "An organization's orchestrator agent"@en .
 
 nexus:SpecialistRole a owl:Class ;
     rdfs:subClassOf nexus:AgentRole ;
@@ -537,7 +537,7 @@ nexus:realizes a owl:ObjectProperty ;
 
 - **Role** = Why provider/agent exists in social/business context
   - Example: OpenAI has "InferenceProvider" role in NEXUS ecosystem
-  - Example: BOB has "OrchestratorRole" for Forvis Mazars
+  - Example: an orchestrator agent has "OrchestratorRole" for its organization
   
 - **Disposition** = Intrinsic capability based on implementation
   - Example: ABI has "MultiLineDataCapability" (W3C SSE compliant)
@@ -551,7 +551,7 @@ Using BFO classifications, we can reason about provider compatibility:
 
 ```turtle
 # Example: ABI Provider Instance
-:ABIForvisMazars a nexus:ABIProvider ;
+:ABIServer a nexus:ABIProvider ;
     nexus:implementsProtocol nexus:W3C_SSE ;
     nexus:hasCapability :MultiLineDataCapability ;
     nexus:hasRole nexus:InferenceProvider ;

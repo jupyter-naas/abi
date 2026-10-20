@@ -15,8 +15,10 @@ import { getWorkspacePath } from '@/components/shell/sidebar/utils';
 import { newChatPath, NEW_CHAT_SLUG } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { AgentAvatar } from '@/components/chat/agent-selector';
 import { useFeature } from '@/hooks/use-feature';
+import { useStartNewChat } from '../lib/use-start-new-chat';
 import { ConversationItem } from './conversation-item';
 import { ProjectGroup } from './project-group';
+import { chatRosterSections } from './chat-section-agents';
 import './chat-components.css';
 
 export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
@@ -100,9 +102,10 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
       });
   }, [safeAgents, allConversations]);
 
-  const AGENTS_PREVIEW_COUNT = 5;
-  const visibleAgents = showAllAgents ? sortedAgents : sortedAgents.slice(0, AGENTS_PREVIEW_COUNT);
-  const hiddenAgentCount = sortedAgents.length - AGENTS_PREVIEW_COUNT;
+  const { visible: visibleAgents, hiddenCount: hiddenAgentCount } = useMemo(
+    () => chatRosterSections(sortedAgents, showAllAgents),
+    [sortedAgents, showAllAgents]
+  );
 
   const sortedSkills = useMemo(() => {
     const workspaceSkills = currentWorkspaceId
@@ -142,17 +145,8 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
     }));
   }, [conversations, safeProjects]);
 
-  const handleNewChat = useCallback(() => {
-    if (!agentExplicitlySelected) {
-      const defaultAgent =
-        safeAgents.find((a) => a.isDefault && a.enabled) ??
-        safeAgents.find((a) => a.enabled);
-      if (defaultAgent) setSelectedAgent(defaultAgent.id);
-    }
-    setActiveConversation(null);
-    setMobilePendingChatSlug(NEW_CHAT_SLUG);
-    router.push(newChatPath(currentWorkspaceId));
-  }, [safeAgents, agentExplicitlySelected, setSelectedAgent, setActiveConversation, setMobilePendingChatSlug, router, currentWorkspaceId]);
+  // Same action as the topnav File → New Chat.
+  const handleNewChat = useStartNewChat();
 
   const handleChatHeaderNavigate = useCallback(() => {
     if (!agentExplicitlySelected) {
@@ -318,7 +312,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
             Skills
           </Link>
           {sortedSkills.length === 0 && (
-            <p className="chat-section-hint">Type /create-skill in the chat to add one</p>
+            <p className="chat-section-hint">Type /create-skill in the chat and the Skills agent adds one</p>
           )}
           {visibleSkills.map((skill) => (
             <div key={skill.id} className="chat-list-row-wrap">

@@ -64,7 +64,7 @@ def columns_cache_key(
     target class), so all three go in the key, namespaced by workspace.
     """
     payload = {
-        "semver": _SEMVER,
+        "semver": "v2-class-anchors",
         "workspace": workspace_id,
         "graphs": sorted(graph_uris),
         "classes": sorted(class_uris),

@@ -2607,6 +2607,19 @@ async def _ensure_runtime_impl(
             coder_workspace=name,
             branch=branch,
         )
+    except Exception as exc:
+        # LocalDirectoryAdapter (and similar) can raise OSError/FileNotFoundError
+        # on concurrent checkout cleanup. Preview already uses Forgejo HTML;
+        # never 500 the optional runtime ensure.
+        logger.exception("slides runtime ensure failed for %s", slug)
+        return RuntimeResponse(
+            ensured=False,
+            detail=_friendly_coding_detail(exc),
+            template_name=template_name,
+            label=label,
+            coder_workspace=name,
+            branch=branch,
+        )
 
     has_creds = bool(ws_base and ws_secret)
     sidecar_ready = False
@@ -2878,7 +2891,7 @@ async def list_seed_templates(
 
 
 def _mutation_outline(html: str) -> tuple[list[SlideOutlineItem], list[str | None]]:
-    from naas_abi.agents.tools.slides_tools import (
+    from naas_abi.tools.slides_tools import (
         _slide_outline_items,
         _split_sections,
     )
@@ -3052,7 +3065,7 @@ async def insert_slide(
     db: AsyncSession = Depends(get_db),
 ) -> SlideMutationResponse:
     """Insert a slide after ``after_index`` (-1 appends). Same mutation as the agent tool."""
-    from naas_abi.agents.tools.slides_tools import _insert_slide_html
+    from naas_abi.tools.slides_tools import _insert_slide_html
 
     await require_workspace_access(current_user.id, body.workspace_id)
     return await _run_slide_html_mutation(
@@ -3080,7 +3093,7 @@ async def delete_slide(
     db: AsyncSession = Depends(get_db),
 ) -> SlideMutationResponse:
     """Delete the slide at index. Refuses the last slide."""
-    from naas_abi.agents.tools.slides_tools import _delete_slide_html
+    from naas_abi.tools.slides_tools import _delete_slide_html
 
     await require_workspace_access(current_user.id, body.workspace_id)
     return await _run_slide_html_mutation(
@@ -3103,7 +3116,7 @@ async def duplicate_slide(
     db: AsyncSession = Depends(get_db),
 ) -> SlideMutationResponse:
     """Duplicate the slide at index and insert the copy after it."""
-    from naas_abi.agents.tools.slides_tools import _duplicate_slide_html
+    from naas_abi.tools.slides_tools import _duplicate_slide_html
 
     await require_workspace_access(current_user.id, body.workspace_id)
     return await _run_slide_html_mutation(
@@ -3126,7 +3139,7 @@ async def reorder_slides(
     db: AsyncSession = Depends(get_db),
 ) -> SlideMutationResponse:
     """Move one slide (from_index/to_index) or apply a full ``order`` permutation."""
-    from naas_abi.agents.tools.slides_tools import _reorder_slides_html
+    from naas_abi.tools.slides_tools import _reorder_slides_html
 
     await require_workspace_access(current_user.id, body.workspace_id)
     return await _run_slide_html_mutation(

@@ -1,0 +1,159 @@
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+abi:S9P1Ontology a owl:Ontology ;
+    rdfs:label "S9-P1 · Stakeholder engagement"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceSHA256 "0d2c2c1e42dc3dfcfb1a8661ddba31057e88de911af1bb8f21868ba3096c0763"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    dct:title "S9-P1 · Stakeholder engagement"@en ;
+    rdfs:comment "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    owl:imports abi:ABIProcessLedgerOntology .
+
+abi:S9P1Condition1 a owl:Class ;
+    rdfs:label "Stakeholder engagement timing condition"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "Continuous; per engagement"@en ;
+    rdfs:comment "Ledger trigger/cadence/target: Continuous; per engagement. No occurrence or achieved timing is asserted."@en ;
+    rdfs:subClassOf abi:ExecutionCondition ;
+    skos:definition "Ledger trigger/cadence/target: Continuous; per engagement. No occurrence or achieved timing is asserted."@en .
+
+abi:S9P1ExecutionRole a owl:Class ;
+    rdfs:label "Stakeholder engagement execution role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "A proposed role realised in Stakeholder engagement and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom [ a owl:Class ;
+                    owl:unionOf ( abi:S9OfficerParticipant abi:StakeholderParticipant ) ] ],
+        abi:ExecutionRole ;
+    skos:definition "A proposed role realised in Stakeholder engagement and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en .
+
+abi:S9P1Interval a owl:Class ;
+    rdfs:label "Stakeholder engagement execution interval"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The temporal region occupied by an execution of Stakeholder engagement; actual dates are unspecified."@en ;
+    rdfs:subClassOf abi:ExecutionInterval ;
+    skos:definition "The temporal region occupied by an execution of Stakeholder engagement; actual dates are unspecified."@en .
+
+abi:S9P1Objective1 a owl:Class ;
+    rdfs:label "Stakeholder engagement objective"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "Trusted external relationships"@en ;
+    rdfs:comment "Intended outcome: Trusted external relationships. This is an objective specification, not a role or a guaranteed result."@en ;
+    rdfs:subClassOf abi:ObjectiveSpecification ;
+    skos:definition "Intended outcome: Trusted external relationships. This is an objective specification, not a role or a guaranteed result."@en .
+
+abi:S9P1Specification a owl:Class ;
+    rdfs:label "Stakeholder engagement specification"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The simulated ledger specification for S9-P1. It describes a possible process, not an executed run."@en ;
+    rdfs:subClassOf abi:ProcessSpecification ;
+    skos:definition "The simulated ledger specification for S9-P1. It describes a possible process, not an executed run."@en .
+
+abi:S9P1Step1 a owl:Class ;
+    rdfs:label "Stakeholder engagement · Map stakeholders"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 1 ;
+    rdfs:comment "Suggested step 1 of Stakeholder engagement: Map stakeholders. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S9P1 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 1 of Stakeholder engagement: Map stakeholders. Its ordering is a specification, not observed timing."@en .
+
+abi:S9P1Step2 a owl:Class ;
+    rdfs:label "Stakeholder engagement · Engage"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 2 ;
+    rdfs:comment "Suggested step 2 of Stakeholder engagement: Engage. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S9P1 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 2 of Stakeholder engagement: Engage. Its ordering is a specification, not observed timing."@en .
+
+abi:S9P1Step3 a owl:Class ;
+    rdfs:label "Stakeholder engagement · Record"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 3 ;
+    rdfs:comment "Suggested step 3 of Stakeholder engagement: Record. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S9P1 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 3 of Stakeholder engagement: Record. Its ordering is a specification, not observed timing."@en .
+
+abi:S9P1 a owl:Class ;
+    rdfs:label "Stakeholder engagement"@en ;
+    abi:ledgerCode "S9-P1"@en ;
+    abi:ledgerHOWITIS "Engagement status"@en ;
+    abi:ledgerHOWWEKNOW "Contact record"@en,
+        "Engagement log"@en ;
+    abi:ledgerWHEN "Continuous; per engagement"@en ;
+    abi:ledgerWHERE "Operations centre"@en ;
+    abi:ledgerWHO "S9 officer"@en,
+        "Stakeholder"@en ;
+    abi:ledgerWHY "Trusted external relationships"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:qualityMappingStatus "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A proposed ABI stakeholder engagement process. Suggested steps: Map stakeholders → Engage → Record. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en,
+        "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S9P1Step3 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000199 ;
+            owl:someValuesFrom abi:S9P1Interval ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000066 ;
+            owl:someValuesFrom abi:OperationsCentreSite ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:EngagementLogRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000059 ;
+            owl:someValuesFrom abi:S9P1Specification ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:ContactRecordRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasExecutionCondition ;
+            owl:someValuesFrom abi:S9P1Condition1 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S9P1Step1 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasIndicatorRecord ;
+            owl:someValuesFrom abi:EngagementStatusIndicator ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:StakeholderParticipant ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:pursuesObjective ;
+            owl:someValuesFrom abi:S9P1Objective1 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000055 ;
+            owl:someValuesFrom abi:S9P1ExecutionRole ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S9P1Step2 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:S9OfficerParticipant ],
+        abi:LedgerProcess,
+        abi:S9Process,
+        bfo:BFO_0000015 ;
+    skos:altLabel "S9-P1"@en ;
+    skos:definition "A proposed ABI stakeholder engagement process. Suggested steps: Map stakeholders → Engage → Record. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en .
+

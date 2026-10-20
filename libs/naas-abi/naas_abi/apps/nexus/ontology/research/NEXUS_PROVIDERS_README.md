@@ -51,7 +51,7 @@ SELECT ?provider ?label WHERE {
 
 for row in g.query(query):
     print(f"Provider: {row.label}")
-# Output: Provider: ABI Forvis Mazars
+# Output: Provider: ABI Server
 ```
 
 ### Example Query 2: Find Providers with Function Calling
@@ -214,11 +214,11 @@ nexus:Anthropic a nexus:AnthropicProvider ;
 - Single `data:` per event (best practice)
 - Structured JSON payloads
 
-#### 3. ABI/Naas (Forvis Mazars)
+#### 3. ABI/Naas
 
 ```turtle
-nexus:ABIForvisMazars a nexus:ABIProvider ;
-    nexus:hasEndpoint "https://abi-forvismazars.default.space.naas.ai" ;
+nexus:ABIServer a nexus:ABIProvider ;
+    nexus:hasEndpoint "https://abi.example.com" ;
     nexus:implementsProtocol nexus:W3C_SSE ;
     nexus:hasCapability nexus:MultiLineDataCapability ;
     nexus:hasRole nexus:InferenceProvider .
@@ -310,7 +310,7 @@ def get_adapter_for_provider(provider_id: str) -> str:
     return adapter_map[protocol]
 
 # Example
-adapter = get_adapter_for_provider("ABIForvisMazars")
+adapter = get_adapter_for_provider("ABIServer")
 print(adapter)  # Output: ABIAdapter
 ```
 
@@ -333,7 +333,7 @@ def provider_supports_function_calling(provider_id: str) -> bool:
 
 # Example
 print(provider_supports_function_calling("OpenAI"))  # True
-print(provider_supports_function_calling("ABIForvisMazars"))  # False
+print(provider_supports_function_calling("ABIServer"))  # False
 ```
 
 ### Use Case 3: Provider Discovery by Capability
@@ -387,14 +387,14 @@ def validate_provider_protocol_claim(provider_id: str, claimed_protocol: str) ->
 PREFIX nexus: <http://ontology.naas.ai/nexus/>
 
 SELECT ?model ?label WHERE {
-    ?model nexus:providedBy nexus:ABIForvisMazars .
+    ?model nexus:providedBy nexus:ABIServer .
     ?model rdfs:label ?label .
 }
 ```
 
 **Result:**
-- ForvisMazars Corporate Agent
-- BOB - Orchestrator
+- Corporate Agent
+- Orchestrator
 
 ---
 
@@ -462,7 +462,7 @@ class OntologyRegistry:
 # Usage
 registry = OntologyRegistry("/Users/jrvmac/nexus/docs/research/nexus_providers.ttl")
 
-protocol = registry.get_protocol_for_provider("ABIForvisMazars")
+protocol = registry.get_protocol_for_provider("ABIServer")
 print(f"Protocol: {protocol}")  # W3C_SSE
 
 capabilities = registry.get_capabilities("OpenAI")
@@ -666,7 +666,7 @@ def test_abi_implements_w3c_sse(ontology):
     query = """
     PREFIX nexus: <http://ontology.naas.ai/nexus/>
     ASK {
-        nexus:ABIForvisMazars nexus:implementsProtocol nexus:W3C_SSE .
+        nexus:ABIServer nexus:implementsProtocol nexus:W3C_SSE .
     }
     """
     
@@ -688,7 +688,7 @@ def test_abi_no_function_calling(ontology):
     query = """
     PREFIX nexus: <http://ontology.naas.ai/nexus/>
     ASK {
-        nexus:ABIForvisMazars nexus:hasCapability nexus:FunctionCallingCapability .
+        nexus:ABIServer nexus:hasCapability nexus:FunctionCallingCapability .
     }
     """
     
@@ -703,7 +703,7 @@ def test_adapter_selection_from_ontology():
     registry = OntologyRegistry("docs/research/nexus_providers.ttl")
     
     # ABI → ABIAdapter
-    protocol = registry.get_protocol_for_provider("ABIForvisMazars")
+    protocol = registry.get_protocol_for_provider("ABIServer")
     assert protocol == "W3C_SSE"
     
     # OpenAI → OpenAIAdapter

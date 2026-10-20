@@ -14,6 +14,8 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
     InvalidMagicLinkError,
     InvalidOtpError,
     PasswordAuthenticationDisabledError,
+    SuperadminChangeError,
+    UserNotFoundError,
 )
 from naas_abi.apps.nexus.apps.api.app.services.refresh_token import hash_otp_code, hash_token
 
@@ -138,9 +140,7 @@ async def test_ensure_user_for_invite_creates_user_without_workspace() -> None:
     )
     service = AuthService(adapter=adapter)
 
-    user, created = await service.ensure_user_for_invite(
-        "NEW@example.com", name="Emma Petit"
-    )
+    user, created = await service.ensure_user_for_invite("NEW@example.com", name="Emma Petit")
 
     assert created is True
     assert user.id == "user-new"
@@ -190,9 +190,7 @@ async def test_request_magic_link_public_signup_creates_default_workspace(
 
     assert challenge
     adapter.create_user_with_default_workspace.assert_awaited_once()
-    assert (
-        adapter.create_user_with_default_workspace.await_args.kwargs["name"] == "Unknown"
-    )
+    assert adapter.create_user_with_default_workspace.await_args.kwargs["name"] == "Unknown"
     adapter.create_user.assert_not_called()
     adapter.create_magic_link_token.assert_awaited_once()
     adapter.commit.assert_awaited_once()
@@ -214,9 +212,7 @@ async def test_request_magic_link_create_if_missing_true_skips_workspace(
     )
     service = AuthService(adapter=adapter)
 
-    challenge = await service.request_magic_link(
-        "invitee@example.com", create_if_missing=True
-    )
+    challenge = await service.request_magic_link("invitee@example.com", create_if_missing=True)
 
     assert challenge
     adapter.create_user.assert_awaited_once()
@@ -389,3 +385,246 @@ async def test_verify_otp_rejects_wrong_code_and_increments(monkeypatch) -> None
 
     adapter.increment_magic_link_otp_attempts.assert_awaited_once_with("ml-1")
     adapter.mark_magic_link_token_used.assert_not_awaited()
+
+
+def _user_with_password(password: str) -> AuthUserRecord:
+    from naas_abi.apps.nexus.apps.api.app.services.auth.service import get_password_hash
+
+    return AuthUserRecord(
+        id="user-1",
+        email="admin@example.com",
+        name="Admin",
+        hashed_password=get_password_hash(password),
+        created_at=datetime.utcnow(),
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("password", ["Admin1234!", "admin"])
+async def test_login_refuses_a_default_password_even_when_it_matches(
+    monkeypatch, password: str
+) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
+        InvalidCredentialsError,
+    )
+
+    monkeypatch.setattr(settings, "auth_password_enabled", True)
+    adapter = AsyncMock()
+    adapter.get_user_by_email.return_value = _user_with_password(password)
+    service = AuthService(adapter=adapter)
+
+    with pytest.raises(InvalidCredentialsError):
+        await service.login_user("admin@example.com", password, None, None)
+    with pytest.raises(InvalidCredentialsError):
+        await service.create_oauth_access_token("admin@example.com", password)
+
+
+@pytest.mark.asyncio
+async def test_register_rejects_a_default_password(monkeypatch) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
+        DefaultPasswordNotAllowedError,
+    )
+
+    monkeypatch.setattr(settings, "auth_password_enabled", True)
+    monkeypatch.setattr(settings, "auth_signup_enabled", True)
+    adapter = AsyncMock()
+    adapter.user_exists_with_email.return_value = False
+    service = AuthService(adapter=adapter)
+
+    with pytest.raises(DefaultPasswordNotAllowedError):
+        await service.register_user("new@example.com", "Admin1234!", "New", None, None)
+    adapter.create_user_with_default_workspace.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_change_and_reset_reject_a_default_password(monkeypatch) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.auth.port import PasswordResetTokenRecord
+    from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
+        DefaultPasswordNotAllowedError,
+    )
+
+    monkeypatch.setattr(settings, "auth_password_enabled", True)
+    adapter = AsyncMock()
+    adapter.get_user_by_id.return_value = _user_with_password("a-real-current-password")
+    adapter.get_password_reset_token.return_value = PasswordResetTokenRecord(
+        id="reset-1",
+        user_id="user-1",
+        token="hashed",
+        expires_at=datetime(2999, 1, 1),
+        used=False,
+        created_at=datetime.utcnow(),
+    )
+    service = AuthService(adapter=adapter)
+
+    with pytest.raises(DefaultPasswordNotAllowedError):
+        await service.change_password("user-1", "a-real-current-password", "admin", None, None)
+    with pytest.raises(DefaultPasswordNotAllowedError):
+        await service.reset_password("raw-token", "Admin1234!")
+    adapter.update_user_password.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_register_is_refused_when_signup_is_disabled(monkeypatch) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.auth.service import SignupDisabledError
+
+    monkeypatch.setattr(settings, "auth_password_enabled", True)
+    monkeypatch.setattr(settings, "auth_signup_enabled", False)
+    adapter = AsyncMock()
+    service = AuthService(adapter=adapter)
+
+    with pytest.raises(SignupDisabledError):
+        await service.register_user("new@example.com", "a-long-password", "New", None, None)
+    adapter.create_user_with_default_workspace.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_a_wrong_code_counts_against_every_active_code(monkeypatch) -> None:
+    """Requesting fresh codes must not reset the guess budget of older ones."""
+    monkeypatch.setattr(settings, "otp_max_attempts", 5)
+    adapter = AsyncMock()
+    adapter.get_user_by_email.return_value = AuthUserRecord(
+        id="user-1",
+        email="user@example.com",
+        name="User",
+        hashed_password="hashed",
+        created_at=datetime.utcnow(),
+    )
+    adapter.list_unused_magic_links_for_user.return_value = [
+        MagicLinkTokenRecord(
+            id=f"ml-{i}",
+            user_id="user-1",
+            token=f"hash-{i}",
+            expires_at=datetime.utcnow().replace(year=2099),
+            used=False,
+            created_at=datetime.utcnow(),
+            otp_code_hash=hash_otp_code(f"11111{i}"),
+            otp_attempts=0,
+        )
+        for i in range(3)
+    ]
+    adapter.increment_magic_link_otp_attempts.return_value = 1
+    service = AuthService(adapter=adapter)
+
+    with pytest.raises(InvalidOtpError):
+        await service.verify_otp(
+            email="user@example.com", code="000000", user_agent=None, ip_address=None
+        )
+
+    charged = {call.args[0] for call in adapter.increment_magic_link_otp_attempts.await_args_list}
+    assert charged == {"ml-0", "ml-1", "ml-2"}
+
+
+def _record(user_id: str, *, is_superadmin: bool) -> AuthUserRecord:
+    return AuthUserRecord(
+        id=user_id,
+        email=f"{user_id}@example.com",
+        name=user_id,
+        hashed_password="hashed",
+        created_at=datetime.utcnow(),
+        is_superadmin=is_superadmin,
+    )
+
+
+@pytest.mark.asyncio
+async def test_set_superadmin_promotes_and_commits() -> None:
+    adapter = AsyncMock()
+    adapter.get_user_by_id.return_value = _record("user-2", is_superadmin=False)
+    adapter.set_user_superadmin.return_value = _record("user-2", is_superadmin=True)
+    service = AuthService(adapter=adapter)
+
+    updated = await service.set_superadmin(actor_id="user-1", user_id="user-2", is_superadmin=True)
+
+    assert updated.is_superadmin is True
+    adapter.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_set_superadmin_refuses_self_demotion() -> None:
+    adapter = AsyncMock()
+    adapter.get_user_by_id.return_value = _record("user-1", is_superadmin=True)
+    service = AuthService(adapter=adapter)
+
+    with pytest.raises(SuperadminChangeError, match="cannot_demote_self"):
+        await service.set_superadmin(actor_id="user-1", user_id="user-1", is_superadmin=False)
+    adapter.set_user_superadmin.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_set_superadmin_refuses_to_demote_the_last_superadmin() -> None:
+    adapter = AsyncMock()
+    adapter.get_user_by_id.return_value = _record("user-2", is_superadmin=True)
+    adapter.count_superadmins.return_value = 1
+    service = AuthService(adapter=adapter)
+
+    with pytest.raises(SuperadminChangeError, match="last_superadmin"):
+        await service.set_superadmin(actor_id="user-1", user_id="user-2", is_superadmin=False)
+    adapter.set_user_superadmin.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_set_superadmin_unknown_user() -> None:
+    adapter = AsyncMock()
+    adapter.get_user_by_id.return_value = None
+    service = AuthService(adapter=adapter)
+
+    with pytest.raises(UserNotFoundError):
+        await service.set_superadmin(actor_id="user-1", user_id="ghost", is_superadmin=True)
+
+
+@pytest.mark.asyncio
+async def test_with_account_fallbacks_fills_empty_fields_from_member_profiles() -> None:
+    from datetime import datetime as _dt
+
+    from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthUserRecord as _Record
+
+    adapter = AsyncMock()
+    adapter.list_member_profiles.return_value = [
+        {
+            "avatar": "/api/auth/avatar/user/u1/org?v=1",
+            "organization": "Forvis Mazars",
+            "job_title": None,
+        },
+        {"avatar": None, "organization": "Other", "job_title": "Partner"},
+    ]
+    service = AuthService(adapter=adapter)
+    record = _Record(
+        id="u1",
+        email="a@b.c",
+        name="A",
+        hashed_password="x",
+        created_at=_dt(2026, 1, 1),
+        organization=None,
+        job_title=None,
+        avatar=None,
+    )
+
+    effective = await service.with_account_fallbacks(record)
+
+    assert (effective.avatar, effective.organization, effective.job_title) == (
+        "/api/auth/avatar/user/u1/org?v=1",
+        "Forvis Mazars",
+        "Partner",
+    )
+
+
+@pytest.mark.asyncio
+async def test_with_account_fallbacks_skips_the_query_when_the_account_is_complete() -> None:
+    from datetime import datetime as _dt
+
+    from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthUserRecord as _Record
+
+    adapter = AsyncMock()
+    service = AuthService(adapter=adapter)
+    record = _Record(
+        id="u1",
+        email="a@b.c",
+        name="A",
+        hashed_password="x",
+        created_at=_dt(2026, 1, 1),
+        organization="Own",
+        job_title="CTO",
+        avatar="/me.png",
+    )
+
+    assert await service.with_account_fallbacks(record) is record
+    adapter.list_member_profiles.assert_not_called()

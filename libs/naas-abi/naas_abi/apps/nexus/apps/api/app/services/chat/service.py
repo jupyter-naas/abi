@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, Protocol
 from uuid import uuid4
 
 import numpy as np
 from naas_abi.agents.conversation_title import conversation_title_from_prompt
-from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthPersistencePort
+from naas_abi.agents.feature.context import render_feature_context_block
+from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthPersistencePort, AuthUserRecord
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat__schema import (
     CompleteChatInput,
     CompleteChatResult,
@@ -137,20 +138,17 @@ _MULTI_AGENT_NOTICE = (
 
 logger = logging.getLogger(__name__)
 
-_CREATE_SKILL_INSTRUCTIONS = (
+# Skills are written and saved by the Skills office agent (naas_abi
+# SkillsAgent), which calls create_skill. Nothing here asks a model to draft
+# one into the conversation: a JSON block the user has to save by hand was
+# both a worse experience and a dead end for clients with no Nexus UI.
+_SKILLS_HANDOFF_NOTE = (
     "\n\n## Creating skills\n"
-    "If the user's message starts with `/create-skill`, help them turn the rest of it (a short "
-    "description of a recurring task) into a reusable skill. Propose a name, a url-safe "
-    "kebab-case slug, a one-sentence description, and a well-written prompt that captures the "
-    "task with a clear goal, constraints, and expected output format. Present the draft as a "
-    "fenced code block using the language tag `skill` containing a single JSON object with "
-    "exactly these keys: name, slug, description, prompt. Briefly explain your choices outside "
-    "the code block. Do not attempt to save it yourself — the user reviews and saves it from "
-    "the UI with one click.\n"
-    "Critical: the slug is the chat command users will type later (e.g. `/weekly-report`). "
-    "Never use `skills` or `create-skill` as the slug — those are reserved builtin commands. "
-    "Derive the slug from the task itself (what the skill does), not from the `/create-skill` "
-    "invocation.\n"
+    "Creating, editing and deleting skills is the Skills agent's job: it writes the prompt "
+    "and saves the skill itself. When the user asks for a new skill (or starts a message with "
+    "`/create-skill`), hand the request to the Skills agent when you can transfer, otherwise "
+    "tell them to ask Skills in the chat or to use Settings > Skills. Never draft a skill as a "
+    "fenced `skill` block or any other payload for the user to save by hand.\n"
 )
 
 _SKILLS_CATALOG_HEADER = (
@@ -394,6 +392,45 @@ def _render_documents_context_block(
     )
 
 
+def _render_sheets_context_block(
+    client_context: dict | None,
+    workspace_id: str | None = None,
+) -> str:
+    if not isinstance(client_context, dict):
+        return ""
+    sheets = client_context.get("sheets")
+    if not isinstance(sheets, dict):
+        return ""
+    slug = str(sheets.get("slug") or "").strip()
+    if not slug:
+        return ""
+    ws = str(sheets.get("workspace_id") or workspace_id or "").strip()
+    default_path = (
+        f"sheets/{ws}/{slug}/workbook.html" if ws else f"sheets/{slug}/workbook.html"
+    )
+    default_branch = f"sheets/{ws}/{slug}" if ws else f"sheets/{slug}"
+    path = str(sheets.get("path") or default_path).strip()
+    branch = str(sheets.get("branch") or default_branch).strip()
+    title = str(sheets.get("title") or "").strip()
+    lines = [
+        f"- slug: {slug}",
+        f"- path: {path}",
+        f"- branch: {branch}",
+    ]
+    if ws:
+        lines.append(f"- workspace_id: {ws}")
+    if title:
+        lines.append(f"- title: {title}")
+    return (
+        "\n\n## Open Sheets workbook\n"
+        "The user is editing this spreadsheet in Nexus Sheets. "
+        "If you lack write_sheets_workbook, call transfer_to_Sheets and stop.\n"
+        "Edit the JSON model via Sheets tools; omit slug (defaults to this workbook).\n"
+        + "\n".join(lines)
+        + "\n"
+    )
+
+
 def _render_coding_context_block(client_context: dict | None) -> str:
     """Inject open Code repo/branch so Abi edits the sandbox checkout."""
     if not isinstance(client_context, dict):
@@ -436,8 +473,8 @@ class UserProfile(Protocol):
     id: str
     name: str
     email: str
-    company: str | None
-    role: str | None
+    organization: str | None
+    job_title: str | None
     bio: str | None
 
 
@@ -449,8 +486,8 @@ def render_user_context_block(
     fields: list[tuple[str, str | None]] = [
         ("Name", user.name),
         ("Email", user.email),
-        ("Company", user.company),
-        ("Role", user.role),
+        ("Organization", user.organization),
+        ("Job title", user.job_title),
         ("Bio", user.bio),
     ]
     lines = [f"- {label}: {value}" for label, value in fields if value]
@@ -506,9 +543,15 @@ class ChatService:
         documents_block = _render_documents_context_block(client_context, workspace_id)
         if documents_block:
             system_prompt += documents_block
+        sheets_block = _render_sheets_context_block(client_context, workspace_id)
+        if sheets_block:
+            system_prompt += sheets_block
         coding_block = _render_coding_context_block(client_context)
         if coding_block:
             system_prompt += coding_block
+        feature_block = render_feature_context_block(client_context)
+        if feature_block:
+            system_prompt += feature_block
 
         has_prior_assistant = any(getattr(m, "role", None) == "assistant" for m in prior_messages)
         if has_prior_assistant:
@@ -547,10 +590,17 @@ class ChatService:
         documents_block = _render_documents_context_block(client_context, workspace_id)
         if documents_block.strip():
             parts.append(documents_block.strip())
+        sheets_block = _render_sheets_context_block(client_context, workspace_id)
+        if sheets_block.strip():
+            parts.append(sheets_block.strip())
 
         coding_block = _render_coding_context_block(client_context)
         if coding_block.strip():
             parts.append(coding_block.strip())
+
+        feature_block = render_feature_context_block(client_context)
+        if feature_block.strip():
+            parts.append(feature_block.strip())
 
         has_prior_assistant = any(getattr(m, "role", None) == "assistant" for m in prior_messages)
         if has_prior_assistant:
@@ -570,13 +620,13 @@ class ChatService:
     async def _build_skills_block(
         self, context: RequestContext | None, workspace_id: str | None
     ) -> str:
-        """Skills catalog + built-in command instructions, injected fresh into the
-        system prompt on every turn. Keeping it always-resident (rather than a
+        """Skills catalog + the note that creating one belongs to the Skills
+        agent, injected fresh into the system prompt on every turn. Keeping it always-resident (rather than a
         one-off prompt expansion at invocation time) is what lets the agent decide
         on its own, turn after turn, whether a skill applies — mirroring how
         Claude's own Skills stay visible in context instead of being invoked once
         and forgotten."""
-        block = _CREATE_SKILL_INSTRUCTIONS
+        block = _SKILLS_HANDOFF_NOTE
         if not self.skills_service or not context or not workspace_id:
             return block
         try:
@@ -620,7 +670,30 @@ class ChatService:
             return ""
         if user is None:
             return ""
+        if workspace_id:
+            user = await self._with_member_profile(user, workspace_id)
         return render_user_context_block(user, workspace_id, conversation_id)
+
+    async def _with_member_profile(self, user: AuthUserRecord, workspace_id: str) -> AuthUserRecord:
+        """Org admins prep a member's profile (Organization Settings > Users): the
+        values set by the workspace's organization win, the account fills the rest."""
+        try:
+            profile = await self.auth_adapter.get_workspace_member_profile(  # type: ignore[union-attr]
+                user.id, workspace_id
+            )
+        except Exception:
+            logger.warning("Failed to load organization member profile", exc_info=True)
+            return user
+        if not profile:
+            return user
+        return replace(
+            user,
+            **{
+                field: profile[field]
+                for field in ("organization", "job_title", "bio")
+                if profile.get(field)
+            },
+        )
 
     def _inject_chat_vector_context(
         self,
@@ -1192,11 +1265,13 @@ class ChatService:
                         client_context=request.context,
                     )
 
+                from naas_abi.agents.feature import bind_feature_context
                 from naas_abi.agents.slides import (
                     apply_slides_model_override,
                     bind_slides_research_policy,
                 )
 
+                bind_feature_context(request.context)
                 has_prior_assistant = any(
                     getattr(m, "role", None) == "assistant" for m in prior_messages
                 )

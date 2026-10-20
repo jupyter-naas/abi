@@ -38,8 +38,8 @@ export default function ProfilePage() {
   const setUser = useAuthStore((s) => s.setUser);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [company, setCompany] = useState('');
-  const [role, setRole] = useState('');
+  const [organization, setOrganization] = useState('');
+  const [jobTitle, setJobTitle] = useState('');
   const [bio, setBio] = useState('');
   const [saved, setSaved] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -50,8 +50,8 @@ export default function ProfilePage() {
     if (authUser) {
       setName(authUser.name || '');
       setEmail(authUser.email || '');
-      setCompany(authUser.company || '');
-      setRole(authUser.role || '');
+      setOrganization(authUser.organization || '');
+      setJobTitle(authUser.job_title || '');
       setBio(authUser.bio || '');
       setAvatarUrl(authUser.avatar || '');
     }
@@ -137,8 +137,8 @@ export default function ProfilePage() {
       const trimmedEmail = email.trim();
       if (trimmedName) payload.name = trimmedName;
       if (trimmedEmail) payload.email = trimmedEmail;
-      payload.company = company.trim();
-      payload.role = role.trim();
+      payload.organization = organization.trim();
+      payload.job_title = jobTitle.trim();
       payload.bio = bio.trim();
 
       const response = await authFetch('/api/auth/me', {
@@ -162,13 +162,10 @@ export default function ProfilePage() {
           name: updated.name,
           email: updated.email,
           avatar: normalizeAvatar(updated.avatar),
-          // @ts-ignore - store model extended
-          company: updated.company,
-          // @ts-ignore
-          role: updated.role,
-          // @ts-ignore
+          organization: updated.organization,
+          job_title: updated.job_title,
           bio: updated.bio,
-        } as any);
+        });
       }
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -183,6 +180,19 @@ export default function ProfilePage() {
       <AccountPageHeader
         title="Profile"
         subtitle="Manage your personal information"
+        actions={
+          <button
+            onClick={handleSave}
+            className={
+              saved
+                ? 'account-profile-save-button account-profile-save-button-saved'
+                : 'account-profile-save-button'
+            }
+          >
+            <Save size={16} />
+            {saved ? 'Saved!' : 'Save Changes'}
+          </button>
+        }
       />
 
       <div className="account-profile-avatar-section">
@@ -258,22 +268,22 @@ export default function ProfilePage() {
             />
           </div>
           <div className="account-profile-field">
-            <label className="account-profile-field-label">Company</label>
+            <label className="account-profile-field-label">Organization</label>
             <input
               type="text"
-              value={company}
-              onChange={(e) => setCompany(e.target.value)}
-              placeholder="Your company"
+              value={organization}
+              onChange={(e) => setOrganization(e.target.value)}
+              placeholder="Your organization"
               className="account-profile-field-input"
             />
           </div>
           <div className="account-profile-field">
-            <label className="account-profile-field-label">Role</label>
+            <label className="account-profile-field-label">Job title</label>
             <input
               type="text"
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              placeholder="Your role"
+              value={jobTitle}
+              onChange={(e) => setJobTitle(e.target.value)}
+              placeholder="Your job title"
               className="account-profile-field-input"
             />
           </div>
@@ -301,20 +311,6 @@ export default function ProfilePage() {
           />
         </div>
       </AccountSectionCard>
-
-      <div className="account-profile-actions">
-        <button
-          onClick={handleSave}
-          className={
-            saved
-              ? 'account-profile-save-button account-profile-save-button-saved'
-              : 'account-profile-save-button'
-          }
-        >
-          <Save size={16} />
-          {saved ? 'Saved!' : 'Save Changes'}
-        </button>
-      </div>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 
 from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig
@@ -26,6 +27,8 @@ KNOWN_FEATURE_KEYS: tuple[str, ...] = (
     "slides",
     # Business documents (Forgejo HTML + Monaco). Same default grant as slides.
     "documents",
+    # Business sheets (Forgejo HTML workbook + XLSX export). Same default as slides.
+    "sheets",
 )
 
 
@@ -65,8 +68,15 @@ def build_feature_flags(
     workspace_id: str | None,
     organization_id: str | None = None,
     organization_override: Mapping[str, list[str]] | None = None,
+    workspace_override: Mapping[str, bool] | None = None,
 ) -> dict[str, bool]:
-    """Build effective feature flags for a workspace user."""
+    """Build effective feature flags for a workspace user.
+
+    ``workspace_override`` is the durable overlay saved from Organization
+    Settings > Workspaces (``workspaces.feature_overrides``). When it is set
+    (even empty) it replaces the YAML ``workspace_overrides`` entry for this
+    workspace: the config only bootstraps it.
+    """
     enabled_catalog = _resolve_enabled_catalog(feature_flags_config.enabled_features)
     role_baseline = resolve_role_baseline(
         feature_flags_config,
@@ -78,10 +88,14 @@ def build_feature_flags(
     }
     flags: dict[str, bool] = {key: (key in baseline) for key in KNOWN_FEATURE_KEYS}
 
-    overrides = _resolve_workspace_overrides(
-        workspace_overrides=feature_flags_config.workspace_overrides,
-        workspace_slug=workspace_slug,
-        workspace_id=workspace_id,
+    overrides = (
+        workspace_override
+        if workspace_override is not None
+        else _resolve_workspace_overrides(
+            workspace_overrides=feature_flags_config.workspace_overrides,
+            workspace_slug=workspace_slug,
+            workspace_id=workspace_id,
+        )
     )
     for key, value in overrides.items():
         if key in enabled_catalog:
@@ -92,6 +106,85 @@ def build_feature_flags(
             flags[key] = False
 
     return flags
+
+
+def effective_workspace_overrides(
+    feature_flags_config: FeatureFlagsConfig,
+    *,
+    workspace_slug: str | None,
+    workspace_id: str | None,
+    workspace_override: Mapping[str, bool] | None,
+) -> tuple[dict[str, bool], str | None]:
+    """The overrides that apply to a workspace and where they come from.
+
+    Returns ``(overrides, source)`` with source ``"database"`` (saved in the
+    app), ``"deployment"`` (YAML ``workspace_overrides``) or ``None``.
+    """
+    if workspace_override is not None:
+        return dict(workspace_override), "database"
+    configured = _resolve_workspace_overrides(
+        workspace_overrides=feature_flags_config.workspace_overrides,
+        workspace_slug=workspace_slug,
+        workspace_id=workspace_id,
+    )
+    if configured:
+        return {key: bool(value) for key, value in configured.items()}, "deployment"
+    return {}, None
+
+
+def workspace_features(
+    *,
+    roles: tuple[str, ...],
+    feature_flags_config: FeatureFlagsConfig,
+    workspace_slug: str | None,
+    workspace_id: str | None,
+    organization_id: str | None = None,
+    organization_override: Mapping[str, list[str]] | None = None,
+    workspace_override: Mapping[str, bool] | None = None,
+) -> list[str]:
+    """Features a workspace offers: on for at least one of ``roles``, in catalog order."""
+    enabled: set[str] = set()
+    for role in roles:
+        flags = build_feature_flags(
+            role=role,
+            feature_flags_config=feature_flags_config,
+            workspace_slug=workspace_slug,
+            workspace_id=workspace_id,
+            organization_id=organization_id,
+            organization_override=organization_override,
+            workspace_override=workspace_override,
+        )
+        enabled.update(key for key, on in flags.items() if on)
+    return [key for key in KNOWN_FEATURE_KEYS if key in enabled]
+
+
+def enabled_feature_catalog(feature_flags_config: FeatureFlagsConfig) -> list[str]:
+    """Deployment catalog (``enabled_features``) in ``KNOWN_FEATURE_KEYS`` order."""
+    catalog = _resolve_enabled_catalog(feature_flags_config.enabled_features)
+    return [key for key in KNOWN_FEATURE_KEYS if key in catalog]
+
+
+def parse_feature_overrides(raw: str | None) -> dict[str, bool] | None:
+    """``workspaces.feature_overrides`` (JSON text) to a dict; ``None`` when unset."""
+    if raw is None:
+        return None
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return {
+        str(key): bool(value)
+        for key, value in data.items()
+        if key in KNOWN_FEATURE_KEYS and isinstance(value, bool)
+    }
+
+
+def dump_feature_overrides(overrides: Mapping[str, bool] | None) -> str | None:
+    if overrides is None:
+        return None
+    return json.dumps({key: bool(overrides[key]) for key in sorted(overrides)})
 
 
 def _resolve_enabled_catalog(enabled_features: list[str]) -> set[str]:

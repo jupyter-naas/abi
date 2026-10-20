@@ -67,6 +67,16 @@ def create_app() -> FastAPI:
         )
     app = FastAPI(title=public_config()["brand"]["name"])
     app.include_router(router, prefix="/api/personnel-cockpit")
+    # The graph page is the people module's; serve it where the registry loads it.
+    from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.graph_view import (
+        GRAPH_PAGE_DIR,
+    )
+
+    app.mount(
+        "/api/personnel-cockpit/graph-page",
+        StaticFiles(directory=GRAPH_PAGE_DIR),
+        name="graph-page",
+    )
     app.mount("/", SPAStaticFiles(directory=WEB_ROOT, html=True), name="web")
     return app
 

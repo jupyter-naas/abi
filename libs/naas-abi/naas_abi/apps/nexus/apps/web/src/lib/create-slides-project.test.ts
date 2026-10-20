@@ -11,6 +11,7 @@ import {
 } from './pick-workspace-default-agent';
 import {
   DEFAULT_SLIDES_TEMPLATE_ID,
+  jumpToSlidesDeck,
   openSlidesAgentPane,
   parseFastApiDetail,
   slidesApiErrorMessage,
@@ -54,6 +55,15 @@ describe('pickWorkspaceDefaultAgent', () => {
     const orchestrator = { id: 'default', enabled: false, isDefault: true };
     const abi = { id: 'abi', enabled: false, isDefault: false };
     expect(pickWorkspaceDefaultAgent([abi, orchestrator])?.id).toBe('default');
+  });
+
+  it('falls back to Abi, then the first enabled agent, when there is no default', () => {
+    const maps = { id: 'maps', enabled: true, class_name: 'naas_abi.agents.MapsAgent/MapsAgent' };
+    const abi = { id: 'abi', enabled: true, class_name: 'naas_abi.agents.AbiAgent/AbiAgent' };
+    const lookalike = { id: 'acme', enabled: true, class_name: 'acme.agents.AbiAgent/AbiAgent' };
+    expect(pickWorkspaceDefaultAgent([maps, abi])?.id).toBe('abi');
+    expect(pickWorkspaceDefaultAgent([maps, lookalike])?.id).toBe('maps');
+    expect(pickWorkspaceDefaultAgent([maps, { ...abi, enabled: false }])?.id).toBe('maps');
   });
 });
 
@@ -296,5 +306,50 @@ describe('slidesApiErrorMessage', () => {
     expect(
       slidesApiErrorMessage('Forgejo is not configured. Slides needs git storage.', 'Failed'),
     ).toBe('Forgejo is not configured. Slides needs git storage.');
+  });
+});
+
+describe('jumpToSlidesDeck', () => {
+  beforeEach(() => {
+    useWorkspaceStore.setState({
+      currentWorkspaceId: 'ws-1',
+      contextPanelOpen: false,
+      paneConversationId: null,
+      paneAgent: null,
+      paneAgentExplicitlySelected: false,
+      selectedAgent: null,
+      conversations: [],
+      slidesPaneConversationByKey: {},
+    } as never);
+    useSlidesStore.setState({ selectedSlug: null, selectedTitle: null } as never);
+    useAgentsStore.setState({ agents: [] });
+  });
+
+  it('selects the deck, opens the pane, and navigates when not already there', () => {
+    const navigated: string[] = [];
+    jumpToSlidesDeck({
+      workspaceId: 'ws-1',
+      slug: 'palantir',
+      title: 'Palantir',
+      pathname: '/workspace/ws-1/chat',
+      navigate: (href) => navigated.push(href),
+    });
+    expect(useSlidesStore.getState().selectedSlug).toBe('palantir');
+    expect(useSlidesStore.getState().selectedTitle).toBe('Palantir');
+    expect(useWorkspaceStore.getState().contextPanelOpen).toBe(true);
+    expect(navigated).toEqual(['/workspace/ws-1/slides/palantir']);
+  });
+
+  it('skips navigation when already on the deck route', () => {
+    const navigated: string[] = [];
+    jumpToSlidesDeck({
+      workspaceId: 'ws-1',
+      slug: 'palantir',
+      title: 'Palantir',
+      pathname: '/workspace/ws-1/slides/palantir',
+      navigate: (href) => navigated.push(href),
+    });
+    expect(useSlidesStore.getState().selectedSlug).toBe('palantir');
+    expect(navigated).toEqual([]);
   });
 });

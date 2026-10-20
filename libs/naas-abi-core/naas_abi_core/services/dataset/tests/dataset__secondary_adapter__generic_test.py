@@ -402,3 +402,45 @@ class DatasetSecondaryAdapterContract(ABC):
         with pytest.raises(DatasetNotFoundError):
             adapter.describe("github_commits", namespace="acme")
         assert adapter.list(namespace="acme") == []
+
+    def test_namespace_version_moves_only_with_its_namespace(
+        self, adapter: IDatasetPort
+    ):
+        assert adapter.namespace_version("acme") is None
+        events = DatasetSpec(
+            name="events",
+            namespace="other",
+            columns=(ColumnSpec(name="id", type="integer"),),
+        )
+        adapter.create(self._spec())
+        adapter.create(events)
+        created = adapter.namespace_version("acme")
+        assert created is not None
+
+        adapter.write("events", [{"id": 1}], namespace="other")
+        assert adapter.namespace_version("acme") == created
+
+        adapter.write("github_commits", [], namespace="acme", mode="replace")
+        adapter.write(
+            "github_commits",
+            [
+                {
+                    "sha": "a",
+                    "project_id": "p",
+                    "author_date": "2026-01-01",
+                    "additions": 1,
+                    "deletions": 0,
+                }
+            ],
+            namespace="acme",
+        )
+        written = adapter.namespace_version("acme")
+        assert written is not None and written > created
+
+        adapter.write("github_commits", [], namespace="acme", mode="replace")
+        replaced = adapter.namespace_version("acme")
+        assert replaced is not None and replaced > written
+
+        adapter.drop("github_commits", namespace="acme")
+        dropped = adapter.namespace_version("acme")
+        assert dropped is not None and dropped > replaced

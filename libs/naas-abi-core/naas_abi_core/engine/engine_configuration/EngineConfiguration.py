@@ -36,6 +36,9 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_DatasetServic
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_Deploy import (
     DeployConfiguration,
 )
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_DocumentService import (
+    DocumentServiceConfiguration,
+)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_EmailService import (
     EmailAdapterConfiguration,
     EmailAdapterSMTPConfiguration,
@@ -85,6 +88,7 @@ from rich.prompt import Prompt
 
 
 class ServicesConfiguration(BaseModel):
+    document: DocumentServiceConfiguration = Field(default_factory=DocumentServiceConfiguration)
     object_storage: ObjectStorageServiceConfiguration = (
         ObjectStorageServiceConfiguration(
             object_storage_adapter=ObjectStorageAdapterConfiguration(

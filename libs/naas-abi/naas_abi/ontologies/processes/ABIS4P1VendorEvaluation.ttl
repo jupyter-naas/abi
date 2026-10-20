@@ -1,0 +1,174 @@
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+abi:S4P1Ontology a owl:Ontology ;
+    rdfs:label "S4-P1 · Vendor evaluation"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceSHA256 "0d2c2c1e42dc3dfcfb1a8661ddba31057e88de911af1bb8f21868ba3096c0763"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    dct:title "S4-P1 · Vendor evaluation"@en ;
+    rdfs:comment "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    owl:imports abi:ABIProcessLedgerOntology .
+
+abi:S4P1Condition1 a owl:Class ;
+    rdfs:label "Vendor evaluation timing condition"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "On new requirement"@en ;
+    rdfs:comment "Ledger trigger/cadence/target: On new requirement. No occurrence or achieved timing is asserted."@en ;
+    rdfs:subClassOf abi:ExecutionCondition ;
+    skos:definition "Ledger trigger/cadence/target: On new requirement. No occurrence or achieved timing is asserted."@en .
+
+abi:S4P1ExecutionRole a owl:Class ;
+    rdfs:label "Vendor evaluation execution role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "A proposed role realised in Vendor evaluation and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom [ a owl:Class ;
+                    owl:unionOf ( abi:OracleERPHost abi:ProcurementOfficerParticipant abi:S4ControllerParticipant abi:VendorParticipant ) ] ],
+        abi:ExecutionRole ;
+    skos:definition "A proposed role realised in Vendor evaluation and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en .
+
+abi:S4P1Interval a owl:Class ;
+    rdfs:label "Vendor evaluation execution interval"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The temporal region occupied by an execution of Vendor evaluation; actual dates are unspecified."@en ;
+    rdfs:subClassOf abi:ExecutionInterval ;
+    skos:definition "The temporal region occupied by an execution of Vendor evaluation; actual dates are unspecified."@en .
+
+abi:S4P1Objective1 a owl:Class ;
+    rdfs:label "Vendor evaluation objective"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "Best-value, sovereign-fit sourcing"@en ;
+    rdfs:comment "Intended outcome: Best-value, sovereign-fit sourcing. This is an objective specification, not a role or a guaranteed result."@en ;
+    rdfs:subClassOf abi:ObjectiveSpecification ;
+    skos:definition "Intended outcome: Best-value, sovereign-fit sourcing. This is an objective specification, not a role or a guaranteed result."@en .
+
+abi:S4P1Specification a owl:Class ;
+    rdfs:label "Vendor evaluation specification"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The simulated ledger specification for S4-P1. It describes a possible process, not an executed run."@en ;
+    rdfs:subClassOf abi:ProcessSpecification ;
+    skos:definition "The simulated ledger specification for S4-P1. It describes a possible process, not an executed run."@en .
+
+abi:S4P1Step1 a owl:Class ;
+    rdfs:label "Vendor evaluation · Define criteria"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 1 ;
+    rdfs:comment "Suggested step 1 of Vendor evaluation: Define criteria. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S4P1 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 1 of Vendor evaluation: Define criteria. Its ordering is a specification, not observed timing."@en .
+
+abi:S4P1Step2 a owl:Class ;
+    rdfs:label "Vendor evaluation · Score vendors"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 2 ;
+    rdfs:comment "Suggested step 2 of Vendor evaluation: Score vendors. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S4P1 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 2 of Vendor evaluation: Score vendors. Its ordering is a specification, not observed timing."@en .
+
+abi:S4P1Step3 a owl:Class ;
+    rdfs:label "Vendor evaluation · Recommend"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 3 ;
+    rdfs:comment "Suggested step 3 of Vendor evaluation: Recommend. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S4P1 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 3 of Vendor evaluation: Recommend. Its ordering is a specification, not observed timing."@en .
+
+abi:S4P1 a owl:Class ;
+    rdfs:label "Vendor evaluation"@en ;
+    abi:ledgerCode "S4-P1"@en ;
+    abi:ledgerHOWITIS "Compliance status"@en,
+        "Vendor performance score"@en ;
+    abi:ledgerHOWWEKNOW "Evaluation record"@en,
+        "Vendor catalogue"@en ;
+    abi:ledgerWHEN "On new requirement"@en ;
+    abi:ledgerWHERE "Operations centre"@en ;
+    abi:ledgerWHO "Oracle ERP"@en,
+        "Procurement officer"@en,
+        "S4 controller"@en,
+        "Vendor"@en ;
+    abi:ledgerWHY "Best-value, sovereign-fit sourcing"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:qualityMappingStatus "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A proposed ABI vendor evaluation process. Suggested steps: Define criteria → Score vendors → Recommend. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en,
+        "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S4P1Step2 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasIndicatorRecord ;
+            owl:someValuesFrom abi:ComplianceStatusIndicator ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:pursuesObjective ;
+            owl:someValuesFrom abi:S4P1Objective1 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:ProcurementOfficerParticipant ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:VendorParticipant ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000059 ;
+            owl:someValuesFrom abi:S4P1Specification ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:EvaluationRecordRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:S4ControllerParticipant ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasIndicatorRecord ;
+            owl:someValuesFrom abi:VendorPerformanceScoreIndicator ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S4P1Step1 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000066 ;
+            owl:someValuesFrom abi:OperationsCentreSite ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S4P1Step3 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:VendorCatalogueRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasExecutionCondition ;
+            owl:someValuesFrom abi:S4P1Condition1 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000055 ;
+            owl:someValuesFrom abi:S4P1ExecutionRole ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000199 ;
+            owl:someValuesFrom abi:S4P1Interval ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:usesInformation ;
+            owl:someValuesFrom abi:OracleERPSoftware ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:OracleERPHost ],
+        abi:LedgerProcess,
+        abi:S4Process,
+        bfo:BFO_0000015 ;
+    skos:altLabel "S4-P1"@en ;
+    skos:definition "A proposed ABI vendor evaluation process. Suggested steps: Define criteria → Score vendors → Recommend. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en .
+

@@ -1,15 +1,16 @@
 export const DEFAULT_NAV_ORDER = [
   'home',
+  'search',
   'apps',
   'files',
   'chat',
-  'search',
   'maps',
   'ontology',
   'graph',
   'datasets',
   'slides',
   'documents',
+  'sheets',
   'code',
   'marketplace',
 ] as const;
@@ -35,13 +36,21 @@ export function shiftForReorder(index: number, from: number, to: number): number
   return 0;
 }
 
+/** Earlier defaults: a saved order still equal to one of them was never customised. */
+const PREVIOUS_DEFAULT_NAV_ORDERS: readonly (readonly string[])[] = [
+  ['home', 'apps', 'files', 'chat', 'search', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'code', 'marketplace'],
+];
+
 /**
  * Keep a persisted order, drop unknown ids, append anything new from the catalog.
+ * An order that is still an earlier default follows the current default instead.
  */
 export function mergeNavOrder(
   persisted: readonly string[] | undefined,
   catalog: readonly NavSectionId[] = DEFAULT_NAV_ORDER,
 ): NavSectionId[] {
+  const saved = persisted?.join();
+  if (saved && PREVIOUS_DEFAULT_NAV_ORDERS.some(old => old.join() === saved)) persisted = catalog;
   const allowed = new Set<string>(catalog);
   const seen = new Set<string>();
   const next: NavSectionId[] = [];
@@ -76,6 +85,57 @@ export function moveNavItem<T extends string>(
   const clamped = Math.max(0, Math.min(adjusted, next.length));
   next.splice(clamped, 0, fromId);
   return next;
+}
+
+/** Icon-rail spacing. Loose is the normal gap; smaller steps pack before anything is hidden. */
+export const DOCK_NAV_GAPS = [4, 2, 0] as const;
+
+export type DockNavLayout = {
+  gap: number;
+  /** How many catalog icons stay on the rail. The rest go in the More list. */
+  visibleCount: number;
+  overflow: boolean;
+  /** Rail is shorter than one icon: scroll full-size icons instead of hiding them. */
+  scroll: boolean;
+};
+
+/**
+ * Fit dock icons without shrinking them.
+ * Use the loosest gap that fits. If none do, reserve one slot for a More list.
+ * If even that button does not fit, scroll the full-size icons.
+ */
+export function layoutDockNav(
+  available: number,
+  count: number,
+  itemSize: number,
+  padding = 24,
+): DockNavLayout {
+  const showAll = (gap: number): DockNavLayout => ({
+    gap,
+    visibleCount: count,
+    overflow: false,
+    scroll: false,
+  });
+  if (count <= 0) return showAll(DOCK_NAV_GAPS[0]);
+  if (!Number.isFinite(available) || available <= 0 || itemSize <= 0) return showAll(DOCK_NAV_GAPS[0]);
+
+  const fits = (gap: number, n: number) => {
+    if (n <= 0) return true;
+    const used = n * itemSize + (n - 1) * gap + padding;
+    return used <= available + 0.5;
+  };
+
+  for (const gap of DOCK_NAV_GAPS) {
+    if (fits(gap, count)) return showAll(gap);
+  }
+
+  for (let visible = count - 1; visible >= 0; visible--) {
+    if (fits(DOCK_NAV_GAPS[DOCK_NAV_GAPS.length - 1], visible + 1)) {
+      return { gap: 0, visibleCount: visible, overflow: true, scroll: false };
+    }
+  }
+
+  return { gap: 0, visibleCount: count, overflow: false, scroll: true };
 }
 
 /** Slot index from a pointer on the main axis. Origins/sizes are per item, in order. */

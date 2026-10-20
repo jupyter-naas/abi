@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Plus, Bot, User, AlertCircle, Brain, ChevronDown, X, ArrowUp, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square, Columns2 } from 'lucide-react';
+import { Send, Plus, Bot, AlertCircle, Brain, ChevronDown, X, ArrowUp, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square, Columns2 } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
@@ -17,19 +17,33 @@ import {
   officeSurfaceFromPath,
   pickDocumentsOfficeAgent,
   pickPaneOfficeAgent,
+  pickSheetsOfficeAgent,
   pickSlidesOfficeAgent,
   pickWorkspaceDefaultAgent,
 } from '@/lib/pick-workspace-default-agent';
+import { pickPaneAgentForSurface } from '@/lib/feature-agent-pane';
+import {
+  appAgentRefForPane,
+  featureChatContext,
+  getPaneSurfaceForPath,
+} from '@/lib/feature-office-agents';
+import { useFeaturePaneStore } from '@/stores/feature-pane';
 import { useModelsStore, modelDisplayName } from '@/stores/models';
-import { useSkillsStore, type Skill, type SkillScope } from '@/stores/skills';
+import { noteSkillsToolResult, useSkillsStore, type Skill } from '@/stores/skills';
 import { useSecretsStore } from '@/stores/secrets';
 import { dispatchDocumentUpdated, isDocumentsWriteTool, useDocumentsStore } from '@/stores/documents';
 import { dispatchSlidesDeckUpdated, isSlidesWriteTool, useSlidesStore } from '@/stores/slides';
+import { noteAppProjectToolResult, noteAppProjectToolStart } from '@/stores/app-projects';
 import {
   sectionsDocumentCardFromToolCalls,
   sectionsDocumentTitleFromToolOutput,
 } from '@/components/documents/documents-card';
 import { DocumentsCardView } from '@/components/documents/documents-deck-card-view';
+import {
+  dispatchSheetsWorkbookUpdated,
+  isSheetsWriteTool,
+  useSheetsStore,
+} from '@/stores/sheets';
 import {
   slidesDeckCardFromToolCalls,
   slidesDeckTitleFromToolOutput,
@@ -63,6 +77,7 @@ import { firstUserPrompt } from '@/lib/office-auto-title';
 import { openDocumentBranch, openDocumentPath } from '@/lib/documents-pane-conversation';
 import { autoTitleOpenDeckIfNeeded } from '@/lib/slides-project-actions';
 import { slidesOpenDeckBranch, slidesOpenDeckPath } from '@/lib/slides-pane-conversation';
+import { sheetsOpenWorkbookBranch, sheetsOpenWorkbookPath } from '@/lib/sheets-pane-conversation';
 import { ContextUsageMeter } from './context-usage-meter';
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 import { getLogoUrl } from '@/lib/logo-url';
@@ -70,8 +85,8 @@ import { activeSuggestions, type ChatSuggestion } from '@/lib/suggestion-row';
 
 const getApiBase = () => getApiUrl();
 
-// Max image size for uploads (5MB)
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+// Max file size for chat uploads (10MB)
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 const SUPPORTED_DOCUMENT_EXTENSIONS = ['pdf', 'docx', 'pptx', 'txt', 'md', 'json', 'csv'];
 const ATTACHMENT_ACCEPT = 'image/jpeg,image/png,image/gif,image/webp,.pdf,.docx,.pptx,.txt,.md,.json,.csv';
@@ -93,14 +108,14 @@ const BUILTIN_SLASH_COMMANDS = [
   {
     slug: 'create-skill',
     name: 'Create a skill',
-    description: 'Ask the agent to draft a reusable skill prompt',
+    description: 'Hand the task to the Skills agent, which writes and saves it',
   },
 ];
 
 function formatSkillListing(skills: Skill[]): string {
   const enabled = skills.filter((s) => s.enabled);
   if (enabled.length === 0) {
-    return 'No skills yet. Type `/create-skill <what the skill should do>` and I will draft one for you.';
+    return 'No skills yet. Type `/create-skill <what the skill should do>` and the Skills agent will write and save one.';
   }
   const lines = [...enabled]
     .sort((a, b) => a.slug.localeCompare(b.slug))
@@ -113,206 +128,8 @@ function formatSkillListing(skills: Skill[]): string {
     '',
     ...lines,
     '',
-    'Run one with `/<slug> [extra instructions]`, or `/create-skill <description>` to create a new one.',
+    'Run one with `/<slug> [extra instructions]`, or `/create-skill <description>` to have the Skills agent add one.',
   ].join('\n');
-}
-
-/** Builtin slash commands that can never be skill slugs. */
-const RESERVED_SKILL_SLUGS = new Set(['skills', 'create-skill']);
-
-function normalizeSkillSlug(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/_/g, '-')
-    .replace(/[^a-z0-9-]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
-/** Prefer a task slug; never keep reserved builtins like create-skill. */
-function suggestSkillSlug(slug: string | undefined, name: string): string {
-  for (const candidate of [slug ?? '', name, `${name}-task`, 'custom-skill']) {
-    const normalized = normalizeSkillSlug(candidate);
-    if (normalized && !RESERVED_SKILL_SLUGS.has(normalized)) {
-      return normalized;
-    }
-  }
-  return 'custom-skill';
-}
-
-/** Card rendered for ```skill fenced blocks in assistant messages: shows the
- *  agent's skill draft with a scope picker and a one-click save. */
-function SkillDraftCard({ raw }: { raw: string }) {
-  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
-  const createSkill = useSkillsStore((s) => s.createSkill);
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [scope, setScope] = useState<SkillScope>('user');
-  const [showPrompt, setShowPrompt] = useState(false);
-  const [slugOverride, setSlugOverride] = useState<string | null>(null);
-  const [savedSlug, setSavedSlug] = useState<string | null>(null);
-
-  const draft = useMemo(() => {
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed.name === 'string' && typeof parsed.prompt === 'string') {
-        const name = parsed.name as string;
-        const rawSlug = typeof parsed.slug === 'string' ? (parsed.slug as string) : undefined;
-        const suggested = suggestSkillSlug(rawSlug, name);
-        return {
-          name,
-          slug: suggested,
-          originalSlug: rawSlug ? normalizeSkillSlug(rawSlug) : undefined,
-          description:
-            typeof parsed.description === 'string' ? (parsed.description as string) : undefined,
-          prompt: parsed.prompt as string,
-        };
-      }
-    } catch {
-      // Partial JSON while the message is still streaming
-    }
-    return null;
-  }, [raw]);
-
-  const effectiveSlug = slugOverride ?? draft?.slug ?? '';
-  const remappedReserved =
-    !!draft?.originalSlug &&
-    RESERVED_SKILL_SLUGS.has(draft.originalSlug) &&
-    effectiveSlug !== draft.originalSlug;
-
-  // Distinguish "still streaming" from "settled but unparseable". If the raw
-  // content stops growing for a moment and still won't parse, the draft was
-  // most likely truncated (e.g. the model hit max_tokens) — show an error and
-  // let the user retry, rather than spinning "Drafting skill…" forever.
-  const [settledUnparseable, setSettledUnparseable] = useState(false);
-  useEffect(() => {
-    if (draft) {
-      setSettledUnparseable(false);
-      return;
-    }
-    const snapshot = raw;
-    const timer = setTimeout(() => {
-      // Same content 1.2s later and still no valid draft → treat as truncated.
-      setSettledUnparseable((prev) => (snapshot === raw ? true : prev));
-    }, 1200);
-    return () => clearTimeout(timer);
-  }, [raw, draft]);
-
-  const handleSave = async () => {
-    if (!currentWorkspaceId || !draft) return;
-    const slug = suggestSkillSlug(effectiveSlug, draft.name);
-    setSaveState('saving');
-    setSaveError(null);
-    try {
-      const skill = await createSkill(currentWorkspaceId, {
-        name: draft.name,
-        slug,
-        description: draft.description,
-        prompt: draft.prompt,
-        scope,
-      });
-      setSavedSlug(skill.slug);
-      setSaveState('saved');
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Failed to save skill');
-      setSaveState('error');
-    }
-  };
-
-  if (!draft) {
-    if (settledUnparseable) {
-      return (
-        <div className="my-3 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-          The skill draft was cut off before it finished (the response likely hit its
-          length limit). Ask the agent to draft it again — try a shorter description.
-        </div>
-      );
-    }
-    return (
-      <div className="my-3 flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-        <Loader2 size={12} className="animate-spin" />
-        Drafting skill…
-      </div>
-    );
-  }
-
-  return (
-    <div className="my-3 rounded-lg border border-border bg-muted/30 p-3">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-foreground">{draft.name}</p>
-          <div className="mt-1 flex items-center gap-1 font-mono text-xs text-workspace-accent">
-            <span>/</span>
-            <input
-              type="text"
-              value={effectiveSlug}
-              onChange={(e) => {
-                setSlugOverride(normalizeSkillSlug(e.target.value));
-                setSaveError(null);
-              }}
-              disabled={saveState === 'saved' || saveState === 'saving'}
-              className="min-w-0 flex-1 rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs text-workspace-accent outline-none focus-visible:ring-1 focus-visible:ring-workspace-accent disabled:opacity-60"
-              aria-label="Skill command slug"
-            />
-          </div>
-          {remappedReserved && (
-            <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
-              /{draft.originalSlug} is reserved. Using /{effectiveSlug} instead.
-            </p>
-          )}
-          {draft.description && (
-            <p className="mt-1 text-xs text-muted-foreground">{draft.description}</p>
-          )}
-        </div>
-      </div>
-
-      <button
-        type="button"
-        onClick={() => setShowPrompt(!showPrompt)}
-        className="mt-2 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-      >
-        {showPrompt ? 'Hide prompt' : 'Show prompt'}
-      </button>
-      {showPrompt && (
-        <pre className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap rounded-md border border-border bg-background p-2 text-xs text-muted-foreground">
-          {draft.prompt}
-        </pre>
-      )}
-
-      <div className="mt-3 flex items-center gap-2">
-        <select
-          value={scope}
-          onChange={(e) => setScope(e.target.value as SkillScope)}
-          disabled={saveState === 'saved' || saveState === 'saving'}
-          className="rounded-md border border-border bg-background px-2 py-1 text-xs"
-        >
-          <option value="user">Private (only me)</option>
-          <option value="workspace">Workspace</option>
-          <option value="organization">Organization</option>
-        </select>
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={saveState === 'saved' || saveState === 'saving' || !effectiveSlug}
-          className={cn(
-            'flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors',
-            saveState === 'saved'
-              ? 'bg-workspace-accent/15 text-workspace-accent'
-              : 'bg-workspace-accent text-white hover:opacity-90'
-          )}
-        >
-          {saveState === 'saving' && <Loader2 size={12} className="animate-spin" />}
-          {saveState === 'saved' && <Check size={12} />}
-          {saveState === 'saved'
-            ? `Saved — use /${savedSlug ?? effectiveSlug}`
-            : saveState === 'saving'
-              ? 'Saving…'
-              : 'Save skill'}
-        </button>
-      </div>
-      {saveError && <p className="mt-2 text-xs text-destructive">{saveError}</p>}
-    </div>
-  );
 }
 
 /** Split text into segments; URLs become anchor elements so they get href styling and preview */
@@ -763,13 +580,17 @@ export function ChatInterface({
 } = {}) {
   const isPane = surface === 'pane';
   const [mounted, setMounted] = useState(false);
-  const [input, setInput] = useState('');
+  const [input, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [requestSentAt, setRequestSentAt] = useState<number | null>(null);
   const isSubmittingRef = useRef(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const streamControllerRef = useRef<AbortController | null>(null);
-  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  // Stop can be pressed before the request is even built (the composer button
+  // flips as soon as the message is sent, but the AbortController is only
+  // created several awaits later). This ref carries that intent across the gap
+  // so the button is never a no-op.
+  const stopRequestedRef = useRef(false);
   const [showConnecting, setShowConnecting] = useState(false);
   const gotFirstTokenRef = useRef(false);
   const connectingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -801,6 +622,32 @@ export function ChatInterface({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // True while the composer only shows a suggestion preview (hover writes the
+  // prompt into the textarea without the caret ever entering it). The composer
+  // keeps its current height for the whole preview: autosizing per hovered
+  // suggestion makes the box grow and shrink as the pointer moves between a
+  // one-line and a two-line suggestion, which shifts the list under the pointer
+  // and reads as a flicker. Height follows the content again as soon as the
+  // caret is in the textarea.
+  const suggestionPreviewRef = useRef(false);
+
+  // Every composer write that isn't a hover preview (typing, sidebar seeds,
+  // slash completion, send) leaves preview mode, so autosizing resumes.
+  const setInput = useCallback((value: string) => {
+    suggestionPreviewRef.current = false;
+    setInputValue(value);
+  }, []);
+
+  const previewSuggestion = useCallback((value: string) => {
+    suggestionPreviewRef.current = true;
+    setInputValue(value);
+  }, []);
+
+  const clearSuggestionPreview = useCallback(() => {
+    suggestionPreviewRef.current = true;
+    setInputValue('');
+  }, []);
+
   const autosizeComposer = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -814,12 +661,23 @@ export function ChatInterface({
   }, []);
 
   useLayoutEffect(() => {
+    if (suggestionPreviewRef.current) return;
     autosizeComposer();
   }, [input, autosizeComposer]);
+
+  // Taking the caret into the composer ends the preview: whatever text is in
+  // there is now editable, so it gets a matching height.
+  const handleComposerFocus = useCallback(() => {
+    if (!suggestionPreviewRef.current) return;
+    suggestionPreviewRef.current = false;
+    autosizeComposer();
+  }, [autosizeComposer]);
 
   const focusChatInput = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
+
+    suggestionPreviewRef.current = false;
 
     // Ensure the textarea is in the tree and laid out (new conversation switches
     // can re-render the composer).
@@ -886,6 +744,10 @@ export function ChatInterface({
         slidesSlug:
           isPane && officeSurface.onSlides
             ? useSlidesStore.getState().selectedSlug ?? undefined
+            : undefined,
+        sheetsSlug:
+          isPane && officeSurface.onSheets
+            ? useSheetsStore.getState().selectedSlug ?? undefined
             : undefined,
         documentsSlug:
           isPane && officeSurface.onDocuments
@@ -1019,6 +881,36 @@ export function ChatInterface({
     documentsSectionCount,
   ]);
 
+  const sheetsSlug = useSheetsStore((s) => s.selectedSlug);
+  const sheetsTitle = useSheetsStore((s) => s.selectedTitle);
+  const sheetsMode = useSheetsStore((s) => s.editorMode);
+  const sheetsSelectedIndex = useSheetsStore((s) => s.selectedIndex);
+  const sheetsTabCount = useSheetsStore((s) => s.tabCount);
+  const sheetsChatContext = useMemo(() => {
+    const onSheets = officeSurfaceFromPath(pathname).onSheets && Boolean(sheetsSlug);
+    if (!onSheets || !sheetsSlug) return null;
+    return {
+      sheets: {
+        slug: sheetsSlug,
+        title: sheetsTitle || sheetsSlug,
+        mode: sheetsMode,
+        workspace_id: currentWorkspaceId || undefined,
+        branch: sheetsOpenWorkbookBranch(currentWorkspaceId || '', sheetsSlug),
+        path: sheetsOpenWorkbookPath(currentWorkspaceId || '', sheetsSlug),
+        selected_index: sheetsTabCount > 0 ? sheetsSelectedIndex : undefined,
+        sheet_count: sheetsTabCount > 0 ? sheetsTabCount : undefined,
+      },
+    };
+  }, [
+    pathname,
+    sheetsSlug,
+    sheetsTitle,
+    sheetsMode,
+    currentWorkspaceId,
+    sheetsSelectedIndex,
+    sheetsTabCount,
+  ]);
+
   const codeActiveBranch = useCodeStore((s) => s.activeBranch);
   const codeSelectedRepo = useCodeStore((s) => s.selectedRepoId);
   const codingChatContext = useMemo(() => {
@@ -1036,19 +928,29 @@ export function ChatInterface({
     };
   }, [pathname, codeActiveBranch, codeSelectedRepo]);
 
+  // Pane only: the section the user is on and its open item (Apps, ...).
+  // Chat and Slides return null (orchestrator surface / own slides block).
+  const featureResource = useFeaturePaneStore((s) => s.resource);
+  const featurePaneContext = useMemo(
+    () => (isPane ? featureChatContext(pathname, featureResource) : null),
+    [isPane, pathname, featureResource],
+  );
+
   const chatRequestContext = useMemo(() => {
     const merged = {
       ...(slidesChatContext ?? {}),
       ...(documentsChatContext ?? {}),
+      ...(sheetsChatContext ?? {}),
       ...(codingChatContext ?? {}),
+      ...(featurePaneContext ?? {}),
     };
     return Object.keys(merged).length > 0 ? merged : null;
-  }, [slidesChatContext, documentsChatContext, codingChatContext]);
+  }, [slidesChatContext, documentsChatContext, sheetsChatContext, codingChatContext, featurePaneContext]);
 
   useEffect(() => {
     if (!isPane) return;
     const surface = officeSurfaceFromPath(pathname);
-    if (!surface.onDocuments && !surface.onSlides) return;
+    if (!surface.onDocuments && !surface.onSlides && !surface.onSheets) return;
     const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
     const picked = pickPaneOfficeAgent(agents, surface);
     if (picked && useWorkspaceStore.getState().paneAgent !== picked.id) {
@@ -1097,7 +999,7 @@ export function ChatInterface({
     setInput(pendingComposerText);
     useWorkspaceStore.getState().setPendingComposerText(null);
     focusChatInput();
-  }, [pendingComposerText, mounted, focusChatInput, isPane]);
+  }, [pendingComposerText, mounted, focusChatInput, isPane, setInput]);
 
   // ---------- Slash-command autocomplete ----------
   const [slashIndex, setSlashIndex] = useState(0);
@@ -1140,7 +1042,7 @@ export function ChatInterface({
       setInput(`/${slug} `);
       focusChatInput();
     },
-    [focusChatInput]
+    [focusChatInput, setInput]
   );
 
   // Listen for new messages from WebSocket
@@ -1572,7 +1474,7 @@ export function ChatInterface({
       
       // Validate file size
       if (file.size > MAX_IMAGE_SIZE) {
-        setImageError(`File too large: ${file.name}. Max size is 5MB.`);
+        setImageError(`File too large: ${file.name}. Max size is 10MB.`);
         continue;
       }
       
@@ -1937,18 +1839,36 @@ export function ChatInterface({
     let effectiveAgent = agentOverride ?? selectedAgent;
     const officeSurface = officeSurfaceFromPath(pathname);
     // Pane can hydrate with paneAgent="" before agents sync; resolve the
-    // workspace default so the stream has a real agent id. Route wins over a
-    // leftover Documents/Slides bind from the other office surface.
+    // section's office agent (else the workspace default) so the stream has
+    // a real agent id. Route wins over a leftover Documents/Slides bind from
+    // the other office surface.
     if (!effectiveAgent) {
       const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
       const resolved =
-        pickPaneOfficeAgent(agents, officeSurface) ?? pickWorkspaceDefaultAgent(agents);
+        officeSurface.onSlides || officeSurface.onDocuments || officeSurface.onSheets
+          ? (pickPaneOfficeAgent(agents, officeSurface) ?? pickWorkspaceDefaultAgent(agents))
+          : isPane
+            ? pickPaneAgentForSurface(
+                agents,
+                getPaneSurfaceForPath(pathname),
+                appAgentRefForPane(pathname, useFeaturePaneStore.getState().resource),
+              )
+            : pickWorkspaceDefaultAgent(agents);
       if (resolved) {
         effectiveAgent = resolved.id;
         if (isPane) {
           useWorkspaceStore.getState().setPaneAgent(resolved.id);
         } else {
           useWorkspaceStore.getState().setSelectedAgent(resolved.id);
+        }
+      }
+    } else if (officeSurface.onSheets) {
+      const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+      const sheets = pickSheetsOfficeAgent(agents);
+      if (sheets) {
+        effectiveAgent = sheets.id;
+        if (isPane && useWorkspaceStore.getState().paneAgent !== sheets.id) {
+          useWorkspaceStore.getState().setPaneAgent(sheets.id);
         }
       }
     } else if (officeSurface.onSlides) {
@@ -2061,14 +1981,16 @@ export function ChatInterface({
           addMessage(conversationId, { role: 'user', content: sourceText.trim() });
           addMessage(conversationId, {
             role: 'system',
-            content: `Unknown command \`/${command}\`. Type \`/skills\` to see available skills or \`/create-skill <description>\` to create one.`,
+            content: `Unknown command \`/${command}\`. Type \`/skills\` to see available skills or \`/create-skill <description>\` to have the Skills agent add one.`,
           });
           finishLocalCommand();
           return;
         }
       }
       // command === 'create-skill', or a matched skill slug: fall through to the
-      // normal send flow below, unmodified.
+      // normal send flow below, unmodified. /create-skill reaches the agent as
+      // plain text, and the orchestrator hands it to the Skills agent, which
+      // writes the prompt and saves the skill itself.
     }
 
     const currentImages = [...attachedImages]; // Copy before clearing
@@ -2117,6 +2039,7 @@ export function ChatInterface({
     setImageError(null);
     // setSearchEnabled(false); // Reset search toggle after sending
     setRequestSentAt(Date.now());
+    stopRequestedRef.current = false;
     setIsLoading(true);
 
     try {
@@ -2202,7 +2125,6 @@ export function ChatInterface({
           const convNow = useWorkspaceStore.getState().conversations.find(c => c.id === conversationId);
           const lastMsg = convNow?.messages[convNow.messages.length - 1];
           assistantMessageIdRef = lastMsg?.id || null;
-          setStreamingMessageId(assistantMessageIdRef);
         }
         // Setup connecting indicator
         gotFirstTokenRef.current = false;
@@ -2268,6 +2190,10 @@ export function ChatInterface({
           if (isDocumentsWriteTool(rawTool)) {
             useDocumentsStore.getState().setAgentWriting(true);
           }
+          if (isSheetsWriteTool(rawTool)) {
+            useSheetsStore.getState().setAgentWriting(true);
+          }
+          noteAppProjectToolStart(rawTool);
         };
 
         const handleToolResponseEvent = (output: string) => {
@@ -2292,19 +2218,24 @@ export function ChatInterface({
 
           // After Abi writes a Slides deck, nudge the open preview to reload.
           const raw = (target.rawName || target.toolName || '').toLowerCase();
-          if (isSlidesWriteTool(raw)) {
+          if (isSlidesWriteTool(raw, output)) {
             let slug: string | undefined;
             let writeFailed = false;
             let projectRenamed = false;
+            let parsedOutput: Record<string, unknown> | null = null;
             try {
-              const parsed = JSON.parse(output) as {
+              parsedOutput = JSON.parse(output) as {
                 slug?: string;
                 error?: unknown;
                 project_renamed?: unknown;
+                created?: unknown;
+                nexus_shipped?: unknown;
+                title?: unknown;
+                workspace_id?: unknown;
               };
-              if (typeof parsed?.slug === 'string') slug = parsed.slug;
-              if (parsed && parsed.error) writeFailed = true;
-              if (parsed?.project_renamed === true) projectRenamed = true;
+              if (typeof parsedOutput?.slug === 'string') slug = parsedOutput.slug;
+              if (parsedOutput && parsedOutput.error) writeFailed = true;
+              if (parsedOutput?.project_renamed === true) projectRenamed = true;
             } catch {
               /* tool output may be plain text */
             }
@@ -2319,6 +2250,9 @@ export function ChatInterface({
                 source: target.rawName || target.toolName,
                 title: projectRenamed ? deckTitle : undefined,
               });
+              // New decks from chat (create_slides_project and other deck-shaped
+              // publishes) stay in chat: the presentation card is derived from
+              // tool output and the user opens it. Do not auto-navigate.
             }
           }
           if (isDocumentsWriteTool(raw)) {
@@ -2342,12 +2276,38 @@ export function ChatInterface({
               });
             }
           }
+          if (isSheetsWriteTool(raw)) {
+            let slug: string | undefined;
+            let writeFailed = false;
+            try {
+              const parsed = JSON.parse(output) as { slug?: string; error?: unknown; title?: string };
+              if (typeof parsed?.slug === 'string') slug = parsed.slug;
+              if (typeof parsed?.title === 'string' && parsed.title.trim()) {
+                useSheetsStore.getState().setSelectedTitle(parsed.title.trim());
+              }
+              if (parsed && parsed.error) writeFailed = true;
+            } catch {
+              /* tool output may be plain text */
+            }
+            useSheetsStore.getState().setAgentWriting(false);
+            if (!writeFailed) {
+              dispatchSheetsWorkbookUpdated({ slug, source: target.rawName || target.toolName });
+            }
+          }
           if (
             raw.includes('write_coding') ||
             raw.includes('run_in_coding')
           ) {
             dispatchCodeFileUpdated({ source: target.rawName || target.toolName });
           }
+          // After the Apps agent edits a project, reload the editor and preview.
+          noteAppProjectToolResult(target.rawName || target.toolName || '', output);
+          // After the Skills agent saves a skill, /<slug> must resolve at once.
+          noteSkillsToolResult(
+            target.rawName || target.toolName || '',
+            output,
+            useWorkspaceStore.getState().currentWorkspaceId,
+          );
 
           const toolUrls = extractUrlsFromContent(output);
           if (toolUrls.length > 0) {
@@ -2477,6 +2437,7 @@ export function ChatInterface({
         try {
           const controller = new AbortController();
           streamControllerRef.current = controller;
+          if (stopRequestedRef.current) controller.abort();
           const response = await fetch(`${getApiBase()}/api/chat/stream`, {
           method: 'POST',
           headers: { 
@@ -2541,10 +2502,9 @@ export function ChatInterface({
                 // First frame swap: the backend emits the real DB uuid for the
                 // assistant row on the opening event. Replace the local
                 // placeholder id so subsequent PATCHes (metadata, feedback)
-                // hit the real row. We use the local ``assistantMessageIdRef``
-                // because the React state ``streamingMessageId`` captured in
-                // this closure is stale (the setState before the SSE loop
-                // hasn't flushed yet).
+                // hit the real row. The id lives in the local
+                // ``assistantMessageIdRef`` rather than React state precisely
+                // because this closure would capture a stale value.
                 if (typeof parsed.assistant_message_id === 'string' && parsed.assistant_message_id) {
                   const backendId = parsed.assistant_message_id as string;
                   if (assistantMessageIdRef && assistantMessageIdRef !== backendId) {
@@ -2553,7 +2513,6 @@ export function ChatInterface({
                       assistantMessageIdRef,
                       backendId,
                     );
-                    setStreamingMessageId(backendId);
                     assistantMessageIdRef = backendId;
                   }
                 }
@@ -2647,20 +2606,26 @@ export function ChatInterface({
         // Mark any still-running tool as done
         streamToolCalls.forEach((t) => { if (t.status === 'running') t.status = 'done'; });
         const finalToolCalls = streamToolCalls.length > 0 ? [...streamToolCalls] : undefined;
-        updateLastMessage(
-          conversationId!,
-          finalContent,
-          thinkingDuration,
-          streamSources.length > 0 ? streamSources : undefined,
-          hasDetailedActivity ? streamActivityLine : null,
-          finalToolCalls,
-          executionTime,
-        );
+        // Sticky office agents sometimes end the SSE with call_model + [DONE]
+        // and no text. Drop the empty assistant row instead of leaving a blank bubble.
+        if (!finalContent && !(finalToolCalls && finalToolCalls.length > 0) && assistantMessageIdRef) {
+          useWorkspaceStore.getState().removeMessage(conversationId!, assistantMessageIdRef);
+        } else {
+          updateLastMessage(
+            conversationId!,
+            finalContent,
+            thinkingDuration,
+            streamSources.length > 0 ? streamSources : undefined,
+            hasDetailedActivity ? streamActivityLine : null,
+            finalToolCalls,
+            executionTime,
+          );
+        }
         // Persist execution metadata to backend. Keyed on ``assistantMessageIdRef``
-        // for the same reason as the id swap above: the React state
-        // ``streamingMessageId`` captured in this closure is stale (still null on
-        // the first turn), which silently skipped this PATCH and lost the steps
-        // and execution time on reload.
+        // for the same reason as the id swap above: React state captured in
+        // this closure would be stale (still null on the first turn), which
+        // silently skipped this PATCH and lost the steps and execution time on
+        // reload.
         if (assistantMessageIdRef && (finalToolCalls || executionTime !== undefined)) {
           const apiUrl = getApiUrl();
           authFetch(
@@ -2707,7 +2672,6 @@ export function ChatInterface({
         }
       } finally {
         setIsStreaming(false);
-        setStreamingMessageId(null);
         useSlidesStore.getState().setAgentWriting(false);
         if (connectingTimerRef.current) clearTimeout(connectingTimerRef.current);
         setShowConnecting(false);
@@ -2716,8 +2680,13 @@ export function ChatInterface({
       } else {
         // Non-streaming for other providers
         const thinkingStartTime = Date.now();
-        
+
+        const controller = new AbortController();
+        streamControllerRef.current = controller;
+        if (stopRequestedRef.current) controller.abort();
+
         const response = await fetch(`${getApiBase()}/api/chat/complete`, {
+          signal: controller.signal,
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
@@ -2832,7 +2801,10 @@ export function ChatInterface({
       // } else {
       // For other errors, update the placeholder if it exists, otherwise add new message
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      if (conversationId) {
+      // Stop leaves whatever already arrived in place; it is not a failure.
+      const wasAborted =
+        (error as { name?: string } | null)?.name === 'AbortError' || stopRequestedRef.current;
+      if (conversationId && !wasAborted) {
           if (isStreaming) {
             updateLastMessage(conversationId, `❌ Error: ${errorMessage}\n\nPlease try again or check your provider settings.`);
           } else {
@@ -2847,6 +2819,7 @@ export function ChatInterface({
       setIsLoading(false);
       setIsStreaming(false);
       isSubmittingRef.current = false;
+      streamControllerRef.current = null;
       useSlidesStore.getState().setAgentWriting(false);
     }
   };
@@ -2893,6 +2866,7 @@ export function ChatInterface({
   }, []);
 
   const stableStopStream = useCallback(() => {
+    stopRequestedRef.current = true;
     streamControllerRef.current?.abort();
   }, []);
 
@@ -2918,7 +2892,7 @@ export function ChatInterface({
       new CustomEvent(COMPARE_SEND_EVENT, { detail: { text } })
     );
     setInput('');
-  }, [input, isLoading]);
+  }, [input, isLoading, setInput]);
 
   // Whether the "Suggestions" / "Files" / artifact-identity containers render
   // above the composer input box. Order is Suggestions, then Files, then
@@ -2957,8 +2931,6 @@ export function ChatInterface({
                 message={message}
                 currentSelectedAgent={selectedAgent}
                 showConnecting={showConnecting}
-                showStop={streamingMessageId === message.id}
-                onStop={stableStopStream}
                 onPreviewUrl={setPreviewUrl}
                 requestSentAt={requestSentAt}
                 onRegenerate={stableRegenerate}
@@ -2967,8 +2939,24 @@ export function ChatInterface({
             ))}
             {isLoading && !isStreaming && (
               <div className="flex items-start gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-workspace-accent text-white">
-                  <Bot size={16} />
+                {/* Same geometry as an answer: avatar, gap, filled bubble.
+                    The portrait pulses with the existing bounce while the reply starts. */}
+                <div
+                  className={cn(
+                    'flex h-8 w-8 flex-shrink-0 animate-pulse items-center justify-center overflow-hidden rounded-md',
+                    selectedAgentData?.logoUrl ? 'bg-transparent' : 'bg-workspace-accent text-white'
+                  )}
+                >
+                  {selectedAgentData?.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={getLogoUrl(selectedAgentData.logoUrl)}
+                      alt={selectedAgentData.name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <Bot size={16} />
+                  )}
                 </div>
                 <div className="flex items-center gap-2 rounded-2xl bg-muted px-4 py-3">
                   <div className="flex gap-1">
@@ -3000,8 +2988,8 @@ export function ChatInterface({
                   agentId={selectedAgent}
                   suggestions={selectedAgentData?.suggestions}
                   onSuggestionClick={(prompt) => handleSubmit(undefined, prompt)}
-                  onSuggestionHover={(value) => setInput(value)}
-                  onSuggestionLeave={() => setInput('')}
+                  onSuggestionHover={previewSuggestion}
+                  onSuggestionLeave={clearSuggestionPreview}
                 />
               )}
               <FilesBlock
@@ -3022,8 +3010,8 @@ export function ChatInterface({
                   agentId={selectedAgent}
                   suggestions={selectedAgentData?.suggestions}
                   onSuggestionClick={(prompt) => handleSubmit(undefined, prompt)}
-                  onSuggestionHover={(value) => setInput(value)}
-                  onSuggestionLeave={() => setInput('')}
+                  onSuggestionHover={previewSuggestion}
+                  onSuggestionLeave={clearSuggestionPreview}
                 />
               )}
               <DocumentsFilesBlock
@@ -3043,8 +3031,8 @@ export function ChatInterface({
                 agentId={selectedAgent}
                 suggestions={selectedAgentData?.suggestions}
                 onSuggestionClick={(prompt) => handleSubmit(undefined, prompt)}
-                onSuggestionHover={(value) => setInput(value)}
-                onSuggestionLeave={() => setInput('')}
+                onSuggestionHover={previewSuggestion}
+                onSuggestionLeave={clearSuggestionPreview}
               />
             )
           )}
@@ -3273,6 +3261,7 @@ export function ChatInterface({
                 <textarea
                   ref={textareaRef}
                   value={input}
+                  onFocus={handleComposerFocus}
                   onChange={(e) => handleInputChange(e.target.value)}
                   onKeyDown={(e) => {
                     if (showSlashMenu) {
@@ -3465,18 +3454,33 @@ export function ChatInterface({
                       </button>
                     )}
 
-                    {/* Send: org-radius filled square (not a circle) */}
-                    <button
-                      type="submit"
-                      disabled={(!input.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0) || isLoading}
-                      className={cn(
-                        'chat-composer-action chat-composer-action-send',
-                        (input.trim() || attachedImages.length > 0 || pendingFileAttachments.length > 0) && !isLoading && 'is-ready'
-                      )}
-                      aria-label="Send message"
-                    >
-                      <ArrowUp size={18} />
-                    </button>
+                    {/* Send / Stop: org-radius filled square (not a circle).
+                        One control, two states — once the message is sent it
+                        becomes Stop, so cancelling is where the hand already is
+                        rather than out in the answer bubble. */}
+                    {isLoading || isStreaming ? (
+                      <button
+                        type="button"
+                        onClick={stableStopStream}
+                        className="chat-composer-action chat-composer-action-send is-ready"
+                        title="Stop generation"
+                        aria-label="Stop generation"
+                      >
+                        <Square size={14} fill="currentColor" />
+                      </button>
+                    ) : (
+                      <button
+                        type="submit"
+                        disabled={!input.trim() && attachedImages.length === 0 && pendingFileAttachments.length === 0}
+                        className={cn(
+                          'chat-composer-action chat-composer-action-send',
+                          (input.trim() || attachedImages.length > 0 || pendingFileAttachments.length > 0) && 'is-ready'
+                        )}
+                        aria-label="Send message"
+                      >
+                        <ArrowUp size={18} />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -3617,26 +3621,6 @@ function EmptyState({
   );
 }
 
-function TypingDots() {
-  // Discrete caret blink, consistent with login header
-  const [on, setOn] = useState(true);
-  useEffect(() => {
-    const id = setInterval(() => setOn(v => !v), 520);
-    return () => clearInterval(id);
-  }, []);
-  return (
-    <span
-      className="inline-block align-baseline w-[2px]"
-      style={{
-        backgroundColor: 'currentColor',
-        height: '1em',
-        transform: 'translateY(0.08em)',
-        opacity: on ? 0.9 : 0,
-      }}
-    />
-  );
-}
-
 function formatToolCallLabel(prefix: string, name: string): string {
   if (prefix === 'Agent') return name;
   if (prefix === 'Tool') return name;
@@ -3656,21 +3640,19 @@ function stripToolCallMarkup(content: string): string {
 function ToolCallsDropdown({
   toolCalls,
   isProcessing,
-  showStop,
-  onStop,
   startTime,
 }: {
   toolCalls: ToolCall[];
   isProcessing: boolean;
-  showStop: boolean;
-  onStop: () => void;
   startTime?: number | null;
 }) {
-  const [isOpen, setIsOpen] = useState(true);
-  const [autoCollapsed, setAutoCollapsed] = useState(false);
+  // Collapsed by default, including while the run is in flight: the collapsed
+  // view already shows the live last step, which is what the old auto-open was
+  // for. Expanding is therefore always a deliberate act, so nothing collapses
+  // it again behind the user's back.
+  const [isOpen, setIsOpen] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [lastDurationSeconds, setLastDurationSeconds] = useState<number | null>(null);
-  const wasProcessingRef = useRef(false);
   const processingStartRef = useRef<number | null>(null);
 
   const formatDuration = (seconds: number) => {
@@ -3682,24 +3664,12 @@ function ToolCallsDropdown({
   };
 
   useEffect(() => {
-    if (isProcessing) {
-      wasProcessingRef.current = true;
-      if (processingStartRef.current === null) {
-        processingStartRef.current = startTime ?? Date.now();
-        setElapsedSeconds(Math.floor((Date.now() - processingStartRef.current) / 1000));
-      }
-      if (autoCollapsed) {
-        setIsOpen(true);
-        setAutoCollapsed(false);
-      }
-    } else if (wasProcessingRef.current && !autoCollapsed) {
-      const timer = setTimeout(() => {
-        setIsOpen(false);
-        setAutoCollapsed(true);
-      }, 3000);
-      return () => clearTimeout(timer);
+    if (!isProcessing) return;
+    if (processingStartRef.current === null) {
+      processingStartRef.current = startTime ?? Date.now();
+      setElapsedSeconds(Math.floor((Date.now() - processingStartRef.current) / 1000));
     }
-  }, [isProcessing, autoCollapsed, startTime]);
+  }, [isProcessing, startTime]);
 
   useEffect(() => {
     if (!isProcessing) {
@@ -3725,6 +3695,16 @@ function ToolCallsDropdown({
     return () => clearInterval(interval);
   }, [isProcessing]);
 
+  // Expanded always shows the whole run. Collapsed shows the running step
+  // while there is one — that is the live progress line — and nothing at all
+  // once the answer has landed, where the header's "N steps" already says
+  // what happened and the detail is a click away.
+  const visibleToolCalls = isOpen
+    ? toolCalls
+    : isProcessing
+      ? toolCalls.slice(-1)
+      : [];
+
   const stepsLabel = `${toolCalls.length} step${toolCalls.length !== 1 ? 's' : ''}`;
   const headerLabel = isProcessing
     ? `Processing ${formatDuration(elapsedSeconds)}`
@@ -3743,32 +3723,17 @@ function ToolCallsDropdown({
         >
           <Wrench size={11} className="shrink-0" />
           <span className="flex-1 truncate text-left">{headerLabel}</span>
-          {isProcessing && (
-            <span className="inline-flex shrink-0">
-              <TypingDots />
-            </span>
-          )}
           <ChevronDown size={11} className={cn('shrink-0 transition-transform', isOpen && 'rotate-180')} />
         </button>
-        {showStop && (
-          <button
-            type="button"
-            className="relative z-20 shrink-0 rounded px-1.5 py-0.5 text-xs pointer-events-auto hover:bg-muted hover:text-foreground"
-            onPointerDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onStop();
-            }}
-            title="Stop generation"
-          >
-            Stop
-          </button>
-        )}
       </div>
 
-      {isOpen && (
-        <div className="mt-1.5 overflow-hidden rounded-lg border border-border/50 bg-background/50 divide-y divide-border/30">
-          {toolCalls.map((tool) => (
+      {/* Steps read as one continuous list rather than a stack of framed
+          boxes. Collapsed still shows the last step, so the header keeps
+          saying what the agent just did (or is doing) without being expanded;
+          opening it breaks out the whole run, each step still expandable. */}
+      {visibleToolCalls.length > 0 && (
+        <div className="mt-1.5 min-w-0">
+          {visibleToolCalls.map((tool) => (
             <ToolCallRow key={tool.id} tool={tool} />
           ))}
         </div>
@@ -3831,7 +3796,9 @@ function ToolCallRow({ tool }: { tool: ToolCall }) {
   }, [clipboardText]);
 
   return (
-    <div className="min-w-0 px-3 py-2">
+    // No horizontal padding: the row's own icon sits at the list's left edge,
+    // which puts its label on the same x as the header's label above it.
+    <div className="min-w-0 py-1">
       <button
         type="button"
         disabled={!hasDetails}
@@ -3911,8 +3878,6 @@ const MessageBubble = React.memo(function MessageBubble({
   message,
   currentSelectedAgent,
   showConnecting,
-  showStop,
-  onStop,
   onPreviewUrl,
   requestSentAt,
   onRegenerate,
@@ -3921,8 +3886,6 @@ const MessageBubble = React.memo(function MessageBubble({
   message: Message;
   currentSelectedAgent: string;
   showConnecting: boolean;
-  showStop: boolean;
-  onStop: () => void;
   onPreviewUrl?: (url: string) => void;
   requestSentAt?: number | null;
   onRegenerate?: (message: Message) => void;
@@ -4276,6 +4239,21 @@ const MessageBubble = React.memo(function MessageBubble({
           </LinkWithPreview>
         );
       },
+      // GFM tables are wider than the bubble: wrap them so they scroll inside
+      // it instead of spilling over the message. Cell styling lives in
+      // globals.css under .chat-message-body.
+      table: ({
+        children,
+        node: _node,
+        ...props
+      }: React.TableHTMLAttributes<HTMLTableElement> & {
+        children?: React.ReactNode;
+        node?: unknown;
+      }) => (
+        <div className="chat-table-scroll">
+          <table {...props}>{children}</table>
+        </div>
+      ),
       pre: ({
         children,
         ...props
@@ -4297,11 +4275,6 @@ const MessageBubble = React.memo(function MessageBubble({
                 .join('')
               : '';
         const copyKey = `${language || 'plain'}:${codeContent}`;
-
-        // ```skill blocks are agent-drafted skills — render the save card.
-        if (language === 'skill') {
-          return <SkillDraftCard raw={codeContent} />;
-        }
 
         return (
           <div className="my-5">
@@ -4329,41 +4302,41 @@ const MessageBubble = React.memo(function MessageBubble({
   );
 
   return (
-    <div className={cn('flex items-start gap-3', isUser && 'flex-row-reverse')}>
+    <div className={cn('flex items-start', isUser ? 'justify-end' : 'gap-3')}>
+      {/* Teams-style: the agent's icon anchors its answer on the left. A user
+          message needs no avatar — side and fill already identify it.
+          The offset drops it past the byline that opens the column, so its top
+          edge meets the bubble's, not the byline's. The three terms mirror the
+          byline's own box: its pt-0.5, its leading-4 line, and the column's
+          space-y-1 gap — change one of those and this has to follow. */}
+      {!isUser && (
+        <div
+          className={cn(
+            'mt-[calc(0.125rem+1rem+0.25rem)] flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-md',
+            agent?.logoUrl ? 'bg-transparent' : 'bg-workspace-accent text-white'
+          )}
+        >
+          {agent?.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={getLogoUrl(agent.logoUrl)}
+              alt={agent.name}
+              className="h-full w-full object-cover"
+              onError={(event) => {
+                event.currentTarget.style.display = 'none';
+              }}
+            />
+          ) : (
+            <Bot size={16} />
+          )}
+        </div>
+      )}
       <div
         className={cn(
-          'flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden',
-          isUser
-            ? (user?.avatar
-                ? 'rounded-full bg-transparent' // Show uploaded/profile avatar
-                : 'rounded-full bg-secondary text-secondary-foreground') // Fallback icon bubble
-            : agent?.logoUrl
-              ? 'rounded-md bg-transparent'  // Agent with logo: square, no bg (transparent)
-              : 'rounded-md bg-workspace-accent text-white'  // Agent without logo: square with accent bg
+          'min-w-0 space-y-1',
+          isUser ? 'flex max-w-[80%] flex-col items-end' : 'flex-1'
         )}
       >
-        {isUser ? (
-          user?.avatar ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={user.avatar} alt={user?.name || 'You'} className="h-full w-full object-cover" />
-          ) : (
-            <User size={16} />
-          )
-        ) : agent?.logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={getLogoUrl(agent.logoUrl)}
-            alt={agent.name}
-            className="h-full w-full object-cover"
-            onError={(event) => {
-              event.currentTarget.style.display = 'none';
-            }}
-          />
-        ) : (
-          <Bot size={16} />
-        )}
-      </div>
-      <div className={cn('max-w-[80%] space-y-1', isUser && 'flex flex-col items-end')}>
         {/* Attached images (for user messages) */}
         {isUser && message.images && message.images.length > 0 && (
           <div className={cn('flex flex-wrap gap-2 mb-2', isUser && 'justify-end')}>
@@ -4431,6 +4404,30 @@ const MessageBubble = React.memo(function MessageBubble({
           </div>
         )}
         
+        <div
+          className={cn(
+            'px-1 pt-0.5 text-[12px] leading-4 text-muted-foreground',
+            isUser && 'text-right'
+          )}
+        >
+          {(() => {
+            const when = formatMessageStamp(message.timestamp);
+            // A user's own message needs no byline — the side and fill say who
+            // sent it. Only the agent line names its sender and model.
+            if (isUser) return when;
+            const modelRaw =
+              message.modelId ||
+              agent?.modelIds?.[0] ||
+              agent?.resolvedModelId ||
+              agent?.modelId ||
+              null;
+            const modelLabel = modelDisplayName(catalogModels, modelRaw) ?? modelRaw;
+            return [senderName, modelLabel ? `model: ${modelLabel}` : null, when]
+              .filter(Boolean)
+              .join(' · ');
+          })()}
+        </div>
+
         {/* Main response bubble */}
         <div
           className={cn(
@@ -4440,52 +4437,19 @@ const MessageBubble = React.memo(function MessageBubble({
               '[&_p]:my-2 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1 [&_li]:pt-0.5 [&_li]:leading-relaxed [&_h1]:text-base [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_h4]:text-sm [&_h4]:font-semibold [&_h4]:mt-2 [&_h4]:mb-0.5 [&_h5]:text-sm [&_h5]:font-medium [&_h5]:mt-1.5 [&_h6]:text-sm [&_h6]:font-medium [&_h6]:mt-1 [&_code]:bg-background/50 [&_code]:px-1 [&_code]:rounded [&_code]:font-mono [&_pre]:my-0 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-border/70 [&_pre]:bg-background/80 [&_pre]:p-3 [&_pre]:text-xs [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:rounded-none [&_pre_code]:text-inherit'
           )}
         >
-          {/* Sender name inside bubble (WhatsApp-style) */}
-          <div className={cn(
-            'text-xs font-bold mb-1.5 pb-1',
-            isUser 
-              ? 'text-left text-white border-b border-white/20' 
-              : 'text-left text-workspace-accent border-b border-border'
-          )}>
-            <div className="flex items-center gap-2">
-              <span>{senderName}</span>
-              {/* {isFromDifferentAgent && (
-                <span className="rounded-full border border-amber-300/50 bg-amber-100/70 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:border-amber-900/60 dark:bg-amber-900/30 dark:text-amber-300">
-                  Not current agent
-                </span>
-              )} */}
-            </div>
-          </div>
-
           {!isUser && message.toolCalls && message.toolCalls.length > 0 && (
             <ToolCallsDropdown
               toolCalls={message.toolCalls}
               isProcessing={isStillProcessing}
-              showStop={showStop}
-              onStop={onStop}
               startTime={requestSentAt}
             />
           )}
-          {!isUser && !message.toolCalls && (activityLine || (isStillProcessing && showStop)) && (
+          {!isUser && !message.toolCalls && activityLine && (
             <div className="mb-2 flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
               {activityLine ? (
                 <span className="truncate">{activityLine}</span>
               ) : (
                 <span className="truncate">Processing...</span>
-              )}
-              {isStillProcessing && (
-                <span className="inline-flex shrink-0">
-                  <TypingDots />
-                </span>
-              )}
-              {isStillProcessing && showStop && (
-                <button
-                  className="ml-auto shrink-0 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted"
-                  onClick={(e) => { e.preventDefault(); onStop(); }}
-                  title="Stop generation"
-                >
-                  Stop
-                </button>
               )}
             </div>
           )}
@@ -4507,28 +4471,6 @@ const MessageBubble = React.memo(function MessageBubble({
               {transformBareUrls(responseForRender as string)}
             </ReactMarkdown>
           )}
-        </div>
-
-        <div
-          className={cn(
-            'px-1 pt-0.5 text-[10px] leading-4 text-muted-foreground',
-            isUser && 'text-right'
-          )}
-        >
-          {(() => {
-            const when = formatMessageStamp(message.timestamp);
-            if (isUser) return when;
-            const modelRaw =
-              message.modelId ||
-              agent?.modelIds?.[0] ||
-              agent?.resolvedModelId ||
-              agent?.modelId ||
-              null;
-            const modelLabel = modelDisplayName(catalogModels, modelRaw) ?? modelRaw;
-            return [senderName, modelLabel ? `model: ${modelLabel}` : null, when]
-              .filter(Boolean)
-              .join(' · ');
-          })()}
         </div>
 
         {/* Artifact built this turn: opens it on the Slides or Documents surface */}

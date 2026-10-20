@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_NAV_ORDER,
   insertIndexFromPoint,
+  layoutDockNav,
   mergeNavOrder,
   moveNavItem,
   shiftForReorder,
@@ -17,8 +18,8 @@ describe('mergeNavOrder', () => {
   it('keeps a custom order and inserts new catalog ids at catalog position', () => {
     const persisted: NavSectionId[] = ['files', 'apps', 'chat'];
     const merged = mergeNavOrder(persisted);
-    expect(merged[0]).toBe('home');
-    expect(merged.slice(1, 4)).toEqual(['files', 'apps', 'chat']);
+    expect(merged.slice(0, 2)).toEqual(['home', 'search']);
+    expect(merged.filter((id) => persisted.includes(id))).toEqual(['files', 'apps', 'chat']);
     expect(merged).toContain('marketplace');
     expect(merged).not.toContain('lab');
     expect(new Set(merged)).toEqual(new Set(DEFAULT_NAV_ORDER));
@@ -28,9 +29,22 @@ describe('mergeNavOrder', () => {
     const persisted = ['apps', 'apps', 'not-a-section', 'lab'];
     const merged = mergeNavOrder(persisted);
     expect(merged.filter((id) => id === 'apps')).toHaveLength(1);
-    expect(merged[0]).toBe('home');
-    expect(merged[1]).toBe('apps');
+    expect(merged.slice(0, 3)).toEqual(['home', 'search', 'apps']);
     expect(merged).not.toContain('lab');
+  });
+
+  it('puts search right after home', () => {
+    expect(DEFAULT_NAV_ORDER.slice(0, 2)).toEqual(['home', 'search']);
+  });
+
+  it('moves search up in an order that is still the previous default', () => {
+    const previous = ['home', 'apps', 'files', 'chat', 'search', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'code', 'marketplace'];
+    expect(mergeNavOrder(previous)).toEqual([...DEFAULT_NAV_ORDER]);
+  });
+
+  it('leaves a customised order where the user put search', () => {
+    const custom = ['home', 'chat', 'apps', 'files', 'search', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'code', 'marketplace'];
+    expect(mergeNavOrder(custom)).toEqual(custom);
   });
 });
 
@@ -90,5 +104,54 @@ describe('shiftForReorder', () => {
   it('does not slide on a no-op drop', () => {
     expect(shiftForReorder(0, 1, 1)).toBe(0);
     expect(shiftForReorder(2, 1, 2)).toBe(0);
+  });
+});
+
+describe('layoutDockNav', () => {
+  const item = 40;
+  const pad = 24;
+  const count = 13;
+
+  it('keeps the loose gap when every icon fits', () => {
+    expect(layoutDockNav(800, count, item, pad)).toEqual({
+      gap: 4,
+      visibleCount: count,
+      overflow: false,
+      scroll: false,
+    });
+  });
+
+  it('packs the gap before hiding any icon', () => {
+    // Loose needs 592px. Gap 2 needs 568. Packed needs 544.
+    expect(layoutDockNav(570, count, item, pad).gap).toBe(2);
+    expect(layoutDockNav(570, count, item, pad).overflow).toBe(false);
+    expect(layoutDockNav(550, count, item, pad)).toMatchObject({
+      gap: 0,
+      visibleCount: count,
+      overflow: false,
+    });
+  });
+
+  it('moves the icons that do not fit into a More slot', () => {
+    // 500px holds 11 packed slots. One is More, so 10 stay on the rail.
+    expect(layoutDockNav(500, count, item, pad)).toEqual({
+      gap: 0,
+      visibleCount: 10,
+      overflow: true,
+      scroll: false,
+    });
+  });
+
+  it('scrolls full-size icons when the rail is shorter than one button', () => {
+    expect(layoutDockNav(50, count, item, pad)).toMatchObject({
+      visibleCount: count,
+      overflow: false,
+      scroll: true,
+    });
+  });
+
+  it('shows everything before the rail has been measured', () => {
+    expect(layoutDockNav(Number.POSITIVE_INFINITY, count, item, pad).visibleCount).toBe(count);
+    expect(layoutDockNav(0, 0, item, pad).visibleCount).toBe(0);
   });
 });

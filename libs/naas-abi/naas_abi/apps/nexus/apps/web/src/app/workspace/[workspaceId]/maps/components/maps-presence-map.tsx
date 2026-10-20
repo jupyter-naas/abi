@@ -2,7 +2,8 @@
 
 import { useEffect, useRef } from 'react';
 import type { Map as LeafletMap, Marker } from 'leaflet';
-import { observeMapsLeafletSize } from '../lib/leaflet-map';
+import { attachMapsZoomControl, observeMapsLeafletSize } from '../lib/leaflet-map';
+import { MAPS_TILE_LIGHT, MAPS_TILE_ATTR } from '../lib/leaflet-tiles';
 
 export interface PresencePin {
   id: string;
@@ -14,18 +15,6 @@ export interface PresencePin {
 
 interface MapsPresenceMapProps {
   pins: PresencePin[];
-}
-
-const TILE_LIGHT =
-  'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-const TILE_DARK =
-  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-const TILE_ATTR =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
-
-function isDarkMode(): boolean {
-  if (typeof document === 'undefined') return false;
-  return document.documentElement.classList.contains('dark');
 }
 
 function pinColor(kind: PresencePin['kind']): string {
@@ -50,11 +39,13 @@ export function MapsPresenceMap({ pins }: MapsPresenceMapProps) {
 
       if (!mapRef.current) {
         const map = L.map(containerRef.current, {
-          zoomControl: true,
+          zoomControl: false,
           attributionControl: true,
         });
-        L.tileLayer(isDarkMode() ? TILE_DARK : TILE_LIGHT, {
-          attribution: TILE_ATTR,
+        attachMapsZoomControl(L, map);
+        L.tileLayer(MAPS_TILE_LIGHT, {
+          className: 'maps-basemap',
+          attribution: MAPS_TILE_ATTR,
           maxZoom: 18,
         }).addTo(map);
         observeMapsLeafletSize(map);

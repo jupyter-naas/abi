@@ -1,0 +1,383 @@
+{
+  "source": "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json",
+  "source_sha256": "0d2c2c1e42dc3dfcfb1a8661ddba31057e88de911af1bb8f21868ba3096c0763",
+  "status": "Draft \u2014 simulated ledger hypothesis; not validated with ABI.",
+  "process_count": 37,
+  "step_count": 111,
+  "subsystem_count": 9,
+  "files": [
+    "ABIProcessLedgerOntology.ttl",
+    "ABIS1P1Onboarding.ttl",
+    "ABIS1P2AccessProvisioning.ttl",
+    "ABIS1P3RotationPlanning.ttl",
+    "ABIS1P4AttendanceAndLeave.ttl",
+    "ABIS1P5Offboarding.ttl",
+    "ABIS2P1ExecutiveBriefing.ttl",
+    "ABIS2P2SignalSynthesis.ttl",
+    "ABIS2P3RiskAndContextAssessment.ttl",
+    "ABIS2P4SecurityScreening.ttl",
+    "ABIS2P5WatchAndAlerting.ttl",
+    "ABIS3P1WorkOrderProcessing.ttl",
+    "ABIS3P2Scheduling.ttl",
+    "ABIS3P3FleetDispatch.ttl",
+    "ABIS3P4Maintenance.ttl",
+    "ABIS3P5IncidentResponse.ttl",
+    "ABIS4P1VendorEvaluation.ttl",
+    "ABIS4P2StraightThroughProcurement.ttl",
+    "ABIS4P3StockAndInventory.ttl",
+    "ABIS4P4AssetRegistry.ttl",
+    "ABIS4P5SupplierOnboarding.ttl",
+    "ABIS5P1ProgrammePlanning.ttl",
+    "ABIS5P2Forecasting.ttl",
+    "ABIS5P3CapabilityRoadmap.ttl",
+    "ABIS6P1ITProvisioning.ttl",
+    "ABIS6P2CyberPostureBlueRedTeam.ttl",
+    "ABIS6P3CommunicationsAndCalendar.ttl",
+    "ABIS7P1TrainingDelivery.ttl",
+    "ABIS7P2CapabilityDevelopment.ttl",
+    "ABIS7P3Assessment.ttl",
+    "ABIS8P1FinanceApprovalChain.ttl",
+    "ABIS8P2BudgetManagement.ttl",
+    "ABIS8P3ContractManagement.ttl",
+    "ABIS8P4PaymentsAndExpenses.ttl",
+    "ABIS8P5AuditTrailMaintenance.ttl",
+    "ABIS9P1StakeholderEngagement.ttl",
+    "ABIS9P2PartnerCoordination.ttl",
+    "ABIS9P3PublicAndCommunications.ttl"
+  ],
+  "processes": [
+    {
+      "code": "S1-P1",
+      "name": "Onboarding",
+      "iri": "http://ontology.naas.ai/abi/S1P1",
+      "file": "ABIS1P1Onboarding.ttl",
+      "subsystem": "Personnel",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S1-P2",
+      "name": "Access provisioning",
+      "iri": "http://ontology.naas.ai/abi/S1P2",
+      "file": "ABIS1P2AccessProvisioning.ttl",
+      "subsystem": "Personnel",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S1-P3",
+      "name": "Rotation planning",
+      "iri": "http://ontology.naas.ai/abi/S1P3",
+      "file": "ABIS1P3RotationPlanning.ttl",
+      "subsystem": "Personnel",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S1-P4",
+      "name": "Attendance and leave",
+      "iri": "http://ontology.naas.ai/abi/S1P4",
+      "file": "ABIS1P4AttendanceAndLeave.ttl",
+      "subsystem": "Personnel",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S1-P5",
+      "name": "Offboarding",
+      "iri": "http://ontology.naas.ai/abi/S1P5",
+      "file": "ABIS1P5Offboarding.ttl",
+      "subsystem": "Personnel",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S2-P1",
+      "name": "Executive briefing",
+      "iri": "http://ontology.naas.ai/abi/S2P1",
+      "file": "ABIS2P1ExecutiveBriefing.ttl",
+      "subsystem": "Intelligence",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S2-P2",
+      "name": "Signal synthesis",
+      "iri": "http://ontology.naas.ai/abi/S2P2",
+      "file": "ABIS2P2SignalSynthesis.ttl",
+      "subsystem": "Intelligence",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S2-P3",
+      "name": "Risk and context assessment",
+      "iri": "http://ontology.naas.ai/abi/S2P3",
+      "file": "ABIS2P3RiskAndContextAssessment.ttl",
+      "subsystem": "Intelligence",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S2-P4",
+      "name": "Security screening",
+      "iri": "http://ontology.naas.ai/abi/S2P4",
+      "file": "ABIS2P4SecurityScreening.ttl",
+      "subsystem": "Intelligence",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S2-P5",
+      "name": "Watch and alerting",
+      "iri": "http://ontology.naas.ai/abi/S2P5",
+      "file": "ABIS2P5WatchAndAlerting.ttl",
+      "subsystem": "Intelligence",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S3-P1",
+      "name": "Work-order processing",
+      "iri": "http://ontology.naas.ai/abi/S3P1",
+      "file": "ABIS3P1WorkOrderProcessing.ttl",
+      "subsystem": "Operations",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S3-P2",
+      "name": "Scheduling",
+      "iri": "http://ontology.naas.ai/abi/S3P2",
+      "file": "ABIS3P2Scheduling.ttl",
+      "subsystem": "Operations",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S3-P3",
+      "name": "Fleet dispatch",
+      "iri": "http://ontology.naas.ai/abi/S3P3",
+      "file": "ABIS3P3FleetDispatch.ttl",
+      "subsystem": "Operations",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S3-P4",
+      "name": "Maintenance",
+      "iri": "http://ontology.naas.ai/abi/S3P4",
+      "file": "ABIS3P4Maintenance.ttl",
+      "subsystem": "Operations",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S3-P5",
+      "name": "Incident response",
+      "iri": "http://ontology.naas.ai/abi/S3P5",
+      "file": "ABIS3P5IncidentResponse.ttl",
+      "subsystem": "Operations",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S4-P1",
+      "name": "Vendor evaluation",
+      "iri": "http://ontology.naas.ai/abi/S4P1",
+      "file": "ABIS4P1VendorEvaluation.ttl",
+      "subsystem": "Logistics",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S4-P2",
+      "name": "Straight-through procurement",
+      "iri": "http://ontology.naas.ai/abi/S4P2",
+      "file": "ABIS4P2StraightThroughProcurement.ttl",
+      "subsystem": "Logistics",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S4-P3",
+      "name": "Stock and inventory",
+      "iri": "http://ontology.naas.ai/abi/S4P3",
+      "file": "ABIS4P3StockAndInventory.ttl",
+      "subsystem": "Logistics",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S4-P4",
+      "name": "Asset registry",
+      "iri": "http://ontology.naas.ai/abi/S4P4",
+      "file": "ABIS4P4AssetRegistry.ttl",
+      "subsystem": "Logistics",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S4-P5",
+      "name": "Supplier onboarding",
+      "iri": "http://ontology.naas.ai/abi/S4P5",
+      "file": "ABIS4P5SupplierOnboarding.ttl",
+      "subsystem": "Logistics",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S5-P1",
+      "name": "Programme planning",
+      "iri": "http://ontology.naas.ai/abi/S5P1",
+      "file": "ABIS5P1ProgrammePlanning.ttl",
+      "subsystem": "Plans",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S5-P2",
+      "name": "Forecasting",
+      "iri": "http://ontology.naas.ai/abi/S5P2",
+      "file": "ABIS5P2Forecasting.ttl",
+      "subsystem": "Plans",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S5-P3",
+      "name": "Capability roadmap",
+      "iri": "http://ontology.naas.ai/abi/S5P3",
+      "file": "ABIS5P3CapabilityRoadmap.ttl",
+      "subsystem": "Plans",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S6-P1",
+      "name": "IT provisioning",
+      "iri": "http://ontology.naas.ai/abi/S6P1",
+      "file": "ABIS6P1ITProvisioning.ttl",
+      "subsystem": "Signal",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S6-P2",
+      "name": "Cyber posture (blue/red team)",
+      "iri": "http://ontology.naas.ai/abi/S6P2",
+      "file": "ABIS6P2CyberPostureBlueRedTeam.ttl",
+      "subsystem": "Signal",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S6-P3",
+      "name": "Communications and calendar",
+      "iri": "http://ontology.naas.ai/abi/S6P3",
+      "file": "ABIS6P3CommunicationsAndCalendar.ttl",
+      "subsystem": "Signal",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S7-P1",
+      "name": "Training delivery",
+      "iri": "http://ontology.naas.ai/abi/S7P1",
+      "file": "ABIS7P1TrainingDelivery.ttl",
+      "subsystem": "Training",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S7-P2",
+      "name": "Capability development",
+      "iri": "http://ontology.naas.ai/abi/S7P2",
+      "file": "ABIS7P2CapabilityDevelopment.ttl",
+      "subsystem": "Training",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S7-P3",
+      "name": "Assessment",
+      "iri": "http://ontology.naas.ai/abi/S7P3",
+      "file": "ABIS7P3Assessment.ttl",
+      "subsystem": "Training",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S8-P1",
+      "name": "Finance approval chain",
+      "iri": "http://ontology.naas.ai/abi/S8P1",
+      "file": "ABIS8P1FinanceApprovalChain.ttl",
+      "subsystem": "Finance",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S8-P2",
+      "name": "Budget management",
+      "iri": "http://ontology.naas.ai/abi/S8P2",
+      "file": "ABIS8P2BudgetManagement.ttl",
+      "subsystem": "Finance",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S8-P3",
+      "name": "Contract management",
+      "iri": "http://ontology.naas.ai/abi/S8P3",
+      "file": "ABIS8P3ContractManagement.ttl",
+      "subsystem": "Finance",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S8-P4",
+      "name": "Payments and expenses",
+      "iri": "http://ontology.naas.ai/abi/S8P4",
+      "file": "ABIS8P4PaymentsAndExpenses.ttl",
+      "subsystem": "Finance",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S8-P5",
+      "name": "Audit trail maintenance",
+      "iri": "http://ontology.naas.ai/abi/S8P5",
+      "file": "ABIS8P5AuditTrailMaintenance.ttl",
+      "subsystem": "Finance",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S9-P1",
+      "name": "Stakeholder engagement",
+      "iri": "http://ontology.naas.ai/abi/S9P1",
+      "file": "ABIS9P1StakeholderEngagement.ttl",
+      "subsystem": "External Affairs",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S9-P2",
+      "name": "Partner coordination",
+      "iri": "http://ontology.naas.ai/abi/S9P2",
+      "file": "ABIS9P2PartnerCoordination.ttl",
+      "subsystem": "External Affairs",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    },
+    {
+      "code": "S9-P3",
+      "name": "Public and communications",
+      "iri": "http://ontology.naas.ai/abi/S9P3",
+      "file": "ABIS9P3PublicAndCommunications.ttl",
+      "subsystem": "External Affairs",
+      "qualities": 0,
+      "quality_status": "Unresolved \u2014 source indicators retained as information; no quality bearer supplied"
+    }
+  ]
+}

@@ -7,7 +7,7 @@ import { MapsFeedCanvas } from './maps-feed-canvas';
 let lastReason =
   'OpenAQ v3 requires a free API key. Set OPENAQ_API_KEY on the Nexus web host.';
 
-async function fetchPins(signal: AbortSignal) {
+export async function fetchPins(signal: AbortSignal) {
   const { pins, reason } = await fetchMapsFeedPins(
     MAPS_PUBLIC_FEEDS.openaq,
     signal,

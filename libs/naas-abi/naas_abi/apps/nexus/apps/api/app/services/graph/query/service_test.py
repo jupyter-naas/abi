@@ -98,18 +98,11 @@ def test_ownership_violation_raises() -> None:
         asyncio.run(service.run_query(spec=_spec(), workspace_id="ws1", limit=2))
 
 
-def test_system_graph_is_queryable_even_when_not_owned() -> None:
-    # Global system graphs (schema/nexus) are readable by any workspace, even though no
-    # workspace "owns" them. Here G is not owned but is declared a system graph.
+def test_system_graph_requires_an_explicit_workspace_grant() -> None:
     store = _FakeStore(_user_rows(), total=3)
-    service = GraphQueryService(
-        store,
-        owned_graphs=lambda _ws: {"http://other/graph"},
-        system_graphs={G},
-        now=lambda: "2026-06-16T00:00:00+00:00",
-    )
-    result = asyncio.run(service.run_query(spec=_spec(), workspace_id="ws1", limit=2))
-    assert result.count.total == 3
+    service = GraphQueryService(store, owned_graphs=lambda _ws: set(), system_graphs={G})
+    with pytest.raises(GraphAccessError):
+        asyncio.run(service.run_query(spec=_spec(), workspace_id="ws1"))
 
 
 def test_sorted_query_uses_offset_fallback() -> None:

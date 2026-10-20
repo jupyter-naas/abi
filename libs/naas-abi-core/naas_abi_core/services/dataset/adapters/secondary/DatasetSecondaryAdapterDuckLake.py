@@ -242,7 +242,7 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
     def describe(self, name: str, *, namespace: str = "default") -> DatasetInfo:
         def read(con: Any) -> DatasetInfo:
             snapshot_id = self._current_snapshot(con)
-            spec = self._load_spec(con, namespace, name)
+            spec = self._read_spec(con, namespace, name)
             return self._to_info(spec, snapshot_id)
 
         return self._read(read)
@@ -397,6 +397,33 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
 
         return self._read(read)
 
+    def namespace_version(self, namespace: str) -> int | None:
+        metadata = self._ident(f"__ducklake_metadata_{CATALOG_ALIAS}")
+
+        def read(con: Any) -> int | None:
+            # Every table the schema ever held: a dropped one changed it too.
+            tables = con.execute(
+                f"SELECT t.table_id, t.begin_snapshot, t.end_snapshot "  # nosec B608
+                f"FROM {metadata}.ducklake_table t "
+                f"JOIN {metadata}.ducklake_schema s ON t.schema_id = s.schema_id "
+                "WHERE s.schema_name = ? AND s.end_snapshot IS NULL",
+                [namespace],
+            ).fetchall()
+            if not tables:
+                return None
+            latest = max(max(begin, end or 0) for _, begin, end in tables)
+            # changes_made is "kind:<table_id>,kind:<table_id>,..." per snapshot.
+            row = con.execute(
+                f"SELECT max(snapshot_id) FROM {metadata}.ducklake_snapshot_changes "  # nosec B608
+                "WHERE list_has_any(list_transform(string_split(changes_made, ','), "
+                "change -> split_part(change, ':', 2)), ?)",
+                [[str(table_id) for table_id, _, _ in tables]],
+            ).fetchall()
+            changed = row[0][0] if row and row[0][0] is not None else 0
+            return max(latest, int(changed))
+
+        return self._read(read)
+
     def drop(self, name: str, *, namespace: str = "default") -> None:
         def operation(con: Any) -> None:
             if not self._table_exists(con, namespace, name):
@@ -526,23 +553,33 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         """
         import duckdb
 
-        connection = self._get_read_connection()
-        cursor = connection.cursor()
-        try:
-            return operation(cursor)
-        except duckdb.CatalogException as exc:
-            # Another process may flush and drop a cached inline table. Retire
-            # this connection for subsequent calls without interrupting cursors
-            # already using it. Do not replay arbitrary SQL: query() allows writes.
-            if "Failed to read inlined data from DuckLake" in str(
-                exc
-            ) and "does not exist" in str(exc):
-                with self._read_connection_lock:
-                    if self._read_connection is connection:
-                        self._read_connection = None
-            raise
-        finally:
-            cursor.close()
+        for attempt in range(2):
+            connection = self._get_read_connection()
+            cursor = connection.cursor()
+            try:
+                return operation(cursor)
+            except duckdb.Error as exc:
+                # Another process may flush and drop a cached inline table. Retire
+                # this connection for subsequent calls without interrupting cursors
+                # already using it. Do not replay arbitrary SQL: query() allows writes.
+                retire = False
+                if isinstance(exc, duckdb.CatalogException) and (
+                    "Failed to read inlined data from DuckLake" in str(exc)
+                    and "does not exist" in str(exc)
+                ) or "database has been invalidated" in str(exc):
+                    retire = True
+                if retire:
+                    with self._read_connection_lock:
+                        if self._read_connection is connection:
+                            self._read_connection = None
+                    with self._snapshot_connection_lock:
+                        self._snapshot_connections.clear()
+                    if attempt == 0 and "database has been invalidated" in str(exc):
+                        continue
+                raise
+            finally:
+                cursor.close()
+        raise RuntimeError("unreachable")  # pragma: no cover
 
     def _write_transaction(self, operation: Callable[[Any], _T]) -> tuple[_T, int]:
         if self._sqlite_write_lock is not None:
@@ -594,9 +631,33 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
             "WHERE database_name = ? AND schema_name = ? AND table_name = ?",
             [CATALOG_ALIAS, namespace, name],
         ).fetchone()
+        return self._spec_from_row(row, namespace, name)
+
+    def _read_spec(self, con: Any, namespace: str, name: str) -> DatasetSpec:
+        """``_load_spec`` for a read: one table, from the DuckLake metadata catalog.
+
+        ``duckdb_tables()`` lists every table in the lake before filtering,
+        seconds per call once there are a few hundred. Reading the catalog's
+        own tables is milliseconds, but only outside a write transaction: on
+        SQLite, that read holds a lock the transaction's commit then hits.
+        """
+        metadata = self._ident(f"__ducklake_metadata_{CATALOG_ALIAS}")
+        rows = con.execute(
+            f"SELECT g.value FROM {metadata}.ducklake_table t "  # nosec B608
+            f"JOIN {metadata}.ducklake_schema s ON t.schema_id = s.schema_id "
+            f"LEFT JOIN {metadata}.ducklake_tag g ON g.object_id = t.table_id "
+            "AND g.key = 'comment' AND g.end_snapshot IS NULL "
+            "WHERE s.schema_name = ? AND t.table_name = ? "
+            "AND t.end_snapshot IS NULL AND s.end_snapshot IS NULL",
+            [namespace, name],
+        ).fetchall()
+        return self._spec_from_row(rows[0] if rows else None, namespace, name)
+
+    @staticmethod
+    def _spec_from_row(row: Any, namespace: str, name: str) -> DatasetSpec:
         if row is None or not str(row[0] or "").startswith(SPEC_COMMENT_PREFIX):
             raise DatasetNotFoundError(name, namespace)
-        return self._spec_from_comment(row[0])
+        return DatasetSecondaryAdapterDuckLake._spec_from_comment(row[0])
 
     @staticmethod
     def _spec_from_comment(comment: str) -> DatasetSpec:

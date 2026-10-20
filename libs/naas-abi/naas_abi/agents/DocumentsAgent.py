@@ -58,6 +58,74 @@ _HANDOFF_PHRASES = (
     "rédige un document",
 )
 
+# Keep sticky Documents turns for follow-up edits; release meta chat / acknowledgements.
+_DOCUMENT_TURN_MARKERS = (
+    "document",
+    "rapport",
+    "report",
+    "memo",
+    "note au",
+    "section",
+    "titre",
+    "title",
+    "heading",
+    "subtitle",
+    "intro",
+    "rename",
+    "renomm",
+    "template",
+    "tableau",
+    "table",
+    "quote",
+    "citation",
+    "paragraphe",
+    "paragraph",
+    "bullet",
+    "fill",
+    "slot",
+    "rewrite",
+    "réécr",
+    "reecr",
+    "modifie",
+    "change the",
+    "change le",
+    "ajoute",
+    "add a",
+    "add the",
+    "update the",
+    "board",
+    "formal",
+    "formel",
+    "chaleureux",
+    "warmer",
+    "shorter",
+    "plus court",
+)
+
+_RELEASE_STICKY_SHORT = frozenset(
+    {
+        "ah",
+        "ok",
+        "okay",
+        "oui",
+        "non",
+        "yes",
+        "no",
+        "yep",
+        "nope",
+        "merci",
+        "thanks",
+        "thx",
+        "cool",
+        "lol",
+        "mdr",
+        "yo",
+        "hi",
+        "hello",
+        "salut",
+    }
+)
+
 
 class DocumentsAgent(IntentAgent):
     """Office agent for Nexus Documents.
@@ -112,6 +180,8 @@ Your step budget is finite ({DOCUMENTS_RECURSION_LIMIT} graph steps). Plan, then
 - Keep a clear, concise, professional tone.
 - Format replies as clean Markdown.
 - Include relevant tool output when it matters (cover_h1_updated, write errors, search budget).
+- Always end the turn with a short user-visible reply. Never finish with empty content.
+- If the user is chatting about you, the product, or anything that is not creating or editing the document, call request_help immediately. Do not answer with silence.
 </operating_guidelines>
 
 <constraints>
@@ -142,6 +212,23 @@ Your step budget is finite ({DOCUMENTS_RECURSION_LIMIT} graph steps). Plan, then
         },
     ]
 
+    @classmethod
+    def retains_active_turn(cls, text: str) -> bool:
+        """Keep sticky handoff for doc edits; release meta chat to the supervisor."""
+        raw = (text or "").strip()
+        if not raw:
+            return False
+        lowered = raw.lower()
+        if lowered in _RELEASE_STICKY_SHORT:
+            return False
+        if any(phrase in lowered for phrase in _HANDOFF_PHRASES):
+            return True
+        if any(marker in lowered for marker in _DOCUMENT_TURN_MARKERS):
+            return True
+        words = lowered.split()
+        # Short follow-ups like "plus formel" stay with Documents.
+        return bool(len(words) <= 6 and "?" not in raw)
+
     @staticmethod
     def handoff_intents() -> list[Intent]:
         """Phrases Abi copies so a document brief transfers here instead of writing itself."""
@@ -160,7 +247,7 @@ Your step budget is finite ({DOCUMENTS_RECURSION_LIMIT} graph steps). Plan, then
         """Document writes plus the search stack the research gate depends on."""
         tools: list = []
         try:
-            from naas_abi.agents.tools.documents_tools import documents_agent_tools
+            from naas_abi.tools.documents_tools import documents_agent_tools
 
             tools += documents_agent_tools()
         except Exception as exc:  # noqa: BLE001

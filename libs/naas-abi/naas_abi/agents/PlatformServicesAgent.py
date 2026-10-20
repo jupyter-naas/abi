@@ -1,6 +1,6 @@
 
 from langchain_core.embeddings import Embeddings
-from naas_abi.agents.tools.platform_tools import platform_service_tools
+from naas_abi.tools.platform_tools import platform_service_tools
 from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,

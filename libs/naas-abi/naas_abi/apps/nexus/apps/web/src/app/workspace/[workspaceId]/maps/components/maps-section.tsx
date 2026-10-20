@@ -1,197 +1,313 @@
 'use client';
 
-import React from 'react';
-import {
-  Activity,
-  AlertTriangle,
-  Bell,
-  Brain,
-  ChevronRight,
-  CloudLightning,
-  Crosshair,
-  Flame,
-  Globe,
-  Laptop,
-  Layers,
-  Map,
-  MapPin,
-  Mountain,
-  Newspaper,
-  Plane,
-  Rocket,
-  Satellite,
-  Ship,
-  Sparkles,
-  Thermometer,
-  Wind,
-} from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-import { usePathname, useRouter } from 'next/navigation';
+import { useMemo, useState } from 'react';
+import { ChevronDown, ChevronRight, Layers, LayoutGrid, Map } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-is-mobile';
-import { useMapsStore } from '@/stores/maps';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from '@/components/shell/sidebar/collapsible-section';
+import { OntologyMultiPicker } from '@/components/shell/sidebar/ontology-multi-picker';
 import { getWorkspacePath } from '@/components/shell/sidebar/utils';
-import { shellTokens } from '@/components/shell/tokens';
+import { MapsLayerBrandIcon } from './maps-layer-brand-icon';
+import { mapsIconMap } from '../lib/maps-icons';
+import { groupFeedLayers, groupLayerEntries, type LayoutEntry } from '../lib/layouts';
+import { mapsLayerPath, mapsLibraryPath, mapsPath } from '../lib/maps-route';
+import { layerPinColor } from '../lib/maps-layer-colors';
 import {
-  getMapsDatasetsByCategory,
-  MAPS_CATEGORIES,
-  type MapsDataset,
-} from '../lib/datasets';
-import { mapsDatasetPath, mapsLibraryPath, parseMapsRoute } from '../lib/maps-route';
+  filterSidebarEntries,
+  sidebarFeedOptions,
+  sidebarFilterLabel,
+  sidebarGroupOptions,
+  toggleValue,
+} from '../lib/maps-sidebar-filter';
+import { resolveMapsPinImageUrl } from '../lib/maps-pin-image-url';
+import { useMapsLayerParams } from '../lib/use-maps-layer-params';
+import { useMapLayers } from '../lib/use-map-layouts';
+import { useMapsSidebarLayerCounts } from '../lib/use-maps-sidebar-layer-counts';
+import { useMapsStore } from '@/stores/maps';
 import './maps-components.css';
 
-const mapsIconMap: Record<string, LucideIcon> = {
-  Activity,
-  AlertTriangle,
-  Bell,
-  Brain,
-  CloudLightning,
-  Crosshair,
-  Flame,
-  Globe,
-  Laptop,
-  Layers,
-  Map,
-  MapPin,
-  Mountain,
-  Newspaper,
-  Plane,
-  Rocket,
-  Satellite,
-  Ship,
-  Sparkles,
-  Thermometer,
-  Wind,
-};
+export { mapsIconMap } from '../lib/maps-icons';
 
-const MapsDatasetItem = React.memo(function MapsDatasetItem({
-  dataset,
-  active,
-  dense,
-  onOpen,
+function LayerSwitch({
+  label,
+  on,
+  onChange,
 }: {
-  dataset: MapsDataset;
-  active: boolean;
-  dense?: boolean;
-  onOpen: () => void;
+  label: string;
+  on: boolean;
+  onChange: () => void;
 }) {
-  const IconComponent = mapsIconMap[dataset.icon] || Map;
-
+  const title = on
+    ? `On the map — click to leave ${label} out`
+    : `Not on the map — click to add ${label}`;
   return (
     <button
       type="button"
-      onClick={onOpen}
-      title={dataset.description}
+      role="switch"
+      aria-checked={on}
+      aria-label={`Show ${label} on the map`}
+      title={title}
+      onClick={onChange}
       className={cn(
-        'maps-section-row group',
-        shellTokens.sidebar.listRow,
-        active && 'maps-section-row--active',
-        dense && 'maps-section-row--dense',
+        'relative h-[14px] w-[25px] flex-shrink-0 rounded-none transition-colors',
+        on ? 'bg-workspace-accent' : 'bg-muted-foreground/30',
       )}
     >
-      <IconComponent size={14} className="maps-section-row__icon" />
-      <span className="maps-section-row__label">{dataset.title}</span>
+      <span
+        className={cn(
+          'absolute top-[2px] h-[10px] w-[10px] rounded-none bg-white shadow transition-all',
+          on ? 'left-[13px]' : 'left-[2px]',
+        )}
+      />
     </button>
   );
-});
+}
 
-const MapsCategoryGroup = React.memo(function MapsCategoryGroup({
-  label,
-  datasets,
-  activeDatasetId,
-  isExpanded,
-  dense,
-  onToggle,
-  onOpenDataset,
-}: {
-  label: string;
-  datasets: MapsDataset[];
-  activeDatasetId: string | null;
-  isExpanded: boolean;
-  dense?: boolean;
-  onToggle: () => void;
-  onOpenDataset: (id: string) => void;
-}) {
-  const activeCount = datasets.filter((d) => d.id === activeDatasetId).length;
-
+/** Swatch in the layer's color with its icon (feed layers). */
+function LayerSwatch({ entry }: { entry: LayoutEntry }) {
+  const Icon = mapsIconMap[entry.icon] ?? mapsIconMap.MapPin;
   return (
-    <div className="maps-category">
-      <button
-        type="button"
-        onClick={onToggle}
-        className={cn(
-          'maps-category__header',
-          shellTokens.sidebar.sectionLabel,
-        )}
+    <span
+      className="flex h-[14px] w-[14px] shrink-0 items-center justify-center text-white"
+      style={{ background: layerPinColor(entry) }}
+      aria-hidden
+    >
+      {Icon ? <Icon size={10} /> : null}
+    </span>
+  );
+}
+
+function PointCount({ count }: { count: number | undefined }) {
+  return count === undefined ? null : (
+    <span className="text-[10px] tabular-nums text-muted-foreground" title={`${count} data points`}>
+      {count}
+    </span>
+  );
+}
+
+function LayerRow({
+  entry,
+  workspaceId,
+  on,
+  active,
+  count,
+  nested = false,
+  onToggle,
+  onSelect,
+}: {
+  entry: LayoutEntry;
+  workspaceId: string | null;
+  on: boolean;
+  active: boolean;
+  count?: number;
+  nested?: boolean;
+  onToggle: () => void;
+  onSelect: () => void;
+}) {
+  return (
+    <div className={cn(rowClass(active), nested && 'pl-5')}>
+      <Link
+        href={mapsLayerPath(workspaceId, entry.id)}
+        aria-current={active ? 'page' : undefined}
+        title={entry.feedTitle && nested ? `${entry.feedTitle} · ${entry.title}` : entry.description}
+        onClick={onSelect}
+        className={cn('flex min-w-0 flex-1 items-center gap-2', !on && 'text-muted-foreground')}
       >
-        <ChevronRight
-          size={12}
-          className={cn(
-            'maps-category__chevron',
-            isExpanded && 'maps-category__chevron--open',
-          )}
-        />
-        <span className="maps-category__label">{label}</span>
-        <span className="maps-category__count">
-          {activeCount}/{datasets.length}
-        </span>
-      </button>
-      {isExpanded && (
-        <div className="maps-category__items">
-          {datasets.length === 0 ? (
-            <p className="maps-category__empty">None yet</p>
-          ) : (
-            datasets.map((dataset) => (
-              <MapsDatasetItem
-                key={dataset.id}
-                dataset={dataset}
-                active={activeDatasetId === dataset.id}
-                dense={dense}
-                onOpen={() => onOpenDataset(dataset.id)}
-              />
-            ))
-          )}
-        </div>
-      )}
+        {nested ? <LayerSwatch entry={entry} /> : <MapsLayerBrandIcon entry={entry} size={14} />}
+        <span className="flex-1 truncate">{entry.title}</span>
+        <PointCount count={count} />
+      </Link>
+      <LayerSwitch label={entry.title} on={on} onChange={onToggle} />
     </div>
   );
-});
+}
 
+const NO_SELECTION: string[] = [];
+
+function rowClass(active: boolean) {
+  return cn(
+    'flex w-full items-center gap-2 rounded-md px-2 py-1 text-left search-sidebar-list-row transition-colors hover:bg-workspace-accent-10',
+    active ? 'bg-workspace-accent-15 text-workspace-accent' : 'text-foreground',
+  );
+}
+
+/**
+ * Sidebar: Active layers, the Groups / Feeds filters, then each group's feeds
+ * and layers.
+ */
 export function MapsDatasetGroups({
   dense,
 }: {
-  /** Larger touch targets for mobile panel / library list. */
   dense?: boolean;
 }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
-  const { datasetId } = parseMapsRoute(pathname);
-  const { expandedCategories, toggleCategory } = useMapsStore();
-
-  const openDataset = (id: string) => {
-    router.push(mapsDatasetPath(currentWorkspaceId, id));
+  const { workspaceId, layerIds, hasLayerChoice, isOn, setLayerOn, setLayersOn, selectLayerExclusive } =
+    useMapsLayerParams();
+  const { entries, error, loading } = useMapLayers();
+  useMapsSidebarLayerCounts(workspaceId, entries, loading);
+  const layerCounts = useMapsStore((s) => s.layerCounts);
+  // Feeds start expanded while one of their layers is on; a click overrides.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  // Sidebar filters (empty = all); they narrow the list, not the map.
+  const [filter, setFilter] = useState<{ workspaceId: string | null; groups: string[]; feeds: string[] }>({
+    workspaceId,
+    groups: [],
+    feeds: [],
+  });
+  const sameWorkspace = filter.workspaceId === workspaceId;
+  const groups = sameWorkspace ? filter.groups : NO_SELECTION;
+  const feeds = sameWorkspace ? filter.feeds : NO_SELECTION;
+  const groupOptions = useMemo(() => sidebarGroupOptions(entries), [entries]);
+  const feedOptions = useMemo(() => sidebarFeedOptions(entries, groups), [entries, groups]);
+  const listed = useMemo(() => filterSidebarEntries(entries, { groups, feeds }), [entries, groups, feeds]);
+  const setGroups = (next: string[]) => {
+    // Feeds outside the chosen groups leave the selection with them.
+    const offered = new Set(sidebarFeedOptions(entries, next).map((option) => option.value));
+    setFilter({ workspaceId, groups: next, feeds: feeds.filter((feed) => offered.has(feed)) });
   };
+  const setFeeds = (next: string[]) => setFilter({ workspaceId, groups, feeds: next });
+  const combinable = entries.filter((e) => e.combinable);
+  const onCount = layerIds.length;
+  const allActive = layerIds.length !== 1;
 
   return (
-    <div className="maps-section-list">
-      {MAPS_CATEGORIES.map(({ id, label }) => {
-        const datasets = getMapsDatasetsByCategory(id);
-        // Hide empty buckets (Custom stays empty upstream until a product overlay injects datasets).
-        if (datasets.length === 0) return null;
+    <div className={cn('maps-section-list', dense && 'maps-section-list--dense')}>
+      {error && <p className="maps-status maps-status--error">{error}</p>}
+      <Link
+        href={mapsPath(workspaceId, layerIds, { explicit: hasLayerChoice })}
+        aria-current={allActive ? 'page' : undefined}
+        className="shell-sidebar-home"
+      >
+        <LayoutGrid size={14} aria-hidden="true" />
+        <span>Active layers</span>
+        <span className="text-[10px] text-muted-foreground">
+          {onCount}/{combinable.length} on
+        </span>
+      </Link>
+
+      <div className="ontology-sidebar-filters shell-sidebar-home-gutter mb-2">
+        <OntologyMultiPicker
+          key={`groups:${workspaceId}`}
+          items={groupOptions}
+          value={groups}
+          onToggle={(value) => setGroups(toggleValue(groups, value))}
+          onClear={() => setGroups([])}
+          loading={loading}
+          error={null}
+          label={sidebarFilterLabel(groups, groupOptions, 'groups')}
+          noun="groups"
+          allLabel="All groups"
+        />
+        <OntologyMultiPicker
+          key={`feeds:${workspaceId}`}
+          items={feedOptions}
+          value={feeds}
+          onToggle={(value) => setFeeds(toggleValue(feeds, value))}
+          onClear={() => setFeeds([])}
+          loading={loading}
+          error={null}
+          label={sidebarFilterLabel(feeds, feedOptions, 'feeds')}
+          noun="feeds"
+          allLabel="All feeds"
+        />
+      </div>
+
+      {!loading && listed.length === 0 && entries.length > 0 && (
+        <p className="maps-status">No layers match these filters.</p>
+      )}
+
+      {groupLayerEntries(listed).map((group) => {
+        const groupCombinable = group.entries.filter((e) => e.combinable);
+        const allOn = groupCombinable.length > 0 && groupCombinable.every(isOn);
         return (
-          <MapsCategoryGroup
-            key={id}
-            label={label}
-            datasets={datasets}
-            activeDatasetId={datasetId}
-            isExpanded={expandedCategories.includes(id)}
-            dense={dense}
-            onToggle={() => toggleCategory(id)}
-            onOpenDataset={openDataset}
-          />
+          <div key={group.id} className="shell-sidebar-home-gutter mb-2 space-y-0.5">
+            <div className="flex items-center justify-between px-2 py-1 text-xs font-medium text-muted-foreground">
+              <span>{group.label}</span>
+              {groupCombinable.length > 1 && (
+                <button
+                  type="button"
+                  className="text-[10px] hover:text-foreground"
+                  onClick={() => setLayersOn(groupCombinable.map((e) => e.id), !allOn)}
+                >
+                  {allOn ? 'None' : 'All'}
+                </button>
+              )}
+            </div>
+            {groupFeedLayers(group.entries).map((item) => {
+              if (item.type === 'layer') {
+                return (
+                  <LayerRow
+                    key={item.entry.id}
+                    entry={item.entry}
+                    count={layerCounts[item.entry.id]}
+                    workspaceId={workspaceId}
+                    on={isOn(item.entry)}
+                    active={layerIds.length === 1 && layerIds[0] === item.entry.id}
+                    onToggle={() => setLayerOn(item.entry.id, !isOn(item.entry))}
+                    onSelect={() => selectLayerExclusive(item.entry.id)}
+                  />
+                );
+              }
+              const ids = item.layers.map((layer) => layer.id);
+              const onCount = item.layers.filter(isOn).length;
+              const open = expanded[item.feedId] ?? onCount > 0;
+              const logo = resolveMapsPinImageUrl(item.logoUrl);
+              return (
+                <div key={`feed:${item.feedId}`}>
+                  <div className={rowClass(false)}>
+                    <button
+                      type="button"
+                      className={cn(
+                        'flex min-w-0 flex-1 items-center gap-2 text-left',
+                        onCount === 0 && 'text-muted-foreground',
+                      )}
+                      aria-expanded={open}
+                      aria-label={`${item.title}: ${open ? 'hide' : 'show'} its layers`}
+                      title={`${item.title}: ${onCount} of ${item.layers.length} layers on`}
+                      onClick={() => setExpanded((current) => ({ ...current, [item.feedId]: !open }))}
+                    >
+                      {logo ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- feed logo (API or https)
+                        <img src={logo} alt="" width={14} height={14} className="shrink-0" />
+                      ) : (
+                        <Layers size={14} aria-hidden />
+                      )}
+                      <span className="min-w-0 truncate">{item.title}</span>
+                      {open ? (
+                        <ChevronDown size={12} className="shrink-0 text-muted-foreground" aria-hidden />
+                      ) : (
+                        <ChevronRight size={12} className="shrink-0 text-muted-foreground" aria-hidden />
+                      )}
+                      <span className="flex-1" />
+                      <PointCount count={layerCounts[`feed:${item.feedId}`]} />
+                    </button>
+                    <LayerSwitch
+                      label={`all layers of ${item.title}`}
+                      on={onCount === item.layers.length}
+                      onChange={() => setLayersOn(ids, onCount !== item.layers.length)}
+                    />
+                  </div>
+                  {open
+                    ? item.layers.map((layer) => (
+                        <LayerRow
+                          key={layer.id}
+                          entry={layer}
+                          nested
+                          count={layerCounts[layer.id]}
+                          workspaceId={workspaceId}
+                          on={isOn(layer)}
+                          active={layerIds.length === 1 && layerIds[0] === layer.id}
+                          onToggle={() => setLayerOn(layer.id, !isOn(layer))}
+                          onSelect={() => selectLayerExclusive(layer.id)}
+                        />
+                      ))
+                    : null}
+                </div>
+              );
+            })}
+          </div>
         );
       })}
     </div>
@@ -219,7 +335,7 @@ export function MapsSection({
       id="maps"
       icon={<Map size={18} />}
       label="Maps"
-      description="Public and private map sources"
+      description="Data layers on the map"
       href={getWorkspacePath(currentWorkspaceId, '/maps')}
       collapsed={collapsed}
       detailOnly={detailOnly}

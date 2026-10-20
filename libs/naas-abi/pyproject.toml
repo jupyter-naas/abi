@@ -1,6 +1,6 @@
 [project]
 name = "naas-abi"
-version = "2.68.0"
+version = "2.87.0"
 description = "Multi-agent orchestrator and knowledge graph management system for AI orchestration, providing comprehensive coordination of specialized AI agents and semantic data management capabilities"
 readme = "README.md"
 authors = [{ name = "Grace Lambert", email = "maxime@naas.ai" },{ name = "Alice Dupont", email = "florent@naas.ai" }, { name = "Emma Petit", email = "jeremy@naas.ai" }]
@@ -42,10 +42,11 @@ dependencies = [
     "thefuzz>=0.22.1",
     "pymupdf>=1.27.2.2",
     "pymupdf4llm>=1.27.2.2",
-    # Backs the web_search tool (naas_abi.agents.tools.web_tools). AbiAgent
+    # Backs the web_search tool (naas_abi.tools.web_tools). AbiAgent
     # binds that tool on every request with no feature flag, so this cannot be
     # an extra: a default install would advertise a tool it cannot run.
-    "ddgs>=9.0.0"
+    "ddgs>=9.0.0",
+    "openpyxl>=3.1.5,<4",
 ]
 
 license = { text = "MIT License" }
@@ -61,9 +62,13 @@ naas-abi-marketplace = { path = "../naas-abi-marketplace", editable = true }
 [tool.setuptools]
 include-package-data = true
 
+[tool.setuptools.packages.find]
+include = ["naas_abi*"]
+
 [tool.setuptools.package-data]
 naas_abi = [
     "apps/nexus/apps/api/migrations/*.sql",
+    "apps/nexus/apps/api/app/services/maps/basemaps/assets/*",
     "apps/nexus/apps/api/public/**/*",
     "apps/nexus/assets/**/*",
     "apps/nexus/ontology/**/*",

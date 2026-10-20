@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from naas_abi.apps.nexus.apps.api.app.models import (
     MagicLinkTokenModel,
+    OrganizationMemberModel,
     PasswordResetTokenModel,
     UserModel,
     WorkspaceMemberModel,
@@ -18,7 +19,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.port import (
     PasswordResetTokenRecord,
 )
 from naas_abi.apps.nexus.apps.api.app.services.refresh_token import hash_token
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 AsyncSessionGetter = Callable[[], AsyncSession | None]
@@ -48,8 +49,8 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
             name=model.name,
             hashed_password=model.hashed_password,
             avatar=model.avatar,
-            company=model.company,
-            role=model.role,
+            organization=model.organization,
+            job_title=model.job_title,
             bio=model.bio,
             is_superadmin=bool(model.is_superadmin),
             created_at=model.created_at,
@@ -162,8 +163,8 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
         user_id: str,
         name: str | None,
         email: str | None,
-        company: str | None,
-        role: str | None,
+        organization: str | None,
+        job_title: str | None,
         bio: str | None,
     ) -> AuthUserRecord | None:
         result = await self.db.execute(select(UserModel).where(UserModel.id == user_id))
@@ -175,10 +176,10 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
             user.name = name
         if email is not None:
             user.email = email
-        if company is not None:
-            user.company = company
-        if role is not None:
-            user.role = role
+        if organization is not None:
+            user.organization = organization
+        if job_title is not None:
+            user.job_title = job_title
         if bio is not None:
             user.bio = bio
 
@@ -331,9 +332,7 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
         rows = await self.list_unused_magic_links_for_user(user_id)
         return rows[0] if rows else None
 
-    async def list_unused_magic_links_for_user(
-        self, user_id: str
-    ) -> list[MagicLinkTokenRecord]:
+    async def list_unused_magic_links_for_user(self, user_id: str) -> list[MagicLinkTokenRecord]:
         result = await self.db.execute(
             select(MagicLinkTokenModel)
             .where(
@@ -346,15 +345,16 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
         return [self._to_magic_link_token_record(row) for row in result.scalars().all()]
 
     async def increment_magic_link_otp_attempts(self, token_id: str) -> int:
+        # One atomic statement: concurrent wrong guesses cannot read the same
+        # count and each write it back, which would let them slip past the cap.
         result = await self.db.execute(
-            select(MagicLinkTokenModel).where(MagicLinkTokenModel.id == token_id)
+            update(MagicLinkTokenModel)
+            .where(MagicLinkTokenModel.id == token_id)
+            .values(otp_attempts=func.coalesce(MagicLinkTokenModel.otp_attempts, 0) + 1)
+            .returning(MagicLinkTokenModel.otp_attempts)
         )
-        row = result.scalar_one_or_none()
-        if row is None:
-            return 0
-        row.otp_attempts = int(row.otp_attempts or 0) + 1
-        await self.db.flush()
-        return int(row.otp_attempts)
+        attempts = result.scalar_one_or_none()
+        return int(attempts) if attempts is not None else 0
 
     async def mark_magic_link_token_used(self, token_id: str) -> None:
         result = await self.db.execute(
@@ -372,6 +372,67 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
         if user is None:
             return None
         user.avatar = avatar_url
+        user.updated_at = now
+        await self.db.flush()
+        await self.db.refresh(user)
+        return self._to_user_record(user)
+
+    async def list_users(self) -> list[AuthUserRecord]:
+        result = await self.db.execute(select(UserModel).order_by(UserModel.email))
+        return [self._to_user_record(user) for user in result.scalars().all()]
+
+    async def count_superadmins(self) -> int:
+        result = await self.db.execute(
+            select(func.count()).select_from(UserModel).where(UserModel.is_superadmin.is_(True))
+        )
+        return int(result.scalar_one())
+
+    async def list_member_profiles(self, user_id: str) -> list[dict[str, str | None]]:
+        rows = await self.db.execute(
+            select(
+                OrganizationMemberModel.avatar,
+                OrganizationMemberModel.organization_name,
+                OrganizationMemberModel.job_title,
+            )
+            .where(OrganizationMemberModel.user_id == user_id)
+            .order_by(OrganizationMemberModel.created_at, OrganizationMemberModel.id)
+        )
+        return [
+            {"avatar": avatar, "organization": organization, "job_title": job_title}
+            for avatar, organization, job_title in rows.all()
+        ]
+
+    async def get_workspace_member_profile(
+        self, user_id: str, workspace_id: str
+    ) -> dict[str, str | None] | None:
+        row = (
+            await self.db.execute(
+                select(
+                    OrganizationMemberModel.organization_name,
+                    OrganizationMemberModel.job_title,
+                    OrganizationMemberModel.bio,
+                )
+                .join(
+                    WorkspaceModel,
+                    WorkspaceModel.organization_id == OrganizationMemberModel.organization_id,
+                )
+                .where(WorkspaceModel.id == workspace_id)
+                .where(OrganizationMemberModel.user_id == user_id)
+            )
+        ).one_or_none()
+        if row is None:
+            return None
+        organization, job_title, bio = row
+        return {"organization": organization, "job_title": job_title, "bio": bio}
+
+    async def set_user_superadmin(
+        self, user_id: str, is_superadmin: bool, now: datetime
+    ) -> AuthUserRecord | None:
+        result = await self.db.execute(select(UserModel).where(UserModel.id == user_id))
+        user = result.scalar_one_or_none()
+        if user is None:
+            return None
+        user.is_superadmin = is_superadmin
         user.updated_at = now
         await self.db.flush()
         await self.db.refresh(user)

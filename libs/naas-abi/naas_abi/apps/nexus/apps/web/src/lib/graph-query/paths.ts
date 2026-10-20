@@ -8,6 +8,7 @@ export interface ColumnsParams {
   workspaceId: string
   graphUris: string[]
   classUris: string[]
+  forceRefresh?: boolean
 }
 
 /** GET /api/graph/columns — repeated graph_uri / class_uri params. */
@@ -16,6 +17,7 @@ export function buildColumnsPath(params: ColumnsParams): string {
   qs.set('workspace_id', params.workspaceId)
   for (const g of params.graphUris) qs.append('graph_uri', g)
   for (const c of params.classUris) qs.append('class_uri', c)
+  if (params.forceRefresh) qs.set('force_refresh', 'true')
   return `${GRAPH_BASE}/columns?${qs.toString()}`
 }
 

@@ -26,7 +26,14 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 
-agent_user_id: ContextVar[str | None] = ContextVar("agent_user_id", default=None)
+from naas_abi_core.services.event.context import (
+    event_actor_user_id,
+    event_actor_workspace_id,
+)
+
+# Same ContextVars as the event service's: identity set for an agent run is
+# stamped on every event published during it (EventService.publish).
+agent_user_id: ContextVar[str | None] = event_actor_user_id
 # Display identity for the acting user, alongside agent_user_id. Populated at
 # the same request boundary so tools that commit on the user's behalf (e.g.
 # Slides' upsert_file/upsert_files) can attribute the commit's git author to
@@ -35,9 +42,7 @@ agent_user_id: ContextVar[str | None] = ContextVar("agent_user_id", default=None
 agent_user_name: ContextVar[str | None] = ContextVar("agent_user_name", default=None)
 agent_user_email: ContextVar[str | None] = ContextVar("agent_user_email", default=None)
 agent_chat_id: ContextVar[str | None] = ContextVar("agent_chat_id", default=None)
-agent_workspace_id: ContextVar[str | None] = ContextVar(
-    "agent_workspace_id", default=None
-)
+agent_workspace_id: ContextVar[str | None] = event_actor_workspace_id
 
 # Coding-workspace bridge: base URL + bearer secret of the exec sidecar running
 # inside the caller's Coder coding workspace. Set at the request boundary (the
@@ -196,6 +201,53 @@ def documents_step_limit_message() -> str:
         f"{done} {leftover} "
         "Open the document and ask it to continue from the next unwritten section."
     )
+
+
+# Open Sheets workbook in the Nexus UI (pane).
+sheets_active_slug: ContextVar[str | None] = ContextVar(
+    "sheets_active_slug", default=None
+)
+sheets_active_title: ContextVar[str | None] = ContextVar(
+    "sheets_active_title", default=None
+)
+sheets_active_mode: ContextVar[str | None] = ContextVar(
+    "sheets_active_mode", default=None
+)
+sheets_research_required: ContextVar[bool] = ContextVar(
+    "sheets_research_required", default=False
+)
+sheets_research_queries: ContextVar[list[str] | None] = ContextVar(
+    "sheets_research_queries", default=None
+)
+sheets_brief: ContextVar[str | None] = ContextVar("sheets_brief", default=None)
+sheets_creation_intent: ContextVar[bool] = ContextVar(
+    "sheets_creation_intent", default=False
+)
+sheets_writes_completed: ContextVar[list[str] | None] = ContextVar(
+    "sheets_writes_completed", default=None
+)
+sheets_list_calls: ContextVar[int] = ContextVar("sheets_list_calls", default=0)
+sheets_section_read_indexes: ContextVar[list[int] | None] = ContextVar(
+    "sheets_section_read_indexes", default=None
+)
+SHEETS_RECURSION_LIMIT = 120
+
+
+def sheets_turn_active() -> bool:
+    if (sheets_active_slug.get() or "").strip():
+        return True
+    return bool(sheets_creation_intent.get())
+
+
+def note_sheets_write(label: str) -> None:
+    text = (label or "").strip()
+    if not text:
+        return
+    bucket = sheets_writes_completed.get()
+    if bucket is None:
+        sheets_writes_completed.set([text])
+        return
+    bucket.append(text)
 
 
 def slides_turn_active() -> bool:

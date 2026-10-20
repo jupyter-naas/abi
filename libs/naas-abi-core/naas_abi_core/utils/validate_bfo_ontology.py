@@ -71,6 +71,16 @@ BUCKET_ROOTS: dict[str, URIRef] = {
 
 ALL_BUCKET_ROOTS: set[URIRef] = set(BUCKET_ROOTS.values())
 
+# Continuant fiat boundaries (points, lines, surfaces) have no volume: they are
+# neither sites nor any other bucket, yet a class such as a geospatial position
+# (a fiat point) is legitimate. They are exempt from the bucket check.
+FIAT_BOUNDARY_ROOTS: set[URIRef] = {
+    BFO["BFO_0000140"],  # continuant fiat boundary
+    BFO["BFO_0000142"],  # fiat line
+    BFO["BFO_0000146"],  # fiat surface
+    BFO["BFO_0000147"],  # fiat point
+}
+
 BFO_INHERES_IN = BFO["BFO_0000197"]
 BFO_BEARER_OF = BFO["BFO_0000196"]
 BFO_HAS_MATERIAL_BASIS = BFO["BFO_0000218"]
@@ -248,6 +258,13 @@ def _build_local_ontology_index(search_root: str) -> dict[str, str]:
                     for s in g.subjects(RDF.type, OWL.Ontology):
                         if isinstance(s, URIRef):
                             index.setdefault(str(s), fpath)
+                        # OWL 2 lets owl:imports name the version IRI: the
+                        # vendored bfo-core.ttl is imported as
+                        # .../bfo/2020/bfo-core.ttl, its versionIRI. Without
+                        # this, BFO was fetched over HTTP on every check.
+                        for version in g.objects(s, OWL.versionIRI):
+                            if isinstance(version, URIRef):
+                                index.setdefault(str(version), fpath)
                 except Exception:  # noqa: BLE001,S112
                     continue
     except Exception:  # noqa: BLE001,S110
@@ -534,7 +551,7 @@ def check_bucket_mapping(
         ancestors = _all_superclasses(cls, g)
         bucket_ancestors = ancestors & ALL_BUCKET_ROOTS
 
-        if not bucket_ancestors:
+        if not bucket_ancestors and not ancestors & FIAT_BOUNDARY_ROOTS:
             issues.append(
                 {
                     "severity": "ERROR",

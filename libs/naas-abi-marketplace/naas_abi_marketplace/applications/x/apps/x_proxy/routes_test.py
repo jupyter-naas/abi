@@ -5,9 +5,15 @@ middleware has to serve a directory tree rather than a single index - these
 tests pin that down against a fake object storage holding a published export.
 """
 
+from typing import cast
+
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
+from naas_abi_core.services.object_storage.ObjectStorageService import (
+    ObjectStorageService,
+)
 from naas_abi_marketplace.applications.x.apps.x_proxy.api.common import (
     DEFAULT_APP_PREFIX,
 )
@@ -149,36 +155,15 @@ def test_search_tweet_indexes_are_served() -> None:
         assert response.json()["posts"] == [["123"]]
 
 
-def test_server_side_tweet_search_is_paged(monkeypatch) -> None:
-    from naas_abi_marketplace.applications.x.apps.x_proxy.cache.reader import (
-        CacheReader,
-    )
-
-    monkeypatch.setattr(
-        CacheReader,
-        "projection_state",
-        lambda _self: {"watermark": "now", "schema_version": 3},
-    )
-    monkeypatch.setattr(
-        CacheReader,
-        "search_tweets",
-        lambda _self, query, *, offset, limit: (
-            1,
-            [{"tweet_id": "123", "text": query, "offset": offset, "limit": limit}],
-        ),
-    )
-
-    response = _client(_published()).get(
-        f"{BASE}/search_tweets/query.json?q=drone&page=2&per_page=25"
-    )
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "count": 1,
-        "page": 2,
-        "per_page": 25,
-        "posts": [{"tweet_id": "123", "text": "drone", "offset": 50, "limit": 25}],
-    }
+def test_dataset_search_requires_read_enabled() -> None:
+    """Dataset search endpoints refuse when read path is not wired."""
+    client = _client(_published())
+    for path in (
+        f"{BASE}/dataset/posts/search.json?page=0&per_page=25",
+        f"{BASE}/dataset/users/search.json?page=0&per_page=25",
+    ):
+        with pytest.raises(Exception):
+            client.get(path)
 
 
 def test_direct_artifacts_and_media_are_served_with_cache_validators() -> None:
@@ -250,3 +235,75 @@ def test_legacy_prefix_objects_serve_at_x_proxy_urls() -> None:
     asset = client.get("/app-html/x/apps/x/_next/static/chunks/main.js")
     assert asset.status_code == 200
     assert b"console.log(0)" in asset.content
+
+
+def test_dataset_post_is_cached_and_revalidates_with_304(tmp_path, monkeypatch) -> None:
+    from datetime import UTC, datetime
+
+    from naas_abi_core.services.dataset.DatasetFactory import DatasetFactory
+    from naas_abi_marketplace.applications.x.apps.x_proxy import routes
+    from naas_abi_marketplace.applications.x.apps.x_proxy.dataset import api as ds_api
+    from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
+        POSTS_V1,
+        upsert_table,
+    )
+
+    dataset = DatasetFactory.DatasetServiceDuckLake(
+        f"sqlite:{tmp_path / 'datasets.sqlite'}", str(tmp_path / "warehouse")
+    )
+    now = datetime.now(UTC)
+    upsert_table(
+        dataset,
+        POSTS_V1,
+        [
+            {
+                "tweet_id": "4242",
+                "kind": "matched",
+                "query_slug": "q",
+                "created_at": now,
+                "created_month": now.strftime("%Y-%m"),
+                "author_id": "a1",
+                "text": "hi",
+                "full_text": "hi",
+                "lang": "en",
+                "conversation_id": "",
+                "like_count": 0,
+                "retweet_count": 0,
+                "reply_count": 0,
+                "media_urls": "",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        routes.XCountAppMiddleware, "_dataset_read_enabled", lambda self: True
+    )
+    # No landing-view warm-up here: this test counts post lookups only.
+    monkeypatch.setattr(
+        routes.XCountAppMiddleware, "_warm_landing_views", lambda self, gen: None
+    )
+    calls = {"n": 0}
+    original = ds_api.post_by_id
+
+    def counting_post_by_id(ds, tweet_id):
+        calls["n"] += 1
+        return original(ds, tweet_id)
+
+    monkeypatch.setattr(ds_api, "post_by_id", counting_post_by_id)
+    app = FastAPI()
+    app.add_middleware(
+        routes.XCountAppMiddleware,
+        object_storage_service=cast(ObjectStorageService, _published()),
+        dataset=dataset,
+    )
+    client = TestClient(app)
+
+    first = client.get(f"{BASE}/dataset/posts/4242.json")
+    assert first.status_code == 200
+    assert first.json()["post"]["tweet_id"] == "4242"
+    assert first.headers["Cache-Control"] == "private, no-cache"
+    again = client.get(
+        f"{BASE}/dataset/posts/4242.json",
+        headers={"If-None-Match": first.headers["ETag"]},
+    )
+    assert again.status_code == 304
+    assert calls["n"] == 1

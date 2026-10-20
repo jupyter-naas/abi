@@ -43,6 +43,18 @@ describe('parseOrgSettingsRoute', () => {
     });
   });
 
+  it('keeps the users section on a member profile page', () => {
+    expect(
+      parseOrgSettingsRoute('/organizations/org-1/settings/users/user-abc')
+    ).toMatchObject({
+      isOrgSettingsRoute: true,
+      orgId: 'org-1',
+      isDetail: true,
+      section: 'users',
+      sectionLabel: 'Users',
+    });
+  });
+
   it('labels the roles section', () => {
     expect(parseOrgSettingsRoute('/organizations/org-1/settings/roles')).toEqual({
       isOrgSettingsRoute: true,
@@ -70,6 +82,18 @@ describe('parseOrgSettingsRoute', () => {
     expect(
       parseOrgSettingsRoute('/organizations/org-1/settings/workspaces#list').sectionLabel
     ).toBe('Workspaces');
+  });
+
+  it('still labels hidden sections for deep links', () => {
+    expect(parseOrgSettingsRoute('/organizations/org-1/settings/domains').sectionLabel).toBe(
+      'Domains'
+    );
+    expect(parseOrgSettingsRoute('/organizations/org-1/settings/services').sectionLabel).toBe(
+      'Services'
+    );
+    expect(parseOrgSettingsRoute('/organizations/org-1/settings/billing').sectionLabel).toBe(
+      'Billing'
+    );
   });
 
   it('does not claim the organizations picker or tenant portal', () => {

@@ -1,0 +1,177 @@
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+abi:S4P2Ontology a owl:Ontology ;
+    rdfs:label "S4-P2 · Straight-through procurement"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceSHA256 "0d2c2c1e42dc3dfcfb1a8661ddba31057e88de911af1bb8f21868ba3096c0763"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    dct:title "S4-P2 · Straight-through procurement"@en ;
+    rdfs:comment "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    owl:imports abi:ABIProcessLedgerOntology .
+
+abi:S4P2Condition1 a owl:Class ;
+    rdfs:label "Straight-through procurement timing condition"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "On requisition"@en ;
+    rdfs:comment "Ledger trigger/cadence/target: On requisition. No occurrence or achieved timing is asserted."@en ;
+    rdfs:subClassOf abi:ExecutionCondition ;
+    skos:definition "Ledger trigger/cadence/target: On requisition. No occurrence or achieved timing is asserted."@en .
+
+abi:S4P2ExecutionRole a owl:Class ;
+    rdfs:label "Straight-through procurement execution role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "A proposed role realised in Straight-through procurement and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom [ a owl:Class ;
+                    owl:unionOf ( abi:AINProcurementAgentHost abi:OracleERPHost abi:ProcurementOfficerParticipant ) ] ],
+        abi:ExecutionRole ;
+    skos:definition "A proposed role realised in Straight-through procurement and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en .
+
+abi:S4P2Interval a owl:Class ;
+    rdfs:label "Straight-through procurement execution interval"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The temporal region occupied by an execution of Straight-through procurement; actual dates are unspecified."@en ;
+    rdfs:subClassOf abi:ExecutionInterval ;
+    skos:definition "The temporal region occupied by an execution of Straight-through procurement; actual dates are unspecified."@en .
+
+abi:S4P2Objective1 a owl:Class ;
+    rdfs:label "Straight-through procurement objective"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "Fast, compliant purchasing"@en ;
+    rdfs:comment "Intended outcome: Fast, compliant purchasing. This is an objective specification, not a role or a guaranteed result."@en ;
+    rdfs:subClassOf abi:ObjectiveSpecification ;
+    skos:definition "Intended outcome: Fast, compliant purchasing. This is an objective specification, not a role or a guaranteed result."@en .
+
+abi:S4P2Specification a owl:Class ;
+    rdfs:label "Straight-through procurement specification"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The simulated ledger specification for S4-P2. It describes a possible process, not an executed run."@en ;
+    rdfs:subClassOf abi:ProcessSpecification ;
+    skos:definition "The simulated ledger specification for S4-P2. It describes a possible process, not an executed run."@en .
+
+abi:S4P2Step1 a owl:Class ;
+    rdfs:label "Straight-through procurement · Requisition"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 1 ;
+    rdfs:comment "Suggested step 1 of Straight-through procurement: Requisition. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S4P2 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 1 of Straight-through procurement: Requisition. Its ordering is a specification, not observed timing."@en .
+
+abi:S4P2Step2 a owl:Class ;
+    rdfs:label "Straight-through procurement · Auto-approve within policy"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 2 ;
+    rdfs:comment "Suggested step 2 of Straight-through procurement: Auto-approve within policy. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S4P2 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 2 of Straight-through procurement: Auto-approve within policy. Its ordering is a specification, not observed timing."@en .
+
+abi:S4P2Step3 a owl:Class ;
+    rdfs:label "Straight-through procurement · Order"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 3 ;
+    rdfs:comment "Suggested step 3 of Straight-through procurement: Order. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S4P2 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 3 of Straight-through procurement: Order. Its ordering is a specification, not observed timing."@en .
+
+abi:S4P2 a owl:Class ;
+    rdfs:label "Straight-through procurement"@en ;
+    abi:ledgerCode "S4-P2"@en ;
+    abi:ledgerHOWITIS "Cycle time"@en,
+        "Policy compliance"@en ;
+    abi:ledgerHOWWEKNOW "Audit trail"@en,
+        "Procurement record"@en ;
+    abi:ledgerWHEN "On requisition"@en ;
+    abi:ledgerWHERE "On-premises data centre"@en,
+        "Operations centre"@en ;
+    abi:ledgerWHO "AIN procurement agent"@en,
+        "Oracle ERP"@en,
+        "Procurement officer"@en ;
+    abi:ledgerWHY "Fast, compliant purchasing"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:qualityMappingStatus "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A proposed ABI straight-through procurement process. Suggested steps: Requisition → Auto-approve within policy → Order. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en,
+        "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000059 ;
+            owl:someValuesFrom abi:S4P2Specification ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:usesInformation ;
+            owl:someValuesFrom abi:AINProcurementAgentSoftware ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasExecutionCondition ;
+            owl:someValuesFrom abi:S4P2Condition1 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:AuditTrailRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:AINProcurementAgentHost ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:OracleERPHost ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasIndicatorRecord ;
+            owl:someValuesFrom abi:PolicyComplianceIndicator ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000066 ;
+            owl:someValuesFrom abi:OnPremisesDataCentreSite ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:usesInformation ;
+            owl:someValuesFrom abi:OracleERPSoftware ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000066 ;
+            owl:someValuesFrom abi:OperationsCentreSite ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S4P2Step2 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S4P2Step3 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S4P2Step1 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:ProcurementRecordRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:ProcurementOfficerParticipant ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000055 ;
+            owl:someValuesFrom abi:S4P2ExecutionRole ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000199 ;
+            owl:someValuesFrom abi:S4P2Interval ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasIndicatorRecord ;
+            owl:someValuesFrom abi:CycleTimeIndicator ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:pursuesObjective ;
+            owl:someValuesFrom abi:S4P2Objective1 ],
+        abi:LedgerProcess,
+        abi:S4Process,
+        bfo:BFO_0000015 ;
+    skos:altLabel "S4-P2"@en ;
+    skos:definition "A proposed ABI straight-through procurement process. Suggested steps: Requisition → Auto-approve within policy → Order. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en .
+

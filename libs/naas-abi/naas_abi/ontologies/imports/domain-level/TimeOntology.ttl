@@ -11,7 +11,7 @@
 
 <http://ontology.naas.ai/abi/TimeOntology> rdf:type owl:Ontology ;
     owl:imports <http://purl.obolibrary.org/obo/bfo/2020/bfo-core.ttl>  ;
-    dc:title "Person Ontology"@en ;
+    dc:title "Time Ontology"@en ;
     dc:description "Ontology for time."@en ;
     dc:license <https://creativecommons.org/licenses/by/4.0/> ;
     rdfs:comment "Creating specific classes for time."@en ;

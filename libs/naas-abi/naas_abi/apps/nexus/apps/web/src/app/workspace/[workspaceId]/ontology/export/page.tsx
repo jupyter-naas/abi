@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams } from 'next/navigation';
+import { OntologyMenuBar } from '@/components/ontology/ontology-menu-bar';
 import { Header } from '@/components/shell/header';
 import {
   AlertCircle,
@@ -178,7 +179,7 @@ export default function OntologyExportPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <Header title="Export Ontology" />
+      <Header title="Export Ontology" nav={<OntologyMenuBar />} />
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto px-6 py-6">

@@ -239,6 +239,16 @@ class IDatasetPort(ABC):
         """List the coherent, catalog-level snapshots available for time travel."""
 
     @abstractmethod
+    def namespace_version(self, namespace: str) -> int | None:
+        """The last snapshot that changed any dataset in *namespace*.
+
+        None when the namespace never held a dataset. Unlike
+        ``DatasetInfo.snapshot_id``, the catalog's current snapshot, which moves
+        on every write anywhere, this moves only when *namespace* changes, so a
+        reader can key a cache on it.
+        """
+
+    @abstractmethod
     def drop(self, name: str, *, namespace: str = "default") -> None:
         """Drop the current table. Historical snapshots retain data until expiry."""
 

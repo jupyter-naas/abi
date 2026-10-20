@@ -2,6 +2,116 @@
 
 <!-- version list -->
 
+## v2.28.0 (2026-10-15)
+
+
+## v2.27.1 (2026-10-14)
+
+### Bug Fixes
+
+- **maps**: Update feed and geojson debug handling
+  ([`f1cad6c`](https://github.com/jupyter-naas/abi/commit/f1cad6c1bbff5792716049a4c5f971138f3eae3a))
+
+### Refactoring
+
+- **files**: Reorganize file drives and add platform drive
+  ([`ad0eed4`](https://github.com/jupyter-naas/abi/commit/ad0eed46afa5d61217b7ab07f63cf35ba1502d72))
+
+
+## v2.27.0 (2026-10-07)
+
+### Features
+
+- **intel-processes**: Add organization and people logo pipelines and utilities
+  ([`d39062b`](https://github.com/jupyter-naas/abi/commit/d39062ba961596f4661354af9a1a47922b1723b3))
+
+
+## v2.26.5 (2026-10-05)
+
+### Bug Fixes
+
+- Onto2py code generated
+  ([`3d4283a`](https://github.com/jupyter-naas/abi/commit/3d4283a305bf04794270d4704c3975be63f76e35))
+
+### Chores
+
+- Commit staged changes
+  ([`50d907d`](https://github.com/jupyter-naas/abi/commit/50d907d0cb5df755ed38cc2565adf0150a535c8a))
+
+- Update naas-abi version and improve people app API mount docs
+  ([`2916982`](https://github.com/jupyter-naas/abi/commit/29169822869cdc4a5f48332c5cbfff70a1cd46a7))
+
+### Refactoring
+
+- **search-topics**: Update topic queries and schema
+  ([`1ec21f8`](https://github.com/jupyter-naas/abi/commit/1ec21f802702ac85fdbc4402d915e8a9a390351c))
+
+
+## v2.26.4 (2026-09-30)
+
+
+## v2.26.3 (2026-09-24)
+
+### Bug Fixes
+
+- **auth**: Lock registration, guard Ollama routes, enforce sign-in rate limits
+  ([`df2a296`](https://github.com/jupyter-naas/abi/commit/df2a296a88ca4d3da6a1846cc175b76d46525edb))
+
+
+## v2.26.2 (2026-09-24)
+
+### Bug Fixes
+
+- **auth**: Remove default admin passwords and API key
+  ([`731802c`](https://github.com/jupyter-naas/abi/commit/731802cce3fe0aaf3367331ee8216df78a2cbbf9))
+
+
+## v2.26.1 (2026-09-24)
+
+### Bug Fixes
+
+- **api**: Remove the /token endpoint that issued ABI_API_KEY
+  ([`101085f`](https://github.com/jupyter-naas/abi/commit/101085f5dbcd209a7d8614b858f7a75fe9ff23cb))
+
+
+## v2.26.0 (2026-09-22)
+
+### Features
+
+- **nexus**: Native Sheets editor, formulas, resizing, and SheetsAgent
+  ([#1297](https://github.com/jupyter-naas/abi/pull/1297),
+  [`135967f`](https://github.com/jupyter-naas/abi/commit/135967f33be441c7afa9f4d82e7f1f40a4c7c465))
+
+
+## v2.25.0 (2026-09-22)
+
+### Bug Fixes
+
+- **core**: Address document service review feedback
+  ([`adc548c`](https://github.com/jupyter-naas/abi/commit/adc548cf122052e64ea79c3427a1e0d450e3093f))
+
+### Features
+
+- **core**: Add portable document store service
+  ([`db7df35`](https://github.com/jupyter-naas/abi/commit/db7df354346a5bf1ebeba60ba4f33651cad09c9d))
+
+
+## v2.24.1 (2026-09-21)
+
+### Bug Fixes
+
+- **x-proxy-dataset**: Apply various minor fixes and updates
+  ([`6becfb5`](https://github.com/jupyter-naas/abi/commit/6becfb51527d799a4222f2c5243a690935d19386))
+
+
+## v2.24.0 (2026-09-17)
+
+### Features
+
+- **nexus-build-app**: Add role-based visibility for office agents
+  ([`02276d4`](https://github.com/jupyter-naas/abi/commit/02276d49c4f37924f647eb3ca8101dd2155a2f18))
+
+
 ## v2.23.0 (2026-09-14)
 
 ### Chores

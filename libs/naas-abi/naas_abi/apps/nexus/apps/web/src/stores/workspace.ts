@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
+import { createDeferredStorage } from '@/lib/deferred-storage';
 import type { WorkspaceFeatureFlags } from '@/lib/feature-access';
 import { DEFAULT_NAV_ORDER, mergeNavOrder } from '@/lib/sidebar-nav';
 import { clampDockWidth, clampFeatureColumnWidth, DOCK_WIDTH_DEFAULT } from '@/lib/shell-columns';
@@ -12,41 +13,12 @@ import {
   dropSlidesPaneConversationKeys,
   slidesPaneConversationKey,
 } from '@/lib/slides-pane-conversation';
+import { sheetsPaneConversationKey, dropSheetsPaneConversationKeys } from '@/lib/sheets-pane-conversation';
 import { conversationTitleFromPrompt } from '@/lib/office-auto-title';
 import { useAuthStore } from './auth';
 import { useDocumentsStore } from './documents';
 import { useSlidesStore } from './slides';
 import { getApiUrl } from '@/lib/config';
-
-// Throttled localStorage wrapper: prevents browser freeze during streaming.
-// During chat streaming, updateLastMessage fires on every token, which causes
-// Zustand persist to JSON.stringify + localStorage.setItem the entire state
-// hundreds of times per second. This batches writes to at most once per second.
-const throttledLocalStorage = () => {
-  let pendingValue: string | null = null;
-  let writeTimer: ReturnType<typeof setTimeout> | null = null;
-
-  return {
-    getItem: (name: string) => localStorage.getItem(name),
-    setItem: (name: string, value: string) => {
-      pendingValue = value;
-      if (!writeTimer) {
-        writeTimer = setTimeout(() => {
-          if (pendingValue !== null) {
-            try {
-              localStorage.setItem(name, pendingValue);
-            } catch {
-              // Silently handle quota exceeded
-            }
-            pendingValue = null;
-          }
-          writeTimer = null;
-        }, 1000);
-      }
-    },
-    removeItem: (name: string) => localStorage.removeItem(name),
-  };
-};
 
 export type NavigationItem =
   | 'maps'
@@ -123,6 +95,7 @@ export interface Conversation {
   /** Slides deck this pane thread is bound to. Client-only; API has no field. */
   slidesSlug?: string;
   documentsSlug?: string;
+  sheetsSlug?: string;
 }
 
 export interface Project {
@@ -181,7 +154,13 @@ export const PRESET_COLORS = [
 export interface Workspace {
   id: string;
   name: string;
+  /** Unique URL name: /workspace/<slug> opens the workspace like its id. */
+  slug?: string;
   description?: string;
+  /** Workspace group (Settings → General); empty shows under "Others". */
+  group?: string;
+  /** Organization the workspace belongs to (Organization Settings links). */
+  organizationId?: string;
   icon?: string;
   color?: string;
   theme: WorkspaceTheme;
@@ -206,7 +185,7 @@ export interface GitCommit {
 }
 
 // Sidebar expandable sections
-export type SidebarSection = 'home' | 'workspaces' | 'maps' | 'chat' | 'search' | 'files' | 'datasets' | 'code' | 'slides' | 'documents' | 'ontology' | 'graph' | 'apps' | 'marketplace' | 'settings' | 'events' | 'infrastructure';
+export type SidebarSection = 'home' | 'workspaces' | 'maps' | 'chat' | 'search' | 'files' | 'datasets' | 'code' | 'slides' | 'documents' | 'sheets' | 'ontology' | 'graph' | 'apps' | 'marketplace' | 'settings' | 'events' | 'infrastructure';
 
 const RETIRED_PANEL_SECTIONS = new Set<string>(['lab']);
 
@@ -249,6 +228,10 @@ interface WorkspaceState {
   lastActivePanelSection: SidebarSection | null;
   /** The column the Workspaces list replaced (null = no column). Not persisted. */
   panelSectionBeforeWorkspaces: SidebarSection | null;
+  /** One-shot: the next route change keeps the feature column closed instead
+   *  of opening the route's section (Home launching an app). Not persisted. */
+  keepPanelClosedOnNextRoute: boolean;
+  setKeepPanelClosedOnNextRoute: (keep: boolean) => void;
   /** Dismiss the mark-opened Workspaces list, putting back the column it covered. */
   closeWorkspacesPanel: () => void;
   /** Icon order for the workspace nav. Settings stays pinned and is omitted. */
@@ -313,6 +296,7 @@ interface WorkspaceState {
     slug: string,
     conversationId: string,
   ) => void;
+  sheetsPaneConversationByKey: Record<string, string>;
   documentsPaneConversationByKey: Record<string, string>;
   rememberDocumentsPaneConversation: (
     workspaceId: string,
@@ -327,7 +311,7 @@ interface WorkspaceState {
   closePaneTab: (id: string) => void;
   createConversation: (
     projectId?: string,
-    options?: { surface?: 'main' | 'pane'; slidesSlug?: string; documentsSlug?: string },
+    options?: { surface?: 'main' | 'pane'; slidesSlug?: string; documentsSlug?: string; sheetsSlug?: string },
   ) => string;
   setActiveConversation: (id: string | null) => void;
   /** Record the latest agent used in a conversation (mirrors the backend,
@@ -354,6 +338,8 @@ interface WorkspaceState {
     oldMessageId: string,
     newMessageId: string,
   ) => void;
+  /** Drop a message row (e.g. empty assistant bubble after a no-content stream). */
+  removeMessage: (conversationId: string, messageId: string) => void;
   setMessageModelId: (
     conversationId: string,
     messageId: string,
@@ -387,6 +373,8 @@ interface WorkspaceState {
   selectWorkspace: (id: string) => void;
   updateWorkspace: (id: string, updates: Partial<Workspace>) => void;
   updateWorkspaceTheme: (updates: Partial<WorkspaceTheme>) => void;
+  /** Apply a theme change the server already saved (no PATCH back). */
+  applyWorkspaceTheme: (workspaceId: string, updates: Partial<WorkspaceTheme>) => void;
   getCurrentWorkspace: () => Workspace | null;
   fetchWorkspaces: () => Promise<void>;
 
@@ -577,6 +565,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   })),
   lastActivePanelSection: null,
   panelSectionBeforeWorkspaces: null,
+  keepPanelClosedOnNextRoute: false,
+  setKeepPanelClosedOnNextRoute: (keep) => set({ keepPanelClosedOnNextRoute: keep }),
   closeWorkspacesPanel: () => set((state) => (
     state.activePanelSection === 'workspaces'
       ? { activePanelSection: state.panelSectionBeforeWorkspaces }
@@ -645,6 +635,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       ),
     }));
   },
+  sheetsPaneConversationByKey: {},
   documentsPaneConversationByKey: {},
   rememberDocumentsPaneConversation: (workspaceId, slug, conversationId) => {
     const ws = workspaceId.trim();
@@ -704,7 +695,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       };
     }),
 
-  createConversation: (projectId?: string, options?: { surface?: 'main' | 'pane'; slidesSlug?: string; documentsSlug?: string }) => {
+  createConversation: (projectId?: string, options?: { surface?: 'main' | 'pane'; slidesSlug?: string; documentsSlug?: string; sheetsSlug?: string }) => {
     const id = generateConversationId();
     const workspaceId = get().currentWorkspaceId;
     const surface = options?.surface ?? 'main';
@@ -714,6 +705,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     }
     const agent = surface === 'pane' ? get().paneAgent : get().selectedAgent;
     const slidesSlug = options?.slidesSlug?.trim() || undefined;
+    const sheetsSlug = options?.sheetsSlug?.trim() || undefined;
     const documentsSlug = options?.documentsSlug?.trim() || undefined;
     const newConversation: Conversation = {
       id,
@@ -728,6 +720,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       isDraft: true,
       slidesSlug,
       documentsSlug,
+      sheetsSlug,
     };
     const slidesKey =
       slidesSlug && surface === 'pane'
@@ -755,6 +748,12 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             },
           }
         : {}),
+      ...(sheetsSlug && surface === 'pane' ? {
+        sheetsPaneConversationByKey: {
+          ...state.sheetsPaneConversationByKey,
+          [sheetsPaneConversationKey(workspaceId, sheetsSlug)]: id,
+        },
+      } : {}),
       ...(documentsKey
         ? {
             documentsPaneConversationByKey: {
@@ -876,6 +875,20 @@ export const useWorkspaceStore = create<WorkspaceState>()(
               messages: conv.messages.map((msg) =>
                 msg.id === oldMessageId ? { ...msg, id: newMessageId } : msg,
               ),
+            }
+          : conv,
+      ),
+    }));
+  },
+
+  removeMessage: (conversationId, messageId) => {
+    if (!conversationId || !messageId) return;
+    set((state) => ({
+      conversations: state.conversations.map((conv) =>
+        conv.id === conversationId
+          ? {
+              ...conv,
+              messages: conv.messages.filter((msg) => msg.id !== messageId),
             }
           : conv,
       ),
@@ -1014,6 +1027,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           state.slidesPaneConversationByKey,
           id,
         ),
+        sheetsPaneConversationByKey: dropSheetsPaneConversationKeys(state.sheetsPaneConversationByKey, id),
         documentsPaneConversationByKey: dropDocumentsPaneConversationKeys(
           state.documentsPaneConversationByKey,
           id,
@@ -1114,6 +1128,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             // Preserve loaded message history if we already have it in memory.
             messages: existing.messages.length > 0 ? existing.messages : apiConv.messages,
             slidesSlug: existing.slidesSlug ?? apiConv.slidesSlug,
+            sheetsSlug: existing.sheetsSlug ?? apiConv.sheetsSlug,
             isDraft: false,
           };
         });
@@ -1192,6 +1207,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
                 ? [...mapped.messages, ...localOnly]
                 : mapped.messages,
           slidesSlug: existing?.slidesSlug ?? mapped.slidesSlug,
+          sheetsSlug: existing?.sheetsSlug ?? mapped.sheetsSlug,
           isDraft: false,
         };
         const conversations = existing
@@ -1296,6 +1312,13 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     }));
   },
 
+  applyWorkspaceTheme: (workspaceId, updates) =>
+    set((state) => ({
+      workspaces: state.workspaces.map((w) =>
+        w.id === workspaceId ? { ...w, theme: { ...w.theme, ...updates }, updatedAt: new Date() } : w
+      ),
+    })),
+
   updateWorkspaceTheme: async (updates) => {
     const { currentWorkspaceId } = get();
     if (!currentWorkspaceId) return;
@@ -1375,7 +1398,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       const workspaces: Workspace[] = apiWorkspaces.map((ws: any) => ({
         id: ws.id,
         name: ws.name,
+        slug: ws.slug || undefined,
         description: ws.description,
+        group: ws.workspace_group || undefined,
+        organizationId: ws.organization_id || undefined,
         icon: ws.icon || ws.logo_emoji,
         color: ws.color,
         theme: {
@@ -1806,7 +1832,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 }),
     {
       name: 'nexus-workspace-storage',
-      storage: createJSONStorage(throttledLocalStorage),
+      // Deferred: chat streaming and dock clicks must not stringify the store.
+      storage: createDeferredStorage(),
       partialize: (state) => ({
         // Persist these parts of state
         workspaces: state.workspaces,
@@ -1827,6 +1854,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         paneOpenTabIds: state.paneOpenTabIds,
         slidesPaneConversationByKey: state.slidesPaneConversationByKey,
         documentsPaneConversationByKey: state.documentsPaneConversationByKey,
+        sheetsPaneConversationByKey: state.sheetsPaneConversationByKey,
         activePanelSection: state.activePanelSection,
         dockWidth: state.dockWidth,
         sectionPanelWidth: state.sectionPanelWidth,
@@ -1880,6 +1908,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             typeof state.slidesPaneConversationByKey === 'object'
               ? state.slidesPaneConversationByKey
               : {};
+          state.sheetsPaneConversationByKey = state.sheetsPaneConversationByKey || {};
           state.documentsPaneConversationByKey =
             state.documentsPaneConversationByKey &&
             typeof state.documentsPaneConversationByKey === 'object'

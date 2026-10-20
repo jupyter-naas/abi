@@ -1,0 +1,174 @@
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+abi:S2P1Ontology a owl:Ontology ;
+    rdfs:label "S2-P1 · Executive briefing"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceSHA256 "0d2c2c1e42dc3dfcfb1a8661ddba31057e88de911af1bb8f21868ba3096c0763"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    dct:title "S2-P1 · Executive briefing"@en ;
+    rdfs:comment "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    owl:imports abi:ABIProcessLedgerOntology .
+
+abi:S2P1Condition1 a owl:Class ;
+    rdfs:label "Executive briefing timing condition"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "Daily; before movements"@en ;
+    rdfs:comment "Ledger trigger/cadence/target: Daily; before movements. No occurrence or achieved timing is asserted."@en ;
+    rdfs:subClassOf abi:ExecutionCondition ;
+    skos:definition "Ledger trigger/cadence/target: Daily; before movements. No occurrence or achieved timing is asserted."@en .
+
+abi:S2P1ExecutionRole a owl:Class ;
+    rdfs:label "Executive briefing execution role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "A proposed role realised in Executive briefing and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom [ a owl:Class ;
+                    owl:unionOf ( abi:AINAgentsHost abi:ExecutivePrincipalParticipant abi:S2OfficerParticipant ) ] ],
+        abi:ExecutionRole ;
+    skos:definition "A proposed role realised in Executive briefing and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en .
+
+abi:S2P1Interval a owl:Class ;
+    rdfs:label "Executive briefing execution interval"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The temporal region occupied by an execution of Executive briefing; actual dates are unspecified."@en ;
+    rdfs:subClassOf abi:ExecutionInterval ;
+    skos:definition "The temporal region occupied by an execution of Executive briefing; actual dates are unspecified."@en .
+
+abi:S2P1Objective1 a owl:Class ;
+    rdfs:label "Executive briefing objective"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "Informed, timely decisions"@en ;
+    rdfs:comment "Intended outcome: Informed, timely decisions. This is an objective specification, not a role or a guaranteed result."@en ;
+    rdfs:subClassOf abi:ObjectiveSpecification ;
+    skos:definition "Intended outcome: Informed, timely decisions. This is an objective specification, not a role or a guaranteed result."@en .
+
+abi:S2P1Specification a owl:Class ;
+    rdfs:label "Executive briefing specification"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The simulated ledger specification for S2-P1. It describes a possible process, not an executed run."@en ;
+    rdfs:subClassOf abi:ProcessSpecification ;
+    skos:definition "The simulated ledger specification for S2-P1. It describes a possible process, not an executed run."@en .
+
+abi:S2P1Step1 a owl:Class ;
+    rdfs:label "Executive briefing · Gather inputs"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 1 ;
+    rdfs:comment "Suggested step 1 of Executive briefing: Gather inputs. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S2P1 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 1 of Executive briefing: Gather inputs. Its ordering is a specification, not observed timing."@en .
+
+abi:S2P1Step2 a owl:Class ;
+    rdfs:label "Executive briefing · Synthesise"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 2 ;
+    rdfs:comment "Suggested step 2 of Executive briefing: Synthesise. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S2P1 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 2 of Executive briefing: Synthesise. Its ordering is a specification, not observed timing."@en .
+
+abi:S2P1Step3 a owl:Class ;
+    rdfs:label "Executive briefing · Deliver briefing"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 3 ;
+    rdfs:comment "Suggested step 3 of Executive briefing: Deliver briefing. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S2P1 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 3 of Executive briefing: Deliver briefing. Its ordering is a specification, not observed timing."@en .
+
+abi:S2P1 a owl:Class ;
+    rdfs:label "Executive briefing"@en ;
+    abi:ledgerCode "S2-P1"@en ;
+    abi:ledgerHOWITIS "Confidence score"@en,
+        "Timeliness"@en ;
+    abi:ledgerHOWWEKNOW "Briefing note"@en,
+        "Decision log"@en ;
+    abi:ledgerWHEN "Daily; before movements"@en ;
+    abi:ledgerWHERE "Air-gapped zone"@en,
+        "Operations centre"@en ;
+    abi:ledgerWHO "AIN agents"@en,
+        "Executive principal"@en,
+        "S2 officer"@en ;
+    abi:ledgerWHY "Informed, timely decisions"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:qualityMappingStatus "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A proposed ABI executive briefing process. Suggested steps: Gather inputs → Synthesise → Deliver briefing. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en,
+        "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000066 ;
+            owl:someValuesFrom abi:AirGappedZoneSite ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasIndicatorRecord ;
+            owl:someValuesFrom abi:ConfidenceScoreIndicator ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:usesInformation ;
+            owl:someValuesFrom abi:AINAgentsSoftware ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasIndicatorRecord ;
+            owl:someValuesFrom abi:TimelinessIndicator ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:S2OfficerParticipant ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000055 ;
+            owl:someValuesFrom abi:S2P1ExecutionRole ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000066 ;
+            owl:someValuesFrom abi:OperationsCentreSite ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000199 ;
+            owl:someValuesFrom abi:S2P1Interval ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:pursuesObjective ;
+            owl:someValuesFrom abi:S2P1Objective1 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S2P1Step1 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasExecutionCondition ;
+            owl:someValuesFrom abi:S2P1Condition1 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:ExecutivePrincipalParticipant ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:AINAgentsHost ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000059 ;
+            owl:someValuesFrom abi:S2P1Specification ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:BriefingNoteRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S2P1Step3 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S2P1Step2 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:DecisionLogRecord ],
+        abi:LedgerProcess,
+        abi:S2Process,
+        bfo:BFO_0000015 ;
+    skos:altLabel "S2-P1"@en ;
+    skos:definition "A proposed ABI executive briefing process. Suggested steps: Gather inputs → Synthesise → Deliver briefing. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en .
+

@@ -11,6 +11,7 @@ class GraphInfo(BaseModel):
     uri: str
     label: str
     role_label: str = "unknown"
+    can_write: bool = False
 
 
 class GraphPack(BaseModel):

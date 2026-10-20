@@ -19,6 +19,7 @@ import {
   recordToOpenModule, toRecord, toTenantRecord,
   type AppRecord, type AppsResponse,
 } from '@/app/workspace/[workspaceId]/apps/components/types';
+import { forgetAppsLastOpen } from '@/app/workspace/[workspaceId]/apps/lib/apps-route';
 
 const CATEGORY_COLORS: Record<string, string> = {
   application: 'bg-purple-500/10 text-purple-500',
@@ -246,7 +247,7 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
           onClick={() => setOpenAppModule(recordToOpenModule(record))}
           onMouseEnter={(e) => showTooltip(e, record.name, record.description || record.module)}
           onMouseLeave={hideTooltip}
-          className={cn('flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-sm', isActive && 'font-medium')}
+          className={cn('flex min-w-0 flex-1 items-center gap-1 px-2 py-1.5 apps-sidebar-list-row', isActive && 'font-medium')}
         >
           <AppIcon record={record} size="sm" />
           <span className="truncate">{record.name}</span>
@@ -283,14 +284,11 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
       <div className="space-y-0.5">
         <Link
           href={basePath}
-          className={cn(
-            'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
-            isOnApps && !openAppModule
-              ? 'bg-muted text-foreground font-medium'
-              : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-          )}
+          onClick={() => forgetAppsLastOpen(currentWorkspaceId)}
+          aria-current={isOnApps && !openAppModule ? 'page' : undefined}
+          className="shell-sidebar-home"
         >
-          <LayoutGrid size={14} />
+          <LayoutGrid size={14} aria-hidden="true" />
           <span>All apps</span>
         </Link>
         {appLinks}

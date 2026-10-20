@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useAppState } from "@/components/AppProvider";
-import { MediaCarousel } from "@/components/MediaCarousel";
+import { PostMediaCarousel } from "@/components/PostMediaCarousel";
 import { FEED } from "@/lib/appConfig";
 import { hrefFor } from "@/lib/routes";
 import { postAnchorId, tweetIdOf } from "@/lib/userSearch";
@@ -132,7 +132,7 @@ export function UserPostCard({
           {post.text || "-"}
         </Link>
       )}
-      {media ? <MediaCarousel value={media} /> : null}
+      {media ? <PostMediaCarousel tweetId={tweetId} value={media} /> : null}
     </article>
   );
 }

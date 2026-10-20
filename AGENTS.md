@@ -29,6 +29,7 @@ Core services live under `libs/naas-abi-core/naas_abi_core/services/`. Each has 
 | `agent` | LLM ↔ tools/sub-agents orchestration, memory, SSE streaming | [services/agent/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/agent/AGENTS.md) |
 | `bus` | Pub/sub + durable work-queue message broker | [services/bus/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/bus/AGENTS.md) |
 | `cache` | Multi-tier (hot/cold) cache with decorator API | [services/cache/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/cache/AGENTS.md) |
+| `document` | Portable mutable documents, scoped to modules (SQLite / PostgreSQL) | [services/document/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/document/AGENTS.md) |
 | `email` | Transactional email sending (SMTP / SES / FS) | [services/email/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/email/AGENTS.md) |
 | `event` | Durable typed event log + live pub/sub | [services/event/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/event/AGENTS.md) |
 | `keyvalue` | Bytes-in/out KV store with TTL + atomic CAS/CAD | [services/keyvalue/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/keyvalue/AGENTS.md) |
@@ -55,8 +56,6 @@ The marketplace (`libs/naas-abi-marketplace/`) is a registry of pluggable module
 
 ## Extra Rules Discovery
 
-- Checked `.cursorrules`: not present.
-- Checked `.cursor/rules/`: not present.
 - Checked `.github/copilot-instructions.md`: not present.
 - Additional instructions are defined in `~/.claude/CLAUDE.md`:
   - Use `gh` CLI for GitHub operations.
@@ -220,34 +219,22 @@ def unsupported_method(self, arg: str) -> None:
 
 After `abi stack start`, the web UI is at `http://localhost:3042`.
 
-Default admin credentials:
+There is no default password. The only seeded account is `admin@example.com`; its password is generated per project and stored in `.env` as `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`:
 
-| Email | Password |
-|---|---|
-| `admin@example.com` | `Admin1234!` |
+```bash
+grep NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD .env
+```
 
 Password login is enabled via `auth_password_enabled: true` in `config.local.yaml`. Set it to `false` to switch back to magic link.
 
-**How the password is set:** On first boot, the seeder looks for `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD` in `.env`. If found, it uses that value. If missing, it generates a random password and writes it back to `.env`. The `.env` in this repo ships with `Admin1234!` pre-set, so all teammates get the same password as long as they don't delete that line.
+Self-registration is off (`auth_signup_enabled: false`): add people by invitation or through `users:` in the config. Sign-in endpoints are rate limited in every environment (5 failures per account and 20 attempts per IP per 5 minutes); `rate_limit_enabled: false` turns this off for local debugging.
 
-If you see "Incorrect email or password":
+**How the password is set:** `abi new project`, `abi dev up` and `abi deploy local` generate it into `.env`. On first boot the seeder creates the account with that value; if the key is missing it generates one and writes it back. Published defaults (`admin`, `Admin1234!`) are never accepted: login refuses them, and on boot the seeder replaces them with a generated password written to `.env`.
 
-**Option A (no data to keep):** Wipe and reseed.
+If you see "Incorrect email or password", read the current value from `.env` (it may have just been rotated), or wipe and reseed when there is no data to keep:
 ```bash
 docker volume rm abi_postgres_data
 abi stack start
-```
-
-**Option B (keep existing data):** The user already exists with a mismatched hash. Add the missing key to `.env` then force-update the hash:
-```bash
-# 1. Add to .env if missing:
-echo "NEXUS_USER_ADMIN_EXAMPLE_COM_EMAIL=admin@example.com" >> .env
-echo "NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD=Admin1234!" >> .env
-
-# 2. Reset the hash in Postgres directly:
-HASH=$(docker exec abi-abi-1 python3 -c "import bcrypt; print(bcrypt.hashpw(b'Admin1234!', bcrypt.gensalt()).decode())")
-docker exec abi-postgres-1 psql -U abi -d nexus -c "UPDATE users SET hashed_password='$HASH' WHERE email='admin@example.com';"
-docker compose restart abi
 ```
 
 ## Stack Management
@@ -379,7 +366,7 @@ docker compose logs -f <service>                # View logs
 
 When creating or modifying secondary adapters, **ALL abstract methods from the port interface MUST be implemented**. Python will refuse to instantiate the class otherwise. For features not supported by an adapter, implement the method to raise `NotImplementedError` with a descriptive message.
 
-## Cursor Cloud specific instructions
+## Hosted development environment instructions
 
 The Cloud VM has no Docker, so use the **no-Docker `abi dev` runtime** (backed by `config.yaml`: Oxigraph/SQLite/filesystem adapters). `abi stack start` and `config.local.yaml` require Docker (Postgres/Fuseki/Qdrant/RabbitMQ/Redis/MinIO) and will not work here. The update script installs deps (`uv sync --all-extras` + `pnpm install` for the web app) and Ollama if missing; it does **not** pull the ~2 GB models on every boot. Do not re-run those to "start" anything.
 
@@ -390,7 +377,7 @@ Run all four services with `uv run abi dev up -d`, then `abi dev status` / `abi 
 Non-obvious gotchas discovered during setup:
 
 - **`.env` is required and gitignored.** It is auto-created on first `abi dev up`, seeding only the admin login. The engine renders `config.yaml` through Jinja and **hard-fails non-interactively (no TTY) on missing `{{ secret.X }}` in active (non-comment) YAML**. Full-line YAML comments are left unrendered, so commented-out modules can keep example `{{ secret.X }}` placeholders. Root config is keyless-clean for AI/integrations; remaining deploy placeholders are in `.env.example` (`NAAS_API_KEY`, `ABI_API_KEY`, `NEXUS_API_URL`). Copy those if missing.
-- **For capable cloud models:** set `global_config.ai_mode: "cloud"`, uncomment a cloud provider module in `config.yaml`, replace `SECRET_REF` with a real Jinja secret, and add its key via Cursor Secrets / `.env`.
+- **For capable cloud models:** set `global_config.ai_mode: "cloud"`, uncomment a cloud provider module in `config.yaml`, replace `SECRET_REF` with a real Jinja secret, and add its key via environment secrets or `.env`.
 - **First API boot is slow (~2-3 min):** the worker loads every module/ontology and runs Nexus SQLite migrations before serving. Watch `abi dev logs api`; it is ready when `/docs` returns 200 (`GET http://localhost:<api-port>/docs`).
 - **Ports are offset per worktree** (see `abi dev ports`), so they are not the config defaults. `abi dev` injects `OXIGRAPH_URL` into each service; the `config.yaml` default `:7878` is not the live port. To run a test that builds its own engine against the live triple store, pass `OXIGRAPH_URL=http://127.0.0.1:<oxigraph-port>`.
-- **Login:** `admin@example.com` / `admin` (the `abi dev` default; the Docker stack uses `Admin1234!`). Web UI is the `nexus-web` port.
+- **Login:** `admin@example.com` with the password generated into `.env` as `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD` (printed by `abi dev up`). There is no default password. Web UI is the `nexus-web` port.

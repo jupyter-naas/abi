@@ -12,6 +12,13 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary import (
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import MagicLinkChallenge
 
 
+@pytest.fixture(autouse=True)
+def _no_rate_limit_store(monkeypatch) -> None:
+    """These tests exercise the handlers, not the rate-limit table."""
+    monkeypatch.setattr(auth_api, "ensure_under_limit", AsyncMock())
+    monkeypatch.setattr(auth_api, "record_attempt", AsyncMock())
+
+
 @pytest.mark.asyncio
 async def test_request_magic_link_response_never_includes_secrets(monkeypatch) -> None:
     auth_service = AsyncMock()

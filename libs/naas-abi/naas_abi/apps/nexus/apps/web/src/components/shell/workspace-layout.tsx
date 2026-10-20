@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import dynamic from 'next/dynamic';
 import { Sidebar } from './sidebar';
@@ -25,6 +25,7 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { PresenceIndicator } from '@/components/presence-indicator';
 import { getWorkspacePath } from './sidebar/utils';
 import { pathNeedsAgentCatalog } from '@/lib/feature-access';
+import { rememberWorkspacePath } from '@/lib/workspace-return-path';
 import { OfficeCreateOverlay } from '@/components/office/office-create-overlay';
 
 const AIPane = dynamic(() => import('./ai-pane').then((m) => m.AIPane), { ssr: false });
@@ -87,6 +88,7 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
   const mobilePendingChatSlug = useWorkspaceStore((state) => state.mobilePendingChatSlug);
   const setMobilePendingChatSlug = useWorkspaceStore((state) => state.setMobilePendingChatSlug);
   const contextPanelOpen = useWorkspaceStore((state) => state.contextPanelOpen);
+  const activePanelSection = useWorkspaceStore((state) => state.activePanelSection);
   const { setTheme } = useTheme();
   const [orgBorderRadius, setOrgBorderRadius] = useState('0');
   const [moreOpen, setMoreOpen] = useState(false);
@@ -171,13 +173,18 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
   // Agents/skills belong to chat, agent settings, and the open AI pane.
   // Fetching them on every workspace switch (including Apps) POSTed
   // /agents/sync and starved GET /api/apps.
+  // Keyed on the boolean, not the pathname: re-fetching (and re-persisting)
+  // the agent catalog on every section switch while the pane is open was a
+  // fixed cost on each dock click.
+  const needsAgents = Boolean(
+    currentWorkspaceId && (contextPanelOpen || pathNeedsAgentCatalog(pathname)),
+  );
   useEffect(() => {
-    const needsAgents = Boolean(
-      currentWorkspaceId && (contextPanelOpen || pathNeedsAgentCatalog(pathname)),
-    );
     if (!needsAgents || !currentWorkspaceId) return;
     const loadAgents = async () => {
-      const { useAgentsStore } = await import('@/stores/agents');
+      const { ensureAgentsSynced, useAgentsStore } = await import('@/stores/agents');
+      // The pane binds per-section office agents: pick up roster changes once.
+      if (contextPanelOpen) await ensureAgentsSynced(currentWorkspaceId);
       await useAgentsStore.getState().fetchAgents(currentWorkspaceId);
     };
     const loadSkills = async () => {
@@ -186,7 +193,7 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
     };
     loadAgents();
     loadSkills();
-  }, [currentWorkspaceId, contextPanelOpen, pathname]);
+  }, [currentWorkspaceId, contextPanelOpen, needsAgents]);
 
   // Keyboard shortcut: Cmd+K to toggle the side chat pane (desktop only).
   // Capture phase so Monaco / editors do not swallow ⌘K as a chord starter.
@@ -246,7 +253,14 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
   const chatRoute = parseChatRoute(pathname);
   const { isChatRoute, isThread } = chatRoute;
   const { isFilesRoute, isBrowse: isFilesBrowse } = parseFilesRoute(pathname);
-  const { isMapsRoute, isDataset: isMapsDataset } = parseMapsRoute(pathname);
+  const searchParams = useSearchParams();
+  // Settings pages (Organization, Platform) send the user back to this page.
+  const searchKey = searchParams?.toString() ?? '';
+  useEffect(() => {
+    if (pathname) rememberWorkspacePath(searchKey ? `${pathname}?${searchKey}` : pathname);
+  }, [pathname, searchKey]);
+  const mapsRoute = parseMapsRoute(pathname, searchParams);
+  const { isMapsRoute, isMapView: isMapsDataset } = mapsRoute;
   const { isDatasetsRoute, isTable: isDatasetsTable } = parseDatasetsRoute(pathname);
   const showMobileChatThread = isMobile && isMobileChatThreadOpen(chatRoute, mobilePendingChatSlug);
   const showMobileChatList = isMobile && isChatRoute && !showMobileChatThread;
@@ -381,6 +395,10 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
       style={themeStyles}
       data-org-branded="true"
     >
+      {/* Workspaces list: left of the dock when the mark is open. Other
+          feature columns stay to the right of the dock, below TopNav. */}
+      {activePanelSection === 'workspaces' ? <SectionPanel /> : null}
+
       {/* Dock: workspace mark, nav, profile — a full top-to-bottom column of
           its own. Width matches the feature column by default and is resizable. */}
       <Sidebar />
@@ -393,8 +411,8 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
         <TopNav />
 
         <div className="flex min-h-0 flex-1 overflow-hidden">
-          {/* Feature column: Chat, Files, Workspaces, ... */}
-          <SectionPanel />
+          {/* Feature column: Chat, Files, Events, ... */}
+          {activePanelSection === 'workspaces' ? null : <SectionPanel />}
 
           {/* Main content + the AI chat pane, opening below TopNav instead of
               beside a per-page-scoped header. */}

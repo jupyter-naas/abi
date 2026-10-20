@@ -13,6 +13,8 @@ so it is unit-testable over a fake store and runnable against the live triple st
 
 from __future__ import annotations
 
+import re
+
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.port import IGraphQueryStore
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.query__schema import (
     SearchHitData,
@@ -66,21 +68,34 @@ def search_entities(
     graph_uris: list[str],
     query: str,
     limit: int = 20,
+    class_uris: list[str] | None = None,
 ) -> tuple[SearchHitData, ...]:
+    def match(var: str) -> str:
+        # Labels and identifiers often use different separators (GPT4, GPT-4, GPT_4).
+        normalized = re.sub(r"[-_ .‐‑–—]", "", query.lower())
+        if not normalized:
+            return f"CONTAINS(LCASE(STR({var})), LCASE({sparql_string_literal(query)}))"
+        return f'CONTAINS(REPLACE(LCASE(STR({var})), "[-_ .‐‑–—]", ""), {sparql_string_literal(normalized)})'
+
+    class_filter = (
+        ("VALUES ?cls { " + " ".join(sparql_iri(c) for c in class_uris) + " }")
+        if class_uris
+        else ""
+    )
     graphs = " ".join(sparql_iri(g) for g in graph_uris)
-    lit = sparql_string_literal(query)
     rdf_type = sparql_iri(_RDF_TYPE)
     rdfs_label = sparql_iri(_RDFS_LABEL)
 
     # ── (A) CLASSES — any ?cls used as `?s a ?cls` (minus meta-classes), counted ──
-    # MATCH when the class fragment OR the class IRI contains the query (case-insensitive).
-    # Counting is done in SPARQL against the data, so the fragment match is applied in Python.
+    # Match class labels or identifiers, with distinct instance counts.
     class_rows = store.select(
         f"""
-        SELECT ?cls ?g (COUNT(DISTINCT ?s) AS ?cnt)
+        SELECT ?cls ?g (MIN(STR(?name)) AS ?label) (COUNT(DISTINCT ?s) AS ?cnt)
         WHERE {{ VALUES ?g {{ {graphs} }} GRAPH ?g {{
             ?s {rdf_type} ?cls . FILTER(isIRI(?cls)) {_excluded_filter("?cls")}
-            FILTER(CONTAINS(LCASE(STR(?cls)), LCASE({lit})))
+            OPTIONAL {{ ?cls {rdfs_label} ?name }}
+            FILTER({match("?cls")} || {match("?name")})
+            {class_filter}
         }} }} GROUP BY ?cls ?g
         ORDER BY DESC(?cnt)
         LIMIT {int(limit)}
@@ -90,32 +105,36 @@ def search_entities(
     # ── (B) INDIVIDUALS — `?uri a ?cls` (minus meta-classes), matched over ANY string ──
     # data property value (not just rdfs:label) OR the URI. ``?uri ?mp ?mv`` scans every
     # literal-valued property of the individual; the OPTIONAL keeps rdfs:label for display and
-    # DISTINCT collapses individuals that match on several properties to one row.
+    # Group by graph and subject so several labels or types still produce one result.
     ind_rows = store.select(
         f"""
-        SELECT DISTINCT ?uri ?cls ?g (COALESCE(?lbl, STR(?uri)) AS ?label)
+        SELECT ?uri ?g (MIN(STR(?cls)) AS ?class) (COALESCE(MIN(STR(?lbl)), STR(?uri)) AS ?label)
         WHERE {{ VALUES ?g {{ {graphs} }} GRAPH ?g {{
             ?uri {rdf_type} ?cls . FILTER(isIRI(?cls)) {_excluded_filter("?cls")}
             OPTIONAL {{ ?uri {rdfs_label} ?lbl }}
-            ?uri ?mp ?mv . FILTER(isLiteral(?mv))
-            FILTER(CONTAINS(LCASE(STR(?mv)), LCASE({lit})) || CONTAINS(LCASE(STR(?uri)), LCASE({lit})))
-        }} }}
+            {class_filter}
+            FILTER({match("?uri")} || EXISTS {{
+                ?uri ?mp ?mv . FILTER(isLiteral(?mv))
+                FILTER({match("?mv")})
+            }})
+        }} }} GROUP BY ?uri ?g
+        ORDER BY LCASE(?label) ?uri ?g
         LIMIT {int(limit)}
         """
     )
 
-    needle = query.strip().lower()
-
-    # ── classes — apply the fragment/IRI match in Python (the SPARQL only matched the IRI) ──
+    # ── classes ──
     class_hits: list[SearchHitData] = []
     for r in class_rows:
         cls = r.get("cls")
         if cls is None:
             continue
         cls_uri = cls.value
-        label = _fragment(cls_uri)
-        if needle and needle not in label.lower() and needle not in cls_uri.lower():
-            continue
+        label = (
+            r["label"].value
+            if r.get("label") and r["label"].value
+            else _fragment(cls_uri)
+        )
         g = r.get("g")
         class_hits.append(
             SearchHitData(
@@ -134,7 +153,7 @@ def search_entities(
     ind_hits: list[SearchHitData] = []
     for r in ind_rows:
         uri = r.get("uri")
-        cls = r.get("cls")
+        cls = r.get("class") or r.get("cls")
         if uri is None or cls is None:
             continue
         lbl = r.get("label")

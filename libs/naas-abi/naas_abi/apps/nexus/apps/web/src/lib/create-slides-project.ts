@@ -1,8 +1,7 @@
 import { authFetch } from '@/stores/auth';
-import { useAgentsStore } from '@/stores/agents';
 import { dispatchSlidesDeckUpdated, useSlidesStore } from '@/stores/slides';
 import { useWorkspaceStore } from '@/stores/workspace';
-import { pickSlidesOfficeAgent } from '@/lib/pick-workspace-default-agent';
+import { openFeatureAgentPane } from '@/lib/feature-agent-pane';
 import {
   findSlidesPaneConversationId,
   slidesPaneConversationKey,
@@ -59,10 +58,6 @@ export type CreatedSlidesProject = {
   title: string;
 };
 
-function pickSlidesPaneAgentId(): string | null {
-  return pickSlidesOfficeAgent(useAgentsStore.getState().agents)?.id ?? null;
-}
-
 /** Open the Slides pane beside the deck so the next message can edit it.
  *
  * Binds Nexus Slides when that agent is enabled in this workspace. Falls
@@ -79,13 +74,9 @@ export function openSlidesAgentPane(opts?: {
   title?: string | null;
 }): void {
   const ws = useWorkspaceStore.getState();
-  ws.setContextPanelOpen(true);
   const slug = (opts?.slug ?? useSlidesStore.getState().selectedSlug ?? '').trim();
   const title = opts?.title ?? useSlidesStore.getState().selectedTitle;
-  if (opts?.freshChat) {
-    ws.setPaneConversationId(null);
-    ws.clearPaneAgentExplicitSelection();
-  } else if (slug) {
+  if (!opts?.freshChat && slug) {
     const workspaceId = ws.currentWorkspaceId || '';
     const boundId = workspaceId
       ? (ws.slidesPaneConversationByKey || {})[
@@ -104,18 +95,10 @@ export function openSlidesAgentPane(opts?: {
       ws.rememberSlidesPaneConversation(workspaceId, slug, found);
     }
   }
-  const defaultId = pickSlidesPaneAgentId();
-  if (!defaultId) return;
-  const agents = useAgentsStore.getState().agents;
-  const currentStillValid = Boolean(
-    ws.paneAgent && agents.some((a) => a.enabled && a.id === ws.paneAgent),
-  );
   // An open deck always binds Slides. The workspace default has no
   // write_slides_* tools; keeping an explicit pick burns the step budget
   // on transfers.
-  if (slug || opts?.freshChat || !ws.paneAgentExplicitlySelected || !currentStillValid) {
-    ws.setPaneAgent(defaultId);
-  }
+  openFeatureAgentPane('slides', { freshChat: opts?.freshChat, resourceId: slug });
 }
 
 export async function createUntitledSlidesProject(
@@ -151,6 +134,39 @@ export async function createUntitledSlidesProject(
   throw new Error(lastError);
 }
 
+/** Open the Slides feature on a deck (Forgejo HTML preview).
+
+ * Used for intentional UI actions (New presentation, apply template). Chat
+ * publish results (create_slides_project and other deck-shaped tool outputs)
+ * do not call this: they render a presentation card and the user clicks to open.
+ * No-ops navigation when already on that deck route.
+ */
+export function jumpToSlidesDeck(opts: {
+  workspaceId: string;
+  slug: string;
+  title?: string | null;
+  navigate: (href: string) => void;
+  pathname?: string | null;
+}): void {
+  const workspaceId = (opts.workspaceId || '').trim();
+  const slug = (opts.slug || '').trim();
+  if (!workspaceId || !slug) return;
+
+  const title = (opts.title || '').trim() || null;
+  useSlidesStore.getState().setSelectedSlug(slug);
+  if (title) useSlidesStore.getState().setSelectedTitle(title);
+  openSlidesAgentPane({ slug, title });
+
+  const target = `/workspace/${encodeURIComponent(workspaceId)}/slides/${encodeURIComponent(slug)}`;
+  const path = opts.pathname ?? (typeof window !== 'undefined' ? window.location.pathname : '');
+  const alreadyThere =
+    typeof path === 'string' &&
+    (path === target || path.endsWith(`/slides/${slug}`) || path.includes(`/slides/${slug}/`));
+  if (!alreadyThere) {
+    opts.navigate(target);
+  }
+}
+
 /** One click: seed a template (default Minimal Light), open the deck, open the pane. */
 export async function startNewPresentation(
   workspaceId: string,
@@ -158,10 +174,12 @@ export async function startNewPresentation(
   templateId: string = DEFAULT_SLIDES_TEMPLATE_ID,
 ): Promise<CreatedSlidesProject> {
   const created = await createUntitledSlidesProject(workspaceId, templateId);
-  useSlidesStore.getState().setSelectedSlug(created.slug);
-  useSlidesStore.getState().setSelectedTitle(created.title);
-  openSlidesAgentPane({ freshChat: true });
-  navigate(`/workspace/${workspaceId}/slides/${created.slug}`);
+  jumpToSlidesDeck({
+    workspaceId,
+    slug: created.slug,
+    title: created.title,
+    navigate,
+  });
   return created;
 }
 

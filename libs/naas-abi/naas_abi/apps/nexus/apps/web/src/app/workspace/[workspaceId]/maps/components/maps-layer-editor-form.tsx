@@ -1,0 +1,641 @@
+'use client';
+
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { Download, Loader2, Play, Upload } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input, Select, Textarea } from '@/components/ui/input';
+import { MapsIconGallery } from './maps-icon-gallery';
+import {
+  downloadLayerTemplate,
+  parseGeoJsonLayerInput,
+  saveImportedMapLayer,
+  slugifyLayerSlug,
+  validateLayerSlug,
+} from '../lib/maps-imported-layers';
+import { DEFAULT_LAYER_GROUP, MAX_LAYER_GROUP_LENGTH } from '../lib/maps-layer-groups';
+import {
+  blankLayout,
+  LayoutApiError,
+  layoutPreviewPinRows,
+  layoutsApi,
+  type LayoutDraft,
+  type LayoutPreview,
+} from '../lib/layouts-api';
+import { isFeedLayout, type WorkspaceMapLayout } from '../lib/layouts';
+import { useMapsStore } from '@/stores/maps';
+import { useWorkspaceGraphs } from '../lib/use-workspace-graphs';
+import { ALL_LAYERS_ID } from '../lib/layouts';
+import { FALLBACK_BASEMAP_ID, splitBasemapPickerDefs } from '../lib/maps-basemaps';
+import { getLayerDefaultBasemapId, setLayerDefaultBasemapId } from '../lib/maps-layer-basemap-prefs';
+import { getImportedMapLayer } from '../lib/maps-imported-layers';
+import { useWorkspaceBasemaps } from '../lib/use-workspace-basemaps';
+
+export type LayerDataSource = 'geojson' | 'sparql' | 'feed';
+
+const LAYOUT_ID = /^[a-z0-9][a-z0-9-]{0,47}$/;
+
+function layoutSlugError(slug: string, isNew: boolean, takenIds: ReadonlySet<string>): string | null {
+  if (!isNew) return null;
+  if (!slug) return null;
+  if (!LAYOUT_ID.test(slug)) {
+    return 'Lowercase letters, digits and dashes, starting with a letter or digit (max 48).';
+  }
+  if (slug === ALL_LAYERS_ID || takenIds.has(slug)) return 'This slug is already used by another layer.';
+  return null;
+}
+
+export function MapsLayerEditorForm({
+  workspaceId,
+  takenIds,
+  layerGroups,
+  canEdit,
+  workspaceLayout,
+  initialGroup = DEFAULT_LAYER_GROUP,
+  initialSource = 'geojson',
+  variant,
+  formId = 'maps-layer-editor-form',
+  onSavedWorkspace,
+  onSavedGeoJson,
+}: {
+  workspaceId: string;
+  takenIds: ReadonlySet<string>;
+  /** Group labels already in use, suggested by the group field. */
+  layerGroups: readonly string[];
+  canEdit: boolean;
+  /** When set, edit mode for that record (SPARQL or feed; source tabs hidden). */
+  workspaceLayout: WorkspaceMapLayout | null;
+  initialGroup?: string;
+  /** Tab a new record starts on. */
+  initialSource?: LayerDataSource;
+  variant: 'modal' | 'page';
+  formId?: string;
+  onSavedWorkspace: (layout: WorkspaceMapLayout) => void;
+  onSavedGeoJson: (layerId: string) => void;
+}) {
+  const isEdit = workspaceLayout !== null;
+  const isNew = !isEdit;
+  const readOnly = !canEdit;
+  const graphs = useWorkspaceGraphs(workspaceId);
+
+  const [source, setSource] = useState<LayerDataSource>(
+    workspaceLayout ? (isFeedLayout(workspaceLayout) ? 'feed' : 'sparql') : initialSource,
+  );
+  const loadLayouts = useMapsStore((state) => state.loadLayouts);
+  const [slug, setSlug] = useState(workspaceLayout?.id ?? '');
+  const [slugTouched, setSlugTouched] = useState(false);
+  const [draft, setDraft] = useState<LayoutDraft>(() => {
+    if (!workspaceLayout) return blankLayout();
+    const { id: _id, ...rest } = workspaceLayout;
+    return rest;
+  });
+  const [group, setGroup] = useState(initialGroup);
+  const groupListId = useId();
+  const [geoJsonText, setGeoJsonText] = useState('');
+  const [featureCount, setFeatureCount] = useState<number | null>(null);
+  const [preview, setPreview] = useState<LayoutPreview | null>(null);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [busy, setBusy] = useState<'save' | 'preview' | null>(null);
+  const { allDefs: basemapCatalog } = useWorkspaceBasemaps(workspaceId);
+  const basemapPickerGroups = useMemo(
+    () => splitBasemapPickerDefs(basemapCatalog),
+    [basemapCatalog],
+  );
+  const [defaultBasemapId, setDefaultBasemapId] = useState(FALLBACK_BASEMAP_ID);
+
+  useEffect(() => {
+    if (!isEdit || !workspaceLayout) return;
+    const imported = getImportedMapLayer(workspaceId, workspaceLayout.id);
+    const pref =
+      imported?.defaultBasemapId
+      ?? getLayerDefaultBasemapId(workspaceId, workspaceLayout.id)
+      ?? FALLBACK_BASEMAP_ID;
+    setDefaultBasemapId(pref);
+  }, [isEdit, workspaceId, workspaceLayout]);
+
+  const setDraftField = <K extends keyof LayoutDraft>(key: K, value: LayoutDraft[K]) => {
+    setDraft((d) => ({ ...d, [key]: value }));
+  };
+
+  useEffect(() => {
+    if (slugTouched || isEdit || !draft.title.trim()) return;
+    setSlug(slugifyLayerSlug(draft.title));
+  }, [draft.title, slugTouched, isEdit]);
+
+  const slugErr = useMemo(
+    () => (source === 'geojson' ? validateLayerSlug(slug, takenIds) : layoutSlugError(slug, isNew, takenIds)),
+    [source, slug, takenIds, isNew],
+  );
+
+  const validateGeoJson = useCallback((text: string) => {
+    const parsed = parseGeoJsonLayerInput(text);
+    if (parsed.ok) {
+      setFeatureCount(parsed.featureCount);
+      return null;
+    }
+    setFeatureCount(null);
+    return parsed.error;
+  }, []);
+
+  const onPickFile = async (file: File | null) => {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      setGeoJsonText(text);
+      const geoError = validateGeoJson(text);
+      setErrors(geoError ? [geoError] : []);
+    } catch {
+      setErrors(['Could not read the file.']);
+    }
+  };
+
+  const runPreview = async () => {
+    setBusy('preview');
+    setErrors([]);
+    setPreview(null);
+    try {
+      const result = await layoutsApi.preview(workspaceId, draft);
+      if (result.errors.length) setErrors(result.errors);
+      else setPreview(result);
+    } catch (e) {
+      setErrors([e instanceof LayoutApiError ? e.message : 'Could not run the query']);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const nextErrors: string[] = [];
+    if (!draft.title.trim()) nextErrors.push('Title is required.');
+    if (slugErr) nextErrors.push(slugErr);
+    const groupLabel = group.trim() || DEFAULT_LAYER_GROUP;
+    if (groupLabel.length > MAX_LAYER_GROUP_LENGTH) {
+      nextErrors.push(`Group name is too long (max ${MAX_LAYER_GROUP_LENGTH}).`);
+    }
+
+    if (source === 'geojson') {
+      const geoError = validateGeoJson(geoJsonText);
+      if (geoError) nextErrors.push(geoError);
+    } else if (source === 'feed') {
+      if (!(draft.feed_url ?? '').startsWith('/api/')) {
+        nextErrors.push('Feed path must start with /api/.');
+      }
+    } else if (!draft.query.trim()) {
+      nextErrors.push('SPARQL query is required.');
+    }
+
+    if (nextErrors.length) {
+      setErrors(nextErrors);
+      return;
+    }
+
+    setBusy('save');
+    setErrors([]);
+    try {
+      if (source === 'geojson') {
+        const parsed = parseGeoJsonLayerInput(geoJsonText);
+        if (!parsed.ok) {
+          setErrors([parsed.error]);
+          return;
+        }
+        const layerId = slug.trim();
+        const basemap =
+          defaultBasemapId && defaultBasemapId !== FALLBACK_BASEMAP_ID
+            ? defaultBasemapId
+            : undefined;
+        saveImportedMapLayer(workspaceId, {
+          id: layerId,
+          title: draft.title.trim(),
+          description: draft.description.trim(),
+          icon: draft.icon,
+          color: draft.color,
+          order: draft.order,
+          group: groupLabel,
+          featureCollection: parsed.collection,
+          defaultBasemapId: basemap,
+        });
+        setLayerDefaultBasemapId(workspaceId, layerId, basemap);
+        onSavedGeoJson(layerId);
+        return;
+      }
+
+      if (!canEdit) {
+        setErrors(['Only workspace owners and admins can save workspace layers.']);
+        return;
+      }
+
+      const layoutId = isNew ? slug.trim() : workspaceLayout!.id;
+      if (source === 'feed') {
+        const saved = await layoutsApi.save(workspaceId, layoutId, {
+          ...draft,
+          title: draft.title.trim(),
+          feed_type: 'geojson_url',
+          feed_url: (draft.feed_url ?? '').trim(),
+          group: groupLabel,
+          query: '',
+          graphs: [],
+          fit_max_zoom: draft.fit_max_zoom || null,
+        });
+        // The API gives a new feed its first layer: refresh the catalog everywhere.
+        await loadLayouts(workspaceId, true);
+        onSavedWorkspace(saved);
+        return;
+      }
+      const saved = await layoutsApi.save(workspaceId, layoutId, {
+        ...draft,
+        title: draft.title.trim(),
+        icon: draft.icon,
+        color: draft.color,
+        group: groupLabel,
+      });
+      await loadLayouts(workspaceId, true);
+      onSavedWorkspace(saved);
+    } catch (e) {
+      setErrors(
+        e instanceof LayoutApiError && e.errors.length
+          ? e.errors
+          : [e instanceof Error ? e.message : 'Could not save the layer'],
+      );
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const canSubmit =
+    busy === null
+    && draft.title.trim()
+    && (source === 'geojson'
+      ? Boolean(geoJsonText.trim()) && !slugErr
+      : (source === 'feed' ? Boolean(draft.feed_url?.trim()) : Boolean(draft.query.trim()))
+        && (isNew ? Boolean(slug && !slugErr) : true));
+
+  return (
+    <form id={formId} className="maps-new-layer-form" onSubmit={(e) => void submit(e)}>
+      {errors.length > 0 && (
+        <ul className="maps-new-layer-form__errors" data-testid="maps-layer-editor-errors">
+          {errors.map((error) => (
+            <li key={error}>{error}</li>
+          ))}
+        </ul>
+      )}
+
+      {!isEdit ? (
+        <div className="maps-layer-source-tabs" role="tablist" aria-label="Layer data source">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={source === 'geojson'}
+            className={source === 'geojson' ? 'maps-layer-source-tabs__btn--active' : undefined}
+            onClick={() => setSource('geojson')}
+          >
+            GeoJSON
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={source === 'sparql'}
+            disabled={!canEdit}
+            title={canEdit ? undefined : 'SPARQL layers require workspace admin'}
+            className={source === 'sparql' ? 'maps-layer-source-tabs__btn--active' : undefined}
+            onClick={() => canEdit && setSource('sparql')}
+          >
+            SPARQL
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={source === 'feed'}
+            disabled={!canEdit}
+            title={canEdit ? 'A feed from a Nexus API path (pins or GeoJSON); add layers for its feature types' : 'Feeds require workspace admin'}
+            className={source === 'feed' ? 'maps-layer-source-tabs__btn--active' : undefined}
+            onClick={() => {
+              if (!canEdit) return;
+              setSource('feed');
+              setDraft((d) => ({ ...d, feed_url: d.feed_url || '/api/' }));
+            }}
+          >
+            API feed
+          </button>
+        </div>
+      ) : null}
+
+      {source !== 'geojson' && !canEdit ? (
+        <p className="maps-new-layer-form__hint-block">
+          Workspace layers and layer feeds can only be created or edited by workspace owners and admins.
+        </p>
+      ) : null}
+
+      <label className="maps-new-layer-form__field">
+        <span>Title</span>
+        <Input
+          value={draft.title}
+          disabled={readOnly}
+          onChange={(e) => setDraftField('title', e.target.value)}
+          placeholder="Sites, offices, assets…"
+          data-testid="maps-new-layer-title"
+        />
+      </label>
+
+      {isNew ? (
+        <label className="maps-new-layer-form__field">
+          <span>Layer slug</span>
+          <Input
+            value={slug}
+            disabled={readOnly}
+            onChange={(e) => {
+              setSlugTouched(true);
+              setSlug(e.target.value.trim().toLowerCase());
+            }}
+            placeholder="my-sites"
+            spellCheck={false}
+            className="font-mono"
+            data-testid="maps-new-layer-slug"
+          />
+          <span className="maps-new-layer-form__hint-block">
+            Derived from the title; used in the map URL and layer list. You can edit it before saving.
+          </span>
+          {slugErr ? <span className="maps-new-layer-form__field-error">{slugErr}</span> : null}
+        </label>
+      ) : null}
+
+      <label className="maps-new-layer-form__field">
+        <span>Description</span>
+        <Input
+          value={draft.description}
+          disabled={readOnly}
+          onChange={(e) => setDraftField('description', e.target.value)}
+          placeholder="Optional"
+        />
+      </label>
+
+      <label className="maps-new-layer-form__field">
+        <span>Layer group</span>
+        <Input
+          value={group}
+          disabled={readOnly}
+          list={groupListId}
+          maxLength={MAX_LAYER_GROUP_LENGTH}
+          onChange={(e) => setGroup(e.target.value)}
+          placeholder={DEFAULT_LAYER_GROUP}
+          data-testid="maps-new-layer-group"
+        />
+        <datalist id={groupListId}>
+          {layerGroups.map((label) => (
+            <option key={label} value={label} />
+          ))}
+        </datalist>
+        <span className="maps-new-layer-form__hint-block">
+          Pick a group in use or type a new one. Layers with the same group are listed together.
+        </span>
+      </label>
+
+      <div className="maps-new-layer-form__row">
+        <label className="maps-new-layer-form__field">
+          <span>Colour</span>
+          <Input
+            type="color"
+            value={draft.color}
+            disabled={readOnly}
+            onChange={(e) => setDraftField('color', e.target.value)}
+            className="maps-new-layer-form__color"
+          />
+        </label>
+      </div>
+
+      <div className="maps-new-layer-form__field">
+        <span>Icon</span>
+        <MapsIconGallery
+          value={draft.icon}
+          onChange={(icon) => setDraftField('icon', icon)}
+        />
+      </div>
+
+      {source === 'geojson' ? (
+        <label className="maps-new-layer-form__field">
+          <span>Default basemap</span>
+          <Select
+            value={defaultBasemapId}
+            disabled={readOnly}
+            onChange={(e) => setDefaultBasemapId(e.target.value)}
+          >
+            {basemapPickerGroups.standard.map((def) => (
+              <option key={def.id} value={def.id}>
+                {def.label}
+              </option>
+            ))}
+            {basemapPickerGroups.organization.length > 0 ? (
+              <option disabled value="__basemap-separator-group">
+                ────────────
+              </option>
+            ) : null}
+            {basemapPickerGroups.organization.map((def) => (
+              <option key={def.id} value={def.id}>
+                {def.label}
+              </option>
+            ))}
+            {basemapPickerGroups.custom.length > 0 ? (
+              <option disabled value="__basemap-separator-imported">
+                ────────────
+              </option>
+            ) : null}
+            {basemapPickerGroups.custom.map((def) => (
+              <option key={def.id} value={def.id}>
+                {def.label}
+              </option>
+            ))}
+          </Select>
+          <span className="maps-form-field__hint">
+            Used when this layer is the only one active on the map (no OpenStreetMap tiles required).
+          </span>
+        </label>
+      ) : null}
+
+      {source === 'geojson' ? (
+        <div className="maps-new-layer-form__geo">
+          <div className="maps-new-layer-form__geo-head">
+            <span>GeoJSON</span>
+            <div className="maps-new-layer-form__geo-actions">
+              <Button type="button" variant="secondary" size="sm" onClick={() => downloadLayerTemplate()}>
+                <Download size={14} /> Template
+              </Button>
+              <label className="maps-new-layer-form__file">
+                <Upload size={14} /> Import file
+                <input
+                  type="file"
+                  accept=".geojson,.json,application/geo+json,application/json"
+                  className="sr-only"
+                  disabled={readOnly}
+                  onChange={(e) => void onPickFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
+            </div>
+          </div>
+          <Textarea
+            value={geoJsonText}
+            disabled={readOnly}
+            onChange={(e) => {
+              setGeoJsonText(e.target.value);
+              if (e.target.value.trim()) validateGeoJson(e.target.value);
+              else setFeatureCount(null);
+            }}
+            rows={variant === 'modal' ? 10 : 12}
+            spellCheck={false}
+            className="font-mono text-xs"
+            placeholder={'Paste a FeatureCollection or { "pins": [ … ] }…'}
+            data-testid="maps-new-layer-geojson"
+          />
+          {featureCount != null ? (
+            <p className="maps-new-layer-form__feature-count">
+              {featureCount} point feature{featureCount === 1 ? '' : 's'} ready
+            </p>
+          ) : null}
+          {variant === 'modal' ? (
+            <p className="maps-new-layer-form__hint-block">
+              GeoJSON layers are stored in this browser only. Use SPARQL for a layer shared with the workspace.
+            </p>
+          ) : null}
+        </div>
+      ) : source === 'feed' ? (
+        <>
+          <label className="maps-new-layer-form__field">
+            <span>Feed path</span>
+            <Input
+              value={draft.feed_url ?? ''}
+              disabled={readOnly}
+              onChange={(e) => setDraftField('feed_url', e.target.value)}
+              placeholder="/api/maps/organization-facilities/acme-facilities"
+              spellCheck={false}
+              className="font-mono"
+            />
+            <span className="maps-new-layer-form__hint-block">
+              A path on this Nexus API returning GeoJSON or {'{ "pins": [...] }'}, called with the member&apos;s token.
+            </span>
+          </label>
+          <div className="maps-new-layer-form__row">
+            <label className="maps-new-layer-form__field">
+              <span>Logo URL</span>
+              <Input
+                value={draft.logo_url ?? ''}
+                disabled={readOnly}
+                onChange={(e) => setDraftField('logo_url', e.target.value)}
+                placeholder="/api/organizations/logos/Acme/Acme.ico"
+              />
+            </label>
+            <label className="maps-new-layer-form__field">
+              <span>Count label</span>
+              <Input
+                value={draft.meta_label ?? ''}
+                disabled={readOnly}
+                onChange={(e) => setDraftField('meta_label', e.target.value)}
+                placeholder="{count} sites"
+              />
+            </label>
+          </div>
+          <label className="maps-new-layer-form__field">
+            <span>Default basemap</span>
+            <Select
+              value={draft.basemap_id ?? ''}
+              disabled={readOnly}
+              onChange={(e) => setDraftField('basemap_id', e.target.value)}
+            >
+              <option value="">Member&apos;s choice</option>
+              {basemapCatalog.map((def) => (
+                <option key={def.id} value={def.id}>
+                  {def.label}
+                </option>
+              ))}
+            </Select>
+            <span className="maps-form-field__hint">Used when this layer is the only one on the map.</span>
+          </label>
+        </>
+      ) : (
+        <>
+          <div className="maps-new-layer-form__field">
+            <span>Graphs</span>
+            <p className="maps-new-layer-form__hint-block">
+              Limit the query to specific graphs, or leave none selected to search every graph this workspace can read.
+            </p>
+            {graphs === null ? (
+              <p className="text-xs text-muted-foreground">Loading graphs…</p>
+            ) : graphs.length === 0 ? (
+              <p className="text-xs text-muted-foreground">This workspace cannot read any graph yet.</p>
+            ) : (
+              <div className="maps-new-layer-form__graphs">
+                {graphs.map((g) => (
+                  <Checkbox
+                    key={g.uri}
+                    label={g.label}
+                    title={g.uri}
+                    disabled={readOnly}
+                    checked={draft.graphs.includes(g.uri)}
+                    onCheckedChange={(on) =>
+                      setDraftField(
+                        'graphs',
+                        on ? [...draft.graphs, g.uri] : draft.graphs.filter((u) => u !== g.uri),
+                      )
+                    }
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="maps-new-layer-form__field">
+            <div className="maps-new-layer-form__geo-head">
+              <span>SPARQL query</span>
+              {canEdit && !readOnly ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={busy !== null || !draft.query.trim()}
+                  onClick={() => void runPreview()}
+                >
+                  {busy === 'preview' ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+                  Run
+                </Button>
+              ) : null}
+            </div>
+            <Textarea
+              value={draft.query}
+              disabled={readOnly}
+              spellCheck={false}
+              rows={variant === 'modal' ? 10 : 14}
+              onChange={(e) => setDraftField('query', e.target.value)}
+              className="font-mono text-xs"
+              aria-label="SPARQL query"
+            />
+            {preview ? (
+              <div className="mt-2 text-sm">
+                <p className="font-medium">{preview.count} pin{preview.count === 1 ? '' : 's'}</p>
+                {preview.features.length > 0 ? (
+                  <ul className="mt-1 max-h-36 overflow-auto text-xs text-muted-foreground">
+                    {layoutPreviewPinRows(preview).slice(0, 15).map((pin) => (
+                      <li key={pin.id} className="truncate">
+                        <span className="text-foreground">{pin.label}</span> · {pin.lat.toFixed(4)}, {pin.lng.toFixed(4)}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
+            <p className="maps-new-layer-form__hint-block">
+              SELECT must project ?label ?lat ?lng. Optional: ?uri ?detail ?graph.
+            </p>
+          </div>
+        </>
+      )}
+
+      {variant === 'page' ? (
+        <div className="flex flex-wrap gap-2 pt-2">
+          <Button type="submit" disabled={!canSubmit || readOnly}>
+            {busy === 'save' ? <Loader2 size={14} className="animate-spin" /> : null}
+            Save layer
+          </Button>
+        </div>
+      ) : null}
+
+    </form>
+  );
+}

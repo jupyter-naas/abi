@@ -1,0 +1,167 @@
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+abi:S2P4Ontology a owl:Ontology ;
+    rdfs:label "S2-P4 · Security screening"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceSHA256 "0d2c2c1e42dc3dfcfb1a8661ddba31057e88de911af1bb8f21868ba3096c0763"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    dct:title "S2-P4 · Security screening"@en ;
+    rdfs:comment "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    owl:imports abi:ABIProcessLedgerOntology .
+
+abi:S2P4Condition1 a owl:Class ;
+    rdfs:label "Security screening timing condition"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "On access request"@en ;
+    rdfs:comment "Ledger trigger/cadence/target: On access request. No occurrence or achieved timing is asserted."@en ;
+    rdfs:subClassOf abi:ExecutionCondition ;
+    skos:definition "Ledger trigger/cadence/target: On access request. No occurrence or achieved timing is asserted."@en .
+
+abi:S2P4ExecutionRole a owl:Class ;
+    rdfs:label "Security screening execution role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "A proposed role realised in Security screening and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom [ a owl:Class ;
+                    owl:unionOf ( abi:ScreeningSystemHost abi:SecurityOfficerParticipant abi:SubjectParticipant ) ] ],
+        abi:ExecutionRole ;
+    skos:definition "A proposed role realised in Security screening and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en .
+
+abi:S2P4Interval a owl:Class ;
+    rdfs:label "Security screening execution interval"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The temporal region occupied by an execution of Security screening; actual dates are unspecified."@en ;
+    rdfs:subClassOf abi:ExecutionInterval ;
+    skos:definition "The temporal region occupied by an execution of Security screening; actual dates are unspecified."@en .
+
+abi:S2P4Objective1 a owl:Class ;
+    rdfs:label "Security screening objective"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "Trusted access to sensitive operations"@en ;
+    rdfs:comment "Intended outcome: Trusted access to sensitive operations. This is an objective specification, not a role or a guaranteed result."@en ;
+    rdfs:subClassOf abi:ObjectiveSpecification ;
+    skos:definition "Intended outcome: Trusted access to sensitive operations. This is an objective specification, not a role or a guaranteed result."@en .
+
+abi:S2P4Specification a owl:Class ;
+    rdfs:label "Security screening specification"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The simulated ledger specification for S2-P4. It describes a possible process, not an executed run."@en ;
+    rdfs:subClassOf abi:ProcessSpecification ;
+    skos:definition "The simulated ledger specification for S2-P4. It describes a possible process, not an executed run."@en .
+
+abi:S2P4Step1 a owl:Class ;
+    rdfs:label "Security screening · Receive request"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 1 ;
+    rdfs:comment "Suggested step 1 of Security screening: Receive request. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S2P4 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 1 of Security screening: Receive request. Its ordering is a specification, not observed timing."@en .
+
+abi:S2P4Step2 a owl:Class ;
+    rdfs:label "Security screening · Screen"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 2 ;
+    rdfs:comment "Suggested step 2 of Security screening: Screen. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S2P4 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 2 of Security screening: Screen. Its ordering is a specification, not observed timing."@en .
+
+abi:S2P4Step3 a owl:Class ;
+    rdfs:label "Security screening · Clear or refer"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 3 ;
+    rdfs:comment "Suggested step 3 of Security screening: Clear or refer. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S2P4 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 3 of Security screening: Clear or refer. Its ordering is a specification, not observed timing."@en .
+
+abi:S2P4 a owl:Class ;
+    rdfs:label "Security screening"@en ;
+    abi:ledgerCode "S2-P4"@en ;
+    abi:ledgerHOWITIS "Clearance status"@en ;
+    abi:ledgerHOWWEKNOW "Audit trail"@en,
+        "Screening record"@en ;
+    abi:ledgerWHEN "On access request"@en ;
+    abi:ledgerWHERE "Secure network perimeter"@en ;
+    abi:ledgerWHO "Screening system"@en,
+        "Security officer"@en,
+        "Subject"@en ;
+    abi:ledgerWHY "Trusted access to sensitive operations"@en ;
+    abi:modelingNote "WHERE 'Secure network perimeter' describes a deployment boundary, not an identified physical site. The occurrence site remains generic pending clarification."@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:qualityMappingStatus "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A proposed ABI security screening process. Suggested steps: Receive request → Screen → Clear or refer. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en,
+        "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty abi:usesInformation ;
+            owl:someValuesFrom abi:ScreeningSystemSoftware ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:SecurityOfficerParticipant ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasExecutionCondition ;
+            owl:someValuesFrom abi:S2P4Condition1 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:SubjectParticipant ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000199 ;
+            owl:someValuesFrom abi:S2P4Interval ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:ScreeningSystemHost ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000059 ;
+            owl:someValuesFrom abi:S2P4Specification ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S2P4Step3 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S2P4Step2 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:pursuesObjective ;
+            owl:someValuesFrom abi:S2P4Objective1 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasIndicatorRecord ;
+            owl:someValuesFrom abi:ClearanceStatusIndicator ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:ScreeningRecordRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000066 ;
+            owl:someValuesFrom abi:ExecutionSite ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:AuditTrailRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000055 ;
+            owl:someValuesFrom abi:S2P4ExecutionRole ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S2P4Step1 ],
+        abi:LedgerProcess,
+        abi:S2Process,
+        bfo:BFO_0000015 ;
+    skos:altLabel "S2-P4"@en ;
+    skos:definition "A proposed ABI security screening process. Suggested steps: Receive request → Screen → Clear or refer. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en .
+

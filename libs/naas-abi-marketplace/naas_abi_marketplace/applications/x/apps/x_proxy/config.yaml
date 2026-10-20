@@ -50,8 +50,8 @@ charts:
 
 # The author feed on the Users page.
 feed:
-  # Posts per batch: what the feed opens with, and what each "Show more" - or
-  # each scroll to the end - adds.
+  # Posts per batch: what the feed opens with (newest first), and what each
+  # "Load more" adds.
   batch: 10
   # The feed's three tabs. The keys are the split the data carries; only the
   # words are yours. `matched` are the posts that answered a followed query -

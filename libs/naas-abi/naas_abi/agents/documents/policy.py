@@ -537,7 +537,7 @@ def attach_documents_research_note(tool: Any) -> Any:
     return tool
 
 
-_SEARCH_STACK = "naas_abi.agents.tools.web_tools"
+_SEARCH_STACK = "naas_abi.tools.web_tools"
 
 
 def documents_search_tool_bound() -> bool:

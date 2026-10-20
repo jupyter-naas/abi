@@ -1,19 +1,19 @@
 import {
   AppWindow,
-  Boxes,
   Bot,
-  Brush,
+  BrainCircuit,
+  Network,
+  SlidersHorizontal,
   Cpu,
   Download,
   HardDrive,
-  Blocks,
-  Server,
   Shield,
   Users,
   Zap,
+  Search,
+  Map,
   type LucideIcon,
 } from 'lucide-react';
-import { DOCKER_SERVICES } from '@/lib/docker-services';
 
 export type SettingsNavItem = {
   href: string;
@@ -40,31 +40,25 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
   {
     label: 'General',
     items: [
-      { href: '/settings/theme', label: 'Theme', icon: Brush },
+      { href: '/settings/general', label: 'General', icon: SlidersHorizontal },
       { href: '/settings/members', label: 'Members', icon: Users },
-      { href: '/settings/infrastructure', label: 'Infrastructure', icon: Blocks },
-      { href: '/settings/servers', label: 'Servers', icon: Server },
       { href: '/settings/secrets', label: 'Secrets', icon: Shield },
       { href: '/settings/export', label: 'Data Export', icon: Download },
     ],
   },
   {
-    label: 'Components',
+    label: 'Features',
     items: [
       { href: '/settings/agents', label: 'Agents', icon: Bot },
-      { href: '/settings/skills', label: 'Skills', icon: Zap },
       { href: '/settings/apps', label: 'Apps', icon: AppWindow },
-      { href: '/settings/models', label: 'Models', icon: Cpu },
       { href: '/settings/drives', label: 'Drives', icon: HardDrive },
+      { href: '/settings/graphs', label: 'Graphs', icon: Network },
+      { href: '/settings/maps', label: 'Maps', icon: Map },
+      { href: '/settings/models', label: 'Models', icon: Cpu },
+      { href: '/settings/ontologies', label: 'Ontologies', icon: BrainCircuit },
+      { href: '/settings/search', label: 'Search', icon: Search },
+      { href: '/settings/skills', label: 'Skills', icon: Zap },
     ],
-  },
-  {
-    label: 'Services',
-    items: DOCKER_SERVICES.map((service) => ({
-      href: `/settings/services/${service.id}`,
-      label: service.label,
-      icon: Boxes,
-    })),
   },
 ];
 

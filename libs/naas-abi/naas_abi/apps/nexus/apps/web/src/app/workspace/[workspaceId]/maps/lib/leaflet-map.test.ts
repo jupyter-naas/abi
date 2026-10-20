@@ -1,9 +1,61 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   canInvalidateMapsLeaflet,
+  captureMapsCamera,
+  flyMapToUserLocation,
+  mapsLocateZoomForAccuracy,
+  mapsPinPopupHtml,
   observeMapsLeafletSize,
+  restoreMapsCamera,
   safeInvalidateMapsLeafletSize,
 } from './leaflet-map';
+
+describe('mapsLocateZoomForAccuracy', () => {
+  it('zooms in for a precise fix and eases out when accuracy is coarse', () => {
+    expect(mapsLocateZoomForAccuracy(20)).toBe(17);
+    expect(mapsLocateZoomForAccuracy(200)).toBe(15);
+    expect(mapsLocateZoomForAccuracy(2000)).toBe(13);
+    expect(mapsLocateZoomForAccuracy(undefined)).toBe(17);
+  });
+});
+
+describe('flyMapToUserLocation', () => {
+  it('flies to coordinates at the chosen zoom', () => {
+    const flyTo = vi.fn();
+    flyMapToUserLocation({ flyTo } as never, 48.85, 2.35, 30);
+    expect(flyTo).toHaveBeenCalledWith([48.85, 2.35], 17, { duration: 0.65 });
+  });
+});
+
+describe('maps camera restore', () => {
+  it('flies back to the saved center and zoom', () => {
+    const flyTo = vi.fn();
+    const map = {
+      getCenter: () => ({ lat: 20, lng: 0 }),
+      getZoom: () => 3,
+      flyTo,
+    };
+    const camera = captureMapsCamera(map as never);
+    expect(camera).toEqual({ lat: 20, lng: 0, zoom: 3 });
+    restoreMapsCamera(map as never, { lat: 20, lng: 0, zoom: 3 });
+    expect(flyTo).toHaveBeenCalledWith([20, 0], 3, { duration: 0.55 });
+  });
+});
+
+describe('mapsPinPopupHtml', () => {
+  it('embeds a preview image that opens Street View', () => {
+    const html = mapsPinPopupHtml({
+      id: 'dc',
+      lat: 38.9031704,
+      lng: -77.0598347,
+      label: 'Washington, DC',
+    });
+    expect(html).toContain('/api/maps/streetview?lat=38.9031704');
+    expect(html).toContain('map_action=pano');
+    expect(html).toContain('<img ');
+    expect(html).not.toContain('Street View at this coordinate');
+  });
+});
 
 describe('observeMapsLeafletSize', () => {
   const observers: ResizeObserverCallback[] = [];
@@ -130,5 +182,41 @@ describe('canInvalidateMapsLeaflet / safeInvalidateMapsLeafletSize', () => {
       _mapPane: { isConnected: true },
     };
     expect(() => safeInvalidateMapsLeafletSize(map as never)).not.toThrow();
+  });
+});
+
+describe('mapsCountryClusterLayersHtml', () => {
+  it('renders one numbered badge per layer in its color', async () => {
+    const { mapsCountryClusterLayersHtml, mapsCountryClusterBox } = await import('./leaflet-map');
+    const html = mapsCountryClusterLayersHtml([
+      { layerId: 'fm', title: 'Acme <b>', color: '#171c8f', count: 2 },
+      { layerId: 'va', color: '#00a651', count: 120 },
+    ]);
+    expect(html).toContain('--maps-cluster-color:#171c8f');
+    expect(html).toContain('--maps-cluster-color:#00a651');
+    expect(html).toContain('>2<');
+    expect(html).toContain('>120<');
+    expect(html).toContain('font-size:9px');
+    expect(html).toContain('title="2 Acme &lt;b&gt;"');
+    expect(html).toContain('grid-template-columns:repeat(2,24px)');
+    // One badge: its own size; several: a grid of at most 3 columns.
+    expect(mapsCountryClusterBox(1)).toEqual({ width: 28, height: 28 });
+    expect(mapsCountryClusterBox(2)).toEqual({ width: 50, height: 24 });
+    expect(mapsCountryClusterBox(8)).toEqual({ width: 76, height: 76 });
+  });
+
+  it('never injects a non-hex color into the style attribute', async () => {
+    const { mapsCountryClusterPinHtml } = await import('./leaflet-map');
+    expect(mapsCountryClusterPinHtml('red;background:url(x)', 3)).toContain('--maps-cluster-color:#2563eb');
+  });
+});
+
+describe('clusterCountLabel', () => {
+  it('shows every count', async () => {
+    const { clusterCountLabel } = await import('./leaflet-map');
+    expect(clusterCountLabel(207)).toBe('207');
+    expect(clusterCountLabel(999)).toBe('999');
+    expect(clusterCountLabel(1234)).toBe('1.2k');
+    expect(clusterCountLabel(15400)).toBe('15k');
   });
 });

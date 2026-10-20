@@ -54,6 +54,19 @@ interface SkillsState {
 
 const SKILLS_CACHE_TTL_MS = 5 * 60 * 1000;
 
+/**
+ * Every backend tool in skills_tools.py that changes the catalog: must stay
+ * in sync with SKILL_WRITE_TOOLS there. The Skills agent saves a skill
+ * mid-conversation, so the cached catalog (what /skills lists and /<slug>
+ * resolves) is stale the moment one of these returns.
+ */
+export const SKILL_WRITE_TOOLS = ['create_skill', 'update_skill', 'delete_skill'] as const;
+
+export function isSkillsWriteTool(rawName: string | null | undefined): boolean {
+  const name = (rawName || '').toLowerCase().split(/[.:/\s]+/).filter(Boolean).pop() || '';
+  return (SKILL_WRITE_TOOLS as readonly string[]).includes(name);
+}
+
 const mapApiSkill = (s: any): Skill => ({
   id: s.id,
   workspaceId: s.workspace_id,
@@ -224,3 +237,19 @@ export const useSkillsStore = create<SkillsState>()(
     }
   )
 );
+
+/** Chat stream hook: the Skills agent changed the catalog — refetch it. */
+export function noteSkillsToolResult(
+  rawTool: string,
+  output: string,
+  workspaceId: string | null,
+): void {
+  if (!workspaceId || !isSkillsWriteTool(rawTool)) return;
+  try {
+    const parsed = JSON.parse(output) as { error?: unknown };
+    if (parsed && parsed.error) return;
+  } catch {
+    /* plain-text tool output: refresh anyway */
+  }
+  void useSkillsStore.getState().fetchSkills(workspaceId, true);
+}

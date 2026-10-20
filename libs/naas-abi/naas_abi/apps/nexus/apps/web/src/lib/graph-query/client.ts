@@ -60,8 +60,8 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
   return (await res.json()) as T
 }
 
-async function getJson<T>(path: string): Promise<T> {
-  const res = await authFetch(path)
+async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const res = await authFetch(path, { signal })
   if (!res.ok) throw await parseError(res)
   return (await res.json()) as T
 }
@@ -115,8 +115,8 @@ export function fetchFacets(
   return postJson<GraphFacetsResponse>(`${GRAPH_BASE}/query/facets`, body)
 }
 
-export function fetchColumns(params: ColumnsParams): Promise<GraphColumnsResponse> {
-  return getJson<GraphColumnsResponse>(buildColumnsPath(params))
+export function fetchColumns(params: ColumnsParams, signal?: AbortSignal): Promise<GraphColumnsResponse> {
+  return getJson<GraphColumnsResponse>(buildColumnsPath(params), signal)
 }
 
 // ── Entity search (google-like) ────────────────────────────────────────────────────

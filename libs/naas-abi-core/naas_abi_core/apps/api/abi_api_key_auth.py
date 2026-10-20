@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 from collections.abc import Callable
@@ -59,7 +60,9 @@ def expected_abi_api_key() -> str | None:
 
 def is_abi_api_token_valid(token: str | None) -> bool:
     expected = expected_abi_api_key()
-    return bool(expected) and token == expected
+    if not expected or not token:
+        return False
+    return hmac.compare_digest(token.encode(), expected.encode())
 
 
 def is_app_html_request_authorized(request: Request) -> bool:

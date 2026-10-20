@@ -61,6 +61,8 @@ export interface UseExplore {
 
   discovered: DiscoveredColumn[]
   discoveredLoading: boolean
+  discoveryError: string | null
+  retryDiscovery: () => void
   /** Anchor key the current `discovered` belongs to (empty while a new grain loads). */
   discoveredFor: string
 
@@ -100,6 +102,9 @@ export function useExplore(workspaceId: string): UseExplore {
   // The anchor key the current `discovered` belongs to (guards column auto-seed against
   // stale results while a new grain's discovery is in flight).
   const [discoveredFor, setDiscoveredFor] = useState('')
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null)
+  const [discoveryAttempt, setDiscoveryAttempt] = useState(0)
+  const retryDiscovery = useCallback(() => setDiscoveryAttempt(n => n + 1), [])
 
   const [result, setResult] = useState<GraphQueryResponse | null>(null)
   const [running, setRunning] = useState(false)
@@ -110,6 +115,7 @@ export function useExplore(workspaceId: string): UseExplore {
 
   // A monotonically increasing token guards against out-of-order responses.
   const runToken = useRef(0)
+  const invalidateRuns = useCallback(() => { ++runToken.current }, [])
 
   const spec = useMemo(() => specFromState(state), [state])
   const runnable = useMemo(() => isRunnable(spec), [spec])
@@ -174,38 +180,34 @@ export function useExplore(workspaceId: string): UseExplore {
     }
   }, [workspaceId, graphsKey])
 
-  // Discover columns whenever the anchor (graphs × classes) changes.
+  // Never turn a failed discovery into an empty, apparently successful menu.
   const anchorKey = `${state.graphUris.join('|')}::${state.classUris.join('|')}`
   useEffect(() => {
-    if (!workspaceId || state.graphUris.length === 0 || state.classUris.length === 0) {
-      setDiscovered([])
-      setDiscoveredFor('')
-      return
-    }
-    let cancelled = false
-    // Clear immediately + retag so the column auto-seed never fires with the *previous*
-    // grain's columns while the new grain's discovery is still in flight.
     setDiscovered([])
     setDiscoveredFor('')
+    setDiscoveryError(null)
+    setDiscoveredLoading(false)
+    if (!workspaceId || state.graphUris.length === 0 || state.classUris.length === 0) return
+    const controller = new AbortController()
     setDiscoveredLoading(true)
-    fetchColumns({ workspaceId, graphUris: state.graphUris, classUris: state.classUris })
-      .then((resp) => {
-        if (!cancelled) {
-          setDiscovered(resp.columns)
-          setDiscoveredFor(anchorKey)
-        }
+    fetchColumns({ workspaceId, graphUris: state.graphUris, classUris: state.classUris,
+      forceRefresh: discoveryAttempt > 0 || bypassCache }, controller.signal)
+      .then(resp => {
+        if (controller.signal.aborted) return
+        setDiscovered(resp.columns)
+        setDiscoveredFor(anchorKey)
       })
-      .catch(() => {
-        if (!cancelled) setDiscovered([])
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return
+        setDiscoveryError(err instanceof GraphApiError ? err.detail : 'Could not load columns. Please retry.')
+        setDiscoveredFor(anchorKey)
       })
       .finally(() => {
-        if (!cancelled) setDiscoveredLoading(false)
+        if (!controller.signal.aborted) setDiscoveredLoading(false)
       })
-    return () => {
-      cancelled = true
-    }
+    return () => controller.abort()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId, anchorKey])
+  }, [workspaceId, anchorKey, discoveryAttempt, bypassCache])
 
   const execute = useCallback(
     async (mode: 'replace' | 'append', opts: { forceRefresh?: boolean } = {}) => {
@@ -249,19 +251,26 @@ export function useExplore(workspaceId: string): UseExplore {
     if (result?.page.has_more) void execute('append')
   }, [execute, result])
   // A manual refresh always fetches fresh, whether or not the bypass toggle is on.
-  const refresh = useCallback(() => void execute('replace', { forceRefresh: true }), [execute])
+  const refresh = useCallback(() => {
+    retryDiscovery()
+    void execute('replace', { forceRefresh: true })
+  }, [execute, retryDiscovery])
 
   // Auto-run (debounced) whenever the spec changes and is runnable.
   useEffect(() => {
+    ++runToken.current
+    setRunning(false)
+    setRowsLoadingMore(false)
+    setError(null)
     if (!runnable) {
       setResult(null)
       return
     }
     const handle = setTimeout(() => void execute('replace'), AUTORUN_DEBOUNCE_MS)
-    return () => clearTimeout(handle)
+    return () => { clearTimeout(handle); invalidateRuns() }
     // execute is intentionally excluded; specKey captures the meaningful change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [specKey, runnable])
+  }, [workspaceId, specKey, runnable, invalidateRuns])
 
   const loadColumnFacets = useCallback(
     async (columnId: string, search: string): Promise<FacetBucket[]> => {
@@ -318,6 +327,8 @@ export function useExplore(workspaceId: string): UseExplore {
     discovered,
     discoveredLoading,
     discoveredFor,
+    discoveryError,
+    retryDiscovery,
     result,
     running,
     error,

@@ -195,7 +195,13 @@ def _build_app_info(
         maintainer=manifest.get("maintainer"),
         pricing=pricing,
         dependencies=dict(manifest.get("dependencies") or {}),
+        agent=_normalize_manifest_agent(manifest.get("agent")),
     )
+
+
+def _normalize_manifest_agent(raw: Any) -> str | None:
+    text = str(raw or "").strip()
+    return text if text and " " in text else None
 
 
 def _iter_loaded_modules() -> Iterator[Any]:
@@ -310,6 +316,31 @@ def _scan_apps_html_paths() -> dict[str, str]:
                 html_map[url_key] = str(asset_file.resolve())
     _log.info("Apps browser asset map built: %d entries", len(html_map))
     return html_map
+
+
+def apps_catalog() -> tuple[AppInfo, ...]:
+    """The process-cached module catalog. The Apps agent tools read it too."""
+    return _scan_apps_catalog()
+
+
+def module_app_dir(app_id: str) -> Path | None:
+    """Folder on disk of a catalog app (``<module_path>:<app_name>``).
+
+    Read from the browser asset map, so a module that reshapes discovery
+    (Bob's nested ``apps/<library>/<name>``) resolves like the Apps page.
+    App projects use it to copy a module app ("Edit").
+    """
+    module_path, sep, app_name = app_id.partition(":")
+    if not sep or not module_path or not app_name:
+        return None
+    key = f"{module_path.replace('.', '/')}/{app_name}/manifest.json"
+    found = _scan_apps_html_paths().get(key)
+    return Path(found).parent if found else None
+
+
+def loaded_modules() -> list[Any]:
+    """Every loaded module, root ABIModule first (the catalog's discovery order)."""
+    return list(_iter_loaded_modules())
 
 
 def _app_exists(app_id: str) -> bool:
@@ -563,22 +594,11 @@ async def update_app_config(
     await require_workspace_access(current_user.id, workspace_id)
     _ensure_app_exists(app_id)
 
-    record = await apps_service.update_app_config(
+    record = await apps_service.upsert_app_config(
         workspace_id=workspace_id,
         app_id=app_id,
         updates=AppConfigUpdateInput(enabled=updates.enabled),
     )
-    if record is None:
-        # No existing row: create one. Missing fields fall back to defaults
-        # (enabled=False), then we apply the requested update on top.
-        enabled = False if updates.enabled is None else updates.enabled
-        record = await apps_service.create_app_config(
-            AppConfigCreateInput(
-                workspace_id=workspace_id,
-                app_id=app_id,
-                enabled=enabled,
-            )
-        )
     return _serialize_record(record)
 
 

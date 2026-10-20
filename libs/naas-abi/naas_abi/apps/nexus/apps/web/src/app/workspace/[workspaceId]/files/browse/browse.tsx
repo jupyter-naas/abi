@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { useRouter, useParams, useSearchParams } from 'next/navigation';
+import { useRouter, useParams, usePathname, useSearchParams } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Header } from '@/components/shell/header';
@@ -23,13 +23,13 @@ import {
   Download, 
   Trash2,
   MoreVertical,
-  Grid,
-  List,
+  PackageOpen,
   Search,
   Eye,
   Code,
   Star,
   X,
+  ArrowLeft,
   ArrowUp,
   ArrowDown,
 } from 'lucide-react';
@@ -44,7 +44,11 @@ import {
 import { authFetch, useAuthStore } from '@/stores/auth';
 import { usePrompt, useConfirm } from '@/components/ui/dialogs';
 import { PdfViewer } from '@/components/files/pdf-viewer';
+import { CsvPreview } from '@/components/files/csv-preview';
 import { FilesAddSheet } from '../components/files-add-sheet';
+import { FilesMenuBar } from '../components/files-menu-bar';
+import { requestFilesExplorerRefresh } from '../lib/explorer-refresh';
+import { isSystemPath, withoutSystemFiles } from '@/lib/system-files';
 import { FilesMobileRow } from '../components/files-mobile-row';
 import { FilesMobileToolbar } from '../components/files-mobile-toolbar';
 import '../components/files-components.css';
@@ -59,6 +63,12 @@ import {
   matchListedFile,
   parseFilesDeepLink,
 } from '../lib/files-route';
+import {
+  ontologySpacing,
+  ontologySpacingRoute,
+  type OntologySpacingValue,
+} from '@/lib/ontology-spacing';
+import { usePublishFeatureResource } from '@/stores/feature-pane';
 import './browse.css';
 
 type FileWithRelativeDir = { file: File; relativeDir?: string };
@@ -128,11 +138,23 @@ function sortFiles(
   });
 }
 
+const SYSTEM_FILES_READ_ONLY = 'System files (names starting with ".") are read-only.';
+
 export default function FilesPage() {
   const router = useRouter();
   const params = useParams();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const workspaceId = params.workspaceId as string;
+  const spacing = ontologySpacing(searchParams?.toString() || '', 'comfortable');
+  const setSpacing = useCallback(
+    (value: OntologySpacingValue) => {
+      const next = ontologySpacingRoute(searchParams?.toString() || '', value);
+      const query = next.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
   
   const {
     files,
@@ -143,6 +165,8 @@ export default function FilesPage() {
     filesSortBy,
     filesSortDir,
     setFilesSort,
+    showSystemFiles,
+    setShowSystemFiles,
     fetchFiles,
     createFile,
     createFolder,
@@ -164,6 +188,19 @@ export default function FilesPage() {
     starredNavigation,
     setStarredNavigation,
   } = useFilesStore();
+  const activeFile = useFilesStore((s) => s.activeFile);
+
+  // The open file (else folder) rides into the right chat pane so the Files
+  // agent's tools default to it. Only the drives its tools can reach.
+  const paneDrive =
+    activeSource === 'my-drive' ? 'my_drive:' : activeSource === 'workspace' ? '' : null;
+  usePublishFeatureResource(
+    paneDrive === null
+      ? null
+      : activeFile
+        ? { feature: 'files', kind: 'file', id: `${paneDrive}${activeFile}`, label: activeFile.split('/').pop() }
+        : { feature: 'files', kind: 'folder', id: `${paneDrive}${currentPath}`, label: currentPath || 'root' },
+  );
 
   const { prompt, dialog: promptDialog } = usePrompt();
   const { confirm, dialog: confirmDialog } = useConfirm();
@@ -209,7 +246,7 @@ export default function FilesPage() {
   const [imageViewerError, setImageViewerError] = useState<string | null>(null);
   const [textViewerFileName, setTextViewerFileName] = useState<string | null>(null);
   const [textViewerContent, setTextViewerContent] = useState<string>('');
-  const [textViewerMode, setTextViewerMode] = useState<'markdown' | 'code'>('code');
+  const [textViewerMode, setTextViewerMode] = useState<'markdown' | 'csv' | 'code'>('code');
   // HTML files get a rendered preview with a toggle between preview and source.
   const [textViewerIsHtml, setTextViewerIsHtml] = useState(false);
   const [htmlPreview, setHtmlPreview] = useState(true);
@@ -251,19 +288,51 @@ export default function FilesPage() {
     };
   }, [pdfViewerUrl]);
 
+  const clearImageViewerState = () => {
+    setImageViewerFileName(null);
+    setImageViewerError(null);
+    setImageViewerLoading(false);
+    setImageViewerUrl((url) => {
+      if (url) URL.revokeObjectURL(url);
+      return null;
+    });
+  };
+
+  const clearTextViewerState = () => {
+    setTextViewerFileName(null);
+    setTextViewerContent('');
+    setTextViewerError(null);
+    setTextViewerLoading(false);
+    setTextViewerIsHtml(false);
+    setHtmlPreview(true);
+  };
+
+  const clearPdfViewerState = () => {
+    setPdfViewerFileName(null);
+    setPdfViewerError(null);
+    setPdfViewerDownloadFile(null);
+    setPdfViewerLoading(false);
+    setPdfViewerUrl((url) => {
+      if (url) URL.revokeObjectURL(url);
+      return null;
+    });
+  };
+
+  const isPreviewOpen = !!(pdfViewerFileName || imageViewerFileName || textViewerFileName);
+  const previewFileName = pdfViewerFileName || imageViewerFileName || textViewerFileName;
+
   // Close any open preview viewer when the user presses Escape.
   useEffect(() => {
-    if (!pdfViewerFileName && !imageViewerFileName && !textViewerFileName) return;
+    if (!isPreviewOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (pdfViewerFileName) closePdfViewer();
-      else if (imageViewerFileName) closeImageViewer();
-      else if (textViewerFileName) closeTextViewer();
+      clearPdfViewerState();
+      clearImageViewerState();
+      clearTextViewerState();
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdfViewerFileName, imageViewerFileName, textViewerFileName]);
+  }, [isPreviewOpen]);
 
   useEffect(() => {
     return () => {
@@ -279,6 +348,9 @@ export default function FilesPage() {
   useEffect(() => {
     if (!starredNavigation) return;
     skipRegularFetchRef.current = true;
+    clearPdfViewerState();
+    clearImageViewerState();
+    clearTextViewerState();
     setActiveSource(starredNavigation.source);
     setSearchQuery('');
     setDebouncedSearch('');
@@ -304,6 +376,9 @@ export default function FilesPage() {
     if (!deepLink.source && !deepLink.path) return;
     deepLinkConsumedRef.current = true;
     skipRegularFetchRef.current = true;
+    clearPdfViewerState();
+    clearImageViewerState();
+    clearTextViewerState();
     if (deepLink.source) setActiveSource(deepLink.source);
     setSearchQuery('');
     setDebouncedSearch('');
@@ -415,6 +490,10 @@ export default function FilesPage() {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
+    if (isSystemPath(currentPath)) {
+      setError(SYSTEM_FILES_READ_ONLY);
+      return;
+    }
 
     const items = e.dataTransfer.items;
     if (items && items.length > 0 && typeof items[0].webkitGetAsEntry === 'function') {
@@ -436,16 +515,21 @@ export default function FilesPage() {
     if (droppedFiles.length > 0) {
       await uploadFiles(droppedFiles);
     }
-  }, [uploadFiles]);
+  }, [uploadFiles, currentPath, setError]);
 
   // Internal move via drag onto a folder row.
   const handleRowDragStart = (e: React.DragEvent, file: FileInfo) => {
+    // System files are read-only: they cannot be moved.
+    if (isSystemPath(file.path)) {
+      e.preventDefault();
+      return;
+    }
     e.dataTransfer.setData(INTERNAL_DRAG_MIME, file.path);
     e.dataTransfer.effectAllowed = 'move';
   };
 
   const handleFolderDragOver = (e: React.DragEvent, folder: FileInfo) => {
-    if (!isInternalDrag(e)) return;
+    if (!isInternalDrag(e) || isSystemPath(folder.path)) return;
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
@@ -465,7 +549,7 @@ export default function FilesPage() {
     setDropTargetPath(null);
 
     const sourcePath = e.dataTransfer.getData(INTERNAL_DRAG_MIME);
-    if (!sourcePath) return;
+    if (!sourcePath || isSystemPath(sourcePath) || isSystemPath(folder.path)) return;
     // dataTransfer.getData isn't always available during dragover, so re-validate here
     const sourceParent = sourcePath.includes('/') ? sourcePath.slice(0, sourcePath.lastIndexOf('/')) : '';
     if (
@@ -483,6 +567,11 @@ export default function FilesPage() {
 
   const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files;
+    if (isSystemPath(currentPath)) {
+      setError(SYSTEM_FILES_READ_ONLY);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
     if (selectedFiles && selectedFiles.length > 0) {
       await uploadFiles(selectedFiles);
       // Reset input
@@ -515,6 +604,10 @@ export default function FilesPage() {
     });
     if (name) {
       const fullPath = currentPath ? `${currentPath}/${name}` : name;
+      if (isSystemPath(fullPath)) {
+        setError(SYSTEM_FILES_READ_ONLY);
+        return;
+      }
       await createFile(fullPath);
     }
   };
@@ -529,11 +622,16 @@ export default function FilesPage() {
     });
     if (name) {
       const fullPath = currentPath ? `${currentPath}/${name}` : name;
+      if (isSystemPath(fullPath)) {
+        setError(SYSTEM_FILES_READ_ONLY);
+        return;
+      }
       await createFolder(fullPath);
     }
   };
 
   const handleRename = async (file: FileInfo) => {
+    if (isSystemPath(file.path)) return;
     const existingNames = new Set(files.map((f) => f.name.toLowerCase()));
     const newName = await prompt({
       title: 'Rename',
@@ -551,6 +649,10 @@ export default function FilesPage() {
           confirmLabel: 'Rename',
         }).then(async (retryName) => {
           if (retryName && retryName !== file.name) {
+            if (isSystemPath(retryName)) {
+              setError(SYSTEM_FILES_READ_ONLY);
+              return;
+            }
             const parentPath = file.path.substring(0, file.path.lastIndexOf('/'));
             const newPath = parentPath ? `${parentPath}/${retryName}` : retryName;
             await renameFile(file.path, newPath);
@@ -559,6 +661,10 @@ export default function FilesPage() {
         return;
       }
 
+      if (isSystemPath(newName)) {
+        setError(SYSTEM_FILES_READ_ONLY);
+        return;
+      }
       const parentPath = file.path.substring(0, file.path.lastIndexOf('/'));
       const newPath = parentPath ? `${parentPath}/${newName}` : newName;
       await renameFile(file.path, newPath);
@@ -566,6 +672,7 @@ export default function FilesPage() {
   };
 
   const handleDelete = async (file: FileInfo) => {
+    if (isSystemPath(file.path)) return;
     const confirmed = await confirm({
       title: `Delete "${file.name}"?`,
       description: file.type === 'folder'
@@ -580,8 +687,10 @@ export default function FilesPage() {
   };
 
   const handleDeleteSelected = async () => {
-    if (selectedFiles.length === 0) return;
-    const count = selectedFiles.length;
+    // System files are read-only: a selection that includes one skips it.
+    const deletable = selectedFiles.filter((path) => !isSystemPath(path));
+    if (deletable.length === 0) return;
+    const count = deletable.length;
     const confirmed = await confirm({
       title: `Delete ${count} item${count === 1 ? '' : 's'}?`,
       description: 'The selected files and folders will be permanently deleted.',
@@ -590,7 +699,7 @@ export default function FilesPage() {
     });
     if (!confirmed) return;
     // Delete sequentially so a single failure doesn't abandon the rest.
-    for (const path of selectedFiles) {
+    for (const path of deletable) {
       await deleteFile(path);
     }
     setSelectedFiles([]);
@@ -608,7 +717,7 @@ export default function FilesPage() {
   const filteredFiles = isServerPaginated
     ? files
     : sortFiles(
-        files.filter((file) =>
+        withoutSystemFiles(files, showSystemFiles).filter((file) =>
           file.name.toLowerCase().includes(searchQuery.toLowerCase())
         ),
         filesSortBy,
@@ -683,6 +792,28 @@ export default function FilesPage() {
   // and fetch the first server page. Used by the JSX click handlers below.
   const navigateToPath = useCallback(
     (path: string) => {
+      // Folder navigation returns to the listing; drop any canvas preview.
+      setPdfViewerFileName(null);
+      setPdfViewerError(null);
+      setPdfViewerDownloadFile(null);
+      setPdfViewerLoading(false);
+      setPdfViewerUrl((url) => {
+        if (url) URL.revokeObjectURL(url);
+        return null;
+      });
+      setImageViewerFileName(null);
+      setImageViewerError(null);
+      setImageViewerLoading(false);
+      setImageViewerUrl((url) => {
+        if (url) URL.revokeObjectURL(url);
+        return null;
+      });
+      setTextViewerFileName(null);
+      setTextViewerContent('');
+      setTextViewerError(null);
+      setTextViewerLoading(false);
+      setTextViewerIsHtml(false);
+      setHtmlPreview(true);
       setSearchQuery('');
       setDebouncedSearch('');
       lastSearchRef.current = '';
@@ -845,8 +976,20 @@ export default function FilesPage() {
     );
   };
 
-  // Extensions that are reliably plain text. Markdown is detected separately
-  // so it can be rendered with ReactMarkdown instead of as raw source.
+  const isCsvFile = (file: FileInfo) => {
+    if (file.type !== 'file') return false;
+    const lowerName = file.name.toLowerCase();
+    const ct = file.content_type?.toLowerCase() || '';
+    return (
+      lowerName.endsWith('.csv') ||
+      lowerName.endsWith('.tsv') ||
+      ct === 'text/csv' ||
+      ct === 'text/tab-separated-values'
+    );
+  };
+
+  // Extensions that are reliably plain text. Markdown/CSV are detected
+  // separately so they can use dedicated previews instead of raw source.
   const TEXT_EXTENSIONS = new Set([
     'txt', 'log', 'rst', 'tex', 'csv', 'tsv',
     'json', 'jsonc', 'json5', 'ndjson', 'geojson',
@@ -913,6 +1056,8 @@ export default function FilesPage() {
 
   const openPdfViewer = async (file: FileInfo) => {
     if (!isPdfFile(file)) return;
+    clearImageViewerState();
+    clearTextViewerState();
     setPdfViewerError(null);
     setPdfViewerLoading(true);
     setPdfViewerFileName(file.name);
@@ -944,18 +1089,13 @@ export default function FilesPage() {
   };
 
   const closePdfViewer = () => {
-    setPdfViewerFileName(null);
-    setPdfViewerError(null);
-    setPdfViewerDownloadFile(null);
-    if (pdfViewerUrl) {
-      URL.revokeObjectURL(pdfViewerUrl);
-    }
-    setPdfViewerUrl(null);
-    setPdfViewerLoading(false);
+    clearPdfViewerState();
   };
 
   const openOfficePreview = async (file: FileInfo) => {
     if (!isOfficeFile(file)) return;
+    clearImageViewerState();
+    clearTextViewerState();
     setPdfViewerError(null);
     setPdfViewerLoading(true);
     setPdfViewerFileName(`${file.name} (PDF preview)`);
@@ -993,6 +1133,8 @@ export default function FilesPage() {
 
   const openImageViewer = async (file: FileInfo) => {
     if (!isImageFile(file)) return;
+    clearPdfViewerState();
+    clearTextViewerState();
     setImageViewerError(null);
     setImageViewerLoading(true);
     setImageViewerFileName(file.name);
@@ -1021,18 +1163,18 @@ export default function FilesPage() {
   };
 
   const closeImageViewer = () => {
-    setImageViewerFileName(null);
-    setImageViewerError(null);
-    if (imageViewerUrl) {
-      URL.revokeObjectURL(imageViewerUrl);
-    }
-    setImageViewerUrl(null);
-    setImageViewerLoading(false);
+    clearImageViewerState();
   };
 
   const openTextViewer = async (file: FileInfo) => {
     if (!isTextFile(file)) return;
-    const mode: 'markdown' | 'code' = isMarkdownFile(file) ? 'markdown' : 'code';
+    clearPdfViewerState();
+    clearImageViewerState();
+    const mode: 'markdown' | 'csv' | 'code' = isMarkdownFile(file)
+      ? 'markdown'
+      : isCsvFile(file)
+        ? 'csv'
+        : 'code';
     const html = isHtmlFile(file);
     setTextViewerError(null);
     setTextViewerLoading(true);
@@ -1063,12 +1205,13 @@ export default function FilesPage() {
   };
 
   const closeTextViewer = () => {
-    setTextViewerFileName(null);
-    setTextViewerContent('');
-    setTextViewerError(null);
-    setTextViewerLoading(false);
-    setTextViewerIsHtml(false);
-    setHtmlPreview(true);
+    clearTextViewerState();
+  };
+
+  const closeActivePreview = () => {
+    clearPdfViewerState();
+    clearImageViewerState();
+    clearTextViewerState();
   };
 
   const downloadFileToDesktop = async (file: FileInfo) => {
@@ -1126,6 +1269,41 @@ export default function FilesPage() {
     }
   };
 
+  const isExtractableArchive = (file: FileInfo) => {
+    if (file.type !== 'file') return false;
+    const lower = file.name.toLowerCase();
+    return (
+      lower.endsWith('.zip') ||
+      lower.endsWith('.tar') ||
+      lower.endsWith('.tgz') ||
+      lower.endsWith('.tar.gz')
+    );
+  };
+
+  const extractArchiveInPlace = async (file: FileInfo) => {
+    if (!isExtractableArchive(file)) return;
+    try {
+      const encodedPath = file.path.split('/').map(encodeURIComponent).join('/');
+      const response = await authFetch(
+        `/api/files/extract/${encodedPath}?${fileQueryParams}`,
+        { method: 'POST' },
+      );
+      if (!response.ok) {
+        let detail = 'Failed to extract archive';
+        try {
+          const data = await response.json();
+          if (data?.detail) detail = data.detail;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(detail);
+      }
+      await refreshFiles();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to extract archive');
+    }
+  };
+
   const handleRefresh = () => {
     if (isLocalFolder && activeSyncedFolder) {
       fetchLocalFiles(activeSyncedFolder.id, currentPath);
@@ -1136,6 +1314,9 @@ export default function FilesPage() {
 
   const openFileItem = (file: FileInfo) => {
     if (file.type === 'folder') {
+      clearPdfViewerState();
+      clearImageViewerState();
+      clearTextViewerState();
       if (isLocalFolder && activeSyncedFolder) {
         fetchLocalFiles(activeSyncedFolder.id, file.path);
       } else {
@@ -1158,6 +1339,8 @@ export default function FilesPage() {
     const starred = starredItems.some(
       (i) => i.path === file.path && i.workspaceId === workspaceId
     );
+    // System files are read-only: view, star and download only.
+    const readOnly = isSystemPath(file.path);
     return (
       <div className={cn('files-browse-row-actions', menuClassName)}>
         <button
@@ -1199,6 +1382,19 @@ export default function FilesPage() {
         >
           <Download size={14} />
         </button>
+        {isExtractableArchive(file) && !readOnly && (
+          <button
+            type="button"
+            title="Unzip"
+            onClick={(e) => {
+              e.stopPropagation();
+              extractArchiveInPlace(file);
+            }}
+            className="files-browse-row-action-btn"
+          >
+            <PackageOpen size={14} />
+          </button>
+        )}
         <button
           type="button"
           title="More options"
@@ -1208,7 +1404,7 @@ export default function FilesPage() {
           }}
           className="files-browse-row-action-btn"
         >
-          <MoreVertical size={16} />
+          <MoreVertical size={14} />
         </button>
         {activeContextMenu === file.path && (
           <div className="files-browse-row-context-menu">
@@ -1265,7 +1461,11 @@ export default function FilesPage() {
                 className="files-browse-row-context-item"
               >
                 <Eye size={14} />
-                {isMarkdownFile(file) ? 'View Markdown' : 'Preview'}
+                {isMarkdownFile(file)
+                  ? 'View Markdown'
+                  : isCsvFile(file)
+                    ? 'View Spreadsheet'
+                    : 'Preview'}
               </button>
             )}
             {starred ? (
@@ -1315,6 +1515,20 @@ export default function FilesPage() {
                 Download
               </button>
             )}
+            {isExtractableArchive(file) && !readOnly && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveContextMenu(null);
+                  extractArchiveInPlace(file);
+                }}
+                className="files-browse-row-context-item"
+              >
+                <PackageOpen size={14} />
+                Unzip
+              </button>
+            )}
             {file.type === 'folder' && (
               <button
                 type="button"
@@ -1329,28 +1543,36 @@ export default function FilesPage() {
                 Download as ZIP
               </button>
             )}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setActiveContextMenu(null);
-                handleRename(file);
-              }}
-              className="files-browse-row-context-item"
-            >
-              Rename
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setActiveContextMenu(null);
-                handleDelete(file);
-              }}
-              className="files-browse-row-context-item files-browse-row-context-item-destructive"
-            >
-              Delete
-            </button>
+            {readOnly ? (
+              <p className="files-browse-row-context-item text-muted-foreground" title={SYSTEM_FILES_READ_ONLY}>
+                System file · read-only
+              </p>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveContextMenu(null);
+                    handleRename(file);
+                  }}
+                  className="files-browse-row-context-item"
+                >
+                  Rename
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveContextMenu(null);
+                    handleDelete(file);
+                  }}
+                  className="files-browse-row-context-item files-browse-row-context-item-destructive"
+                >
+                  Delete
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -1361,10 +1583,38 @@ export default function FilesPage() {
     <>
     {promptDialog}
     {confirmDialog}
-    <div className="files-browse-root">
-      <Header 
+    <div className="files-browse-root" data-spacing={spacing.value}>
+      <Header
         title={driveLabel}
-        subtitle={isLocalFolder ? 'Synced from your machine' : undefined} 
+        subtitle={isLocalFolder ? 'Synced from your machine' : undefined}
+        nav={
+          <FilesMenuBar
+            isLocalFolder={isLocalFolder}
+            loading={loading}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            spacing={spacing.value}
+            onSpacingChange={setSpacing}
+            onNewFile={() => void handleNewFile()}
+            onNewFolder={() => void handleNewFolder()}
+            onUpload={() => fileInputRef.current?.click()}
+            onRefresh={() => {
+              handleRefresh();
+              requestFilesExplorerRefresh();
+            }}
+            onOpenDriveSettings={() =>
+              router.push(`/workspace/${encodeURIComponent(workspaceId)}/settings/drives`)
+            }
+            isSystemFolder={isSystemPath(currentPath)}
+            showSystemFiles={showSystemFiles}
+            onShowSystemFilesChange={(show) => {
+              setShowSystemFiles(show);
+              // Remote drives filter on the server; local folders re-filter on render.
+              if (!isLocalFolder) goToPage(1);
+              requestFilesExplorerRefresh();
+            }}
+          />
+        }
       />
 
       {/* Error banner */}
@@ -1382,55 +1632,16 @@ export default function FilesPage() {
       )}
 
       <div className="files-browse-body">
-        {/* Breadcrumb — hidden at drive root on mobile (shell top bar already shows drive name) */}
-        {(!isMobile || relativePath) && (
-        <div className="files-browse-breadcrumb">
-          <button
-            type="button"
-            onClick={() => {
-              if (isLocalFolder && activeSyncedFolder) {
-                fetchLocalFiles(activeSyncedFolder.id, '');
-              } else {
-                navigateToPath('');
-              }
-            }}
-            className={cn(
-              'files-browse-breadcrumb-link',
-              !relativePath && 'is-current',
-            )}
-          >
-            {driveLabel}
-          </button>
-          {relativePath && relativePath.split('/').map((part, i, arr) => (
-            <span key={i} className="files-browse-breadcrumb-segment">
-              <span className="files-browse-breadcrumb-separator">/</span>
-              <button
-                type="button"
-                onClick={() => {
-                  const sub = arr.slice(0, i + 1).join('/');
-                  if (isLocalFolder && activeSyncedFolder) {
-                    fetchLocalFiles(activeSyncedFolder.id, sub);
-                  } else {
-                    // Send the storage-relative path so the API resolver anchors it
-                    // under the drive root (server normalizes a leading drive root).
-                    const fullPath = driveRoot ? `${driveRoot}/${sub}` : sub;
-                    navigateToPath(fullPath);
-                  }
-                }}
-                className={cn(
-                  'files-browse-breadcrumb-link',
-                  i === arr.length - 1 && 'is-current',
-                )}
-              >
-                {part}
-              </button>
-            </span>
-          ))}
-        </div>
-        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          onChange={handleFileInputChange}
+          className="files-browse-hidden-input"
+        />
 
-        {/* Toolbar */}
-        <div className="files-browse-toolbar-wrap">
+        {/* Mobile chrome (TopNav app menu is desktop-only) */}
+        <div className="files-browse-toolbar-wrap files-browse-toolbar-wrap-mobile">
           <FilesMobileToolbar
             isLocalFolder={isLocalFolder}
             loading={loading}
@@ -1449,104 +1660,147 @@ export default function FilesPage() {
               setToolbarMenuOpen((open) => !open);
             }}
           />
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            onChange={handleFileInputChange}
-            className="files-browse-hidden-input"
-          />
+        </div>
 
-          {/* Desktop toolbar */}
-          <div className="files-browse-toolbar-desktop">
-            <div className="files-browse-toolbar-actions">
-              {!isLocalFolder && (
-                <>
-                  <button
-                    type="button"
-                    onClick={handleNewFile}
-                    className="files-browse-toolbar-btn files-browse-toolbar-btn-primary"
-                  >
-                    <FileCode size={16} />
-                    New File
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleNewFolder}
-                    className="files-browse-toolbar-btn files-browse-toolbar-btn-outline"
-                  >
-                    <FolderPlus size={16} />
-                    New Folder
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="files-browse-toolbar-btn files-browse-toolbar-btn-outline"
-                  >
-                    <Upload size={16} />
-                    Upload
-                  </button>
-                </>
-              )}
+        {/* Desktop canvas chrome: path + search (File/View live in app nav) */}
+        <div className="files-browse-canvas-chrome">
+          {isPreviewOpen ? (
+            <div className="files-browse-preview-chrome" aria-label="File preview">
               <button
                 type="button"
-                onClick={handleRefresh}
-                disabled={loading}
-                className={cn(
-                  'files-browse-toolbar-btn files-browse-toolbar-btn-outline',
-                  loading && 'is-disabled',
-                )}
+                onClick={closeActivePreview}
+                className="files-browse-preview-back"
+                aria-label="Back to folder"
               >
-                <RefreshCw
-                  size={16}
-                  className={cn('files-browse-toolbar-btn-icon', loading && 'is-spinning')}
-                />
-                Refresh
+                <ArrowLeft size={14} />
+                <span>Back</span>
               </button>
-
-              <div className="files-browse-toolbar-view-toggle">
+              <span className="files-browse-preview-filename" title={previewFileName ?? undefined}>
+                {previewFileName}
+              </span>
+              <div className="files-browse-preview-chrome-actions">
+                {textViewerIsHtml && textViewerFileName && (
+                  <div className="files-browse-preview-toggle">
+                    <button
+                      type="button"
+                      onClick={() => setHtmlPreview(true)}
+                      title="Preview"
+                      aria-label="Preview rendered HTML"
+                      className={cn(
+                        'files-browse-preview-toggle-btn',
+                        htmlPreview && 'is-active',
+                      )}
+                    >
+                      <Eye size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHtmlPreview(false)}
+                      title="View source"
+                      aria-label="View HTML source"
+                      className={cn(
+                        'files-browse-preview-toggle-btn',
+                        !htmlPreview && 'is-active',
+                      )}
+                    >
+                      <Code size={14} />
+                    </button>
+                  </div>
+                )}
+                {pdfViewerDownloadFile && (
+                  <button
+                    type="button"
+                    onClick={() => downloadFileToDesktop(pdfViewerDownloadFile)}
+                    className="files-browse-preview-action-btn"
+                  >
+                    <Download size={12} />
+                    Download original
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={() => setViewMode('list')}
-                  className={cn(
-                    'files-browse-toolbar-view-btn',
-                    viewMode === 'list' && 'is-active',
-                  )}
-                  aria-label="List view"
+                  onClick={closeActivePreview}
+                  className="files-browse-preview-close"
+                  aria-label="Close file preview"
                 >
-                  <List size={16} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode('grid')}
-                  className={cn(
-                    'files-browse-toolbar-view-btn',
-                    viewMode === 'grid' && 'is-active',
-                  )}
-                  aria-label="Grid view"
-                >
-                  <Grid size={16} />
+                  <X size={16} />
                 </button>
               </div>
             </div>
+          ) : (
+            <>
+          {(!isMobile || relativePath) && (
+            <div className="files-browse-breadcrumb" aria-label="Current folder">
+              <button
+                type="button"
+                onClick={() => {
+                  if (isLocalFolder && activeSyncedFolder) {
+                    fetchLocalFiles(activeSyncedFolder.id, '');
+                  } else {
+                    navigateToPath('');
+                  }
+                }}
+                className={cn(
+                  'files-browse-breadcrumb-link',
+                  !relativePath && 'is-current',
+                )}
+              >
+                {driveLabel}
+              </button>
+              {relativePath && relativePath.split('/').map((part, i, arr) => (
+                <span key={i} className="files-browse-breadcrumb-segment">
+                  <span className="files-browse-breadcrumb-separator">/</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sub = arr.slice(0, i + 1).join('/');
+                      if (isLocalFolder && activeSyncedFolder) {
+                        fetchLocalFiles(activeSyncedFolder.id, sub);
+                      } else {
+                        // Send the storage-relative path so the API resolver anchors it
+                        // under the drive root (server normalizes a leading drive root).
+                        const fullPath = driveRoot ? `${driveRoot}/${sub}` : sub;
+                        navigateToPath(fullPath);
+                      }
+                    }}
+                    className={cn(
+                      'files-browse-breadcrumb-link',
+                      i === arr.length - 1 && 'is-current',
+                    )}
+                  >
+                    {part}
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
 
+          <div className="files-browse-toolbar-desktop">
+            <p className="files-browse-canvas-meta">
+              {loading && filteredFiles.length === 0
+                ? 'Loading…'
+                : `${pageCount} item${pageCount === 1 ? '' : 's'}`}
+            </p>
             <div className="files-browse-toolbar-search-wrap">
               <div className="files-browse-toolbar-search">
-                <Search size={16} className="files-browse-toolbar-search-icon" />
+                <Search size={14} className="files-browse-toolbar-search-icon" />
                 <input
-                  type="text"
-                  placeholder="Search files..."
+                  type="search"
+                  placeholder="Search files…"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="files-browse-toolbar-search-input"
+                  aria-label="Search files"
                 />
               </div>
             </div>
           </div>
+            </>
+          )}
         </div>
 
         {/* Selection action bar (list view, desktop only — mobile has no row checkboxes) */}
-        {viewMode === 'list' && !isLocalFolder && !isMobile && selectedFiles.length > 0 && (
+        {!isPreviewOpen && viewMode === 'list' && !isLocalFolder && !isMobile && selectedFiles.length > 0 && (
           <div className="files-browse-selection-bar">
             <span className="files-browse-selection-count">
               {selectedFiles.length} selected
@@ -1575,12 +1829,110 @@ export default function FilesPage() {
         <div 
           className={cn(
             'files-browse-content',
+            isPreviewOpen && 'files-browse-content-preview',
             isDragging && 'is-dragging',
           )}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
+          onDragOver={isPreviewOpen ? undefined : handleDragOver}
+          onDragLeave={isPreviewOpen ? undefined : handleDragLeave}
+          onDrop={isPreviewOpen ? undefined : handleDrop}
         >
+          {isPreviewOpen ? (
+            <div className="files-browse-preview">
+              {/* Mobile preview chrome (desktop chrome lives in files-browse-canvas-chrome) */}
+              <div className="files-browse-preview-mobile-bar">
+                <button
+                  type="button"
+                  onClick={closeActivePreview}
+                  className="files-browse-preview-back"
+                  aria-label="Back to folder"
+                >
+                  <ArrowLeft size={14} />
+                  <span>Back</span>
+                </button>
+                <span className="files-browse-preview-filename" title={previewFileName ?? undefined}>
+                  {previewFileName}
+                </span>
+                <button
+                  type="button"
+                  onClick={closeActivePreview}
+                  className="files-browse-preview-close"
+                  aria-label="Close file preview"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="files-browse-preview-body">
+                {pdfViewerFileName && (
+                  <>
+                    {pdfViewerLoading && (
+                      <div className="files-browse-preview-status">Loading PDF preview...</div>
+                    )}
+                    {pdfViewerError && !pdfViewerLoading && (
+                      <div className="files-browse-preview-status is-error">{pdfViewerError}</div>
+                    )}
+                    {pdfViewerUrl && !pdfViewerLoading && !pdfViewerError && (
+                      <PdfViewer src={pdfViewerUrl} className="files-browse-preview-pdf" />
+                    )}
+                  </>
+                )}
+                {imageViewerFileName && (
+                  <>
+                    {imageViewerLoading && (
+                      <div className="files-browse-preview-status">Loading image preview...</div>
+                    )}
+                    {imageViewerError && !imageViewerLoading && (
+                      <div className="files-browse-preview-status is-error">{imageViewerError}</div>
+                    )}
+                    {imageViewerUrl && !imageViewerLoading && !imageViewerError && (
+                      <div className="files-browse-preview-image-wrap">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={imageViewerUrl}
+                          alt={imageViewerFileName}
+                          className="files-browse-preview-image"
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+                {textViewerFileName && (
+                  <>
+                    {textViewerLoading && (
+                      <div className="files-browse-preview-status">Loading preview...</div>
+                    )}
+                    {textViewerError && !textViewerLoading && (
+                      <div className="files-browse-preview-status is-error">{textViewerError}</div>
+                    )}
+                    {!textViewerLoading && !textViewerError && textViewerIsHtml && htmlPreview && (
+                      <iframe
+                        title={textViewerFileName ?? 'HTML preview'}
+                        srcDoc={textViewerContent}
+                        sandbox="allow-scripts allow-popups allow-forms allow-modals"
+                        className="files-browse-preview-html"
+                      />
+                    )}
+                    {!textViewerLoading && !textViewerError && textViewerIsHtml && !htmlPreview && (
+                      <pre className="files-browse-preview-code">{textViewerContent}</pre>
+                    )}
+                    {!textViewerLoading && !textViewerError && !textViewerIsHtml && textViewerMode === 'markdown' && (
+                      <div className="files-browse-preview-markdown">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {textViewerContent}
+                        </ReactMarkdown>
+                      </div>
+                    )}
+                    {!textViewerLoading && !textViewerError && !textViewerIsHtml && textViewerMode === 'csv' && (
+                      <CsvPreview content={textViewerContent} fileName={textViewerFileName} />
+                    )}
+                    {!textViewerLoading && !textViewerError && !textViewerIsHtml && textViewerMode === 'code' && (
+                      <pre className="files-browse-preview-code">{textViewerContent}</pre>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          ) : (
+          <>
           {/* Drag overlay */}
           {isDragging && (
             <div className="files-browse-drag-overlay">
@@ -1643,25 +1995,19 @@ export default function FilesPage() {
 
           {loading && filteredFiles.length === 0 ? (
             <div className="files-browse-empty">
-              <div className="files-browse-empty-icon-wrap">
-                <RefreshCw size={32} className="files-browse-empty-icon files-browse-toolbar-btn-icon is-spinning" />
-              </div>
-              <h3 className="files-browse-empty-title">Loading files…</h3>
+              <p className="files-browse-empty-state">Loading files…</p>
             </div>
           ) : filteredFiles.length === 0 ? (
             <div className="files-browse-empty">
-              <div className="files-browse-empty-icon-wrap">
-                <Folder size={32} className="files-browse-empty-icon" />
-              </div>
               <h3 className="files-browse-empty-title">
                 {searchQuery ? 'No files found' : isLocalFolder ? 'Folder is empty' : 'No files yet'}
               </h3>
               <p className="files-browse-empty-text">
-                {searchQuery 
-                  ? 'Try a different search term' 
-                  : isLocalFolder 
+                {searchQuery
+                  ? 'Try a different search term'
+                  : isLocalFolder
                     ? 'This folder has no files or subfolders'
-                    : 'Create a file or folder to get started'}
+                    : 'Create a file, make a folder, or upload from File in the app menu. You can also drop files here.'}
               </p>
               {!searchQuery && !isLocalFolder && (
                 <div className="files-browse-empty-actions">
@@ -1691,9 +2037,6 @@ export default function FilesPage() {
                       Upload Files
                     </button>
                   </div>
-                  <p className="files-browse-empty-hint">
-                    Or drag and drop files anywhere on this page
-                  </p>
                 </div>
               )}
             </div>
@@ -1761,7 +2104,7 @@ export default function FilesPage() {
                         onClick={() => openFileItem(file)}
                         className="files-browse-table-name-btn"
                       >
-                        <span className="files-browse-table-name-icon">{getFileIcon(file, 16)}</span>
+                        <span className="files-browse-table-name-icon">{getFileIcon(file, 14)}</span>
                         <span className="files-browse-table-name-text">{file.name}</span>
                       </button>
                     </td>
@@ -1884,10 +2227,12 @@ export default function FilesPage() {
               ))}
             </div>
           )}
+          </>
+          )}
         </div>
 
         {/* Pagination bar */}
-        {pageCount > 0 && (
+        {!isPreviewOpen && pageCount > 0 && (
           <div className={cn(
             'files-browse-pagination',
             isMobile && 'files-browse-pagination-compact',
@@ -1947,169 +2292,6 @@ export default function FilesPage() {
         onNewFolder={() => void handleNewFolder()}
         onUpload={() => fileInputRef.current?.click()}
       />
-
-      {/* PDF Viewer modal — rendered outside the page container to avoid stacking-context traps */}
-      {pdfViewerFileName && (
-        <div className="fixed inset-0 z-[200] bg-black/60 p-4 backdrop-blur-sm">
-          <div className="flex h-full flex-col overflow-hidden rounded-xl border bg-background shadow-2xl">
-            <div className="flex items-center justify-between border-b px-4 py-2">
-              <div className="truncate text-sm font-medium">{pdfViewerFileName}</div>
-              <div className="flex items-center gap-2">
-                {pdfViewerDownloadFile && (
-                  <button
-                    onClick={() => downloadFileToDesktop(pdfViewerDownloadFile)}
-                    className="flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs hover:bg-muted"
-                  >
-                    <Download size={12} />
-                    Download original
-                  </button>
-                )}
-                <button
-                  onClick={closePdfViewer}
-                  className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted"
-                  aria-label="Close PDF viewer"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            </div>
-            <div className="relative flex-1 bg-muted/20">
-              {pdfViewerLoading && (
-                <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-                  Loading PDF preview...
-                </div>
-              )}
-              {pdfViewerError && !pdfViewerLoading && (
-                <div className="absolute inset-0 flex items-center justify-center p-6 text-sm text-destructive">
-                  {pdfViewerError}
-                </div>
-              )}
-              {pdfViewerUrl && !pdfViewerLoading && !pdfViewerError && (
-                <PdfViewer src={pdfViewerUrl} className="h-full w-full" />
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-      {imageViewerFileName && (
-        <div className="fixed inset-0 z-[200] bg-black/60 p-4 backdrop-blur-sm">
-          <div className="flex h-full flex-col overflow-hidden rounded-xl border bg-background shadow-2xl">
-            <div className="flex items-center justify-between border-b px-4 py-2">
-              <div className="truncate text-sm font-medium">{imageViewerFileName}</div>
-              <button
-                onClick={closeImageViewer}
-                className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted"
-                aria-label="Close image viewer"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <div className="relative flex-1 bg-black/40">
-              {imageViewerLoading && (
-                <div className="absolute inset-0 flex items-center justify-center text-sm text-white/80">
-                  Loading image preview...
-                </div>
-              )}
-              {imageViewerError && !imageViewerLoading && (
-                <div className="absolute inset-0 flex items-center justify-center p-6 text-sm text-destructive">
-                  {imageViewerError}
-                </div>
-              )}
-              {imageViewerUrl && !imageViewerLoading && !imageViewerError && (
-                <div className="flex h-full w-full items-center justify-center p-4">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={imageViewerUrl}
-                    alt={imageViewerFileName}
-                    className="max-h-full max-w-full object-contain"
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-      {textViewerFileName && (
-        <div className="fixed inset-0 z-[200] bg-black/60 p-4 backdrop-blur-sm">
-          <div className="flex h-full flex-col overflow-hidden rounded-xl border bg-background shadow-2xl">
-            <div className="flex items-center justify-between border-b px-4 py-2">
-              <div className="flex min-w-0 items-center gap-2">
-                {textViewerIsHtml && (
-                  <div className="flex items-center rounded-md border">
-                    <button
-                      onClick={() => setHtmlPreview(true)}
-                      title="Preview"
-                      aria-label="Preview rendered HTML"
-                      className={cn(
-                        'flex h-7 w-7 items-center justify-center rounded-l-md',
-                        htmlPreview ? 'bg-muted' : 'hover:bg-muted/50'
-                      )}
-                    >
-                      <Eye size={14} />
-                    </button>
-                    <button
-                      onClick={() => setHtmlPreview(false)}
-                      title="View source"
-                      aria-label="View HTML source"
-                      className={cn(
-                        'flex h-7 w-7 items-center justify-center rounded-r-md border-l',
-                        !htmlPreview ? 'bg-muted' : 'hover:bg-muted/50'
-                      )}
-                    >
-                      <Code size={14} />
-                    </button>
-                  </div>
-                )}
-                <div className="truncate text-sm font-medium">{textViewerFileName}</div>
-              </div>
-              <button
-                onClick={closeTextViewer}
-                className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted"
-                aria-label="Close text viewer"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <div className="relative flex-1 overflow-auto bg-background">
-              {textViewerLoading && (
-                <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-                  Loading preview...
-                </div>
-              )}
-              {textViewerError && !textViewerLoading && (
-                <div className="absolute inset-0 flex items-center justify-center p-6 text-sm text-destructive">
-                  {textViewerError}
-                </div>
-              )}
-              {!textViewerLoading && !textViewerError && textViewerIsHtml && htmlPreview && (
-                <iframe
-                  title={textViewerFileName ?? 'HTML preview'}
-                  srcDoc={textViewerContent}
-                  sandbox="allow-scripts allow-popups allow-forms allow-modals"
-                  className="h-full w-full border-0 bg-white"
-                />
-              )}
-              {!textViewerLoading && !textViewerError && textViewerIsHtml && !htmlPreview && (
-                <pre className="m-0 h-full overflow-auto whitespace-pre p-4 font-mono text-xs leading-relaxed text-foreground">
-                  {textViewerContent}
-                </pre>
-              )}
-              {!textViewerLoading && !textViewerError && !textViewerIsHtml && textViewerMode === 'markdown' && (
-                <div className="prose prose-sm max-w-none p-6 dark:prose-invert">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {textViewerContent}
-                  </ReactMarkdown>
-                </div>
-              )}
-              {!textViewerLoading && !textViewerError && !textViewerIsHtml && textViewerMode === 'code' && (
-                <pre className="m-0 h-full overflow-auto whitespace-pre p-4 font-mono text-xs leading-relaxed text-foreground">
-                  {textViewerContent}
-                </pre>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

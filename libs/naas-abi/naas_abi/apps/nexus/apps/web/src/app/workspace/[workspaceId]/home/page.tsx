@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { File, Folder, MessageSquare } from 'lucide-react';
 import { appsPath } from '@/app/workspace/[workspaceId]/apps/lib/apps-route';
@@ -8,11 +8,18 @@ import { filesBrowsePath } from '@/app/workspace/[workspaceId]/files/lib/files-r
 import { Header } from '@/components/shell/header';
 import { getWorkspacePath } from '@/components/shell/sidebar/utils';
 import { useFeature } from '@/hooks/use-feature';
+import { useDeskImageUrl } from '@/hooks/use-desk-image-url';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useAppsStore } from '@/stores/apps';
 import { useFilesStore } from '@/stores/files';
 import { useWorkspaceStore } from '@/stores/workspace';
-import { deskSurfaceIcons, resolveDeskImageUrl, wallpaperStyle, type DeskSurfaceId } from './home-desk';
+import { fetchCurrentBackgroundImage, parseBackgroundImageUrl } from '@/lib/home-background';
+import { BackgroundImageDialog } from './components/background-image-dialog';
+import { DeskWallpaper } from './components/desk-wallpaper';
+import { HomeMenuBar } from './components/home-menu-bar';
+import { buildHomeFileMenuRows } from './home-desk-nav';
+import { deskSurfaceIcons, resolveDeskImageUrl, type DeskSurfaceId } from './home-desk';
+import type { StarredItem } from '@/stores/files';
 
 export default function HomePage() {
   const router = useRouter();
@@ -20,8 +27,39 @@ export default function HomePage() {
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const workspaces = useWorkspaceStore((s) => s.workspaces);
   const setActivePanelSection = useWorkspaceStore((s) => s.setActivePanelSection);
+  const setKeepPanelClosedOnNextRoute = useWorkspaceStore((s) => s.setKeepPanelClosedOnNextRoute);
   const workspace = workspaces.find((w) => w.id === currentWorkspaceId) || null;
   const theme = workspace?.theme;
+  const applyWorkspaceTheme = useWorkspaceStore((s) => s.applyWorkspaceTheme);
+  const canEditBackground = workspace?.currentUserRole === 'owner' || workspace?.currentUserRole === 'admin';
+  const [backgroundDialogOpen, setBackgroundDialogOpen] = useState(false);
+  const themeBackgroundUrl = resolveDeskImageUrl(theme?.backgroundImageUrl);
+  // The file lives in the workspace drive (.home). The theme URL is only the
+  // pointer, and a restart used to clear it. When it is missing, ask the API
+  // for the committed file and put the pointer back.
+  const [driveBackgroundUrl, setDriveBackgroundUrl] = useState<string | undefined>();
+  useEffect(() => {
+    setDriveBackgroundUrl(undefined);
+    if (!currentWorkspaceId || themeBackgroundUrl) return;
+    let cancelled = false;
+    void fetchCurrentBackgroundImage(currentWorkspaceId)
+      .then((url) => {
+        if (cancelled || !url) return;
+        setDriveBackgroundUrl(url);
+        applyWorkspaceTheme(currentWorkspaceId, { backgroundImageUrl: url });
+      })
+      .catch(() => {
+        // Wallpaper is decoration: the desk colour stays.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentWorkspaceId, themeBackgroundUrl, applyWorkspaceTheme]);
+  const backgroundUrl = themeBackgroundUrl || driveBackgroundUrl;
+  // Framing rides in the URL; the image URL without it stays stable, so
+  // re-framing does not refetch the image.
+  const { imageUrl: backgroundImageUrl, framing: backgroundFraming } = parseBackgroundImageUrl(backgroundUrl);
+  const deskImageUrl = useDeskImageUrl(backgroundImageUrl);
   const canChat = useFeature('chat');
   const canFiles = useFeature('files');
 
@@ -39,23 +77,105 @@ export default function HomePage() {
   const desktopApps = apps.filter((a) => a.enabled && a.installed && a.url);
   const desktopFiles = starredItems.filter((item) => item.workspaceId === currentWorkspaceId);
 
-  const openSurface = (section: DeskSurfaceId) => {
-    if (!currentWorkspaceId) return;
-    setActivePanelSection(section);
-    if (section === 'files') setActiveSource('my-drive');
-    router.push(getWorkspacePath(currentWorkspaceId, `/${section}`));
-  };
+  const openSurface = useCallback(
+    (section: DeskSurfaceId) => {
+      if (!currentWorkspaceId) return;
+      setActivePanelSection(section);
+      if (section === 'files') setActiveSource('my-drive');
+      router.push(getWorkspacePath(currentWorkspaceId, `/${section}`));
+    },
+    [currentWorkspaceId, router, setActivePanelSection, setActiveSource],
+  );
+
+  const openApp = useCallback(
+    (appId: string) => {
+      if (!currentWorkspaceId) return;
+      setActivePanelSection(null);
+      setKeepPanelClosedOnNextRoute(true);
+      router.push(appsPath(currentWorkspaceId, appId));
+    },
+    [currentWorkspaceId, router, setActivePanelSection, setKeepPanelClosedOnNextRoute],
+  );
+
+  const openStarred = useCallback(
+    (item: StarredItem) => {
+      if (!currentWorkspaceId) return;
+      if (item.type === 'folder') {
+        setStarredNavigation({ source: item.source, path: item.path });
+      } else {
+        const parentPath = item.path.includes('/')
+          ? item.path.substring(0, item.path.lastIndexOf('/'))
+          : '';
+        setStarredNavigation({
+          source: item.source,
+          path: parentPath,
+          previewPath: item.path,
+        });
+      }
+      setActivePanelSection('files');
+      router.push(
+        isMobile ? filesBrowsePath(currentWorkspaceId) : getWorkspacePath(currentWorkspaceId, '/files'),
+      );
+    },
+    [
+      currentWorkspaceId,
+      isMobile,
+      router,
+      setActivePanelSection,
+      setStarredNavigation,
+    ],
+  );
+
+  const fileMenuRows = useMemo(() => {
+    if (!currentWorkspaceId) return [];
+    return buildHomeFileMenuRows({
+      workspaceId: currentWorkspaceId,
+      isMobile,
+      surfaces: surfaceIcons,
+      apps,
+      starredItems: desktopFiles,
+      onOpenSurface: openSurface,
+      onOpenApp: openApp,
+      onOpenStarred: openStarred,
+    });
+  }, [
+    currentWorkspaceId,
+    isMobile,
+    surfaceIcons,
+    apps,
+    desktopFiles,
+    openSurface,
+    openApp,
+    openStarred,
+  ]);
 
   return (
     <div className="flex h-full flex-col">
-      <Header title={workspace?.name || 'Home'} />
+      <Header
+        title={workspace?.name || 'Home'}
+        nav={
+          <HomeMenuBar
+            fileMenuRows={fileMenuRows}
+            canEditBackground={canEditBackground}
+            onEditBackground={() => setBackgroundDialogOpen(true)}
+          />
+        }
+      />
+      {currentWorkspaceId && (
+        <BackgroundImageDialog
+          open={backgroundDialogOpen}
+          workspaceId={currentWorkspaceId}
+          currentBackgroundUrl={backgroundUrl}
+          onClose={() => setBackgroundDialogOpen(false)}
+          onSaved={(backgroundImageUrl) => applyWorkspaceTheme(currentWorkspaceId, { backgroundImageUrl })}
+          onRemoved={() => applyWorkspaceTheme(currentWorkspaceId, { backgroundImageUrl: '' })}
+        />
+      )}
       <div className="relative min-h-0 flex-1 overflow-hidden">
-        <div
+        <DeskWallpaper
+          imageUrl={deskImageUrl}
+          framing={backgroundFraming}
           className="absolute inset-0"
-          style={wallpaperStyle(
-            resolveDeskImageUrl(theme?.backgroundImageUrl),
-            theme?.backgroundColor,
-          )}
         />
         <div className="relative z-10 flex h-full w-full content-start flex-wrap items-start gap-x-7 gap-y-8 overflow-auto p-8">
           {surfaceIcons.map((section) => (
@@ -69,7 +189,7 @@ export default function HomePage() {
               <span className="flex h-14 w-14 items-center justify-center bg-black/35 shadow-lg">
                 {section === 'chat' ? <MessageSquare size={28} /> : <Folder size={28} />}
               </span>
-              <span className="w-full truncate text-center text-[11px] font-medium leading-tight [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
+              <span className="w-full break-words text-center text-[11px] font-medium leading-tight [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
                 {section === 'chat' ? 'Chat' : 'Files'}
               </span>
             </button>
@@ -79,10 +199,7 @@ export default function HomePage() {
               key={app.app_id}
               type="button"
               className="flex w-[88px] flex-col items-center gap-3 text-white"
-              onClick={() => {
-                if (!currentWorkspaceId) return;
-                router.push(appsPath(currentWorkspaceId, app.app_id));
-              }}
+              onClick={() => openApp(app.app_id)}
               title={app.name}
             >
               {app.avatar_url ? (
@@ -99,7 +216,7 @@ export default function HomePage() {
                   {app.icon_emoji || app.name.slice(0, 1)}
                 </span>
               )}
-              <span className="w-full truncate text-center text-[11px] font-medium leading-tight [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
+              <span className="w-full break-words text-center text-[11px] font-medium leading-tight [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
                 {app.name}
               </span>
             </button>
@@ -109,32 +226,13 @@ export default function HomePage() {
               key={`${item.workspaceId}:${item.source}:${item.path}`}
               type="button"
               className="flex w-[88px] flex-col items-center gap-3 text-white"
-              onClick={() => {
-                if (item.type === 'folder') {
-                  setStarredNavigation({ source: item.source, path: item.path });
-                } else {
-                  const parentPath = item.path.includes('/')
-                    ? item.path.substring(0, item.path.lastIndexOf('/'))
-                    : '';
-                  setStarredNavigation({
-                    source: item.source,
-                    path: parentPath,
-                    previewPath: item.path,
-                  });
-                }
-                setActivePanelSection('files');
-                router.push(
-                  isMobile
-                    ? filesBrowsePath(currentWorkspaceId)
-                    : getWorkspacePath(currentWorkspaceId, '/files'),
-                );
-              }}
+              onClick={() => openStarred(item)}
               title={item.path}
             >
               <span className="flex h-14 w-14 items-center justify-center bg-black/35 shadow-lg">
                 {item.type === 'folder' ? <Folder size={28} /> : <File size={28} />}
               </span>
-              <span className="w-full truncate text-center text-[11px] font-medium leading-tight [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
+              <span className="w-full break-words text-center text-[11px] font-medium leading-tight [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
                 {item.name}
               </span>
             </button>

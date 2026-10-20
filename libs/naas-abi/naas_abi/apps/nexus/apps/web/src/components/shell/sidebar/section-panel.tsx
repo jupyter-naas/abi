@@ -50,6 +50,10 @@ const DocumentsSection = dynamic(
   () => import('./documents-section').then((m) => m.DocumentsSection),
   { ssr: false, loading: sectionLoading },
 );
+const SheetsSection = dynamic(() => import('./sheets-section').then((m) => m.SheetsSection), {
+  ssr: false,
+  loading: sectionLoading,
+});
 const MarketplaceSection = dynamic(
   () => import('./marketplace-section').then((m) => m.MarketplaceSection),
   { ssr: false, loading: sectionLoading },
@@ -72,6 +76,31 @@ const WorkspacesSection = dynamic(
   { ssr: false, loading: sectionLoading },
 );
 
+/** Same import paths as the dynamic() calls above, so a hover warms the chunk next/dynamic will use. */
+const SECTION_CHUNK: Partial<Record<SidebarSection, () => Promise<unknown>>> = {
+  chat: () => import('@/app/workspace/[workspaceId]/chat/components/chat-section'),
+  maps: () => import('./maps-section'),
+  search: () => import('./search-section'),
+  files: () => import('./files-section'),
+  datasets: () => import('./datasets-section'),
+  ontology: () => import('./ontology-section'),
+  graph: () => import('./knowledge-graph-section'),
+  code: () => import('./code-section'),
+  slides: () => import('./slides-section'),
+  documents: () => import('./documents-section'),
+  sheets: () => import('./sheets-section'),
+  marketplace: () => import('./marketplace-section'),
+  apps: () => import('./apps-section'),
+  infrastructure: () => import('@/app/workspace/[workspaceId]/settings/infrastructure/infrastructure-section'),
+  settings: () => import('./settings-section'),
+  events: () => import('./events-section'),
+  workspaces: () => import('./workspaces-section'),
+};
+
+export function prefetchSectionPanel(section: SidebarSection) {
+  void SECTION_CHUNK[section]?.();
+}
+
 function SectionContent({ section }: { section: SidebarSection }) {
   const canSettings = useFeature('settings.workspace');
   const canMaps = useFeature('maps');
@@ -85,6 +114,7 @@ function SectionContent({ section }: { section: SidebarSection }) {
   const canGraph = useFeature('graph');
   const canSlides = useFeature('slides');
   const canDocuments = useFeature('documents');
+  const canSheets = useFeature('sheets');
 
   if (section === 'maps' && canMaps) return <MapsSection collapsed={false} detailOnly />;
   if (section === 'search' && canSearch) return <SearchSection collapsed={false} detailOnly />;
@@ -96,6 +126,7 @@ function SectionContent({ section }: { section: SidebarSection }) {
   if (section === 'code') return <CodeSection collapsed={false} detailOnly />;
   if (section === 'slides' && canSlides) return <SlidesSection collapsed={false} detailOnly />;
   if (section === 'documents' && canDocuments) return <DocumentsSection collapsed={false} detailOnly />;
+  if (section === 'sheets' && canSheets) return <SheetsSection collapsed={false} detailOnly />;
   if (section === 'apps' && canApps) return <AppsSection collapsed={false} detailOnly />;
   if (section === 'marketplace' && canMarketplace) return <MarketplaceSection collapsed={false} detailOnly />;
   if (section === 'infrastructure' && canSettings) return <InfrastructureSection />;
@@ -131,7 +162,14 @@ export function SectionPanel() {
         style={isOpen ? { width: sectionPanelWidth } : undefined}
       >
         {isOpen && activePanelSection && (
-          <nav className="flex-1 overflow-y-auto p-2">
+          <nav
+            className={cn(
+              'flex min-h-0 flex-1 flex-col p-2',
+              // Workspaces owns its own list scroll so the search bar can
+              // stay pinned and clip rows. Other sections still scroll here.
+              activePanelSection === 'workspaces' ? 'overflow-hidden' : 'overflow-y-auto',
+            )}
+          >
             <SectionContent section={activePanelSection} />
           </nav>
         )}

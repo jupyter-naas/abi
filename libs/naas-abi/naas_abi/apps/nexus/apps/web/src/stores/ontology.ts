@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { createDeferredStorage } from '@/lib/deferred-storage';
 import { useWorkspaceStore } from './workspace';
 import { getApiUrl } from '@/lib/config';
 import { ontologyApiQuery } from '@/lib/ontology-query';
@@ -508,7 +509,7 @@ export const useOntologyStore = create<OntologyState>()(
       clearCache: async () => {
         try {
           const baseUrl = getApiUrl();
-          await authFetch(`${baseUrl}/api/ontology/cache/clear`, { method: 'POST' });
+          await authFetch(`${baseUrl}/api/ontology/cache/clear${ontologyApiQuery()}`, { method: 'POST' });
         } catch (err) {
           console.error('Failed to clear ontology cache:', err);
         }
@@ -633,6 +634,7 @@ export const useOntologyStore = create<OntologyState>()(
     }),
     {
       name: 'nexus-ontology',
+      storage: createDeferredStorage(),
       partialize: (state) => ({
         items: state.items,
         expandedFolders: state.expandedFolders,

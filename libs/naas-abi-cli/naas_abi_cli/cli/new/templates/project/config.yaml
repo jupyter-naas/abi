@@ -41,6 +41,9 @@ modules:
         # bootstrap password is auto-generated on first boot and written to
         # `.env` as `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`.
         auth_password_enabled: true
+        # Self-registration is off: accounts come from invitations or `users:`
+        # below. Set true to let anyone reaching the login page create an account.
+        auth_signup_enabled: false
         magic_link_allow_signup: false
         users:
           - email: "admin@example.com"
@@ -52,16 +55,10 @@ modules:
           - name: "Dev"
             slug: "dev"
             owner_email: "admin@example.com"
-            members:
-              - email: "admin@example.com"
-                role: "owner"
             workspaces:
               - name: "Default"
                 slug: "default"
                 owner_email: "admin@example.com"
-                members:
-                  - email: "admin@example.com"
-                    role: "owner"
 
   # OpenRouter — the only AI provider enabled by default. One gateway key
   # serves both the default chat model (Gemma 4 26B-A4B) and the default
@@ -126,6 +123,11 @@ services:
       adapter: "fs"
       config:
         base_path: "storage/datastore"
+  document:
+    document_adapter:
+      adapter: "sqlite"
+      config:
+        path: "storage/documents.sqlite"
   dataset:
     dataset_adapter:
       adapter: "ducklake"

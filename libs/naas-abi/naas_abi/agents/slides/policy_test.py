@@ -24,6 +24,7 @@ from naas_abi.agents.slides.policy import (
     reject_unresearched_slides_write,
     resolve_slides_llm_model,
     slides_brief_requires_research,
+    slides_creation_requested,
     slides_research_tools,
     slides_search_budget_remaining,
     slides_search_tool_bound,
@@ -321,7 +322,7 @@ def test_write_gate_opens_when_no_search_tool_can_be_bound() -> None:
     tool bound the gate rejected every deck write on a factual brief forever,
     and told the model to retry after a search it could not run.
     """
-    with _unimportable("naas_abi.agents.tools.web_tools"):
+    with _unimportable("naas_abi.tools.web_tools"):
         assert slides_research_tools() == []
         bind_slides_research_policy(
             "create a presentation about what's going on in iran now",
@@ -411,6 +412,14 @@ def test_slides_creation_requested_detects_a_french_deck_brief() -> None:
     # Not a deck request.
     assert not slides_creation_requested("quelle est la capitale de la France ?")
     assert not slides_creation_requested("résume ce document")
+
+
+def test_slides_creation_requested_ignores_domain_shorthand_without_deck_noun() -> None:
+    """ABI policy stays generic: product shorthand without a deck noun is not a create."""
+    assert not slides_creation_requested("pipeline review for Acme")
+    assert not slides_creation_requested("competitor brief on Anthropic")
+    assert not slides_creation_requested("do a report on OpenAI")
+    assert not slides_creation_requested("what is the capital of France?")
 
 
 def test_research_policy_records_the_brief_for_naming() -> None:

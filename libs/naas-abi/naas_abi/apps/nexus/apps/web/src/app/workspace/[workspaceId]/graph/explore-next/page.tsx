@@ -1,8 +1,7 @@
 'use client'
 
 import { useParams, useSearchParams } from 'next/navigation'
-import { Header } from '@/components/shell/header'
-import { GraphDevBanner } from '@/components/graph/graph-dev-banner'
+import { GraphHeader as Header } from '@/components/graph/graph-header'
 import { ExploreWorkbench } from '@/components/graph/explore/ExploreWorkbench'
 
 /**
@@ -22,9 +21,8 @@ export default function ExploreNextPage() {
       <Header title="Explore Graph" />
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <GraphDevBanner />
           <div className="min-h-0 flex-1 overflow-hidden">
-            <ExploreWorkbench workspaceId={workspaceId} viewIdToLoad={viewIdToLoad} />
+            <ExploreWorkbench key={workspaceId} workspaceId={workspaceId} viewIdToLoad={viewIdToLoad} />
           </div>
         </div>
       </div>

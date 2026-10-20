@@ -1,12 +1,14 @@
 """Scheduled dashboard-rebuild orchestration for the X application.
 
 A single Dagster job (``x_build_app_x_proxy``) that rebuilds the Recent Tweets app from
-the current graph — no X API calls, no re-ingest, no re-map. On every tick it
-calls :func:`publish_x_app`, which:
+Dataset Service — no X API calls, no re-ingest, no Fuseki snapshot scans. On every
+tick it calls :func:`publish_x_app`, which:
 
-1. reads the ``x_recent_posts_count`` / tweet graphs from the triple store, then
+1. reads ``posts_v1`` / ``count_buckets_v1`` via the dataset port, then
 2. re-renders the ``x/apps/x_proxy/`` JSON snapshots (globals + count_recent_tweets +
-   search_recents_tweets) and the static web export from that graph state.
+   search_recents_tweets) and the static web export.
+3. drains a bounded batch of pending dataset media downloads (formerly the
+   ``x_dataset_media_worker_schedule`` every-10-min tick).
 
 Use it to keep the published dashboard fresh on a fixed cadence, independent of
 when new tweets/counts land — the ingestion orchestrations already republish on
@@ -24,6 +26,7 @@ from naas_abi_core.orchestrations.DagsterOrchestration import DagsterOrchestrati
 
 _JOB_NAME = "x_build_app_x_proxy"
 _OP_NAME = "x_build_app_x_proxy_op"
+_MEDIA_OP_NAME = "x_dataset_media_worker_op"
 _SCHEDULE_NAME = "x_build_app_x_proxy_hourly"
 _DAILY_REPORT_JOB_PREFIX = "report_send_counter_uas_daily_"
 _IN_PROGRESS_STATUSES = [
@@ -34,110 +37,73 @@ _IN_PROGRESS_STATUSES = [
 ]
 
 
-_BUILD_APP_OP_CONFIG_SCHEMA = {
-    "full_users": dg.Field(
-        bool,
-        is_required=False,
-        default_value=False,
-        description=(
-            "Rebuild every Users shard instead of only the ones whose authors "
-            "changed. The incremental default skips querying posts for "
-            "unchanged shards; use this to pick up profile edits that arrived "
-            "without a new post."
-        ),
-    ),
-    "rebuild_projection": dg.Field(
-        bool,
-        is_required=False,
-        default_value=False,
-        description=(
-            "Re-project the Parquet cache from the whole envelope archive "
-            "instead of only the envelopes past the watermark. Use after a "
-            "schema change, a suspected gap, or to compact month partitions "
-            "that were duplicated when a missing watermark appended a full "
-            "archive dump. Costs a full archive read, so it is not the "
-            "scheduled behaviour."
-        ),
-    ),
-    "artifact_batch_size": dg.Field(
-        int,
-        is_required=False,
-        default_value=100,
-        description=(
-            "Maximum changed/recent user artifacts (and their media) materialized "
-            "per build. Bounds the initial 30-day backfill."
-        ),
-    ),
-}
-
-
-def _run_build_cycle(
-    *,
-    full_users: bool = False,
-    rebuild_projection: bool = False,
-    artifact_batch_size: int = 100,
-) -> dict:
-    """Populate from the triple store and rebuild the X app front."""
+def _run_build_cycle() -> dict:
+    """Rebuild the X app snapshots from Dataset Service."""
     from naas_abi_marketplace.applications.x import ABIModule
     from naas_abi_marketplace.applications.x.orchestrations.utils import (
         publish_x_app,
-        refresh_x_cache,
     )
 
     module = ABIModule.get_instance()
-    summary: dict = {}
-    if rebuild_projection:
-        # Done up front so the publish below reads the rebuilt projection;
-        # publish_x_app's own incremental refresh then has nothing left to do.
-        summary["projection_rebuild"] = refresh_x_cache(module, full=True)
-    summary["app"] = publish_x_app(
-        module,
-        full_users=full_users,
-        direct_user_limit=max(0, artifact_batch_size),
-    )
+    summary: dict = {"app": publish_x_app(module)}
     logger.info(f"XBuildAppOrchestration: done — {summary}")
     return summary
 
 
+def _default_run_config() -> dict:
+    """Launchpad reference — ops in graph execution order (no op config schema)."""
+    return {
+        "ops": {
+            _OP_NAME: {},
+            _MEDIA_OP_NAME: {},
+        }
+    }
+
+
+def _run_media_batch() -> dict:
+    from naas_abi_marketplace.applications.x import ABIModule
+    from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.media_worker import (
+        process_pending_media_batch,
+    )
+
+    module = ABIModule.get_instance()
+    app_cfg = getattr(module.configuration, "app", None)
+    dataset_cfg = getattr(app_cfg, "dataset", None) if app_cfg else None
+    batch = int(getattr(dataset_cfg, "media_batch_size", 4) or 4)
+    result = process_pending_media_batch(module, limit=batch)
+    logger.info(f"XBuildAppOrchestration: media batch — {result}")
+    return result
+
+
 class XBuildAppOrchestration(DagsterOrchestration):
-    """Scheduled job that rebuilds the X app dashboard from the graph.
+    """Scheduled job that rebuilds the X app dashboard from Dataset Service.
 
-    Launchpad: run ``x_build_app_x_proxy`` to re-render the ``x/apps/x_proxy/`` snapshots +
-    web export from the current triple-store state on demand::
-
-        ops:
-          x_build_app_x_proxy_op:
-            config:
-              full_users: true
-              rebuild_projection: true
-
-    ``rebuild_projection`` rewrites every monthly Parquet part from the envelope
-    archive (one file per month). Use it after an OOM or a missing Redis
-    watermark that appended a second copy of history — the hourly tick must
-    stay incremental.
+    Launchpad: run ``x_build_app_x_proxy`` to re-render snapshots + web export on demand.
+    Requires ``app.dataset.read_enabled: true`` and Dataset Service on the engine.
     """
 
     @classmethod
     def New(cls) -> XBuildAppOrchestration:
-        @dg.op(name=_OP_NAME, config_schema=_BUILD_APP_OP_CONFIG_SCHEMA)
-        def build_op(context) -> dict:
-            config = context.op_config or {}
-            return _run_build_cycle(
-                full_users=bool(config.get("full_users", False)),
-                rebuild_projection=bool(config.get("rebuild_projection", False)),
-                artifact_batch_size=int(config.get("artifact_batch_size", 100)),
-            )
+        @dg.op(name=_OP_NAME)
+        def build_op(_context) -> dict:
+            return _run_build_cycle()
 
-        # In-process executor: share the code-server's warm engine instead of
-        # forking a subprocess that re-bootstraps and races oxigraph / nexus.db.
-        @dg.job(name=_JOB_NAME, executor_def=dg.in_process_executor)
+        @dg.op(name=_MEDIA_OP_NAME, tags={"x_dataset_media": "1"})
+        def media_worker_op(_build_summary: dict) -> dict:
+            return _run_media_batch()
+
+        @dg.job(
+            name=_JOB_NAME,
+            executor_def=dg.in_process_executor,
+            config=_default_run_config(),
+        )
         def build_job():
-            build_op()
+            media_worker_op(build_op())
 
         @dg.schedule(
             name=_SCHEDULE_NAME,
             job=build_job,
-            cron_schedule="0 * * * *",  # top of every hour
+            cron_schedule="0 * * * *",
             execution_timezone="UTC",
             default_status=dg.DefaultScheduleStatus.RUNNING,
         )

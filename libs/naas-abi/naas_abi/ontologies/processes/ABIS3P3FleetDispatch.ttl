@@ -1,0 +1,174 @@
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+abi:S3P3Ontology a owl:Ontology ;
+    rdfs:label "S3-P3 · Fleet dispatch"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceSHA256 "0d2c2c1e42dc3dfcfb1a8661ddba31057e88de911af1bb8f21868ba3096c0763"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    dct:title "S3-P3 · Fleet dispatch"@en ;
+    rdfs:comment "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    owl:imports abi:ABIProcessLedgerOntology .
+
+abi:S3P3Condition1 a owl:Class ;
+    rdfs:label "Fleet dispatch timing condition"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "On demand; time-of-day windows"@en ;
+    rdfs:comment "Ledger trigger/cadence/target: On demand; time-of-day windows. No occurrence or achieved timing is asserted."@en ;
+    rdfs:subClassOf abi:ExecutionCondition ;
+    skos:definition "Ledger trigger/cadence/target: On demand; time-of-day windows. No occurrence or achieved timing is asserted."@en .
+
+abi:S3P3ExecutionRole a owl:Class ;
+    rdfs:label "Fleet dispatch execution role"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "A proposed role realised in Fleet dispatch and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000197 ;
+            owl:someValuesFrom [ a owl:Class ;
+                    owl:unionOf ( abi:DispatcherParticipant abi:DriverParticipant abi:FleetSystemHost ) ] ],
+        abi:ExecutionRole ;
+    skos:definition "A proposed role realised in Fleet dispatch and borne by a listed material participant. The accountable bearer must be confirmed with ABI."@en .
+
+abi:S3P3Interval a owl:Class ;
+    rdfs:label "Fleet dispatch execution interval"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The temporal region occupied by an execution of Fleet dispatch; actual dates are unspecified."@en ;
+    rdfs:subClassOf abi:ExecutionInterval ;
+    skos:definition "The temporal region occupied by an execution of Fleet dispatch; actual dates are unspecified."@en .
+
+abi:S3P3Objective1 a owl:Class ;
+    rdfs:label "Fleet dispatch objective"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:sourceValue "Reliable VIP movement"@en ;
+    rdfs:comment "Intended outcome: Reliable VIP movement. This is an objective specification, not a role or a guaranteed result."@en ;
+    rdfs:subClassOf abi:ObjectiveSpecification ;
+    skos:definition "Intended outcome: Reliable VIP movement. This is an objective specification, not a role or a guaranteed result."@en .
+
+abi:S3P3Specification a owl:Class ;
+    rdfs:label "Fleet dispatch specification"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    rdfs:comment "The simulated ledger specification for S3-P3. It describes a possible process, not an executed run."@en ;
+    rdfs:subClassOf abi:ProcessSpecification ;
+    skos:definition "The simulated ledger specification for S3-P3. It describes a possible process, not an executed run."@en .
+
+abi:S3P3Step1 a owl:Class ;
+    rdfs:label "Fleet dispatch · Receive request"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 1 ;
+    rdfs:comment "Suggested step 1 of Fleet dispatch: Receive request. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S3P3 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 1 of Fleet dispatch: Receive request. Its ordering is a specification, not observed timing."@en .
+
+abi:S3P3Step2 a owl:Class ;
+    rdfs:label "Fleet dispatch · Assign vehicle"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 2 ;
+    rdfs:comment "Suggested step 2 of Fleet dispatch: Assign vehicle. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S3P3 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 2 of Fleet dispatch: Assign vehicle. Its ordering is a specification, not observed timing."@en .
+
+abi:S3P3Step3 a owl:Class ;
+    rdfs:label "Fleet dispatch · Dispatch & track"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:stepNumber 3 ;
+    rdfs:comment "Suggested step 3 of Fleet dispatch: Dispatch & track. Its ordering is a specification, not observed timing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000132 ;
+            owl:someValuesFrom abi:S3P3 ],
+        abi:ProcessStep,
+        bfo:BFO_0000015 ;
+    skos:definition "Suggested step 3 of Fleet dispatch: Dispatch & track. Its ordering is a specification, not observed timing."@en .
+
+abi:S3P3 a owl:Class ;
+    rdfs:label "Fleet dispatch"@en ;
+    abi:ledgerCode "S3-P3"@en ;
+    abi:ledgerHOWITIS "On-time rate"@en,
+        "Vehicle status"@en ;
+    abi:ledgerHOWWEKNOW "Dispatch record"@en,
+        "Trip log"@en ;
+    abi:ledgerWHEN "On demand; time-of-day windows"@en ;
+    abi:ledgerWHERE "Operations centre"@en,
+        "Sites across the estate"@en ;
+    abi:ledgerWHO "Dispatcher"@en,
+        "Driver"@en,
+        "Fleet system"@en ;
+    abi:ledgerWHY "Reliable VIP movement"@en ;
+    abi:modelingStatus "Draft — simulated ledger hypothesis; not validated with ABI."@en ;
+    abi:qualityMappingStatus "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    dct:source "libs/naas-abi/naas_abi/ontologies/processes/source_ledger.json"@en ;
+    rdfs:comment "A proposed ABI fleet dispatch process. Suggested steps: Receive request → Assign vehicle → Dispatch & track. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en,
+        "Unresolved — source indicators retained as information; no quality bearer supplied"@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty abi:hasExecutionCondition ;
+            owl:someValuesFrom abi:S3P3Condition1 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S3P3Step1 ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S3P3Step2 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:TripLogRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasIndicatorRecord ;
+            owl:someValuesFrom abi:VehicleStatusIndicator ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000055 ;
+            owl:someValuesFrom abi:S3P3ExecutionRole ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000066 ;
+            owl:someValuesFrom abi:SitesAcrossTheEstateSite ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:FleetSystemHost ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:usesInformation ;
+            owl:someValuesFrom abi:FleetSystemSoftware ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:DispatcherParticipant ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000117 ;
+            owl:someValuesFrom abi:S3P3Step3 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:pursuesObjective ;
+            owl:someValuesFrom abi:S3P3Objective1 ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:documentedBy ;
+            owl:someValuesFrom abi:DispatchRecordRecord ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000199 ;
+            owl:someValuesFrom abi:S3P3Interval ],
+        [ a owl:Restriction ;
+            owl:onProperty abi:hasIndicatorRecord ;
+            owl:someValuesFrom abi:OnTimeRateIndicator ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000057 ;
+            owl:someValuesFrom abi:DriverParticipant ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000059 ;
+            owl:someValuesFrom abi:S3P3Specification ],
+        [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000066 ;
+            owl:someValuesFrom abi:OperationsCentreSite ],
+        abi:LedgerProcess,
+        abi:S3Process,
+        bfo:BFO_0000015 ;
+    skos:altLabel "S3-P3"@en ;
+    skos:definition "A proposed ABI fleet dispatch process. Suggested steps: Receive request → Assign vehicle → Dispatch & track. Draft — simulated ledger hypothesis; not validated with ABI. HOW IT IS values are retained as indicator records; quality bearers remain unresolved."@en .
+

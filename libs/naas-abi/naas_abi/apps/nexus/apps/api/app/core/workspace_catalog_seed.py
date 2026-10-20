@@ -130,7 +130,7 @@ def ontology_matches_seed(path: str, module_name: str, seed_refs: Sequence[str])
         normalized = normalize_ontology_ref(ref)
         if normalized in aliases or normalized in normalized_aliases:
             return True
-        if posix.endswith(_posix(ref)) or path.endswith(ref):
+        if "/" in _posix(ref) and not _posix(ref).startswith("/") and posix.endswith("/" + _posix(ref)):
             return True
     return False
 
@@ -141,7 +141,8 @@ def filter_ontology_catalog(
 ) -> list[Any]:
     """Restrict catalog rows to the seed list.
 
-    ``None`` keeps the full engine listing (existing deployments). An empty
+    ``None`` is reserved for trusted internal enumeration. HTTP callers must
+    supply an authorized workspace allowlist. An empty
     list returns nothing. A non-empty list is exclusive: listed on, others
     off. owl:imports are not added.
     """

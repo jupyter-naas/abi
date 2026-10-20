@@ -21,6 +21,11 @@ from typing import Any
 from naas_abi_core import logger
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.event import EventCodec, EventFilter
+from naas_abi_core.services.event.context import (
+    event_actor_user_id,
+    event_actor_workspace_id,
+    event_triggered_via,
+)
 from naas_abi_core.services.event.EventPort import (
     IEventAdapter,
     IEventService,
@@ -96,6 +101,17 @@ class EventService(ServiceBase, IEventService):
             created_at = datetime.datetime.now(datetime.UTC)
             event.created_at = created_at
         timestamp = created_at.isoformat()
+
+        # Who/where from the request context, unless the caller said otherwise.
+        for field_name, context_var in (
+            ("actor_user_id", event_actor_user_id),
+            ("actor_workspace_id", event_actor_workspace_id),
+            ("triggered_via", event_triggered_via),
+        ):
+            if getattr(event, field_name, None) is None:
+                value = context_var.get()
+                if value is not None:
+                    setattr(event, field_name, value)
 
         payload = EventCodec.serialize(event)
 

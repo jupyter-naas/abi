@@ -246,6 +246,17 @@
   height: 8px;
 }
 
+/* Opt-in: keep overflow scroll without a visible gutter. */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 ::-webkit-scrollbar-track {
   @apply bg-transparent;
 }
@@ -279,9 +290,116 @@ aside.glass :focus-visible {
   @apply ring-0;
 }
 
+/* TopNav app menus (File / View / …): no focus ring around triggers. */
+[data-testid="app-menu-bar"] :focus-visible {
+  @apply outline-none ring-0;
+}
+
+/*
+ * Radix DropdownMenu content is portaled under body, so the app-menu-bar
+ * rule above never reaches it. Global :focus-visible { ring-2 ring-ring/30 }
+ * paints a green box-shadow (hsl(--ring)/30) around the open panel.
+ * Kill that paint unconditionally — not only on :focus — so it still wins
+ * when the panel is focused via keyboard.
+ */
+[data-radix-menu-content],
+[data-radix-popper-content-wrapper] [role='menu'],
+/* Items too: Radix focuses the highlighted item, so hover drew a green ring
+   round each row. The row's data-[highlighted] background is the cue. */
+[data-radix-menu-content] :focus-visible,
+[data-radix-menu-content] :focus {
+  outline: none !important;
+  --tw-ring-width: 0px !important;
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+  box-shadow: none !important;
+}
+
 /* Subtle focus for glass cards */
 .glass-card:focus-within {
   border-color: var(--border-hex);
+}
+
+/*
+ * Bordered search shells: keep neutral border on focus (no workspace-accent ring).
+ */
+.graph-explorer-search:focus-within,
+.graph-browser-search:focus-within,
+.ontology-icon-picker-search:focus-within,
+.image-square-picker-search:focus-within,
+.maps-point-search__field:focus-within,
+.maps-record-search:focus-within,
+.infrastructure-search:focus-within,
+.workspace-omni-search:focus-within {
+  border-color: var(--border-hex, hsl(var(--border)));
+  box-shadow: none;
+}
+
+.graph-explorer-search :focus-visible,
+.graph-browser-search :focus-visible,
+.ontology-icon-picker-search :focus-visible,
+.image-square-picker-search :focus-visible,
+.maps-point-search__field :focus-visible,
+.maps-record-search :focus-visible,
+.infrastructure-search :focus-visible,
+.chat-agent-selector-search:focus-visible,
+.files-browse-toolbar-search-input:focus-visible,
+.files-mobile-toolbar-search input:focus-visible,
+.workspace-omni-search :focus-visible {
+  outline: none;
+  --tw-ring-width: 0px;
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-ring-offset-shadow: 0 0 #0000;
+  box-shadow: none;
+}
+
+.chat-agent-selector-search:focus,
+.files-browse-toolbar-search-input:focus,
+.files-mobile-toolbar-search input:focus {
+  border-color: var(--border-hex, hsl(var(--border)));
+  box-shadow: none;
+}
+
+/*
+ * Maps dropdowns (group panel, basemap strip, country filter): no green focus ring.
+ */
+.maps-group-panel,
+.maps-group-panel :focus,
+.maps-group-panel :focus-visible,
+.maps-basemap-popover,
+.maps-basemap-popover :focus,
+.maps-basemap-popover :focus-visible,
+.maps-record-panel select:focus,
+.maps-record-panel select:focus-visible {
+  outline: none !important;
+  --tw-ring-width: 0px !important;
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+  box-shadow: none !important;
+}
+
+.maps-record-panel select:focus,
+.maps-record-panel select:focus-visible {
+  border-color: hsl(var(--border));
+}
+
+.maps-country-filter__panel,
+.maps-country-filter__panel :focus,
+.maps-country-filter__panel :focus-visible,
+.maps-region-filter__panel,
+.maps-region-filter__panel :focus,
+.maps-region-filter__panel :focus-visible {
+  outline: none !important;
+  --tw-ring-width: 0px !important;
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+  box-shadow: none !important;
+}
+
+.maps-country-filter__search:focus-within,
+.maps-region-filter__search:focus-within {
+  border-color: var(--border-hex, hsl(var(--border)));
+  box-shadow: none;
 }
 
 /* ============================================
@@ -313,6 +431,14 @@ aside.glass :focus-visible {
 
 .bg-workspace-accent-20 {
   background-color: color-mix(in srgb, var(--workspace-accent, #22c55e) 20%, transparent);
+}
+
+.bg-workspace-accent-30 {
+  background-color: color-mix(
+    in srgb,
+    var(--workspace-accent, var(--workspace-primary, #22c55e)) 30%,
+    transparent
+  );
 }
 
 /* Border with workspace accent color */
@@ -480,6 +606,73 @@ aside.glass :focus-visible {
   line-height: 1.625;
 }
 
+/* Chat tables: the wrapper (components/chat markdown `table`) clips and scrolls,
+ * so a wide GFM table stays inside the bubble instead of overflowing it. */
+.chat-message-body .chat-table-scroll {
+  @apply my-3 w-full max-w-full overflow-x-auto rounded-lg border border-border/70;
+}
+
+.chat-message-body .chat-table-scroll table {
+  @apply w-full border-collapse text-xs;
+}
+
+.chat-message-body .chat-table-scroll th,
+.chat-message-body .chat-table-scroll td {
+  @apply px-3 py-2 text-left align-top;
+  /* break-word, not anywhere: at cell level `anywhere` shrinks every column's
+   * min-content width, so ordinary words split too ("externa l", "bundle d").
+   * Only the long-identifier tokens below opt into mid-token breaking. */
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+/* Headers never wrap: their widths are the table's min-content floor, which is
+ * what keeps the body columns from being squeezed into one-word-per-line. */
+.chat-message-body .chat-table-scroll thead th {
+  white-space: nowrap;
+}
+
+.chat-message-body .chat-table-scroll thead th {
+  @apply border-b border-border bg-background/50 font-semibold;
+}
+
+.chat-message-body .chat-table-scroll tbody td {
+  @apply border-b border-border/50;
+}
+
+.chat-message-body .chat-table-scroll tbody tr:last-child td {
+  @apply border-b-0;
+}
+
+/* Long identifiers (`module.app:id`) are the one thing allowed to break
+ * mid-token, so no single cell can force the table wider than the bubble.
+ * Scoped to the inline token, not the cell: any prose beside it still wraps at
+ * word boundaries. No min-width floor here — a floor is exactly what used to
+ * pin the table wide and hand it to the wrapper's scrollbar. */
+.chat-message-body .chat-table-scroll code {
+  @apply text-[11px];
+}
+
+.chat-message-body .chat-table-scroll td code,
+.chat-message-body .chat-table-scroll td strong {
+  overflow-wrap: anywhere;
+}
+
+/* Phone widths: six columns cannot hold full words at 390px, so trade density
+ * for fit — tighter cells, wrappable headers, and mid-word breaks everywhere.
+ * The wrapper keeps overflow-x-auto as the last resort if even this overflows. */
+@media (max-width: 640px) {
+  .chat-message-body .chat-table-scroll thead th {
+    white-space: normal;
+  }
+
+  .chat-message-body .chat-table-scroll th,
+  .chat-message-body .chat-table-scroll td {
+    @apply px-2 py-1.5 text-[11px];
+    overflow-wrap: anywhere;
+  }
+}
+
 /* Mobile shell layout: bump dense chrome for touch targets and readability. */
 [data-mobile-shell='true'] .files-table-head {
   @apply text-sm;
@@ -503,6 +696,92 @@ aside.glass :focus-visible {
 .shell-sidebar-list-row {
   font-size: 14px;
   line-height: 19px;
+}
+
+/* Files explorer only: match Ontology/KG sidebar density (12/18), keep shell listRow at 14/19. */
+.files-explorer-list-row {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* Slides sidebar tree only: same 12/18 density; Chat uses .chat-list-row in chat-components.css. */
+.slides-sidebar-list-row {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* Documents sidebar tree: same 12/18; keep global shell listRow at 14/19. */
+.documents-sidebar-list-row {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* Sheets sidebar tree: same 12/18; keep global shell listRow at 14/19. */
+.sheets-sidebar-list-row {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* Feature section list rows that previously used text-sm / shell listRow.
+   Workspaces stays on .shell-sidebar-list-row (14/19); it is a panel, not a dock section. */
+.apps-sidebar-list-row,
+.search-sidebar-list-row,
+.marketplace-sidebar-list-row,
+.settings-sidebar-list-row,
+.code-sidebar-list-row {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* Section home row: Ontology Dashboard, Knowledge Graph Dashboard,
+   Search "All topics", Apps "All apps", Maps "All layouts". */
+.shell-sidebar-home {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% - 16px);
+  min-height: 32px;
+  margin: 4px 8px 0;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  cursor: pointer;
+}
+.shell-sidebar-home > svg {
+  flex-shrink: 0;
+}
+.shell-sidebar-home > span:first-of-type {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shell-sidebar-home[aria-current],
+.shell-sidebar-home:hover {
+  background: color-mix(in srgb, var(--workspace-accent, var(--color-primary)) 10%, transparent);
+}
+.shell-sidebar-home[aria-current] {
+  color: var(--workspace-accent, var(--color-primary));
+}
+.shell-sidebar-home:focus-visible {
+  outline: 2px solid var(--workspace-accent, var(--color-primary));
+  outline-offset: -2px;
+}
+.shell-sidebar-home + .graph-explorer-sidebar {
+  padding-top: 4px;
+}
+/* Search and Maps lists share the home row's side edges (8px margin + 8px padding). */
+.shell-sidebar-home-gutter {
+  margin-left: 8px;
+  margin-right: 8px;
 }
 
 .shell-sidebar-section-label {

@@ -528,7 +528,10 @@ class ToolUsageEvent(Event):
 
 @dataclass
 class ToolResponseEvent(Event):
-    pass
+    # False when the tool's output must not be listed as chat sources: a tool
+    # opts out with ``metadata={"chat_source": False}`` (internal lookups whose
+    # URLs are identifiers, not references).
+    chat_source: bool = True
 
 
 @dataclass
@@ -614,6 +617,11 @@ class Agent(Expose):
         _event_queue (Queue): Event queue for real-time event streaming
         _chat_model_output_version (str|None): Version identifier for model output format
     """
+
+    # Per-agent step budget, declared here so subclasses can raise it and the
+    # per-request copy in ``duplicate`` can carry it over. 0 means "leave
+    # LangGraph's default alone", which is why every read guards on ``> 0``.
+    recursion_limit: int = 0
 
     _name: str
     _description: str
@@ -714,6 +722,26 @@ class Agent(Expose):
                 return "\n".join(parts)
             return ""
         return str(content)
+
+    @staticmethod
+    def _ai_content_effectively_empty(content: Any) -> bool:
+        """True when an assistant reply has no user-visible text."""
+        if not content:
+            return True
+        if isinstance(content, str):
+            return not content.strip()
+        if isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict):
+                    btype = block.get("type")
+                    if btype == "text" and (block.get("text") or "").strip():
+                        return False
+                    if btype == "tool_use":
+                        return False
+                elif isinstance(block, str) and block.strip():
+                    return False
+            return True
+        return False
 
     @staticmethod
     def _has_tool_calls(message: AnyMessage) -> bool:
@@ -1145,11 +1173,41 @@ class Agent(Expose):
             self._state.current_active_agent is not None
             and self._state.current_active_agent != self._name
         ):
-            logger.debug(
-                f"⏩ Continuing conversation with: '{self._state.current_active_agent}'"
+            active_name = self._state.current_active_agent
+            human_text = (
+                last_human_message.content
+                if last_human_message is not None
+                and isinstance(last_human_message.content, str)
+                else ""
             )
-            # self._notify_agent_routing(self._state.current_active_agent)
-            return Command(goto=self._state.current_active_agent)
+            active_agent = pd.find(
+                self._agents,
+                lambda a: Agent.validate_name(a.name) == active_name,
+            )
+            retain = True
+            retain_fn = (
+                getattr(type(active_agent), "retains_active_turn", None)
+                if active_agent is not None
+                else None
+            )
+            if callable(retain_fn):
+                try:
+                    retain = bool(retain_fn(human_text))
+                except Exception:  # noqa: BLE001
+                    logger.debug(
+                        "retains_active_turn failed for '%s'; keeping sticky handoff",
+                        active_name,
+                        exc_info=True,
+                    )
+                    retain = True
+            if retain:
+                logger.debug(f"⏩ Continuing conversation with: '{active_name}'")
+                # self._notify_agent_routing(active_name)
+                return Command(goto=active_name)
+            logger.debug(
+                f"↩️  Releasing sticky agent '{active_name}' back to '{self._name}'"
+            )
+            self._state.set_current_active_agent(self._name)
 
         # self._state.set_current_active_agent(self.name)
         logger.debug(f"💬 Starting chatting with: '{self._name}'")
@@ -1251,15 +1309,23 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         ]
 
         try:
-            formatted_response = self._chat_model_with_tools.invoke(prompt)
+            # A formatting pass needs no tools. With tools bound, some models
+            # answer the formatting prompt with a tool call or an empty
+            # message, and the user's real answer was replaced by "".
+            formatted_response = self._chat_model.invoke(prompt)
             logger.debug(
                 f"Markdown pretty display response: {formatted_response.content}"
             )
 
-            if not isinstance(formatted_response.content, str):
+            formatted = formatted_response.content
+            if (
+                not isinstance(formatted, str)
+                or not formatted.strip()
+                or getattr(formatted_response, "tool_calls", None)
+            ):
                 return response
 
-            response.content = formatted_response.content.strip()
+            response.content = formatted.strip()
             return response
         except Exception as e:  # noqa: BLE001
             logger.warning(
@@ -1740,7 +1806,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
     def _strip_inbound_handoff_artifacts(
         self, messages: list[AnyMessage]
     ) -> list[AnyMessage]:
-        """Hide the parent's `transfer_to_<self>` call/response pair from the sub-agent's LLM.
+        """Hide inbound handoff call/response pairs from the sub-agent's LLM.
 
         When a supervisor hands off to this agent, two artifacts end up in the
         propagated message history:
@@ -1756,8 +1822,10 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         underlying tool result). This helper removes both so the sub-agent
         sees a clean user/assistant transcript.
 
-        Outbound handoffs that this agent emitted itself (to its OWN
-        sub-agents) are left untouched.
+        Through a chain of supervisors (Bob -> Abi -> Apps) the upstream pairs
+        (``transfer_to_Abi``) reach this agent too and read the same way, so
+        every handoff pair is removed except the outbound ones this agent
+        emitted itself (to its OWN sub-agents).
 
         The original ``state["messages"]`` is not mutated — this only adjusts
         what the LLM sees on this turn.
@@ -1765,13 +1833,18 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         if not messages:
             return messages
 
-        target_name = f"transfer_to_{self._name}"
+        outbound = {
+            f"transfer_to_{getattr(agent, '_name', '')}"
+            for agent in getattr(self, "_agents", None) or []
+        }
         inbound_ids: set[str] = set()
         for m in messages:
+            name = getattr(m, "name", None)
             if (
                 isinstance(m, ToolMessage)
-                and isinstance(getattr(m, "name", None), str)
-                and m.name == target_name
+                and isinstance(name, str)
+                and name.startswith("transfer_to_")
+                and name not in outbound
             ):
                 tcid = getattr(m, "tool_call_id", None)
                 if isinstance(tcid, str):
@@ -1945,6 +2018,37 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         if self._markdown_pretty_display:
             logger.debug("Applying Markdown pretty display to response")
             response = self._pretty_display_markdown(response)
+
+        # Empty final replies under a supervisor become blank chat bubbles. Hand
+        # control back so the supervisor can answer the same user turn instead
+        # of persisting an empty AIMessage.
+        has_supervisor = (
+            self._state.supervisor_agent is not None
+            and self._state.supervisor_agent.strip() != ""
+            and self._state.supervisor_agent != self._name
+        )
+        if (
+            isinstance(response, AIMessage)
+            and not self._has_tool_calls(response)
+            and self._ai_content_effectively_empty(response.content)
+            and has_supervisor
+        ):
+            supervisor = self._state.supervisor_agent
+            assert supervisor is not None
+            logger.info(
+                "Empty reply from '%s'; returning control to supervisor '%s'",
+                self._name,
+                supervisor,
+            )
+            self._state.set_current_active_agent(supervisor)
+            return Command(
+                goto="current_active_agent",
+                graph=Command.PARENT,
+                update={
+                    **routing_update,
+                    "current_active_agent": supervisor,
+                },
+            )
 
         # Sequential supervisor mode (opt-in): if a sequential_supervisor parent
         # tagged this sub-agent instance, hand control back to that supervisor when
@@ -2357,8 +2461,37 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             return message.get("tool_call_id") or id(message)
         return getattr(message, "tool_call_id", None) or message.id or id(message)
 
+    def _find_tool(self, name: str, seen: set[int] | None = None) -> Any:
+        """The tool called *name* in this agent or, depth first, its sub-agents.
+
+        A supervisor streams its sub-agents' graphs too, so the tool behind a
+        response it reports may belong to any agent below it.
+        """
+        seen = seen if seen is not None else set()
+        if id(self) in seen:
+            return None
+        seen.add(id(self))
+        tool = getattr(self, "_tools_by_name", {}).get(name)
+        if tool is not None:
+            return tool
+        for agent in getattr(self, "_agents", None) or []:
+            tool = agent._find_tool(name, seen)
+            if tool is not None:
+                return tool
+        return None
+
+    def _is_chat_source(self, message: AnyMessage) -> bool:
+        """Whether the URLs in this tool response may be listed as sources."""
+        tool = self._find_tool(str(getattr(message, "name", "") or ""))
+        metadata = getattr(tool, "metadata", None) or {}
+        return metadata.get("chat_source") is not False
+
     def _notify_tool_response(self, message: AnyMessage):
-        self._event_queue.put(ToolResponseEvent(payload=message))
+        self._event_queue.put(
+            ToolResponseEvent(
+                payload=message, chat_source=self._is_chat_source(message)
+            )
+        )
         self._on_tool_response(message)
         content = self._stringify_content(getattr(message, "content", None))
         self._publish_agent_event(
@@ -2536,6 +2669,13 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             stream_config["recursion_limit"] = SLIDES_RECURSION_LIMIT
         elif documents_turn_active():
             stream_config["recursion_limit"] = DOCUMENTS_RECURSION_LIMIT
+        else:
+            # An agent may declare its own budget (class attribute). Grounded
+            # answers (read the code, then explain) and supervisor handoffs run
+            # past LangGraph's default 25 steps.
+            own_limit = getattr(self, "recursion_limit", None)
+            if isinstance(own_limit, int) and own_limit > 0:
+                stream_config["recursion_limit"] = own_limit
         for chunk in self.graph.stream(
             {"messages": [human_message]},
             config=stream_config,
@@ -2696,6 +2836,102 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             # If thread_id is not a valid integer, generate a new UUID
             self._state.set_thread_id(str(uuid.uuid4()))
 
+    def _tools_for_duplicate(self, clone: Agent) -> list[Tool | BaseTool | Agent]:
+        """Rebuild the tool list the same way ``__init__`` does, without re-init."""
+        from naas_abi_core.services.agent.tools.default_tools import default_tools
+
+        tools: list[Tool | BaseTool | Agent] = list(self._original_tools)
+        if clone._enable_default_tools:
+            tools.extend(default_tools(clone))
+
+        has_supervisor = (
+            clone._state.supervisor_agent is not None
+            and clone._state.supervisor_agent.strip() != ""
+            and clone._state.supervisor_agent != clone._name
+        )
+        if has_supervisor:
+
+            @tool(return_direct=True)
+            def request_help(reason: str):
+                """
+                Request help from the supervisor agent when you (the LLM) are uncertain about the next step or do not have the required capability to fulfill the user's request.
+
+                Use this tool if:
+                - You are unsure how to proceed.
+                - You lack the necessary knowledge or ability to complete the task.
+                - The user's request is outside your capabilities or unclear.
+
+                Args:
+                    reason (str): A brief explanation of why you are requesting help (e.g., "I am uncertain about the next step", "I do not have the required capability", "The user's request is unclear").
+
+                The supervisor agent will review your reason and provide assistance or take over the conversation.
+                """
+                logger.debug(
+                    f"'{clone.name}' is requesting help from the supervisor agent"
+                )
+                return f"Requesting help from the supervisor agent because {reason}."
+
+            tools.append(request_help)
+
+        return tools
+
+    def _populate_duplicate_shell(self, clone: Agent) -> None:
+        """Copy subclass-specific fields onto a shell duplicate before ``build_graph``."""
+
+    def _duplicate_shell(
+        self,
+        queue: Queue,
+        shared_state: AgentSharedState,
+        duplicated_children: list[Agent],
+    ) -> Agent:
+        """Fast per-request clone: reuse wired tools/models, only rebuild graphs."""
+        clone = object.__new__(type(self))
+
+        clone._name = self._name
+        clone._description = self._description
+        clone._markdown_pretty_display = self._markdown_pretty_display
+        clone._enable_default_tools = self._enable_default_tools
+        clone._configuration = self._configuration
+        clone._state = shared_state
+        clone._event_queue = queue
+        clone._checkpointer = self._checkpointer
+        clone._original_agents = duplicated_children
+        clone._original_tools = list(self._original_tools)
+        clone._native_tools = list(getattr(self, "_native_tools", None) or [])
+
+        clone._chat_model = self._chat_model
+        clone._chat_model_with_tools = self._chat_model_with_tools
+        clone._chat_model_without_workspace_tools = (
+            self._chat_model_without_workspace_tools
+        )
+        clone._chat_model_output_version = getattr(self, "_chat_model_output_version", None)
+
+        clone._on_tool_usage = self._configuration.on_tool_usage
+        clone._on_tool_response = self._configuration.on_tool_response
+        clone._on_ai_message = self._configuration.on_ai_message
+        clone._on_call_model = self._configuration.on_agent_calling
+        clone._on_agent_routing = self._configuration.on_agent_routing
+
+        tools = self._tools_for_duplicate(clone)
+        structured_tools, runtime_agents = clone.prepare_tools(
+            cast(list[Tool | BaseTool | Agent], tools),
+            duplicated_children,
+        )
+        clone._tools = tools
+        clone._structured_tools = structured_tools
+        clone._agents = runtime_agents
+        clone._tools_by_name = {tool.name: tool for tool in structured_tools}
+
+        if getattr(clone, "sequential_supervisor", False):
+            for sub_agent in clone._agents:
+                if sub_agent.name != clone._name:
+                    sub_agent._returns_to_supervisor = clone._name
+
+        self._populate_duplicate_shell(clone)
+        clone._sync_event_queue_with_subagents()
+        clone.build_graph()
+        return clone
+
     def duplicate(
         self,
         queue: Queue | None = None,
@@ -2715,25 +2951,15 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         if queue is None:
             queue = Queue()
 
-        # We duplicated each agent and add them as tools.
-        # This will be recursively done for each sub agents.
-        agents: list[Agent] = [
+        duplicated_children: list[Agent] = [
             agent.duplicate(queue, shared_state) for agent in self._original_agents
         ]
 
-        new_agent = self.__class__(
-            name=self._name,
-            description=self._description,
-            chat_model=self._chat_model,
-            tools=self._original_tools,
-            agents=agents,
-            memory=self._checkpointer,
-            state=shared_state,  # Create new state instance
-            configuration=self._configuration,
-            event_queue=queue,
-            enable_default_tools=self._enable_default_tools,
-            markdown_pretty_display=self._markdown_pretty_display,
-        )
+        new_agent = self._duplicate_shell(queue, shared_state, duplicated_children)
+
+        own_limit = getattr(self, "recursion_limit", None)
+        if isinstance(own_limit, int) and own_limit > 0:
+            new_agent.recursion_limit = own_limit
 
         return new_agent
 
@@ -2791,8 +3017,15 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             new_agent = self.duplicate(
                 queue=fresh_queue, agent_shared_state=fresh_state
             )
+            # Only SSE fields go on the wire; in-process flags such as
+            # `chat_source` are not ServerSentEvent arguments.
             return EventSourceResponse(
-                new_agent.stream_invoke(query.prompt),
+                (
+                    {"event": event["event"], "data": event["data"]}
+                    if isinstance(event, dict)
+                    else event
+                    for event in new_agent.stream_invoke(query.prompt)
+                ),
                 media_type="text/event-stream; charset=utf-8",
             )
 
@@ -2844,10 +3077,13 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                     }
                 elif isinstance(message, ToolResponseEvent):
                     raw = str(pd.get(message, "payload.content", "NULL"))
-                    yield {
+                    tool_response: dict[str, Any] = {
                         "event": "tool_response",
                         "data": _truncate_tool_content(raw, _MAX_TOOL_RESULT_CHARS),
                     }
+                    if not message.chat_source:
+                        tool_response["chat_source"] = False
+                    yield tool_response
                 elif isinstance(message, AIMessageEvent):
                     yield {
                         "event": "ai_message",

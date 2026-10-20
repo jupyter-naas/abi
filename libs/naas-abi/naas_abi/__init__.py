@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import FastAPI
 from naas_abi_core.module.Module import (
@@ -22,6 +22,9 @@ from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
+
+from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
+from naas_abi.apps.nexus.maps_seed_config import WorkspaceMapsSeedConfig
 
 
 def _initialize_nexus_service_registry() -> None:
@@ -197,6 +200,8 @@ FeatureKey = Literal[
     "slides",
     # Business documents (Forgejo HTML docs + Monaco). On for members by default.
     "documents",
+    # Business sheets (Forgejo HTML workbook + XLSX export).
+    "sheets",
 ]
 
 # Default catalog (excludes opt-in features like "code").
@@ -215,6 +220,7 @@ _ALL_FEATURES: list[FeatureKey] = [
     "settings",
     "slides",
     "documents",
+    "sheets",
 ]
 
 
@@ -226,8 +232,8 @@ def _default_role_baseline() -> dict[str, list[FeatureKey]]:
     return {
         "owner": list(_ALL_FEATURES),
         "admin": list(_ALL_FEATURES),
-        "member": ["maps", "chat", "files", "datasets", "skills", "slides", "documents"],
-        "viewer": ["maps", "chat", "files", "datasets", "skills", "slides", "documents"],
+        "member": ["maps", "chat", "files", "datasets", "skills", "slides", "documents", "sheets"],
+        "viewer": ["maps", "chat", "files", "datasets", "skills", "slides", "documents", "sheets"],
     }
 
 
@@ -242,6 +248,9 @@ class FeatureFlagsConfig(BaseModel):
     role_baseline: dict[str, list[FeatureKey]] = Field(
         default_factory=_default_role_baseline
     )
+    # Deprecated: workspace feature overrides are managed in Organization
+    # Settings > Workspaces (workspaces.feature_overrides). Still read as a
+    # fallback for workspaces that never saved any.
     workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)
 
 
@@ -264,6 +273,15 @@ class SlidesTemplateSourceConfig(BaseModel):
 
 class DocumentsTemplateSourceConfig(BaseModel):
     """An extra tree of Nexus Documents seed templates, declared by the deploy."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    namespace: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=32)
+    path: str = Field(min_length=1)
+
+
+class SheetsTemplateSourceConfig(BaseModel):
+    """Extra Nexus Sheets seed workbooks declared by the deploy."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -309,10 +327,15 @@ class WorkspaceSeedConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    name: str
     slug: str
+    # Name, owner, group and branding are managed in the app; config.workspaces.yaml
+    # snapshots them (core/workspaces_import replays it). Still accepted here,
+    # bootstrap only; a workspace created without a name is named after its slug.
+    name: str | None = None
     owner_email: EmailStr | None = None
     members: list[WorkspaceMemberSeedConfig] = Field(default_factory=list)
+    # Group in the workspace lists ("Others" when empty); bootstrap only.
+    group: str | None = Field(default=None, max_length=100)
 
     # Workspace-level theming
     logo_url: str | None = None
@@ -333,9 +356,13 @@ class WorkspaceSeedConfig(BaseModel):
     # ``None`` means no seed; missing app-config rows default to off.
     apps: list[str] | None = None
     # Ontology catalog ids (``module:filename.ttl``). Exclusive when a list
-    # is set: listed on, others off. ``None`` keeps the full engine listing.
-    # An empty list shows none. owl:imports are not implied; name every file.
-    ontologies: list[str] | None = None
+    # is set: listed on, others off. Missing, null and empty lists show none.
+    # owl:imports are not implied; explicitly list shared dependency files too.
+    ontologies: list[str] | None = Field(default_factory=list)
+    # Exact data graph grants. Missing policy exposes owned graphs only.
+    graphs: WorkspaceGraphPolicyConfig = Field(default_factory=WorkspaceGraphPolicyConfig)
+    # Initial Maps feeds and custom basemaps (see WorkspaceMapsSeedConfig).
+    maps: WorkspaceMapsSeedConfig | None = None
 
 
 class OrganizationSeedConfig(BaseModel):
@@ -401,6 +428,7 @@ class NexusConfig(BaseModel):
 
     secret_key: str = "change-me-in-production"
     auth_password_enabled: bool = False
+    auth_signup_enabled: bool = False
     pages_sso_secret: str = ""
     pages_sso_expire_seconds: int = 300
     magic_link_allow_signup: bool = False
@@ -453,6 +481,7 @@ class NexusConfig(BaseModel):
 
     rate_limit_enabled: bool = True
     rate_limit_login_attempts: int = 5
+    rate_limit_ip_attempts: int = 20
     rate_limit_window_seconds: int = 300
 
     enable_security_headers: bool = True
@@ -477,8 +506,29 @@ class NexusConfig(BaseModel):
     )
     documents_default_template_id: str | None = None
     documents_hidden_template_ids: list[str] = Field(default_factory=list)
+    sheets_template_sources: list[SheetsTemplateSourceConfig] = Field(
+        default_factory=list
+    )
     users: list[UserSeedConfig] = Field(default_factory=list)
     organizations: list[OrganizationSeedConfig] = Field(default_factory=list)
+
+
+# Settings the Nexus ``Settings`` also reads from the environment. Passing
+# NexusConfig's defaults for them as init kwargs would shadow ``SECRET_KEY`` /
+# ``ENVIRONMENT`` / ``NEXUS_ENV``, so they are forwarded only when set in yaml.
+_ENV_OVERRIDABLE_NEXUS_FIELDS = ("secret_key", "environment", "nexus_env")
+
+
+def nexus_settings_kwargs(nexus_config: NexusConfig) -> dict[str, Any]:
+    """Build the kwargs for the Nexus ``Settings`` from the module config."""
+    settings_kwargs = nexus_config.model_dump(exclude_none=True)
+    for field in _ENV_OVERRIDABLE_NEXUS_FIELDS:
+        if field not in nexus_config.model_fields_set:
+            settings_kwargs.pop(field, None)
+    # Empty yaml (``pages_sso_secret: ""``) would override ``PAGES_SSO_SECRET``.
+    if not str(settings_kwargs.get("pages_sso_secret") or "").strip():
+        settings_kwargs.pop("pages_sso_secret", None)
+    return settings_kwargs
 
 
 class ABIModule(BaseModule):
@@ -544,6 +594,9 @@ class ABIModule(BaseModule):
             "naas_abi_marketplace.domains.external#soft",
             "naas_abi_marketplace.domains.finance#soft",
             "naas_abi_marketplace.domains.intelligence#soft",
+            "naas_abi_marketplace.domains.intelligence.modules.organizations#soft",
+            "naas_abi_marketplace.domains.intelligence.modules.people#soft",
+            "naas_abi_marketplace.domains.intelligence.modules.wsr#soft",
             "naas_abi_marketplace.domains.logistics#soft",
             "naas_abi_marketplace.domains.operations#soft",
             "naas_abi_marketplace.domains.operations.modules.document#soft",
@@ -616,8 +669,25 @@ class ABIModule(BaseModule):
                           slug: "ops-workspace"
                           owner_email: "owner@example.com"
                           default_agent: "naas_abi AbiAgent"
+                          # The right chat pane binds each section's office
+                          # agent (Apps on /apps, ...). Home, Chat, and unlisted
+                          # sections use default_agent (Abi when none is set).
+                          # Full list: naas_abi/agents/feature/registry.py.
                           agents:
                             - "naas_abi AbiAgent"
+                            - "naas_abi SlidesAgent"
+                            - "naas_abi AppsAgent"
+                            - "naas_abi MarketplaceAgent"
+                            - "naas_abi OntologyAgent"
+                            - "naas_abi KnowledgeGraphAgent"
+                            - "naas_abi FilesAgent"
+                            - "naas_abi DatasetsAgent"
+                            - "naas_abi SearchAgent"
+                            - "naas_abi MapsAgent"
+                            - "naas_abi CodeAgent"
+                            - "naas_abi SettingsAgent"
+                            - "naas_abi AgentCatalogAgent"
+                            - "naas_abi SkillsAgent"
                           apps:
                             - example.module:dashboard
                           members:
@@ -654,6 +724,7 @@ class ABIModule(BaseModule):
         # slides follow ``abi_agent_model``, which the engine already resolves.
         abi_slides_agent_model: str = ""
         abi_documents_agent_model: str = ""
+        abi_sheets_agent_model: str = ""
 
         # Canonical model id used by OntologyEngineerAgent. Same registry
         # semantics as ``abi_agent_model``.
@@ -695,18 +766,21 @@ class ABIModule(BaseModule):
                 self._engine.services.model_registry,
                 self.configuration.abi_documents_agent_model,
             )
+            from naas_abi.agents.sheets import validate_configured_sheets_model
+
+            validate_configured_sheets_model(
+                self._engine.services.model_registry,
+                self.configuration.abi_sheets_agent_model,
+            )
 
         super().on_initialized()
         # Initialize Nexus settings and service registry
 
         from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
 
-        settings_kwargs = self.configuration.nexus_config.model_dump(exclude_none=True)
-        # Empty yaml (``pages_sso_secret: ""``) would override ``PAGES_SSO_SECRET``.
-        if not str(settings_kwargs.get("pages_sso_secret") or "").strip():
-            settings_kwargs.pop("pages_sso_secret", None)
-
-        nexus_config.settings = nexus_config.Settings(**settings_kwargs)
+        nexus_config.settings = nexus_config.Settings(
+            **nexus_settings_kwargs(self.configuration.nexus_config)
+        )
 
         _initialize_nexus_service_registry()
 
@@ -766,7 +840,9 @@ class ABIModule(BaseModule):
         # Initialize Nexus platform (graphs + agent metadata in the triple
         # store). Deferred from on_initialized so non-API entry points
         # (Dagster run workers, CLI commands, tests) don't pay this cost.
-        from naas_abi.apply_nexus_platform_pipeline import apply_nexus_platform_pipeline
+        from naas_abi.scripts.apply_nexus_platform_pipeline import (
+            apply_nexus_platform_pipeline,
+        )
 
         apply_nexus_platform_pipeline(
             enabled=self.configuration.run_nexus_platform_pipeline,
@@ -792,6 +868,16 @@ class ABIModule(BaseModule):
         # record one event per HTTP request.
         if self.engine.services.activity_log_available():
             app.state.activity_log_service = self.engine.services.activity_log
+
+        # Only the API process resolves the key: generating it here rather than
+        # in ``on_initialized`` keeps Dagster and CLI engines from racing the
+        # API to write a different one.
+        from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
+        from naas_abi.apps.nexus.apps.api.app.core.secret_key import resolve_secret_key
+
+        nexus_config.settings.secret_key = resolve_secret_key(
+            nexus_config.settings.secret_key, self.engine.services.secret
+        )
 
         from naas_abi.apps.nexus.apps.api.app.main import create_app
 

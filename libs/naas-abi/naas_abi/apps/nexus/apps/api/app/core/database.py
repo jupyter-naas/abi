@@ -9,7 +9,7 @@ import re
 from collections.abc import AsyncGenerator
 
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -55,6 +55,25 @@ _ALTER_CONSTRAINT_RE = re.compile(
     r"^\s*ALTER\s+TABLE\s+\S+\s+(ADD|DROP)\s+CONSTRAINT\b",
     re.IGNORECASE,
 )
+
+
+# `ALTER TABLE t RENAME COLUMN a TO b` has no IF EXISTS form. Migrations re-run
+# on every boot, so the runner skips a rename whose old column is gone and whose
+# new column exists (already applied).
+_RENAME_COLUMN_RE = re.compile(
+    r'^\s*ALTER\s+TABLE\s+"?(\w+)"?\s+RENAME\s+COLUMN\s+"?(\w+)"?\s+TO\s+"?(\w+)"?\s*;?\s*$',
+    re.IGNORECASE,
+)
+
+
+def parse_rename_column(statement: str) -> tuple[str, str, str] | None:
+    """(table, old, new) for an `ALTER TABLE ... RENAME COLUMN ... TO ...`, else None."""
+    match = _RENAME_COLUMN_RE.match(statement)
+    return (match.group(1), match.group(2), match.group(3)) if match else None
+
+
+def rename_already_applied(columns: set[str], old: str, new: str) -> bool:
+    return old not in columns and new in columns
 
 
 def _adapt_statement_for_dialect(statement: str, dialect: str) -> list[str]:
@@ -273,6 +292,18 @@ async def init_db() -> None:
             for statement in adapted:
                 if not statement:
                     continue
+                rename = parse_rename_column(statement)
+                if rename is not None:
+                    table, old, new = rename
+                    async with async_engine.connect() as conn:
+                        columns = await conn.run_sync(
+                            lambda sync_conn, t=table: {
+                                c["name"] for c in inspect(sync_conn).get_columns(t)
+                            }
+                        )
+                    if rename_already_applied(columns, old, new):
+                        skipped += 1
+                        continue
                 try:
                     async with async_engine.begin() as conn:
                         await conn.execute(text(statement))

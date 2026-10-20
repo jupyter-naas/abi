@@ -1,0 +1,36 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+abi:DocumentContentEntityOntology a owl:Ontology ;
+  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+  dc:title "Document Content Entity Ontology"@en ;
+  dc:description "The document content entity (CCO Document Content Entity)."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  rdfs:comment "HOW WE KNOW: the content of a document, independent of the paper or file that carries it, aligned with the Common Core Ontologies Document Content Entity."@en ;
+  rdfs:seeAlso <https://raw.githubusercontent.com/jupyter-naas/abi/refs/heads/main/libs/naas-abi/naas_abi/ontologies/modules/DocumentContentEntityOntology.ttl> ;
+  abi:pythonPackage "naas_abi" ;
+  abi:ontologyResource "ontologies/modules/DocumentContentEntityOntology.ttl" ;
+  abi:pythonResource "ontologies/modules/DocumentContentEntityOntology.py" ;
+  dc11:contributor "Florent Ravenel" ;
+  dc11:date "2026-10-05"^^xsd:date .
+
+#################################################################
+# Classes
+#################################################################
+
+abi:DocumentContentEntity a owl:Class ;
+    owl:equivalentClass cco:ont00002039 ;
+    rdfs:label "Document Content Entity"@en ;
+    skos:altLabel "Document"@en ;
+    skos:definition "A generically dependent continuant that consists of a series of paragraphs of text or diagrams intended to be carried by physical pieces of paper or an electronic word processor file."@en ;
+    skos:example "A profile page; a recommendation; a job description"@en ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant .

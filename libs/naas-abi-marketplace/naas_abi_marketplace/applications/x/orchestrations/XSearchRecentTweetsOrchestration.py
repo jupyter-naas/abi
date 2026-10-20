@@ -122,6 +122,35 @@ _SEARCH_RECENT_TWEETS_OP_CONFIG_SCHEMA = {
 }
 
 
+def _default_search_run_config(
+    filter_config: XTweetSearchWorkflowConfiguration,
+) -> dict:
+    """Launchpad defaults for one search filter job (single op, step 1)."""
+    safe = safe_name(filter_config.name)
+    op_name = f"x_search_recent_tweets_op_{safe}"
+    body: dict[str, object] = {
+        "query": filter_config.query,
+        "max_results": filter_config.max_results,
+        "sort_order": filter_config.sort_order,
+        "save_every_pages": filter_config.save_every_pages,
+        "save_every_tweets": filter_config.save_every_tweets,
+        "cost_per_tweet_usd": filter_config.cost_per_tweet_usd,
+        "count_recent_tweets": filter_config.count_recent_tweets,
+        "app_publish": filter_config.app_publish,
+    }
+    if filter_config.max_pages is not None:
+        body["max_pages"] = filter_config.max_pages
+    if filter_config.daily_max_tweets is not None:
+        body["daily_max_tweets"] = filter_config.daily_max_tweets
+    if filter_config.daily_max_usd is not None:
+        body["daily_max_usd"] = filter_config.daily_max_usd
+    if filter_config.monthly_max_tweets is not None:
+        body["monthly_max_tweets"] = filter_config.monthly_max_tweets
+    if filter_config.monthly_max_usd is not None:
+        body["monthly_max_usd"] = filter_config.monthly_max_usd
+    return {"ops": {op_name: {"config": body}}}
+
+
 def _trigger_description(config: XTweetSearchWorkflowConfiguration) -> str:
     """Human-readable summary shown on the filter's sensor / schedule."""
     cadence = (
@@ -169,7 +198,11 @@ def _build_search_recent_tweets_definitions(
     # In-process executor: share the code-server's warm engine instead of
     # forking a subprocess that has to re-bootstrap and race the api on
     # oxigraph / nexus.db.
-    @dg.job(name=job_name, executor_def=dg.in_process_executor)
+    @dg.job(
+        name=job_name,
+        executor_def=dg.in_process_executor,
+        config=_default_search_run_config(config),
+    )
     def search_recent_tweets_job():
         search_recent_tweets_op()
 

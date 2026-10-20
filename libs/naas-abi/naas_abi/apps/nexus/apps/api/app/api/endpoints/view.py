@@ -10,6 +10,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
 )
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.graph import GraphData, GraphEdge, GraphNode
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import GraphAccessError
 from naas_abi.apps.nexus.apps.api.app.services.view.service import (
     ViewNotFoundError,
     ViewService,
@@ -146,6 +147,21 @@ class TriplePreviewRequest(BaseModel):
     limit: int = Field(default=10, ge=1, le=100)
 
 
+async def _get_scoped_view_service(db: AsyncSession, user_id: str, workspace_id: str) -> ViewService:
+    from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__dependencies import (
+        workspace_graph_service,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.registry import ServiceRegistry
+
+    graph = await workspace_graph_service(ServiceRegistry.instance().graph, user_id, workspace_id)
+    return ViewService(
+        db=db,
+        triple_store_getter=graph._get_triple_store,
+        catalog_store_getter=graph._get_catalog_store,
+        access_scope=graph.access_scope,
+    )
+
+
 def _get_view_service(_request: Request, db: AsyncSession) -> ViewService:
     return ViewService(db=db)
 
@@ -161,8 +177,7 @@ async def list_graph_filter_options(
     current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> GraphFilterOptionsResponse:
-    await require_workspace_access(current_user.id, workspace_id)
-    service = _get_view_service(request, db)
+    service = await _get_scoped_view_service(db, current_user.id, workspace_id)
     try:
         data = await service.list_graph_filter_options(
             graph_names=graph_names,
@@ -170,6 +185,8 @@ async def list_graph_filter_options(
             predicate_uri=predicate_uri,
             object_uri=object_uri,
         )
+    except GraphAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ViewServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return GraphFilterOptionsResponse(
@@ -186,14 +203,15 @@ async def preview_graph_filters(
     current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> TriplePreviewResponse:
-    await require_workspace_access(current_user.id, payload.workspace_id)
-    service = _get_view_service(request, db)
+    service = await _get_scoped_view_service(db, current_user.id, payload.workspace_id)
     try:
         data = await service.preview_graph_filters(
             graph_names=payload.graph_names,
             filters=[item.model_dump() for item in payload.filters],
             limit=payload.limit,
         )
+    except GraphAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ViewServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return TriplePreviewResponse(
@@ -382,14 +400,15 @@ async def get_view_overview(
     current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> ViewOverview:
-    await require_workspace_access(current_user.id, workspace_id)
-    service = _get_view_service(request, db)
+    service = await _get_scoped_view_service(db, current_user.id, workspace_id)
     try:
         overview = await service.get_view_overview(
             workspace_id=workspace_id,
             view_id=view_id,
             limit=limit,
         )
+    except GraphAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ViewNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
@@ -411,14 +430,15 @@ async def get_view_network(
     current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> GraphData:
-    _ = current_user
-    service = _get_view_service(request, db)
+    service = await _get_scoped_view_service(db, current_user.id, workspace_id)
     try:
         network = await service.get_view_network(
             workspace_id=workspace_id,
             view_id=view_id,
             limit=limit,
         )
+    except GraphAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ViewNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:

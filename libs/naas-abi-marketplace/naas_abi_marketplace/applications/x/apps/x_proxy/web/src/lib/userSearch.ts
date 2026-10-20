@@ -1,248 +1,241 @@
 /**
- * Reader for the published Users dataset under `x/apps/x_proxy/search_users/`.
- *
- * Everything here is a plain GET against object storage - no SPARQL runs at
- * request time. The picker index (`users.json`) carries every author in the
- * tweet graph, so searching "grok" reaches an account with a single post; the
- * selected author's posts live in one shard file (`posts/<shard>.json`) -
- * search matches plus referenced context (quotes / replies / retweets they
- * wrote) - and the index row names the shard so the browser never has to hash
- * anything.
- *
- * Index and shards are fetched once and memoised: both are immutable between
- * publishes, and the index is a few MB.
+ * Users search and author feeds — Dataset Service only (`dataset/users/…`).
  */
 import { FEED, RESULTS } from "@/lib/appConfig";
 import type { TweetRow, UserBundle, UserProfile, UserRow } from "@/lib/types";
 import { withAccessToken } from "@/lib/routes";
 
-const BASE = "/app-html/x/apps/x_proxy";
+const APP_BASE = "/app-html/x/apps/x_proxy";
+const DATASET_USERS_SEARCH = `${APP_BASE}/dataset/users/search.json`;
 
-/**
- * Posts the author feed shows per batch - `feed.batch` in `config.yaml`.
- *
- * The whole shard is already in memory, so a batch is a slice, not a fetch: the
- * feed opens with one and grows by one whenever the end comes into view or the
- * button is pressed.
- */
 export const USER_FEED_BATCH = FEED.batch;
-
-/** Search results per page - `results.per_page` in `config.yaml`. An empty
- * query lists the busiest first. */
 export const USER_RESULTS_PAGE_SIZE = RESULTS.perPage;
 
-/**
- * Must match INDEX_COLUMNS in api/search_users/users.py.
- *
- * ``description`` and ``display_name`` are trailing and optional: a publish
- * older than those columns simply has fewer entries, and the row reads as a
- * bio-less / nameless author.
- */
-type IndexRow = [
-  string,
-  number,
-  string,
-  string,
-  string,
-  string,
-  string?,
-  string?,
-];
-
-type IndexDoc = {
-  format?: number;
-  users?: IndexRow[];
-};
-
-type ShardDoc = {
-  shard?: string;
-  authors?: Record<string, UserBundle>;
-};
-
-export type UserIndex = {
+export type UserSearchPage = {
+  count: number;
+  page: number;
+  perPage: number;
   users: UserRow[];
-  /** username → shard file holding that author's posts. */
-  shardOf: Map<string, string>;
 };
 
 /** Which posts of an author the feed is showing. */
 export type FeedTab = "all" | "matched" | "referenced";
 
 export type UserFeed = {
-  /** The batch on screen. */
   rows: TweetRow[];
-  /** Posts in the selected tab, however many are shown. */
   total: number;
-  /** Still to come in this tab. */
   remaining: number;
   profile: UserProfile | null;
   counts: Record<FeedTab, number>;
 };
 
-let indexPromise: Promise<UserIndex> | null = null;
-const shardPromises = new Map<string, Promise<ShardDoc | null>>();
-const directUserPromises = new Map<string, Promise<UserBundle | null>>();
 const directPostPromises = new Map<string, Promise<TweetRow | null>>();
+const feedPagePromises = new Map<string, Promise<UserBundle | null>>();
+/** Session memo cap - a long browse should not hold every feed ever opened. */
+const MAX_MEMOIZED = 200;
 
-async function getJson<T>(path: string): Promise<T | null> {
-  let res: Response;
-  try {
-    res = await fetch(withAccessToken(`${BASE}/${path}`));
-  } catch {
-    return null;
+/**
+ * Shares one request per key between whoever asks - a hover prefetch and the
+ * click that follows it, or two views of the same post. A miss (`null`, which
+ * is also what a failed fetch resolves to) is forgotten, so it is retried.
+ */
+function memoized<T>(
+  memo: Map<string, Promise<T | null>>,
+  key: string,
+  load: () => Promise<T | null>,
+): Promise<T | null> {
+  let pending = memo.get(key);
+  if (!pending) {
+    if (memo.size >= MAX_MEMOIZED) memo.clear();
+    pending = load().then((value) => {
+      if (value == null) memo.delete(key);
+      return value;
+    });
+    memo.set(key, pending);
   }
-  if (!res.ok) return null;
-  try {
-    return (await res.json()) as T;
-  } catch {
-    return null;
+  return pending;
+}
+
+function mapDatasetPost(row: Record<string, unknown>): TweetRow {
+  const tweetId = String(row.tweet_id || "");
+  const username = String(row.username || "");
+  return {
+    url: tweetId ? `https://x.com/i/status/${tweetId}` : "",
+    created_at: String(row.created_at || ""),
+    text: String(row.full_text || row.text || ""),
+    username,
+    location: String(row.location || ""),
+    verified_type: String(row.verified_type || ""),
+    referenced: row.kind === "referenced",
+    media_url: String(row.media_urls || ""),
+    queries: row.query_slug ? [String(row.query_slug)] : [],
+  };
+}
+
+function mapDatasetUser(row: Record<string, unknown>): UserRow {
+  const username = String(row.username || "");
+  return {
+    username,
+    posts:
+      Number(row.matched_count || 0) + Number(row.referenced_count || 0),
+    last_post_at: String(row.last_post_at || ""),
+    first_post_at: String(row.first_post_at || ""),
+    location: String(row.location || ""),
+    verified_type: String(row.verified_type || ""),
+    description: String(row.description || ""),
+    display_name: String(row.display_name || ""),
+  };
+}
+
+async function getJson<T>(path: string): Promise<T> {
+  const res = await fetch(withAccessToken(`${APP_BASE}/${path}`));
+  if (!res.ok) {
+    throw new Error(`${path} HTTP ${res.status}`);
   }
+  return (await res.json()) as T;
 }
 
 export function artifactUrl(path: string): string {
   if (/^https?:\/\//i.test(path)) return path;
-  return withAccessToken(`${BASE}/${path.replace(/^\/+/, "")}`);
+  return withAccessToken(`${APP_BASE}/${path.replace(/^\/+/, "")}`);
+}
+
+export async function loadUserSearchPage(
+  needle: string,
+  page: number,
+): Promise<UserSearchPage> {
+  const params = new URLSearchParams({
+    q: needle,
+    page: String(page),
+    per_page: String(USER_RESULTS_PAGE_SIZE),
+  });
+  const res = await fetch(withAccessToken(`${DATASET_USERS_SEARCH}?${params}`));
+  if (!res.ok) {
+    throw new Error(`dataset/users/search.json HTTP ${res.status}`);
+  }
+  const doc = (await res.json()) as {
+    count?: number;
+    page?: number;
+    per_page?: number;
+    users?: Record<string, unknown>[];
+  };
+  return {
+    count: Number(doc.count) || 0,
+    page: Number(doc.page) || 0,
+    perPage: Number(doc.per_page) || USER_RESULTS_PAGE_SIZE,
+    users: (doc.users || []).map((row) =>
+      mapDatasetUser(row as Record<string, unknown>),
+    ),
+  };
+}
+
+function mapDatasetProfile(row: Record<string, unknown>): UserProfile {
+  const username = String(row.username || "");
+  const matched = Number(row.matched_count || 0);
+  const referenced = Number(row.referenced_count || 0);
+  return {
+    username,
+    posts: Number(row.posts || 0) || matched + referenced,
+    matched_count: matched,
+    referenced_count: referenced,
+    last_post_at: String(row.last_post_at || ""),
+    first_post_at: String(row.first_post_at || ""),
+    location: String(row.location || ""),
+    verified_type: String(row.verified_type || ""),
+    description: String(row.description || ""),
+    display_name: String(row.display_name || ""),
+    author_id: String(row.author_id || ""),
+    profile_image_url: String(row.profile_image_url || ""),
+    profile_banner_url: String(row.profile_banner_url || ""),
+  };
 }
 
 export function loadPostArtifact(tweetId: string): Promise<TweetRow | null> {
-  let pending = directPostPromises.get(tweetId);
-  if (!pending) {
-    pending = getJson<{ post?: TweetRow }>(
-      `posts/by-id/${encodeURIComponent(tweetId)}/post.json`,
-    ).then((doc) => doc?.post || null);
-    directPostPromises.set(tweetId, pending);
-  }
-  return pending;
+  return memoized(directPostPromises, tweetId, () =>
+    getJson<{ post?: Record<string, unknown> }>(
+      `dataset/posts/${encodeURIComponent(tweetId)}.json`,
+    )
+      .then((doc) =>
+        doc?.post ? mapDatasetPost(doc.post as Record<string, unknown>) : null,
+      )
+      .catch(() => null),
+  );
 }
 
-function loadDirectUser(username: string): Promise<UserBundle | null> {
-  const key = username.toLowerCase();
-  let pending = directUserPromises.get(key);
-  if (!pending) {
-    pending = getJson<{ bundle?: UserBundle }>(
-      `users/by-handle/${encodeURIComponent(key)}/user.json`,
-    ).then((doc) => doc?.bundle || null);
-    directUserPromises.set(key, pending);
-  }
-  return pending;
-}
-
-/** Every author in the tweet graph, busiest first. Memoised per session. */
-export function loadUserIndex(): Promise<UserIndex> {
-  if (!indexPromise) {
-    indexPromise = getJson<IndexDoc>("search_users/users.json").then((doc) => {
-      const users: UserRow[] = [];
-      const shardOf = new Map<string, string>();
-      for (const row of doc?.users || []) {
-        const [
-          username,
-          posts,
-          last_post_at,
-          location,
-          verified_type,
-          shard,
-          description,
-          display_name,
-        ] = row;
-        users.push({
-          username,
-          posts,
-          last_post_at,
-          location,
-          verified_type,
-          description: description || "",
-          display_name: display_name || "",
-        });
-        shardOf.set(username, shard);
-      }
-      return { users, shardOf };
-    });
-  }
-  return indexPromise;
-}
-
-function loadShard(shard: string): Promise<ShardDoc | null> {
-  let pending = shardPromises.get(shard);
-  if (!pending) {
-    pending = getJson<ShardDoc>(`search_users/posts/${shard}.json`);
-    shardPromises.set(shard, pending);
-  }
-  return pending;
+/** One page of an author's feed (newest first). */
+export function loadUserFeedPage(
+  username: string,
+  page: number,
+  perPage: number = USER_FEED_BATCH,
+): Promise<UserBundle | null> {
+  const key = username.toLowerCase().replace(/^@/, "");
+  return memoized(feedPagePromises, `${key}|${page}|${perPage}`, () =>
+    fetchUserFeedPage(key, page, perPage),
+  );
 }
 
 /**
- * An author's profile and full post list, newest first.
- *
- * Returns `null` when the author is not in the published dataset, which the
- * page renders as "no posts found" rather than as an error.
+ * Starts loading what a result link opens, so the page is there - or on its
+ * way - by the time the click lands. Called on hover / focus / touch.
  */
+export function prefetchUser(username: string): void {
+  void loadUserFeedPage(username, 0, USER_FEED_BATCH);
+}
+
+export function prefetchPost(tweetId: string): void {
+  void loadPostArtifact(tweetId);
+}
+
+/** Link props that start `prefetch` on hover, keyboard focus or touch. The
+ * loaders are memoized, so firing on each of them costs one request. */
+export function prefetchOn(prefetch: () => void) {
+  return { onMouseEnter: prefetch, onFocus: prefetch, onTouchStart: prefetch };
+}
+
+async function fetchUserFeedPage(
+  key: string,
+  page: number,
+  perPage: number,
+): Promise<UserBundle | null> {
+  const params = new URLSearchParams({
+    page: String(page),
+    per_page: String(perPage),
+  });
+  const doc = await getJson<{
+    profile?: Record<string, unknown>;
+    posts?: Record<string, unknown>[];
+    count?: number;
+  }>(`dataset/users/${encodeURIComponent(key)}/posts.json?${params}`).catch(
+    () => null,
+  );
+  if (!doc?.profile) return null;
+  const profile = mapDatasetProfile(doc.profile as Record<string, unknown>);
+  const posts = (doc.posts || []).map((row) =>
+    mapDatasetPost(row as Record<string, unknown>),
+  );
+  return {
+    profile,
+    posts,
+    postTotal: Number(doc.count) || profile.posts || posts.length,
+  };
+}
+
+/** @deprecated Prefer {@link loadUserFeedPage} — loads one batch only. */
 export async function loadUserBundle(
   username: string,
 ): Promise<UserBundle | null> {
-  const direct = await loadDirectUser(username);
-  if (direct) return direct;
-  const { shardOf } = await loadUserIndex();
-  const shard = shardOf.get(username);
-  if (!shard) return null;
-  const doc = await loadShard(shard);
-  const bundle = doc?.authors?.[username];
-  if (!bundle) return null;
-  return { profile: bundle.profile, posts: bundle.posts || [] };
+  return loadUserFeedPage(username, 0, USER_FEED_BATCH);
 }
 
-/**
- * Authors matching ``needle``, best match first.
- *
- * The index arrives busiest-first, which is the right answer for an empty box
- * but the wrong one for a search: typing "grok" must not bury @grok under every
- * louder account whose handle merely contains those letters. So matches are
- * ranked by how well the handle *or display name* answers the needle, and only
- * then by how much the author has posted.
- */
-export function rankUsers(users: UserRow[], needle: string): UserRow[] {
-  const q = needle.trim().toLowerCase().replace(/^@/, "");
-  if (!q) return users;
-
-  const scored: { user: UserRow; score: number }[] = [];
-  for (const user of users) {
-    const username = user.username.toLowerCase();
-    const name = (user.display_name || "").toLowerCase();
-    let score: number;
-    if (username === q) score = 0;
-    else if (name === q) score = 1;
-    else if (username.startsWith(q)) score = 2;
-    else if (name.startsWith(q)) score = 3;
-    else if (username.includes(q)) score = 4;
-    else if (name.includes(q)) score = 5;
-    else if ((user.location || "").toLowerCase().includes(q)) score = 6;
-    else continue;
-    scored.push({ user, score });
-  }
-  // The index is already sorted by posts, so a stable sort on the score alone
-  // keeps the busiest author first within each band.
-  scored.sort((a, b) => a.score - b.score);
-  return scored.map((entry) => entry.user);
-}
-
-/** Tweet id from an ingested post URL (`https://x.com/{user}/status/{id}`). */
 export function tweetIdOf(post: { url?: string }): string | null {
   const match = (post.url || "").match(/\/status\/(\d+)/);
   return match ? match[1] : null;
 }
 
-/** DOM id of a post card, so the page can scroll one to the top. */
 export function postAnchorId(tweetId: string): string {
   return `post-${tweetId}`;
 }
 
-/**
- * Posts of one tab.
- *
- * ``matched`` are the posts that answered a followed query - each names which
- * one - and ``referenced`` are the reply parents, quoted tweets and retweeted
- * originals ingested only to explain a match. The words the tabs wear are in
- * `feed.tabs` in `config.yaml`; these keys are the split the data carries.
- */
 export function postsInTab(posts: TweetRow[], tab: FeedTab): TweetRow[] {
   if (tab === "matched") return posts.filter((post) => !post.referenced);
   if (tab === "referenced") {
@@ -251,7 +244,6 @@ export function postsInTab(posts: TweetRow[], tab: FeedTab): TweetRow[] {
   return posts;
 }
 
-/** The post *tweetId* names, from anywhere in the author's history. */
 export function findPost(
   bundle: UserBundle | null,
   tweetId: string | null,
@@ -260,30 +252,48 @@ export function findPost(
   return (bundle?.posts || []).find((post) => tweetIdOf(post) === tweetId) || null;
 }
 
-/**
- * What the feed renders: the first ``shown`` posts of ``tab``, plus the counts
- * the tabs label themselves with.
- *
- * Everything is a slice of the bundle already in memory, so growing the feed
- * costs nothing but a render.
- */
+function tabGraphTotal(
+  profile: UserProfile | null | undefined,
+  tab: FeedTab,
+  loaded: TweetRow[],
+): number {
+  if (tab === "matched") {
+    return profile?.matched_count ?? loaded.filter((p) => !p.referenced).length;
+  }
+  if (tab === "referenced") {
+    return (
+      profile?.referenced_count ?? loaded.filter((p) => p.referenced).length
+    );
+  }
+  return profile?.posts ?? loaded.length;
+}
+
 export function feedOf(
   bundle: UserBundle | null,
   tab: FeedTab,
   shown: number,
 ): UserFeed {
   const posts = bundle?.posts || [];
+  const profile = bundle?.profile || null;
   const inTab = postsInTab(posts, tab);
-  const matched = posts.filter((post) => !post.referenced).length;
+  const tabTotal = tabGraphTotal(profile, tab, posts);
+  const matched =
+    profile?.matched_count ??
+    posts.filter((post) => !post.referenced).length;
+  const referenced =
+    profile?.referenced_count ?? posts.length - matched;
+  const canRevealLoaded = shown < inTab.length;
+  const canFetchMore =
+    Boolean(bundle) && posts.length < (bundle?.postTotal ?? posts.length);
   return {
     rows: inTab.slice(0, Math.max(0, shown)),
-    total: inTab.length,
-    remaining: Math.max(0, inTab.length - Math.max(0, shown)),
-    profile: bundle?.profile || null,
+    total: tabTotal,
+    remaining: canRevealLoaded || canFetchMore ? 1 : 0,
+    profile,
     counts: {
-      all: posts.length,
+      all: profile?.posts ?? bundle?.postTotal ?? posts.length,
       matched,
-      referenced: posts.length - matched,
+      referenced,
     },
   };
 }

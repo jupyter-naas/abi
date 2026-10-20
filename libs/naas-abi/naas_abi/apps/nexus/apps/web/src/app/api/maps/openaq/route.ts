@@ -1,4 +1,4 @@
-import { mapsJson, mapsUpstreamGet } from '../_lib';
+import { mapsPinResponse, mapsUpstreamGet } from '../_lib';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -72,10 +72,7 @@ export async function GET() {
           });
         }
         if (pins.length > 0) {
-          return mapsJson(
-            { pins, count: pins.length, source: 'openaq' },
-            { cacheSeconds: 300 },
-          );
+          return mapsPinResponse(pins, { source: 'openaq' }, { cacheSeconds: 300 });
         }
       }
     } catch {
@@ -84,10 +81,9 @@ export async function GET() {
   }
 
   const pins = await fetchOpenMeteo();
-  return mapsJson(
+  return mapsPinResponse(
+    pins,
     {
-      pins,
-      count: pins.length,
       source: 'open-meteo',
       note: apiKey
         ? 'OpenAQ empty or failed; showing Open-Meteo PM2.5 city samples.'

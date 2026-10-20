@@ -2,6 +2,196 @@
 
 <!-- version list -->
 
+## v2.43.0 (2026-10-14)
+
+### Chores
+
+- **nexus-map**: Commit staged changes and push
+  ([`df724fe`](https://github.com/jupyter-naas/abi/commit/df724fe722b9bf76d6508ac88c6ae26b2aa3a29f))
+
+### Features
+
+- **maps**: Add new map icons and layer colors
+  ([`36ab3d9`](https://github.com/jupyter-naas/abi/commit/36ab3d9544a495a2cf34983c4045b1a100c12807))
+
+
+## v2.42.1 (2026-10-12)
+
+### Bug Fixes
+
+- Qa for testing files
+  ([`6241eac`](https://github.com/jupyter-naas/abi/commit/6241eac59eafbfb08d7f742bf27f767bc1c7c7ee))
+
+
+## v2.42.0 (2026-10-09)
+
+### Bug Fixes
+
+- **identity_graph**: Drop graph silently instead of clear
+  ([`3353bef`](https://github.com/jupyter-naas/abi/commit/3353bef7ce404f9728aeb478c246627f5396b9b3))
+
+- **triple_store**: Decode invalid UTF-8 error bodies in _raise_for_status
+  ([`3353bef`](https://github.com/jupyter-naas/abi/commit/3353bef7ce404f9728aeb478c246627f5396b9b3))
+
+### Features
+
+- **identity_graph**: Retry sync on Fuseki dataset lock races
+  ([`3353bef`](https://github.com/jupyter-naas/abi/commit/3353bef7ce404f9728aeb478c246627f5396b9b3))
+
+### Testing
+
+- **triple_store**: Add test for _raise_for_status decoding invalid UTF-8
+  ([`3353bef`](https://github.com/jupyter-naas/abi/commit/3353bef7ce404f9728aeb478c246627f5396b9b3))
+
+
+## v2.41.3 (2026-10-09)
+
+### Bug Fixes
+
+- **agent**: Add chat_source flag to ToolResponseEvent and support tool metadata opt-out
+  ([`e197797`](https://github.com/jupyter-naas/abi/commit/e1977973d8d7c4809c2dd589553ecc7d51563825))
+
+- **triple_store**: Decode RDF body as UTF-8 to handle missing charset
+  ([`69f6574`](https://github.com/jupyter-naas/abi/commit/69f657450c054cbee47bbe3d75d7214703358699))
+
+### Refactoring
+
+- **people-intel**: Update multiple modules and scripts for improvements and fixes
+  ([`ed96de9`](https://github.com/jupyter-naas/abi/commit/ed96de9d594768c4053bf24850114b88a122b52c))
+
+
+## v2.41.2 (2026-10-06)
+
+### Bug Fixes
+
+- **api**: Keep oauth2_scheme as an alias of api_key_scheme
+  ([`d7b36c2`](https://github.com/jupyter-naas/abi/commit/d7b36c2b11b5541804a448a6f6931a5de7a24180))
+
+
+## v2.41.1 (2026-10-05)
+
+### Bug Fixes
+
+- Onto2py code generated
+  ([`3d4283a`](https://github.com/jupyter-naas/abi/commit/3d4283a305bf04794270d4704c3975be63f76e35))
+
+### Refactoring
+
+- **ontologies**: Add action classes for geospatial and administrative regions
+  ([`4dbffc8`](https://github.com/jupyter-naas/abi/commit/4dbffc8b5876b5e91593f8794ebef9d08ad196b4))
+
+- **ontologies**: Add new ontology-related modules and tests
+  ([`5e9ec6a`](https://github.com/jupyter-naas/abi/commit/5e9ec6a19162fe5263bf7bdcd203f22bb3eb33e4))
+
+- **ontologies**: Improve module ontology consolidation and path resolution
+  ([`7d3bc9a`](https://github.com/jupyter-naas/abi/commit/7d3bc9a3eb346e7f116e1f0fa5839c4c6011e64e))
+
+- **ontology**: Add process slices endpoint and tests
+  ([`d4ef150`](https://github.com/jupyter-naas/abi/commit/d4ef150dadf9489329134745d007e99c5f0c69b7))
+
+
+## v2.41.0 (2026-10-01)
+
+
+## v2.40.3 (2026-09-30)
+
+
+## v2.40.2 (2026-09-24)
+
+### Bug Fixes
+
+- **auth**: Lock registration, guard Ollama routes, enforce sign-in rate limits
+  ([`df2a296`](https://github.com/jupyter-naas/abi/commit/df2a296a88ca4d3da6a1846cc175b76d46525edb))
+
+
+## v2.40.1 (2026-09-24)
+
+### Bug Fixes
+
+- **api**: Remove the /token endpoint that issued ABI_API_KEY
+  ([`101085f`](https://github.com/jupyter-naas/abi/commit/101085f5dbcd209a7d8614b858f7a75fe9ff23cb))
+
+
+## v2.40.0 (2026-09-23)
+
+### Bug Fixes
+
+- **api**: Render configured description and branding assets on landing page
+  ([`c064c34`](https://github.com/jupyter-naas/abi/commit/c064c3402eb30d0951cf4763b3449aab30650f70))
+
+### Features
+
+- **api**: Configurable landing page theme colours
+  ([`94b58f7`](https://github.com/jupyter-naas/abi/commit/94b58f799bf900c4ff35077d0fbaa20b47b0438f))
+
+
+## v2.39.0 (2026-09-22)
+
+### Features
+
+- **nexus**: Native Sheets editor, formulas, resizing, and SheetsAgent
+  ([#1297](https://github.com/jupyter-naas/abi/pull/1297),
+  [`135967f`](https://github.com/jupyter-naas/abi/commit/135967f33be441c7afa9f4d82e7f1f40a4c7c465))
+
+
+## v2.38.0 (2026-09-22)
+
+### Bug Fixes
+
+- **core**: Address document service review feedback
+  ([`adc548c`](https://github.com/jupyter-naas/abi/commit/adc548cf122052e64ea79c3427a1e0d450e3093f))
+
+- **core**: Address document store code review findings
+  ([`840f142`](https://github.com/jupyter-naas/abi/commit/840f142b6eea3f1eebac5d1a4666e241b4347603))
+
+- **core**: Align document numeric comparisons and bound optional indexes
+  ([`92121af`](https://github.com/jupyter-naas/abi/commit/92121af7f013ad15a8b9870dbe20ce3ef1099978))
+
+- **core**: Close 4 remaining document store review findings
+  ([`6c5fc28`](https://github.com/jupyter-naas/abi/commit/6c5fc28e32d192403981b84362ac05b7b0a950d4))
+
+- **core**: Harden document query and storage boundaries
+  ([`c35bca5`](https://github.com/jupyter-naas/abi/commit/c35bca523909428ef28dfb045b8fbddabdb46e92))
+
+- **core**: Keep expanded JSONB floats portable
+  ([`9e3a409`](https://github.com/jupyter-naas/abi/commit/9e3a409e1df327afae62c45a67cbe25b55ad14a5))
+
+- **core**: Surface malformed document SQL as DocumentAdapterError and split adapter factories
+  ([`afb901a`](https://github.com/jupyter-naas/abi/commit/afb901a0fe9ef2d6999dcff0c738c0de30229532))
+
+### Features
+
+- **core**: Add portable document store service
+  ([`db7df35`](https://github.com/jupyter-naas/abi/commit/db7df354346a5bf1ebeba60ba4f33651cad09c9d))
+
+
+## v2.37.0 (2026-09-17)
+
+### Features
+
+- **bedrock**: Add GPT-5.6 Sol model support on Amazon Bedrock
+  ([`42a9fdf`](https://github.com/jupyter-naas/abi/commit/42a9fdf21c40f8d7090583932a4ef33ffda1a689))
+
+- **nexus-build-app**: Add role-based visibility for office agents
+  ([`02276d4`](https://github.com/jupyter-naas/abi/commit/02276d49c4f37924f647eb3ca8101dd2155a2f18))
+
+
+## v2.36.2 (2026-09-14)
+
+### Bug Fixes
+
+- **core,nexus**: Release sticky office turns that would leave empty bubbles
+  ([`333e5d8`](https://github.com/jupyter-naas/abi/commit/333e5d8de15984905c21ad244462acc4485dfad7))
+
+
+## v2.36.1 (2026-09-14)
+
+### Bug Fixes
+
+- **core**: Preserve IntentAgent subclass on duplicate
+  ([`f701a27`](https://github.com/jupyter-naas/abi/commit/f701a27820f2b22985e386cfa2edb224018a73c8))
+
+
 ## v2.36.0 (2026-09-14)
 
 ### Features

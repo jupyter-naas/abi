@@ -47,9 +47,9 @@ Help the user accomplish their human resources tasks using the tools available t
 
     suggestions: list[dict] = [
         {
-            "label": "Working history",
-            "value": "Show the working history of {{Person}}",
-            "description": "List every act of working with role, mission and skills",
+            "label": "Headcount",
+            "value": "What is our current headcount by job family?",
+            "description": "Count active employees per job family",
         },
         {
             "label": "Job Description",
@@ -100,40 +100,36 @@ Help the user accomplish their human resources tasks using the tools available t
             "find_open_job_positions",
             "find_positions_by_title",
             "find_headcount_by_job_family",
-            "find_working_processes",
-            "find_skills_developed",
-            "find_acts_of_studying",
         ]
         return list(templatable_sparql_query_module.get_tools(personnel_sparql_tools))
 
     @classmethod
     def get_pipeline_tools(cls) -> list:
-        """Process registration tools (Act of Working, Act of Studying)."""
+        """Tools that record what the organization keeps about its own staff."""
         from naas_abi_marketplace.domains.personnel import ABIModule
-        from naas_abi_marketplace.domains.personnel.pipelines.ActOfStudyingPipeline import (
-            ActOfStudyingPipeline,
-            ActOfStudyingPipelineConfiguration,
+        from naas_abi_marketplace.domains.personnel.pipelines.ActOfEmploymentPipeline import (
+            ActOfEmploymentPipeline,
+            ActOfEmploymentPipelineConfiguration,
         )
-        from naas_abi_marketplace.domains.personnel.pipelines.ActOfWorkingPipeline import (
-            ActOfWorkingPipeline,
-            ActOfWorkingPipelineConfiguration,
+        from naas_abi_marketplace.domains.personnel.pipelines.PersonnelProfilePipeline import (
+            PersonnelProfilePipeline,
+            PersonnelProfilePipelineConfiguration,
         )
         from rdflib import URIRef
 
         module = ABIModule.get_instance()
         triple_store = module.engine.services.triple_store
         graph_name = URIRef(module.configuration.graph_name)
-        working = ActOfWorkingPipeline(
-            ActOfWorkingPipelineConfiguration(
-                triple_store=triple_store, graph_name=graph_name, persist=True
-            )
+        pipeline_cfg = dict(
+            triple_store=triple_store, graph_name=graph_name, persist=True
         )
-        studying = ActOfStudyingPipeline(
-            ActOfStudyingPipelineConfiguration(
-                triple_store=triple_store, graph_name=graph_name, persist=True
-            )
+        employment = ActOfEmploymentPipeline(
+            ActOfEmploymentPipelineConfiguration(**pipeline_cfg)
         )
-        return [*working.as_tools(), *studying.as_tools()]
+        profile = PersonnelProfilePipeline(
+            PersonnelProfilePipelineConfiguration(**pipeline_cfg)
+        )
+        return [*employment.as_tools(), *profile.as_tools()]
 
     @classmethod
     def get_tools(cls) -> list:
