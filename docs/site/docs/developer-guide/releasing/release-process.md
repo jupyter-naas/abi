@@ -59,6 +59,18 @@ PyPI token in the repository. A package's first publish needs a **pending truste
 registered for it on PyPI (owner `jupyter-naas`, repository `abi`, workflow `release.yml`,
 environment `pypi`); do that before the first merge that releases a new package.
 
+PyPI accepts one pending publisher with the same settings at a time. For the 3.0 release,
+`naas-abi-proto` has its pending publisher and `naas-abi-sdk` has none, so:
+
+1. The merge's release run uploads proto. The SDK upload step fails and is ignored
+   (`continue-on-error` in `release.yml`), so core, marketplace, naas-abi and the CLI are still
+   uploaded. Until step 2, `naas-abi-core` 3.0.0 cannot be installed: it needs `naas-abi-sdk`.
+2. Upload the SDK by hand, from the tag the run pushed, with a temporary account-wide PyPI token:
+   `git checkout naas-abi-sdk-v0.1.0 && cd libs/naas-abi-sdk && uv build && uv publish --token <token>`.
+   Then delete the token.
+3. On the `naas-abi-sdk` project, add a normal trusted publisher (same settings as above), and
+   remove `continue-on-error` from the SDK upload step in `release.yml`.
+
 ## Containers and the API deploy
 
 Publishing a GitHub release starts two workflows, `build_abi_container.yml` and
