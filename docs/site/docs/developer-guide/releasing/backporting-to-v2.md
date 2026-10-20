@@ -65,7 +65,7 @@ Merging into `v2` starts `release.yml` on `v2`. It runs semantic-release for
 prerelease). For each package with a `fix:` commit under its folder, it:
 
 1. computes the next patch version from that package's latest 2.x tag, for
-   example `naas-abi-core-v2.43.0` to `2.43.1`;
+   example `naas-abi-core-v2.44.0` to `2.44.1`;
 2. commits the version bump to `v2`, tags it (`naas-abi-core-v2.43.1`) and
    creates the GitHub release;
 3. publishes the package to PyPI.

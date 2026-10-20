@@ -21,12 +21,12 @@ after 3.0 is released.
 
 | | Released from `v2` | Starting after |
 |---|---|---|
-| `naas-abi-core` | 2.x patch versions on PyPI | 2.43.0 |
-| `naas-abi` | 2.x patch versions on PyPI | 2.87.0 |
+| `naas-abi-core` | 2.x patch versions on PyPI | 2.44.0 |
+| `naas-abi` | 2.x patch versions on PyPI | 2.89.0 |
 | `naas-abi-cli` | 2.x patch versions on PyPI | 2.28.0 |
 | `naas-abi-marketplace` | Not released from `v2` | |
-| `ghcr.io/jupyter-naas/nexus-web` | `:v2`, and the exact version (`:2.87.1`) | |
-| `ghcr.io/jupyter-naas/abi/abi` | `:v2`, and the release tag (`:naas-abi-core-v2.43.1`) | |
+| `ghcr.io/jupyter-naas/nexus-web` | `:v2`, and the exact version (`:2.89.1`) | |
+| `ghcr.io/jupyter-naas/abi/abi` | `:v2`, and the release tag (`:naas-abi-core-v2.44.1`) | |
 
 Images from `v2` are never tagged `:latest`: `:latest` follows 3.0.
 
@@ -82,7 +82,7 @@ NEXUS_WEB_TAG=v2
 ```
 
 Then run `docker compose up -d`. The `:v2` tag is published with the first
-2.x release from `v2`. Until then, use the exact version, `NEXUS_WEB_TAG=2.87.0`.
+2.x release from `v2`. Until then, use the exact version, `NEXUS_WEB_TAG=2.89.0`.
 
 If you pull the ABI image (`ghcr.io/jupyter-naas/abi/abi`), use `:v2` instead
 of `:latest` too.
