@@ -58,7 +58,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
   const [loadingOntologyFiles, setLoadingOntologyFiles] = useState(false);
   const [filesWorkspaceId, setFilesWorkspaceId] = useState<string | null>(null);
   const [filesError, setFilesError] = useState<string | null>(null);
-  const { currentWorkspaceId } = useWorkspaceStore();
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const {
     graphRefreshTrigger,
     referenceOntologies,

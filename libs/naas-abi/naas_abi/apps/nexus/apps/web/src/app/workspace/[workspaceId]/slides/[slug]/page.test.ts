@@ -17,4 +17,13 @@ describe('slides editor page', () => {
     expect(src).toContain("from '@/components/monaco/monaco-editor'");
     expect(src).not.toContain('@monaco-editor/react');
   });
+
+  it('acknowledges only the saved revision through the shared save queue', () => {
+    expect(src).toContain("from '@/lib/office-save-queue'");
+    expect(src).toContain('createOfficeSaveQueue(');
+    expect(src).toContain('queue.dispose()');
+    expect(src).toContain("outcome.status === 'stale' || queue !== saveQueueRef.current");
+    expect(src).toContain('setDirty(queue.isDirty())');
+    expect(src.match(/saveQueueRef\.current\?\.edit\(/g)?.length).toBe(2);
+  });
 });

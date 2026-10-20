@@ -13,7 +13,7 @@ export type ProjectGroupProps = {
   onPin: (id: string) => void;
   onArchive: (id: string) => void;
   onRename: (id: string, newTitle: string) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string, title: string) => void;
   renamingId: string | null;
   onStartRename: (id: string) => void;
   onCancelRename: () => void;
@@ -61,14 +61,14 @@ export const ProjectGroup = React.memo(function ProjectGroup({
               title={conv.title}
               pinned={conv.pinned}
               isActive={activeId === conv.id}
-              onClick={() => onSelect(conv.id)}
-              onPin={() => onPin(conv.id)}
-              onArchive={() => onArchive(conv.id)}
+              onClick={onSelect}
+              onPin={onPin}
+              onArchive={onArchive}
               isRenaming={renamingId === conv.id}
-              onStartRename={() => onStartRename(conv.id)}
-              onRename={(newTitle) => onRename(conv.id, newTitle)}
+              onStartRename={onStartRename}
+              onRename={onRename}
               onCancelRename={onCancelRename}
-              onDelete={() => onDelete(conv.id)}
+              onDelete={onDelete}
               mobilePanel={mobilePanel}
             />
           ))}

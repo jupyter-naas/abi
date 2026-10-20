@@ -49,6 +49,7 @@ import {
   useOfficeCreateStore,
 } from '@/components/office/office-create-state';
 import { copyDocumentToMyDrive } from '@/lib/documents-my-drive';
+import { createOfficeSaveQueue, type OfficeSaveQueue } from '@/lib/office-save-queue';
 import { authFetch } from '@/stores/auth';
 import {
   DOCUMENTS_UPDATED_EVENT,
@@ -230,6 +231,7 @@ export default function SectionsEditorPage() {
   const loadGenRef = useRef(0);
   const skipTokenEffectRef = useRef(true);
   const saveRef = useRef<() => Promise<void>>(async () => {});
+  const saveQueueRef = useRef<OfficeSaveQueue<{ commit_sha?: string }> | null>(null);
   const refreshRef = useRef<() => Promise<void>>(async () => {});
 
   useEffect(() => {
@@ -333,6 +335,7 @@ export default function SectionsEditorPage() {
             parseDocumentsOutline(document.html).length,
           ),
         );
+        saveQueueRef.current?.load(document.html);
         setDirty(false);
         setDocumentSource(
           document.source === 'sidecar' || document.source === 'forgejo' ? document.source : null,
@@ -453,19 +456,16 @@ export default function SectionsEditorPage() {
     };
   }, [html, holdPreview]);
 
-  const save = useCallback(async () => {
-    const document = htmlRef.current;
-    if (!workspaceId || !slug || !document) return;
-    setSaving(true);
-    setError(null);
-    setStatus(null);
-    try {
+  // One save queue per document: switching documents or unmounting makes in-flight saves stale.
+  useEffect(() => {
+    if (!workspaceId || !slug) return;
+    const queue = createOfficeSaveQueue(async (html: string) => {
       const res = await authFetch(`/api/documents/projects/${encodeURIComponent(slug)}/document`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           workspace_id: workspaceId,
-          html: document,
+          html,
           message: `chore(document): update ${slug}`,
         }),
       });
@@ -473,15 +473,34 @@ export default function SectionsEditorPage() {
         const body = (await res.json().catch(() => ({}))) as { detail?: unknown };
         throw new Error(documentsApiErrorMessage(body.detail, `Save failed (${res.status})`));
       }
-      const body = (await res.json()) as { commit_sha?: string };
-      setDirty(false);
-      setStatus(body.commit_sha ? `Saved ${body.commit_sha.slice(0, 7)}` : 'Saved');
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
+      return (await res.json()) as { commit_sha?: string };
+    });
+    saveQueueRef.current = queue;
+    setSaving(false);
+    return () => {
+      queue.dispose();
+      if (saveQueueRef.current === queue) saveQueueRef.current = null;
+    };
   }, [workspaceId, slug]);
+
+  const save = useCallback(async () => {
+    const queue = saveQueueRef.current;
+    if (!queue) return;
+    setSaving(true);
+    setError(null);
+    setStatus(null);
+    const outcome = await queue.save();
+    if (outcome.status === 'stale' || queue !== saveQueueRef.current) return;
+    setSaving(queue.isSaving());
+    setDirty(queue.isDirty());
+    if (outcome.status === 'saved') {
+      const sha = outcome.result.commit_sha;
+      const saved = sha ? `Saved ${sha.slice(0, 7)}` : 'Saved';
+      setStatus(outcome.dirty ? `${saved}; newer edits not saved yet` : saved);
+    } else if (outcome.status === 'failed') {
+      setError((outcome.error as Error).message);
+    }
+  }, []);
 
   const saveToMyDrive = useCallback(async () => {
     if (!slug || !html) return;
@@ -621,6 +640,7 @@ export default function SectionsEditorPage() {
           setPreviewHtml(result.html);
         }
         setSelectedIndex(result.section_index);
+        saveQueueRef.current?.load(result.html || htmlRef.current);
         setDirty(false);
         setStatus(`${label} (${result.section_index + 1}/${result.section_count})`);
       } catch (e) {
@@ -720,6 +740,7 @@ export default function SectionsEditorPage() {
       if (next === htmlRef.current) return;
       setHoldPreview(true);
       setHtml(next);
+      saveQueueRef.current?.edit(next);
       setDirty(true);
       scheduleManualSave();
     },
@@ -936,6 +957,7 @@ export default function SectionsEditorPage() {
               onChange={(value) => {
                 setHoldPreview(false);
                 setHtml(value ?? '');
+                saveQueueRef.current?.edit(value ?? '');
                 setDirty(true);
               }}
               onMount={(editor, monaco) => {

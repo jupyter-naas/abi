@@ -10,28 +10,20 @@ interface PdfViewerProps {
   className?: string;
 }
 
-// Patch ResizeObserver at module load time so all callbacks are deferred through
-// requestAnimationFrame. This breaks the synchronous loop that triggers
-// "ResizeObserver loop completed with undelivered notifications" — the browser
-// only fires that error when callbacks fire synchronously in the same frame.
-// Doing this once at module level rather than inside a component avoids the
-// race between React's useEffect timing and Next.js dev overlay handlers.
-if (typeof window !== 'undefined' && window.ResizeObserver) {
-  const Native = window.ResizeObserver;
-  // Only patch once even if this module is HMR-reloaded.
-  if (!(Native as unknown as { __patchedForPdfViewer?: boolean }).__patchedForPdfViewer) {
-    class PatchedResizeObserver extends Native {
-      constructor(callback: ResizeObserverCallback) {
-        super((entries, observer) => {
-          requestAnimationFrame(() => {
-            try { callback(entries, observer); } catch { /* silence */ }
-          });
-        });
-      }
-    }
-    (PatchedResizeObserver as unknown as { __patchedForPdfViewer: boolean }).__patchedForPdfViewer = true;
-    window.ResizeObserver = PatchedResizeObserver;
-  }
+// The snippet's scroll viewport (inside its shadow root) observes its own size
+// and re-lays the pages out. Without a reserved gutter the vertical scrollbar
+// appearing narrows the viewport, which re-triggers that observer in the same
+// frame ("ResizeObserver loop completed with undelivered notifications").
+// Scoped to this viewer's shadow root; window.ResizeObserver stays native.
+export const PDF_VIEWER_SHADOW_CSS = '[style*="overflow: auto"] { scrollbar-gutter: stable; }';
+
+export function stabilizePdfViewerScrollbars(instance: Element | null | undefined): void {
+  const root = instance?.shadowRoot;
+  if (!root || root.querySelector('style[data-nexus-pdf-viewer]')) return;
+  const style = document.createElement('style');
+  style.setAttribute('data-nexus-pdf-viewer', '');
+  style.textContent = PDF_VIEWER_SHADOW_CSS;
+  root.appendChild(style);
 }
 
 export function PdfViewer({ src, className }: PdfViewerProps) {
@@ -61,6 +53,7 @@ export function PdfViewer({ src, className }: PdfViewerProps) {
           theme: { preference: resolvedTheme === 'dark' ? 'dark' : 'light' },
         });
         containerRef.current = instance ?? null;
+        stabilizePdfViewerScrollbars(instance);
 
         if (instance instanceof HTMLElement) {
           instance.style.position = 'absolute';

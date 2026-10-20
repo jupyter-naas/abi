@@ -287,6 +287,25 @@ const getFilesScope = (activeSource: string): 'workspace' | 'my_drive' | 'platfo
   return 'workspace';
 };
 
+// Files page listing requests. Each fetch bumps the generation; only the
+// latest one may commit files, errors or the loading flag. Switching drive or
+// reading a local folder also invalidates (and aborts) the pending listing.
+let filesRequestGen = 0;
+let filesRequestAbort: AbortController | null = null;
+
+const beginFilesRequest = (): { gen: number; signal: AbortSignal } => {
+  filesRequestAbort?.abort();
+  filesRequestAbort = new AbortController();
+  filesRequestGen += 1;
+  return { gen: filesRequestGen, signal: filesRequestAbort.signal };
+};
+
+export const invalidateFilesRequests = (): void => {
+  filesRequestAbort?.abort();
+  filesRequestAbort = null;
+  filesRequestGen += 1;
+};
+
 export const useFilesStore = create<FilesState>((set, get) => ({
   // Files page state (Finder-like)
   files: [],
@@ -376,7 +395,10 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     ),
   })),
   
-  setActiveSource: (sourceId) => set({ activeSource: sourceId }),
+  setActiveSource: (sourceId) => {
+    if (sourceId !== get().activeSource) invalidateFilesRequests();
+    set({ activeSource: sourceId });
+  },
   
   connectSource: async (sourceId) => {
     // TODO: Implement OAuth or API key connection flow for cloud sources
@@ -468,6 +490,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   
   // Fetch files from a synced local folder using File System Access API
   fetchLocalFiles: async (folderId, subPath = '') => {
+    const { gen } = beginFilesRequest();
     const { syncedFolders } = get();
     const folder = syncedFolders.find((f) => f.id === folderId);
     
@@ -520,8 +543,10 @@ export const useFilesStore = create<FilesState>((set, get) => ({
         return a.name.localeCompare(b.name);
       });
       
+      if (gen !== filesRequestGen) return;
       set({ files, currentPath: subPath, loading: false });
     } catch (err) {
+      if (gen !== filesRequestGen) return;
       console.error('Error reading local folder:', err);
       set({ 
         error: 'Failed to read folder contents. You may need to re-grant access.',
@@ -587,6 +612,8 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     // Search: filtered on the server (current folder only) so paging walks the
     // matches, not just whatever happened to load on the current page.
     const search = (options?.search ?? '').trim();
+    const { gen, signal } = beginFilesRequest();
+    const isCurrent = () => gen === filesRequestGen;
 
     // The files API requires a workspace for workspace/platform-drive scopes.
     // During app bootstrap the workspace can still be null.
@@ -620,7 +647,8 @@ export const useFilesStore = create<FilesState>((set, get) => ({
           : '';
         const scopeParam = `&scope=${scope}`;
         const response = await authFetch(
-          `${getApiBase()}/api/files/?path=${encodeURIComponent(targetPath)}${workspaceParam}${scopeParam}${pageParams}${searchParam}${sortParams}${hiddenParam}`
+          `${getApiBase()}/api/files/?path=${encodeURIComponent(targetPath)}${workspaceParam}${scopeParam}${pageParams}${searchParam}${sortParams}${hiddenParam}`,
+          { signal }
         );
         if (!response.ok) {
           throw new Error('Failed to fetch files');
@@ -637,6 +665,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       // Fallback: if the root has no entries at all, try the workspace root.
       // This handles deployments where objects are scoped under workspace IDs.
       // Keyed on total (not the page length) so an empty later page doesn't retry.
+      if (!isCurrent()) return;
       if (scope === 'workspace' && !relativePath && resolvedTotal === 0 && workspaceId) {
         const workspaceListing = await fetchListing(workspaceId);
         if (workspaceListing.total > 0) {
@@ -646,6 +675,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
         }
       }
 
+      if (!isCurrent()) return;
       set({
         files: resolvedFiles,
         currentPath: resolvedPath,
@@ -656,6 +686,8 @@ export const useFilesStore = create<FilesState>((set, get) => ({
         loading: false,
       });
     } catch (error) {
+      // Aborted or superseded: the newer request owns error/loading.
+      if (!isCurrent()) return;
       set({ error: (error as Error).message, loading: false });
     }
   },

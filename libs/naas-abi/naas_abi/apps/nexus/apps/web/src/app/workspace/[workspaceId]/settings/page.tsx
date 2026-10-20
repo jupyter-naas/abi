@@ -1,6 +1,11 @@
 import { redirect } from 'next/navigation';
 import { DEFAULT_SETTINGS_PATH } from '@/components/shell/settings-nav';
 
-export default function SettingsPage({ params }: { params: { workspaceId: string } }) {
-  redirect(`/workspace/${params.workspaceId}${DEFAULT_SETTINGS_PATH}`);
+export default async function SettingsPage({
+  params,
+}: {
+  params: Promise<{ workspaceId: string }>;
+}) {
+  const { workspaceId } = await params;
+  redirect(`/workspace/${workspaceId}${DEFAULT_SETTINGS_PATH}`);
 }
