@@ -2,6 +2,9 @@
 
 <!-- version list -->
 
+## v3.0.0 (2026-10-20)
+
+
 ### Upgrade notes (3.0)
 
 - **NATS mode.** A top-level `nats:` block runs the engine on a NATS broker:
