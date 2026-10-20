@@ -81,8 +81,9 @@ app, which does not match a 2.x API. Set the tag in `.env`:
 NEXUS_WEB_TAG=v2
 ```
 
-Then run `docker compose up -d`. The `:v2` tag is published with the first
-2.x release from `v2`. Until then, use the exact version, `NEXUS_WEB_TAG=2.89.0`.
+Then run `docker compose up -d`. `:v2` points at the last 2.x build (2.89.0) and
+moves with each 2.x release from `v2`; to stay on a fixed build, use the exact
+version instead, `NEXUS_WEB_TAG=2.89.0`.
 
 If you pull the ABI image (`ghcr.io/jupyter-naas/abi/abi`), use `:v2` instead
 of `:latest` too.
