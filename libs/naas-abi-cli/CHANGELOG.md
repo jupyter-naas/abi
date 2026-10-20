@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.28.1 (2026-10-20)
+
+### Bug Fixes
+
+- **cli**: The local stack pulls MinIO images that exist and fuseki-compact starts
+  ([`2c770da`](https://github.com/jupyter-naas/abi/commit/2c770da7e8505dd5120af3e5a96592745328149e))
+
+### Continuous Integration
+
+- **release**: Release 2.x patches of core, naas-abi and the CLI from v2
+  ([`49f0fd3`](https://github.com/jupyter-naas/abi/commit/49f0fd3e37c2ba674c62b08337186f80062e1ee4))
+
+
 ## v2.28.0 (2026-10-15)
 
 
