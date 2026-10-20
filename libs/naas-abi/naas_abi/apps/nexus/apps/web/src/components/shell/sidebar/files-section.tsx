@@ -83,7 +83,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
   const rowPadClass = isMobilePanel ? 'px-2 py-2.5 min-h-11' : 'px-2 py-1';
   const iconSize = isMobilePanel ? 14 : 12;
   const treeKeyboard = useOntologyTreeKeyboard();
-  const { currentWorkspaceId } = useWorkspaceStore();
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const workspaces = useWorkspaceStore((state) => state.workspaces);
   const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId) || null;
   const platformDriveEnabled = Boolean(currentWorkspace?.platformDriveEnabled);

@@ -19,6 +19,12 @@ export default function OrganizationsPage() {
     })();
   }, [fetchOrganizations]);
 
+  // If user has only one org, redirect directly to its settings
+  const singleOrgId = !loading && organizations.length === 1 ? organizations[0].id : null;
+  useEffect(() => {
+    if (singleOrgId) router.replace(`/organizations/${singleOrgId}/settings`);
+  }, [router, singleOrgId]);
+
   const handleCancel = () => {
     if (currentWorkspaceId) {
       router.push(`/workspace/${currentWorkspaceId}/chat`);
@@ -36,9 +42,7 @@ export default function OrganizationsPage() {
     );
   }
 
-  // If user has only one org, redirect directly to its settings
-  if (organizations.length === 1) {
-    router.push(`/organizations/${organizations[0].id}/settings`);
+  if (singleOrgId) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <p className="text-muted-foreground">Redirecting...</p>

@@ -1,10 +1,11 @@
 import { redirect } from 'next/navigation';
 
 /** Lab is retired. Code owns editing. Old /lab bookmarks land on /code. */
-export default function LabRedirectPage({
+export default async function LabRedirectPage({
   params,
 }: {
-  params: { workspaceId: string };
+  params: Promise<{ workspaceId: string }>;
 }) {
-  redirect(`/workspace/${params.workspaceId}/code`);
+  const { workspaceId } = await params;
+  redirect(`/workspace/${workspaceId}/code`);
 }

@@ -11,7 +11,7 @@ import { SETTINGS_GROUPS } from '@/components/shell/settings-nav';
 
 export function SettingsSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const pathname = usePathname();
-  const { currentWorkspaceId } = useWorkspaceStore();
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const basePath = getWorkspacePath(currentWorkspaceId, '/settings');
 
   return (

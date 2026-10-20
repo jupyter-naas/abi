@@ -51,9 +51,10 @@ type FeedLayerRecord = { title?: string; feed_type?: string; feed_url?: string }
  */
 export async function GET(
   request: Request,
-  { params }: { params: { datasetId: string } },
+  { params }: { params: Promise<{ datasetId: string }> },
 ) {
-  if (!LAYER_ID_PATTERN.test(params.datasetId)) {
+  const { datasetId } = await params;
+  if (!LAYER_ID_PATTERN.test(datasetId)) {
     return errorJson({ error: 'Unknown layer' }, 404);
   }
 
@@ -71,7 +72,7 @@ export async function GET(
   const base = nexusInternalApiBase();
   let dataset: { title: string; endpoint: string };
   try {
-    const recordUrl = new URL(`${base}/api/maps/layouts/${encodeURIComponent(params.datasetId)}`);
+    const recordUrl = new URL(`${base}/api/maps/layouts/${encodeURIComponent(datasetId)}`);
     recordUrl.searchParams.set('workspace_id', workspaceId);
     const recordRes = await fetch(recordUrl.toString(), {
       cache: 'no-store',
@@ -86,7 +87,7 @@ export async function GET(
     if (record.feed_type !== 'geojson_url' || !isNexusApiFeedPath(record.feed_url)) {
       return errorJson({ error: 'Not a feed layer' }, 404);
     }
-    dataset = { title: record.title || params.datasetId, endpoint: record.feed_url };
+    dataset = { title: record.title || datasetId, endpoint: record.feed_url };
   } catch (err) {
     return errorJson({ error: err instanceof Error ? err.message : 'Layer lookup failed' }, 502);
   }

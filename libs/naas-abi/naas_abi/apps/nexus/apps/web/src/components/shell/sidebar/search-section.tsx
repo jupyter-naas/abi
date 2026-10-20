@@ -22,7 +22,7 @@ import { getWorkspacePath } from './utils';
  * Counts are the current query's hits in the All view.
  */
 export function SearchSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
-  const { currentWorkspaceId } = useWorkspaceStore();
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const pathname = usePathname();
   const route = readSearchRoute(useSearchParams());
   const { scopes, isOn, setScopeOn, allowedEngines } = useSearchScopes(currentWorkspaceId);

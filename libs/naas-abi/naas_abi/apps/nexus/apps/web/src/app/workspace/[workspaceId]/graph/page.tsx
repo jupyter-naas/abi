@@ -1,14 +1,15 @@
 import { redirect } from 'next/navigation';
 
-export default function GraphPage({
+export default async function GraphPage({
   params,
   searchParams,
 }: {
-  params: { workspaceId: string };
-  searchParams?: { view?: string };
+  params: Promise<{ workspaceId: string }>;
+  searchParams?: Promise<{ view?: string }>;
 }) {
-  const base = `/workspace/${params.workspaceId}/graph`;
-  const view = searchParams?.view;
+  const { workspaceId } = await params;
+  const base = `/workspace/${workspaceId}/graph`;
+  const view = (await searchParams)?.view;
 
   if (view === 'create-graph') {
     redirect(`${base}/create-graph`);
