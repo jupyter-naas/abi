@@ -487,15 +487,23 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                     if origin and origin not in ancestors:
                         ancestors.append(origin)
                 # Allow the embedding page even when it is not listed in config
-                # (e.g. http://localhost:3042 during local dev).
-                for header in (request.headers.get("origin"), request.headers.get("referer")):
+                # (e.g. http://localhost:3042 during local dev). Never for a
+                # remote module's app: only Nexus may frame it.
+                presented = (
+                    ()
+                    if request.url.path.startswith("/app-remote/")
+                    else (request.headers.get("origin"), request.headers.get("referer"))
+                )
+                for header in presented:
                     if not header:
                         continue
                     try:
                         from urllib.parse import urlparse
 
-                        ref_origin = f"{urlparse(header).scheme}://{urlparse(header).netloc}".rstrip("/")
-                        if ref_origin and ref_origin not in ancestors:
+                        parsed = urlparse(header)
+                        # "Origin: null" (a sandboxed page) names no origin.
+                        ref_origin = f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+                        if parsed.netloc and ref_origin not in ancestors:
                             ancestors.append(ref_origin)
                     except Exception:
                         pass
@@ -505,8 +513,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             else:
                 response.headers["X-Frame-Options"] = "DENY"
 
-            # Referrer policy
-            response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+            # Referrer policy, unless the route set a stricter one (remote apps).
+            response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
 
             # Permissions policy (restrict features)
             response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
@@ -637,6 +645,23 @@ def _configure_middleware(app: FastAPI) -> None:
 
     app.add_middleware(RequestIdentityMiddleware)
 
+    # Remote app pages preflight from an opaque origin, which the CORS
+    # middleware refuses: answered outside it.
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.http_routes import (
+        RemoteAppPreflight,
+        redact_grants_in_access_log,
+    )
+
+    app.add_middleware(RemoteAppPreflight)
+    # A remote app's path holds its grant: never print it in the access log.
+    redact_grants_in_access_log()
+
+    # Outermost: one span per request, around everything else (no-op unless the
+    # engine config enables telemetry).
+    from naas_abi.apps.nexus.apps.api.app.core.tracing import TracingMiddleware
+
+    app.add_middleware(TracingMiddleware)
+
 
 async def serve_app_html(path: str) -> FileResponse:
     """Serve a browser asset from any loaded module's apps directory.
@@ -721,6 +746,46 @@ def _register_routes(app: FastAPI) -> None:
     )
     # The core API's middleware already guards /app-html/; checking here too keeps
     # the route closed when Nexus is served without that middleware.
+    # Apps of remote modules, forwarded over NATS. The catalog URL redirects
+    # to a grant URL, before the /app-html/ catch-all below; the grant is the
+    # only credential of /app-remote/.
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.http_routes import (
+        METHODS as REMOTE_APP_METHODS,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.http_routes import (
+        open_remote_app,
+        redirect_remote_app_root,
+        serve_remote_app,
+    )
+
+    # Every method: a user's request is redirected with a 307, which keeps it,
+    # and an ABI_API_KEY caller's is answered directly.
+    app.add_api_route(
+        "/app-html/remote/{module_id}/{app}/{path:path}",
+        open_remote_app,
+        methods=REMOTE_APP_METHODS,
+        dependencies=[Depends(require_abi_api_token)],
+        include_in_schema=False,
+    )
+    app.add_api_route(
+        "/app-html/remote/{module_id}/{app}",
+        open_remote_app,
+        methods=REMOTE_APP_METHODS,
+        dependencies=[Depends(require_abi_api_token)],
+        include_in_schema=False,
+    )
+    app.add_api_route(
+        "/app-remote/{grant}/{module_id}/{app}/{path:path}",
+        serve_remote_app,
+        methods=REMOTE_APP_METHODS,
+        include_in_schema=False,
+    )
+    app.add_api_route(
+        "/app-remote/{grant}/{module_id}/{app}",
+        redirect_remote_app_root,
+        methods=["GET", "HEAD"],
+        include_in_schema=False,
+    )
     app.add_api_route(
         "/app-html/{path:path}",
         serve_app_html,

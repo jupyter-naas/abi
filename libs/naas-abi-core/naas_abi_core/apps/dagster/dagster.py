@@ -1,6 +1,15 @@
+"""The Dagster app: module orchestrations and dataset compaction for a project
+without NATS. Legacy, to be removed in the next major; needs the
+``naas-abi-core[dagster]`` extra."""
+
 from typing import cast
 
-from dagster import Definitions
+from naas_abi_core.utils.LegacyExtras import raise_missing_extra
+
+try:
+    from dagster import Definitions
+except ModuleNotFoundError as error:
+    raise_missing_extra(error, "The Dagster app (naas_abi_core.apps.dagster)")
 
 from naas_abi_core.apps.dagster.DatasetCompaction import dataset_compaction_definitions
 from naas_abi_core.engine.Engine import Engine
@@ -11,7 +20,9 @@ engine.load()
 
 all_definitions: list[Definitions] = []
 
-if engine.services.dataset_available():
+# In NATS mode with jobs enabled, the engine hosts dataset maintenance itself
+# (DatasetMaintenanceJobs); scheduling it here too would run it twice.
+if engine.services.dataset_available() and not engine.hosts_jobs:
     all_definitions.append(dataset_compaction_definitions(engine.services.dataset))
 
 for module in engine.modules.values():

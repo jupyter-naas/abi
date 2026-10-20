@@ -83,3 +83,48 @@ def test_oxigraph_embedded_creates_missing_parent_directories(tmp_path):
     )
 
     assert store_path.exists()
+
+
+def test_streams_iterate_pyoxigraph_results_lazily(tmp_path, monkeypatch):
+    from naas_abi_core.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__OxigraphEmbedded import (
+        TripleStoreService__SecondaryAdaptor__OxigraphEmbedded as Embedded,
+    )
+    from rdflib import BNode, Graph, Literal, URIRef
+    from rdflib.namespace import XSD
+
+    adapter = Embedded(str(tmp_path / "store"))
+    graph_name = URIRef("http://test.example.org/stream/embedded")
+    ex = "http://test.example.org/"
+    g = Graph()
+    g.add((URIRef(ex + "a"), URIRef(ex + "label"), Literal("plain")))
+    g.add((URIRef(ex + "a"), URIRef(ex + "label"), Literal("anglais", lang="en")))
+    g.add(
+        (
+            URIRef(ex + "a"),
+            URIRef(ex + "when"),
+            Literal("2026-10-03", datatype=XSD.date),
+        )
+    )
+    adapter.insert(g, graph_name)
+    monkeypatch.setattr(
+        adapter,
+        "query",
+        lambda *a: (_ for _ in ()).throw(AssertionError("materialized")),
+    )
+
+    with adapter.query_stream(
+        f"SELECT ?o ?missing WHERE {{ GRAPH <{graph_name}> {{ ?s ?p ?o }} }}"
+    ) as result:
+        assert result.vars == ["o", "missing"]
+        assert {row["o"] for row in result.rows} == set(g.objects())
+    with adapter.export(graph_name) as triples:
+        assert set(triples) == set(g)
+    with adapter.query_stream(
+        f"ASK {{ GRAPH <{graph_name}> {{ ?s ?p 'plain' }} }}"
+    ) as asked:
+        assert asked.ask_answer is True
+    with adapter.query_stream(
+        "CONSTRUCT { _:b <http://test.example.org/p> 1 } WHERE {}"
+    ) as built:
+        ((subject, _, value),) = list(built.triples)
+        assert isinstance(subject, BNode) and value == Literal(1)

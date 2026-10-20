@@ -1,7 +1,7 @@
 # EngineConfiguration_ObjectStorageService
 
 ## What it is
-Pydantic-based configuration models and loaders for wiring an `ObjectStorageService` with a selectable object storage adapter (`fs`, `s3`, `naas`, or `custom`).
+Pydantic configuration models for wiring an `ObjectStorageService` with a selectable object storage adapter (`fs`, `s3`, `naas`, `r2`, `nats_rpc`, or `custom`), plus loader helpers to instantiate the configured adapter.
 
 ## Public API
 
@@ -9,8 +9,9 @@ Pydantic-based configuration models and loaders for wiring an `ObjectStorageServ
 
 - `ObjectStorageAdapterFSConfiguration`
   - Filesystem adapter config.
-  - Fields: `base_path: str`
-  - `extra="forbid"` (unknown fields are rejected)
+  - Fields:
+    - `base_path: str`
+  - `extra="forbid"` (unknown fields rejected)
 
 - `ObjectStorageAdapterS3Configuration`
   - S3-compatible adapter config.
@@ -24,7 +25,7 @@ Pydantic-based configuration models and loaders for wiring an `ObjectStorageServ
   - `extra="forbid"`
 
 - `ObjectStorageAdapterNaasConfiguration`
-  - Naas object storage adapter config.
+  - Naas adapter config.
   - Fields:
     - `naas_api_key: str`
     - `workspace_id: str`
@@ -32,34 +33,62 @@ Pydantic-based configuration models and loaders for wiring an `ObjectStorageServ
     - `base_prefix: str = ""`
   - `extra="forbid"`
 
-- `ObjectStorageAdapterConfiguration` (extends `GenericLoader`)
-  - Selects which adapter to instantiate and validates its config.
+- `ObjectStorageAdapterR2Configuration`
+  - Cloudflare R2 adapter config.
   - Fields:
-    - `adapter: Literal["fs", "s3", "naas", "custom"]`
-    - `config: ObjectStorageAdapterFSConfiguration | ObjectStorageAdapterS3Configuration | ObjectStorageAdapterNaasConfiguration | None = None`
+    - `account_id: str`
+    - `bucket_name: str`
+    - `access_key_id: str`
+    - `secret_access_key: str`
+    - `base_prefix: str = ""`
+  - `extra="forbid"`
+
+- `ObjectStorageAdapterNATSConfiguration`
+  - NATS RPC client adapter config (talks to a remote object storage service over NATS request/reply).
+  - Fields:
+    - `nats_url: str = "nats://127.0.0.1:4222"`
+    - `jwt_secret: str`
+    - `service_identity: str = "api"`
+  - `extra="forbid"`
+
+- `ObjectStorageAdapterConfiguration` (extends `GenericLoader`)
+  - Selects an adapter and loads an `IObjectStorageAdapter`.
+  - Fields:
+    - `adapter: Literal["fs", "s3", "naas", "r2", "nats_rpc", "custom"]`
+    - `config: (FS|S3|Naas|R2|NATS)|None = None`
   - Methods:
-    - `validate_adapter() -> Self` (Pydantic model validator)
-      - Requires `config` when `adapter != "custom"`
-      - Validates `config` type/shape against the selected adapter model
+    - `validate_adapter() -> Self` (Pydantic `@model_validator(mode="after")`)
+      - Asserts `config` is present when `adapter != "custom"`.
+      - Validates `config` against the adapter-specific pydantic model via `pydantic_model_validator(...)`.
     - `load() -> IObjectStorageAdapter`
-      - For `fs`, `s3`, `naas`: imports and instantiates the corresponding adapter with `config.model_dump()`
-      - For `custom`: delegates to `GenericLoader.load()`
+      - For `fs`/`s3`/`naas`/`r2`/`nats_rpc`: imports and instantiates the corresponding secondary adapter using `**config.model_dump()`.
+      - For `custom`: delegates to `GenericLoader.load()`.
+    - `local_storage() -> str | None`
+      - Returns a human-readable description of where objects live:
+        - `fs`: `"files under {base_path}"`
+        - `custom`: delegates to `self.custom_local_storage()`
+        - others: `None`
 
 - `ObjectStorageServiceConfiguration`
   - Top-level service configuration.
-  - Fields: `object_storage_adapter: ObjectStorageAdapterConfiguration`
+  - Fields:
+    - `object_storage_adapter: ObjectStorageAdapterConfiguration`
   - Methods:
-    - `load() -> ObjectStorageService`
-      - Builds `ObjectStorageService(adapter=...)` using the configured adapter.
+    - `load() -> ObjectStorageService`: builds `ObjectStorageService(adapter=...)`.
 
 ## Configuration/Dependencies
 
-- Depends on Pydantic v2 features (`BaseModel`, `ConfigDict`, `model_validator`).
-- Adapter-specific implementations are imported at load time:
+- Uses **Pydantic v2**: `BaseModel`, `ConfigDict`, `model_validator`.
+- Depends on:
+  - `GenericLoader`, `config_model` from `naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader`
+  - `pydantic_model_validator` from `naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator`
+  - `ObjectStorageService`, `IObjectStorageAdapter`
+- Adapter implementations are imported at load time:
   - `naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS`
   - `naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterS3`
   - `naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterNaas`
-- `custom` adapter path is handled by `GenericLoader` (not defined in this file).
+  - `naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterR2`
+  - `naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterNATSClient`
 
 ## Usage
 
@@ -78,10 +107,12 @@ cfg = ObjectStorageServiceConfiguration(
 )
 
 service = cfg.load()  # ObjectStorageService with FS adapter
+print(cfg.object_storage_adapter.local_storage())  # "files under storage/datastore"
 ```
 
 ## Caveats
 
-- `config` is required for `adapter` values `fs`, `s3`, and `naas`. Missing it triggers an assertion error.
-- Unknown fields in adapter config models are rejected (`extra="forbid"`).
-- Selecting `adapter="custom"` bypasses the built-in adapter validation/instantiation and relies on `GenericLoader` behavior.
+- `config` is required for all adapters except `custom` (`assert` enforced in both validation and `load()`).
+- All adapter config models set `extra="forbid"`: unknown fields cause validation errors.
+- `adapter="custom"` bypasses built-in instantiation and uses `GenericLoader` behavior (not defined in this file).
+- `local_storage()` only reports a location for `fs` and `custom`; returns `None` for `s3`, `naas`, `r2`, and `nats_rpc`.

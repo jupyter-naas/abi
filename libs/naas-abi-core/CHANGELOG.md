@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+### Upgrade notes (3.0)
+
+- **NATS mode.** A top-level `nats:` block runs the engine on a NATS broker:
+  kernel services on `abi.svc.<service>.v1.*`, the JetStream bus, module jobs,
+  discovery for remote modules, one serving engine per NATS account. Without
+  the block the engine keeps its in-process wiring.
+- **Dagster and RabbitMQ are legacy extras.** `naas-abi-core` no longer
+  installs Dagster and `[all]` leaves out `dagster` and `rabbitmq`: a project
+  without NATS adds `naas-abi-core[all,dagster,rabbitmq]`. Both are removed in
+  the next major. `[all]` now includes `nats` and `otel`.
+- **Agent memory and the activity log** move to the Document Service in NATS
+  mode. Right after the switch, run `agent_memory_migrate` (`{}`, then
+  `{"apply": true}`) and `activity_log_migrate` from the Nexus System app.
+  `agent_memory_prune` runs daily.
+- Custom adapters must implement the ports' new abstract methods.
+- Upgrade `naas-abi-core`, `naas-abi` and `naas-abi-cli` together.
+- Guide: [Migrate from 2.x to 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/migrate-to-3.md).
+  Every change: [Breaking changes in 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/breaking-changes-3.md).
+
 ## v2.44.0 (2026-10-20)
 
 ### Bug Fixes
@@ -13,7 +32,6 @@
 
 - **slides**: Preserve semantic editor contributions
   ([`6f244f6`](https://github.com/jupyter-naas/abi/commit/6f244f6b5165e2fd98850b6c00f3b9cbd1a0057e))
-
 
 ## v2.43.0 (2026-10-14)
 

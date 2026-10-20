@@ -4,6 +4,8 @@
 
 ## What goes here
 
+> Legacy: Dagster serves projects without NATS (no `nats:` block in the config) and will be removed in the next major. It needs the `naas-abi-core[dagster]` extra. A NATS project schedules with module jobs instead.
+
 **Dagster** orchestration units. An orchestration bundles `assets`, `jobs`, `schedules`, and `sensors` into a single `dg.Definitions` and lets the engine run scheduled / triggered work.
 
 Use orchestrations when you need:

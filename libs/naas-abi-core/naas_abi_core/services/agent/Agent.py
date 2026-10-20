@@ -23,6 +23,7 @@ from typing import (
     Union,
     cast,
 )
+from urllib.parse import urlsplit
 
 import pydash as pd
 from langchain_core.language_models import BaseChatModel
@@ -56,7 +57,10 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import MessagesState
 from langgraph.types import Command
-from naas_abi_core.engine.context import get_default_event_service
+from naas_abi_core.engine.context import (
+    get_default_agent_checkpointer,
+    get_default_event_service,
+)
 from naas_abi_core.services.agent.context import (
     DOCUMENTS_RECURSION_LIMIT,
     SLIDES_RECURSION_LIMIT,
@@ -346,9 +350,15 @@ def compact_old_tool_messages(messages: list[AnyMessage]) -> list[AnyMessage]:
 def create_checkpointer() -> BaseCheckpointSaver:
     """Create a checkpointer based on environment configuration.
 
-    Returns a PostgreSQL-backed checkpointer if POSTGRES_URL is set,
-    otherwise returns an in-memory checkpointer.
+    Inside a loaded engine, returns the engine's agent checkpointer (the
+    Document Service, shared by every agent). Outside one, returns a
+    PostgreSQL-backed checkpointer if POSTGRES_URL is set, otherwise an
+    in-memory checkpointer.
     """
+    engine_checkpointer = get_default_agent_checkpointer()
+    if engine_checkpointer is not None:
+        return engine_checkpointer
+
     postgres_url = os.getenv("POSTGRES_URL")
 
     if postgres_url:
@@ -422,16 +432,19 @@ def create_checkpointer() -> BaseCheckpointSaver:
                     "PostgreSQL checkpointer requested but langgraph.checkpoint.postgres not available. Falling back to in-memory."
                 )
             except Exception as e:  # noqa: BLE001
-                error_msg = str(e)
+                # The URL carries the password: log its host only, and take
+                # the URL out of the driver's message (a DSN error echoes it).
+                error_msg = str(e).replace(postgres_url, "[POSTGRES_URL]")
                 if "nodename nor servname provided" in error_msg:
                     logger.error(
-                        f"PostgreSQL connection failed - cannot resolve hostname. Check if PostgreSQL is running and hostname is correct in POSTGRES_URL: {postgres_url}"
+                        "PostgreSQL connection failed - cannot resolve hostname. Check if PostgreSQL is running and hostname is correct in POSTGRES_URL "
+                        f"(host: {urlsplit(postgres_url).hostname})"
                     )
                     logger.error(
                         "Hint: If running outside Docker, use 'localhost' instead of 'postgres' in POSTGRES_URL"
                     )
                 else:
-                    logger.error(f"Failed to initialize PostgreSQL checkpointer: {e}")
+                    logger.error(f"Failed to initialize PostgreSQL checkpointer: {error_msg}")
                 logger.error("Falling back to in-memory checkpointer")
 
         # Fallback to in-memory checkpointer
@@ -772,7 +785,8 @@ class Agent(Expose):
                 Should support tool binding.
             tools (list[Tool]): List of tools to make available to the agent.
             memory (BaseCheckpointSaver, optional): Component to save conversation state.
-                If None, will use PostgreSQL if POSTGRES_URL env var is set, otherwise in-memory.
+                If None, uses the engine's agent checkpointer (Document Service) when an
+                engine is loaded, else PostgreSQL if POSTGRES_URL is set, else in-memory.
         """
         if native_tools is None:
             native_tools = []
@@ -1103,6 +1117,24 @@ class Agent(Expose):
                 state["messages"][::-1], lambda m: isinstance(m, HumanMessage)
             )
 
+    def _path_to(self, name: str, _seen: set[int] | None = None) -> list[Agent] | None:
+        """Sub-agents from a direct one down to the agent ``name``, or None
+        when ``name`` is not in this agent's graph."""
+        seen = _seen if _seen is not None else {id(self)}
+        for agent in self._agents:
+            if id(agent) in seen:
+                continue
+            seen.add(id(agent))
+            if Agent.validate_name(agent.name) == name:
+                return [agent]
+            below = agent._path_to(name, seen)
+            if below is not None:
+                return [agent, *below]
+        return None
+
+    def _in_tree(self, name: str) -> bool:
+        return name == self._name or self._path_to(name) is not None
+
     def current_active_agent(self, state: ABIAgentState) -> Command:
         """Goto the current active agent.
 
@@ -1118,11 +1150,26 @@ class Agent(Expose):
         # of a new HTTP turn, where the agent tree was freshly duplicated with a
         # blank AgentSharedState. This is what makes a prior handoff survive
         # across requests instead of falling back to the supervisor every turn.
+        #
+        # The thread is not always this agent's: Nexus keeps one thread per
+        # conversation when the user switches agents, and every engine agent
+        # shares one checkpointer. Only adopt names from this agent's tree;
+        # routing to another agent's node ends the turn without a model call.
         persisted_active = state.get("current_active_agent")
         if persisted_active is not None and self._state.current_active_agent is None:
-            self._state.set_current_active_agent(persisted_active)
+            if self._in_tree(persisted_active):
+                self._state.set_current_active_agent(persisted_active)
+            else:
+                logger.debug(
+                    f"Ignoring active agent '{persisted_active}' from the thread: "
+                    f"not in '{self._name}' graph"
+                )
         persisted_supervisor = state.get("supervisor_agent")
-        if persisted_supervisor is not None and self._state.supervisor_agent is None:
+        if (
+            persisted_supervisor is not None
+            and self._state.supervisor_agent is None
+            and self._in_tree(persisted_supervisor)
+        ):
             self._state.set_supervisor_agent(persisted_supervisor)
 
         # Log the current active agent
@@ -1180,11 +1227,13 @@ class Agent(Expose):
                 and isinstance(last_human_message.content, str)
                 else ""
             )
-            active_agent = pd.find(
-                self._agents,
-                lambda a: Agent.validate_name(a.name) == active_name,
-            )
-            retain = True
+            path = self._path_to(active_name)
+            active_agent = path[-1] if path else None
+            retain = path is not None
+            if path is None:
+                logger.debug(
+                    f"Active agent '{active_name}' is not in '{self._name}' graph"
+                )
             retain_fn = (
                 getattr(type(active_agent), "retains_active_turn", None)
                 if active_agent is not None
@@ -1200,10 +1249,12 @@ class Agent(Expose):
                         exc_info=True,
                     )
                     retain = True
-            if retain:
+            if retain and path is not None:
                 logger.debug(f"⏩ Continuing conversation with: '{active_name}'")
                 # self._notify_agent_routing(active_name)
-                return Command(goto=active_name)
+                # Go through the direct sub-agent that holds it: a deeper agent
+                # is a node of that sub-agent's graph, not of this one.
+                return Command(goto=path[0].name)
             logger.debug(
                 f"↩️  Releasing sticky agent '{active_name}' back to '{self._name}'"
             )
@@ -2122,8 +2173,10 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             or not hasattr(last_message, "tool_calls")
             or len(last_message.tool_calls) == 0
         ):
+            # Never the message itself: it is the model's answer.
             logger.warning(
-                f"No tool calls found in last message but call_tools was called: {last_message}"
+                "No tool calls found in last message but call_tools was called "
+                f"({type(last_message).__name__}, id {getattr(last_message, 'id', None)})"
             )
             return [Command(goto="__end__", update={"messages": [last_message]})]
 

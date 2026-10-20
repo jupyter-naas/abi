@@ -34,6 +34,7 @@ class TestBuildFeatureFlags:
             "settings": False,
             "code": False,
             "slides": True,
+            "sheets": True,
             "documents": True,
         }
 

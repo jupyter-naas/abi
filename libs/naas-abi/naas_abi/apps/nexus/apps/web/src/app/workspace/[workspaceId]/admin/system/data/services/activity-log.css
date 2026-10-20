@@ -1,0 +1,191 @@
+/* data/services — activity log (request log details) */
+
+.data-activity-log-method {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid currentColor;
+  border-radius: var(--org-border-radius, 0px);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground-hex);
+}
+
+.data-activity-log-method-get {
+  color: #2563EB;
+  background-color: #3B82F614;
+}
+
+.data-activity-log-method-post {
+  color: #059669;
+  background-color: #10B98114;
+}
+
+.data-activity-log-method-put,
+.data-activity-log-method-patch {
+  color: #B45309;
+  background-color: #F59E0B14;
+}
+
+.data-activity-log-method-delete {
+  color: #DC2626;
+  background-color: #EF444414;
+}
+
+.dark .data-activity-log-method-get {
+  color: #93C5FD;
+}
+
+.dark .data-activity-log-method-post {
+  color: #6EE7B7;
+}
+
+.dark .data-activity-log-method-put,
+.dark .data-activity-log-method-patch {
+  color: #FCD34D;
+}
+
+.dark .data-activity-log-method-delete {
+  color: #FCA5A5;
+}
+
+.data-activity-log-status {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.data-activity-log-status-2xx {
+  color: #059669;
+}
+
+.data-activity-log-status-3xx {
+  color: #2563EB;
+}
+
+.data-activity-log-status-4xx {
+  color: #B45309;
+}
+
+.data-activity-log-status-5xx {
+  color: #DC2626;
+}
+
+.dark .data-activity-log-status-2xx {
+  color: #6EE7B7;
+}
+
+.dark .data-activity-log-status-3xx {
+  color: #93C5FD;
+}
+
+.dark .data-activity-log-status-4xx {
+  color: #FCD34D;
+}
+
+.dark .data-activity-log-status-5xx {
+  color: #FCA5A5;
+}
+
+.data-activity-log-slow {
+  color: #B45309;
+}
+
+.dark .data-activity-log-slow {
+  color: #FCD34D;
+}
+
+.data-activity-log-preview {
+  display: flex;
+  flex-direction: column;
+}
+
+.data-activity-log-type {
+  margin: 0 0 var(--space-3);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--font-size-sm);
+}
+
+.data-activity-log-request {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--background-hex);
+}
+
+.data-activity-log-request-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.data-activity-log-path {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--font-size-sm);
+  line-height: 20px;
+  word-break: break-all;
+}
+
+.data-activity-log-query {
+  color: var(--muted-foreground-hex);
+}
+
+.data-activity-log-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.data-activity-log-stats dt {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-foreground-hex);
+}
+
+.data-activity-log-stats dd {
+  margin: 3px 0 0;
+  font-size: var(--font-size-sm);
+}
+
+.data-activity-log-agent {
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-foreground-hex);
+}
+
+.data-activity-log-correlation {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--font-size-xs);
+}
+
+.data-activity-log-correlation .data-mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-activity-log-ctype {
+  margin-left: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-transform: none;
+  letter-spacing: 0;
+}

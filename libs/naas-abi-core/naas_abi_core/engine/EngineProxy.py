@@ -200,6 +200,20 @@ class ServicesProxy:
         return self.__engine.services.coding_environment
 
     @property
+    def document_admin(self) -> DocumentService:
+        """The engine's document root: ``namespaces()`` and ``for_namespace(ns)``.
+
+        Platform administration across module namespaces, for the unlocked proxy
+        (the platform module) only. Module proxies keep their scoped ``document``.
+        """
+        if not self.__unlocked:
+            raise PermissionError(
+                f"Module {self.__module_name} is not the platform module: "
+                "document administration needs the unlocked engine proxy"
+            )
+        return self.__engine.services.document
+
+    @property
     def source_control(self) -> SourceControlService:
         # Platform service used by the Nexus API resolvers — exempt from the
         # per-module dependency check (like ``model_registry``).
@@ -255,6 +269,16 @@ class EngineProxy:
     @property
     def services(self) -> ServicesProxy:
         return self.__services_proxy
+
+    def job_owners(self) -> dict[str, object]:
+        """``Engine.job_owners``: the modules and the kernel job owners, for the
+        unlocked proxy (the platform module's Jobs tab) only."""
+        if not self.__unlocked:
+            raise PermissionError(
+                f"Module {self.__module_name} is not the platform module: "
+                "listing the engine's job owners needs the unlocked engine proxy"
+            )
+        return self.__engine.job_owners()
 
     @property
     def configuration(self):

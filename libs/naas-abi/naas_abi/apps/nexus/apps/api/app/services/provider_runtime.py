@@ -727,8 +727,41 @@ async def complete_chat(
             thread_id=thread_id,
             injection_preamble=injection_preamble,
         )
+    elif config.type == "remote":
+        return await complete_with_remote_agent(
+            messages, config, thread_id=thread_id, injection_preamble=injection_preamble
+        )
     else:
         raise ValueError(f"Unknown provider type: {config.type}")
+
+
+async def complete_with_remote_agent(
+    messages: list[Message],
+    config: ProviderConfig,
+    *,
+    thread_id: str | None,
+    injection_preamble: str | None,
+) -> str:
+    """The streamed answer of an agent published by a remote module, whole:
+    its text chunks joined, its step events left out. Raises when the agent is
+    unavailable or its run fails, as ``complete_with_abi`` does."""
+    from naas_abi.apps.nexus.apps.api.app.services.agents.remote.streaming import (
+        remote_agent_chunks,
+    )
+
+    if not thread_id:
+        raise ValueError("A remote agent needs a conversation (thread_id)")
+    parts: list[str] = []
+    async for chunk in remote_agent_chunks(
+        messages,
+        config,
+        thread_id,
+        user_context_preamble=injection_preamble,
+        invocation_id=None,
+    ):
+        if isinstance(chunk, str):
+            parts.append(chunk)
+    return "".join(parts)
 
 
 async def complete_with_abi(
@@ -1511,6 +1544,39 @@ def _extract_opencode_ui_event(event: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+# Agent.stream_invoke event -> key of the Nexus stream event carrying its data.
+_AGENT_STEP_EVENTS = {
+    "tool_usage": "tool",
+    "tool_response": "output",
+    "call_model": "agent",
+    "agent_routing": "agent",
+}
+
+
+def agent_event_chunk(
+    event_name: str, text: str, *, chat_source: object = None
+) -> str | dict[str, Any] | None:
+    """Map one core ``Agent.stream_invoke`` event to a Nexus stream chunk.
+
+    ``ai_message`` deltas become text; tool and routing steps become step events.
+    ``message`` (the closing replay), ``done`` and empty events map to None: the
+    caller decides whether the replay is needed. Shared by in-process and remote
+    agents, which emit the same vocabulary. ``chat_source`` is the event's flag:
+    a ``tool_response`` whose tool opted out of chat sources keeps ``False``.
+    """
+    if not text.strip():
+        return None
+    if event_name == "ai_message":
+        return text
+    key = _AGENT_STEP_EVENTS.get(event_name)
+    if not key:
+        return None
+    chunk: dict[str, Any] = {"event": event_name, key: text}
+    if event_name == "tool_response" and chat_source is False:
+        chunk["chat_source"] = False
+    return chunk
+
+
 async def stream_with_abi_inprocess(
     messages: list[Message],
     config: ProviderConfig,
@@ -1665,22 +1731,15 @@ async def stream_with_abi_inprocess(
             # Prefer live ai_message deltas. The closing "message" replay is the
             # only text when the graph errors before an assistant token (for
             # example a recursion-limit stop).
-            if event_name == "ai_message" and text.strip():
-                emitted = True
-                yield text
-            elif event_name == "message" and text.strip():
+            if event_name == "message" and text.strip():
                 final_replay.append(text.strip())
-            elif event_name == "tool_usage" and text.strip():
-                yield {"event": "tool_usage", "tool": text}
-            elif event_name == "tool_response" and text.strip():
-                tool_response = {"event": "tool_response", "output": text}
-                if event.get("chat_source") is False:
-                    tool_response["chat_source"] = False
-                yield tool_response
-            elif event_name == "call_model" and text.strip():
-                yield {"event": "call_model", "agent": text}
-            elif event_name == "agent_routing" and text.strip():
-                yield {"event": "agent_routing", "agent": text}
+                continue
+            chunk = agent_event_chunk(
+                event_name, text, chat_source=event.get("chat_source")
+            )
+            if chunk is not None:
+                emitted = emitted or isinstance(chunk, str)
+                yield chunk
         elif isinstance(event, str) and event.strip():
             emitted = True
             yield event

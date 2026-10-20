@@ -3348,14 +3348,10 @@ wheels = [
 
 [[package]]
 name = "naas-abi-core"
-version = "2.43.0"
+version = "2.44.0"
 source = { editable = "../naas-abi-core" }
 dependencies = [
     { name = "click" },
-    { name = "dagster" },
-    { name = "dagster-aws" },
-    { name = "dagster-postgres" },
-    { name = "dagster-webserver" },
     { name = "docker" },
     { name = "dotenv" },
     { name = "duckdb" },
@@ -3386,17 +3382,23 @@ dependencies = [
     { name = "types-tqdm" },
 ]
 
+[package.optional-dependencies]
+dagster = [
+    { name = "dagster" },
+    { name = "dagster-aws" },
+    { name = "dagster-postgres" },
+    { name = "dagster-webserver" },
+    { name = "sqlalchemy" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "boto3", marker = "extra == 'aws'", specifier = ">=1.38.19,<2" },
     { name = "boto3-stubs", marker = "extra == 'aws'", specifier = ">=1.42.19" },
     { name = "click", specifier = ">=8.1.1,<8.2" },
-    { name = "dagster", specifier = ">=1.11.12" },
     { name = "dagster", marker = "extra == 'dagster'", specifier = ">=1.12.13" },
-    { name = "dagster-aws", specifier = ">=0.27.12" },
-    { name = "dagster-postgres", specifier = ">=0.27.12" },
+    { name = "dagster-aws", marker = "extra == 'dagster'", specifier = ">=0.28.14" },
     { name = "dagster-postgres", marker = "extra == 'dagster'", specifier = ">=0.28.14" },
-    { name = "dagster-webserver", specifier = ">=1.11.12" },
     { name = "dagster-webserver", marker = "extra == 'dagster'", specifier = ">=1.12.14" },
     { name = "docker", specifier = ">=7.1.0" },
     { name = "dotenv", specifier = ">=0.9.9" },
@@ -3410,14 +3412,18 @@ requires-dist = [
     { name = "loguru", specifier = ">=0.7.2,<0.8" },
     { name = "msal", marker = "extra == 'microsoft'", specifier = ">=1.37.0" },
     { name = "naas-abi-core", extras = ["aws"], marker = "extra == 'all'" },
-    { name = "naas-abi-core", extras = ["dagster"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["microsoft"], marker = "extra == 'all'" },
+    { name = "naas-abi-core", extras = ["nats"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["openrouter"], marker = "extra == 'all'" },
+    { name = "naas-abi-core", extras = ["otel"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["qdrant"], marker = "extra == 'all'" },
-    { name = "naas-abi-core", extras = ["rabbitmq"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["redis"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["sqlite-vec"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["ssh"], marker = "extra == 'all'" },
+    { name = "naas-abi-proto", marker = "extra == 'nats'", editable = "../naas-abi-proto" },
+    { name = "naas-abi-sdk", extras = ["models"], marker = "extra == 'nats'", editable = "../naas-abi-sdk" },
+    { name = "naas-abi-sdk", extras = ["otel"], marker = "extra == 'otel'", editable = "../naas-abi-sdk" },
+    { name = "nats-py", marker = "extra == 'nats'", specifier = ">=2.16.0" },
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "pandas-stubs", specifier = ">=2.3.2.250926" },
     { name = "paramiko", marker = "extra == 'ssh'", specifier = ">=3.5.1,<4.0.0" },
@@ -3427,6 +3433,7 @@ requires-dist = [
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.0.0" },
     { name = "pydantic", specifier = ">=2.11.5" },
     { name = "pydash", specifier = ">=8.0.5" },
+    { name = "pyjwt", marker = "extra == 'nats'", specifier = ">=2.11.0" },
     { name = "pyoxigraph", specifier = ">=0.5.5" },
     { name = "pytz", specifier = ">=2025.2" },
     { name = "pyyaml", specifier = ">=6.0.3" },
@@ -3436,6 +3443,7 @@ requires-dist = [
     { name = "rich", specifier = ">=13.9.4,<14" },
     { name = "spacy", specifier = ">=3.8.7" },
     { name = "sparqlwrapper", specifier = ">=2.0.0" },
+    { name = "sqlalchemy", marker = "extra == 'dagster'", specifier = "<2.1" },
     { name = "sqlite-vec", marker = "extra == 'sqlite-vec'", specifier = ">=0.1.9" },
     { name = "sse-starlette", specifier = ">=2.1.3,<3" },
     { name = "sshtunnel", marker = "extra == 'ssh'", specifier = ">=0.4.0" },
@@ -3444,7 +3452,7 @@ requires-dist = [
     { name = "types-pyyaml", specifier = ">=6.0.12.20250915" },
     { name = "types-tqdm", specifier = ">=4.67.0.20250809" },
 ]
-provides-extras = ["ssh", "aws", "qdrant", "sqlite-vec", "all", "openrouter", "dagster", "redis", "rabbitmq", "microsoft"]
+provides-extras = ["ssh", "aws", "qdrant", "sqlite-vec", "all", "openrouter", "dagster", "redis", "rabbitmq", "nats", "microsoft", "otel"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -3453,6 +3461,7 @@ dev = [
     { name = "pytest", specifier = ">=9.0.1" },
     { name = "python-semantic-release", specifier = ">=9.21.0" },
     { name = "testcontainers", specifier = ">=4.13.2" },
+    { name = "types-protobuf" },
 ]
 
 [[package]]
@@ -3561,6 +3570,7 @@ domains-ontology-engineer = [
 [package.dev-dependencies]
 dev = [
     { name = "mypy" },
+    { name = "naas-abi-core", extra = ["dagster"] },
     { name = "pytest" },
     { name = "python-semantic-release" },
 ]
@@ -3613,6 +3623,7 @@ provides-extras = ["ai-bedrock", "ai-chatgpt", "ai-claude", "ai-deepseek", "ai-g
 [package.metadata.requires-dev]
 dev = [
     { name = "mypy", specifier = ">=1.19.0" },
+    { name = "naas-abi-core", extras = ["dagster"], editable = "../naas-abi-core" },
     { name = "pytest", specifier = ">=9.0.1" },
     { name = "python-semantic-release", specifier = ">=9.21.0" },
 ]

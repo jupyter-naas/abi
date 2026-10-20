@@ -1,0 +1,17 @@
+# Keep secrets, caches and local state out of the build context (they would
+# reach the builder, and maybe the image).
+.git
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+.venv
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+.ruff_cache
+.mypy_cache
+*.egg-info
+dist
+build
+storage/

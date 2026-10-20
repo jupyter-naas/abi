@@ -571,6 +571,8 @@ class Settings(BaseSettings):
     apps_submit_web_base: str = "https://github.com"
     # Lifetime of an /app-preview/ token (the editor re-mints on reload).
     app_preview_token_expire_minutes: int = Field(default=60, ge=1, le=24 * 60)
+    # Lifetime of an /app-remote/ grant (a remote module's app, reopened to renew).
+    remote_app_grant_expire_minutes: int = Field(default=8 * 60, ge=1, le=24 * 60)
     magic_link_expire_minutes: int = 15
     magic_link_max_active: int = 5
     magic_link_path: str = "/auth/magic-link"

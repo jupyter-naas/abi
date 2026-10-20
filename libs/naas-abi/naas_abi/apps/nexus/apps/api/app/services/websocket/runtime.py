@@ -19,6 +19,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
 )
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
+from naas_abi.apps.nexus.apps.api.app.services.auth.service import is_session_token
 from naas_abi.apps.nexus.apps.api.app.services.refresh_token import is_access_token_revoked
 
 logger = logging.getLogger(__name__)
@@ -71,6 +72,9 @@ async def connect(sid, environ, auth):
     payload = decode_token(token)
     if not payload:
         logger.warning("[WS] Invalid token; rejecting connection")
+        return False
+    if not is_session_token(payload):
+        logger.warning("[WS] Scoped token; rejecting connection")
         return False
 
     user_id = payload.get("sub")

@@ -2,7 +2,7 @@
 
 Request for Comments: written proposals for significant changes before a decision is made.
 
-Write an RFC when you're proposing a new architecture, a breaking change, or a major capability and want to gather feedback first. Once the discussion settles, the decision gets recorded as an ADR in `../site/docs/updates/`.
+Write an RFC when you're proposing a new architecture, a breaking change, or a major capability and want to gather feedback first. Once the discussion settles, the decision gets recorded as an ADR in `../adr/`.
 
 ## Naming
 

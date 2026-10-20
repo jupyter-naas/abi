@@ -1,67 +1,86 @@
 # NEXUS ORM Models (`models.py`)
 
 ## What it is
-- A set of **SQLAlchemy 2.0 declarative ORM models** representing NEXUS database tables.
-- Provides table schemas, constraints, and relationships to replace raw SQL usage.
-- Includes a small helper (`_utcnow`) for consistent timestamp defaults.
+- SQLAlchemy declarative ORM models for NEXUS API database tables.
+- Defines table schemas (columns, constraints) and ORM relationships.
+- Provides a small timestamp helper for consistent UTC defaults.
 
 ## Public API
+
 ### Helper
 - `def _utcnow() -> datetime`
-  - Returns current UTC time as a **naive** `datetime` (`tzinfo=None`), used as default for `created_at`/`updated_at`.
+  - Returns the current UTC time as a **naive** `datetime` (timezone removed) for `created_at`/`updated_at` defaults.
 
-### ORM Models (tables)
+### ORM models (tables)
 - `OrganizationModel` (`organizations`)
-  - Organization identity, ownership, branding/login configuration, and relationships to members/domains/workspaces.
+  - Organization identity, branding/login configuration, timestamps, and relations to owner/members/domains/workspaces.
 - `OrganizationMemberModel` (`organization_members`)
-  - Membership join table between organizations and users; unique per (`organization_id`, `user_id`).
+  - Join table between organizations and users; unique `(organization_id, user_id)`.
 - `OrganizationDomainModel` (`organization_domains`)
-  - Domain attached to an organization, with verification fields; domain is globally unique.
+  - Domain bound to an organization; `domain` is globally unique; verification fields.
 - `UserModel` (`users`)
-  - User identity and auth fields; relationships to owned orgs/workspaces, memberships, conversations, and tokens.
+  - User identity/auth fields; relations to owned orgs/workspaces, memberships, conversations, and token tables.
 - `PasswordResetTokenModel` (`password_reset_tokens`)
-  - Password reset token lifecycle (token, expiry, used flag) linked to a user.
+  - Password reset token record linked to a user (`token` unique).
 - `MagicLinkTokenModel` (`magic_link_tokens`)
-  - Magic-link token lifecycle (token, expiry, used flag) linked to a user.
+  - Magic-link token record linked to a user (`token` unique); OTP tracking fields.
 - `WorkspaceModel` (`workspaces`)
-  - Workspace identity, ownership, optional organization linkage, theming fields, and related resources.
+  - Workspace identity, theming, drive feature flags, and relations to members/conversations/graph/secrets/servers.
+- `CodingEnvironmentModel` (`coding_environments`)
+  - Records binding between a Coder workspace and repo/label plus optional sidecar connection fields.
 - `ABIServerModel` (`abi_servers`)
-  - External ABI server configuration per workspace; unique per (`workspace_id`, `endpoint`).
+  - External ABI server configuration per workspace; unique `(workspace_id, endpoint)`.
 - `InferenceServerModel` (`inference_servers`)
   - Generic inference server configuration per workspace (type, endpoint, optional paths).
 - `WorkspaceMemberModel` (`workspace_members`)
-  - Membership join table between workspaces and users; unique per (`workspace_id`, `user_id`).
+  - Join table between workspaces and users; unique `(workspace_id, user_id)`.
 - `ConversationModel` (`conversations`)
-  - Chat conversation within a workspace; ordered relationship to messages.
+  - Conversation within a workspace; includes flags (pinned/archived) and ordered `messages` relationship.
 - `MessageModel` (`messages`)
-  - Chat message content and role; `metadata_` stored in DB column named `metadata`.
+  - Message within a conversation; `metadata_` attribute is stored in DB column named `"metadata"`.
 - `ChatIngestionJobModel` (`chat_ingestion_jobs`)
-  - Tracks ingestion jobs for conversations (source path/type, embedding config, status/progress, timings).
+  - Tracks ingestion jobs for conversations (source, embedding config, status/progress, timings).
 - `OntologyModel` (`ontologies`)
-  - Stores ontology schema (JSON stored as text) per workspace.
+  - Ontology per workspace; `schema_` stored in DB column `"schema"` as text.
+- `OntologyIconModel` (`ontology_icons`)
+  - Composite primary key `(workspace_id, target_key)`; stores icon assignment and audit fields.
 - `GraphNodeModel` (`graph_nodes`)
-  - Graph nodes per workspace with typed label and JSON properties; relationships to edges.
+  - Graph nodes per workspace; JSON-like `properties` stored as text; relationships to edges as source/target.
+- `GraphViewModel` (`graph_views`)
+  - Stores a saved graph view definition/state per workspace with optional creator linkage.
 - `GraphEdgeModel` (`graph_edges`)
-  - Graph edges per workspace linking source/target nodes; JSON properties.
+  - Graph edges per workspace connecting nodes; JSON-like `properties` stored as text.
 - `ApiKeyModel` (`api_keys`)
-  - API key records (hash/prefix, optional workspace scope).
+  - API key record (hash/prefix), scoped optionally to a workspace; includes string fields `last_used_at`, `expires_at`.
 - `ProviderConfigModel` (`provider_configs`)
-  - Provider/model configuration per workspace; `config` stored as JSON text.
+  - Provider/model config per workspace; `config` stored as text (intended JSON).
 - `AgentConfigModel` (`agent_configs`)
-  - Agent configuration per workspace (class path, prompts, provider linkage, enable/default flags).
+  - Agent configuration per workspace; notes a partial unique index on `(workspace_id, class_name)` created via migration.
+- `SkillModel` (`skills`)
+  - User-created reusable prompt skills; includes scope (`user|workspace|organization`) and ordering field `last_used_at`.
+- `OrganizationRoleFeaturesModel` (`organization_role_features`)
+  - Per-organization role baseline overlay stored as JSON text; primary key `organization_id`.
+- `AppConfigModel` (`app_configs`)
+  - Per-workspace marketplace app enablement; unique `(workspace_id, app_id)`.
 - `SecretModel` (`secrets`)
-  - Encrypted secret storage per workspace; unique per (`workspace_id`, `key`).
+  - Encrypted secret storage per workspace; unique `(workspace_id, key)`; relationship to workspace.
+- `ModelCatalogRecordModel` (`model_catalog`)
+  - Persistent display metadata for marketplace AI models, including “source_*” columns and `overridden_fields` JSON text.
+- `WorkspaceResourcePolicyModel` (`workspace_resource_policies`)
+  - Composite primary key `(workspace_id, resource_kind)`; policy stored as text; revision/audit fields.
+- `SearchTopicModel` (`search_topics`)
+  - Composite primary key `(workspace_id, topic_id)`; topic definition stored as text (intended JSON).
+- `SearchSettingsModel` (`search_settings`)
+  - Primary key `workspace_id`; settings stored as text (intended JSON).
 
 ## Configuration/Dependencies
 - Depends on:
   - `naas_abi.apps.nexus.apps.api.app.core.database.Base` (SQLAlchemy declarative base).
   - `naas_abi.apps.nexus.apps.api.app.core.datetime_compat.UTC` (timezone used by `_utcnow`).
-  - SQLAlchemy: `Column`, types (`String`, `Text`, `Integer`, `Boolean`, `DateTime`), `ForeignKey`, `UniqueConstraint`, and ORM `relationship`.
-- Timestamps:
-  - Many models use `DateTime(timezone=False)` with defaults/onupdate set to `_utcnow`.
+  - SQLAlchemy: `Column`, `ForeignKey`, `UniqueConstraint`, `relationship`, and core column types (`String`, `Text`, `Integer`, `Boolean`, `DateTime`).
 
 ## Usage
-Minimal example creating a user, an organization, a workspace, a conversation, and a message:
+Minimal in-memory SQLite example (create tables, insert a user/org/workspace/conversation/message):
 
 ```python
 from sqlalchemy import create_engine
@@ -69,8 +88,7 @@ from sqlalchemy.orm import Session
 
 from naas_abi.apps.nexus.apps.api.app.core.database import Base
 from naas_abi.apps.nexus.apps.api.app.models import (
-    UserModel, OrganizationModel, WorkspaceModel,
-    ConversationModel, MessageModel,
+    UserModel, OrganizationModel, WorkspaceModel, ConversationModel, MessageModel
 )
 
 engine = create_engine("sqlite:///:memory:", future=True)
@@ -88,6 +106,7 @@ with Session(engine) as session:
 ```
 
 ## Caveats
-- `_utcnow()` returns a **naive** datetime (UTC converted then `tzinfo` removed); DB columns are declared with `timezone=False`.
-- Several fields intended to hold JSON are stored as `Text` without validation (e.g., `MessageModel.metadata_`, `OntologyModel.schema_`, `ProviderConfigModel.config`, `GraphNodeModel.properties`, `GraphEdgeModel.properties`).
-- `MessageModel.metadata_` maps to a database column named `"metadata"`; attribute name is `metadata_` to avoid conflicts.
+- `_utcnow()` returns a **naive** `datetime` (UTC converted then `tzinfo` removed); `DateTime(timezone=False)` is used throughout.
+- Several fields intended to contain JSON are stored as `Text` with no schema enforcement (e.g., `MessageModel.metadata_`, `OntologyModel.schema_`, `GraphNodeModel.properties`, `ProviderConfigModel.config`, `OrganizationRoleFeaturesModel.role_baseline`).
+- `MessageModel.metadata_` maps to a database column named `"metadata"`; use the attribute name `metadata_` in Python to avoid reserved-name conflicts.
+- `AgentConfigModel` relies on a **partial unique index** declared in a migration (not expressible portably in the model definition).

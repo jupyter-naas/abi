@@ -32,7 +32,7 @@ const NODES = [
   },
   {
     id: 'pipelines',
-    label: 'Pipelines & Workflows\nDagster · event-driven · scheduled',
+    label: 'Pipelines & Workflows\nmodule jobs · event-driven · scheduled',
     x: 300, y: 160,
     color: C('#dcfce7', '#22c55e'),
   },

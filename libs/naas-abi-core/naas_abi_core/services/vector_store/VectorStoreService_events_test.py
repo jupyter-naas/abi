@@ -8,7 +8,13 @@ from typing import Any
 import numpy as np
 import pytest
 
-from .IVectorStorePort import IVectorStorePort, SearchResult, VectorDocument
+from .IVectorStorePort import (
+    CollectionInfo,
+    IVectorStorePort,
+    SearchResult,
+    VectorDocument,
+    VectorPage,
+)
 from .ontologies.modules.VectorStoreEventOntology import (
     CollectionDeleted,
     CollectionEnsured,
@@ -100,6 +106,19 @@ class _MemoryAdapter(IVectorStorePort):
 
     def count_vectors(self, collection_name: str) -> int:
         return len(self.collections.get(collection_name, {}))
+
+    def list_vectors(
+        self,
+        collection_name: str,
+        limit: int = 100,
+        cursor: str | None = None,
+        include_vectors: bool = False,
+    ) -> VectorPage:
+        return VectorPage(list(self.collections.get(collection_name, {}).values()))
+
+    def get_collection_info(self, collection_name: str) -> CollectionInfo:
+        size = len(self.collections.get(collection_name, {}))
+        return CollectionInfo(collection_name, None, None, size)
 
     def close(self) -> None:
         pass

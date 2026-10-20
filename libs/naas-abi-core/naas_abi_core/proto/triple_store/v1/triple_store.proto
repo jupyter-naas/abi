@@ -1,0 +1,2 @@
+syntax = "proto3";
+import public "naas_abi_proto/triple_store/v1/triple_store.proto";

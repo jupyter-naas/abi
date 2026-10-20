@@ -21,6 +21,7 @@ from collections.abc import Iterable
 from typing import Any
 from urllib.parse import parse_qsl
 
+from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import redact_grant_path
 from naas_abi_core.services.activity_log.ActivityLogPort import ActivityEvent
 from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogService
 from starlette.datastructures import Headers
@@ -50,7 +51,11 @@ SENSITIVE_KEYS: frozenset[str] = frozenset(
 REDACTED = "[REDACTED]"
 
 DEFAULT_MAX_BODY_BYTES = 64 * 1024  # 64 KB
-DEFAULT_SKIP_BODY_PATH_PREFIXES: tuple[str, ...] = ("/api/auth/",)
+# The System app's data endpoints carry raw service values (secrets, objects).
+DEFAULT_SKIP_BODY_PATH_PREFIXES: tuple[str, ...] = (
+    "/api/auth/",
+    "/api/admin/system/resources/",
+)
 
 
 def _redact(value: Any) -> Any:
@@ -272,7 +277,8 @@ class HttpActivityLogMiddleware:
 
         attrs: dict[str, Any] = {
             "method": scope.get("method"),
-            "path": scope.get("path"),
+            # A remote app's path holds its grant, a bearer credential.
+            "path": redact_grant_path(scope.get("path") or ""),
             "status_code": status_code,
             "duration_ms": duration_ms,
             "ip": client_ip,

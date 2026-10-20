@@ -24,11 +24,17 @@ class DotenvSecretConfiguration(BaseModel):
       - adapter: "dotenv"
         config:
           path: ".env"
+          # A file another process owns: read, never written.
+          read_only: false
+          # Read the process environment before the file.
+          environment_first: false
     """
 
     model_config = ConfigDict(extra="forbid")
 
     path: str = ".env"
+    read_only: bool = False
+    environment_first: bool = False
 
 
 class NaasSecretConfiguration(BaseModel):
@@ -70,11 +76,42 @@ class Base64SecretConfiguration(BaseModel):
         return Base64Secret(self.secret_adapter.load(), self.base64_secret_key)
 
 
+class SecretAdapterNATSConfiguration(BaseModel):
+    """Secret adapter NATS RPC client configuration.
+
+    Talks to a remote ``SecretPrimaryAdapterNATS`` over NATS request/reply
+    -- see docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
+    (Stage 1) and naas_abi_core/proto/secret/v1/secret.proto.
+
+    Security note: Stage 1's shared-JWT auth has no per-caller
+    authorization -- anyone holding a valid service token can read every
+    secret the remote process exposes. Accepted as a known, temporary
+    Stage 1 gap, not an oversight -- revisit once Stage 2 per-caller
+    authorization exists.
+
+    Plugs into the existing multi-adapter fan-out exactly like dotenv/naas/
+    base64 already do -- add it as one more entry in secret_adapters, not
+    a top-level swap:
+
+    secret_adapters:
+      - adapter: "nats_rpc"
+        config:
+          nats_url: "nats://127.0.0.1:4222"
+          jwt_secret: "{{ secret.NATS_SERVICE_JWT_SECRET }}"
+          service_identity: "api"
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    nats_url: str = "nats://127.0.0.1:4222"
+    jwt_secret: str
+    service_identity: str = "api"
+
+
 class SecretAdapterConfiguration(GenericLoader):
-    adapter: Literal["dotenv", "naas", "base64", "custom"]
+    adapter: Literal["dotenv", "naas", "base64", "nats_rpc", "custom"]
     config: (
         DotenvSecretConfiguration | NaasSecretConfiguration | Base64SecretConfiguration
-        | None
+        | SecretAdapterNATSConfiguration | None
     ) = None
 
     @model_validator(mode="after")
@@ -100,6 +137,12 @@ class SecretAdapterConfiguration(GenericLoader):
                 NaasSecretConfiguration,
                 self.config,
                 "Invalid configuration for services.secret.secret_adapters 'naas' adapter",
+            )
+        if self.adapter == "nats_rpc":
+            pydantic_model_validator(
+                SecretAdapterNATSConfiguration,
+                self.config,
+                "Invalid configuration for services.secret.secret_adapters 'nats_rpc' adapter",
             )
         return self
 
@@ -134,6 +177,13 @@ class SecretAdapterConfiguration(GenericLoader):
                 raise ValueError(f"Unknown adapter: {self.adapter}")
         else:
             return super().load()
+
+    def local_storage(self) -> str | None:
+        """Secrets are deployment configuration, the same for every engine of a
+        deploy (single-serving-engine ADR)."""
+        if self.adapter == "custom":
+            return self.custom_local_storage()
+        return None  # dotenv, naas, base64; nats_rpc is another engine's
 
 
 class SecretServiceConfiguration(BaseModel):

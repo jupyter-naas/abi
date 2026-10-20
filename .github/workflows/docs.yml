@@ -1,72 +1,57 @@
-name: Deploy Docs to Cloudflare Pages
+name: Docs site
+
+# Builds the Docusaurus site (docs/site) on every change to it: broken links
+# fail the build, and so does a route of the pre-split site (the User guide and
+# Developer guide split) that has neither a page nor a redirect. Publishing is not this workflow's: the Cloudflare
+# Pages project `abi-docs` builds the site from the repository itself, `main` to
+# abi-docs-76c.pages.dev and a preview per branch. docs.naas.ai is served by
+# another site.
 
 on:
   push:
     branches: [main]
     paths:
-      - 'docs/**'
+      - 'docs/site/**'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - 'docs/site/**'
+      - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 concurrency:
-  group: docs-deploy
+  group: docs-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    if: github.repository == 'jupyter-naas/abi'
     permissions:
       contents: read
-      deployments: write
 
     steps:
       - name: Checkout ABI
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Node 22
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: docs/site/package-lock.json
 
-      - name: Clone Quartz v4
-        run: git clone https://github.com/jackyzha0/quartz.git quartz-build --depth 1
-
-      - name: Install Quartz dependencies
-        working-directory: quartz-build
+      - name: Install dependencies
+        working-directory: docs/site
         run: npm ci
 
-      - name: Copy ABI docs into Quartz content
-        run: |
-          cp -r docs/. quartz-build/content/
-          rm -rf quartz-build/content/.quartz_conf
-          rm -f quartz-build/content/docker-compose.yaml
+      - name: Check the ADR index lists every ADR
+        working-directory: docs/site
+        run: npm run check:adr-index
 
-      - name: Apply custom Quartz config and styles
-        run: |
-          cp docs/.quartz_conf/quartz.config.ts quartz-build/quartz.config.ts
-          cp docs/.quartz_conf/quartz.layout.ts quartz-build/quartz.layout.ts
-          cp docs/.quartz_conf/custom.scss quartz-build/quartz/styles/custom.scss
-          cp docs/.quartz_conf/favicon.ico quartz-build/quartz/static/favicon.ico
+      - name: Build the site
+        working-directory: docs/site
+        run: npm run build
 
-      - name: Build Quartz
-        working-directory: quartz-build
-        env:
-          BASE_URL: "docs.naas.ai"
-          SITE_TITLE: "naas.ai Docs"
-          SITE_TITLE_SUFFIX: " | naas.ai"
-          DARK_SECONDARY: "#22c55e"
-          DARK_TERTIARY: "#22c55e"
-          DARK_GRAY: "#22c55e"
-          DEFAULT_THEME: "dark"
-        run: npx quartz build
-
-      - name: Deploy to Cloudflare Pages
-        uses: cloudflare/pages-action@v1
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: abi-docs
-          directory: quartz-build/public
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check that every old route still resolves
+        working-directory: docs/site
+        run: npm run check:redirects

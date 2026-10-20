@@ -110,8 +110,13 @@ export const useMapsStore = create<MapsState>()(
           if (!force && get().byWorkspace[workspaceId]) return Promise.resolve();
           // Every component on the page asks at mount: one request per workspace.
           const pending = pendingCatalogs.get(workspaceId);
-          if (pending) return pending;
-          const load = fetchCatalog(workspaceId).finally(() => pendingCatalogs.delete(workspaceId));
+          if (pending && !force) return pending;
+          // A forced load follows a change: the request in flight may predate it,
+          // so fetch again once it settles (fetchCatalog never rejects).
+          const request = pending ? pending.then(() => fetchCatalog(workspaceId)) : fetchCatalog(workspaceId);
+          const load: Promise<void> = request.finally(() => {
+            if (pendingCatalogs.get(workspaceId) === load) pendingCatalogs.delete(workspaceId);
+          });
           pendingCatalogs.set(workspaceId, load);
           return load;
         },

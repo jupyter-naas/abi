@@ -1,38 +1,43 @@
-# `new_integration` (integration scaffold generator)
+# `new_integration`
 
 ## What it is
-- Implements the `naas-abi-cli new integration` command.
-- Creates (if needed) a target directory and copies an “integration” template into it using a `Copier`.
+- Integration scaffold generator used by the `naas-abi-cli new integration` command.
+- Copies an “integration” template into a target directory using `Copier`.
 
 ## Public API
-- `new_integration(integration_name: str, integration_path: str = ".", extra_values: dict = {})`
-  - Normalizes `integration_name` to PascalCase.
-  - Resolves `integration_path` (`"."` becomes current working directory).
-  - Ensures the destination directory exists.
-  - Copies templates from the package’s `cli/new/templates/integration` directory into the destination.
+- `new_integration(integration_name: str, integration_path: str = ".", extra_values: dict | None = None)`
+  - Converts `integration_name` to PascalCase.
+  - Resolves `integration_path`:
+    - `"."` becomes `os.getcwd()`.
+    - Creates the directory if it does not exist.
+  - Copies templates from the package template directory into `integration_path`.
   - Passes template values:
     - `integration_name_pascal`: PascalCase integration name
     - plus any `extra_values` merged in.
 
-- CLI command: `new integration`
-  - Implemented by `_new_integration(integration_name, integration_path=".")`
-  - Delegates to `new_integration(...)`.
+- CLI command function: `_new_integration(integration_name: str, integration_path: str = ".")`
+  - Registered as `new integration` under the `new` click command group.
+  - Calls `refuse_in_remote_module("integration", integration_path)` then delegates to `new_integration(...)`.
 
 ## Configuration/Dependencies
-- Depends on:
-  - `click` (CLI arguments and command registration)
-  - `naas_abi_cli` (used to locate the templates directory)
-  - `naas_abi_cli.cli.utils.Copier.Copier` (template copying)
+- Standard library: `os`
+- External:
+  - `click` (CLI registration/arguments)
+  - `naas_abi_cli` (used to locate installed package path for templates)
+- Internal:
+  - `naas_abi_cli.cli.utils.Copier.Copier` (template copier)
   - `.utils.to_pascal_case` (name normalization)
+  - `.remote_module.refuse_in_remote_module` (CLI guard)
 - Template source directory (computed at runtime):
-  - `<naas_abi_cli package dir>/cli/new/templates/integration`
+  - `<dir_of_naas_abi_cli_package>/cli/new/templates/integration`
 
 ## Usage
+
 ### From Python
 ```python
 from naas_abi_cli.cli.new.integration import new_integration
 
-new_integration("my_integration", "./out_dir")
+new_integration("my_integration", "./out")
 ```
 
 ### From CLI
@@ -41,5 +46,5 @@ naas-abi-cli new integration my_integration .
 ```
 
 ## Caveats
-- `extra_values` has a mutable default (`{}`); avoid relying on mutation across calls.
-- `integration_name` is always converted to PascalCase; exact transformation depends on `to_pascal_case`.
+- `integration_name` is always normalized to PascalCase (behavior depends on `to_pascal_case`).
+- `new_integration()` creates `integration_path` if missing (including nested directories).

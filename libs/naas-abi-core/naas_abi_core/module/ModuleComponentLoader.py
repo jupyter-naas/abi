@@ -10,7 +10,10 @@ import importlib
 import inspect
 import os
 
-from naas_abi_core.module.ModuleUtils import find_class_module_root_path
+from naas_abi_core.module.ModuleUtils import (
+    find_class_module_root_path,
+    module_package,
+)
 from naas_abi_core.utils.Logger import logger
 
 
@@ -32,6 +35,7 @@ def load_subclasses(class_: type, folder: str, base: type) -> list[type]:
     module_root_path = find_class_module_root_path(class_)
     folder_path = module_root_path / folder
     top_package = class_.__module__.split(".")[0]
+    package = module_package(class_)
 
     if not os.path.exists(folder_path):
         return found
@@ -45,18 +49,16 @@ def load_subclasses(class_: type, folder: str, base: type) -> list[type]:
                 continue
 
             if rel_dir == ".":
-                dotted = f"{class_.__module__}.{folder}.{file[:-3]}"
+                dotted = f"{package}.{folder}.{file[:-3]}"
             else:
                 subpackage = rel_dir.replace(os.sep, ".")
-                dotted = f"{class_.__module__}.{folder}.{subpackage}.{file[:-3]}"
+                dotted = f"{package}.{folder}.{subpackage}.{file[:-3]}"
 
             try:
                 imported = importlib.import_module(dotted)
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
-                    "ModuleComponentLoader: failed to import %s: %s; skipping.",
-                    dotted,
-                    exc,
+                    f"ModuleComponentLoader: failed to import {dotted}: {exc!r}; skipping."
                 )
                 continue
 

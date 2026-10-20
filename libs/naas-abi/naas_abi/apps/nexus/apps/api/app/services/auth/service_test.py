@@ -514,6 +514,41 @@ async def test_a_wrong_code_counts_against_every_active_code(monkeypatch) -> Non
     assert charged == {"ml-0", "ml-1", "ml-2"}
 
 
+def test_a_scoped_token_opens_no_api_route(monkeypatch) -> None:
+    """An app-html link token sits in a page URL: it must not act as a session."""
+    from fastapi import Depends, FastAPI
+    from fastapi.testclient import TestClient
+    from naas_abi.apps.nexus.apps.api.app.services.apps.app_html_access import (
+        mint_app_html_access_token,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.auth import service as auth_service
+    from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
+        get_auth_service,
+        get_current_user_required,
+    )
+
+    monkeypatch.setattr(auth_service, "is_access_token_revoked", AsyncMock(return_value=False))
+    adapter = AsyncMock()
+    adapter.get_user_by_id.return_value = AuthUserRecord(
+        id="u-1", email="u@example.com", name="U", hashed_password="x", created_at=datetime.utcnow()
+    )
+    app = FastAPI()
+
+    @app.get("/api/me")
+    async def me(user=Depends(get_current_user_required)) -> dict:
+        return {"id": user.id}
+
+    app.dependency_overrides[get_auth_service] = lambda: AuthService(adapter=adapter)
+    client = TestClient(app)
+    scoped, _ = mint_app_html_access_token(user_id="u-1", path_prefix="/app-html/remote/acme/")
+    session, _ = auth_service.create_access_token({"sub": "u-1"})
+
+    refused = client.get("/api/me", headers={"Authorization": f"Bearer {scoped}"})
+    assert refused.status_code == 401
+    accepted = client.get("/api/me", headers={"Authorization": f"Bearer {session}"})
+    assert accepted.status_code == 200 and accepted.json() == {"id": "u-1"}
+
+
 def _record(user_id: str, *, is_superadmin: bool) -> AuthUserRecord:
     return AuthUserRecord(
         id=user_id,

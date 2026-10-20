@@ -173,7 +173,9 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> t
     expire = datetime.now(UTC) + (
         expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
     )
-    to_encode.update({"exp": expire, "jti": jti})
+    # iat, fractional: a credential issued before the user's latest logout
+    # mints no remote app grant (apps/remote/revocation.py).
+    to_encode.update({"exp": expire, "jti": jti, "iat": datetime.now(UTC).timestamp()})
     token = jwt.encode(to_encode, current_secret_key(), algorithm="HS256")
     return token, jti
 
@@ -184,6 +186,12 @@ def decode_token(token: str) -> dict | None:
         return payload
     except JWTError:
         return None
+
+
+def is_session_token(payload: dict) -> bool:
+    """A user's session token. A scoped one (an ``app-html`` link token) opens
+    only what its scope names, never the API or the WebSocket."""
+    return "scope" not in payload
 
 
 def now_utc_naive() -> datetime:
@@ -292,7 +300,7 @@ class AuthService:
         if not token:
             return None
         payload = decode_token(token)
-        if not payload:
+        if not payload or not is_session_token(payload):
             return None
 
         user_id = payload.get("sub")
@@ -334,6 +342,13 @@ class AuthService:
         return updated_user
 
     async def logout_user(self, user_id: str, token: str | None) -> None:
+        from naas_abi.apps.nexus.apps.api.app.services.apps.remote.revocation import (
+            revoke_remote_app_grants,
+        )
+
+        # Every remote app grant of the user ends, on every device, for as long
+        # as a grant can live (not only as long as this session token).
+        await revoke_remote_app_grants(user_id)
         if not token:
             return
         payload = decode_token(token)

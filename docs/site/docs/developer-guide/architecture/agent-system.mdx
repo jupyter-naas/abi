@@ -1,0 +1,128 @@
+---
+sidebar_position: 7
+title: "The Agent System"
+---
+
+import BrowserOnly from '@docusaurus/BrowserOnly';
+
+# The Agent System
+
+ABI's agent architecture is the capstone of the platform: the layer where the knowledge graph, data plane, and service infrastructure become directly accessible to humans and AI clients. The agent layer is open at every seam: agents are Python classes, tools are SPARQL queries or Python functions, routing is vector similarity over registered intent strings, and every agent is exposed via REST, MCP, and CLI simultaneously.
+
+---
+
+## The core idea
+
+Most AI systems treat data, models, and workflows as separate concerns stitched together with glue code. ABI takes a different approach: **ontologies are the unifying field**.
+
+An ontology is a formal, machine-readable description of the world: what entities exist, how they relate, and what operations can be performed on them. When your data, agents, workflows, and integrations all speak the same ontological language, they become composable by design rather than by accident.
+
+<BrowserOnly fallback={<div style={{height:'420px',border:'1px solid #e2e8f0',borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',color:'#94a3b8'}}>Loading…</div>}>
+  {() => {
+    const CoreIdeaGraph = require('@site/src/components/CoreIdeaGraph').default;
+    return <CoreIdeaGraph />;
+  }}
+</BrowserOnly>
+
+Everything in ABI (agents, pipelines, workflows, integrations) operates on the same shared knowledge graph. There is no ETL to a vector store, no separate "AI layer". The ontology IS the integration layer.
+
+---
+
+## Why an operating system
+
+An OS provides shared primitives that every application uses without reimplementing: memory, I/O, scheduling, inter-process communication.
+
+ABI provides the same for AI:
+
+| OS primitive | ABI equivalent |
+|---|---|
+| File system | Knowledge graph (triple store) |
+| Process model | Agent runtime (LangGraph state machines) |
+| IPC / messaging | NATS: kernel services, the JetStream bus, discovery |
+| Package manager | Module system (installable, versioned capabilities) |
+| Shell / CLI | `abi chat`, MCP server, REST API |
+| Scheduler | Module jobs (JetStream schedules and event triggers) |
+
+You bring the domain. ABI provides the runtime.
+
+---
+
+## The agent layer
+
+Agents are the user-facing interface to the system. Each agent is a LangGraph state machine with:
+
+- A **system prompt** defining its role and behavior
+- A **tool list** (workflows, integrations, or other agents it can invoke)
+- An **intent declaration** controlling how the supervisor routes to it
+- Optional **persistent memory**: the conversation is checkpointed in the engine's Document Service (SQLite or PostgreSQL), so it survives restarts and is shared by replicas
+
+### Intent routing
+
+An **`IntentAgent`** matches each incoming message against its registered intents (a value, a type of `agent`, `tool` or `raw`, and a target) by vector similarity, using the engine's embedding model. A match scores at least `threshold` (0.85 by default); intents scoring within `threshold_neighbor` (0.05) of the best count as similar. The matching intent hands the message to the agent or tool it points to, with the conversation's context.
+
+`AbiAgent` is the root of the built-in agents: an `IntentAgent` that delegates to the specialized agents and tools you enable. An intent carries a scope (`ALL` or `DIRECT`); the agents and tools an `IntentAgent` is given are registered as `DIRECT` intents. How routing came to be scoped is recorded in [Intent Scope Routing](/user-guide/release-notes/intent-scope-agent-routing) (an ADR from 2025, since refined in code).
+
+### Agent composition
+
+Agents can use other agents as tools, enabling delegation hierarchies:
+
+<BrowserOnly fallback={<div style={{height:'460px',border:'1px solid #e2e8f0',borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',color:'#94a3b8'}}>Loading…</div>}>
+  {() => {
+    const AgentGraph = require('@site/src/components/AgentGraph').default;
+    return <AgentGraph />;
+  }}
+</BrowserOnly>
+
+### Built-in agents
+
+`naas-abi` ships these agents in `naas_abi.agents`, among others:
+
+| Agent | Role |
+|---|---|
+| `AbiAgent` | Root agent: routes requests to the others by intent and uses the Nexus admin tools. |
+| `OntologyEngineerAgent` | Designs and extends ontologies using BFO/CCO. |
+| `OntologyAgent`, `KnowledgeGraphAgent` | Work with the ontologies and the knowledge graph. |
+| Feature agents (`FilesAgent`, `DocumentsAgent`, `DatasetsAgent`, `SearchAgent`, `AppsAgent`, `SlidesAgent`, `SheetsAgent`, `SettingsAgent`, `SkillsAgent`, `MarketplaceAgent`, `MapsAgent`, `PlatformServicesAgent`, and others) | One per Nexus feature: they answer questions about the feature and act on it. |
+
+Marketplace modules add agents for AI providers, applications and domains. A [remote module](./remote-modules#agents) can expose agents too.
+
+---
+
+## Model layer
+
+All agents accept a `ChatModel` interface, not a specific provider. Models come from the model registry, which serves what the enabled provider modules register. A generated project enables **OpenRouter**: one API key gives access to every model it routes. Other cloud providers are marketplace modules.
+
+For local or air-gapped deployments, models are served via **Ollama**. The `ai.ollama` module registers a Qwen2.5 3B chat model and the `nomic-embed-text` embedding model (the pair `make ollama-models` pulls); these modules add more:
+
+| Model | Command | Use case |
+|---|---|---|
+| Qwen3 8B | `ollama pull qwen3:8b` | Multilingual, code-capable |
+| DeepSeek R1 8B | `ollama pull deepseek-r1:8b` | Advanced reasoning |
+| Gemma3 4B | `ollama pull gemma3:4b` | Lightweight and fast |
+
+---
+
+## How agents are exposed
+
+Every agent is automatically available on three interfaces without additional configuration:
+
+| Interface | Endpoint |
+|---|---|
+| REST API | `POST /agents/{agent_name}/completion` and `/stream-completion` |
+| MCP tool | Dynamically registered at MCP server startup |
+| CLI | `abi chat <module> <agent>`, for example `abi chat naas_abi AbiAgent` |
+
+The REST endpoints require a bearer token.
+
+---
+
+## Further reading
+
+- [The ABI Stack](the-stack): the packages and how they fit together
+- [Creating an Agent](/user-guide/build/agents/creating-an-agent): step-by-step guide
+- [Agent.New() Pattern](/user-guide/release-notes/agent-class-new-pattern): ADR
+- [Intent Scope Routing](/user-guide/release-notes/intent-scope-agent-routing): ADR
+
+---
+
+→ [Overview](./what-is-abi)

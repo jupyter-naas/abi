@@ -30,13 +30,112 @@ from __future__ import annotations
 import argparse
 import io
 import logging
+import queue
+import threading
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import StreamingResponse
 from pyoxigraph import QueryResultsFormat, QueryTriples, RdfFormat, Store
 from starlette.concurrency import run_in_threadpool
 
 logger = logging.getLogger(__name__)
+
+_CHUNK_BYTES = 64 * 1024
+
+
+class _Abandoned(Exception):
+    """The client went away; stop serializing."""
+
+
+class _ChunkWriter(io.RawIOBase):
+    """Where pyoxigraph serializes a result: hands 64 KiB chunks to the response."""
+
+    def __init__(self, put: Callable[[tuple], bool]) -> None:
+        self._put = put
+        self._buffer = bytearray()
+
+    def writable(self) -> bool:
+        return True
+
+    def write(self, data) -> int:  # type: ignore[override]
+        self._buffer.extend(data)
+        if len(self._buffer) >= _CHUNK_BYTES:
+            self.drain()
+        return len(data)
+
+    def drain(self) -> None:
+        if self._buffer and not self._put(("chunk", bytes(self._buffer))):
+            raise _Abandoned()
+        self._buffer.clear()
+
+
+async def _streamed(
+    work: Callable[[Callable[[str], bool], _ChunkWriter], None],
+) -> Response:
+    """Stream what ``work(announce, writer)`` serializes, without holding it.
+
+    ``work`` runs on ONE dedicated thread from start to end (pyoxigraph results
+    are bound to the thread that produced them) and calls ``announce(media)``
+    before writing. An error before ``announce`` becomes an HTTP status; one
+    after it truncates the body, as a SPARQL server streaming its result does.
+    """
+    chunks: queue.Queue = queue.Queue(maxsize=8)
+    stopped = threading.Event()
+
+    def put(item: tuple) -> bool:
+        while not stopped.is_set():
+            try:
+                chunks.put(item, timeout=0.2)
+                return True
+            except queue.Full:
+                continue
+        return False
+
+    def run() -> None:
+        writer = _ChunkWriter(put)
+        try:
+            work(lambda media: put(("media", media)), writer)
+            writer.drain()
+        except _Abandoned:
+            return
+        except BaseException as exc:  # noqa: BLE001 - reported to the response
+            put(("error", exc))
+            return
+        put(("end", None))
+
+    async def next_item() -> tuple:
+        while True:
+            try:
+                return await run_in_threadpool(chunks.get, True, 0.5)
+            except queue.Empty:
+                continue
+
+    threading.Thread(target=run, name="oxigraph-stream", daemon=True).start()
+    kind, value = await next_item()
+    if kind == "error":
+        stopped.set()
+        if isinstance(value, SyntaxError):
+            raise HTTPException(status_code=400, detail=f"SPARQL syntax: {value}")
+        logger.error("query failed: %s", value)
+        raise HTTPException(status_code=500, detail=str(value))
+
+    async def body() -> AsyncIterator[bytes]:
+        try:
+            while True:
+                kind, item = await next_item()
+                if kind == "chunk":
+                    yield item
+                elif kind == "error":
+                    logger.error("query failed mid-stream: %s", item)
+                    return
+                else:
+                    return
+        finally:
+            stopped.set()
+
+    return StreamingResponse(body(), media_type=value)
 
 
 def _query_format_for_accept(accept: str) -> tuple[QueryResultsFormat, str]:
@@ -92,33 +191,30 @@ def create_app(store_path: str) -> FastAPI:
     # ------------------------------------------------------------------
     # SPARQL query (SELECT/CONSTRUCT/ASK/DESCRIBE)
     # ------------------------------------------------------------------
-    def _query_sync(query_str: str, accept: str) -> tuple[bytes | None, str]:
-        """Run query + serialize on ONE thread and return (payload, media_type).
+    def _query_into(query_str: str, accept: str, announce, writer) -> None:
+        """Run query + serialize on ONE thread (see ``_streamed``).
 
         pyoxigraph's query result (``QuerySolutions``/``QueryTriples``) is *unsendable* —
         it's bound to the thread that produced it and panics the interpreter if touched
-        from another thread. So the whole query→serialize chain must stay on a single
-        thread; we hand that one chunk of blocking work to the threadpool below.
+        from another thread. So the whole query→serialize chain stays on one thread.
         """
         result = store.query(query_str)
         # CONSTRUCT / DESCRIBE → RDF format. SELECT / ASK → results format.
         if isinstance(result, QueryTriples):
             rdf_fmt, media = _rdf_format_for_accept(accept)
-            return result.serialize(format=rdf_fmt), media
+            announce(media)
+            result.serialize(writer, format=rdf_fmt)
+            return
         res_fmt, media = _query_format_for_accept(accept)
-        return result.serialize(format=res_fmt), media
+        announce(media)
+        result.serialize(writer, format=res_fmt)
 
     async def _run_query(query_str: str, accept: str) -> Response:
         if not query_str:
             raise HTTPException(status_code=400, detail="empty SPARQL query")
-        try:
-            payload, media = await run_in_threadpool(_query_sync, query_str, accept)
-        except SyntaxError as exc:
-            raise HTTPException(status_code=400, detail=f"SPARQL syntax: {exc}")
-        except Exception as exc:  # pragma: no cover - bubble unexpected
-            logger.exception("query failed")
-            raise HTTPException(status_code=500, detail=str(exc))
-        return Response(content=payload, media_type=media)
+        return await _streamed(
+            lambda announce, writer: _query_into(query_str, accept, announce, writer)
+        )
 
     @app.get("/query")
     async def query_get(request: Request) -> Response:
@@ -175,9 +271,12 @@ def create_app(store_path: str) -> FastAPI:
     async def store_get(request: Request) -> Response:
         accept = request.headers.get("accept", "text/turtle")
         fmt, media = _rdf_format_for_accept(accept)
-        buf = io.BytesIO()
-        await run_in_threadpool(store.dump, buf, format=fmt)
-        return Response(content=buf.getvalue(), media_type=media)
+
+        def dump(announce, writer) -> None:
+            announce(media)
+            store.dump(writer, format=fmt)
+
+        return await _streamed(dump)
 
     @app.post("/store")
     async def store_post(request: Request) -> Response:

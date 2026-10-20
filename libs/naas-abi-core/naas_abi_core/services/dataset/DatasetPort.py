@@ -6,6 +6,9 @@ from __future__ import annotations
 # evaluated in the class bodies below; use ``builtins.list`` there.
 import builtins
 from abc import ABC, abstractmethod
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal
 
@@ -170,8 +173,22 @@ class DatasetSnapshotInfo(BaseModel):
 
 
 class QueryResult(BaseModel):
+    """``rows`` hold the same portable values on every adapter (DatasetValues.py)."""
+
     columns: list[str]
     rows: list[dict[str, Any]] = Field(default_factory=list)
+
+
+@dataclass
+class RowStream:
+    """A query result read incrementally (docs/adr/20261003_nats-streamed-results.md).
+
+    ``rows`` is a single-use iterator, valid inside the ``query_stream`` block,
+    holding the values of DatasetValues.py.
+    """
+
+    columns: list[str]
+    rows: Iterator[dict[str, Any]] = field(default_factory=lambda: iter(()))
 
 
 class IDatasetPort(ABC):
@@ -196,6 +213,7 @@ class IDatasetPort(ABC):
         namespace: str = "default",
         mode: WriteMode = "append",
         snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> DatasetInfo:
         """Append, replace, or upsert rows against the current catalog snapshot.
 
@@ -203,7 +221,37 @@ class IDatasetPort(ABC):
         any dataset in the same catalog can invalidate it, in which case this raises
         ``DatasetSnapshotConflictError``. Prefer idempotent upserts and adapter
         retries when unrelated datasets are written concurrently.
+
+        ``timeout_seconds``: as for ``query``. A write takes as long as the
+        table's files take to read and rewrite, often longer than a client's
+        default deadline of seconds.
         """
+
+    def write_stream(
+        self,
+        name: str,
+        rows: Iterable[dict[str, Any]],
+        *,
+        namespace: str = "default",
+        mode: WriteMode = "append",
+        snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,
+    ) -> DatasetInfo:
+        """``write`` for rows read from an iterator once, committed in one
+        snapshot: all of them or none (docs/adr/20261003_nats-streamed-results.md).
+        ``timeout_seconds`` bounds the whole upload and commit.
+
+        This default collects the rows and calls ``write``; adapters that can
+        stage rows in bounded memory override it.
+        """
+        return self.write(
+            name,
+            builtins.list(rows),
+            namespace=namespace,
+            mode=mode,
+            snapshot_id=snapshot_id,
+            **({} if timeout_seconds is None else {"timeout_seconds": timeout_seconds}),
+        )
 
     @abstractmethod
     def query(
@@ -212,11 +260,39 @@ class IDatasetPort(ABC):
         *,
         namespace: str = "default",
         snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> QueryResult:
-        """Run SQL against datasets in ``namespace``. Tables are registered by dataset name."""
+        """Run SQL against datasets in ``namespace``. Tables are registered by dataset name.
+
+        ``timeout_seconds`` (here, ``write``, ``flush`` and ``compact``): how long the
+        caller waits when the adapter calls another process; an in-process
+        adapter runs to completion. ``None`` keeps the adapter's default.
+        """
+
+    @contextmanager
+    def query_stream(
+        self,
+        sql: str,
+        *,
+        namespace: str = "default",
+        snapshot_id: int | None = None,
+    ) -> Iterator[RowStream]:
+        """Run SQL and read its rows incrementally, inside the block.
+
+        This default reads ``query``; adapters that can fetch in batches
+        override it to keep memory bounded.
+        """
+        result = self.query(sql, namespace=namespace, snapshot_id=snapshot_id)
+        yield RowStream(columns=result.columns, rows=iter(result.rows))
 
     @abstractmethod
-    def flush(self, name: str, *, namespace: str = "default") -> QueryResult:
+    def flush(
+        self,
+        name: str,
+        *,
+        namespace: str = "default",
+        timeout_seconds: float | None = None,
+    ) -> QueryResult:
         """Materialize inlined data as Parquet while preserving snapshot history."""
 
     @abstractmethod
@@ -227,8 +303,15 @@ class IDatasetPort(ABC):
         """
 
     @abstractmethod
-    def compact(self, name: str, *, namespace: str = "default") -> QueryResult:
-        """Merge eligible small files within partitions, preserving snapshots.
+    def compact(
+        self,
+        name: str,
+        *,
+        namespace: str = "default",
+        timeout_seconds: float | None = None,
+    ) -> QueryResult:
+        """Rewrite files holding deleted rows and merge small files within
+        partitions, preserving snapshots.
 
         Returns adapter maintenance statistics. Does not flush inlined rows,
         expire snapshots, or delete old files. Raises DatasetNotFoundError.

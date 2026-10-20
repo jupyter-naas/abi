@@ -1,41 +1,44 @@
-# `new_workflow` (workflow generator)
+# `new_workflow`
 
 ## What it is
 - Implements the `naas-abi-cli new workflow` command.
-- Copies a workflow template directory into a target path, injecting a PascalCase workflow name into template values.
+- Generates a workflow scaffold by copying a bundled template directory into a target path, injecting a PascalCase workflow name into template values.
 
 ## Public API
-- `new_workflow(workflow_name: str, workflow_path: str = ".", extra_values: dict = {})`
-  - Normalizes `workflow_name` to PascalCase.
+- `new_workflow(workflow_name: str, workflow_path: str = ".", extra_values: dict | None = None)`
+  - Converts `workflow_name` to PascalCase.
   - Resolves `workflow_path`:
     - `"."` becomes `os.getcwd()`
     - Creates the directory if it does not exist
-  - Uses `Copier` to copy templates from the package template folder to `workflow_path`.
-  - Passes template values:
-    - `workflow_name_pascal` (PascalCase string)
-    - merged with `extra_values` (using dict union `|`)
+  - Copies templates from the installed package templates folder into `workflow_path`.
+  - Template values passed to the copier:
+    - `workflow_name_pascal`: PascalCase workflow name
+    - merged with `extra_values` via dict union (`|`)
 
-- CLI entrypoint (Click command)
-  - `naas-abi-cli new workflow WORKFLOW_NAME [WORKFLOW_PATH]`
-  - Implemented by `_new_workflow(...)`, which delegates to `new_workflow(...)`.
+- Click command: `naas-abi-cli new workflow`
+  - `_new_workflow(workflow_name, workflow_path=".")`
+    - Calls `refuse_in_remote_module("workflow", workflow_path)`
+    - Delegates to `new_workflow(...)`
 
 ## Configuration/Dependencies
 - **Python packages**
-  - `click` (CLI wiring)
+  - `click` (CLI command wiring)
   - `naas_abi_cli` (used to locate installed template files)
 - **Internal utilities**
-  - `Copier` from `naas_abi_cli.cli.utils.Copier` (performs template copy)
-  - `to_pascal_case` from `.utils` (name normalization)
+  - `Copier` from `naas_abi_cli.cli.utils.Copier` (performs the copy/render step)
+  - `to_pascal_case` from `.utils` (workflow name normalization)
+  - `refuse_in_remote_module` from `.remote_module` (CLI guard)
 - **Template location**
   - `<naas_abi_cli package>/cli/new/templates/workflow`
 
 ## Usage
-### From CLI
+
+### CLI
 ```bash
 naas-abi-cli new workflow MyWorkflow .
 ```
 
-### From Python
+### Python
 ```python
 from naas_abi_cli.cli.new.workflow import new_workflow
 
@@ -43,5 +46,5 @@ new_workflow("my_workflow", "./out")
 ```
 
 ## Caveats
-- `extra_values` has a mutable default (`{}`); avoid mutating it inside callers. Prefer passing an explicit dict if needed.
-- Requires Python support for dict union (`values | extra_values`), i.e., Python 3.9+.
+- Requires Python 3.9+ due to dict union usage (`dict1 | dict2`).
+- `workflow_name` is converted to PascalCase; the template receives the PascalCase value under `workflow_name_pascal`.

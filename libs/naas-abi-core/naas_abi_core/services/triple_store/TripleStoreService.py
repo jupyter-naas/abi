@@ -1,10 +1,12 @@
 import base64
 import hashlib
+import inspect
 import io
 import os
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 
 import rdflib
@@ -25,6 +27,8 @@ from naas_abi_core.services.triple_store.TripleStorePorts import (
     ITripleStorePort,
     ITripleStoreService,
     OntologyEvent,
+    QueryStream,
+    Triple,
 )
 from rdflib import Graph, URIRef
 
@@ -112,6 +116,13 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
         self._bootstrap_schema_graph()
 
+    @property
+    def adapter(self) -> ITripleStorePort:
+        """The wrapped secondary adapter -- public so callers (e.g.
+        ``EngineNATSLoader``) can check what kind of adapter this service is
+        backed by, mirroring ``ObjectStorageService.adapter``."""
+        return self.__triple_store_adapter
+
     def _schema_graph_bootstrapped(self) -> bool:
         """Return True when the built-in schema vocabulary is already in the store.
 
@@ -189,16 +200,32 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             return "*"
         return self._hash_value(graph_name)
 
+    def _deadline(self, method: Callable, timeout_seconds: float | None) -> dict:
+        """A caller's deadline, for an adapter whose ``method`` takes one (one
+        that calls another process); an in-process store runs to completion."""
+        if timeout_seconds is None:
+            return {}
+        if "timeout_seconds" not in inspect.signature(method).parameters:
+            return {}
+        return {"timeout_seconds": timeout_seconds}
+
     def insert(
         self,
         triples: Graph,
         graph_name: URIRef,
+        *,
+        timeout_seconds: float | None = None,
     ) -> None:
         assert graph_name is not None
 
         # Insert the triples into the store
+        adapter = self.__triple_store_adapter
         try:
-            self.__triple_store_adapter.insert(triples, graph_name=graph_name)
+            adapter.insert(
+                triples,
+                graph_name=graph_name,
+                **self._deadline(adapter.insert, timeout_seconds),
+            )
         except Exception as exc:
             self.__publish_event(
                 TripleStoreError(
@@ -228,12 +255,19 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         self,
         triples: Graph,
         graph_name: URIRef,
+        *,
+        timeout_seconds: float | None = None,
     ) -> None:
         assert graph_name is not None
 
         # Remove the triples from the store
+        adapter = self.__triple_store_adapter
         try:
-            self.__triple_store_adapter.remove(triples, graph_name=graph_name)
+            adapter.remove(
+                triples,
+                graph_name=graph_name,
+                **self._deadline(adapter.remove, timeout_seconds),
+            )
         except Exception as exc:
             self.__publish_event(
                 TripleStoreError(
@@ -298,6 +332,59 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             )
             raise
 
+    @contextmanager
+    def query_stream(self, query: str) -> Iterator[QueryStream]:
+        with ExitStack() as stack:
+            try:
+                result = stack.enter_context(
+                    self.__triple_store_adapter.query_stream(query)
+                )
+            except Exception as exc:
+                self.__report_stream_error(exc)
+                raise
+            result.rows = self.__reporting_errors(result.rows)
+            result.triples = self.__reporting_errors(result.triples)
+            yield result
+
+    @contextmanager
+    def export(self, graph_name: URIRef | None = None) -> Iterator[Iterator[Triple]]:
+        with ExitStack() as stack:
+            try:
+                triples = stack.enter_context(
+                    self.__triple_store_adapter.export(graph_name)
+                )
+            except Exception as exc:
+                self.__report_stream_error(exc, "export", graph_name)
+                raise
+            yield self.__reporting_errors(triples, "export", graph_name)
+
+    def __reporting_errors(
+        self,
+        items: Iterator,
+        operation: str = "query_stream",
+        graph_name: URIRef | None = None,
+    ) -> Iterator:
+        # Errors raised while reading the backend, not by the caller's own block.
+        try:
+            yield from items
+        except Exception as exc:
+            self.__report_stream_error(exc, operation, graph_name)
+            raise
+
+    def __report_stream_error(
+        self,
+        exc: Exception,
+        operation: str = "query_stream",
+        graph_name: URIRef | None = None,
+    ) -> None:
+        self.__publish_event(
+            TripleStoreError(
+                operation=operation,
+                graph_name=str(graph_name) if graph_name is not None else None,
+                message=self._error_message(exc),
+            )
+        )
+
     def query_view(self, view: str, query: str) -> rdflib.query.Result:
         try:
             return self.__triple_store_adapter.query_view(view, query)
@@ -310,12 +397,15 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             )
             raise
 
-    def create_graph(self, graph_name: URIRef) -> None:
+    def create_graph(
+        self, graph_name: URIRef, *, timeout_seconds: float | None = None
+    ) -> None:
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
 
+        method = self.__triple_store_adapter.create_graph
         try:
-            self.__triple_store_adapter.create_graph(graph_name)
+            method(graph_name, **self._deadline(method, timeout_seconds))
         except Exception as exc:
             self.__publish_event(
                 TripleStoreError(
@@ -328,12 +418,15 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
         self.__publish_event(GraphCreated(graph_name=str(graph_name)))
 
-    def clear_graph(self, graph_name: URIRef) -> None:
+    def clear_graph(
+        self, graph_name: URIRef, *, timeout_seconds: float | None = None
+    ) -> None:
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
 
+        method = self.__triple_store_adapter.clear_graph
         try:
-            self.__triple_store_adapter.clear_graph(graph_name)
+            method(graph_name, **self._deadline(method, timeout_seconds))
         except Exception as exc:
             self.__publish_event(
                 TripleStoreError(
@@ -346,9 +439,12 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
         self.__publish_event(GraphCleared(graph_name=str(graph_name)))
 
-    def drop_graph(self, graph_name: URIRef) -> None:
+    def drop_graph(
+        self, graph_name: URIRef, *, timeout_seconds: float | None = None
+    ) -> None:
+        method = self.__triple_store_adapter.drop_graph
         try:
-            self.__triple_store_adapter.drop_graph(graph_name)
+            method(graph_name, **self._deadline(method, timeout_seconds))
         except Exception as exc:
             self.__publish_event(
                 TripleStoreError(

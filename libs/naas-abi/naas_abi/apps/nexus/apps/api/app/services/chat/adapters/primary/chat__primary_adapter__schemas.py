@@ -12,8 +12,9 @@ from pydantic import BaseModel, Field
 
 def _valid_provider_types() -> list[str]:
     """Provider types accepted by chat: every marketplace AI provider id,
-    plus a couple of platform-internal aliases."""
-    return [p.provider_id for p in list_catalog_providers()] + ["custom", "abi"]
+    plus platform-internal aliases. ``remote`` is only ever resolved server-side
+    from an agent row; ChatService ignores it in a client-supplied payload."""
+    return [p.provider_id for p in list_catalog_providers()] + ["custom", "abi", "remote"]
 
 
 VALID_PROVIDER_TYPES = _valid_provider_types()

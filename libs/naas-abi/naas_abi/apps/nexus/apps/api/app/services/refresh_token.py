@@ -182,12 +182,17 @@ async def revoke_refresh_token(token: str, reason: str = "user_requested") -> No
 
 async def revoke_all_user_tokens(user_id: str, reason: str = "password_change") -> None:
     """
-    Revoke all refresh tokens for a user (e.g., on password change).
+    Revoke all refresh tokens for a user (e.g., on password change), and end
+    the remote app grants the user holds.
 
     Args:
         user_id: User ID
         reason: Reason for revocation
     """
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.revocation import (
+        revoke_remote_app_grants,
+    )
+
     now = datetime.now(UTC).replace(tzinfo=None)
 
     async with async_engine.begin() as conn:
@@ -199,6 +204,7 @@ async def revoke_all_user_tokens(user_id: str, reason: str = "password_change") 
             """),
             {"now": now, "reason": reason, "user_id": user_id},
         )
+    await revoke_remote_app_grants(user_id)
 
 
 async def revoke_access_token(jti: str, user_id: str, expires_at: datetime, reason: str = "logout") -> None:
