@@ -149,12 +149,6 @@ jobs:
       - name: Publish | Upload naas-abi-sdk to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
         if: steps.release-naas-abi-sdk.outputs.released == 'true'
-        # First release only: PyPI takes one pending trusted publisher with these
-        # settings at a time, so naas-abi-sdk has none when 3.0 is released and this
-        # upload fails. The later uploads must still run: it is published by hand
-        # afterwards (docs/site/docs/developer-guide/releasing/release-process.md).
-        # Remove this line once naas-abi-sdk 0.1.0 is on PyPI.
-        continue-on-error: true
         with:
           packages-dir: ${{ format('{0}/dist', env.naas_abi_sdk_dir) }}
 

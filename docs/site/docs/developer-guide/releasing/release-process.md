@@ -56,20 +56,19 @@ PyPI uploads use [trusted publishing](https://docs.pypi.org/trusted-publishers/)
 job runs in the GitHub environment `pypi` with `id-token: write`, and
 `pypa/gh-action-pypi-publish` exchanges that token for a short-lived upload credential. There is no
 PyPI token in the repository. A package's first publish needs a **pending trusted publisher**
-registered for it on PyPI (owner `jupyter-naas`, repository `abi`, workflow `release.yml`,
-environment `pypi`); do that before the first merge that releases a new package.
+registered for it on PyPI (owner `jupyter-naas`, repository `abi`, workflow `release.yml`); do that
+before the first merge that releases a new package.
 
-PyPI accepts one pending publisher with the same settings at a time. For the 3.0 release,
-`naas-abi-proto` has its pending publisher and `naas-abi-sdk` has none, so:
+Leave the **environment name blank**, as the publishers of the existing packages are. PyPI mints the
+upload token from the most specific matching publisher: a publisher with the environment `pypi` on
+some projects and a blank one on the others makes the token valid only for the first group, and the
+other uploads fail with `OIDC scoped token is not valid for project`. PyPI also takes only one pending
+publisher with the same settings at a time, so register the new packages one release at a time.
 
-1. The merge's release run uploads proto. The SDK upload step fails and is ignored
-   (`continue-on-error` in `release.yml`), so core, marketplace, naas-abi and the CLI are still
-   uploaded. Until step 2, `naas-abi-core` 3.0.0 cannot be installed: it needs `naas-abi-sdk`.
-2. Upload the SDK by hand, from the tag the run pushed, with a temporary account-wide PyPI token:
-   `git checkout naas-abi-sdk-v0.1.0 && cd libs/naas-abi-sdk && uv build && uv publish --token <token>`.
-   Then delete the token.
-3. On the `naas-abi-sdk` project, add a normal trusted publisher (same settings as above), and
-   remove `continue-on-error` from the SDK upload step in `release.yml`.
+If a release is tagged and published on GitHub but an upload failed, re-running the workflow uploads
+nothing: the version is already tagged. Run **Actions > Release > Run workflow** from `main` with the
+tag (`publish-existing` job): it uploads the files of that GitHub release, one package at a time, in
+dependency order (proto, SDK, core, marketplace, naas-abi, CLI). Versions already on PyPI are skipped.
 
 ## Containers and the API deploy
 
