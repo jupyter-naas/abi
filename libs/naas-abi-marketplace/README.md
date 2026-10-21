@@ -445,7 +445,7 @@ MIT License
 
 ## Documentation
 
-- [Install a marketplace module](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/build/modules/marketplace/marketplace-install.md)
-- [Marketplace overview](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/build/modules/marketplace/marketplace-overview.md)
-- [Publish a module](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/build/modules/marketplace/marketplace-publish.md)
-- [Quickstart](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/get-started/quickstart.md)
+- [Install a marketplace module](https://docs.naas.ai/user-guide/build/modules/marketplace/marketplace-install)
+- [Marketplace overview](https://docs.naas.ai/user-guide/build/modules/marketplace/marketplace-overview)
+- [Publish a module](https://docs.naas.ai/user-guide/build/modules/marketplace/marketplace-publish)
+- [Quickstart](https://docs.naas.ai/user-guide/get-started/quickstart)
