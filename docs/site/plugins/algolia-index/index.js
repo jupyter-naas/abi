@@ -55,7 +55,11 @@ function readMarkdownFiles(docsDir, baseUrl = '', context = null) {
 
         // Create URL path
         let urlPath;
-        if (file === 'index.md') {
+        if (typeof frontmatter.slug === 'string' && frontmatter.slug.startsWith('/')) {
+          // An absolute `slug` is the page's route, wherever its file is
+          // (the upgrade pages live under docs/upgrade/ but are served in the User guide).
+          urlPath = frontmatter.slug;
+        } else if (file === 'index.md') {
           urlPath = baseUrl || '/';
         } else {
           urlPath = `${baseUrl}/${file.replace('.md', '')}`;

@@ -37,8 +37,11 @@ memberships.
   computed by `bootstrap.feature_plan` from `feature_flags`, org overlays and workspace overrides). An action of a
   flagged section carries its `feature=` in the catalog; the API refuses it where the role lacks the feature.
 - **Memberships change through `MEMBERSHIPS`** only: an admin cannot grant, demote or remove an owner, and the last
-  owner stays (IAM answers, whichever API is used). Creating a workspace needs `CreateWorkspace` on its organization,
-  never a request field; one with no organization is a personal workspace (`CreateOrganization`, which every user holds).
+  owner stays (IAM answers, whichever API is used). An org owner or admin also holds their role organization-wide
+  (`abi:<org>:*`, kept by `Memberships.mirror_org_wide` and `sync_org_wide_roles` at start): that is how they reach
+  every workspace of the org; org members and viewers inherit nothing. Creating a workspace needs `CreateWorkspace`
+  on its organization (an owner's or an admin's), never a request field; one with no organization is a personal
+  workspace (`CreateOrganization`, which every user holds).
 - **Kernel resources need a placement.** A workspace's role reaches a kernel resource only once IAM placed it in the
   workspace. Place what you create (`placements.place`), register what exists (`@placement_source`).
 - **Roles are for users Nexus knows.** `MEMBERSHIPS` reads (`roles_of`, `check`, `revoke`) never create an IAM

@@ -8,17 +8,20 @@ collision.
 
 Managed services:
   - api         (FastAPI, uvicorn)
-  - dagster     (Dagster dev UI)
+  - dagster     (Dagster dev UI; legacy, needs naas-abi-core[dagster])
   - nexus-web   (Next.js dev server)
 
 Added by a mode or a flag:
   - nats        (NATS/JetStream; requires the `nats-server` binary on PATH)
   - jaeger      (Jaeger v2, OpenTelemetry traces; requires the `jaeger` binary)
 
-`abi dev up` runs the engine in NATS mode by default: it starts nats first and
-leaves dagster out (module jobs replace it, and a second engine would compete
-for the serving lease). `--without-nats` runs the engine in-process, with
-dagster and without the broker or the modules. `--with-tracing` starts a
+`abi dev up` runs the engine in NATS mode when the project config has a
+`nats:` block: it starts nats first and leaves dagster out (module jobs replace
+it, and a second engine would compete for the serving lease). A project
+without one runs in-process, with dagster and without the broker or the
+modules. Dagster is legacy, to be removed in the next major: it starts only
+when the project installs the naas-abi-core[dagster] extra. `--with-nats` and
+`--without-nats` choose the mode whatever the config says. `--with-tracing` starts a
 native Jaeger and has the engine export spans to it. The project config is
 left untouched: a generated overlay (`.abi/dev/dev.overlay.yaml`, via
 ABI_CONFIG_OVERLAY) adds the `nats:` and `telemetry:` blocks, or, with
@@ -54,6 +57,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import click
+from naas_abi_core.utils.LegacyExtras import LEGACY_NOTICE, install_hint
 from rich.console import Console, Group
 from rich.live import Live
 from rich.table import Table
@@ -153,8 +157,8 @@ ALT_NEXUS_WEB_DIR = ALT_NEXUS_ROOT / "apps" / "web"
 # the API URL is available when Next.js starts polling it.
 ALL_SERVICES = ("oxigraph", "api", "dagster", "nexus-web")
 
-# Selectable via `--service`, and added by their mode: nats in NATS mode (the
-# default; `--without-nats` leaves it out), jaeger with `--with-tracing`.
+# Selectable via `--service`, and added by their mode: nats in NATS mode (a
+# project with a `nats:` block, or `--with-nats`), jaeger with `--with-tracing`.
 OPTIONAL_SERVICES = ("nats", "jaeger")
 
 # nats-server refuses any single message above `max_payload` (1 MB by default),
@@ -501,6 +505,31 @@ def _api_origin(ports: dict[str, int]) -> str:
     return f"http://{BROWSER_HOST}:{ports['api']}"
 
 
+DAGSTER_MISSING = (
+    "dagster: not installed in this project, so it is left out. "
+    f"{LEGACY_NOTICE} Start on NATS with `--with-nats` (module jobs and "
+    "dataset maintenance run in the engine), or keep Dagster. "
+    f"{install_hint('dagster')}"
+)
+
+
+def _project_lacks_dagster() -> bool:
+    """Whether the project's environment exists without the `dagster` command.
+
+    naas-abi-core installs Dagster only with its legacy `dagster` extra. A
+    project with no environment yet is not judged: `uv run` creates it.
+    """
+    venv = Path(os.environ.get("UV_PROJECT_ENVIRONMENT") or ".venv")
+    if not venv.is_absolute():
+        venv = _project_root() / venv
+    if not venv.is_dir():
+        return False
+    return not any(
+        (venv / folder / name).exists()
+        for folder, name in (("bin", "dagster"), ("Scripts", "dagster.exe"))
+    )
+
+
 def _jaeger_ports(query_port: int) -> dict[str, int]:
     return {
         "query": query_port,
@@ -680,12 +709,52 @@ NATS_SERVER_MISSING = (
 )
 
 
+# Message schedules (module job triggers) need JetStream from nats-server 2.14;
+# the Docker stacks pin the same release line (nats:2.14.7-alpine).
+NATS_SERVER_MIN_VERSION = (2, 14)
+
+
+def _nats_server_version(binary: str) -> tuple[int, int, int] | None:
+    """`nats-server --version` ("nats-server: v2.14.7"), or None when it
+    cannot be read."""
+    try:
+        result = subprocess.run(
+            [binary, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    found = re.search(r"v?(\d+)\.(\d+)\.(\d+)", result.stdout + result.stderr)
+    if found is None:
+        return None
+    major, minor, patch = (int(part) for part in found.groups())
+    return major, minor, patch
+
+
 def _nats_server_binary() -> str:
     """The `nats-server` binary; fails with an install hint rather than
-    falling back to in-process mode."""
+    falling back to in-process mode, or when it is older than 2.14."""
     binary = shutil.which("nats-server")
     if binary is None:
         raise click.ClickException(NATS_SERVER_MISSING)
+    version = _nats_server_version(binary)
+    wanted = ".".join(map(str, NATS_SERVER_MIN_VERSION))
+    if version is None:
+        raise click.ClickException(
+            f"Could not read the version of {binary} (`nats-server --version`). "
+            f"`abi dev up` needs nats-server {wanted} or later."
+        )
+    if version[:2] < NATS_SERVER_MIN_VERSION:
+        found = ".".join(map(str, version))
+        raise click.ClickException(
+            f"{binary} is nats-server {found}; `abi dev up` needs {wanted} or "
+            "later (module job schedules use JetStream message schedules). "
+            "Upgrade it, or run the engine in-process with "
+            "`abi dev up --without-nats`."
+        )
     return binary
 
 
@@ -762,10 +831,19 @@ def _launch_api(
         if origin not in extra_list:
             extra_list.append(origin)
     env["ABI_CORS_EXTRA_ORIGINS"] = ",".join(extra_list)
-    # Ensure Nexus API builds magic-link URLs against the dynamically allocated
-    # local web port used by `abi dev up`.
-    # Must match the origin the browser is actually on, or the magic link
-    # lands on a second, logged-out origin.
+    _set_public_hosts(env, nexus_port, spec.port)
+    cmd = ["uv", "run", "python", "-m", "naas_abi_core.apps.api.api"]
+    return _spawn(spec, cmd, _project_root(), env)
+
+
+def _set_public_hosts(env: dict[str, str], nexus_port: int, api_port: int) -> None:
+    """The stack's public origins, for every engine process: configs render
+    {{ secret.PUBLIC_WEB_HOST }} and {{ secret.PUBLIC_API_HOST }}, and a
+    missing secret fails the config without a TTY."""
+    # Ensure Nexus API builds links (invitations) against the dynamically
+    # allocated local web port used by `abi dev up`.
+    # Must match the origin the browser is actually on, or the link
+    # lands on a second origin with no session.
     env["FRONTEND_URL"] = f"http://{BROWSER_HOST}:{nexus_port}"
     # Keep config-templated frontend URLs in sync when they reference
     # {{ secret.PUBLIC_WEB_HOST }}.
@@ -774,18 +852,18 @@ def _launch_api(
     # prefers .env over process env, so PUBLIC_API_HOST / NEXUS_API_URL here
     # only win when those keys are absent from .env. ABI_DEV_PUBLIC_API_ORIGIN
     # is read by public_api_host() from the process env and is never a secret.
-    api_origin = f"http://{BROWSER_HOST}:{spec.port}"
+    api_origin = f"http://{BROWSER_HOST}:{api_port}"
     env["ABI_DEV_PUBLIC_API_ORIGIN"] = api_origin
-    env["PUBLIC_API_HOST"] = f"{BROWSER_HOST}:{spec.port}"
+    env["PUBLIC_API_HOST"] = f"{BROWSER_HOST}:{api_port}"
     env["NEXUS_API_URL"] = api_origin
     # Nexus's own API URL, which the sign-in redirect URI is built from.
     env["API_URL"] = api_origin
     # The built-in IdP's issuer (config: `{{ secret.ABI_IDP_ISSUER }}`): Nexus
     # serves it at /idp on this origin. Like the origins above, only when the
-    # .env does not say otherwise (the dotenv adapter reads .env first).
+    # .env does not say otherwise (the dotenv adapter reads .env first). Every
+    # engine process loads the project's config, so every one gets it: without
+    # it a config naming the issuer hard-fails (no TTY to ask).
     env[IDP_ISSUER_ENV] = f"{api_origin}/idp"
-    cmd = ["uv", "run", "python", "-m", "naas_abi_core.apps.api.api"]
-    return _spawn(spec, cmd, _project_root(), env)
 
 
 def _launch_dagster(
@@ -812,10 +890,7 @@ def _launch_dagster(
     # `--log-level` (left at its default so the daemon doesn't drown the pane).
     env["LOG_LEVEL"] = _resolve_log_level(log_level)
     env["OXIGRAPH_URL"] = _oxigraph_url(ports)
-    # Dagster loads the project's engine config too: a config that names the
-    # built-in IdP's issuer as `{{ secret.ABI_IDP_ISSUER }}` hard-fails here
-    # (no TTY to ask) without it.
-    env[IDP_ISSUER_ENV] = f"{_api_origin(ports)}/idp"
+    _set_public_hosts(env, ports["nexus-web"], ports["api"])
     cmd = [
         "uv",
         "run",
@@ -1515,6 +1590,21 @@ def _ensure_default_api_key_env() -> str:
     return os.environ["ABI_API_KEY"]
 
 
+def _ensure_project_nats_env() -> None:
+    """Generate the secrets a project config's `nats:` block names into `.env`
+    (the broker's passwords, the auth callout's seed), as for the API key.
+
+    The engine renders the whole config before it merges the dev overlay, and
+    a missing ``{{ secret.X }}`` fails without a TTY: needed in NATS mode, and
+    with `--without-nats` too, whose overlay only turns the block off.
+    """
+    if not _project_declares_nats():
+        return
+    env_path = _project_root() / ".env"
+    ensure_nats_passwords(env_path)
+    ensure_nats_callout_seed(env_path)
+
+
 def _stream_log_to_console(
     spec: ServiceSpec,
     buffer: collections.deque,
@@ -1570,6 +1660,8 @@ def _open_letter_map(started: list[ServiceSpec]) -> dict[str, str]:
     seen: dict[str, str | None] = {}
     for spec in started:
         if not spec.port:  # a dev module: nothing to open
+            continue
+        if spec.name == "nats":  # a client port, no web page: keeps `n` for nexus-web
             continue
         first = spec.name[:1].lower()
         if not first.isalpha():
@@ -1970,8 +2062,9 @@ def dev() -> None:
     multiple=True,
     help=(
         "Limit to the given service(s) or dev module(s). Repeat the flag. "
-        "Default: oxigraph, nats, api, nexus-web, then every `dev.modules` "
-        "entry (--without-nats: oxigraph, api, dagster, nexus-web)."
+        "Default in NATS mode: oxigraph, nats, api, nexus-web, then every "
+        "`dev.modules` entry; in-process (legacy): oxigraph, api, dagster "
+        "(legacy), nexus-web."
     ),
 )
 @click.option(
@@ -1987,7 +2080,7 @@ def dev() -> None:
     type=click.Choice(LOG_LEVELS, case_sensitive=False),
     default=None,
     help=(
-        "LOG_LEVEL for the api and dagster processes. "
+        "LOG_LEVEL for the api and (legacy) dagster processes. "
         f"Default: $LOG_LEVEL, else {DEFAULT_LOG_LEVEL} "
         "(engine boot phases are logged at DEBUG)."
     ),
@@ -1995,14 +2088,18 @@ def dev() -> None:
 @click.option(
     "--with-nats/--without-nats",
     "with_nats",
-    default=True,
+    default=None,
     help=(
-        "NATS mode (default): start nats first and give the api the project "
+        "NATS mode: start nats first and give the api the project "
         "config plus a generated `nats:` overlay (discovery, monitoring, jobs), "
         "then the SDK modules of `dev.modules`; dagster is left out unless "
         "selected with --service. Needs `nats-server` on PATH. "
-        "--without-nats runs the engine in-process, as before NATS, even when "
-        "the project config has a `nats:` block."
+        "--without-nats (legacy, to be removed in the next major) runs the "
+        "engine in-process, as before NATS, even when the project config has a "
+        "`nats:` block, with dagster when the project installs the legacy "
+        "naas-abi-core[dagster] extra. "
+        "Default: NATS mode when the project config has a `nats:` block, "
+        "in-process otherwise."
     ),
 )
 @click.option(
@@ -2019,7 +2116,7 @@ def dev_up(
     services: tuple[str, ...],
     detach: bool,
     log_level: str | None,
-    with_nats: bool,
+    with_nats: bool | None,
     with_tracing: bool,
 ) -> None:
     """Start the selected dev services.
@@ -2031,6 +2128,9 @@ def dev_up(
     The api and dagster processes run at LOG_LEVEL=DEBUG so engine boot
     narrates itself; pass `--log-level INFO` (or lower) to quieten them.
     """
+    if with_nats is None:
+        # The project's own mode: NATS only when its config enables it.
+        with_nats = _project_declares_nats()
     modules = _dev_modules()
     core, named_modules = _split_selection(services, modules)
     if services:
@@ -2045,6 +2145,11 @@ def dev_up(
     else:
         selected = _services_for((), with_nats=with_nats, with_tracing=with_tracing)
         to_run = list(modules) if with_nats else []
+    if "dagster" in selected and _project_lacks_dagster():
+        if "dagster" in core:
+            raise click.ClickException(DAGSTER_MISSING)
+        click.echo(f"{DAGSTER_MISSING} Starting without it.")
+        selected.remove("dagster")
     if "nats" in selected:
         _nats_server_binary()  # before anything starts
     # --without-nats on a project whose config enables NATS: turn it off too.
@@ -2054,6 +2159,7 @@ def dev_up(
     _ensure_storage_layout()
     config_overlay: Path | None = None
     _ensure_default_api_key_env()
+    _ensure_project_nats_env()
     # The built-in IdP, the default identity provider in NATS mode: its client
     # secret is generated into .env (the engine's config reads it from there),
     # and a project that names no provider gets it through the overlay.
@@ -2360,6 +2466,47 @@ def _running_services(ports: dict[str, int]) -> list[str]:
         if pid is not None and _pid_alive(pid):
             alive.append(name)
     return alive
+
+
+# Commands that do not load the engine's configuration, or that start it
+# themselves with their own overlay.
+_NO_DEV_OVERLAY_COMMANDS = frozenset(
+    {"dev", "stack", "start", "stop", "logs", "new", "init", "deploy", "docs"}
+)
+
+
+def use_running_dev_overlay(argv: list[str]) -> None:
+    """Make a command that loads the engine reach the one `abi dev up` runs.
+
+    `abi dev up` starts its own broker on an offset port and hands the API its
+    URL through `.abi/dev/dev.overlay.yaml`; the config the other commands read
+    names the Docker stack's broker (127.0.0.1:4222). While a dev service is
+    alive, those commands read the overlay too, unless the caller set
+    ABI_CONFIG_OVERLAY.
+    """
+    if os.environ.get(CONFIG_OVERLAY_ENV):
+        return
+    if argv and argv[0] in _NO_DEV_OVERLAY_COMMANDS:
+        return
+    from naas_abi_cli.cli.bootstrap import find_abi_project_root
+
+    root = find_abi_project_root()
+    if root is None:
+        return
+    overlay = root / DEV_DIR_NAME / DEV_OVERLAY_FILENAME
+    if not overlay.is_file() or not (root / DEV_DIR_NAME / INSTANCE_FILENAME).is_file():
+        return
+    # The dev helpers read the project root from the working directory.
+    invoked_from = Path.cwd()
+    os.chdir(root)
+    try:
+        alive = _running_services(_load_or_create_instance()["ports"])
+    except (ValueError, KeyError, OSError):
+        return
+    finally:
+        os.chdir(invoked_from)
+    if alive:
+        os.environ[CONFIG_OVERLAY_ENV] = str(overlay)
 
 
 @dev.command("nuke")

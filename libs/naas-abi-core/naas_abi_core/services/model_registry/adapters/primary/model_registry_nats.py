@@ -37,6 +37,7 @@ from naas_abi_core.services.model_registry.ModelRegistryPort import (
 )
 from naas_abi_proto.model_registry.v1 import model_registry_pb2 as pb
 from naas_abi_sdk import overflow
+from naas_abi_sdk.broker_flush import flush_to_broker
 from naas_abi_sdk.messages import reply
 from naas_abi_sdk.model_codec import (
     decode_json,
@@ -186,7 +187,7 @@ class ModelRegistryNATS(SessionHost):
                         cb=partial(self._dispatch, operation),
                     )
                 )
-            await nc.flush()
+            await flush_to_broker(nc)
             self._reaper = asyncio.create_task(self._expire())
             await self.transfer.start(nc)
         except BaseException:

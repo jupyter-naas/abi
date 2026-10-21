@@ -91,6 +91,58 @@ def test_git_init_is_skipped_when_already_a_repo(tmp_path, monkeypatch) -> None:
     assert not any("init" in cmd for cmd in calls)
 
 
+def _git(*args, cwd) -> None:
+    subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+    )
+
+
+def test_the_submodule_clones_a_local_checkout(tmp_path) -> None:
+    """`--abi-source <checkout>` tests a framework that is not on GitHub yet.
+
+    Git refuses the file transport for submodules unless told otherwise
+    (`transport 'file' not allowed`), so this runs the real git.
+    """
+    checkout = tmp_path / "abi"
+    (checkout / "libs" / "naas-abi-sdk").mkdir(parents=True)
+    (checkout / "libs" / "naas-abi-sdk" / "pyproject.toml").write_text("")
+    _git("init", "-q", cwd=checkout)
+    _git("add", ".", cwd=checkout)
+    _git("commit", "-q", "-m", "init", cwd=checkout)
+    target = tmp_path / "project"
+    target.mkdir()
+
+    assert project._add_abi_submodule(str(target), str(checkout)) is True
+    assert (_submodule_dir(target) / "naas-abi-sdk" / "pyproject.toml").is_file()
+
+
+def test_a_relative_source_is_cloned_from_where_the_command_ran(
+    tmp_path, monkeypatch
+) -> None:
+    """git resolves a submodule's relative URL against the superproject's
+    remote, not the caller's directory: pass it the absolute path."""
+    (tmp_path / "abi").mkdir()
+    monkeypatch.chdir(tmp_path)
+    commands: list[list[str]] = []
+    _invoke_new_project(tmp_path, monkeypatch, "--abi-source", "abi", commands=commands)
+
+    [clone] = [cmd for cmd in commands if "submodule" in cmd]
+    assert str(tmp_path / "abi") in clone
+    assert "protocol.file.allow=always" in clone
+
+
+def test_the_submodule_comes_from_github_by_default(tmp_path, monkeypatch) -> None:
+    commands: list[list[str]] = []
+    _invoke_new_project(tmp_path, monkeypatch, commands=commands)
+
+    [clone] = [cmd for cmd in commands if "submodule" in cmd]
+    assert project.ABI_SUBMODULE_URL in clone
+    assert "protocol.file.allow=always" not in clone
+
+
 # =============================================================================
 # End-to-end wiring: `abi new project` must actually emit the live sources.
 #
@@ -263,6 +315,24 @@ def test_new_project_makes_no_admin_password(tmp_path, monkeypatch) -> None:
     assert "password" not in result.output.lower()
 
 
+def test_new_project_keeps_secrets_out_of_git_and_out_of_the_image(
+    tmp_path, monkeypatch
+) -> None:
+    result = _invoke_new_project(tmp_path, monkeypatch)
+    assert result.exit_code == 0, result.output
+
+    project = tmp_path / "demo"
+    ignored_by_git = (project / ".gitignore").read_text(encoding="utf-8").split()
+    ignored_by_docker = (project / ".dockerignore").read_text(encoding="utf-8").split()
+    # `.env.remote`, `.env.dokploy`, volume snapshots: all hold secrets.
+    for name in (".env", ".env.*", ".snapshots/"):
+        assert name in ignored_by_git, name
+    for name in (".env", ".env.*", ".snapshots/", ".git"):
+        assert name in ignored_by_docker, name
+    # The `.abi` submodule is what the image installs the framework from.
+    assert ".abi" not in ignored_by_docker
+
+
 # =============================================================================
 # NATS is the default; --without-nats keeps the classic in-process project.
 # =============================================================================
@@ -298,10 +368,14 @@ def test_new_project_runs_on_nats_by_default(tmp_path, monkeypatch) -> None:
     # The built-in identity provider `abi dev up` runs, and its client's secret.
     assert "naas-abi-idp" in _uv_add(commands)
     assert len(env["ABI_IDP_CLIENT_SECRET"]) >= 24
+    # No legacy extras: Dagster and RabbitMQ are not installed.
+    assert "naas-abi-core[all]" in _uv_add(commands)
     assert "nats-server" in result.output
     # The project's own module holds the default agent the engine loads.
     module = (tmp_path / "demo" / "src" / "demo" / "__init__.py").read_text()
     assert "naas_abi_core" in module
+    # Module jobs schedule a NATS project: no Dagster orchestration.
+    assert not (tmp_path / "demo" / "src" / "demo" / "orchestrations").exists()
     assert not (tmp_path / "demo" / "docker-compose.override.yml").exists()
 
 
@@ -320,11 +394,16 @@ def test_new_project_without_nats_is_the_classic_project(tmp_path, monkeypatch) 
     assert not any("naas-abi-sdk" in arg for arg in _uv_add(commands))
     assert not any("naas-abi-idp" in arg for arg in _uv_add(commands))
     assert "nats-server" not in result.output
+    # The legacy extras its Dagster and RabbitMQ setup runs on.
+    assert "naas-abi-core[all,dagster,rabbitmq]" in _uv_add(commands)
+    orchestrations = tmp_path / "demo" / "src" / "demo" / "orchestrations"
+    assert (orchestrations / "DemoOrchestration.py").is_file()
 
 
 def test_a_nats_project_refuses_to_skip_the_submodule(tmp_path, monkeypatch) -> None:
-    """naas-abi-proto and naas-abi-sdk are not on PyPI: without the submodule
-    the project could not install, so it fails before writing anything."""
+    """naas-abi-proto and naas-abi-sdk come from the submodule: without it the
+    project would not install the framework's own revision, so it fails before
+    writing anything."""
     result = _invoke_new_project(tmp_path, monkeypatch, "--without-abi-submodule")
 
     assert result.exit_code != 0
@@ -352,3 +431,33 @@ def test_a_nats_project_stops_when_the_clone_fails(tmp_path, monkeypatch) -> Non
     assert "naas-abi-sdk" in result.output
     # The half-made project is removed, so the same command can run again.
     assert not (tmp_path / "demo").exists()
+
+
+def test_a_config_that_does_not_validate_is_reported_not_raised(
+    tmp_path, monkeypatch
+) -> None:
+    """Without a TTY, a secret the config names but nobody set (OPENROUTER_API_KEY)
+    fails the closing `abi config validate`: say what to do, not a traceback."""
+    from click.testing import CliRunner
+
+    def fake_run(cmd, **_kwargs):
+        if "submodule" in cmd:
+            (tmp_path / "demo" / project.ABI_SUBMODULE_PATH / "libs").mkdir(
+                parents=True, exist_ok=True
+            )
+        if "validate" in cmd:
+            raise subprocess.CalledProcessError(1, cmd)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(project.subprocess, "run", fake_run)
+    monkeypatch.setattr(project.shutil, "which", lambda _cmd: "/usr/bin/git")
+
+    result = CliRunner().invoke(
+        project.new_project,
+        ["demo", str(tmp_path), "--domain", "localhost", "--without-local-deploy"],
+    )
+
+    assert result.exit_code == 1
+    assert not isinstance(result.exception, subprocess.CalledProcessError)
+    assert str(tmp_path / "demo") in result.output
+    assert "abi config validate" in result.output

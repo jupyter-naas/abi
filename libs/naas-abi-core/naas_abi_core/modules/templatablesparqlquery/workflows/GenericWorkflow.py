@@ -2,6 +2,7 @@ from typing import Generic, TypeVar
 
 from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
+from naas_abi_core.utils.Logger import logger
 from naas_abi_core.utils.SPARQL import SPARQLUtils
 from pydantic import BaseModel
 
@@ -31,7 +32,8 @@ class GenericWorkflow(Generic[T]):
             sparql_query = template.render(
                 **parameters.model_dump(),
             )
-            print(sparql_query)
+            # It holds the model's arguments: DEBUG only.
+            logger.debug(f"{self.name} query: {sparql_query}")
             results = self.triple_store_service.query(sparql_query)
 
             return SPARQLUtils(self.triple_store_service).results_to_list(results)

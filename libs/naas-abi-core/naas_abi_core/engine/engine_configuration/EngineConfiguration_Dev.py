@@ -20,9 +20,6 @@ overlay approves its permission manifest as it submits it.
           args: [researcher]
           env: {NATS_PROBE_DISCOVERY_PROJECT: "${ABI_DISCOVERY_PROJECT}"}
           restart: on-failure               # or always, never
-          # identity: zen.probe_researcher  # the token's subject: its module_id;
-          #                                 # default: as the SDK names its module class
-          #                                 # (module_id, else its module), else name
 """
 
 from __future__ import annotations

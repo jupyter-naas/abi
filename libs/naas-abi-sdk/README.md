@@ -1,6 +1,9 @@
 # naas-abi-sdk
 
-Small, async Python clients for ABI engine services over NATS. Runtime dependencies:
+Small, async Python clients for ABI engine services over NATS, and the runtime
+of remote modules: modules that run in their own process and reach the engine
+only through NATS. Guide: [Build a Remote Module](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/build/sdk/build-a-remote-module.md);
+architecture: [Remote Modules and Jobs](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/developer-guide/architecture/remote-modules.md). Runtime dependencies:
 `naas-abi-proto`, `protobuf` (transitive), and `nats-py`. No ABI core, LangChain,
 Dagster, RDF library, database drivers, or HTTP framework.
 
@@ -32,7 +35,7 @@ internal. Argument names and defaults follow the corresponding core methods wher
 the v1 contract supports them. No core classes are imported.
 
 Explicit protobuf access remains available through `engine.rpc` or the low-level
-`ABIClient`. Those clients cover all 117 v1 RPC endpoints in `catalog.py`.
+`ABIClient`. Those clients cover every v1 RPC endpoint listed in `catalog.py`.
 Services: activity_log, cache, coding_environment, dataset, document, email, event,
 keyvalue, object_storage, secret, source_control, triple_store, vector_store.
 The bus retains its native publish/subscribe and enqueue/dequeue API, including
@@ -186,6 +189,43 @@ separately from those framework-specific components.
 engine's `services.cache.adapters` list. The default `client.cache` remains the
 v1 cold endpoint. Tier contracts use the same protobuf messages, with subjects
 `abi.svc.cache.v1.tier.<index>.<method>`.
+
+## Jobs
+
+A module declares jobs and runs them in its own process; JetStream schedules
+and delivers the triggers (docs/adr/20261001_nats-jobs.md). One replica takes
+each trigger, and delivery is at least once.
+
+```python
+from datetime import timedelta
+from naas_abi_sdk.jobs import Cron, Every, JobContext, OnEvent, job
+
+
+class ABIModule(BaseModule):
+    @job(triggers=(Every("1h"),), timeout=timedelta(minutes=5), max_attempts=3)
+    async def refresh(self, ctx: JobContext) -> dict:
+        if not await self.has_work():
+            ctx.skip("nothing to do")  # SKIPPED, hidden by default
+            return {}
+        ctx.log("refreshing")
+        return {"ok": True}  # stored on the run record
+```
+
+- Triggers: `Cron` (six fields, seconds first, optional `time_zone`), `Every`
+  (a Go duration or a timedelta, at least 1 s), `OnEvent(subject)` or
+  `OnEvent(event_type=..., filter={...})`.
+- `max_concurrency` (default 1: no overlap), `timeout` (sets `ctx.cancelled`),
+  `max_attempts` (default 1).
+- `self.trigger_job(name, payload, idempotency_key=...)` (sync) or
+  `await self.atrigger_job(...)` triggers the module's own jobs; another
+  module's: `await self.engine.modules[id].get_job(name)`, then
+  `run = await job.trigger(payload)` and `run.status()`, `run.wait()`,
+  `run.cancel()`. A repeated `idempotency_key` within 2 minutes is the same run.
+- Runs are documents in the module's namespace (`QUEUED`, `RUNNING`,
+  `RETRYING`, `SUCCEEDED`, `SKIPPED`, `FAILED`, `TIMED_OUT`, `CANCELLED`),
+  pruned after 7 days (1 hour for skipped runs, at most 1,000 per job). Modules
+  host jobs only with discovery; the engine that hosts it creates the jobs
+  stream.
 
 ## Document state and LangGraph checkpoints
 
@@ -459,7 +499,8 @@ inference cannot be forcibly interrupted: the adapter waits for its worker threa
 before releasing the claim. Completed side effects cannot be undone. Graph
 interrupt/resume is not yet part of this protocol.
 
-The host admits at most 32 active runs per module. Prompts remain bounded to
+The host admits at most 200 active runs per process (`MAX_ACTIVE_RUNS`),
+shared by every agent it hosts; one more fails with `AGENT_BUSY`. Prompts remain bounded to
 64 KiB. Events and results are stored separately as immutable 8 KiB fragments;
 there is no 64 KiB output limit or 1024-event cap. The run record holds committed
 sequence counters and stays small. Status returns up to 64 event references;
@@ -560,7 +601,7 @@ api = FastAPI()
 
 @api.get("/api/report")
 async def report(request: Request):
-    user = request.scope["abi"]["user_id"]  # the signed-in Nexus user
+    user = request.scope["abi"]["user_id"]  # the user the caller's credential acts for
     return {"user": user}
 
 class ABIModule(BaseModule):
@@ -575,6 +616,16 @@ The app's page calls `fetch("api/report")`, relative to its folder. The ASGI
 app runs in the module's process with `root_path` set to the Nexus path, and its
 lifespan (startup and shutdown) runs with the module. Nexus checks the user's
 access, then forwards the request without the user's credential.
+
+`request.scope["abi"]` holds `user_id` (the user the caller's verified credential
+acts for, empty for a caller acting for nobody), `principal` (`id`, `kind`, `name`:
+whoever holds the credential, which may act for that user) and `workspace_id`
+(the Nexus workspace the user opened the app from, one where it is enabled;
+empty without a `user_id`). The app host takes the user and the principal from
+discovery's verification of the caller's token, never from the request, so
+another module can call an app, but never on behalf of a user it does not act
+for. Keep each workspace's data apart with `workspace_id`. A lifespan's state (`yield {...}`) reaches each request
+(`request.state`).
 
 The page runs sandboxed, in an opaque origin, apart from the Nexus session. The
 grant in its URL is its only credential:
@@ -599,9 +650,16 @@ async def upload(name: str, request: Request):
 ```
 
 A `StreamingResponse` (a download, server-sent events) leaves as the app sends
-it; when the browser leaves, the app is cancelled. Nexus refuses uploads above
-the app's `max_upload_bytes` (manifest; default 1 GiB). An app that neither
-reads nor answers for 60 s gets 504; there is no total limit. Multipart forms
+it; when the browser leaves, the app is cancelled, even while it waits for its
+next event. Set `Content-Length` when you know it: Nexus forwards it, and a
+browser then tells a cut download from a whole one (a stream that fails is
+aborted either way). When the module stops, a stream still open ends with an
+error. Nexus refuses uploads above the app's `max_upload_bytes` (manifest;
+default 1 GiB), and the module stops reading there too. Uploads run 16 at
+once per module process (`AppHost(max_uploads=)`), apart from other requests.
+An app that neither reads nor answers for 60 s gets 504; there is no total
+limit. An exception the app raises, an `RPCError` of a service it called
+included, is a 502 for the browser. Multipart forms
 work, but FastAPI's `UploadFile` spools each file (to disk above 1 MB): send a
 very large file as the raw body instead. No WebSockets yet. Declare `apps = (AppDescriptor(...),)` on the class instead
 of the folder for an app without files.
@@ -694,3 +752,10 @@ Expired leases use half the nominal lease as the cap.
 Authentication/configuration errors remain fatal and visible. Unexpected renewal
 or endpoint-binding failures receive at most three consecutive attempts. Failed
 endpoint rebinds clean up partial subscriptions and retain the previous bindings.
+
+## Documentation
+
+- [Quickstart](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/get-started/quickstart.md)
+- [Module jobs and scheduling](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/build/modules/module-jobs.md)
+- [SDK and proto internals](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/developer-guide/sdk-and-proto.md)
+- [Deploy](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/deploy/overview.md)

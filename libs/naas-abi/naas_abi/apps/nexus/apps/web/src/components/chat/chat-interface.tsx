@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffe
 import { createPortal } from 'react-dom';
 import { Send, Plus, Bot, AlertCircle, Brain, ChevronDown, X, ArrowUp, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square, Columns2 } from 'lucide-react';
 import Image from 'next/image';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
@@ -25,6 +25,7 @@ import { pickPaneAgentForSurface } from '@/lib/feature-agent-pane';
 import {
   appAgentRefForPane,
   featureChatContext,
+  routeWithSearch,
   getPaneSurfaceForPath,
 } from '@/lib/feature-office-agents';
 import { useFeaturePaneStore } from '@/stores/feature-pane';
@@ -818,6 +819,7 @@ export function ChatInterface({
   }, [initialConversationId, isPane]);
 
   const pathname = usePathname();
+  const search = useSearchParams()?.toString();
   const slidesSlug = useSlidesStore((s) => s.selectedSlug);
   const slidesTitle = useSlidesStore((s) => s.selectedTitle);
   const slidesMode = useSlidesStore((s) => s.editorMode);
@@ -932,8 +934,8 @@ export function ChatInterface({
   // Chat and Slides return null (orchestrator surface / own slides block).
   const featureResource = useFeaturePaneStore((s) => s.resource);
   const featurePaneContext = useMemo(
-    () => (isPane ? featureChatContext(pathname, featureResource) : null),
-    [isPane, pathname, featureResource],
+    () => (isPane ? featureChatContext(routeWithSearch(pathname, search), featureResource) : null),
+    [isPane, pathname, search, featureResource],
   );
 
   const chatRequestContext = useMemo(() => {

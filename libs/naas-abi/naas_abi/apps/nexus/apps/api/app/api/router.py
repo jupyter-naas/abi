@@ -46,8 +46,20 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.adapters.primary.invites_
     idp_groups_router,
     invitations_router,
 )
+from naas_abi.apps.nexus.apps.api.app.services.maps.basemaps.handlers import (
+    router as maps_basemaps_router,
+)
+from naas_abi.apps.nexus.apps.api.app.services.maps.catalog.handlers import (
+    router as maps_catalog_router,
+)
+from naas_abi.apps.nexus.apps.api.app.services.maps.feed_layers.handlers import (
+    router as maps_feed_layers_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.handlers import (
     router as maps_layouts_router,
+)
+from naas_abi.apps.nexus.apps.api.app.services.maps.permissions.handlers import (
+    router as maps_permissions_router,
 )
 from naas_abi.apps.nexus.apps.api.app.services.modules.handlers import router as modules_router
 from naas_abi.apps.nexus.apps.api.app.services.oidc.adapters.primary.oidc__primary_adapter__FastAPI import (  # noqa: E501
@@ -107,6 +119,12 @@ api_router.include_router(apps_router, prefix="/apps", tags=["apps"])
 api_router.include_router(app_projects_router, prefix="/app-projects", tags=["app-projects"])
 api_router.include_router(files_router, prefix="/files", tags=["files"])
 api_router.include_router(maps_layouts_router, prefix="/maps/layouts", tags=["maps"])
+# Feeds are the layout records; /maps/feeds is the name the UI uses.
+api_router.include_router(maps_layouts_router, prefix="/maps/feeds", tags=["maps"])
+api_router.include_router(maps_feed_layers_router, prefix="/maps/feed-layers", tags=["maps"])
+api_router.include_router(maps_basemaps_router, prefix="/maps/basemaps", tags=["maps"])
+api_router.include_router(maps_catalog_router, prefix="/maps/catalog", tags=["maps"])
+api_router.include_router(maps_permissions_router, prefix="/maps/permissions", tags=["maps"])
 api_router.include_router(datasets_router, prefix="/datasets", tags=["datasets"])
 api_router.include_router(secrets.router, prefix="/secrets", tags=["secrets"])
 api_router.include_router(providers_router, prefix="/providers", tags=["providers"])

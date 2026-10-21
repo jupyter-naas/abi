@@ -1,13 +1,15 @@
 [project]
 name = "naas-abi"
-version = "2.85.0"
+version = "3.0.0"
 description = "Multi-agent orchestrator and knowledge graph management system for AI orchestration, providing comprehensive coordination of specialized AI agents and semantic data management capabilities"
 readme = "README.md"
 authors = [{ name = "Grace Lambert", email = "maxime@naas.ai" },{ name = "Alice Dupont", email = "florent@naas.ai" }, { name = "Emma Petit", email = "jeremy@naas.ai" }]
 requires-python = ">=3.11,<4"
 dependencies = [
     # nats: Nexus imports naas_abi_core.engine.nats_transfer (naas-abi-proto, naas-abi-sdk).
-    "naas-abi-core[dagster,nats]>=1.4.0",
+    # Not dagster: DemoOrchestration imports it only when used, and a project
+    # without NATS adds the legacy naas-abi-core[dagster] extra itself.
+    "naas-abi-core[nats]>=3.0.0",
     "naas-abi-marketplace>=1.3.3",
     # --- Nexus API runtime dependencies ---
     "fastapi>=0.109.0",
@@ -70,6 +72,7 @@ include = ["naas_abi*"]
 [tool.setuptools.package-data]
 naas_abi = [
     "apps/nexus/apps/api/migrations/*.sql",
+    "apps/nexus/apps/api/app/services/maps/basemaps/assets/*",
     "apps/nexus/apps/api/public/**/*",
     "apps/nexus/assets/**/*",
     "apps/nexus/ontology/**/*",

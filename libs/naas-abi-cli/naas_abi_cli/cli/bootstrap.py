@@ -73,18 +73,23 @@ def _get_project_cli_version(project_root: Path) -> str:
 def _show_rerun_info(
     project_root: Path, system_version: str, project_version: str
 ) -> None:
+    # On stderr: stdout is the command's own output, which scripts capture
+    # (`key=$(abi iam key create ...)`).
     click.secho(
         "[abi] ABI project detected. Re-running in local project environment.",
         fg="yellow",
         bold=True,
+        err=True,
     )
     click.secho(
         f"      project: {project_root}",
         fg="bright_yellow",
+        err=True,
     )
     click.secho(
         f"      versions: system={system_version} | project={project_version}",
         fg="bright_yellow",
+        err=True,
     )
 
 

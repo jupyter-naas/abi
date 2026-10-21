@@ -8,16 +8,18 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class AgentEvent(_message.Message):
-    __slots__ = ("sequence", "event", "data", "parts")
+    __slots__ = ("sequence", "event", "data", "parts", "chat_source")
     SEQUENCE_FIELD_NUMBER: _ClassVar[int]
     EVENT_FIELD_NUMBER: _ClassVar[int]
     DATA_FIELD_NUMBER: _ClassVar[int]
     PARTS_FIELD_NUMBER: _ClassVar[int]
+    CHAT_SOURCE_FIELD_NUMBER: _ClassVar[int]
     sequence: int
     event: str
     data: str
     parts: int
-    def __init__(self, sequence: _Optional[int] = ..., event: _Optional[str] = ..., data: _Optional[str] = ..., parts: _Optional[int] = ...) -> None: ...
+    chat_source: bool
+    def __init__(self, sequence: _Optional[int] = ..., event: _Optional[str] = ..., data: _Optional[str] = ..., parts: _Optional[int] = ..., chat_source: bool = ...) -> None: ...
 
 class Invocation(_message.Message):
     __slots__ = ("invocation_id", "thread_id", "status", "result", "error_code", "error_message", "owner_instance_id", "owner_available", "events", "last_sequence", "result_parts")

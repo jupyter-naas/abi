@@ -2,20 +2,52 @@
 
 <!-- version list -->
 
-### Upgrade notes
+## v3.0.0 (2026-10-20)
 
-- **Agent memory moves to the Document Service.** In NATS mode, engine agents
-  keep conversation memory in the Document Service, not in the `POSTGRES_URL`
-  database. Right after deploying, a super admin runs `agent_memory_migrate`
-  from the Nexus System app (Jobs tab, Run now): `{}` for a dry run, then
-  `{"apply": true}`. Until then, earlier conversations have no memory, and a
-  thread continued in between is reported as `diverged`. Without NATS mode,
-  use `abi agent migrate-memory`. `agent_memory_prune` now runs daily and keeps
-  each thread's newest 20 checkpoints.
-- **Activity log history.** The activity log now defaults to the Document
-  Service. To keep the per-actor SQLite history, run `activity_log_migrate`
-  with `{"data_dir": "storage/activity_log"}`, then add `"apply": true`.
-- Runbook: `docs/migrate-to-nats.md`.
+
+### Upgrade notes (3.0)
+
+- **NATS mode.** A top-level `nats:` block runs the engine on a NATS broker:
+  kernel services on `abi.svc.<service>.v1.*`, the JetStream bus, module jobs,
+  discovery for remote modules, one serving engine per NATS account. Without
+  the block the engine keeps its in-process wiring.
+- **Dagster and RabbitMQ are legacy extras.** `naas-abi-core` no longer
+  installs Dagster and `[all]` leaves out `dagster` and `rabbitmq`: a project
+  without NATS adds `naas-abi-core[all,dagster,rabbitmq]`. Both are removed in
+  the next major. `[all]` now includes `nats` and `otel`.
+- **Agent memory and the activity log** move to the Document Service in NATS
+  mode. Right after the switch, run `agent_memory_migrate` (`{}`, then
+  `{"apply": true}`) and `activity_log_migrate` from the Nexus System app.
+  `agent_memory_prune` runs daily.
+- Custom adapters must implement the ports' new abstract methods.
+- Upgrade `naas-abi-core`, `naas-abi` and `naas-abi-cli` together.
+- Guide: [Migrate from 2.x to 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/migrate-to-3.md).
+  Every change: [Breaking changes in 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/breaking-changes-3.md).
+
+## v2.44.0 (2026-10-20)
+
+### Bug Fixes
+
+- **slides**: Satisfy CI lint checks
+  ([`48c9102`](https://github.com/jupyter-naas/abi/commit/48c9102a3614a96edb8b0daafb030bc2299d8fa4))
+
+### Features
+
+- **slides**: Preserve semantic editor contributions
+  ([`6f244f6`](https://github.com/jupyter-naas/abi/commit/6f244f6b5165e2fd98850b6c00f3b9cbd1a0057e))
+
+## v2.43.0 (2026-10-14)
+
+### Chores
+
+- **nexus-map**: Commit staged changes and push
+  ([`df724fe`](https://github.com/jupyter-naas/abi/commit/df724fe722b9bf76d6508ac88c6ae26b2aa3a29f))
+
+### Features
+
+- **maps**: Add new map icons and layer colors
+  ([`36ab3d9`](https://github.com/jupyter-naas/abi/commit/36ab3d9544a495a2cf34983c4045b1a100c12807))
+
 
 ## v2.42.1 (2026-10-12)
 

@@ -2,6 +2,7 @@
 
 import { MAPS_PUBLIC_FEEDS } from '../lib/datasets';
 import { fetchMapsFeedPins } from '../lib/maps-feed';
+import { gulfStrikesFeedLegend } from '../lib/maps-layer-feed-legends';
 import { MapsFeedCanvas } from './maps-feed-canvas';
 
 export async function fetchPins(signal: AbortSignal) {
@@ -27,32 +28,8 @@ export function MapsGulfStrikes() {
       fetchPins={fetchPins}
       refreshMs={120000}
       fitMaxZoom={6}
-      legend={
-        <div className="maps-legend">
-          <span className="maps-legend__title">Severity</span>
-          <div className="maps-legend__row">
-            <span
-              className="maps-legend__dot"
-              style={{ background: '#dc2626' }}
-            />
-            <span>Critical</span>
-          </div>
-          <div className="maps-legend__row">
-            <span
-              className="maps-legend__dot"
-              style={{ background: '#ea580c' }}
-            />
-            <span>High</span>
-          </div>
-          <div className="maps-legend__row">
-            <span
-              className="maps-legend__dot"
-              style={{ background: '#ca8a04' }}
-            />
-            <span>Elevated</span>
-          </div>
-        </div>
-      }
+      legendLayerId="gulf-strikes"
+      legend={gulfStrikesFeedLegend()}
     />
   );
 }

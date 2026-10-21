@@ -25,3 +25,9 @@ This extraction preserves existing validation semantics: v1 currently has no
 Protovalidate annotations. The engine's adapters remain the validation boundary;
 this package does not claim client-side semantic validation. Introducing annotations
 and the corresponding runtime is a separate contract change.
+
+## Documentation
+
+- [SDK and proto internals](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/developer-guide/sdk-and-proto.md)
+- [Build a Remote Module](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/build/sdk/build-a-remote-module.md)
+- [Releasing](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/developer-guide/releasing/release-process.md)

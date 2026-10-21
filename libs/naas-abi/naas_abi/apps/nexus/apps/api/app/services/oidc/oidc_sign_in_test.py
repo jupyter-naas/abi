@@ -76,6 +76,8 @@ def _app() -> FastAPI:
     app = FastAPI()
     app.include_router(auth_router, prefix="/api/auth")
     app.include_router(oidc_router, prefix="/api/auth/oidc")
+    # The drive profile sync of a profile change (best effort) has no object storage here.
+    app.state.object_storage = object()
 
     @app.get("/api/whoami")
     async def whoami() -> dict:

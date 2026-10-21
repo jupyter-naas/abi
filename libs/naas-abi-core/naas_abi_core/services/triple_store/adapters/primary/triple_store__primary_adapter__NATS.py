@@ -174,10 +174,10 @@ def _query_result_to_pb(result: object) -> triple_store_pb2.QueryResult:
                 result_type=result.type,
                 construct_triples_nt=_graph_to_nt(graph),
             )
-        # SELECT
+        # SELECT. The HTTP adapters answer an update (DROP, INSERT, ...) with
+        # an empty ``Result("SELECT")`` that has no bindings to iterate.
         var_names = [str(v) for v in (result.vars or [])]
         rows = []
-        # An update's answer is an empty SELECT with no bindings at all.
         for row in result if result.bindings is not None else ():
             assert isinstance(row, rdflib.query.ResultRow)
             bindings: dict[str, str] = {}

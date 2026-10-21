@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+from naas_abi.apps.nexus.apps.api.app.services.apps import links
 from naas_abi.apps.nexus.apps.api.app.services.audit import log_login, log_logout
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
     to_signed_in_user,
@@ -31,6 +32,7 @@ from naas_abi.apps.nexus.apps.api.app.services.oidc.service import (
     OidcLoginError,
     csrf_token,
 )
+from naas_abi_core import logger
 from naas_abi_core.services.identity.IdentityPorts import ProviderUnavailableError
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -171,6 +173,15 @@ async def get_session(request: Request, db: AsyncSession = Depends(get_db)) -> d
     }
 
 
+async def _end_remote_app_grants(user_id: str) -> None:
+    """A remote app's grant ends with the sign-out, on every device; the sign-out
+    itself never fails for it."""
+    try:
+        await links.arevoke_remote_app_links(user_id)
+    except Exception as exc:  # noqa: BLE001 - the session is ended anyway
+        logger.warning(f"Remote app grants of user {user_id} were not ended at logout: {exc}")
+
+
 @router.post("/logout")
 async def logout(request: Request, db: AsyncSession = Depends(get_db)) -> JSONResponse:
     if getattr(request.state, "nexus_csrf_failed", False):
@@ -181,6 +192,7 @@ async def logout(request: Request, db: AsyncSession = Depends(get_db)) -> JSONRe
         post_logout_redirect_uri=_frontend("/auth/login"),
     )
     if session is not None:
+        await _end_remote_app_grants(session.user_id)
         await log_logout(session.user_id, request)
     response = JSONResponse({"status": "logged out", "end_session_url": end_session_url})
     response.delete_cookie(settings.oidc_session_cookie, path="/", **_cookie_options())

@@ -46,6 +46,13 @@ def _name(value: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.:-]{0,255}", value))
 
 
+def _instance_id(value: str) -> bool:
+    """One NATS subject token: an instance id carries no ``.`` and no wildcard, so
+    an id ``<other>.x`` cannot be read as another instance's id where a subject
+    or a record names it."""
+    return bool(re.fullmatch(r"[A-Za-z0-9_-]{1,128}", value))
+
+
 def _rollout_id(value: str) -> bool:
     return value == "" or bool(
         re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.:-]{0,127}", value)
@@ -452,7 +459,7 @@ class DiscoveryService:
     def _validate(self, req: pb.RegisterRequest, state: pb.RegistryState) -> None:
         d = req.descriptor
         _require(
-            _name(d.module_id) and _name(req.instance_id),
+            _name(d.module_id) and _instance_id(req.instance_id),
             "INVALID_ARGUMENT",
             "Invalid module or instance identity",
         )

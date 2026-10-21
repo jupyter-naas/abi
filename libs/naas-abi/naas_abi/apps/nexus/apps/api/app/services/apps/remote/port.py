@@ -25,6 +25,9 @@ MAX_UPLOADS_PER_MODULE = 16
 # by the route that knows which service account it runs as
 # (services/idp), and its admin app by services only, over NATS.
 INTERNAL_MODULES = frozenset({"idp"})
+# Responses streaming at once from one module, per API worker (downloads,
+# server-sent events): one module's streams cannot take a worker for all.
+MAX_STREAMS_PER_MODULE = 256
 
 
 class RemoteAppUnavailable(Exception):
@@ -33,6 +36,12 @@ class RemoteAppUnavailable(Exception):
     def __init__(self, status: int, reason: str) -> None:
         super().__init__(reason)
         self.status, self.reason = status, reason
+
+
+class RemoteAppStreamFailed(Exception):
+    """A response body broke off after its status was sent. Raised from the
+    body's iterator so that the server aborts the connection: the browser sees
+    a failed download, never a short one that looks whole."""
 
 
 @dataclass(frozen=True)
@@ -77,6 +86,8 @@ class AppRequest:
     headers: tuple[tuple[str, str], ...] = ()
     body: bytes = b""
     user_id: str = ""
+    # The workspace the user opened the app from (its grant names it).
+    workspace_id: str = ""
     # A large body, read as the module pulls it (after ``body``).
     body_stream: AsyncIterator[bytes] | None = None
     max_body_bytes: int = 0

@@ -31,7 +31,7 @@ IdP group bindings are the same idea for a whole group of a provider: the member
 | `views.py` | The answers of the routes (no service behind them, so the org and workspace routers can import them) |
 | `runtime.py` | `RUNTIME`: builds the service from the engine's, `claimer` (the sign-in hook), `get_invitation_service` (the route dependency); tests `configure` another |
 | `adapters/primary/invites__primary_adapter__FastAPI.py` | `/api/invitations/...` and `/api/idp-groups/...` |
-| `adapters/secondary/postgres.py` | The `invitations` table (`migrations/0051_add_invitations.sql`) |
+| `adapters/secondary/postgres.py` | The `invitations` table (`migrations/0060_add_invitations.sql`) |
 | `adapters/secondary/engine.py` | The engine's identity and IAM, as `api` for nobody |
 | `adapters/secondary/mailer.py` | The invitation mail through the engine's email service |
 | `mail.py` | The email service, the dev-frontend subject mark, and the notice mailed to someone who already had an account (`send_added_notice`) |

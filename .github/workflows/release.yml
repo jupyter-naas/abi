@@ -4,6 +4,13 @@ on:
     branches:
       - dev
       - main
+  # Uploads the files of an existing GitHub release to PyPI (job publish-existing).
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag whose files to upload to PyPI, e.g. naas-abi-sdk-v0.1.0
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -14,7 +21,7 @@ jobs:
 
   release:
     runs-on: ubuntu-latest
-    if: github.repository == 'jupyter-naas/abi'
+    if: github.repository == 'jupyter-naas/abi' && github.event_name == 'push'
     concurrency:
       group: ${{ github.workflow }}-release-${{ github.ref_name }}
       cancel-in-progress: false
@@ -169,3 +176,31 @@ jobs:
         if: steps.release-naas-abi-cli.outputs.released == 'true'
         with:
           packages-dir: ${{ format('{0}/dist', env.naas_abi_cli_dir) }}
+
+  # A release whose upload failed (a missing or wrong trusted publisher) is not
+  # released again: its tag exists, so semantic-release has nothing to do. Run this
+  # job from main (Actions > Release > Run workflow) with the tag, one package at a
+  # time and in dependency order: naas-abi-proto, naas-abi-sdk, naas-abi-core,
+  # naas-abi-marketplace, naas-abi, naas-abi-cli. It runs in this file so that the
+  # trusted publishers (workflow release.yml, environment pypi) apply. Versions
+  # already on PyPI are skipped.
+  publish-existing:
+    runs-on: ubuntu-latest
+    if: github.repository == 'jupyter-naas/abi' && github.event_name == 'workflow_dispatch'
+    environment:
+      name: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download | Files of the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir dist
+
+      - name: Publish | Upload to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
+        with:
+          packages-dir: dist
+          skip-existing: true

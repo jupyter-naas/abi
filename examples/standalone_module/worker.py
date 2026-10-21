@@ -309,9 +309,9 @@ class ABIModule(BaseModule):
         await call("compact")
         assert (await self.call("dataset", "list_snapshots")).snapshots.items
         version = await self.call("dataset", "namespace_version", namespace="default")
-        assert version.HasField("snapshot_id") and version.snapshot_id > 0
+        assert version.HasField("version") and version.version > 0
         unused = await self.call("dataset", "namespace_version", namespace="unused")
-        assert not unused.HasField("snapshot_id")
+        assert not unused.HasField("version")
         await call("drop")
         assert not any(
             i.name == "demo"

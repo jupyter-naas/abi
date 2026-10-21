@@ -2,6 +2,7 @@ import asyncio
 import json
 import sys
 import types
+from functools import partial
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -66,11 +67,17 @@ def _session():
             caller_principal_name="api",
         )
     )
+    # The host reads the broker's limit to decide what travels inline.
+    nc = SimpleNamespace(max_payload=8 * 1024 * 1024)
     return SimpleNamespace(
         instance_id="i-1",
         service_account="sa1",
         lease_token="l" * 32,
-        client=SimpleNamespace(_call=call, project="acme"),
+        client=SimpleNamespace(
+            _call=call,
+            project="acme",
+            transport=SimpleNamespace(connect=AsyncMock(return_value=nc)),
+        ),
     )
 
 
@@ -217,6 +224,53 @@ def test_a_fastapi_backend_answers_other_paths(tmp_path):
     asyncio.run(scenario())
 
 
+def test_the_app_sees_the_verified_user_and_workspace(tmp_path):
+    """The user and the actor are discovery's; the workspace is kept only for a
+    verified user."""
+    fastapi = pytest.importorskip("fastapi")
+    app = fastapi.FastAPI()
+
+    @app.get("/api/whoami")
+    async def whoami(request: fastapi.Request):
+        return request.scope["abi"]
+
+    async def scenario():
+        host = _host(tmp_path / "user", app)
+        answered = await _send(
+            host,
+            _request("/api/whoami", user_id="forged", workspace_id="ws-1"),
+        )
+        assert json.loads(answered.body) == {
+            "user_id": "u-7",
+            "workspace_id": "ws-1",
+            "principal": {
+                "id": "sa_api",
+                "kind": "service_account",
+                "name": "api",
+            },
+        }
+        module = _host(tmp_path / "module", app)
+        module.session.client._call.return_value = discovery_pb.AuthorizeAppResponse(
+            caller_principal_id="sa_billing",
+            caller_principal_kind="service_account",
+            caller_principal_name="module/acme/acme.billing",
+        )
+        anonymous = await _send(
+            module, _request("/api/whoami", user_id="u-7", workspace_id="ws-1")
+        )
+        assert json.loads(anonymous.body) == {
+            "user_id": "",
+            "workspace_id": "",
+            "principal": {
+                "id": "sa_billing",
+                "kind": "service_account",
+                "name": "module/acme/acme.billing",
+            },
+        }
+
+    asyncio.run(scenario())
+
+
 def test_without_a_backend_unknown_paths_are_404(tmp_path):
     async def scenario():
         response = await _send(_host(tmp_path), _request("/api/x", method="POST"))
@@ -252,6 +306,23 @@ def test_a_failing_backend_is_an_app_error(tmp_path):
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("code", ["MODULE_UNAVAILABLE", "UNAVAILABLE", "LEASE_EXPIRED"])
+def test_an_rpc_error_raised_by_the_app_is_an_app_error(tmp_path, code):
+    """Nexus resends retryable codes elsewhere, assuming the app never ran: an
+    app whose own downstream call failed must not have its POST run twice."""
+
+    async def calls_downstream(scope, receive, send):
+        raise RPCError(code, "downstream module gone")
+
+    async def scenario():
+        response = await _send(
+            _host(tmp_path, calls_downstream), _request("/x", method="POST")
+        )
+        assert response.error.code == "APP_ERROR"
+
+    asyncio.run(scenario())
+
+
 def test_lifespan_runs_startup_and_shutdown(tmp_path):
     events = []
 
@@ -273,7 +344,9 @@ def test_lifespan_runs_startup_and_shutdown(tmp_path):
             connect=AsyncMock(return_value=nc)
         )
         await host.start()
-        assert nc.subscribe.await_args.args[0] == "abi.mod.acme.sa1.i-1.app.console.http"
+        assert (
+            nc.subscribe.await_args.args[0] == "abi.mod.acme.sa1.i-1.app.console.http"
+        )
         await host.close()
 
     asyncio.run(scenario())
@@ -325,6 +398,158 @@ def test_draining_and_oversized_requests_are_refused(tmp_path):
         host.closing = True
         draining = await _send(host, _request("/"))
         assert draining.error.code == "MODULE_UNAVAILABLE"
+
+    asyncio.run(scenario())
+
+
+def _in_flight(host, request):
+    """Deliver ``request`` as the subscription does: in its own task."""
+    msg = FakeMsg(request)
+    host.subscriptions.append(
+        SimpleNamespace(drain=AsyncMock(), unsubscribe=AsyncMock())
+    )
+    return msg, host.calls.callback(partial(host._handle, "console"))(msg)
+
+
+def test_draining_lets_requests_in_progress_answer(tmp_path):
+    """On SIGTERM a request already running answers; Nexus does not wait 65 s
+    for a reply that never comes."""
+    release = asyncio.Event()
+
+    async def slow(scope, receive, send):
+        await release.wait()
+        await send({"type": "http.response.start", "status": 201, "headers": []})
+        await send({"type": "http.response.body", "body": b"done"})
+
+    async def scenario():
+        host = _host(tmp_path, slow)
+        msg, receive = _in_flight(host, _request("/x", method="POST"))
+        await receive
+        subscription = host.subscriptions[0]
+        drain = asyncio.create_task(host.drain(30))
+        await asyncio.sleep(0.05)
+        assert not drain.done()
+        subscription.drain.assert_awaited()  # new requests go elsewhere
+        release.set()
+        await asyncio.wait_for(drain, 5)
+        assert (msg.response.status, msg.response.body) == (201, b"done")
+        await host.close()
+
+    asyncio.run(scenario())
+
+
+def test_draining_gives_up_after_its_timeout(tmp_path):
+    async def stuck(scope, receive, send):
+        await asyncio.Event().wait()
+
+    async def scenario():
+        host = _host(tmp_path, stuck)
+        _, receive = _in_flight(host, _request("/x"))
+        await receive
+        await asyncio.wait_for(host.drain(0.05), 5)
+        await host.close()  # cancels what is still running
+
+    asyncio.run(scenario())
+
+
+class _QueuedSubscription:
+    """nats-py's drain: unsubscribe, then wait until the queued messages are
+    handed to the callback, one at a time."""
+
+    def __init__(self, cb, queued):
+        self.cb, self.queued = cb, list(queued)
+        self.unsubscribe = AsyncMock()
+
+    async def drain(self):
+        for msg in self.queued:
+            await self.cb(msg)
+
+
+def test_draining_keeps_to_its_deadline_with_calls_in_flight(tmp_path):
+    """Every slot busy, a request queued behind them: the queued one is refused
+    for another instance at once, and the drain ends at its timeout."""
+
+    running = asyncio.Event()
+
+    async def stuck(scope, receive, send):
+        running.set()
+        await asyncio.Event().wait()
+
+    async def scenario():
+        host = AppHost(
+            _session(),
+            {"console": (read_app(_site(tmp_path)), stuck)},
+            max_concurrency=1,
+        )
+        receive = host._receiver("console")
+        await receive(FakeMsg(_request("/x", method="POST")))  # takes the only slot
+        await asyncio.wait_for(running.wait(), 5)
+        queued = FakeMsg(_request("/y", method="POST"))
+        host.subscriptions.append(_QueuedSubscription(receive, [queued]))
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        await asyncio.wait_for(host.drain(0.3), 5)
+        assert loop.time() - started < 1.0
+        assert host.calls.in_flight == 1  # still running: close() cancels it
+        assert queued.response.error.code == "MODULE_UNAVAILABLE"
+        await host.close()
+
+    asyncio.run(scenario())
+
+
+def test_a_subscription_drain_that_hangs_does_not_outlast_the_timeout(tmp_path):
+    async def scenario():
+        host = _host(tmp_path)
+        host.subscriptions.append(
+            SimpleNamespace(drain=asyncio.Event().wait, unsubscribe=AsyncMock())
+        )
+        await asyncio.wait_for(host.drain(0.1), 2)
+        await host.close()
+
+    asyncio.run(scenario())
+
+
+def test_draining_with_nats_closed_still_waits_for_calls(tmp_path):
+    """nats-py refuses to drain on a closed or draining connection: the host
+    unsubscribes if it can and still lets the call in progress answer."""
+    from nats.errors import ConnectionClosedError
+
+    release = asyncio.Event()
+
+    async def slow(scope, receive, send):
+        await release.wait()
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"ok"})
+
+    async def scenario():
+        host = _host(tmp_path, slow)
+        msg, receive = _in_flight(host, _request("/x"))
+        await receive
+        subscription = host.subscriptions[0]
+        subscription.drain.side_effect = ConnectionClosedError
+        subscription.unsubscribe.side_effect = ConnectionClosedError
+        drain = asyncio.create_task(host.drain(30))
+        await asyncio.sleep(0.05)
+        assert not drain.done()
+        subscription.unsubscribe.assert_awaited()
+        release.set()
+        await asyncio.wait_for(drain, 5)
+        assert msg.response.status == 200
+        await host.close()
+
+    asyncio.run(scenario())
+
+
+def test_one_host_failing_to_drain_does_not_stop_the_others():
+    from naas_abi_sdk.module import _drain_hosts
+
+    async def scenario():
+        app_host = SimpleNamespace(drain=AsyncMock(side_effect=RuntimeError("nats")))
+        agent_host = SimpleNamespace(drain=AsyncMock())
+        job_host = SimpleNamespace(drain=AsyncMock())
+        await _drain_hosts(agent_host, job_host, None, 1.0, app_host)
+        agent_host.drain.assert_awaited_once_with(1.0)
+        job_host.drain.assert_awaited_once_with(1.0)
 
     asyncio.run(scenario())
 
@@ -390,3 +615,220 @@ def test_expose_app_needs_a_declared_app():
         module.expose_app("console", app)
     with pytest.raises(ValueError, match="Declare the app"):
         module.expose_app("other", app)
+
+
+# -- review findings of 2026-10-13 (A9, A10, A23-A25, A28) ----------------------------
+
+
+def test_an_answer_too_large_for_a_message_is_an_error_not_silence(tmp_path):
+    """A9: Nexus gets an error at once instead of waiting for its timeout."""
+
+    async def huge_headers(scope, receive, send):
+        headers = [(b"x-padding", b"p" * (96 * 1024))]
+        await send({"type": "http.response.start", "status": 200, "headers": headers})
+        await send({"type": "http.response.body", "body": b"ok"})
+
+    async def scenario():
+        msg = FakeMsg(_request("/x"))
+        msg._client.max_payload = 64 * 1024
+        await _host(tmp_path, huge_headers)._handle("console", msg)
+        assert msg.response.error.code == "APP_ERROR"
+        assert "too large" in msg.response.error.message
+
+    asyncio.run(scenario())
+
+
+def test_a_failed_send_of_the_answer_is_followed_by_an_error(tmp_path):
+    """A9: the first send fails; the module still answers."""
+
+    async def scenario():
+        msg = FakeMsg(_request("/"))
+        sent = msg._publish
+        calls = []
+
+        async def flaky(subject, data, headers=None):
+            calls.append(data)
+            if len(calls) == 1:
+                raise ConnectionError("broker hiccup")
+            await sent(subject, data, headers)
+
+        msg._client.publish = flaky
+        await _host(tmp_path)._handle("console", msg)
+        assert len(calls) == 2
+        assert msg.response.error.code == "APP_ERROR"
+
+    asyncio.run(scenario())
+
+
+def test_an_rpc_error_of_the_app_itself_is_an_app_error(tmp_path):
+    """A10: an app whose own call failed is not "the module is unavailable",
+    which Nexus would resend to another instance after the app ran."""
+
+    async def calls_a_service(scope, receive, send):
+        raise RPCError("UNAVAILABLE", "the vector store is down")
+
+    async def scenario():
+        response = await _send(_host(tmp_path, calls_a_service), _request("/x"))
+        assert response.error.code == "APP_ERROR"
+        assert "vector store" not in response.error.message
+
+    asyncio.run(scenario())
+
+
+def test_a_header_that_is_not_latin_1_is_refused(tmp_path):
+    """A23: refused as a bad request, not an app failure."""
+
+    async def app(scope, receive, send):  # pragma: no cover - never reached
+        raise AssertionError("the app must not run")
+
+    async def scenario():
+        request = _request("/x")
+        request.headers.add(name="X-Label", value="café ☕")
+        response = await _send(_host(tmp_path, app), request)
+        assert response.error.code == "INVALID_ARGUMENT"
+
+    asyncio.run(scenario())
+
+
+def test_head_and_get_of_a_file_carry_its_length(tmp_path):
+    """A23: HEAD answers the length GET would send."""
+
+    async def scenario():
+        host = _host(tmp_path)
+        head = await _send(host, _request("/index.html", method="HEAD"))
+        get = await _send(host, _request("/index.html"))
+        size = str(len(b"<h1>console</h1>"))
+        assert (
+            _headers(head)["content-length"] == size == _headers(get)["content-length"]
+        )
+        assert head.body == b""
+
+    asyncio.run(scenario())
+
+
+def test_the_apps_content_length_reaches_nexus(tmp_path):
+    """A6: Nexus forwards it, so a cut stream is seen as cut."""
+
+    async def app(scope, receive, send):
+        headers = [(b"content-length", b"2"), (b"connection", b"close")]
+        await send({"type": "http.response.start", "status": 200, "headers": headers})
+        await send({"type": "http.response.body", "body": b"ok"})
+
+    async def scenario():
+        response = await _send(_host(tmp_path, app), _request("/x"))
+        assert _headers(response) == {"content-length": "2"}
+
+    asyncio.run(scenario())
+
+
+def test_a_nul_in_a_path_is_not_found(tmp_path):
+    """A24: not an error the module logs as an app failure."""
+
+    async def scenario():
+        response = await _send(_host(tmp_path), _request("/index.html\x00.js"))
+        assert response.status == 404
+
+    asyncio.run(scenario())
+
+
+def test_the_lifespan_state_reaches_each_request(tmp_path):
+    """A25: a FastAPI lifespan that yields its state starts, and requests see it."""
+    fastapi = pytest.importorskip("fastapi")
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def lifespan(app):
+        yield {"greeting": "hello"}
+
+    app = fastapi.FastAPI(lifespan=lifespan)
+
+    @app.get("/api/greeting")
+    async def greeting(request: fastapi.Request):
+        return {"greeting": request.state.greeting}
+
+    async def scenario():
+        host = _host(tmp_path, app)
+        nc = SimpleNamespace(
+            subscribe=AsyncMock(), flush=AsyncMock(), max_payload=8 * 1024 * 1024
+        )
+        host.session.client.transport = SimpleNamespace(
+            connect=AsyncMock(return_value=nc)
+        )
+        await host.start()
+        try:
+            response = await _send(host, _request("/api/greeting"))
+            assert (response.status, json.loads(response.body)) == (
+                200,
+                {"greeting": "hello"},
+            )
+        finally:
+            await host.close()
+
+    asyncio.run(scenario())
+
+
+def test_requests_with_one_token_share_one_authorization(tmp_path):
+    """A28: a page loading its files at once asks discovery once."""
+
+    async def scenario():
+        host = _host(tmp_path)
+        call = host.session.client._call
+        answer = call.return_value
+
+        async def slow(*args, **kwargs):
+            await asyncio.sleep(0.05)
+            return answer
+
+        call.side_effect = slow
+        responses = await asyncio.gather(
+            *(_send(host, _request("/assets/app.js")) for _ in range(20))
+        )
+        assert all(r.status == 200 for r in responses)
+        assert call.await_count == 1
+        call.side_effect = RPCError("UNAUTHENTICATED", "bad token")
+        refused = await asyncio.gather(
+            *(_send(host, _request("/"), token="other") for _ in range(5))
+        )
+        assert {r.error.code for r in refused} == {"UNAUTHENTICATED"}
+        assert call.await_count == 2
+
+    asyncio.run(scenario())
+
+
+def test_a_finished_body_outlasts_the_readers_retry_of_its_last_pull():
+    """A21: a lost reply to the last pull is asked for again after the reader's
+    pull timeout; the holder must still be there to answer it."""
+    from naas_abi_sdk import app_streams
+
+    assert app_streams.LINGER_SECONDS > app_streams.PULL_TIMEOUT_SECONDS
+
+
+def test_closing_lets_the_reader_take_the_error_and_keeps_the_cancel(tmp_path):
+    """Review round 1: close() cancels a stream task already waiting for its
+    reader. The reader still gets CLOSE_SECONDS to take the error close() put
+    in (else its pull waits for its timeout), and the task ends cancelled."""
+
+    class Source:
+        def __init__(self):
+            self.done, self.closed = asyncio.Event(), False
+
+        async def settled(self):
+            await self.done.wait()
+
+        async def close(self):
+            self.closed = True
+
+    async def scenario():
+        host, source = _host(tmp_path), Source()
+        task = asyncio.create_task(host._settle(source))
+        await asyncio.sleep(0.05)
+        host.closing = True  # as close() does, before cancelling
+        task.cancel()
+        await asyncio.sleep(0.1)
+        assert not source.closed  # the reader is taking the error
+        source.done.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert source.closed
+
+    asyncio.run(scenario())

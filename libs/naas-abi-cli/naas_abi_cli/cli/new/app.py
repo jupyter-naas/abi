@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import click
 
@@ -7,7 +8,7 @@ from naas_abi_cli.cli.utils.Copier import Copier
 
 from .new import new
 from .remote_module import is_remote_module, target_dir
-from .utils import to_kebab_case, to_pascal_case, to_snake_case
+from .utils import module_package_name, to_kebab_case, to_pascal_case, to_snake_case
 
 
 @new.command("app")
@@ -18,9 +19,10 @@ def _new_app(app_name: str, app_path: str = "."):
     if is_remote_module(target_dir(app_path)):
         name = to_snake_case(to_kebab_case(app_name))
         click.echo(
-            "Nexus lists it once the module runs (Apps page), served under "
-            f"/app-html/remote/<module_id>/{name}/. For a backend, bind an ASGI "
-            f'app in on_initialized: self.expose_app("{name}", app).'
+            "Nexus lists it once the module runs: enable it on a workspace's Apps "
+            f"page, which opens it. /app-html/remote/<module_id>/{name}/ opens it "
+            "too, in the first of your workspaces that enables it. For a backend, "
+            f'bind an ASGI app in on_initialized: self.expose_app("{name}", app).'
         )
 
 
@@ -46,10 +48,14 @@ def new_app(app_name: str, app_path: str = ".", extra_values: dict | None = None
             os.path.dirname(naas_abi_cli.__file__), "cli/new/templates/apps"
         ),
         destination_path=app_path,
+        # A module's apps/AGENTS.md may have been written by hand since.
+        keep=("AGENTS.md",),
     )
 
     if "module_name_snake" not in extra_values:
-        extra_values["module_name_snake"] = "your_module_name"
+        extra_values["module_name_snake"] = (
+            module_package_name(Path(app_path).resolve()) or "your_module_name"
+        )
 
     copier.copy(
         values={

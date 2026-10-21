@@ -3,6 +3,8 @@
 
 // const lightCodeTheme = require("prism-react-renderer/themes/github");
 
+const { redirects } = require("./redirects");
+
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: "NaasAI Platform Docs",
@@ -60,6 +62,9 @@ const config = {
   themes: ["@docusaurus/theme-mermaid"],
 
   plugins: [
+    // Every route of the site before the split into a User guide and a
+    // Developer guide (redirects.js) lands on its new page.
+    ["@docusaurus/plugin-client-redirects", { redirects: redirects() }],
     [
       require.resolve("./plugins/algolia-index"),
       {
@@ -89,6 +94,12 @@ const config = {
         { property: "og:image:height", content: "630" },
         { property: "og:type", content: "website" },
       ],
+      announcementBar: {
+        id: "abi-3-0",
+        content:
+          'ABI 3.0 runs on NATS. Upgrading from 2.x? Read <a href="/user-guide/upgrade/migrate-to-3">the migration guide</a> and <a href="/user-guide/release-notes/abi-3-0-nats">the release note</a>.',
+        isCloseable: true,
+      },
       // Algolia search configuration
       algolia: {
         appId: "NGBDVK8FYQ",
@@ -115,29 +126,16 @@ const config = {
         },
         items: [
           {
-            to: "get-started/quickstart",
+            type: "docSidebar",
+            sidebarId: "userGuide",
             position: "left",
-            label: "Get Started",
+            label: "User guide",
           },
           {
-            to: "architecture/what-is-abi",
+            type: "docSidebar",
+            sidebarId: "developerGuide",
             position: "left",
-            label: "Architecture",
-          },
-          {
-            to: "capabilities/overview",
-            position: "left",
-            label: "Capabilities",
-          },
-          {
-            to: "/category/reference",
-            position: "left",
-            label: "Reference",
-          },
-          {
-            href: "/category/updates",
-            position: "left",
-            label: "Updates",
+            label: "Developer guide",
           },
           // Right side
           {

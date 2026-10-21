@@ -41,7 +41,7 @@ def compact_datasets(context: dg.OpExecutionContext) -> None:
 
 
 @dg.job(
-    description="Flush inline data, then merge small files within partitions; preserve snapshots."
+    description="Flush inline data, then rewrite files with deletes and merge small files within partitions; preserve snapshots."
 )
 def dataset_compaction_job() -> None:
     compact_datasets()

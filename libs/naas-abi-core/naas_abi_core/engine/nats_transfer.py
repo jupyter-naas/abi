@@ -13,6 +13,7 @@ ends ``open`` (a queue group) and the owner's sessions go on until they finish.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import contextvars
 import math
 import queue
@@ -37,6 +38,7 @@ from naas_abi_core.engine.nats_identity import caller_context, for_request, refu
 from naas_abi_core.engine.nats_sessions import (
     ServicePrimary,
     SessionHost,
+    flush_to_broker,
     session_owner,
     stop_delivery,
     until,
@@ -45,6 +47,11 @@ from naas_abi_core.services.iam.enforcement import authorization_error_code
 from naas_abi_proto.transfer.v1 import transfer_pb2 as pb
 from naas_abi_sdk.messages import reply, reply_allowed
 from naas_abi_sdk.telemetry import ServedTransfer, serve_transfer
+from nats.errors import Error as NATSError
+
+# How long stop() waits for the broker to confirm its unsubscribes (twice at
+# most: one wait to write them, one for the broker's answer).
+STOP_FLUSH_SECONDS = 1
 
 OPERATIONS = {
     "open": (pb.OpenRequest, pb.OpenResponse),
@@ -220,6 +227,7 @@ class TransferHost(SessionHost):
         self.error_mapper = error_mapper
         self.sessions: dict[str, TransferSession] = {}
         self.subscriptions: list[Any] = []
+        self.nc: Any = None
         # ``open``, on a queue group: any owner may answer it.
         self.shared_subscriptions: list[Any] = []
         self.tasks: set[asyncio.Task] = set()
@@ -227,6 +235,7 @@ class TransferHost(SessionHost):
         self.packet_bytes = 0
 
     async def start(self, nc):
+        self.nc = nc
         self.packet_bytes = nc.max_payload  # the broker's limit, the only one
         self.chunk_bytes = min(self.chunk_bytes, self.packet_bytes // 2)
         if self.chunk_bytes < 1024:
@@ -249,7 +258,7 @@ class TransferHost(SessionHost):
                         cb=partial(self._dispatch, operation),
                     )
                 )
-            await nc.flush()
+            await flush_to_broker(nc)
             self.reaper = asyncio.create_task(self._expire())
         except BaseException:
             await self.stop()
@@ -263,9 +272,17 @@ class TransferHost(SessionHost):
         await until(lambda: not self.sessions)
 
     async def stop(self):
+        subscribed = bool(self.subscriptions)
         for sub in self.subscriptions:
             await sub.unsubscribe()
         self.subscriptions.clear()
+        if subscribed and self.nc is not None:
+            # Once stop returns the broker has dropped the subjects: a request
+            # finds no responder, never a host that no longer answers, unless
+            # the broker did not answer within STOP_FLUSH_SECONDS (a
+            # reconnecting connection must not eat the shutdown's grace).
+            with contextlib.suppress(NATSError, asyncio.TimeoutError):
+                await flush_to_broker(self.nc, timeout=STOP_FLUSH_SECONDS)
         self.shared_subscriptions.clear()
         if self.reaper:
             self.reaper.cancel()

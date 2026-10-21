@@ -9,6 +9,7 @@ from jinja2 import ChainableUndefined, Environment, FileSystemLoader
 from naas_abi_core import logger
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_ActivityLogService import (
     ActivityLogAdapterConfiguration,
+    ActivityLogAdapterSqliteConfiguration,
     ActivityLogServiceConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_BusService import (
@@ -719,6 +720,18 @@ class EngineConfiguration(BaseModel):
     @model_validator(mode="after")
     def validate_modules(self) -> Self:
         self.ensure_default_modules()
+        if self.nats is None and "activity_log" not in self.services.model_fields_set:
+            # The Document Service default is for NATS mode, where engines share
+            # it. Without NATS, keep the 2.x SQLite default: it would otherwise
+            # load the Document Service, and agent memory would follow it
+            # (docs/site/docs/upgrade/breaking-changes-3.md). Still an engine default, not config.
+            self.services.activity_log = ActivityLogServiceConfiguration(
+                activity_log_adapter=ActivityLogAdapterConfiguration(
+                    adapter="sqlite",
+                    config=ActivityLogAdapterSqliteConfiguration(),
+                )
+            )
+            self.services.model_fields_set.discard("activity_log")
         if self.nats is not None:
             bus = self.services.bus.bus_adapter
             if "bus" in self.services.model_fields_set:
@@ -888,9 +901,14 @@ class EngineConfiguration(BaseModel):
             with open("config.yaml", "r") as file:
                 config_yaml = file.read()
 
-            bootstrap_dotenv_adapter = (
-                cls._load_bootstrap_dotenv_adapter_from_yaml_content(config_yaml)
-            )
+            try:
+                bootstrap_dotenv_adapter = (
+                    cls._load_bootstrap_dotenv_adapter_from_yaml_content(config_yaml)
+                )
+            except FileNotFoundError:
+                # No .env yet (a fresh clone, before `abi dev up` writes one):
+                # no ENV from it. Loading the engine still requires the file.
+                bootstrap_dotenv_adapter = None
             if bootstrap_dotenv_adapter is not None:
                 env_from_bootstrap = bootstrap_dotenv_adapter.get("ENV")
                 if env_from_bootstrap is not None:

@@ -9,6 +9,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
     MEMBERSHIPS,
     ROLE_NAMES,
     Memberships,
+    best,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
     NO_ORG,
@@ -27,6 +28,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     WorkspaceUpdateInput,
 )
 from naas_abi_core import logger
+from naas_abi_core.services.iam.names import scope_fields
 
 
 @dataclass
@@ -92,8 +94,33 @@ class WorkspaceService:
         return workspace_scope(org, workspace_id) if org is not None else None
 
     async def get_workspace_role(self, user_id: str, workspace_id: str) -> str | None:
+        """The highest role the user holds in the workspace: their own there, or the
+        organization-wide role their org role (owner, admin) carries."""
         scope = await self._scope(workspace_id)
-        return await self.memberships.role_at(user_id, scope) if scope else None
+        if scope is None:
+            return None
+        org, _ = scope_fields(scope)
+        held = await self.memberships.roles_of(user_id)
+        return best([r for r in (held.get(scope), held.get(f"abi:{org}:*")) if r])
+
+    async def effective_roles(
+        self, user_id: str, workspaces: list[WorkspaceRecord]
+    ) -> list[str | None]:
+        """``get_workspace_role`` of each workspace, from one read of the user's roles."""
+        held = await self.memberships.roles_of(user_id)
+        return [
+            best(
+                [
+                    r
+                    for r in (
+                        held.get(workspace_scope(row.organization_id, row.id)),
+                        held.get(f"abi:{row.organization_id or NO_ORG}:*"),
+                    )
+                    if r
+                ]
+            )
+            for row in workspaces
+        ]
 
     async def require_workspace_access(self, user_id: str, workspace_id: str) -> str:
         role = await self.get_workspace_role(user_id=user_id, workspace_id=workspace_id)
@@ -157,28 +184,62 @@ class WorkspaceService:
     ) -> WorkspaceRecord | None:
         return await self.adapter.update_workspace(workspace_id=workspace_id, updates=updates)
 
+    async def set_workspace_feature_overrides(
+        self, workspace_id: str, overrides: dict[str, bool] | None
+    ) -> WorkspaceRecord | None:
+        return await self.adapter.set_workspace_feature_overrides(
+            workspace_id=workspace_id, overrides=overrides
+        )
+
     async def get_workspace_stats(self, workspace_id: str) -> WorkspaceStatsRecord | None:
         return await self.adapter.get_workspace_stats(workspace_id=workspace_id)
 
     async def list_workspace_members(self, workspace_id: str) -> list[WorkspaceMemberRecord]:
+        """The workspace's members, then the owners and admins of its organization
+        who reach it through their org role (``source: "organization"``, read-only:
+        that access is managed in Organization > Users)."""
         scope = await self._scope(workspace_id)
         if scope is None:
             return []
         members = await self.memberships.members(scope)
-        users = await self.adapter.get_users_by_ids([m.user_id for m in members])
-        return [
+        org = await self._authz.org_of(workspace_id)
+        inherited = (
+            await self.memberships.members(f"abi:{org}:*") if org not in (None, NO_ORG) else []
+        )
+        explicit_ids = {m.user_id for m in members}
+        inherited = [m for m in inherited if m.user_id not in explicit_ids]
+        users = await self.adapter.get_users_by_ids([m.user_id for m in members + inherited])
+        records = [
             WorkspaceMemberRecord(
                 id=_member_id(workspace_id, member.user_id),
                 workspace_id=workspace_id,
                 user_id=member.user_id,
                 role=member.role,
-                email=users[member.user_id].email if member.user_id in users else None,
-                name=users[member.user_id].name if member.user_id in users else None,
+                email=users[member.user_id].email,
+                name=users[member.user_id].name,
                 created_at=member.since,
             )
             for member in members
             if member.user_id in users
         ]
+        records += sorted(
+            (
+                WorkspaceMemberRecord(
+                    id=f"org:{member.user_id}",
+                    workspace_id=workspace_id,
+                    user_id=member.user_id,
+                    role=member.role,
+                    email=users[member.user_id].email,
+                    name=users[member.user_id].name,
+                    created_at=None,
+                    source="organization",
+                )
+                for member in inherited
+                if member.user_id in users
+            ),
+            key=lambda record: record.email or "",
+        )
+        return records
 
     async def invite_workspace_member(
         self, workspace_id: str, email: str, role: str, *, by: Any
@@ -302,6 +363,6 @@ class WorkspaceService:
         )
 
     async def update_workspace_logo(
-        self, workspace_id: str, logo_url: str
+        self, workspace_id: str, logo_url: str | None
     ) -> WorkspaceRecord | None:
         return await self.adapter.set_workspace_logo(workspace_id=workspace_id, logo_url=logo_url)

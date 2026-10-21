@@ -1,9 +1,17 @@
 import type { CSSProperties } from 'react';
 
+/** Workspace accent (falls back to primary) at 30% opacity — desk base and wallpaper tint. */
+export const DESK_ACCENT_TINT =
+  'color-mix(in srgb, var(--workspace-accent, var(--workspace-primary, #22c55e)) 30%, transparent)';
+
+/** Flat overlay on wallpaper images (same tint as the empty desk). */
+export const DESK_IMAGE_OVERLAY = `linear-gradient(${DESK_ACCENT_TINT}, ${DESK_ACCENT_TINT})`;
+
+/** @deprecated Use DESK_ACCENT_TINT; kept for tests that reference the old dark desk. */
 export const DESK_FALLBACK_COLOR = '#0a0a0a';
 
-export const HERO_OVERLAY =
-  'linear-gradient(to bottom, rgba(70, 75, 75, 0.78) 0%, rgba(37, 40, 42, 0.68) 100%)';
+/** @deprecated Use DESK_IMAGE_OVERLAY. */
+export const HERO_OVERLAY = DESK_IMAGE_OVERLAY;
 
 export type DeskSurfaceId = 'chat' | 'files';
 
@@ -25,9 +33,8 @@ export function isLightDeskColor(hex?: string): boolean {
   return luminance > 0.6;
 }
 
-export function deskFallbackColor(themeColor?: string): string {
-  if (themeColor && !isLightDeskColor(themeColor)) return themeColor;
-  return DESK_FALLBACK_COLOR;
+export function deskFallbackColor(_themeColor?: string): string {
+  return DESK_ACCENT_TINT;
 }
 
 export function resolveDeskImageUrl(workspaceImageUrl?: string): string | undefined {
@@ -35,12 +42,12 @@ export function resolveDeskImageUrl(workspaceImageUrl?: string): string | undefi
   return url || undefined;
 }
 
-export function wallpaperStyle(imageUrl?: string, fallbackColor?: string): CSSProperties {
-  const deskColor = deskFallbackColor(fallbackColor);
+export function wallpaperStyle(imageUrl?: string, _fallbackColor?: string): CSSProperties {
+  const deskColor = deskFallbackColor();
   if (imageUrl) {
     return {
       backgroundColor: deskColor,
-      backgroundImage: `${HERO_OVERLAY}, url(${JSON.stringify(imageUrl)})`,
+      backgroundImage: `${DESK_IMAGE_OVERLAY}, url(${JSON.stringify(imageUrl)})`,
       backgroundSize: 'cover',
       backgroundPosition: 'center',
     };

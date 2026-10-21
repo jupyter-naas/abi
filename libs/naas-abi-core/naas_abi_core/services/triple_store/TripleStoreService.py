@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import inspect
 import io
 import os
 import uuid
@@ -359,17 +360,33 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             return "*"
         return self._hash_value(graph_name)
 
+    def _deadline(self, method: Callable, timeout_seconds: float | None) -> dict:
+        """A caller's deadline, for an adapter whose ``method`` takes one (one
+        that calls another process); an in-process store runs to completion."""
+        if timeout_seconds is None:
+            return {}
+        if "timeout_seconds" not in inspect.signature(method).parameters:
+            return {}
+        return {"timeout_seconds": timeout_seconds}
+
     def insert(
         self,
         triples: Graph,
         graph_name: URIRef,
+        *,
+        timeout_seconds: float | None = None,
     ) -> None:
         assert graph_name is not None
         self.__graph("Insert", graph_name)
 
         # Insert the triples into the store
+        adapter = self.__triple_store_adapter
         try:
-            self.__triple_store_adapter.insert(triples, graph_name=graph_name)
+            adapter.insert(
+                triples,
+                graph_name=graph_name,
+                **self._deadline(adapter.insert, timeout_seconds),
+            )
         except Exception as exc:
             self.__publish_event(
                 TripleStoreError(
@@ -399,13 +416,20 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         self,
         triples: Graph,
         graph_name: URIRef,
+        *,
+        timeout_seconds: float | None = None,
     ) -> None:
         assert graph_name is not None
         self.__graph("Remove", graph_name)
 
         # Remove the triples from the store
+        adapter = self.__triple_store_adapter
         try:
-            self.__triple_store_adapter.remove(triples, graph_name=graph_name)
+            adapter.remove(
+                triples,
+                graph_name=graph_name,
+                **self._deadline(adapter.remove, timeout_seconds),
+            )
         except Exception as exc:
             self.__publish_event(
                 TripleStoreError(
@@ -581,7 +605,9 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             )
             raise
 
-    def create_graph(self, graph_name: URIRef) -> None:
+    def create_graph(
+        self, graph_name: URIRef, *, timeout_seconds: float | None = None
+    ) -> None:
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
         checked_iri(graph_name)
@@ -595,8 +621,9 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             ),
         )
 
+        method = self.__triple_store_adapter.create_graph
         try:
-            self.__triple_store_adapter.create_graph(graph_name)
+            method(graph_name, **self._deadline(method, timeout_seconds))
         except Exception as exc:
             self.__publish_event(
                 TripleStoreError(
@@ -610,13 +637,16 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         commit()
         self.__publish_event(GraphCreated(graph_name=str(graph_name)))
 
-    def clear_graph(self, graph_name: URIRef) -> None:
+    def clear_graph(
+        self, graph_name: URIRef, *, timeout_seconds: float | None = None
+    ) -> None:
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
         self.__graph("ClearGraph", graph_name)
 
+        method = self.__triple_store_adapter.clear_graph
         try:
-            self.__triple_store_adapter.clear_graph(graph_name)
+            method(graph_name, **self._deadline(method, timeout_seconds))
         except Exception as exc:
             self.__publish_event(
                 TripleStoreError(
@@ -629,10 +659,14 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
         self.__publish_event(GraphCleared(graph_name=str(graph_name)))
 
-    def drop_graph(self, graph_name: URIRef) -> None:
+    def drop_graph(
+        self, graph_name: URIRef, *, timeout_seconds: float | None = None
+    ) -> None:
         self.__graph("DropGraph", graph_name)
+
+        method = self.__triple_store_adapter.drop_graph
         try:
-            self.__triple_store_adapter.drop_graph(graph_name)
+            method(graph_name, **self._deadline(method, timeout_seconds))
         except Exception as exc:
             self.__publish_event(
                 TripleStoreError(

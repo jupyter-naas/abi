@@ -30,10 +30,14 @@ ON_DEMAND = {
 }
 
 
-def _loader(monkeypatch, nats):
+def _loader(monkeypatch, nats, services=None):
     """A loader whose service owners are stubs, so no backend is touched."""
     config = EngineConfiguration(
-        api={}, global_config={"ai_mode": "local"}, modules=[], nats=nats, services={}
+        api={},
+        global_config={"ai_mode": "local"},
+        modules=[],
+        nats=nats,
+        services=services or {},
     )
     for field in ON_DEMAND.values():
         owner_config = getattr(config.services, field)
@@ -143,9 +147,29 @@ def test_an_activity_log_in_documents_loads_the_document_service(monkeypatch):
         ActivityLogService,
     )
 
-    services = _loader(monkeypatch, None).load_services(
+    services = _loader(
+        monkeypatch,
+        None,
+        {"activity_log": {"activity_log_adapter": {"adapter": "document"}}},
+    ).load_services(
         {"m": ModuleDependencies(modules=[], services=[ActivityLogService])}
     )
 
     assert services.document_available()
+    assert services.activity_log_available()
+
+
+def test_without_nats_the_default_activity_log_leaves_documents_unloaded(
+    monkeypatch,
+):
+    # The 2.x default (SQLite): loading documents would move agent memory too.
+    from naas_abi_core.services.activity_log.ActivityLogService import (
+        ActivityLogService,
+    )
+
+    services = _loader(monkeypatch, None).load_services(
+        {"m": ModuleDependencies(modules=[], services=[ActivityLogService])}
+    )
+
+    assert not services.document_available()
     assert services.activity_log_available()

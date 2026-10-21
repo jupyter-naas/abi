@@ -26,7 +26,20 @@ def boundary(monkeypatch):
     with patch.object(ABIModule, "get_instance", return_value=config):
         from naas_abi.apps.nexus.apps.api.app.services.maps.adapters.primary import fastapi as api
     app = FastAPI()
-    provider = Mock(return_value={"pins": [{"id": "one"}]})
+    provider = Mock(
+        return_value={
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "id": "one",
+                    "geometry": {"type": "Point", "coordinates": [0, 0]},
+                    "properties": {"label": "One"},
+                }
+            ],
+            "count": 1,
+        }
+    )
     api.register_map_layer(
         app,
         GraphMapLayer(
@@ -78,7 +91,9 @@ def test_every_role_reads_an_allowed_layer_from_the_scoped_store_without_cache(b
         response = http.get("/api/maps/layers/example-offices?workspace_id=ws-1")
         assert response.status_code == 200
         assert response.headers["cache-control"] == "no-store"
-        assert response.json()["pins"] == [{"id": "one"}]
+        body = response.json()
+        assert body["type"] == "FeatureCollection"
+        assert body["features"][0]["id"] == "one"
         assert http.get("/api/maps/layers/unknown?workspace_id=ws-1").status_code == 404
         # The maps section is checked by the route, not by the graph section's flag.
         scope.assert_awaited_with(graph, user, "ws-1", feature=None)
@@ -93,3 +108,12 @@ def test_requires_authentication_before_anything(boundary):
             assert http.get("/api/maps/layers?workspace_id=ws-1").status_code == 401
         scope.assert_not_called()
         provider.assert_not_called()
+
+
+def test_layers_route_is_mounted_once_even_without_graph_layers(boundary):
+    api, _, _, _ = boundary
+    app = FastAPI()
+    catalog = api.install_maps_layers(app)
+    assert api.install_maps_layers(app) is catalog
+    assert [r.path for r in app.routes].count("/api/maps/layers") == 1
+    assert catalog.layers == {}

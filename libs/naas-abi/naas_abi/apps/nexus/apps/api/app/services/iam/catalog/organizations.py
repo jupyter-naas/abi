@@ -24,7 +24,8 @@ ACTIONS = (
     action("DeleteOrganization", "admin", "organization"),
     # The org's full workspace catalog, every workspace and its memberships.
     action("ListOrganizationCatalog", "admin", "organization"),
-    action("CreateWorkspace", "write", "organization"),
+    # Only the organization's owners and admins add a workspace to it.
+    action("CreateWorkspace", "admin", "organization"),
     action("ListOrganizationMembers", "admin", "member"),
     action("InviteOrganizationMember", "admin", "member"),
     action("UpdateOrganizationMember", "admin", "member"),

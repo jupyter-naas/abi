@@ -21,6 +21,7 @@ from naas_abi_proto.discovery.v1 import discovery_pb2 as discovery_pb
 
 from naas_abi_sdk import overflow
 from naas_abi_sdk.agent import TERMINAL, agent_subject
+from naas_abi_sdk.broker_flush import flush_to_broker
 from naas_abi_sdk.call_context import CallContext, Principal, use_call_context
 from naas_abi_sdk.concurrency import DEFAULT_LIMIT, ConcurrentCalls
 from naas_abi_sdk.credentials import AGENT_AUDIENCE
@@ -155,6 +156,19 @@ def _error(code: str, message: str) -> RPCError:
     return RPCError(code, message)
 
 
+def _agent_event(
+    sequence: int, stored: dict, *, data: str = "", parts: int = 0
+) -> pb.AgentEvent:
+    """One event on the wire. ``chat_source`` is set only when a tool opted
+    out of chat sources (False), as core's stream_invoke carries it."""
+    event = pb.AgentEvent(
+        sequence=sequence, event=stored["event"], data=data, parts=parts
+    )
+    if stored.get("chat_source") is False:
+        event.chat_source = False
+    return event
+
+
 class AgentHost:
     """Durable no-replay execution, with conversation claims that never auto-expire.
 
@@ -225,7 +239,7 @@ class AgentHost:
                             ),
                         )
                     )
-            await nc.flush()
+            await flush_to_broker(nc)
         except BaseException:
             for sub in pending:
                 await sub.unsubscribe()
@@ -405,15 +419,15 @@ class AgentHost:
                     self.events_collection, f"{key}:{sequence}"
                 )
                 events.append(
-                    pb.AgentEvent(
-                        sequence=sequence,
-                        event=manifest.data["event"],
+                    _agent_event(
+                        sequence,
+                        manifest.data,
                         parts=manifest.data["parts"],
                     )
                 )
         else:
             events = [
-                pb.AgentEvent(sequence=i + 1, event=e["event"], data=e["data"])
+                _agent_event(i + 1, e, data=e["data"])
                 for i, e in enumerate(data["events"])
                 if i + 1 > after
             ][:64]
@@ -688,18 +702,24 @@ class AgentHost:
         if run.context.cancelled.is_set():
             raise asyncio.CancelledError()
         if (
-            set(event) != {"event", "data"}
-            or not all(isinstance(v, str) for v in event.values())
+            not {"event", "data"} <= set(event) <= {"event", "data", "chat_source"}
+            or not isinstance(event["event"], str)
+            or not isinstance(event["data"], str)
+            or not isinstance(event.get("chat_source", True), bool)
             or len(event["event"]) > 64
         ):
-            raise _error("INVALID_STREAM", "Events must contain event/data strings")
+            raise _error(
+                "INVALID_STREAM",
+                "Events must contain event/data strings and may carry a "
+                "chat_source flag",
+            )
         sequence = run.data["last_sequence"] + 1
         parts = await self._store_output(run, sequence, event["data"])
+        manifest = {"event": event["event"], "parts": parts}
+        if event.get("chat_source") is False:
+            manifest["chat_source"] = False
         await self.documents.put(
-            self.events_collection,
-            f"{run.key}:{sequence}",
-            {"event": event["event"], "parts": parts},
-            if_version=0,
+            self.events_collection, f"{run.key}:{sequence}", manifest, if_version=0
         )
         # Publish the cursor only after every immutable fragment has committed.
         await self._save(run, last_sequence=sequence)
@@ -730,9 +750,9 @@ class AgentHost:
                 limit = min(INLINE_UPDATE_BYTES, nc.max_payload // 4)
                 inline = len(event["data"].encode()) <= limit
                 update = pb.RunUpdate(
-                    event=pb.AgentEvent(
-                        sequence=sequence,
-                        event=event["event"],
+                    event=_agent_event(
+                        sequence,
+                        event,
                         data=event["data"] if inline else "",
                         parts=0 if inline else parts,
                     )

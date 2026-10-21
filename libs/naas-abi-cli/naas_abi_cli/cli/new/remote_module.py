@@ -19,6 +19,7 @@ import jinja2
 import yaml
 
 import naas_abi_cli
+from naas_abi_cli.cli.deploy.local import MIGRATE_TO_NATS_DOC
 from naas_abi_cli.cli.utils.Copier import Copier
 
 from .utils import to_pascal_case, to_snake_case
@@ -26,9 +27,26 @@ from .utils import to_pascal_case, to_snake_case
 TEMPLATES = Path(naas_abi_cli.__file__).parent / "cli/new/templates"
 COMPOSE_OVERRIDE = "docker-compose.override.yml"
 ABI_GIT_URL = "https://github.com/jupyter-naas/abi.git"
-# The ABI ref standalone modules install naas-abi-proto and naas-abi-sdk from,
-# until both are on PyPI. `--abi-ref` picks another branch, tag or commit.
-DEFAULT_ABI_GIT_REF = "main"
+# Standalone modules install naas-abi-proto and naas-abi-sdk from the ABI
+# repository until both are on PyPI, pinned by default to the release tag of
+# this CLI (semantic-release's tag_format), so they match the CLI that created
+# the module and never move. `--abi-ref` picks another branch, tag or commit.
+CLI_TAG_FORMAT = "naas-abi-cli-v{version}"
+
+
+def default_abi_git_ref() -> str:
+    """The release tag of the installed CLI: ``naas-abi-cli-v<version>``."""
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return CLI_TAG_FORMAT.format(version=version("naas-abi-cli"))
+    except PackageNotFoundError as exc:
+        raise click.ClickException(
+            "Cannot tell which naas-abi-cli release this is; pass --abi-ref "
+            "with the ABI tag or commit to install naas-abi-sdk from."
+        ) from exc
+
+
 # A dev module's name (EngineConfiguration_Dev.DevModuleConfiguration.name).
 _DEV_MODULE_NAME = re.compile(r"^[a-z][a-z0-9-]{0,62}$")
 # What reading a project config can raise: the file, its Jinja, its YAML, or
@@ -51,19 +69,37 @@ class Project:
         return self.root / "src"
 
     def nats(self) -> bool:
+        """Whether its Docker stack runs on NATS (``config.local.yaml`` first)."""
         from naas_abi_cli.cli.deploy.local import project_uses_nats
 
         return bool(project_uses_nats(str(self.root)))
 
+    def nats_anywhere(self) -> bool:
+        """Whether it runs on NATS natively or in Docker: either config has
+        a ``nats:`` block."""
+        from naas_abi_cli.cli.deploy.local import any_config_uses_nats
+
+        return any_config_uses_nats(str(self.root))
+
     def discovery_project(self) -> str:
-        """The configured discovery project, else the project's own name."""
+        """The configured discovery project, else the project's own name.
+
+        The Docker stack's config comes first: its engine hosts the discovery the
+        module's compose service registers in. `config.yaml` is what `abi dev up`
+        reads, and it hands its modules the project from there itself.
+        """
         from naas_abi_cli.cli.dev_modules import configured_discovery_project
 
-        try:
-            configured = configured_discovery_project(self.config)
-        except _CONFIG_ERRORS:  # an unreadable config falls back to the name
-            configured = None
-        return configured or to_snake_case(self.root.name) or "default"
+        for config in (self.root / "config.local.yaml", self.config):
+            if not config.is_file():
+                continue
+            try:
+                configured = configured_discovery_project(config)
+            except _CONFIG_ERRORS:  # an unreadable config is skipped
+                continue
+            if configured:
+                return configured
+        return to_snake_case(self.root.name) or "default"
 
 
 def find_project(start: Path) -> Project | None:
@@ -359,9 +395,10 @@ def create_in_project(project: Project, module_name: str, package: Path) -> None
     service = compose_service(project, name, package, discovery_project)
     if not project.nats():
         click.echo(
-            "- This project's config has no `nats:` block, so its Docker stack "
-            "has no broker for the module. See docs/migrate-to-nats.md; then add "
-            f"this service to {COMPOSE_OVERRIDE}:\n\n" + compose_snippet(name, service)
+            "- This project's Docker config has no `nats:` block, so its Docker "
+            f"stack has no broker for the module. See {MIGRATE_TO_NATS_DOC}; "
+            f"then add this service to {COMPOSE_OVERRIDE}:\n\n"
+            + compose_snippet(name, service)
         )
     elif not (project.root / "docker-compose.yml").exists():
         click.echo(

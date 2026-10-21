@@ -56,6 +56,7 @@ class IDatasetPort:
     def flush(name, *, namespace="default", timeout_seconds=None) -> QueryResult
     def inlined_row_count(name, *, namespace="default") -> int
     def list_snapshots() -> list[DatasetSnapshotInfo]
+    def namespace_version(namespace) -> int | None
     def drop(name, *, namespace="default") -> None
 ```
 
@@ -168,11 +169,23 @@ Every connection attaches with `AUTOMATIC_MIGRATION`, so the adapter initializes
 - Treat the catalog and `data_path` as one stateful unit, including when `data_path` is a bucket: a catalog restored to a different point than the store references Parquet files that are not there. The SQLite catalog can contain inlined rows, so copying only Parquet files is not a backup.
 - `abi stack snapshot create` stops the stack, then captures `postgres_data` and `storage/`; this produces a coherent local-deployment backup for both PostgreSQL and SQLite catalogs.
 - Flush inlined rows before storage-only maintenance with `CALL ducklake_flush_inlined_data('abi_datasets')`.
-- Compact adjacent small files with `CALL ducklake_merge_adjacent_files('abi_datasets')`.
-- Application callers can use `service.compact(name, namespace="default")`, which
-  returns maintenance statistics and uses the adapter's write conflict retries.
-  It preserves partitions and snapshots and does not flush inlined data or delete
-  old files. Missing datasets raise `DatasetNotFoundError`.
+- Compact a table with `service.compact(name, namespace="default")`: it rewrites
+  the files holding deleted rows (`ducklake_rewrite_data_files`, every file with
+  deletes unless `compaction_delete_threshold` is set), then merges small files
+  (`ducklake_merge_adjacent_files`). Every replace or upsert leaves a data file
+  and a delete file, and merging alone skips files with deletes, so without the
+  rewrite a table read opens one more pair per write. It returns one row per
+  step (`step`) and uses the adapter's write conflict retries. It preserves
+  partitions and snapshots (they read the same rows) and does not flush inlined
+  data or delete old files: the files it replaces are scheduled for deletion.
+  Missing datasets raise `DatasetNotFoundError`.
+- `DatasetSecondaryAdapterDuckLake.clean_up(dry_run=False)` expires the snapshots
+  older than `snapshot_retention_days` when it is set (time travel ends there;
+  unset, snapshots never expire), then deletes the files no snapshot uses that
+  were scheduled at least `CLEANUP_GRACE` (1 h) ago, so a read still on a just
+  expired snapshot can finish. A dry run's file count excludes what its expiry
+  would schedule. On a SQLite catalog DuckLake compares the schedule time as
+  text and may not honour the grace (local catalogs only).
 - Dagster registers `dataset_compaction_job` when the service is enabled. Launch it
   manually or use `dataset_compaction_daily` (02:00 UTC, running by default).
   The job calls `flush` before `compact` for each dataset, even for small totals.
@@ -188,7 +201,8 @@ Every connection attaches with `AUTOMATIC_MIGRATION`, so the adapter initializes
   service datasets. See `../../apps/dagster/AGENTS.md` for run config and semantics.
 - In NATS mode the engine hosts the same maintenance as kernel jobs
   (`DatasetMaintenanceJobs`, owner `naas_abi_core.dataset`: `dataset_compaction`
-  daily at 02:00 UTC, `dataset_catalog_monitor` hourly), and Dagster skips its
+  daily at 02:00 UTC, `dataset_cleanup` daily at 03:00 UTC, payload `dry_run`,
+  `dataset_catalog_monitor` hourly), and Dagster skips its
   app. The jobs get the engine's own dataset service, so compaction makes no RPC
   hop. When the dataset is itself `nats_rpc` to another engine, `flush` and
   `compact` wait `MAINTENANCE_CALL_TIMEOUT` (6 h), not the client's default.
@@ -209,7 +223,8 @@ Every connection attaches with `AUTOMATIC_MIGRATION`, so the adapter initializes
   The daily maintenance job also checks before flushing. Both schedules default
   to running but require the Dagster daemon; persisted stopped overrides remain
   stopped. Checks are outside the write path and warnings repeat while over limit.
-- Configure a retention window with DuckLake's `expire_older_than` option, then run `CALL ducklake_expire_snapshots('abi_datasets')` followed by `CALL ducklake_cleanup_old_files('abi_datasets')`. Never expire snapshots still required by restore/audit policy.
+- Set a retention window with the adapter's `snapshot_retention_days`; `dataset_cleanup` (or `clean_up`) expires and deletes past it. Never expire snapshots still required by restore/audit policy.
+- `commit_retries` (DuckLake's `ducklake_max_retry_count`, 10 by default) lets a commit that raced a commit to another table go through without replaying its transaction; with 0, any commit in the catalog during a long write failed it.
 - Moving from a SQLite catalog to PostgreSQL is a metadata migration. A DSN change alone loses snapshot history and any inlined rows.
 
 ## Authorization

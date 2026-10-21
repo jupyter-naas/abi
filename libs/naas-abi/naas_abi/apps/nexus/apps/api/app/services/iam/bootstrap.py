@@ -21,6 +21,7 @@ from typing import Any
 from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig, settings
 from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
     KNOWN_FEATURE_KEYS,
+    parse_feature_overrides,
     resolve_role_baseline,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
@@ -56,14 +57,17 @@ def feature_plan(
     *,
     org_overlays: Mapping[str, Mapping[str, list[str]]],
     workspaces: Iterable[tuple[str, str | None, str | None]],
+    workspace_overrides: Mapping[str, Mapping[str, bool]] | None = None,
 ) -> dict[str, list[str]]:
     """``{feature policy key: features}`` for IAM's ``put_feature_policies``.
 
     The same resolution ``build_feature_flags`` applies for the UI: the
     deployment's ``role_baseline``, the org overrides of the configuration, the
-    org's stored overlay, then the workspace overrides (by slug or id), all
-    restricted to ``enabled_features``. A key is only emitted where it differs
-    from the broader one, which IAM falls back to.
+    org's stored overlay, then the workspace overrides, all restricted to
+    ``enabled_features``. The overrides saved for a workspace in the app
+    (``workspace_overrides``, by workspace id; saved empty is still saved) replace
+    the deployment's (by slug or id). A key is only emitted where it differs from
+    the broader one, which IAM falls back to.
     """
     enabled = _enabled(flags)
     base = resolve_role_baseline(flags)
@@ -80,9 +84,12 @@ def feature_plan(
             if features != plan[role]:
                 plan[f"{org}.{role}"] = features
             org_keys[(org, role)] = features
+    saved = workspace_overrides or {}
     for workspace_id, slug, org_id in workspaces:
         overrides = (
-            flags.workspace_overrides.get(slug or "")
+            saved[workspace_id]
+            if workspace_id in saved
+            else flags.workspace_overrides.get(slug or "")
             or flags.workspace_overrides.get(workspace_id)
             or {}
         )
@@ -111,13 +118,20 @@ async def load_feature_plan(db: AsyncSession, flags: FeatureFlagsConfig) -> dict
             continue
         if isinstance(parsed, dict):
             overlays[str(org_id)] = {str(k): list(v) for k, v in parsed.items()}
-    workspaces = [
-        (str(row[0]), row[1], row[2])
-        for row in (
-            await db.execute(text("SELECT id, slug, organization_id FROM workspaces"))
-        ).all()
-    ]
-    return feature_plan(flags, org_overlays=overlays, workspaces=workspaces)
+    rows = (
+        await db.execute(
+            text("SELECT id, slug, organization_id, feature_overrides FROM workspaces")
+        )
+    ).all()
+    workspaces = [(str(row[0]), row[1], row[2]) for row in rows]
+    saved: dict[str, dict[str, bool]] = {}
+    for row in rows:
+        overrides = parse_feature_overrides(row[3])
+        if overrides is not None:
+            saved[str(row[0])] = overrides
+    return feature_plan(
+        flags, org_overlays=overlays, workspaces=workspaces, workspace_overrides=saved
+    )
 
 
 async def nexus_user_exists(user_id: str) -> bool:

@@ -13,6 +13,7 @@ from naas_abi_core.engine.nats_naming import connection_name
 from naas_abi_core.services.bus.BusPorts import IBusAdapter
 from naas_abi_core.utils.Logger import logger
 from naas_abi_sdk import claim_check
+from naas_abi_sdk.broker_flush import flush_to_broker
 from naas_abi_sdk.lifeline import Lifeline
 from nats.aio.client import Client as NATSClient
 from nats.aio.msg import Msg
@@ -291,7 +292,7 @@ class NATSJetStreamAdapter(IBusAdapter):
         # genuinely on the wire by the time the synchronous caller gets
         # control back, matching the "block until it completes" contract of
         # the sync bridge.
-        await nc.flush()
+        await flush_to_broker(nc)
 
     def subscribe(
         self, topic: str, routing_key: str, callback: Callable[[bytes], None]

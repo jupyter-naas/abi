@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-from naas_abi.apps.nexus.apps.api.app.models import MapsLayoutModel, MapsSettingsModel
+from naas_abi.apps.nexus.apps.api.app.models import MapsLayoutModel
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.layouts__schema import MapsLayout
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.port import MapsLayoutStorePort
 from sqlalchemy import delete, select
@@ -50,27 +50,3 @@ class PostgresMapsLayoutStore(MapsLayoutStorePort):
             )
             await db.commit()
             return bool(getattr(result, "rowcount", 0))
-
-    async def get_hidden(self, workspace_id: str) -> set[str]:
-        async with AsyncSessionLocal() as db:
-            row = await db.get(MapsSettingsModel, workspace_id)
-            if row is None:
-                return set()
-            return set(json.loads(str(row.settings)).get("hidden_layouts", []))
-
-    async def set_hidden(
-        self, workspace_id: str, layout_ids: set[str], *, user_id: str | None
-    ) -> None:
-        async with AsyncSessionLocal() as db:
-            row = await db.get(MapsSettingsModel, workspace_id)
-            settings = json.dumps({"hidden_layouts": sorted(layout_ids)})
-            if row is None:
-                db.add(
-                    MapsSettingsModel(
-                        workspace_id=workspace_id, settings=settings, updated_by=user_id
-                    )
-                )
-            else:
-                row.settings = settings  # type: ignore[assignment]
-                row.updated_by = user_id  # type: ignore[assignment]
-            await db.commit()

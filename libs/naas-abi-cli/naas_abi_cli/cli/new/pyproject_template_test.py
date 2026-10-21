@@ -37,7 +37,7 @@ _FRAMEWORK_PACKAGES = {
     "naas-abi-core",
     "naas-abi-marketplace",
     "naas-abi-cli",
-    # Not on PyPI yet; naas-abi-core's nats extra (in [all]) needs the first two.
+    # naas-abi-core's nats extra (in [all]) needs both; they follow the submodule.
     "naas-abi-proto",
     "naas-abi-sdk",
     # The built-in identity provider `abi dev up` runs.
@@ -90,3 +90,47 @@ def test_project_metadata_is_unaffected_by_the_switch() -> None:
         doc, _ = _render(use_local_abi_sources=use_local)
         assert doc["project"]["name"] == "demo"
         assert doc["build-system"]["build-backend"] == "setuptools.build_meta"
+
+
+def test_uv_run_pytest_finds_the_module_tests() -> None:
+    """The project's docs say `uv run pytest`: pytest must be installed, and a
+    remote module's `tests/module_test.py` collected (not `test_*.py` only)."""
+    for use_local in (True, False):
+        doc, _ = _render(use_local_abi_sources=use_local)
+        assert any(dep.startswith("pytest") for dep in doc["dependency-groups"]["dev"])
+        options = doc["tool"]["pytest"]["ini_options"]
+        assert options["testpaths"] == ["src"]
+        assert "*_test.py" in options["python_files"]
+
+
+def test_the_images_run_the_python_the_project_requires() -> None:
+    # A base image older than requires-python makes uv download an interpreter
+    # on every build; the release workflow would test on the wrong one.
+    import re
+
+    root = os.path.join(os.path.dirname(naas_abi_cli.__file__), "cli")
+    required = re.search(
+        r'requires-python = ">=(\d+)\.(\d+)"',
+        open(os.path.join(root, "new/templates/project/pyproject.toml")).read(),
+    )
+    assert required is not None
+    minimum = (int(required[1]), int(required[2]))
+
+    for relative in (
+        "new/templates/project/Dockerfile",
+        "deploy/templates/local/docker/images/Dockerfile",
+    ):
+        image = re.search(
+            r"^FROM python:(\d+)\.(\d+)\b",
+            open(os.path.join(root, relative)).read(),
+            re.MULTILINE,
+        )
+        assert image is not None, relative
+        assert (int(image[1]), int(image[2])) >= minimum, relative
+
+    workflow = open(
+        os.path.join(root, "new/templates/project/.github/workflows/release.yaml")
+    ).read()
+    version = re.search(r'python-version: "(\d+)\.(\d+)"', workflow)
+    assert version is not None
+    assert (int(version[1]), int(version[2])) >= minimum

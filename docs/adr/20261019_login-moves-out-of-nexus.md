@@ -28,7 +28,7 @@ had of its own:
 ## Decision
 
 1. **Sign-in is OIDC only.** The password, magic-link, one-time-code, reset, signup and refresh-token code is
-   deleted from Nexus, with its tables (migration `0052_remove_builtin_login.sql`, also dropping
+   deleted from Nexus, with its tables (migration `0061_remove_builtin_login.sql`, also dropping
    `users.hashed_password`), its settings (accepted and ignored with a warning by `NexusConfig`, so an older
    configuration still loads), the web pages and the `abi user create` command. What stays of `/api/auth` is
    the account itself: `GET|PATCH /me` and the avatar. The web app holds a cookie session and nothing else;

@@ -44,6 +44,24 @@ def test_select_rows_are_capped_and_counted(monkeypatch):
     assert result["rows"][0] == {"s": "urn:s0", "label": None}
 
 
+def test_the_count_stops_at_the_limit(monkeypatch):
+    read = []
+
+    def rows():
+        for n in range(platform_tools.COUNT_LIMIT * 3):
+            read.append(n)
+            yield {"s": URIRef(f"urn:s{n}")}
+
+    tool = _tool(monkeypatch, QueryStream("SELECT", vars=["s"], rows=rows()))
+
+    result = tool.invoke({"query": "SELECT ?s WHERE { ?s ?p ?o }"})
+
+    assert result["truncated"] is True and result["total_rows_at_least"] is True
+    assert result["total_rows"] == platform_tools.COUNT_LIMIT
+    assert len(result["rows"]) == platform_tools.MAX_ROWS
+    assert len(read) <= platform_tools.MAX_ROWS + platform_tools.COUNT_LIMIT + 1
+
+
 def test_small_results_keep_the_plain_list(monkeypatch):
     rows = iter([{"s": URIRef("urn:a"), "label": Literal("A")}])
     tool = _tool(monkeypatch, QueryStream("SELECT", vars=["s", "label"], rows=rows))

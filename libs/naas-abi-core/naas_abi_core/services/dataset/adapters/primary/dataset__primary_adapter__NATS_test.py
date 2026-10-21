@@ -110,6 +110,7 @@ class _StubAdapter(IDatasetPort):
         namespace: str = "default",
         mode: WriteMode = "append",
         snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> DatasetInfo:
         key = (namespace, name)
         if key not in self.datasets:
@@ -154,19 +155,15 @@ class _StubAdapter(IDatasetPort):
 
     def list_snapshots(self) -> builtins.list[DatasetSnapshotInfo]:
         return [
-            DatasetSnapshotInfo(
-                snapshot_id=info.snapshot_id, created_at=datetime.now(UTC)
-            )
+            DatasetSnapshotInfo(snapshot_id=info.snapshot_id, created_at=datetime.now(UTC))
             for info in self.datasets.values()
         ]
 
     def namespace_version(self, namespace: str) -> int | None:
         versions = [
-            info.snapshot_id
-            for (ns, _), info in self.datasets.items()
-            if ns == namespace
+            info.snapshot_id for (ns, _), info in self.datasets.items() if ns == namespace
         ]
-        return max(versions) if versions else None
+        return max(versions, default=None)
 
     def drop(self, name: str, *, namespace: str = "default") -> None:
         key = (namespace, name)
@@ -249,9 +246,7 @@ def test_successful_create_returns_info_with_no_error():
     spec = dataset_pb2.DatasetSpec(
         name="events",
         namespace="acme",
-        columns=[
-            dataset_pb2.ColumnSpec(name="id", type=dataset_pb2.COLUMN_TYPE_STRING)
-        ],
+        columns=[dataset_pb2.ColumnSpec(name="id", type=dataset_pb2.COLUMN_TYPE_STRING)],
     )
     request = _FakeRequest(
         data=dataset_pb2.CreateRequest(spec=spec).SerializeToString(),
@@ -313,16 +308,12 @@ def test_dataset_already_exists_maps_to_call_error_with_detail():
 
 def test_dataset_schema_error_maps_to_call_error_without_detail():
     class _SchemaErrorAdapter(_StubAdapter):
-        def write(
-            self, name, rows, *, namespace="default", mode="append", snapshot_id=None
-        ):
+        def write(self, name, rows, *, namespace="default", mode="append", snapshot_id=None):
             raise DatasetSchemaError("rows are not valid JSON")
 
     adapter = DatasetPrimaryAdapterNATS(_SchemaErrorAdapter(), SECRET)
     request = _FakeRequest(
-        data=dataset_pb2.WriteRequest(
-            name="events", namespace="acme"
-        ).SerializeToString(),
+        data=dataset_pb2.WriteRequest(name="events", namespace="acme").SerializeToString(),
         headers={AUTH_HEADER: _valid_token()},
         subject="abi.svc.dataset.v1.write",
     )
@@ -343,9 +334,7 @@ def test_dataset_snapshot_not_found_maps_to_call_error_with_detail():
 
     adapter = DatasetPrimaryAdapterNATS(_SnapshotMissingAdapter(), SECRET)
     request = _FakeRequest(
-        data=dataset_pb2.QueryRequest(
-            sql="SELECT 1", namespace="acme"
-        ).SerializeToString(),
+        data=dataset_pb2.QueryRequest(sql="SELECT 1", namespace="acme").SerializeToString(),
         headers={AUTH_HEADER: _valid_token()},
         subject="abi.svc.dataset.v1.query",
     )
@@ -427,6 +416,30 @@ def test_list_round_trips_datasets():
     assert sorted(item.name for item in response.datasets.items) == ["a", "b"]
 
 
+@pytest.mark.parametrize(("namespace", "version"), [("acme", 2), ("empty", None)])
+def test_namespace_version_round_trips_and_stays_unset_for_an_empty_namespace(
+    namespace, version
+):
+    stub = _StubAdapter()
+    stub.create(DatasetSpec(name="a", namespace="acme", columns=()))
+    stub.create(DatasetSpec(name="b", namespace="acme", columns=()))
+    adapter = DatasetPrimaryAdapterNATS(stub, SECRET)
+    request = _FakeRequest(
+        data=dataset_pb2.NamespaceVersionRequest(
+            namespace=namespace
+        ).SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject="abi.svc.dataset.v1.namespace_version",
+    )
+
+    asyncio.run(adapter._handle_namespace_version(request))
+
+    response = dataset_pb2.NamespaceVersionResponse()
+    response.ParseFromString(request.responses[0])
+    assert not response.HasField("error")
+    assert (response.version if response.HasField("version") else None) == version
+
+
 def test_query_answers_json_rows_with_exact_integers():
     adapter = DatasetPrimaryAdapterNATS(_StubAdapter(), SECRET)
     request = _FakeRequest(
@@ -444,27 +457,6 @@ def test_query_answers_json_rows_with_exact_integers():
     assert not response.HasField("error")
     assert list(response.query_result.columns) == ["answer"]
     assert [json.loads(row) for row in response.query_result.rows] == [{"answer": 42}]
-
-
-@pytest.mark.parametrize(("datasets", "expected"), [((), None), (("a",), 1)])
-def test_namespace_version_tells_a_namespace_without_datasets_apart(datasets, expected):
-    stub = _StubAdapter()
-    for name in datasets:
-        stub.create(DatasetSpec(name=name, namespace="acme", columns=()))
-    adapter = DatasetPrimaryAdapterNATS(stub, SECRET)
-    request = _FakeRequest(
-        data=dataset_pb2.NamespaceVersionRequest(namespace="acme").SerializeToString(),
-        headers={AUTH_HEADER: _valid_token()},
-        subject="abi.svc.dataset.v1.namespace_version",
-    )
-
-    asyncio.run(adapter._handle_namespace_version(request))
-
-    response = dataset_pb2.NamespaceVersionResponse()
-    response.ParseFromString(request.responses[0])
-    assert not response.HasField("error")
-    got = response.snapshot_id if response.HasField("snapshot_id") else None
-    assert got == expected
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import threading
 from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
@@ -581,9 +582,15 @@ class Engine(IEngine):
         no service: its root is the serving engine's, over NATS (RPC overflow
         carries the large snapshots). Without the service, agents keep the
         standalone fallback (POSTGRES_URL, else in memory).
+
+        Without NATS mode, POSTGRES_URL keeps precedence, as in 2.x: moving that
+        memory is a NATS migration step (`agent_memory_migrate`), not a side
+        effect of loading the document service.
         """
         self.__agent_checkpointer = None
-        if self.__services.document_available():
+        if self.__configuration.nats is None and os.getenv("POSTGRES_URL"):
+            logger.debug("Agent memory stays in POSTGRES_URL (not in NATS mode)")
+        elif self.__services.document_available():
             try:
                 from naas_abi_core.services.agent.DocumentCheckpointSaver import (
                     DocumentCheckpointSaver,

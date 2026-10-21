@@ -75,14 +75,19 @@ class Store(InvitationPersistencePort):
             if (i.email, i.provider, i.status) == (email, provider, "pending")
         ]
 
-    async def update(self, invitation_id, *, org_role, workspace_role, grant_ids, invited_by, now):
-        self.rows[invitation_id] = replace(
+    async def update(
+        self, invitation_id, *, org_role, workspace_role, grant_ids, invited_by, now, profile=None
+    ):
+        row = replace(
             self.rows[invitation_id],
             org_role=org_role,
             workspace_role=workspace_role,
             grant_ids=tuple(grant_ids),
             invited_by=invited_by,
         )
+        if profile is not None:
+            row = replace(row, profile=dict(profile))
+        self.rows[invitation_id] = row
         return self.rows[invitation_id]
 
     async def mark_accepted(self, invitation_id, *, user_id, now):
@@ -345,6 +350,19 @@ async def test_inviting_again_renews_the_invitation_and_replaces_its_grants():
     }
     assert set(again.invitation.grant_ids) == set(h.grants.live)
     assert len(h.store.rows) == 1 and len(h.mailer.sent) == 2
+
+
+@pytest.mark.asyncio
+async def test_the_profile_set_at_invitation_is_kept_and_a_renewal_replaces_it():
+    h = Harness()
+    first = (
+        await h.invite(profile={"job_title": "CTO", "country": "FR", "unknown": "x"})
+    ).invitation
+    assert first.profile == {"job_title": "CTO", "country": "FR"}
+    kept = (await h.invite()).invitation
+    assert kept.profile == first.profile
+    replaced = (await h.invite(profile={"bio": "Hi"})).invitation
+    assert replaced.profile == {"bio": "Hi"}
 
 
 @pytest.mark.asyncio

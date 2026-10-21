@@ -259,9 +259,10 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
         namespace: str = "default",
         mode: WriteMode = "append",
         snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> DatasetInfo:
         request = dataset_pb2.WriteRequest(
-            context=self._context(),
+            context=self._context(timeout_seconds),
             name=name,
             rows=encode_rows(rows),
             namespace=namespace,
@@ -270,7 +271,10 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
         if snapshot_id is not None:
             request.snapshot_id = snapshot_id
         response = self._call(
-            f"{SUBJECT_PREFIX}.write", request, dataset_pb2.WriteResponse
+            f"{SUBJECT_PREFIX}.write",
+            request,
+            dataset_pb2.WriteResponse,
+            timeout_seconds=timeout_seconds,
         )
         if response.HasField("error"):
             _raise_for_error(response.error)
@@ -284,11 +288,15 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
         namespace: str = "default",
         mode: WriteMode = "append",
         snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> DatasetInfo:
         """Upload the rows as they are read, one JSON object per line, over a
         transfer stream (docs/adr/20261003_nats-streamed-results.md); the
         engine commits them once. An error while reading ``rows`` discards the
-        upload: nothing is written."""
+        upload: nothing is written. ``timeout_seconds`` bounds the upload and
+        the wait for the commit (``None``: no bound; each exchange of the
+        stream still has the client's deadline). A timeout may hide a
+        commit."""
         request = dataset_pb2.WriteRequest(
             name=name, namespace=namespace, mode=_WRITE_MODE_TO_PB[mode]
         )
@@ -307,6 +315,7 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
             request.SerializeToString(),
             raise_error,
             upload=encode_lines(rows),
+            timeout_seconds=timeout_seconds,
         ) as frames:
             if frames is None:
                 raise NatsRPCError(
@@ -461,9 +470,7 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
         )
         if response.HasField("error"):
             _raise_for_error(response.error)
-        if response.HasField("snapshot_id"):
-            return response.snapshot_id
-        return None
+        return response.version if response.HasField("version") else None
 
     def drop(self, name: str, *, namespace: str = "default") -> None:
         request = dataset_pb2.DropRequest(

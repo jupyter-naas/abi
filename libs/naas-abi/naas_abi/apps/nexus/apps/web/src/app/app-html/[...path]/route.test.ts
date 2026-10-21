@@ -17,6 +17,7 @@ function stubFetch(): ReturnType<typeof vi.fn> {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe('app-html proxy', () => {
@@ -44,7 +45,9 @@ describe('app-html proxy', () => {
     expect(contentType).toMatch(/^multipart\/form-data; boundary=/);
     expect(headers.get('content-type')).toBe(contentType);
     expect(headers.get('authorization')).toBe('Bearer jwt');
-    const forwarded = new TextDecoder().decode(init.body as ArrayBuffer);
+    // The body streams to the upstream, never read whole here.
+    expect(init.body).toBeInstanceOf(ReadableStream);
+    const forwarded = await new Response(init.body as ReadableStream).text();
     expect(forwarded).toContain('name="files"; filename="report.pdf"');
   });
 
@@ -76,16 +79,43 @@ describe('app-html proxy', () => {
 });
 
 describe('app-html proxy and remote module apps', () => {
-  it('never serves a remote module app from this origin', async () => {
-    const fetchMock = stubFetch();
+  it('sends a remote app link to its grant URL on the API origin', async () => {
+    vi.stubEnv('NEXUS_API_URL', 'https://api.nexus.example/');
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(null, {
+          status: 307,
+          headers: { location: '/app-remote/g.r.ant/acme.research/console/index.html?q=1' },
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
     const request = new NextRequest(
-      'https://nexus.example/app-html/remote/acme.research/console/index.html?token=jwt',
+      'https://nexus.example/app-html/remote/acme.research/console/index.html?token=jwt&q=1',
     );
 
     const res = await GET(request, { params: { path: ['remote', 'acme.research', 'console', 'index.html'] } });
 
-    expect(res.status).toBe(404);
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toBe(
+      'https://api.nexus.example/app-remote/g.r.ant/acme.research/console/index.html?q=1',
+    );
+    const { url, init } = upstreamCall(fetchMock);
+    expect(url).toMatch(/\/app-html\/remote\/acme\.research\/console\/index\.html\?token=jwt&q=1$/);
+    expect(new Headers(init.headers).get('authorization')).toBe('Bearer jwt');
+  });
+
+  it('passes a redirect on to the browser instead of following it', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(null, { status: 302, headers: { location: '/app-html/some/module/console/' } }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const request = new NextRequest('https://nexus.example/app-html/some/module/console?token=jwt');
+
+    const res = await GET(request, params);
+
+    expect(upstreamCall(fetchMock).init.redirect).toBe('manual');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('/app-html/some/module/console/');
   });
 
   it('keeps the upstream sandbox and referrer policy', async () => {
@@ -109,5 +139,50 @@ describe('app-html proxy and remote module apps', () => {
     expect(res.headers.get('content-security-policy')).toBe('sandbox allow-scripts');
     expect(res.headers.get('referrer-policy')).toBe('no-referrer');
     expect(res.headers.get('clear-site-data')).toBeNull();
+  });
+});
+
+describe('app-html proxy and streamed bodies', () => {
+  it('streams a response as the upstream sends it, with its length', async () => {
+    let push: (chunk: string) => void = () => {};
+    let end: () => void = () => {};
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        push = (chunk) => controller.enqueue(new TextEncoder().encode(chunk));
+        end = () => controller.close();
+      },
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(body, { status: 200, headers: { 'content-length': '10' } })),
+    );
+    const request = new NextRequest('https://nexus.example/app-html/some/module/console/export.csv?token=jwt');
+
+    const res = await GET(request, params);
+    expect(res.headers.get('content-length')).toBe('10');
+    const reader = res.body!.getReader();
+    push('first');
+    // The first part arrives before the upstream finished: nothing is buffered.
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe('first');
+    push('later');
+    end();
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe('later');
+    expect((await reader.read()).done).toBe(true);
+  });
+
+  it('drops the length of a body fetch has decompressed', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response('decoded', { status: 200, headers: { 'content-length': '3', 'content-encoding': 'gzip' } }),
+      ),
+    );
+    const request = new NextRequest('https://nexus.example/app-html/some/module/console/data.json?token=jwt');
+
+    const res = await GET(request, params);
+
+    expect(res.headers.get('content-length')).toBeNull();
+    expect(await res.text()).toBe('decoded');
   });
 });

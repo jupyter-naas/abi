@@ -331,6 +331,38 @@ def test_large_events_and_long_runs_preserve_output_in_bounded_documents():
     asyncio.run(scenario())
 
 
+def test_events_keep_a_chat_source_opt_out_and_refuse_other_keys():
+    from naas_abi_sdk.agent_host import _hash
+
+    async def scenario():
+        docs, handler = Documents(), Handler()
+        owner = host(docs, handler)
+        key = _hash("agent", "id")
+        await owner._submit("agent", key, "caller", request())
+        run = owner.runs[key]
+        await owner._event(run, {"event": "tool_response", "data": "a"})
+        await owner._event(
+            run, {"event": "tool_response", "data": "b", "chat_source": False}
+        )
+        await owner._event(
+            run, {"event": "tool_response", "data": "c", "chat_source": True}
+        )
+        for bad in (
+            {"event": "tool_response", "data": "d", "chat_source": "no"},
+            {"event": "tool_response", "data": "e", "other": 1},
+        ):
+            with pytest.raises(RPCError, match="INVALID_STREAM"):
+                await owner._event(run, bad)
+
+        events = (await owner._view(run.data)).events
+        assert [e.HasField("chat_source") for e in events] == [False, True, False]
+        assert events[1].chat_source is False
+        handler.finish.set()
+        await run.task
+
+    asyncio.run(scenario())
+
+
 def test_failed_rebind_rolls_back_partial_subscriptions():
     async def scenario():
         owner = host(Documents(), Handler())

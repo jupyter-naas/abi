@@ -1,4 +1,4 @@
-import { mapsJson } from '../_lib';
+import { mapsPinResponse } from '../_lib';
 import {
   AIS_PIN_LIMIT,
   aisVesselsToPins,
@@ -18,10 +18,9 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: Request) {
   const key = aisStreamApiKey();
   if (!key) {
-    return mapsJson(
+    return mapsPinResponse(
+      [],
       {
-        pins: [],
-        count: 0,
         empty: true,
         needsKey: true,
         source: 'aisstream',
@@ -67,10 +66,9 @@ export async function GET(req: Request) {
     message = 'AISStream has not delivered a position report yet.';
   }
 
-  return mapsJson(
+  return mapsPinResponse(
+    pins,
     {
-      pins,
-      count: pins.length,
       empty,
       source: 'aisstream',
       attribution: 'AISStream',

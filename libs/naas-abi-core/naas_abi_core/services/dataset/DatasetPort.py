@@ -218,6 +218,7 @@ class IDatasetPort(ABC):
         namespace: str = "default",
         mode: WriteMode = "append",
         snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> DatasetInfo:
         """Append, replace, or upsert rows against the current catalog snapshot.
 
@@ -225,6 +226,10 @@ class IDatasetPort(ABC):
         any dataset in the same catalog can invalidate it, in which case this raises
         ``DatasetSnapshotConflictError``. Prefer idempotent upserts and adapter
         retries when unrelated datasets are written concurrently.
+
+        ``timeout_seconds``: as for ``query``. A write takes as long as the
+        table's files take to read and rewrite, often longer than a client's
+        default deadline of seconds.
         """
 
     def write_stream(
@@ -235,9 +240,11 @@ class IDatasetPort(ABC):
         namespace: str = "default",
         mode: WriteMode = "append",
         snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> DatasetInfo:
         """``write`` for rows read from an iterator once, committed in one
         snapshot: all of them or none (docs/adr/20261003_nats-streamed-results.md).
+        ``timeout_seconds`` bounds the whole upload and commit.
 
         This default collects the rows and calls ``write``; adapters that can
         stage rows in bounded memory override it.
@@ -248,6 +255,7 @@ class IDatasetPort(ABC):
             namespace=namespace,
             mode=mode,
             snapshot_id=snapshot_id,
+            **({} if timeout_seconds is None else {"timeout_seconds": timeout_seconds}),
         )
 
     @abstractmethod
@@ -261,7 +269,7 @@ class IDatasetPort(ABC):
     ) -> QueryResult:
         """Run SQL against datasets in ``namespace``. Tables are registered by dataset name.
 
-        ``timeout_seconds`` (here, ``flush`` and ``compact``): how long the
+        ``timeout_seconds`` (here, ``write``, ``flush`` and ``compact``): how long the
         caller waits when the adapter calls another process; an in-process
         adapter runs to completion. ``None`` keeps the adapter's default.
         """
@@ -307,7 +315,8 @@ class IDatasetPort(ABC):
         namespace: str = "default",
         timeout_seconds: float | None = None,
     ) -> QueryResult:
-        """Merge eligible small files within partitions, preserving snapshots.
+        """Rewrite files holding deleted rows and merge small files within
+        partitions, preserving snapshots.
 
         Returns adapter maintenance statistics. Does not flush inlined rows,
         expire snapshots, or delete old files. Raises DatasetNotFoundError.

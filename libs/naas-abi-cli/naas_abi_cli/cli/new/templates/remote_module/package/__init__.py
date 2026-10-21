@@ -36,6 +36,8 @@ MODULE_ID = "{{module_id}}"
 AGENT_INVOKE = ("agent.invoke.v1",)
 
 logger = logging.getLogger(__name__)
+# While discovery has not made the module READY, run() says so this often.
+NOT_READY_NOTICE_SECONDS = 15.0
 
 
 @dataclass
@@ -69,7 +71,20 @@ class ABIModule(BaseModule[{{module_name_pascal}}Configuration]):
     async def run(self) -> None:
         # Agents and jobs are served in the background; stay up until stopped.
         # SIGTERM drains the module: it finishes running work and unregisters.
-        while self.discovery_status != "READY":
-            await asyncio.sleep(0.5)
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        notice = started + NOT_READY_NOTICE_SECONDS
+        while (status := self.discovery_status) != "READY":
+            if loop.time() >= notice:  # say why nothing happens yet
+                logger.warning(
+                    "%s not READY after %.0f s (discovery status %s): is the "
+                    "engine's discovery running, ABI_SERVICE_KEY this module's, "
+                    "and its manifest approved (abi iam module approve)?",
+                    MODULE_ID,
+                    loop.time() - started,
+                    status,
+                )
+                notice += NOT_READY_NOTICE_SECONDS
+            await asyncio.sleep(min(0.5, NOT_READY_NOTICE_SECONDS))
         logger.info("%s READY: registered in discovery, serving %s", MODULE_ID, NAME)
         await asyncio.Event().wait()

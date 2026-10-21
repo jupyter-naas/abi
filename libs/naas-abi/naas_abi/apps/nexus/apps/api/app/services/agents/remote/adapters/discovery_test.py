@@ -56,6 +56,8 @@ class _Handle:
     async def events(self, *, timeout=None):
         if self.prompt == "boom":
             raise RPCError("AGENT_FAILED", "handler raised")
+        if self.prompt == "quiet":  # as the SDK's InvocationHandle.events() yields
+            yield {"sequence": 1, "event": "tool_response", "data": "u", "chat_source": False}
         yield {"event": "ai_message", "data": f"fact: {self.prompt}"}
         if self.prompt == "slow":
             await asyncio.sleep(10)
@@ -105,6 +107,13 @@ def test_runs_on_the_conversation_thread(directory):
     asyncio.run(run())
 
     assert _Proxy.handles[0].proxy.thread_id == "conv-7"
+
+
+def test_a_tool_response_keeps_its_chat_source_opt_out(directory):
+    async def run():
+        return [e async for e in directory.stream(RESEARCHER.key, "quiet", thread_id="c")]
+
+    assert asyncio.run(run())[0] == {"event": "tool_response", "data": "u", "chat_source": False}
 
 
 def test_failed_run_is_unavailable_with_its_code(directory):

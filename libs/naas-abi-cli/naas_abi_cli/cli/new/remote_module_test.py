@@ -20,6 +20,7 @@ from naas_abi_cli.cli.new.agent import _new_agent
 from naas_abi_cli.cli.new.module import _new_module
 from naas_abi_cli.cli.new.remote_module import (
     COMPOSE_OVERRIDE,
+    MIGRATE_TO_NATS_DOC,
     Project,
     add_compose_service,
     add_dev_module,
@@ -120,6 +121,10 @@ def test_a_remote_module_never_imports_abi_core(tmp_path: Path) -> None:
     assert "naas-abi-sdk[agent,otel]" in dockerfile
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 12),
+    reason="generated modules need Python 3.12 (projects and their images do)",
+)
 def test_the_generated_module_passes_its_own_tests(tmp_path: Path) -> None:
     """Its tests include the check that importing it loads no naas_abi_core."""
     root = _project(tmp_path)
@@ -161,8 +166,8 @@ def test_the_module_is_run_by_abi_dev_up_not_loaded_by_the_engine(
     _invoke(_new_module, root, "research")
 
     dev = load_dev_configuration(str(root / "config.yaml"))
-    assert [(m.name, m.module, m.args) for m in dev.modules] == [
-        ("research", "research", [])
+    assert [(m.name, m.module, m.args, m.identity) for m in dev.modules] == [
+        ("research", "research", [], "demo.research")
     ]
     # Its service account is module/<project>/<module_id>.
     assert dev.modules[0].module_id == "demo.research"
@@ -197,6 +202,39 @@ def test_the_module_gets_a_compose_service_in_the_override(tmp_path: Path) -> No
     assert (root / "docker-compose.yml").read_text() == "services: {}\n"
 
 
+def test_the_compose_service_joins_the_discovery_project_of_the_docker_config(
+    tmp_path: Path,
+) -> None:
+    # A project moved to NATS by hand names its discovery project in the config
+    # the Docker engine reads; config.yaml (`abi dev up`) may not name one.
+    root = _project(tmp_path, nats=False)
+    (root / "config.local.yaml").write_text(
+        _NATS_CONFIG.replace('"acme"', '"acme_stack"'), encoding="utf-8"
+    )
+
+    _invoke(_new_module, root, "research")
+
+    service = yaml.safe_load((root / COMPOSE_OVERRIDE).read_text())["services"][
+        "research"
+    ]
+    assert "ABI_DISCOVERY_PROJECT=acme_stack" in service["environment"]
+
+
+def test_no_key_is_made_up_and_the_next_steps_name_the_commands(
+    tmp_path: Path,
+) -> None:
+    root = _project(tmp_path)
+
+    result = _invoke(_new_module, root, "research")
+
+    assert result.exit_code == 0, result.output
+    assert not (root / ".env").exists()
+    assert "abi iam service-account create module/acme/demo.research --key" in (
+        result.output
+    )
+    assert "abi iam module approve module/acme/demo.research" in result.output
+
+
 def test_a_second_module_joins_the_first(tmp_path: Path) -> None:
     root = _project(tmp_path)
 
@@ -210,17 +248,53 @@ def test_a_second_module_joins_the_first(tmp_path: Path) -> None:
     assert list(services) == ["research", "writer"]
 
 
-def test_a_classic_project_gets_no_compose_service(tmp_path: Path) -> None:
-    """Its Docker stack has no broker: the module would never start."""
+def test_a_classic_project_gets_an_in_engine_module_by_default(
+    tmp_path: Path,
+) -> None:
+    """Nothing runs a remote module without NATS: neither `abi dev up`
+    in-process nor the classic Docker stack, which has no broker."""
     root = _project(tmp_path, nats=False)
 
     result = _invoke(_new_module, root, "research")
 
     assert result.exit_code == 0, result.output
+    assert "naas_abi_core" in (root / "src" / "research" / "__init__.py").read_text()
+    assert "  - module: research" in result.output
+    assert "--remote" in result.output
+    assert load_dev_configuration(str(root / "config.yaml")).modules == []
+
+
+def test_a_project_on_nats_natively_gets_a_remote_module(tmp_path: Path) -> None:
+    """The guide puts the `nats:` block in config.yaml for `abi dev up`; the
+    Docker config (config.local.yaml) may stay classic."""
+    root = _project(tmp_path, nats=True)
+    (root / "config.local.yaml").write_text(_CLASSIC_CONFIG, encoding="utf-8")
+
+    result = _invoke(_new_module, root, "research")
+
+    assert result.exit_code == 0, result.output
+    assert "naas_abi_sdk" in (root / "src" / "research" / "__init__.py").read_text()
+    assert [
+        m.name for m in load_dev_configuration(str(root / "config.yaml")).modules
+    ] == ["research"]
+    # Its Docker stack has no broker: the service is printed, not added.
     assert not (root / COMPOSE_OVERRIDE).exists()
-    assert "migrate-to-nats" in result.output
+    assert "Docker config has no `nats:` block" in result.output
+
+
+def test_a_remote_module_in_a_classic_project_gets_no_compose_service(
+    tmp_path: Path,
+) -> None:
+    """Its Docker stack has no broker: the module would never start."""
+    root = _project(tmp_path, nats=False)
+
+    result = _invoke(_new_module, root, "research", "--remote")
+
+    assert result.exit_code == 0, result.output
+    assert not (root / COMPOSE_OVERRIDE).exists()
+    assert MIGRATE_TO_NATS_DOC in result.output
     assert "research:" in result.output  # the snippet, to add by hand
-    # `abi dev up` runs on NATS by default, so the dev entry is still added.
+    # Ready for `abi dev up` once the project is on NATS.
     assert [
         m.name for m in load_dev_configuration(str(root / "config.yaml")).modules
     ] == ["research"]
@@ -312,6 +386,37 @@ def test_outside_a_project_a_remote_module_is_standalone(tmp_path: Path) -> None
     assert (tmp_path / "research" / "pyproject.toml").is_file()
 
 
+def test_standalone_pins_the_sdk_to_this_cli_release_by_default(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Never a moving branch: the SDK the module installs matches the CLI."""
+    import importlib.metadata
+
+    monkeypatch.setattr(
+        importlib.metadata,
+        "version",
+        lambda name: "3.0.0" if name == "naas-abi-cli" else "0",
+    )
+
+    result = _invoke(_new_module, tmp_path, "research", "--standalone")
+
+    assert result.exit_code == 0, result.output
+    project = tomllib.loads((tmp_path / "research" / "pyproject.toml").read_text())
+    for dependency in project["project"]["dependencies"]:
+        assert (
+            "@ git+https://github.com/jupyter-naas/abi.git@naas-abi-cli-v3.0.0#"
+            in dependency
+        )
+        assert "@main" not in dependency
+
+
+def test_remote_and_in_engine_exclude_each_other(tmp_path: Path) -> None:
+    result = _invoke(_new_module, tmp_path, "x", "--remote", "--in-engine")
+
+    assert result.exit_code == 2
+    assert "drop --in-engine" in result.output
+
+
 def test_standalone_and_in_engine_exclude_each_other(tmp_path: Path) -> None:
     result = _invoke(_new_module, tmp_path, "x", "--standalone", "--in-engine")
 
@@ -348,8 +453,39 @@ def test_new_app_in_a_remote_module_says_how_nexus_serves_it(tmp_path: Path) -> 
 
     assert result.exit_code == 0, result.output
     assert (apps / "reports" / "manifest.json").is_file()
+    # The module's name, not the placeholder, in what the scaffold writes.
+    for written in (apps / "reports" / "manifest.json", apps / "AGENTS.md"):
+        text = written.read_text()
+        assert "research" in text and "your_module_name" not in text
+    assert "  - module: research\n" in (apps / "AGENTS.md").read_text()
     assert "/app-html/remote/<module_id>/reports/" in result.output
     assert 'expose_app("reports", app)' in result.output
+
+    # A second app keeps the AGENTS.md the module's author has since edited.
+    (apps / "AGENTS.md").write_text("hand-written notes\n")
+    assert _invoke(_new_app, apps, "charts").exit_code == 0
+    assert (apps / "AGENTS.md").read_text() == "hand-written notes\n"
+    assert "research" in (apps / "charts" / "manifest.json").read_text()
+
+
+def test_new_app_in_a_nested_module_names_its_dotted_package(tmp_path: Path) -> None:
+    from naas_abi_cli.cli.new.app import _new_app
+
+    core = tmp_path / "src" / "core"
+    research = core / "research"
+    research.mkdir(parents=True)
+    (core / "__init__.py").write_text("")
+    (research / "__init__.py").write_text("class ABIModule(BaseModule):\n    pass\n")
+    apps = research / "apps"
+    apps.mkdir()
+
+    assert _invoke(_new_app, apps, "reports").exit_code == 0
+
+    assert (
+        "the core.research module" in (apps / "reports" / "manifest.json").read_text()
+    )
+    for written in (apps / "AGENTS.md", apps / "reports" / "README.md"):
+        assert "  - module: core.research\n" in written.read_text()
 
 
 def test_new_agent_in_an_in_engine_module_is_a_core_agent(tmp_path: Path) -> None:
@@ -457,3 +593,31 @@ def test_compose_service_merges_into_an_existing_override(tmp_path: Path) -> Non
 
     services = yaml.safe_load((tmp_path / COMPOSE_OVERRIDE).read_text())["services"]
     assert services == {"mine": {"image": "x"}, "research": {"image": "y"}}
+
+
+@pytest.mark.parametrize("standalone", [False, True])
+def test_the_build_context_leaves_secrets_and_caches_out(
+    tmp_path: Path, standalone: bool
+) -> None:
+    """A31: env files, keys, bytecode and local state never reach the builder."""
+    if standalone:
+        result = _invoke(
+            _new_module, tmp_path, "research", "--standalone", "--abi-ref", "v9"
+        )
+        ignore = tmp_path / "research" / ".dockerignore"
+    else:
+        root = _project(tmp_path)
+        result = _invoke(_new_module, root, "research")
+        ignore = root / "src" / "research" / ".dockerignore"
+    assert result.exit_code == 0, result.output
+    patterns = set(ignore.read_text().splitlines())
+    for pattern in (
+        "**/.env",
+        "**/.env.*",
+        "**/*.pem",
+        "**/*.key",
+        "**/*.py[cod]",
+        ".venv",
+        "storage/",
+    ):
+        assert pattern in patterns, pattern

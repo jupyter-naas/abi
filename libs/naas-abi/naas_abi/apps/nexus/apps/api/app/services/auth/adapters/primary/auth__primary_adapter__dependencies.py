@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal, get_db
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__schemas import (
     User,
 )
@@ -41,8 +41,8 @@ def to_user_schema(user: AuthUserRecord, *, is_superadmin: bool | None = None) -
         email=user.email,
         name=user.name,
         avatar=user.avatar,
-        company=user.company,
-        role=user.role,
+        organization=user.organization,
+        job_title=user.job_title,
         bio=user.bio,
         is_superadmin=bool(is_superadmin),
         created_at=user.created_at,
@@ -103,29 +103,55 @@ async def with_platform_role(user: User) -> User:
     return user.model_copy(update={"is_superadmin": await is_platform_admin(user.id)})
 
 
+def _refuse(request: Request) -> HTTPException:
+    """Why the request has no user: a failed CSRF check, a credential of a kind
+    this route does not take, or none."""
+    if getattr(request.state, "nexus_csrf_failed", False):
+        return HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="CSRF token missing or invalid",
+        )
+    refused = getattr(request.state, "nexus_credential_refused", None)
+    if refused is not None:
+        # A real credential, of a kind this route does not take: a key on
+        # the account, a coding agent's key anywhere but the gateway.
+        return HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"A {refused} credential cannot be used here",
+        )
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
 async def get_current_user_required(
     request: Request, current_user: User | None = Depends(get_current_user)
 ) -> User:
     if not current_user:
-        if getattr(request.state, "nexus_csrf_failed", False):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="CSRF token missing or invalid",
-            )
-        refused = getattr(request.state, "nexus_credential_refused", None)
-        if refused is not None:
-            # A real credential, of a kind this route does not take: a key on
-            # the account, a coding agent's key anywhere but the gateway.
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"A {refused} credential cannot be used here",
-            )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise _refuse(request)
     return current_user
+
+
+async def get_current_user_released(
+    request: Request, token: str | None = Depends(bearer_token)
+) -> User:
+    """``get_current_user_required`` on its own short-lived session.
+
+    The request does not keep a pooled connection while it runs. Use it on hot
+    read paths that fire many requests at once (Maps layer data, logos): with
+    the request-scoped session, every waiting request holds a connection and
+    the pool runs dry.
+    """
+    credential = await request_credential(request, token)
+    user = None
+    if credential is not None:
+        async with AsyncSessionLocal() as db:
+            user = await AuthSecondaryAdapterPostgres(db=db).get_user_by_id(credential.user_id)
+    if user is None:
+        raise _refuse(request)
+    return to_user_schema(user)
 
 
 async def is_platform_admin(user_id: str) -> bool:
@@ -166,6 +192,7 @@ __all__ = [
     "get_auth_service",
     "get_current_user",
     "get_current_user_required",
+    "get_current_user_released",
     "to_signed_in_user",
     "with_platform_role",
     "to_user_schema",

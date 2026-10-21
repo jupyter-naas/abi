@@ -19,6 +19,7 @@ from httpx import ASGITransport, AsyncClient
 from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig
 from naas_abi.apps.nexus.apps.api.app.core.feature_flags import KNOWN_FEATURE_KEYS
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
+    get_current_user_released,
     get_current_user_required,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
@@ -40,7 +41,9 @@ def knowledge_team() -> Iterator[NexusIam]:
         scope = nexus.workspace("org-1", workspace)
         for role in ROLES:
             nexus.grant(f"{role}{suffix}", role, scope)
-            nexus.grant(f"{role}{suffix}", role, org)
+            # Members of the org, not its administrators: an org owner or admin
+            # reaches every workspace of the org, and these are workspace roles.
+            nexus.grant(f"{role}{suffix}", "member", org)
     nexus.user("stranger")
     nexus.platform_admin("root")
     with nexus.installed():
@@ -67,6 +70,7 @@ def acting_as_header(app: FastAPI) -> FastAPI:
         return SimpleNamespace(id=request.headers["x-user"], is_superadmin=False)
 
     app.dependency_overrides[get_current_user_required] = current_user
+    app.dependency_overrides[get_current_user_released] = current_user
     app.add_middleware(AsUser)
     return app
 

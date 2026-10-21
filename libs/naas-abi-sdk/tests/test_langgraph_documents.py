@@ -428,7 +428,7 @@ def test_created_before_reads_datetimes_and_rpc_text():
 
     cutoff = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
     assert created_before(datetime(2026, 10, 4, 11, 59, tzinfo=timezone.utc), cutoff)
-    assert created_before(datetime(2026, 10, 4, 11, 59), cutoff)  # noqa: DTZ001 - naive is UTC
+    assert created_before(datetime(2026, 10, 4, 11, 59), cutoff)  # noqa: DTZ001 (naive on purpose)
     assert created_before("2026-10-04T11:59:00+00:00", cutoff)
     assert created_before("2026-10-04T11:59:00Z", cutoff)
     assert not created_before("2026-10-04T12:00:01+00:00", cutoff)

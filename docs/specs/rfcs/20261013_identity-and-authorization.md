@@ -1861,7 +1861,7 @@ guide [`docs/identity-providers.md`](../../identity-providers.md)):
 | Sessions, refresh tokens, app grants and preview tokens signed with `secret_key` | invalidated: users sign in again. `secret_key` keeps only the workspace-secret encryption until step 13 gives that its own key. **As built (step 13):** workspace secrets (and the provider tokens of sessions) have `secrets_encryption_key` (generated as `NEXUS_SECRETS_KEY`); at start whatever is still under an old key is re-encrypted under it, and `secret_key` signs and encrypts nothing. |
 
 - **Removal.** Nexus's login code, `refresh_tokens`, `magic_link_tokens`, `password_reset_tokens` and the
-  `api_keys` mock are removed in step 13 (migration `0052_remove_builtin_login.sql`; also `revoked_tokens`,
+  `api_keys` mock are removed in step 13 (migration `0061_remove_builtin_login.sql`; also `revoked_tokens`,
   `password_changes` and `users.hashed_password`).
 - **Each step leaves the branch green.** Each keeps existing remote modules and `make demo-sdk` working.
   It relies on the transitional broad policies of `api` and `engine` until step 11 replaces them.

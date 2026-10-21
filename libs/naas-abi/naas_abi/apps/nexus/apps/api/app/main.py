@@ -335,7 +335,8 @@ class _NoStore:
 
 async def _prepare_iam() -> None:
     """Register the ``nexus`` catalog and feature policies, then move the role
-    data Nexus kept itself into IAM. Without an IAM service every Nexus
+    data Nexus kept itself into IAM and give org owners and admins their
+    organization-wide role. Without an IAM service every Nexus
     decision is a refusal, so the failure is logged loudly and boot goes on."""
     from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
     from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
@@ -350,6 +351,10 @@ async def _prepare_iam() -> None:
             report = await bootstrap.migrate_role_data(db)
             if report.applied:
                 log.info("Role data moved into IAM: %s", report)
+            # Org owners and admins reach every workspace of their organization.
+            made = await MEMBERSHIPS.sync_org_wide_roles()
+            if made:
+                log.info("Organization-wide roles given to %d owner(s) and admin(s)", made)
     except Exception:
         log.exception("Nexus could not set up its authorization in IAM: every request is refused")
 
@@ -442,6 +447,29 @@ async def _startup(app: FastAPI) -> None:
     # resources Nexus keeps for each are placed in it, which is what lets its
     # members' roles reach them.
     await _place_workspace_resources()
+
+    # Maps feeds, layers and basemaps declared by modules (artifacts/maps/{layers/**,basemaps/*}/manifest.json),
+    # then config Maps ids (workspaces[].maps) that nothing provides. Both only
+    # log errors, never fail the start.
+    from naas_abi.apps.nexus.apps.api.app.services.maps.adapters.primary.workspace_defaults import (  # noqa: E501
+        report_unknown_workspace_map_ids,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.maps.manifests import (
+        register_module_manifests,
+    )
+
+    try:
+        from naas_abi import ABIModule
+
+        abi_module = ABIModule.get_instance()
+        modules = [
+            abi_module,
+            *(m for m in abi_module.engine.modules.values() if m is not abi_module),
+        ]
+    except Exception:  # noqa: BLE001 - standalone Nexus: no ABI engine, no module manifests
+        modules = []
+    register_module_manifests(app, modules)
+    report_unknown_workspace_map_ids(app)
 
     # An ABI restart clears the settings pages' 24h API cache (after seeds, which
     # may have changed users, workspaces and organizations).
@@ -806,6 +834,16 @@ async def serve_provider_logo(provider_id: str) -> FileResponse:
 def _register_routes(app: FastAPI) -> None:
     # Include API router
     app.include_router(api_router, prefix="/api")
+    # Graph map layers: always mounted (empty until a module registers one), so
+    # the web's request is a list, not a 404. Needs the ABI engine.
+    try:
+        from naas_abi.apps.nexus.apps.api.app.services.maps.adapters.primary.fastapi import (
+            install_maps_layers,
+        )
+
+        install_maps_layers(app)
+    except ValueError:
+        logging.getLogger(__name__).info("Maps graph layers: no ABI engine, not mounted")
 
     app.add_api_route("/health", health_check, methods=["GET"])
     from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
@@ -848,17 +886,19 @@ def _register_routes(app: FastAPI) -> None:
         serve_remote_app,
     )
 
+    # Every method: a user's request is redirected with a 307, which keeps it,
+    # and an ABI_API_KEY caller's is answered directly.
     app.add_api_route(
         "/app-html/remote/{module_id}/{app}/{path:path}",
         open_remote_app,
-        methods=["GET", "HEAD"],
+        methods=REMOTE_APP_METHODS,
         dependencies=[Depends(require_abi_api_token)],
         include_in_schema=False,
     )
     app.add_api_route(
         "/app-html/remote/{module_id}/{app}",
         open_remote_app,
-        methods=["GET", "HEAD"],
+        methods=REMOTE_APP_METHODS,
         dependencies=[Depends(require_abi_api_token)],
         include_in_schema=False,
     )

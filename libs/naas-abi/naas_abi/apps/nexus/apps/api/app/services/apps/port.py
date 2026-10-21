@@ -32,18 +32,18 @@ class AppInfo(BaseModel):
     """A launchable web application discovered from a module's apps/<name>/manifest.json."""
 
     # Identity
-    module_path: str           # e.g. "naas_abi_marketplace.domains.intelligence"
-    module_name: str           # human-readable parent module, e.g. "intelligence"
-    app_name: str              # folder name under apps/, e.g. "wsr"
-    app_id: str                # "<module_path>:<app_name>"
-    category: str              # "core" | "ai" | "application" | "domain" | "alpha"
+    module_path: str  # e.g. "naas_abi_marketplace.domains.intelligence"
+    module_name: str  # human-readable parent module, e.g. "intelligence"
+    app_name: str  # folder name under apps/, e.g. "wsr"
+    app_id: str  # "<module_path>:<app_name>"
+    category: str  # "core" | "ai" | "application" | "domain" | "alpha"
 
     # Display
     name: str
     description: str = ""
     url: str | None = None
-    avatar_url: str | None = None   # image URL for the app icon
-    icon_emoji: str | None = None   # emoji fallback when no avatar_url is set
+    avatar_url: str | None = None  # image URL for the app icon
+    icon_emoji: str | None = None  # emoji fallback when no avatar_url is set
 
     # Demo credentials (declared in manifest for shared demo accounts)
     demo_login: str | None = None

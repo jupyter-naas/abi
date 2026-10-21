@@ -727,8 +727,41 @@ async def complete_chat(
             thread_id=thread_id,
             injection_preamble=injection_preamble,
         )
+    elif config.type == "remote":
+        return await complete_with_remote_agent(
+            messages, config, thread_id=thread_id, injection_preamble=injection_preamble
+        )
     else:
         raise ValueError(f"Unknown provider type: {config.type}")
+
+
+async def complete_with_remote_agent(
+    messages: list[Message],
+    config: ProviderConfig,
+    *,
+    thread_id: str | None,
+    injection_preamble: str | None,
+) -> str:
+    """The streamed answer of an agent published by a remote module, whole:
+    its text chunks joined, its step events left out. Raises when the agent is
+    unavailable or its run fails, as ``complete_with_abi`` does."""
+    from naas_abi.apps.nexus.apps.api.app.services.agents.remote.streaming import (
+        remote_agent_chunks,
+    )
+
+    if not thread_id:
+        raise ValueError("A remote agent needs a conversation (thread_id)")
+    parts: list[str] = []
+    async for chunk in remote_agent_chunks(
+        messages,
+        config,
+        thread_id,
+        user_context_preamble=injection_preamble,
+        invocation_id=None,
+    ):
+        if isinstance(chunk, str):
+            parts.append(chunk)
+    return "".join(parts)
 
 
 async def complete_with_abi(
@@ -761,7 +794,9 @@ async def complete_with_abi(
         )
         import asyncio
 
-        agent = await asyncio.to_thread(_duplicate_inprocess_agent, template_agent, thread_id)
+        agent = await asyncio.to_thread(
+            _duplicate_inprocess_agent, template_agent, thread_id
+        )
         if llm_model:
             _retarget_inprocess_chat_model(agent, llm_model)
 
@@ -1336,7 +1371,9 @@ def _normalize_inprocess_llm_model(model_id: str | None) -> str | None:
     return _INPROCESS_LLM_MODEL_ALIASES.get(mid, mid)
 
 
-_INPROCESS_LLM_MODEL_RESOLVERS: list[Callable[[str, str | None], str | None]] = []
+_INPROCESS_LLM_MODEL_RESOLVERS: list[
+    Callable[[str, str | None], str | None]
+] = []
 
 
 def register_inprocess_llm_model_resolver(
@@ -1358,7 +1395,9 @@ def _ensure_inprocess_llm_resolvers_loaded() -> None:
         pass
 
 
-def resolve_inprocess_llm_model_for_turn(agent_name: str, config_llm: str | None) -> str | None:
+def resolve_inprocess_llm_model_for_turn(
+    agent_name: str, config_llm: str | None
+) -> str | None:
     """Resolve the chat model id for an in-process ABI agent turn."""
     _ensure_inprocess_llm_resolvers_loaded()
     normalized = _normalize_inprocess_llm_model(config_llm)
@@ -1515,17 +1554,15 @@ _AGENT_STEP_EVENTS = {
 
 
 def agent_event_chunk(
-    event_name: str, text: str, *, chat_source: Any = None
+    event_name: str, text: str, *, chat_source: object = None
 ) -> str | dict[str, Any] | None:
     """Map one core ``Agent.stream_invoke`` event to a Nexus stream chunk.
 
     ``ai_message`` deltas become text; tool and routing steps become step events.
     ``message`` (the closing replay), ``done`` and empty events map to None: the
     caller decides whether the replay is needed. Shared by in-process and remote
-    agents, which emit the same vocabulary.
-
-    ``chat_source`` is the event's own flag: a ``tool_response`` whose tool opted
-    out of chat sources (``chat_source`` False) keeps that flag on its chunk.
+    agents, which emit the same vocabulary. ``chat_source`` is the event's flag:
+    a ``tool_response`` whose tool opted out of chat sources keeps ``False``.
     """
     if not text.strip():
         return None
@@ -1610,7 +1647,9 @@ async def stream_with_abi_inprocess(
     # (the previous behaviour) caused cross-conversation response leakage when
     # two requests overlapped — see jupyter-naas/abi#991.
     assert thread_id is not None, "thread_id is required"
-    agent = await asyncio.to_thread(_duplicate_inprocess_agent, template_agent, thread_id)
+    agent = await asyncio.to_thread(
+        _duplicate_inprocess_agent, template_agent, thread_id
+    )
     if llm_model:
         try:
             _retarget_inprocess_chat_model(agent, llm_model)
@@ -1695,7 +1734,9 @@ async def stream_with_abi_inprocess(
             if event_name == "message" and text.strip():
                 final_replay.append(text.strip())
                 continue
-            chunk = agent_event_chunk(event_name, text, chat_source=event.get("chat_source"))
+            chunk = agent_event_chunk(
+                event_name, text, chat_source=event.get("chat_source")
+            )
             if chunk is not None:
                 emitted = emitted or isinstance(chunk, str)
                 yield chunk

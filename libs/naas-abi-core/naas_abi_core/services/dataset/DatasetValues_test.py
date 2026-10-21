@@ -25,7 +25,7 @@ def test_json_values_are_kept_as_they_are(value):
     ("value", "portable"),
     [
         (date(2026, 10, 4), "2026-10-04"),
-        (datetime(2026, 10, 4, 12, 30), "2026-10-04T12:30:00"),  # naive on purpose
+        (datetime(2026, 10, 4, 12, 30), "2026-10-04T12:30:00"),
         (
             datetime(2026, 10, 4, 12, 30, tzinfo=UTC),
             "2026-10-04T12:30:00+00:00",
@@ -58,17 +58,11 @@ def test_finite_numbers():
     [
         (
             datetime(2026, 10, 4, 12, 30, tzinfo=timezone(timedelta(hours=2))),
-            datetime(2026, 10, 4, 10, 30),  # stored naive, in UTC
+            datetime(2026, 10, 4, 10, 30),
         ),
-        (
-            "2026-10-04T12:30:00+02:00",
-            datetime(2026, 10, 4, 10, 30),
-        ),  # stored naive, in UTC
-        ("2026-10-04T10:30:00Z", datetime(2026, 10, 4, 10, 30)),  # stored naive, in UTC
-        (
-            datetime(2026, 10, 4, 10, 30),
-            datetime(2026, 10, 4, 10, 30),
-        ),  # naive on purpose
+        ("2026-10-04T12:30:00+02:00", datetime(2026, 10, 4, 10, 30)),
+        ("2026-10-04T10:30:00Z", datetime(2026, 10, 4, 10, 30)),
+        (datetime(2026, 10, 4, 10, 30), datetime(2026, 10, 4, 10, 30)),
         ("2026-10-04T10:30:00", "2026-10-04T10:30:00"),
         ("not a time", "not a time"),
         (None, None),

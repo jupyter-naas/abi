@@ -15,6 +15,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -107,6 +108,18 @@ class OrganizationMemberModel(Base):
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(String, nullable=False, default="member")  # owner, admin, member
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    # Profile in this organization, set by its admins. NULL falls back to the
+    # account value on users.* (see organizations postgres adapter).
+    name = Column(String(200), nullable=True)
+    avatar = Column(String, nullable=True)
+    # Column "organization" (was company, migration 0055). The attribute name differs
+    # because `organization` is the relationship to the OrganizationModel row.
+    organization_name = Column("organization", String(200), nullable=True)
+    service_line = Column(String(200), nullable=True)
+    country = Column(String(100), nullable=True)
+    interest = Column(String(1000), nullable=True)
+    job_title = Column(String(100), nullable=True)
+    bio = Column(String(2000), nullable=True)
 
     __table_args__ = (UniqueConstraint("organization_id", "user_id", name="uq_organization_user"),)
 
@@ -152,8 +165,8 @@ class UserModel(Base):
     email = Column(String, unique=True, nullable=False, index=True)
     name = Column(String, nullable=False)
     avatar = Column(String, nullable=True)
-    company = Column(String, nullable=True)
-    role = Column(String, nullable=True)
+    organization = Column(String, nullable=True)  # was company (migration 0053)
+    job_title = Column(String, nullable=True)  # was role (migration 0054)
     bio = Column(String, nullable=True)
     is_superadmin = Column(Boolean, nullable=False, default=False, server_default="false")
     # A user signed in through an identity provider: one row per (issuer, sub),
@@ -259,6 +272,10 @@ class WorkspaceModel(Base):
     background_image_url = Column(Text, nullable=True)  # Desktop wallpaper URL
     sidebar_color = Column(String, nullable=True)  # Custom sidebar background color (hex)
     font_family = Column(String, nullable=True)  # Custom font family name
+    description = Column(Text, nullable=True)  # Settings → General
+    workspace_group = Column(String(100), nullable=True)  # workspace lists ("Others" if empty)
+    # JSON {feature: bool} saved in Organization Settings; NULL = config overrides.
+    feature_overrides = Column(Text, nullable=True)
 
     # Drive-scope feature flags
     platform_drive_enabled = Column(Boolean, nullable=False, default=False)
@@ -714,9 +731,7 @@ class OrganizationRoleFeaturesModel(Base):
         primary_key=True,
     )
     role_baseline = Column(Text, nullable=False)  # JSON object
-    updated_by = Column(
-        String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
-    )
+    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 
@@ -859,13 +874,54 @@ class MapsLayoutModel(Base):
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 
 
+class MapsBasemapModel(Base):
+    """A workspace's Maps basemap: JSON definition plus its preview image."""
+
+    __tablename__ = "maps_basemaps"
+
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
+    basemap_id = Column(String(48), primary_key=True)
+    definition = Column(Text, nullable=False)  # JSON MapsBasemap (no preview fields)
+    preview = Column(LargeBinary, nullable=True)
+    preview_content_type = Column(String(32), nullable=True)
+    preview_version = Column(Integer, nullable=False, default=0)
+    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+
+class MapsFeedLayerModel(Base):
+    """A workspace's map layer: a view on one of its feeds (JSON definition)."""
+
+    __tablename__ = "maps_feed_layers"
+
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
+    layer_id = Column(String(48), primary_key=True)
+    feed_id = Column(String(48), nullable=False)
+    definition = Column(Text, nullable=False)  # JSON MapsFeedLayer
+    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+
+class MapsGrantModel(Base):
+    """Which workspaces may use a Maps layer or basemap (deployment or custom item)."""
+
+    __tablename__ = "maps_grants"
+
+    kind = Column(String(16), primary_key=True)  # layout | basemap
+    item_id = Column(String(48), primary_key=True)
+    owner_workspace_id = Column(String, primary_key=True, default="")  # "" = deployment
+    workspace_ids = Column(Text, nullable=True)  # JSON list; NULL = every workspace
+    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+
 class MapsSettingsModel(Base):
-    """A workspace's Maps settings: which layouts are hidden."""
+    """A workspace's Maps settings: hidden layers/basemaps, layer colors, applied seeds."""
 
     __tablename__ = "maps_settings"
 
     workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
-    settings = Column(Text, nullable=False)  # JSON {"hidden_layouts": [...]}
+    settings = Column(Text, nullable=False)  # JSON MapsWorkspaceSettings
     updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 
@@ -898,3 +954,5 @@ class InvitationModel(Base):
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
     accepted_at = Column(DateTime(timezone=False), nullable=True)
     accepted_user_id = Column(String, nullable=True)
+    # JSON object: the member profile set at invitation (see ``invites.port.PROFILE_FIELDS``).
+    profile = Column(Text, nullable=True)

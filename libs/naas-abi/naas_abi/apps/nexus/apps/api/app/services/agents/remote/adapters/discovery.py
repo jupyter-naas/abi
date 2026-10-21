@@ -69,7 +69,7 @@ class DiscoveryRemoteAgentDirectory:
 
     async def stream(
         self, key: str, prompt: str, *, thread_id: str, invocation_id: str | None = None
-    ) -> AsyncIterator[dict[str, str]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         from naas_abi_sdk.agent import AgentState, SubmissionUncertain
         from naas_abi_sdk.transport import RPCError
 
@@ -88,7 +88,8 @@ class DiscoveryRemoteAgentDirectory:
         finished = False
         try:
             async for event in handle.events(timeout=self._timeout):
-                yield {"event": str(event["event"]), "data": str(event["data"])}
+                # The SDK's event: event, data and a chat_source opt-out.
+                yield {k: v for k, v in event.items() if k != "sequence"}
             finished = True
         except RPCError as exc:
             finished = True  # the run is already terminal

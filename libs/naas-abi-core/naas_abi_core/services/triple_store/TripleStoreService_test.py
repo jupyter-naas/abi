@@ -5,6 +5,7 @@ from collections.abc import Callable
 from types import SimpleNamespace
 from typing import Any, cast
 
+import pytest
 import rdflib
 from naas_abi_core.services.triple_store.TripleStorePorts import (
     ITripleStorePort,
@@ -163,7 +164,8 @@ class _InMemoryTripleStoreAdapter(ITripleStorePort):
 
 
 def _sha(value: object) -> str:
-    return hashlib.sha256(str(value).encode("utf-8")).hexdigest()
+    """The service's routing key token: a sha256 cut to 32 hex digits."""
+    return hashlib.sha256(str(value).encode("utf-8")).hexdigest()[:32]
 
 
 def _build_service() -> tuple[TripleStoreService, _FakeTripleStoreAdapter, _FakeBus]:
@@ -195,7 +197,7 @@ def test_constructor_skips_schema_insert_when_schema_graph_already_present():
     assert adapter.insert_calls == []
 
 
-def test_insert_default_graph_publishes_default_topic_and_passes_none_graph():
+def test_insert_publishes_one_routing_key_per_triple():
     service, adapter, bus = _build_service()
 
     graph = Graph()
@@ -206,23 +208,32 @@ def test_insert_default_graph_publishes_default_topic_and_passes_none_graph():
             Literal("o"),
         )
     )
+    graph_name = URIRef("http://example.org/graphs/g")
 
-    service.insert(graph)
+    service.insert(graph, graph_name)
 
-    assert len(adapter.insert_calls) == 1
-    _, graph_name = adapter.insert_calls[0]
-    assert graph_name is None
-
+    assert [name for _, name in adapter.insert_calls] == [graph_name]
     assert len(bus.published) == 1
     topic, routing_key, payload = bus.published[0]
     assert topic == "triple_store"
     assert routing_key == (
-        f"ts.insert.g.default"
+        f"ts.insert.g.{_sha(graph_name)}"
         f".s.{_sha(URIRef('http://example.org/s'))}"
         f".p.{_sha(URIRef('http://example.org/p'))}"
         f".o.{_sha(Literal('o'))}"
     )
     assert payload == b'<http://example.org/s> <http://example.org/p> "o" .\n'
+
+
+def test_writes_require_a_graph_name():
+    service, adapter, bus = _build_service()
+
+    for write in (service.insert, service.remove):
+        with pytest.raises(AssertionError):
+            write(Graph(), None)  # type: ignore[arg-type]
+
+    assert adapter.insert_calls == adapter.remove_calls == []
+    assert bus.published == []
 
 
 def test_insert_named_graph_publishes_graph_hash_topic_and_passes_graph_name():
@@ -273,7 +284,7 @@ def test_remove_named_graph_publishes_delete_topic_with_graph_hash():
     assert routing_key.startswith(f"ts.delete.g.{_sha(graph_name)}")
 
 
-def test_subscribe_with_default_and_named_graph_builds_expected_routing_key():
+def test_subscribe_with_any_and_named_graph_builds_expected_routing_key():
     service, _, bus = _build_service()
 
     def callback(_: bytes) -> None:
@@ -283,7 +294,6 @@ def test_subscribe_with_default_and_named_graph_builds_expected_routing_key():
         (None, RDF.type, None),
         callback,
         event_type=OntologyEvent.INSERT,
-        graph_name=None,
     )
     service.subscribe(
         (None, RDF.type, None),
@@ -294,8 +304,8 @@ def test_subscribe_with_default_and_named_graph_builds_expected_routing_key():
 
     assert len(bus.consumed) == 2
 
-    _, default_routing_key, _ = bus.consumed[0]
-    assert default_routing_key == f"ts.insert.g.default.s.*.p.{_sha(RDF.type)}.o.*"
+    _, any_graph_routing_key, _ = bus.consumed[0]
+    assert any_graph_routing_key == f"ts.insert.g.*.s.*.p.{_sha(RDF.type)}.o.*"
 
     _, named_routing_key, _ = bus.consumed[1]
     assert named_routing_key == (
@@ -331,13 +341,12 @@ def test_named_graph_management_methods_delegate_to_adapter():
 
     service.create_graph(graph_name)
     service.clear_graph(graph_name)
-    service.clear_graph()
     service.drop_graph(other_graph)
 
     listed = service.list_graphs()
 
     assert adapter.create_graph_calls == [graph_name]
-    assert adapter.clear_graph_calls == [graph_name, None]
+    assert adapter.clear_graph_calls == [graph_name]
     assert adapter.drop_graph_calls == [other_graph]
     assert listed == [graph_name, other_graph]
 
@@ -472,3 +481,57 @@ SELECT ?filePath (COUNT(?s) AS ?n) WHERE {
     service.load_schemas(filepaths)
     assert len(adapter.insert_calls) == inserts_before
     assert len(adapter.remove_calls) == removes_before
+
+
+def test_a_write_deadline_reaches_only_an_adapter_that_takes_one():
+    class _RemoteAdapter(_FakeTripleStoreAdapter):
+        """Calls another process, so a caller's deadline matters (NATS client)."""
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.deadlines: list[float | None] = []
+
+        def insert(self, triples, graph_name=None, *, timeout_seconds=None):
+            self.deadlines.append(timeout_seconds)
+            super().insert(triples, graph_name)
+
+        def remove(self, triples, graph_name=None, *, timeout_seconds=None):
+            self.deadlines.append(timeout_seconds)
+            super().remove(triples, graph_name)
+
+        def create_graph(self, graph_name, *, timeout_seconds=None):
+            self.deadlines.append(timeout_seconds)
+            super().create_graph(graph_name)
+
+        def clear_graph(self, graph_name=None, *, timeout_seconds=None):
+            self.deadlines.append(timeout_seconds)
+            super().clear_graph(graph_name)
+
+        def drop_graph(self, graph_name, *, timeout_seconds=None):
+            self.deadlines.append(timeout_seconds)
+            super().drop_graph(graph_name)
+
+    graph_name = URIRef("http://example.org/graph/billing")
+    triples = Graph()
+    triples.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
+
+    remote = _RemoteAdapter()
+    remote.schema_graph_present = True
+    service = TripleStoreService(remote)
+    service.insert(triples, graph_name, timeout_seconds=900.0)
+    service.remove(triples, graph_name, timeout_seconds=900.0)
+    service.insert(triples, graph_name)
+    for operation in ("create_graph", "clear_graph", "drop_graph"):
+        getattr(service, operation)(graph_name, timeout_seconds=900.0)
+    assert remote.deadlines == [900.0, 900.0, None, 900.0, 900.0, 900.0]
+
+    # An in-process store runs to completion: its adapter never sees one.
+    local = _FakeTripleStoreAdapter()
+    local.schema_graph_present = True
+    service = TripleStoreService(local)
+    service.insert(triples, graph_name, timeout_seconds=900.0)
+    service.remove(triples, graph_name, timeout_seconds=900.0)
+    assert [name for _, name in local.insert_calls] == [graph_name]
+    assert [name for _, name in local.remove_calls] == [graph_name]
+    service.clear_graph(graph_name, timeout_seconds=900.0)
+    assert local.clear_graph_calls == [graph_name]

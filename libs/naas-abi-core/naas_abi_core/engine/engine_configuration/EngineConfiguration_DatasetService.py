@@ -48,6 +48,15 @@ class DatasetAdapterDuckLakeConfiguration(BaseModel):
     data_path: str = "storage/datasets/"
     data_inlining_row_limit: int = Field(default=1000, ge=0)
     max_retries: int = Field(default=10, ge=0)
+    # DuckLake's own retries of a commit that raced an unrelated one.
+    commit_retries: int = Field(default=10, ge=0)
+    # Compaction rewrites a file once this share of its rows is deleted (0: any).
+    compaction_delete_threshold: float = Field(default=0.0, ge=0, le=1)
+    # Days of snapshot history the nightly dataset_cleanup job keeps (time
+    # travel reaches that far back); older snapshots expire and the files only
+    # they used are deleted. Unset: snapshots never expire. Files no snapshot
+    # uses (replaced by compaction) are deleted either way.
+    snapshot_retention_days: float | None = Field(default=None, ge=0)
     retry_base_delay_seconds: float = Field(default=0.05, ge=0)
     retry_max_delay_seconds: float = Field(default=1.0, ge=0)
     s3_endpoint: str = ""

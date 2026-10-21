@@ -180,3 +180,19 @@ def test_missing_folder_returns_empty(tmp_path: Path) -> None:
     assert ModuleWorkflowLoader.load_workflows(cls) == []
     assert ModulePipelineLoader.load_pipelines(cls) == []
     assert ModuleToolLoader.load_tools(cls) == []
+
+
+def test_a_module_class_defined_in_a_submodule_finds_its_package_components(
+    tmp_path: Path,
+) -> None:
+    """ABIModule in pkg/_abi_module.py: components live under pkg/, not under that file."""
+    cls = _make_module(tmp_path, "pkg_sub", {"workflows/EchoWorkflow.py": _WORKFLOW})
+    (tmp_path / "pkg_sub" / "_abi_module.py").write_text("class SubModule:\n    pass\n")
+    sub = __import__("pkg_sub._abi_module", fromlist=["SubModule"]).SubModule
+
+    assert sub.__module__ == "pkg_sub._abi_module"
+    found = ModuleWorkflowLoader.load_workflows(sub)
+    assert [item.__name__ for item in found] == ["EchoWorkflow"]
+    assert [item.__name__ for item in ModuleWorkflowLoader.load_workflows(cls)] == [
+        "EchoWorkflow"
+    ]

@@ -1,47 +1,51 @@
 # `chat` (CLI command)
 
 ## What it is
-A `click`-based CLI command that loads a module via `naas_abi_core`’s `Engine` and runs a named terminal agent from that module.
+A `click` CLI command that binds a local identity for event publishing, loads a module via `naas_abi_core`’s `Engine`, and runs a named terminal agent from that module.
 
 ## Public API
 - `chat(module_name: str = "", agent_name: str = "")`
-  - Click command named `chat`.
-  - Arguments:
-    - `module-name` (string, default `""`)
-    - `agent-name` (string, default `""`)
+  - Click command name: `chat`
+  - CLI args:
+    - `module-name` (str, default `""`)
+    - `agent-name` (str, default `""`)
   - Behavior:
-    - If both arguments are empty, uses `engine.configuration.default_agent` and splits it into `"module agent"`.
-    - Loads the module via `engine.load(module_names=[module_name])`.
-    - Validates the module exists in `engine.modules`; otherwise raises `ValueError`.
-    - Searches `engine.modules[module_name].agents` for a class whose `__name__` matches `agent_name`.
-    - Runs the agent via `naas_abi_core.apps.terminal_agent.main.run_agent(agent_class.New())`.
+    - Wraps execution in `bind_local_identity()` context.
+    - Delegates to internal `_chat(module_name, agent_name)`.
+
+- `_chat(module_name: str, agent_name: str) -> None` (internal helper)
+  - Behavior:
+    - Calls `use_auto_engine_role()` then creates `Engine()`.
+    - If both args are empty, derives them from `engine.configuration.default_agent` by `split(" ")`.
+    - Loads the module: `engine.load(module_names=[module_name])`.
+    - Validates `module_name in engine.modules`; otherwise raises `ValueError`.
+    - Iterates `engine.modules[module_name].agents` and runs the first class whose `__name__` matches `agent_name`:
+      - `run_agent(agent_class.New())`
 
 ## Configuration/Dependencies
-- **Dependencies**
+- Dependencies:
   - `click`
   - `naas_abi_core`:
+    - `naas_abi_core.services.event.local_identity.bind_local_identity`
     - `naas_abi_core.engine.Engine.Engine`
     - `naas_abi_core.apps.terminal_agent.main.run_agent`
     - `naas_abi_core.logger`
-- **Configuration**
-  - `engine.configuration.default_agent` must be a string formatted like `"module_name agent_name"` if relying on defaults.
+  - `naas_abi_cli.cli.engine_role.use_auto_engine_role`
+- Configuration:
+  - `engine.configuration.default_agent` must be formatted like `"module_name agent_name"` when relying on defaults.
 
 ## Usage
-```python
-# Running through Click normally happens via your package's CLI entrypoint.
-# If you have a Click group, it typically registers `chat` as a subcommand.
-```
+Minimal CLI usage (via your package entrypoint that registers this command):
 
-Example CLI invocation (assuming your project exposes this command):
 ```bash
-# Use explicit module and agent
+# Run a specific agent
 naas-abi chat my_module MyAgent
 
-# Use defaults from engine.configuration.default_agent
+# Use engine.configuration.default_agent (formatted "module agent")
 naas-abi chat
 ```
 
 ## Caveats
-- If `module_name` is loaded but **no agent class name matches** `agent_name`, nothing is run and no error is raised.
-- `default_agent` is split on a single space (`split(" ")`); unexpected formatting may break default resolution.
-- The agent class is expected to provide a `New()` constructor-like method (called dynamically).
+- If no agent class name matches `agent_name`, nothing is run and no error is raised.
+- Default resolution uses `engine.configuration.default_agent.split(" ")`; unexpected spacing/format can break parsing.
+- The selected agent class is expected to provide a `New()` method; it is invoked dynamically.

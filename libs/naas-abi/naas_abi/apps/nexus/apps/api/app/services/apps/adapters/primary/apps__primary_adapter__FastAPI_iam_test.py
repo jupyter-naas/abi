@@ -17,6 +17,7 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.port import (
     AppConfigRecord,
     AppPersistencePort,
 )
+from naas_abi.apps.nexus.apps.api.app.services.apps.remote import access
 from naas_abi.apps.nexus.apps.api.app.services.apps.service import AppsService
 from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
@@ -83,6 +84,12 @@ def _world(flags: FeatureFlagsConfig | None, monkeypatch):
     monkeypatch.setattr(adapter, "_scan_apps_catalog", lambda: catalog)
     monkeypatch.setattr(adapter, "_workspace_slug", no_slug)
     monkeypatch.setattr(adapter, "_remote_apps_catalog", no_remote)
+
+    async def enabled_in_the_workspace(user_id, app_id, workspace_id):
+        return workspace_id
+
+    # Which workspace enables the app is the database's (access.py): the workspace asked for.
+    monkeypatch.setattr(access, "remote_app_workspace", enabled_in_the_workspace)
     store = MemoryApps()
     app = FastAPI()
     app.include_router(adapter.router, prefix="/api/apps")

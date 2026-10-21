@@ -5,12 +5,16 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
+    OrganizationWorkspaceMembershipRecord,
+)
 from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
     OrganizationDomainAlreadyExistsError,
     OrganizationMemberAlreadyExistsError,
     OrganizationPermissionError,
     OrganizationService,
     OrganizationSlugAlreadyExistsError,
+    member_workspace_access,
 )
 
 
@@ -104,3 +108,120 @@ async def test_list_workspace_memberships_reads_each_workspaces_roles(team) -> N
         ("member", "ws-1", "member"),
         ("viewer", "ws-1", "viewer"),
     }
+
+
+def _ws(ws_id: str, owner_id: str = "someone") -> SimpleNamespace:
+    return SimpleNamespace(id=ws_id, name=ws_id.upper(), slug=ws_id, owner_id=owner_id)
+
+
+def test_member_workspace_access_lists_explicit_memberships() -> None:
+    access = member_workspace_access(
+        user_id="u1",
+        inherited_role=None,
+        workspaces=[_ws("a"), _ws("b"), _ws("c")],
+        memberships=[
+            OrganizationWorkspaceMembershipRecord(user_id="u1", workspace_id="a", role="viewer"),
+            OrganizationWorkspaceMembershipRecord(user_id="u2", workspace_id="b", role="admin"),
+        ],
+    )
+
+    assert [(a.workspace_id, a.role, a.source) for a in access] == [("a", "viewer", "workspace")]
+
+
+def test_org_admins_inherit_every_workspace_and_higher_roles_win() -> None:
+    access = member_workspace_access(
+        user_id="u1",
+        inherited_role="admin",
+        workspaces=[_ws("a"), _ws("b", owner_id="u1")],
+        memberships=[
+            OrganizationWorkspaceMembershipRecord(user_id="u1", workspace_id="a", role="member"),
+        ],
+    )
+
+    assert [(a.workspace_id, a.role, a.source) for a in access] == [
+        ("a", "admin", "organization"),
+        ("b", "owner", "workspace"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_an_org_owner_and_admin_hold_the_role_in_every_workspace_of_the_org(team) -> None:
+    """The organization role is also held organization-wide (``abi:<org>:*``) for
+    owners and admins; members and viewers inherit nothing. IAM decides, so a
+    workspace the user was never added to is theirs to use."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+
+    team.workspace("org-1", "ws-2")
+    adapter = SimpleNamespace(
+        get_users_by_ids=AsyncMock(return_value={}),
+        list_organization_member_profiles=AsyncMock(return_value={}),
+    )
+    service = OrganizationService(adapter=adapter)
+
+    assert await service.memberships.inherited_role("admin", "org-1") == "admin"
+    assert await service.memberships.inherited_role("owner", "org-1") == "owner"
+    assert await service.memberships.inherited_role("member", "org-1") is None
+    assert await authz.allowed("UpdateWorkspace", user="admin", workspace="ws-2")
+    assert not await authz.allowed("UpdateWorkspace", user="member", workspace="ws-2")
+
+    # Demoted to member: the reach goes with the role.
+    await service.update_member_role("org-1", "admin", "member", by="owner")
+    assert await service.memberships.inherited_role("admin", "org-1") is None
+    assert not await authz.allowed("UpdateWorkspace", user="admin", workspace="ws-2")
+
+
+@pytest.mark.asyncio
+async def test_a_member_shows_the_org_profile_and_the_accounts_name(team) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
+        OrganizationMemberProfileRecord,
+        UserRecord,
+    )
+
+    users = {
+        "member": UserRecord(id="member", email="m@x.io", name="Account Name", bio="Account bio")
+    }
+    adapter = SimpleNamespace(
+        get_users_by_ids=AsyncMock(return_value=users),
+        list_organization_member_profiles=AsyncMock(
+            return_value={
+                "member": OrganizationMemberProfileRecord(
+                    name="Ignored", job_title="CTO", organization="Acme", bio=None
+                )
+            }
+        ),
+    )
+    service = OrganizationService(adapter=adapter)
+
+    member = await service.get_organization_member("org-1", "member")
+
+    assert member is not None
+    # The name is the account's, the bio falls back to it, the rest is the org's.
+    assert (member.name, member.bio) == ("Account Name", "Account bio")
+    assert (member.job_title, member.organization, member.avatar) == ("CTO", "Acme", None)
+
+
+@pytest.mark.asyncio
+async def test_every_membership_of_the_platform_is_read_from_iam(team) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.organizations.port import OrganizationRecord
+
+    team.org("org-2")
+    team.grant("member", "admin", "abi:org-2:-")
+    adapter = SimpleNamespace(
+        list_all_organizations=AsyncMock(
+            return_value=[
+                OrganizationRecord(id="org-1", name="Acme", slug="acme", owner_id="owner"),
+                OrganizationRecord(id="org-2", name="Beta", slug="beta", owner_id="owner"),
+            ]
+        )
+    )
+    service = OrganizationService(adapter=adapter)
+
+    memberships = await service.list_all_memberships()
+
+    assert [(m.user_id, m.organization_name, m.role) for m in memberships] == [
+        ("admin", "Acme", "admin"),
+        ("member", "Acme", "member"),
+        ("member", "Beta", "admin"),
+        ("owner", "Acme", "owner"),
+        ("viewer", "Acme", "viewer"),
+    ]

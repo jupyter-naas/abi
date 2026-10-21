@@ -305,7 +305,7 @@ export function Sidebar() {
   const getDefaultPath = useCallback((sectionId: SidebarSection): string | undefined => {
     switch (sectionId) {
       case 'home':     return getWorkspacePath(currentWorkspaceId, '/home');
-      case 'maps':     return getWorkspacePath(currentWorkspaceId, '/maps/presence');
+      case 'maps':     return getWorkspacePath(currentWorkspaceId, '/maps');
       case 'search':   return getWorkspacePath(currentWorkspaceId, '/search');
       case 'chat':     return getWorkspacePath(currentWorkspaceId, '/chat');
       case 'ontology': {
@@ -778,6 +778,7 @@ export function Sidebar() {
               key={item.key}
               onClick={() => { showPanel(item.section); router.push(base); }}
               onPointerEnter={(e) => {
+                // System has no section panel to prefetch.
                 if (item.section) prefetchSectionPanel(item.section);
                 router.prefetch(base);
                 showHoverTip({ id: item.key, ...item }, e.currentTarget);

@@ -140,12 +140,12 @@ async def test_profile_changes_name_the_fields_but_never_log_personal_values(env
         user = await session.get(UserModel, "usr-1")
         user.name = "Alice Martin"
         user.email = "alice.martin@example.com"
-        user.company = "Acme"
+        user.organization = "Acme"
         await session.commit()
 
     event = _payloads(events)[-1]
     assert _kind(event) == "UpdateUser"
-    assert sorted(event["changed_fields"]) == ["company", "email", "name"]
+    assert sorted(event["changed_fields"]) == ["email", "name", "organization"]
     raw = json.dumps(event)
     assert "Alice Martin" not in raw and "alice.martin@" not in raw
     assert event["updates"] == [str(user_account_iri("usr-1"))]
@@ -305,7 +305,7 @@ async def test_workspace_context_is_stamped(env) -> None:
     token = event_actor_workspace_id.set("ws-ctx")
     try:
         async with maker() as session:
-            (await session.get(UserModel, "usr-1")).company = "Acme"
+            (await session.get(UserModel, "usr-1")).organization = "Acme"
             await session.commit()
     finally:
         event_actor_workspace_id.reset(token)
@@ -344,7 +344,7 @@ async def test_bulk_statements_on_identity_tables_are_reported(env) -> None:
     try:
         async with maker() as session:
             await session.execute(
-                update(UserModel).where(UserModel.id == "usr-1").values(company="Acme")
+                update(UserModel).where(UserModel.id == "usr-1").values(organization="Acme")
             )
             await session.execute(
                 delete(AppConfigModel).where(AppConfigModel.workspace_id == "ws-x")

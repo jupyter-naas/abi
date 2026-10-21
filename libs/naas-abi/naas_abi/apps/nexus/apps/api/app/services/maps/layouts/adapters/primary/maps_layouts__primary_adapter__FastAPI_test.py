@@ -5,6 +5,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.port import Binding, IGraphQueryStore
 from naas_abi.apps.nexus.apps.api.app.services.graph.testing import acting_as_header, knowledge_team
+from naas_abi.apps.nexus.apps.api.app.services.maps.feed_layers.adapters.secondary.memory import (
+    InMemoryMapsFeedLayerStore,
+)
+from naas_abi.apps.nexus.apps.api.app.services.maps.feed_layers.service import (
+    MapsFeedLayerService,
+)
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.adapters.primary import (
     maps_layouts__primary_adapter__FastAPI as api,
 )
@@ -12,6 +18,10 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.adapters.secondary.m
     InMemoryMapsLayoutStore,
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.service import MapsLayoutService
+from naas_abi.apps.nexus.apps.api.app.services.maps.settings.adapters.secondary.memory import (
+    InMemoryMapsSettingsStore,
+)
+from naas_abi.apps.nexus.apps.api.app.services.maps.workspace_config import WorkspaceMapsDefaults
 
 QUERY = "SELECT ?uri ?label ?lat ?lng WHERE { ?uri <http://ex/name> ?label ; <http://ex/lat> ?lat ; <http://ex/lng> ?lng }"
 BODY = {"title": "Offices", "query": QUERY, "graphs": ["http://g/a"]}
@@ -38,7 +48,9 @@ class _Store(IGraphQueryStore):
 @pytest.fixture
 def client_for(monkeypatch):
     """A client acting as the workspace's user of that role (``ws-1``)."""
-    service = MapsLayoutService(InMemoryMapsLayoutStore())
+    settings = InMemoryMapsSettingsStore()
+    service = MapsLayoutService(InMemoryMapsLayoutStore(), settings)
+    layers = MapsFeedLayerService(InMemoryMapsFeedLayerStore(), settings, service)
     scoped_calls: list[tuple] = []
 
     async def scoped(user_id, workspace_id, graphs):
@@ -49,6 +61,8 @@ def client_for(monkeypatch):
     app = FastAPI()
     app.include_router(api.router, prefix="/api/maps/layouts")
     app.dependency_overrides[api.get_maps_layout_service] = lambda: service
+    app.dependency_overrides[api.get_maps_feed_layer_service] = lambda: layers
+    app.dependency_overrides[api.maps_workspace_defaults] = WorkspaceMapsDefaults
     acting_as_header(app)
 
     def make(user: str) -> TestClient:
@@ -71,7 +85,7 @@ def test_admin_creates_layout_and_member_reads_its_feed(client_for) -> None:
 
     feed = member.get("/api/maps/layouts/offices/feed?workspace_id=ws-1")
     assert feed.status_code == 200
-    assert feed.json()["pins"][0]["entityUri"] == "http://ex/p"
+    assert feed.json()["features"][0]["properties"]["entityUri"] == "http://ex/p"
     # The query is narrowed to the layout's graphs.
     assert client_for.scoped_calls[-1] == ("ws-1", ("http://g/a",))
 
@@ -150,6 +164,32 @@ def test_hiding_builtin_and_custom_layouts(client_for) -> None:
     ]
 
 
+def test_switching_whole_feeds_off(client_for) -> None:
+    admin = client_for("admin")
+    url = "/api/maps/layouts/{}/feed-visibility?workspace_id=ws-1"
+
+    admin.put(url.format("earthquakes"), json={"hidden": True})
+    switched = admin.put(url.format("offices"), json={"hidden": True}).json()
+    assert switched == {"hidden_feeds": ["earthquakes", "offices"]}
+    assert admin.put(url.format("offices"), json={"hidden": False}).json() == {
+        "hidden_feeds": ["earthquakes"]
+    }
+    member = client_for("member")
+    assert member.put(url.format("offices"), json={"hidden": True}).status_code == 403
+
+
+def test_switching_feeds_in_bulk(client_for) -> None:
+    admin = client_for("admin")
+    url = "/api/maps/layouts/feed-visibility?workspace_id=ws-1"
+
+    off = admin.post(url, json={"ids": ["earthquakes", "iss", "offices"], "hidden": True})
+    assert off.json() == {"hidden_feeds": ["earthquakes", "iss", "offices"]}
+    on = admin.post(url, json={"ids": ["iss", "offices"], "hidden": False})
+    assert on.json() == {"hidden_feeds": ["earthquakes"]}
+    assert admin.post(url, json={"ids": [], "hidden": True}).status_code == 422
+    assert client_for("member").post(url, json={"ids": ["iss"], "hidden": True}).status_code == 403
+
+
 def test_preview_reports_errors_or_pins(client_for) -> None:
     admin = client_for("admin")
 
@@ -158,9 +198,48 @@ def test_preview_reports_errors_or_pins(client_for) -> None:
     ).json()
     assert invalid["errors"] and invalid["count"] == 0
     ok = admin.post("/api/maps/layouts/preview", json={**BODY, "workspace_id": "ws-1"}).json()
-    assert ok == {"errors": [], "count": 1, "pins": ok["pins"]}
-    assert ok["pins"][0]["label"] == "Paris"
+    assert ok["errors"] == [] and ok["count"] == 1 and ok["type"] == "FeatureCollection"
+    assert ok["features"][0]["properties"]["label"] == "Paris"
 
 
 def test_delete_unknown_layout_is_404(client_for) -> None:
     assert client_for("admin").delete("/api/maps/layouts/nope?workspace_id=ws-1").status_code == 404
+
+
+def test_feed_layer_record_and_colors(client_for) -> None:
+    admin = client_for("admin")
+    body = {
+        "title": "Acme",
+        "feed_type": "geojson_url",
+        "feed_url": "/api/maps/organization-facilities/acme",
+        "category": "organizations-facility",
+        "color": "#171c8f",
+    }
+    assert admin.put("/api/maps/layouts/acme?workspace_id=ws-1", json=body).status_code == 200
+    # A legacy category slug is stored as its group label; group wins when sent.
+    assert admin.get("/api/maps/layouts/acme?workspace_id=ws-1").json()["group"] == (
+        "Organizations Facilities"
+    )
+    renamed = {**body, "group": "Partners"}
+    assert admin.put("/api/maps/layouts/acme?workspace_id=ws-1", json=renamed).status_code == 200
+    assert admin.get("/api/maps/layouts/acme?workspace_id=ws-1").json()["group"] == "Partners"
+
+    member = client_for("member")
+    record = member.get("/api/maps/layouts/acme?workspace_id=ws-1").json()
+    assert record["feed_url"] == "/api/maps/organization-facilities/acme"
+    assert member.get("/api/maps/layouts/nope?workspace_id=ws-1").status_code == 404
+    assert (
+        member.put(
+            "/api/maps/layouts/earthquakes/color?workspace_id=ws-1", json={"color": "#000000"}
+        ).status_code
+        == 403
+    )
+
+    admin = client_for("admin")
+    colored = admin.put(
+        "/api/maps/layouts/earthquakes/color?workspace_id=ws-1", json={"color": "#112233"}
+    )
+    assert colored.json() == {"colors": {"earthquakes": "#112233"}}
+    assert admin.get("/api/maps/layouts?workspace_id=ws-1").json()["colors"] == {
+        "earthquakes": "#112233"
+    }

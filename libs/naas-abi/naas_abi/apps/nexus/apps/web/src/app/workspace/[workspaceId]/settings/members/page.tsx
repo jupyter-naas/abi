@@ -32,7 +32,9 @@ interface Member {
   email: string;
   role: 'owner' | 'admin' | 'member' | 'viewer';
   avatar?: string;
-  joinedAt: Date;
+  joinedAt: Date | null;
+  /** 'organization': no membership row; access comes from the org owner/admin role. */
+  source: 'workspace' | 'organization';
 }
 
 const roleConfig = {
@@ -94,7 +96,8 @@ export default function MembersPage() {
         ...m,
         name: (m.name as string) || 'Unknown',
         email: (m.email as string) || '',
-        joinedAt: new Date(m.created_at as string),
+        joinedAt: m.created_at ? new Date(m.created_at as string) : null,
+        source: m.source === 'organization' ? 'organization' : 'workspace',
       }))
     );
   };
@@ -383,7 +386,9 @@ export default function MembersPage() {
                 const role = roleConfig[member.role] || roleConfig.member;
                 const RoleIcon = role.icon;
                 const initial = (member.name || member.email || '?').charAt(0).toUpperCase();
-                const roleLocked = member.role === 'owner' || member.user_id === authUser?.id || !canManage;
+                const inherited = member.source === 'organization';
+                const roleLocked =
+                  inherited || member.role === 'owner' || member.user_id === authUser?.id || !canManage;
                 return (
                   <tr key={member.id} className={settingsTable.row}>
                     <td className={settingsTable.td}>
@@ -392,7 +397,17 @@ export default function MembersPage() {
                           {initial}
                         </div>
                         <div>
-                          <p className="font-medium">{member.name}</p>
+                          <p className="flex items-center gap-2 font-medium">
+                            {member.name}
+                            {inherited && (
+                              <span
+                                className="border border-border px-1.5 py-0.5 text-[10px] font-normal uppercase tracking-wide text-muted-foreground"
+                                title="Organization owners and admins reach every workspace of the organization. Manage them in Organization > Users."
+                              >
+                                via organization
+                              </span>
+                            )}
+                          </p>
                           <p className="text-xs text-muted-foreground">{member.email}</p>
                         </div>
                       </div>
@@ -418,10 +433,10 @@ export default function MembersPage() {
                       )}
                     </td>
                     <td className={cn(settingsTable.td, 'text-muted-foreground')}>
-                      {member.joinedAt.toLocaleDateString()}
+                      {member.joinedAt ? member.joinedAt.toLocaleDateString() : '—'}
                     </td>
                     <td className={cn(settingsTable.td, 'text-right')}>
-                      {canManage && member.role !== 'owner' && member.user_id !== authUser?.id && (
+                      {canManage && !inherited && member.role !== 'owner' && member.user_id !== authUser?.id && (
                         <Button
                           variant="destructive-ghost"
                           size="icon"
@@ -465,6 +480,11 @@ export default function MembersPage() {
             <p className="text-xs text-muted-foreground">Full access except billing and workspace deletion</p>
           </div>
         </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Organization owners and admins have owner or admin access to every workspace of the
+          organization without being invited here. People invited here are also added to the
+          organization as members.
+        </p>
       </SettingsSection>
       {confirmDialog}
     </div>

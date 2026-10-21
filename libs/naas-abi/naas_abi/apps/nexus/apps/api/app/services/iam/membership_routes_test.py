@@ -92,6 +92,8 @@ async def api(team, nexus_db, monkeypatch):
             await db.commit()
 
     app.dependency_overrides[get_db] = session
+    # The drive profile sync (best effort) has no object storage here.
+    app.dependency_overrides[organizations_module._get_object_storage] = lambda: object()
     app.dependency_overrides[get_current_user_required] = lambda: SimpleNamespace(
         id=current["id"], email=f"{current['id']}@example.com", name=current["id"].title()
     )
@@ -182,7 +184,10 @@ async def test_a_workspace_is_created_only_in_an_organization_the_caller_may(api
         assert "organization" in refused.json()["detail"]
     async with api("viewer") as http:
         assert (await http.post("/api/workspaces", json=body)).status_code == 403
+    # Creating a workspace in an organization is for its owners and admins.
     async with api("member") as http:
+        assert (await http.post("/api/workspaces", json=body)).status_code == 403
+    async with api("admin") as http:
         made = await http.post("/api/workspaces", json=body)
         assert made.status_code == 200, made.text
         created = made.json()
@@ -190,7 +195,7 @@ async def test_a_workspace_is_created_only_in_an_organization_the_caller_may(api
         assert created["current_user_role"] == "owner"
     # The creator owns it, nobody else holds a role there.
     scope = workspace_scope("org-1", created["id"])
-    assert await role("member", scope) == "owner"
+    assert await role("admin", scope) == "owner"
     assert await role("owner", scope) is None
 
 

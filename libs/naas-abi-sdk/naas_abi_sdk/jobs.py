@@ -528,7 +528,34 @@ async def store_trigger(
     kind: str = "manual",
     on_behalf_of: bool = True,
 ) -> int:
-    """Store a trigger for a job; its stream sequence. Through the engine when
+    """Store a trigger for a job; its stream sequence (``store_trigger_ack``)."""
+    sequence, _ = await store_trigger_ack(
+        transport,
+        project,
+        module_id,
+        job,
+        body,
+        headers,
+        kind=kind,
+        on_behalf_of=on_behalf_of,
+    )
+    return sequence
+
+
+async def store_trigger_ack(
+    transport: Any,
+    project: str,
+    module_id: str,
+    job: str,
+    body: bytes,
+    headers: dict[str, str],
+    *,
+    kind: str = "manual",
+    on_behalf_of: bool = True,
+) -> tuple[int, bool]:
+    """Store a trigger for a job: its stream sequence, and whether it repeated a
+    message id within the stream's duplicate window (nothing was stored, and the
+    sequence is the first trigger's). Through the engine when
     it answers (a module behind the broker's auth callout writes nothing into
     the jobs stream), else published here. ``kind`` is ``manual`` or
     ``event`` (the engine grants ``event`` to the job's own module only).
@@ -553,7 +580,7 @@ async def store_trigger(
         kind=kind,
     )
     if answer is not None:
-        return int(answer["seq"])
+        return int(answer["seq"]), bool(answer.get("duplicate"))
     # No engine answered. Behind the broker's auth callout nothing is stored
     # here (a module may not write the jobs stream, and its token must never
     # reach the job's host): the engine is away, so try again.
@@ -570,7 +597,7 @@ async def store_trigger(
         },
         stream=stream_name(project),
     )
-    return ack.seq
+    return ack.seq, bool(ack.duplicate)
 
 
 async def store_cancel(
@@ -696,7 +723,11 @@ async def _unconfined_credentials(
 
 
 class JobRun:
-    """A triggered run: read its record, wait for it, or ask its host to cancel it."""
+    """A triggered run: read its record, wait for it, or ask its host to cancel it.
+
+    ``duplicate`` is true when the trigger repeated an ``idempotency_key``
+    within the stream's duplicate window: JetStream stored nothing, and this
+    is the first trigger's run."""
 
     def __init__(
         self,
@@ -706,9 +737,12 @@ class JobRun:
         job_name: str,
         run_id: str,
         documents: Any = None,
+        *,
+        duplicate: bool = False,
     ):
         self.transport, self.project, self.module_id = transport, project, module_id
         self.job, self.run_id = job_name, run_id
+        self.duplicate = duplicate
         self._documents = documents
 
     def _docs(self) -> Any:
@@ -782,7 +816,8 @@ class JobProxy:
         """Store a trigger; the run starts when a host takes it, once the caller
         this transport names may trigger the job (discovery:TriggerJob). A
         repeated ``idempotency_key`` within the stream's duplicate window
-        (2 minutes) is the same run (JetStream message-id dedup).
+        (2 minutes) is the same run (JetStream message-id dedup), returned with
+        ``duplicate`` set.
 
         ``on_behalf_of``: also name the current call's user, when the transport
         forwards users. A module triggering its own job does so as itself."""
@@ -807,7 +842,7 @@ class JobProxy:
                 reserve=trigger_reserve(len(body)),
                 store=claim_check.ThroughEngine(for_transport(self.transport)),
             )
-            sequence = await store_trigger(
+            sequence, duplicate = await store_trigger_ack(
                 self.transport,
                 self.project,
                 self.module_id,
@@ -823,4 +858,5 @@ class JobProxy:
             self.name,
             run_key(self.name, sequence),
             self._documents,
+            duplicate=duplicate,
         )

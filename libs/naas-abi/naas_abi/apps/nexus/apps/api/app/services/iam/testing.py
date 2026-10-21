@@ -19,7 +19,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.bootstrap import (
     shared_repo_grants,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import NEXUS_CATALOG
-from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS, Memberships
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
     NO_ORG,
     org_scope,
@@ -80,6 +80,8 @@ class NexusIam:
         with as_service_account("api"):
             principal = self.iam.ensure_user(LEGACY_NEXUS_ISSUER, user_id, provider="nexus")
             self.iam.attach_policy(f"builtin.{role}", principal.id, scope)
+            # As MEMBERSHIPS does: an org owner or admin reaches every workspace of the org.
+            Memberships.mirror_org_wide(self.iam, principal.id, scope, role)
 
     def platform_admin(self, user_id: str) -> None:
         with as_service_account("api"):

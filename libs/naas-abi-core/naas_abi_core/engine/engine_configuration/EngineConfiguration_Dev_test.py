@@ -75,6 +75,28 @@ def test_the_dev_block_is_read_from_the_config_the_engine_loads(project, monkeyp
     assert len(load_dev_configuration().modules) == 2
 
 
+def test_the_config_file_is_found_before_its_env_file_exists(project):
+    """A fresh clone has no .env until `abi dev up` writes one: the dotenv
+    adapter the config names does not hide its config.yaml."""
+    dotenv = "  secret: {secret_adapters: [{adapter: dotenv, config: {}}]}\n"
+    (project / "config.yaml").write_text(
+        BASE.replace("  secret: {secret_adapters: []}\n", dotenv)
+    )
+
+    assert EngineConfiguration.configuration_file() == "config.yaml"
+
+
+def test_env_in_the_env_file_still_picks_the_config(project):
+    dotenv = "  secret: {secret_adapters: [{adapter: dotenv, config: {}}]}\n"
+    (project / "config.yaml").write_text(
+        BASE.replace("  secret: {secret_adapters: []}\n", dotenv)
+    )
+    (project / "config.local.yaml").write_text(BASE)
+    (project / ".env").write_text("ENV=local\n")
+
+    assert EngineConfiguration.configuration_file() == "config.local.yaml"
+
+
 def test_templates_render_without_secrets(project):
     # {{ secret.X }} must not fail the CLI: it has no secret service.
     (project / "config.yaml").write_text(

@@ -75,3 +75,22 @@ def test_sigterm_cancels_the_module_before_it_runs() -> None:
         return await task
 
     assert asyncio.run(scenario()) is None
+
+
+def test_a_module_that_never_gets_ready_says_so(monkeypatch, caplog) -> None:
+    """Not READY (discovery down, a wrong key): run() logs it, not a silent wait."""
+    import logging
+
+    import {{module_name_snake}} as package
+
+    monkeypatch.setattr(package, "NOT_READY_NOTICE_SECONDS", 0.05)
+    module = ABIModule.__new__(ABIModule)
+    module._discovery_session = None  # no engine: discovery is off
+
+    async def scenario() -> None:
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(module.run(), 0.3)
+
+    with caplog.at_level(logging.WARNING, logger=package.__name__):
+        asyncio.run(scenario())
+    assert f"{MODULE_ID} not READY" in caplog.text

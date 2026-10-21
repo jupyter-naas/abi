@@ -14,7 +14,7 @@ uv run pytest
 ```
 
 `naas-abi-proto` and `naas-abi-sdk` come from the ABI repository at
-`{{abi_git_ref}}` (see `pyproject.toml`); they are not on PyPI yet.
+`{{abi_git_ref}}` (see `pyproject.toml`).
 
 ## Run it against a project
 

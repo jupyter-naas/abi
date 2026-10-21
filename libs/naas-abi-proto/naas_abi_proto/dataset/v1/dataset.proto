@@ -301,10 +301,10 @@ message NamespaceVersionRequest {
   abi.common.v1.CallContext context = 1;
   string namespace = 2;
 }
-// Neither arm set: the namespace never held a dataset (None in Python).
 message NamespaceVersionResponse {
+  // Neither set: the namespace never held a dataset.
   oneof result {
-    int64 snapshot_id = 1;
+    int64 version = 1;
     DatasetError error = 2;
   }
 }

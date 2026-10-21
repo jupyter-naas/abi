@@ -1,7 +1,7 @@
 """Observe ABI traffic on the broker: requests paired with replies, and publishes.
 
 Subscribes to ABI request subjects only (kernel services, discovery, agents, jobs,
-events) and to ``_INBOX.>`` to pair replies. Chunked transfer subjects are left out
+events) and to the inboxes (``_INBOX.>``) to pair replies. Chunked transfer subjects are left out
 on purpose. Only headers and sizes are read: never payloads, never the token
 (the caller is its ``sub`` claim). Replies to requests that were not observed are
 dropped on arrival, but still cross the wire: run the tap only while watched.
@@ -32,7 +32,7 @@ TAP_SUBJECTS = (
     "abi.jobs.>",
     "evt.>",
 )
-REPLIES = "_INBOX.>"
+REPLIES = ("_INBOX.>",)
 AUTH_HEADER = "Nats-Auth-Token"
 ERROR_HEADERS = ("Abi-Error-Code", "Nats-Service-Error-Code")
 
@@ -68,7 +68,8 @@ class NatsTrafficTap:
             nc = await asyncio.wait_for(self._connect(), self._connect_timeout)
             for subject in TAP_SUBJECTS:
                 self._subscriptions.append(await nc.subscribe(subject, cb=self._on_request))
-            self._subscriptions.append(await nc.subscribe(REPLIES, cb=self._on_reply))
+            for replies in REPLIES:
+                self._subscriptions.append(await nc.subscribe(replies, cb=self._on_reply))
         except Exception as exc:  # noqa: BLE001 - no broker, refused, timed out
             await self.stop()
             reason = "timed out connecting" if isinstance(exc, asyncio.TimeoutError) else str(exc)

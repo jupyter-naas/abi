@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
   Plus,
   Shield,
@@ -17,8 +17,9 @@ import {
   ChevronDown,
   Search,
   Download,
-  Mail,
+  Pencil,
 } from 'lucide-react';
+import { getApiUrl } from '@/lib/config';
 import { useAuthStore } from '@/stores/auth';
 import { useOrganizationStore } from '@/stores/organization';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
@@ -26,14 +27,14 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useConfirm } from '@/components/ui/dialogs';
 import { IdpGroupBindings } from '@/components/invitations/idp-group-bindings';
 import { PendingInvitations } from '@/components/invitations/pending-invitations';
-import { useInviteProviders } from '@/components/invitations/use-invite-providers';
-import { inviteSuccessMessage, providerHint } from '@/lib/invitations';
 import { ColumnResizeHandle } from '@/components/shell/column-resize-handle';
 import { ColumnFilterPopover } from '@/components/graph/explore/ColumnFilterPopover';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { isBlank, type ColumnFilterState } from '@/lib/graph-query/filters';
 import type { FacetBucket } from '@/lib/graph-query/types';
 import { rowMatchesColumnFilter } from './users-table-filter';
+import { SearchBox } from '@/components/settings/search-box';
+import { matchesSearch } from '@/app/settings/lib/search';
 import {
   downloadUsersExport,
   type UsersExportFormat,
@@ -45,7 +46,6 @@ const PANE_WIDTH_DEFAULT = 440;
 const PANE_WIDTH_MIN = 320;
 const PANE_WIDTH_MAX = 560;
 
-type InviteRole = 'admin' | 'member';
 type SortKey = 'user' | 'workspaces' | 'role';
 type SortDir = 'asc' | 'desc';
 type ColumnId = SortKey;
@@ -107,6 +107,11 @@ function roleBadge(role: 'owner' | 'admin' | 'member') {
   );
 }
 
+function memberPhotoUrl(avatar?: string) {
+  if (!avatar) return '';
+  return avatar.startsWith('/') ? `${getApiUrl()}${avatar}` : avatar;
+}
+
 function countFacets(values: string[]): FacetBucket[] {
   const counts = new Map<string, number>();
   for (const value of values) {
@@ -119,11 +124,11 @@ function countFacets(values: string[]): FacetBucket[] {
 
 export default function OrgUsersPage() {
   const params = useParams();
+  const router = useRouter();
   const orgId = params.orgId as string;
   const authUser = useAuthStore((s) => s.user);
   const {
     fetchMembers,
-    inviteToOrganization,
     removeMember,
     membersCache,
     membersLoading,
@@ -134,16 +139,6 @@ export default function OrgUsersPage() {
   const canManage =
     myMembership?.role === 'owner' || myMembership?.role === 'admin';
 
-  const [showInviteModal, setShowInviteModal] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<InviteRole>('member');
-  const [inviteError, setInviteError] = useState('');
-  const [inviteNotice, setInviteNotice] = useState('');
-  const [invitationsKey, setInvitationsKey] = useState(0);
-  const providers = useInviteProviders(showInviteModal);
-  const [inviteLoading, setInviteLoading] = useState(false);
-  const [inviteWorkspaceIds, setInviteWorkspaceIds] = useState<string[]>([]);
-  const [inviteQuery, setInviteQuery] = useState('');
   const [actionError, setActionError] = useState('');
   const { confirm: confirmAction, dialog: confirmDialog } = useConfirm();
   const [workspaces, setWorkspaces] = useState<OrgWorkspace[]>([]);
@@ -153,6 +148,7 @@ export default function OrgUsersPage() {
   const [draftWorkspaceIds, setDraftWorkspaceIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [sheetQuery, setSheetQuery] = useState('');
+  const [search, setSearch] = useState('');
   const [columnFilters, setColumnFilters] = useState<
     Partial<Record<ColumnId, ColumnFilterState>>
   >({});
@@ -208,14 +204,6 @@ export default function OrgUsersPage() {
       workspace.name.toLowerCase().includes(query)
     );
   }, [sortedWorkspaces, sheetQuery]);
-
-  const inviteWorkspaces = useMemo(() => {
-    const query = inviteQuery.trim().toLowerCase();
-    if (!query) return sortedWorkspaces;
-    return sortedWorkspaces.filter((workspace) =>
-      workspace.name.toLowerCase().includes(query)
-    );
-  }, [sortedWorkspaces, inviteQuery]);
 
   const pickerUser = members.find((user) => user.userId === openPickerUserId);
 
@@ -302,25 +290,14 @@ export default function OrgUsersPage() {
     setSheetQuery('');
   }, []);
 
-  const closeInviteModal = useCallback(() => {
-    setShowInviteModal(false);
-    setInviteEmail('');
-    setInviteRole('member');
-    setInviteError('');
-    setInviteWorkspaceIds([]);
-    setInviteQuery('');
-  }, []);
-
   useEffect(() => {
-    if (!openPickerUserId && !showInviteModal) return;
+    if (!openPickerUserId) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      if (showInviteModal) closeInviteModal();
-      else closePane();
+      if (event.key === 'Escape') closePane();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [openPickerUserId, showInviteModal, closePane, closeInviteModal]);
+  }, [openPickerUserId, closePane]);
 
   const putMemberWorkspaces = async (userId: string, workspaceIds: string[]) => {
     const { authFetch } = await import('@/stores/auth');
@@ -338,80 +315,11 @@ export default function OrgUsersPage() {
     }
   };
 
-  const openInviteModal = () => {
-    if (!canManage) return;
-    closePane();
-    setInviteEmail('');
-    setInviteRole('member');
-    setInviteError('');
-    setInviteWorkspaceIds([]);
-    setInviteQuery('');
-    setActionError('');
-    setInviteNotice('');
-    setShowInviteModal(true);
-  };
-
   const openWorkspacePicker = (userId: string) => {
     if (!canManage) return;
-    closeInviteModal();
     setSheetQuery('');
     setDraftWorkspaceIds([...(membershipByUser[userId] || [])]);
     setOpenPickerUserId(userId);
-  };
-
-  const toggleInviteWorkspace = (workspaceId: string) => {
-    setInviteWorkspaceIds((current) =>
-      current.includes(workspaceId)
-        ? current.filter((id) => id !== workspaceId)
-        : [...current, workspaceId]
-    );
-  };
-
-  const handleInvite = async () => {
-    if (!orgId || !inviteEmail.trim() || !canManage) return;
-    setInviteError('');
-    setInviteLoading(true);
-    try {
-      const email = inviteEmail.trim();
-      const provider = providers.providerToSend();
-      const { member, answer } = await inviteToOrganization(orgId, {
-        email,
-        role: inviteRole,
-        provider,
-        workspaceId: inviteWorkspaceIds[0],
-        workspaceRole: inviteWorkspaceIds[0] ? 'member' : undefined,
-      });
-      if (answer.kind === 'invited') {
-        // No account yet: the invitation holds the roles until they sign in,
-        // one invitation per workspace picked.
-        for (const workspaceId of inviteWorkspaceIds.slice(1)) {
-          await inviteToOrganization(orgId, {
-            email,
-            role: inviteRole,
-            provider,
-            workspaceId,
-            workspaceRole: 'member',
-          });
-        }
-        setInviteNotice(inviteSuccessMessage(answer));
-        setInvitationsKey((key) => key + 1);
-      } else {
-        if (!member) {
-          throw new Error('Failed to add user');
-        }
-        if (inviteWorkspaceIds.length > 0) {
-          await putMemberWorkspaces(member.userId, inviteWorkspaceIds);
-        }
-      }
-      await loadMemberWorkspaces();
-      closeInviteModal();
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : 'Failed to add user';
-      setInviteError(message);
-    } finally {
-      setInviteLoading(false);
-    }
   };
 
   const handleRemove = async (userId: string) => {
@@ -493,12 +401,27 @@ export default function OrgUsersPage() {
   );
 
   const filteredMembers = useMemo(() => {
-    return members.filter((user) =>
-      (['user', 'workspaces', 'role'] as ColumnId[]).every((columnId) =>
-        rowMatchesColumnFilter(cellValues(user.userId, columnId), columnFilters[columnId])
-      )
+    return members.filter(
+      (user) =>
+        // Global search: every word must appear in a column or the member profile.
+        matchesSearch(
+          [
+            ...(['user', 'workspaces', 'role'] as ColumnId[]).flatMap((columnId) =>
+              cellValues(user.userId, columnId)
+            ),
+            user.organization ?? '',
+            user.jobTitle ?? '',
+            user.serviceLine ?? '',
+            user.country ?? '',
+            user.interest ?? '',
+          ],
+          search
+        ) &&
+        (['user', 'workspaces', 'role'] as ColumnId[]).every((columnId) =>
+          rowMatchesColumnFilter(cellValues(user.userId, columnId), columnFilters[columnId])
+        )
     );
-  }, [members, columnFilters, cellValues]);
+  }, [members, search, columnFilters, cellValues]);
 
   const visibleMembers = useMemo(() => {
     const rows = [...filteredMembers];
@@ -563,7 +486,7 @@ export default function OrgUsersPage() {
       name: user.name || 'Unknown',
       email: user.email || user.userId,
       role: ROLE_LABEL[user.role],
-      workspaces: (assignedNamesByUser[user.userId] || []).join('; '),
+      groups: (assignedNamesByUser[user.userId] || []).join('; '),
     }));
     const date = new Date().toISOString().slice(0, 10);
     downloadUsersExport(rows, format, `users_${date}`);
@@ -615,20 +538,20 @@ export default function OrgUsersPage() {
                 <button
                   type="button"
                   className="org-settings-primary-button"
-                  onClick={openInviteModal}
+                  onClick={() => router.push(`/organizations/${orgId}/settings/users/new`)}
                 >
                   <Plus size={16} />
-                  Add User
+                  Create user
                 </button>
               ) : (
                 <button
                   type="button"
                   className="org-settings-primary-button"
                   disabled
-                  title="Only organization owners and admins can add users"
+                  title="Only organization owners and admins can create users"
                 >
                   <Plus size={16} />
-                  Add User
+                  Create user
                 </button>
               )}
             </>
@@ -642,23 +565,26 @@ export default function OrgUsersPage() {
           </div>
         )}
 
-        {inviteNotice && (
-          <div className="org-settings-users-alert" role="status">
-            <Mail size={16} />
-            <span>{inviteNotice}</span>
-          </div>
-        )}
+        <SearchBox
+          value={search}
+          onChange={setSearch}
+          placeholder="Search name, email, role, workspace, organization, country..."
+          label="Search users"
+        />
 
-        {hasActiveFilters && (
+        {(hasActiveFilters || search.trim()) && (
           <p className="org-settings-users-filter-meta">
             {visibleMembers.length} of {members.length}{' '}
             {members.length === 1 ? 'user' : 'users'}
             <button
               type="button"
               className="org-settings-users-filter-clear"
-              onClick={() => setColumnFilters({})}
+              onClick={() => {
+                setSearch('');
+                setColumnFilters({});
+              }}
             >
-              Clear filters
+              Clear search and filters
             </button>
           </p>
         )}
@@ -742,7 +668,7 @@ export default function OrgUsersPage() {
                 {visibleMembers.length === 0 && (
                   <tr>
                     <td colSpan={3} className="org-settings-users-no-match">
-                      No users match the current filters
+                      No users match the current search and filters
                     </td>
                   </tr>
                 )}
@@ -759,12 +685,32 @@ export default function OrgUsersPage() {
                       ? 'Loading...'
                       : summary.label;
                   return (
-                    <tr key={user.id}>
+                    <tr
+                      key={user.id}
+                      className={canManage ? 'org-settings-users-row-link' : undefined}
+                      onClick={(event) => {
+                        // Buttons and inputs in the row (workspaces, remove) keep their own action.
+                        if (!canManage) return;
+                        if ((event.target as HTMLElement).closest('button, a, input, select, label')) return;
+                        router.push(`/organizations/${orgId}/settings/users/${user.userId}`);
+                      }}
+                    >
                       <td>
                         <div className="org-settings-users-row-start">
-                          <div className="org-settings-users-avatar">
-                            <UserCircle size={20} />
-                          </div>
+                          {memberPhotoUrl(user.avatar) ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={memberPhotoUrl(user.avatar)}
+                              alt=""
+                              className="org-settings-users-avatar-image"
+                            />
+                          ) : (
+                            <div className="org-settings-users-avatar">
+                              {(user.name || user.email || '?')
+                                .charAt(0)
+                                .toUpperCase()}
+                            </div>
+                          )}
                           <div className="org-settings-users-identity">
                             <p className="org-settings-users-name">
                               {user.name || 'Unknown'}
@@ -814,18 +760,35 @@ export default function OrgUsersPage() {
                       <td>
                         <div className="org-settings-users-row-end">
                           {roleBadge(user.role)}
-                          <span className="org-settings-users-remove-slot">
-                            {canRemove ? (
+                          {canManage ? (
+                            <span className="org-settings-users-row-actions">
                               <button
                                 type="button"
-                                className="org-settings-users-remove"
-                                onClick={() => void handleRemove(user.userId)}
-                                title="Remove user"
+                                className="org-settings-users-edit"
+                                title="Open user"
+                                aria-label={`Edit ${user.name || user.email || 'user'}`}
+                                onClick={() =>
+                                  router.push(
+                                    `/organizations/${orgId}/settings/users/${user.userId}`
+                                  )
+                                }
                               >
-                                <Trash2 size={16} />
+                                <Pencil size={16} />
                               </button>
-                            ) : null}
-                          </span>
+                              <span className="org-settings-users-remove-slot">
+                                {canRemove ? (
+                                  <button
+                                    type="button"
+                                    className="org-settings-users-remove"
+                                    onClick={() => void handleRemove(user.userId)}
+                                    title="Remove user"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                ) : null}
+                              </span>
+                            </span>
+                          ) : null}
                         </div>
                       </td>
                     </tr>
@@ -837,15 +800,15 @@ export default function OrgUsersPage() {
         </div>
 
         <p className="org-settings-footnote">
-          Add User creates the account if needed, emails a sign-in code, and
-          assigns the workspaces you pick. Filter from the column headers.
+          Click a user to open their organization profile. Create user invites
+          the person through the identity provider: the account is made there
+          if it does not exist yet, and they sign in with the code it emails.
         </p>
 
         <PendingInvitations
           scope="organizations"
           id={orgId}
           canManage={canManage}
-          refreshKey={invitationsKey}
         />
 
         <IdpGroupBindings scope="organizations" id={orgId} canManage={canManage} />
@@ -983,164 +946,6 @@ export default function OrgUsersPage() {
           </>,
           paneHost
         )}
-
-      {showInviteModal && (
-        <div
-          className="org-settings-users-modal-backdrop"
-          role="presentation"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) closeInviteModal();
-          }}
-        >
-          <div
-            className="org-settings-users-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="org-add-user-title"
-          >
-            <h3 id="org-add-user-title" className="org-settings-users-modal-title">
-              Add User
-            </h3>
-            <p className="org-settings-users-modal-hint">
-              {providers.known.enabled
-                ? 'Enter any email. If they are new, their identity provider creates their account, and their roles apply when they first sign in with this email. Pick the workspaces they should join.'
-                : 'Enter any email. If they are new, we create their account and send a sign-in code. Pick the workspaces they should join.'}
-            </p>
-            {inviteError && (
-              <div className="org-settings-users-alert" role="alert">
-                <AlertCircle size={16} />
-                <span>{inviteError}</span>
-              </div>
-            )}
-            <div className="org-settings-users-modal-fields">
-              <label className="org-settings-field">
-                <span className="org-settings-field-label">Email</span>
-                <input
-                  type="email"
-                  value={inviteEmail}
-                  onChange={(event) => setInviteEmail(event.target.value)}
-                  placeholder="user@example.com"
-                  className="org-settings-input"
-                  autoFocus
-                />
-              </label>
-              {providers.choosable && (
-                <label className="org-settings-field">
-                  <span className="org-settings-field-label">Identity provider</span>
-                  <select
-                    value={providers.picked ?? ''}
-                    onChange={(event) => providers.setPicked(event.target.value)}
-                    className="org-settings-input"
-                  >
-                    {providers.known.providers.map((p) => (
-                      <option key={p.name} value={p.name}>
-                        {p.display_name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              {providers.known.enabled && providerHint(providers.chosen) && (
-                <p className="org-settings-users-modal-hint">{providerHint(providers.chosen)}</p>
-              )}
-              <label className="org-settings-field">
-                <span className="org-settings-field-label">Role</span>
-                <select
-                  value={inviteRole}
-                  onChange={(event) =>
-                    setInviteRole(event.target.value as InviteRole)
-                  }
-                  className="org-settings-input"
-                >
-                  <option value="member">Member</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </label>
-              <div className="org-settings-field">
-                <span className="org-settings-field-label">
-                  Workspaces
-                  <span className="org-settings-users-modal-count">
-                    {inviteWorkspaceIds.length} selected
-                  </span>
-                </span>
-                <div className="org-settings-users-modal-workspaces">
-                  <div className="org-settings-users-modal-workspace-toolbar">
-                    <label className="org-settings-users-modal-search">
-                      <Search size={12} />
-                      <input
-                        type="text"
-                        value={inviteQuery}
-                        onChange={(event) => setInviteQuery(event.target.value)}
-                        placeholder="Search workspaces..."
-                        className="org-settings-users-pane-search"
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      className="org-settings-users-modal-link"
-                      onClick={() =>
-                        setInviteWorkspaceIds(sortedWorkspaces.map((ws) => ws.id))
-                      }
-                    >
-                      All
-                    </button>
-                    <button
-                      type="button"
-                      className="org-settings-users-modal-link"
-                      onClick={() => setInviteWorkspaceIds([])}
-                    >
-                      None
-                    </button>
-                  </div>
-                  <div className="org-settings-users-modal-workspace-list">
-                    {sortedWorkspaces.length === 0 ? (
-                      <p className="org-settings-users-modal-empty">
-                        No organization workspaces yet.
-                      </p>
-                    ) : inviteWorkspaces.length === 0 ? (
-                      <p className="org-settings-users-modal-empty">
-                        {`No workspaces match "${inviteQuery.trim()}"`}
-                      </p>
-                    ) : (
-                      inviteWorkspaces.map((workspace) => (
-                        <label
-                          key={workspace.id}
-                          className="org-settings-users-modal-workspace"
-                        >
-                          <Checkbox
-                            checked={inviteWorkspaceIds.includes(workspace.id)}
-                            onCheckedChange={() =>
-                              toggleInviteWorkspace(workspace.id)
-                            }
-                          />
-                          <span>{workspace.name}</span>
-                        </label>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="org-settings-users-modal-actions">
-              <button
-                type="button"
-                className="org-settings-users-secondary-button"
-                onClick={closeInviteModal}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="org-settings-primary-button"
-                onClick={() => void handleInvite()}
-                disabled={!inviteEmail.trim() || inviteLoading}
-              >
-                {inviteLoading ? 'Adding...' : 'Add User'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       {confirmDialog}
     </div>
   );

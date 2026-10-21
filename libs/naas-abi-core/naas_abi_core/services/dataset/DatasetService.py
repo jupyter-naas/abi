@@ -162,6 +162,7 @@ class DatasetService(ServiceBase, IDatasetPort):
         namespace: str = "default",
         mode: WriteMode = "append",
         snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> DatasetInfo:
         self.__dataset("Write", name, namespace)
         return self.__adapter.write(
@@ -170,6 +171,7 @@ class DatasetService(ServiceBase, IDatasetPort):
             namespace=namespace,
             mode=mode,
             snapshot_id=snapshot_id,
+            **_deadline(timeout_seconds),
         )
 
     def write_stream(
@@ -180,6 +182,7 @@ class DatasetService(ServiceBase, IDatasetPort):
         namespace: str = "default",
         mode: WriteMode = "append",
         snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> DatasetInfo:
         self.__dataset("WriteStream", name, namespace)
         return self.__adapter.write_stream(
@@ -188,6 +191,7 @@ class DatasetService(ServiceBase, IDatasetPort):
             namespace=namespace,
             mode=mode,
             snapshot_id=snapshot_id,
+            **_deadline(timeout_seconds),
         )
 
     def query(

@@ -12,7 +12,17 @@ from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
     KNOWN_FEATURE_KEYS,
+    effective_workspace_overrides,
+    enabled_feature_catalog,
     resolve_role_baseline,
+    workspace_features,
+)
+from naas_abi.apps.nexus.apps.api.app.services.auth import avatar_store, user_drive_profile
+from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__FastAPI import (  # noqa: E501
+    ALLOWED_AVATAR_EXTENSIONS,
+    MAX_AVATAR_SIZE,
+    _delete_old_avatar,
+    _get_object_storage,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.bootstrap import refresh_feature_policies
@@ -54,11 +64,14 @@ from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.postgres import (
     WorkspaceSecondaryAdapterPostgres,
 )
+from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import WorkspaceUpdateInput
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
     WorkspaceMemberAlreadyExistsError,
     WorkspaceService,
 )
+from naas_abi.apps.nexus.apps.api.app.utils.public_urls import resolve_stored_asset_url
 from naas_abi_core.services.email.EmailService import EmailService
+from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -208,9 +221,58 @@ class OrganizationMember(BaseModel):
     email: str | None = None
     name: str | None = None
     created_at: datetime | None = None
+    avatar: str | None = None
+    organization: str | None = None
+    job_title: str | None = None
+    bio: str | None = None
+    service_line: str | None = None
+    country: str | None = None
+    interest: str | None = None
     user_created: bool = False
     sign_in_email_sent: bool = False
     workspace_member_id: str | None = None
+
+
+class OrganizationMemberAccount(BaseModel):
+    """The member's platform account (read-only here)."""
+
+    user_id: str
+    email: str | None = None
+    name: str | None = None
+    avatar: str | None = None
+    organization: str | None = None
+    job_title: str | None = None
+    bio: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class OrganizationMemberProfile(BaseModel):
+    """What this organization set; null fields show the account value."""
+
+    name: str | None = None
+    avatar: str | None = None
+    organization: str | None = None
+    job_title: str | None = None
+    bio: str | None = None
+    service_line: str | None = None
+    country: str | None = None
+    interest: str | None = None
+
+
+class OrganizationMemberWorkspace(BaseModel):
+    id: str
+    name: str
+    slug: str
+    role: str
+    source: str
+
+
+class OrganizationMemberDetails(BaseModel):
+    member: OrganizationMember
+    account: OrganizationMemberAccount
+    organization_profile: OrganizationMemberProfile
+    workspaces: list[OrganizationMemberWorkspace]
 
 
 class OrganizationMemberInvite(BaseModel):
@@ -222,10 +284,24 @@ class OrganizationMemberInvite(BaseModel):
     # The identity provider to invite through; by default the one the email's
     # domain routes to, else the default provider.
     provider: str | None = Field(default=None, min_length=1, max_length=32)
+    # Member profile in this organization (Organization Settings > Users > Create user).
+    organization: str | None = Field(default=None, max_length=200)
+    job_title: str | None = Field(default=None, max_length=100)
+    bio: str | None = Field(default=None, max_length=2000)
+    service_line: str | None = Field(default=None, max_length=200)
+    country: str | None = Field(default=None, max_length=100)
+    interest: str | None = Field(default=None, max_length=1000)
 
 
 class OrganizationMemberUpdate(BaseModel):
-    role: str = Field(..., pattern=r"^(owner|admin|member)$")
+    role: str | None = Field(default=None, pattern=r"^(owner|admin|member)$")
+    # No name: a member's full name is always their account name (users.name).
+    organization: str | None = Field(default=None, max_length=200)
+    job_title: str | None = Field(default=None, max_length=100)
+    bio: str | None = Field(default=None, max_length=2000)
+    service_line: str | None = Field(default=None, max_length=200)
+    country: str | None = Field(default=None, max_length=100)
+    interest: str | None = Field(default=None, max_length=1000)
 
 
 class OrganizationMemberWorkspacesUpdate(BaseModel):
@@ -235,6 +311,19 @@ class OrganizationMemberWorkspacesUpdate(BaseModel):
 
 class OrganizationRoleFeaturesUpdate(BaseModel):
     role_baseline: dict[str, list[FeatureKey]]
+
+
+class OrganizationWorkspacesBulkUpdate(BaseModel):
+    """One property set on several workspaces at once (only the group for now)."""
+
+    workspace_ids: list[str] = Field(..., min_length=1, max_length=500)
+    # Blank clears the group (the workspaces list under "Others").
+    workspace_group: str = Field(..., max_length=100)
+
+
+class WorkspaceFeatureOverridesUpdate(BaseModel):
+    # None drops the saved overrides: the deployment config applies again.
+    overrides: dict[FeatureKey, bool] | None = None
 
 
 class OrganizationDomain(BaseModel):
@@ -528,12 +617,24 @@ async def upload_org_logo_rectangle(
     return {"logo_rectangle_url": updated.logo_rectangle_url}
 
 
+# Settings always stays reachable, so it cannot be overridden per workspace.
+_PINNED_FEATURES = ("settings",)
+
+
 def _workspace_payload(
     ws: OrganizationWorkspaceRecord,
     *,
     org_logo_url: str | None,
     org_logo_rect_url: str | None,
+    organization_override: dict[str, list[str]] | None = None,
 ) -> dict:
+    flags = settings.feature_flags
+    overrides, overrides_source = effective_workspace_overrides(
+        flags,
+        workspace_slug=ws.slug,
+        workspace_id=ws.id,
+        workspace_override=ws.feature_overrides,
+    )
     return {
         "id": ws.id,
         "name": ws.name,
@@ -542,11 +643,49 @@ def _workspace_payload(
         "organization_id": ws.organization_id,
         "created_at": ws.created_at,
         "updated_at": ws.updated_at,
-        "logo_url": ws.logo_url,
+        "logo_url": resolve_stored_asset_url(ws.logo_url),
         "logo_emoji": ws.logo_emoji,
-        "organization_logo_url": org_logo_url,
-        "organization_logo_rectangle_url": org_logo_rect_url,
+        "workspace_group": ws.workspace_group,
+        "organization_logo_url": resolve_stored_asset_url(org_logo_url),
+        "organization_logo_rectangle_url": resolve_stored_asset_url(org_logo_rect_url),
+        # Features on for at least one role, after the overrides.
+        "features": workspace_features(
+            roles=_BASELINE_ROLES,
+            feature_flags_config=flags,
+            workspace_slug=ws.slug,
+            workspace_id=ws.id,
+            organization_id=ws.organization_id,
+            organization_override=organization_override,
+            workspace_override=ws.feature_overrides,
+        ),
+        "feature_overrides": overrides,
+        "feature_overrides_source": overrides_source,
     }
+
+
+async def _org_role_override(
+    org_id: str, service: OrganizationService
+) -> dict[str, list[str]] | None:
+    stored = await service.get_role_features(org_id=org_id)
+    return stored.role_baseline if stored is not None else None
+
+
+async def _org_workspace_payloads(
+    org_id: str,
+    service: OrganizationService,
+    workspaces: list[OrganizationWorkspaceRecord],
+) -> list[dict]:
+    org = await service.get_organization(org_id=org_id)
+    organization_override = await _org_role_override(org_id, service)
+    return [
+        _workspace_payload(
+            ws,
+            org_logo_url=org.logo_url if org else None,
+            org_logo_rect_url=org.logo_rectangle_url if org else None,
+            organization_override=organization_override,
+        )
+        for ws in workspaces
+    ]
 
 
 @router.get(
@@ -558,20 +697,136 @@ async def list_org_workspaces(
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
 ) -> list[dict]:
-    org = await service.get_organization(org_id=org_id)
-    org_logo_url = org.logo_url if org else None
-    org_logo_rect_url = org.logo_rectangle_url if org else None
-
     # Org owners/admins manage the full org catalog; members only see workspaces
     # they already belong to.
     if await authz.allowed("ListOrganizationCatalog", user=current_user, org=org_id):
         workspaces = await service.list_all_workspaces(org_id=org_id)
     else:
         workspaces = await service.list_workspaces(org_id=org_id, user_id=current_user.id)
-    return [
-        _workspace_payload(ws, org_logo_url=org_logo_url, org_logo_rect_url=org_logo_rect_url)
-        for ws in workspaces
+    return await _org_workspace_payloads(org_id, service, workspaces)
+
+
+@router.post(
+    "/{org_id}/workspaces/bulk-update",
+    dependencies=[
+        guard(
+            "UpdateOrganization",
+            workspace=None,
+            org="org_id",
+            denied="Only admins can edit workspaces",
+        )
+    ],
+)
+async def bulk_update_org_workspaces(
+    org_id: str,
+    body: OrganizationWorkspacesBulkUpdate,
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+    workspace_service: WorkspaceService = Depends(get_workspace_service_for_org_invite),
+) -> dict:
+    """Set the group of several workspaces of this organization at once."""
+    org_workspaces = {ws.id: ws for ws in await service.list_all_workspaces(org_id=org_id)}
+    requested = list(dict.fromkeys(body.workspace_ids))
+    unknown = sorted(set(requested) - set(org_workspaces))
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Workspaces not in this organization: {', '.join(unknown)}",
+        )
+    for workspace_id in requested:
+        await workspace_service.update_workspace(
+            workspace_id=workspace_id,
+            updates=WorkspaceUpdateInput(workspace_group=body.workspace_group),
+        )
+    refreshed = [
+        ws for ws in await service.list_all_workspaces(org_id=org_id) if ws.id in set(requested)
     ]
+    return {
+        "updated": len(requested),
+        "workspaces": await _org_workspace_payloads(org_id, service, refreshed),
+    }
+
+
+@router.get(
+    "/{org_id}/workspace-features",
+    dependencies=[
+        guard(
+            "ListOrganizationCatalog",
+            workspace=None,
+            org="org_id",
+            denied="Only admins can view workspace features",
+        )
+    ],
+)
+async def get_org_workspace_features(
+    org_id: str,
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+) -> dict:
+    """What the workspace features modal needs: the catalog and the role defaults."""
+    flags = settings.feature_flags
+    role_baseline = resolve_role_baseline(
+        flags,
+        organization_id=org_id,
+        organization_override=await _org_role_override(org_id, service),
+    )
+    catalog = enabled_feature_catalog(flags)
+    return {
+        "catalog": catalog,
+        "pinned": [key for key in _PINNED_FEATURES if key in catalog],
+        "roles": list(_BASELINE_ROLES),
+        "role_baseline": {
+            role_name: [key for key in role_baseline.get(role_name, []) if key in catalog]
+            for role_name in _BASELINE_ROLES
+        },
+    }
+
+
+@router.put(
+    "/{org_id}/workspaces/{workspace_id}/features",
+    dependencies=[
+        guard(
+            "UpdateOrganization",
+            workspace=None,
+            org="org_id",
+            denied="Only admins can edit workspace features",
+        )
+    ],
+)
+async def update_org_workspace_features(
+    org_id: str,
+    workspace_id: str,
+    body: WorkspaceFeatureOverridesUpdate,
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+    workspace_service: WorkspaceService = Depends(get_workspace_service_for_org_invite),
+) -> dict:
+    """Save a workspace's feature overrides; ``overrides: null`` restores the config ones."""
+    org_workspaces = {ws.id: ws for ws in await service.list_all_workspaces(org_id=org_id)}
+    if workspace_id not in org_workspaces:
+        raise HTTPException(status_code=404, detail="Workspace not found in this organization")
+    overrides = None
+    if body.overrides is not None:
+        catalog = set(enabled_feature_catalog(settings.feature_flags))
+        outside = sorted(key for key in body.overrides if key not in catalog)
+        if outside:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Features not enabled in deployment catalog: {', '.join(outside)}",
+            )
+        pinned = sorted(key for key in body.overrides if key in _PINNED_FEATURES)
+        if pinned:
+            raise HTTPException(status_code=400, detail=f"Features always on: {', '.join(pinned)}")
+        overrides = {str(key): bool(value) for key, value in body.overrides.items()}
+    await workspace_service.set_workspace_feature_overrides(
+        workspace_id=workspace_id, overrides=overrides
+    )
+    # The API enforces features through IAM: the saved overrides become policies.
+    await refresh_feature_policies(service.adapter.db)
+    refreshed = [
+        ws for ws in await service.list_all_workspaces(org_id=org_id) if ws.id == workspace_id
+    ]
+    return (await _org_workspace_payloads(org_id, service, refreshed))[0]
 
 
 @router.get(
@@ -590,16 +845,10 @@ async def list_org_member_workspaces(
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
 ) -> dict:
-    org = await service.get_organization(org_id=org_id)
-    org_logo_url = org.logo_url if org else None
-    org_logo_rect_url = org.logo_rectangle_url if org else None
     workspaces = await service.list_all_workspaces(org_id=org_id)
     memberships = await service.list_workspace_memberships(org_id=org_id)
     return {
-        "workspaces": [
-            _workspace_payload(ws, org_logo_url=org_logo_url, org_logo_rect_url=org_logo_rect_url)
-            for ws in workspaces
-        ],
+        "workspaces": await _org_workspace_payloads(org_id, service, workspaces),
         "memberships": [
             {
                 "user_id": row.user_id,
@@ -824,6 +1073,64 @@ async def list_org_members(
     return [OrganizationMember(**row.__dict__) for row in rows]
 
 
+def _invite_profile(invite: OrganizationMemberInvite) -> dict[str, str]:
+    """What the invite sets about the person in this organization."""
+    profile = {
+        "organization": invite.organization,
+        "job_title": invite.job_title,
+        "bio": invite.bio,
+        "service_line": invite.service_line,
+        "country": invite.country,
+        "interest": invite.interest,
+    }
+    return {key: value for key, value in profile.items() if value is not None}
+
+
+async def _sync_member_drive(
+    db: AsyncSession, object_storage: ObjectStorageService, user_id: str
+) -> None:
+    """Refresh org_member.json and .USER.md in the member's drive (best effort)."""
+    await db.flush()
+    await user_drive_profile.sync_user_drive_profile_safely(
+        db, object_storage, user_id, datetime.now(UTC)
+    )
+
+
+@router.get(
+    "/{org_id}/members/{user_id}",
+    dependencies=[
+        guard(
+            "ListOrganizationMembers",
+            org="org_id",
+            literal="-",
+            denied="Only admins can view member details",
+        )
+    ],
+)
+async def get_org_member_details(
+    org_id: str,
+    user_id: str,
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+) -> OrganizationMemberDetails:
+    """One member: their account, their profile in this org and their workspaces here."""
+    details = await service.get_member_details(org_id=org_id, user_id=user_id)
+    if details is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    workspaces = await service.get_member_workspace_access(org_id=org_id, user_id=user_id)
+    return OrganizationMemberDetails(
+        member=OrganizationMember(**details.member.__dict__),
+        account=OrganizationMemberAccount(**details.account.__dict__),
+        organization_profile=OrganizationMemberProfile(**details.organization_profile.__dict__),
+        workspaces=[
+            OrganizationMemberWorkspace(
+                id=w.workspace_id, name=w.name, slug=w.slug, role=w.role, source=w.source
+            )
+            for w in workspaces
+        ],
+    )
+
+
 async def _find_org_member(
     service: OrganizationService, *, org_id: str, user_id: str
 ) -> OrganizationMemberRecord | None:
@@ -852,6 +1159,8 @@ async def invite_org_member(
     workspace_service: WorkspaceService = Depends(get_workspace_service_for_org_invite),
     email_service: EmailService | None = Depends(_get_email_service),
     invites: InvitationService = Depends(invites_runtime.get_invitation_service),
+    db: AsyncSession = Depends(get_db),
+    object_storage: ObjectStorageService = Depends(_get_object_storage),
 ) -> OrganizationMember | dict[str, object]:
     # IAM decided who may invite (the guard) and decides what each role may
     # give (``by``); ``role`` only tells whether the caller may name an owner.
@@ -897,6 +1206,7 @@ async def invite_org_member(
                 organization_name=org.name if org else None,
                 workspace_name=workspace.name if workspace else None,
                 may_grant_owner=role == "owner",
+                profile=_invite_profile(invite),
             )
         except OwnerGrantRefusedError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
@@ -931,6 +1241,15 @@ async def invite_org_member(
     if member is None:
         raise HTTPException(status_code=500, detail="Failed to create or find user for invite")
 
+    profile = _invite_profile(invite)
+    if profile:
+        member = (
+            await service.update_member_profile(
+                org_id=org_id, user_id=member.user_id, name=None, **profile
+            )
+            or member
+        )
+
     if invite.workspace_id:
         # An org admin puts people in the organization's workspaces whether or
         # not they belong to one (see ``sync_org_member_workspaces``): granted
@@ -961,6 +1280,7 @@ async def invite_org_member(
         email_service=email_service or _get_email_service(request),
     )
 
+    await _sync_member_drive(db, object_storage, member.user_id)
     return OrganizationMember(
         **member.__dict__,
         user_created=False,
@@ -986,20 +1306,155 @@ async def update_org_member(
     updates: OrganizationMemberUpdate,
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
+    db: AsyncSession = Depends(get_db),
+    object_storage: ObjectStorageService = Depends(_get_object_storage),
 ) -> OrganizationMember:
-    if user_id == current_user.id:
-        raise HTTPException(status_code=400, detail="Cannot change your own role")
-
-    try:
-        member = await service.update_member_role(
-            org_id=org_id, user_id=user_id, role=updates.role, by=current_user
-        )
-    except MembershipDenied as exc:
-        raise _member_denied(str(exc)) from exc
-    except LastOwnerError as exc:
-        raise HTTPException(status_code=400, detail="An organization needs an owner") from exc
+    member = await service.get_organization_member(org_id=org_id, user_id=user_id)
     if member is None:
         raise HTTPException(status_code=404, detail="Member not found")
+
+    if updates.role is not None:
+        if user_id == current_user.id:
+            raise HTTPException(status_code=400, detail="Cannot change your own role")
+        try:
+            member = await service.update_member_role(
+                org_id=org_id, user_id=user_id, role=updates.role, by=current_user
+            )
+        except MembershipDenied as exc:
+            raise _member_denied(str(exc)) from exc
+        except LastOwnerError as exc:
+            raise HTTPException(status_code=400, detail="An organization needs an owner") from exc
+        if member is None:
+            raise HTTPException(status_code=404, detail="Member not found")
+
+    profile_touched = any(
+        field is not None
+        for field in (
+            updates.organization,
+            updates.job_title,
+            updates.bio,
+            updates.service_line,
+            updates.country,
+            updates.interest,
+        )
+    )
+    if profile_touched:
+        # Profile in this organization only: the account (users.*) and the
+        # member's profile in other organizations are left untouched.
+        member = await service.update_member_profile(
+            org_id=org_id,
+            user_id=user_id,
+            name=None,
+            organization=updates.organization,
+            job_title=updates.job_title,
+            bio=updates.bio,
+            service_line=updates.service_line,
+            country=updates.country,
+            interest=updates.interest,
+        )
+        if member is None:
+            raise HTTPException(status_code=404, detail="Member not found")
+
+    await _sync_member_drive(db, object_storage, user_id)
+    return OrganizationMember(**member.__dict__)
+
+
+@router.post(
+    "/{org_id}/members/{user_id}/avatar",
+    dependencies=[
+        guard(
+            "UpdateOrganizationMember",
+            org="org_id",
+            id="user_id",
+            denied="Only admins can update members",
+        )
+    ],
+)
+async def upload_org_member_avatar(
+    org_id: str,
+    user_id: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+    object_storage: ObjectStorageService = Depends(_get_object_storage),
+    db: AsyncSession = Depends(get_db),
+) -> OrganizationMember:
+    member = await service.get_organization_member(org_id=org_id, user_id=user_id)
+    if member is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ALLOWED_AVATAR_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type. Allowed: {', '.join(sorted(ALLOWED_AVATAR_EXTENSIONS))}",
+        )
+
+    content = await file.read()
+    if len(content) > MAX_AVATAR_SIZE:
+        raise HTTPException(status_code=400, detail="File too large (max 2MB)")
+
+    # In the member's own drive as avatar_org_<org_id>.<ext>, one per organization,
+    # the previous one archived (avatar_store). The account shows it when it has
+    # no picture of its own.
+    saved = avatar_store.save_avatar(
+        object_storage,
+        user_id,
+        content,
+        ext,
+        datetime.now(UTC),
+        basename=avatar_store.org_avatar_basename(org_id),
+    )
+    avatar_url = avatar_store.org_avatar_url(user_id, org_id, saved.digest)
+    previous_avatar = await service.set_member_avatar(
+        org_id=org_id, user_id=user_id, avatar=avatar_url
+    )
+    # A picture from before the drive layout: its file is no longer used.
+    _delete_old_avatar(object_storage, previous_avatar)
+    member = await service.get_organization_member(org_id=org_id, user_id=user_id)
+    if member is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    await _sync_member_drive(db, object_storage, user_id)
+    return OrganizationMember(**member.__dict__)
+
+
+@router.delete(
+    "/{org_id}/members/{user_id}/avatar",
+    dependencies=[
+        guard(
+            "UpdateOrganizationMember",
+            org="org_id",
+            id="user_id",
+            denied="Only admins can update members",
+        )
+    ],
+)
+async def remove_org_member_avatar(
+    org_id: str,
+    user_id: str,
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+    object_storage: ObjectStorageService = Depends(_get_object_storage),
+    db: AsyncSession = Depends(get_db),
+) -> OrganizationMember:
+    member = await service.get_organization_member(org_id=org_id, user_id=user_id)
+    if member is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    previous_avatar = await service.set_member_avatar(org_id=org_id, user_id=user_id, avatar=None)
+    avatar_store.remove_avatar(
+        object_storage,
+        user_id,
+        datetime.now(UTC),
+        basename=avatar_store.org_avatar_basename(org_id),
+    )
+    _delete_old_avatar(object_storage, previous_avatar)
+    member = await service.get_organization_member(org_id=org_id, user_id=user_id)
+    if member is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    await _sync_member_drive(db, object_storage, user_id)
     return OrganizationMember(**member.__dict__)
 
 
@@ -1019,6 +1474,8 @@ async def remove_org_member(
     user_id: str,
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
+    db: AsyncSession = Depends(get_db),
+    object_storage: ObjectStorageService = Depends(_get_object_storage),
 ) -> dict:
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot remove yourself from the organization")
@@ -1034,6 +1491,7 @@ async def remove_org_member(
         raise _member_denied(str(exc)) from exc
     if not removed:
         raise HTTPException(status_code=404, detail="Member not found")
+    await _sync_member_drive(db, object_storage, user_id)
     return {"message": "Member removed successfully"}
 
 

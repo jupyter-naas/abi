@@ -1,7 +1,7 @@
 """Job bodies, kept apart from the module class so they test without a broker.
 
 A job is declared on ``ABIModule`` with ``@job(..., triggers=(...))``:
-``Every("1h")``, ``Cron("0 2 * * *")`` or ``OnEvent(...)``. JetStream fires the
+``Every("1h")``, ``Cron("0 0 2 * * *")`` or ``OnEvent(...)``. JetStream fires the
 trigger and one replica of this module runs it. Delivery is at least once, so a
 job must tolerate running twice.
 """

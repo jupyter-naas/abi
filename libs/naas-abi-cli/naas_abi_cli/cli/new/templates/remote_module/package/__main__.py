@@ -31,6 +31,7 @@ from {{module_name_snake}} import ABIModule
 
 DEFAULT_NATS_URL = "nats://127.0.0.1:4222"
 DEFAULT_DISCOVERY_PROJECT = "{{discovery_project}}"
+
 T = TypeVar("T")
 
 

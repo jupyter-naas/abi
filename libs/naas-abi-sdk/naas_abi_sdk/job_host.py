@@ -522,13 +522,22 @@ class JobHost:
         for subscription in self._subscriptions:
             with contextlib.suppress(Exception):
                 await subscription.unsubscribe()
-        for run_id, context in self._running.items():
+        # The first half of the grace lets runs end on their own and keep
+        # their outcome: a short run a deploy happens to catch is no failure.
+        # The rest are asked to stop, and retried elsewhere if they may be.
+        finish = self.close_grace_seconds / 2
+        if self._work:
+            await asyncio.wait(set(self._work.values()), timeout=finish)
+        for run_id, context in list(self._running.items()):
+            work = self._work.get(run_id)
+            if work is not None and work.done():
+                continue
             self._interrupted.add(run_id)
             context.cancelled.set()
         if not self._tasks:
             return
         _, pending = await asyncio.wait(
-            set(self._tasks), timeout=self.close_grace_seconds
+            set(self._tasks), timeout=self.close_grace_seconds - finish
         )
         if pending:
             # Ignored the cancel request: cancel the handlers themselves, so each run

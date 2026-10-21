@@ -78,6 +78,7 @@ jobs:
           uv run --project libs/naas-abi-core --no-sync pytest --import-mode=importlib -q \
             libs/naas-abi-core/naas_abi_core/engine/nats_rpc_integration_test.py \
             libs/naas-abi-core/naas_abi_core/services/discovery/discovery_integration_test.py \
+            libs/naas-abi-core/naas_abi_core/engine/app_shutdown_integration_test.py \
             examples/standalone_module/transfer_integration_test.py \
             examples/standalone_module/model_integration_test.py \
             examples/standalone_module/agent_integration_test.py \

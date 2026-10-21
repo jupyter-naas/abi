@@ -1,0 +1,8 @@
+{
+  "label": "naas_abi_sdk",
+  "link": {
+    "type": "generated-index",
+    "slug": "/developer-guide/reference/libraries/naas_abi_sdk",
+    "description": "The SDK for remote modules: async clients of the kernel services over NATS, the module runtime (BaseModule, run_module), discovery, remote agents, jobs and apps. Start with the guide: Build a Remote Module."
+  }
+}

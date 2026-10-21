@@ -19,7 +19,7 @@ import hashlib
 import logging
 import mimetypes
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
@@ -27,6 +27,8 @@ from typing import Any
 
 from naas_abi_proto.app.v1 import app_pb2 as pb
 from naas_abi_proto.discovery.v1 import discovery_pb2 as discovery_pb
+from nats.errors import Error as NATSError
+from nats.errors import MaxPayloadError
 
 from naas_abi_sdk import overflow
 from naas_abi_sdk.agent_host import _token_expiry
@@ -39,6 +41,7 @@ from naas_abi_sdk.app_streams import (
     pull_body,
 )
 from naas_abi_sdk.apps import AppDescriptor
+from naas_abi_sdk.broker_flush import flush_to_broker
 from naas_abi_sdk.concurrency import DEFAULT_LIMIT, ConcurrentCalls
 from naas_abi_sdk.messages import reply
 from naas_abi_sdk.transport import RPCError
@@ -53,6 +56,17 @@ MAX_REQUEST_BYTES = MAX_INLINE_REQUEST_BODY + 64 * 1024
 IDLE_SECONDS = 60.0
 # Responses streaming at once (downloads, server-sent events) in this process.
 MAX_STREAMS = 256
+# Uploads streaming into this process's apps at once. They go as fast as the
+# browser sends, so they have slots of their own and never hold the slots of
+# other requests; one more is refused at once (Nexus tries another instance).
+MAX_UPLOADS = 16
+# When the host closes, a response still streaming ends with an error, which
+# its reader has this long to take.
+CLOSE_SECONDS = 3.0
+# While the host drains, a response stream whose app sent nothing for this long
+# ends with an error: an idle stream (server-sent events, a long poll) never
+# ends by itself. Server-sent events end at once.
+DRAIN_IDLE_SECONDS = 1.0
 AUTHORIZATION_SECONDS = 5.0
 MAX_AUTHORIZATIONS = 1024
 # The browser assets Nexus serves for in-engine apps.
@@ -69,6 +83,9 @@ HOP_BY_HOP = frozenset(
         "te", "trailer", "transfer-encoding", "upgrade", "content-length",
     }
 )  # fmt: skip
+# A response's Content-Length crosses: Nexus sends it, so a reader can tell a
+# streamed body that ended early from a whole one.
+RESPONSE_HOP_BY_HOP = HOP_BY_HOP - {"content-length"}
 
 ASGIApp = Callable[[dict, Callable[[], Awaitable[dict]], Callable[[dict], Awaitable[None]]], Awaitable[None]]  # fmt: skip
 
@@ -123,6 +140,42 @@ def _header(request: pb.HttpRequest, name: str) -> str:
     return next((h.value for h in request.headers if h.name.lower() == name), "")
 
 
+def _asgi_headers(request: pb.HttpRequest) -> list[tuple[bytes, bytes]]:
+    """The request's headers as ASGI wants them: latin-1 bytes, as HTTP has them."""
+    try:
+        return [
+            (h.name.lower().encode("latin-1"), h.value.encode("latin-1"))
+            for h in request.headers
+            if h.name.lower() not in HOP_BY_HOP
+        ]
+    except UnicodeEncodeError:
+        raise RPCError("INVALID_ARGUMENT", "A header is not latin-1 text") from None
+
+
+def _is_upload(msg: Any) -> bool:
+    """A request whose body follows: it waits on its sender as long as it lasts."""
+    if len(msg.data) > MAX_REQUEST_BYTES:
+        return False
+    try:
+        return pb.HttpRequest.FromString(msg.data).body_follows
+    except Exception:  # noqa: BLE001 - _handle answers a malformed request
+        return False
+
+
+class _AppFailed(Exception):
+    """The app raised before it answered: never retried elsewhere, since it ran."""
+
+
+async def _drain_subscription(subscription: Any) -> None:
+    """Drain, or at least unsubscribe; nats-py raises when the connection is
+    closed or draining, or the subscription already gone."""
+    try:
+        await subscription.drain()
+    except NATSError:
+        with contextlib.suppress(NATSError):
+            await subscription.unsubscribe()
+
+
 class AppHost:
     def __init__(
         self,
@@ -130,6 +183,7 @@ class AppHost:
         apps: dict[str, tuple[AppDescriptor, ASGIApp | None]],
         *,
         max_concurrency: int = DEFAULT_LIMIT,
+        max_uploads: int = MAX_UPLOADS,
         idle_seconds: float = IDLE_SECONDS,
     ) -> None:
         self.session, self.apps = session, apps
@@ -137,18 +191,28 @@ class AppHost:
         self.closing = False
         self.idle_seconds = idle_seconds
         self.calls = ConcurrentCalls(max_concurrency)
-        # (token, on-behalf-of, app) -> (reuse until, the verified caller's user)
-        self._authorized: dict[tuple[str, str, str], tuple[float, Caller]] = {}
+        self.uploads = ConcurrentCalls(max_uploads)
+        # (token, app) -> (reuse until, the verified caller)
+        self._authorized: dict[tuple[str, str], tuple[float, Caller]] = {}
+        # One discovery call per token and app at a time; the others wait for it.
+        self._authorizing: dict[tuple[str, str], asyncio.Future[Caller]] = {}
         self._etags: dict[Path, tuple[float, int, str]] = {}
         self._lifespans: list[_Lifespan] = []
+        # What each app's lifespan put in its state (ASGI lifespan "state").
+        self._states: dict[str, dict] = {}
         # Requests whose app still runs: reading an upload, or streaming its answer.
         self._streams: set[asyncio.Task] = set()
+        # Response bodies not over yet, lingering ones included.
+        self._sources: set[BodySource] = set()
+        # ASGI calls whose response streams: a drain ends the idle ones.
+        self._responding: set[_AsgiCall] = set()
 
     async def start(self) -> None:
         try:
             for descriptor, asgi in self.apps.values():
                 if asgi is not None:
                     lifespan = _Lifespan(asgi, descriptor.name)
+                    self._states[descriptor.name] = lifespan.state
                     await lifespan.startup()
                     self._lifespans.append(lifespan)
             nc = await self._nc()
@@ -161,24 +225,97 @@ class AppHost:
                             self.session.instance_id,
                             name,
                         ),
-                        cb=self.calls.callback(
-                            partial(self._handle, name), requests=True
-                        ),
+                        cb=self._receiver(name),
                     )
                 )
-            await nc.flush()
+            await flush_to_broker(nc)
         except BaseException:
             await self.close()
             raise
 
+    async def drain(self, timeout: float) -> None:
+        """Stop taking requests and let those in progress finish, for up to
+        ``timeout`` seconds in all.
+
+        A request arriving now finds no responder, and Nexus sends it to
+        another instance; one cut off mid-call would wait out its timeout
+        (504). A response still streaming may finish, unless it is idle
+        (DRAIN_IDLE_SECONDS) or server-sent events: those end with an error,
+        and their readers reconnect to another instance. close() cancels
+        whatever is still running afterwards. A NATS connection already
+        closed or draining does not stop the shutdown.
+        """
+        self.closing = True
+        self._end_idle_streams()
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+
+        def remaining() -> float:
+            return max(0.0, deadline - loop.time())
+
+        subscriptions, self.subscriptions = self.subscriptions, []
+        steps = [
+            asyncio.ensure_future(
+                asyncio.gather(*(_drain_subscription(s) for s in subscriptions))
+            ),
+            asyncio.ensure_future(
+                asyncio.gather(self.calls.idle(), self.uploads.idle())
+            ),
+        ]
+        try:
+            for step in steps:
+                await asyncio.wait({step}, timeout=remaining())
+        finally:
+            for step in steps:
+                step.cancel()
+            await asyncio.gather(*steps, return_exceptions=True)
+        # Answered, but still reading an upload or streaming the response.
+        while self._streams and remaining() > 0:
+            self._end_idle_streams()
+            await asyncio.wait(
+                set(self._streams), timeout=min(remaining(), DRAIN_IDLE_SECONDS / 4)
+            )
+
+    def _end_idle_streams(self) -> None:
+        """End, with an error, the streamed responses a drain need not wait
+        for: server-sent events, and those whose app went quiet. A response
+        whose body ended is never cut: its app may still run a background
+        task (Starlette runs it after the body), which the drain waits for."""
+        now = asyncio.get_running_loop().time()
+        for call in list(self._responding):
+            if call.body_ended or (
+                call.source is not None and call.source.done.is_set()
+            ):
+                self._responding.discard(call)
+            elif call.event_stream or (
+                not call.sending and now - call.activity >= DRAIN_IDLE_SECONDS
+            ):
+                self._responding.discard(call)
+                if call.source is not None:
+                    call.source.abort("MODULE_UNAVAILABLE", "The module is stopping")
+                if call.task is not None:
+                    call.task.cancel()
+
     async def close(self) -> None:
+        """Stop serving. A response still streaming (a download, server-sent
+        events) ends with an error its reader sees, not a clean end, and the
+        host waits CLOSE_SECONDS at most for the readers to take it."""
+        self.closing = True
         for subscription in self.subscriptions:
-            await subscription.unsubscribe()
+            with contextlib.suppress(Exception):
+                await subscription.unsubscribe()
         self.subscriptions.clear()
         await self.calls.cancel()
+        await self.uploads.cancel()
+        for source in list(self._sources):
+            source.abort("MODULE_UNAVAILABLE", "The module stopped")
         for task in list(self._streams):
             task.cancel()
-        await asyncio.gather(*self._streams, return_exceptions=True)
+        if self._streams:
+            await asyncio.wait(set(self._streams), timeout=CLOSE_SECONDS + 1)
+        for source in list(self._sources):
+            await source.close()
+        self._sources.clear()
         for lifespan in reversed(self._lifespans):
             await lifespan.shutdown()
         self._lifespans.clear()
@@ -186,14 +323,92 @@ class AppHost:
     async def _nc(self) -> Any:
         return await self.session.client.transport.connect()
 
+    async def _fits_inline(
+        self, size: int, headers: Iterable[tuple[str, str]] = ()
+    ) -> bool:
+        """Whether a body of ``size`` bytes is answered inline: up to
+        INLINE_BYTES, and fitting one broker message with its headers and
+        envelope. Else it streams (a stream's first message holds only the
+        headers)."""
+        if size > INLINE_BYTES:
+            return False
+        total = size + sum(len(k) + len(v) + 8 for k, v in headers)
+        if total <= chunk_bytes(0):  # the smallest chunk fits any broker
+            return True
+        nc = await self._nc()
+        return total <= chunk_bytes(getattr(nc, "max_payload", 1024 * 1024))
+
+    async def _source(self) -> BodySource:
+        """A new response body, closed with the host."""
+        self._sources = {s for s in self._sources if not s.gone.is_set()}
+        source = BodySource(await self._nc(), idle_seconds=self.idle_seconds)
+        await source.start()
+        self._sources.add(source)
+        return source
+
+    async def _settle(self, source: BodySource) -> None:
+        """Wait until the reader took the body's end, or left; the source then
+        lingers for a repeated last pull on its own. While the host closes,
+        the reader has CLOSE_SECONDS to take it (the error ``close`` put in),
+        even when this wait is cancelled; the cancellation then goes on."""
+        try:
+            await asyncio.wait_for(
+                source.settled(), CLOSE_SECONDS if self.closing else None
+            )
+        except asyncio.TimeoutError:
+            pass
+        except asyncio.CancelledError:
+            if self.closing:  # close() cancels; its error is still to be served
+                with contextlib.suppress(asyncio.TimeoutError):
+                    await asyncio.wait_for(source.settled(), CLOSE_SECONDS)
+            await source.close()
+            raise
+        if self.closing or not source.done.is_set():
+            await source.close()
+
     def _keep(self, task: asyncio.Task) -> None:
         self._streams.add(task)
         task.add_done_callback(self._streams.discard)
+
+    def _receiver(self, name: str) -> Callable[[Any], Awaitable[None]]:
+        """The app's subscription callback: uploads run on slots of their own.
+
+        Once the host drains, a request still queued behind busy calls is
+        refused at once (MODULE_UNAVAILABLE: the app never ran, so Nexus may
+        send it to another instance) rather than waiting for a slot. The
+        subscription's drain waits for its queue to empty, so it ends quickly.
+        """
+        call = self.calls.callback(partial(self._handle, name), requests=True)
+        upload = self.uploads.callback(partial(self._handle, name), requests=True)
+
+        async def receive(msg: Any) -> None:
+            if self.closing:
+                await self._refuse(msg, "MODULE_UNAVAILABLE", "App is draining")
+            elif not _is_upload(msg):
+                await call(msg)
+            elif self.uploads.in_flight >= self.uploads.limit:
+                # Waiting for a slot would hold this subscription's other requests.
+                await self._refuse(
+                    msg, "MODULE_UNAVAILABLE", "Too many uploads in progress"
+                )
+            else:
+                await upload(msg)
+
+        return receive
+
+    async def _refuse(self, msg: Any, code: str, message: str) -> None:
+        if not msg.reply:
+            return
+        response = pb.HttpResponse()
+        response.error.code, response.error.message = code, message
+        with contextlib.suppress(Exception):
+            await reply(msg, response.SerializeToString())
 
     # -- one request ----------------------------------------------------------
 
     async def _handle(self, name: str, msg: Any) -> None:
         response = pb.HttpResponse()
+        stream: BodySource | None = None
         try:
             if len(msg.data) > MAX_REQUEST_BYTES or overflow.REQUEST_HEADER in (
                 msg.headers or {}
@@ -211,23 +426,57 @@ class AppHost:
             request.principal_id = caller.principal_id
             request.principal_kind = caller.principal_kind
             request.principal_name = caller.principal_name
+            if not caller.user_id:
+                # The workspace a user opened the app from: with no verified
+                # user there is none.
+                request.workspace_id = ""
             answer = await self._answer(name, request)
             response.status = answer.status
             for key, value in answer.headers:
                 response.headers.add(name=key, value=value)
             if answer.stream is not None:
-                response.body_follows, response.body_inbox = True, answer.stream.inbox
+                stream = answer.stream
+                response.body_follows, response.body_inbox = True, stream.inbox
             else:
                 response.body = answer.body
         except RPCError as exc:
+            # Raised by this host before the app ran (draining, unauthorized, a
+            # bad request): Nexus may retry the retryable ones elsewhere.
             response = pb.HttpResponse()
             response.error.code, response.error.message = exc.code, str(exc)
+        except _AppFailed as exc:
+            logger.error("App %s failed", name, exc_info=exc.__cause__)
+            response = pb.HttpResponse()
+            response.error.code, response.error.message = "APP_ERROR", "App failed"
         except Exception:
             logger.exception("App %s failed", name)
             response = pb.HttpResponse()
             response.error.code, response.error.message = "APP_ERROR", "App failed"
         if msg.reply:
+            await self._reply(name, msg, response, stream)
+
+    async def _reply(
+        self, name: str, msg: Any, response: pb.HttpResponse, stream: BodySource | None
+    ) -> None:
+        """Send the answer; when it cannot go (too large for one message, or the
+        send failed), a short error instead, so Nexus is not left waiting."""
+        try:
             await reply(msg, response.SerializeToString())
+            return
+        except MaxPayloadError:
+            logger.warning(
+                "App %s answered with more headers than a message holds", name
+            )
+            message = "The app's response headers are too large"
+        except Exception:
+            logger.warning("Could not send app %s's answer", name, exc_info=True)
+            message = "Could not send the app's answer"
+        if stream is not None:
+            await stream.close()  # its reader never learnt where it is
+        failed = pb.HttpResponse()
+        failed.error.code, failed.error.message = "APP_ERROR", message
+        with contextlib.suppress(Exception):
+            await reply(msg, failed.SerializeToString())
 
     async def _authorize(self, name: str, headers: dict) -> Caller:
         """The verified caller (the actor and the user it acts for, "" for
@@ -238,6 +487,22 @@ class AppHost:
         cached = self._authorized.get(key)
         if cached is not None and now < cached[0]:
             return cached[1]
+        # A page loads many files at once with one token: one discovery call.
+        pending = self._authorizing.get(key)
+        if pending is None:
+            pending = asyncio.ensure_future(self._ask_discovery(name, token))
+            self._authorizing[key] = pending
+            pending.add_done_callback(partial(self._authorized_now, key))
+        return await asyncio.shield(pending)
+
+    def _authorized_now(self, key: tuple[str, str], future: asyncio.Future) -> None:
+        self._authorizing.pop(key, None)
+        if not future.cancelled():
+            future.exception()  # retrieved: every waiter may have left
+
+    async def _ask_discovery(self, name: str, token: str) -> Caller:
+        key = (token, name)
+        now = asyncio.get_running_loop().time()
         response = await self.session.client._call(
             "authorize_app",
             discovery_pb.AuthorizeAppRequest(
@@ -266,13 +531,15 @@ class AppHost:
         return caller
 
     async def _answer(self, name: str, request: pb.HttpRequest) -> _Answer:
+        descriptor, asgi = self.apps[name]
         if len(request.body) > MAX_INLINE_REQUEST_BODY:
             return _text(413, "Request too large")
+        if len(request.body) > descriptor.upload_limit:
+            return _text(413, "Request body too large")
         if not request.path.startswith("/"):
             raise RPCError("INVALID_ARGUMENT", "App path must start with /")
         if request.body_follows and not request.body_inbox.startswith("_INBOX."):
             raise RPCError("INVALID_ARGUMENT", "A body inbox must be an _INBOX subject")
-        descriptor, asgi = self.apps[name]
         method = request.method.upper()
         if method in ("GET", "HEAD") and descriptor.root is not None:
             found = await self._static(descriptor, request)
@@ -282,7 +549,7 @@ class AppHost:
             return _text(404, "Not found")
         if len(self._streams) >= MAX_STREAMS:
             raise RPCError("MODULE_UNAVAILABLE", "Too many requests in progress")
-        return await self._asgi(asgi, request)
+        return await self._asgi(asgi, request, descriptor)
 
     # -- static files ---------------------------------------------------------
 
@@ -295,6 +562,8 @@ class AppHost:
         relative = request.path.lstrip("/") or descriptor.entry
         parts = relative.split("/")
         if any(part in ("", ".", "..") for part in parts) or "\\" in relative:
+            return None
+        if "\x00" in relative:  # no file has it; the OS would raise
             return None
         path = (root / relative).resolve()
         try:
@@ -318,14 +587,14 @@ class AppHost:
         ]
         if _header(request, "if-none-match") == etag:
             return _Answer(304, headers)
+        headers.append(("content-length", str(stat.st_size)))
         if request.method.upper() == "HEAD":
             return _Answer(200, headers)
-        if stat.st_size <= INLINE_BYTES:
+        if await self._fits_inline(stat.st_size, headers):
             return _Answer(200, headers, path.read_bytes())
         if len(self._streams) >= MAX_STREAMS:
             raise RPCError("MODULE_UNAVAILABLE", "Too many responses streaming")
-        source = BodySource(await self._nc(), idle_seconds=self.idle_seconds)
-        await source.start()
+        source = await self._source()
         self._keep(asyncio.create_task(self._send_file(path, source)))
         return _Answer(200, headers, stream=source)
 
@@ -336,11 +605,13 @@ class AppHost:
                 while chunk := await asyncio.to_thread(file.read, size):
                     await source.put(chunk)
             await source.finish()
-            await source.gone.wait()  # the last pull, then the linger
         except ReaderGone:
             pass
+        except Exception:
+            logger.exception("Could not send %s", path.name)
+            source.abort("APP_ERROR", "Could not read the file")
         finally:
-            await source.close()
+            await self._settle(source)
 
     def _etag(self, path: Path, mtime: float, size: int) -> str:
         cached = self._etags.get(path)
@@ -355,8 +626,13 @@ class AppHost:
 
     # -- the ASGI app ---------------------------------------------------------
 
-    async def _asgi(self, app: ASGIApp, request: pb.HttpRequest) -> _Answer:
-        call = _AsgiCall(self, app, request)
+    async def _asgi(
+        self,
+        app: ASGIApp,
+        request: pb.HttpRequest,
+        descriptor: AppDescriptor | None = None,
+    ) -> _Answer:
+        call = _AsgiCall(self, app, request, descriptor)
         call.task = asyncio.create_task(call.run())
         self._keep(call.task)
         try:
@@ -373,8 +649,16 @@ class _AsgiCall:
     """One request through an ASGI app: its body pulled as the app reads it,
     its response answered inline or streamed as the app sends it."""
 
-    def __init__(self, host: AppHost, app: ASGIApp, request: pb.HttpRequest) -> None:
+    def __init__(
+        self,
+        host: AppHost,
+        app: ASGIApp,
+        request: pb.HttpRequest,
+        descriptor: AppDescriptor | None = None,
+    ) -> None:
         self.host, self.app, self.request = host, app, request
+        self.descriptor = descriptor or AppDescriptor(request.app or "app")
+        self.headers_in = _asgi_headers(request)
         loop = asyncio.get_running_loop()
         self.ready: asyncio.Future[_Answer] = loop.create_future()
         self.activity = loop.time()
@@ -388,6 +672,11 @@ class _AsgiCall:
         self.task: asyncio.Task | None = None
         self.timed_out = False
         self._watcher: asyncio.Task | None = None
+        # Inside send(): a body chunk waits for its reader, which is no idling.
+        self.sending = False
+        self.event_stream = False
+        # The app sent its last body message: what runs now is its own work.
+        self.body_ended = False
 
     def _touch(self) -> None:
         self.activity = asyncio.get_running_loop().time()
@@ -414,7 +703,11 @@ class _AsgiCall:
             pass
         except Exception as exc:
             if not self.ready.done():
-                self.ready.set_exception(exc)
+                # Even an RPCError of the app's own (a service it called) is
+                # the app failing, never the host: Nexus must not resend it.
+                failed = _AppFailed()
+                failed.__cause__ = exc
+                self.ready.set_exception(failed)
             elif not self.too_large:
                 logger.exception("App failed after it started answering")
                 if self.source is not None and not self.source.done.is_set():
@@ -422,6 +715,7 @@ class _AsgiCall:
                         await self.source.fail("APP_ERROR", "App failed")
         finally:
             self.done.set()
+            self.host._responding.discard(self)
             if self.body is not None:
                 with contextlib.suppress(Exception):
                     await self.body.aclose()  # stop pulling an unread upload
@@ -431,12 +725,10 @@ class _AsgiCall:
                     if self.too_large
                     else _text(500, "App sent no response")
                 )
-            if self.source is not None:
-                with contextlib.suppress(asyncio.CancelledError):
-                    await self.source.gone.wait()  # the last pull, then the linger
-                await self.source.close()
             if self._watcher is not None:
                 self._watcher.cancel()
+            if self.source is not None:
+                await self.host._settle(self.source)
 
     async def _stop_when_reader_gone(self) -> None:
         """An app awaiting its next event (server-sent events) never learns from
@@ -461,17 +753,17 @@ class _AsgiCall:
             "raw_path": path.encode(),
             "root_path": root_path,
             "query_string": request.query.encode(),
-            "headers": [
-                (h.name.lower().encode("latin-1"), h.value.encode("latin-1"))
-                for h in request.headers
-                if h.name.lower() not in HOP_BY_HOP
-            ],
+            "headers": self.headers_in,
             "client": None,
             "server": None,
+            # A shallow copy of what the app's lifespan stored, as servers pass it.
+            "state": dict(self.host._states.get(self.descriptor.name, {})),
             # Who asked, as discovery verified it: request.scope["abi"]["user_id"]
-            # and request.scope["abi"]["principal"].
+            # and request.scope["abi"]["principal"]; the workspace the user
+            # opened the app from (empty without a verified user).
             "abi": {
                 "user_id": request.user_id,
+                "workspace_id": request.workspace_id,
                 # The actor, as discovery verified it: who holds the credential,
                 # which a service may have used to act for the user above.
                 "principal": {
@@ -487,10 +779,14 @@ class _AsgiCall:
         if self.first:
             self.first = False
             if request.body_follows:
+                # The app's own limit, whatever the request asks; lower if it asks.
+                limit = self.descriptor.upload_limit
+                if request.max_body_bytes:
+                    limit = min(limit, request.max_body_bytes)
                 self.body = pull_body(
                     await self.host._nc(),
                     request.body_inbox,
-                    max_bytes=max(0, request.max_body_bytes - len(request.body)),
+                    max_bytes=max(0, limit - len(request.body)),
                 )
             return {
                 "type": "http.request",
@@ -523,7 +819,7 @@ class _AsgiCall:
             self.headers = [
                 (k.decode("latin-1"), v.decode("latin-1"))
                 for k, v in message.get("headers", [])
-                if k.decode("latin-1").lower() not in HOP_BY_HOP
+                if k.decode("latin-1").lower() not in RESPONSE_HOP_BY_HOP
             ]
             return
         if kind != "http.response.body":
@@ -538,23 +834,32 @@ class _AsgiCall:
                 # caller sent too much, which is what it is told.
                 self.ready.set_result(_text(413, "Request body too large"))
                 return
-            if not more and len(body) <= INLINE_BYTES:
+            if not more and await self.host._fits_inline(len(body), self.headers):
                 # The whole response at once, small: inline.
                 self.ready.set_result(_Answer(self.status, self.headers, body))
                 return
-            self.source = BodySource(
-                await self.host._nc(), idle_seconds=self.host.idle_seconds
-            )
-            await self.source.start()
+            self.source = await self.host._source()
             self._watcher = asyncio.create_task(self._stop_when_reader_gone())
+            self.event_stream = any(
+                k.lower() == "content-type"
+                and v.split(";")[0].strip().lower() == "text/event-stream"
+                for k, v in self.headers
+            )
+            self.host._responding.add(self)
             self.ready.set_result(
                 _Answer(self.status, self.headers, stream=self.source)
             )
         size = chunk_bytes(getattr(self.source.nc, "max_payload", 1024 * 1024))
-        for start in range(0, len(body), size):
-            await self.source.put(body[start : start + size])
-        if not more:
-            await self.source.finish()
+        self.sending = True
+        try:
+            for start in range(0, len(body), size):
+                await self.source.put(body[start : start + size])
+            if not more:
+                await self.source.finish()
+                self.body_ended = True
+        finally:
+            self.sending = False
+            self._touch()
 
 
 class _Lifespan:
@@ -566,6 +871,9 @@ class _Lifespan:
 
     def __init__(self, app: ASGIApp, name: str) -> None:
         self.app, self.name = app, name
+        # The lifespan "state": what the app stores at startup, copied into
+        # each request's scope (FastAPI lifespans that yield a dict need it).
+        self.state: dict = {}
         self.inbox: asyncio.Queue[dict] = asyncio.Queue()
         self.outbox: asyncio.Queue[dict] = asyncio.Queue()
         self.task: asyncio.Task | None = None
@@ -594,7 +902,11 @@ class _Lifespan:
     async def _run(self) -> None:
         try:
             await self.app(
-                {"type": "lifespan", "asgi": {"version": "3.0", "spec_version": "2.0"}},
+                {
+                    "type": "lifespan",
+                    "asgi": {"version": "3.0", "spec_version": "2.0"},
+                    "state": self.state,
+                },
                 self.inbox.get,
                 self.outbox.put,
             )

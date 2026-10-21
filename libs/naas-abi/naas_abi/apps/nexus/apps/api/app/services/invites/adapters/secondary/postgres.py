@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 
 from naas_abi.apps.nexus.apps.api.app.models import (
@@ -28,6 +28,14 @@ def _grants(raw: str | None) -> tuple[str, ...]:
         return ()
 
 
+def _profile(raw: str | None) -> dict[str, str]:
+    try:
+        found = json.loads(raw or "{}")
+    except ValueError:
+        return {}
+    return {str(k): str(v) for k, v in found.items()} if isinstance(found, dict) else {}
+
+
 def _invitation(model: InvitationModel) -> Invitation:
     return Invitation(
         id=model.id,
@@ -43,6 +51,7 @@ def _invitation(model: InvitationModel) -> Invitation:
         created_at=model.created_at,
         accepted_at=model.accepted_at,
         accepted_user_id=model.accepted_user_id,
+        profile=_profile(model.profile),
     )
 
 
@@ -62,6 +71,7 @@ class InvitationSecondaryAdapterPostgres(InvitationPersistencePort):
                 workspace_role=invitation.workspace_role,
                 invited_by=invitation.invited_by,
                 grant_ids=json.dumps(list(invitation.grant_ids)),
+                profile=json.dumps(invitation.profile) if invitation.profile else None,
                 status="pending",
                 created_at=now,
                 updated_at=now,
@@ -140,17 +150,19 @@ class InvitationSecondaryAdapterPostgres(InvitationPersistencePort):
         grant_ids: Sequence[str],
         invited_by: str | None,
         now: datetime,
+        profile: Mapping[str, str] | None = None,
     ) -> Invitation:
+        values: dict[str, object] = {
+            "org_role": org_role,
+            "workspace_role": workspace_role,
+            "grant_ids": json.dumps(list(grant_ids)),
+            "invited_by": invited_by,
+            "updated_at": now,
+        }
+        if profile is not None:
+            values["profile"] = json.dumps(dict(profile)) if profile else None
         await self.db.execute(
-            update(InvitationModel)
-            .where(InvitationModel.id == invitation_id)
-            .values(
-                org_role=org_role,
-                workspace_role=workspace_role,
-                grant_ids=json.dumps(list(grant_ids)),
-                invited_by=invited_by,
-                updated_at=now,
-            )
+            update(InvitationModel).where(InvitationModel.id == invitation_id).values(**values)
         )
         await self.db.flush()
         return await self._get(invitation_id)

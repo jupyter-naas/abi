@@ -12,6 +12,10 @@ only land in that run's code. On a timeout, a close or a cancel request:
 An interrupt cannot break a blocking C call (e.g. a socket read without a
 timeout); it fires when that call returns. ``interrupt_grace_seconds=None``
 disables step 2.
+
+The thread runs in a copy of the awaiting task's context, so the handler's
+service calls nest under the run's trace span (contextvars are not inherited
+by a new thread).
 """
 
 from __future__ import annotations

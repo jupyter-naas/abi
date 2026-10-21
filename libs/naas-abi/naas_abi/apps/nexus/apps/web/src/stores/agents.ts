@@ -280,7 +280,7 @@ export const useAgentsStore = create<AgentsState>()(
             // from the other one must not pin Documents on /slides or Slides
             // on /documents, and a slug like board-documents must not flip
             // the surface.
-            const { appAgentRefForPane, featureOpenResource, getPaneSurfaceForPath } =
+            const { appAgentRefForPane, featureOpenResource, getPaneSurfaceForPath, routeWithSearch } =
               await import('@/lib/feature-office-agents');
             const { isNexusDocumentsAgent, officeSurfaceFromPath, pickPaneOfficeAgent } =
               await import('@/lib/pick-workspace-default-agent');
@@ -300,7 +300,10 @@ export const useAgentsStore = create<AgentsState>()(
               return;
             }
             const featureItemOpen = Boolean(
-              featureOpenResource(routePath, featurePaneResource),
+              featureOpenResource(
+                routeWithSearch(routePath, window.location.search),
+                featurePaneResource,
+              ),
             );
             const panePreferred =
               (onSlides || onDocuments

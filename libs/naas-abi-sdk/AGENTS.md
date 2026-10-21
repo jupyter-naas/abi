@@ -6,6 +6,8 @@ and generated SDK dataclasses, never engine domain objects. See services/AGENTS.
 Generated artifacts are checked in; regenerate with `make generate` in the proto package.
 Use UV. `make deps`, `make test`, `make lint`, and `make build` are the local gates.
 Tests live under tests/. Update the standalone module demonstration when adding endpoints.
+After subscribing (or publishing) and before saying so, `await flush_to_broker(nc)` (`broker_flush.py`), never `nc.flush()`:
+nats-py's PING overtakes the buffered SUBs, so a request right after could find no responder. Core re-uses it.
 
 LangGraph support lives in langgraph.py and is opt-in via [langgraph]; never import
 it from package __init__ or make it a base dependency. Only async graph execution
@@ -62,7 +64,8 @@ run with no new event, and any run without a deadline. An unstreamed run (invoke
 mode, or a handler without `stream_invoke`) reports nothing until it returns, so
 its deadline alone bounds it. Core Agent/IntentAgent compatibility belongs in core's
 RemoteAgentAdapter; only agent_tools imports optional LangChain dependencies.
-Agent streaming preserves string event/data pairs and sequence-based replay.
+Agent streaming preserves string event/data pairs, a tool response's `chat_source: False`
+opt-out, and sequence-based replay.
 
 A rollout id (`DiscoveryConfiguration.rollout_id`, or `ABI_ROLLOUT_ID`) marks
 processes that cut over together. `rollout_modules` (or `ABI_ROLLOUT_MODULES`,
@@ -77,8 +80,10 @@ starts the job host only once discovery reports the instance `READY` or
 job consumers (`JobHost.prepare`: no fetch, no schedule, no change to an
 existing consumer), so a trigger for a new job sent after the cutover waits
 for the host. `SIGTERM` and `SIGINT` drain the
-process: new agent submits, job fetches and model chats stop, accepted runs and
-jobs finish, then the process unregisters. A live run keeps its claim until it
+process: new agent submits, job fetches, model chats and app requests stop,
+accepted runs, jobs and app requests finish, then the process unregisters. A
+streamed app response may finish too, unless it is server-sent events or idle
+for a second: those end with an error, and their readers reconnect elsewhere. A live run keeps its claim until it
 finishes. See the discovery ADR, section "Rollouts and draining (2026-10-05)".
 
 `ABI_HEALTH_PORT` (or `run_module(..., health_port=)`) opens a standard-library

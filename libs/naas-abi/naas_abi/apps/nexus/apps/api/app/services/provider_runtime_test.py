@@ -217,19 +217,16 @@ def test_redact_url_for_logs_masks_sensitive_query_params() -> None:
     assert "xyz" not in redacted
 
 
-@pytest.mark.parametrize(
-    ("chat_source", "expected"),
-    [
-        (None, {"event": "tool_response", "output": "3 hits"}),
-        (True, {"event": "tool_response", "output": "3 hits"}),
-        (False, {"event": "tool_response", "output": "3 hits", "chat_source": False}),
-    ],
-)
-def test_a_tool_response_keeps_its_chat_source_opt_out(chat_source, expected) -> None:
-    assert agent_event_chunk("tool_response", "3 hits", chat_source=chat_source) == expected
-
-
-def test_only_tool_responses_carry_chat_source() -> None:
+def test_a_tool_response_keeps_its_chat_source_opt_out() -> None:
+    assert agent_event_chunk("tool_response", "rows", chat_source=False) == {
+        "event": "tool_response",
+        "output": "rows",
+        "chat_source": False,
+    }
+    assert agent_event_chunk("tool_response", "rows", chat_source=True) == {
+        "event": "tool_response",
+        "output": "rows",
+    }
     assert agent_event_chunk("tool_usage", "search", chat_source=False) == {
         "event": "tool_usage",
         "tool": "search",

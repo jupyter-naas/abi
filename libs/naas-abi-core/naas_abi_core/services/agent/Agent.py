@@ -23,6 +23,7 @@ from typing import (
     Union,
     cast,
 )
+from urllib.parse import urlsplit
 
 import pydash as pd
 from langchain_core.language_models import BaseChatModel
@@ -431,16 +432,19 @@ def create_checkpointer() -> BaseCheckpointSaver:
                     "PostgreSQL checkpointer requested but langgraph.checkpoint.postgres not available. Falling back to in-memory."
                 )
             except Exception as e:  # noqa: BLE001
-                error_msg = str(e)
+                # The URL carries the password: log its host only, and take
+                # the URL out of the driver's message (a DSN error echoes it).
+                error_msg = str(e).replace(postgres_url, "[POSTGRES_URL]")
                 if "nodename nor servname provided" in error_msg:
                     logger.error(
-                        f"PostgreSQL connection failed - cannot resolve hostname. Check if PostgreSQL is running and hostname is correct in POSTGRES_URL: {postgres_url}"
+                        "PostgreSQL connection failed - cannot resolve hostname. Check if PostgreSQL is running and hostname is correct in POSTGRES_URL "
+                        f"(host: {urlsplit(postgres_url).hostname})"
                     )
                     logger.error(
                         "Hint: If running outside Docker, use 'localhost' instead of 'postgres' in POSTGRES_URL"
                     )
                 else:
-                    logger.error(f"Failed to initialize PostgreSQL checkpointer: {e}")
+                    logger.error(f"Failed to initialize PostgreSQL checkpointer: {error_msg}")
                 logger.error("Falling back to in-memory checkpointer")
 
         # Fallback to in-memory checkpointer
@@ -2169,8 +2173,10 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             or not hasattr(last_message, "tool_calls")
             or len(last_message.tool_calls) == 0
         ):
+            # Never the message itself: it is the model's answer.
             logger.warning(
-                f"No tool calls found in last message but call_tools was called: {last_message}"
+                "No tool calls found in last message but call_tools was called "
+                f"({type(last_message).__name__}, id {getattr(last_message, 'id', None)})"
             )
             return [Command(goto="__end__", update={"messages": [last_message]})]
 

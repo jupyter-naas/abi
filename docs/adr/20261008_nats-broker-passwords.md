@@ -83,3 +83,27 @@ The broker was reachable from:
 - An existing `.env` without the passwords stops the `nats` service. Running
   `abi deploy local --regenerate` adds them, and the engine's `nats_url` must
   name the `abi` user.
+
+## Amendment (2026-10-14): the module user stays off the engine
+This replaces the consequences "Both users have every right" and "Modules that
+receive `NATS_JWT_SECRET` can still sign a token for any identity"
+(`20261014_module-identities.md`):
+
+- The `module` user may not subscribe to `abi.svc.>`, `abi.discovery.>`,
+  `abi.rpc.>` (RPC overflow), `_INBOX.>` (modules use the inbox prefix
+  `_INBOX_MODULES`), `$JS.>` (the engine's JetStream requests) or `$KV.>`, nor publish to `$KV.>` or the JetStream API's
+  stream create, update, delete, message delete, snapshot, restore, peer and
+  leader subjects, consumer delete, direct get, or server, meta and account API
+  (`naas_abi_core.engine.nats_permissions.MODULE_PERMISSIONS`, in the Docker
+  `nats.conf` and in the one `abi dev` writes). The engine creates the streams
+  modules use. `abi` keeps every right.
+- Modules receive a key for their own module id instead of the secret, so they
+  can no longer sign for another identity, and the tokens sent to a module are
+  bound to it.
+- Still open: modules share one broker user, so one module can listen on
+  another's subjects and inbox (and race forged answers to that module's
+  callers), read or purge any stream (the key-value
+  buckets included) through the consumer, message-get and purge API, and take
+  over another module's jobs (fetch from or reconfigure its job consumer,
+  publish triggers or cancels for its jobs). The module identities ADR has the
+  full list. Per-module users or auth callout remain the next step.

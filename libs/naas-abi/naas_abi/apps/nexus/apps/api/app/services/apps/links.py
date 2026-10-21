@@ -42,7 +42,7 @@ MAX_MINUTES = 8 * 60
 # What each kind of link is bound to (``resource``).
 APP_HTML_ROOT = "/app-html/"  # an /app-html/ link: a path prefix below it
 PREVIEW = "preview"  # preview/<workspace id>/<slug>
-REMOTE_APP = "app-remote"  # app-remote/<module id>/<app>
+REMOTE_APP = "app-remote"  # app-remote/<module id>/<app>/<workspace id>
 
 
 class LinksUnavailable(RuntimeError):
@@ -65,8 +65,9 @@ def preview_resource(workspace_id: str, slug: str) -> str:
     return f"{PREVIEW}/{workspace_id}/{slug}"
 
 
-def remote_app_resource(module_id: str, app: str) -> str:
-    return f"{REMOTE_APP}/{module_id}/{app}"
+def remote_app_resource(module_id: str, app: str, workspace_id: str = "") -> str:
+    base = f"{REMOTE_APP}/{module_id}/{app}"
+    return f"{base}/{workspace_id}" if workspace_id else base
 
 
 def remote_app_scope(module_id: str, app: str) -> tuple[dict[str, Any], ...]:
@@ -157,6 +158,31 @@ def open_link(value: str, audience: str) -> OpenedLink | None:
         scope=tuple(dict(s) for s in record.scope) if record.scope is not None else None,
         expires_at=record.expires_at,
     )
+
+
+def revoke_remote_app_links(user_id: str) -> int:
+    """End every remote app grant ``user_id`` holds now, on every device; how many.
+    Made as ``api`` for the user, who needs ``iam:ListKeys`` and ``iam:RevokeKey``
+    on their own keys (every user holds both). Their sessions and other keys stay."""
+    iam = _iam()
+    ended = 0
+    with use_call_context(
+        CallContext(principal=service_account("api"), on_behalf_of=user(user_id))
+    ):
+        for key in iam.list_keys(user_id):
+            if (
+                key.kind == "grant"
+                and key.audience == APP_AUDIENCE
+                and key.revoked_at is None
+                and (key.resource or "").startswith(f"{REMOTE_APP}/")
+            ):
+                iam.revoke_key(user_id, key.key_id)
+                ended += 1
+    return ended
+
+
+async def arevoke_remote_app_links(user_id: str) -> int:
+    return await asyncio.to_thread(revoke_remote_app_links, user_id)
 
 
 async def amint_link(**fields: Any) -> tuple[str, int]:

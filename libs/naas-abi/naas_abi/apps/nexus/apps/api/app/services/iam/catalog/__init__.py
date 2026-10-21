@@ -30,7 +30,7 @@ from naas_abi_core.services.iam.catalog import ActionCatalog, ResourceType
 
 SERVICE = "nexus"
 # Raise when the catalog changes; IAM keeps the highest version it has seen.
-VERSION = 2
+VERSION = 3
 
 _MODULES = (
     organizations,

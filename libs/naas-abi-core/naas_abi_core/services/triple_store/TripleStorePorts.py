@@ -376,7 +376,13 @@ class ITripleStoreService(ABC):
     #     pass
 
     @abstractmethod
-    def insert(self, triples: Graph, graph_name: URIRef):
+    def insert(
+        self,
+        triples: Graph,
+        graph_name: URIRef,
+        *,
+        timeout_seconds: float | None = None,
+    ):
         """Insert triples from the provided graph into the store.
 
         This method takes a graph of triples and inserts them into the triple store. The triples
@@ -385,13 +391,23 @@ class ITripleStoreService(ABC):
         Args:
             triples (Graph): The RDF graph containing triples to insert
             graph_name (URIRef): Named graph URI target.
+            timeout_seconds: how long the caller waits when the store is served
+                by another process (a write can queue behind a long one); an
+                in-process store runs to completion. ``None`` keeps the
+                adapter's default.
 
         Returns:
             None
         """
 
     @abstractmethod
-    def remove(self, triples: Graph, graph_name: URIRef):
+    def remove(
+        self,
+        triples: Graph,
+        graph_name: URIRef,
+        *,
+        timeout_seconds: float | None = None,
+    ):
         """Remove triples from the provided graph from the store.
 
         This method takes a graph of triples and removes them from the triple store. The triples
@@ -400,6 +416,7 @@ class ITripleStoreService(ABC):
         Args:
             triples (Graph): The RDF graph containing triples to remove
             graph_name (URIRef): Named graph URI target.
+            timeout_seconds: as for ``insert``.
 
         Returns:
             None
@@ -455,11 +472,14 @@ class ITripleStoreService(ABC):
         """
 
     @abstractmethod
-    def create_graph(self, graph_name: URIRef):
+    def create_graph(
+        self, graph_name: URIRef, *, timeout_seconds: float | None = None
+    ):
         """Create an empty named graph in the underlying store.
 
         Args:
             graph_name (URIRef): URI of the graph to create
+            timeout_seconds: as for ``insert``.
 
         Returns:
             None
@@ -469,11 +489,14 @@ class ITripleStoreService(ABC):
         """
 
     @abstractmethod
-    def clear_graph(self, graph_name: URIRef):
+    def clear_graph(
+        self, graph_name: URIRef, *, timeout_seconds: float | None = None
+    ):
         """Clear triples from a graph.
 
         Args:
             graph_name (URIRef | None): Target named graph URI. If None, clear default graph.
+            timeout_seconds: as for ``insert``.
 
         Returns:
             None
@@ -483,11 +506,14 @@ class ITripleStoreService(ABC):
         """
 
     @abstractmethod
-    def drop_graph(self, graph_name: URIRef):
+    def drop_graph(
+        self, graph_name: URIRef, *, timeout_seconds: float | None = None
+    ):
         """Drop a named graph and all its triples.
 
         Args:
             graph_name (URIRef): URI of the graph to drop
+            timeout_seconds: as for ``insert``.
 
         Returns:
             None

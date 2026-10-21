@@ -9,6 +9,7 @@ import {
   isFeatureOfficeAgent,
   isNaasAbiAgent,
   resourceFromPath,
+  routeWithSearch,
 } from './feature-office-agents';
 import {
   pickFeatureOfficeAgent,
@@ -73,7 +74,7 @@ describe('resourceFromPath', () => {
       kind: 'dataset',
       id: 'sales/orders',
     });
-    expect(resourceFromPath('/workspace/ws-1/maps/earthquakes')?.id).toBe('earthquakes');
+    expect(resourceFromPath('/workspace/ws-1/maps?layer=earthquakes')?.id).toBe('earthquakes');
     expect(resourceFromPath('/workspace/ws-1/settings/agents/agent-7')).toEqual({
       feature: 'agents',
       kind: 'agent',
@@ -87,6 +88,18 @@ describe('resourceFromPath', () => {
     });
   });
 
+  it('reads the map layers from the query that routeWithSearch adds', () => {
+    const route = routeWithSearch('/workspace/ws-1/maps', '?layer=earthquakes&layer=storms');
+    expect(route).toBe('/workspace/ws-1/maps?layer=earthquakes&layer=storms');
+    expect(resourceFromPath(route)).toEqual({
+      feature: 'maps',
+      kind: 'map_dataset',
+      id: 'earthquakes,storms',
+    });
+    expect(routeWithSearch('/workspace/ws-1/maps', '')).toBe('/workspace/ws-1/maps');
+    expect(resourceFromPath(routeWithSearch('/workspace/ws-1/maps', null))).toBeNull();
+  });
+
   it('is null on list routes', () => {
     expect(resourceFromPath('/workspace/ws-1/datasets')).toBeNull();
     expect(resourceFromPath('/workspace/ws-1/settings/agents')).toBeNull();
@@ -98,7 +111,7 @@ describe('featureOpenResource', () => {
   it('prefers what the page published for this feature', () => {
     const app = { feature: 'apps' as const, kind: 'app', id: 'm:wsr' };
     expect(featureOpenResource('/workspace/ws-1/apps', app)).toEqual(app);
-    expect(featureOpenResource('/workspace/ws-1/maps/iss', app)?.id).toBe('iss');
+    expect(featureOpenResource('/workspace/ws-1/maps?layer=iss', app)?.id).toBe('iss');
   });
 });
 

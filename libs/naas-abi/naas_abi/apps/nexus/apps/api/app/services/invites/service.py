@@ -21,7 +21,7 @@ as ``api`` for nobody (``GrantsGateway``).
 
 from __future__ import annotations
 
-from collections.abc import Callable, Collection, Iterable
+from collections.abc import Callable, Collection, Iterable, Mapping
 from datetime import datetime
 from uuid import uuid4
 
@@ -31,6 +31,7 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.names import (
     workspace_scope,
 )
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
+    PROFILE_FIELDS,
     Directory,
     DirectoryGateway,
     GrantMade,
@@ -126,6 +127,7 @@ class InvitationService:
         workspace_name: str | None = None,
         may_grant_owner: bool = False,
         may_renew_org_invitation: bool = False,
+        profile: Mapping[str, str] | None = None,
     ) -> InviteOutcome:
         """Invite ``email`` and send the invitation. Inviting again someone
         already invited here renews the invitation (new roles, a new email).
@@ -139,6 +141,10 @@ class InvitationService:
         organization *and* this workspace would rewrite that invitation without its
         organization role: it is refused unless they may, and then the organization
         role is kept.
+
+        ``profile``: what the organization sets about the person (``PROFILE_FIELDS``),
+        written as their profile in the organization when they sign in and their
+        account exists; with a renewal, it replaces the one kept.
 
         The provider makes the person exist only for an inviting user IAM lets
         create accounts there (``identity:ProvisionUser``), or for an address on a
@@ -187,6 +193,11 @@ class InvitationService:
                         workspace_role=workspace_role,
                         invited_by=invited_by,
                         grant_ids=tuple(grant_ids),
+                        profile={
+                            key: value
+                            for key, value in (profile or {}).items()
+                            if key in PROFILE_FIELDS and value is not None
+                        },
                     ),
                     now=now,
                 )
@@ -198,6 +209,13 @@ class InvitationService:
                     grant_ids=grant_ids,
                     invited_by=invited_by,
                     now=now,
+                    profile={
+                        key: value
+                        for key, value in profile.items()
+                        if key in PROFILE_FIELDS and value is not None
+                    }
+                    if profile
+                    else None,
                 )
             await self.persistence.commit()
         except Exception:

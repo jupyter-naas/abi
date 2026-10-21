@@ -26,14 +26,17 @@ message HttpRequest {
   string user_id = 9;
   // Likewise the verified actor: whoever holds the credential, which may act
   // for `user_id`. Replaced by the app host, never read from a request.
-  string principal_id = 13;
-  string principal_kind = 14;
-  string principal_name = 15;
+  string principal_id = 14;
+  string principal_kind = 15;
+  string principal_name = 16;
   // The body continues after `body` (its first bytes): pull the rest from
   // body_inbox. The total is at most max_body_bytes.
   bool body_follows = 10;
   string body_inbox = 11;
   uint64 max_body_bytes = 12;
+  // The Nexus workspace the user opened the app from (one where it is
+  // enabled); empty without a user_id.
+  string workspace_id = 13;
 }
 // Sent once the app starts its response. A small body travels inline; a larger
 // or streamed one (downloads, server-sent events) follows: Nexus pulls it from

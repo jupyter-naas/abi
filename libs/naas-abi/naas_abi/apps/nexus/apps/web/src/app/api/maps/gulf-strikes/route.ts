@@ -1,4 +1,4 @@
-import { mapsJson, mapsUpstreamGet } from '../_lib';
+import { mapsPinResponse, mapsUpstreamGet } from '../_lib';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -218,19 +218,16 @@ export async function GET() {
       };
     });
 
-    return mapsJson({
-      pins,
-      count: pins.length,
+    return mapsPinResponse(pins, {
       empty: pins.length === 0,
       source: 'BBC / Al Jazeera / Reuters RSS (Gulf strike filter)',
       theater: 'Persian Gulf / Iran / Israel',
     });
   } catch (err) {
-    return mapsJson(
+    return mapsPinResponse(
+      [],
       {
         error: err instanceof Error ? err.message : 'Gulf strikes fetch failed',
-        pins: [],
-        count: 0,
         empty: true,
       },
       { status: 502 },

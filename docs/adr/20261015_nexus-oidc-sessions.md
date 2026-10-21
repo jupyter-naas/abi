@@ -102,7 +102,7 @@ open:
   CORS allows `X-CSRF-Token`.
 - Over NATS the transitional `Abi-On-Behalf-Of` header names the user but not its mapped groups, which
   travel only in process until delegated tokens (step 8).
-- Migration `0049_oidc_identity.sql` also creates `organization_domains`, which only the ORM model declared
+- Migration `0058_oidc_identity.sql` also creates `organization_domains`, which only the ORM model declared
   before.
 - The generic identity suite (`services/identity/tests/identity_contract.py`) runs against an in-process
   provider on every run and against Zitadel 4.19.4 from its native binary, with PostgreSQL 17.6 from

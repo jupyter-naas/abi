@@ -474,6 +474,7 @@ def test_a_module_triggers_its_own_job_once_per_idempotency_key(broker):
     first, again, other = asyncio.run(scenario())
 
     assert first.run_id == again.run_id != other.run_id
+    assert (first.duplicate, again.duplicate, other.duplicate) == (False, True, False)
     assert sorted(r["payload"]["n"] for r in docs.runs("work")) == [1, 2]
 
 

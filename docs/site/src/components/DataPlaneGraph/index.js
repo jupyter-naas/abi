@@ -16,8 +16,8 @@ const NODES = [
   { id: 'ephemeral',  label: 'Ephemeral data\nRedis · key-value',    x: -370, y:  210, color: C('#dbeafe','#3b82f6') },
 
   // Compute modes (center column)
-  { id: 'batch',       label: 'Batch\nDagster pipelines',        x: 0, y:  -90, color: C('#dcfce7','#22c55e') },
-  { id: 'event',       label: 'Event-driven\nRabbitMQ message bus', x: 0, y:   30, color: C('#dcfce7','#22c55e') },
+  { id: 'batch',       label: 'Batch\nModule jobs',              x: 0, y:  -90, color: C('#dcfce7','#22c55e') },
+  { id: 'event',       label: 'Event-driven\nJetStream bus · events', x: 0, y:   30, color: C('#dcfce7','#22c55e') },
   { id: 'interactive', label: 'Interactive\nAgent tool calls',   x: 0, y:  150, color: C('#dcfce7','#22c55e') },
 
   // Model providers (right column)

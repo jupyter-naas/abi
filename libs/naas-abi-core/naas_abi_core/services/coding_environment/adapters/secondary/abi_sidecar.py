@@ -6,15 +6,24 @@ HTTP. Used by ``local_directory`` coding workspaces and Slides/Coder runtimes.
 
 from __future__ import annotations
 
+import base64
 import hmac
 import json
 import os
 import subprocess
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-ROOT = os.path.realpath(os.environ.get("ABI_SIDECAR_ROOT") or os.path.expanduser("~/project"))
+ROOT = os.path.realpath(
+    os.environ.get("ABI_SIDECAR_ROOT") or os.path.expanduser("~/project")
+)
 SECRET = os.environ.get("ABI_SIDECAR_SECRET", "")
-INSECURE = os.environ.get("ABI_SIDECAR_INSECURE", "").strip() in {"1", "true", "TRUE", "yes", "YES"}
+INSECURE = os.environ.get("ABI_SIDECAR_INSECURE", "").strip() in {
+    "1",
+    "true",
+    "TRUE",
+    "yes",
+    "YES",
+}
 PORT = int(os.environ.get("ABI_SIDECAR_PORT", "8378"))
 MAX_BODY = 8 * 1024 * 1024
 MAX_OUT = 20000
@@ -31,10 +40,18 @@ def _resolve(rel_path: str) -> str:
 
 def _write_file(body: dict) -> dict:
     path = body["path"]
-    content = body.get("content", "")
     target = _resolve(path)
     os.makedirs(os.path.dirname(target) or ROOT, exist_ok=True)
-    data = content.encode("utf-8")
+    if body.get("content_base64") is not None:
+        try:
+            data = base64.b64decode(body["content_base64"], validate=True)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("content_base64 must be valid base64") from exc
+    else:
+        content = body.get("content", "")
+        if not isinstance(content, str):
+            raise ValueError("content must be text")
+        data = content.encode("utf-8")
     with open(target, "wb") as fh:
         fh.write(data)
     return {"ok": True, "path": os.path.relpath(target, ROOT), "bytes": len(data)}
@@ -48,7 +65,12 @@ def _read_file(body: dict) -> dict:
         text = raw.decode("utf-8")
         return {"ok": True, "path": os.path.relpath(target, ROOT), "content": text}
     except UnicodeDecodeError:
-        return {"ok": True, "path": os.path.relpath(target, ROOT), "binary": True, "bytes": len(raw)}
+        return {
+            "ok": True,
+            "path": os.path.relpath(target, ROOT),
+            "binary": True,
+            "bytes": len(raw),
+        }
 
 
 def _list_dir(body: dict) -> dict:

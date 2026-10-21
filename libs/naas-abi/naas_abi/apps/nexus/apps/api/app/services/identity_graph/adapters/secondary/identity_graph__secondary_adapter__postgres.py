@@ -131,8 +131,8 @@ class IdentitySourceSecondaryAdapterPostgres(IdentitySourcePort):
                     email=u.email,
                     created_at=u.created_at,
                     avatar=u.avatar,
-                    company=u.company,
-                    job_title=u.role,
+                    organization=u.organization,
+                    job_title=u.job_title,
                     bio=u.bio,
                     is_superadmin=u.id in platform_admins,
                 )

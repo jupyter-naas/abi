@@ -255,7 +255,7 @@ class JetStream:
             raise BadRequestError(code=400, err_code=10071, description="wrong last")
         self.published.append((subject, payload, headers))
         self.last[subject] = SimpleNamespace(seq=len(self.published), headers=headers)
-        return SimpleNamespace(seq=len(self.published))
+        return SimpleNamespace(seq=len(self.published), duplicate=None)
 
     async def purge_stream(self, name, subject=None):
         if subject in self.last:
@@ -489,7 +489,8 @@ def test_event_bridge_turns_an_event_into_a_trigger():
 
 def _closing_scenario(handler, **kwargs):
     docs = Documents()
-    host = _host(docs, close_grace_seconds=0.05, **kwargs)
+    kwargs.setdefault("close_grace_seconds", 0.05)
+    host = _host(docs, **kwargs)
     started = asyncio.Event()
 
     async def wrapped(ctx):
@@ -517,6 +518,19 @@ def test_shutdown_is_not_a_user_cancel_the_run_is_retried():
     assert run["status"] == "RETRYING"
     assert run["error"] == "Interrupted by host shutdown"
     assert msg.calls[-1][0] == "nak"
+
+
+def test_a_run_that_ends_within_the_grace_keeps_its_outcome():
+    async def short(ctx):
+        await asyncio.sleep(0.02)  # never looks at ctx.cancelled
+        return {"done": True}
+
+    run, msg = _closing_scenario(short, close_grace_seconds=1)
+
+    assert run["status"] == "SUCCEEDED"
+    assert run["result"] == {"done": True}
+    assert not run.get("error")
+    assert msg.calls[-1][0] == "ack"
 
 
 def test_close_cancels_jobs_still_running_after_the_grace_period():
@@ -578,7 +592,7 @@ def test_manual_triggers_carry_the_callers_trace(monkeypatch):
     class _JS:
         async def publish(self, subject, payload, headers=None, stream=None):
             published.append(dict(headers or {}))
-            return SimpleNamespace(seq=3)
+            return SimpleNamespace(seq=3, duplicate=None)
 
     class _NC:
         async def request(self, *args, **kwargs):  # no engine answers
@@ -762,6 +776,7 @@ def test_a_host_triggers_its_own_jobs_once_per_idempotency_key():
 
     first, again, other = asyncio.run(scenario())
 
+    assert (first.duplicate, again.duplicate, other.duplicate) == (False, True, False)
     assert first.run_id == again.run_id == "ingest:1" and other.run_id == "ingest:2"
     assert len(js.published) == 2
     subject, headers = js.published[0]
@@ -1659,7 +1674,7 @@ def test_consumers_leave_attempts_to_the_host():
             raise NotFoundError(code=404, err_code=10037)
 
         async def publish(self, *args, **kwargs):
-            return SimpleNamespace(seq=1)
+            return SimpleNamespace(seq=1, duplicate=None)
 
         async def purge_stream(self, name, subject=None):
             return None

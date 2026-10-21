@@ -15,8 +15,8 @@ class IdentityUser:
     email: str
     created_at: datetime.datetime
     avatar: str | None = None
-    company: str | None = None
-    # users.role is the job title the user typed in their profile, not access.
+    organization: str | None = None
+    # users.job_title: what the user typed in their profile (not an access role).
     job_title: str | None = None
     bio: str | None = None
     is_superadmin: bool = False

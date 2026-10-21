@@ -51,7 +51,7 @@ describe('mergeFeatureFlags', () => {
 describe('getFeatureForWorkspacePath', () => {
   it('maps workspace paths to features', () => {
     expect(getFeatureForWorkspacePath('/workspace/ws1/maps')).toBe('maps');
-    expect(getFeatureForWorkspacePath('/workspace/ws1/maps/presence')).toBe('maps');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/maps?layer=iss')).toBe('maps');
     expect(getFeatureForWorkspacePath('/workspace/ws1/chat')).toBe('chat');
     expect(getFeatureForWorkspacePath('/workspace/ws1/search')).toBe('search');
     expect(getFeatureForWorkspacePath('/workspace/ws1/ontology')).toBe('ontology');
@@ -61,7 +61,7 @@ describe('getFeatureForWorkspacePath', () => {
       'datasets',
     );
     expect(getFeatureForWorkspacePath('/workspace/ws1/settings/agents')).toBe('agents');
-    expect(getFeatureForWorkspacePath('/workspace/ws1/settings/theme')).toBe('settings.workspace');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/settings/general')).toBe('settings.workspace');
     expect(getFeatureForWorkspacePath('/workspace/ws1/settings/infrastructure')).toBe('settings.workspace');
     expect(getFeatureForWorkspacePath('/workspace/ws1/organization')).toBe('settings.organization');
     expect(getFeatureForWorkspacePath('/workspace/ws1/organization/billing')).toBe('settings.organization');
@@ -177,11 +177,11 @@ describe('getWorkspaceSwitchPath', () => {
     ).toBe('/workspace/ws-other/chat');
     expect(
       getWorkspaceSwitchPath({
-        pathname: '/workspace/ws-next-gen/maps/presence',
+        pathname: '/workspace/ws-next-gen/maps?layer=iss',
         targetWorkspaceId: 'ws-other',
         role: 'owner',
       }),
-    ).toBe('/workspace/ws-other/maps/presence');
+    ).toBe('/workspace/ws-other/maps');
   });
 
   it('sends retired lab routes to code when the target has code', () => {
@@ -239,7 +239,7 @@ describe('pathNeedsAgentCatalog', () => {
   it('is false on apps and other sections', () => {
     expect(pathNeedsAgentCatalog('/workspace/ws1/apps')).toBe(false);
     expect(pathNeedsAgentCatalog('/workspace/ws1/files')).toBe(false);
-    expect(pathNeedsAgentCatalog('/workspace/ws1/settings/theme')).toBe(false);
+    expect(pathNeedsAgentCatalog('/workspace/ws1/settings/general')).toBe(false);
   });
 });
 

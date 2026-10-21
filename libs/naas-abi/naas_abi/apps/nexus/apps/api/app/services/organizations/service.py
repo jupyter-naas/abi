@@ -9,7 +9,9 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ, Authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
     MEMBERSHIPS,
     ROLE_NAMES,
+    Member,
     Memberships,
+    best,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
     nexus_resource,
@@ -20,6 +22,8 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     OrganizationCreateInput,
     OrganizationDomainCreateInput,
     OrganizationDomainRecord,
+    OrganizationMemberDetailsRecord,
+    OrganizationMemberProfileRecord,
     OrganizationMemberRecord,
     OrganizationPermissionPort,
     OrganizationRecord,
@@ -27,8 +31,60 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     OrganizationUpdateInput,
     OrganizationWorkspaceMembershipRecord,
     OrganizationWorkspaceRecord,
+    UserOrganizationMembershipRecord,
+    UserRecord,
 )
 from naas_abi_core import logger
+
+
+@dataclass
+class MemberWorkspaceAccess:
+    workspace_id: str
+    name: str
+    slug: str
+    role: str
+    #: "workspace" for an explicit membership or ownership, "organization" when
+    #: the org role (owner/admin) gives the higher role.
+    source: str
+
+
+def member_workspace_access(
+    *,
+    user_id: str,
+    inherited_role: str | None,
+    workspaces: list[OrganizationWorkspaceRecord],
+    memberships: list[OrganizationWorkspaceMembershipRecord],
+) -> list[MemberWorkspaceAccess]:
+    """The member's effective role on each workspace of the org: the highest of the
+    role they hold in it, ownership of it, and the organization-wide role their
+    org role carries (``inherited_role``: an org owner or admin)."""
+    explicit = {m.workspace_id: m.role for m in memberships if m.user_id == user_id}
+    access: list[MemberWorkspaceAccess] = []
+    for workspace in workspaces:
+        own = best(
+            [
+                r
+                for r in (
+                    explicit.get(workspace.id),
+                    "owner" if workspace.owner_id == user_id else None,
+                )
+                if r
+            ]
+        )
+        role = best([r for r in (own, inherited_role) if r])
+        if role is None:
+            continue
+        source = "workspace" if own == role else "organization"
+        access.append(
+            MemberWorkspaceAccess(
+                workspace_id=workspace.id,
+                name=workspace.name,
+                slug=workspace.slug,
+                role=role,
+                source=source,
+            )
+        )
+    return access
 
 
 @dataclass
@@ -52,6 +108,35 @@ class LastOwnerError(ValueError):
 
 def _member_id(org_id: str, user_id: str) -> str:
     return f"member-{org_id}-{user_id}"
+
+
+def _member_record(
+    org_id: str,
+    member: Member,
+    user: UserRecord,
+    profile: OrganizationMemberProfileRecord | None,
+) -> OrganizationMemberRecord:
+    """A member as the organization shows them: the full name is always the
+    account's; the picture, organization, job title and the rest are what the
+    organization set (the account falls back to them, never the other way round);
+    the bio falls back to the account's."""
+    profile = profile or OrganizationMemberProfileRecord()
+    return OrganizationMemberRecord(
+        id=_member_id(org_id, member.user_id),
+        organization_id=org_id,
+        user_id=member.user_id,
+        role=member.role,
+        email=user.email,
+        name=user.name,
+        created_at=member.since,
+        bio=profile.bio if profile.bio is not None else user.bio,
+        avatar=profile.avatar,
+        organization=profile.organization,
+        job_title=profile.job_title,
+        service_line=profile.service_line,
+        country=profile.country,
+        interest=profile.interest,
+    )
 
 
 @dataclass
@@ -242,19 +327,26 @@ class OrganizationService:
             ]
         return found
 
+    async def list_all_memberships(self) -> list[UserOrganizationMembershipRecord]:
+        """Every user's organizations across the platform (Platform Settings), from IAM."""
+        found = [
+            UserOrganizationMembershipRecord(
+                user_id=member.user_id,
+                organization_id=org.id,
+                organization_name=org.name,
+                role=member.role,
+            )
+            for org in await self.adapter.list_all_organizations()
+            for member in await self.memberships.members(org_scope(org.id))
+        ]
+        return sorted(found, key=lambda m: (m.user_id, m.organization_name))
+
     async def list_members(self, org_id: str) -> list[OrganizationMemberRecord]:
         members = await self.memberships.members(org_scope(org_id))
         users = await self.adapter.get_users_by_ids([m.user_id for m in members])
+        profiles = await self.adapter.list_organization_member_profiles(org_id)
         return [
-            OrganizationMemberRecord(
-                id=_member_id(org_id, member.user_id),
-                organization_id=org_id,
-                user_id=member.user_id,
-                role=member.role,
-                email=users[member.user_id].email,
-                name=users[member.user_id].name,
-                created_at=member.since,
-            )
+            _member_record(org_id, member, users[member.user_id], profiles.get(member.user_id))
             for member in members
             if member.user_id in users
         ]
@@ -314,6 +406,67 @@ class OrganizationService:
             await self._keep_an_owner(scope, user_id)
         await self.memberships.grant(user_id, role, scope, by=by)
         return await self.get_organization_member(org_id, user_id)
+
+    async def get_member_details(
+        self, org_id: str, user_id: str
+    ) -> OrganizationMemberDetailsRecord | None:
+        member = await self.get_organization_member(org_id, user_id)
+        account = await self.adapter.get_member_account(user_id)
+        if member is None or account is None:
+            return None
+        profile = await self.adapter.get_organization_member_profile(org_id, user_id)
+        return OrganizationMemberDetailsRecord(
+            member=member,
+            account=account,
+            organization_profile=profile or OrganizationMemberProfileRecord(),
+        )
+
+    async def get_member_workspace_access(
+        self, org_id: str, user_id: str
+    ) -> list[MemberWorkspaceAccess]:
+        return member_workspace_access(
+            user_id=user_id,
+            inherited_role=await self.memberships.inherited_role(user_id, org_id),
+            workspaces=await self.list_all_workspaces(org_id=org_id),
+            memberships=await self.list_workspace_memberships(org_id=org_id),
+        )
+
+    async def update_member_profile(
+        self,
+        org_id: str,
+        user_id: str,
+        *,
+        name: str | None = None,
+        organization: str | None = None,
+        job_title: str | None = None,
+        bio: str | None = None,
+        service_line: str | None = None,
+        country: str | None = None,
+        interest: str | None = None,
+    ) -> OrganizationMemberRecord | None:
+        """Edit the member's profile in this organization only (never the account)."""
+        if await self.memberships.role_at(user_id, org_scope(org_id)) is None:
+            return None
+        await self.adapter.update_organization_member_profile(
+            org_id=org_id,
+            user_id=user_id,
+            name=name,
+            organization=organization,
+            job_title=job_title,
+            bio=bio,
+            service_line=service_line,
+            country=country,
+            interest=interest,
+        )
+        return await self.get_organization_member(org_id, user_id)
+
+    async def set_member_avatar(self, org_id: str, user_id: str, avatar: str | None) -> str | None:
+        """Set or clear the org avatar; returns the previous org avatar to clean up."""
+        if await self.memberships.role_at(user_id, org_scope(org_id)) is None:
+            return None
+        return await self.adapter.set_organization_member_avatar(
+            org_id=org_id, user_id=user_id, avatar=avatar
+        )
 
     async def remove_member(self, org_id: str, user_id: str, *, by: Any) -> bool:
         """Drop the member's role; the owners are removed by changing their role first."""

@@ -12,7 +12,8 @@ from pydantic import BaseModel
 from rich.console import Console
 from rich.markdown import Markdown
 
-from .local import setup_local_deploy
+from .dokploy import DokployDeployError, setup_dokploy_deploy
+from .local import ensure_legacy_extras, project_uses_nats, setup_local_deploy
 
 
 @click.group("deploy")
@@ -120,7 +121,10 @@ class NaasDeployer:
         self.naas_api_client = NaasAPIClient(configuration.deploy.naas_api_key)
 
     def docker_build(self, image_name: str):
-        subprocess.run(["docker", "build", "-t", image_name, ".", "--platform", "linux/amd64"], check=False)
+        subprocess.run(
+            ["docker", "build", "-t", image_name, ".", "--platform", "linux/amd64"],
+            check=False,
+        )
 
     def deploy(self):
         assert self.configuration.deploy is not None
@@ -135,12 +139,18 @@ class NaasDeployer:
         credentials = self.naas_api_client.get_registry_credentials(
             self.configuration.deploy.space_name
         )
-        subprocess.run([
-            "docker", "login",
-            "-u", credentials["credentials"]["username"],
-            "-p", credentials["credentials"]["password"],
-            registry["registry"]["uri"],
-        ], check=False)
+        subprocess.run(
+            [
+                "docker",
+                "login",
+                "-u",
+                credentials["credentials"]["username"],
+                "-p",
+                credentials["credentials"]["password"],
+                registry["registry"]["uri"],
+            ],
+            check=False,
+        )
         subprocess.run(["docker", "push", image_name], check=False)
 
         # Shell pipe required to extract digest via cut; image_name is a
@@ -152,7 +162,8 @@ class NaasDeployer:
                 + " | cut -d'@' -f2",
                 shell=True,
                 capture_output=True,
-            check=False)
+                check=False,
+            )
             .stdout.strip()
             .decode("utf-8")
         )
@@ -260,13 +271,82 @@ def naas(env: str):
 def local_deploy(
     env: str, regenerate: bool, no_backup: bool, headscale: bool, coding: bool
 ):
+    """Write the project's docker-compose stack.
+
+    A project whose config has a `nats:` block runs on the `nats` service. One
+    without it keeps the classic stack, with Dagster and RabbitMQ (legacy, to be
+    removed in the next major), and gets the naas-abi-core[dagster,rabbitmq]
+    extras they need added to its pyproject.toml.
+    """
+    project_path = os.getcwd()
     setup_local_deploy(
-        os.getcwd(),
+        project_path,
         include_headscale=headscale,
         include_coding=coding,
         regenerate=regenerate,
         backup=not no_backup,
     )
+    if project_uses_nats(project_path) is False:
+        ensure_legacy_extras(project_path)
+
+
+@deploy.command("dokploy")
+@click.option(
+    "--domain",
+    type=str,
+    default=None,
+    help="Base domain: Nexus at nexus.<domain>, the API at api.<domain>. "
+    "Prompted on the first run; later runs keep the hosts in .env.dokploy.",
+)
+@click.option(
+    "--coding",
+    is_flag=True,
+    default=False,
+    help="Include coding workspaces (Coder + Forgejo + Actions CI).",
+)
+@click.option(
+    "--regenerate",
+    is_flag=True,
+    default=False,
+    help="Generate new secrets in .env.dokploy, keeping the hosts, settings and "
+    "your own keys (the previous file is backed up).",
+)
+@click.option(
+    "--wildcard-cert-resolver",
+    type=str,
+    default=None,
+    help="With --coding: the DNS-challenge resolver in Dokploy's Traefik that "
+    "issues the *.coder wildcard certificate. Kept on later runs.",
+)
+@click.option(
+    "--headscale",
+    is_flag=True,
+    default=False,
+    hidden=True,
+)
+def dokploy_deploy(
+    domain: str | None,
+    coding: bool,
+    regenerate: bool,
+    wildcard_cert_resolver: str | None,
+    headscale: bool,
+):
+    """Render docker-compose.dokploy.yml and .env.dokploy for a Dokploy server."""
+    if headscale:
+        raise click.ClickException(
+            "--headscale is not supported on Dokploy yet: deploy Headscale "
+            "separately, or use `abi deploy local --headscale`."
+        )
+    try:
+        setup_dokploy_deploy(
+            os.getcwd(),
+            domain=domain,
+            include_coding=coding,
+            regenerate=regenerate,
+            wildcard_cert_resolver=wildcard_cert_resolver,
+        )
+    except DokployDeployError as error:
+        raise click.ClickException(str(error)) from error
 
 
 # `abi new module` declares remote modules in the override file, which
@@ -279,11 +359,15 @@ def _compose_command(*args: str) -> list[str]:
     if os.path.exists(COMPOSE_OVERRIDE):
         files += ["--file", COMPOSE_OVERRIDE]
     return [
-        "docker", "compose",
+        "docker",
+        "compose",
         *files,
-        "--env-file", ".env",
-        "--profile", "infrastructure",
-        "--profile", "container",
+        "--env-file",
+        ".env",
+        "--profile",
+        "infrastructure",
+        "--profile",
+        "container",
         *args,
     ]
 

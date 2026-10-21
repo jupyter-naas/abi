@@ -5,7 +5,12 @@
 # - Multi-model AI capabilities (chat, embeddings, reasoning)
 # - Knowledge graph storage (Apache Jena Fuseki + TDB2)
 # - Agent memory persistence (PostgreSQL)
-# - Workflow orchestration (Dagster)
+# - NATS + JetStream: kernel services, bus, module jobs and discovery
+#
+# Legacy, to be removed in the next major: Dagster and the RabbitMQ bus sit
+# behind the `legacy` profile. `abi stack start --legacy` starts them and runs
+# the engine without NATS; `docker compose --profile legacy up -d` only adds
+# the containers.
 # =============================================================================
 
 # models:
@@ -60,12 +65,15 @@ x-abi-template: &abi_template
     - VECTOR_STORE_ADAPTER=qdrant
     - QDRANT_HOST=qdrant
     - QDRANT_PORT=${QDRANT_PORT}
+    # Set by `abi stack start --legacy`: an overlay that turns the `nats:`
+    # block off and puts the bus on RabbitMQ (.abi/stack/legacy.overlay.yaml).
+    - ABI_CONFIG_OVERLAY=${ABI_STACK_CONFIG_OVERLAY:-}
   # env_file:
   #   - .env  # Load environment variables (API keys, AI_MODE, etc.)
   depends_on:
     postgres:
       condition: service_healthy
-    rabbitmq:
+    nats:
       condition: service_healthy
     qdrant:
       condition: service_healthy
@@ -159,12 +167,20 @@ services:
         condition: service_healthy
     command:
       ["uv", "run", "--no-dev", "python", "-m", "naas_abi_core.apps.mcp.mcp_server"]
+    # The repository and the venv the abi service synced (it is healthy first),
+    # as the abi service mounts them: the host's .venv stays out of the container.
+    volumes:
+      - .:/app
+      - venv_cache:/app/.venv
     environment:
       - ABI_API_BASE=http://abi:9879
       - ABI_API_KEY=abi
       - MCP_TRANSPORT=http
+      - MCP_HOST=0.0.0.0
     ports:
-      - 8000:8000
+      # The MCP server checks no credential and calls agents with ABI_API_KEY:
+      # from this machine only.
+      - 127.0.0.1:8000:8000
     networks:
       - abi-network
 
@@ -362,11 +378,12 @@ services:
       - abi-network
 
   # -----------------------------------------------------------------------------
-  # Dagster - Workflow Orchestration & Data Pipeline Management
+  # Dagster - Workflow Orchestration & Data Pipeline Management (legacy)
   # -----------------------------------------------------------------------------
-  # Manages data pipelines, asset materialization, and workflow scheduling
-  # Provides web UI for monitoring and managing data operations
+  # Legacy, to be removed in the next major: module jobs on NATS replace its
+  # schedules. Behind the `legacy` profile: `abi stack start --legacy`.
   dagster:
+    profiles: ["legacy"]
     build:
       context: .
       dockerfile: ./.deploy/docker/images/Dockerfile
@@ -399,6 +416,11 @@ services:
       - DAGSTER_PG_USERNAME=${POSTGRES_USER}
       - DAGSTER_PG_PASSWORD=${POSTGRES_PASSWORD}
       - DAGSTER_PG_DB=${POSTGRES_DB}
+      - ABI_CONFIG_OVERLAY=${ABI_STACK_CONFIG_OVERLAY:-}
+      # Next to an engine on NATS, a client of it: a second serving engine would
+      # fail on the ownership lease (docs/adr/20261006_single-serving-engine.md).
+      # Without NATS (`--legacy`) the role is ignored.
+      - ABI_ENGINE_ROLE=client
     command:
       - /bin/bash
       - -c
@@ -410,7 +432,9 @@ services:
   # MinIO - S3-compatible Object Storage for Dagster Compute Logs
   # -----------------------------------------------------------------------------
   minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    # MinIO stopped publishing public images (quay.io/minio, minio/* on Docker Hub).
+    # pgsty/minio is a community fork built from MinIO source, drop-in compatible.
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     pull_policy: always
     restart: unless-stopped
     command: server /data --console-address :9001
@@ -432,7 +456,7 @@ services:
 
   # mc container to initialize the bucket on startup
   minio-init:
-    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    image: pgsty/mc:RELEASE.2026-09-16T00-00-00Z
     pull_policy: always
     depends_on:
       minio:
@@ -447,9 +471,12 @@ services:
       - abi-network
 
   # -----------------------------------------------------------------------------
-  # RabbitMQ - Message Bus (AMQP)
+  # RabbitMQ - Message Bus (AMQP, legacy)
   # -----------------------------------------------------------------------------
+  # Legacy, to be removed in the next major: the bus is JetStream on `nats`.
+  # Behind the `legacy` profile: `abi stack start --legacy`.
   rabbitmq:
+    profiles: ["legacy"]
     image: rabbitmq:3-management
     pull_policy: always
     restart: unless-stopped
@@ -476,20 +503,19 @@ services:
       - abi-network
 
   # -----------------------------------------------------------------------------
-  # NATS - Distributed module fabric (JetStream: bus, RPC, discovery)
+  # NATS - Distributed module fabric (JetStream: bus, RPC, jobs, discovery)
   # -----------------------------------------------------------------------------
-  # Opt-in alongside RabbitMQ, not a replacement yet — see
-  # docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md. `-js` enables
-  # JetStream; `-m 8222` exposes the monitoring/health endpoint used below and by
-  # the NATS Services framework's $SRV.* discovery subjects.
+  # The engine (abi) reaches every kernel service through it, and modules
+  # register here. `-js` enables JetStream; `-m 8222` exposes the monitoring and
+  # health endpoint used below. Check it: curl -s localhost:8222/healthz, then
+  # curl -s localhost:8222/connz lists the engine's and modules' connections.
   nats:
-    profiles: ["nats"]
-    image: nats:2-alpine
+    image: nats:2.14.7-alpine
     pull_policy: always
     restart: unless-stopped
     environment:
       # The broker's static users and its auth callout's trusted key (nats.conf).
-      # `abi deploy local` generates them in .env.
+      # `abi stack start` and `abi deploy local` generate them in .env.
       - NATS_ENGINE_PASSWORD=${NATS_ENGINE_PASSWORD:-}
       - NATS_AUTH_PASSWORD=${NATS_AUTH_PASSWORD:-}
       - NATS_AUTH_CALLOUT_ISSUER=${NATS_AUTH_CALLOUT_ISSUER:-}
@@ -500,7 +526,7 @@ services:
       - -c
       - |
         for key in NATS_ENGINE_PASSWORD NATS_AUTH_PASSWORD NATS_AUTH_CALLOUT_ISSUER; do
-          [ -n "$$(printenv $$key)" ] || { echo "$$key is empty: run abi deploy local" >&2; exit 1; }
+          [ -n "$$(printenv $$key)" ] || { echo "$$key is empty: run abi stack start" >&2; exit 1; }
         done
         exec nats-server -c /etc/nats/nats.conf -js -sd /data -m 8222
     ports:
@@ -650,14 +676,14 @@ volumes:
   postgres_data:  # PostgreSQL database files (agent memory persistence)
   coder_data:     # Coder control-plane state (home dir)
   forgejo_data:   # Forgejo git repositories + state
-  dagster_home:   # Dagster metadata, run history, and configuration
+  dagster_home:   # Dagster metadata, run history, and configuration (legacy)
   qdrant_storage: # Qdrant vector store data
 
   headscale_data: # Headscale state and sqlite database
   headscale_run:  # Headscale unix socket runtime data
 
   minio_data:     # MinIO object storage data
-  rabbitmq_data:  # RabbitMQ message bus data
+  rabbitmq_data:  # RabbitMQ message bus data (legacy)
   nats_data:      # NATS JetStream persistence (streams, KV, module registry)
   redis_data:     # Redis persistence data
   caddy_data:     # Caddy certificates and ACME data
