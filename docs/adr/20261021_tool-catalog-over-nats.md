@@ -170,6 +170,11 @@ exercises every operation from the wheel-only worker.
 
 ## Consequences
 
+- Whatever makes the serving engine unreachable (no responder, a closed or refused
+  connection, a timeout) reaches the registry as a `ToolCatalogError`, so a client or standby
+  engine goes on with its own tools. When it has no search backend, the catalog ranks the
+  tools it holds too.
+
 - A client engine and an SDK module find the serving engine's tools by meaning,
   with the same ranking as the serving engine's own search, and an agent composed
   in a client engine can enable the tools its own modules loaded as before.

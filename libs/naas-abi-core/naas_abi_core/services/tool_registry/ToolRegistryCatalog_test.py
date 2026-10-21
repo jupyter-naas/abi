@@ -372,6 +372,23 @@ class TestSearchThroughTheCatalog:
         with pytest.raises(ToolSearchUnavailableError):
             registry.search_tools("anything")
 
+    def test_tools_held_here_survive_a_process_that_cannot_rank_them(self, owner):
+        """No embedder or index here: the catalog ranks the tools this process holds
+        (published by its own synchroniser), and none of them is dropped."""
+        registry = ToolRegistryService()
+        registry.publish(
+            "acme.local",
+            [_tool("acme.local", "report_bug", "Report a bug in the tracker.")],
+        )
+        # The catalog ranks this process's own tool among the owner's.
+        owner.publish(
+            "acme.local",
+            [_tool("acme.local", "report_bug", "Report a bug in the tracker.")],
+        )
+        registry.configure_catalog(OwnerCatalog(owner))
+        found = ids(registry.search_tools("report a bug in the tracker", limit=5))
+        assert "acme.local/report_bug@1" in found
+
     def test_search_never_builds_a_tool(self, owner):
         binding = RecordingBinding()
         owner.publish(

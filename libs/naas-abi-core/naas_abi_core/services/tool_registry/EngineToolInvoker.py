@@ -17,7 +17,10 @@ in this order:
    references against the caller's allow list;
 4. admission (a bounded number of calls at once, held until the tool returns, so a
    tool that overruns its deadline keeps its slot) and then, on a worker thread under
-   a deadline, the secrets' resolution, ``registry.resolve`` and the call.
+   a deadline, everything from 2 on: the registry lookup (its lock is held while it
+   syncs), the schema checks, the secrets' resolution, ``registry.resolve`` and the
+   call. Only the checks of 1 run on the shared event loop, which serves every
+   other service of the connection.
 
 The result and any message of the tool are scrubbed of the values of the secrets the
 call used (a defence in depth: a tool should not echo a credential, but one that does
@@ -33,7 +36,9 @@ import contextvars
 import json
 import math
 import re
+import threading
 import time
+from collections import OrderedDict
 from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -82,6 +87,10 @@ DEFAULT_MAX_CONCURRENT = 16
 # Shorter values are not worth hiding, and would mangle everything they match.
 MIN_SCRUBBED_LENGTH = 4
 REDACTED = "[redacted]"
+
+# Validators kept ready (one per published input schema): checking a schema is
+# not free, and a call should not pay for it again.
+MAX_CACHED_VALIDATORS = 256
 
 _SECRET_NAME = re.compile(SECRET_NAME)
 ACTIVITY_ACTOR_PREFIX = "service:"
@@ -207,6 +216,10 @@ class EngineToolInvoker:
         self._record_activity = record_activity
         self._in_flight = 0
         self._pool: ThreadPoolExecutor | None = None
+        # tool id -> (the schema object it was built from, its validator). A
+        # republished tool has a new schema object, so the entry is rebuilt.
+        self._validators: OrderedDict[str, tuple[dict[str, Any], Any]] = OrderedDict()
+        self._validators_lock = threading.Lock()
 
     @property
     def in_flight(self) -> int:
@@ -294,6 +307,19 @@ class EngineToolInvoker:
             raise ToolInvokeError(
                 "PERMISSION_DENIED", "This caller cannot act for a user or workspace"
             )
+        seconds = (
+            min(invocation.timeout_ms / 1000, self._max_timeout)
+            if invocation.timeout_ms > 0
+            else self._default_timeout
+        )
+        return await self._run(caller, invocation, seconds)
+
+    def _prepare(
+        self, caller: InvokeCaller, invocation: ToolInvocation
+    ) -> tuple[
+        ToolDefinition, ToolContext, dict[str, Any], dict[str, Any], dict[str, str]
+    ]:
+        """On a worker thread: what the call needs, or the refusal."""
         ref = self._reference(invocation)
         context = ToolContext(
             user_id=invocation.user_id or None,
@@ -305,14 +331,7 @@ class EngineToolInvoker:
         self._validate(definition, arguments)
         literal = self._configuration(definition, invocation)
         references = self._references(caller, definition, invocation)
-        seconds = (
-            min(invocation.timeout_ms / 1000, self._max_timeout)
-            if invocation.timeout_ms > 0
-            else self._default_timeout
-        )
-        return await self._run(
-            definition, context, arguments, literal, references, seconds
-        )
+        return definition, context, arguments, literal, references
 
     @staticmethod
     def _reference(invocation: ToolInvocation) -> ToolRef:
@@ -365,19 +384,31 @@ class EngineToolInvoker:
             raise ToolInvokeError("TOOL_NOT_FOUND", "No visible tool matches") from None
         return definition
 
-    @staticmethod
-    def _validate(definition: ToolDefinition, arguments: dict[str, Any]) -> None:
+    def _validator(self, definition: ToolDefinition) -> Any:
+        schema = definition.input_schema
+        key = str(definition.id)
+        with self._validators_lock:
+            cached = self._validators.get(key)
+            if cached is not None and cached[0] is schema:
+                self._validators.move_to_end(key)
+                return cached[1]
         try:
-            Draft202012Validator.check_schema(definition.input_schema)
+            Draft202012Validator.check_schema(schema)
         except SchemaError:
             logger.warning(f"Tool '{definition.id}' declares an invalid input schema")
             raise ToolInvokeError(
                 "TOOL_ERROR", "The tool's input schema is invalid"
             ) from None
-        errors = sorted(
-            Draft202012Validator(definition.input_schema).iter_errors(arguments),
-            key=str,
-        )
+        validator = Draft202012Validator(schema)
+        with self._validators_lock:
+            self._validators[key] = (schema, validator)
+            self._validators.move_to_end(key)
+            while len(self._validators) > MAX_CACHED_VALIDATORS:
+                self._validators.popitem(last=False)
+        return validator
+
+    def _validate(self, definition: ToolDefinition, arguments: dict[str, Any]) -> None:
+        errors = sorted(self._validator(definition).iter_errors(arguments), key=str)
         if errors:
             where = "/".join(str(part) for part in errors[0].absolute_path)
             raise ToolInvokeError(
@@ -443,13 +474,7 @@ class EngineToolInvoker:
 
     # -------------------------------------------------------------- execution
     async def _run(
-        self,
-        definition: ToolDefinition,
-        context: ToolContext,
-        arguments: dict[str, Any],
-        literal: dict[str, Any],
-        references: dict[str, str],
-        seconds: float,
+        self, caller: InvokeCaller, invocation: ToolInvocation, seconds: float
     ) -> bytes:
         if self._in_flight >= self._max_concurrent:
             raise ToolInvokeError(
@@ -465,14 +490,7 @@ class EngineToolInvoker:
         loop = asyncio.get_running_loop()
         work = contextvars.copy_context()
         future = loop.run_in_executor(
-            self._pool,
-            work.run,
-            self._execute,
-            definition,
-            context,
-            arguments,
-            literal,
-            references,
+            self._pool, work.run, self._prepare_and_execute, caller, invocation
         )
 
         def finished(done: asyncio.Future) -> None:
@@ -488,6 +506,14 @@ class EngineToolInvoker:
             raise ToolInvokeError(
                 "DEADLINE_EXCEEDED", f"Tool exceeded its {seconds:g}s deadline"
             ) from None
+
+    def _prepare_and_execute(
+        self, caller: InvokeCaller, invocation: ToolInvocation
+    ) -> bytes:
+        definition, context, arguments, literal, references = self._prepare(
+            caller, invocation
+        )
+        return self._execute(definition, context, arguments, literal, references)
 
     def _execute(
         self,

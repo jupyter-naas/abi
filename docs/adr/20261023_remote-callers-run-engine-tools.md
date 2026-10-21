@@ -80,7 +80,9 @@ in this order:
    lookup**, so no secret's existence is revealed);
 4. admission, then, on a worker thread under the deadline: resolve the secrets,
    `registry.resolve` (which applies the policy and the required configuration again) and
-   run the tool.
+   run the tool. Steps 2 and 3 run on that thread too: the registry's lock is held while
+   it syncs and a schema can be large, and the connection's event loop serves every other
+   service. A tool's schema validator is cached per published schema.
 
 The result, a `ToolException`'s message and the arguments' validation message are scrubbed
 of the values of every secret the call used (the referenced ones and the credential

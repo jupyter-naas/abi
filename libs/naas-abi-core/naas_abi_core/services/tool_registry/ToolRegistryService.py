@@ -528,8 +528,14 @@ class ToolRegistryService(IToolRegistry):
                 # decides, and raises the same error when it cannot either.
                 logger.debug("Tool registry: no local search backend; catalog only")
         try:
+            # What this process could not rank is the catalog's to return.
             remote = self._search_catalog(
-                query, context, limit, min_score, where, held_at_start
+                query,
+                context,
+                limit,
+                min_score,
+                where,
+                held_at_start if local_ranked else frozenset(),
             )
         except ToolCatalogError as exc:
             # This process ranked its own tools: they stay searchable while the
@@ -553,9 +559,9 @@ class ToolRegistryService(IToolRegistry):
         held: frozenset[str],
     ) -> list[ToolSearchResult]:
         """The catalog's best matches this caller may see, less what this process
-        held when the search began (it ranks those itself). The catalog applied its own access rules to
-        this process; the caller's are applied here, so ask for more until the
-        limit is met or the catalog has no more."""
+        held when the search began, if it ranked them itself (``held``). The catalog
+        applied its own access rules to this process; the caller's are applied here,
+        so ask for more until the limit is met or the catalog has no more."""
         assert self._catalog is not None
         fetch = min(max(limit * 2, limit + 5), MAX_CATALOG_SEARCH_LIMIT)
         previous = -1

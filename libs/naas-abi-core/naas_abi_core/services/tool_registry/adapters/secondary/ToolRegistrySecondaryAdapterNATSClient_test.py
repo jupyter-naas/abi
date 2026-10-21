@@ -2,9 +2,15 @@ import json
 from unittest.mock import AsyncMock
 
 import pytest
+from naas_abi_core.services.tool_registry.adapters.secondary.InMemoryToolIndexAdapter import (
+    InMemoryToolIndexAdapter,
+)
 from naas_abi_core.services.tool_registry.adapters.secondary.ToolRegistrySecondaryAdapterNATSClient import (
     MAX_LIST_PAGES,
     ToolRegistrySecondaryAdapterNATSClient,
+)
+from naas_abi_core.services.tool_registry.tests.concept_embeddings import (
+    CountingConceptEmbedder,
 )
 from naas_abi_core.services.tool_registry.ToolRegistryPort import (
     ToolCatalogError,
@@ -14,8 +20,17 @@ from naas_abi_core.services.tool_registry.ToolRegistryPort import (
     ToolRegistryError,
     ToolSearchUnavailableError,
 )
+from naas_abi_core.services.tool_registry.ToolRegistryService import (
+    ToolRegistryService,
+)
+from naas_abi_core.services.tool_registry.ToolRegistryService_test import _tool
 from naas_abi_proto.tool_registry.v1 import tool_registry_pb2 as pb
 from naas_abi_sdk.transport import RPCError
+from nats.errors import (
+    ConnectionClosedError,
+    NoRespondersError,
+    NoServersError,
+)
 
 
 def entry(name, *, missing=()):
@@ -66,6 +81,52 @@ def test_other_failures_are_not_hidden(client):
     client.remote.get_tool.side_effect = RPCError("INVALID_ARGUMENT", "bad ref")
     with pytest.raises(ToolCatalogRequestError, match="bad ref"):
         client.get_tool("bad")
+
+
+AWAY = [
+    NoRespondersError(),
+    ConnectionClosedError(),
+    NoServersError(),
+    OSError("connection refused"),
+]
+
+
+@pytest.mark.parametrize("failure", AWAY, ids=lambda f: type(f).__name__)
+def test_a_serving_engine_that_is_away_is_a_catalog_error(client, failure):
+    for method in (
+        client.remote.list_tools,
+        client.remote.get_tool,
+        client.remote.search_tools,
+    ):
+        method.side_effect = failure
+    with pytest.raises(ToolCatalogError, match="serving engine"):
+        client.list_tools()
+    with pytest.raises(ToolCatalogError, match="serving engine"):
+        client.get_tool("acme.crm/sync")
+    with pytest.raises(ToolCatalogError, match="serving engine"):
+        client.search_tools("sync", 3)
+
+
+@pytest.mark.parametrize("failure", AWAY, ids=lambda f: type(f).__name__)
+def test_a_registry_keeps_its_own_tools_while_the_serving_engine_is_away(
+    client, failure
+):
+    for method in (client.remote.list_tools, client.remote.search_tools):
+        method.side_effect = failure
+    registry = ToolRegistryService(
+        embedder=CountingConceptEmbedder(), index=InMemoryToolIndexAdapter()
+    )
+    registry.publish(
+        "acme.local", [_tool("acme.local", "close_issue", "Close an issue.")]
+    )
+    registry.configure_catalog(client)
+
+    assert [r.tool_id for r in registry.search_tools("close an issue", limit=3)] == [
+        "acme.local/close_issue@1"
+    ]
+    assert [str(d.id) for d in registry.list_definitions()] == [
+        "acme.local/close_issue@1"
+    ]
 
 
 def test_a_search_sends_the_limit_the_contract_allows_and_the_filter(client):

@@ -172,7 +172,11 @@ the next step.
   "unavailable" until the record or the caller provides it, as a local one.
 - Latency: a call costs a discovery lookup and the module round trip.
 - Every engine process reads discovery every `refresh_seconds` (one page per 100
-  instances), and keeps one more NATS connection for it and one for calls.
+  instances), and keeps one more NATS connection for it and one for calls. With N engine
+  processes (serving, standby, each client) discovery answers N x instances / 100 pages every
+  `refresh_seconds`, and each process's registry lock is held across its read. Raise
+  `refresh_seconds` on a large deployment; the next step is a `has_tools` filter on
+  discovery's listing, so a process reads only the instances that serve tools.
 - A module cannot declare more than 32 tools or 32 KiB of descriptors. Every replica
   carries them in discovery's snapshot and in each `get_module` / `list_modules` reply
   (512 KiB bounds both), so eight replicas at the limit use half of it. Agents, models and

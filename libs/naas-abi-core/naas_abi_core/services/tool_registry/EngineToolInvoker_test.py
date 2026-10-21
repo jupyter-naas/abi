@@ -709,6 +709,97 @@ def test_calls_beyond_the_limit_are_refused_not_queued(invoker, bindings):
     asyncio.run(scenario())
 
 
+# ------------------------------------------------- the event loop stays free
+def test_a_busy_registry_does_not_stall_the_event_loop(invoker, registry):
+    """The registry's lock is held while it syncs; a call waiting for it must not
+    take the shared loop with it."""
+    held, release = threading.Event(), threading.Event()
+
+    def hold():
+        with registry._lock:
+            held.set()
+            release.wait(10)
+
+    holder = threading.Thread(target=hold)
+    holder.start()
+    assert held.wait(5)
+    # A safety net: the lock is released even if the loop were blocked.
+    timer = threading.Timer(1.5, release.set)
+    timer.start()
+
+    async def scenario():
+        call = asyncio.ensure_future(
+            invoker.invoke(
+                TRUSTED,
+                ToolInvocation(tool=f"{GITHUB}/echo_token", arguments=b'{"repo": "r"}'),
+            )
+        )
+        started = time.monotonic()
+        await asyncio.sleep(0.1)
+        assert time.monotonic() - started < 1.0, "the loop was blocked"
+        assert not call.done()
+        release.set()
+        assert b"redacted" in await asyncio.wait_for(call, 5)
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        release.set()
+        timer.cancel()
+        holder.join()
+
+
+def test_a_tools_input_schema_is_checked_once(invoker, monkeypatch):
+    checked = []
+    original = invoker_module.Draft202012Validator.check_schema
+
+    def counting(schema, *args, **kwargs):
+        checked.append(schema)
+        return original(schema, *args, **kwargs)
+
+    monkeypatch.setattr(
+        invoker_module.Draft202012Validator, "check_schema", staticmethod(counting)
+    )
+
+    async def scenario():
+        for _ in range(3):
+            await invoker.invoke(
+                TRUSTED,
+                ToolInvocation(tool=f"{GITHUB}/echo_token", arguments=b'{"repo": "r"}'),
+            )
+
+    asyncio.run(scenario())
+    assert len(checked) == 1
+
+
+def test_a_republished_tool_has_its_new_schema_checked(registry, invoker):
+    async def call(arguments: bytes):
+        return await invoker.invoke(
+            TRUSTED, ToolInvocation(tool=f"{GITHUB}/echo_token", arguments=arguments)
+        )
+
+    asyncio.run(call(b'{"repo": "r"}'))
+    registry.publish(
+        GITHUB,
+        [
+            PublishedTool(
+                definition(
+                    "echo_token",
+                    schema={
+                        "type": "object",
+                        "properties": {"n": {"type": "integer"}},
+                        "required": ["n"],
+                    },
+                ),
+                Binding(),
+            )
+        ],
+    )
+    with pytest.raises(ToolInvokeError) as raised:
+        asyncio.run(call(b'{"repo": "r"}'))
+    assert raised.value.code == "INVALID_ARGUMENT"
+
+
 def test_the_deadline_is_clamped(registry, secrets):
     seen = []
     invoker = EngineToolInvoker(registry, secrets, default_timeout=7, max_timeout=9)

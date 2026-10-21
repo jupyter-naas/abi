@@ -117,7 +117,11 @@ could not answer; `ToolCatalogRequestError` when it refused the request).
   exhausted (short and not `truncated`) or more brings nothing new). If the
   catalog fails (`ToolCatalogError`), `list_definitions` and `search_tools` go on
   with what this process holds (warning) and raise only when it holds nothing or
-  could not rank it; `get_definition` and `availability` on a miss raise.
+  could not rank it; `get_definition` and `availability` on a miss raise. The NATS
+  client turns every way the serving engine can be away (`NoRespondersError`, a closed
+  or unreachable connection, `OSError`, a timeout) into `ToolCatalogError`. A process
+  with no search backend leaves its held tools to the catalog's ranking (it does not
+  drop them from the merge).
   A reply cut at the primary's byte budget is a known bound: what follows the cut
   is unreachable by search. `resolve` never
   leaves the process: for a tool only the catalog shows it raises
@@ -220,7 +224,10 @@ Only JSON crosses the wire; no binding, callable or secret value.
   the module; unscoped grant; the registry's `EXECUTE` policy); arguments against the JSON Schema; config
   (declared keys, plain values, **no value for a key marked `secret`**); secret refs (key marked
   secret, name on the allow list, checked before any lookup); admission; then on a worker thread under
-  a deadline: resolve the secrets, `registry.resolve`, run.
+  a deadline: resolve the secrets, `registry.resolve`, run. Only the size limits and user naming run on
+  the shared NATS event loop: the registry lookup (its lock is held while it syncs), the schema checks and
+  the JSON decoding run on the worker thread too, and a tool's input-schema validator is cached (256
+  entries, keyed on the schema object, so a republished tool is checked again).
 - **Secrets never come back.** Results, a `ToolException` message and validation messages are scrubbed
   of the referenced secret values and the binding's credential defaults
   (`ToolRegistryService.credential_values`); any other tool failure is `TOOL_ERROR` "Tool execution
@@ -252,7 +259,10 @@ before the handler, sanitized errors, deadline, size caps).
   READY instance as `<module_id>/<name>@<version>` (`ToolDefinition.remote = True`, binding
   `RemoteToolBinding`); a module with none is `unpublish`ed, and the index follows at the
   next search (`_sync` deletes what this registry indexed). A failed read keeps what is
-  published. `EngineRemoteToolLoader` starts it after `publish_tools`, in every NATS role
+  published. **Cost:** every engine process (serving, standby, each client) runs its own
+  synchroniser, so discovery sees N processes x its instances every `refresh_seconds`, and the
+  registry's lock is held across the read. Raise `refresh_seconds` on a large deployment; a
+  `has_tools` filter on discovery's `list_instances` is the next step. `EngineRemoteToolLoader` starts it after `publish_tools`, in every NATS role
   (serving, standby, client: bindings are per process), and `Engine.shutdown` stops it.
   A module named like a loaded module, or a tool another module holds, is not published.
 - **Out.** `resolve` builds a `StructuredTool` whose schema is the module's JSON Schema; a

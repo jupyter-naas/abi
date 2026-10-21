@@ -124,6 +124,10 @@ engine: encode it (base64 or hex) or keep it in the module's own environment.
 - **Do not grant `write` on a name that a tool run by a module takes from `invoke.modules.<id>.secrets`
   or that other components read.** A module can replace the value, so whoever reads it next uses
   what the module wrote. `write` is for the module's own state.
+- **Upgrade:** `Base64Secret` reads its bundle with `interpolate=False`. A bundle written
+  before this change that relied on `${NAME}` expanding on read now returns the text
+  literally. Write the final value instead; keeping interpolation on read was rejected, as the
+  primary's refusal of `$` and the escaping on write would then be the only barrier.
 - Values are opaque, never expanded: nothing a module writes can read another secret, and nothing
   it writes can add a key. A module-written value that an operator renders into `config.yaml`
   (`{{ secret.NAME }}`) still lands in the config text: do not grant `write` on such a name.

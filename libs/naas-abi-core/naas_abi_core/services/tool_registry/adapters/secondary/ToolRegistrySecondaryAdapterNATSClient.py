@@ -41,6 +41,7 @@ from naas_abi_core.services.tool_registry.ToolRegistryPort import (
 from naas_abi_proto.tool_registry.v1 import tool_registry_pb2 as pb
 from naas_abi_sdk.tool_registry import ToolRegistryClient
 from naas_abi_sdk.transport import RPCError, Transport
+from nats.errors import Error as NATSError
 
 # Listing pages to read before giving up: a catalog this large is not one a
 # process should hold in memory.
@@ -104,6 +105,12 @@ class ToolRegistrySecondaryAdapterNATSClient(IToolCatalogPort):
             raise ToolCatalogError(
                 "The serving engine's tool catalog did not answer in "
                 f"{self.timeout_seconds:g} seconds."
+            ) from exc
+        except (NATSError, OSError) as exc:
+            # Nobody answering (NoRespondersError), a closed or unreachable
+            # connection: the serving engine is away, fenced or mid-handover.
+            raise ToolCatalogError(
+                f"The serving engine's tool catalog is unreachable: {type(exc).__name__}"
             ) from exc
 
     def list_tools(self, filter: ToolFilter | None = None) -> list[ToolListing]:
