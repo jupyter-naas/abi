@@ -291,3 +291,114 @@ def test_a_nested_record_tree_keeps_routing_on_the_next_turn(composer, models, r
     assert lead.invoke("and a follow-up") == "follow-up answer"
     # The lead did not have to route the follow-up again.
     assert len(lead_llm.recorder.bound) == 1
+
+
+def _three_level_records(composer, models, records, worker_script, lead_script):
+    lead_model, lead_llm = _scripted("lead-model", lead_script)
+    manager_model, manager_llm = _scripted(
+        "manager-model",
+        [tool_call("transfer_to_worker", {}, "h2"), AIMessage(content="manager")],
+    )
+    worker_model, _ = _scripted("worker-model", worker_script)
+    models.register("lead-model", lead_model)
+    models.register("manager-model", manager_model)
+    models.register("worker-model", worker_model)
+    records.mkdir()
+    (records / "lead.yaml").write_text(
+        "name: lead\nprompt: You lead.\nmodel: lead-model\nsub_agents: [manager]\n"
+    )
+    (records / "manager.yaml").write_text(
+        "name: manager\nprompt: You manage.\nmodel: manager-model\n"
+        "sub_agents: [worker]\n"
+    )
+    (records / "worker.yaml").write_text(
+        "name: worker\nprompt: You do the work.\nmodel: worker-model\n"
+    )
+    return composer.compose("lead"), manager_llm
+
+
+def test_a_help_request_in_a_nested_record_tree_reaches_the_lead(
+    composer, models, records
+):
+    """The worker's supervisor is the lead, not the manager above it."""
+    lead, manager_llm = _three_level_records(
+        composer,
+        models,
+        records,
+        worker_script=[tool_call("request_help", {"reason": "stuck"}, "h3")],
+        lead_script=[
+            tool_call("transfer_to_manager", {}, "h1"),
+            AIMessage(content="lead helps"),
+        ],
+    )
+
+    assert lead.invoke("do the task") == "lead helps"
+    assert len(manager_llm.recorder.bound) == 1  # the manager only delegated
+
+
+def test_a_leaf_record_reused_under_two_parents_is_rejected(composer, models, records):
+    """Routing and capability state identify an agent by its name: two agents of
+    one name in the tree would be indistinguishable after a handoff."""
+    from naas_abi_core.services.agent_composer.AgentComposerPort import (
+        AgentCompositionError,
+    )
+
+    records.mkdir()
+    for name, children in {
+        "lead": "[a, b]",
+        "a": "[worker]",
+        "b": "[worker]",
+        "worker": "[]",
+    }.items():
+        (records / f"{name}.yaml").write_text(
+            f"name: {name}\nprompt: You are {name}.\nsub_agents: {children}\n"
+        )
+
+    with pytest.raises(AgentCompositionError) as raised:
+        composer.compose("lead")
+
+    (problem,) = raised.value.problems
+    assert "'worker'" in problem
+    assert "lead > a > worker" in problem and "lead > b > worker" in problem
+
+
+def test_a_supplied_agent_cannot_reuse_the_name_of_a_record_in_the_tree(
+    composer, models, records
+):
+    from naas_abi_core.services.agent_composer.AgentComposerPort import (
+        AgentCompositionError,
+    )
+
+    records.mkdir()
+    (records / "helper.yaml").write_text(
+        "name: helper\nprompt: You help.\nsub_agents: [worker]\n"
+    )
+    (records / "worker.yaml").write_text("name: worker\nprompt: You work.\n")
+    supplied = Agent(
+        name="worker",
+        description="A worker built in Python",
+        chat_model=_scripted("w", [AIMessage(content="w")])[1],
+        configuration=AgentConfiguration(system_prompt="You work."),
+        state=AgentSharedState(thread_id="t"),
+        memory=MemorySaver(),
+    )
+
+    with pytest.raises(AgentCompositionError, match="'worker'"):
+        composer.create(
+            name="lead",
+            prompt="You lead.",
+            sub_agents=["helper", supplied],
+        )
+
+
+def test_the_composer_accepts_one_name_per_agent_in_a_deep_tree(
+    composer, models, records
+):
+    lead, _ = _three_level_records(
+        composer,
+        models,
+        records,
+        worker_script=[AIMessage(content="done")],
+        lead_script=[tool_call("transfer_to_manager", {}, "h1")],
+    )
+    assert lead.invoke("task") == "done"

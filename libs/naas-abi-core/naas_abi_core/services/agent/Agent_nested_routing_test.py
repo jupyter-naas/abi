@@ -15,6 +15,7 @@ from naas_abi_core.services.agent.Agent import (
 )
 from naas_abi_core.services.agent.tests.scripted_chat_model import (
     ScriptedChatModel,
+    tool_call,
 )
 
 
@@ -36,3 +37,62 @@ def test_an_active_agent_outside_the_tree_hands_the_turn_back():
     state.set_current_active_agent("ghost")
     assert lead.invoke("hello") == "lead answers"
     assert state.current_active_agent == "lead"
+
+
+def _three_levels(worker_script, manager_script=None, lead_script=None):
+    """lead -> manager -> worker, every node sharing ``supervisor_agent="lead"``."""
+    state = AgentSharedState(thread_id="t", supervisor_agent="lead")
+    memory = MemorySaver()
+    worker = _agent("worker", worker_script, state=state, memory=memory)
+    manager = _agent(
+        "manager",
+        manager_script
+        or [tool_call("transfer_to_worker", {}, "h2"), AIMessage(content="manager")],
+        agents=[worker],
+        state=state,
+        memory=memory,
+    )
+    lead = _agent(
+        "lead",
+        lead_script
+        or [tool_call("transfer_to_manager", {}, "h1"), AIMessage(content="lead")],
+        agents=[manager],
+        state=state,
+        memory=memory,
+    )
+    return lead, state
+
+
+def test_a_help_request_from_a_grandchild_reaches_the_top_supervisor():
+    """The agent in between must not take the turn: the configured supervisor
+    is the one asked, whatever its depth above the requester."""
+    lead, state = _three_levels(
+        [tool_call("request_help", {"reason": "stuck"}, "h3")],
+        lead_script=[
+            tool_call("transfer_to_manager", {}, "h1"),
+            AIMessage(content="lead helps"),
+        ],
+    )
+
+    assert lead.invoke("do the task") == "lead helps"
+    assert state.current_active_agent == "lead"
+
+
+def test_a_help_request_from_a_child_still_reaches_its_supervisor():
+    state = AgentSharedState(thread_id="t", supervisor_agent="lead")
+    memory = MemorySaver()
+    worker = _agent(
+        "worker",
+        [tool_call("request_help", {"reason": "stuck"}, "h2")],
+        state=state,
+        memory=memory,
+    )
+    lead = _agent(
+        "lead",
+        [tool_call("transfer_to_worker", {}, "h1"), AIMessage(content="lead helps")],
+        agents=[worker],
+        state=state,
+        memory=memory,
+    )
+
+    assert lead.invoke("do the task") == "lead helps"

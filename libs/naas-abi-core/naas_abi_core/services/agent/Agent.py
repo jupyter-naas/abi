@@ -692,6 +692,9 @@ class Agent(Expose):
     # An agent can have other agents.
     # He will be responsible to load them as tools.
     _agents: list[Agent] = []
+    # Names of the agents whose graph holds this one, as far as the trees it was
+    # built into tell (set by ``build_graph``; a shared instance holds them all).
+    _ancestors: frozenset[str] = frozenset()
 
     # Opt-in: when True, this agent is a *sequential supervisor*. Its sub-agents
     # return control to it when they finish (instead of ending the turn), so it can
@@ -1103,6 +1106,7 @@ class Agent(Expose):
             agent = self.validate_agent_name(agent)
             logger.debug(f"Adding sub-agent '{agent._name}' to graph '{self._name}'")
             graph.add_node(agent._name, agent.graph)
+            agent._add_ancestors(self._ancestors | {self._name})
 
         # Patcher is callable that can be passed and that will impact the graph before we compile it.
         # This is used to be able to give more flexibility about how the graph is being built.
@@ -1165,6 +1169,18 @@ class Agent(Expose):
 
     def _in_tree(self, name: str) -> bool:
         return name == self._name or self._path_to(name) is not None
+
+    def _add_ancestors(self, names: frozenset[str]) -> None:
+        """Record that the agents ``names`` hold this one, and everything below it.
+
+        A handoff to one of them (``request_help``) is not for this graph to
+        route: it goes up, to the graph that has the node.
+        """
+        if names <= self._ancestors:
+            return  # also ends a cycle
+        self._ancestors = self._ancestors | names
+        for agent in self._agents:
+            agent._add_ancestors(names | {self._name})
 
     def current_active_agent(self, state: ABIAgentState) -> Command:
         """Goto the current active agent.
@@ -1259,6 +1275,16 @@ class Agent(Expose):
                 else ""
             )
             path = self._path_to(active_name)
+            if path is None and active_name in self._ancestors:
+                # A handoff upward (``request_help`` names the tree's supervisor,
+                # however deep the requester is): this graph does not hold the
+                # target, the parent graph does. Only a target that is nowhere in
+                # the tree is released to the agent that has the turn.
+                logger.debug(
+                    f"Active agent '{active_name}' holds '{self._name}': "
+                    "routing up to its graph"
+                )
+                return Command(goto="current_active_agent", graph=Command.PARENT)
             active_agent = path[-1] if path else None
             retain = path is not None
             if path is None:

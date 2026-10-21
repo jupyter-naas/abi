@@ -81,3 +81,55 @@ def test_from_engine_without_a_secret_service():
     composer = AgentComposerFactory.FromEngine(engine)
     assert composer._secrets is None
     assert composer.spec_repository is None
+
+
+def _documents(tmp_path):
+    from naas_abi_core.services.document.adapters.secondary.DocumentSecondaryAdapterSQLite import (
+        DocumentSecondaryAdapterSQLite,
+    )
+    from naas_abi_core.services.document.DocumentService import DocumentService
+
+    return DocumentService._for_engine(
+        DocumentSecondaryAdapterSQLite(str(tmp_path / "documents.sqlite"))
+    )
+
+
+def test_documents_composer_keeps_its_records_in_the_document_service(tmp_path):
+    documents = _documents(tmp_path)
+    composer = AgentComposerFactory.Documents(
+        ToolRegistryService(), _models(), documents
+    )
+    composer.spec_repository.save(AgentSpec(name="a", prompt="A."))
+
+    # Another composer on the same service (another process, over NATS) sees it.
+    other = AgentComposerFactory.Documents(ToolRegistryService(), _models(), documents)
+    assert other.compose("a").invoke("hello") == "hi"
+
+
+def test_from_engine_falls_back_to_the_document_service_for_records(tmp_path):
+    engine = _Engine(
+        IEngine.Services(
+            model_registry=_models(),
+            tool_registry=ToolRegistryService(),
+            document=_documents(tmp_path),
+        )
+    )
+    composer = AgentComposerFactory.FromEngine(engine)
+    composer.spec_repository.save(AgentSpec(name="a", prompt="A."))
+    assert composer.compose("a").name == "a"
+
+
+def test_from_engine_prefers_an_explicit_directory_to_the_document_service(tmp_path):
+    from naas_abi_core.services.agent_composer.adapters.secondary.FileSystemAgentSpecRepositoryAdapter import (
+        FileSystemAgentSpecRepositoryAdapter,
+    )
+
+    engine = _Engine(
+        IEngine.Services(
+            model_registry=_models(),
+            tool_registry=ToolRegistryService(),
+            document=_documents(tmp_path),
+        )
+    )
+    composer = AgentComposerFactory.FromEngine(engine, records_directory=tmp_path)
+    assert isinstance(composer.spec_repository, FileSystemAgentSpecRepositoryAdapter)

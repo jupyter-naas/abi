@@ -132,7 +132,7 @@ class AgentComposerService:
             # Like Python-defined supervisors: the whole tree shares one state
             # naming the top agent, which gives sub-agents their handoff back.
             shared_state.set_supervisor_agent(spec.name)
-        return self._build(
+        agent = self._build(
             spec,
             instances=sub_agents,
             inline_tools=tools,
@@ -142,6 +142,8 @@ class AgentComposerService:
             queue=event_queue or Queue(),
             path=(),
         )
+        self._check_unique_agent_names(agent)
+        return agent
 
     def create(
         self,
@@ -368,6 +370,37 @@ class AgentComposerService:
         return resolved
 
     # ------------------------------------------------------------- validation
+    @staticmethod
+    def _check_unique_agent_names(root: Agent) -> None:
+        """Every agent of the composed tree has a name of its own.
+
+        The active agent, the supervisor and the enabled capabilities are all
+        stored by name for the whole tree, and a handoff target is found by
+        name: two agents named alike (a record reused under two parents, a
+        supplied instance named like a record) cannot be told apart once the
+        conversation moves, so routing would pick one of them silently.
+        """
+        found: dict[str, list[str]] = {}
+
+        def walk(agent: Agent, path: tuple[str, ...], seen: frozenset[int]) -> None:
+            name = Agent.validate_name(agent.name)
+            path = (*path, name)
+            found.setdefault(name, []).append(" > ".join(path))
+            if id(agent) in seen:  # a cycle through shared instances
+                return
+            for child in agent.agents:
+                walk(child, path, seen | {id(agent)})
+
+        walk(root, (), frozenset())
+        problems = [
+            f"agent '{name}' appears {len(paths)} times in the tree "
+            f"({', '.join(paths)}): give each agent its own name"
+            for name, paths in sorted(found.items())
+            if len(paths) > 1
+        ]
+        if problems:
+            raise AgentCompositionError(Agent.validate_name(root.name), problems)
+
     @staticmethod
     def _check_names(
         spec: AgentSpec,
