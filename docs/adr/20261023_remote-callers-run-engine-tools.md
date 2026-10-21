@@ -159,6 +159,7 @@ the engine; nothing about the tools changes for in-process agents.
 | A module overloads the engine | bounded concurrency (RESOURCE_EXHAUSTED), a deadline (a slot is held until the tool returns), size caps, a separate worker pool, per-call validation before any thread |
 | Malformed or hostile arguments | JSON object with finite numbers, validated against the schema before the binding is resolved |
 | A tool of another module is run through the engine | `remote` tools are refused: the confused-deputy risk of the engine's identity |
+| A module redirects a credential through plain configuration (a base URL) | not prevented by the engine, which cannot tell such keys apart; granting is per tool, and the ADR says to withhold tools that mix the two (Consequences) |
 | Code or objects are shipped | arguments, config, result: JSON only; the tool and its binding never leave the engine |
 | An unauthenticated or replayed call | the primary requires a valid token (`UNAUTHENTICATED`); a token bound to a module instance (`aud`) is refused here |
 
@@ -218,6 +219,11 @@ tools its own process loads or a module serves.
   `NATS_JWT_SECRET` to a tool can still read it with `abi.svc.secret.v1.get`. "Engine secrets
   never reach a module" is therefore only fully true once that service is closed to modules; it
   is a separate change (which secrets a module may read), tracked as a follow-up of this job.
+- **Plain configuration can steer a credential.** A caller writes the non-secret values of a tool's
+  configuration. A tool that takes both a credential and a value saying where to send it (a base URL, an
+  endpoint) lets a granted caller point the credential at a server of its own; scrubbing cannot help once
+  the engine has sent it. The engine cannot tell such keys apart: do not grant a module a tool that mixes
+  them, or have the tool validate the value. The GitHub tools take only the token.
 - A synchronous tool past its deadline keeps running; its slot stays taken until it returns.
 - `api`, `engine` and `dagster` are not separated from each other in `module_scopes`, as
   in the catalog.
