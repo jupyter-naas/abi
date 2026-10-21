@@ -90,7 +90,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_VectorStoreSe
 )
 from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.secret.SecretPorts import ISecretAdapter
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from rich.prompt import Prompt
 
 
@@ -315,6 +315,37 @@ class NATSModelConfiguration(BaseModel):
     )
 
 
+class NATSToolRegistryConfiguration(BaseModel):
+    """What the tool catalog served over NATS shows each caller.
+
+    The serving engine answers ``abi.svc.tool_registry.v1`` from its own registry
+    under the scopes of the caller's verified service identity, never of the
+    request. The engine's own processes (``api``, ``engine``, ``dagster``) are
+    trusted with every scope: they apply their end users' scopes themselves. An
+    SDK module sees the tools that need no scope, plus the scopes listed here for
+    its identity (the module id its token asserts):
+
+        tool_registry:
+          module_scopes:
+            my_company_module: ["billing:read"]
+    """
+
+    module_scopes: dict[str, list[str]] = Field(default_factory=dict)
+
+    @field_validator("module_scopes")
+    @classmethod
+    def _identities_are_modules(cls, value: dict[str, list[str]]):
+        from naas_abi_core.engine.nats_auth import FIRST_PARTY_IDENTITIES
+
+        for identity in value:
+            if not identity or identity in FIRST_PARTY_IDENTITIES:
+                raise ValueError(
+                    f"module_scopes names SDK module identities, not {identity!r}: "
+                    "the engine's own processes already see every tool"
+                )
+        return value
+
+
 class NATSRPCOverflowConfiguration(BaseModel):
     """RPC payloads above the broker limit travel as transfer frames instead of
     failing with PAYLOAD_TOO_LARGE (docs/adr/20261003_nats-rpc-overflow.md).
@@ -483,6 +514,9 @@ class NATSConfiguration(BaseModel):
         default_factory=NATSStreamingConfiguration
     )
     models: NATSModelConfiguration = Field(default_factory=NATSModelConfiguration)
+    tool_registry: NATSToolRegistryConfiguration = Field(
+        default_factory=NATSToolRegistryConfiguration
+    )
     rpc_overflow: NATSRPCOverflowConfiguration = Field(
         default_factory=NATSRPCOverflowConfiguration
     )

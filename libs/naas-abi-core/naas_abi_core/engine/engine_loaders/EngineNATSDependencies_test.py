@@ -403,3 +403,40 @@ def test_the_registry_searches_through_the_facades_modules_use():
         assert registry._embedder._registry is facades.model_registry
     finally:
         wiring.close()
+
+
+def test_only_off_the_serving_engine_does_the_registry_read_the_catalog():
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration_ToolRegistryService import (
+        ToolIndexRole,
+        ToolRegistryServiceConfiguration,
+    )
+    from naas_abi_core.services.tool_registry.adapters.secondary.ToolRegistrySecondaryAdapterNATSClient import (
+        ToolRegistrySecondaryAdapterNATSClient,
+    )
+    from naas_abi_core.services.tool_registry.ToolRegistryService import (
+        ToolRegistryService,
+    )
+
+    registry = ToolRegistryService()
+    owners = IEngine.Services(model_registry=MagicMock(), tool_registry=registry)
+    wiring = EngineNATSDependencies(NATSConfiguration(jwt_secret="x" * 32))
+    configuration = ToolRegistryServiceConfiguration()
+    try:
+        wiring.build(owners)
+        assert not registry.catalog_available
+
+        wiring.wire_tool_registry(configuration, ToolIndexRole.LOCAL)
+        catalog = registry._catalog
+        assert isinstance(catalog, ToolRegistrySecondaryAdapterNATSClient)
+        assert catalog in wiring.clients
+
+        # The handover: this engine serves, so it answers from its own registry.
+        wiring.wire_tool_registry(configuration, ToolIndexRole.SOLE_WRITER)
+        assert not registry.catalog_available
+
+        # Fenced again: the same client, not a second connection.
+        wiring.wire_tool_registry(configuration, ToolIndexRole.LOCAL)
+        assert registry._catalog is catalog
+        assert wiring.clients.count(catalog) == 1
+    finally:
+        wiring.close()

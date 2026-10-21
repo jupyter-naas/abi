@@ -289,6 +289,33 @@ class ToolSearchResult(BaseModel):
     definition: ToolDefinition
 
 
+class ToolListing(BaseModel):
+    """A definition with its availability: what a catalog read returns."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    definition: ToolDefinition
+    availability: ToolAvailability
+
+
+class ToolFilter(BaseModel):
+    """Narrows a list or a search before its limit applies."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    # The tool's module is one of these (any, when empty).
+    modules: tuple[str, ...] = ()
+    # The tool has every one of these.
+    tags: tuple[str, ...] = ()
+    available_only: bool = False
+
+    def matches(self, definition: ToolDefinition) -> bool:
+        """The part of the filter a definition decides; availability is the registry's."""
+        return (not self.modules or definition.module in self.modules) and set(
+            self.tags
+        ) <= set(definition.tags)
+
+
 # --------------------------------------------------------------------------- #
 # Bindings                                                                     #
 # --------------------------------------------------------------------------- #
@@ -408,6 +435,40 @@ class IToolEmbedderPort(ABC):
         sync or a search resolves the model once, not once per call (resolving
         can cross the network)."""
         return ResolvedEmbedder(self.model_key, self.embed_documents, self.embed_query)
+
+
+class IToolCatalogPort(ABC):
+    """Read-only view of the tools another process holds.
+
+    A registry whose process is not the one serving the catalog reads it through
+    this port (``ToolRegistryService.configure_catalog``): definitions and
+    availability only, never a binding or a configuration value. A tool found
+    here cannot be built here. What the other process lets the caller see is its
+    decision, taken from the caller's identity.
+    """
+
+    @abstractmethod
+    def list_tools(self, filter: ToolFilter | None = None) -> list[ToolListing]:
+        """Every tool visible to this process, sorted by id."""
+
+    @abstractmethod
+    def get_tool(self, ref: str) -> ToolListing:
+        """Raise ``ToolNotFoundError`` when nothing visible matches ``ref``."""
+
+    @abstractmethod
+    def search_tools(
+        self,
+        query: str,
+        limit: int,
+        min_score: float | None = None,
+        filter: ToolFilter | None = None,
+    ) -> list[ToolSearchResult]:
+        """Best first; ``limit`` is at most ``MAX_CATALOG_SEARCH_LIMIT``."""
+
+
+# What a catalog read may ask for in one call (the serving side enforces them).
+MAX_CATALOG_SEARCH_LIMIT = 50
+MAX_CATALOG_LIST_LIMIT = 200
 
 
 class IToolAccessPolicy(ABC):

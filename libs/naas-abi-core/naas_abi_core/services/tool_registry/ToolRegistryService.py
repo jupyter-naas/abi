@@ -19,6 +19,18 @@ process may have written: a search skips a hit this registry does not know, and
 a sync removes only what this registry indexed itself. Cleaning leftovers out
 (``collect_garbage``) is opt-in, for a registry that is the index's only
 writer: the serving engine, or any registry whose index is private.
+
+**Catalog.** A process that does not serve the shared catalog (a client engine,
+a standby one) may read it through an ``IToolCatalogPort``
+(``configure_catalog``). Reads (``get_definition``, ``list_definitions``,
+``availability``, ``check_access``, ``search_tools``) then cover the tools this
+process holds and the ones the catalog shows; ``publish``, ``unpublish`` and
+``resolve`` never leave the process, because bindings are live objects. A tool
+this process holds always shadows the catalog's of the same id, and a reference
+resolves here first: what ``resolve`` can build is what a read reports. A tool
+only the catalog shows cannot be built here (``resolve`` says so). The serving
+side answers from ``get_local``, ``list_local`` and ``search_local``, which
+never read a catalog, so two registries cannot answer each other's calls.
 """
 
 from __future__ import annotations
@@ -32,7 +44,9 @@ from naas_abi_core.services.tool_registry.ToolAccessPolicy import (
     ScopeToolAccessPolicy,
 )
 from naas_abi_core.services.tool_registry.ToolRegistryPort import (
+    MAX_CATALOG_SEARCH_LIMIT,
     IToolAccessPolicy,
+    IToolCatalogPort,
     IToolEmbedderPort,
     IToolIndexPort,
     IToolRegistry,
@@ -45,8 +59,10 @@ from naas_abi_core.services.tool_registry.ToolRegistryPort import (
     ToolConfigurationError,
     ToolContext,
     ToolDefinition,
+    ToolFilter,
     ToolId,
     ToolIndexEntry,
+    ToolListing,
     ToolNotFoundError,
     ToolRef,
     ToolRegistryError,
@@ -69,6 +85,7 @@ class ToolRegistryService(IToolRegistry):
         self._modules: dict[str, set[str]] = {}
         self._embedder = embedder
         self._index = index
+        self._catalog: IToolCatalogPort | None = None
         self._collect_leftovers = False
         self._access_policy = access_policy or ScopeToolAccessPolicy()
         # Ids the index holds for this registry, and the model they were
@@ -107,6 +124,15 @@ class ToolRegistryService(IToolRegistry):
     @property
     def search_available(self) -> bool:
         return self._embedder is not None and self._index is not None
+
+    def configure_catalog(self, catalog: IToolCatalogPort | None) -> None:
+        """Read the tools another process serves too (``None``: this process only)."""
+        with self._lock:
+            self._catalog = catalog
+
+    @property
+    def catalog_available(self) -> bool:
+        return self._catalog is not None
 
     # ------------------------------------------------------------ publication
     def publish(self, module: str, tools: Sequence[PublishedTool]) -> None:
@@ -149,7 +175,11 @@ class ToolRegistryService(IToolRegistry):
             self._dirty = True
 
     # ---------------------------------------------------------------- lookup
-    def _lookup(self, ref: str | ToolRef | ToolId) -> PublishedTool:
+    def _lookup(
+        self,
+        ref: str | ToolRef | ToolId,
+        visible: Callable[[ToolDefinition], bool] | None = None,
+    ) -> PublishedTool:
         if isinstance(ref, ToolId):
             ref = ToolRef(namespace=ref.namespace, name=ref.name, version=ref.version)
         elif isinstance(ref, str):
@@ -162,6 +192,8 @@ class ToolRegistryService(IToolRegistry):
                 candidates = [
                     t for t in self._tools.values() if ref.matches(t.definition.id)
                 ]
+        if visible is not None:
+            candidates = [t for t in candidates if visible(t.definition)]
         if not candidates:
             raise ToolNotFoundError(
                 f"No published tool matches '{ref}'. Check the module publishing "
@@ -169,8 +201,18 @@ class ToolRegistryService(IToolRegistry):
             )
         return max(candidates, key=lambda t: t.definition.id.version_key)
 
+    def _remote(self, ref: str | ToolRef | ToolId) -> ToolListing:
+        """The catalog's tool for ``ref`` (the caller found no local one)."""
+        assert self._catalog is not None
+        return self._catalog.get_tool(str(ref))
+
     def get_definition(self, ref: str | ToolRef | ToolId) -> ToolDefinition:
-        return self._lookup(ref).definition
+        try:
+            return self._lookup(ref).definition
+        except ToolNotFoundError:
+            if self._catalog is None:
+                raise
+            return self._remote(ref).definition
 
     def _can(
         self, definition: ToolDefinition, context: ToolContext, action: ToolAction
@@ -184,13 +226,20 @@ class ToolRegistryService(IToolRegistry):
     def list_definitions(
         self, context: ToolContext | None = None
     ) -> list[ToolDefinition]:
-        with self._lock:
-            definitions = [t.definition for t in self._tools.values()]
-        if context is not None:
-            definitions = [
-                d for d in definitions if self._can(d, context, ToolAction.DISCOVER)
-            ]
-        return sorted(definitions, key=lambda d: str(d.id))
+        definitions = {
+            str(listing.definition.id): listing.definition
+            for listing in self.list_local(context)
+        }
+        if self._catalog is not None:
+            for listing in self._catalog.list_tools():
+                definition = listing.definition
+                if str(definition.id) in definitions:
+                    continue
+                if context is None or self._can(
+                    definition, context, ToolAction.DISCOVER
+                ):
+                    definitions[str(definition.id)] = definition
+        return [definitions[tool_id] for tool_id in sorted(definitions)]
 
     @staticmethod
     def _missing_config(
@@ -206,8 +255,75 @@ class ToolRegistryService(IToolRegistry):
     def availability(
         self, ref: str | ToolRef | ToolId, config: Mapping[str, Any] | None = None
     ) -> ToolAvailability:
-        missing = self._missing_config(self._lookup(ref), config)
+        try:
+            tool = self._lookup(ref)
+        except ToolNotFoundError:
+            if self._catalog is None:
+                raise
+            # The owner's own values are never sent: keys it lacks, less the ones
+            # this caller provides.
+            missing = tuple(
+                key
+                for key in self._remote(ref).availability.missing_config
+                if (config or {}).get(key) in (None, "")
+            )
+            return ToolAvailability(available=not missing, missing_config=missing)
+        missing = self._missing_config(tool, config)
         return ToolAvailability(available=not missing, missing_config=missing)
+
+    # --------------------------------------------------- what this process holds
+    def get_local(
+        self, ref: str | ToolRef | ToolId, context: ToolContext | None = None
+    ) -> ToolListing:
+        """A tool this process holds, with its availability. Never reads the catalog.
+
+        With a ``context``, only a tool it may discover counts (the highest
+        version of those, for a reference without one); one it may not is
+        reported as not found, so a caller cannot tell it exists.
+        """
+        tool = self._lookup(
+            ref,
+            None
+            if context is None
+            else lambda definition: self._can(definition, context, ToolAction.DISCOVER),
+        )
+        missing = self._missing_config(tool, None)
+        return ToolListing(
+            definition=tool.definition,
+            availability=ToolAvailability(
+                available=not missing, missing_config=missing
+            ),
+        )
+
+    def list_local(
+        self,
+        context: ToolContext | None = None,
+        filter: ToolFilter | None = None,
+    ) -> list[ToolListing]:
+        """The tools this process holds that ``context`` may discover (``None``:
+        all), sorted by id. Never reads the catalog."""
+        with self._lock:
+            tools = list(self._tools.values())
+        listings = []
+        for tool in tools:
+            if context is not None and not self._can(
+                tool.definition, context, ToolAction.DISCOVER
+            ):
+                continue
+            if filter is not None and not filter.matches(tool.definition):
+                continue
+            missing = self._missing_config(tool, None)
+            if filter is not None and filter.available_only and missing:
+                continue
+            listings.append(
+                ToolListing(
+                    definition=tool.definition,
+                    availability=ToolAvailability(
+                        available=not missing, missing_config=missing
+                    ),
+                )
+            )
+        return sorted(listings, key=lambda listing: str(listing.definition.id))
 
     # ------------------------------------------------------------ resolution
     def check_access(
@@ -216,7 +332,12 @@ class ToolRegistryService(IToolRegistry):
         context: ToolContext,
         action: ToolAction,
     ) -> ToolDefinition:
-        definition = self._lookup(ref).definition
+        try:
+            definition = self._lookup(ref).definition
+        except ToolNotFoundError:
+            if self._catalog is None:
+                raise
+            definition = self._remote(ref).definition
         self._access_policy.check(definition, context, action)
         return definition
 
@@ -227,7 +348,16 @@ class ToolRegistryService(IToolRegistry):
         config: Mapping[str, Any] | None = None,
         action: ToolAction = ToolAction.EXECUTE,
     ) -> object:
-        tool = self._lookup(ref)
+        try:
+            tool = self._lookup(ref)
+        except ToolNotFoundError:
+            if self._catalog is None:
+                raise
+            listing = self._remote(ref)
+            raise ToolResolutionError(
+                f"Tool '{listing.definition.id}' is published by another engine "
+                "process: this one can find it but cannot build or run it."
+            ) from None
         definition = tool.definition
         self._access_policy.check(definition, context, action)
         missing = self._missing_config(tool, config)
@@ -332,6 +462,73 @@ class ToolRegistryService(IToolRegistry):
     ) -> list[ToolSearchResult]:
         if limit <= 0:
             raise ValueError("limit must be a positive integer")
+        if self._catalog is None:
+            return self.search_local(
+                query, context, limit=limit, min_score=min_score, where=where
+            )
+        context = context or ToolContext()
+        local: list[ToolSearchResult] = []
+        if self._tools:
+            try:
+                local = self.search_local(
+                    query, context, limit=limit, min_score=min_score, where=where
+                )
+            except ToolSearchUnavailableError:
+                # This process cannot rank its own tools; the catalog's search
+                # decides, and raises the same error when it cannot either.
+                logger.debug("Tool registry: no local search backend; catalog only")
+        remote = self._search_catalog(query, context, limit, min_score, where)
+        merged = {result.tool_id: result for result in remote}
+        merged.update({result.tool_id: result for result in local})
+        ranked = sorted(merged.values(), key=lambda result: -result.score)
+        return ranked[:limit]
+
+    def _search_catalog(
+        self,
+        query: str,
+        context: ToolContext,
+        limit: int,
+        min_score: float | None,
+        where: Callable[[ToolDefinition], bool] | None,
+    ) -> list[ToolSearchResult]:
+        """The catalog's best matches this caller may see, less what this process
+        holds (it ranks those itself). The catalog applied its own access rules to
+        this process; the caller's are applied here, so ask for more until the
+        limit is met or the catalog has no more."""
+        assert self._catalog is not None
+        fetch = min(max(limit * 2, limit + 5), MAX_CATALOG_SEARCH_LIMIT)
+        while True:
+            hits = self._catalog.search_tools(query, fetch, min_score)
+            kept: list[ToolSearchResult] = []
+            for hit in hits:
+                definition = hit.definition
+                with self._lock:
+                    held = hit.tool_id in self._tools
+                if held or not self._can(definition, context, ToolAction.DISCOVER):
+                    continue
+                if where is not None and not where(definition):
+                    continue
+                kept.append(hit)
+            if (
+                len(kept) >= limit
+                or len(hits) < fetch
+                or fetch >= MAX_CATALOG_SEARCH_LIMIT
+            ):
+                return kept[:limit]
+            fetch = min(fetch * 2, MAX_CATALOG_SEARCH_LIMIT)
+
+    def search_local(
+        self,
+        query: str,
+        context: ToolContext | None = None,
+        limit: int = 5,
+        min_score: float | None = None,
+        where: Callable[[ToolDefinition], bool] | None = None,
+        filter: ToolFilter | None = None,
+    ) -> list[ToolSearchResult]:
+        """Search the tools this process holds. Never reads the catalog."""
+        if limit <= 0:
+            raise ValueError("limit must be a positive integer")
         embedder, index = self._require_search()
         context = context or ToolContext()
         resolved = embedder.resolve()
@@ -363,7 +560,11 @@ class ToolRegistryService(IToolRegistry):
                     continue
                 if where is not None and not where(tool.definition):
                     continue
+                if filter is not None and not filter.matches(tool.definition):
+                    continue
                 missing = self._missing_config(tool, None)
+                if filter is not None and filter.available_only and missing:
+                    continue
                 results.append(
                     ToolSearchResult(
                         tool_id=hit.id,

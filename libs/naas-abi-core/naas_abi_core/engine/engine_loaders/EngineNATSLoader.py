@@ -28,6 +28,10 @@ secret is skipped when every adapter is one.
 
 Model registry endpoints resolve metadata and execute inference at the owner;
 clients receive LangChain proxies instead of serialized live model objects.
+
+The tool registry is exposed read only (list, get, search): the serving engine
+answers from its own registry, and other engines read it (docs/adr/
+20261021_tool-catalog-over-nats.md). It never runs a tool.
 """
 
 from __future__ import annotations
@@ -462,5 +466,22 @@ class EngineNATSLoader:
             )
             nats_runtime.run_coro(primary_models.start(nc))
             started.append(primary_models)
+
+        if services.tool_registry_available():
+            # The catalog this process serves: what its own modules published.
+            # It answers from the registry's local view, so the registry's own
+            # catalog reads (a standby engine, until now) cannot loop back here.
+            from naas_abi_core.services.tool_registry.adapters.primary.tool_registry__primary_adapter__NATS import (
+                ToolRegistryPrimaryAdapterNATS,
+            )
+
+            primary_tools = ToolRegistryPrimaryAdapterNATS(
+                services.tool_registry,
+                nats_config.jwt_secret,
+                module_scopes=nats_config.tool_registry.module_scopes,
+            )
+            nats_runtime.run_coro(primary_tools.start(nc))
+            started.append(primary_tools)
+            logger.debug("EngineNATSLoader: exposed tool_registry over NATS")
 
         return started

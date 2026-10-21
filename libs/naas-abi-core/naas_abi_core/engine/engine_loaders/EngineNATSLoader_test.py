@@ -174,6 +174,7 @@ def _services(available: dict[str, object] | None = None) -> MagicMock:
         if adapter is not None:
             getattr(services, flag).adapter = adapter
     services.model_registry_available.return_value = "model_registry" in available
+    services.tool_registry_available.return_value = "tool_registry" in available
     services.cache_available.return_value = False
     return services
 
@@ -396,6 +397,42 @@ def test_expose_model_registry_owner(monkeypatch):
     assert len(started) == 1
     assert isinstance(started[0], ModelRegistryNATS)
     assert started[0].registry is services.model_registry
+
+
+def test_expose_tool_registry_owner(monkeypatch):
+    from naas_abi_core.services.tool_registry.adapters.primary.tool_registry__primary_adapter__NATS import (
+        ToolRegistryPrimaryAdapterNATS,
+    )
+
+    config = SimpleNamespace(
+        nats=NATSConfiguration(
+            jwt_secret="x" * 32,
+            tool_registry={"module_scopes": {"crm_module": ["crm:read"]}},
+        )
+    )
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.get_connection", MagicMock())
+    monkeypatch.setattr(
+        "naas_abi_core.engine.nats_runtime.run_coro",
+        MagicMock(side_effect=lambda coro, *a, **k: coro.close()),
+    )
+    services = _services({"tool_registry": True})
+    started = EngineNATSLoader(config).expose_services(services)
+    assert len(started) == 1
+    assert isinstance(started[0], ToolRegistryPrimaryAdapterNATS)
+    assert started[0]._registry is services.tool_registry
+    assert started[0]._module_scopes == {"crm_module": frozenset({"crm:read"})}
+
+
+def test_module_scopes_name_modules_not_the_engines_own_processes():
+    from pydantic import ValidationError
+
+    assert NATSConfiguration(jwt_secret="x" * 32).tool_registry.module_scopes == {}
+    for identity in ("engine", "api", "dagster", ""):
+        with pytest.raises(ValidationError):
+            NATSConfiguration(
+                jwt_secret="x" * 32,
+                tool_registry={"module_scopes": {identity: ["s"]}},
+            )
 
 
 def test_streaming_configuration_is_optional_and_validated():

@@ -5,7 +5,9 @@
 ## Purpose
 
 Process-local catalog of the tools the modules *this process loads* publish
-(one registry per process, with NATS too: see "Engine wiring"). Each tool has a serialisable
+(one registry per process, with NATS too: see "Engine wiring"), whose catalog
+reads also cover the serving engine's tools on an engine that does not serve
+("Catalog over NATS"). Each tool has a serialisable
 **definition** (stable id, description, input contract, owning module, config
 requirements, required scopes) and a runtime **binding** that builds an
 executable tool for a caller. Agents are composed from definitions
@@ -22,13 +24,16 @@ may omit the version (`ns/name`) and then resolves to the highest version.
 
 ```
 tool_registry/
-├── ToolRegistryPort.py        # ToolId/ToolRef, ToolDefinition, ToolContext, ToolBinding, ports, exceptions
-├── ToolRegistryService.py     # in-memory registry + lazy fingerprinted indexing + search
+├── ToolRegistryPort.py        # ToolId/ToolRef, ToolDefinition, ToolContext, ToolBinding, ToolListing/ToolFilter, ports, exceptions
+├── ToolRegistryService.py     # in-memory registry + lazy fingerprinted indexing + search + optional catalog
 ├── ToolAccessPolicy.py        # ScopeToolAccessPolicy (default)
 ├── ToolRegistryFactory.py     # InMemory(...), VectorStore(...)
 ├── adapters/
+│   ├── tool_registry_nats_codec.py            # registry objects <-> abi.tool_registry.v1 messages, request limits
 │   ├── primary/LangChainToolPublisher.py      # ToolPublisher, StaticToolBinding, FactoryToolBinding
+│   ├── primary/tool_registry__primary_adapter__NATS.py  # the serving engine's catalog over NATS (read only)
 │   └── secondary/
+│       ├── ToolRegistrySecondaryAdapterNATSClient.py  # IToolCatalogPort over NATS (client / standby engines)
 │       ├── InMemoryToolIndexAdapter.py        # numpy cosine index (default)
 │       ├── VectorStoreToolIndexAdapter.py     # index in the engine's VectorStoreService (UUID point ids)
 │       └── ModelRegistryEmbedderAdapter.py    # embeddings from the model registry (batches of 1024, one lookup per sync)
@@ -52,6 +57,7 @@ class IToolRegistry:
     search_tools(query, context=None, limit=5, min_score=None, where=None) -> list[ToolSearchResult]
     sync_index() -> int                                   # definitions (re-)embedded
 
+class IToolCatalogPort:    list_tools(filter), get_tool(ref), search_tools(query, limit, min_score, filter)   # another process's catalog, read only
 class IToolIndexPort:      prepare(model_key), fingerprints(ids), upsert(entries), delete(ids), search(vector, limit), size(),
                            collect_garbage(keep_ids)          # the writer's cleanup, never automatic
 class IToolEmbedderPort:   model_key, embed_documents(texts), embed_query(text), resolve() -> ResolvedEmbedder  # model looked up once
@@ -91,6 +97,17 @@ Exceptions (all `ToolRegistryError`): `InvalidToolReferenceError`,
   backend (the engine does it in `EngineConfiguration_ToolRegistryService.wire`).
   `collect_leftovers=True` lets the first sync call `index.collect_garbage`;
   set it only for the sole writer of the index's storage.
+- **Catalog.** `configure_catalog(IToolCatalogPort | None)` (the engine does it
+  by role, see below). With one, `get_definition`, `list_definitions`,
+  `availability`, `check_access` and `search_tools` cover this process's tools
+  and the catalog's: a tool held here shadows the catalog's of the same id and a
+  reference resolves here first; `search_tools` merges both rankings by score,
+  and the caller's `context` and `where` apply to what the catalog returned
+  (it asks for more, doubling up to 50, until the limit is met). `resolve` never
+  leaves the process: for a tool only the catalog shows it raises
+  `ToolResolutionError`. `get_local`, `list_local` and `search_local` read this
+  process only: the NATS primary answers from them, so it never calls itself.
+  `search_local` takes a `ToolFilter` (modules, tags, `available_only`).
 
 ## Publishing tools from a module
 
@@ -119,24 +136,51 @@ Example: `naas_abi_marketplace/applications/github/__init__.py`.
 
 Always loaded (like the model registry) and exempt from
 `ModuleDependencies`: `engine.services.tool_registry`, in every role. The
-registry holds Python bindings, so it is **one per process** and never a NATS
-service (`sysadmin.NATS_SERVICE_NAMES` has it as `None`); the modules each
-process loads publish to that process's registry, after `on_initialized` and
-before module jobs start.
+registry holds Python bindings, so it is **one per process**: bindings never
+cross NATS, only its read-only catalog does (a micro service of the serving
+engine, `tool_registry`); the modules each process loads publish to that
+process's registry, after `on_initialized` and before module jobs start.
 
 | Role | Registry | Search backend (`ToolIndexRole`) |
 |---|---|---|
 | NATS off | loaded by `EngineServiceLoader`, wired there | engine embedder + vector store; `PEER`: writes the shared index, collects nothing |
-| serving | the owner's, carried into `module_services` by `EngineNATSDependencies.build()` | NATS facades; `SOLE_WRITER`: shared index, collects leftovers |
-| standby | same | NATS facades; `LOCAL` (in-memory index) until the handover, then `SOLE_WRITER` |
-| client | created and wired by `Engine.__nats_clients()` / `build_clients()` | NATS facades; `LOCAL` |
+| serving | the owner's, carried into `module_services` by `EngineNATSDependencies.build()`; serves the catalog | NATS facades; `SOLE_WRITER`: shared index, collects leftovers |
+| standby | same; reads the serving engine's catalog until the handover | NATS facades; `LOCAL` (in-memory index) until the handover, then `SOLE_WRITER` |
+| client | created and wired by `Engine.__nats_clients()` / `build_clients()`; reads the serving engine's catalog | NATS facades; `LOCAL` |
 
 `EngineNATSDependencies.wire_tool_registry(configuration, role)` wires the
 search backend to the facades *after* `build()`, not to the owners; `Engine`
 re-wires on fencing (`LOCAL`), restore and handover (`SOLE_WRITER`).
 `EngineProxy.services.tool_registry` and `AgentComposerFactory.FromEngine` work
-in all roles. A tool is visible only in the process that loaded its module
-until remote tool contracts exist (later steps of the NATS work).
+in all roles. Publication and `resolve` are local in every role; a client or
+standby engine's reads also cover the serving engine's catalog.
+
+### Catalog over NATS
+
+`abi.svc.tool_registry.v1` (`naas_abi_proto/tool_registry/v1/tool_registry.proto`,
+micro service `tool_registry`, ADR `docs/adr/20261021_tool-catalog-over-nats.md`)
+is **read only**: `list_tools`, `get_tool`, `search_tools`. The serving engine
+starts `ToolRegistryPrimaryAdapterNATS` (in `EngineNATSLoader.expose_services`),
+which answers from `*_local` and never resolves a binding or sends a
+configuration value. Other engines read it with
+`ToolRegistrySecondaryAdapterNATSClient`, which `wire_tool_registry` sets as the
+registry's catalog for `ToolIndexRole.LOCAL` (client, standby before the
+handover) and removes for `SOLE_WRITER` and `PEER`.
+
+- **Scopes come from the verified service identity only** (`caller_context`):
+  the engine's own processes (`api`, `engine`, `dagster`) hold every scope the
+  catalog uses; an SDK module holds `nats.tool_registry.module_scopes[<module
+  id>]`, none by default. The request's `CallContext` is not read and the proto
+  has no scope field. A tool the caller cannot discover is `TOOL_NOT_FOUND`.
+- **Validation is on the server** (no Protovalidate): limits in
+  `tool_registry_nats_codec.py` (query 2000 characters, search limit 1..50,
+  list limit 1..200, 32 module and 16 tag filters, reference 512), out of range
+  is `INVALID_ARGUMENT`. A reply stays under half the broker's `max_payload`.
+- Never put a binding value, a default config or a secret in a message: the codec
+  (`definition_to_pb`) maps a `ToolDefinition` only; requirements carry key names.
+- Tests: `adapters/primary/..._NATS_test.py` (no broker),
+  `ToolRegistryCatalog_test.py` (registry with a catalog) and, on a real broker,
+  `engine/Engine_tool_registry_nats_integration_test.py`.
 
 **Several processes on one vector store** (the sqlite_vec dev default shares a
 file between `api` and `dagster`): an engine without NATS writes the shared
@@ -172,6 +216,8 @@ ToolRegistryFactory.VectorStore(
 ## Tests
 
 ```bash
+# the catalog over a real broker (nats-server on PATH; fails instead of skipping):
+ABI_REQUIRE_NATS_SERVER=1 uv run pytest libs/naas-abi-core/naas_abi_core/engine/Engine_tool_registry_nats_integration_test.py -o addopts=""
 uv run pytest libs/naas-abi-core/naas_abi_core/services/tool_registry -o addopts=""
 # real embeddings (skips unless Ollama serves nomic-embed-text):
 uv run pytest libs/naas-abi-core/naas_abi_core/services/tool_registry/tests/ToolRegistry_real_embedding_smoke_test.py -o addopts=""

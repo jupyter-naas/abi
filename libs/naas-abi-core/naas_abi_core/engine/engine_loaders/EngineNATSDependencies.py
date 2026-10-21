@@ -119,6 +119,7 @@ class EngineNATSDependencies:
     def __init__(self, config: NATSConfiguration):
         self.config = config
         self.clients: list[Any] = []
+        self._tool_catalog: Any = None
 
     def _client(self, cls, **kwargs):
         client = cls(
@@ -251,8 +252,9 @@ class EngineNATSDependencies:
             values["model_registry"] = models
         if owners.tool_registry_available():
             # One registry per process, never a client: modules publish to it
-            # in this process and agents composed here read it. Only its search
-            # backend crosses NATS (``wire_tool_registry``).
+            # in this process and agents composed here read it. Its search
+            # backend and, off the serving engine, its catalog reads cross NATS
+            # (``wire_tool_registry``).
             values["tool_registry"] = owners.tool_registry
         dependencies = IEngine.Services(**values)
         if dependencies.triple_store_available():
@@ -270,14 +272,36 @@ class EngineNATSDependencies:
     def wire_tool_registry(
         self, configuration: ToolRegistryServiceConfiguration, role: ToolIndexRole
     ) -> None:
-        """Give this process's registry its search backend.
+        """Give this process's registry its search backend and its catalog.
 
         After ``build`` or ``build_clients``, so the embedding model and the
         vector store are the facades modules use: their calls cross NATS and
         reach the serving engine's owners, as an SDK module's would.
+
+        Only the serving engine reads its own registry alone: any other role
+        (a client engine, a standby one before its handover) also reads the
+        serving engine's catalog, through ``abi.svc.tool_registry.v1``.
         """
         services = self.module_services
         configuration.wire(services.tool_registry, services, role)
+        services.tool_registry.configure_catalog(
+            self._catalog() if role is ToolIndexRole.LOCAL else None
+        )
+
+    def _catalog(self):
+        if self._tool_catalog is None:
+            from naas_abi_core.services.tool_registry.adapters.secondary.ToolRegistrySecondaryAdapterNATSClient import (
+                ToolRegistrySecondaryAdapterNATSClient,
+            )
+
+            self._tool_catalog = ToolRegistrySecondaryAdapterNATSClient(
+                self.config.nats_url,
+                self.config.jwt_secret,
+                # A search may wait for the serving engine to embed its tools.
+                timeout_seconds=max(self.config.client_timeout_seconds, 60.0),
+            )
+            self.clients.append(self._tool_catalog)
+        return self._tool_catalog
 
     def _secret_routes(
         self, routes: Sequence[ISecretAdapter | None]
