@@ -37,3 +37,78 @@ def test_base64_secret(base64_secret_naas):
     base64_secret_naas.remove("test")
 
     naas_secret.remove(base64_secret_key)
+
+
+class _MemorySecrets:
+    """A backend that keeps text as written, like a remote secret store."""
+
+    def __init__(self):
+        self.values: dict[str, str] = {}
+
+    def get(self, key, default=None):
+        return self.values.get(key, default)
+
+    def set(self, key, value):
+        self.values[key] = value
+
+    def remove(self, key):
+        self.values.pop(key, None)
+
+    def list(self):
+        return dict(self.values)
+
+
+@pytest.fixture
+def bundle():
+    from naas_abi_core.services.secret.adaptors.secondary.Base64Secret import (
+        Base64Secret,
+    )
+
+    return Base64Secret(_MemorySecrets(), "BUNDLE")
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        'a"b',
+        "a'b",
+        "back\\slash",
+        "ends with backslash\\",
+        "line\nbreak",
+        "carriage\rreturn",
+        "tab\there",
+        'a"\nNATS_JWT_SECRET="attacker',
+        "${ENGINE_ONLY}",
+        "$ENGINE_ONLY",
+        "# not a comment",
+        "",
+    ],
+)
+def test_a_value_round_trips_and_adds_no_key(bundle, monkeypatch, value):
+    monkeypatch.setenv("ENGINE_ONLY", "engine-only-value")
+    bundle.set("FIRST", "1")
+
+    bundle.set("MOD_STATE", value)
+
+    assert bundle.get("MOD_STATE") == value
+    assert bundle.list() == {"FIRST": "1", "MOD_STATE": value}
+    bundle.remove("FIRST")
+    assert bundle.list() == {"MOD_STATE": value}
+
+
+def test_a_bundle_never_interpolates_a_value_from_the_environment(bundle, monkeypatch):
+    monkeypatch.setenv("ENGINE_ONLY", "engine-only-value")
+    bundle.set("EARLIER", "first")
+    bundle.set("MOD_STATE", "${EARLIER}-${ENGINE_ONLY}")
+
+    assert bundle.get("MOD_STATE") == "${EARLIER}-${ENGINE_ONLY}"
+
+
+@pytest.mark.parametrize("key", ["A B", "A=B", 'A"', "A\nB", "A#", "$A", ""])
+def test_a_key_that_cannot_be_stored_as_one_is_refused(bundle, key):
+    bundle.set("KEPT", "1")
+
+    with pytest.raises(ValueError):
+        bundle.set(key, "value")
+
+    assert bundle.list() == {"KEPT": "1"}

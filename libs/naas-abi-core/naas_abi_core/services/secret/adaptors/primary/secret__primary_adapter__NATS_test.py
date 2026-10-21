@@ -8,6 +8,7 @@ against a minimal fake ``Request`` that records whatever gets passed to
 import asyncio
 import threading
 
+import pytest
 from naas_abi_core.engine.nats_auth import (
     issue_module_token,
     issue_service_token,
@@ -489,3 +490,132 @@ def test_grants_naming_a_first_party_identity_are_refused():
         SecretPrimaryAdapterNATS(_StubAdapter(), SECRET, module_read={"api": ["A"]})
     with pytest.raises(ValueError, match="first-party"):
         SecretPrimaryAdapterNATS(_StubAdapter(), SECRET, module_write={"engine": ["A"]})
+
+
+# ---------------------------------------------------------------------------
+# Values a module writes are opaque: the backends parse stored text, so a value
+# that could be read as syntax (interpolation, quoting, a new line) is refused.
+# ---------------------------------------------------------------------------
+
+SYNTAX_VALUES = [
+    "${NATS_JWT_SECRET}",
+    "$NATS_JWT_SECRET",
+    "price in $",
+    "it's",
+    'say "hi"',
+    "back\\slash",
+    'a"\nNATS_JWT_SECRET="attacker',
+    "line\nbreak",
+    "carriage\rreturn",
+]
+
+
+def _set(adapter, token: str, key: str, value: str) -> secret_pb2.SetResponse:
+    response = secret_pb2.SetResponse()
+    response.ParseFromString(
+        _call(adapter._handle_set, secret_pb2.SetRequest, token, key=key, value=value)
+    )
+    return response
+
+
+@pytest.mark.parametrize("value", SYNTAX_VALUES)
+def test_a_module_cannot_write_a_value_that_could_be_read_as_syntax(value):
+    stub = _stub_with_engine_secrets()
+    adapter = _grants_adapter(stub)
+
+    response = _set(adapter, _module_token(), "BILLING_CACHE", value)
+
+    assert response.error.code == "INVALID_ARGUMENT"
+    assert response.error.retryable is False
+    assert stub.secrets["BILLING_CACHE"] == "c"
+    # it names no secret, the value, or the syntax it saw
+    for text in ("NATS_JWT_SECRET", "attacker", "OPENAI_API_KEY"):
+        assert text not in response.error.message
+
+
+@pytest.mark.parametrize("value", SYNTAX_VALUES)
+def test_first_party_processes_write_any_value(value):
+    stub = _stub_with_engine_secrets()
+    adapter = _grants_adapter(stub)
+
+    for identity in ("api", "engine", "dagster"):
+        response = _set(
+            adapter, issue_service_token(identity, SECRET), "BILLING_CACHE", value
+        )
+        assert not response.HasField("error")
+        assert stub.secrets["BILLING_CACHE"] == value
+
+
+@pytest.mark.parametrize(
+    "value", ["", "plain", "with space", "a=b", "a#b", "{x}", "100%", "é日本", "a`b"]
+)
+def test_a_module_writes_ordinary_values(value):
+    stub = _stub_with_engine_secrets()
+    adapter = _grants_adapter(stub)
+
+    response = _set(adapter, _module_token(), "BILLING_CACHE", value)
+
+    assert not response.HasField("error")
+    assert stub.secrets["BILLING_CACHE"] == value
+
+
+def test_an_ungranted_name_is_denied_before_its_value_is_looked_at():
+    adapter = _grants_adapter(_stub_with_engine_secrets())
+
+    response = _set(adapter, _module_token(), "NATS_JWT_SECRET", "${OPENAI_API_KEY}")
+
+    assert response.error.code == "PERMISSION_DENIED"
+
+
+def _real_secret(tmp_path, monkeypatch, *, base64_bundle: bool):
+    from naas_abi_core.services.secret.adaptors.secondary.Base64Secret import (
+        Base64Secret,
+    )
+    from naas_abi_core.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor import (
+        DotenvSecretSecondaryAdaptor,
+    )
+    from naas_abi_core.services.secret.Secret import Secret
+
+    path = tmp_path / ".env"
+    path.write_text("NATS_JWT_SECRET='orig'\nB64=\n")
+    monkeypatch.delenv("ENGINE_ONLY", raising=False)
+    monkeypatch.setenv("ENGINE_ONLY", "engine-only-value")
+    dotenv = DotenvSecretSecondaryAdaptor(str(path))
+    adapters = [Base64Secret(dotenv, "B64"), dotenv] if base64_bundle else [dotenv]
+    return path, Secret(adapters)
+
+
+def test_a_module_cannot_read_another_secret_through_an_interpolated_value(
+    tmp_path, monkeypatch
+):
+    from naas_abi_core.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor import (
+        DotenvSecretSecondaryAdaptor,
+    )
+
+    path, secret = _real_secret(tmp_path, monkeypatch, base64_bundle=False)
+    adapter = SecretPrimaryAdapterNATS(
+        secret, SECRET, module_read={"m": ["MOD_STATE"]}, module_write={"m": ["MOD_STATE"]}
+    )
+    token = _module_token("m")
+
+    for value in ("${NATS_JWT_SECRET}", "${ENGINE_ONLY}"):
+        assert _set(adapter, token, "MOD_STATE", value).error.code == "INVALID_ARGUMENT"
+
+    # what an engine restart reads back from the file
+    reloaded = DotenvSecretSecondaryAdaptor(str(path))
+    assert reloaded.get("MOD_STATE") is None
+    assert "${" not in path.read_text()
+
+
+def test_a_module_cannot_inject_keys_into_a_base64_bundle(tmp_path, monkeypatch):
+    _, secret = _real_secret(tmp_path, monkeypatch, base64_bundle=True)
+    adapter = SecretPrimaryAdapterNATS(
+        secret, SECRET, module_read={"m": ["MOD_STATE"]}, module_write={"m": ["MOD_STATE"]}
+    )
+    token = _module_token("m")
+
+    for value in ('a"\nNATS_JWT_SECRET="attacker', "${ENGINE_ONLY}"):
+        assert _set(adapter, token, "MOD_STATE", value).error.code == "INVALID_ARGUMENT"
+
+    assert secret.get("NATS_JWT_SECRET") == "orig"
+    assert _get(adapter, token, "MOD_STATE").found.HasField("value") is False

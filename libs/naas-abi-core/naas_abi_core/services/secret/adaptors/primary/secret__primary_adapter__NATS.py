@@ -15,11 +15,14 @@ removes only the secret names an operator granted it (``nats.secret.modules``,
 docs/adr/20261024_secret-service-closed-to-sdk-modules.md). A name it may not
 read is answered as not found and left out of ``list``, so nothing says which
 secrets exist; a write it may not make is PERMISSION_DENIED whether or not the
-name exists.
+name exists. A value a module writes is opaque, never interpolated: one holding ``$``, a
+quote, a backslash or a line break is refused (INVALID_ARGUMENT), because the backends
+parse stored text and would expand it, reading another secret or adding a key.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Mapping, Sequence
 from typing import TypeVar
 
@@ -62,6 +65,12 @@ __all__ = [
     "SUBJECT_PREFIX",
     "SecretPrimaryAdapterNATS",
 ]
+
+# What the backends read as syntax when they parse stored text back: dotenv expands
+# ``${NAME}`` (even inside quotes) from the file and the environment, and quotes,
+# backslashes and line breaks end or extend a value. A value a module writes is
+# opaque, so none of it is accepted.
+_SYNTAX = re.compile(r"[$'\"\\\n\r]")
 
 _RequestT = TypeVar("_RequestT", bound=Message)
 _ResponseT = TypeVar("_ResponseT", bound=Message)
@@ -314,6 +323,17 @@ class SecretPrimaryAdapterNATS(ServicePrimary):
     ) -> secret_pb2.SetResponse:
         if not self._may(self._module_write, identity, req.key):
             return secret_pb2.SetResponse(error=self._denied())
+        if identity not in FIRST_PARTY_IDENTITIES and _SYNTAX.search(req.value):
+            return secret_pb2.SetResponse(
+                error=common_pb2.CallError(
+                    code="INVALID_ARGUMENT",
+                    message=(
+                        "A secret value written by a module may not contain "
+                        "$, quotes, backslashes or line breaks"
+                    ),
+                    retryable=False,
+                )
+            )
         self._adapter.set(req.key, req.value)
         return secret_pb2.SetResponse()
 

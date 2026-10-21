@@ -267,7 +267,9 @@ returns its `default` as if the secret did not exist, `list()` leaves it out, an
 `remove` fail with `RPCError` / `ServiceError` code `PERMISSION_DENIED`: nothing says which
 engine secrets exist. A module that keeps its own credentials in the engine needs a grant for
 each one; keeping them in the module's own environment needs none. Do not grant `write` on a
-secret something else reads. See `docs/adr/20261024_secret-service-closed-to-sdk-modules.md`.
+secret something else reads. A value a module writes is opaque: one with `$`, a quote, a backslash or a
+line break is refused with `INVALID_ARGUMENT` (the engine's backends would parse it; encode such a value,
+for instance base64). See `docs/adr/20261024_secret-service-closed-to-sdk-modules.md`.
 
 ## Facade compatibility boundaries
 

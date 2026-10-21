@@ -91,8 +91,9 @@ there (those are called on their module). Keep its DTOs aligned with `tool_regis
 `services/secret.py` (`SecretService`) reaches the engine's secret service, which is closed to
 modules (ADR docs/adr/20261024_secret-service-closed-to-sdk-modules.md): the rights are the exact names
 of `nats.secret.modules.<id>.read` / `.write`, from the verified identity, denied by default. An
-ungranted `get` returns the default (not found), `list` leaves the name out, `set` / `remove` raise
-`PERMISSION_DENIED`. The standalone demo's `secret` exercise grants and checks it.
+ungranted `get` returns the default (not found), `list` leaves the name out, an ungranted `set` /
+`remove` raises `PERMISSION_DENIED`. A value a module writes is opaque, never interpolated: one with
+`$`, a quote, a backslash or a line break is `INVALID_ARGUMENT`. The standalone demo's `secret` exercise grants and checks it.
 
 A module can serve tools (`tools.py` descriptors, `tool_host.py`, `BaseModule.tools`/`expose_tool`/
 `authorize_tool`, ADR docs/adr/20261022_remote-module-tools.md): `ToolDescriptor`s go in the discovery

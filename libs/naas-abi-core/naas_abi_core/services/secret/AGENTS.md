@@ -126,6 +126,13 @@ nats:
       my_company_module: {read: [MY_COMPANY_API_KEY], write: [MY_COMPANY_STATE]}
 ```
 
+Values a module writes are opaque and never interpolated: a `set` from a non-first-party identity
+whose value has `$`, a quote, a backslash or a line break is `INVALID_ARGUMENT`, because the
+backends parse stored text back (the dotenv reader expands `${NAME}`; a base64 bundle could gain
+a key). `Base64Secret` also escapes what it writes and reads its bundle with `interpolate=False`,
+and refuses keys that could not stay one key. `dotenv` keeps interpolating what it reads (operators'
+files use it); the primary is the boundary.
+
 `read` allows `get` and shows the name in `list`; `write` allows `set` and `remove`; neither
 implies the other. An ungranted `get` is "not found" and `list` leaves the name out, so nothing
 says which secrets exist; an ungranted `set` / `remove` is `PERMISSION_DENIED`, the same for

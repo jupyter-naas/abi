@@ -39,4 +39,4 @@ async def main(transport):
 ## Caveats
 - All methods are `async` and must be awaited.
 - Request/response fields are defined by the protobuf schema; consult `secret_pb2` for exact message structure.
-- The engine's secret service is closed to SDK modules: a module's token reads and writes only the names an operator granted under `nats.secret.modules.<module id>`. An ungranted `get` answers "not found" (unset value), `list` omits the name, and `set`/`remove` return a `PERMISSION_DENIED` error. See `docs/adr/20261024_secret-service-closed-to-sdk-modules.md`.
+- The engine's secret service is closed to SDK modules: a module's token reads and writes only the names an operator granted under `nats.secret.modules.<module id>`. An ungranted `get` answers "not found" (unset value), `list` omits the name, and `set`/`remove` return a `PERMISSION_DENIED` error. A value a module writes may not contain `$`, quotes, backslashes or line breaks (`INVALID_ARGUMENT`). See `docs/adr/20261024_secret-service-closed-to-sdk-modules.md`.

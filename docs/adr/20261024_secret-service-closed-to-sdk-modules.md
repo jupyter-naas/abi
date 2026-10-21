@@ -75,6 +75,33 @@ uses. The primary refuses first-party keys too, for code that builds it directly
 
 A module therefore learns nothing about the engine's secrets beyond its own grants.
 
+### Values a module writes are opaque
+
+A grant on a name is not enough if the *value* can reach other names. The backends store
+text and parse it back: the `dotenv` adapter's reader expands `${NAME}` (even inside quotes)
+from the file and the process environment, and `Base64Secret` wrote its bundle unescaped and
+read it with the same expansion. A module granted `write` and `read` on one name could
+`set(NAME, "${NATS_JWT_SECRET}")`, and after the next load of the `.env` read the project secret
+back through `get(NAME)` (with `base64`, at once). A value with a quote and a line break could add
+a whole `NATS_JWT_SECRET="..."` line to the bundle, poisoning what first-party code reads.
+
+So the boundary and the adapter each close it:
+
+- **The primary refuses**, for a non-first-party identity, a `set` whose value holds `$`, `'`, `"`,
+  a backslash, a line break or a carriage return: `INVALID_ARGUMENT`, with one message that names no
+  secret and echoes nothing of the value. The grant is checked first, so an ungranted name still
+  answers `PERMISSION_DENIED`. First-party callers are unaffected. Any other character is accepted
+  (spaces, `=`, `#`, braces, non-ASCII).
+- **`Base64Secret` is safe by itself**: it escapes `\`, `"` and line breaks when it writes, reads
+  the bundle with `interpolate=False` (nothing in a bundle the code wrote is interpolated), and
+  refuses a key that could not stay one key (whitespace, `=`, quotes, `#`, `$`).
+- **The `dotenv` adapter keeps interpolating** what it reads. Operators' `.env` files rely on
+  `${NAME}`, and a first-party value is trusted. The boundary check above is what keeps a module's
+  value out of it; a test pins both sides.
+
+A module that needs such a character in a value (a password with `$`) cannot store it in the
+engine: encode it (base64 or hex) or keep it in the module's own environment.
+
 ### Not changed
 
 - The wire contract (`secret.proto`): `PERMISSION_DENIED` is already a `CallError` code, and a
@@ -97,6 +124,9 @@ A module therefore learns nothing about the engine's secrets beyond its own gran
 - **Do not grant `write` on a name that a tool run by a module takes from `invoke.modules.<id>.secrets`
   or that other components read.** A module can replace the value, so whoever reads it next uses
   what the module wrote. `write` is for the module's own state.
+- Values are opaque, never expanded: nothing a module writes can read another secret, and nothing
+  it writes can add a key. A module-written value that an operator renders into `config.yaml`
+  (`{{ secret.NAME }}`) still lands in the config text: do not grant `write` on such a name.
 - A granted `read` hands the module the *value*: the module can keep or leak it. Grant least
   privilege, a dedicated secret per module rather than the engine's provider keys.
 - Tokens signed with the project secret (held by first-party processes only) can still assert

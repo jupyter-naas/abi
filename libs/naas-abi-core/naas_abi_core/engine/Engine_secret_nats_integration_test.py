@@ -242,3 +242,59 @@ def test_the_engines_own_processes_keep_every_secret(serving, broker):
             assert set(ENGINE_SECRETS) <= set(client.list())
         finally:
             client.close()
+
+
+SYNTAX_VALUES = [
+    "${NATS_JWT_SECRET}",
+    "$OPENAI_API_KEY",
+    'a"\nNATS_JWT_SECRET="attacker',
+    "it's",
+    "back\\slash",
+]
+
+
+def test_a_module_cannot_reach_another_secret_through_a_value_it_writes(
+    serving, broker
+):
+    """The backend parses what it stored, expanding ``${NAME}`` from the file and the
+    environment when the engine next loads its ``.env``: the value is refused instead."""
+    from naas_abi_core.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor import (
+        DotenvSecretSecondaryAdaptor,
+    )
+    from naas_abi_sdk import RPCError
+
+    async def scenario(client):
+        get, _, set_, _ = secret_calls(client)
+        refused = {}
+        for value in SYNTAX_VALUES:
+            try:
+                await set_("PARTNER_STATE", value)
+            except RPCError as exc:
+                refused[value] = exc.code
+        await set_("PARTNER_STATE", "plain-new-state")
+        return refused, await get("PARTNER_STATE")
+
+    refused, state = as_module(broker, GRANTED, scenario)
+
+    assert refused == {value: "INVALID_ARGUMENT" for value in SYNTAX_VALUES}
+    assert state == "plain-new-state"
+    # what an engine restart reads back from the file
+    reloaded = DotenvSecretSecondaryAdaptor(str(serving / ".env"))
+    assert reloaded.get("PARTNER_STATE") == "plain-new-state"
+    assert reloaded.get("NATS_JWT_SECRET") == SECRET
+    assert "${" not in (serving / ".env").read_text()
+
+
+def test_the_engines_own_processes_may_still_write_any_value(serving, broker):
+    from naas_abi_core.services.secret.adaptors.secondary.SecretSecondaryAdapterNATSClient import (
+        SecretSecondaryAdapterNATSClient,
+    )
+
+    client = SecretSecondaryAdapterNATSClient(
+        login(broker, "abi", PASSWORDS["abi"]), SECRET, "api"
+    )
+    try:
+        client.set("ENGINE_NOTE", 'it\'s "quoted"')
+        assert client.get("ENGINE_NOTE") == 'it\'s "quoted"'
+    finally:
+        client.close()
