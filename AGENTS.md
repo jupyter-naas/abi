@@ -247,7 +247,7 @@ abi stack start
 
 ### Deploying with Dokploy
 
-`abi deploy dokploy --domain <domain> [--coding] [--wildcard-cert-resolver <name>]` renders `docker-compose.dokploy.yml`, `config.dokploy.yaml` and a gitignored `.env.dokploy` for a Dokploy server: Traefik labels instead of Caddy, no host ports, `abi` built from the project `Dockerfile`. Code: `libs/naas-abi-cli/naas_abi_cli/cli/deploy/dokploy.py`, template in `deploy/templates/dokploy/`, tests in `deploy/dokploy_test.py`. Guide: `docs/site/docs/user-guide/deploy/dokploy.md`; decision: `docs/adr/20261013_dokploy-deployment.md`.
+`abi deploy dokploy --domain <domain> [--coding] [--wildcard-cert-resolver <name>]` renders `docker-compose.dokploy.yml`, `config.dokploy.yaml` and a gitignored `.env.dokploy` for a Dokploy server: Traefik labels instead of Caddy, no host ports, `abi` built from the project `Dockerfile`. Code: `libs/naas-abi-cli/naas_abi_cli/cli/deploy/dokploy.py`, template in `deploy/templates/dokploy/`, tests in `deploy/dokploy_test.py`. Guide: https://docs.naas.ai/user-guide/deploy/dokploy.
 
 ## Stack Management
 
@@ -376,8 +376,8 @@ in-process and uses the `bus:` adapter below.
 - Keep changes scoped; avoid broad refactors unless requested.
 - Preserve existing architecture patterns over stylistic rewrites.
 - If unsure, follow nearest module conventions.
-- When a change introduces or updates an architecture-level decision (boundaries, ownership, cross-cutting configuration, major tradeoffs), add/update an ADR in `docs/adr/`.
-- ADR files use `YYYYMMDD_topic.md` naming (e.g. `20260212_apache-jena-fuseki-default-triplestore.md`) and must include at least: Status, Date, Context, Decision, Consequences.
+- When a change introduces or updates an architecture-level decision (boundaries, ownership, cross-cutting configuration, major tradeoffs), write it into the nearest `AGENTS.md` (Decision / Consequences). Do not add narrative docs under `docs/`.
+- Product docs live at https://docs.naas.ai. Do not revive a docs site or ADR tree in this repository.
 
 ## Quick Cheat Sheet
 

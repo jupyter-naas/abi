@@ -21,8 +21,8 @@
   `agent_memory_prune` runs daily.
 - Custom adapters must implement the ports' new abstract methods.
 - Upgrade `naas-abi-core`, `naas-abi` and `naas-abi-cli` together.
-- Guide: [Migrate from 2.x to 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/migrate-to-3.md).
-  Every change: [Breaking changes in 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/breaking-changes-3.md).
+- Guide: [Migrate from 2.x to 3.0](https://docs.naas.ai/user-guide/upgrade/migrate-to-3).
+  Every change: [Breaking changes in 3.0](https://docs.naas.ai/user-guide/upgrade/breaking-changes-3).
 
 ## v2.44.0 (2026-10-20)
 

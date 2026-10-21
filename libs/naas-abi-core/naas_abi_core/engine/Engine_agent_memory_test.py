@@ -75,7 +75,7 @@ def test_an_engine_without_documents_keeps_the_standalone_fallback(
 
 def test_without_nats_postgres_url_keeps_the_2x_memory(tmp_path, monkeypatch):
     # A 2.x deploy's conversations stay in POSTGRES_URL until the NATS
-    # migration copies them (docs/site/docs/upgrade/migrate-to-3.md).
+    # migration copies them (https://docs.naas.ai/user-guide/upgrade/migrate-to-3).
     monkeypatch.setenv("POSTGRES_URL", "postgresql://abi@127.0.0.1:1/abi")
     loaded = engine(tmp_path, monkeypatch, [DocumentService])
     loaded.load()

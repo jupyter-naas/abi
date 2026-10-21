@@ -51,7 +51,7 @@ jobs:
         run: make test-agent-memory-core
 
   # The CLI's own suite, which includes the reference-completeness test: every
-  # command and option has a row in docs/site/docs/user-guide/reference/cli.md.
+  # command and option has a row in https://docs.naas.ai/user-guide/reference/cli.
   cli-tests:
     runs-on: ubuntu-latest
     steps:

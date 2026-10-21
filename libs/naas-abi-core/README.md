@@ -15,7 +15,7 @@ The ABI Library is the core implementation of ABI's concepts, designed to build 
 - **Applications**: Ready-to-use interfaces (REST API, Terminal, MCP Protocol)
 - **NATS mode** (3.0): the engine serves its kernel services on a NATS broker, the bus is JetStream, module jobs replace Dagster, and modules can run in their own process with `naas-abi-sdk`
 
-Upgrading from 2.x: [Migrate from 2.x to 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/migrate-to-3.md) and [Breaking changes in 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/breaking-changes-3.md).
+Upgrading from 2.x: [Migrate from 2.x to 3.0](https://docs.naas.ai/user-guide/upgrade/migrate-to-3) and [Breaking changes in 3.0](https://docs.naas.ai/user-guide/upgrade/breaking-changes-3).
 
 ## Installation
 
@@ -68,8 +68,8 @@ nats:
   handovers); discovery registers remote modules.
 - Agent memory and the activity log live in the Document Service.
 
-Architecture: [NATS and the Kernel Services](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/developer-guide/architecture/nats.md),
-[Remote Modules and Jobs](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/developer-guide/architecture/remote-modules.md).
+Architecture: [NATS and the Kernel Services](https://docs.naas.ai/developer-guide/architecture/nats),
+[Remote Modules and Jobs](https://docs.naas.ai/developer-guide/architecture/remote-modules).
 
 ## Core Architecture
 
@@ -552,7 +552,7 @@ modules:
 ```
 
 The full reference, with every service and the `nats:`, `telemetry:` and
-`dev:` blocks: [Configuration Reference](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/get-started/configuration.md).
+`dev:` blocks: [Configuration Reference](https://docs.naas.ai/user-guide/get-started/configuration).
 
 ## Key Dependencies
 
@@ -623,10 +623,10 @@ MIT License
 
 ## Documentation
 
-- [Install and prerequisites](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/get-started/install.md)
-- [Quickstart](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/get-started/quickstart.md)
-- [Configuration](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/get-started/configuration.md)
-- [Module jobs and scheduling](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/build/modules/module-jobs.md)
-- [Architecture](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/developer-guide/architecture/nats.md)
-- [Contribute to ABI](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/developer-guide/contributing/overview.md)
-- [Testing](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/developer-guide/contributing/testing.md)
+- [Install and prerequisites](https://docs.naas.ai/user-guide/get-started/install)
+- [Quickstart](https://docs.naas.ai/user-guide/get-started/quickstart)
+- [Configuration](https://docs.naas.ai/user-guide/get-started/configuration)
+- [Module jobs and scheduling](https://docs.naas.ai/user-guide/build/modules/module-jobs)
+- [Architecture](https://docs.naas.ai/developer-guide/architecture/nats)
+- [Contribute to ABI](https://docs.naas.ai/developer-guide/contributing/overview)
+- [Testing](https://docs.naas.ai/developer-guide/contributing/testing)

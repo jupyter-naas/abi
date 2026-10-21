@@ -28,6 +28,6 @@ and the corresponding runtime is a separate contract change.
 
 ## Documentation
 
-- [SDK and proto internals](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/developer-guide/sdk-and-proto.md)
-- [Build a Remote Module](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/build/sdk/build-a-remote-module.md)
-- [Releasing](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/developer-guide/releasing/release-process.md)
+- [SDK and proto internals](https://docs.naas.ai/developer-guide/sdk-and-proto)
+- [Build a Remote Module](https://docs.naas.ai/user-guide/build/sdk/build-a-remote-module)
+- [Releasing](https://docs.naas.ai/developer-guide/releasing/release-process)

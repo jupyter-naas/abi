@@ -4,7 +4,7 @@ Dokploy's Traefik is the edge, so the stack routes through Traefik labels on
 the external ``dokploy-network`` instead of the local Caddy service, publishes
 no host port, and builds ``abi`` from the project Dockerfile on each deploy.
 Its values live in Dokploy's Environment tab; this command writes a starting
-set to the gitignored ``.env.dokploy``. See https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/deploy/dokploy.md.
+set to the gitignored ``.env.dokploy``. See https://docs.naas.ai/user-guide/deploy/dokploy.md.
 """
 
 import os
@@ -657,7 +657,7 @@ def _print_next_steps(
     print(
         f"5. Deploy, then sign in at https://{web} with the admin login in {ENV_FILE}."
     )
-    print("Guide: https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/deploy/dokploy.md\n")
+    print("Guide: https://docs.naas.ai/user-guide/deploy/dokploy.md\n")
 
 
 def setup_dokploy_deploy(

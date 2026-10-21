@@ -1,6 +1,6 @@
 """The CLI reference page documents the whole command tree.
 
-Walks the Click tree of `abi` and fails when `docs/site/docs/user-guide/reference/cli.md`
+Walks the Click tree of `abi` and fails when `https://docs.naas.ai/user-guide/reference/cli`
 misses a command or one of its options, or shows a command, an option or a heading
 that does not exist. The same check runs on the `abi ...` examples of every
 hand-written page of the site.
@@ -185,7 +185,7 @@ def test_every_command_has_a_section_on_the_reference_page() -> None:
     sections = _sections(CLI_PAGE.read_text())
     missing = [path for path in _commands() if path not in sections]
     assert not missing, (
-        "commands missing from docs/site/docs/user-guide/reference/cli.md "
+        "commands missing from https://docs.naas.ai/user-guide/reference/cli "
         f"(add a heading like `## `{missing[0]}``): {missing}"
     )
 

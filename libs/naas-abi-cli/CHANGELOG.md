@@ -104,8 +104,8 @@
   `naas-abi-core[dagster,rabbitmq]` extras to `pyproject.toml` (`uv add`).
 - New commands: `abi module key`, `abi agent migrate-memory`,
   `abi agent prune-memory`.
-- Guide: [Migrate from 2.x to 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/migrate-to-3.md).
-  Every change: [Breaking changes in 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/breaking-changes-3.md).
+- Guide: [Migrate from 2.x to 3.0](https://docs.naas.ai/user-guide/upgrade/migrate-to-3).
+  Every change: [Breaking changes in 3.0](https://docs.naas.ai/user-guide/upgrade/breaking-changes-3).
 
 ## v2.28.0 (2026-10-15)
 

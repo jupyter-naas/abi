@@ -33,8 +33,8 @@
 - App link tokens (`POST /api/apps/access-token`) no longer authenticate
   `/api/*`; a user's agent toggle now sticks across config syncs (migration
   `0057_agent_enabled_override`).
-- Guide: [Migrate from 2.x to 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/migrate-to-3.md).
-  Every change: [Breaking changes in 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/breaking-changes-3.md).
+- Guide: [Migrate from 2.x to 3.0](https://docs.naas.ai/user-guide/upgrade/migrate-to-3).
+  Every change: [Breaking changes in 3.0](https://docs.naas.ai/user-guide/upgrade/breaking-changes-3).
 
 ## v2.89.0 (2026-10-20)
 
