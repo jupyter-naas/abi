@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.92.0 (2026-10-21)
+
+### Features
+
+- **workspaces**: Reject feature overrides on personal workspaces
+  ([`8f27a36`](https://github.com/jupyter-naas/abi/commit/8f27a3673c219e892f1ea6a172feee7571a67c61))
+
+
 ## v2.91.0 (2026-10-21)
 
 ### Features
