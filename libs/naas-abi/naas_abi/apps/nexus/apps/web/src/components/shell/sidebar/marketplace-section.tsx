@@ -19,7 +19,7 @@ const TYPE_LINKS = [
 ] as const;
 
 export function MarketplaceSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
-  const { currentWorkspaceId } = useWorkspaceStore();
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const pathname = usePathname();
   const searchParams = useSearchParams();
 

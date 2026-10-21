@@ -155,9 +155,11 @@ function AppDetailView({ mod, onBack }: { mod: OpenAppModule; onBack: () => void
 }
 
 export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
-  const {
-    currentWorkspaceId, openAppModule, setOpenAppModule, appDetailOpen, setAppDetailOpen,
-  } = useWorkspaceStore();
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const openAppModule = useWorkspaceStore((s) => s.openAppModule);
+  const setOpenAppModule = useWorkspaceStore((s) => s.setOpenAppModule);
+  const appDetailOpen = useWorkspaceStore((s) => s.appDetailOpen);
+  const setAppDetailOpen = useWorkspaceStore((s) => s.setAppDetailOpen);
   const tenant = useTenant();
   const basePath = getWorkspacePath(currentWorkspaceId, '/apps');
   const pathname = usePathname();
