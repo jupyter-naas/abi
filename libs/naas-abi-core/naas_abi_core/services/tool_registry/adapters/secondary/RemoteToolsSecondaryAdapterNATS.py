@@ -234,7 +234,6 @@ class RemoteToolsSecondaryAdapterNATS(IRemoteToolDirectory, IRemoteToolInvoker):
                 tool_subject(self.project, target.instance_id, definition.name),
                 target.instance_id,
             ).invoke(request)
-            return json.loads(response.result_json)
         except RemoteToolError:
             raise
         except RPCError as exc:
@@ -256,6 +255,10 @@ class RemoteToolsSecondaryAdapterNATS(IRemoteToolDirectory, IRemoteToolInvoker):
             ) from exc
         except (NATSError, OSError) as exc:
             raise RemoteToolError("UNAVAILABLE", f"NATS failed: {exc}") from exc
+        # Only the parse below is about the result: a ValueError above (a bad token
+        # source, an identity) is not.
+        try:
+            return json.loads(response.result_json)
         except ValueError as exc:
             raise RemoteToolError(
                 "TOOL_ERROR", "The tool's result is not JSON"

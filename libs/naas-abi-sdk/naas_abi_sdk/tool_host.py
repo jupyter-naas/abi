@@ -143,9 +143,12 @@ class ToolHost:
 
     async def close(self) -> None:
         self.closing = True
-        for subscription in self.subscriptions:
-            await subscription.unsubscribe()
-        self.subscriptions.clear()
+        subscriptions, self.subscriptions = self.subscriptions, []
+        for subscription in subscriptions:
+            try:
+                await subscription.unsubscribe()
+            except Exception:
+                logger.debug("Tool subscription already closed", exc_info=True)
         await self.calls.cancel()
 
     async def _handle(self, name: str, msg: Any) -> None:
@@ -267,14 +270,27 @@ class ToolHost:
             else DEFAULT_DEADLINE_SECONDS
         )
         kwargs = {"call": call} if _takes_call(handler) else {}
+
+        # A TimeoutError the handler raises itself (a socket, an HTTP client) is a
+        # failure of the tool, not the deadline: only wait_for's own ends the wait.
+        async def run_async() -> Any:
+            try:
+                return await handler(arguments, **kwargs)
+            except (TimeoutError, asyncio.TimeoutError) as exc:
+                raise _HandlerTimeout() from exc
+
+        def run_sync() -> Any:
+            try:
+                return handler(arguments, **kwargs)
+            except (TimeoutError, asyncio.TimeoutError) as exc:
+                raise _HandlerTimeout() from exc
+
         try:
             if inspect.iscoroutinefunction(handler):
-                return await asyncio.wait_for(handler(arguments, **kwargs), seconds)
+                return await asyncio.wait_for(run_async(), seconds)
             # A synchronous handler runs on a thread; its deadline stops the wait,
             # not the thread.
-            return await asyncio.wait_for(
-                asyncio.to_thread(handler, arguments, **kwargs), seconds
-            )
+            return await asyncio.wait_for(asyncio.to_thread(run_sync), seconds)
         except asyncio.TimeoutError as exc:
             raise RPCError(
                 "DEADLINE_EXCEEDED", f"Tool exceeded its {seconds:g}s deadline"
@@ -298,6 +314,10 @@ class ToolHost:
         if validator is not None and not validator.is_valid(result):
             raise RPCError("TOOL_ERROR", "Tool result does not match its output schema")
         return raw
+
+
+class _HandlerTimeout(Exception):
+    """The handler itself raised ``TimeoutError``: a tool failure, not the deadline."""
 
 
 def _takes_call(handler: Any) -> bool:

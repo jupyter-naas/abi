@@ -580,7 +580,7 @@ The engine publishes it as `acme_crm/open_ticket@1`; a `CapabilityAgent` finds i
 - **No engine secret reaches a module.** `ToolConfig` takes plain values only (discovery
   refuses a secret requirement, and a `{secret: NAME}` binding on a remote tool is a
   composition error). Keep the module's own credentials in its own environment.
-- Replicas must declare the same tools; at most 32 tools, 64 KiB of descriptors.
+- Replicas must declare the same tools; at most 32 tools, 32 KiB of descriptors.
 
 `docs/adr/20261022_remote-module-tools.md` has the contract.
 

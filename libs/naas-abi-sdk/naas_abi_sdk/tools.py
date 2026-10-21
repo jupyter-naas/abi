@@ -184,7 +184,16 @@ class ModuleToolClient:
             instance_id,
         )
 
-    async def invoke(self, request: pb.InvokeToolRequest) -> pb.InvokeToolResponse:
+    async def invoke(
+        self, request: pb.InvokeToolRequest, *, timeout: float | None = None
+    ) -> pb.InvokeToolResponse:
+        """``timeout``: how long to wait, and the handler's deadline (the host reads
+        it from ``context.timeout_ms``); default the transport's."""
+        kwargs = {} if timeout is None else {"timeout": timeout}
         return await self._transport.call(
-            self.subject, request, pb.InvokeToolResponse, instance_id=self.instance_id
+            self.subject,
+            request,
+            pb.InvokeToolResponse,
+            instance_id=self.instance_id,
+            **kwargs,
         )

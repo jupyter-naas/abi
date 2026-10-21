@@ -44,8 +44,9 @@ registration and refuses (`INVALID_ARGUMENT`):
   a valid namespace (`[A-Za-z0-9_]+(.[A-Za-z0-9_]+)*`), a bad name, version or id;
 - schemas that are not JSON objects with finite numbers, tags and scopes out of
   bounds, more than 32 tools, two versions of one name (the subject carries only the
-  name), a tool above 8 KiB or tools above 64 KiB together (they travel in every
-  lookup's reply);
+  name), a tool above 8 KiB or tools above 32 KiB together (they travel in every
+  lookup's reply, once per replica); an empty description, an input schema that
+  does not describe an object or that `jsonschema` rejects;
 - a **secret configuration requirement** and a **workspace requirement**: a tool
   another process runs holds no engine secret and has no engine workspace.
 
@@ -110,7 +111,11 @@ process's registry as `<module_id>/<name>@<version>`, with `remote=True`. A modu
 no ready instance (stopped, draining, lease expired) is unpublished, and the index
 follows: `ToolRegistryService` re-syncs on the next search and deletes what it indexed
 itself. A failed read keeps what is published (discovery being down says nothing about
-the modules). A module whose id is a loaded module's name is not published (it would
+the modules). When a module's changed set is refused (an id another module
+holds), the set it published before is unpublished too, so the registry never
+advertises tools or a contract generation the module no longer serves; the
+refusal is retried at every read and logged once. The first read runs in the
+synchroniser's thread, so a slow discovery never holds up the engine's boot. A module whose id is a loaded module's name is not published (it would
 replace it), nor a tool another module already holds.
 
 Every role that composes agents does it (serving, standby, client): bindings are per
@@ -168,10 +173,19 @@ the next step.
 - Latency: a call costs a discovery lookup and the module round trip.
 - Every engine process reads discovery every `refresh_seconds` (one page per 100
   instances), and keeps one more NATS connection for it and one for calls.
-- A tool above 64 KiB of descriptors in total, or 32 tools, cannot be declared; a module
-  with more should group them or expose a general tool.
+- A module cannot declare more than 32 tools or 32 KiB of descriptors. Every replica
+  carries them in discovery's snapshot and in each `get_module` / `list_modules` reply
+  (512 KiB bounds both), so eight replicas at the limit use half of it. Agents, models and
+  apps have looser totals; this one is deliberately tighter. A module with more tools
+  should group them or expose a general one.
 - A caller waits at most `call_timeout_seconds` (120 s, at most 300 s); a longer job
   belongs to a module job or an agent.
 - A synchronous handler cannot be cancelled: a deadline releases the caller, not the thread.
+- Every call costs two discovery reads (the engine's `get_module`, the module's
+  `authorize_tool`), and each engine process lists the instances every
+  `refresh_seconds`.
+- The engine signs every call as the identity `engine`, in every role, so a module's
+  `authorize_tool` cannot tell `api` from `dagster`; it can tell the engine from another
+  module, which is the boundary that exists today.
 - Out of scope: running the engine's tools from a module, per-module broker users,
   streaming tool results, and discovery push (the engine polls).

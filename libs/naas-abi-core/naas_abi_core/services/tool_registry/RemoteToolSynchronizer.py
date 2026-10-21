@@ -103,14 +103,16 @@ class RemoteToolSynchronizer:
         fingerprint = _fingerprint(module)
         if self._published.get(module_id) == fingerprint:
             return False
-        if self._refused.get(module_id) == fingerprint:
-            return False
+        # A refusal is tried again at every read (the module that holds the id may
+        # have gone), and reported once.
+        reported = self._refused.get(module_id) == fingerprint
         if module_id in self._reserved:
+            if not reported:
+                logger.warning(
+                    f"Remote tools: module '{module_id}' has the name of a module "
+                    "loaded here; its remote tools are not published."
+                )
             self._refused[module_id] = fingerprint
-            logger.warning(
-                f"Remote tools: module '{module_id}' has the name of a module loaded "
-                "here; its remote tools are not published."
-            )
             return False
         try:
             self._registry.publish(
@@ -123,8 +125,15 @@ class RemoteToolSynchronizer:
                 ],
             )
         except ToolRegistryError as exc:
+            if not reported:
+                logger.error(f"Remote tools: module '{module_id}' not published: {exc}")
             self._refused[module_id] = fingerprint
-            logger.error(f"Remote tools: module '{module_id}' not published: {exc}")
+            # What it published before is not what it serves now: do not go on
+            # advertising it.
+            if module_id in self._published:
+                self._registry.unpublish(module_id)
+                del self._published[module_id]
+                return True
             return False
         self._published[module_id] = fingerprint
         self._refused.pop(module_id, None)
@@ -134,11 +143,10 @@ class RemoteToolSynchronizer:
         return True
 
     def start(self) -> None:
-        """Read the directory once now, then every ``refresh_seconds`` in the background."""
+        """Read the directory now and then every ``refresh_seconds``, in the background."""
         if self._thread is not None:
             return
         self._stop.clear()
-        self._safe_sync()
         self._thread = threading.Thread(
             target=self._run, name="remote-tool-sync", daemon=True
         )
@@ -151,6 +159,9 @@ class RemoteToolSynchronizer:
             thread.join(timeout=self._refresh + 15)
 
     def _run(self) -> None:
+        # The first read is here too, so a slow discovery never holds up the engine's
+        # boot: the tools join the registry as soon as it answers.
+        self._safe_sync()
         while not self._stop.wait(self._refresh):
             self._safe_sync()
 

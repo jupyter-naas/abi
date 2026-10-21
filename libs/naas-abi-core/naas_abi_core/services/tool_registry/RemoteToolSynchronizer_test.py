@@ -201,6 +201,32 @@ def test_a_tool_another_module_already_publishes_is_refused_not_taken(registry):
     assert sync.sync_once() is False
 
 
+def test_a_changed_set_that_is_refused_does_not_leave_the_old_one_advertised(registry):
+    directory = Directory(crm(TICKET))
+    sync = synchronizer(registry, directory)
+    sync.sync_once()
+    assert ids(registry) == [ISSUE]
+    # The module now serves a tool whose id another module holds.
+    taken = PublishedTool(
+        ToolDefinition(
+            namespace=CRM, name="send_email", description="Mail.", module="other"
+        ),
+        RecordingBinding(),
+    )
+    registry.publish("other", [taken])
+    directory.modules = [crm(TICKET, MAIL, major=2)]
+    assert sync.sync_once() is True
+    # Neither the old tools nor the old contract generation stay published.
+    assert ids(registry) == [f"{CRM}/send_email@1"]
+    assert registry.get_definition(f"{CRM}/send_email@1").remote is False
+    assert sync.published_modules == frozenset()
+    # Once the id is free the module's tools come back.
+    registry.unpublish("other")
+    assert sync.sync_once() is True
+    assert ids(registry) == [ISSUE, f"{CRM}/send_email@1"]
+    assert registry.get_definition(ISSUE).remote is True
+
+
 def test_modules_without_tools_publish_nothing(registry):
     sync = synchronizer(registry, Directory(crm()))
     assert sync.sync_once() is False
@@ -214,7 +240,12 @@ def test_the_background_loop_follows_the_directory(registry):
     sync = synchronizer(registry, directory, refresh_seconds=0.05)
     sync.start()
     try:
-        assert ids(registry) == [ISSUE]  # the first read is made by start()
+        # The first read is made in the thread too: start() never waits for discovery.
+        for _ in range(100):
+            if ids(registry):
+                break
+            threading.Event().wait(0.05)
+        assert ids(registry) == [ISSUE]
         directory.modules = []
         deadline = threading.Event()
         for _ in range(100):

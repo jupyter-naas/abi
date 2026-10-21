@@ -54,7 +54,7 @@ Convenience wrapper around a specific `(module_id, contract_major)`.
 - `list_agents() -> tuple[AgentDescriptor, ...]`
   - Returns agents from the first ready instance.
 - `call_tool(name, arguments=None, *, config=None, timeout=None) -> Any`
-  - Runs a tool a ready instance serves and returns its JSON result. The module authorizes the caller (by default only the engine's own processes may).
+  - Runs a tool a ready instance serves (one picked at random) and returns its JSON result. `timeout` is how long to wait and the handler's deadline. The module authorizes the caller (by default only the engine's own processes may).
 - `get_agent(name: str)`
   - Returns an `naas_abi_sdk.agent.AgentProxy` if the agent exists and supports invocation:
     - `descriptor.contract_major == 1`

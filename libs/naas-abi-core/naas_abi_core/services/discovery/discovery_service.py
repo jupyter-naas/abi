@@ -142,11 +142,32 @@ def _valid_app(app: pb.AppDescriptor) -> bool:
 # they stay few and small.
 MAX_TOOLS = 32
 MAX_TOOL_BYTES = 8 * 1024
-MAX_TOOLS_BYTES = 64 * 1024
+MAX_TOOLS_BYTES = 32 * 1024
 _TOOL_NAMESPACE = re.compile(r"[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*")
 _TOOL_NAME = re.compile(r"[A-Za-z0-9_-]{1,64}")
 _TOOL_VERSION = re.compile(r"\d+(?:\.\d+){0,2}")
 _CONFIG_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def _json_schema(raw: bytes, *, required: bool) -> bool:
+    """A JSON Schema object describing an object, that the SDK's validator accepts."""
+    if not _json_object(raw, required=required):
+        return False
+    if not raw:
+        return True
+    schema = json.loads(raw)
+    if schema.get("type", "object") != "object":
+        return False
+    try:
+        from jsonschema import Draft202012Validator
+        from jsonschema.exceptions import SchemaError
+    except ImportError:  # the module's own host checks it before it is ready
+        return True
+    try:
+        Draft202012Validator.check_schema(schema)
+    except SchemaError:
+        return False
+    return True
 
 
 def _json_object(raw: bytes, *, required: bool) -> bool:
@@ -177,12 +198,12 @@ def _tool_problem(tool: Any, module_id: str) -> str | None:
         return "invalid name or version"
     if tool.id not in ("", f"{module_id}/{tool.name}@{tool.version}"):
         return "its id is <module>/<name>@<version>"
-    if not 0 < len(tool.description) <= 4096:
+    if not tool.description.strip() or len(tool.description) > 4096:
         return "a description of 1 to 4096 characters is required"
-    if not _json_object(tool.input_schema_json, required=True) or not _json_object(
-        tool.output_schema_json, required=False
-    ):
-        return "its schemas are JSON objects"
+    if not _json_schema(tool.input_schema_json, required=True):
+        return "its input schema is a valid JSON Schema for an object"
+    if not _json_schema(tool.output_schema_json, required=False):
+        return "its output schema is a valid JSON Schema"
     if len(tool.tags) > 16 or any(not 0 < len(t) <= 64 for t in tool.tags):
         return "at most 16 tags of 1 to 64 characters"
     if len(tool.required_scopes) > 16 or any(
@@ -496,7 +517,7 @@ class DiscoveryService:
         _require(
             sum(x.ByteSize() for x in d.tools) <= MAX_TOOLS_BYTES,
             "INVALID_ARGUMENT",
-            "Tool descriptors exceed 64 KiB",
+            "Tool descriptors exceed 32 KiB",
         )
         _require(
             len(d.apps) <= MAX_APPS and len({x.name for x in d.apps}) == len(d.apps),

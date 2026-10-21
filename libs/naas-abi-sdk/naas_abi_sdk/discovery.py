@@ -272,29 +272,40 @@ class ModuleProxy:
         The module authorizes this caller (its ``authorize_tool``): by default
         only the engine's own processes may run its tools."""
         import json
+        import random
 
         from naas_abi_proto.tool.v1 import tool_pb2 as tool_pb
 
         from naas_abi_sdk.tools import ModuleToolClient, tool_subject
 
         eligible = [
-            instance
+            (instance, tool)
             for instance in await self.ready_instances()
-            if any(tool.name == name for tool in instance.tools)
+            for tool in instance.tools
+            if tool.name == name
         ]
         if not eligible:
             raise RPCError("TOOL_NOT_FOUND", name)
-        target = eligible[0]
-        request = tool_pb.InvokeToolRequest(
-            tool=name,
-            arguments_json=json.dumps(arguments or {}).encode(),
-            config_json=json.dumps(config).encode() if config else b"",
-        )
+        # Replicas serve the same tools: spread the calls.
+        target, descriptor = random.choice(eligible)
+        try:
+            request = tool_pb.InvokeToolRequest(
+                tool=name,
+                version=descriptor.version,
+                arguments_json=json.dumps(arguments or {}, allow_nan=False).encode(),
+                config_json=(
+                    json.dumps(config, allow_nan=False).encode() if config else b""
+                ),
+            )
+        except (TypeError, ValueError) as exc:
+            raise RPCError(
+                "INVALID_ARGUMENT", "Arguments and configuration must be JSON"
+            ) from exc
         response = await ModuleToolClient(
             self.client.transport,
             tool_subject(self.client.project, target.instance_id, name),
             target.instance_id,
-        ).invoke(request)
+        ).invoke(request, timeout=timeout)
         return json.loads(response.result_json)
 
     async def get_agent(self, name: str):

@@ -397,3 +397,194 @@ def test_a_module_proxy_calls_the_serving_instance():
             await proxy.call_tool("missing")
 
     asyncio.run(scenario())
+
+
+def test_a_timeout_the_handler_raises_itself_is_a_tool_failure_not_the_deadline():
+    async def async_timeout(arguments):
+        raise TimeoutError("upstream took too long")
+
+    def sync_timeout(arguments):
+        raise TimeoutError("upstream took too long")
+
+    async def asyncio_timeout(arguments):
+        raise asyncio.TimeoutError()
+
+    for handler in (async_timeout, sync_timeout, asyncio_timeout):
+        tool_host, _ = host(handler)
+        response = invoke(tool_host, request())
+        assert response.error.code == "TOOL_ERROR"
+        assert response.error.message == "Tool execution failed"
+        assert "deadline" not in response.error.message
+
+
+def test_close_cancels_running_calls_even_when_the_connection_is_lost():
+    async def scenario():
+        tool_host, _ = host()
+
+        class Lost:
+            async def unsubscribe(self):
+                raise ConnectionError("connection closed")
+
+        tool_host.subscriptions = [Lost(), Lost()]
+        cancelled = []
+
+        async def cancel():
+            cancelled.append(True)
+
+        tool_host.calls.cancel = cancel
+        await tool_host.close()
+        assert cancelled == [True] and tool_host.subscriptions == []
+
+    asyncio.run(scenario())
+
+
+def test_a_start_that_fails_reports_its_own_error():
+    async def scenario():
+        tool_host, _ = host()
+
+        class Lost:
+            async def unsubscribe(self):
+                raise ConnectionError("connection closed")
+
+        class Connection:
+            def __init__(self):
+                self.count = 0
+
+            async def subscribe(self, subject, cb):
+                self.count += 1
+                return Lost()
+
+            @property
+            def max_payload(self):
+                return 1 << 20
+
+        async def connect():
+            return Connection()
+
+        tool_host.session.client.transport = SimpleNamespace(connect=connect)
+        original = RuntimeError("flush failed")
+
+        async def broken(nc):
+            raise original
+
+        import naas_abi_sdk.tool_host as module
+
+        saved, module.flush_to_broker = module.flush_to_broker, broken
+        try:
+            with pytest.raises(RuntimeError) as raised:
+                await tool_host.start()
+        finally:
+            module.flush_to_broker = saved
+        assert raised.value is original
+
+    asyncio.run(scenario())
+
+
+def _proxy(instances, response=None):
+    transport = SimpleNamespace(
+        call=AsyncMock(return_value=response or pb.InvokeToolResponse(result_json=b"1"))
+    )
+    proxy = ModuleProxy(
+        SimpleNamespace(
+            project="acme",
+            transport=transport,
+            get_module=AsyncMock(return_value=tuple(instances)),
+        ),
+        "acme.crm",
+    )
+    return proxy, transport
+
+
+def test_call_tool_uses_its_timeout_as_the_wait_and_the_handlers_deadline():
+    async def scenario():
+        instance = ModuleInstance(
+            "acme.crm", "i-1", "0.0.0", 1, "READY", 0.0, (), tools=(LOOKUP,)
+        )
+        proxy, transport = _proxy([instance])
+        await proxy.call_tool("lookup", {"email": "a@b.c"}, timeout=7.5)
+        assert transport.call.await_args.kwargs["timeout"] == 7.5
+        sent = transport.call.await_args.args[1]
+        assert sent.version == "1"
+        await proxy.call_tool("lookup", {"email": "a@b.c"})
+        assert "timeout" not in transport.call.await_args.kwargs
+
+    asyncio.run(scenario())
+
+
+def test_call_tool_refuses_what_is_not_json_before_sending():
+    async def scenario():
+        instance = ModuleInstance(
+            "acme.crm", "i-1", "0.0.0", 1, "READY", 0.0, (), tools=(LOOKUP,)
+        )
+        proxy, transport = _proxy([instance])
+        for arguments in ({"limit": float("nan")}, {"x": object()}):
+            with pytest.raises(RPCError, match="INVALID_ARGUMENT"):
+                await proxy.call_tool("lookup", arguments)
+        with pytest.raises(RPCError, match="INVALID_ARGUMENT"):
+            await proxy.call_tool("lookup", {}, config={"n": float("inf")})
+        transport.call.assert_not_awaited()
+
+    asyncio.run(scenario())
+
+
+def test_call_tool_spreads_calls_over_the_replicas():
+    async def scenario():
+        instances = [
+            ModuleInstance(
+                "acme.crm", f"i-{n}", "0.0.0", 1, "READY", 0.0, (), tools=(LOOKUP,)
+            )
+            for n in range(4)
+        ]
+        proxy, transport = _proxy(instances)
+        for _ in range(80):
+            await proxy.call_tool("lookup", {"email": "a@b.c"})
+        used = {call.kwargs["instance_id"] for call in transport.call.await_args_list}
+        assert len(used) > 1
+
+    asyncio.run(scenario())
+
+
+def test_the_transports_per_call_timeout_is_the_deadline_sent_and_waited():
+    from naas_abi_sdk.transport import Transport
+
+    async def scenario():
+        transport = Transport("nats://127.0.0.1:1", "token", timeout=30)
+        seen = {}
+
+        async def exchange(
+            subject, payload, headers, response_type, transfer=None, **kw
+        ):
+            seen["timeout"] = kw.get("timeout")
+            seen["request"] = pb.InvokeToolRequest.FromString(payload)
+            return pb.InvokeToolResponse(result_json=b"1")
+
+        async def overflowing(
+            subject, payload, headers, response_type, trace, *, timeout
+        ):
+            return await exchange(
+                subject, payload, headers, response_type, timeout=timeout
+            )
+
+        transport._overflowing = overflowing
+        transport.token = SimpleNamespace(
+            for_audience=lambda audience: "bound", __call__=lambda: "t"
+        )
+        await transport.call(
+            "abi.mod.acme.i-1.tool.lookup.invoke",
+            pb.InvokeToolRequest(),
+            pb.InvokeToolResponse,
+            instance_id="i-1",
+            timeout=4,
+        )
+        assert seen["timeout"] == 4
+        assert seen["request"].context.timeout_ms == 4000
+        with pytest.raises(ValueError):
+            await transport.call(
+                "abi.mod.acme.i-1.tool.lookup.invoke",
+                pb.InvokeToolRequest(),
+                pb.InvokeToolResponse,
+                instance_id="i-1",
+                timeout=0,
+            )
+
+    asyncio.run(scenario())
