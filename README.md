@@ -288,7 +288,7 @@ Copy your `.env` and config files to the target server, then run:
 docker compose -f docker-compose.yml up -d
 ```
 
-All services (NATS, PostgreSQL, Fuseki, Qdrant, MinIO, Redis) start as containers, with remote modules from `docker-compose.override.yml`. In NATS mode one engine serves the kernel services; for deploys without downtime see [one serving engine](https://docs.naas.ai/developer-guide/architecture/nats.md#one-serving-engine). For production workloads, swap the Docker adapters for managed cloud services as described in [How It Works](#how-it-works).
+All services (NATS, PostgreSQL, Fuseki, Qdrant, MinIO, Redis) start as containers, with remote modules from `docker-compose.override.yml`. In NATS mode one engine serves the kernel services; for deploys without downtime see [one serving engine](https://docs.naas.ai/developer-guide/architecture/nats#one-serving-engine). For production workloads, swap the Docker adapters for managed cloud services as described in [How It Works](#how-it-works).
 
 ### Managed Hosting
 
