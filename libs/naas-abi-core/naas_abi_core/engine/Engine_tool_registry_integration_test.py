@@ -154,7 +154,9 @@ def assert_composes_from_records(engine) -> None:
     from naas_abi_core.services.agent_composer.AgentComposerPort import AgentSpec
 
     composer = AgentComposerFactory.FromEngine(engine)
-    composer.spec_repository.save(
+    repository = composer.spec_repository
+    assert repository is not None
+    repository.save(
         AgentSpec.model_validate(
             {
                 "name": "triage",
