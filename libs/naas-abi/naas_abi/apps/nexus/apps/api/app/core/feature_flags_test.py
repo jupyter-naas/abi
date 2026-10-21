@@ -1,9 +1,12 @@
+import pytest
 from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig
 from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
+    InvalidFeatureOverridesError,
     build_feature_flags,
     dump_feature_overrides,
     effective_workspace_overrides,
     parse_feature_overrides,
+    validate_workspace_feature_overrides,
     workspace_features,
 )
 
@@ -209,3 +212,18 @@ class TestWorkspaceOverrideFromTheApp:
         assert parse_feature_overrides('{"nope": true, "chat": "yes"}') == {}
         assert parse_feature_overrides(None) is None
         assert parse_feature_overrides("not json") is None
+
+
+class TestValidateWorkspaceFeatureOverrides:
+    def test_catalog_features_are_kept(self) -> None:
+        assert validate_workspace_feature_overrides(
+            FeatureFlagsConfig(), {"maps": False, "graph": True}
+        ) == {"maps": False, "graph": True}
+
+    def test_features_outside_the_catalog_are_rejected(self) -> None:
+        with pytest.raises(InvalidFeatureOverridesError, match="catalog: code"):
+            validate_workspace_feature_overrides(FeatureFlagsConfig(), {"code": True})
+
+    def test_pinned_features_are_rejected(self) -> None:
+        with pytest.raises(InvalidFeatureOverridesError, match="always on: settings"):
+            validate_workspace_feature_overrides(FeatureFlagsConfig(), {"settings": False})
