@@ -103,7 +103,7 @@ export function WorkspaceConfiguration({ workspaceId }: { workspaceId: string })
                   >
                     {featureLabel(feature)}
                     {config.pinned.includes(feature) && (
-                      <span className="text-muted-foreground"> · always on</span>
+                      <span className="text-muted-foreground"> · role defaults only</span>
                     )}
                   </span>
                 ))
