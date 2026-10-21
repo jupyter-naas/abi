@@ -150,3 +150,34 @@ class SearchToolsResponse(_message.Message):
     truncated: bool
     error: _common_pb2.CallError
     def __init__(self, matches: _Optional[_Iterable[_Union[ToolMatch, _Mapping]]] = ..., truncated: bool = ..., error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ...) -> None: ...
+
+class InvokeToolRequest(_message.Message):
+    __slots__ = ("context", "tool", "version", "arguments_json", "config_json", "secret_refs")
+    class SecretRefsEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    TOOL_FIELD_NUMBER: _ClassVar[int]
+    VERSION_FIELD_NUMBER: _ClassVar[int]
+    ARGUMENTS_JSON_FIELD_NUMBER: _ClassVar[int]
+    CONFIG_JSON_FIELD_NUMBER: _ClassVar[int]
+    SECRET_REFS_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    tool: str
+    version: str
+    arguments_json: bytes
+    config_json: bytes
+    secret_refs: _containers.ScalarMap[str, str]
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., tool: _Optional[str] = ..., version: _Optional[str] = ..., arguments_json: _Optional[bytes] = ..., config_json: _Optional[bytes] = ..., secret_refs: _Optional[_Mapping[str, str]] = ...) -> None: ...
+
+class InvokeToolResponse(_message.Message):
+    __slots__ = ("result_json", "error")
+    RESULT_JSON_FIELD_NUMBER: _ClassVar[int]
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    result_json: bytes
+    error: _common_pb2.CallError
+    def __init__(self, result_json: _Optional[bytes] = ..., error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ...) -> None: ...

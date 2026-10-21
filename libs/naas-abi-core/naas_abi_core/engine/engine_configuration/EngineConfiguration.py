@@ -202,9 +202,7 @@ class ServicesConfiguration(BaseModel):
     model_registry: ModelRegistryServiceConfiguration = (
         ModelRegistryServiceConfiguration()
     )
-    tool_registry: ToolRegistryServiceConfiguration = (
-        ToolRegistryServiceConfiguration()
-    )
+    tool_registry: ToolRegistryServiceConfiguration = ToolRegistryServiceConfiguration()
     cache: CacheServiceConfiguration = CacheServiceConfiguration(
         adapters=[
             CacheAdapterEntry(
@@ -332,6 +330,83 @@ class NATSRemoteToolsConfiguration(BaseModel):
     )
 
 
+class NATSToolInvokeModuleConfiguration(BaseModel):
+    """What one SDK module may run through ``invoke_tool``, beyond its scopes.
+
+    Both lists are empty by default: a module runs nothing that needs no scope, and
+    references no engine secret, until they say so.
+
+    ``secrets``: names of engine secrets the module may reference (``secret_refs``)
+    for a tool's configuration keys marked secret. The engine resolves them and never
+    sends a value back.
+
+    ``unscoped_tools``: patterns (``fnmatch`` on ``<namespace>/<name>``) of tools that
+    declare no ``required_scopes`` and that the module may still run. A tool with
+    scopes needs them in ``tool_registry.module_scopes`` instead.
+    """
+
+    secrets: list[str] = Field(default_factory=list)
+    unscoped_tools: list[str] = Field(default_factory=list)
+
+    @field_validator("secrets")
+    @classmethod
+    def _secret_names(cls, value: list[str]) -> list[str]:
+        import re
+
+        for name in value:
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,127}", name):
+                raise ValueError(f"{name!r} is not a secret name")
+        return value
+
+
+class NATSToolInvokeConfiguration(BaseModel):
+    """Running the tools the serving engine holds for other processes
+    (``abi.svc.tool_registry.v1.invoke_tool``, docs/adr/20261023_remote-callers-run-engine-tools.md).
+
+    The engine runs the tool and resolves its configuration and secrets itself; the
+    caller sends a reference, JSON arguments, plain values and secret *names*.
+    ``enabled: false`` answers every call with PERMISSION_DENIED. ``max_concurrent``
+    calls run at once (kept below ``nats.max_concurrent_requests`` so catalog reads
+    always find a free slot); the rest get RESOURCE_EXHAUSTED. A call's deadline is
+    its ``timeout_ms``, ``default_timeout_seconds`` when zero, at most
+    ``max_timeout_seconds``.
+
+        tool_registry:
+          module_scopes:
+            my_company_module: ["github:read"]
+          invoke:
+            modules:
+              my_company_module:
+                secrets: [GITHUB_ACCESS_TOKEN]
+                unscoped_tools: ["naas_abi_marketplace.applications.github/get_*"]
+    """
+
+    enabled: bool = True
+    max_concurrent: int = Field(default=16, ge=1, le=256)
+    default_timeout_seconds: float = Field(
+        default=60.0, gt=0, le=300, allow_inf_nan=False
+    )
+    max_timeout_seconds: float = Field(
+        default=300.0, gt=0, le=3600, allow_inf_nan=False
+    )
+    modules: dict[str, NATSToolInvokeModuleConfiguration] = Field(default_factory=dict)
+
+    @field_validator("modules")
+    @classmethod
+    def _identities_are_modules(
+        cls, value: dict[str, NATSToolInvokeModuleConfiguration]
+    ):
+        from naas_abi_core.engine.nats_auth import FIRST_PARTY_IDENTITIES
+
+        for identity in value:
+            if not identity or identity in FIRST_PARTY_IDENTITIES:
+                raise ValueError(
+                    f"invoke.modules names SDK module identities, not {identity!r}: "
+                    "the engine's own processes are trusted already"
+                )
+        return value
+
+
 class NATSToolRegistryConfiguration(BaseModel):
     """What the tool catalog served over NATS shows each caller.
 
@@ -350,6 +425,9 @@ class NATSToolRegistryConfiguration(BaseModel):
     module_scopes: dict[str, list[str]] = Field(default_factory=dict)
     remote_modules: NATSRemoteToolsConfiguration = Field(
         default_factory=NATSRemoteToolsConfiguration
+    )
+    invoke: NATSToolInvokeConfiguration = Field(
+        default_factory=NATSToolInvokeConfiguration
     )
 
     @field_validator("module_scopes")

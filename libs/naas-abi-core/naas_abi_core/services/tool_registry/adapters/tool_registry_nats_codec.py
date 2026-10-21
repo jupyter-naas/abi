@@ -27,7 +27,7 @@ from pydantic import ValidationError
 SUBJECT_PREFIX = "abi.svc.tool_registry.v1"
 SERVICE_NAME = "tool_registry"
 SERVICE_VERSION = "1.0.0"
-OPERATIONS = ("list_tools", "get_tool", "search_tools")
+OPERATIONS = ("list_tools", "get_tool", "search_tools", "invoke_tool")
 
 # Request limits, enforced by the primary (the contract states them).
 MAX_QUERY_CHARS = 2000

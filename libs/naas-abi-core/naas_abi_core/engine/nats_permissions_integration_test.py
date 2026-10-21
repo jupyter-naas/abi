@@ -74,6 +74,7 @@ def test_a_module_cannot_listen_on_the_engine_nor_touch_its_buckets(broker):
         "abi.svc.document.v1.get",
         # The engine's tool catalog: a module reads it by calling, never by serving it.
         "abi.svc.tool_registry.v1.search_tools",
+        "abi.svc.tool_registry.v1.invoke_tool",
         "abi.discovery.acme.v1.register",
         "abi.discovery.acme.v1.authorize_tool",
         "abi.rpc.overflow.open",
@@ -112,6 +113,8 @@ def test_a_module_cannot_listen_on_the_engine_nor_touch_its_buckets(broker):
                 publish=[
                     "abi.svc.document.v1.get",
                     "abi.svc.tool_registry.v1.search_tools",
+                    # Running an engine tool: the engine decides from the token.
+                    "abi.svc.tool_registry.v1.invoke_tool",
                     "abi.discovery.acme.v1.register",
                     "abi.discovery.acme.v1.authorize_tool",
                 ],

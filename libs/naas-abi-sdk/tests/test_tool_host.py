@@ -50,7 +50,7 @@ class Session:
         return response_type(caller_identity=self.identity, caller_admin=self.admin)
 
 
-def request(arguments=None, config=None, user="", **fields):
+def request(arguments=None, config=None, user="", context_workspace="", **fields):
     fields.setdefault("tool", "lookup")
     value = pb.InvokeToolRequest(
         arguments_json=json.dumps(
@@ -62,6 +62,7 @@ def request(arguments=None, config=None, user="", **fields):
         **fields,
     )
     value.context.principal_id = user
+    value.context.workspace_id = context_workspace
     return value
 
 
@@ -217,6 +218,18 @@ def test_only_the_engines_processes_speak_for_a_user():
     assert not invoke(tool_host, request()).error.code
     tool_host, calls = host(session=Session("dagster"))
     assert invoke(tool_host, request(user="user-7")).error.code == "PERMISSION_DENIED"
+
+
+def test_only_the_engines_processes_name_a_workspace_either():
+    tool_host, calls = host(session=Session("some-module"), authorize=lambda n, c: True)
+    assert (
+        invoke(tool_host, request(context_workspace="w-1")).error.code
+        == "PERMISSION_DENIED"
+    )
+    assert calls == []
+    tool_host, calls = host(session=Session("api"))
+    assert not invoke(tool_host, request(context_workspace="w-1")).error.code
+    assert calls[0][1].caller.workspace_id == "w-1"
 
 
 def test_a_handlers_failure_reaches_the_caller_without_its_internals():

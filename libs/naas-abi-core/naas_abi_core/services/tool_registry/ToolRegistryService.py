@@ -351,6 +351,22 @@ class ToolRegistryService(IToolRegistry):
             )
         return sorted(listings, key=lambda listing: str(listing.definition.id))
 
+    def credential_values(
+        self, ref: str | ToolRef | ToolId, config: Mapping[str, Any] | None = None
+    ) -> list[str]:
+        """The values of the credential keys (``secret=True``) a ``resolve`` of ``ref``
+        with ``config`` would hand its binding: the binding's own defaults and the
+        caller's. For a host that returns results to another process and must keep
+        them out of it (``EngineToolInvoker``). Held here only: a tool only the
+        catalog shows has none."""
+        tool = self._lookup(ref)
+        merged = {**tool.binding.default_config, **(config or {})}
+        return [
+            str(merged[requirement.key])
+            for requirement in tool.definition.requirements.config
+            if requirement.secret and merged.get(requirement.key) not in (None, "")
+        ]
+
     # ------------------------------------------------------------ resolution
     def check_access(
         self,

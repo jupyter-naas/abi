@@ -1,27 +1,44 @@
-"""Read the engine's tool catalog: list, get and search. Nothing here runs a tool.
+"""Read the engine's tool catalog (list, get, search) and run its tools (``invoke``).
 
-What a module sees is decided by the engine from the module's identity, never
-by the request. A tool is found by ``tool_id`` (``<namespace>/<name>@<version>``);
+What a module sees and runs is decided by the engine from the module's identity,
+never by the request. A tool is found by ``tool_id`` (``<namespace>/<name>@<version>``);
 credentials are never part of a definition: a config requirement names a key
 (``secret=True`` for a credential) and ``availability`` says which keys the engine
 still lacks.
+
+``invoke`` runs an engine tool *on the engine*: the tool, its configuration and the
+secrets it reads never reach this process. A credential is passed by the NAME of an
+engine secret (``secrets={"access_token": "GITHUB_ACCESS_TOKEN"}``), which the engine
+resolves only when it allows this module that name; writing a credential's value is
+refused. ``as_tool`` wraps one as a LangChain tool (``naas_abi_sdk.engine_tools``,
+extra ``engine-tools``) so an SDK agent can bind what it found by search.
 """
 
 from __future__ import annotations
 
 import json
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 from naas_abi_proto.tool_registry.v1 import tool_registry_pb2 as pb
 
-from naas_abi_sdk.services.errors import domain_error
+from naas_abi_sdk.services.errors import (
+    ToolExecutionError,
+    ToolPermissionDenied,
+    domain_error,
+)
 from naas_abi_sdk.tool_registry import ToolRegistryClient
 from naas_abi_sdk.transport import RPCError
 
 MAX_LIST_PAGES = 100
+# What the engine accepts of a call (abi.svc.tool_registry.v1.InvokeToolRequest).
+MAX_ARGUMENTS_BYTES = 256 * 1024
+MAX_CONFIG_BYTES = 64 * 1024
+MAX_SECRET_REFS = 16
+DEFAULT_INVOKE_TIMEOUT = 60.0
+MAX_INVOKE_TIMEOUT = 300.0
 
 
 @dataclass(frozen=True)
@@ -188,6 +205,101 @@ class ToolRegistryService:
             entry = _entry(match.tool)
             matches.append(ToolMatch(entry.definition, entry.availability, match.score))
         return matches
+
+    async def invoke(
+        self,
+        ref: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        config: Mapping[str, Any] | None = None,
+        secrets: Mapping[str, str] | None = None,
+        version: str = "",
+        timeout: float = DEFAULT_INVOKE_TIMEOUT,
+    ) -> Any:
+        """Run an engine tool on the engine; its JSON result.
+
+        ``ref``: ``<namespace>/<name>`` (the highest version) or
+        ``<namespace>/<name>@<version>``. ``arguments``: a JSON object the engine
+        validates against the tool's input schema. ``config``: plain values for
+        non-secret configuration keys. ``secrets``: configuration key (one the
+        definition marks ``secret=True``) -> the NAME of an engine secret; the engine
+        resolves it if it allows this module that name, and never sends the value back.
+        ``timeout``: how long to wait, and the tool's deadline (at most 300 seconds).
+
+        Raises ``ToolNotFound`` (no tool this module may discover matches),
+        ``ToolPermissionDenied`` (a secret it may not use, a credential written inline,
+        a tool it is not granted), ``ToolExecutionError`` (the tool failed) and
+        ``ServiceError`` for the other codes (``INVALID_ARGUMENT``,
+        ``PAYLOAD_TOO_LARGE``, ``RESOURCE_EXHAUSTED``, ``DEADLINE_EXCEEDED``).
+        Nothing is retried: a tool may have side effects.
+        """
+        if not isinstance(ref, str) or not ref:
+            raise ValueError("ref is a tool reference")
+        if not 0 < timeout <= MAX_INVOKE_TIMEOUT or not math.isfinite(timeout):
+            raise ValueError(f"timeout must be between 0 and {MAX_INVOKE_TIMEOUT:g}")
+        secrets = dict(secrets or {})
+        if len(secrets) > MAX_SECRET_REFS:
+            raise ValueError(f"At most {MAX_SECRET_REFS} secrets")
+        if not all(
+            isinstance(key, str) and isinstance(name, str)
+            for key, name in secrets.items()
+        ):
+            raise TypeError("secrets maps a configuration key to a secret's name")
+        try:
+            encoded_arguments = json.dumps(
+                dict(arguments or {}), allow_nan=False
+            ).encode()
+            encoded_config = (
+                json.dumps(dict(config), allow_nan=False).encode() if config else b""
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Arguments and config must be JSON values") from exc
+        if len(encoded_arguments) > MAX_ARGUMENTS_BYTES:
+            raise ValueError("Arguments exceed 256 KiB")
+        if len(encoded_config) > MAX_CONFIG_BYTES:
+            raise ValueError("Config exceeds 64 KiB")
+        request = pb.InvokeToolRequest(
+            tool=ref,
+            version=version,
+            arguments_json=encoded_arguments,
+            config_json=encoded_config,
+            secret_refs=secrets,
+        )
+        try:
+            response = await self._client.invoke_tool(request, timeout=timeout)
+        except RPCError as exc:
+            if exc.code == "PERMISSION_DENIED":
+                raise ToolPermissionDenied(
+                    exc.code, str(exc), response=exc.response
+                ) from exc
+            if exc.code == "TOOL_ERROR":
+                raise ToolExecutionError(
+                    exc.code, str(exc), response=exc.response
+                ) from exc
+            raise domain_error(exc) from exc
+        return json.loads(response.result_json)
+
+    async def as_tool(
+        self,
+        tool: str | ToolDefinition | ToolMatch | ToolEntry,
+        *,
+        config: Mapping[str, Any] | None = None,
+        secrets: Mapping[str, str] | None = None,
+        timeout: float = DEFAULT_INVOKE_TIMEOUT,
+        name: str | None = None,
+    ) -> Any:
+        """An engine tool as a LangChain tool whose calls ``invoke`` it.
+
+        ``tool``: a reference (the definition is fetched), or what ``get_tool`` and
+        ``search_tools`` returned. Needs the ``engine-tools`` extra. See
+        ``naas_abi_sdk.engine_tools.engine_tool``."""
+        from naas_abi_sdk.engine_tools import engine_tool
+
+        if isinstance(tool, str):
+            tool = await self.get_tool(tool)
+        return engine_tool(
+            self, tool, config=config, secrets=secrets, timeout=timeout, name=name
+        )
 
     @staticmethod
     async def _call(call):

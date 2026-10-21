@@ -245,14 +245,19 @@ class ToolHost:
             discovery_pb.AuthorizeToolResponse,
         )
         user_id = request.context.principal_id
-        if user_id and answer.caller_identity not in self.user_callers:
-            # Only the engine's own processes authenticate users.
-            raise RPCError("PERMISSION_DENIED", "This caller cannot act for a user")
+        workspace_id = request.context.workspace_id
+        if (
+            user_id or workspace_id
+        ) and answer.caller_identity not in self.user_callers:
+            # Only the engine's own processes authenticate users and name workspaces.
+            raise RPCError(
+                "PERMISSION_DENIED", "This caller cannot act for a user or workspace"
+            )
         caller = ToolCaller(
             answer.caller_identity,
             answer.caller_admin,
             user_id or None,
-            request.context.workspace_id or None,
+            workspace_id or None,
         )
         allowed = self.authorize(name, caller)
         if inspect.isawaitable(allowed):

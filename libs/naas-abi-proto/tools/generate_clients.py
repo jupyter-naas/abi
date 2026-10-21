@@ -47,6 +47,17 @@ class {cls}:
                 f'"abi.svc.model_registry.v1.{operation}"',
                 f'transfer_subject("abi.svc.model_registry.v1", "{operation}", request.stream_id)',
             )
+    if domain == "tool_registry":
+        # A tool runs for as long as its deadline: the caller waits that long, and the
+        # engine reads it from the request's context.timeout_ms.
+        text = text.replace(
+            "async def invoke_tool(self, request: pb.InvokeToolRequest) -> pb.InvokeToolResponse:",
+            "async def invoke_tool(self, request: pb.InvokeToolRequest, *, timeout: float | None = None) -> pb.InvokeToolResponse:",
+        ).replace(
+            'return await self._transport.call("abi.svc.tool_registry.v1.invoke_tool", request, pb.InvokeToolResponse)',
+            'kwargs = {} if timeout is None else {"timeout": timeout}\n'
+            '        return await self._transport.call("abi.svc.tool_registry.v1.invoke_tool", request, pb.InvokeToolResponse, **kwargs)',
+        )
     if domain == "cache":
         text = text.replace(
             "def __init__(self, transport: Transport) -> None:",

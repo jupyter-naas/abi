@@ -22,6 +22,9 @@ import "naas_abi_proto/common/v1/common.proto";
 // detail of the handler's failure:
 //   UNAUTHENTICATED, PERMISSION_DENIED, TOOL_NOT_FOUND, MODULE_UNAVAILABLE,
 //   INVALID_ARGUMENT, PAYLOAD_TOO_LARGE, DEADLINE_EXCEEDED, TOOL_ERROR.
+// abi.tool_registry.v1.InvokeToolRequest repeats these fields, with the same numbers,
+// for running a tool the engine holds, and adds `secret_refs`. Here there is none: no
+// secret reaches a module.
 // `context.principal_id` names the end user the call is for: a module honors it
 // only from the engine's own processes (api, engine) and refuses it from any
 // other caller.

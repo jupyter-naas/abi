@@ -1,19 +1,26 @@
-"""The serving engine's tool catalog over NATS, read only.
+"""The serving engine's tool catalog over NATS, and the one operation that runs a tool.
 
-``abi.svc.tool_registry.v1.{list_tools,get_tool,search_tools}``, answered from the
-registry of the process that serves, from what it holds itself (``list_local``,
-``get_local``, ``search_local``): it never reads a catalog, so it cannot call
-itself. Nothing here resolves a binding, builds a tool or sends a configuration
-value, and ``ToolRegistryService.search_local`` ranks definitions without
-touching their bindings.
+``abi.svc.tool_registry.v1.{list_tools,get_tool,search_tools}`` are read only,
+answered from the registry of the process that serves, from what it holds itself
+(``list_local``, ``get_local``, ``search_local``): they never read a catalog, so
+they cannot call themselves. Nothing there resolves a binding, builds a tool or
+sends a configuration value, and ``ToolRegistryService.search_local`` ranks
+definitions without touching their bindings.
+
+``invoke_tool`` runs a tool the engine holds, on the engine, through
+``EngineToolInvoker`` (docs/adr/20261023_remote-callers-run-engine-tools.md): the
+transport decodes the message and decides who the caller is, the invoker enforces
+what that caller may do. Only JSON crosses the wire.
 
 Who is asking is the verified service identity (``Nats-Auth-Token``), never the
-request: the scopes a caller discovers with come from ``caller_context``. The
-engine's own processes hold every scope (they apply their users' scopes
-themselves, see ``ToolRegistryService.search_tools`` on a client engine); an SDK
-module holds the scopes configured for its identity (``nats.tool_registry.
-module_scopes``), by default none. The request's ``CallContext`` is not read, and
-a tool the caller may not discover is reported as not found.
+request: the scopes a caller discovers and runs tools with come from
+``caller_context``. The engine's own processes hold every scope (they apply their
+users' scopes themselves, see ``ToolRegistryService.search_tools`` on a client
+engine); an SDK module holds the scopes configured for its identity
+(``nats.tool_registry.module_scopes``), by default none. For the catalog reads the
+request's ``CallContext`` is not read, and a tool the caller may not discover is
+reported as not found. For ``invoke_tool`` it names an end user and a workspace
+only when the caller is ``api`` or ``engine``, and a deadline.
 
 Requests are validated here, on the server, against the limits in
 ``tool_registry_nats_codec`` (the contract's Protovalidate rules, written out):
@@ -60,6 +67,12 @@ from naas_abi_core.services.tool_registry.adapters.tool_registry_nats_codec impo
     entry_to_pb,
     filter_from_pb,
 )
+from naas_abi_core.services.tool_registry.EngineToolInvoker import (
+    EngineToolInvoker,
+    InvokeCaller,
+    ToolInvocation,
+    ToolInvokeError,
+)
 from naas_abi_core.services.tool_registry.ToolRegistryPort import (
     MAX_CATALOG_LIST_LIMIT,
     MAX_CATALOG_SEARCH_LIMIT,
@@ -75,6 +88,7 @@ from naas_abi_core.services.tool_registry.ToolRegistryService import (
 )
 from naas_abi_proto.common.v1 import common_pb2
 from naas_abi_proto.tool_registry.v1 import tool_registry_pb2 as pb
+from naas_abi_sdk.tools import MAX_REQUEST_BYTES, USER_CALLERS
 
 __all__ = ["SUBJECT_PREFIX", "ToolRegistryPrimaryAdapterNATS"]
 
@@ -85,6 +99,7 @@ _MESSAGES = {
     "list_tools": "ListTools",
     "get_tool": "GetTool",
     "search_tools": "SearchTools",
+    "invoke_tool": "InvokeTool",
 }
 
 
@@ -99,12 +114,25 @@ class ToolRegistryPrimaryAdapterNATS(ServicePrimary):
         jwt_secret: str,
         *,
         module_scopes: Mapping[str, Sequence[str]] | None = None,
+        invoker: EngineToolInvoker | None = None,
+        module_secrets: Mapping[str, Sequence[str]] | None = None,
+        module_unscoped_tools: Mapping[str, Sequence[str]] | None = None,
     ) -> None:
         self._registry = registry
         self._jwt_secret = jwt_secret
         self._module_scopes = {
             identity: frozenset(scopes)
             for identity, scopes in (module_scopes or {}).items()
+        }
+        # Running tools: without an invoker the operation answers that it is off.
+        self._invoker = invoker
+        self._module_secrets = {
+            identity: frozenset(names)
+            for identity, names in (module_secrets or {}).items()
+        }
+        self._module_unscoped_tools = {
+            identity: tuple(patterns)
+            for identity, patterns in (module_unscoped_tools or {}).items()
         }
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
         self._service: TracedService | None = None
@@ -137,6 +165,37 @@ class ToolRegistryPrimaryAdapterNATS(ServicePrimary):
             scopes = set(self._module_scopes.get(identity, ()))
         return ToolContext(scopes=frozenset(scopes))
 
+    def invoke_caller(self, identity: str) -> InvokeCaller:
+        """What a verified ``identity`` may run, and with which secrets.
+
+        The engine's own processes are trusted (they hold the project secret): every
+        scope, any secret, any tool; ``api`` and ``engine`` speak for end users. An SDK
+        module holds nothing by default: the scopes of ``module_scopes``, the secret
+        names of ``module_secrets`` and the tools of ``module_unscoped_tools`` listed
+        for it."""
+        if identity in FIRST_PARTY_IDENTITIES:
+            return InvokeCaller(
+                identity,
+                scopes=frozenset(self._registry.known_scopes()),
+                secrets=None,
+                unscoped_tools=None,
+                may_name_user=identity in USER_CALLERS,
+            )
+        return InvokeCaller(
+            identity,
+            scopes=self._module_scopes.get(identity, frozenset()),
+            secrets=self._module_secrets.get(identity, frozenset()),
+            unscoped_tools=self._module_unscoped_tools.get(identity, ()),
+            may_name_user=False,
+        )
+
+    async def stop(self) -> None:
+        try:
+            await super().stop()
+        finally:
+            if self._invoker is not None:
+                self._invoker.close()
+
     async def _handle(self, request, *, operation: str) -> None:
         response_type = getattr(pb, _MESSAGES[operation] + "Response")
         try:
@@ -152,13 +211,25 @@ class ToolRegistryPrimaryAdapterNATS(ServicePrimary):
             )
             return
         try:
-            parsed = getattr(pb, _MESSAGES[operation] + "Request").FromString(
-                await request_payload(request)
+            payload = await request_payload(request)
+            if operation == "invoke_tool" and len(payload) > MAX_REQUEST_BYTES:
+                raise ToolInvokeError(
+                    "PAYLOAD_TOO_LARGE",
+                    f"Tool request exceeds {MAX_REQUEST_BYTES // 1024} KiB",
+                )
+            parsed = getattr(pb, _MESSAGES[operation] + "Request").FromString(payload)
+            if operation == "invoke_tool":
+                result = await self._invoke(identity, parsed)
+            else:
+                budget = (broker_limit(request) or DEFAULT_BROKER_LIMIT) // REPLY_SHARE
+                result = await self._dispatch.call(
+                    partial(self._call, operation, identity, budget), parsed
+                )
+        except ToolInvokeError as exc:
+            await self._fail(
+                request, response_type, exc.code, exc.message, retryable=exc.retryable
             )
-            budget = (broker_limit(request) or DEFAULT_BROKER_LIMIT) // REPLY_SHARE
-            result = await self._dispatch.call(
-                partial(self._call, operation, identity, budget), parsed
-            )
+            return
         except RequestPayloadError as exc:
             await self._fail(request, response_type, exc.code, exc.message)
             return
@@ -193,14 +264,40 @@ class ToolRegistryPrimaryAdapterNATS(ServicePrimary):
         await respond_protobuf(request, result, response_type)
 
     @staticmethod
-    async def _fail(request, response_type, code: str, message: str) -> None:
+    async def _fail(
+        request, response_type, code: str, message: str, *, retryable: bool = False
+    ) -> None:
         await respond_protobuf(
             request,
             response_type(
-                error=common_pb2.CallError(code=code, message=message, retryable=False)
+                error=common_pb2.CallError(
+                    code=code, message=message, retryable=retryable
+                )
             ),
             response_type,
         )
+
+    async def _invoke(self, identity: str, request: pb.InvokeToolRequest):
+        if self._invoker is None:
+            raise ToolInvokeError(
+                "PERMISSION_DENIED",
+                "This engine does not run tools for other processes",
+            )
+        result = await self._invoker.invoke(
+            self.invoke_caller(identity),
+            ToolInvocation(
+                tool=request.tool,
+                version=request.version,
+                arguments=request.arguments_json,
+                config=request.config_json,
+                secret_refs=dict(request.secret_refs),
+                user_id=request.context.principal_id,
+                workspace_id=request.context.workspace_id,
+                timeout_ms=request.context.timeout_ms,
+                trace_id=request.context.trace_id,
+            ),
+        )
+        return pb.InvokeToolResponse(result_json=result)
 
     def _call(self, operation: str, identity: str, budget: int, request: Any):
         context = self.caller_context(identity)

@@ -55,6 +55,17 @@ class ToolSearchUnavailable(ServiceError):
     pass
 
 
+class ToolPermissionDenied(ServiceError):
+    """The engine refused to run the tool for this module: a scope it lacks, a
+    secret it may not reference, a credential written inline, or the engine does
+    not run tools for other processes."""
+
+
+class ToolExecutionError(ServiceError):
+    """The tool ran and failed. The message is the one the tool wrote for its
+    caller (a secret it used is scrubbed out), or a generic one."""
+
+
 ERRORS = {
     "OBJECT_NOT_FOUND": ObjectNotFound,
     "OBJECT_ALREADY_EXISTS": ObjectAlreadyExists,

@@ -39,7 +39,12 @@ def entry(name, *, secret=False, missing=(), scopes=()):
 
 
 def test_the_catalog_lists_the_service_and_a_module_may_depend_on_it():
-    assert OPERATIONS["tool_registry"] == ["list_tools", "get_tool", "search_tools"]
+    assert OPERATIONS["tool_registry"] == [
+        "list_tools",
+        "get_tool",
+        "search_tools",
+        "invoke_tool",
+    ]
     assert FACTORIES["tool_registry"] is ToolRegistryService
     client = SimpleNamespace(tool_registry=AsyncMock(), bus=object())
     engine = EngineProxy(client, ModuleDependencies(services=("tool_registry",)))

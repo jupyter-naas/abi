@@ -2,15 +2,19 @@ syntax = "proto3";
 package abi.tool_registry.v1;
 import "naas_abi_proto/common/v1/common.proto";
 
-// The serving engine's tool catalog, read only: list, get and search. No call
-// here runs a tool, resolves its binding or returns a configuration value.
+// The serving engine's tool catalog: list, get and search (read only, they never
+// resolve a binding or return a configuration value), and invoke_tool, which runs
+// a tool the engine holds.
 //
-// Subjects: abi.svc.tool_registry.v1.{list_tools,get_tool,search_tools}.
+// Subjects: abi.svc.tool_registry.v1.{list_tools,get_tool,search_tools,invoke_tool}.
 //
 // Who is asking is the verified service identity, never the request: the scopes
-// that decide what a caller may discover come from the engine's configuration
-// for that identity. CallContext's principal, workspace and tenant are carried
-// but not read, and no field here grants rights. Unknown fields are ignored.
+// that decide what a caller may discover and run come from the engine's
+// configuration for that identity. For the catalog reads CallContext's principal,
+// workspace and tenant are carried but not read; for invoke_tool the engine honors
+// the principal and the workspace only from its own processes (api, engine) and
+// refuses them from any other caller. No field here grants rights. Unknown fields
+// are ignored.
 //
 // Runtime validation is authoritative (Protovalidate tooling is not yet enabled);
 // the limits are the primary's: query 1..2000 characters, search limit 1..50
@@ -117,5 +121,55 @@ message SearchToolsResponse {
   // has no more. Asking for a larger limit gets back what was skipped, not what
   // the budget cut.
   bool truncated = 2;
+  abi.common.v1.CallError error = 15;
+}
+
+// Run a tool the engine holds, on the engine: the tool, its configuration and
+// the secrets it reads all stay in the engine process, and only JSON crosses the
+// wire. The request has the fields, numbers and meaning of abi.tool.v1.InvokeToolRequest
+// (the call to a tool a module serves) and one more, `secret_refs`; the response is
+// abi.tool.v1.InvokeToolResponse's:
+//   context        trace_id as usual; timeout_ms is the deadline (60 s when zero, at
+//                  most 300 s: the SDK sets it from the time the caller waits);
+//                  principal_id and workspace_id are honored from api and engine
+//                  only, refused (PERMISSION_DENIED) from any other caller
+//   tool           <namespace>/<name>, or <namespace>/<name>@<version>
+//   version        the version when `tool` has none; empty: the highest. Both
+//                  given must agree.
+//   arguments_json a JSON object, validated against the tool's input schema
+//   config_json    a JSON object of NON-secret configuration values for keys the
+//                  tool's definition declares; a key it marks secret is refused
+//                  here (PERMISSION_DENIED): a credential is never written inline
+//   secret_refs    maps a configuration key the definition marks secret to the NAME
+//                  of an engine secret. The engine resolves it, only when the caller's
+//                  identity is allowed that name (`nats.tool_registry.invoke.modules.<id>.secrets`,
+//                  denied by default; its own processes are not restricted), and the
+//                  value is never put in a result, an error or a log.
+//
+// A tool that needs no scope is not run for an SDK module unless the operator
+// lists it (`unscoped_tools`). A tool a module serves (ToolDefinition.remote) is
+// not run here: call the module itself.
+//
+// Limits, enforced by the engine (no Protovalidate): a request of at most 512 KiB,
+// arguments_json at most 256 KiB, config_json at most 64 KiB, at most 16 secret_refs
+// whose names are at most 128 characters, a result of at most 512 KiB, and a
+// configurable number of calls at once (the rest get RESOURCE_EXHAUSTED, retryable).
+// Errors carry a stable code and a message that holds no secret and none of the
+// tool's internals:
+//   UNAUTHENTICATED, PERMISSION_DENIED, TOOL_NOT_FOUND, INVALID_ARGUMENT,
+//   PAYLOAD_TOO_LARGE, RESOURCE_EXHAUSTED, DEADLINE_EXCEEDED, TOOL_ERROR.
+// A tool's own failure is TOOL_ERROR; only a message it wrote for its caller (a
+// ToolException) is returned, scrubbed of the secrets of the call.
+message InvokeToolRequest {
+  abi.common.v1.CallContext context = 1;
+  string tool = 2;
+  string version = 3;
+  bytes arguments_json = 4;
+  bytes config_json = 5;
+  map<string, string> secret_refs = 6;
+}
+message InvokeToolResponse {
+  // Any JSON value (UTF-8, finite numbers); empty when the call failed.
+  bytes result_json = 1;
   abi.common.v1.CallError error = 15;
 }

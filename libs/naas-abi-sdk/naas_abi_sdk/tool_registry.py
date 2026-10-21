@@ -24,3 +24,14 @@ class ToolRegistryClient:
         return await self._transport.call(
             "abi.svc.tool_registry.v1.search_tools", request, pb.SearchToolsResponse
         )
+
+    async def invoke_tool(
+        self, request: pb.InvokeToolRequest, *, timeout: float | None = None
+    ) -> pb.InvokeToolResponse:
+        kwargs = {} if timeout is None else {"timeout": timeout}
+        return await self._transport.call(
+            "abi.svc.tool_registry.v1.invoke_tool",
+            request,
+            pb.InvokeToolResponse,
+            **kwargs,
+        )

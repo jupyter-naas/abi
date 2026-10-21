@@ -475,10 +475,40 @@ class EngineNATSLoader:
                 ToolRegistryPrimaryAdapterNATS,
             )
 
+            invoke = nats_config.tool_registry.invoke
+            invoker = None
+            if invoke.enabled:
+                from naas_abi_core.services.agent_composer.adapters.secondary.SecretServiceResolverAdapter import (
+                    SecretServiceResolverAdapter,
+                )
+                from naas_abi_core.services.tool_registry.EngineToolInvoker import (
+                    EngineToolInvoker,
+                )
+
+                invoker = EngineToolInvoker(
+                    services.tool_registry,
+                    SecretServiceResolverAdapter(services.secret)
+                    if services.secret_available()
+                    else None,
+                    max_concurrent=invoke.max_concurrent,
+                    default_timeout=invoke.default_timeout_seconds,
+                    max_timeout=invoke.max_timeout_seconds,
+                    record_activity=services.activity_log.record
+                    if services.activity_log_available()
+                    else None,
+                )
             primary_tools = ToolRegistryPrimaryAdapterNATS(
                 services.tool_registry,
                 nats_config.jwt_secret,
                 module_scopes=nats_config.tool_registry.module_scopes,
+                invoker=invoker,
+                module_secrets={
+                    module: grant.secrets for module, grant in invoke.modules.items()
+                },
+                module_unscoped_tools={
+                    module: grant.unscoped_tools
+                    for module, grant in invoke.modules.items()
+                },
             )
             nats_runtime.run_coro(primary_tools.start(nc))
             started.append(primary_tools)
