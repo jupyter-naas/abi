@@ -144,6 +144,9 @@ class CapabilityAgent(Agent):
         self._tool_config = {k: dict(v) for k, v in (tool_config or {}).items()}
         self._search_limit = search_limit
         self._bound_cache: dict[tuple[tuple[str, ...], bool], Runnable] = {}
+        # Tools enabled at runtime, as last resolved: how a response to a call
+        # of one is traced back to its tool (``_find_tool``).
+        self._resolved_tools: dict[str, BaseTool] = {}
         # Capability changes issued by the step ``call_tools`` is running.
         self._step = threading.local()
 
@@ -270,7 +273,15 @@ class CapabilityAgent(Agent):
                 # the registry's instance is shared with other agents.
                 built = built.model_copy(update={"name": name})
             resolved[name] = built
+        self._resolved_tools = {**self._resolved_tools, **resolved}
         return resolved
+
+    def _find_tool(self, name: str, seen: set[int] | None = None) -> Any:
+        # A response is reported without the state that enabled its tool, so
+        # what a tool declares about itself (``metadata={"chat_source": False}``)
+        # is read from the tools resolved for this agent's turns.
+        found = super()._find_tool(name, seen)
+        return found if found is not None else self._resolved_tools.get(name)
 
     @staticmethod
     def _binding_signature(tools: Mapping[str, BaseTool]) -> tuple[str, ...]:

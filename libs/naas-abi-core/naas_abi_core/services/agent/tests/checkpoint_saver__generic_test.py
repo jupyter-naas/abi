@@ -19,6 +19,7 @@ from langgraph.checkpoint.base import ERROR, Checkpoint, empty_checkpoint
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
+from naas_abi_core.services.agent.Agent import merge_enabled_capabilities
 
 
 class SyncSaver:
@@ -124,6 +125,33 @@ def approval_graph() -> StateGraph:
     builder = StateGraph(_State)
     builder.add_node("approval", _approval)
     builder.add_edge(START, "approval")
+    builder.add_edge("approval", END)
+    return builder
+
+
+class _Selection(TypedDict):
+    log: Annotated[list[str], operator.add]
+    enabled_capabilities: Annotated[dict[str, list[str]], merge_enabled_capabilities]
+
+
+def selection_graph(enabled: list[str]) -> StateGraph:
+    """Two nodes of one step: one enables capabilities, the other waits for an
+    approval. The enable survives only as a pending write of the checkpoint
+    until the approval comes."""
+
+    def enable(state: _Selection) -> dict[str, Any]:
+        enabled.append("enable ran")
+        return {"enabled_capabilities": {"agent": {"enable": ["acme/tool@1"]}}}
+
+    def approval(state: _Selection) -> dict[str, list[str]]:
+        return {"log": [f"approved:{interrupt('approve?')}"]}
+
+    builder = StateGraph(_Selection)
+    builder.add_node("enable", enable)
+    builder.add_node("approval", approval)
+    builder.add_edge(START, "enable")
+    builder.add_edge(START, "approval")
+    builder.add_edge("enable", END)
     builder.add_edge("approval", END)
     return builder
 
@@ -253,6 +281,33 @@ class CheckpointSaverContract(ABC):
             "again",
         ]
         assert len(saver.history(config)) >= 4
+
+    def test_a_capability_selection_survives_as_a_pending_write(self, saver):
+        """A ``CapabilityAgent`` stores its selection in graph state. Written in
+        a step that is not finished (a sibling is waiting for an approval), it
+        lives only in the checkpoint's pending writes: they must hold the update
+        as written, apply when the step resumes, and not run the node again."""
+        enabled: list[str] = []
+        builder, config = selection_graph(enabled), thread("selection")
+
+        saver.run(builder, {"log": ["start"]}, config)
+        pending = saver.get_tuple(config)
+        assert pending.checkpoint["channel_values"].get("enabled_capabilities") is None
+        assert [
+            value
+            for _, channel, value in pending.pending_writes
+            if channel == "enabled_capabilities"
+        ] == [{"agent": {"enable": ["acme/tool@1"]}}]
+
+        # A new process: a new graph on the same saver, no memory of the first.
+        resumed = selection_graph(enabled)
+        result = saver.run(resumed, Command(resume="yes"), config)
+
+        assert result["enabled_capabilities"] == {"agent": ["acme/tool@1"]}
+        assert enabled == ["enable ran"]
+        assert saver.get_tuple(config).checkpoint["channel_values"][
+            "enabled_capabilities"
+        ] == {"agent": ["acme/tool@1"]}
 
 
 class TestInMemorySaverReference(CheckpointSaverContract):

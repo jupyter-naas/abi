@@ -35,7 +35,7 @@ from naas_abi_core.utils.Expose import Expose
 from naas_abi_core.utils.Logger import logger
 
 # Pydantic imports for schema validation (keep - it's already loaded by other modules)
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 # Only import heavy modules for type checking
 if TYPE_CHECKING:
@@ -1166,6 +1166,23 @@ class Agent(Expose):
             if below is not None:
                 return [agent, *below]
         return None
+
+    @staticmethod
+    def _failure_text(error: Exception) -> str:
+        """``error`` for the log and the model, without the input it rejected.
+
+        A tool declaring ``InjectedState`` is called with the whole conversation
+        among its arguments, and a validation error quotes the value it refused.
+        """
+        if isinstance(error, ValidationError):
+            reasons = "; ".join(
+                f"{'.'.join(str(part) for part in detail['loc'])}: {detail['msg']}"
+                for detail in error.errors(
+                    include_url=False, include_context=False, include_input=False
+                )
+            )
+            return f"{error.title}: {reasons}"
+        return str(error)
 
     def _in_tree(self, name: str) -> bool:
         return name == self._name or self._path_to(name) is not None
@@ -2359,7 +2376,8 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
 
             # Try to invoke the tool.
             try:
-                logger.debug(f"🔧 Tool arguments: {args.get('args')}")
+                # The model's arguments: ``args`` also holds an injected state.
+                logger.debug(f"🔧 Tool arguments: {tool_call['args']}")
                 tool_response = tool_.invoke(args)
                 logger.debug(
                     f"📦 Tool response: {tool_response.content if hasattr(tool_response, 'content') else tool_response}"
@@ -2404,7 +2422,8 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                         )
                     )
             except Exception as e:  # noqa: BLE001
-                logger.error(f"🚨 Tool call {tool_name} failed: {e}")
+                failure = self._failure_text(e)
+                logger.error(f"🚨 Tool call {tool_name} failed: {failure}")
                 had_tool_error = True
                 called_tools.append(tool_)
                 results.append(
@@ -2412,7 +2431,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                         update={
                             "messages": [
                                 ToolMessage(
-                                    content=f"Tool call {tool_name} failed: {e!s}",
+                                    content=f"Tool call {tool_name} failed: {failure}",
                                     name=tool_name,
                                     tool_call_id=tool_call["id"],
                                 )

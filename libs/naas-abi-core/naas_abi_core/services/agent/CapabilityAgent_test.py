@@ -228,6 +228,77 @@ def test_a_selection_survives_rebuilding_the_agent_for_the_next_request(registry
     assert issue_calls == [{"repo_name": "o/r", "title": "t"}]
 
 
+def test_a_selection_survives_the_document_checkpointer(registry, tmp_path):
+    """The engine's agents checkpoint into the Document Service: the selection
+    must come back from it, through a restart of the backend as well."""
+    from naas_abi_core.services.agent.DocumentCheckpointSaver import (
+        DocumentCheckpointSaver,
+    )
+    from naas_abi_core.services.document.DocumentFactory import DocumentFactory
+    from naas_abi_core.services.document.DocumentService import DocumentService
+
+    def saver() -> DocumentCheckpointSaver:
+        root = DocumentService._for_engine(
+            DocumentFactory.DocumentAdapterSQLite(str(tmp_path / "documents.sqlite"))
+        )
+        return DocumentCheckpointSaver.for_engine(root)
+
+    first, _ = _agent(
+        registry,
+        [
+            _call("enable_capability", {"tool_id": CREATE_ISSUE}, "e1"),
+            AIMessage(content="ok"),
+        ],
+        memory=saver(),
+    )
+    first.invoke("enable issues")
+
+    second, recorder = _agent(
+        registry,
+        [
+            _call("create_issue", {"repo_name": "o/r", "title": "t"}, "c1"),
+            AIMessage(content="done"),
+        ],
+        memory=saver(),
+    )
+    assert second.invoke("file it") == "done"
+    assert "create_issue" in recorder.bound[0]
+    assert issue_calls == [{"repo_name": "o/r", "title": "t"}]
+
+
+def test_a_runtime_tool_can_opt_out_of_chat_sources(registry):
+    """``metadata={"chat_source": False}`` is honoured for tools enabled at runtime."""
+    from naas_abi_core.services.agent.Agent import ToolResponseEvent
+
+    @tool
+    def internal_lookup(query: str) -> str:
+        """Look something up internally."""
+        return "https://internal.example/doc"
+
+    internal_lookup.metadata = {"chat_source": False}
+
+    publisher = ToolPublisher("acme.internal")
+    publisher.add_tool(internal_lookup)
+    publisher.publish_to(registry)
+    agent, _ = _agent(
+        registry,
+        [
+            _call("enable_capability", {"tool_id": "acme.internal/internal_lookup@1"}, "e1"),
+            _call("internal_lookup", {"query": "q"}, "c1"),
+            AIMessage(content="done"),
+        ],
+    )
+    assert agent.invoke("look it up") == "done"
+
+    responses = {}
+    while not agent._event_queue.empty():
+        event = agent._event_queue.get_nowait()
+        if isinstance(event, ToolResponseEvent):
+            responses[event.payload.name] = event.chat_source
+    assert responses["internal_lookup"] is False
+    assert responses["enable_capability"] is True
+
+
 def test_duplicate_keeps_registry_and_options(registry):
     agent, _ = _agent(registry, [AIMessage(content="ok")], max_enabled=3)
     copy = agent.duplicate()
