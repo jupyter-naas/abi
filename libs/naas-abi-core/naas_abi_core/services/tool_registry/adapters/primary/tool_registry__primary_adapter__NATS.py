@@ -59,12 +59,12 @@ from naas_abi_core.services.tool_registry.adapters.tool_registry_nats_codec impo
     SUBJECT_PREFIX,
     entry_to_pb,
     filter_from_pb,
-    match_to_pb,
 )
 from naas_abi_core.services.tool_registry.ToolRegistryPort import (
     MAX_CATALOG_LIST_LIMIT,
     MAX_CATALOG_SEARCH_LIMIT,
     ToolContext,
+    ToolListing,
     ToolNotFoundError,
     ToolRef,
     ToolRegistryError,
@@ -132,11 +132,7 @@ class ToolRegistryPrimaryAdapterNATS(ServicePrimary):
         Only the identity decides it: first-party processes hold every scope the
         catalog's tools require, a module those configured for it."""
         if identity in FIRST_PARTY_IDENTITIES:
-            scopes = {
-                scope
-                for listing in self._registry.list_local()
-                for scope in listing.definition.required_scopes
-            }
+            scopes = self._registry.known_scopes()
         else:
             scopes = set(self._module_scopes.get(identity, ()))
         return ToolContext(scopes=frozenset(scopes))
@@ -276,19 +272,23 @@ class ToolRegistryPrimaryAdapterNATS(ServicePrimary):
         response = pb.SearchToolsResponse()
         used = 0
         for result in results:
-            try:
-                match = match_to_pb(result)
-            except (ValueError, TypeError):
-                logger.warning(
-                    f"tool_registry NATS: '{result.tool_id}' has a definition "
-                    "JSON cannot carry; left out of the results"
-                )
+            entry = self._encode(
+                ToolListing(
+                    definition=result.definition, availability=result.availability
+                ),
+                budget,
+            )
+            if entry is None:
+                # Not served (JSON cannot carry it, or it alone passes the budget):
+                # a larger limit reaches the matches after it.
+                response.truncated = True
                 continue
-            used += match.ByteSize()
-            if used > budget:
-                if not response.matches:
-                    continue
+            match = pb.ToolMatch(tool=entry, score=result.score)
+            if used + match.ByteSize() > budget:
+                # Past the budget: what follows is cut, whatever the limit.
+                response.truncated = True
                 break
+            used += match.ByteSize()
             response.matches.append(match)
         return response
 

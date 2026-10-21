@@ -140,9 +140,11 @@ class SearchToolsRequest(_message.Message):
     def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., query: _Optional[str] = ..., limit: _Optional[int] = ..., min_score: _Optional[float] = ..., filter: _Optional[_Union[ToolFilter, _Mapping]] = ...) -> None: ...
 
 class SearchToolsResponse(_message.Message):
-    __slots__ = ("matches", "error")
+    __slots__ = ("matches", "truncated", "error")
     MATCHES_FIELD_NUMBER: _ClassVar[int]
+    TRUNCATED_FIELD_NUMBER: _ClassVar[int]
     ERROR_FIELD_NUMBER: _ClassVar[int]
     matches: _containers.RepeatedCompositeFieldContainer[ToolMatch]
+    truncated: bool
     error: _common_pb2.CallError
-    def __init__(self, matches: _Optional[_Iterable[_Union[ToolMatch, _Mapping]]] = ..., error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ...) -> None: ...
+    def __init__(self, matches: _Optional[_Iterable[_Union[ToolMatch, _Mapping]]] = ..., truncated: bool = ..., error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ...) -> None: ...

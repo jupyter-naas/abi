@@ -7,6 +7,8 @@ from naas_abi_core.services.tool_registry.adapters.secondary.ToolRegistrySeconda
     ToolRegistrySecondaryAdapterNATSClient,
 )
 from naas_abi_core.services.tool_registry.ToolRegistryPort import (
+    ToolCatalogError,
+    ToolCatalogRequestError,
     ToolFilter,
     ToolNotFoundError,
     ToolRegistryError,
@@ -56,13 +58,13 @@ def test_search_that_the_serving_engine_cannot_rank_is_unavailable(client):
 
 def test_other_failures_are_not_hidden(client):
     client.remote.search_tools.side_effect = RPCError("INTERNAL", "boom")
-    with pytest.raises(ToolRegistryError, match="INTERNAL: boom"):
+    with pytest.raises(ToolCatalogError, match="INTERNAL: boom"):
         client.search_tools("x", 3)
     client.remote.search_tools.side_effect = TimeoutError()
-    with pytest.raises(ToolRegistryError, match="did not answer"):
+    with pytest.raises(ToolCatalogError, match="did not answer"):
         client.search_tools("x", 3)
     client.remote.get_tool.side_effect = RPCError("INVALID_ARGUMENT", "bad ref")
-    with pytest.raises(ValueError, match="bad ref"):
+    with pytest.raises(ToolCatalogRequestError, match="bad ref"):
         client.get_tool("bad")
 
 
@@ -71,9 +73,11 @@ def test_a_search_sends_the_limit_the_contract_allows_and_the_filter(client):
         matches=[pb.ToolMatch(tool=entry("sync", missing=("api_key",)), score=0.8)]
     )
 
-    (result,) = client.search_tools(
+    answer = client.search_tools(
         "sync", 500, 0.2, ToolFilter(modules=("acme.crm",), available_only=True)
     )
+    (result,) = answer.results
+    assert not answer.truncated
 
     request = client.remote.search_tools.call_args.args[0]
     assert request.limit == 50 and request.min_score == pytest.approx(0.2)
@@ -104,7 +108,7 @@ def test_a_catalog_that_never_ends_is_refused(client):
     client.remote.list_tools.return_value = pb.ListToolsResponse(
         tools=[entry("a")], next_after="acme.crm/a@1"
     )
-    with pytest.raises(ToolRegistryError, match="more than"):
+    with pytest.raises(ToolCatalogError, match="more than"):
         client.list_tools()
     assert client.remote.list_tools.await_count == MAX_LIST_PAGES
 
@@ -115,3 +119,53 @@ def test_a_definition_that_does_not_match_its_id_is_refused(client):
     client.remote.get_tool.return_value = pb.GetToolResponse(tool=bad)
     with pytest.raises(ToolRegistryError, match="does not match"):
         client.get_tool("acme.crm/a")
+
+
+def test_the_truncation_the_catalog_reports_is_passed_on(client):
+    client.remote.search_tools.return_value = pb.SearchToolsResponse(
+        matches=[pb.ToolMatch(tool=entry("a"), score=0.5)], truncated=True
+    )
+    assert client.search_tools("x", 3).truncated
+
+
+def test_a_query_the_catalog_would_refuse_is_made_acceptable_not_an_error(client):
+    client.remote.search_tools.return_value = pb.SearchToolsResponse()
+    for blank in ("", "   ", "\n\t"):
+        assert client.search_tools(blank, 3).results == ()
+    client.remote.search_tools.assert_not_called()
+
+    client.search_tools("  " + "x" * 5000 + "  ", 3)
+    sent = client.remote.search_tools.call_args.args[0].query
+    assert sent == "x" * 2000
+
+
+def test_a_request_the_catalog_still_refuses_is_a_catalog_error(client):
+    client.remote.search_tools.side_effect = RPCError("INVALID_ARGUMENT", "min_score")
+    with pytest.raises(ToolRegistryError) as raised:
+        client.search_tools("x", 3, float("nan"))
+    assert not isinstance(raised.value, ValueError)
+
+
+def test_one_bad_definition_does_not_hide_the_catalog(client):
+    bad = entry("bad")
+    bad.definition.id = "acme.crm/other@1"
+    client.remote.list_tools.return_value = pb.ListToolsResponse(
+        tools=[entry("a"), bad, entry("b")]
+    )
+    assert [l.definition.name for l in client.list_tools()] == ["a", "b"]
+    client.remote.search_tools.return_value = pb.SearchToolsResponse(
+        matches=[
+            pb.ToolMatch(tool=bad, score=0.9),
+            pb.ToolMatch(tool=entry("a"), score=0.5),
+        ]
+    )
+    assert [r.tool_id for r in client.search_tools("x", 3).results] == ["acme.crm/a@1"]
+
+
+def test_no_transport_exists_until_the_catalog_is_read():
+    client = ToolRegistrySecondaryAdapterNATSClient("nats://127.0.0.1:1", "s" * 32)
+    assert client._transport is None
+    client.close()  # nothing to close
+    assert client.remote is not None and client._transport is not None
+    client.close()
+    assert client._transport is None

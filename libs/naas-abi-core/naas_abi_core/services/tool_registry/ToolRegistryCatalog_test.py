@@ -14,13 +14,14 @@ from naas_abi_core.services.tool_registry.ToolRegistryPort import (
     ConfigRequirement,
     IToolCatalogPort,
     ToolAction,
+    ToolCatalogError,
+    ToolCatalogSearch,
     ToolContext,
     ToolFilter,
     ToolListing,
     ToolNotFoundError,
     ToolRequirements,
     ToolResolutionError,
-    ToolSearchResult,
     ToolSearchUnavailableError,
 )
 from naas_abi_core.services.tool_registry.ToolRegistryService import (
@@ -49,6 +50,7 @@ class OwnerCatalog(IToolCatalogPort):
         self.owner = owner
         self.context = ToolContext(scopes=frozenset(scopes))
         self.searches: list[tuple[str, int]] = []
+        self.truncated = False
 
     def list_tools(self, filter: ToolFilter | None = None) -> list[ToolListing]:
         return self.owner.list_local(self.context, filter)
@@ -58,10 +60,15 @@ class OwnerCatalog(IToolCatalogPort):
 
     def search_tools(
         self, query, limit, min_score=None, filter=None
-    ) -> list[ToolSearchResult]:
+    ) -> ToolCatalogSearch:
         self.searches.append((query, limit))
-        return self.owner.search_local(
-            query, self.context, limit=limit, min_score=min_score, filter=filter
+        return ToolCatalogSearch(
+            results=tuple(
+                self.owner.search_local(
+                    query, self.context, limit=limit, min_score=min_score, filter=filter
+                )
+            ),
+            truncated=self.truncated,
         )
 
 
@@ -397,3 +404,111 @@ class TestTheOwnersView:
             l.definition.name
             for l in owner.list_local(filter=ToolFilter(available_only=True))
         ] == ["free"]
+
+
+class Down(IToolCatalogPort):
+    """A serving engine that is restarting, missing or too slow."""
+
+    def list_tools(self, filter=None):
+        raise ToolCatalogError("the serving engine did not answer")
+
+    get_tool = list_tools
+
+    def search_tools(self, *args, **kwargs):
+        raise ToolCatalogError("the serving engine did not answer")
+
+
+class TestTheCatalogBeingAway:
+    @pytest.fixture
+    def local(self) -> ToolRegistryService:
+        registry = ToolRegistryService(
+            embedder=CountingConceptEmbedder(), index=InMemoryToolIndexAdapter()
+        )
+        registry.publish(
+            "acme.local",
+            [_tool("acme.local", "close_issue", "Close an issue in a repository.")],
+        )
+        registry.configure_catalog(Down())
+        return registry
+
+    def test_search_goes_on_with_the_tools_this_process_holds(self, local):
+        assert ids(local.search_tools("close an issue", limit=3)) == [
+            "acme.local/close_issue@1"
+        ]
+
+    def test_list_goes_on_with_the_tools_this_process_holds(self, local):
+        assert [str(d.id) for d in local.list_definitions()] == [
+            "acme.local/close_issue@1"
+        ]
+
+    def test_with_nothing_held_there_is_no_answer_so_the_failure_surfaces(self):
+        registry = ToolRegistryService(
+            embedder=CountingConceptEmbedder(), index=InMemoryToolIndexAdapter()
+        )
+        registry.configure_catalog(Down())
+        with pytest.raises(ToolCatalogError):
+            registry.search_tools("anything")
+        with pytest.raises(ToolCatalogError):
+            registry.list_definitions()
+
+    def test_a_process_that_could_not_rank_its_own_tools_does_not_hide_it(self):
+        registry = ToolRegistryService()  # no search backend
+        registry.publish("acme.local", [_tool("acme.local", "x", "Local.")])
+        registry.configure_catalog(Down())
+        with pytest.raises(ToolCatalogError):
+            registry.search_tools("anything")
+
+    def test_a_tool_not_held_reports_the_failure_as_a_registry_error(self, local):
+        with pytest.raises(ToolCatalogError):
+            local.get_definition(ISSUE)
+        with pytest.raises(ToolCatalogError):
+            local.availability(ISSUE)
+
+
+class TestAShortAnswerIsNotAlwaysTheEnd:
+    def test_a_truncated_answer_is_asked_again_with_a_larger_limit(self):
+        class Skipping(OwnerCatalog):
+            """Leaves out the best match at the first size, as a primary does for a
+            definition too large to send; a larger limit gets past it."""
+
+            def search_tools(self, query, limit, min_score=None, filter=None):
+                self.searches.append((query, limit))
+                results = self.owner.search_local(query, self.context, limit=limit)
+                if limit < 20:
+                    return ToolCatalogSearch(results=tuple(results[2:]), truncated=True)
+                return ToolCatalogSearch(results=tuple(results))
+
+        owner = ToolRegistryService(
+            embedder=CountingConceptEmbedder(), index=InMemoryToolIndexAdapter()
+        )
+        owner.publish(
+            "acme.weather",
+            [
+                _tool("acme.weather", f"forecast_{n:02d}", "Get the weather forecast.")
+                for n in range(8)
+            ],
+        )
+        registry = ToolRegistryService()
+        catalog = Skipping(owner)
+        registry.configure_catalog(catalog)
+        found = registry.search_tools("weather forecast", limit=8)
+        assert len(found) == 8
+        assert catalog.searches[-1][1] >= 20
+
+    def test_widening_stops_when_it_brings_no_more(self):
+        """A reply cut at the catalog's size budget returns the same matches
+        however large the limit: asking again is pointless."""
+
+        class Capped(OwnerCatalog):
+            def search_tools(self, query, limit, min_score=None, filter=None):
+                self.searches.append((query, limit))
+                results = self.owner.search_local(query, self.context, limit=limit)
+                return ToolCatalogSearch(results=tuple(results[:3]), truncated=True)
+
+        owner = _owner()
+        registry = ToolRegistryService()
+        catalog = Capped(owner)
+        registry.configure_catalog(catalog)
+        found = registry.search_tools("create something", limit=5)
+        assert len(found) == 3
+        assert len(catalog.searches) == 2  # the second brought no more than the first

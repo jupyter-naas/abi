@@ -92,7 +92,13 @@ A reply stays under half of the broker's `max_payload`, so it never needs RPC
 overflow. A list page, or a result list, ends at the tool that would pass it (the
 next page continues from `next_after`); a single definition above it, or one JSON
 cannot carry (NaN), is neither listed nor returned (`get_tool` says invalid), and
-the primary logs which.
+the primary logs which. A search reply says `truncated` when it left matches out
+for either reason, so a short answer is not mistaken for "no more": a client
+asks again with a larger limit while that adds matches (it gets back what was
+skipped as too large, not what the byte budget cut: the budget does not depend on
+the limit, and a client stops when a larger limit brings no more). That is a known
+bound: matches past a reply's byte budget are unreachable by search on a client
+engine.
 
 ### Engines that do not serve read the catalog; publish and resolve stay local
 
@@ -120,7 +126,8 @@ Reads then cover what the process holds and what the catalog shows:
   engine's identity, so the process applies its caller's context (the
   `ToolContext` of the search) to what comes back, and the caller's `where`. The
   limit is met by asking the catalog for more, doubling up to the contract's 50
-  results, until it is filled or the catalog has no more.
+  results, until it is filled, the catalog has no more (a short, untruncated
+  answer) or a larger limit brings nothing new.
 - **Availability** of a catalog-only tool is the owner's, less the keys the caller
   provides in `config`.
 - **A tool only the catalog has cannot be built here.** `resolve` raises
@@ -131,8 +138,18 @@ The serving side answers from `get_local`, `list_local` and `search_local`,
 which never read a catalog, so a standby that just took over and still has its
 catalog set for an instant cannot call itself over the queue group it joined.
 
-Failures reaching the catalog are not swallowed: a search over NATS that fails
-raises, since a silently shorter result is worse than an error.
+When the catalog cannot answer (the serving engine restarting or in a handover,
+the service missing, the 60 s timeout), `list_definitions` and `search_tools` of
+a process that holds tools of its own go on with those, and log a warning: agent
+composition and `search_capabilities` worked from local tools before there was a
+catalog. A process with nothing local to answer with, or whose own search could
+not rank, raises, since an empty result would hide the failure. `get_definition`,
+`availability` and `check_access` on a tool not held raise too, as a
+`ToolCatalogError` (a `ToolRegistryError`; `ToolCatalogRequestError` for a request
+the catalog refused). The client sends what the catalog accepts (a query is
+stripped and cut at 2000 characters, a blank one asks nothing) and skips a
+definition it cannot read, with a warning, instead of failing the whole catalog.
+Its connection opens on first use.
 
 ### Broker permissions
 

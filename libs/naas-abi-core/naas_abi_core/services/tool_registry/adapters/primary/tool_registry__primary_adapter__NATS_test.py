@@ -496,6 +496,56 @@ class TestReplySize:
         finally:
             primary._dispatch.close()
 
+    def test_an_oversized_best_match_does_not_cost_the_matches_after_it(self, registry):
+        publish(
+            registry,
+            "acme.huge",
+            "enormous",
+            "Get the weather forecast for a city and report a bug.",
+            input_schema={"type": "object", "x": "y" * 20000},
+        )
+        primary = ToolRegistryPrimaryAdapterNATS(registry, SECRET)
+        try:
+            found, _ = call(
+                primary,
+                "search_tools",
+                pb.SearchToolsRequest(query="weather forecast city", limit=10),
+                limit=8192,
+            )
+            assert "acme.huge/enormous@1" not in ids(found)
+            assert "acme.weather/get_forecast@1" in ids(found)
+            assert len(found.matches) == 3  # the three small ones
+            assert found.truncated
+            # Fully served: nothing to flag.
+            whole, _ = call(
+                primary, "search_tools", pb.SearchToolsRequest(query="x", limit=10)
+            )
+            assert not whole.truncated
+        finally:
+            primary._dispatch.close()
+
+    def test_a_search_cut_at_the_budget_says_so(self, registry):
+        for n in range(20):
+            publish(
+                registry,
+                "acme.bulk",
+                f"tool_{n:02d}",
+                "Get the weather forecast. " * 20,
+                input_schema={"type": "object", "x": "y" * 400},
+            )
+        primary = ToolRegistryPrimaryAdapterNATS(registry, SECRET)
+        try:
+            found, payload = call(
+                primary,
+                "search_tools",
+                pb.SearchToolsRequest(query="weather forecast", limit=30),
+                limit=8 * 1024,
+            )
+            assert 0 < len(found.matches) < 23 and found.truncated
+            assert len(payload) <= 4 * 1024 + 1024
+        finally:
+            primary._dispatch.close()
+
     def test_one_definition_above_the_limit_is_neither_listed_nor_returned(
         self, registry
     ):

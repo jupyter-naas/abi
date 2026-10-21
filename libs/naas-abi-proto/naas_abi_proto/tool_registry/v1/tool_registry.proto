@@ -17,7 +17,8 @@ import "naas_abi_proto/common/v1/common.proto";
 // (default 5), list limit 1..200 (default 100), at most 32 module filters of 256
 // characters and 16 tag filters of 64, a finite min_score, and a tool reference
 // of at most 512 characters. A reply stays under half the broker's limit: a
-// page or a result list is cut at the tool that would pass it, and a single
+// page or a result list is cut at the tool that would pass it (search says so with
+// `truncated`), and a single
 // definition above it is neither listed nor returned.
 //
 // ToolDefinition is the portable form of a published tool, shared by the
@@ -106,5 +107,10 @@ message SearchToolsRequest {
 message SearchToolsResponse {
   // Best first.
   repeated ToolMatch matches = 1;
+  // Matches were left out of this reply: too large to send, or past the reply's
+  // size budget. A shorter list than the limit then does not mean the catalog
+  // has no more. Asking for a larger limit gets back what was skipped, not what
+  // the budget cut.
+  bool truncated = 2;
   abi.common.v1.CallError error = 15;
 }

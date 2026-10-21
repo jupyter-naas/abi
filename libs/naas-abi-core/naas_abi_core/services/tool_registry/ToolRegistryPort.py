@@ -437,6 +437,27 @@ class IToolEmbedderPort(ABC):
         return ResolvedEmbedder(self.model_key, self.embed_documents, self.embed_query)
 
 
+class ToolCatalogError(ToolRegistryError):
+    """The other process's catalog could not answer (unreachable, timed out, failed)."""
+
+
+class ToolCatalogRequestError(ToolCatalogError):
+    """The catalog refused a request as outside its limits."""
+
+
+class ToolCatalogSearch(BaseModel):
+    """What a catalog search returned, best first.
+
+    ``truncated``: matches were left out of the reply (too large to send, or past
+    its size budget), so fewer than asked for does not mean no more exist.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    results: tuple[ToolSearchResult, ...] = ()
+    truncated: bool = False
+
+
 class IToolCatalogPort(ABC):
     """Read-only view of the tools another process holds.
 
@@ -449,7 +470,9 @@ class IToolCatalogPort(ABC):
 
     @abstractmethod
     def list_tools(self, filter: ToolFilter | None = None) -> list[ToolListing]:
-        """Every tool visible to this process, sorted by id."""
+        """Every tool visible to this process, sorted by id.
+
+        Raises ``ToolCatalogError`` when the catalog cannot answer."""
 
     @abstractmethod
     def get_tool(self, ref: str) -> ToolListing:
@@ -462,8 +485,10 @@ class IToolCatalogPort(ABC):
         limit: int,
         min_score: float | None = None,
         filter: ToolFilter | None = None,
-    ) -> list[ToolSearchResult]:
-        """Best first; ``limit`` is at most ``MAX_CATALOG_SEARCH_LIMIT``."""
+    ) -> ToolCatalogSearch:
+        """Best first; ``limit`` is at most ``MAX_CATALOG_SEARCH_LIMIT``.
+
+        Raises ``ToolCatalogError`` when the catalog cannot answer."""
 
 
 # What a catalog read may ask for in one call (the serving side enforces them).

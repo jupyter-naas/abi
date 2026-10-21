@@ -57,7 +57,7 @@ class IToolRegistry:
     search_tools(query, context=None, limit=5, min_score=None, where=None) -> list[ToolSearchResult]
     sync_index() -> int                                   # definitions (re-)embedded
 
-class IToolCatalogPort:    list_tools(filter), get_tool(ref), search_tools(query, limit, min_score, filter)   # another process's catalog, read only
+class IToolCatalogPort:    list_tools(filter), get_tool(ref), search_tools(query, limit, min_score, filter) -> ToolCatalogSearch(results, truncated)   # another process's catalog, read only; raises ToolCatalogError
 class IToolIndexPort:      prepare(model_key), fingerprints(ids), upsert(entries), delete(ids), search(vector, limit), size(),
                            collect_garbage(keep_ids)          # the writer's cleanup, never automatic
 class IToolEmbedderPort:   model_key, embed_documents(texts), embed_query(text), resolve() -> ResolvedEmbedder  # model looked up once
@@ -68,7 +68,8 @@ class ToolBinding (Protocol): default_config; create(context, config) -> object
 Exceptions (all `ToolRegistryError`): `InvalidToolReferenceError`,
 `ToolNotFoundError`, `ToolAlreadyPublishedError`, `ToolAccessDeniedError`,
 `ToolConfigurationError` (`.missing`), `ToolResolutionError`,
-`ToolSearchUnavailableError`.
+`ToolSearchUnavailableError`, `ToolCatalogError` (the other process's catalog
+could not answer; `ToolCatalogRequestError` when it refused the request).
 
 ## Service behaviour (`ToolRegistryService.py`)
 
@@ -103,7 +104,13 @@ Exceptions (all `ToolRegistryError`): `InvalidToolReferenceError`,
   and the catalog's: a tool held here shadows the catalog's of the same id and a
   reference resolves here first; `search_tools` merges both rankings by score,
   and the caller's `context` and `where` apply to what the catalog returned
-  (it asks for more, doubling up to 50, until the limit is met). `resolve` never
+  (it asks for more, doubling up to 50, until the limit is met, the catalog is
+  exhausted (short and not `truncated`) or more brings nothing new). If the
+  catalog fails (`ToolCatalogError`), `list_definitions` and `search_tools` go on
+  with what this process holds (warning) and raise only when it holds nothing or
+  could not rank it; `get_definition` and `availability` on a miss raise.
+  A reply cut at the primary's byte budget is a known bound: what follows the cut
+  is unreachable by search. `resolve` never
   leaves the process: for a tool only the catalog shows it raises
   `ToolResolutionError`. `get_local`, `list_local` and `search_local` read this
   process only: the NATS primary answers from them, so it never calls itself.

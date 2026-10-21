@@ -56,6 +56,7 @@ from naas_abi_core.services.tool_registry.ToolRegistryPort import (
     ToolAction,
     ToolAlreadyPublishedError,
     ToolAvailability,
+    ToolCatalogError,
     ToolConfigurationError,
     ToolContext,
     ToolDefinition,
@@ -230,16 +231,32 @@ class ToolRegistryService(IToolRegistry):
             str(listing.definition.id): listing.definition
             for listing in self.list_local(context)
         }
-        if self._catalog is not None:
-            for listing in self._catalog.list_tools():
-                definition = listing.definition
-                if str(definition.id) in definitions:
-                    continue
-                if context is None or self._can(
-                    definition, context, ToolAction.DISCOVER
-                ):
-                    definitions[str(definition.id)] = definition
+        for listing in self._catalog_listings(self._holds_tools()):
+            definition = listing.definition
+            if str(definition.id) in definitions:
+                continue
+            if context is None or self._can(definition, context, ToolAction.DISCOVER):
+                definitions[str(definition.id)] = definition
         return [definitions[tool_id] for tool_id in sorted(definitions)]
+
+    def _holds_tools(self) -> bool:
+        with self._lock:
+            return bool(self._tools)
+
+    def _catalog_listings(self, have_local: bool) -> list[ToolListing]:
+        """The catalog's tools. When it cannot answer, a process that holds tools
+        of its own goes on with them (a warning says so); one that holds none has
+        nothing to go on with, and raises."""
+        catalog = self._catalog
+        if catalog is None:
+            return []
+        try:
+            return catalog.list_tools()
+        except ToolCatalogError as exc:
+            if not have_local:
+                raise
+            logger.warning(f"Tool registry: listing this process's tools only: {exc}")
+            return []
 
     @staticmethod
     def _missing_config(
@@ -294,6 +311,15 @@ class ToolRegistryService(IToolRegistry):
                 available=not missing, missing_config=missing
             ),
         )
+
+    def known_scopes(self) -> set[str]:
+        """Every scope the tools this process holds require."""
+        with self._lock:
+            return {
+                scope
+                for tool in self._tools.values()
+                for scope in tool.definition.required_scopes
+            }
 
     def list_local(
         self,
@@ -468,16 +494,26 @@ class ToolRegistryService(IToolRegistry):
             )
         context = context or ToolContext()
         local: list[ToolSearchResult] = []
-        if self._tools:
+        local_ranked = False
+        if self._holds_tools():
             try:
                 local = self.search_local(
                     query, context, limit=limit, min_score=min_score, where=where
                 )
+                local_ranked = True
             except ToolSearchUnavailableError:
                 # This process cannot rank its own tools; the catalog's search
                 # decides, and raises the same error when it cannot either.
                 logger.debug("Tool registry: no local search backend; catalog only")
-        remote = self._search_catalog(query, context, limit, min_score, where)
+        try:
+            remote = self._search_catalog(query, context, limit, min_score, where)
+        except ToolCatalogError as exc:
+            # This process ranked its own tools: they stay searchable while the
+            # serving engine is away. With nothing ranked, there is no answer.
+            if not local_ranked:
+                raise
+            logger.warning(f"Tool registry: searching this process's tools only: {exc}")
+            remote = []
         merged = {result.tool_id: result for result in remote}
         merged.update({result.tool_id: result for result in local})
         ranked = sorted(merged.values(), key=lambda result: -result.score)
@@ -497,8 +533,10 @@ class ToolRegistryService(IToolRegistry):
         limit is met or the catalog has no more."""
         assert self._catalog is not None
         fetch = min(max(limit * 2, limit + 5), MAX_CATALOG_SEARCH_LIMIT)
+        previous = -1
         while True:
-            hits = self._catalog.search_tools(query, fetch, min_score)
+            answer = self._catalog.search_tools(query, fetch, min_score)
+            hits = answer.results
             kept: list[ToolSearchResult] = []
             for hit in hits:
                 definition = hit.definition
@@ -509,12 +547,19 @@ class ToolRegistryService(IToolRegistry):
                 if where is not None and not where(definition):
                     continue
                 kept.append(hit)
+            # A short answer means the catalog has no more, unless it says it left
+            # some out; and asking for more is pointless when that returned no more
+            # than the last time (the catalog's reply size budget, not the limit,
+            # is what cut it).
+            exhausted = len(hits) < fetch and not answer.truncated
             if (
                 len(kept) >= limit
-                or len(hits) < fetch
+                or exhausted
                 or fetch >= MAX_CATALOG_SEARCH_LIMIT
+                or len(hits) <= previous
             ):
                 return kept[:limit]
+            previous = len(hits)
             fetch = min(fetch * 2, MAX_CATALOG_SEARCH_LIMIT)
 
     def search_local(
