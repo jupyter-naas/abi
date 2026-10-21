@@ -1,4 +1,5 @@
 import asyncio
+import json
 
 import pytest
 from naas_abi_core.services.discovery.discovery_ports import RevisionConflict
@@ -1080,5 +1081,188 @@ def test_an_instance_id_is_one_subject_token(instance_id):
         service = DiscoveryService(MemoryRegistry())
         with pytest.raises(DiscoveryError, match="INVALID_ARGUMENT"):
             await service.register(registration("acme.c", instance_id), "acme.c")
+
+    asyncio.run(scenario())
+
+
+def tool(name="lookup", module="acme.crm", **overrides):
+    fields = {
+        "id": f"{module}/{name}@1",
+        "namespace": module,
+        "name": name,
+        "version": "1",
+        "module": module,
+        "description": "Look a customer up by email.",
+        "input_schema_json": json.dumps(
+            {"type": "object", "properties": {"email": {"type": "string"}}}
+        ).encode(),
+    }
+    fields.update(overrides)
+    return fields
+
+
+def tool_registration(id="instance", module="acme.crm", tools=(), **kwargs):
+    req = registration(module, id, **kwargs)
+    for fields in tools:
+        req.descriptor.tools.add(**fields)
+    return req
+
+
+def test_tools_are_registered_and_listed_with_their_descriptor():
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        await _up(service, tool_registration(tools=[tool()]))
+        found = await service.get_module(
+            pb.GetModuleRequest(module_id="acme.crm", contract_major=1)
+        )
+        (declared,) = found.instances[0].descriptor.tools
+        assert declared.id == "acme.crm/lookup@1"
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"namespace": "other.module"},  # a module publishes under its own id
+        {"module": "other.module"},
+        {"id": "acme.crm/other@1"},
+        {"name": "has space", "id": ""},
+        {"name": ""},
+        {"version": "v1"},
+        {"version": ""},
+        {"description": ""},
+        {"description": "x" * 4097},
+        {"input_schema_json": b""},
+        {"input_schema_json": b"[]"},
+        {"input_schema_json": b"{not json"},
+        {"input_schema_json": b'{"default": NaN}'},
+        {"input_schema_json": b'{"x": "' + b"a" * 9000 + b'"}'},
+        {"output_schema_json": b"[1]"},
+        {"tags": [f"t{i}" for i in range(17)]},
+        {"required_scopes": ["s" * 129]},
+        {"requires": True},
+    ],
+)
+def test_a_malformed_tool_descriptor_is_refused(fields):
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        declared = tool()
+        requires = fields.pop("requires", False)
+        declared.update(fields)
+        req = tool_registration(tools=[declared])
+        if requires:
+            req.descriptor.tools[0].requirements.requires_workspace = True
+        with pytest.raises(DiscoveryError, match="INVALID_ARGUMENT"):
+            await service.register(req, "acme.crm")
+
+    asyncio.run(scenario())
+
+
+def test_a_tool_cannot_declare_a_secret_requirement():
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        req = tool_registration(tools=[tool()])
+        req.descriptor.tools[0].requirements.config.add(key="api_key", secret=True)
+        with pytest.raises(DiscoveryError, match="INVALID_ARGUMENT.*secret"):
+            await service.register(req, "acme.crm")
+        ok = tool_registration(tools=[tool()])
+        ok.descriptor.tools[0].requirements.config.add(key="region", required=True)
+        await service.register(ok, "acme.crm")
+
+    asyncio.run(scenario())
+
+
+def test_tool_names_are_unique_and_bounded_in_a_module():
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        with pytest.raises(DiscoveryError, match="INVALID_ARGUMENT"):
+            await service.register(
+                tool_registration(
+                    tools=[tool(), tool(version="2", id="acme.crm/lookup@2")]
+                ),
+                "acme.crm",
+            )
+        with pytest.raises(DiscoveryError, match="INVALID_ARGUMENT"):
+            await service.register(
+                tool_registration(tools=[tool(f"t{i}") for i in range(33)]),
+                "acme.crm",
+            )
+        with pytest.raises(DiscoveryError, match="INVALID_ARGUMENT"):
+            await service.register(
+                tool_registration(
+                    tools=[
+                        tool(
+                            f"t{i}",
+                            input_schema_json=json.dumps({"d": "x" * 7000}).encode(),
+                        )
+                        for i in range(10)
+                    ]
+                ),
+                "acme.crm",
+            )
+
+    asyncio.run(scenario())
+
+
+def test_a_module_id_that_is_not_a_tool_namespace_publishes_no_tools():
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        # "acme-crm" is a valid module id, not a valid tool namespace.
+        req = tool_registration(
+            module="acme-crm",
+            tools=[tool(module="acme-crm", id="acme-crm/lookup@1")],
+        )
+        with pytest.raises(DiscoveryError, match="INVALID_ARGUMENT"):
+            await service.register(req, "acme-crm")
+        await service.register(tool_registration(module="acme-crm"), "acme-crm")
+
+    asyncio.run(scenario())
+
+
+def test_replicas_of_a_contract_declare_the_same_tools():
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        await service.register(tool_registration("a", tools=[tool()]), "acme.crm")
+        await service.register(tool_registration("b", tools=[tool()]), "acme.crm")
+        with pytest.raises(DiscoveryError, match="DESCRIPTOR_CONFLICT"):
+            await service.register(
+                tool_registration("c", tools=[tool(), tool("other")]), "acme.crm"
+            )
+        with pytest.raises(DiscoveryError, match="DESCRIPTOR_CONFLICT"):
+            await service.register(tool_registration("d"), "acme.crm")
+
+    asyncio.run(scenario())
+
+
+def test_tool_authorization_requires_the_declared_tool_lease_and_readiness():
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        req = tool_registration(tools=[tool()])
+        await service.register(req, "acme.crm")
+        auth = pb.AuthorizeToolRequest(
+            instance_id="instance", lease_token=req.lease_token, tool_name="lookup"
+        )
+        with pytest.raises(DiscoveryError, match="MODULE_UNAVAILABLE"):
+            await service.authorize_tool(auth, "acme.crm")
+        await service.renew(
+            pb.RenewRequest(
+                instance_id="instance", lease_token=req.lease_token, initialized=True
+            ),
+            "acme.crm",
+        )
+        await service.authorize_tool(auth, "acme.crm")
+        with pytest.raises(DiscoveryError, match="PERMISSION_DENIED"):
+            await service.authorize_tool(auth, "other-identity")
+        auth.tool_name = "missing"
+        with pytest.raises(DiscoveryError, match="TOOL_NOT_FOUND"):
+            await service.authorize_tool(auth, "acme.crm")
+        auth.tool_name = "lookup"
+        auth.lease_token = "wrong"
+        with pytest.raises(DiscoveryError, match="PERMISSION_DENIED"):
+            await service.authorize_tool(auth, "acme.crm")
+        auth.instance_id = "gone"
+        with pytest.raises(DiscoveryError, match="LEASE_EXPIRED"):
+            await service.authorize_tool(auth, "acme.crm")
 
     asyncio.run(scenario())

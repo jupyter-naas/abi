@@ -30,6 +30,8 @@ models = ["langchain-core>=0.3.78,<2"]
 # naas-abi-core pins langchain-openai below 0.4 (langchain-core 0.3), and a
 # project installs both: the agent extras accept the same range as models.
 agents = ["langchain-core>=0.3.78,<2"]
+# Serving tools: arguments are validated against each tool's input schema.
+tools = ["jsonschema>=4.19,<5"]
 rdf = ["rdflib>=7,<8"]
 langgraph = ["langgraph-checkpoint>=3.0.1,<4"]
 # Agents written like naas_abi_core agents (naas_abi_sdk.agents).

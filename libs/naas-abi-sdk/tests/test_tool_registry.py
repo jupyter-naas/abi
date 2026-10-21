@@ -64,6 +64,7 @@ def test_a_definition_is_data_with_requirements_that_name_but_never_hold_secrets
     assert definition.input_schema == {"type": "object"}
     assert definition.output_schema is None
     assert definition.tags == ("crm",) and definition.required_scopes == ("crm:read",)
+    assert definition.remote is False
     (requirement,) = definition.config
     assert (requirement.key, requirement.secret, requirement.required) == (
         "api_key",

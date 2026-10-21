@@ -51,6 +51,11 @@ message ToolDefinition {
   ToolRequirements requirements = 10;
   // The caller needs every one of these scopes to discover, enable or run it.
   repeated string required_scopes = 11;
+  // Published by an SDK module and served by it (abi.tool.v1): the engine
+  // runs it by calling the module, so its configuration holds no secret. Set by
+  // the engine from the module's discovery descriptor; a module's own value is
+  // ignored.
+  bool remote = 12;
 }
 // Whether the tool could be built now, as the engine that owns it sees it: the
 // required configuration keys that stay empty even with the publishing module's

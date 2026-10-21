@@ -1,0 +1,43 @@
+syntax = "proto3";
+package abi.tool.v1;
+import "naas_abi_proto/common/v1/common.proto";
+
+// Running a tool that a module serves. The tool's definition is the portable
+// abi.tool_registry.v1.ToolDefinition, declared in the module's discovery
+// descriptor; this file is only the call.
+//
+// Subject: abi.mod.<project>.<instance>.tool.<name>.invoke, a unary request to
+// one ready instance of the module (the caller's token is bound to it). The
+// module asks discovery to authorize the caller (AuthorizeToolRequest) and may
+// refuse it. Nothing here carries a binding, a callable or a pickle, and no
+// field carries an engine secret: `config_json` holds values the caller wrote
+// in plain, for a tool whose requirements are not secret.
+//
+// Limits, enforced by the serving module (no Protovalidate): a request of at
+// most 512 KiB as sent, `arguments_json` of at most 256 KiB, `config_json` of
+// at most 64 KiB, a result of at most 512 KiB. Arguments are validated against
+// the declared input schema before the handler runs. The handler's deadline is
+// `context.timeout_ms` (the time the caller waits), at most 300 seconds, 60
+// when it is zero. An error carries a stable code and a message that holds no
+// detail of the handler's failure:
+//   UNAUTHENTICATED, PERMISSION_DENIED, TOOL_NOT_FOUND, MODULE_UNAVAILABLE,
+//   INVALID_ARGUMENT, PAYLOAD_TOO_LARGE, DEADLINE_EXCEEDED, TOOL_ERROR.
+// `context.principal_id` names the end user the call is for: a module honors it
+// only from the engine's own processes (api, engine) and refuses it from any
+// other caller.
+message InvokeToolRequest {
+  abi.common.v1.CallContext context = 1;
+  // The tool's name, as declared. Must be the one in the subject.
+  string tool = 2;
+  // The declared version the caller means; empty: the declared one.
+  string version = 3;
+  // A JSON object, validated against the tool's input schema.
+  bytes arguments_json = 4;
+  // A JSON object of non-secret configuration values; empty: none.
+  bytes config_json = 5;
+}
+message InvokeToolResponse {
+  // Any JSON value (UTF-8, finite numbers); empty when the call failed.
+  bytes result_json = 1;
+  abi.common.v1.CallError error = 15;
+}

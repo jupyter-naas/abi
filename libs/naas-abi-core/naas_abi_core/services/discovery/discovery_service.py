@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
+import json
 import math
 import re
 import secrets
@@ -134,6 +135,77 @@ def _valid_app(app: pb.AppDescriptor) -> bool:
         and _app_entry(app.entry)
         and app.ByteSize() <= MAX_APP_BYTES
     )
+
+
+# Tools a module serves over NATS (docs/adr/20261022_remote-module-tools.md): every
+# descriptor is in discovery's bounded snapshot and in each lookup's reply, so
+# they stay few and small.
+MAX_TOOLS = 32
+MAX_TOOL_BYTES = 8 * 1024
+MAX_TOOLS_BYTES = 64 * 1024
+_TOOL_NAMESPACE = re.compile(r"[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*")
+_TOOL_NAME = re.compile(r"[A-Za-z0-9_-]{1,64}")
+_TOOL_VERSION = re.compile(r"\d+(?:\.\d+){0,2}")
+_CONFIG_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def _json_object(raw: bytes, *, required: bool) -> bool:
+    """UTF-8 JSON holding one object, with finite numbers."""
+    if not raw:
+        return not required
+
+    def refuse(constant: str) -> None:
+        raise ValueError(constant)
+
+    try:
+        return isinstance(json.loads(raw, parse_constant=refuse), dict)
+    except (ValueError, RecursionError):  # not JSON, not UTF-8, or nested too deep
+        return False
+
+
+def _tool_problem(tool: Any, module_id: str) -> str | None:
+    """Why a module may not declare ``tool``, or None. A tool is published under its
+    module's id, takes no secret (the module holds its own credentials) and no
+    workspace (it runs in another process)."""
+    if not (
+        tool.namespace == module_id
+        and tool.module == module_id
+        and _TOOL_NAMESPACE.fullmatch(module_id)
+    ):
+        return "its namespace and module are the module's own id, made of letters, digits, _ and ."
+    if not (_TOOL_NAME.fullmatch(tool.name) and _TOOL_VERSION.fullmatch(tool.version)):
+        return "invalid name or version"
+    if tool.id not in ("", f"{module_id}/{tool.name}@{tool.version}"):
+        return "its id is <module>/<name>@<version>"
+    if not 0 < len(tool.description) <= 4096:
+        return "a description of 1 to 4096 characters is required"
+    if not _json_object(tool.input_schema_json, required=True) or not _json_object(
+        tool.output_schema_json, required=False
+    ):
+        return "its schemas are JSON objects"
+    if len(tool.tags) > 16 or any(not 0 < len(t) <= 64 for t in tool.tags):
+        return "at most 16 tags of 1 to 64 characters"
+    if len(tool.required_scopes) > 16 or any(
+        not 0 < len(s) <= 128 for s in tool.required_scopes
+    ):
+        return "at most 16 scopes of 1 to 128 characters"
+    requirements = tool.requirements
+    if requirements.requires_workspace:
+        return "a tool another process runs cannot require a workspace"
+    config = requirements.config
+    if len(config) > 32 or len({c.key for c in config}) != len(config):
+        return "at most 32 distinct configuration keys"
+    for c in config:
+        if not _CONFIG_KEY.fullmatch(c.key) or len(c.description) > 512:
+            return "invalid configuration requirement"
+        if c.secret:
+            return (
+                "a configuration requirement cannot be secret: engine secrets never "
+                "reach a module, which holds its own credentials"
+            )
+    if tool.ByteSize() > MAX_TOOL_BYTES:
+        return "larger than 8 KiB"
+    return None
 
 
 class DiscoveryService:
@@ -409,6 +481,24 @@ class DiscoveryService:
             "Invalid model descriptor",
         )
         _require(
+            len(d.tools) <= MAX_TOOLS
+            and len({x.name for x in d.tools}) == len(d.tools),
+            "INVALID_ARGUMENT",
+            f"At most {MAX_TOOLS} tools, one version of each name",
+        )
+        for declared in d.tools:
+            problem = _tool_problem(declared, d.module_id)
+            _require(
+                problem is None,
+                "INVALID_ARGUMENT",
+                f"Invalid tool descriptor {declared.name!r}: {problem}",
+            )
+        _require(
+            sum(x.ByteSize() for x in d.tools) <= MAX_TOOLS_BYTES,
+            "INVALID_ARGUMENT",
+            "Tool descriptors exceed 64 KiB",
+        )
+        _require(
             len(d.apps) <= MAX_APPS and len({x.name for x in d.apps}) == len(d.apps),
             "INVALID_ARGUMENT",
             "Too many or duplicate apps",
@@ -438,9 +528,10 @@ class DiscoveryService:
                     and other.agents == d.agents
                     and other.jobs == d.jobs
                     and other.models == d.models
-                    and other.apps == d.apps,
+                    and other.apps == d.apps
+                    and other.tools == d.tools,
                     "DESCRIPTOR_CONFLICT",
-                    "Replicas of a contract in one rollout must declare identical dependencies, agents, jobs, models and apps",
+                    "Replicas of a contract in one rollout must declare identical dependencies, agents, jobs, models, apps and tools",
                 )
         self._refuse_cycles(req, state)
 
@@ -829,6 +920,30 @@ class DiscoveryService:
             "Provider is not ready",
         )
         return pb.AuthorizeModelResponse()
+
+    async def authorize_tool(
+        self, req: pb.AuthorizeToolRequest, owner: str
+    ) -> pb.AuthorizeToolResponse:
+        state, _ = await self._read()
+        self._ready(state)
+        record = next(
+            (r for r in state.records if r.instance.instance_id == req.instance_id),
+            None,
+        )
+        if record is None:
+            raise DiscoveryError("LEASE_EXPIRED", "Provider registration expired")
+        self._authorize(record, req.lease_token, owner)
+        _require(
+            any(t.name == req.tool_name for t in record.instance.descriptor.tools),
+            "TOOL_NOT_FOUND",
+            req.tool_name,
+        )
+        _require(
+            record.instance.status == "READY",
+            "MODULE_UNAVAILABLE",
+            "Provider is not ready",
+        )
+        return pb.AuthorizeToolResponse()
 
     async def authorize_app(
         self, req: pb.AuthorizeAppRequest, owner: str

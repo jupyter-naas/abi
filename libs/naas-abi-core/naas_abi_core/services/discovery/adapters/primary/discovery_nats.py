@@ -27,6 +27,7 @@ from nats.aio.subscription import Subscription
 OPERATIONS: dict[str, tuple[Any, Any, bool]] = {
     "authorize_agent": (pb.AuthorizeAgentRequest, pb.AuthorizeAgentResponse, True),
     "authorize_model": (pb.AuthorizeModelRequest, pb.AuthorizeModelResponse, True),
+    "authorize_tool": (pb.AuthorizeToolRequest, pb.AuthorizeToolResponse, True),
     "authorize_app": (pb.AuthorizeAppRequest, pb.AuthorizeAppResponse, True),
     "register": (pb.RegisterRequest, pb.RegisterResponse, True),
     "renew": (pb.RenewRequest, pb.RenewResponse, True),
@@ -109,7 +110,13 @@ class DiscoveryNATS:
                 verify_service_token(
                     request.caller_token, self.secret, audience=request.instance_id
                 )
-                if operation in ("authorize_agent", "authorize_model", "authorize_app")
+                if operation
+                in (
+                    "authorize_agent",
+                    "authorize_model",
+                    "authorize_tool",
+                    "authorize_app",
+                )
                 else None
             )
             handler = getattr(self.service, operation)

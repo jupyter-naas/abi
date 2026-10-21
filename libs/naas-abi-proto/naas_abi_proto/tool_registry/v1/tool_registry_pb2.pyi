@@ -28,7 +28,7 @@ class ToolRequirements(_message.Message):
     def __init__(self, config: _Optional[_Iterable[_Union[ConfigRequirement, _Mapping]]] = ..., requires_workspace: bool = ...) -> None: ...
 
 class ToolDefinition(_message.Message):
-    __slots__ = ("id", "namespace", "name", "version", "module", "description", "input_schema_json", "output_schema_json", "tags", "requirements", "required_scopes")
+    __slots__ = ("id", "namespace", "name", "version", "module", "description", "input_schema_json", "output_schema_json", "tags", "requirements", "required_scopes", "remote")
     ID_FIELD_NUMBER: _ClassVar[int]
     NAMESPACE_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
@@ -40,6 +40,7 @@ class ToolDefinition(_message.Message):
     TAGS_FIELD_NUMBER: _ClassVar[int]
     REQUIREMENTS_FIELD_NUMBER: _ClassVar[int]
     REQUIRED_SCOPES_FIELD_NUMBER: _ClassVar[int]
+    REMOTE_FIELD_NUMBER: _ClassVar[int]
     id: str
     namespace: str
     name: str
@@ -51,7 +52,8 @@ class ToolDefinition(_message.Message):
     tags: _containers.RepeatedScalarFieldContainer[str]
     requirements: ToolRequirements
     required_scopes: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, id: _Optional[str] = ..., namespace: _Optional[str] = ..., name: _Optional[str] = ..., version: _Optional[str] = ..., module: _Optional[str] = ..., description: _Optional[str] = ..., input_schema_json: _Optional[bytes] = ..., output_schema_json: _Optional[bytes] = ..., tags: _Optional[_Iterable[str]] = ..., requirements: _Optional[_Union[ToolRequirements, _Mapping]] = ..., required_scopes: _Optional[_Iterable[str]] = ...) -> None: ...
+    remote: bool
+    def __init__(self, id: _Optional[str] = ..., namespace: _Optional[str] = ..., name: _Optional[str] = ..., version: _Optional[str] = ..., module: _Optional[str] = ..., description: _Optional[str] = ..., input_schema_json: _Optional[bytes] = ..., output_schema_json: _Optional[bytes] = ..., tags: _Optional[_Iterable[str]] = ..., requirements: _Optional[_Union[ToolRequirements, _Mapping]] = ..., required_scopes: _Optional[_Iterable[str]] = ..., remote: bool = ...) -> None: ...
 
 class ToolAvailability(_message.Message):
     __slots__ = ("available", "missing_config")

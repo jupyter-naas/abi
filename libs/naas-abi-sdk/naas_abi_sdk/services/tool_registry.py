@@ -46,6 +46,8 @@ class ToolDefinition:
     config: tuple[ConfigRequirement, ...] = ()
     requires_workspace: bool = False
     required_scopes: tuple[str, ...] = ()
+    # Served by an SDK module (naas_abi_sdk.tools) rather than by the engine's own code.
+    remote: bool = False
 
 
 @dataclass(frozen=True)
@@ -96,6 +98,7 @@ def _definition(message: pb.ToolDefinition) -> ToolDefinition:
         ),
         requires_workspace=message.requirements.requires_workspace,
         required_scopes=tuple(message.required_scopes),
+        remote=message.remote,
     )
 
 
