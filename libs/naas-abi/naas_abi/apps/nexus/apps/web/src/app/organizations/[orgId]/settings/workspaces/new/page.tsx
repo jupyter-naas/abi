@@ -51,7 +51,8 @@ async function readApiError(response: Response, fallback: string): Promise<strin
  * (``.settings/logos/logo.<ext>``); the desk wallpaper is set in General
  * once the workspace exists. Features left on Default follow the role
  * defaults and the config; any On/Off choice is saved as the workspace
- * overrides, like the Features column of the workspaces list.
+ * overrides, like the Features column of the workspaces list, and then
+ * replaces the config overrides (``workspace_overrides``) for this slug.
  */
 export default function OrgCreateWorkspacePage() {
   const params = useParams();
@@ -72,6 +73,7 @@ export default function OrgCreateWorkspacePage() {
   const [logoPreview, setLogoPreview] = useState('');
   const [featureCatalog, setFeatureCatalog] = useState<WorkspaceFeatureCatalog | null>(null);
   const [featureChoices, setFeatureChoices] = useState<Record<string, FeatureChoice>>({});
+  const [featureCatalogFailed, setFeatureCatalogFailed] = useState(false);
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -101,12 +103,19 @@ export default function OrgCreateWorkspacePage() {
   useEffect(() => {
     if (!orgId) return;
     let cancelled = false;
+    setFeatureCatalogFailed(false);
+    // No catalog: the workspace follows the role defaults.
     void authFetch(`/api/organizations/${orgId}/workspace-features`)
       .then(async (res) => {
-        if (res.ok && !cancelled) setFeatureCatalog(await res.json());
+        if (cancelled) return;
+        if (!res.ok) {
+          setFeatureCatalogFailed(true);
+          return;
+        }
+        setFeatureCatalog(await res.json());
       })
       .catch(() => {
-        // No catalog: the workspace follows the role defaults.
+        if (!cancelled) setFeatureCatalogFailed(true);
       });
     return () => {
       cancelled = true;
@@ -402,9 +411,14 @@ export default function OrgCreateWorkspacePage() {
             Features
           </span>
         }
-        description="Default follows the role defaults. On shows a feature to every role, Off hides it. Change them later from the Features column of the workspaces list."
+        description="Default follows the role defaults. On shows a feature to every role, Off hides it. Any On or Off replaces the config overrides for this workspace. Change them later from the Features column of the workspaces list."
       >
-        {featureCatalog ? (
+        {featureCatalogFailed ? (
+          <p className="text-sm text-muted-foreground">
+            Features could not be loaded. The workspace will follow the role defaults; change
+            them later from the Features column of the workspaces list.
+          </p>
+        ) : featureCatalog ? (
           <WorkspaceFeaturesTable
             catalog={featureCatalog}
             choices={featureChoices}

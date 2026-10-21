@@ -114,6 +114,20 @@ def test_create_rejects_pinned_features_before_creating() -> None:
     service.create_workspace.assert_not_called()
 
 
+def test_create_rejects_features_on_a_personal_workspace() -> None:
+    client, service, _ = _client(org_role=None)
+
+    resp = client.post(
+        "/api/workspaces",
+        json={"name": "Mine", "slug": "mine", "feature_overrides": {"maps": True}},
+    )
+
+    assert resp.status_code == 400
+    assert "organization" in resp.json()["detail"]
+    service.create_workspace.assert_not_called()
+    service.set_workspace_feature_overrides.assert_not_called()
+
+
 def test_configuration_lists_features_and_config_seeds(monkeypatch) -> None:
     client, service, role = _client(ws_role="admin")
     monkeypatch.setattr(ws_api, "require_workspace_access", role)

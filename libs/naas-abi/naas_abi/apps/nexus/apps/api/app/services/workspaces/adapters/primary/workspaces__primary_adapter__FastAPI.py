@@ -382,6 +382,13 @@ async def create_workspace(
             )
     feature_overrides = None
     if workspace.feature_overrides is not None:
+        # Overrides are an org admin's call (like the org Features modal); a
+        # personal workspace follows the role defaults.
+        if not workspace.organization_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Feature overrides need an organization workspace",
+            )
         try:
             feature_overrides = validate_workspace_feature_overrides(
                 settings.feature_flags, workspace.feature_overrides
