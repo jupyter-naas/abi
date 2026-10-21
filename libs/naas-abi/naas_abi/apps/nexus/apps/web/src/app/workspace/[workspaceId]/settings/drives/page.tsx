@@ -15,25 +15,23 @@ import {
   countLabel,
   settingsTable,
 } from '@/components/settings/settings-ui';
+import { useAuthStore } from '@/stores/auth';
 import { useFilesStore } from '@/stores/files';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { buildDriveRows, canToggleDrives, type DriveFlag, type DriveIcon, type DriveRow } from './drive-rows';
 
-type DriveFlag = 'platform_drive_enabled' | 'system_drive_enabled';
-
-type DriveRow = {
-  id: string;
-  name: string;
-  icon: LucideIcon;
-  description: string;
-  access: string;
-  enabled: boolean;
-  /** Set for drives an admin can turn on. Drives are never turned off from here. */
-  flag?: DriveFlag;
+const DRIVE_ICONS: Record<DriveIcon, LucideIcon> = {
+  drive: HardDrive,
+  server: Server,
+  folder: Folder,
 };
 
+const SUPERADMIN_ONLY = 'Only a platform superadmin can turn drives on or off.';
+
 /**
- * The drives of this workspace, the same set the Files sidebar shows. Enabled drives
- * cannot be disabled from here; owners and admins can turn on a drive that is off.
+ * The drives of this workspace, the same set the Files sidebar shows. The platform and system
+ * drives can be turned on and off by a platform superadmin only; everyone else sees the table
+ * read-only.
  */
 export default function DrivesSettingsPage() {
   const workspaces = useWorkspaceStore((state) => state.workspaces);
@@ -41,75 +39,27 @@ export default function DrivesSettingsPage() {
   const fetchWorkspaces = useWorkspaceStore((state) => state.fetchWorkspaces);
   const workspace = workspaces.find((w) => w.id === currentWorkspaceId) || null;
   const syncedFolders = useFilesStore((state) => state.syncedFolders);
-  const { confirm: confirmTurnOn, dialog: confirmDialog } = useConfirm();
+  const isSuperadmin = useAuthStore((state) => !!state.user?.is_superadmin);
+  const { confirm: confirmToggle, dialog: confirmDialog } = useConfirm();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [accessFilter, setAccessFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [turningOn, setTurningOn] = useState<DriveFlag | null>(null);
+  const [updating, setUpdating] = useState<DriveFlag | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   if (!workspace) {
     return <SettingsEmpty title="No workspace selected" />;
   }
 
-  const isWorkspaceAdmin = workspace.currentUserRole === 'owner' || workspace.currentUserRole === 'admin';
-  const platformOn = Boolean(workspace.platformDriveEnabled);
-  const systemOn = Boolean(workspace.systemDriveEnabled);
-
-  // Same rules as the Drives list in the Files sidebar, plus the drives an admin can still turn on.
-  const drives: DriveRow[] = [
-    {
-      id: 'my-drive',
-      name: 'My Drive',
-      icon: HardDrive,
-      description: 'Your personal files in this workspace.',
-      access: 'Only you',
-      enabled: true,
-    },
-    {
-      id: 'workspace',
-      name: 'Workspace Drive',
-      icon: HardDrive,
-      description: 'Files shared with every member of this workspace.',
-      access: 'All members',
-      enabled: true,
-    },
-    ...(platformOn || isWorkspaceAdmin
-      ? [
-          {
-            id: 'platform-drive',
-            name: 'Platform Drive',
-            icon: HardDrive,
-            description: 'Files shared across every workspace where the platform drive is enabled.',
-            access: 'All members',
-            enabled: platformOn,
-            flag: 'platform_drive_enabled' as const,
-          },
-        ]
-      : []),
-    ...(isWorkspaceAdmin
-      ? [
-          {
-            id: 'system-drive',
-            name: 'System Drive',
-            icon: Server,
-            description: 'Full object-storage tree, visible to workspace owners and admins.',
-            access: 'Owners & admins',
-            enabled: systemOn,
-            flag: 'system_drive_enabled' as const,
-          },
-        ]
-      : []),
-    ...syncedFolders.map((folder) => ({
-      id: folder.id,
-      name: folder.name,
-      icon: Folder,
-      description: `Synced folder · ${folder.localPath}`,
-      access: 'This browser',
-      enabled: true,
-    })),
-  ];
+  const viewer = { role: workspace.currentUserRole, isSuperadmin };
+  const canToggle = canToggleDrives(viewer);
+  const drives = buildDriveRows({
+    viewer,
+    platformOn: Boolean(workspace.platformDriveEnabled),
+    systemOn: Boolean(workspace.systemDriveEnabled),
+    syncedFolders,
+  });
   const enabledCount = drives.filter((drive) => drive.enabled).length;
   const accessOptions = Array.from(new Set(drives.map((drive) => drive.access)));
   const query = searchQuery.trim().toLowerCase();
@@ -120,38 +70,48 @@ export default function DrivesSettingsPage() {
     return !query || `${drive.name} ${drive.description}`.toLowerCase().includes(query);
   });
 
-  const turnOn = async (drive: DriveRow) => {
-    if (!drive.flag || !isWorkspaceAdmin || turningOn) return;
-    const ok = await confirmTurnOn({
-      title: `Turn on ${drive.name}?`,
-      description: `${drive.description}\n\nOnce on, it cannot be turned off from Settings.`,
-      confirmLabel: 'Turn on',
-      destructive: false,
-    });
+  const setDrive = async (drive: DriveRow, checked: boolean) => {
+    if (!drive.flag || !drive.toggleable || updating) return;
+    const verb = checked ? 'on' : 'off';
+    const ok = await confirmToggle(
+      checked
+        ? {
+            title: `Turn on ${drive.name}?`,
+            description: drive.description,
+            confirmLabel: 'Turn on',
+            destructive: false,
+          }
+        : {
+            title: `Turn off ${drive.name}?`,
+            description: `Members of this workspace lose access to ${drive.name}. Its files stay in storage.`,
+            confirmLabel: 'Turn off',
+            destructive: true,
+          }
+    );
     if (!ok) return;
     setError(null);
-    setTurningOn(drive.flag);
+    setUpdating(drive.flag);
     try {
       const { authFetch } = await import('@/stores/auth');
       const response = await authFetch(`/api/workspaces/${workspace.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [drive.flag]: true }),
+        body: JSON.stringify({ [drive.flag]: checked }),
       });
       if (!response.ok) {
         setError(
           response.status === 403
-            ? 'Only workspace admins can turn on drives.'
-            : `Failed to turn on ${drive.name} (HTTP ${response.status}).`
+            ? SUPERADMIN_ONLY
+            : `Failed to turn ${verb} ${drive.name} (HTTP ${response.status}).`
         );
         return;
       }
       await fetchWorkspaces();
     } catch (err) {
-      console.error(`Failed to turn on ${drive.name}:`, err);
-      setError(`Failed to turn on ${drive.name}. Please try again.`);
+      console.error(`Failed to turn ${verb} ${drive.name}:`, err);
+      setError(`Failed to turn ${verb} ${drive.name}. Please try again.`);
     } finally {
-      setTurningOn(null);
+      setUpdating(null);
     }
   };
 
@@ -161,11 +121,13 @@ export default function DrivesSettingsPage() {
         title="Drives"
         badge={`${enabledCount} enabled`}
         description={
-          isWorkspaceAdmin
-            ? 'File drives of this workspace. Enabled drives stay on; drives that are off can be turned on.'
+          canToggle
+            ? 'File drives of this workspace. As a platform superadmin you can turn the platform and system drives on or off.'
             : 'File drives enabled in this workspace.'
         }
       />
+
+      {!canToggle && <SettingsNotice>{SUPERADMIN_ONLY}</SettingsNotice>}
 
       {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
 
@@ -217,8 +179,8 @@ export default function DrivesSettingsPage() {
                 </tr>
               )}
               {filteredDrives.map((drive) => {
-                const Icon = drive.icon;
-                const busy = turningOn !== null && turningOn === drive.flag;
+                const Icon = DRIVE_ICONS[drive.icon];
+                const busy = updating !== null && updating === drive.flag;
                 return (
                   <tr key={drive.id} className={settingsTable.row}>
                     <td className={settingsTable.td}>
@@ -236,16 +198,22 @@ export default function DrivesSettingsPage() {
                       <Badge variant="outline">{drive.access}</Badge>
                     </td>
                     <td className={settingsTable.td}>
-                      {/* Enabled drives stay on (checked, locked); admins can tick a drive that is off. */}
+                      {/* Locked drives are always on. Only a superadmin can tick or untick the others. */}
                       <span className="inline-flex items-center gap-2">
                         <Checkbox
                           checked={drive.enabled}
-                          onCheckedChange={(checked) => {
-                            if (checked) void turnOn(drive);
-                          }}
-                          disabled={drive.enabled || !drive.flag || !isWorkspaceAdmin || turningOn !== null}
+                          onCheckedChange={(checked) => void setDrive(drive, checked === true)}
+                          disabled={!drive.toggleable || updating !== null}
                           aria-label={`${drive.name} enabled`}
-                          title={drive.enabled ? `${drive.name} is enabled and stays on` : `Turn on ${drive.name}`}
+                          title={
+                            !drive.flag
+                              ? `${drive.name} is always enabled`
+                              : drive.toggleable
+                                ? drive.enabled
+                                  ? `Turn off ${drive.name}`
+                                  : `Turn on ${drive.name}`
+                                : SUPERADMIN_ONLY
+                          }
                         />
                         {busy && <Loader2 size={14} className="animate-spin text-muted-foreground" />}
                       </span>
