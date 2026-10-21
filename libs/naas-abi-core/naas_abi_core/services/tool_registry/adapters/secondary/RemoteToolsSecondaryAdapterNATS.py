@@ -114,7 +114,8 @@ class RemoteToolsSecondaryAdapterNATS(IRemoteToolDirectory, IRemoteToolInvoker):
             return nats_runtime.run_coro(
                 self._list(), timeout=DISCOVERY_TIMEOUT_SECONDS * 3
             )
-        except (RPCError, NATSError, OSError, TimeoutError) as exc:
+        except (RPCError, NATSError, OSError, TimeoutError, RuntimeError) as exc:
+            # RuntimeError: the engine's NATS runtime is closed (shutdown in progress).
             raise RemoteToolDirectoryError(f"discovery did not answer: {exc}") from exc
 
     async def _list(self) -> list[RemoteModuleTools]:

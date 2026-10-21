@@ -306,8 +306,14 @@ def test_a_client_engine_finds_it_and_runs_it_too(serving, crm, broker):
     client = new_engine(broker, role="client")
     client.load()
     try:
-        wait_for(lambda: TICKET in published(client))
         tools = client.services.tool_registry
+        # The catalog shows the tool as soon as the serving engine has it; this
+        # process can run it once its own synchroniser (a thread, reading discovery on
+        # its schedule) has bound it: `resolve` never leaves the process. Searching
+        # works in both states, so search first, as an agent composing would.
+        wait_for(lambda: TICKET in published(client))
+        assert tools.search_tools("report a bug", USER, limit=1)[0].tool_id == TICKET
+        wait_for(lambda: TICKET in {str(l.definition.id) for l in tools.list_local()})
         assert tools.search_tools("report a bug", USER, limit=1)[0].tool_id == TICKET
         built = tools.resolve(TICKET, USER, config={"region": "eu"})
         out = json.loads(built.invoke({"title": "From a client engine"}))

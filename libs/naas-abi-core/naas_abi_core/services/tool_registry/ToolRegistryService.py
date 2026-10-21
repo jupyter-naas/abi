@@ -495,7 +495,13 @@ class ToolRegistryService(IToolRegistry):
         context = context or ToolContext()
         local: list[ToolSearchResult] = []
         local_ranked = False
-        if self._holds_tools():
+        # One view of what this process holds, for the whole search: a tool published
+        # meanwhile (the remote tools' synchroniser does, in its thread) is either
+        # ranked here and left out of the catalog's share, or the catalog's alone,
+        # never dropped from both.
+        with self._lock:
+            held_at_start = frozenset(self._tools)
+        if held_at_start:
             try:
                 local = self.search_local(
                     query, context, limit=limit, min_score=min_score, where=where
@@ -506,7 +512,9 @@ class ToolRegistryService(IToolRegistry):
                 # decides, and raises the same error when it cannot either.
                 logger.debug("Tool registry: no local search backend; catalog only")
         try:
-            remote = self._search_catalog(query, context, limit, min_score, where)
+            remote = self._search_catalog(
+                query, context, limit, min_score, where, held_at_start
+            )
         except ToolCatalogError as exc:
             # This process ranked its own tools: they stay searchable while the
             # serving engine is away. With nothing ranked, there is no answer.
@@ -526,9 +534,10 @@ class ToolRegistryService(IToolRegistry):
         limit: int,
         min_score: float | None,
         where: Callable[[ToolDefinition], bool] | None,
+        held: frozenset[str],
     ) -> list[ToolSearchResult]:
         """The catalog's best matches this caller may see, less what this process
-        holds (it ranks those itself). The catalog applied its own access rules to
+        held when the search began (it ranks those itself). The catalog applied its own access rules to
         this process; the caller's are applied here, so ask for more until the
         limit is met or the catalog has no more."""
         assert self._catalog is not None
@@ -540,9 +549,9 @@ class ToolRegistryService(IToolRegistry):
             kept: list[ToolSearchResult] = []
             for hit in hits:
                 definition = hit.definition
-                with self._lock:
-                    held = hit.tool_id in self._tools
-                if held or not self._can(definition, context, ToolAction.DISCOVER):
+                if hit.tool_id in held or not self._can(
+                    definition, context, ToolAction.DISCOVER
+                ):
                     continue
                 if where is not None and not where(definition):
                     continue

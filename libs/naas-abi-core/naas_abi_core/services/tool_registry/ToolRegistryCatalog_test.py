@@ -111,6 +111,53 @@ def ids(results) -> list[str]:
     return [result.tool_id for result in results]
 
 
+class PublishingCatalog(OwnerCatalog):
+    """A catalog that answers while this process publishes: it does so as it is asked,
+    as the remote tools' synchroniser does from its own thread."""
+
+    def __init__(self, owner, registry, publish):
+        super().__init__(owner)
+        self.registry, self.publish = registry, publish
+
+    def search_tools(self, query, limit, min_score=None, filter=None):
+        answer = super().search_tools(query, limit, min_score, filter)
+        self.publish(self.registry)
+        return answer
+
+
+class TestPublicationDuringASearch:
+    def test_a_tool_published_while_the_catalog_answers_is_never_dropped(self, owner):
+        """The search found nothing held, the catalog's hit for the tool is then held:
+        it must stay the catalog's, not vanish from both."""
+        registry = ToolRegistryService(
+            embedder=CountingConceptEmbedder(), index=InMemoryToolIndexAdapter()
+        )
+        issue = next(
+            t for t in _catalog()[GITHUB] if t.definition.name == "create_issue"
+        )
+        registry.configure_catalog(
+            PublishingCatalog(owner, registry, lambda r: r.publish(GITHUB, [issue]))
+        )
+        found = registry.search_tools("report a bug", ToolContext(), limit=1)
+        assert ids(found) == [ISSUE]
+        # And from the next search on it is this process's own.
+        assert ids(registry.search_tools("report a bug", ToolContext(), limit=1)) == [
+            ISSUE
+        ]
+
+    def test_a_tool_held_from_the_start_is_ranked_once(self, owner):
+        registry = ToolRegistryService(
+            embedder=CountingConceptEmbedder(), index=InMemoryToolIndexAdapter()
+        )
+        registry.publish(
+            GITHUB,
+            [t for t in _catalog()[GITHUB] if t.definition.name == "create_issue"],
+        )
+        registry.configure_catalog(OwnerCatalog(owner))
+        found = registry.search_tools("report a bug", ToolContext(), limit=5)
+        assert ids(found).count(ISSUE) == 1
+
+
 class TestReadsThroughTheCatalog:
     def test_without_a_catalog_nothing_changes(self, owner):
         assert not owner.catalog_available
