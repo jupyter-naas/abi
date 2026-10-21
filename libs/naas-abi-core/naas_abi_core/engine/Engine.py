@@ -24,6 +24,9 @@ from naas_abi_core.engine.context import (
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     EngineConfiguration,
 )
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_ToolRegistryService import (
+    ToolIndexRole,
+)
 from naas_abi_core.engine.engine_loaders import EngineTelemetryLoader
 from naas_abi_core.engine.engine_loaders.EngineJobLoader import EngineJobLoader
 from naas_abi_core.engine.engine_loaders.EngineModuleLoader import EngineModuleLoader
@@ -176,6 +179,7 @@ class Engine(IEngine):
             self.__nats_dependencies = EngineNATSDependencies(self.__configuration.nats)
             dependencies = self.__nats_dependencies.build(self.__services)
             self.__services.wire_services(dependencies)
+            self.__wire_tool_registry(ToolIndexRole.LOCAL)
             self.__nats_runtime_started = True
             if claim is Claim.SERVING:
                 self.__serve()
@@ -281,7 +285,9 @@ class Engine(IEngine):
 
         No owner, no local adapter, no subscription: nothing opens a backend on
         this host. The model registry stays in this process, in memory, for the
-        modules to register their models with.
+        modules to register their models with, and so does the tool registry:
+        this engine's modules publish their tools to it (its search runs over
+        the serving engine's embedding model, on an in-memory index).
         """
         from naas_abi_core.engine.engine_loaders.EngineNATSDependencies import (
             EngineNATSDependencies,
@@ -291,8 +297,9 @@ class Engine(IEngine):
         services = self.__configuration.services
         self.__nats_dependencies = EngineNATSDependencies(self.__configuration.nats)
         self.__nats_runtime_started = True
-        return self.__nats_dependencies.build_clients(
+        clients = self.__nats_dependencies.build_clients(
             services.model_registry.load(),
+            services.tool_registry.load(),
             cache_tiers=[entry.tier for entry in services.cache.adapters],
             emit_message_events=services.bus.emit_message_events,
             secret_routes=[
@@ -300,6 +307,15 @@ class Engine(IEngine):
                 for entry in services.secret.secret_adapters
             ],
         )
+        self.__wire_tool_registry(ToolIndexRole.LOCAL)
+        return clients
+
+    def __wire_tool_registry(self, role: ToolIndexRole) -> None:
+        """NATS mode: the registry searches through the facades, on ``role``'s index."""
+        if self.__nats_dependencies is not None:
+            self.__nats_dependencies.wire_tool_registry(
+                self.__configuration.services.tool_registry, role
+            )
 
     def __serve(self) -> None:
         """Expose the kernel services over NATS: this engine holds the lease."""
@@ -317,6 +333,8 @@ class Engine(IEngine):
                 primaries = nats_loader.expose_services(self.__services)
                 primaries += nats_loader.expose_overflow(primaries)
             self.__nats_primary_adapters = primaries
+            # The only engine that writes the shared index, now that it serves.
+            self.__wire_tool_registry(ToolIndexRole.SOLE_WRITER)
 
     def __stop_serving(self, drain_seconds: float = 0) -> None:
         """Stop every started primary adapter.
@@ -332,6 +350,9 @@ class Engine(IEngine):
 
         with self.__serving_lock:
             primaries, self.__nats_primary_adapters = self.__nats_primary_adapters, []
+            if primaries:
+                # Another engine may serve now: stop writing the shared index.
+                self.__wire_tool_registry(ToolIndexRole.LOCAL)
         hosts = [
             primary
             for primary in primaries

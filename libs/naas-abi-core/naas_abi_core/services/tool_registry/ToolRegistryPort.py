@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
@@ -338,9 +338,15 @@ class IToolIndexPort(ABC):
     """Vector index over tool definitions. Owned by the registry.
 
     ``prepare`` binds the index to an embedding model. Vectors from different
-    models are not comparable, so preparing with a new ``model_key`` discards
-    everything indexed under the previous one. Storage is created lazily on
-    the first ``upsert``, sized from its vectors.
+    models are not comparable, so after preparing with a new ``model_key`` the
+    previous model's entries are no longer visible. Storage is created lazily
+    on the first ``upsert``, sized from its vectors.
+
+    An index may live in storage other processes share. Nothing here deletes
+    what only another process could have written: ``prepare``, ``search`` and
+    ``delete`` touch the prepared model's entries the caller names. Removing
+    leftovers is ``collect_garbage``, which only the process that owns the
+    index calls (see ``ToolRegistryService.configure_search``).
     """
 
     @abstractmethod
@@ -363,6 +369,25 @@ class IToolIndexPort(ABC):
     @abstractmethod
     def size(self) -> int: ...
 
+    @abstractmethod
+    def collect_garbage(self, keep_ids: Collection[str]) -> int:
+        """Delete every entry whose id is not in ``keep_ids``, and what other
+        embedding models left in shared storage. Returns how many entries and
+        collections it deleted.
+
+        For the index's owner only: with several writers on one store, it
+        deletes theirs.
+        """
+
+
+@dataclass(frozen=True)
+class ResolvedEmbedder:
+    """An embedding model, looked up once: what one sync or search embeds with."""
+
+    model_key: str
+    embed_documents: Callable[[Sequence[str]], list[list[float]]]
+    embed_query: Callable[[str], list[float]]
+
 
 class IToolEmbedderPort(ABC):
     """Turns text into vectors for tool search."""
@@ -377,6 +402,14 @@ class IToolEmbedderPort(ABC):
 
     @abstractmethod
     def embed_query(self, text: str) -> list[float]: ...
+
+    def resolve(self) -> ResolvedEmbedder:
+        """Look the model up once. The registry embeds through the result, so a
+        sync or a search resolves the model once, not once per call (resolving
+        can cross the network)."""
+        return ResolvedEmbedder(
+            self.model_key, self.embed_documents, self.embed_query
+        )
 
 
 class IToolAccessPolicy(ABC):

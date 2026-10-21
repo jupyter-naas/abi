@@ -8,7 +8,7 @@ every boot, like the registry itself.
 from __future__ import annotations
 
 import threading
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 
 import numpy as np
 from naas_abi_core.services.tool_registry.ToolRegistryPort import (
@@ -82,6 +82,15 @@ class InMemoryToolIndexAdapter(IToolIndexPort):
     def size(self) -> int:
         with self._lock:
             return len(self._entries)
+
+    def collect_garbage(self, keep_ids: Collection[str]) -> int:
+        with self._lock:
+            self._require_prepared()
+            keep = set(keep_ids)
+            gone = [id for id in self._entries if id not in keep]
+            for id in gone:
+                del self._entries[id]
+            return len(gone)
 
 
 def _normalise(vector: np.ndarray) -> np.ndarray:

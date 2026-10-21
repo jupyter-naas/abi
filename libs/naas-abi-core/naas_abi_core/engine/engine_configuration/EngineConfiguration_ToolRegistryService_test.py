@@ -1,5 +1,6 @@
 import pytest
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_ToolRegistryService import (
+    ToolIndexRole,
     ToolRegistryServiceConfiguration,
 )
 from naas_abi_core.engine.IEngine import IEngine
@@ -21,14 +22,16 @@ from naas_abi_core.services.vector_store.adapters.QdrantInMemoryAdapter import (
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 
 
-def _wired(configuration, vector_store=None) -> ToolRegistryService:
+def _wired(
+    configuration, vector_store=None, role=ToolIndexRole.PEER
+) -> ToolRegistryService:
     service = configuration.load()
     services = IEngine.Services(
         model_registry=ModelRegistryService(),
         vector_store=vector_store,
         tool_registry=service,
     )
-    configuration.wire(service, services)
+    configuration.wire(service, services, role)
     return service
 
 
@@ -66,3 +69,34 @@ def test_search_can_be_disabled():
 def test_rejects_unknown_options():
     with pytest.raises(ValueError):
         ToolRegistryServiceConfiguration(unknown=True)
+
+
+@pytest.mark.parametrize(
+    ("role", "shared", "collects"),
+    [
+        (ToolIndexRole.SOLE_WRITER, True, True),
+        (ToolIndexRole.PEER, True, False),
+        (ToolIndexRole.LOCAL, False, True),
+    ],
+)
+def test_the_role_decides_which_index_a_process_writes(role, shared, collects):
+    """Only the serving engine, or an engine without NATS, writes the shared
+    store; a standby or client engine keeps its own, in memory. Cleaning leftovers
+    out is for the one writer, or for an index no one else sees."""
+    store = VectorStoreService(adapter=QdrantInMemoryAdapter(storage_path=":memory:"))
+    service = _wired(ToolRegistryServiceConfiguration(), vector_store=store, role=role)
+    assert isinstance(
+        service._index,
+        VectorStoreToolIndexAdapter if shared else InMemoryToolIndexAdapter,
+    )
+    assert service._collect_leftovers is collects
+
+
+def test_a_local_role_ignores_an_explicit_vector_store_index():
+    store = VectorStoreService(adapter=QdrantInMemoryAdapter(storage_path=":memory:"))
+    service = _wired(
+        ToolRegistryServiceConfiguration(index="vector_store"),
+        vector_store=store,
+        role=ToolIndexRole.LOCAL,
+    )
+    assert isinstance(service._index, InMemoryToolIndexAdapter)

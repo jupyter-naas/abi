@@ -80,7 +80,7 @@ class ToolIndexSecondaryAdapterContract(ABC):
         index.prepare("model-a")
         assert index.size() == 1
 
-    def test_preparing_another_model_discards_entries(self, index):
+    def test_preparing_another_model_hides_the_previous_entries(self, index):
         index.prepare("model-a")
         index.upsert([_entry("ns/a@1", (1.0, 0.0))])
         index.prepare("model-b")
@@ -89,6 +89,24 @@ class ToolIndexSecondaryAdapterContract(ABC):
         # A new model may use another dimensionality.
         index.upsert([_entry("ns/a@1", (1.0, 0.0, 0.0))])
         assert index.size() == 1
+
+    def test_collect_garbage_keeps_only_the_listed_ids(self, index):
+        index.prepare("model-a")
+        index.upsert(
+            [
+                _entry("ns/a@1", (1.0, 0.0)),
+                _entry("ns/b@1", (0.0, 1.0)),
+                _entry("ns/c@1", (1.0, 1.0)),
+            ]
+        )
+        index.collect_garbage(["ns/a@1", "ns/unknown@1"])
+        assert index.size() == 1
+        assert list(index.fingerprints(["ns/a@1", "ns/b@1", "ns/c@1"])) == ["ns/a@1"]
+
+    def test_collect_garbage_on_an_empty_index_is_a_no_op(self, index):
+        index.prepare("model-a")
+        index.collect_garbage([])
+        assert index.size() == 0
 
     def test_dimension_mismatch_is_rejected(self, index):
         index.prepare("model-a")

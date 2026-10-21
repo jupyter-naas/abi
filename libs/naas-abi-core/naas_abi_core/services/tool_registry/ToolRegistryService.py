@@ -10,8 +10,15 @@ Index invalidation is fingerprint based. A definition's fingerprint hashes its
 * a new or changed definition gets (re-)embedded,
 * an unchanged one is skipped, even across restarts with a persistent index,
 * a removed one is deleted from the index,
-* an embedding model change re-embeds everything (the index discards the
-  previous model's vectors in ``prepare``).
+* an embedding model change re-embeds everything (the index switches to the
+  new model's entries in ``prepare``).
+
+Several processes may share one persistent index (an engine without NATS, next
+to a CLI process with a narrower module set). Nothing here deletes what another
+process may have written: a search skips a hit this registry does not know, and
+a sync removes only what this registry indexed itself. Cleaning leftovers out
+(``collect_garbage``) is opt-in, for a registry that is the index's only
+writer: the serving engine, or any registry whose index is private.
 """
 
 from __future__ import annotations
@@ -30,6 +37,7 @@ from naas_abi_core.services.tool_registry.ToolRegistryPort import (
     IToolIndexPort,
     IToolRegistry,
     PublishedTool,
+    ResolvedEmbedder,
     ToolAccessDeniedError,
     ToolAction,
     ToolAlreadyPublishedError,
@@ -61,25 +69,39 @@ class ToolRegistryService(IToolRegistry):
         self._modules: dict[str, set[str]] = {}
         self._embedder = embedder
         self._index = index
+        self._collect_leftovers = False
         self._access_policy = access_policy or ScopeToolAccessPolicy()
         # Ids the index holds for this registry, and the model they were
         # embedded with. ``None`` means "never synced in this process".
         self._indexed: dict[str, str] | None = None
         self._indexed_model_key: str | None = None
+        # Whether leftovers were collected for the current search backend.
+        self._collected = False
         # Set by every publication change; lets searches skip fingerprinting
         # the whole catalog when nothing changed.
         self._dirty = True
 
     # ----------------------------------------------------------------- wiring
     def configure_search(
-        self, embedder: IToolEmbedderPort | None, index: IToolIndexPort | None
+        self,
+        embedder: IToolEmbedderPort | None,
+        index: IToolIndexPort | None,
+        collect_leftovers: bool = False,
     ) -> None:
-        """Install (or replace) the search backend. Forces a full re-sync."""
+        """Install (or replace) the search backend. Forces a full re-sync.
+
+        ``collect_leftovers`` lets the first sync delete what the index holds
+        for tools this registry does not publish, and for other embedding
+        models. Set it only when this registry is the only writer of the
+        index's storage; the default leaves foreign entries alone.
+        """
         with self._lock:
             self._embedder = embedder
             self._index = index
+            self._collect_leftovers = collect_leftovers
             self._indexed = None
             self._indexed_model_key = None
+            self._collected = False
             self._dirty = True
 
     @property
@@ -239,6 +261,9 @@ class ToolRegistryService(IToolRegistry):
 
     def sync_index(self) -> int:
         embedder, index = self._require_search()
+        return self._sync(embedder.resolve(), index)
+
+    def _sync(self, embedder: ResolvedEmbedder, index: IToolIndexPort) -> int:
         with self._lock:
             model_key = embedder.model_key
             if not self._dirty and self._indexed_model_key == model_key:
@@ -283,6 +308,11 @@ class ToolRegistryService(IToolRegistry):
                 ]
                 if removed:
                     index.delete(removed)
+            if self._collect_leftovers and not self._collected:
+                # The previous run's leftovers: tools no longer published, other
+                # embedding models. Once per backend.
+                index.collect_garbage(list(desired))
+                self._collected = True
             self._indexed = desired
             self._indexed_model_key = model_key
             self._dirty = False
@@ -304,12 +334,12 @@ class ToolRegistryService(IToolRegistry):
             raise ValueError("limit must be a positive integer")
         embedder, index = self._require_search()
         context = context or ToolContext()
-        self.sync_index()
-        vector = embedder.embed_query(query)
+        resolved = embedder.resolve()
+        self._sync(resolved, index)
+        vector = resolved.embed_query(query)
 
         results: list[ToolSearchResult] = []
         seen: set[str] = set()
-        stale: list[str] = []
         # Over-fetch so hits the caller may not see don't starve the limit;
         # widen until the limit is filled or a short page shows the index is
         # exhausted. ``index.size()`` is not trusted here: some backends
@@ -326,7 +356,8 @@ class ToolRegistryService(IToolRegistry):
                 with self._lock:
                     tool = self._tools.get(hit.id)
                 if tool is None:
-                    stale.append(hit.id)
+                    # Another process's tool, or a previous run's: not ours to
+                    # delete from a store others share.
                     continue
                 if not self._can(tool.definition, context, ToolAction.DISCOVER):
                     continue
@@ -350,7 +381,4 @@ class ToolRegistryService(IToolRegistry):
                 break
             fetch *= 2
 
-        if stale:
-            # Leftovers of a previous process sharing a persistent index.
-            index.delete(stale)
         return results[:limit]

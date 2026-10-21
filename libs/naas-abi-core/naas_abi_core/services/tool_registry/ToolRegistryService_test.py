@@ -582,9 +582,7 @@ class TestIndexLifecycle:
         assert registry.sync_index() == 5
         assert index.size() == 5
 
-    def test_stale_index_entries_from_a_previous_process_are_ignored(
-        self, embedder, index
-    ):
+    def _leftover(self, embedder, index):
         from naas_abi_core.services.tool_registry.tests.concept_embeddings import (
             concept_vector,
         )
@@ -602,10 +600,131 @@ class TestIndexLifecycle:
                 )
             ]
         )
+
+    def test_entries_of_unknown_tools_are_ignored_and_not_deleted(
+        self, embedder, index
+    ):
+        """They belong to a previous run or to another process on a shared store."""
+        self._leftover(embedder, index)
         service = ToolRegistryService(embedder=embedder, index=index)
         service.publish(MAIL, _catalog()[MAIL])
 
         results = service.search_tools("open a ticket", limit=5)
 
         assert [r.name for r in results] == ["send_email"]
+        assert index.fingerprints([f"{GITHUB}/deleted_tool@1"]) != {}
+
+    def test_the_index_owner_collects_leftovers_once(self, embedder, index):
+        self._leftover(embedder, index)
+        service = ToolRegistryService()
+        service.configure_search(embedder, index, collect_leftovers=True)
+        service.publish(MAIL, _catalog()[MAIL])
+
+        results = service.search_tools("open a ticket", limit=5)
+
+        assert [r.name for r in results] == ["send_email"]
         assert index.fingerprints([f"{GITHUB}/deleted_tool@1"]) == {}
+
+    def test_a_sync_removes_only_what_it_indexed(self, registry, embedder, index):
+        registry.sync_index()
+        self._leftover(embedder, index)
+        registry.unpublish(WEATHER)
+        registry.sync_index()
+        assert index.fingerprints([f"{GITHUB}/deleted_tool@1"]) != {}
+        assert index.size() == 5
+
+    def test_the_model_is_resolved_once_per_sync_and_once_per_search(
+        self, registry, embedder
+    ):
+        resolutions = []
+        resolve = embedder.resolve
+        embedder.resolve = lambda: resolutions.append(1) or resolve()  # type: ignore[method-assign]
+        registry.sync_index()
+        assert len(resolutions) == 1
+        resolutions.clear()
+        registry.search_tools("open a ticket", limit=3)
+        assert len(resolutions) == 1
+
+
+class TestRegistriesSharingOneVectorStore:
+    """Two processes, each with its own registry, on one persistent index."""
+
+    @staticmethod
+    def _process(store, tools, *, collect_leftovers=False):
+        from naas_abi_core.services.tool_registry.adapters.secondary.VectorStoreToolIndexAdapter import (
+            VectorStoreToolIndexAdapter,
+        )
+
+        service = ToolRegistryService()
+        service.configure_search(
+            CountingConceptEmbedder(),
+            VectorStoreToolIndexAdapter(store, collection_prefix="shared"),
+            collect_leftovers=collect_leftovers,
+        )
+        for module, published in tools.items():
+            service.publish(module, published)
+        return service
+
+    @pytest.fixture
+    def store(self):
+        from naas_abi_core.services.vector_store.adapters.QdrantInMemoryAdapter import (
+            QdrantInMemoryAdapter,
+        )
+        from naas_abi_core.services.vector_store.VectorStoreService import (
+            VectorStoreService,
+        )
+
+        return VectorStoreService(adapter=QdrantInMemoryAdapter(storage_path=":memory:"))
+
+    def test_neither_deletes_the_others_entries_whatever_it_searches(self, store):
+        catalog = _catalog()
+        api = self._process(store, {GITHUB: catalog[GITHUB], MAIL: catalog[MAIL]})
+        cli = self._process(store, {WEATHER: catalog[WEATHER]})
+
+        # Each finds its own tools, though the other's are in the same index.
+        assert [r.name for r in api.search_tools("send a mail", limit=1)] == [
+            "send_email"
+        ]
+        assert [r.name for r in cli.search_tools("weather forecast", limit=1)] == [
+            "get_forecast"
+        ]
+        assert api.search_tools("weather forecast", limit=5)[0].name != "get_forecast"
+        for registry in (api, cli):
+            registry.search_tools("open a ticket", limit=5)
+
+        # Search and sync deleted nothing: a new process re-embeds only the one
+        # tool (the calendar's) that neither of them indexed.
+        third = self._process(store, catalog)
+        assert third.sync_index() == 1
+        assert [r.name for r in third.search_tools("weather forecast", limit=1)] == [
+            "get_forecast"
+        ]
+
+    def test_an_unpublish_in_one_process_leaves_what_the_other_published(self, store):
+        catalog = _catalog()
+        api = self._process(store, {MAIL: catalog[MAIL]})
+        cli = self._process(store, {WEATHER: catalog[WEATHER]})
+        api.sync_index()
+        cli.sync_index()
+
+        cli.unpublish(WEATHER)
+        cli.sync_index()
+
+        assert [r.name for r in api.search_tools("send a mail", limit=1)] == [
+            "send_email"
+        ]
+
+    def test_only_the_sole_writer_collects_leftovers(self, store):
+        catalog = _catalog()
+        writer = self._process(store, {MAIL: catalog[MAIL]})
+        writer.sync_index()
+        peer = self._process(store, {WEATHER: catalog[WEATHER]})
+        peer.sync_index()
+        assert writer._index.size() == 2 and peer._index.size() == 2
+
+        sole_writer = self._process(
+            store, {GITHUB: catalog[GITHUB]}, collect_leftovers=True
+        )
+        sole_writer.sync_index()
+
+        assert sole_writer._index.size() == 2  # only its own tools remain

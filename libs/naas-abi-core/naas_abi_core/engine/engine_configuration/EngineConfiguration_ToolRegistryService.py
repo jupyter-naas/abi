@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import TYPE_CHECKING, Literal
 
 from naas_abi_core.services.tool_registry.ToolRegistryService import (
@@ -9,6 +10,23 @@ from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
     from naas_abi_core.engine.IEngine import IEngine
+
+
+class ToolIndexRole(StrEnum):
+    """What this process may do with a shared vector-store index.
+
+    Each process has its own registry; the vector-store index is the one part
+    that can be shared (docs/adr/20260923_tool-registry-and-agent-composition.md).
+    """
+
+    SOLE_WRITER = "sole_writer"
+    """The serving engine: nothing else writes the index, so it also cleans
+    leftovers out of it."""
+    PEER = "peer"
+    """An engine without NATS: it writes the shared index and deletes nothing
+    it did not index itself, since other processes may share the store."""
+    LOCAL = "local"
+    """A standby or client engine: an in-memory index, never the shared one."""
 
 
 class ToolRegistryServiceConfiguration(BaseModel):
@@ -25,6 +43,9 @@ class ToolRegistryServiceConfiguration(BaseModel):
     ``auto`` indexes in the engine's vector store when one is loaded, and in
     process memory otherwise. Search stays unavailable (with an explicit error)
     until an embedding model resolves.
+
+    With NATS, only the serving engine writes the vector-store index: a standby
+    or client engine, which has its own registry, searches an in-memory one.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -40,8 +61,18 @@ class ToolRegistryServiceConfiguration(BaseModel):
     def load(self) -> ToolRegistryService:
         return ToolRegistryService()
 
-    def wire(self, service: ToolRegistryService, services: IEngine.Services) -> None:
-        """Attach the search backend once every engine service is loaded."""
+    def wire(
+        self,
+        service: ToolRegistryService,
+        services: IEngine.Services,
+        role: ToolIndexRole = ToolIndexRole.PEER,
+    ) -> None:
+        """Attach the search backend once every engine service is loaded.
+
+        ``services`` is where the embedding model and the vector store come
+        from: with NATS, the facades through which modules reach them, not the
+        owners'. ``role`` decides which index this process may use.
+        """
         from naas_abi_core.services.tool_registry.adapters.secondary.InMemoryToolIndexAdapter import (
             InMemoryToolIndexAdapter,
         )
@@ -67,16 +98,22 @@ class ToolRegistryServiceConfiguration(BaseModel):
                 "dependencies, or use index 'auto' or 'memory'."
             )
         index: IToolIndexPort
-        if self.index == "vector_store" or (self.index == "auto" and has_vector_store):
+        shared = role is not ToolIndexRole.LOCAL and has_vector_store
+        if self.index == "memory" or not shared:
+            index = InMemoryToolIndexAdapter()
+        else:
             index = VectorStoreToolIndexAdapter(
                 services.vector_store, collection_prefix=self.collection_prefix
             )
-        else:
-            index = InMemoryToolIndexAdapter()
 
         embedder = ModelRegistryEmbedderAdapter(
             services.model_registry,
             canonical_id=self.embedding_model,
             provider=self.embedding_provider,
         )
-        service.configure_search(embedder, index)
+        service.configure_search(
+            embedder,
+            index,
+            collect_leftovers=role is not ToolIndexRole.PEER
+            or isinstance(index, InMemoryToolIndexAdapter),
+        )

@@ -3,9 +3,15 @@
 Each embedding model gets its own collection, named
 ``<prefix>__<model hash>__<dimension>``. Encoding the dimension in the name
 lets a restarted process recover it without a metadata record, and encoding
-the model hash means switching embedding models never mixes vectors: the
-previous model's collection is dropped when the index is prepared for a new
-one. Stored fingerprints make re-syncs incremental across restarts.
+the model hash means switching embedding models never mixes vectors. Stored
+fingerprints make re-syncs incremental across restarts.
+
+The vector store may be shared with other processes, so ``prepare`` only picks
+the prepared model's collection: it deletes nothing. Removing the collections
+of other models and the entries of tools no longer published is
+``collect_garbage``, for the one process that writes this index (the serving
+engine, or an engine without NATS). Two engines that publish different tools to
+one store use different ``collection_prefix`` values.
 
 Tool ids (``ns/name@1``) are not valid point ids for every backend (Qdrant
 servers accept only UUIDs and integers), so each entry is stored under a
@@ -19,7 +25,7 @@ import hashlib
 import re
 import threading
 import uuid
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 
 import numpy as np
 from naas_abi_core.services.tool_registry.ToolRegistryPort import (
@@ -27,7 +33,10 @@ from naas_abi_core.services.tool_registry.ToolRegistryPort import (
     ToolIndexEntry,
     ToolIndexHit,
 )
-from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
+from naas_abi_core.services.vector_store.VectorStoreService import (
+    MAX_PAGE_SIZE,
+    VectorStoreService,
+)
 
 _FINGERPRINT_KEY = "tool_fingerprint"
 _TOOL_ID_KEY = "tool_id"
@@ -51,15 +60,23 @@ class VectorStoreToolIndexAdapter(IToolIndexPort):
             )
         self._store = vector_store
         self._prefix = collection_prefix
+        self._collection_name = re.compile(
+            rf"{re.escape(collection_prefix)}__([0-9a-f]{{16}})__(\d+)"
+        )
         self._lock = threading.RLock()
         self._model_hash: str | None = None
         self._collection: str | None = None
         self._dimension: int | None = None
 
     # ---------------------------------------------------------------- helpers
-    def _own_collections(self) -> list[str]:
-        marker = f"{self._prefix}__"
-        return [c for c in self._store.list_collections() if c.startswith(marker)]
+    def _own_collections(self) -> list[tuple[str, str, int]]:
+        """``(name, model hash, dimension)`` of every collection this index made."""
+        found = []
+        for name in self._store.list_collections():
+            match = self._collection_name.fullmatch(name)
+            if match is not None:
+                found.append((name, match.group(1), int(match.group(2))))
+        return sorted(found)
 
     def _require_prepared(self) -> str:
         if self._model_hash is None:
@@ -75,14 +92,11 @@ class VectorStoreToolIndexAdapter(IToolIndexPort):
             self._model_hash = model_hash
             self._collection = None
             self._dimension = None
-            current = f"{self._prefix}__{model_hash}__"
-            for name in self._own_collections():
-                if name.startswith(current) and self._collection is None:
+            for name, found_hash, dimension in self._own_collections():
+                if found_hash == model_hash:
                     self._collection = name
-                    self._dimension = int(name.rsplit("__", 1)[1])
-                else:
-                    # Another embedding model, or a duplicate: never comparable.
-                    self._store.delete_collection(name)
+                    self._dimension = dimension
+                    break
 
     def fingerprints(self, ids: Sequence[str]) -> dict[str, str]:
         with self._lock:
@@ -169,3 +183,29 @@ class VectorStoreToolIndexAdapter(IToolIndexPort):
             if self._collection is None:
                 return 0
             return self._store.get_collection_size(self._collection)
+
+    def collect_garbage(self, keep_ids: Collection[str]) -> int:
+        with self._lock:
+            model_hash = self._require_prepared()
+            removed = 0
+            for name, found_hash, _ in self._own_collections():
+                if found_hash != model_hash or name != self._collection:
+                    # Another embedding model, or a duplicate: never comparable.
+                    self._store.delete_collection(name)
+                    removed += 1
+            if self._collection is None:
+                return removed
+            keep = {_point_id(id) for id in keep_ids}
+            orphans: list[str] = []
+            cursor = None
+            while True:
+                page = self._store.list_documents(
+                    self._collection, limit=MAX_PAGE_SIZE, cursor=cursor
+                )
+                orphans.extend(d.id for d in page.documents if d.id not in keep)
+                if page.next_cursor is None:
+                    break
+                cursor = page.next_cursor
+            if orphans:
+                self._store.delete_documents(self._collection, orphans)
+            return removed + len(orphans)

@@ -31,11 +31,13 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.port import (
 )
 
 # Engine configuration name -> NATS micro service name. None: not a micro service
-# (the bus is JetStream; the model registry uses plain subscriptions).
+# (the bus is JetStream; the model registry uses plain subscriptions; the tool
+# registry lives in each process and is exposed by none).
 NATS_SERVICE_NAMES: dict[str, str | None] = {
     "kv": "keyvalue",
     "bus": None,
     "model_registry": None,
+    "tool_registry": None,
 }
 
 T = TypeVar("T")

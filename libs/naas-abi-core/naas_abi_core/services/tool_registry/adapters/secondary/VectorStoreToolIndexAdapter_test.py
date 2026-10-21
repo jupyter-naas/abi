@@ -58,14 +58,51 @@ class TestVectorStoreToolIndexAdapter(ToolIndexSecondaryAdapterContract):
                 [ToolIndexEntry(id="ns/b@1", fingerprint="fp", vector=(1.0, 0.0, 0.0))]
             )
 
-    def test_a_new_model_drops_the_previous_collection(self, vector_store):
+    def test_preparing_never_deletes_what_another_process_wrote(self, vector_store):
+        """Two engines on one store, on different embedding models: neither
+        prepare may drop the other's collection or entries."""
+        first = VectorStoreToolIndexAdapter(vector_store, collection_prefix="tools")
+        first.prepare("model-a")
+        first.upsert([ToolIndexEntry(id="ns/a@1", fingerprint="fp", vector=(1.0, 0.0))])
+
+        second = VectorStoreToolIndexAdapter(vector_store, collection_prefix="tools")
+        second.prepare("model-b")
+        second.upsert(
+            [ToolIndexEntry(id="ns/b@1", fingerprint="fp", vector=(0.0, 1.0, 0.0))]
+        )
+        second.prepare("model-b")
+
+        assert len([c for c in vector_store.list_collections() if "tools__" in c]) == 2
+        first.prepare("model-a")
+        assert first.fingerprints(["ns/a@1"]) == {"ns/a@1": "fp"}
+
+    def test_collect_garbage_drops_other_models_and_unlisted_entries(
+        self, vector_store
+    ):
         index = VectorStoreToolIndexAdapter(vector_store, collection_prefix="tools")
         index.prepare("model-a")
         index.upsert([ToolIndexEntry(id="ns/a@1", fingerprint="fp", vector=(1.0, 0.0))])
         index.prepare("model-b")
-        assert [
-            c for c in vector_store.list_collections() if c.startswith("tools__")
-        ] == []
+        index.upsert(
+            [
+                ToolIndexEntry(id="ns/a@1", fingerprint="fp", vector=(1.0, 0.0)),
+                ToolIndexEntry(id="ns/old@1", fingerprint="fp", vector=(0.0, 1.0)),
+            ]
+        )
+        index.collect_garbage(["ns/a@1"])
+        assert len([c for c in vector_store.list_collections() if "tools__" in c]) == 1
+        assert list(index.fingerprints(["ns/a@1", "ns/old@1"])) == ["ns/a@1"]
+
+    def test_a_longer_prefix_is_not_mistaken_for_this_one(self, vector_store):
+        other = VectorStoreToolIndexAdapter(
+            vector_store, collection_prefix="tools__team"
+        )
+        other.prepare("model-a")
+        other.upsert([ToolIndexEntry(id="ns/a@1", fingerprint="fp", vector=(1.0, 0.0))])
+        index = VectorStoreToolIndexAdapter(vector_store, collection_prefix="tools")
+        index.prepare("model-b")
+        index.collect_garbage([])
+        assert other.size() == 1
 
     def test_leaves_collections_of_other_prefixes_alone(self, vector_store):
         vector_store.ensure_collection("unrelated", dimension=2)

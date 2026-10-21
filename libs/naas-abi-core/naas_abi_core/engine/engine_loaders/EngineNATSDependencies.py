@@ -11,6 +11,10 @@ from naas_abi_core import logger
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     NATSConfiguration,
 )
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_ToolRegistryService import (
+    ToolIndexRole,
+    ToolRegistryServiceConfiguration,
+)
 from naas_abi_core.engine.IEngine import IEngine
 from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogService
 from naas_abi_core.services.activity_log.adapters.secondary.ActivityLogSecondaryAdapterNATSClient import (
@@ -66,6 +70,9 @@ from naas_abi_core.services.source_control.adapters.secondary.SourceControlSecon
 )
 from naas_abi_core.services.source_control.SourceControlService import (
     SourceControlService,
+)
+from naas_abi_core.services.tool_registry.ToolRegistryService import (
+    ToolRegistryService,
 )
 from naas_abi_core.services.triple_store.adapters.secondary.TripleStoreSecondaryAdapterNATSClient import (
     TripleStoreSecondaryAdapterNATSClient,
@@ -242,6 +249,11 @@ class EngineNATSDependencies:
             )
             self.clients.append(models)
             values["model_registry"] = models
+        if owners.tool_registry_available():
+            # One registry per process, never a client: modules publish to it
+            # in this process and agents composed here read it. Only its search
+            # backend crosses NATS (``wire_tool_registry``).
+            values["tool_registry"] = owners.tool_registry
         dependencies = IEngine.Services(**values)
         if dependencies.triple_store_available():
             dependencies.triple_store.set_services(
@@ -254,6 +266,18 @@ class EngineNATSDependencies:
         self.services = dependencies
         self.module_services = dependencies
         return dependencies
+
+    def wire_tool_registry(
+        self, configuration: ToolRegistryServiceConfiguration, role: ToolIndexRole
+    ) -> None:
+        """Give this process's registry its search backend.
+
+        After ``build`` or ``build_clients``, so the embedding model and the
+        vector store are the facades modules use: their calls cross NATS and
+        reach the serving engine's owners, as an SDK module's would.
+        """
+        services = self.module_services
+        configuration.wire(services.tool_registry, services, role)
 
     def _secret_routes(
         self, routes: Sequence[ISecretAdapter | None]
@@ -275,6 +299,7 @@ class EngineNATSDependencies:
     def build_clients(
         self,
         model_registry: Any,
+        tool_registry: ToolRegistryService,
         *,
         cache_tiers: list[str],
         emit_message_events: bool,
@@ -286,6 +311,9 @@ class EngineNATSDependencies:
         subscribes. They are the facades ``build`` gives a serving engine's
         modules. ``model_registry`` is this process's in-memory registry: modules
         register their models with it; lookups and inference go over NATS.
+        ``tool_registry`` is this process's own, empty one: the modules this
+        engine loads publish their tools to it (``wire_tool_registry`` gives it
+        a search backend).
         ``secret_routes`` is the configured secret fanout in order: an upstream
         ``nats_rpc`` adapter, or None for one the serving engine exposes.
         """
@@ -331,6 +359,7 @@ class EngineNATSDependencies:
                 self._client(TripleStoreSecondaryAdapterNATSClient)
             ),
             "model_registry": models,
+            "tool_registry": tool_registry,
         }
         if cache_tiers:
             values["cache"] = CacheService(
