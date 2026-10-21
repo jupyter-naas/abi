@@ -345,6 +345,9 @@ class NATSToolInvokeModuleConfiguration(BaseModel):
     scopes needs them in ``tool_registry.module_scopes`` instead.
     """
 
+    # A misspelt key would silently grant nothing: refuse it instead.
+    model_config = ConfigDict(extra="forbid")
+
     secrets: list[str] = Field(default_factory=list)
     unscoped_tools: list[str] = Field(default_factory=list)
 
@@ -381,14 +384,14 @@ class NATSToolInvokeConfiguration(BaseModel):
                 unscoped_tools: ["naas_abi_marketplace.applications.github/get_*"]
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     enabled: bool = True
     max_concurrent: int = Field(default=16, ge=1, le=256)
     default_timeout_seconds: float = Field(
         default=60.0, gt=0, le=300, allow_inf_nan=False
     )
-    max_timeout_seconds: float = Field(
-        default=300.0, gt=0, le=3600, allow_inf_nan=False
-    )
+    max_timeout_seconds: float = Field(default=300.0, gt=0, le=300, allow_inf_nan=False)
     modules: dict[str, NATSToolInvokeModuleConfiguration] = Field(default_factory=dict)
 
     @field_validator("modules")

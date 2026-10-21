@@ -482,7 +482,7 @@ class EngineToolInvoker:
         future.add_done_callback(finished)
         try:
             return await asyncio.wait_for(asyncio.shield(future), seconds)
-        except TimeoutError:
+        except asyncio.TimeoutError:  # noqa: UP041 - not the builtin one on Python 3.10
             raise ToolInvokeError(
                 "DEADLINE_EXCEEDED", f"Tool exceeded its {seconds:g}s deadline"
             ) from None
