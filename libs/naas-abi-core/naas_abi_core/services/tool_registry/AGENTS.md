@@ -108,7 +108,8 @@ could not answer; `ToolCatalogRequestError` when it refused the request).
   by role, see below). With one, `get_definition`, `list_definitions`,
   `availability`, `check_access` and `search_tools` cover this process's tools
   and the catalog's: a tool held here shadows the catalog's of the same id and a
-  reference resolves here first; `search_tools` merges both rankings by score,
+  reference resolves here first; `search_tools` merges both rankings by score (it takes one view of the tools held when the
+  search begins, so a tool published meanwhile is ranked by one half, never dropped by both),
   and the caller's `context` and `where` apply to what the catalog returned
   (it asks for more, doubling up to 50, until the limit is met, the catalog is
   exhausted (short and not `truncated`) or more brings nothing new). If the
