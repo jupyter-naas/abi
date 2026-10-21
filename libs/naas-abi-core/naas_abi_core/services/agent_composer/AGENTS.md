@@ -17,9 +17,10 @@ runtime discovery. Decision record:
 agent_composer/
 ├── AgentComposerPort.py        # AgentSpec record schema, ports, exceptions
 ├── AgentComposerService.py     # compose() / create() / load()
-├── AgentComposerFactory.py     # InMemory(...), FileSystem(...), FromEngine(...)
+├── AgentComposerFactory.py     # InMemory(...), FileSystem(...), Documents(...), FromEngine(...)
 ├── adapters/secondary/
 │   ├── InMemoryAgentSpecRepositoryAdapter.py
+│   ├── DocumentAgentSpecRepositoryAdapter.py     # one document per record, Document Service (shared, NATS-ready)
 │   ├── FileSystemAgentSpecRepositoryAdapter.py   # <dir>/<name>.yaml|.yml|.json
 │   ├── SecretServiceResolverAdapter.py           # engine Secret service
 │   └── MappingSecretResolverAdapter.py           # plain mapping
@@ -91,6 +92,13 @@ load(name) -> AgentSpec
   config or secrets, inline credentials, unknown models or records), then
   checks cycles and model-facing name collisions (tools, default tools,
   `transfer_to_*` handoffs, capability tools, `request_help`).
+- Every agent of the composed tree has its own name: the active agent, the
+  supervisor and `enabled_capabilities` are keyed by name for the whole tree.
+  `compose` raises `AgentCompositionError` (with each occurrence's path) when a
+  name appears twice: a record reused under two parents, or a supplied `Agent`
+  named like a record. Give each occurrence its own record.
+- A `request_help` from any depth reaches the tree's top agent (see
+  `services/agent/AGENTS.md`).
 - Each composition starts a fresh conversation (random thread id) unless a
   `state` is passed.
 
@@ -114,8 +122,20 @@ lead.invoke("...")
 ```python
 AgentComposerFactory.InMemory(tool_registry, model_registry, specs=(), secrets=None)
 AgentComposerFactory.FileSystem(tool_registry, model_registry, directory, secret_resolver=None)
+AgentComposerFactory.Documents(tool_registry, model_registry, documents, secret_resolver=None)
 AgentComposerFactory.FromEngine(engine, spec_repository=None, records_directory=None, **options)  # after Engine.load()
 ```
+
+`FromEngine` takes records from `spec_repository`, else `records_directory`,
+else the engine's Document Service when it is available. It works in every
+engine role (NATS off, serving, standby, client): the registries are the
+process's own (`services/tool_registry`), and the Document Service is the
+serving engine's, through its NATS facade. `Documents(...)` accepts the engine
+root (`engine.services.document` of an `Engine`: records go to the namespace
+`naas_abi_core.services.agent_composer`) or a view a module already holds
+(used as it is). The collection is declared on first use, so building a
+composer touches nothing. Records saved through one process are read by the
+others.
 
 ## Tests
 

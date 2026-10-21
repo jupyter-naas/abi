@@ -2,11 +2,14 @@
 
 ## Status
 
-Proposed (implemented on `feat/1245-tool-registry`, issue #1245)
+Accepted. Covers modules that run in the engine, with NATS off and on (issue
+#1245). The contracts that let other processes use the registry come in later
+steps (see "Contracts").
 
 ## Date
 
-2026-09-23
+2026-09-23, updated 2026-10-21 for 3.0 (NATS mode, index ownership, Document
+Service records, routing).
 
 ## Context
 
@@ -47,7 +50,7 @@ model registry and exempt from `ModuleDependencies`.
   process boundary only ever see definitions.
 - **Publication**: after every module's `on_initialized`, the engine calls
   `module.publish_tools(publisher)` and publishes the result under the
-  module's name, before `Engine.load()` returns. The default publishes
+  module's name, before module jobs start and before `Engine.load()` returns. The default publishes
   `module.tools`; modules override it to publish integration factories
   (`publisher.add_factory(as_tools_fn, default_config=..., requirements=...)`).
   The GitHub module does this for its REST and GraphQL integrations, so its
@@ -85,12 +88,17 @@ definitions by cosine similarity.
   New and changed definitions are embedded, unchanged ones skipped (also
   across restarts with a vector-store index), removed ones deleted, and a
   change of embedding model re-embeds everything (each model gets its own
-  collection; the previous one is dropped).
+  collection).
+- **Embedding calls**: the registry resolves the embedding model once per sync
+  or search (`IToolEmbedderPort.resolve()`; with a remote model registry each
+  lookup is a round trip), and sends documents in batches of at most 1024,
+  the most one `embed` call of the engine's model service accepts.
 - **Lifecycle**: indexing is lazy (first search or `sync_index()`), so boot
   never depends on an embedding provider. Without one, search fails with
   `ToolSearchUnavailableError`.
-- **Ranking**: search over-fetches, drops hits the caller may not discover,
-  and returns `limit` results. There is no default score threshold: against
+- **Ranking**: search over-fetches, drops hits the caller may not discover
+  (and hits it does not know: see "Index ownership"), and returns `limit`
+  results. There is no default score threshold: against
   `nomic-embed-text`, correct top hits scored 0.43 to 0.67 and the runner-up
   was sometimes within 0.01, so a fixed cut-off would drop right answers.
 - An optional `where` filter (an agent's allow-list, for instance) is applied
@@ -106,8 +114,15 @@ bindings with config, sub-agent references, capabilities) or from Python
 values (`create`, which accepts `BaseTool` instances and existing `Agent`
 instances too). Both paths share one implementation.
 
-- Record storage sits behind `IAgentSpecRepository` (in-memory and
-  YAML/JSON file adapters). The composer never assumes a backend or Nexus.
+- Record storage sits behind `IAgentSpecRepository`: in-memory, YAML/JSON
+  files, and the Document Service (`DocumentAgentSpecRepositoryAdapter`, one
+  document per record in the composer's own namespace). The Document Service
+  is the shared backend: every engine process reads the same records, and with
+  NATS the document facade carries the calls to the serving engine.
+  `AgentComposerFactory.Documents(...)` builds a composer on it, and
+  `FromEngine` falls back to it when no repository or directory is given. The
+  adapter declares its collection on first use, so building a composer never
+  reaches the service. The composer never assumes a backend or Nexus.
 - Record config values are literals or `{secret: NAME}` references resolved
   through `ISecretResolverPort` (engine `Secret` service). A value for a key a
   tool declares `secret` must be a reference.
@@ -117,10 +132,23 @@ instances too). Both paths share one implementation.
   Existing instances are duplicated onto that state, never mutated.
 - Record trees can nest (`lead -> manager -> worker`). The active agent's name
   is shared by the whole tree while each graph only holds its direct
-  children, so `Agent.current_active_agent` now enters the child whose
-  subtree holds the active agent, and an active agent outside the tree hands
-  the turn back instead of targeting a missing node. This also covers nested
-  Python-defined supervisors.
+  children. `main` already routes a follow-up turn through the direct child
+  that holds the active agent (`Agent._path_to`, `_in_tree`; this work keeps
+  that fix, and adds nothing to it for downward routing). This also covers
+  nested Python-defined supervisors.
+- **Handoffs upward.** Every node of a tree shares `supervisor_agent`, the top
+  agent, so `request_help` from `worker` names `lead`, not `manager`. A graph
+  that does not hold the target but knows it holds the requester
+  (`Agent._ancestors`, filled in when a parent builds its graph) routes the
+  handoff to its parent graph instead of taking the turn. Only a target that
+  is nowhere in the tree falls back to the agent that has the turn, which is
+  the top agent.
+- **Names identify agents.** The active agent, the supervisor, handoff targets
+  and `enabled_capabilities` are all keyed by agent name for the whole tree,
+  so two agents of one name cannot be told apart once the conversation moves.
+  `compose` rejects such a tree (a record reused under two parents, a supplied
+  `Agent` instance named like a record) with the paths of every occurrence.
+  Python-defined trees keep first-match routing: name your agents apart.
 - Validation reports every problem found in one `AgentCompositionError`
   (unknown or denied tools, missing configuration or secrets, inline
   credentials, unknown models and records). Cycles raise
@@ -164,25 +192,90 @@ with `search_capabilities`, `enable_capability`, `disable_capability` and
   description, argument schema), so switching versions or republishing a tool
   with a new schema rebinds it.
 
-### 5. Contracts
+### 5. NATS mode: one registry per process
+
+With NATS, kernel services have an owner (the serving engine) and every module
+reaches them through NATS facades (`docs/adr/20261015_repository-runs-on-nats.md`).
+The tool registry is not one of them: it holds tool *bindings*, which are
+Python callables built from the module's own code and cannot cross a process.
+So each engine process has a registry of its own, filled by the modules it
+loads, in every role:
+
+| Role | Registry | Search backend |
+|---|---|---|
+| NATS off | the loaded service | embedder and vector store of the engine, shared index |
+| serving | the owner's registry, handed to `module_services` like the model registry's owner | embedder and vector store through the NATS facades, shared index (sole writer) |
+| standby | same, until it takes over | facades, in-memory index; shared index after the handover |
+| client | created by `build_clients`, empty until the modules this engine loads publish | facades, in-memory index |
+
+`EngineProxy.services.tool_registry` and `AgentComposerFactory.FromEngine` work
+in all of them; tools are published after `on_initialized` and before module
+jobs start. The search backend is wired after `build()`, to the facades and not
+to the owners, so the registry reaches the embedding model and the vector store
+as any module does (RPC to the serving engine, with the same deadlines). The
+registry is not a NATS micro service (`sysadmin.NATS_SERVICE_NAMES` lists it as
+`None`). A role change at runtime (fenced, restored, handover) re-wires the
+index.
+
+### 6. Index ownership
+
+The vector-store index is the one part of the registry that can be shared by
+processes, so it follows two rules.
+
+- **Who writes.** Only the serving engine, or an engine with NATS off, writes
+  the shared index. A standby or client engine uses an in-memory index
+  (`ToolIndexRole.LOCAL`), which also keeps it from embedding into a store it
+  does not own.
+- **No process deletes what another may have written.** `search_tools` skips a
+  hit it does not know, instead of deleting it. `prepare()` selects the
+  prepared model's collection and drops nothing, so engines on different
+  embedding models coexist. A sync removes only ids this registry indexed
+  itself. Collections are matched strictly (`<prefix>__<16 hex>__<dim>`), so a
+  prefix that extends another is not mistaken for it.
+  Cleaning out leftovers (other models' collections, entries of tools no longer
+  published) is `IToolIndexPort.collect_garbage`, run once per backend, only by
+  a registry configured with `collect_leftovers`: the serving engine (the lease
+  makes it the only writer) or a registry whose index is private. An engine
+  without NATS never collects, because a one-off process with a narrower module
+  set (`abi chat <module>`) may share its store: engines that publish different
+  tools to one vector store use different `collection_prefix` values to keep
+  their entries apart.
+
+### 7. Contracts
 
 New DTOs are Pydantic models (strict, `extra="forbid"`, frozen) serialisable
-to JSON and YAML. Protobuf/Protovalidate contracts are being defined outside
-this repository. When they land, these models map one to one onto messages:
-the record `kind` field and the tool id version give the compatibility
-handles, and existing tool schemas stay JSON Schema inside the definition's
-`input_schema`. Everything runs in process for now, so no gRPC/DDS transport
-is introduced; the NATS RPC work (`docs/specs/rfcs/20260910_…`) is the path
-when registry calls cross processes.
+to JSON and YAML. This change adds no protobuf message, NATS subject or SDK
+client: 3.0 has no tool or agent-spec contract, and kernel services validate
+requests on the server side (there is no Protovalidate). The contracts come in
+the later steps of this work, on the pattern of the remote model registry
+(`docs/adr/20260924_remote-model-registry.md`): searching the serving engine's
+registry from a client engine or an SDK module, tools published by remote SDK
+modules, and remote execution of engine tools, where the engine resolves the
+tool's configuration and secrets and enforces access. The Pydantic models map
+one to one onto those messages: the record `kind` field and the tool id version
+give the compatibility handles, and tool schemas stay JSON Schema inside the
+definition's `input_schema`. Credentials never appear in definitions, search
+results or records, which carry secret references only.
 
 ## Consequences
 
 - Any module's tools are addressable by a stable id and usable by agents that
   never import the module. Existing Python-defined agents, including their
   sub-agent behaviour, are unchanged.
-- Records can live anywhere an `IAgentSpecRepository` adapter reaches. Nexus
-  still stores agents as Python class references; wiring records into Nexus
-  (list, create, run) is follow-up work.
+- Records can live anywhere an `IAgentSpecRepository` adapter reaches, the
+  Document Service included, which every engine process and (through its
+  facade) NATS reaches. Nexus still stores agents as Python class references;
+  wiring records into Nexus (list, create, run) is follow-up work.
+- A tool a module publishes is searchable and composable only in the process
+  that loads the module until the later steps land: a client engine does not
+  see the serving engine's tools, and the other way round. Records, which are
+  shared, may name tools the current process does not have: composing fails
+  with `ToolNotFoundError`.
+- Each process embeds its own tool index when it is not the index's writer
+  (standby, client): one `embed` call per 1024 tools on first search.
+- A tree that reuses one agent name is rejected at composition, which breaks
+  record sets that reused a leaf record under two parents. They must give each
+  occurrence its own record.
 - Boot does one extra pass (publication), with no network I/O: integration
   factories must build tools without calling their service. Embedding cost
   moves to the first search.

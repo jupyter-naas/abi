@@ -4,7 +4,8 @@
 
 ## Purpose
 
-Process-wide catalog of the tools modules publish. Each tool has a serialisable
+Process-local catalog of the tools the modules *this process loads* publish
+(one registry per process, with NATS too: see "Engine wiring"). Each tool has a serialisable
 **definition** (stable id, description, input contract, owning module, config
 requirements, required scopes) and a runtime **binding** that builds an
 executable tool for a caller. Agents are composed from definitions
@@ -30,7 +31,7 @@ tool_registry/
 │   └── secondary/
 │       ├── InMemoryToolIndexAdapter.py        # numpy cosine index (default)
 │       ├── VectorStoreToolIndexAdapter.py     # index in the engine's VectorStoreService (UUID point ids)
-│       └── ModelRegistryEmbedderAdapter.py    # embeddings from the model registry
+│       └── ModelRegistryEmbedderAdapter.py    # embeddings from the model registry (batches of 1024, one lookup per sync)
 └── tests/
     ├── tool_index__secondary_adapter__generic_test.py  # IToolIndexPort contract
     ├── concept_embeddings.py                           # deterministic embedding fixtures
@@ -51,8 +52,9 @@ class IToolRegistry:
     search_tools(query, context=None, limit=5, min_score=None, where=None) -> list[ToolSearchResult]
     sync_index() -> int                                   # definitions (re-)embedded
 
-class IToolIndexPort:      prepare(model_key), fingerprints(ids), upsert(entries), delete(ids), search(vector, limit), size()
-class IToolEmbedderPort:   model_key, embed_documents(texts), embed_query(text)
+class IToolIndexPort:      prepare(model_key), fingerprints(ids), upsert(entries), delete(ids), search(vector, limit), size(),
+                           collect_garbage(keep_ids)          # the writer's cleanup, never automatic
+class IToolEmbedderPort:   model_key, embed_documents(texts), embed_query(text), resolve() -> ResolvedEmbedder  # model looked up once
 class IToolAccessPolicy:   check(definition, context, action)   # raises ToolAccessDeniedError
 class ToolBinding (Protocol): default_config; create(context, config) -> object
 ```
@@ -73,17 +75,22 @@ Exceptions (all `ToolRegistryError`): `InvalidToolReferenceError`,
 - **Search** embeds the query, over-fetches from the index (widening until
   the limit is met or a short page shows the index is exhausted; it does not
   trust `size()`), drops hits the
-  caller may not discover, stale ids and those rejected by the optional `where`
-  filter (e.g. an agent's allow list), and returns `limit` results sorted by
-  cosine similarity. It never builds or grants a tool. No default score
+  caller may not discover, hits it does not know (another process's, or a
+  previous run's: **never deleted**, the index may be shared) and those rejected
+  by the optional `where` filter (e.g. an agent's allow list), and returns
+  `limit` results sorted by cosine similarity. It never builds or grants a tool. No default score
   threshold: real-model margins are too narrow for one.
 - **Indexing** is lazy (first search or `sync_index()`), so boot never
   depends on an embedding provider. A definition's fingerprint hashes
   `embedding_text()` + the embedder's `model_key`: new/changed definitions are
   embedded, unchanged ones skipped (also across restarts with a persistent
-  index), removed ones deleted, and an embedding model change re-embeds all.
-- `configure_search(embedder, index)` installs the backend (the engine does
-  it in `EngineConfiguration_ToolRegistryService.wire`).
+  index), removed ones deleted (only ids this registry indexed itself), and an
+  embedding model change re-embeds all. The model is resolved once per sync or
+  search (`embedder.resolve()`).
+- `configure_search(embedder, index, collect_leftovers=False)` installs the
+  backend (the engine does it in `EngineConfiguration_ToolRegistryService.wire`).
+  `collect_leftovers=True` lets the first sync call `index.collect_garbage`;
+  set it only for the sole writer of the index's storage.
 
 ## Publishing tools from a module
 
@@ -111,7 +118,31 @@ Example: `naas_abi_marketplace/applications/github/__init__.py`.
 ## Engine wiring
 
 Always loaded (like the model registry) and exempt from
-`ModuleDependencies`: `engine.services.tool_registry`. Configuration
+`ModuleDependencies`: `engine.services.tool_registry`, in every role. The
+registry holds Python bindings, so it is **one per process** and never a NATS
+service (`sysadmin.NATS_SERVICE_NAMES` has it as `None`); the modules each
+process loads publish to that process's registry, after `on_initialized` and
+before module jobs start.
+
+| Role | Registry | Search backend (`ToolIndexRole`) |
+|---|---|---|
+| NATS off | loaded by `EngineServiceLoader`, wired there | engine embedder + vector store; `PEER`: writes the shared index, collects nothing |
+| serving | the owner's, carried into `module_services` by `EngineNATSDependencies.build()` | NATS facades; `SOLE_WRITER`: shared index, collects leftovers |
+| standby | same | NATS facades; `LOCAL` (in-memory index) until the handover, then `SOLE_WRITER` |
+| client | created and wired by `Engine.__nats_clients()` / `build_clients()` | NATS facades; `LOCAL` |
+
+`EngineNATSDependencies.wire_tool_registry(configuration, role)` wires the
+search backend to the facades *after* `build()`, not to the owners; `Engine`
+re-wires on fencing (`LOCAL`), restore and handover (`SOLE_WRITER`).
+`EngineProxy.services.tool_registry` and `AgentComposerFactory.FromEngine` work
+in all roles. A tool is visible only in the process that loaded its module
+until remote tool contracts exist (later steps of the NATS work).
+
+**Several processes on one vector store** (the sqlite_vec dev default shares a
+file between `api` and `dagster`): an engine without NATS writes the shared
+index but only deletes what it indexed itself. Engines that publish different
+tools to one store (for instance a one-off `abi chat <module>` next to the API)
+should use different `collection_prefix` values. Configuration
 (`services.tool_registry`, all optional):
 
 ```yaml
@@ -149,6 +180,6 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/tool_registry/tests/Tool
 ## Adding a new index adapter
 
 1. Implement every `IToolIndexPort` method in `adapters/secondary/<Name>ToolIndexAdapter.py`.
-2. `prepare(model_key)` must discard vectors of another model; storage is created on first `upsert`, sized from its vectors; mismatched dimensions raise `ValueError`; calls before `prepare` raise `RuntimeError`.
+2. `prepare(model_key)` must stop showing vectors of another model, and must **not delete** what a process sharing the storage may have written (it only selects). Removal of leftovers is `collect_garbage(keep_ids)`, run by the sole writer. Storage is created on first `upsert`, sized from its vectors; mismatched dimensions raise `ValueError`; calls before `prepare` raise `RuntimeError`.
 3. Add `<Name>ToolIndexAdapter_test.py` subclassing `ToolIndexSecondaryAdapterContract` with an `index` fixture.
 4. Offer it in `EngineConfiguration_ToolRegistryService.index` if the engine should select it.

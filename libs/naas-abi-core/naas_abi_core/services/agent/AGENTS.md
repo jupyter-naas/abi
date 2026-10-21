@@ -112,8 +112,24 @@ Agents can also be built from records: see `services/agent_composer`.
 Routing in nested trees: the active agent's name is shared by the whole tree,
 but each graph holds only its direct children. `current_active_agent` finds the
 path to it (`_path_to`) and enters the direct child that holds it; that child's
-graph routes further. An active agent outside the tree hands the turn back to
-the current agent instead of targeting a missing node (`_in_tree`).
+graph routes further.
+
+- **Handoffs upward.** Every node shares `supervisor_agent` (the top agent), so
+  `request_help` from a grandchild names the top agent, not its parent. A graph
+  that does not hold the target but knows it holds the requester
+  (`Agent._ancestors`, set by `build_graph` for the whole subtree) sends the
+  handoff to its parent graph (`Command.PARENT`). Only a target nowhere in the
+  tree is released to the agent that has the turn (`_in_tree`).
+- **Names are identities.** The active agent, supervisor, handoff targets and
+  `enabled_capabilities` are keyed by name for the whole tree. Routing finds the
+  first agent of a name, so keep names unique across the tree (the composer
+  enforces it for composed trees; for Python-defined trees it is on you).
+
+Tool failures: `call_tools` logs and returns a failed call as
+`Tool call <name> failed: <reason>`, with a validation error stripped of its
+input (an injected `state` is the whole conversation). Tools enabled at runtime
+by `CapabilityAgent` honour `tool.metadata["chat_source"] = False` like static
+ones.
 
 ## Subdirectories
 
