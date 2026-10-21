@@ -691,7 +691,67 @@ class ABIModule(BaseModule):
             filter=pb.ToolFilter(modules=["engine_host"], tags=["demo"]),
         )
         assert {m.tool.definition.id for m in only.matches} == set(expected[:2])
+        await self.invoke_engine_tools(call)
         assert not any(credential in reply.SerializeToString() for reply in replies)
+        assert b"demo-crm-key-never-sent" not in b"".join(
+            reply.SerializeToString() for reply in replies
+        )
+
+    async def invoke_engine_tools(self, call):
+        """Run engine tools on the engine: the worker names a secret, never holds one."""
+        from naas_abi_sdk.transport import RPCError
+
+        ran = await call(
+            "invoke_tool",
+            tool="engine_host/get_forecast",
+            arguments_json=b'{"city": "Paris"}',
+        )
+        assert json.loads(ran.result_json) == "Paris"
+        synced = await call(
+            "invoke_tool",
+            tool="engine_host/sync_contacts",
+            arguments_json=b'{"source": "crm"}',
+            secret_refs={"api_key": "DEMO_CRM_KEY"},
+        )
+        assert json.loads(synced.result_json) == "crm"
+        refused = {
+            # needs a scope this module does not hold
+            (
+                "engine_host/refund_payment",
+                b'{"payment": "p"}',
+                b"",
+                (),
+            ): "TOOL_NOT_FOUND",
+            # a credential is never written inline
+            (
+                "engine_host/sync_contacts",
+                b'{"source": "crm"}',
+                b'{"api_key": "written-inline"}',
+                (),
+            ): "PERMISSION_DENIED",
+            # a secret the operator did not list for this module
+            (
+                "engine_host/sync_contacts",
+                b'{"source": "crm"}',
+                b"",
+                (("api_key", "DEMO_OTHER"),),
+            ): "PERMISSION_DENIED",
+            # arguments that break the tool's schema
+            ("engine_host/get_forecast", b'{"city": 3}', b"", ()): "INVALID_ARGUMENT",
+        }
+        for (tool, arguments, config, refs), code in refused.items():
+            try:
+                await call(
+                    "invoke_tool",
+                    tool=tool,
+                    arguments_json=arguments,
+                    config_json=config,
+                    secret_refs=dict(refs),
+                )
+            except RPCError as exc:
+                assert exc.code == code, (tool, exc.code)
+            else:
+                raise AssertionError(f"{tool} {refs} must be refused")
 
     async def run(self):
         for domain in OPERATIONS:

@@ -5,8 +5,8 @@
 Accepted. Step 3 of the tool registry's NATS work
 (`docs/adr/20260923_tool-registry-and-agent-composition.md`, sections 5 to 7; the
 catalog is `docs/adr/20261021_tool-catalog-over-nats.md`). Running the engine's own
-tools from a remote module is the next step and reuses the invoke messages defined
-here.
+tools from a remote module is step 4 and reuses the invoke messages defined here
+(`docs/adr/20261023_remote-callers-run-engine-tools.md`).
 
 ## Date
 
@@ -187,5 +187,6 @@ the next step.
 - The engine signs every call as the identity `engine`, in every role, so a module's
   `authorize_tool` cannot tell `api` from `dagster`; it can tell the engine from another
   module, which is the boundary that exists today.
-- Out of scope: running the engine's tools from a module, per-module broker users,
-  streaming tool results, and discovery push (the engine polls).
+- Out of scope: per-module broker users, streaming tool results, and discovery push
+  (the engine polls). Running the engine's tools from a module is
+  `docs/adr/20261023_remote-callers-run-engine-tools.md`.

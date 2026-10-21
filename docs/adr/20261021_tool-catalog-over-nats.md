@@ -4,8 +4,9 @@
 
 Accepted. Step 2 of the tool registry's NATS work
 (`docs/adr/20260923_tool-registry-and-agent-composition.md`, sections 5 and 7).
-Tools published by SDK modules and the remote execution of engine tools are the
-next steps, and build on the contract defined here.
+Tools published by SDK modules and the remote execution of engine tools
+(`docs/adr/20261022_remote-module-tools.md`,
+`docs/adr/20261023_remote-callers-run-engine-tools.md`) build on the contract defined here.
 
 ## Date
 
@@ -74,8 +75,9 @@ and unknown fields are ignored.
   get and search with those scopes. A tool the caller may not discover is
   reported as not found, with the message of a tool that does not exist.
 
-These scopes decide discovery only. Running a tool is the next step, and checks
-access again with the real caller.
+These scopes decide discovery, and the same scopes (`module_scopes`) are the ones a
+module runs tools with (`invoke_tool`, `docs/adr/20261023_remote-callers-run-engine-tools.md`),
+which checks access again with the caller's verified identity and adds its own grants.
 
 ### Validation on the server
 

@@ -8,7 +8,8 @@ Process-local catalog of the tools the modules *this process loads* publish, and
 tools SDK modules serve ("Tools served by SDK modules"), one registry per process,
 with NATS too: see "Engine wiring". Its catalog
 reads also cover the serving engine's tools on an engine that does not serve
-("Catalog over NATS"). Each tool has a serialisable
+("Catalog over NATS"), and SDK modules can run those tools on the engine
+("Running engine tools for other processes"). Each tool has a serialisable
 **definition** (stable id, description, input contract, owning module, config
 requirements, required scopes) and a runtime **binding** that builds an
 executable tool for a caller. Agents are composed from definitions
@@ -28,13 +29,14 @@ tool_registry/
 ├── ToolRegistryPort.py        # ToolId/ToolRef, ToolDefinition, ToolContext, ToolBinding, ToolListing/ToolFilter, ports, exceptions
 ├── ToolRegistryService.py     # in-memory registry + lazy fingerprinted indexing + search + optional catalog
 ├── RemoteToolSynchronizer.py  # discovery -> registry: publishes the tools SDK modules serve, drops them with the module
+├── EngineToolInvoker.py       # runs an engine tool for another process (invoke_tool): identity-bound access, secrets, scrubbing, limits
 ├── ToolAccessPolicy.py        # ScopeToolAccessPolicy (default)
 ├── ToolRegistryFactory.py     # InMemory(...), VectorStore(...)
 ├── adapters/
 │   ├── tool_registry_nats_codec.py            # registry objects <-> abi.tool_registry.v1 messages, request limits
 │   ├── primary/LangChainToolPublisher.py      # ToolPublisher, StaticToolBinding, FactoryToolBinding
 │   ├── primary/RemoteToolBinding.py           # a tool a module serves, as a LangChain tool that calls it over NATS
-│   ├── primary/tool_registry__primary_adapter__NATS.py  # the serving engine's catalog over NATS (read only)
+│   ├── primary/tool_registry__primary_adapter__NATS.py  # the serving engine's catalog over NATS, and invoke_tool
 │   └── secondary/
 │       ├── ToolRegistrySecondaryAdapterNATSClient.py  # IToolCatalogPort over NATS (client / standby engines)
 │       ├── RemoteToolsSecondaryAdapterNATS.py  # IRemoteToolDirectory (discovery) + IRemoteToolInvoker (abi.tool.v1)
@@ -173,9 +175,10 @@ standby engine's reads also cover the serving engine's catalog.
 
 `abi.svc.tool_registry.v1` (`naas_abi_proto/tool_registry/v1/tool_registry.proto`,
 micro service `tool_registry`, ADR `docs/adr/20261021_tool-catalog-over-nats.md`)
-is **read only**: `list_tools`, `get_tool`, `search_tools`. The serving engine
+has three **read only** operations, `list_tools`, `get_tool`, `search_tools`, and
+`invoke_tool` ("Running engine tools for other processes"). The serving engine
 starts `ToolRegistryPrimaryAdapterNATS` (in `EngineNATSLoader.expose_services`),
-which answers from `*_local` and never resolves a binding or sends a
+which answers the three reads from `*_local` and never resolves a binding or sends a
 configuration value. Other engines read it with
 `ToolRegistrySecondaryAdapterNATSClient`, which `wire_tool_registry` sets as the
 registry's catalog for `ToolIndexRole.LOCAL` (client, standby before the
@@ -192,9 +195,48 @@ handover) and removes for `SOLE_WRITER` and `PEER`.
   is `INVALID_ARGUMENT`. A reply stays under half the broker's `max_payload`.
 - Never put a binding value, a default config or a secret in a message: the codec
   (`definition_to_pb`) maps a `ToolDefinition` only; requirements carry key names.
-- Tests: `adapters/primary/..._NATS_test.py` (no broker),
+- Tests: `adapters/primary/..._NATS_test.py` and `..._NATS_invoke_test.py` (no broker),
   `ToolRegistryCatalog_test.py` (registry with a catalog) and, on a real broker,
   `engine/Engine_tool_registry_nats_integration_test.py`.
+
+### Running engine tools for other processes
+
+ADR `docs/adr/20261023_remote-callers-run-engine-tools.md`. `invoke_tool` (same service) runs a
+tool this engine holds, **on the engine**, for an SDK module or another engine process:
+`InvokeToolRequest` has the fields of `abi.tool.v1.InvokeToolRequest` (`tool` reference, `version`,
+`arguments_json`, `config_json`, `context`) and `secret_refs` (config key -> engine secret *name*).
+Only JSON crosses the wire; no binding, callable or secret value.
+
+- **Identity, never the request.** `ToolRegistryPrimaryAdapterNATS.invoke_caller(identity)` builds an
+  `InvokeCaller` from the verified token: `api`, `engine`, `dagster` hold every scope, any secret, any
+  tool, and only `api`/`engine` may name a user or workspace (`context.principal_id/workspace_id`,
+  refused with `PERMISSION_DENIED` from anyone else). An SDK module holds nothing by default:
+  `nats.tool_registry.module_scopes[<id>]`, `invoke.modules[<id>].secrets` (engine secret names it may
+  reference) and `invoke.modules[<id>].unscoped_tools` (patterns of tools with no `required_scopes`
+  it may run). A tool that declares no scope is **not run for a module** until listed (the GitHub
+  tools publish none and run with the module's token by default).
+- **`EngineToolInvoker`** (technology agnostic; the primary decodes) checks in order: sizes and user
+  naming; the tool (not discoverable -> `TOOL_NOT_FOUND`; `remote` tools -> `PERMISSION_DENIED`, call
+  the module; unscoped grant; the registry's `EXECUTE` policy); arguments against the JSON Schema; config
+  (declared keys, plain values, **no value for a key marked `secret`**); secret refs (key marked
+  secret, name on the allow list, checked before any lookup); admission; then on a worker thread under
+  a deadline: resolve the secrets, `registry.resolve`, run.
+- **Secrets never come back.** Results, a `ToolException` message and validation messages are scrubbed
+  of the referenced secret values and the binding's credential defaults
+  (`ToolRegistryService.credential_values`); any other tool failure is `TOOL_ERROR` "Tool execution
+  failed" (type logged, never the message); one `tool_registry.invoke` activity event per call (tool,
+  outcome, code, duration; no arguments, config or secret names).
+- **Limits.** 512 KiB request, 256 KiB arguments, 64 KiB config, 16 refs, 512 KiB result;
+  `nats.tool_registry.invoke: {enabled, max_concurrent (16, below the service's 64), default_timeout_seconds,
+  max_timeout_seconds, modules}`. Over the limit: `RESOURCE_EXHAUSTED` (retryable), never queued; a slot is
+  held until the tool returns (a synchronous tool cannot be cancelled).
+- **Not here:** a client engine's `resolve` of a tool it has not loaded still raises. The composer resolves
+  `{secret: NAME}` against the client's own secrets, so a proxy would send credential values; the ADR says
+  what it needs instead. SDK side: `ToolRegistryService.invoke` / `as_tool` (`naas_abi_sdk.engine_tools`).
+- Tests: `EngineToolInvoker_test.py` (every refusal, scrubbing in results, errors, logs, activity),
+  `adapters/primary/..._NATS_invoke_test.py` (identity -> rights), and on a real broker
+  `engine/Engine_invoke_tools_nats_integration_test.py` (an SDK agent searches, binds and runs a
+  GitHub-style tool with a secret reference resolved on the engine).
 
 ### Tools served by SDK modules
 
@@ -262,8 +304,8 @@ ToolRegistryFactory.VectorStore(
 ## Tests
 
 ```bash
-# the catalog and the tools SDK modules serve, over a real broker (nats-server on PATH; fails instead of skipping):
-ABI_REQUIRE_NATS_SERVER=1 uv run pytest libs/naas-abi-core/naas_abi_core/engine/Engine_tool_registry_nats_integration_test.py libs/naas-abi-core/naas_abi_core/engine/Engine_remote_tools_nats_integration_test.py -o addopts=""
+# the catalog, the tools SDK modules serve and engine tools run remotely, over a real broker (nats-server on PATH; fails instead of skipping):
+ABI_REQUIRE_NATS_SERVER=1 uv run pytest libs/naas-abi-core/naas_abi_core/engine/Engine_tool_registry_nats_integration_test.py libs/naas-abi-core/naas_abi_core/engine/Engine_remote_tools_nats_integration_test.py libs/naas-abi-core/naas_abi_core/engine/Engine_invoke_tools_nats_integration_test.py -o addopts=""
 uv run pytest libs/naas-abi-core/naas_abi_core/services/tool_registry -o addopts=""
 # real embeddings (skips unless Ollama serves nomic-embed-text):
 uv run pytest libs/naas-abi-core/naas_abi_core/services/tool_registry/tests/ToolRegistry_real_embedding_smoke_test.py -o addopts=""

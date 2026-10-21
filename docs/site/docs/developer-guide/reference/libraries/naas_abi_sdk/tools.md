@@ -5,6 +5,8 @@
 - Stdlib and protobuf only: importable without the host's optional `jsonschema`.
 - A module declares `ToolDescriptor`s, binds a handler to each with `BaseModule.expose_tool`, and `ToolHost` ([tool_host](tool_host.md)) serves them. Discovery stores the descriptors as the portable `abi.tool_registry.v1.ToolDefinition`; the engine publishes them to its tool registry while the module has a ready instance. See `docs/adr/20261022_remote-module-tools.md`.
 
+- The other direction, running the *engine's* tools from a module, is [`ToolRegistryService.invoke`](services/tool_registry.md) (`docs/adr/20261023_remote-callers-run-engine-tools.md`); a tool a module serves is called with `ModuleProxy.call_tool`, never through the engine.
+
 ## Public API
 - `ToolDescriptor(name, description, input_schema={"type": "object", "properties": {}}, version="1", output_schema=None, tags=(), config=(), required_scopes=())`
   - `name`: `[A-Za-z0-9_-]{1,64}`; one version per name. `input_schema`: a JSON Schema object every call's arguments are validated against, before the handler runs.

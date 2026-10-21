@@ -14,7 +14,9 @@ logger.remove()  # Configuration debug logging can contain the demo signing key.
 logger.add(lambda message: print(message, end="", flush=True), level="WARNING")
 root = Path(os.environ["DEMO_DATA"])
 url = os.environ["DEMO_NATS_URL"]
+# An engine secret the worker may only name (invoke_tool resolves it on the engine).
 (root / "demo.env").touch(mode=0o600)
+(root / "demo.env").write_text("DEMO_CRM_KEY=demo-crm-key-never-sent\n")
 engine = Engine(
     json.dumps(
         {
@@ -25,6 +27,18 @@ engine = Engine(
                 "nats_url": url,
                 "jwt_secret": os.environ["DEMO_SIGNING_KEY"],
                 "discovery": {"lease_seconds": 2},
+                # What the worker (token identity `standalone-demo`) may run: the
+                # tools of this module, with one engine secret, by name.
+                "tool_registry": {
+                    "invoke": {
+                        "modules": {
+                            "standalone-demo": {
+                                "secrets": ["DEMO_CRM_KEY"],
+                                "unscoped_tools": ["engine_host/*"],
+                            }
+                        }
+                    }
+                },
             },
             "services": {
                 "tool_registry": {"embedding_model": "demo-embedding"},
@@ -103,7 +117,8 @@ try:
     )
 
     # The tools a module publishes to this engine: SDK modules read them over
-    # NATS (list, get, search), and never run them.
+    # NATS (list, get, search) and run them there (invoke_tool): the engine builds
+    # and runs the tool, resolving its secret by name.
     from langchain_core.tools import tool
     from naas_abi_core.services.tool_registry.adapters.primary.LangChainToolPublisher import (
         ToolPublisher,

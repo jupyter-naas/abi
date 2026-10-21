@@ -499,9 +499,10 @@ and cancellation; declaration checks alone are not authorization.
 
 ## Tool catalog
 
-A module can find the tools the engine's modules published (it cannot run them
-yet; it can publish its own, see "Serving tools"), by meaning, with `tool_registry`. Calls are read only: nothing here builds
-or runs a tool, and no reply holds a credential: a tool's config requirements name
+A module can find the tools the engine's modules published, by meaning, with
+`tool_registry`, and run them on the engine ("Running engine tools"; it can also
+publish its own, see "Serving tools"). The reads (list, get, search) never build or
+run a tool, and no reply holds a credential: a tool's config requirements name
 the keys it needs (`secret=True` for a credential) and `availability` says which
 the engine still lacks.
 
@@ -525,6 +526,55 @@ until the operator grants the module those scopes in the engine's configuration,
 `limit` (1 to 50), `min_score`, `modules`, `tags` and `available_only`, and raises
 `ToolSearchUnavailable` when the engine has no embedding model or index.
 `docs/adr/20261021_tool-catalog-over-nats.md` has the contract.
+
+## Running engine tools
+
+`tool_registry.invoke` runs a tool the engine holds, **on the engine**: the engine builds it,
+resolves its configuration and secrets, checks that the module may run it and sends back JSON.
+Nothing of the tool, and no credential, reaches the module.
+
+```python
+tools = self.engine.services.tool_registry
+result = await tools.invoke(
+    "naas_abi_marketplace.applications.github/create_issue",
+    {"owner": "naas", "repo": "abi", "title": "Login fails"},
+    config={},                                        # plain, non-secret values
+    secrets={"access_token": "GITHUB_ACCESS_TOKEN"},  # config key -> NAME of an engine secret
+    timeout=30,                                       # the wait, and the tool's deadline
+)
+```
+
+- A credential goes only by the **name** of an engine secret, to a configuration key the tool's
+  definition marks `secret=True`. Writing its value in `config` is refused
+  (`ToolPermissionDenied`), and so is a name the operator did not list for this module. A tool
+  that echoes its credential comes back `[redacted]`.
+- The engine decides from the module's verified identity, never from the request, and denies by
+  default: scopes in `nats.tool_registry.module_scopes[<id>]`, secret names in
+  `nats.tool_registry.invoke.modules[<id>].secrets`, and `invoke.modules[<id>].unscoped_tools` for tools
+  that declare no scope (the GitHub tools declare none: list them, and a dedicated secret, explicitly).
+  A tool the module may not run reads as `ToolNotFound` or `ToolPermissionDenied`; `ToolExecutionError`
+  is the tool's own failure. A tool another SDK module serves is not run through the engine (call
+  that module: `ModuleProxy.call_tool`).
+- Limits: arguments 256 KiB, config 64 KiB, 16 secret names, result 512 KiB, a deadline of at most
+  300 s, a bounded number of calls at once (`RESOURCE_EXHAUSTED` when busy). Nothing is retried.
+- An SDK agent binds what it found by search, with the `engine-tools` extra
+  (`pip install naas-abi-sdk[engine-tools,agent]`):
+
+```python
+from naas_abi_sdk.agents import Agent
+
+found = await tools.search_tools("report a bug in a github repository", limit=3)
+proxies = [
+    await tools.as_tool(m, secrets={"access_token": "GITHUB_ACCESS_TOKEN"})
+    for m in found
+    if m.availability.available and not m.definition.remote
+]
+agent = Agent("support", "Opens issues", chat_model, tools=proxies)
+```
+
+The proxy fixes the secret names and config when it is built, so the model never sees them; a
+failure reaches the model as the tool's output. `docs/adr/20261023_remote-callers-run-engine-tools.md`
+has the contract and the threat model.
 
 ## Serving tools
 

@@ -76,9 +76,17 @@ when discovery is off. Every other status is 503. The server closes when the
 module exits.
 
 `services/tool_registry.py` reads the engine's tool catalog (`list_tools`, `get_tool`,
-`search_tools`), read only: no call builds or runs a tool, and what a module sees comes from
-its identity on the engine (`nats.tool_registry.module_scopes`), never from the request. Keep
-its DTOs aligned with `tool_registry/v1` (`ToolDefinition` is reused by the next steps).
+`search_tools`), read only, and runs engine tools with `invoke` (ADR
+docs/adr/20261023_remote-callers-run-engine-tools.md): the engine builds and runs the tool, resolves
+its config and secrets and enforces access from the module's verified identity
+(`nats.tool_registry.module_scopes`, `invoke.modules.<id>.secrets` / `unscoped_tools`, all denied by
+default), never from the request. `invoke` sends plain `config` and `secrets` as *names* of engine
+secrets (never values: an inline credential is refused), arguments as JSON, and `timeout` as the
+deadline; it never retries. `as_tool` / `engine_tools.py` wrap a definition as a LangChain tool (extra
+`engine-tools`, imported only when requested) that an SDK `Agent` binds; refuse `remote` definitions
+there (those are called on their module). Keep its DTOs aligned with `tool_registry/v1`. Tests:
+`tests/test_engine_tools.py`; the real-broker suite is core's
+`engine/Engine_invoke_tools_nats_integration_test.py`.
 
 A module can serve tools (`tools.py` descriptors, `tool_host.py`, `BaseModule.tools`/`expose_tool`/
 `authorize_tool`, ADR docs/adr/20261022_remote-module-tools.md): `ToolDescriptor`s go in the discovery

@@ -6,8 +6,8 @@ Accepted. Covers modules that run in the engine, with NATS off and on (issue
 #1245). Other processes read its catalog over NATS
 (`docs/adr/20261021_tool-catalog-over-nats.md`), and SDK modules publish tools
 that agents find and run over NATS (`docs/adr/20261022_remote-module-tools.md`);
-the contract for remote execution of engine tools comes in a later step (see
-"Contracts").
+remote execution of engine tools, with the engine resolving configuration and
+secrets and enforcing access, is `docs/adr/20261023_remote-callers-run-engine-tools.md`.
 
 ## Date
 
@@ -264,8 +264,10 @@ services validate requests on the server side (there is no Protovalidate):
 2. Done: tools published by remote SDK modules (`abi.tool.v1`, `ModuleDescriptor.tools`;
    `docs/adr/20261022_remote-module-tools.md`). A remote tool's configuration holds no
    secret: the composer rejects a `{secret: NAME}` binding on it.
-3. Remote execution of engine tools, where the engine resolves the tool's
-   configuration and secrets and enforces access.
+3. Done: remote execution of engine tools, where the engine resolves the tool's
+   configuration and secrets and enforces access (`abi.svc.tool_registry.v1.invoke_tool`;
+   `docs/adr/20261023_remote-callers-run-engine-tools.md`). A client engine's `resolve` of a
+   tool it has not loaded stays unsupported there, with the reason.
 
 The Pydantic models map one to one onto those messages: the record `kind` field and the tool id version
 give the compatibility handles, and tool schemas stay JSON Schema inside the
