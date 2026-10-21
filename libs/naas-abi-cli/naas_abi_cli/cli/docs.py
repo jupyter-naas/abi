@@ -10,9 +10,9 @@ import click
 
 from naas_abi_cli.docs_builder import DocumentationAgent
 
-# Where the site shows the library reference: scripts/abi_docs_sync.sh copies
-# the pages generated under --output there.
-SITE_LIBRARY_REFERENCE = Path("docs/site/docs/developer-guide/reference/libraries")
+# Where `abi docs sync` writes the library reference (scripts/abi_docs_sync.sh
+# regenerates it). Product docs at https://docs.naas.ai may republish a copy.
+SITE_LIBRARY_REFERENCE = Path("docs/reference")
 
 _SKIP_DIRECTORIES = {
     ".git",
@@ -202,9 +202,8 @@ def docs() -> None:
     default=Path("docs/reference"),
     show_default=True,
     help=(
-        "Root folder where markdown files are expected/generated. The site's "
-        f"library reference ({SITE_LIBRARY_REFERENCE}) is a copy of it, made by "
-        "scripts/abi_docs_sync.sh."
+        "Root folder where markdown files are expected/generated "
+        f"({SITE_LIBRARY_REFERENCE}; scripts/abi_docs_sync.sh regenerates it)."
     ),
 )
 @click.option(
