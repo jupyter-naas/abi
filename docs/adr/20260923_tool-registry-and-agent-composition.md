@@ -3,13 +3,15 @@
 ## Status
 
 Accepted. Covers modules that run in the engine, with NATS off and on (issue
-#1245). The contracts that let other processes use the registry come in later
-steps (see "Contracts").
+#1245). Other processes read its catalog over NATS
+(`docs/adr/20261021_tool-catalog-over-nats.md`); the contracts for tools
+published by SDK modules and for remote execution come in later steps (see
+"Contracts").
 
 ## Date
 
 2026-09-23, updated 2026-10-21 for 3.0 (NATS mode, index ownership, Document
-Service records, routing).
+Service records, routing, the catalog over NATS).
 
 ## Context
 
@@ -208,14 +210,20 @@ loads, in every role:
 | standby | same, until it takes over | facades, in-memory index; shared index after the handover |
 | client | created by `build_clients`, empty until the modules this engine loads publish | facades, in-memory index |
 
+Publication and `resolve` are always local. The catalog reads (`get_definition`,
+`list_definitions`, `availability`, `check_access`, `search_tools`) of a standby
+or client engine also cover the serving engine's tools, read over NATS
+(`abi.svc.tool_registry.v1`, `docs/adr/20261021_tool-catalog-over-nats.md`); the
+serving engine answers them from its own registry.
+
 `EngineProxy.services.tool_registry` and `AgentComposerFactory.FromEngine` work
 in all of them; tools are published after `on_initialized` and before module
 jobs start. The search backend is wired after `build()`, to the facades and not
 to the owners, so the registry reaches the embedding model and the vector store
 as any module does (RPC to the serving engine, with the same deadlines). The
-registry is not a NATS micro service (`sysadmin.NATS_SERVICE_NAMES` lists it as
-`None`). A role change at runtime (fenced, restored, handover) re-wires the
-index.
+registry's catalog is a NATS micro service of the serving engine, read only
+(`tool_registry`). A role change at runtime (fenced, restored, handover) re-wires the
+index and the catalog.
 
 ### 6. Index ownership
 
@@ -244,15 +252,19 @@ processes, so it follows two rules.
 ### 7. Contracts
 
 New DTOs are Pydantic models (strict, `extra="forbid"`, frozen) serialisable
-to JSON and YAML. This change adds no protobuf message, NATS subject or SDK
-client: 3.0 has no tool or agent-spec contract, and kernel services validate
-requests on the server side (there is no Protovalidate). The contracts come in
-the later steps of this work, on the pattern of the remote model registry
-(`docs/adr/20260924_remote-model-registry.md`): searching the serving engine's
-registry from a client engine or an SDK module, tools published by remote SDK
-modules, and remote execution of engine tools, where the engine resolves the
-tool's configuration and secrets and enforces access. The Pydantic models map
-one to one onto those messages: the record `kind` field and the tool id version
+to JSON and YAML. The contracts come in steps, on the pattern of the remote
+model registry (`docs/adr/20260924_remote-model-registry.md`), and kernel
+services validate requests on the server side (there is no Protovalidate):
+
+1. Done: `abi.tool_registry.v1`, the serving engine's catalog (list, get, search)
+   for client engines and SDK modules
+   (`docs/adr/20261021_tool-catalog-over-nats.md`). Its `ToolDefinition` message
+   is the portable form of a definition, for the next two.
+2. Tools published by remote SDK modules.
+3. Remote execution of engine tools, where the engine resolves the tool's
+   configuration and secrets and enforces access.
+
+The Pydantic models map one to one onto those messages: the record `kind` field and the tool id version
 give the compatibility handles, and tool schemas stay JSON Schema inside the
 definition's `input_schema`. Credentials never appear in definitions, search
 results or records, which carry secret references only.
@@ -266,11 +278,13 @@ results or records, which carry secret references only.
   Document Service included, which every engine process and (through its
   facade) NATS reaches. Nexus still stores agents as Python class references;
   wiring records into Nexus (list, create, run) is follow-up work.
-- A tool a module publishes is searchable and composable only in the process
-  that loads the module until the later steps land: a client engine does not
-  see the serving engine's tools, and the other way round. Records, which are
-  shared, may name tools the current process does not have: composing fails
-  with `ToolNotFoundError`.
+- A tool a module publishes is composable and runnable only in the process that
+  loads the module until remote execution lands. A client engine or an SDK
+  module can find the serving engine's tools (search, list, get); the serving
+  engine does not see tools published only by a client engine. Records, which
+  are shared, may name tools the current process does not have: composing fails
+  with `ToolNotFoundError`, or `ToolResolutionError` when only the catalog has
+  it.
 - Each process embeds its own tool index when it is not the index's writer
   (standby, client): one `embed` call per 1024 tools on first search.
 - A tree that reuses one agent name is rejected at composition, which breaks

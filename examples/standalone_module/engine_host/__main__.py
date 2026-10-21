@@ -27,6 +27,7 @@ engine = Engine(
                 "discovery": {"lease_seconds": 2},
             },
             "services": {
+                "tool_registry": {"embedding_model": "demo-embedding"},
                 "secret": {
                     "secret_adapters": [
                         {
@@ -100,6 +101,45 @@ try:
             model=DeterministicFakeEmbedding(size=8),
         ),
     )
+
+    # The tools a module publishes to this engine: SDK modules read them over
+    # NATS (list, get, search), and never run them.
+    from langchain_core.tools import tool
+    from naas_abi_core.services.tool_registry.adapters.primary.LangChainToolPublisher import (
+        ToolPublisher,
+    )
+    from naas_abi_core.services.tool_registry.ToolRegistryPort import ConfigRequirement
+
+    @tool
+    def create_issue(title: str) -> str:
+        """Create a new issue in a GitHub repository."""
+        return title
+
+    @tool
+    def get_forecast(city: str) -> str:
+        """Get the weather forecast for a city."""
+        return city
+
+    @tool
+    def refund_payment(payment: str) -> str:
+        """Refund a payment and send the customer a receipt."""
+        return payment
+
+    @tool
+    def sync_contacts(source: str) -> str:
+        """Create and update the contacts of a CRM from a list."""
+        return source
+
+    publisher = ToolPublisher("engine_host")
+    publisher.add_tools([create_issue, get_forecast], tags=("demo",))
+    # Needs a scope no SDK module holds: it never shows in the worker's reads.
+    publisher.add_tool(refund_payment, required_scopes=["billing:write"])
+    publisher.add_factory(
+        lambda config: [sync_contacts],
+        default_config={"api_key": "demo-credential-never-sent"},
+        requirements=[ConfigRequirement(key="api_key", secret=True)],
+    )
+    publisher.publish_to(engine.services.tool_registry)
 
     import asyncio
     from concurrent.futures import ThreadPoolExecutor

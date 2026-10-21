@@ -635,6 +635,64 @@ class ABIModule(BaseModule):
         )
         assert len(response.vectors[0].values) == 8
 
+    async def tool_registry(self):
+        from naas_abi_proto.tool_registry.v1 import tool_registry_pb2 as pb
+        from naas_abi_sdk.transport import RPCError
+
+        credential = b"demo-credential-never-sent"
+        replies = []
+
+        async def call(operation, **fields):
+            replies.append(await self.call("tool_registry", operation, **fields))
+            return replies[-1]
+
+        expected = [
+            "engine_host/create_issue@1",
+            "engine_host/get_forecast@1",
+            "engine_host/sync_contacts@1",
+        ]
+        listed = await call("list_tools")
+        # The refund tool needs a scope this module does not hold: not even listed.
+        assert [t.definition.id for t in listed.tools] == expected
+        paged = await call("list_tools", limit=2)
+        assert [t.definition.id for t in paged.tools] == expected[:2]
+        rest = await call("list_tools", limit=2, after=paged.next_after)
+        assert [t.definition.id for t in rest.tools] == expected[2:]
+        assert not rest.next_after
+        tagged = await call("list_tools", filter=pb.ToolFilter(tags=["demo"]))
+        assert [t.definition.id for t in tagged.tools] == expected[:2]
+
+        entry = (await call("get_tool", ref="engine_host/sync_contacts")).tool
+        assert entry.definition.id == expected[2]
+        (requirement,) = entry.definition.requirements.config
+        assert (requirement.key, requirement.secret) == ("api_key", True)
+        assert entry.availability.available  # the engine holds the value, never sent
+        schema = json.loads(entry.definition.input_schema_json)
+        assert "source" in schema["properties"]
+        for ref in ("engine_host/refund_payment", "engine_host/nothing"):
+            try:
+                await call("get_tool", ref=ref)
+            except RPCError as exc:
+                assert exc.code == "TOOL_NOT_FOUND", exc.code
+            else:
+                raise AssertionError(f"{ref} must not be readable")
+
+        found = await call("search_tools", query="weather forecast", limit=2)
+        scores = [m.score for m in found.matches]
+        assert 1 <= len(found.matches) <= 2 and scores == sorted(scores, reverse=True)
+        assert {m.tool.definition.id for m in found.matches} <= set(expected)
+        assert not (
+            await call("search_tools", query="weather", limit=5, min_score=2.0)
+        ).matches
+        only = await call(
+            "search_tools",
+            query="anything",
+            limit=5,
+            filter=pb.ToolFilter(modules=["engine_host"], tags=["demo"]),
+        )
+        assert {m.tool.definition.id for m in only.matches} == set(expected[:2])
+        assert not any(credential in reply.SerializeToString() for reply in replies)
+
     async def run(self):
         for domain in OPERATIONS:
             try:

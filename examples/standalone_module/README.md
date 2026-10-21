@@ -99,6 +99,14 @@ instances with deterministic local model/embedding doubles. It verifies the
 compatibility adapter, SSE format, invalid-token rejection and an async LangGraph
 parent invoking the remote agent as a tool. No external LLM credentials are used.
 
+### Tool catalog
+
+The engine host publishes four tools (one needs a scope the worker does not hold, one
+carries a default credential). The raw worker lists them by page and by tag, gets one,
+searches with a limit, a `min_score` and a filter, and checks that the tool it may not
+discover reads as not found and that the credential is in no reply. It never runs a tool:
+the catalog is read only.
+
 ### Remote model example
 
 `model_module.py` extends SDK BaseModule and declares only `model_registry`. It

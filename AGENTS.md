@@ -38,7 +38,7 @@ Core services live under `libs/naas-abi-core/naas_abi_core/services/`. Each has 
 | `object_storage` | S3-style blob storage (FS / S3 / Naas) | [services/object_storage/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/object_storage/AGENTS.md) |
 | `ontology` | LLM-powered NER against an RDF/OWL ontology | [services/ontology/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/ontology/AGENTS.md) |
 | `secret` | Layered secret store (dotenv / Naas / base64) | [services/secret/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/secret/AGENTS.md) |
-| `tool_registry` | Catalog of module tools, one per process (also with NATS): versioned ids, bindings, semantic search | [services/tool_registry/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/tool_registry/AGENTS.md) |
+| `tool_registry` | Catalog of module tools, one per process (also with NATS): versioned ids, bindings, semantic search; its catalog is served read only over NATS (`abi.svc.tool_registry.v1`: list, get, search) to client engines and SDK modules | [services/tool_registry/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/tool_registry/AGENTS.md) |
 | `triple_store` | RDF/SPARQL named-graph store + view subscriptions | [services/triple_store/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/triple_store/AGENTS.md) |
 | `vector_store` | Vector DB facade (Qdrant / SQLite-vec) | [services/vector_store/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/vector_store/AGENTS.md) |
 

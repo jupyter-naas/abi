@@ -15,8 +15,9 @@ the engine's.
   each one in `ModuleDependencies(services=(...))`: undeclared calls are
   refused. Available: `activity_log`, `bus`, `cache`, `coding_environment`,
   `dataset`, `document`, `email`, `event`, `keyvalue` (`kv`), `model_registry`,
-  `object_storage`, `secret`, `source_control`, `triple_store`,
-  `vector_store`. All calls are `async`.
+  `object_storage`, `secret`, `source_control`, `tool_registry` (read the
+  engine's tool catalog: list, get, search; it never runs a tool),
+  `triple_store`, `vector_store`. All calls are `async`.
 - Every agent is declared in `ABIModule.agents` (an `AgentDescriptor` with the
   `agent.invoke.v1` capability) **and** bound in `on_initialized` with
   `self.expose_agent(name, agent.as_handler())`, before the module is READY.
