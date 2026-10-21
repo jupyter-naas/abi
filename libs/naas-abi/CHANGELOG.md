@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v2.91.0 (2026-10-21)
+
+### Features
+
+- **workspace**: Add workspace feature overrides validation and preseeding config
+  ([`cf6ada2`](https://github.com/jupyter-naas/abi/commit/cf6ada21fa17b02be4c003c9e649c0c8cf6b76c9))
+
+
 ## v2.90.0 (2026-10-21)
 
 ### Bug Fixes
