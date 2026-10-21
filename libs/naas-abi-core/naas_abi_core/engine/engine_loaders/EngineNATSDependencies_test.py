@@ -257,7 +257,10 @@ def test_a_client_engine_gets_the_facades_a_serving_engine_gives_its_modules():
 
     try:
         facades = client.build_clients(
-            MagicMock(), cache_tiers=["hot", "cold"], emit_message_events=True
+            MagicMock(),
+            owners.tool_registry,
+            cache_tiers=["hot", "cold"],
+            emit_message_events=True,
         )
         assert shape(facades) == shape(serving.build(owners))
         assert client.module_services is facades
@@ -275,7 +278,11 @@ def test_a_client_engine_keeps_the_upstream_routes_of_its_secret_fanout():
             NATSConfiguration(nats_url="nats://engine:4222", jwt_secret="x" * 32)
         )
         facades = client.build_clients(
-            MagicMock(), cache_tiers=[], emit_message_events=False, secret_routes=routes
+            MagicMock(),
+            MagicMock(),
+            cache_tiers=[],
+            emit_message_events=False,
+            secret_routes=routes,
         )
         return client, facades.secret.adapters
 
@@ -319,3 +326,117 @@ def test_module_triple_store_writes_pass_their_deadline_to_the_client():
     assert client.insert.call_args.kwargs == {"timeout_seconds": 900.0}
     assert client.remove.call_args.kwargs == {}
     assert client.clear_graph.call_args.kwargs == {"timeout_seconds": 900.0}
+
+
+def test_modules_get_the_serving_engines_own_tool_registry_not_a_client():
+    from naas_abi_core.services.tool_registry.ToolRegistryService import (
+        ToolRegistryService,
+    )
+
+    registry = ToolRegistryService()
+    owners = IEngine.Services(model_registry=MagicMock(), tool_registry=registry)
+    wiring = EngineNATSDependencies(NATSConfiguration(jwt_secret="x" * 32))
+    try:
+        dependencies = wiring.build(owners)
+        assert dependencies.tool_registry is registry
+        assert wiring.module_services.tool_registry is registry
+    finally:
+        wiring.close()
+
+
+def test_a_client_engine_gets_a_registry_of_its_own():
+    from naas_abi_core.services.tool_registry.ToolRegistryService import (
+        ToolRegistryService,
+    )
+
+    local = ToolRegistryService()
+    client = EngineNATSDependencies(NATSConfiguration(jwt_secret="x" * 32))
+    try:
+        facades = client.build_clients(
+            MagicMock(), local, cache_tiers=[], emit_message_events=False
+        )
+        assert facades.tool_registry is local
+        assert client.module_services.tool_registry is local
+    finally:
+        client.close()
+
+
+def test_the_registry_searches_through_the_facades_modules_use():
+    """The embedding model and the vector store are the NATS facades, not the owners'."""
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration_ToolRegistryService import (
+        ToolIndexRole,
+        ToolRegistryServiceConfiguration,
+    )
+    from naas_abi_core.services.tool_registry.adapters.secondary.InMemoryToolIndexAdapter import (
+        InMemoryToolIndexAdapter,
+    )
+    from naas_abi_core.services.tool_registry.adapters.secondary.VectorStoreToolIndexAdapter import (
+        VectorStoreToolIndexAdapter,
+    )
+    from naas_abi_core.services.tool_registry.ToolRegistryService import (
+        ToolRegistryService,
+    )
+    from naas_abi_core.services.vector_store.VectorStoreService import (
+        VectorStoreService,
+    )
+
+    configuration = ToolRegistryServiceConfiguration()
+    registry = ToolRegistryService()
+    owners = IEngine.Services(
+        model_registry=MagicMock(),
+        vector_store=VectorStoreService(MagicMock()),
+        tool_registry=registry,
+    )
+    wiring = EngineNATSDependencies(NATSConfiguration(jwt_secret="x" * 32))
+    try:
+        facades = wiring.build(owners)
+
+        wiring.wire_tool_registry(configuration, ToolIndexRole.SOLE_WRITER)
+        assert isinstance(registry._index, VectorStoreToolIndexAdapter)
+        assert registry._index._store is facades.vector_store
+        assert registry._index._store is not owners.vector_store
+        assert registry._embedder._registry is facades.model_registry
+        assert registry._embedder._registry is not owners.model_registry
+
+        wiring.wire_tool_registry(configuration, ToolIndexRole.LOCAL)
+        assert isinstance(registry._index, InMemoryToolIndexAdapter)
+        assert registry._embedder._registry is facades.model_registry
+    finally:
+        wiring.close()
+
+
+def test_only_off_the_serving_engine_does_the_registry_read_the_catalog():
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration_ToolRegistryService import (
+        ToolIndexRole,
+        ToolRegistryServiceConfiguration,
+    )
+    from naas_abi_core.services.tool_registry.adapters.secondary.ToolRegistrySecondaryAdapterNATSClient import (
+        ToolRegistrySecondaryAdapterNATSClient,
+    )
+    from naas_abi_core.services.tool_registry.ToolRegistryService import (
+        ToolRegistryService,
+    )
+
+    registry = ToolRegistryService()
+    owners = IEngine.Services(model_registry=MagicMock(), tool_registry=registry)
+    wiring = EngineNATSDependencies(NATSConfiguration(jwt_secret="x" * 32))
+    configuration = ToolRegistryServiceConfiguration()
+    try:
+        wiring.build(owners)
+        assert not registry.catalog_available
+
+        wiring.wire_tool_registry(configuration, ToolIndexRole.LOCAL)
+        catalog = registry._catalog
+        assert isinstance(catalog, ToolRegistrySecondaryAdapterNATSClient)
+        assert catalog in wiring.clients
+
+        # The handover: this engine serves, so it answers from its own registry.
+        wiring.wire_tool_registry(configuration, ToolIndexRole.SOLE_WRITER)
+        assert not registry.catalog_available
+
+        # Fenced again: the same client, not a second connection.
+        wiring.wire_tool_registry(configuration, ToolIndexRole.LOCAL)
+        assert registry._catalog is catalog
+        assert wiring.clients.count(catalog) == 1
+    finally:
+        wiring.close()

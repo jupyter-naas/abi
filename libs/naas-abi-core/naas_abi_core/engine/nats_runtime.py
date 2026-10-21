@@ -71,6 +71,20 @@ def run_coro(coro, timeout: float = 10.0):
     return future.result(timeout=timeout)
 
 
+async def run_coro_async(coro, timeout: float = 10.0):
+    """``run_coro`` for a caller on another event loop: awaits ``coro`` on the shared
+    loop without blocking its own. On the shared loop itself it just awaits."""
+    loop = _ensure_loop()
+    if asyncio.get_running_loop() is loop:
+        return await asyncio.wait_for(coro, timeout)
+    future = asyncio.run_coroutine_threadsafe(coro, loop)
+    try:
+        return await asyncio.wait_for(asyncio.wrap_future(future), timeout)
+    except TimeoutError:
+        future.cancel()
+        raise
+
+
 def get_connection(nats_url: str, timeout: float = 10.0) -> NATSClient:
     """Return the shared, connected NATS client for this process.
 

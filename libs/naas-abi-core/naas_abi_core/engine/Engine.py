@@ -24,13 +24,21 @@ from naas_abi_core.engine.context import (
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     EngineConfiguration,
 )
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_ToolRegistryService import (
+    ToolIndexRole,
+)
 from naas_abi_core.engine.engine_loaders import EngineTelemetryLoader
 from naas_abi_core.engine.engine_loaders.EngineJobLoader import EngineJobLoader
 from naas_abi_core.engine.engine_loaders.EngineModuleLoader import EngineModuleLoader
 from naas_abi_core.engine.engine_loaders.EngineOntologyLoader import (
     EngineOntologyLoader,
 )
+from naas_abi_core.engine.engine_loaders.EngineRemoteToolLoader import (
+    EngineRemoteToolLoader,
+    RunningRemoteTools,
+)
 from naas_abi_core.engine.engine_loaders.EngineServiceLoader import EngineServiceLoader
+from naas_abi_core.engine.engine_loaders.EngineToolLoader import EngineToolLoader
 from naas_abi_core.engine.IEngine import IEngine
 from naas_abi_core.engine.ownership.ownership_service import Claim
 from naas_abi_core.module.Module import BaseModule, ModuleDependencies
@@ -54,6 +62,8 @@ class Engine(IEngine):
     __nats_runtime_started: bool
     # Hosts the modules' jobs (NATS mode only); stopped first in shutdown().
     __job_loader: EngineJobLoader | None
+    # NATS mode with discovery: publishes the tools SDK modules serve to the registry.
+    __remote_tools: RunningRemoteTools | None = None
     # NATS mode: the lease that lets this engine serve (single-serving-engine ADR).
     __ownership: EngineOwnershipLoader | None
     # Serving starts and stops from the lease's callbacks as well as load/shutdown.
@@ -98,6 +108,7 @@ class Engine(IEngine):
         self.__nats_primary_adapters = []
         self.__nats_runtime_started = False
         self.__job_loader = None
+        self.__remote_tools = None
         self.__ownership = None
         self.__serving_lock = threading.RLock()
 
@@ -175,6 +186,7 @@ class Engine(IEngine):
             self.__nats_dependencies = EngineNATSDependencies(self.__configuration.nats)
             dependencies = self.__nats_dependencies.build(self.__services)
             self.__services.wire_services(dependencies)
+            self.__wire_tool_registry(ToolIndexRole.LOCAL)
             self.__nats_runtime_started = True
             if claim is Claim.SERVING:
                 self.__serve()
@@ -222,6 +234,22 @@ class Engine(IEngine):
         logger.debug("Initializing engine")
         self.on_initialized()
         logger.debug("Engine initialized")
+
+        # Tool instances exist once every module ran ``on_initialized``.
+        # Publication completes before ``load`` returns, so anything composing
+        # agents afterwards (kernel routes, requests) sees every tool.
+        if self.__services.tool_registry_available():
+            EngineToolLoader.publish_tools(
+                self.__services.tool_registry, self.__modules
+            )
+            # Tools SDK modules serve join them, and leave them when the module
+            # stops (every role: the registry's bindings are per process).
+            if self.__configuration.nats is not None:
+                self.__remote_tools = EngineRemoteToolLoader.start(
+                    self.__configuration.nats,
+                    self.__services.tool_registry,
+                    self.__modules,
+                )
 
         # Module jobs start last: their handlers may use anything initialized above.
         # A standby or client engine hosts none: the serving engine does.
@@ -272,7 +300,9 @@ class Engine(IEngine):
 
         No owner, no local adapter, no subscription: nothing opens a backend on
         this host. The model registry stays in this process, in memory, for the
-        modules to register their models with.
+        modules to register their models with, and so does the tool registry:
+        this engine's modules publish their tools to it (its search runs over
+        the serving engine's embedding model, on an in-memory index).
         """
         from naas_abi_core.engine.engine_loaders.EngineNATSDependencies import (
             EngineNATSDependencies,
@@ -282,8 +312,9 @@ class Engine(IEngine):
         services = self.__configuration.services
         self.__nats_dependencies = EngineNATSDependencies(self.__configuration.nats)
         self.__nats_runtime_started = True
-        return self.__nats_dependencies.build_clients(
+        clients = self.__nats_dependencies.build_clients(
             services.model_registry.load(),
+            services.tool_registry.load(),
             cache_tiers=[entry.tier for entry in services.cache.adapters],
             emit_message_events=services.bus.emit_message_events,
             secret_routes=[
@@ -291,6 +322,15 @@ class Engine(IEngine):
                 for entry in services.secret.secret_adapters
             ],
         )
+        self.__wire_tool_registry(ToolIndexRole.LOCAL)
+        return clients
+
+    def __wire_tool_registry(self, role: ToolIndexRole) -> None:
+        """NATS mode: the registry searches through the facades, on ``role``'s index."""
+        if self.__nats_dependencies is not None:
+            self.__nats_dependencies.wire_tool_registry(
+                self.__configuration.services.tool_registry, role
+            )
 
     def __serve(self) -> None:
         """Expose the kernel services over NATS: this engine holds the lease."""
@@ -308,6 +348,8 @@ class Engine(IEngine):
                 primaries = nats_loader.expose_services(self.__services)
                 primaries += nats_loader.expose_overflow(primaries)
             self.__nats_primary_adapters = primaries
+            # The only engine that writes the shared index, now that it serves.
+            self.__wire_tool_registry(ToolIndexRole.SOLE_WRITER)
 
     def __stop_serving(self, drain_seconds: float = 0) -> None:
         """Stop every started primary adapter.
@@ -323,6 +365,9 @@ class Engine(IEngine):
 
         with self.__serving_lock:
             primaries, self.__nats_primary_adapters = self.__nats_primary_adapters, []
+            if primaries:
+                # Another engine may serve now: stop writing the shared index.
+                self.__wire_tool_registry(ToolIndexRole.LOCAL)
         hosts = [
             primary
             for primary in primaries
@@ -457,6 +502,7 @@ class Engine(IEngine):
                 owners.update(offer(adapter, self.services))
         return owners
 
+
     def on_initialized(self):
         for module in self.__modules.values():
             module.on_initialized()
@@ -478,6 +524,9 @@ class Engine(IEngine):
         reaps naturally -- this only makes the *clean* shutdown path
         actually clean, it's not required for correctness.
         """
+        remote_tools, self.__remote_tools = self.__remote_tools, None
+        if remote_tools is not None:
+            remote_tools.stop()
         # Jobs first: running ones still save their run records over NATS.
         job_loader, self.__job_loader = self.__job_loader, None
         if job_loader is not None:

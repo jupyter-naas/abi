@@ -5,9 +5,9 @@ Implements ``ISecretAdapter`` by calling out to a remote
 ``naas_abi_core/proto/secret/v1/secret.proto`` for the wire contract and
 ``naas_abi_core/proto/README.md`` for why it lives there.
 
-Security note: Stage 1's shared-JWT auth has no per-caller authorization --
-see ``secret_nats_contract.py``'s docstring. Ported anyway, an explicit,
-accepted, temporary gap.
+Security note: the server authorizes per caller by the token's verified identity --
+see ``secret_nats_contract.py``'s docstring. Use a first-party identity (``api``,
+``engine``, ``dagster``) to reach every secret.
 
 Shared connection, token, timeout, and reply handling live in
 ``naas_abi_core.engine.nats_rpc.NatsRPCClient``. Calls are never replayed

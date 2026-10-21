@@ -219,6 +219,74 @@ def test_a_standby_engine_serves_and_hosts_jobs_only_after_the_handover(parts):
     engine.shutdown()
 
 
+@pytest.fixture
+def index_roles(monkeypatch):
+    """The role each wiring of the tool registry's search index asked for."""
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration_ToolRegistryService import (
+        ToolRegistryServiceConfiguration,
+    )
+
+    roles: list = []
+    monkeypatch.setattr(
+        ToolRegistryServiceConfiguration,
+        "wire",
+        lambda self, service, services, role: roles.append(role),
+    )
+    return roles
+
+
+def test_a_serving_engine_is_the_sole_writer_of_the_shared_tool_index(
+    parts, index_roles
+):
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration_ToolRegistryService import (
+        ToolIndexRole,
+    )
+
+    engine = new_engine()
+    engine.load()
+    assert index_roles[-1] is ToolIndexRole.SOLE_WRITER
+
+    # Fenced, another engine may serve: back to an index of its own.
+    callbacks = parts.keep.call_args.kwargs
+    callbacks["on_fenced"]()
+    assert index_roles[-1] is ToolIndexRole.LOCAL
+    callbacks["on_restored"]()
+    assert index_roles[-1] is ToolIndexRole.SOLE_WRITER
+    engine.shutdown()
+
+
+def test_a_client_engine_wires_its_own_registry_to_a_local_index(parts, index_roles):
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration_ToolRegistryService import (
+        ToolIndexRole,
+    )
+
+    parts.claim.return_value = None
+    engine = new_engine()
+    engine.load()
+
+    assert index_roles == [ToolIndexRole.LOCAL]
+    assert engine.services.tool_registry_available()
+    engine.shutdown()
+
+
+def test_a_standby_engine_writes_the_shared_tool_index_only_after_the_handover(
+    parts, index_roles
+):
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration_ToolRegistryService import (
+        ToolIndexRole,
+    )
+
+    parts.claim.return_value = Claim.STANDBY
+    engine = new_engine()
+    engine.load()
+    assert index_roles == [ToolIndexRole.LOCAL]
+
+    parts.take_over.call_args.args[0]()
+
+    assert index_roles == [ToolIndexRole.LOCAL, ToolIndexRole.SOLE_WRITER]
+    engine.shutdown()
+
+
 def test_an_engine_that_finds_another_serving_fails_before_loading_services(
     parts, monkeypatch
 ):

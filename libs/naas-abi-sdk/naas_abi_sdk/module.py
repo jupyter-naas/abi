@@ -31,6 +31,7 @@ from naas_abi_sdk.discovery import (
 from naas_abi_sdk.health import HealthServer
 from naas_abi_sdk.jobs import JobsMixin
 from naas_abi_sdk.services import service_proxy
+from naas_abi_sdk.tools import ToolCaller, ToolDescriptor
 from naas_abi_sdk.transport import MODULE_INBOX_PREFIX
 
 if TYPE_CHECKING:
@@ -48,6 +49,7 @@ if TYPE_CHECKING:
         ObjectStorageService,
         SecretService,
         SourceControlService,
+        ToolRegistryService,
         TripleStoreService,
         VectorStoreService,
     )
@@ -99,6 +101,7 @@ class ServicesProxy(_ServicesAccess):
     triple_store: TripleStoreService
     vector_store: VectorStoreService
     model_registry: ModelRegistryService
+    tool_registry: ToolRegistryService
     bus: BusClient
 
     def __getattr__(self, name: str):
@@ -170,6 +173,8 @@ class BaseModule(JobsMixin, Generic[Config]):
     contract_major: int = 1
     agents: tuple[AgentDescriptor, ...] = ()
     models: tuple[ModelDescriptor, ...] = ()
+    # Tools it serves over NATS (naas_abi_sdk.tools): bind each with expose_tool.
+    tools: tuple[ToolDescriptor, ...] = ()
     # Web apps it serves over NATS. None: one per apps/<name>/manifest.json
     # next to the module's package (naas_abi_sdk.apps.discover_apps).
     apps: tuple[AppDescriptor, ...] | None = None
@@ -184,6 +189,7 @@ class BaseModule(JobsMixin, Generic[Config]):
         self._discovery_session: DiscoverySession | None = None
         self._agent_handlers = {}
         self._model_handlers = {}
+        self._tool_handlers: dict[str, Any] = {}
         self._app_handlers: dict[str, Any] = {}
         self._health_port: int | None = None
 
@@ -224,6 +230,37 @@ class BaseModule(JobsMixin, Generic[Config]):
         if not inspect.iscoroutinefunction(handler.invoke):
             raise TypeError("Model handler.invoke must be async")
         self._model_handlers[name] = handler
+
+    def expose_tool(self, name: str, handler) -> None:
+        """Bind a tool handler during on_initialized, before readiness.
+
+        ``handler(arguments)`` takes the call's arguments as a dict, already
+        validated against the declared input schema, and returns any JSON value.
+        It may be a coroutine function or a plain one (run on a thread). Declare
+        ``call`` (or ``**kwargs``) to receive a ``ToolCall``: the caller, the
+        non-secret configuration, the trace id. Raise ``ToolError`` to report a
+        failure to the caller; any other exception is logged here and reported as
+        a generic error.
+        """
+        if not any(tool.name == name for tool in self.tools):
+            raise ValueError("Declare a ToolDescriptor first")
+        if name in self._tool_handlers:
+            raise ValueError(f"Tool handler already registered: {name}")
+        if not callable(handler):
+            raise TypeError("A tool handler is a callable taking the arguments")
+        self._tool_handlers[name] = handler
+
+    def authorize_tool(self, name: str, caller: ToolCaller) -> bool | Awaitable[bool]:
+        """Whether ``caller`` may run tool ``name``. Discovery has already
+        verified who it is (its token is bound to this instance).
+
+        The default allows the engine's own processes (``api``, ``engine``,
+        ``dagster``) and refuses every other caller, other modules included.
+        Override it to widen or narrow that: it replaces the default entirely, so
+        ``return caller.engine or caller.identity == "billing"`` keeps the engine
+        in. Only ``True`` allows the call.
+        """
+        return caller.engine
 
     @classmethod
     def get_apps(cls) -> tuple[AppDescriptor, ...]:
@@ -307,12 +344,14 @@ async def _invoke(hook):
 
 
 async def _drain_hosts(
-    agent_host, job_host, model_host, timeout: float, app_host=None
+    agent_host, job_host, model_host, timeout: float, app_host=None, tool_host=None
 ) -> None:
     """Stop new work and wait for runs, jobs and app requests that already started."""
     if model_host is not None:
         model_host.closing = True
     waits = []
+    if tool_host is not None:
+        waits.append(asyncio.create_task(tool_host.drain(timeout)))
     if app_host is not None:
         waits.append(asyncio.create_task(app_host.drain(timeout)))
     if agent_host is not None:
@@ -438,6 +477,7 @@ async def run_module(
         work = None
         agent_host = None
         model_host = None
+        tool_host = None
         app_host = None
         job_host = None
         jobs_after_cutover: asyncio.Task | None = None
@@ -483,6 +523,25 @@ async def run_module(
 
                 model_host = ModelHost(registration, module._model_handlers)
                 await model_host.start()
+            declared_tools = {tool.name: tool for tool in module.tools}
+            if set(declared_tools) != set(module._tool_handlers):
+                raise ValueError(
+                    "Every declared tool must have a handler before module readiness"
+                )
+            if declared_tools:
+                if registration is None:
+                    raise ValueError("Tool hosting requires discovery")
+                from naas_abi_sdk.tool_host import ToolHost
+
+                tool_host = ToolHost(
+                    registration,
+                    {
+                        name: (tool, module._tool_handlers[name])
+                        for name, tool in declared_tools.items()
+                    },
+                    module.authorize_tool,
+                )
+                await tool_host.start()
             apps = module_type.get_apps()
             if apps:
                 if registration is None:
@@ -593,6 +652,7 @@ async def run_module(
                         model_host,
                         drain_timeout_seconds,
                         app_host,
+                        tool_host,
                     )
                     if not work.done():
                         work.cancel()
@@ -627,6 +687,8 @@ async def run_module(
                     await job_host.close()
                 if model_host:
                     await model_host.close()
+                if tool_host:
+                    await tool_host.close()
                 if app_host:
                     await app_host.close()
                 if agent_host:

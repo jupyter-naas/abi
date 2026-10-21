@@ -51,6 +51,22 @@ def test_micro_services_nobody_configured_still_show_up():
     assert services["custom"].adapters == () and services["custom"].status == "serving"
 
 
+def test_the_tool_catalog_is_a_micro_service_named_as_its_configuration():
+    from naas_abi.apps.nexus.apps.api.app.services.sysadmin.port import (
+        MicroServiceInstance,
+        ServiceConfiguration,
+    )
+
+    micro = InMemoryMicroServiceMonitor(
+        [MicroServiceInstance("tool_registry", "t1", "1.0.0", "", ())]
+    )
+    configuration = InMemoryServiceConfiguration([ServiceConfiguration("tool_registry", ())])
+    view = asyncio.run(_service(micro=micro, configuration=configuration).kernel_services())
+    (service,) = view.services
+
+    assert service.nats_service == "tool_registry" and service.status == "serving"
+
+
 def test_without_nats_services_are_listed_from_configuration_only():
     view = asyncio.run(
         _service(micro=UnavailableSource("nats", "NATS mode is off")).kernel_services()

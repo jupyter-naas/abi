@@ -506,9 +506,14 @@ class Agent(ToolCallRepair):
                 )
                 continue
 
-            tool_input_fields = tool_.get_input_schema().model_json_schema()[
-                "properties"
-            ]
+            # A tool may carry its JSON Schema as a dict (an engine tool run through
+            # ``engine_tools``): there is no pydantic model to read the fields from.
+            tool_schema = getattr(tool_, "args_schema", None)
+            tool_input_fields = (
+                tool_schema.get("properties", {})
+                if isinstance(tool_schema, dict)
+                else tool_.get_input_schema().model_json_schema()["properties"]
+            )
             args: dict[str, Any] | ToolCall = tool_call
             if "state" in tool_input_fields:
                 args = {**tool_call, "state": state}

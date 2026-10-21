@@ -15,11 +15,18 @@ the engine's.
   each one in `ModuleDependencies(services=(...))`: undeclared calls are
   refused. Available: `activity_log`, `bus`, `cache`, `coding_environment`,
   `dataset`, `document`, `email`, `event`, `keyvalue` (`kv`), `model_registry`,
-  `object_storage`, `secret`, `source_control`, `triple_store`,
-  `vector_store`. All calls are `async`.
+  `object_storage`, `secret`, `source_control`, `tool_registry` (read the
+  engine's tool catalog: list, get, search; `invoke` runs an engine tool on the engine, with a
+  secret referenced by name, only as far as the operator granted this module),
+  `triple_store`, `vector_store`. All calls are `async`.
 - Every agent is declared in `ABIModule.agents` (an `AgentDescriptor` with the
   `agent.invoke.v1` capability) **and** bound in `on_initialized` with
   `self.expose_agent(name, agent.as_handler())`, before the module is READY.
+- A module can also publish tools for the engine's agents: declare
+  `tools = (ToolDescriptor(...),)` and bind each with `self.expose_tool(name, handler)`
+  in `on_initialized` (install `naas-abi-sdk[tools]`). Arguments arrive validated against
+  the input schema; by default only the engine may call them (`authorize_tool`). Engine
+  secrets never reach the module: keep its credentials in its own environment.
 - Scheduled or event-driven work is a `@job(...)` method (`Every`, `Cron`,
   `OnEvent` triggers from `naas_abi_sdk.jobs`). Delivery is at least once.
 - Keep `MODULE_ID` stable: discovery, job subjects and agent memory use it.

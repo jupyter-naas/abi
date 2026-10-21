@@ -35,7 +35,7 @@ from naas_abi_core.utils.Expose import Expose
 from naas_abi_core.utils.Logger import logger
 
 # Pydantic imports for schema validation (keep - it's already loaded by other modules)
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 # Only import heavy modules for type checking
 if TYPE_CHECKING:
@@ -519,6 +519,33 @@ class AgentSharedState:
         self._requesting_help = requesting_help
 
 
+def merge_enabled_capabilities(
+    current: dict[str, list[str]] | None, update: dict[str, Any] | None
+) -> dict[str, list[str]]:
+    """Reducer for ``ABIAgentState.enabled_capabilities``.
+
+    The value maps an agent name to the tool ids it enabled at runtime (see
+    ``CapabilityAgent``). An update entry is either an operation,
+    ``{"enable": [...], "disable": [...]}``, which lets several tool calls of
+    one step all apply, or a full list, which is how a sub-graph hands its
+    final state back to its parent.
+    """
+    merged = {agent: list(ids) for agent, ids in (current or {}).items()}
+    for agent, change in (update or {}).items():
+        if isinstance(change, list | tuple):
+            merged[agent] = list(dict.fromkeys(change))
+            continue
+        if not isinstance(change, dict):
+            continue
+        ids = merged.get(agent, [])
+        for tool_id in change.get("enable", []):
+            if tool_id not in ids:
+                ids.append(tool_id)
+        disabled = set(change.get("disable", []))
+        merged[agent] = [tool_id for tool_id in ids if tool_id not in disabled]
+    return merged
+
+
 class ABIAgentState(MessagesState):
     system_prompt: str
     # Routing state persisted through the LangGraph checkpointer so that agent
@@ -527,6 +554,10 @@ class ABIAgentState(MessagesState):
     # lost between requests).
     current_active_agent: str | None
     supervisor_agent: str | None
+    # Tools enabled at runtime, per agent name. Checkpointed with the
+    # conversation, so a selection survives across turns and stays scoped to
+    # one thread. Plain agents never write it.
+    enabled_capabilities: Annotated[dict[str, list[str]], merge_enabled_capabilities]
 
 
 @dataclass
@@ -661,6 +692,9 @@ class Agent(Expose):
     # An agent can have other agents.
     # He will be responsible to load them as tools.
     _agents: list[Agent] = []
+    # Names of the agents whose graph holds this one, as far as the trees it was
+    # built into tell (set by ``build_graph``; a shared instance holds them all).
+    _ancestors: frozenset[str] = frozenset()
 
     # Opt-in: when True, this agent is a *sequential supervisor*. Its sub-agents
     # return control to it when they finish (instead of ending the turn), so it can
@@ -1072,6 +1106,7 @@ class Agent(Expose):
             agent = self.validate_agent_name(agent)
             logger.debug(f"Adding sub-agent '{agent._name}' to graph '{self._name}'")
             graph.add_node(agent._name, agent.graph)
+            agent._add_ancestors(self._ancestors | {self._name})
 
         # Patcher is callable that can be passed and that will impact the graph before we compile it.
         # This is used to be able to give more flexibility about how the graph is being built.
@@ -1132,8 +1167,37 @@ class Agent(Expose):
                 return [agent, *below]
         return None
 
+    @staticmethod
+    def _failure_text(error: Exception) -> str:
+        """``error`` for the log and the model, without the input it rejected.
+
+        A tool declaring ``InjectedState`` is called with the whole conversation
+        among its arguments, and a validation error quotes the value it refused.
+        """
+        if isinstance(error, ValidationError):
+            reasons = "; ".join(
+                f"{'.'.join(str(part) for part in detail['loc'])}: {detail['msg']}"
+                for detail in error.errors(
+                    include_url=False, include_context=False, include_input=False
+                )
+            )
+            return f"{error.title}: {reasons}"
+        return str(error)
+
     def _in_tree(self, name: str) -> bool:
         return name == self._name or self._path_to(name) is not None
+
+    def _add_ancestors(self, names: frozenset[str]) -> None:
+        """Record that the agents ``names`` hold this one, and everything below it.
+
+        A handoff to one of them (``request_help``) is not for this graph to
+        route: it goes up, to the graph that has the node.
+        """
+        if names <= self._ancestors:
+            return  # also ends a cycle
+        self._ancestors = self._ancestors | names
+        for agent in self._agents:
+            agent._add_ancestors(names | {self._name})
 
     def current_active_agent(self, state: ABIAgentState) -> Command:
         """Goto the current active agent.
@@ -1228,6 +1292,16 @@ class Agent(Expose):
                 else ""
             )
             path = self._path_to(active_name)
+            if path is None and active_name in self._ancestors:
+                # A handoff upward (``request_help`` names the tree's supervisor,
+                # however deep the requester is): this graph does not hold the
+                # target, the parent graph does. Only a target that is nowhere in
+                # the tree is released to the agent that has the turn.
+                logger.debug(
+                    f"Active agent '{active_name}' holds '{self._name}': "
+                    "routing up to its graph"
+                )
+                return Command(goto="current_active_agent", graph=Command.PARENT)
             active_agent = path[-1] if path else None
             retain = path is not None
             if path is None:
@@ -1978,6 +2052,42 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             cleaned.append(m)
         return cleaned
 
+    # ------------------------------------------------------------------
+    # Tool-set hooks. Subclasses whose tools change during a conversation
+    # (see ``CapabilityAgent``) override these three; the base agent's tool
+    # set is fixed at construction.
+    # ------------------------------------------------------------------
+
+    def _chat_model_for_turn(self, state: ABIAgentState) -> Runnable:
+        """The model, bound to the tools this step may use.
+
+        Workspace-gated tools are only exposed when a coding workspace is
+        bound to the request; otherwise the model never sees tools it cannot
+        use.
+        """
+        return (
+            self._chat_model_with_tools
+            if coder_workspace_base.get()
+            else self._chat_model_without_workspace_tools
+        )
+
+    def _tool_for_call(
+        self, tool_name: str, state: ABIAgentState
+    ) -> Tool | BaseTool | None:
+        """The tool dispatched for ``tool_name``, or ``None`` when unavailable."""
+        return self._tools_by_name.get(tool_name)
+
+    def _tool_names_for_turn(self, state: ABIAgentState) -> list[str]:
+        """Tool names reported to the model when it calls an unknown tool."""
+        return sorted(self._tools_by_name.keys())
+
+    @staticmethod
+    def _injects_state(tool_: Tool | BaseTool) -> bool:
+        """True when ``state`` is hidden from the model, i.e. ``InjectedState``."""
+        schema = tool_.tool_call_schema
+        visible = schema if isinstance(schema, dict) else schema.model_json_schema()
+        return "state" not in visible.get("properties", {})
+
     def call_model(
         self,
         state: ABIAgentState,
@@ -2014,14 +2124,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         messages = compact_old_tool_messages(messages)
         logger.debug(f"Messages before calling model: {messages}")
 
-        # Calling model. Only expose workspace-gated tools when a coding
-        # workspace is bound to this request; otherwise the model never sees
-        # tools it cannot use.
-        chat_model = (
-            self._chat_model_with_tools
-            if coder_workspace_base.get()
-            else self._chat_model_without_workspace_tools
-        )
+        chat_model = self._chat_model_for_turn(state)
         try:
             if documents_turn_active() or slides_turn_active():
                 response = _invoke_office_chat_model(chat_model, messages)
@@ -2198,9 +2301,9 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             # lookup here would raise KeyError and kill the whole invoke thread
             # (the user sees a generic crash). Instead, surface a ToolMessage the
             # model can read so it can self-correct on the next loop.
-            tool_ = self._tools_by_name.get(tool_name)
+            tool_ = self._tool_for_call(tool_name, state)
             if tool_ is None:
-                available = sorted(self._tools_by_name.keys())
+                available = self._tool_names_for_turn(state)
                 logger.error(
                     f"🚨 Agent '{self._name}' tried to call unknown tool "
                     f"'{tool_name}'. Available tools: {available}"
@@ -2225,17 +2328,26 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 )
                 continue
 
-            tool_input_fields = tool_.get_input_schema().model_json_schema()[
-                "properties"
-            ]
+            # A tool may carry its JSON Schema as a dict (a tool served by a remote
+            # module): there is no pydantic model to read the fields from.
+            tool_schema = getattr(tool_, "args_schema", None)
+            tool_input_fields = (
+                tool_schema.get("properties", {})
+                if isinstance(tool_schema, dict)
+                else tool_.get_input_schema().model_json_schema()["properties"]
+            )
 
             # For tools with InjectedToolCallId, we must pass the full ToolCall object
             # according to LangChain's requirements
             args: dict[str, Any] | ToolCall = tool_call
 
-            # Check if tool needs state injection
-            if "state" in tool_input_fields:
-                args = {**tool_call, "state": state}  # inject state
+            # Inject the graph state into tools that declare it with
+            # ``InjectedState``: such a ``state`` is hidden from the model (absent
+            # from ``tool_call_schema``). An ordinary ``state`` argument, like an
+            # issue filter, keeps the model's value. LangChain reads injected
+            # values from the call's arguments, not from the call itself.
+            if "state" in tool_input_fields and self._injects_state(tool_):
+                args = {**tool_call, "args": {**tool_call["args"], "state": state}}
 
             # Check if tool is a handoff tool
             is_handoff = tool_call["name"].startswith("transfer_to_")
@@ -2269,7 +2381,8 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
 
             # Try to invoke the tool.
             try:
-                logger.debug(f"🔧 Tool arguments: {args.get('args')}")
+                # The model's arguments: ``args`` also holds an injected state.
+                logger.debug(f"🔧 Tool arguments: {tool_call['args']}")
                 tool_response = tool_.invoke(args)
                 logger.debug(
                     f"📦 Tool response: {tool_response.content if hasattr(tool_response, 'content') else tool_response}"
@@ -2314,7 +2427,8 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                         )
                     )
             except Exception as e:  # noqa: BLE001
-                logger.error(f"🚨 Tool call {tool_name} failed: {e}")
+                failure = self._failure_text(e)
+                logger.error(f"🚨 Tool call {tool_name} failed: {failure}")
                 had_tool_error = True
                 called_tools.append(tool_)
                 results.append(
@@ -2322,7 +2436,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                         update={
                             "messages": [
                                 ToolMessage(
-                                    content=f"Tool call {tool_name} failed: {e!s}",
+                                    content=f"Tool call {tool_name} failed: {failure}",
                                     name=tool_name,
                                     tool_call_id=tool_call["id"],
                                 )

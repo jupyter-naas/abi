@@ -84,6 +84,11 @@ close()
 
 Distance metrics supported: `cosine`, `euclidean`, `l2`, `dot`, `l1`.
 
+`SearchResult.score` for `cosine` (and `dot`) is a similarity on every
+adapter: higher is better, 1 for the same direction. That is what
+`score_threshold` assumes. `SqliteVecAdapter` converts sqlite-vec's cosine
+distance (`1 - distance`); L1/L2 scores stay distances.
+
 ## Available Adapters (`adapters/`)
 
 | Adapter | Backend / Notes |
@@ -115,8 +120,9 @@ uv run pytest --import-mode=importlib libs/naas-abi-core/naas_abi_core/services/
 `GenericVectorStoreAdapterTest` (`IVectorStorePort_test.py`) runs against every
 adapter: QdrantInMemory, SqliteVec, the NATS client (through a real primary on
 a local `nats-server`, else a Docker container) and remote Qdrant when
-`QDRANT_HOST` is set. SqliteVec reports the distance as `score` (lower is
-closer), so its `test_search_vectors` is a strict xfail.
+`QDRANT_HOST` is set. Every adapter reports `score` as a similarity (higher is
+closer): SqliteVec converts its distance, so `score_threshold` means the same
+everywhere.
 
 ## Adding a new adapter
 

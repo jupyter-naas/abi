@@ -246,6 +246,31 @@ Existing core agents keep their current PostgreSQL/memory selection. This option
 saver does not migrate old checkpoints, launch remote agents, or provide discovery.
 See the document-checkpoint ADR and remote-agent invocation RFC for those boundaries.
 
+## Engine secrets
+
+The engine's secret service (`engine.services.secret`, declare `secret` in
+`ModuleDependencies`) is closed to modules: the engine's own processes see every
+secret, a module only the names an operator granted its identity (the module id its
+token asserts), denied by default:
+
+```yaml
+nats:
+  secret:
+    modules:
+      my_company_module:
+        read: [MY_COMPANY_API_KEY, MY_COMPANY_STATE]   # get, and shown by list
+        write: [MY_COMPANY_STATE]                      # set, remove
+```
+
+Names are exact, and `read` and `write` do not imply each other. For anything else, `get`
+returns its `default` as if the secret did not exist, `list()` leaves it out, and `set` /
+`remove` fail with `RPCError` / `ServiceError` code `PERMISSION_DENIED`: nothing says which
+engine secrets exist. A module that keeps its own credentials in the engine needs a grant for
+each one; keeping them in the module's own environment needs none. Do not grant `write` on a
+secret something else reads. A value a module writes is opaque: one with `$`, a quote, a backslash or a
+line break is refused with `INVALID_ARGUMENT` (the engine's backends would parse it; encode such a value,
+for instance base64). See `docs/adr/20261024_secret-service-closed-to-sdk-modules.md`.
+
 ## Facade compatibility boundaries
 
 - All remote I/O is async. SDK dataclasses and exceptions are independent of core
@@ -496,6 +521,143 @@ This forwards the caller's bearer token to the trusted provider for verification
 use broker TLS/ACLs. Stage 1 still lacks per-end-user/module grants, and document
 namespaces are not security boundaries. Caller identity guards invocation status
 and cancellation; declaration checks alone are not authorization.
+
+## Tool catalog
+
+A module can find the tools the engine's modules published, by meaning, with
+`tool_registry`, and run them on the engine ("Running engine tools"; it can also
+publish its own, see "Serving tools"). The reads (list, get, search) never build or
+run a tool, and no reply holds a credential: a tool's config requirements name
+the keys it needs (`secret=True` for a credential) and `availability` says which
+the engine still lacks.
+
+```python
+class ABIModule(BaseModule):
+    dependencies = ModuleDependencies(services=("tool_registry",))
+
+    async def run(self):
+        tools = self.engine.services.tool_registry
+        for match in await tools.search_tools("report a bug in our codebase", limit=3):
+            print(match.tool_id, round(match.score, 3), match.availability.available)
+        entry = await tools.get_tool("naas_abi_marketplace.applications.github/create_issue")
+        print(entry.definition.input_schema)
+        everything = await tools.list_tools(tags=["crm"], available_only=True)
+```
+
+What a module sees is decided by the engine from the module's identity, never by
+the request: a tool that requires scopes stays hidden (as if absent, `ToolNotFound`)
+until the operator grants the module those scopes in the engine's configuration,
+`nats.tool_registry.module_scopes: {<module id>: [scope, ...]}`. `search_tools` takes
+`limit` (1 to 50), `min_score`, `modules`, `tags` and `available_only`, and raises
+`ToolSearchUnavailable` when the engine has no embedding model or index.
+`docs/adr/20261021_tool-catalog-over-nats.md` has the contract.
+
+## Running engine tools
+
+`tool_registry.invoke` runs a tool the engine holds, **on the engine**: the engine builds it,
+resolves its configuration and secrets, checks that the module may run it and sends back JSON.
+Nothing of the tool, and no credential, reaches the module.
+
+```python
+tools = self.engine.services.tool_registry
+result = await tools.invoke(
+    "naas_abi_marketplace.applications.github/create_issue",
+    {"owner": "naas", "repo": "abi", "title": "Login fails"},
+    config={},                                        # plain, non-secret values
+    secrets={"access_token": "GITHUB_ACCESS_TOKEN"},  # config key -> NAME of an engine secret
+    timeout=30,                                       # the tool's deadline (the call waits 5 s more)
+)
+```
+
+- A credential goes only by the **name** of an engine secret, to a configuration key the tool's
+  definition marks `secret=True`. Writing its value in `config` is refused
+  (`ToolPermissionDenied`), and so is a name the operator did not list for this module. A tool
+  that echoes its credential comes back `[redacted]`.
+- The engine decides from the module's verified identity, never from the request, and denies by
+  default: scopes in `nats.tool_registry.module_scopes[<id>]`, secret names in
+  `nats.tool_registry.invoke.modules[<id>].secrets`, and `invoke.modules[<id>].unscoped_tools` for tools
+  that declare no scope (the GitHub tools declare none: list them, and a dedicated secret, explicitly).
+  A tool the module may not run reads as `ToolNotFound` or `ToolPermissionDenied`; `ToolExecutionError`
+  is the tool's own failure. A tool another SDK module serves is not run through the engine (call
+  that module: `ModuleProxy.call_tool`).
+- Limits: arguments 256 KiB, config 64 KiB, 16 secret names, result 512 KiB, a deadline of at most
+  300 s, a bounded number of calls at once (`RESOURCE_EXHAUSTED` when busy). Nothing is retried.
+- An SDK agent binds what it found by search, with the `engine-tools` extra
+  (`pip install naas-abi-sdk[engine-tools,agent]`):
+
+```python
+from naas_abi_sdk.agents import Agent
+
+found = await tools.search_tools("report a bug in a github repository", limit=3)
+proxies = [
+    await tools.as_tool(m, secrets={"access_token": "GITHUB_ACCESS_TOKEN"})
+    for m in found
+    if m.availability.available and not m.definition.remote
+]
+agent = Agent("support", "Opens issues", chat_model, tools=proxies)
+```
+
+The proxy fixes the secret names and config when it is built, so the model never sees them; a
+failure reaches the model as the tool's output. `docs/adr/20261023_remote-callers-run-engine-tools.md`
+has the contract and the threat model.
+
+## Serving tools
+
+A module can publish tools that agents in the engine find by meaning, enable and
+call over NATS, while the module has a ready instance. Install
+`naas-abi-sdk[tools]` (arguments are validated with `jsonschema`).
+
+```python
+from naas_abi_sdk import BaseModule, ToolConfig, ToolDescriptor, ToolError
+
+class ABIModule(BaseModule):
+    module_id = "acme_crm"          # letters, digits, _ and .: it is the tool namespace
+    tools = (
+        ToolDescriptor(
+            "open_ticket",
+            "Create a new ticket to report a bug or defect.",
+            {
+                "type": "object",
+                "properties": {"title": {"type": "string"}},
+                "required": ["title"],
+            },
+            config=(ToolConfig("region"),),
+            required_scopes=("crm:write",),   # optional: the engine's access policy applies it
+        ),
+    )
+
+    def on_initialized(self):
+        self.expose_tool("open_ticket", self.open_ticket)   # sync or async
+
+    async def open_ticket(self, arguments, call):           # ``call`` is optional
+        if not arguments["title"].strip():
+            raise ToolError("A ticket needs a title")        # the caller reads this
+        return {"ticket": "T-1", "region": call.config["region"], "user": call.caller.user_id}
+
+    def authorize_tool(self, name, caller):
+        return caller.engine                                 # the default
+```
+
+The engine publishes it as `acme_crm/open_ticket@1`; a `CapabilityAgent` finds it with
+`search_capabilities`, and a record binds it like any tool
+(`{tool: acme_crm/open_ticket, config: {region: eu}}`).
+
+- **Arguments** are JSON, validated against the input schema before the handler runs;
+  the result is JSON (at most 512 KiB). A call is one attempt, never replayed, and its
+  deadline is the caller's (at most 300 s). A sync handler runs on a thread.
+- **Who may call.** Discovery checks the caller's token is bound to this instance, then
+  `authorize_tool(name, caller)` decides. The default allows the engine's own processes
+  (`api`, `engine`, `dagster`) and refuses every other caller, other modules included;
+  an override replaces it, and only `True` allows. Only `api` and `engine` may name an
+  end user (`call.caller.user_id`).
+- **Errors.** `ToolError` reaches the caller with its message; any other exception is
+  logged here and reported as a generic failure.
+- **No engine secret reaches a module.** `ToolConfig` takes plain values only (discovery
+  refuses a secret requirement, and a `{secret: NAME}` binding on a remote tool is a
+  composition error). Keep the module's own credentials in its own environment.
+- Replicas must declare the same tools; at most 32 tools, 32 KiB of descriptors.
+
+`docs/adr/20261022_remote-module-tools.md` has the contract.
 
 ## Remote models
 

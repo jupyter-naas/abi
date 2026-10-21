@@ -14,7 +14,9 @@ logger.remove()  # Configuration debug logging can contain the demo signing key.
 logger.add(lambda message: print(message, end="", flush=True), level="WARNING")
 root = Path(os.environ["DEMO_DATA"])
 url = os.environ["DEMO_NATS_URL"]
+# An engine secret the worker may only name (invoke_tool resolves it on the engine).
 (root / "demo.env").touch(mode=0o600)
+(root / "demo.env").write_text("DEMO_CRM_KEY=demo-crm-key-never-sent\n")
 engine = Engine(
     json.dumps(
         {
@@ -25,8 +27,31 @@ engine = Engine(
                 "nats_url": url,
                 "jwt_secret": os.environ["DEMO_SIGNING_KEY"],
                 "discovery": {"lease_seconds": 2},
+                # The engine's secret service is closed to modules: the worker
+                # (identity `standalone-demo`) keeps one value of its own there.
+                "secret": {
+                    "modules": {
+                        "standalone-demo": {
+                            "read": ["DEMO_VALUE"],
+                            "write": ["DEMO_VALUE"],
+                        }
+                    }
+                },
+                # What the worker (token identity `standalone-demo`) may run: the
+                # tools of this module, with one engine secret, by name.
+                "tool_registry": {
+                    "invoke": {
+                        "modules": {
+                            "standalone-demo": {
+                                "secrets": ["DEMO_CRM_KEY"],
+                                "unscoped_tools": ["engine_host/*"],
+                            }
+                        }
+                    }
+                },
             },
             "services": {
+                "tool_registry": {"embedding_model": "demo-embedding"},
                 "secret": {
                     "secret_adapters": [
                         {
@@ -100,6 +125,46 @@ try:
             model=DeterministicFakeEmbedding(size=8),
         ),
     )
+
+    # The tools a module publishes to this engine: SDK modules read them over
+    # NATS (list, get, search) and run them there (invoke_tool): the engine builds
+    # and runs the tool, resolving its secret by name.
+    from langchain_core.tools import tool
+    from naas_abi_core.services.tool_registry.adapters.primary.LangChainToolPublisher import (
+        ToolPublisher,
+    )
+    from naas_abi_core.services.tool_registry.ToolRegistryPort import ConfigRequirement
+
+    @tool
+    def create_issue(title: str) -> str:
+        """Create a new issue in a GitHub repository."""
+        return title
+
+    @tool
+    def get_forecast(city: str) -> str:
+        """Get the weather forecast for a city."""
+        return city
+
+    @tool
+    def refund_payment(payment: str) -> str:
+        """Refund a payment and send the customer a receipt."""
+        return payment
+
+    @tool
+    def sync_contacts(source: str) -> str:
+        """Create and update the contacts of a CRM from a list."""
+        return source
+
+    publisher = ToolPublisher("engine_host")
+    publisher.add_tools([create_issue, get_forecast], tags=("demo",))
+    # Needs a scope no SDK module holds: it never shows in the worker's reads.
+    publisher.add_tool(refund_payment, required_scopes=["billing:write"])
+    publisher.add_factory(
+        lambda config: [sync_contacts],
+        default_config={"api_key": "demo-credential-never-sent"},
+        requirements=[ConfigRequirement(key="api_key", secret=True)],
+    )
+    publisher.publish_to(engine.services.tool_registry)
 
     import asyncio
     from concurrent.futures import ThreadPoolExecutor

@@ -110,3 +110,21 @@ def test_environment_first_lets_the_environment_win_over_the_file(
     adapter.set(key, "changed")
     assert adapter.get(key) == "changed"
     assert dotenv_values(path)[key] == "changed"
+
+
+def test_a_stored_value_is_interpolated_when_the_file_is_read_again(
+    tmp_path, monkeypatch
+):
+    """Why the secret service's primary refuses ``$`` in values SDK modules write
+    (docs/adr/20261024_secret-service-closed-to-sdk-modules.md): operators' files use
+    ``${NAME}``, so reading back is not opaque, and what a caller stores is parsed."""
+    from naas_abi_core.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor import (
+        DotenvSecretSecondaryAdaptor,
+    )
+
+    path = tmp_path / ".env"
+    path.write_text("BASE='orig'\n")
+    monkeypatch.delenv("COPY", raising=False)
+    DotenvSecretSecondaryAdaptor(str(path)).set("COPY", "${BASE}")
+
+    assert DotenvSecretSecondaryAdaptor(str(path)).get("COPY") == "orig"

@@ -7,7 +7,7 @@
 ## Public API
 - `OPERATIONS: dict[str, list[str]]`
   - Inventory of RPC operations grouped by service.
-  - Keys include (non-exhaustive): `activity_log`, `cache`, `coding_environment`, `dataset`, `document`, `email`, `event`, `keyvalue`, `model_registry`, `object_storage`, `secret`, `source_control`, `triple_store`, `vector_store`.
+  - Keys include (non-exhaustive): `activity_log`, `cache`, `coding_environment`, `dataset`, `document`, `email`, `event`, `keyvalue`, `model_registry`, `object_storage`, `secret`, `source_control`, `tool_registry`, `triple_store`, `vector_store`.
 
 ## Configuration/Dependencies
 - None.

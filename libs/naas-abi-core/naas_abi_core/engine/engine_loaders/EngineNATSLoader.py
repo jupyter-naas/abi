@@ -14,12 +14,9 @@ Extending to another service means adding one more branch to
 metaprogrammed dispatch, matching how ``EngineServiceLoader.load_services``
 itself lists every service explicitly rather than looping over a registry.
 
-``secret`` is exposed too, at Max's explicit direction, despite Stage 1's
-shared-JWT auth having no per-caller ARN/IAM authorization yet -- anyone
-holding a valid service token can read every secret this process's
-``Secret`` service is configured with. Accepted as a known, temporary gap
-("if it's adding security problems we will have to fix that anyway"), not
-an oversight -- revisit once Stage 2 per-caller authorization exists. It
+``secret`` is exposed too, closed to SDK modules: the engine's own processes keep
+full access, a module reads and writes only the names ``nats.secret.modules`` grants
+it (docs/adr/20261024_secret-service-closed-to-sdk-modules.md). It
 also has its own re-exposure guard shape (see ``expose_services`` below):
 ``Secret`` fans out over a *list* of adapters, not one, so only its local
 adapters are served: a NATS client in the fanout is left out, preventing
@@ -28,6 +25,10 @@ secret is skipped when every adapter is one.
 
 Model registry endpoints resolve metadata and execute inference at the owner;
 clients receive LangChain proxies instead of serialized live model objects.
+
+The tool registry is exposed read only (list, get, search): the serving engine
+answers from its own registry, and other engines read it (docs/adr/
+20261021_tool-catalog-over-nats.md). It never runs a tool.
 """
 
 from __future__ import annotations
@@ -240,7 +241,16 @@ class EngineNATSLoader:
                 if services.secret.services_wired:
                     exposed_secret.set_services(services.secret.services)
             primary_secret = SecretPrimaryAdapterNATS(
-                exposed_secret, nats_config.jwt_secret
+                exposed_secret,
+                nats_config.jwt_secret,
+                module_read={
+                    module: grant.read
+                    for module, grant in nats_config.secret.modules.items()
+                },
+                module_write={
+                    module: grant.write
+                    for module, grant in nats_config.secret.modules.items()
+                },
             )
             nats_runtime.run_coro(primary_secret.start(nc))
             started.append(primary_secret)
@@ -462,5 +472,60 @@ class EngineNATSLoader:
             )
             nats_runtime.run_coro(primary_models.start(nc))
             started.append(primary_models)
+
+        if services.tool_registry_available():
+            # The catalog this process serves: what its own modules published.
+            # It answers from the registry's local view, so the registry's own
+            # catalog reads (a standby engine, until now) cannot loop back here.
+            from naas_abi_core.services.tool_registry.adapters.primary.tool_registry__primary_adapter__NATS import (
+                ToolRegistryPrimaryAdapterNATS,
+            )
+
+            invoke = nats_config.tool_registry.invoke
+            invoker = None
+            if invoke.enabled:
+                concurrency = nats_config.tool_invoke_concurrency()
+                if concurrency < invoke.max_concurrent:
+                    logger.warning(
+                        f"tool_registry.invoke.max_concurrent is {invoke.max_concurrent}"
+                        f" but the service handles {nats_config.max_concurrent_requests}"
+                        f" calls at once: running {concurrency} tools at once, so "
+                        "catalog reads keep a free slot"
+                    )
+                from naas_abi_core.services.agent_composer.adapters.secondary.SecretServiceResolverAdapter import (
+                    SecretServiceResolverAdapter,
+                )
+                from naas_abi_core.services.tool_registry.EngineToolInvoker import (
+                    EngineToolInvoker,
+                )
+
+                invoker = EngineToolInvoker(
+                    services.tool_registry,
+                    SecretServiceResolverAdapter(services.secret)
+                    if services.secret_available()
+                    else None,
+                    max_concurrent=concurrency,
+                    default_timeout=invoke.default_timeout_seconds,
+                    max_timeout=invoke.max_timeout_seconds,
+                    record_activity=services.activity_log.record
+                    if services.activity_log_available()
+                    else None,
+                )
+            primary_tools = ToolRegistryPrimaryAdapterNATS(
+                services.tool_registry,
+                nats_config.jwt_secret,
+                module_scopes=nats_config.tool_registry.module_scopes,
+                invoker=invoker,
+                module_secrets={
+                    module: grant.secrets for module, grant in invoke.modules.items()
+                },
+                module_unscoped_tools={
+                    module: grant.unscoped_tools
+                    for module, grant in invoke.modules.items()
+                },
+            )
+            nats_runtime.run_coro(primary_tools.start(nc))
+            started.append(primary_tools)
+            logger.debug("EngineNATSLoader: exposed tool_registry over NATS")
 
         return started

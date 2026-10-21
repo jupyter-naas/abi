@@ -170,16 +170,29 @@ class Transport:
         *,
         transfer: TransferTrace | None = None,
         instance_id: str | None = None,
+        timeout: float | None = None,
+        grace: float = 0.0,
     ) -> Response:
         """One exchange. ``instance_id``: the module instance a call to a module
-        subject goes to, which its token is bound to (required there)."""
+        subject goes to, which its token is bound to (required there). ``timeout``:
+        the deadline of this call, instead of the transport's (the callee reads it
+        from the request's ``context.timeout_ms``) and how long it waits. ``grace``:
+        extra time to wait beyond the deadline, so a callee that enforces it can
+        still report ``DEADLINE_EXCEEDED`` instead of the caller giving up first."""
+        if timeout is None:
+            timeout = self.timeout
+        elif not math.isfinite(timeout) or timeout <= 0:
+            raise ValueError("timeout must be finite and positive")
+        if not math.isfinite(grace) or grace < 0:
+            raise ValueError("grace must be finite and not negative")
+        wait = timeout + grace
         # Copy so concurrent calls never mutate a caller-owned request.
         outgoing = type(request)()
         outgoing.CopyFrom(request)
         context = cast(Any, outgoing).context
         if not context.trace_id:
             context.trace_id = str(uuid.uuid4())
-        context.timeout_ms = int(self.timeout * 1000)
+        context.timeout_ms = int(timeout * 1000)
         token = self._token(subject, instance_id)
         if not token or "\r" in token or "\n" in token:
             raise ValueError("A nonempty service token without newlines is required")
@@ -191,11 +204,16 @@ class Transport:
         ) as span:
             if transfer is not None:  # a transfer's own chunk: always small
                 return await self._exchange(
-                    subject, payload, headers, response_type, transfer
+                    subject, payload, headers, response_type, transfer, timeout=wait
                 )
             headers[overflow.ACCEPT_HEADER] = "1"
             return await self._overflowing(
-                subject, payload, headers, response_type, TransferTrace(span)
+                subject,
+                payload,
+                headers,
+                response_type,
+                TransferTrace(span),
+                timeout=wait,
             )
 
     async def _overflowing(
@@ -205,6 +223,8 @@ class Transport:
         headers: dict[str, str],
         response_type: type[Response],
         trace: TransferTrace,
+        *,
+        timeout: float,
     ) -> Response:
         """Upload a request above the broker limit first; download a parked reply.
 
@@ -232,7 +252,12 @@ class Transport:
             payload = b""
         try:
             return await self._exchange(
-                subject, payload, headers, response_type, download=chunk
+                subject,
+                payload,
+                headers,
+                response_type,
+                download=chunk,
+                timeout=timeout,
             )
         finally:
             if upload is not None:
@@ -248,7 +273,11 @@ class Transport:
         transfer: TransferTrace | None = None,
         *,
         download: overflow.Call | None = None,
+        timeout: float | None = None,
     ) -> Response:
+        if timeout is None:
+            timeout = self.timeout
+
         async def send():
             nc = await self.connect()
             if message_size(payload, headers) > nc.max_payload:
@@ -263,7 +292,7 @@ class Transport:
                     subject,
                     payload,
                     headers=headers,
-                    timeout=self.timeout,
+                    timeout=timeout,
                     retry_seconds=no_responders.RETRY_SECONDS if resend else 0,
                 )
             except MaxPayloadError as exc:
@@ -271,7 +300,7 @@ class Transport:
                     "PAYLOAD_TOO_LARGE", "Request exceeds broker limit"
                 ) from exc
 
-        reply = await asyncio.wait_for(send(), timeout=self.timeout)
+        reply = await asyncio.wait_for(send(), timeout=timeout)
         record_reply(len(reply.data or b""), transfer=transfer)
         h = reply.headers or {}
         if "Nats-Service-Error" in h or "Nats-Service-Error-Code" in h:

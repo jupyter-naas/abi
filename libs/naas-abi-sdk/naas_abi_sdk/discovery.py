@@ -15,6 +15,7 @@ from uuid import uuid4
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 from nats.errors import Error as NATSError
 
+from naas_abi_sdk.tools import ToolDescriptor
 from naas_abi_sdk.transport import RPCError, Transport
 
 
@@ -49,6 +50,7 @@ class ModuleInstance:
     dependencies: tuple[tuple[str, int], ...] = ()
     models: tuple[ModelDescriptor, ...] = ()
     apps: tuple[Any, ...] = ()  # naas_abi_sdk.apps.AppDescriptor, without root
+    tools: tuple[ToolDescriptor, ...] = ()
 
 
 def _instance(value: pb.Instance) -> ModuleInstance:
@@ -70,7 +72,24 @@ def _instance(value: pb.Instance) -> ModuleInstance:
         tuple((x.module_id, x.contract_major) for x in d.dependencies),
         tuple(ModelDescriptor(m.name, m.description, m.kind) for m in d.models),
         _apps(d),
+        _tools(d),
     )
+
+
+def _tools(descriptor: pb.ModuleDescriptor) -> tuple[ToolDescriptor, ...]:
+    """The tools a descriptor declares. Discovery validates them at registration, so a
+    tool this client cannot read is skipped, not allowed to fail every lookup."""
+    found = []
+    for tool in descriptor.tools:
+        try:
+            found.append(ToolDescriptor.from_pb(tool))
+        except (ValueError, TypeError, RecursionError):
+            logging.getLogger(__name__).warning(
+                "Skipping unreadable tool %r of module %s",
+                tool.name,
+                descriptor.module_id,
+            )
+    return tuple(found)
 
 
 def _apps(descriptor: pb.ModuleDescriptor) -> tuple[Any, ...]:
@@ -239,6 +258,55 @@ class ModuleProxy:
             provider=self.module_id,
         )
         return RemoteModel(name, name, self.module_id, proxy, "chat", name, None, {})
+
+    async def call_tool(
+        self,
+        name: str,
+        arguments: dict[str, Any] | None = None,
+        *,
+        config: dict[str, Any] | None = None,
+        timeout: float | None = None,
+    ) -> Any:
+        """Run a tool a ready instance of this module serves; its JSON result.
+
+        The module authorizes this caller (its ``authorize_tool``): by default
+        only the engine's own processes may run its tools."""
+        import json
+        import random
+
+        from naas_abi_proto.tool.v1 import tool_pb2 as tool_pb
+
+        from naas_abi_sdk.tools import ModuleToolClient, tool_subject
+
+        eligible = [
+            (instance, tool)
+            for instance in await self.ready_instances()
+            for tool in instance.tools
+            if tool.name == name
+        ]
+        if not eligible:
+            raise RPCError("TOOL_NOT_FOUND", name)
+        # Replicas serve the same tools: spread the calls.
+        target, descriptor = random.choice(eligible)
+        try:
+            request = tool_pb.InvokeToolRequest(
+                tool=name,
+                version=descriptor.version,
+                arguments_json=json.dumps(arguments or {}, allow_nan=False).encode(),
+                config_json=(
+                    json.dumps(config, allow_nan=False).encode() if config else b""
+                ),
+            )
+        except (TypeError, ValueError) as exc:
+            raise RPCError(
+                "INVALID_ARGUMENT", "Arguments and configuration must be JSON"
+            ) from exc
+        response = await ModuleToolClient(
+            self.client.transport,
+            tool_subject(self.client.project, target.instance_id, name),
+            target.instance_id,
+        ).invoke(request, timeout=timeout)
+        return json.loads(response.result_json)
 
     async def get_agent(self, name: str):
         from naas_abi_sdk.agent import AgentProxy
@@ -496,4 +564,5 @@ def module_descriptor(
                 module_type.get_apps() if hasattr(module_type, "get_apps") else ()
             )
         ],
+        tools=[t.to_pb(module_id) for t in getattr(module_type, "tools", ())],
     )

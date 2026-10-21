@@ -75,6 +75,39 @@ HTTP probe on `ABI_HEALTH_HOST` (default `0.0.0.0`). Unset means no port.
 when discovery is off. Every other status is 503. The server closes when the
 module exits.
 
+`services/tool_registry.py` reads the engine's tool catalog (`list_tools`, `get_tool`,
+`search_tools`), read only, and runs engine tools with `invoke` (ADR
+docs/adr/20261023_remote-callers-run-engine-tools.md): the engine builds and runs the tool, resolves
+its config and secrets and enforces access from the module's verified identity
+(`nats.tool_registry.module_scopes`, `invoke.modules.<id>.secrets` / `unscoped_tools`, all denied by
+default), never from the request. `invoke` sends plain `config` and `secrets` as *names* of engine
+secrets (never values: an inline credential is refused), arguments as JSON, and `timeout` as the
+deadline (the call waits `INVOKE_GRACE_SECONDS` longer so the engine's `DEADLINE_EXCEEDED` arrives; a lost reply is a `ServiceError` `DEADLINE_EXCEEDED` too); it never retries. `as_tool` / `engine_tools.py` wrap a definition as a LangChain tool (extra
+`engine-tools`, imported only when requested) that an SDK `Agent` binds; refuse `remote` definitions
+there (those are called on their module). Keep its DTOs aligned with `tool_registry/v1`. Tests:
+`tests/test_engine_tools.py`; the real-broker suite is core's
+`engine/Engine_invoke_tools_nats_integration_test.py`.
+
+`services/secret.py` (`SecretService`) reaches the engine's secret service, which is closed to
+modules (ADR docs/adr/20261024_secret-service-closed-to-sdk-modules.md): the rights are the exact names
+of `nats.secret.modules.<id>.read` / `.write`, from the verified identity, denied by default. An
+ungranted `get` returns the default (not found), `list` leaves the name out, an ungranted `set` /
+`remove` raises `PERMISSION_DENIED`. A value a module writes is opaque, never interpolated: one with
+`$`, a quote, a backslash or a line break is `INVALID_ARGUMENT`. The standalone demo's `secret` exercise grants and checks it.
+
+A module can serve tools (`tools.py` descriptors, `tool_host.py`, `BaseModule.tools`/`expose_tool`/
+`authorize_tool`, ADR docs/adr/20261022_remote-module-tools.md): `ToolDescriptor`s go in the discovery
+descriptor as the portable `ToolDefinition` (canonical JSON, so replicas compare equal), and
+`ToolHost` serves `abi.mod.<project>.<instance>.tool.<name>.invoke`. Order of a call: size limits,
+discovery's `authorize_tool` (token bound to this instance), the module's `authorize_tool` hook
+(default: the engine's own processes only; it replaces the default), arguments validated against the
+input schema and configuration against the descriptor, then the handler under the caller's deadline.
+Only `api` and `engine` may name an end user. A handler's exception never travels (generic
+`TOOL_ERROR`); only `ToolError` carries its message. No secret in a descriptor or a call: engine
+secrets never reach a module, which holds its own. Serving needs the `tools` extra (`jsonschema`);
+`tools.py` stays stdlib and proto only. Tests: `tests/test_tool_host.py`; the real-broker
+suite is core's `engine/Engine_remote_tools_nats_integration_test.py`.
+
 A module can serve a chat model (`ModelDescriptor`, `expose_model`, `ModelHost`).
 Another module calls `engine.modules[id].get_chat_model(name)`. The call is unary,
 instance-addressed, and authorized with `authorize_model`. The handler returns

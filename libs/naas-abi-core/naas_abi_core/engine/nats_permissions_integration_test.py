@@ -72,7 +72,11 @@ def test_a_module_cannot_listen_on_the_engine_nor_touch_its_buckets(broker):
     engine, module = broker
     listen = [
         "abi.svc.document.v1.get",
+        # The engine's tool catalog: a module reads it by calling, never by serving it.
+        "abi.svc.tool_registry.v1.search_tools",
+        "abi.svc.tool_registry.v1.invoke_tool",
         "abi.discovery.acme.v1.register",
+        "abi.discovery.acme.v1.authorize_tool",
         "abi.rpc.overflow.open",
         "_INBOX.engine-replies",
         "$KV.abi.key",
@@ -100,8 +104,20 @@ def test_a_module_cannot_listen_on_the_engine_nor_touch_its_buckets(broker):
         asyncio.run(
             _violations(
                 module,
-                subscribe=["abi.mod.acme.i-1.app.console.http", "_INBOX_MODULES.x"],
-                publish=["abi.svc.document.v1.get", "abi.discovery.acme.v1.register"],
+                subscribe=[
+                    "abi.mod.acme.i-1.app.console.http",
+                    # The tools it serves, and the replies to the calls it makes.
+                    "abi.mod.acme.i-1.tool.lookup.invoke",
+                    "_INBOX_MODULES.x",
+                ],
+                publish=[
+                    "abi.svc.document.v1.get",
+                    "abi.svc.tool_registry.v1.search_tools",
+                    # Running an engine tool: the engine decides from the token.
+                    "abi.svc.tool_registry.v1.invoke_tool",
+                    "abi.discovery.acme.v1.register",
+                    "abi.discovery.acme.v1.authorize_tool",
+                ],
             )
         )
         == []

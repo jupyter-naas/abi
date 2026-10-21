@@ -75,6 +75,9 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_SourceControl
     SourceControlAdapterConfiguration,
     SourceControlServiceConfiguration,
 )
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_ToolRegistryService import (
+    ToolRegistryServiceConfiguration,
+)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_TripleStoreService import (
     TripleStoreAdapterConfiguration,
     TripleStoreAdapterOxigraphEmbeddedConfiguration,
@@ -87,7 +90,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_VectorStoreSe
 )
 from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.secret.SecretPorts import ISecretAdapter
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from rich.prompt import Prompt
 
 
@@ -199,6 +202,7 @@ class ServicesConfiguration(BaseModel):
     model_registry: ModelRegistryServiceConfiguration = (
         ModelRegistryServiceConfiguration()
     )
+    tool_registry: ToolRegistryServiceConfiguration = ToolRegistryServiceConfiguration()
     cache: CacheServiceConfiguration = CacheServiceConfiguration(
         adapters=[
             CacheAdapterEntry(
@@ -307,6 +311,209 @@ class NATSModelConfiguration(BaseModel):
     streaming: NATSModelStreamingConfiguration = Field(
         default_factory=NATSModelStreamingConfiguration
     )
+
+
+class NATSRemoteToolsConfiguration(BaseModel):
+    """Tools SDK modules serve (docs/adr/20261022_remote-module-tools.md).
+
+    With ``nats.discovery``, every engine process reads discovery and publishes the
+    tools of the modules that have a ready instance to its tool registry, then
+    drops them when the module has none. ``refresh_seconds`` is how often it reads.
+    ``call_timeout_seconds`` bounds a call to a module (its handler's deadline too,
+    at most 300 seconds). ``enabled: false`` leaves remote tools out.
+    """
+
+    enabled: bool = True
+    refresh_seconds: float = Field(default=5.0, gt=0, allow_inf_nan=False)
+    call_timeout_seconds: float = Field(
+        default=120.0, gt=0, le=300, allow_inf_nan=False
+    )
+
+
+def _secret_names(names: list[str]) -> list[str]:
+    import re
+
+    from naas_abi_sdk.tools import MAX_SECRET_NAME_CHARS, SECRET_NAME
+
+    for name in names:
+        if len(name) > MAX_SECRET_NAME_CHARS or not re.fullmatch(SECRET_NAME, name):
+            raise ValueError(f"{name!r} is not a secret name")
+    return names
+
+
+def _module_identities(value: dict, key: str, reason: str) -> dict:
+    from naas_abi_core.engine.nats_auth import FIRST_PARTY_IDENTITIES
+
+    for identity in value:
+        if not identity or identity in FIRST_PARTY_IDENTITIES:
+            raise ValueError(
+                f"{key} names SDK module identities, not {identity!r}: {reason}"
+            )
+    return value
+
+
+class NATSToolInvokeModuleConfiguration(BaseModel):
+    """What one SDK module may run through ``invoke_tool``, beyond its scopes.
+
+    Both lists are empty by default: a module runs nothing that needs no scope, and
+    references no engine secret, until they say so.
+
+    ``secrets``: names of engine secrets the module may reference (``secret_refs``)
+    for a tool's configuration keys marked secret. The engine resolves them and never
+    sends a value back.
+
+    ``unscoped_tools``: patterns (``fnmatch`` on ``<namespace>/<name>``) of tools that
+    declare no ``required_scopes`` and that the module may still run. A tool with
+    scopes needs them in ``tool_registry.module_scopes`` instead.
+    """
+
+    # A misspelt key would silently grant nothing: refuse it instead.
+    model_config = ConfigDict(extra="forbid")
+
+    secrets: list[str] = Field(default_factory=list)
+    unscoped_tools: list[str] = Field(default_factory=list)
+
+    @field_validator("secrets")
+    @classmethod
+    def _secret_names(cls, value: list[str]) -> list[str]:
+        return _secret_names(value)
+
+
+class NATSToolInvokeConfiguration(BaseModel):
+    """Running the tools the serving engine holds for other processes
+    (``abi.svc.tool_registry.v1.invoke_tool``, docs/adr/20261023_remote-callers-run-engine-tools.md).
+
+    The engine runs the tool and resolves its configuration and secrets itself; the
+    caller sends a reference, JSON arguments, plain values and secret *names*.
+    ``enabled: false`` answers every call with PERMISSION_DENIED. ``max_concurrent``
+    calls run at once, and the engine never runs more than half of
+    ``nats.max_concurrent_requests`` (it lowers the value, with a warning, see
+    ``NATSConfiguration.tool_invoke_concurrency``) so catalog reads always find a free
+    slot; the rest get RESOURCE_EXHAUSTED. A call's deadline is its ``timeout_ms``,
+    ``default_timeout_seconds`` when zero (lowered to ``max_timeout_seconds`` when that
+    is smaller), at most ``max_timeout_seconds``.
+
+        tool_registry:
+          module_scopes:
+            my_company_module: ["github:read"]
+          invoke:
+            modules:
+              my_company_module:
+                secrets: [GITHUB_ACCESS_TOKEN]
+                unscoped_tools: ["naas_abi_marketplace.applications.github/get_*"]
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    max_concurrent: int = Field(default=16, ge=1, le=256)
+    default_timeout_seconds: float = Field(
+        default=60.0, gt=0, le=300, allow_inf_nan=False
+    )
+    max_timeout_seconds: float = Field(default=300.0, gt=0, le=300, allow_inf_nan=False)
+    modules: dict[str, NATSToolInvokeModuleConfiguration] = Field(default_factory=dict)
+
+    @field_validator("modules")
+    @classmethod
+    def _identities_are_modules(
+        cls, value: dict[str, NATSToolInvokeModuleConfiguration]
+    ):
+        from naas_abi_core.engine.nats_auth import FIRST_PARTY_IDENTITIES
+
+        for identity in value:
+            if not identity or identity in FIRST_PARTY_IDENTITIES:
+                raise ValueError(
+                    f"invoke.modules names SDK module identities, not {identity!r}: "
+                    "the engine's own processes are trusted already"
+                )
+        return value
+
+
+class NATSToolRegistryConfiguration(BaseModel):
+    """What the tool catalog served over NATS shows each caller.
+
+    The serving engine answers ``abi.svc.tool_registry.v1`` from its own registry
+    under the scopes of the caller's verified service identity, never of the
+    request. The engine's own processes (``api``, ``engine``, ``dagster``) are
+    trusted with every scope: they apply their end users' scopes themselves. An
+    SDK module sees the tools that need no scope, plus the scopes listed here for
+    its identity (the module id its token asserts):
+
+        tool_registry:
+          module_scopes:
+            my_company_module: ["billing:read"]
+    """
+
+    module_scopes: dict[str, list[str]] = Field(default_factory=dict)
+    remote_modules: NATSRemoteToolsConfiguration = Field(
+        default_factory=NATSRemoteToolsConfiguration
+    )
+    invoke: NATSToolInvokeConfiguration = Field(
+        default_factory=NATSToolInvokeConfiguration
+    )
+
+    @field_validator("module_scopes")
+    @classmethod
+    def _identities_are_modules(cls, value: dict[str, list[str]]):
+        from naas_abi_core.engine.nats_auth import FIRST_PARTY_IDENTITIES
+
+        for identity in value:
+            if not identity or identity in FIRST_PARTY_IDENTITIES:
+                raise ValueError(
+                    f"module_scopes names SDK module identities, not {identity!r}: "
+                    "the engine's own processes already see every tool"
+                )
+        return value
+
+
+class NATSSecretModuleConfiguration(BaseModel):
+    """The engine secrets one SDK module may use through ``abi.svc.secret.v1``.
+
+    Both lists are empty by default: a module reads, lists, writes and removes no
+    engine secret until an operator names it. ``read``: names it may ``get`` and see
+    in ``list`` (any other name is not found). ``write``: names it may ``set`` and
+    ``remove``. A write grant does not allow reading, nor the reverse.
+    """
+
+    # A misspelt key would silently grant nothing: refuse it instead.
+    model_config = ConfigDict(extra="forbid")
+
+    read: list[str] = Field(default_factory=list)
+    write: list[str] = Field(default_factory=list)
+
+    @field_validator("read", "write")
+    @classmethod
+    def _names(cls, value: list[str]) -> list[str]:
+        return _secret_names(value)
+
+
+class NATSSecretConfiguration(BaseModel):
+    """Who may use the engine's secret service over NATS
+    (docs/adr/20261024_secret-service-closed-to-sdk-modules.md).
+
+    The engine's own processes (``api``, ``engine``, ``dagster``) hold the project
+    secret and keep full access. An SDK module is denied by default; the rights
+    come from the identity its token asserts, never from the request:
+
+        secret:
+          modules:
+            my_company_module:
+              read: [MY_COMPANY_API_KEY]
+              write: [MY_COMPANY_STATE]
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    modules: dict[str, NATSSecretModuleConfiguration] = Field(default_factory=dict)
+
+    @field_validator("modules")
+    @classmethod
+    def _identities_are_modules(cls, value: dict[str, NATSSecretModuleConfiguration]):
+        return _module_identities(
+            value,
+            "secret.modules",
+            "the engine's own processes are trusted already",
+        )
 
 
 class NATSRPCOverflowConfiguration(BaseModel):
@@ -477,6 +684,10 @@ class NATSConfiguration(BaseModel):
         default_factory=NATSStreamingConfiguration
     )
     models: NATSModelConfiguration = Field(default_factory=NATSModelConfiguration)
+    tool_registry: NATSToolRegistryConfiguration = Field(
+        default_factory=NATSToolRegistryConfiguration
+    )
+    secret: NATSSecretConfiguration = Field(default_factory=NATSSecretConfiguration)
     rpc_overflow: NATSRPCOverflowConfiguration = Field(
         default_factory=NATSRPCOverflowConfiguration
     )
@@ -485,6 +696,16 @@ class NATSConfiguration(BaseModel):
     # The broker's HTTP monitoring endpoint (``nats-server -m 8222``), read by the
     # Nexus SysAdmin app (/varz, /connz, /jsz). It has no auth: keep it private.
     monitoring_url: str | None = Field(default=None, pattern=r"^https?://")
+
+    def tool_invoke_concurrency(self) -> int:
+        """How many engine tools run at once for other processes: the configured
+        ``tool_registry.invoke.max_concurrent``, at most half of
+        ``max_concurrent_requests`` (and one), so the catalog's reads, which share the
+        service's slots, are never starved by long tool calls."""
+        return min(
+            self.tool_registry.invoke.max_concurrent,
+            max(1, self.max_concurrent_requests // 2),
+        )
 
 
 class OpencodeProviderConfiguration(BaseModel):

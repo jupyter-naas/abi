@@ -243,3 +243,36 @@ def test_the_brokers_limit_is_the_only_limit():
     )
     (subject, payload), _ = nc.request.call_args
     assert subject == "set" and len(payload) > 10 * 1024 * 1024
+
+
+def test_grace_extends_the_wait_not_the_deadline_the_callee_reads():
+    rpc, nc = transport(kv.GetResponse(value=b"v").SerializeToString())
+
+    asyncio.run(
+        rpc.call(
+            "abi.svc.keyvalue.v1.get",
+            kv.GetRequest(key="k"),
+            kv.GetResponse,
+            timeout=2,
+            grace=3,
+        )
+    )
+
+    sent = kv.GetRequest.FromString(nc.request.call_args.args[1])
+    assert sent.context.timeout_ms == 2000
+    assert nc.request.call_args.kwargs["timeout"] == 5
+
+
+@pytest.mark.parametrize("grace", [-1, float("nan"), float("inf")])
+def test_grace_is_finite_and_not_negative(grace):
+    rpc, nc = transport()
+    with pytest.raises(ValueError):
+        asyncio.run(
+            rpc.call(
+                "abi.svc.keyvalue.v1.get",
+                kv.GetRequest(key="k"),
+                kv.GetResponse,
+                grace=grace,
+            )
+        )
+    nc.request.assert_not_called()

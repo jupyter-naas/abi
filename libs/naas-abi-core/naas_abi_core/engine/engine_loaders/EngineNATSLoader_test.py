@@ -174,6 +174,7 @@ def _services(available: dict[str, object] | None = None) -> MagicMock:
         if adapter is not None:
             getattr(services, flag).adapter = adapter
     services.model_registry_available.return_value = "model_registry" in available
+    services.tool_registry_available.return_value = "tool_registry" in available
     services.cache_available.return_value = False
     return services
 
@@ -304,6 +305,54 @@ def test_expose_services_starts_a_primary_adapter_for_secret(monkeypatch):
     run_coro.assert_called_once()
 
 
+def test_the_secret_grants_reach_the_primary(monkeypatch):
+    config = SimpleNamespace(
+        nats=NATSConfiguration(
+            nats_url="nats://example:4222",
+            jwt_secret="x" * 32,
+            secret={
+                "modules": {
+                    "partner": {"read": ["TOKEN"], "write": ["STATE"]},
+                    "reader": {"read": ["A"]},
+                }
+            },
+        )
+    )
+    loader = EngineNATSLoader(config)
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.get_connection", MagicMock())
+    monkeypatch.setattr(
+        "naas_abi_core.engine.nats_runtime.run_coro",
+        MagicMock(side_effect=lambda coro, *a, **k: coro.close()),
+    )
+
+    (primary,) = loader.expose_services(_services({"secret": True}))
+
+    assert primary._module_read == {
+        "partner": frozenset({"TOKEN"}),
+        "reader": frozenset({"A"}),
+    }
+    assert primary._module_write == {
+        "partner": frozenset({"STATE"}),
+        "reader": frozenset(),
+    }
+
+
+def test_a_module_gets_no_secret_without_a_grant(monkeypatch):
+    config = SimpleNamespace(
+        nats=NATSConfiguration(nats_url="nats://example:4222", jwt_secret="x" * 32)
+    )
+    loader = EngineNATSLoader(config)
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.get_connection", MagicMock())
+    monkeypatch.setattr(
+        "naas_abi_core.engine.nats_runtime.run_coro",
+        MagicMock(side_effect=lambda coro, *a, **k: coro.close()),
+    )
+
+    (primary,) = loader.expose_services(_services({"secret": True}))
+
+    assert primary._module_read == {} and primary._module_write == {}
+
+
 def test_expose_services_does_not_re_expose_secret_when_every_adapter_is_remote(
     monkeypatch,
 ):
@@ -396,6 +445,101 @@ def test_expose_model_registry_owner(monkeypatch):
     assert len(started) == 1
     assert isinstance(started[0], ModelRegistryNATS)
     assert started[0].registry is services.model_registry
+
+
+def test_expose_tool_registry_owner(monkeypatch):
+    from naas_abi_core.services.tool_registry.adapters.primary.tool_registry__primary_adapter__NATS import (
+        ToolRegistryPrimaryAdapterNATS,
+    )
+
+    config = SimpleNamespace(
+        nats=NATSConfiguration(
+            jwt_secret="x" * 32,
+            tool_registry={"module_scopes": {"crm_module": ["crm:read"]}},
+        )
+    )
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.get_connection", MagicMock())
+    monkeypatch.setattr(
+        "naas_abi_core.engine.nats_runtime.run_coro",
+        MagicMock(side_effect=lambda coro, *a, **k: coro.close()),
+    )
+    services = _services({"tool_registry": True})
+    started = EngineNATSLoader(config).expose_services(services)
+    assert len(started) == 1
+    assert isinstance(started[0], ToolRegistryPrimaryAdapterNATS)
+    assert started[0]._registry is services.tool_registry
+    assert started[0]._module_scopes == {"crm_module": frozenset({"crm:read"})}
+
+
+def _expose_tools(monkeypatch, **nats):
+    from loguru import logger
+
+    config = SimpleNamespace(nats=NATSConfiguration(jwt_secret="x" * 32, **nats))
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.get_connection", MagicMock())
+    monkeypatch.setattr(
+        "naas_abi_core.engine.nats_runtime.run_coro",
+        MagicMock(side_effect=lambda coro, *a, **k: coro.close()),
+    )
+    lines: list[str] = []
+    sink = logger.add(lines.append, level="WARNING", format="{message}")
+    try:
+        started = EngineNATSLoader(config).expose_services(
+            _services({"tool_registry": True})
+        )
+    finally:
+        logger.remove(sink)
+    return started[0], "".join(lines)
+
+
+def test_running_tools_never_takes_more_than_half_of_the_services_slots(monkeypatch):
+    primary, warnings = _expose_tools(
+        monkeypatch,
+        max_concurrent_requests=8,
+        tool_registry={"invoke": {"max_concurrent": 16}},
+    )
+
+    assert primary._invoker._max_concurrent == 4
+    assert "running 4 tools at once" in warnings
+
+    primary, warnings = _expose_tools(
+        monkeypatch,
+        max_concurrent_requests=1,
+        tool_registry={"invoke": {"max_concurrent": 3}},
+    )
+    assert primary._invoker._max_concurrent == 1
+
+    primary, warnings = _expose_tools(monkeypatch)  # the defaults: 16 of 64
+    assert primary._invoker._max_concurrent == 16 and not warnings
+
+
+def test_the_invoke_grants_and_switch_reach_the_primary(monkeypatch):
+    primary, _ = _expose_tools(
+        monkeypatch,
+        tool_registry={
+            "invoke": {
+                "modules": {
+                    "partner": {"secrets": ["TOKEN"], "unscoped_tools": ["ns/get_*"]}
+                }
+            }
+        },
+    )
+    assert primary._module_secrets == {"partner": frozenset({"TOKEN"})}
+    assert primary._module_unscoped_tools == {"partner": ("ns/get_*",)}
+
+    off, _ = _expose_tools(monkeypatch, tool_registry={"invoke": {"enabled": False}})
+    assert off._invoker is None
+
+
+def test_module_scopes_name_modules_not_the_engines_own_processes():
+    from pydantic import ValidationError
+
+    assert NATSConfiguration(jwt_secret="x" * 32).tool_registry.module_scopes == {}
+    for identity in ("engine", "api", "dagster", ""):
+        with pytest.raises(ValidationError):
+            NATSConfiguration(
+                jwt_secret="x" * 32,
+                tool_registry={"module_scopes": {identity: ["s"]}},
+            )
 
 
 def test_streaming_configuration_is_optional_and_validated():

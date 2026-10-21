@@ -194,7 +194,13 @@ class EngineServiceLoader:
             # default to the cheap in_memory adapter when left unconfigured.
             coding_environment=self.__configuration.services.coding_environment.load(),
             source_control=self.__configuration.services.source_control.load(),
+            # Always loaded, like the model registry: modules publish to it at
+            # boot and agents query it without declaring a dependency.
+            tool_registry=self.__configuration.services.tool_registry.load(),
         )
         if self.__configuration.nats is None:
             services.wire_services()
+            self.__configuration.services.tool_registry.wire(
+                services.tool_registry, services
+            )
         return services

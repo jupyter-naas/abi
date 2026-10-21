@@ -12,13 +12,10 @@ the domain, never directly on each other. Both
 ``adaptors/secondary/SecretSecondaryAdapterNATSClient.py`` import from here
 instead.
 
-Security note (see the RFC / dev log for the fuller reasoning): Stage 1's
-auth model is one shared JWT with no per-caller ARN/IAM authorization --
-whoever holds a valid service token can read/write/list every secret this
-process's ``Secret`` service exposes. Ported anyway, explicitly accepted
-by Max as a known, temporary gap ("if it's adding security problems we
-will have to fix that anyway") rather than left undone -- revisit once
-Stage 2 per-caller authorization exists.
+Security note: the primary authorizes per caller. The engine's own processes
+(``api``, ``engine``, ``dagster``) keep full access; an SDK module reads, lists,
+writes and removes only the names ``nats.secret.modules`` grants it, by its verified
+service identity (docs/adr/20261024_secret-service-closed-to-sdk-modules.md).
 
 See ``naas_abi_core/proto/secret/v1/secret.proto`` for the full wire
 contract this pairs with.

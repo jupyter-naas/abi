@@ -30,6 +30,13 @@ if TYPE_CHECKING:
         current_module,
         run_module,
     )
+    from naas_abi_sdk.tools import (
+        ToolCall,
+        ToolCaller,
+        ToolConfig,
+        ToolDescriptor,
+        ToolError,
+    )
     from naas_abi_sdk.transport import RPCError
 
 _EXPORTS = {
@@ -46,6 +53,11 @@ _EXPORTS = {
     "ModuleDependencies": "naas_abi_sdk.module",
     "RPCError": "naas_abi_sdk.transport",
     "SubmissionUncertain": "naas_abi_sdk.agent",
+    "ToolCall": "naas_abi_sdk.tools",
+    "ToolCaller": "naas_abi_sdk.tools",
+    "ToolConfig": "naas_abi_sdk.tools",
+    "ToolDescriptor": "naas_abi_sdk.tools",
+    "ToolError": "naas_abi_sdk.tools",
     "current_module": "naas_abi_sdk.module",
     "run_module": "naas_abi_sdk.module",
 }
@@ -64,6 +76,11 @@ __all__ = [
     "ModuleDependencies",
     "RPCError",
     "SubmissionUncertain",
+    "ToolCall",
+    "ToolCaller",
+    "ToolConfig",
+    "ToolDescriptor",
+    "ToolError",
     "current_module",
     "run_module",
 ]
