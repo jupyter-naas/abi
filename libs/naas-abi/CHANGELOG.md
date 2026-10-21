@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v3.1.0 (2026-10-21)
+
+### Bug Fixes
+
+- **nexus-web**: Port code added on main to Next 15 and React 19
+  ([`7d9d902`](https://github.com/jupyter-naas/abi/commit/7d9d902ef95afcb5913249509e63408dc411c5f4))
+
+### Features
+
+- **nexus-web**: Update and add tests for chat primary adapter and web components
+  ([`eda0e8e`](https://github.com/jupyter-naas/abi/commit/eda0e8e6d8b167990115cb053b79640b87daec98))
+
+
 ## v3.0.0 (2026-10-20)
 
 
