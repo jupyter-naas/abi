@@ -2274,7 +2274,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi-core"
-version = "3.0.0"
+version = "3.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -2452,7 +2452,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-proto"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "../naas-abi-proto" }
 dependencies = [
     { name = "protobuf" },
@@ -2469,7 +2469,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-sdk"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "../naas-abi-sdk" }
 dependencies = [
     { name = "naas-abi-proto" },
