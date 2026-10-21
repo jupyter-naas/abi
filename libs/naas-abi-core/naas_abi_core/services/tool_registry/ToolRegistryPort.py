@@ -206,6 +206,10 @@ class ToolDefinition(BaseModel):
     requirements: ToolRequirements = ToolRequirements()
     # Caller must hold every one of these scopes to discover, enable or run it.
     required_scopes: tuple[str, ...] = ()
+    # Served by an SDK module (docs/adr/20261022_remote-module-tools.md): running it
+    # is a call to that process, so its configuration holds no engine secret. Set
+    # by the engine from the module's discovery descriptor, never by the module.
+    remote: bool = False
 
     @property
     def id(self) -> ToolId:
@@ -494,6 +498,77 @@ class IToolCatalogPort(ABC):
 # What a catalog read may ask for in one call (the serving side enforces them).
 MAX_CATALOG_SEARCH_LIMIT = 50
 MAX_CATALOG_LIST_LIMIT = 200
+
+
+# --------------------------------------------------------------------------- #
+# Tools served by SDK modules                                                  #
+# --------------------------------------------------------------------------- #
+
+
+class RemoteToolError(ToolRegistryError):
+    """A remote tool call failed. ``code`` is the stable code the module or the
+    transport reported (``TOOL_ERROR``, ``INVALID_ARGUMENT``, ``PERMISSION_DENIED``,
+    ``MODULE_UNAVAILABLE``, ``DEADLINE_EXCEEDED``...); the message holds nothing of
+    the module's internals."""
+
+    def __init__(self, code: str, message: str):
+        self.code = code
+        self.reason = message
+        super().__init__(f"{code}: {message}")
+
+
+class RemoteToolDirectoryError(ToolRegistryError):
+    """The modules that serve tools could not be listed (discovery unreachable)."""
+
+
+@dataclass(frozen=True)
+class RemoteModuleTools:
+    """What a module with a ready instance serves: its tools as definitions
+    (``remote`` set), and the contract generation they belong to."""
+
+    module_id: str
+    contract_major: int
+    definitions: tuple[ToolDefinition, ...]
+
+
+class IRemoteToolDirectory(ABC):
+    """Which modules serve tools now. Read only."""
+
+    @abstractmethod
+    def list_modules(self) -> list[RemoteModuleTools]:
+        """Every module with a ready instance that declares tools.
+
+        Raises ``RemoteToolDirectoryError`` when it cannot tell."""
+
+
+class IRemoteToolInvoker(ABC):
+    """Runs a tool a module serves, as the engine, for a caller.
+
+    One attempt: a tool may have side effects, so nothing here retries. Arguments
+    and configuration are JSON values; configuration holds no engine secret.
+    """
+
+    @abstractmethod
+    def invoke(
+        self,
+        definition: ToolDefinition,
+        contract_major: int,
+        arguments: Mapping[str, Any],
+        config: Mapping[str, Any],
+        context: ToolContext,
+    ) -> Any:
+        """The tool's JSON result. Raises ``RemoteToolError``."""
+
+    @abstractmethod
+    async def ainvoke(
+        self,
+        definition: ToolDefinition,
+        contract_major: int,
+        arguments: Mapping[str, Any],
+        config: Mapping[str, Any],
+        context: ToolContext,
+    ) -> Any:
+        """``invoke`` for a caller on an event loop."""
 
 
 class IToolAccessPolicy(ABC):

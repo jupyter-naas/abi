@@ -315,6 +315,23 @@ class NATSModelConfiguration(BaseModel):
     )
 
 
+class NATSRemoteToolsConfiguration(BaseModel):
+    """Tools SDK modules serve (docs/adr/20261022_remote-module-tools.md).
+
+    With ``nats.discovery``, every engine process reads discovery and publishes the
+    tools of the modules that have a ready instance to its tool registry, then
+    drops them when the module has none. ``refresh_seconds`` is how often it reads.
+    ``call_timeout_seconds`` bounds a call to a module (its handler's deadline too,
+    at most 300 seconds). ``enabled: false`` leaves remote tools out.
+    """
+
+    enabled: bool = True
+    refresh_seconds: float = Field(default=5.0, gt=0, allow_inf_nan=False)
+    call_timeout_seconds: float = Field(
+        default=120.0, gt=0, le=300, allow_inf_nan=False
+    )
+
+
 class NATSToolRegistryConfiguration(BaseModel):
     """What the tool catalog served over NATS shows each caller.
 
@@ -331,6 +348,9 @@ class NATSToolRegistryConfiguration(BaseModel):
     """
 
     module_scopes: dict[str, list[str]] = Field(default_factory=dict)
+    remote_modules: NATSRemoteToolsConfiguration = Field(
+        default_factory=NATSRemoteToolsConfiguration
+    )
 
     @field_validator("module_scopes")
     @classmethod

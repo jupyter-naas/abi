@@ -90,6 +90,7 @@ def definition_to_pb(definition: ToolDefinition) -> pb.ToolDefinition:
             requires_workspace=definition.requirements.requires_workspace,
         ),
         required_scopes=sorted(definition.required_scopes),
+        remote=definition.remote,
     )
 
 
@@ -122,6 +123,7 @@ def definition_from_pb(message: pb.ToolDefinition) -> ToolDefinition:
                 requires_workspace=message.requirements.requires_workspace,
             ),
             required_scopes=tuple(message.required_scopes),
+            remote=message.remote,
         )
     except (ValidationError, TypeError, ValueError) as exc:
         raise ToolRegistryError(f"Invalid tool definition on the wire: {exc}") from exc

@@ -2328,9 +2328,14 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 )
                 continue
 
-            tool_input_fields = tool_.get_input_schema().model_json_schema()[
-                "properties"
-            ]
+            # A tool may carry its JSON Schema as a dict (a tool served by a remote
+            # module): there is no pydantic model to read the fields from.
+            tool_schema = getattr(tool_, "args_schema", None)
+            tool_input_fields = (
+                tool_schema.get("properties", {})
+                if isinstance(tool_schema, dict)
+                else tool_.get_input_schema().model_json_schema()["properties"]
+            )
 
             # For tools with InjectedToolCallId, we must pass the full ToolCall object
             # according to LangChain's requirements

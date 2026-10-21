@@ -302,7 +302,15 @@ class AgentComposerService:
         resolved: dict[str, Any] = {}
         ok = True
         for key, value in config.items():
-            if isinstance(value, SecretRef):
+            if isinstance(value, SecretRef) and definition.remote:
+                problems.append(
+                    f"'{key}' of tool '{definition.id}' cannot reference a secret "
+                    f"('{value.secret}'): the tool is served by a remote module and "
+                    "engine secrets are never sent to a module. Give a plain "
+                    "non-secret value; the module holds its own credentials"
+                )
+                ok = False
+            elif isinstance(value, SecretRef):
                 secret = self._secrets.resolve(value.secret) if self._secrets else None
                 if secret is None:
                     problems.append(

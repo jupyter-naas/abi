@@ -39,9 +39,16 @@ from naas_abi_core.services.model_registry.ModelRegistryService import (
 from naas_abi_core.services.tool_registry.adapters.primary.LangChainToolPublisher import (
     ToolPublisher,
 )
+from naas_abi_core.services.tool_registry.adapters.primary.RemoteToolBinding import (
+    RemoteToolBinding,
+)
 from naas_abi_core.services.tool_registry.ToolRegistryPort import (
     ConfigRequirement,
+    IRemoteToolInvoker,
+    PublishedTool,
     ToolContext,
+    ToolDefinition,
+    ToolRequirements,
 )
 from naas_abi_core.services.tool_registry.ToolRegistryService import (
     ToolRegistryService,
@@ -416,3 +423,101 @@ class TestEntryPoints:
                     }
                 )
             )
+
+
+# --------------------------------------------------------------------------- #
+# Tools served by a remote module                                              #
+# --------------------------------------------------------------------------- #
+
+CRM = "acme.crm"
+
+
+class _Invoker(IRemoteToolInvoker):
+    def __init__(self) -> None:
+        self.calls: list[tuple[dict[str, Any], dict[str, Any]]] = []
+
+    def invoke(self, definition, contract_major, arguments, config, context):
+        self.calls.append((dict(arguments), dict(config)))
+        return {"found": arguments["email"]}
+
+    async def ainvoke(self, definition, contract_major, arguments, config, context):
+        return self.invoke(definition, contract_major, arguments, config, context)
+
+
+@pytest.fixture
+def invoker(tool_registry) -> _Invoker:
+    invoker = _Invoker()
+    definition = ToolDefinition(
+        namespace=CRM,
+        name="lookup",
+        description="Look a customer up by email.",
+        module=CRM,
+        remote=True,
+        input_schema={
+            "type": "object",
+            "properties": {"email": {"type": "string"}},
+            "required": ["email"],
+        },
+        requirements=ToolRequirements(config=(ConfigRequirement(key="region"),)),
+    )
+    tool_registry.publish(
+        CRM, [PublishedTool(definition, RemoteToolBinding(definition, 1, invoker))]
+    )
+    return invoker
+
+
+class TestRemoteTools:
+    def test_a_record_binds_a_remote_tool_with_plain_configuration(
+        self, composer, invoker
+    ):
+        agent = composer.compose(
+            _spec(tools=[{"tool": f"{CRM}/lookup", "config": {"region": "eu"}}])
+        )
+        lookup = next(t for t in agent.tools if t.name == "lookup")
+        assert "found" in lookup.invoke({"email": "a@b.c"})
+        assert invoker.calls == [({"email": "a@b.c"}, {"region": "eu"})]
+
+    def test_an_engine_secret_is_never_bound_to_a_remote_tool(self, composer, invoker):
+        with pytest.raises(AgentCompositionError) as error:
+            composer.compose(
+                _spec(
+                    tools=[
+                        {
+                            "tool": f"{CRM}/lookup",
+                            "config": {"region": {"secret": "TRACKER_TOKEN"}},
+                        }
+                    ]
+                )
+            )
+        (problem,) = error.value.problems
+        assert "remote module" in problem
+        assert "never sent to a module" in problem
+        assert "TRACKER_TOKEN" in problem
+        assert "s3cret" not in problem
+        assert invoker.calls == []
+
+    def test_a_capability_agent_refuses_it_too(self, composer, invoker):
+        with pytest.raises(AgentCompositionError, match="never sent to a module"):
+            composer.compose(
+                _spec(
+                    capabilities={
+                        "enabled": True,
+                        "tool_config": {
+                            f"{CRM}/lookup@1": {"region": {"secret": "TRACKER_TOKEN"}}
+                        },
+                    }
+                )
+            )
+
+    def test_a_local_tool_still_takes_its_secret(self, composer, invoker):
+        agent = composer.compose(
+            _spec(
+                tools=[
+                    {
+                        "tool": f"{TRACKER}/create_ticket",
+                        "config": {"api_token": {"secret": "TRACKER_TOKEN"}},
+                    }
+                ]
+            )
+        )
+        assert "create_ticket" in _tool_names(agent)

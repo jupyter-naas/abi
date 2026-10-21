@@ -33,6 +33,10 @@ from naas_abi_core.engine.engine_loaders.EngineModuleLoader import EngineModuleL
 from naas_abi_core.engine.engine_loaders.EngineOntologyLoader import (
     EngineOntologyLoader,
 )
+from naas_abi_core.engine.engine_loaders.EngineRemoteToolLoader import (
+    EngineRemoteToolLoader,
+    RunningRemoteTools,
+)
 from naas_abi_core.engine.engine_loaders.EngineServiceLoader import EngineServiceLoader
 from naas_abi_core.engine.engine_loaders.EngineToolLoader import EngineToolLoader
 from naas_abi_core.engine.IEngine import IEngine
@@ -58,6 +62,8 @@ class Engine(IEngine):
     __nats_runtime_started: bool
     # Hosts the modules' jobs (NATS mode only); stopped first in shutdown().
     __job_loader: EngineJobLoader | None
+    # NATS mode with discovery: publishes the tools SDK modules serve to the registry.
+    __remote_tools: RunningRemoteTools | None = None
     # NATS mode: the lease that lets this engine serve (single-serving-engine ADR).
     __ownership: EngineOwnershipLoader | None
     # Serving starts and stops from the lease's callbacks as well as load/shutdown.
@@ -102,6 +108,7 @@ class Engine(IEngine):
         self.__nats_primary_adapters = []
         self.__nats_runtime_started = False
         self.__job_loader = None
+        self.__remote_tools = None
         self.__ownership = None
         self.__serving_lock = threading.RLock()
 
@@ -235,6 +242,14 @@ class Engine(IEngine):
             EngineToolLoader.publish_tools(
                 self.__services.tool_registry, self.__modules
             )
+            # Tools SDK modules serve join them, and leave them when the module
+            # stops (every role: the registry's bindings are per process).
+            if self.__configuration.nats is not None:
+                self.__remote_tools = EngineRemoteToolLoader.start(
+                    self.__configuration.nats,
+                    self.__services.tool_registry,
+                    self.__modules,
+                )
 
         # Module jobs start last: their handlers may use anything initialized above.
         # A standby or client engine hosts none: the serving engine does.
@@ -509,6 +524,9 @@ class Engine(IEngine):
         reaps naturally -- this only makes the *clean* shutdown path
         actually clean, it's not required for correctness.
         """
+        remote_tools, self.__remote_tools = self.__remote_tools, None
+        if remote_tools is not None:
+            remote_tools.stop()
         # Jobs first: running ones still save their run records over NATS.
         job_loader, self.__job_loader = self.__job_loader, None
         if job_loader is not None:
