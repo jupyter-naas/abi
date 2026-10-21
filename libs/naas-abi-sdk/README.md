@@ -246,6 +246,29 @@ Existing core agents keep their current PostgreSQL/memory selection. This option
 saver does not migrate old checkpoints, launch remote agents, or provide discovery.
 See the document-checkpoint ADR and remote-agent invocation RFC for those boundaries.
 
+## Engine secrets
+
+The engine's secret service (`engine.services.secret`, declare `secret` in
+`ModuleDependencies`) is closed to modules: the engine's own processes see every
+secret, a module only the names an operator granted its identity (the module id its
+token asserts), denied by default:
+
+```yaml
+nats:
+  secret:
+    modules:
+      my_company_module:
+        read: [MY_COMPANY_API_KEY, MY_COMPANY_STATE]   # get, and shown by list
+        write: [MY_COMPANY_STATE]                      # set, remove
+```
+
+Names are exact, and `read` and `write` do not imply each other. For anything else, `get`
+returns its `default` as if the secret did not exist, `list()` leaves it out, and `set` /
+`remove` fail with `RPCError` / `ServiceError` code `PERMISSION_DENIED`: nothing says which
+engine secrets exist. A module that keeps its own credentials in the engine needs a grant for
+each one; keeping them in the module's own environment needs none. Do not grant `write` on a
+secret something else reads. See `docs/adr/20261024_secret-service-closed-to-sdk-modules.md`.
+
 ## Facade compatibility boundaries
 
 - All remote I/O is async. SDK dataclasses and exceptions are independent of core

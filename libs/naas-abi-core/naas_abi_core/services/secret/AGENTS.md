@@ -112,6 +112,29 @@ In NATS mode a fanout may mix local adapters and `nats_rpc` ones
 modules read them through the engine's endpoint before the `nats_rpc` upstream,
 in the configured order (`engine/engine_loaders/AGENTS.md`).
 
+### Per-caller rights
+
+The primary authorizes by the verified service identity of the token, never the request
+(docs/adr/20261024_secret-service-closed-to-sdk-modules.md). `api`, `engine` and `dagster`
+(`FIRST_PARTY_IDENTITIES`) keep full access. An SDK module is denied by default and uses only
+the exact names granted under `nats.secret.modules.<module id>`:
+
+```yaml
+nats:
+  secret:
+    modules:
+      my_company_module: {read: [MY_COMPANY_API_KEY], write: [MY_COMPANY_STATE]}
+```
+
+`read` allows `get` and shows the name in `list`; `write` allows `set` and `remove`; neither
+implies the other. An ungranted `get` is "not found" and `list` leaves the name out, so nothing
+says which secrets exist; an ungranted `set` / `remove` is `PERMISSION_DENIED`, the same for
+every name. A first-party identity is not a valid key (`SecretPrimaryAdapterNATS` and the config
+refuse it). A `nats_rpc` secret adapter must keep a first-party `service_identity` (default `api`).
+Tests: `secret__primary_adapter__NATS_test.py` (unit),
+`engine/Engine_secret_nats_integration_test.py` (real broker, `ABI_REQUIRE_NATS_SERVER=1`),
+`engine/engine_configuration/EngineConfiguration_NATSSecret_test.py`.
+
 Run the colocated NATS tests with `--import-mode=importlib`; shared regressions
 are in `engine/nats_rpc_test.py` and `engine/nats_rpc_integration_test.py`.
 The latter uses a local `nats-server` executable without Docker.

@@ -88,6 +88,12 @@ there (those are called on their module). Keep its DTOs aligned with `tool_regis
 `tests/test_engine_tools.py`; the real-broker suite is core's
 `engine/Engine_invoke_tools_nats_integration_test.py`.
 
+`services/secret.py` (`SecretService`) reaches the engine's secret service, which is closed to
+modules (ADR docs/adr/20261024_secret-service-closed-to-sdk-modules.md): the rights are the exact names
+of `nats.secret.modules.<id>.read` / `.write`, from the verified identity, denied by default. An
+ungranted `get` returns the default (not found), `list` leaves the name out, `set` / `remove` raise
+`PERMISSION_DENIED`. The standalone demo's `secret` exercise grants and checks it.
+
 A module can serve tools (`tools.py` descriptors, `tool_host.py`, `BaseModule.tools`/`expose_tool`/
 `authorize_tool`, ADR docs/adr/20261022_remote-module-tools.md): `ToolDescriptor`s go in the discovery
 descriptor as the portable `ToolDefinition` (canonical JSON, so replicas compare equal), and

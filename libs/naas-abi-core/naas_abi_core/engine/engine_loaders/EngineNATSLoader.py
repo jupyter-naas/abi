@@ -14,12 +14,9 @@ Extending to another service means adding one more branch to
 metaprogrammed dispatch, matching how ``EngineServiceLoader.load_services``
 itself lists every service explicitly rather than looping over a registry.
 
-``secret`` is exposed too, at Max's explicit direction, despite Stage 1's
-shared-JWT auth having no per-caller ARN/IAM authorization yet -- anyone
-holding a valid service token can read every secret this process's
-``Secret`` service is configured with. Accepted as a known, temporary gap
-("if it's adding security problems we will have to fix that anyway"), not
-an oversight -- revisit once Stage 2 per-caller authorization exists. It
+``secret`` is exposed too, closed to SDK modules: the engine's own processes keep
+full access, a module reads and writes only the names ``nats.secret.modules`` grants
+it (docs/adr/20261024_secret-service-closed-to-sdk-modules.md). It
 also has its own re-exposure guard shape (see ``expose_services`` below):
 ``Secret`` fans out over a *list* of adapters, not one, so only its local
 adapters are served: a NATS client in the fanout is left out, preventing
@@ -244,7 +241,16 @@ class EngineNATSLoader:
                 if services.secret.services_wired:
                     exposed_secret.set_services(services.secret.services)
             primary_secret = SecretPrimaryAdapterNATS(
-                exposed_secret, nats_config.jwt_secret
+                exposed_secret,
+                nats_config.jwt_secret,
+                module_read={
+                    module: grant.read
+                    for module, grant in nats_config.secret.modules.items()
+                },
+                module_write={
+                    module: grant.write
+                    for module, grant in nats_config.secret.modules.items()
+                },
             )
             nats_runtime.run_coro(primary_secret.start(nc))
             started.append(primary_secret)

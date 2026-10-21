@@ -330,6 +330,28 @@ class NATSRemoteToolsConfiguration(BaseModel):
     )
 
 
+def _secret_names(names: list[str]) -> list[str]:
+    import re
+
+    from naas_abi_sdk.tools import MAX_SECRET_NAME_CHARS, SECRET_NAME
+
+    for name in names:
+        if len(name) > MAX_SECRET_NAME_CHARS or not re.fullmatch(SECRET_NAME, name):
+            raise ValueError(f"{name!r} is not a secret name")
+    return names
+
+
+def _module_identities(value: dict, key: str, reason: str) -> dict:
+    from naas_abi_core.engine.nats_auth import FIRST_PARTY_IDENTITIES
+
+    for identity in value:
+        if not identity or identity in FIRST_PARTY_IDENTITIES:
+            raise ValueError(
+                f"{key} names SDK module identities, not {identity!r}: {reason}"
+            )
+    return value
+
+
 class NATSToolInvokeModuleConfiguration(BaseModel):
     """What one SDK module may run through ``invoke_tool``, beyond its scopes.
 
@@ -354,14 +376,7 @@ class NATSToolInvokeModuleConfiguration(BaseModel):
     @field_validator("secrets")
     @classmethod
     def _secret_names(cls, value: list[str]) -> list[str]:
-        import re
-
-        from naas_abi_sdk.tools import MAX_SECRET_NAME_CHARS, SECRET_NAME
-
-        for name in value:
-            if len(name) > MAX_SECRET_NAME_CHARS or not re.fullmatch(SECRET_NAME, name):
-                raise ValueError(f"{name!r} is not a secret name")
-        return value
+        return _secret_names(value)
 
 
 class NATSToolInvokeConfiguration(BaseModel):
@@ -449,6 +464,56 @@ class NATSToolRegistryConfiguration(BaseModel):
                     "the engine's own processes already see every tool"
                 )
         return value
+
+
+class NATSSecretModuleConfiguration(BaseModel):
+    """The engine secrets one SDK module may use through ``abi.svc.secret.v1``.
+
+    Both lists are empty by default: a module reads, lists, writes and removes no
+    engine secret until an operator names it. ``read``: names it may ``get`` and see
+    in ``list`` (any other name is not found). ``write``: names it may ``set`` and
+    ``remove``. A write grant does not allow reading, nor the reverse.
+    """
+
+    # A misspelt key would silently grant nothing: refuse it instead.
+    model_config = ConfigDict(extra="forbid")
+
+    read: list[str] = Field(default_factory=list)
+    write: list[str] = Field(default_factory=list)
+
+    @field_validator("read", "write")
+    @classmethod
+    def _names(cls, value: list[str]) -> list[str]:
+        return _secret_names(value)
+
+
+class NATSSecretConfiguration(BaseModel):
+    """Who may use the engine's secret service over NATS
+    (docs/adr/20261024_secret-service-closed-to-sdk-modules.md).
+
+    The engine's own processes (``api``, ``engine``, ``dagster``) hold the project
+    secret and keep full access. An SDK module is denied by default; the rights
+    come from the identity its token asserts, never from the request:
+
+        secret:
+          modules:
+            my_company_module:
+              read: [MY_COMPANY_API_KEY]
+              write: [MY_COMPANY_STATE]
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    modules: dict[str, NATSSecretModuleConfiguration] = Field(default_factory=dict)
+
+    @field_validator("modules")
+    @classmethod
+    def _identities_are_modules(cls, value: dict[str, NATSSecretModuleConfiguration]):
+        return _module_identities(
+            value,
+            "secret.modules",
+            "the engine's own processes are trusted already",
+        )
 
 
 class NATSRPCOverflowConfiguration(BaseModel):
@@ -622,6 +687,7 @@ class NATSConfiguration(BaseModel):
     tool_registry: NATSToolRegistryConfiguration = Field(
         default_factory=NATSToolRegistryConfiguration
     )
+    secret: NATSSecretConfiguration = Field(default_factory=NATSSecretConfiguration)
     rpc_overflow: NATSRPCOverflowConfiguration = Field(
         default_factory=NATSRPCOverflowConfiguration
     )

@@ -27,6 +27,16 @@ engine = Engine(
                 "nats_url": url,
                 "jwt_secret": os.environ["DEMO_SIGNING_KEY"],
                 "discovery": {"lease_seconds": 2},
+                # The engine's secret service is closed to modules: the worker
+                # (identity `standalone-demo`) keeps one value of its own there.
+                "secret": {
+                    "modules": {
+                        "standalone-demo": {
+                            "read": ["DEMO_VALUE"],
+                            "write": ["DEMO_VALUE"],
+                        }
+                    }
+                },
                 # What the worker (token identity `standalone-demo`) may run: the
                 # tools of this module, with one engine secret, by name.
                 "tool_registry": {

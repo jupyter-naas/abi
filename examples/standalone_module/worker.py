@@ -134,6 +134,22 @@ class ABIModule(BaseModule):
         await self.call("secret", "set", key="DEMO_VALUE", value="updated")
         entries = (await self.call("secret", "list")).found.entries
         assert any(e.key == "DEMO_VALUE" and e.value == "updated" for e in entries)
+        # Only the granted name is visible: the engine's other secret is not found,
+        # absent from the list, and not writable.
+        assert not (
+            await self.call("secret", "get", key="DEMO_CRM_KEY")
+        ).found.HasField("value")
+        assert {e.key for e in entries} == {"DEMO_VALUE"}
+        for operation, fields in (
+            ("set", {"key": "DEMO_CRM_KEY", "value": "overwritten"}),
+            ("remove", {"key": "DEMO_CRM_KEY"}),
+        ):
+            try:
+                await self.call("secret", operation, **fields)
+            except RPCError as exc:
+                assert exc.code == "PERMISSION_DENIED", exc.code
+            else:
+                raise AssertionError(f"{operation} of an ungranted secret must fail")
         await self.call("secret", "remove", key="DEMO_VALUE")
         assert not (await self.call("secret", "get", key="DEMO_VALUE")).found.HasField(
             "value"

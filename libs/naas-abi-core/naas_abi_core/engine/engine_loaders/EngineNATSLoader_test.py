@@ -305,6 +305,54 @@ def test_expose_services_starts_a_primary_adapter_for_secret(monkeypatch):
     run_coro.assert_called_once()
 
 
+def test_the_secret_grants_reach_the_primary(monkeypatch):
+    config = SimpleNamespace(
+        nats=NATSConfiguration(
+            nats_url="nats://example:4222",
+            jwt_secret="x" * 32,
+            secret={
+                "modules": {
+                    "partner": {"read": ["TOKEN"], "write": ["STATE"]},
+                    "reader": {"read": ["A"]},
+                }
+            },
+        )
+    )
+    loader = EngineNATSLoader(config)
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.get_connection", MagicMock())
+    monkeypatch.setattr(
+        "naas_abi_core.engine.nats_runtime.run_coro",
+        MagicMock(side_effect=lambda coro, *a, **k: coro.close()),
+    )
+
+    (primary,) = loader.expose_services(_services({"secret": True}))
+
+    assert primary._module_read == {
+        "partner": frozenset({"TOKEN"}),
+        "reader": frozenset({"A"}),
+    }
+    assert primary._module_write == {
+        "partner": frozenset({"STATE"}),
+        "reader": frozenset(),
+    }
+
+
+def test_a_module_gets_no_secret_without_a_grant(monkeypatch):
+    config = SimpleNamespace(
+        nats=NATSConfiguration(nats_url="nats://example:4222", jwt_secret="x" * 32)
+    )
+    loader = EngineNATSLoader(config)
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.get_connection", MagicMock())
+    monkeypatch.setattr(
+        "naas_abi_core.engine.nats_runtime.run_coro",
+        MagicMock(side_effect=lambda coro, *a, **k: coro.close()),
+    )
+
+    (primary,) = loader.expose_services(_services({"secret": True}))
+
+    assert primary._module_read == {} and primary._module_write == {}
+
+
 def test_expose_services_does_not_re_expose_secret_when_every_adapter_is_remote(
     monkeypatch,
 ):

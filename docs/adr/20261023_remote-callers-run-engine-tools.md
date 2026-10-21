@@ -225,12 +225,11 @@ tools its own process loads or a module serves.
 - The caller's own end-user rights (`api`, `engine`) are the tool's context only: the
   registry's policy sees the engine's scopes for them, so a user's scopes must be applied by
   the caller, as for the catalog.
-- **The secret allow list closes one door.** The engine's `secret` service is still open over
-  NATS to every authenticated caller, SDK modules included (an explicit, accepted gap noted in
-  `secret__primary_adapter__NATS.py`: no per-caller authorization yet). A module that may not name
-  `NATS_JWT_SECRET` to a tool can still read it with `abi.svc.secret.v1.get`. "Engine secrets
-  never reach a module" is therefore only fully true once that service is closed to modules; it
-  is a separate change (which secrets a module may read), tracked as a follow-up of this job.
+- **The secret allow list closes one door; the secret service was the other.** The engine's `secret`
+  service was open over NATS to every authenticated caller, SDK modules included, so a module that may
+  not name `NATS_JWT_SECRET` to a tool could still read it with `abi.svc.secret.v1.get`. It is closed to
+  modules since `docs/adr/20261024_secret-service-closed-to-sdk-modules.md`: a module reads and writes
+  only the names `nats.secret.modules` grants it.
 - **Plain configuration can steer a credential.** A caller writes the non-secret values of a tool's
   configuration. A tool that takes both a credential and a value saying where to send it (a base URL, an
   endpoint) lets a granted caller point the credential at a server of its own; scrubbing cannot help once
