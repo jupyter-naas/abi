@@ -120,12 +120,12 @@ def new_engine(url: str | None = None, **engine):
 
 def tool_collections(engine) -> list[str]:
     """What the serving engine's vector store holds for the tool index."""
-    owner = engine._Engine__services.vector_store  # noqa: SLF001 - the owner's, not a facade
+    owner = engine._Engine__services.vector_store
     return [c for c in owner.list_collections() if c.startswith("probe_tools__")]
 
 
 def indexed_ids(engine) -> set[str]:
-    owner = engine._Engine__services.vector_store  # noqa: SLF001
+    owner = engine._Engine__services.vector_store
     (collection,) = tool_collections(engine)
     return {
         document.metadata["tool_id"]
@@ -140,9 +140,7 @@ def assert_published_and_searchable(engine) -> None:
         ISSUE,
         FORECAST,
     }
-    hits = services.tool_registry.search_tools(
-        "report a bug", ToolContext(), limit=1
-    )
+    hits = services.tool_registry.search_tools("report a bug", ToolContext(), limit=1)
     assert [hit.tool_id for hit in hits] == [ISSUE]
 
 
@@ -192,7 +190,7 @@ def test_a_serving_engine_publishes_and_indexes_in_the_shared_store(
         assert indexed_ids(engine) == {ISSUE, FORECAST}
         assert_composes_from_records(engine)
         # The facade modules get hands out the process's own registry.
-        assert engine.services.tool_registry is engine._Engine__services.tool_registry  # noqa: SLF001
+        assert engine.services.tool_registry is engine._Engine__services.tool_registry
     finally:
         engine.shutdown()
 

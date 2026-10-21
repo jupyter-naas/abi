@@ -58,7 +58,9 @@ class ModelRegistryEmbedderAdapter(IToolEmbedderPort):
         return f"{model.provider}/{model.model_id}"
 
     @staticmethod
-    def _embed_documents(model: EmbeddingModel, texts: Sequence[str]) -> list[list[float]]:
+    def _embed_documents(
+        model: EmbeddingModel, texts: Sequence[str]
+    ) -> list[list[float]]:
         vectors: list[list[float]] = []
         for start in range(0, len(texts), EMBED_BATCH_SIZE):
             batch = list(texts[start : start + EMBED_BATCH_SIZE])

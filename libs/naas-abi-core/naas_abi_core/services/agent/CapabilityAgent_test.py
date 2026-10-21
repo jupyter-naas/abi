@@ -283,7 +283,11 @@ def test_a_runtime_tool_can_opt_out_of_chat_sources(registry):
     agent, _ = _agent(
         registry,
         [
-            _call("enable_capability", {"tool_id": "acme.internal/internal_lookup@1"}, "e1"),
+            _call(
+                "enable_capability",
+                {"tool_id": "acme.internal/internal_lookup@1"},
+                "e1",
+            ),
             _call("internal_lookup", {"query": "q"}, "c1"),
             AIMessage(content="done"),
         ],

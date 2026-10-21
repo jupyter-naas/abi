@@ -674,7 +674,9 @@ class TestRegistriesSharingOneVectorStore:
             VectorStoreService,
         )
 
-        return VectorStoreService(adapter=QdrantInMemoryAdapter(storage_path=":memory:"))
+        return VectorStoreService(
+            adapter=QdrantInMemoryAdapter(storage_path=":memory:")
+        )
 
     def test_neither_deletes_the_others_entries_whatever_it_searches(self, store):
         catalog = _catalog()

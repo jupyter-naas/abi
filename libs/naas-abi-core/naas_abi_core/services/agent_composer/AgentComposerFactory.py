@@ -102,7 +102,9 @@ class AgentComposerFactory:
         if repository is None and records_directory is not None:
             repository = FileSystemAgentSpecRepositoryAdapter(records_directory)
         if repository is None and services.document_available():
-            repository = DocumentAgentSpecRepositoryAdapter.for_engine(services.document)
+            repository = DocumentAgentSpecRepositoryAdapter.for_engine(
+                services.document
+            )
         secret_resolver = (
             SecretServiceResolverAdapter(services.secret)
             if services.secret_available()

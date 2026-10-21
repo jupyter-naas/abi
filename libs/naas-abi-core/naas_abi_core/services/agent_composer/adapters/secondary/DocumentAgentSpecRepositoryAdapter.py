@@ -44,7 +44,9 @@ class DocumentAgentSpecRepositoryAdapter(IAgentSpecRepository):
         self._ensured = False
 
     @classmethod
-    def for_engine(cls, documents: DocumentService) -> DocumentAgentSpecRepositoryAdapter:
+    def for_engine(
+        cls, documents: DocumentService
+    ) -> DocumentAgentSpecRepositoryAdapter:
         """Records in the composer's own namespace of the engine's Document Service.
 
         ``documents`` is the engine root (``engine.services.document``), or an

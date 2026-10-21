@@ -294,7 +294,7 @@ def test_a_nested_record_tree_keeps_routing_on_the_next_turn(composer, models, r
 
 
 def _three_level_records(composer, models, records, worker_script, lead_script):
-    lead_model, lead_llm = _scripted("lead-model", lead_script)
+    lead_model, _ = _scripted("lead-model", lead_script)
     manager_model, manager_llm = _scripted(
         "manager-model",
         [tool_call("transfer_to_worker", {}, "h2"), AIMessage(content="manager")],

@@ -407,9 +407,7 @@ class IToolEmbedderPort(ABC):
         """Look the model up once. The registry embeds through the result, so a
         sync or a search resolves the model once, not once per call (resolving
         can cross the network)."""
-        return ResolvedEmbedder(
-            self.model_key, self.embed_documents, self.embed_query
-        )
+        return ResolvedEmbedder(self.model_key, self.embed_documents, self.embed_query)
 
 
 class IToolAccessPolicy(ABC):
