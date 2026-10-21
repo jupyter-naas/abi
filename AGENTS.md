@@ -376,8 +376,8 @@ in-process and uses the `bus:` adapter below.
 - Keep changes scoped; avoid broad refactors unless requested.
 - Preserve existing architecture patterns over stylistic rewrites.
 - If unsure, follow nearest module conventions.
-- When a change introduces or updates an architecture-level decision (boundaries, ownership, cross-cutting configuration, major tradeoffs), add/update an ADR in `docs/adr/`.
-- ADR files use `YYYYMMDD_topic.md` naming (e.g. `20260212_apache-jena-fuseki-default-triplestore.md`) and must include at least: Status, Date, Context, Decision, Consequences.
+- When a change introduces or updates an architecture-level decision (boundaries, ownership, cross-cutting configuration, major tradeoffs), write it into the nearest `AGENTS.md` (Decision / Consequences). Do not add narrative docs under `docs/`.
+- Product docs live at https://docs.naas.ai (maintained in the Zen NaasAI module). Historical ADRs are archived there under `apps/archive/abi-engineering-docs/adr/`.
 
 ## Quick Cheat Sheet
 
