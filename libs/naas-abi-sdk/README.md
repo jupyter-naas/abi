@@ -497,6 +497,35 @@ use broker TLS/ACLs. Stage 1 still lacks per-end-user/module grants, and documen
 namespaces are not security boundaries. Caller identity guards invocation status
 and cancellation; declaration checks alone are not authorization.
 
+## Tool catalog
+
+A module can find the tools the engine's modules published (it cannot run them
+yet), by meaning, with `tool_registry`. Calls are read only: nothing here builds
+or runs a tool, and no reply holds a credential: a tool's config requirements name
+the keys it needs (`secret=True` for a credential) and `availability` says which
+the engine still lacks.
+
+```python
+class ABIModule(BaseModule):
+    dependencies = ModuleDependencies(services=("tool_registry",))
+
+    async def run(self):
+        tools = self.engine.services.tool_registry
+        for match in await tools.search_tools("report a bug in our codebase", limit=3):
+            print(match.tool_id, round(match.score, 3), match.availability.available)
+        entry = await tools.get_tool("naas_abi_marketplace.applications.github/create_issue")
+        print(entry.definition.input_schema)
+        everything = await tools.list_tools(tags=["crm"], available_only=True)
+```
+
+What a module sees is decided by the engine from the module's identity, never by
+the request: a tool that requires scopes stays hidden (as if absent, `ToolNotFound`)
+until the operator grants the module those scopes in the engine's configuration,
+`nats.tool_registry.module_scopes: {<module id>: [scope, ...]}`. `search_tools` takes
+`limit` (1 to 50), `min_score`, `modules`, `tags` and `available_only`, and raises
+`ToolSearchUnavailable` when the engine has no embedding model or index.
+`docs/adr/20261021_tool-catalog-over-nats.md` has the contract.
+
 ## Remote models
 
 Install `naas-abi-sdk[models]` to use models already registered by the engine's

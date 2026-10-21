@@ -48,6 +48,7 @@ if TYPE_CHECKING:
         ObjectStorageService,
         SecretService,
         SourceControlService,
+        ToolRegistryService,
         TripleStoreService,
         VectorStoreService,
     )
@@ -99,6 +100,7 @@ class ServicesProxy(_ServicesAccess):
     triple_store: TripleStoreService
     vector_store: VectorStoreService
     model_registry: ModelRegistryService
+    tool_registry: ToolRegistryService
     bus: BusClient
 
     def __getattr__(self, name: str):

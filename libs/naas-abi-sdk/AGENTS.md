@@ -75,6 +75,11 @@ HTTP probe on `ABI_HEALTH_HOST` (default `0.0.0.0`). Unset means no port.
 when discovery is off. Every other status is 503. The server closes when the
 module exits.
 
+`services/tool_registry.py` reads the engine's tool catalog (`list_tools`, `get_tool`,
+`search_tools`), read only: no call builds or runs a tool, and what a module sees comes from
+its identity on the engine (`nats.tool_registry.module_scopes`), never from the request. Keep
+its DTOs aligned with `tool_registry/v1` (`ToolDefinition` is reused by the next steps).
+
 A module can serve a chat model (`ModelDescriptor`, `expose_model`, `ModelHost`).
 Another module calls `engine.modules[id].get_chat_model(name)`. The call is unary,
 instance-addressed, and authorized with `authorize_model`. The handler returns

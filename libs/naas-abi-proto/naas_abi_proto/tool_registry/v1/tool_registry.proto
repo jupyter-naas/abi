@@ -1,0 +1,110 @@
+syntax = "proto3";
+package abi.tool_registry.v1;
+import "naas_abi_proto/common/v1/common.proto";
+
+// The serving engine's tool catalog, read only: list, get and search. No call
+// here runs a tool, resolves its binding or returns a configuration value.
+//
+// Subjects: abi.svc.tool_registry.v1.{list_tools,get_tool,search_tools}.
+//
+// Who is asking is the verified service identity, never the request: the scopes
+// that decide what a caller may discover come from the engine's configuration
+// for that identity. CallContext's principal, workspace and tenant are carried
+// but not read, and no field here grants rights. Unknown fields are ignored.
+//
+// Runtime validation is authoritative (Protovalidate tooling is not yet enabled);
+// the limits are the primary's: query 1..2000 characters, search limit 1..50
+// (default 5), list limit 1..200 (default 100), at most 32 module filters of 256
+// characters and 16 tag filters of 64, a finite min_score, and a tool reference
+// of at most 512 characters. A reply stays under half the broker's limit: a
+// page or a result list is cut at the tool that would pass it, and a single
+// definition above it is neither listed nor returned.
+//
+// ToolDefinition is the portable form of a published tool, shared by the
+// steps that follow (tools published by SDK modules, running engine tools).
+message ConfigRequirement {
+  string key = 1;
+  string description = 2;
+  // The value is a credential: a requirement names it, never carries it.
+  bool secret = 3;
+  bool required = 4;
+}
+message ToolRequirements {
+  repeated ConfigRequirement config = 1;
+  bool requires_workspace = 2;
+}
+message ToolDefinition {
+  // <namespace>/<name>@<version>; always the parts below joined.
+  string id = 1;
+  string namespace = 2;
+  string name = 3;
+  string version = 4;
+  // The module that published it.
+  string module = 5;
+  string description = 6;
+  // JSON Schema of the tool's input, as a UTF-8 JSON object with finite numbers.
+  bytes input_schema_json = 7;
+  // Empty when the tool declares none.
+  bytes output_schema_json = 8;
+  repeated string tags = 9;
+  ToolRequirements requirements = 10;
+  // The caller needs every one of these scopes to discover, enable or run it.
+  repeated string required_scopes = 11;
+}
+// Whether the tool could be built now, as the engine that owns it sees it: the
+// required configuration keys that stay empty even with the publishing module's
+// own values (which are never sent).
+message ToolAvailability {
+  bool available = 1;
+  repeated string missing_config = 2;
+}
+message ToolEntry {
+  ToolDefinition definition = 1;
+  ToolAvailability availability = 2;
+}
+message ToolMatch {
+  ToolEntry tool = 1;
+  double score = 2;
+}
+// Narrows list and search; applied by the owner before the limit.
+message ToolFilter {
+  // The tool's module is one of these.
+  repeated string modules = 1;
+  // The tool has every one of these.
+  repeated string tags = 2;
+  bool available_only = 3;
+}
+message ListToolsRequest {
+  abi.common.v1.CallContext context = 1;
+  ToolFilter filter = 2;
+  uint32 limit = 3;
+  // The last id of the previous page (its next_after); ids come sorted.
+  string after = 4;
+}
+message ListToolsResponse {
+  repeated ToolEntry tools = 1;
+  // Empty on the last page.
+  string next_after = 2;
+  abi.common.v1.CallError error = 15;
+}
+message GetToolRequest {
+  abi.common.v1.CallContext context = 1;
+  // <namespace>/<name> (the highest version) or <namespace>/<name>@<version>.
+  string ref = 2;
+}
+message GetToolResponse {
+  ToolEntry tool = 1;
+  abi.common.v1.CallError error = 15;
+}
+message SearchToolsRequest {
+  abi.common.v1.CallContext context = 1;
+  string query = 2;
+  uint32 limit = 3;
+  optional double min_score = 4;
+  ToolFilter filter = 5;
+}
+message SearchToolsResponse {
+  // Best first.
+  repeated ToolMatch matches = 1;
+  abi.common.v1.CallError error = 15;
+}

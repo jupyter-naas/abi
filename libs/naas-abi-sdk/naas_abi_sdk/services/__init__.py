@@ -12,11 +12,13 @@ from naas_abi_sdk.services.keyvalue import KeyValueService
 from naas_abi_sdk.services.model_registry import ModelRegistryService
 from naas_abi_sdk.services.object_storage import ObjectStorageService
 from naas_abi_sdk.services.secret import SecretService
+from naas_abi_sdk.services.tool_registry import ToolRegistryService
 from naas_abi_sdk.services.triple_store import TripleStoreService
 from naas_abi_sdk.services.vector_store import VectorStoreService
 
 FACTORIES = {
     "model_registry": ModelRegistryService,
+    "tool_registry": ToolRegistryService,
     "object_storage": ObjectStorageService,
     "keyvalue": KeyValueService,
     "secret": SecretService,

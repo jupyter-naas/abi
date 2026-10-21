@@ -18,6 +18,7 @@ from naas_abi_sdk.model_registry import ModelRegistryClient
 from naas_abi_sdk.object_storage import ObjectStorageClient
 from naas_abi_sdk.secret import SecretClient
 from naas_abi_sdk.source_control import SourceControlClient
+from naas_abi_sdk.tool_registry import ToolRegistryClient
 from naas_abi_sdk.transport import Transport
 from naas_abi_sdk.triple_store import TripleStoreClient
 from naas_abi_sdk.vector_store import VectorStoreClient
@@ -46,6 +47,7 @@ class ABIClient:
         self.object_storage = ObjectStorageClient(self._transport)
         self.secret = SecretClient(self._transport)
         self.source_control = SourceControlClient(self._transport)
+        self.tool_registry = ToolRegistryClient(self._transport)
         self.triple_store = TripleStoreClient(self._transport)
         self.vector_store = VectorStoreClient(self._transport)
 

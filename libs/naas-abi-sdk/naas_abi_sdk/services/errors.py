@@ -47,6 +47,14 @@ class SecretAuthenticationError(ServiceError):
     pass
 
 
+class ToolNotFound(ServiceError):
+    pass
+
+
+class ToolSearchUnavailable(ServiceError):
+    pass
+
+
 ERRORS = {
     "OBJECT_NOT_FOUND": ObjectNotFound,
     "OBJECT_ALREADY_EXISTS": ObjectAlreadyExists,
@@ -58,6 +66,8 @@ ERRORS = {
     "CACHE_EXPIRED": CacheExpiredError,
     "KV_NOT_FOUND": KVNotFoundError,
     "SECRET_AUTH_FAILED": SecretAuthenticationError,
+    "TOOL_NOT_FOUND": ToolNotFound,
+    "SEARCH_UNAVAILABLE": ToolSearchUnavailable,
 }
 
 
