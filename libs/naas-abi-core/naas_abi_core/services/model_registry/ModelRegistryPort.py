@@ -175,3 +175,7 @@ class IModelRegistry:
     def list_canonical_ids(self) -> list[str]:
         """Return all canonical ids with at least one registered model."""
         raise NotImplementedError
+
+    def list_registered_models(self) -> list[tuple[str, Model]]:
+        """Return catalog entries with their canonical identifiers."""
+        raise NotImplementedError

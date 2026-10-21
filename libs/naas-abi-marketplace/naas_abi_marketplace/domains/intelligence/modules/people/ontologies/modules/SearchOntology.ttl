@@ -1,0 +1,107 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix dc11:  <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix cco:   <https://www.commoncoreontologies.org/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+
+abi:SearchOntology a owl:Ontology ;
+  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+  abi:pythonPackage "naas_abi_marketplace.domains.intelligence.modules.people" ;
+  abi:ontologyResource "ontologies/modules/SearchOntology.ttl" ;
+  dc:title "Search Ontology"@en ;
+  dc:description "What a search over the people graph is and what it found: the act of searching (a process, with the words it looked for) and one search match (a GDC) per field its words were found in. A match is the bridge from the search to the person: act of searching -> match -> act of working or studying -> person, or straight to the person when the words were found in them (name, headline, summary). Matches are computed when a search runs; they are not stored with the people they describe."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  rdfs:comment "Used by the people app's Network view (apps/people/scripts/network_payload.py), which draws a search as a graph with its query at the centre."@en ;
+  dc11:contributor "Florent Ravenel" ;
+  dc11:date "2026-10-06"^^xsd:date .
+
+#################################################################
+#    Classes
+#################################################################
+
+# WHAT - running a search
+abi:ActOfSearching a owl:Class ;
+    rdfs:subClassOf cco:ont00000228 ; # Planned Act
+    rdfs:label "Act of Searching"@en ;
+    skos:definition "A planned act in which an agent looks for the people and records that hold the words of a query. Its matches and results are what it found; the query is its abi:query_text."@en ;
+    skos:example "Typing 'EDF' in the people directory and running the search."@en .
+
+# HOW WE KNOW - what was found
+abi:SearchMatch a owl:Class ;
+    rdfs:subClassOf cco:ont00000958 ; # Information Content Entity
+    rdfs:label "Search Match"@en ;
+    skos:definition "An information content entity that records that the words an act of searching looked for were found in one field of the graph: the field, the text it was found in, and what it was found in - an act of working or studying, or the person."@en ;
+    skos:example "'Client: EDF R&D' - 'EDF' found in the client of three of Alexis Tourneux's acts of working."@en .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:hasSearchMatch a owl:ObjectProperty ;
+    owl:inverseOf abi:isSearchMatchOf ;
+    rdfs:label "has search match"@en ;
+    skos:definition "Relates an act of searching to one of the matches it found."@en ;
+    rdfs:domain abi:ActOfSearching ;
+    rdfs:range abi:SearchMatch .
+
+abi:isSearchMatchOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
+    owl:inverseOf abi:hasSearchMatch ;
+    rdfs:label "is search match of"@en ;
+    skos:definition "Relates a search match to the act of searching that found it, on which it depends."@en ;
+    rdfs:domain abi:SearchMatch ;
+    rdfs:range abi:ActOfSearching .
+
+abi:hasSearchResult a owl:ObjectProperty ;
+    owl:inverseOf abi:isSearchResultOf ;
+    rdfs:label "has search result"@en ;
+    skos:definition "Relates an act of searching to a person it returned. A search with no words returns everyone without a match: this is then the only tie from the search to them."@en ;
+    rdfs:domain abi:ActOfSearching ;
+    rdfs:range abi:Person .
+
+abi:isSearchResultOf a owl:ObjectProperty ;
+    owl:inverseOf abi:hasSearchResult ;
+    rdfs:label "is search result of"@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range abi:ActOfSearching .
+
+abi:matchesIn a owl:ObjectProperty ;
+    rdfs:subPropertyOf cco:ont00001808 ; # is about
+    owl:inverseOf abi:isMatchedBy ;
+    rdfs:label "matches in"@en ;
+    skos:definition "Relates a search match to what the words were found in: an act of working (its organization, client, job title, mission or a skill developed in it), an act of studying (its school, program or degree), or the person (name, headline, summary, a skill no act records)."@en ;
+    rdfs:domain abi:SearchMatch .
+
+abi:isMatchedBy a owl:ObjectProperty ;
+    owl:inverseOf abi:matchesIn ;
+    rdfs:label "is matched by"@en ;
+    rdfs:range abi:SearchMatch .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+abi:query_text a owl:DatatypeProperty ;
+    rdfs:label "query text"@en ;
+    skos:definition "The words an act of searching looked for, as typed."@en ;
+    rdfs:domain abi:ActOfSearching ;
+    rdfs:range xsd:string .
+
+abi:matched_field a owl:DatatypeProperty ;
+    rdfs:label "matched field"@en ;
+    skos:definition "The field of the matched entity the query's words were found in."@en ;
+    skos:example "'Summary', 'Client', 'Organization', 'Job title', 'School', 'Skill'."@en ;
+    rdfs:domain abi:SearchMatch ;
+    rdfs:range xsd:string .
+
+abi:matched_text a owl:DatatypeProperty ;
+    rdfs:label "matched text"@en ;
+    skos:definition "The text the query's words were found in: a field's value, or the sentence of a longer text that holds them."@en ;
+    rdfs:domain abi:SearchMatch ;
+    rdfs:range xsd:string .

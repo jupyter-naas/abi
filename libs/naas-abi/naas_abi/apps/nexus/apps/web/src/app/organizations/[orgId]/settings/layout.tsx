@@ -1,14 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Building2, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Building2 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-is-mobile';
+import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { SettingsLayoutNav } from '@/components/settings/settings-layout-nav';
 import {
+  SettingsLayoutRoot,
+  SettingsNavItem,
+  useWorkspaceReturnPath,
+} from '@/components/settings/settings-shell';
+import {
+  isOrgAdminRole,
   orgSettingsIndexPath,
-  orgSettingsNav,
+  orgSettingsNavForRole,
   orgSettingsSectionPath,
   type OrgSettingsNavItem,
 } from './lib/nav';
@@ -27,25 +34,15 @@ function NavItem({
   mobileList?: boolean;
 }) {
   const fullHref = orgSettingsSectionPath(orgId, item.slug);
-  const isActive = pathname === fullHref;
-  const Icon = item.icon;
+  const isActive = pathname === fullHref || pathname.startsWith(`${fullHref}/`);
   return (
-    <li>
-      <Link
-        href={fullHref}
-        className={
-          isActive
-            ? 'org-settings-nav-item org-settings-nav-item-active'
-            : 'org-settings-nav-item'
-        }
-      >
-        <Icon size={18} />
-        <span className="org-settings-nav-item-label">{item.label}</span>
-        {mobileList && (
-          <ChevronRight size={18} className="org-settings-nav-item-chevron" />
-        )}
-      </Link>
-    </li>
+    <SettingsNavItem
+      href={fullHref}
+      label={item.label}
+      icon={item.icon}
+      active={isActive}
+      chevron={mobileList}
+    />
   );
 }
 
@@ -58,14 +55,26 @@ export default function OrganizationSettingsLayout({
   const router = useRouter();
   const params = useParams();
   const orgId = params.orgId as string;
+  const [viewerRole, setViewerRole] = useState<string | null>(null);
+  const visibleNav = useMemo(() => orgSettingsNavForRole(viewerRole), [viewerRole]);
+  const sectionHrefs = useMemo(
+    () => (orgId ? visibleNav.map((item) => orgSettingsSectionPath(orgId, item.slug)) : []),
+    [orgId, visibleNav]
+  );
+  useDevRouteWarmup(sectionHrefs);
   const isMobile = useIsMobile();
-  const { isDetail, sectionLabel } = parseOrgSettingsRoute(pathname);
+  const { isDetail, section, sectionLabel } = parseOrgSettingsRoute(pathname);
   const showMobileList = isMobile && !isDetail;
   const showMobileDetail = isMobile && isDetail;
   const currentWorkspaceId = useWorkspaceStore((state) => state.currentWorkspaceId);
 
   const [orgName, setOrgName] = useState('');
   const [borderRadius, setBorderRadius] = useState('0');
+  // The organization's colours, not the last workspace's (see SettingsLayoutRoot).
+  const [orgColors, setOrgColors] = useState<{ primary: string | null; accent: string | null }>({
+    primary: null,
+    accent: null,
+  });
   const [orgCount, setOrgCount] = useState<number | null>(null);
   const [layoutKey, setLayoutKey] = useState(0);
 
@@ -78,8 +87,13 @@ export default function OrganizationSettingsLayout({
         if (response.ok) {
           const data = await response.json();
           setOrgName(data.name);
+          setViewerRole(data.current_user_role ?? null);
           const radius = data.loginBorderRadius ?? data.login_border_radius ?? '0';
           setBorderRadius(radius);
+          setOrgColors({
+            primary: data.primary_color ?? data.primaryColor ?? null,
+            accent: data.accent_color ?? data.accentColor ?? null,
+          });
         }
 
         const orgsResponse = await authFetch('/api/organizations/');
@@ -105,9 +119,20 @@ export default function OrganizationSettingsLayout({
     return () => window.removeEventListener('org-branding-updated', handleBrandingUpdate);
   }, [orgId]);
 
-  const themeStyles = {
-    '--org-border-radius': `${borderRadius}px`,
-  } as React.CSSProperties;
+  useEffect(() => {
+    if (!orgId || viewerRole === null || !section) return;
+    if (
+      !isOrgAdminRole(viewerRole) &&
+      !visibleNav.some((entry) => entry.slug === section)
+    ) {
+      router.replace(orgSettingsSectionPath(orgId, 'general'));
+    }
+  }, [orgId, viewerRole, section, visibleNav, router]);
+
+  const workspaceHref = useWorkspaceReturnPath(
+    currentWorkspaceId ? `/workspace/${currentWorkspaceId}/maps` : '/',
+    currentWorkspaceId
+  );
 
   const handleBack = () => {
     if (showMobileDetail) {
@@ -115,11 +140,7 @@ export default function OrganizationSettingsLayout({
       return;
     }
     if (orgCount === 1) {
-      if (currentWorkspaceId) {
-        router.push(`/workspace/${currentWorkspaceId}/maps/presence`);
-      } else {
-        router.push('/');
-      }
+      router.push(workspaceHref);
       return;
     }
     router.push('/organizations');
@@ -133,12 +154,8 @@ export default function OrganizationSettingsLayout({
   const showMain = !showMobileList;
 
   return (
-    <div
-      className="org-settings-layout-root"
-      data-org-branded="true"
-      style={themeStyles}
-      key={layoutKey}
-    >
+    <SettingsLayoutRoot key={layoutKey} brand={orgColors} borderRadius={borderRadius}>
+      <div className="org-settings-layout-left">
       <header className="org-settings-layout-header">
         <div className="org-settings-layout-header-inner">
           <button
@@ -163,6 +180,7 @@ export default function OrganizationSettingsLayout({
       </header>
 
       <div
+        data-org-settings-body=""
         className={
           showMobileList
             ? 'org-settings-layout-body org-settings-layout-body-mobile-list'
@@ -172,11 +190,9 @@ export default function OrganizationSettingsLayout({
         }
       >
         {showNav && (
-          <nav className="org-settings-layout-nav">
-            <h2 className="org-settings-layout-nav-title">Organization Settings</h2>
-            <div className="org-settings-layout-nav-divider" />
-            <ul className="org-settings-layout-nav-list">
-              {orgSettingsNav.map((item) => (
+          <SettingsLayoutNav title="Organization Settings" resizable={!showMobileList}>
+            <ul className="settings-layout-nav-list">
+              {visibleNav.map((item) => (
                 <NavItem
                   key={item.slug}
                   item={item}
@@ -186,15 +202,18 @@ export default function OrganizationSettingsLayout({
                 />
               ))}
             </ul>
-          </nav>
+          </SettingsLayoutNav>
         )}
 
         {showMain && (
           <div className="org-settings-layout-main">
-            <div className="org-settings-layout-content">{children}</div>
+            <div className="org-settings-layout-content">
+              {children}
+            </div>
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </SettingsLayoutRoot>
   );
 }

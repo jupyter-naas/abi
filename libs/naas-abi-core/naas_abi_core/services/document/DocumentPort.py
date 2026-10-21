@@ -121,6 +121,9 @@ class Document:
 
 @dataclass(frozen=True)
 class Page:
+    """One page of ``find``. Only ``cursor is None`` means the end: a page cut
+    by ``max_bytes`` can be short and still have a next page."""
+
     items: list[Document]
     cursor: str | None
 
@@ -183,6 +186,11 @@ def validate_version(version: int | None) -> None:
         raise ValueError("if_version must be a nonnegative integer or None")
 
 
+def validate_max_bytes(max_bytes: int | None) -> None:
+    if max_bytes is not None and (type(max_bytes) is not int or max_bytes < 1):
+        raise ValueError("max_bytes must be a positive integer or None")
+
+
 def validate_query(
     where: Iterable[Predicate], order_by: OrderBy = None, limit: int = 100
 ) -> tuple[Predicate, ...]:
@@ -236,6 +244,15 @@ class IDocumentAdapter(Protocol):
     def ensure_collection(self, namespace: str, spec: CollectionSpec) -> None: ...
     def drop_collection(self, namespace: str, collection: str) -> None: ...
     def collections(self, namespace: str) -> list[str]: ...
+    def collection_spec(self, namespace: str, collection: str) -> CollectionSpec:
+        """The collection's declared fields and unique groups, as merged by
+        every ``ensure_collection``. Raises ``CollectionNotFound``."""
+        ...
+
+    def namespaces(self) -> list[str]:
+        """Namespaces holding at least one collection, sorted (platform administration)."""
+        ...
+
     def put(
         self,
         namespace: str,
@@ -256,7 +273,15 @@ class IDocumentAdapter(Protocol):
         order_by: OrderBy,
         limit: int,
         cursor: str | None,
-    ) -> Page: ...
+        *,
+        max_bytes: int | None = None,
+    ) -> Page:
+        """At most ``limit`` items. With ``max_bytes``, the page stops before
+        the item that would take its estimated size (stored document plus a
+        small overhead) past it, always holding at least one item; a cut page
+        carries a cursor."""
+        ...
+
     def count(
         self, namespace: str, collection: str, where: Sequence[Predicate]
     ) -> int: ...

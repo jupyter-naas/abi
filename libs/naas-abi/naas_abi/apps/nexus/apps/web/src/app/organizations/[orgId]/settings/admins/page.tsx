@@ -1,10 +1,11 @@
 import { redirect } from 'next/navigation';
 
 /** Legacy /settings/admins path; org people management lives under Users. */
-export default function AdminsRedirectPage({
+export default async function AdminsRedirectPage({
   params,
 }: {
-  params: { orgId: string };
+  params: Promise<{ orgId: string }>;
 }) {
-  redirect(`/organizations/${params.orgId}/settings/users`);
+  const { orgId } = await params;
+  redirect(`/organizations/${orgId}/settings/users`);
 }

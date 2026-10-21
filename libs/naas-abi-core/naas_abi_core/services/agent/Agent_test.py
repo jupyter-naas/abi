@@ -1,21 +1,55 @@
+from __future__ import annotations
+
+from typing import Any
+
 import pytest
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
 
 
-@pytest.fixture
-def model():
-    import os
+class Scripted(BaseChatModel):
+    """Replies in order (the last one repeats): the agent's own logic runs
+    offline, with the answers the prompts below ask a model for."""
 
-    from dotenv import load_dotenv
-    from langchain_openai import ChatOpenAI
+    replies: list[AIMessage]
+    calls: int = 0
 
-    load_dotenv()
+    @property
+    def _llm_type(self) -> str:
+        return "scripted"
 
-    return ChatOpenAI(
-        model="gpt-4o", temperature=0, api_key=os.environ.get("OPENAI_API_KEY")
+    def bind_tools(self, tools: Any, **kwargs: Any) -> Scripted:
+        return self
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        self.calls += 1
+        reply = self.replies[min(self.calls, len(self.replies)) - 1]
+        return ChatResult(generations=[ChatGeneration(message=reply.model_copy())])
+
+
+def scripted(*replies: AIMessage | str) -> Scripted:
+    return Scripted(
+        replies=[r if isinstance(r, AIMessage) else AIMessage(r) for r in replies]
     )
 
 
-def test_no_tools_no_agents(model):
+def tool_call(name: str, **args: Any) -> AIMessage:
+    return AIMessage("", tool_calls=[{"name": name, "args": args, "id": "call-1"}])
+
+
+@pytest.fixture(autouse=True)
+def _standalone(monkeypatch):
+    monkeypatch.delenv("POSTGRES_URL", raising=False)  # in-memory checkpoints
+
+
+@pytest.fixture
+def model() -> Scripted:
+    return scripted("OK")
+
+
+def test_no_tools_no_agents():
+    model = scripted("42")
     from langchain_core.messages import AIMessage
     from naas_abi_core.services.agent.Agent import Agent, AgentConfiguration
 
@@ -38,9 +72,15 @@ def test_no_tools_no_agents(model):
         assert chunk["call_model"]["messages"][0].content == "42"
 
 
-def test_tools_no_agents(model):
+def test_tools_no_agents():
     from langchain_core.tools import tool
     from naas_abi_core.services.agent.Agent import Agent, AgentConfiguration
+
+    model = scripted(
+        tool_call("test_tool", input="Hello, world!"),
+        "Tool Response: Hello, world!",
+    )
+    called = []
 
     @tool
     def test_tool(input: str) -> str:
@@ -53,6 +93,7 @@ def test_tools_no_agents(model):
             str: Return the input
         """
         assert input == "Hello, world!"
+        called.append(input)
         return input
 
     agent = Agent(
@@ -70,6 +111,11 @@ def test_tools_no_agents(model):
 
     for _, chunk in agent.stream("Hello, world!"):
         chunks.append(chunk)
+
+    assert called == ["Hello, world!"]
+    assert chunks[-1]["call_model"]["messages"][0].content == (
+        "Tool Response: Hello, world!"
+    )
 
 
 def test_agent_duplication(model):
@@ -104,9 +150,28 @@ def test_agent_duplication(model):
     assert id(duplicated_agent.agents[0]) != id(first_agent.agents[0])
 
 
-def test_agent_stream_invoke(model):
+def test_agent_duplicate_twice(model):
     from naas_abi_core.services.agent.Agent import Agent, AgentConfiguration
 
+    agent = Agent(
+        name="Twice Agent",
+        description="nested duplicate",
+        chat_model=model,
+        tools=[],
+        agents=[],
+        configuration=AgentConfiguration(system_prompt=""),
+    )
+    first_shell = agent.duplicate()
+    assert hasattr(first_shell, "_original_tools")
+    second_shell = first_shell.duplicate()
+    assert id(second_shell) != id(first_shell)
+    assert hasattr(second_shell, "_original_tools")
+
+
+def test_agent_stream_invoke():
+    from naas_abi_core.services.agent.Agent import Agent, AgentConfiguration
+
+    model = scripted("Hello ABI, nice to meet you.")
     agent = Agent(
         name="Greeting Agent",
         description="A Greeting agent",
@@ -127,7 +192,7 @@ def test_agent_stream_invoke(model):
     assert events[3]["event"] == "done", events[3]
 
 
-def test_agent_stream_invoke_isolation(model):
+def test_agent_stream_invoke_isolation():
     from queue import Queue
 
     from naas_abi_core.services.agent.Agent import (
@@ -136,6 +201,7 @@ def test_agent_stream_invoke_isolation(model):
         AgentSharedState,
     )
 
+    model = scripted("ANSWER_A")
     agent = Agent(
         name="Isolation Test Agent",
         description="Tests request isolation",
@@ -158,6 +224,35 @@ def test_agent_stream_invoke_isolation(model):
         if e.get("event") == "message" and "[DONE]" not in e.get("data", "")
     )
     assert "ANSWER_A" in content_a, f"Expected ANSWER_A but got: {content_a}"
+
+
+def test_agent_duplicate_reuses_intent_mapper(model, monkeypatch):
+    from naas_abi_core.services.agent import IntentAgent as intent_agent_module
+    from naas_abi_core.services.agent.Agent import AgentConfiguration, AgentSharedState
+    from naas_abi_core.services.agent.IntentAgent import IntentAgent
+
+    class _StubIntentMapper:
+        def __init__(self, *args, **kwargs):
+            del args, kwargs
+
+    monkeypatch.setattr(intent_agent_module, "IntentMapper", _StubIntentMapper)
+
+    agent = IntentAgent(
+        name="IntentDup",
+        description="intent duplicate shell",
+        chat_model=model,
+        tools=[],
+        agents=[],
+        configuration=AgentConfiguration(system_prompt=""),
+    )
+    mapper_id = id(agent._intent_mapper)
+
+    dup = agent.duplicate(
+        agent_shared_state=AgentSharedState(thread_id="dup-thread")
+    )
+    assert id(dup._intent_mapper) == mapper_id
+    assert dup.state.thread_id == "dup-thread"
+    assert id(dup) != id(agent)
 
 
 def test_agent_completion_fresh_state_per_request(model):
@@ -189,9 +284,11 @@ def test_agent_completion_fresh_state_per_request(model):
     assert dup.state.thread_id != dup2.state.thread_id
 
 
-def test_agent_one_tool_agent_response(model):
+def test_agent_one_tool_agent_response():
     from langchain_core.tools import tool
     from naas_abi_core.services.agent.Agent import Agent, AgentConfiguration
+
+    model = scripted(tool_call("add_one", input=42), "42 + one = 43")
 
     @tool
     def add_one(input: int) -> int:
@@ -826,8 +923,9 @@ def test_stream_invoke_surfaces_error_containing_braces():
     events = list(agent.stream_invoke("hello"))
 
     text = " ".join(e["data"] for e in events if e["event"] == "message")
-    assert "I encountered an error while processing your request" in text, events
-    assert "Insufficient credits" in text, events
+    # The caller gets the one-line friendly error, never the raw provider JSON.
+    assert "The model provider failed" in text, events
+    assert "{'error'" not in text, events
     assert events[-1] == {"event": "done", "data": "[DONE]"}
 
 

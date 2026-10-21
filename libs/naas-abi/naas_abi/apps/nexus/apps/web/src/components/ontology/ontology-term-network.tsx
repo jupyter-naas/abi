@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { X } from 'lucide-react';
 import type { DictionaryTerm } from '@/lib/ontology-dictionary-tree';
-import { buildTermGraph, filterTermGraph } from '@/lib/ontology-term-graph';
+import { BFO_LAYOUT_RELATIONS, buildTermGraph, filterTermGraph } from '@/lib/ontology-term-graph';
 import { buildProcessGraph, PROCESS_BUCKET_DEFS, processPresentationRoute } from '@/lib/ontology-process-graph';
 import { termRoute } from '@/lib/ontology-navigation';
 import { termKey } from '@/lib/ontology-context';
@@ -20,12 +20,24 @@ const BFOBucketFilters = dynamic(() => import('@/components/graph/vis-network').
 export function OntologyTermNetwork({ term, terms, systemSidebar = false }: { term: DictionaryTerm; terms: DictionaryTerm[]; systemSidebar?: boolean }) {
   const router = useRouter(); const params = useSearchParams();
   const spacing = ontologySpacing(params?.toString() || '');
-  const [hierarchy, setHierarchy] = useState(true);
-  const [restrictions, setRestrictions] = useState(true);
-  const [properties, setProperties] = useState(true);
-  const [layout, setLayout] = useState<'network' | 'TD' | 'LR'>('network');
+  // The BFO 7 buckets layout (the default) shows restrictions only.
+  const [hierarchy, setHierarchy] = useState(BFO_LAYOUT_RELATIONS.hierarchy);
+  const [restrictions, setRestrictions] = useState(BFO_LAYOUT_RELATIONS.restrictions);
+  const [properties, setProperties] = useState(BFO_LAYOUT_RELATIONS.properties);
+  // BFO 7 buckets by default: occurrents above continuants, one zone per bucket.
+  const [layout, setLayout] = useState<'bfo' | 'network' | 'TD' | 'LR'>('bfo');
+  // The zones the BFO layout is drawn in: hidden until asked for. The cards keep their places either way.
+  const [zoneTopLevel, setZoneTopLevel] = useState(false);
+  const [zoneBuckets, setZoneBuckets] = useState(false);
   const [activeBuckets, setActiveBuckets] = useState<Set<string>>(new Set());
   const [hiddenNodeIds, setHiddenNodeIds] = useState<Set<string>>(new Set());
+  // The BFO legend (bucket filters) is opt-in. Hiding it also drops its filters,
+  // so nothing stays filtered without a visible control to undo it.
+  const [showBfoLegend, setShowBfoLegend] = useState(false);
+  const toggleBfoLegend = (show: boolean) => {
+    if (!show) { setActiveBuckets(new Set()); setHiddenNodeIds(new Set()); }
+    setShowBfoLegend(show);
+  };
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [focusRequestKey, setFocusRequestKey] = useState(0);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
@@ -33,6 +45,7 @@ export function OntologyTermNetwork({ term, terms, systemSidebar = false }: { te
   const processGraph = useMemo(() => systemSidebar ? buildProcessGraph(term, terms) : null, [systemSidebar, term, terms]);
   const processView = Boolean(processGraph && params?.get('processView') !== 'ontology');
   const displayedGraph = processView ? processGraph! : graph;
+  const zones = !processView && layout === 'bfo';
   const relationGraph = useMemo(() => processView ? processGraph! : filterTermGraph(graph, { hierarchy, restrictions, properties }), [processView, processGraph, graph, hierarchy, restrictions, properties]);
   const visible = useMemo(() => processView ? processGraph! : filterTermGraph(graph, { hierarchy, restrictions, properties }, activeBuckets, hiddenNodeIds), [processView, processGraph, graph, hierarchy, restrictions, properties, activeBuckets, hiddenNodeIds]);
   const canvasNodes = useMemo(() => processView ? spaceOntologyNodes(visible.nodes, spacing.scale) : visible.nodes, [visible.nodes, processView, spacing.scale]);
@@ -90,19 +103,39 @@ export function OntologyTermNetwork({ term, terms, systemSidebar = false }: { te
       </div>}
       {!processView && <>
         <div className="ontology-term-controls" role="group" aria-label="Show relationships">
-          <label title="Show the class hierarchy and ancestors">
+          {!zones && <label title="Show the class hierarchy and ancestors">
             <input type="checkbox" checked={hierarchy} onChange={event => setHierarchy(event.target.checked)} />
             {term.type === 'entity' ? 'SubclassOf' : 'Hierarchy'}
-          </label>
+          </label>}
           <label title="Show restrictions declared on this term and its ancestors">
             <input type="checkbox" checked={restrictions} onChange={event => setRestrictions(event.target.checked)} />Restrictions
           </label>
           <label title="Show property relationships">
             <input type="checkbox" checked={properties} onChange={event => setProperties(event.target.checked)} />Properties
           </label>
+          {!systemSidebar && <label title="Show or hide the BFO 7 buckets legend and its filters">
+            <input type="checkbox" checked={showBfoLegend} onChange={event => toggleBfoLegend(event.target.checked)} />BFO legend
+          </label>}
         </div>
+        {zones && <div className="ontology-term-controls" role="group" aria-label="BFO zones">
+          <label title="Show the top-level zones and their titles: Occurrents and Continuants">
+            <input type="checkbox" checked={zoneTopLevel} onChange={event => setZoneTopLevel(event.target.checked)} />Zone Top Level
+          </label>
+          <label title="Show a zone and its title for each BFO bucket: Who, What, When, Where, Why, How it is, How we know">
+            <input type="checkbox" checked={zoneBuckets} onChange={event => setZoneBuckets(event.target.checked)} />Zone 7 Buckets
+          </label>
+        </div>}
         <label className="ontology-term-layout">Layout
-          <select value={layout} onChange={event => setLayout(event.target.value as 'network' | 'TD' | 'LR')}>
+          <select value={layout} onChange={event => {
+            const next = event.target.value as 'bfo' | 'network' | 'TD' | 'LR';
+            setLayout(next);
+            if (next === 'bfo') {
+              setHierarchy(BFO_LAYOUT_RELATIONS.hierarchy);
+              setRestrictions(BFO_LAYOUT_RELATIONS.restrictions);
+              setProperties(BFO_LAYOUT_RELATIONS.properties);
+            }
+          }}>
+            <option value="bfo">BFO 7 buckets</option>
             <option value="network">Network</option>
             <option value="TD">Top to bottom</option>
             <option value="LR">Left to right</option>
@@ -113,19 +146,21 @@ export function OntologyTermNetwork({ term, terms, systemSidebar = false }: { te
     <div className="ontology-term-body" onKeyDown={event => { if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); selectNode(null); } }}>
     <div className="ontology-term-canvas" data-process-overview={processView || undefined}>
       <div className="ontology-term-viewport">
-        <VisNetwork zoomOnDoubleClick key={`${processView ? 'process' : 'ontology'}:${layout}`} spacingKey={spacing.value} minimumAutoFitScale={1} nodes={canvasNodes} edges={visible.edges} selectedNodeId={selectedNode?.id || null}
+        <VisNetwork zoomOnDoubleClick key={`${processView ? 'process' : 'ontology'}:${layout}`} spacingKey={spacing.value} minimumAutoFitScale={zones ? 0.35 : 1} nodes={canvasNodes} edges={visible.edges} selectedNodeId={selectedNode?.id || null}
           selectedEdgeIds={selectedEdge ? [selectedEdge.id] : []}
           onNodeSelect={selectNode}
           onEdgeSelect={id => { setSelectedEdgeId(id); if (id) setSelectedNodeId(null); }}
           onNodeDoubleClick={selectNode}
           orthogonalEdges={params?.get('connectors') !== 'curved'}
           nodeSpacing={processView ? undefined : spacing.gap} fixedLayout={processView} processOverview={processView}
-          layoutDirection={processView || layout === 'network' ? undefined : layout}
+          layoutDirection={processView || layout === 'network' || layout === 'bfo' ? undefined : layout}
+          bfoZones={zones}
+          bfoZonesVisible={{ topLevel: zoneTopLevel, buckets: zoneBuckets }}
           physicsEnabled={false} fillContainer preserveZoomOnSelection preserveZoomOnResize focusOnSelection focusRequestKey={focusRequestKey}
           viewStateKey={processView ? `ontology:process:${graph.rootId}` : `ontology:term:${graph.rootId}:${layout}:${hierarchy}:${restrictions}:${properties}`}
         />
       </div>
-      {!systemSidebar && <BFOBucketFilters activeBuckets={activeBuckets} onToggle={toggleBucket} nodesPerBucket={nodesPerBucket} hiddenNodeIds={hiddenNodeIds} onNodeToggle={toggleNode} />}
+      {!systemSidebar && showBfoLegend && <BFOBucketFilters activeBuckets={activeBuckets} onToggle={toggleBucket} nodesPerBucket={nodesPerBucket} hiddenNodeIds={hiddenNodeIds} onNodeToggle={toggleNode} />}
     </div>
     {selectedNode && <OntologyNodeInspector node={selectedNode} nodes={visible.nodes} edges={visible.edges} terms={terms}
       context={systemSidebar ? term : undefined} onClose={() => selectNode(null)} onSelect={selectNode}

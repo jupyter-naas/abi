@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, Protocol
 from uuid import uuid4
@@ -10,7 +10,7 @@ from uuid import uuid4
 import numpy as np
 from naas_abi.agents.conversation_title import conversation_title_from_prompt
 from naas_abi.agents.feature.context import render_feature_context_block
-from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthPersistencePort
+from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthPersistencePort, AuthUserRecord
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat__schema import (
     CompleteChatInput,
     CompleteChatResult,
@@ -473,8 +473,8 @@ class UserProfile(Protocol):
     id: str
     name: str
     email: str
-    company: str | None
-    role: str | None
+    organization: str | None
+    job_title: str | None
     bio: str | None
 
 
@@ -486,8 +486,8 @@ def render_user_context_block(
     fields: list[tuple[str, str | None]] = [
         ("Name", user.name),
         ("Email", user.email),
-        ("Company", user.company),
-        ("Role", user.role),
+        ("Organization", user.organization),
+        ("Job title", user.job_title),
         ("Bio", user.bio),
     ]
     lines = [f"- {label}: {value}" for label, value in fields if value]
@@ -617,6 +617,26 @@ class ChatService:
 
         return "\n\n".join(parts) if parts else None
 
+    async def build_remote_agent_preamble(
+        self,
+        prior_messages: list,
+        user_id: str | None,
+        workspace_id: str | None = None,
+        conversation_id: str | None = None,
+    ) -> str | None:
+        """Context prepended for agents published by remote modules (NATS).
+
+        Only the first-turn user profile: the skills catalog, open documents,
+        coding workspace and multi-agent notice describe Nexus tooling a remote
+        agent cannot use, and they crowd out its own system prompt.
+        """
+        if any(getattr(m, "role", None) == "assistant" for m in prior_messages):
+            return None
+        addendum = await self.build_user_context_addendum(
+            prior_messages, user_id, workspace_id, conversation_id
+        )
+        return addendum.strip() or None
+
     async def _build_skills_block(
         self, context: RequestContext | None, workspace_id: str | None
     ) -> str:
@@ -670,7 +690,30 @@ class ChatService:
             return ""
         if user is None:
             return ""
+        if workspace_id:
+            user = await self._with_member_profile(user, workspace_id)
         return render_user_context_block(user, workspace_id, conversation_id)
+
+    async def _with_member_profile(self, user: AuthUserRecord, workspace_id: str) -> AuthUserRecord:
+        """Org admins prep a member's profile (Organization Settings > Users): the
+        values set by the workspace's organization win, the account fills the rest."""
+        try:
+            profile = await self.auth_adapter.get_workspace_member_profile(  # type: ignore[union-attr]
+                user.id, workspace_id
+            )
+        except Exception:
+            logger.warning("Failed to load organization member profile", exc_info=True)
+            return user
+        if not profile:
+            return user
+        return replace(
+            user,
+            **{
+                field: profile[field]
+                for field in ("organization", "job_title", "bio")
+                if profile.get(field)
+            },
+        )
 
     def _inject_chat_vector_context(
         self,
@@ -1241,6 +1284,13 @@ class ChatService:
                         context=context,
                         client_context=request.context,
                     )
+                elif provider.type == "remote":
+                    injection_preamble = await self.build_remote_agent_preamble(
+                        prior_messages=prior_messages,
+                        user_id=context.actor_user_id,
+                        workspace_id=request.workspace_id,
+                        conversation_id=conversation_id,
+                    )
 
                 from naas_abi.agents.feature import bind_feature_context
                 from naas_abi.agents.slides import (
@@ -1450,6 +1500,10 @@ class ChatService:
         workspace_id: str | None = None,
     ) -> ResolvedProvider | None:
         incoming_llm = getattr(provider, "llm_model", None) if provider else None
+        # A remote agent is reached only through its agent row (sync + roster),
+        # never by naming its key in a client-supplied provider payload.
+        if provider and getattr(provider, "type", None) == "remote":
+            provider = None
         if provider and getattr(provider, "enabled", False):
             return ResolvedProvider(
                 id=provider.id,
@@ -1468,6 +1522,20 @@ class ChatService:
                 agent = await self.get_agent(context=context, agent_id=agent_id)
                 if agent and agent.provider:
                     workspace_id = agent.workspace_id
+                    if agent.provider == "remote" and agent.class_name:
+                        # Published by a remote module (NATS discovery): stream
+                        # through its agent proxy; class_name is the agent key.
+                        return ResolvedProvider(
+                            id=f"remote-{agent.id}",
+                            name=f"Remote ({agent.class_name.rpartition('/')[0]})",
+                            type="remote",
+                            enabled=True,
+                            endpoint=None,
+                            api_key=None,
+                            account_id=None,
+                            model=agent.class_name,
+                            llm_model=None,
+                        )
                     if agent.provider == "abi":
                         inprocess_agent_ref = (
                             agent.class_name or agent.name or agent.model_id or agent.id

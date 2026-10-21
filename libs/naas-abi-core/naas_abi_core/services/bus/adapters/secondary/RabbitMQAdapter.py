@@ -3,12 +3,24 @@ from collections.abc import Callable
 from threading import RLock, Thread
 from typing import Self
 
-import pika
 from naas_abi_core.services.bus.BusPorts import IBusAdapter
+from naas_abi_core.utils.LegacyExtras import raise_missing_extra
 from naas_abi_core.utils.Logger import logger
+
+try:
+    import pika
+except ModuleNotFoundError as error:
+    raise_missing_extra(error, "The RabbitMQ bus adapter")
 
 
 class RabbitMQAdapter(IBusAdapter):
+    """The bus on RabbitMQ (``bus_adapter: rabbitmq``).
+
+    Legacy, for projects without NATS, to be removed in the next major: NATS
+    projects use ``nats_jetstream``. pika comes with the
+    ``naas-abi-core[rabbitmq]`` extra.
+    """
+
     __rabbitmq_url: str
     __publish_connection: pika.BlockingConnection | None
     __publish_channel: pika.adapters.blocking_connection.BlockingChannel | None

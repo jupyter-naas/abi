@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import cast
 
-from naas_abi.apps.nexus.apps.api.app.models import (
-    ConversationModel,
-    OrganizationMemberModel,
-    OrganizationModel,
-    WorkspaceMemberModel,
-    WorkspaceModel,
+from naas_abi.apps.nexus.apps.api.app.core.workspace_access import (
+    resolve_organization_role,
+    resolve_workspace_role,
 )
+from naas_abi.apps.nexus.apps.api.app.models import ConversationModel
 from naas_abi.apps.nexus.apps.api.app.services.iam.port import (
     ConversationAccessRecord,
     IAMPolicyPort,
@@ -37,40 +36,10 @@ class IAMSecondaryAdapterPostgres(IAMPolicyPort):
         return db
 
     async def get_workspace_role(self, user_id: str, workspace_id: str) -> Role | None:
-        member_result = await self.db.execute(
-            select(WorkspaceMemberModel.role)
-            .where(WorkspaceMemberModel.workspace_id == workspace_id)
-            .where(WorkspaceMemberModel.user_id == user_id)
-        )
-        member_role = member_result.scalar_one_or_none()
-        if member_role is not None:
-            return member_role
-
-        owner_result = await self.db.execute(
-            select(WorkspaceModel.owner_id).where(WorkspaceModel.id == workspace_id)
-        )
-        owner_id = owner_result.scalar_one_or_none()
-        if owner_id == user_id:
-            return "owner"
-        return None
+        return cast(Role | None, await resolve_workspace_role(self.db, user_id, workspace_id))
 
     async def get_organization_role(self, user_id: str, org_id: str) -> Role | None:
-        member_result = await self.db.execute(
-            select(OrganizationMemberModel.role)
-            .where(OrganizationMemberModel.organization_id == org_id)
-            .where(OrganizationMemberModel.user_id == user_id)
-        )
-        member_role = member_result.scalar_one_or_none()
-        if member_role is not None:
-            return member_role
-
-        owner_result = await self.db.execute(
-            select(OrganizationModel.owner_id).where(OrganizationModel.id == org_id)
-        )
-        owner_id = owner_result.scalar_one_or_none()
-        if owner_id == user_id:
-            return "owner"
-        return None
+        return cast(Role | None, await resolve_organization_role(self.db, user_id, org_id))
 
     async def get_conversation_access_record(
         self, conversation_id: str

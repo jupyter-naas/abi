@@ -4,8 +4,15 @@ const path = require('path');
 const nextConfig = {
   reactStrictMode: true,
   // Keep make check / production builds from overwriting a running dev server.
+  // distDir must stay relative to this app (Next does not accept absolute paths).
   distDir: process.env.NODE_ENV === 'development' ? '.next-dev' : '.next',
   transpilePackages: ['@nexus/ui', '@embedpdf/snippet', 'three'],
+  // next dev only: keep compiled pages for an hour (default 60s), so going back
+  // from Organization/Platform Settings to a workspace does not recompile it.
+  onDemandEntries: {
+    maxInactiveAge: 60 * 60 * 1000,
+    pagesBufferLength: 25,
+  },
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },
@@ -17,6 +24,16 @@ const nextConfig = {
       'node_modules/@embedpdf/snippet/dist/embedpdf.js'
     );
     return config;
+  },
+  async redirects() {
+    return [
+      // Workspace Settings → Theme was renamed Settings → General.
+      {
+        source: '/workspace/:workspaceId/settings/theme',
+        destination: '/workspace/:workspaceId/settings/general',
+        permanent: true,
+      },
+    ];
   },
   async rewrites() {
     return [
@@ -33,6 +50,9 @@ const nextConfig = {
     ];
   },
   images: {
+    // Image Optimization API (/_next/image) is on: Next >= 15.5.24 fixes the AVIF
+    // RCE (GHSA-2xp9-vwfh-vxw4). Only remotePatterns hosts are optimized; data: URLs
+    // and arbitrary web-search thumbnails keep `unoptimized` on their <Image>.
     remotePatterns: [
       {
         protocol: 'https',

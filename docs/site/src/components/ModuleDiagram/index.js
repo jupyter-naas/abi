@@ -35,7 +35,7 @@ const COMPONENTS = [
   { id: 'ints',  color: orange, label: 'integrations/\nExternal API connectors\nGitHub · LinkedIn · Stripe …' },
   { id: 'agts',  color: amber,  label: 'agents/\nLLM-powered agents\nreason over the KG' },
   { id: 'wfs',   color: blue,   label: 'workflows/\nSPARQL-backed tools\ninvoked by agents & users' },
-  { id: 'orch',  color: purp,   label: 'orchestrations/\nScheduled tasks\nand sensors' },
+  { id: 'orch',  color: purp,   label: 'jobs\nScheduled and event-driven\nwork (NATS module jobs)' },
   { id: 'apps',  color: green,  label: 'apps/\nCLI · Web · API\nper-module entry points' },
 ];
 
@@ -83,7 +83,7 @@ const LEGEND = [
   { color: '#3b82f6', label: 'Workflow tools' },
   { color: '#22c55e', label: 'Data ingestion / Apps' },
   { color: '#f97316', label: 'External connectors' },
-  { color: '#8b5cf6', label: 'Orchestration' },
+  { color: '#8b5cf6', label: 'Module jobs' },
   { color: '#ec4899', label: 'Config / deps (dashed)' },
 ];
 

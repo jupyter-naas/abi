@@ -154,7 +154,13 @@ export const PRESET_COLORS = [
 export interface Workspace {
   id: string;
   name: string;
+  /** Unique URL name: /workspace/<slug> opens the workspace like its id. */
+  slug?: string;
   description?: string;
+  /** Workspace group (Settings → General); empty shows under "Others". */
+  group?: string;
+  /** Organization the workspace belongs to (Organization Settings links). */
+  organizationId?: string;
   icon?: string;
   color?: string;
   theme: WorkspaceTheme;
@@ -222,6 +228,10 @@ interface WorkspaceState {
   lastActivePanelSection: SidebarSection | null;
   /** The column the Workspaces list replaced (null = no column). Not persisted. */
   panelSectionBeforeWorkspaces: SidebarSection | null;
+  /** One-shot: the next route change keeps the feature column closed instead
+   *  of opening the route's section (Home launching an app). Not persisted. */
+  keepPanelClosedOnNextRoute: boolean;
+  setKeepPanelClosedOnNextRoute: (keep: boolean) => void;
   /** Dismiss the mark-opened Workspaces list, putting back the column it covered. */
   closeWorkspacesPanel: () => void;
   /** Icon order for the workspace nav. Settings stays pinned and is omitted. */
@@ -363,6 +373,8 @@ interface WorkspaceState {
   selectWorkspace: (id: string) => void;
   updateWorkspace: (id: string, updates: Partial<Workspace>) => void;
   updateWorkspaceTheme: (updates: Partial<WorkspaceTheme>) => void;
+  /** Apply a theme change the server already saved (no PATCH back). */
+  applyWorkspaceTheme: (workspaceId: string, updates: Partial<WorkspaceTheme>) => void;
   getCurrentWorkspace: () => Workspace | null;
   fetchWorkspaces: () => Promise<void>;
 
@@ -553,6 +565,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   })),
   lastActivePanelSection: null,
   panelSectionBeforeWorkspaces: null,
+  keepPanelClosedOnNextRoute: false,
+  setKeepPanelClosedOnNextRoute: (keep) => set({ keepPanelClosedOnNextRoute: keep }),
   closeWorkspacesPanel: () => set((state) => (
     state.activePanelSection === 'workspaces'
       ? { activePanelSection: state.panelSectionBeforeWorkspaces }
@@ -822,7 +836,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
                     }
                   : msg
               ),
-              updatedAt: new Date(),
+              // Content-only stream chunk: keep updatedAt (addMessage already bumped it
+              // for this turn) so conversation-list metadata stays referentially stable.
             }
           : conv
       ),
@@ -1298,6 +1313,13 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     }));
   },
 
+  applyWorkspaceTheme: (workspaceId, updates) =>
+    set((state) => ({
+      workspaces: state.workspaces.map((w) =>
+        w.id === workspaceId ? { ...w, theme: { ...w.theme, ...updates }, updatedAt: new Date() } : w
+      ),
+    })),
+
   updateWorkspaceTheme: async (updates) => {
     const { currentWorkspaceId } = get();
     if (!currentWorkspaceId) return;
@@ -1377,7 +1399,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       const workspaces: Workspace[] = apiWorkspaces.map((ws: any) => ({
         id: ws.id,
         name: ws.name,
+        slug: ws.slug || undefined,
         description: ws.description,
+        group: ws.workspace_group || undefined,
+        organizationId: ws.organization_id || undefined,
         icon: ws.icon || ws.logo_emoji,
         color: ws.color,
         theme: {

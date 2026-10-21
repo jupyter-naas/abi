@@ -57,7 +57,8 @@ export function AgentSelector({ compact = false }: { compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const ref = useRef<HTMLDivElement>(null);
-  const { selectedAgent, setSelectedAgent } = useWorkspaceStore();
+  const selectedAgent = useWorkspaceStore((s) => s.selectedAgent);
+  const setSelectedAgent = useWorkspaceStore((s) => s.setSelectedAgent);
   const { defaultAgents, customAgents, filteredAgents, enabledAgents } = useAgentList(searchQuery);
 
   const defaultAgent = pickWorkspaceDefaultAgent(enabledAgents);
@@ -228,7 +229,7 @@ export function ModelSelector() {
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const { selectedAgent } = useWorkspaceStore();
+  const selectedAgent = useWorkspaceStore((s) => s.selectedAgent);
   const { getAgent } = useAgentsStore();
   const { providers, getProviderForAgent: getLegacyProviderForAgent } = useIntegrationsStore();
   const { models, fetchModels } = useModelsStore();

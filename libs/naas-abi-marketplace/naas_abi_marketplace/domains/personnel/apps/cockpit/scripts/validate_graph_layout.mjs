@@ -3,8 +3,13 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const cockpitRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+// The graph page is the people module's (intelligence/modules/people/apps/people/graph_page).
+const domainsRoot = path.resolve(cockpitRoot, "../../..");
 const graphModule = pathToFileURL(
-  path.join(cockpitRoot, "web/components/pages/graph/GraphPage.js")
+  path.join(
+    domainsRoot,
+    "intelligence/modules/people/apps/people/graph_page/GraphPage.js",
+  ),
 ).href;
 const dataPath = path.join(cockpitRoot, "data/entities/demo/graph/index.json");
 

@@ -4,6 +4,7 @@ import { useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Database, Table2 } from 'lucide-react';
 import { Header } from '@/components/shell/header';
+import { DatasetsMenuBar } from './components/datasets-menu-bar';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useDatasetsStore, type DatasetInfo } from '@/stores/datasets';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -37,7 +38,7 @@ export default function DatasetsCatalog() {
   return (
     <div className="datasets-root">
       <div className="datasets-header-gap">
-        <Header title="Datasets" subtitle="SQL tables published by modules" />
+        <Header title="Datasets" subtitle="SQL tables published by modules" nav={<DatasetsMenuBar />} />
       </div>
       <div className="datasets-body">
         {error ? <p className="datasets-banner datasets-banner--error">{error}</p> : null}

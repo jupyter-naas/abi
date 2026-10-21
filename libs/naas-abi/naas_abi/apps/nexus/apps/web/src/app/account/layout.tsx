@@ -7,6 +7,8 @@ import { ArrowLeft, ChevronRight } from 'lucide-react';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAuthStore } from '@/stores/auth';
 import { useIsMobile } from '@/hooks/use-is-mobile';
+import { useMounted } from '@/hooks/use-mounted';
+import { loadOrgBranding, resolveWorkspaceOrgId } from '@/lib/org-branding';
 import { accountSettingsNavVisible, type AccountSettingsNavItem } from './lib/nav';
 import { parseAccountRoute } from './lib/account-route';
 import './account-layout.css';
@@ -52,33 +54,24 @@ export default function AccountLayout({
   const showMobileList = isMobile && !isDetail;
   const showMobileDetail = isMobile && isDetail;
   const currentWorkspaceId = useWorkspaceStore((state) => state.currentWorkspaceId);
+  const workspaceOrgId = useWorkspaceStore(
+    (state) => state.workspaces.find((w) => w.id === state.currentWorkspaceId)?.organizationId,
+  );
   const user = useAuthStore((state) => state.user);
+  // The saved login only exists in the browser: show the name after hydration.
+  const mounted = useMounted();
   const [orgBorderRadius, setOrgBorderRadius] = useState('0');
 
   useEffect(() => {
+    let cancelled = false;
     const fetchOrgBranding = async () => {
       if (!currentWorkspaceId) {
         setOrgBorderRadius('0');
         return;
       }
-
-      try {
-        const { authFetch } = await import('@/stores/auth');
-        const wsResponse = await authFetch(`/api/workspaces/${currentWorkspaceId}`);
-        if (!wsResponse.ok) return;
-
-        const wsData = await wsResponse.json();
-        if (!wsData.organization_id) return;
-
-        const orgResponse = await authFetch(`/api/organizations/${wsData.organization_id}`);
-        if (!orgResponse.ok) return;
-
-        const orgData = await orgResponse.json();
-        const radius = orgData.loginBorderRadius ?? orgData.login_border_radius ?? '0';
-        setOrgBorderRadius(radius);
-      } catch (error) {
-        console.error('Failed to fetch org branding for account layout:', error);
-      }
+      const orgId = await resolveWorkspaceOrgId(currentWorkspaceId, workspaceOrgId);
+      const branding = orgId ? await loadOrgBranding(orgId) : null;
+      if (!cancelled) setOrgBorderRadius(branding?.borderRadius ?? '0');
     };
 
     fetchOrgBranding();
@@ -88,8 +81,11 @@ export default function AccountLayout({
     };
 
     window.addEventListener('org-branding-updated', handleBrandingUpdate);
-    return () => window.removeEventListener('org-branding-updated', handleBrandingUpdate);
-  }, [currentWorkspaceId]);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('org-branding-updated', handleBrandingUpdate);
+    };
+  }, [currentWorkspaceId, workspaceOrgId]);
 
   const themeStyles = {
     '--org-border-radius': `${orgBorderRadius}px`,
@@ -109,7 +105,7 @@ export default function AccountLayout({
 
   const headerTitle = showMobileDetail
     ? sectionLabel ?? 'Account'
-    : user?.name || 'Account';
+    : (mounted && user?.name) || 'Account';
 
   const showNav = !showMobileDetail;
   const showMain = !showMobileList;

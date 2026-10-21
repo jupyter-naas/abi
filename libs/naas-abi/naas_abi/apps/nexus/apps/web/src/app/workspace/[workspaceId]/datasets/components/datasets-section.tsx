@@ -1,14 +1,13 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { ChevronRight, Database, RefreshCw, Table2 } from 'lucide-react';
+import { ChevronRight, Database, Table2 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useDatasetsStore, type DatasetInfo } from '@/stores/datasets';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from '@/components/shell/sidebar/collapsible-section';
-import { SidebarToolbar, SidebarToolbarButton } from '@/components/shell/sidebar/sidebar-toolbar';
 import { getWorkspacePath } from '@/components/shell/sidebar/utils';
 import { shellTokens } from '@/components/shell/tokens';
 import {
@@ -131,7 +130,6 @@ export function DatasetsSection({
   const isMobile = useIsMobile();
   const isMobilePanel = isMobile && !!detailOnly;
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
-  const fetchDatasets = useDatasetsStore((s) => s.fetchDatasets);
 
   const openCatalog = () => {
     router.push(datasetsCatalogPath(currentWorkspaceId));
@@ -148,17 +146,6 @@ export function DatasetsSection({
       detailOnly={detailOnly}
       onNavigate={openCatalog}
     >
-      <SidebarToolbar>
-        <SidebarToolbarButton
-          icon={<RefreshCw size={12} />}
-          label="Refresh"
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            void fetchDatasets(currentWorkspaceId);
-          }}
-        />
-      </SidebarToolbar>
       <DatasetsNamespaceGroups dense={isMobilePanel} />
     </CollapsibleSection>
   );

@@ -58,7 +58,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
   const [loadingOntologyFiles, setLoadingOntologyFiles] = useState(false);
   const [filesWorkspaceId, setFilesWorkspaceId] = useState<string | null>(null);
   const [filesError, setFilesError] = useState<string | null>(null);
-  const { currentWorkspaceId } = useWorkspaceStore();
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const {
     graphRefreshTrigger,
     referenceOntologies,
@@ -215,7 +215,7 @@ export function OntologySection({ collapsed, detailOnly }: { collapsed: boolean;
       collapsed={collapsed}
       detailOnly={detailOnly}
     >
-      <button type="button" className="ontology-dashboard-home" aria-current={searchParams?.get('view') === 'overview' ? 'page' : undefined}
+      <button type="button" className="shell-sidebar-home" aria-current={searchParams?.get('view') === 'overview' ? 'page' : undefined}
         onClick={() => router.push(getWorkspacePath(currentWorkspaceId, `/ontology?${dashboardRoute(routeQuery)}`), {scroll: false})}>
         <LayoutGrid size={14} aria-hidden="true" /><span>Dashboard</span>
       </button>

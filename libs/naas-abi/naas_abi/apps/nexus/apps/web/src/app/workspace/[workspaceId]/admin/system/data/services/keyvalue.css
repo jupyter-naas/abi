@@ -1,0 +1,35 @@
+/* data/services — key-value view */
+
+/* Keys read better in monospace (applies once the explorer tags its main pane with the service). */
+[data-service='keyvalue'] .data-row-label,
+[data-service='cache'] .data-row-label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--font-size-xs);
+}
+
+.data-keyvalue-snippet {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--muted-foreground-hex);
+}
+
+.data-keyvalue-opaque {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--muted-foreground-hex);
+}
+
+.data-keyvalue-ttl {
+  display: inline-flex;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-keyvalue-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.data-keyvalue-preview > .data-notice {
+  margin: 0;
+}

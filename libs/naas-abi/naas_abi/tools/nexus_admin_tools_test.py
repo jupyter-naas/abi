@@ -79,3 +79,52 @@ def test_nexus_admin_tools_exported_names() -> None:
     assert "list_organization_members" in names
     assert "update_my_profile" in names
     assert len(names) >= 10
+
+
+def test_update_my_profile_writes_organization_and_job_title() -> None:
+    from datetime import datetime
+    from unittest.mock import create_autospec
+
+    from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthUserRecord
+    from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService
+
+    token = agent_user_id.set("user-1")
+    tools = _tools_by_name()
+    # Autospec: a call that no longer matches AuthService.update_profile fails here.
+    auth = create_autospec(AuthService, instance=True)
+    auth.update_profile.return_value = AuthUserRecord(
+        id="user-1",
+        email="a@b.c",
+        name="Alice",
+        hashed_password="x",
+        created_at=datetime(2026, 1, 1),
+        organization="Acme",
+        job_title="CTO",
+        bio=None,
+    )
+
+    async def fake_with_db(fn):  # type: ignore[no-untyped-def]
+        return await fn(MagicMock())
+
+    try:
+        with (
+            patch.object(mod, "_auth_service", return_value=auth),
+            patch.object(mod, "_with_db", side_effect=fake_with_db),
+        ):
+            result = tools["update_my_profile"].invoke(
+                {"organization": " Acme ", "job_title": "CTO"}
+            )
+    finally:
+        agent_user_id.reset(token)
+
+    assert result["status"] == "updated"
+    assert result["user"]["organization"] == "Acme"
+    assert result["user"]["job_title"] == "CTO"
+    auth.update_profile.assert_awaited_once_with(
+        user_id="user-1",
+        name=None,
+        email=None,
+        organization="Acme",
+        job_title="CTO",
+        bio=None,
+    )

@@ -71,3 +71,30 @@ def test_nexus_platform_ontology_checks_clean_offline(offline) -> None:
 
     assert all(r["status"] == "ok" for r in report["imports"]), report["imports"]
     assert report["errors"] == []
+
+
+def _bucket_issues(body: str) -> list[dict]:
+    g = Graph()
+    g.parse(
+        data="@prefix owl: <http://www.w3.org/2002/07/owl#> .\n"
+        "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n"
+        "@prefix bfo: <http://purl.obolibrary.org/obo/> .\n"
+        "@prefix ex: <http://example.org/> .\n" + body,
+        format="turtle",
+    )
+    return v.check_bucket_mapping(g)
+
+
+def test_fiat_boundaries_need_no_bucket() -> None:
+    # A geospatial position is a fiat point: no volume, so not a site, and
+    # outside the 7 buckets by nature.
+    assert _bucket_issues(
+        "ex:Position a owl:Class ; rdfs:subClassOf bfo:BFO_0000147 .\n"
+        "ex:Border a owl:Class ; rdfs:subClassOf bfo:BFO_0000142 .\n"
+        "ex:Pin a owl:Class ; rdfs:subClassOf ex:Position .\n"
+    ) == []
+
+
+def test_classes_outside_the_buckets_are_still_reported() -> None:
+    issues = _bucket_issues("ex:Loose a owl:Class ; rdfs:subClassOf bfo:BFO_0000141 .\n")
+    assert [issue["category"] for issue in issues] == ["BUCKET_MAPPING"]

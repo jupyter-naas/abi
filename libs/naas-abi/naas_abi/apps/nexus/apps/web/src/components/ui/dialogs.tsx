@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 import { useAgentsStore, type Agent } from '@/stores/agents';
 import { useWorkspaceStore } from '@/stores/workspace';
 
@@ -10,14 +11,17 @@ import { useWorkspaceStore } from '@/stores/workspace';
 // Generic Modal Backdrop
 // ============================================================
 
-function ModalBackdrop({
+export function ModalBackdrop({
   open,
   onClose,
   children,
+  widthClassName = 'max-w-md',
 }: {
   open: boolean;
   onClose: () => void;
   children: ReactNode;
+  /** Content width; prompts use the default, previews go wider. */
+  widthClassName?: string;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -38,7 +42,7 @@ function ModalBackdrop({
         onClick={onClose}
       />
       {/* Content */}
-      <div className="relative z-10 w-full max-w-md mx-4 animate-in zoom-in-95 fade-in duration-200">
+      <div className={cn('relative z-10 mx-4 w-full animate-in zoom-in-95 fade-in duration-200', widthClassName)}>
         {children}
       </div>
     </div>,
@@ -238,23 +242,12 @@ export function ConfirmDialog({
           <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">{description}</p>
         )}
         <div className="mt-6 flex justify-end gap-2">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
+          <Button variant="ghost" onClick={onCancel}>
             {cancelLabel}
-          </button>
-          <button
-            onClick={onConfirm}
-            className={cn(
-              'px-4 py-2 text-sm font-medium text-white transition-colors',
-              destructive
-                ? 'bg-red-600 hover:bg-red-700'
-                : 'bg-workspace-accent hover:bg-workspace-accent/90'
-            )}
-          >
+          </Button>
+          <Button variant={destructive ? 'destructive' : 'primary'} onClick={onConfirm}>
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </ModalBackdrop>

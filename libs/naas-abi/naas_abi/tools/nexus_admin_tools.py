@@ -724,13 +724,13 @@ def nexus_admin_tools() -> list[BaseTool]:
     @tool
     def update_my_profile(
         name: str = "",
-        company: str = "",
-        role: str = "",
+        organization: str = "",
+        job_title: str = "",
         bio: str = "",
     ) -> Any:
         """Update the signed-in user's own profile fields.
 
-        Only provided (non-empty) fields are changed: name, company, role, bio.
+        Only provided (non-empty) fields are changed: name, organization, job_title, bio.
         Email changes stay in the authenticated settings UI (re-auth / confirm).
         """
         user_id = _require_user_id()
@@ -739,12 +739,12 @@ def nexus_admin_tools() -> list[BaseTool]:
 
         payload = {
             "name": name.strip() or None,
-            "company": company.strip() or None,
-            "role": role.strip() or None,
+            "organization": organization.strip() or None,
+            "job_title": job_title.strip() or None,
             "bio": bio.strip() or None,
         }
         if not any(payload.values()):
-            return {"error": "Provide at least one of: name, company, role, bio"}
+            return {"error": "Provide at least one of: name, organization, job_title, bio"}
 
         async def _run(db: Any) -> Any:
             from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
@@ -756,8 +756,8 @@ def nexus_admin_tools() -> list[BaseTool]:
                     user_id=user_id,
                     name=payload["name"],
                     email=None,
-                    company=payload["company"],
-                    role=payload["role"],
+                    organization=payload["organization"],
+                    job_title=payload["job_title"],
                     bio=payload["bio"],
                 )
             except UserNotFoundError:
@@ -768,8 +768,8 @@ def nexus_admin_tools() -> list[BaseTool]:
                     "id": user.id,
                     "email": user.email,
                     "name": user.name,
-                    "company": getattr(user, "company", None),
-                    "role": getattr(user, "role", None),
+                    "organization": user.organization,
+                    "job_title": user.job_title,
                     "bio": getattr(user, "bio", None),
                 },
             }

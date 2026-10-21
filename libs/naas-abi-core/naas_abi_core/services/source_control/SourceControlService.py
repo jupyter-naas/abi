@@ -39,6 +39,13 @@ class SourceControlService(ServiceBase):
         super().__init__()
         self._adapter = adapter
 
+    @property
+    def adapter(self) -> ISourceControlAdapter:
+        """The wrapped secondary adapter -- public so callers (e.g.
+        ``EngineNATSLoader``) can check what kind of adapter this service is
+        backed by, mirroring ``ObjectStorageService.adapter``."""
+        return self._adapter
+
     def __publish_event(self, event: object) -> None:
         if not self.services_wired:
             return
@@ -67,6 +74,9 @@ class SourceControlService(ServiceBase):
 
     def list_repos(self) -> list[Repo]:
         return self._adapter.list_repos()
+
+    def delete_repo(self, *, repo_id: str) -> None:
+        self._adapter.delete_repo(repo_id=repo_id)
 
     def add_collaborator(
         self, *, repo_id: str, username: str, permission: str = "write"

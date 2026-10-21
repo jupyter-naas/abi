@@ -1,12 +1,15 @@
 [project]
 name = "naas-abi"
-version = "2.73.5"
+version = "3.1.0"
 description = "Multi-agent orchestrator and knowledge graph management system for AI orchestration, providing comprehensive coordination of specialized AI agents and semantic data management capabilities"
 readme = "README.md"
 authors = [{ name = "Grace Lambert", email = "maxime@naas.ai" },{ name = "Alice Dupont", email = "florent@naas.ai" }, { name = "Emma Petit", email = "jeremy@naas.ai" }]
 requires-python = ">=3.11,<4"
 dependencies = [
-    "naas-abi-core[dagster]>=1.4.0",
+    # nats: Nexus imports naas_abi_core.engine.nats_transfer (naas-abi-proto, naas-abi-sdk).
+    # Not dagster: DemoOrchestration imports it only when used, and a project
+    # without NATS adds the legacy naas-abi-core[dagster] extra itself.
+    "naas-abi-core[nats]>=3.0.0",
     "naas-abi-marketplace>=1.3.3",
     # --- Nexus API runtime dependencies ---
     "fastapi>=0.109.0",
@@ -56,15 +59,20 @@ Homepage = "https://github.com/jupyter-naas/abi"
 Repository = "https://github.com/jupyter-naas/abi/tree/main/libs/naas-abi"
 
 [tool.uv.sources]
+naas-abi-proto = {path = "../naas-abi-proto", editable = true}
 naas-abi-core = { path = "../naas-abi-core", editable = true }
 naas-abi-marketplace = { path = "../naas-abi-marketplace", editable = true }
 
 [tool.setuptools]
 include-package-data = true
 
+[tool.setuptools.packages.find]
+include = ["naas_abi*"]
+
 [tool.setuptools.package-data]
 naas_abi = [
     "apps/nexus/apps/api/migrations/*.sql",
+    "apps/nexus/apps/api/app/services/maps/basemaps/assets/*",
     "apps/nexus/apps/api/public/**/*",
     "apps/nexus/assets/**/*",
     "apps/nexus/ontology/**/*",

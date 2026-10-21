@@ -118,7 +118,7 @@ Query behavior
 - Update queries (``INSERT``, ``DELETE``, ``WITH``, ``DROP``, etc.) are sent to
   ``/update``.
 - Results are mapped to RDFLib-compatible structures:
-  - JSON SPARQL results -> iterable of ``ResultRow`` (or ``ASK`` result)
+  - JSON SPARQL results -> ``rdflib.query.Result`` (``SELECT`` or ``ASK``)
   - RDF payloads (N-Triples/Turtle) -> ``rdflib.Graph``
 - ``list_graphs()`` lists IRI named graphs from the catalog
   (``GRAPH ?g { } FILTER(isIRI(?g))``) so a dangling null graph node in TDB2
@@ -135,7 +135,7 @@ import random
 import re
 import threading
 import time
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -144,10 +144,14 @@ if TYPE_CHECKING:
 
 import rdflib
 import requests
+from naas_abi_core.services.triple_store.adaptors.secondary.base import sparql_stream
 from naas_abi_core.services.triple_store.TripleStorePorts import (
     Exceptions,
     ITripleStorePort,
     OntologyEvent,
+    QueryStream,
+    Triple,
+    graph_export_query,
 )
 from rdflib import BNode, Graph, URIRef
 
@@ -211,6 +215,19 @@ def _recover_truncated_sparql_results_json(text: str) -> dict[str, Any] | None:
     if not bindings:
         return None
     return {"head": {"vars": vars_}, "results": {"bindings": bindings}}
+
+
+def _rdf_body(response: requests.Response) -> str:
+    """An N-Triples or Turtle body, decoded as UTF-8.
+
+    Both formats are UTF-8 by definition, but Fuseki sends
+    ``application/n-triples`` without a charset, and ``response.text`` then
+    guesses one: "François" came back as "FranÃ§ois".
+    """
+    content = response.content
+    if isinstance(content, bytes):
+        return content.decode("utf-8")
+    return response.text
 
 
 def _parse_sparql_results_json(text: str) -> dict[str, Any]:
@@ -372,7 +389,11 @@ class ApacheJenaTDB2(ITripleStorePort):
         """
         if response.status_code < 400:
             return
-        body = (response.text or "").strip()
+        content = response.content
+        if isinstance(content, bytes):
+            body = content.decode("utf-8", errors="replace").strip()
+        else:
+            body = (response.text or "").strip()
         if len(body) > self._MAX_ERROR_BODY:
             body = body[: self._MAX_ERROR_BODY] + "… [truncated]"
         raise Exceptions.RequestError(
@@ -380,6 +401,23 @@ class ApacheJenaTDB2(ITripleStorePort):
             message=f"Fuseki {operation} request failed with HTTP {response.status_code}",
             status_code=response.status_code,
             response_body=body or None,
+            endpoint=endpoint,
+            attempts=attempts,
+        )
+
+    @staticmethod
+    def _transport_error(
+        exc: requests.RequestException, operation: str, endpoint: str, attempts: int
+    ) -> Exceptions.RequestError:
+        """A request that got no answer (a read timeout behind another writer,
+        a lost connection) as a domain ``RequestError``: unwrapped, it crossed
+        NATS as a bare INTERNAL, which a caller cannot tell from a rejection."""
+        return Exceptions.RequestError(
+            operation=operation,
+            message=(
+                f"Fuseki {operation} request got no answer: "
+                f"{type(exc).__name__}: {exc}"
+            ),
             endpoint=endpoint,
             attempts=attempts,
         )
@@ -454,12 +492,17 @@ class ApacheJenaTDB2(ITripleStorePort):
         """
         with self._acquire_write_lock():
             for attempt in range(self.max_retries + 1):
-                response = self._session.post(
-                    self.update_endpoint,
-                    headers={"Content-Type": "application/sparql-update"},
-                    data=sparql.encode("utf-8"),
-                    timeout=self.timeout,
-                )
+                try:
+                    response = self._session.post(
+                        self.update_endpoint,
+                        headers={"Content-Type": "application/sparql-update"},
+                        data=sparql.encode("utf-8"),
+                        timeout=self.timeout,
+                    )
+                except requests.RequestException as exc:
+                    raise self._transport_error(
+                        exc, "update", self.update_endpoint, attempt + 1
+                    ) from exc
                 if response.status_code in self._RETRYABLE_STATUS_CODES and attempt < self.max_retries:
                     delay = self.retry_delay * (2 ** attempt) + random.uniform(0, 0.1)
                     logger.warning(
@@ -482,23 +525,37 @@ class ApacheJenaTDB2(ITripleStorePort):
                 return response
             raise AssertionError("unreachable: update retry loop must return or raise")
 
-    def _post_query(self, sparql: str) -> requests.Response:
+    def _post_query(
+        self,
+        sparql: str,
+        *,
+        accept: str = "application/sparql-results+json,application/n-triples,text/turtle",
+        stream: bool = False,
+    ) -> requests.Response:
         """POST to the SPARQL query endpoint, retrying on transient 500/503.
 
         Read queries are not serialised by the write lock — Fuseki/TDB2 allows
-        concurrent readers.
+        concurrent readers. With ``stream`` the body is left unread: a retry only
+        ever happens before the caller has read anything.
         """
         for attempt in range(self.max_retries + 1):
-            response = self._session.post(
-                self.query_endpoint,
-                headers={
-                    "Content-Type": "application/sparql-query",
-                    "Accept": "application/sparql-results+json,application/n-triples,text/turtle",
-                },
-                data=sparql.encode("utf-8"),
-                timeout=self.timeout,
-            )
+            try:
+                response = self._session.post(
+                    self.query_endpoint,
+                    headers={
+                        "Content-Type": "application/sparql-query",
+                        "Accept": accept,
+                    },
+                    data=sparql.encode("utf-8"),
+                    timeout=self.timeout,
+                    stream=stream,
+                )
+            except requests.RequestException as exc:
+                raise self._transport_error(
+                    exc, "query", self.query_endpoint, attempt + 1
+                ) from exc
             if response.status_code in self._RETRYABLE_STATUS_CODES and attempt < self.max_retries:
+                response.close()
                 delay = self.retry_delay * (2 ** attempt) + random.uniform(0, 0.1)
                 logger.warning(
                     "Fuseki query returned HTTP %d (attempt %d/%d); retrying in %.2fs",
@@ -656,7 +713,7 @@ class ApacheJenaTDB2(ITripleStorePort):
             if "n-triples" in content_type or "turtle" in content_type:
                 graph = Graph()
                 format_type = "nt" if "n-triples" in content_type else "turtle"
-                graph.parse(data=response.text, format=format_type)
+                graph.parse(data=_rdf_body(response), format=format_type)
                 return graph  # type: ignore
 
             raise ValueError(f"Unexpected content type: {content_type}")
@@ -669,14 +726,12 @@ class ApacheJenaTDB2(ITripleStorePort):
             ask_result.askAnswer = bool(result_data["boolean"])
             return ask_result
 
-        from rdflib.query import ResultRow
-        from rdflib.term import BNode, Literal, URIRef, Variable
+        from rdflib.term import BNode, Identifier, Literal, URIRef, Variable
 
         vars = result_data.get("head", {}).get("vars", [])
         bindings = result_data.get("results", {}).get("bindings", [])
 
-        var_objects = [Variable(var) for var in vars]
-        results = []
+        results: list[Mapping[Variable, Identifier]] = []
 
         for binding in bindings:
             row_values = {}
@@ -704,12 +759,46 @@ class ApacheJenaTDB2(ITripleStorePort):
                             value = Literal(value_str)
 
                     row_values[var_obj] = value
-                else:
-                    row_values[var_obj] = None  # type: ignore
 
-            results.append(ResultRow(row_values, var_objects))
+            # Unbound variables stay out of the binding; ResultRow reads them as None.
+            results.append(row_values)
 
-        return iter(results)  # type: ignore
+        select_result = rdflib.query.Result("SELECT")
+        select_result.vars = [Variable(var) for var in vars]
+        select_result.bindings = results
+        return select_result
+
+    @contextmanager
+    def query_stream(self, query: str) -> Generator[QueryStream, None, None]:
+        """Read a query's result as Fuseki writes it: TSV rows or N-Triples,
+        parsed line by line (docs/adr/20261003_nats-streamed-results.md).
+
+        Fuseki can answer 200 and abort mid-response; the iterator then raises
+        ``Exceptions.RequestError`` after the rows it already yielded.
+        """
+        if self.__is_update_query(query):
+            with super().query_stream(query) as result:
+                yield result
+            return
+        response = self._post_query(query, accept=sparql_stream.ACCEPT, stream=True)
+        try:
+            yield sparql_stream.read_query_response(
+                response, operation="query", endpoint=self.query_endpoint
+            )
+        finally:
+            response.close()
+
+    @contextmanager
+    def export(
+        self, graph_name: URIRef | None = None
+    ) -> Generator[Generator[Triple, None, None], None, None]:
+        query = (
+            graph_export_query(graph_name)
+            if graph_name is not None
+            else "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }"  # as get()
+        )
+        with self.query_stream(query) as result:
+            yield (triple for triple in result.triples)
 
     def query_view(self, view: str, query: str) -> Any:
         return self.query(query)

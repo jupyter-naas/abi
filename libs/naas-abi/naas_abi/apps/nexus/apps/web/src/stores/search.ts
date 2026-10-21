@@ -5,8 +5,16 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { authFetch } from './auth';
 import { getApiUrl } from '@/lib/config';
+import { WEB_ENGINE_IDS } from '@/lib/search-scopes';
 
 export type SourceCategory = 'public' | 'private' | 'custom';
+
+/**
+ * The Web scope queries only the engines `/api/search/web` implements
+ * (`WEB_ENGINES`), and of those only the ones the workspace allows. Private
+ * sources (conversations, files, graph, ontology) have their own scopes.
+ */
+export { WEB_ENGINE_IDS };
 
 export interface SearchSource {
   id: string;
@@ -36,6 +44,9 @@ export interface SearchResult {
 export interface SearchState {
   // Available sources
   sources: SearchSource[];
+  /** Engines the current workspace allows (Settings → Search); null until known. */
+  allowedEngineIds: string[] | null;
+  setAllowedEngines: (ids: string[]) => void;
   
   // Search state
   query: string;
@@ -71,7 +82,7 @@ const defaultPublicSources: SearchSource[] = [
     name: 'Wikipedia',
     category: 'public',
     icon: 'BookOpen',
-    enabled: true,
+    enabled: false, // the query leaves Nexus: off until switched on
     description: 'Search Wikipedia articles (free API)',
   },
   {
@@ -79,7 +90,7 @@ const defaultPublicSources: SearchSource[] = [
     name: 'DuckDuckGo',
     category: 'public',
     icon: 'Search',
-    enabled: true,
+    enabled: false, // the query leaves Nexus: off until switched on
     description: 'DuckDuckGo instant answers (free API)',
   },
   {
@@ -151,11 +162,55 @@ const defaultCustomSources: SearchSource[] = [
   },
 ];
 
+/** Engines queried at once by a single search. */
+export const SEARCH_ENGINE_CONCURRENCY = 4;
+
+// Each search bumps the generation; only the latest may commit results, errors
+// or the loading flag. Changing the query, engines or workspace (or clearing)
+// invalidates and aborts the one in flight.
+let searchGen = 0;
+let searchAbort: AbortController | null = null;
+
+const invalidateSearch = (): void => {
+  searchAbort?.abort();
+  searchAbort = null;
+  searchGen += 1;
+};
+
+/** Runs `run` over `items` with at most `limit` in flight; results keep input order. */
+export async function mapSettledWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  run: (item: T) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  const settled: PromiseSettledResult<R>[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++;
+      try {
+        settled[index] = { status: 'fulfilled', value: await run(items[index]) };
+      } catch (reason) {
+        settled[index] = { status: 'rejected', reason };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), items.length) }, worker));
+  return settled;
+}
+
 export const useSearchStore = create<SearchState>()(
   persist(
     (set, get) => ({
       // Initial state
       sources: [...defaultPublicSources, ...defaultPrivateSources, ...defaultCustomSources],
+      allowedEngineIds: null,
+      // A workspace change can forbid an engine: forget the last query so it reruns without it.
+      setAllowedEngines: (ids) => {
+        if (get().allowedEngineIds?.join() === ids.join()) return;
+        invalidateSearch();
+        set({ allowedEngineIds: ids, query: '', results: [], loading: false });
+      },
       query: '',
       results: [],
       loading: false,
@@ -167,12 +222,18 @@ export const useSearchStore = create<SearchState>()(
       setQuery: (query) => set({ query }),
 
       // Toggle source enabled/disabled
-      toggleSource: (sourceId) =>
+      // Results depend on the engines: forget the last query so the next search reruns.
+      toggleSource: (sourceId) => {
+        invalidateSearch();
         set((state) => ({
           sources: state.sources.map((s) =>
             s.id === sourceId ? { ...s, enabled: !s.enabled } : s
           ),
-        })),
+          query: '',
+          results: [],
+          loading: false,
+        }));
+      },
 
       // Toggle category expansion in sidebar
       toggleCategory: (category) =>
@@ -214,40 +275,59 @@ export const useSearchStore = create<SearchState>()(
       // Perform search across enabled sources
       search: async (query) => {
         if (!query.trim()) {
-          set({ results: [], error: null });
+          invalidateSearch();
+          set({ results: [], error: null, loading: false });
           return;
         }
+
+        searchAbort?.abort();
+        const abort = new AbortController();
+        searchAbort = abort;
+        const gen = ++searchGen;
+        const workspaceId = useWorkspaceStore.getState().currentWorkspaceId;
+        const isCurrent = () =>
+          gen === searchGen && useWorkspaceStore.getState().currentWorkspaceId === workspaceId;
 
         set({ loading: true, error: null, query });
         get().addRecentSearch(query);
 
-        try {
-          const enabledSources = get().sources.filter((s) => s.enabled);
-          const results: SearchResult[] = [];
-
-          // Search each enabled source
-          for (const source of enabledSources) {
-            try {
-              const sourceResults = await searchSource(source, query);
-              results.push(...sourceResults);
-            } catch (err) {
-              console.error(`Search failed for source ${source.id}:`, err);
-            }
-          }
-
-          // Sort by relevance
-          results.sort((a, b) => (b.relevance || 0) - (a.relevance || 0));
-
-          set({ results, loading: false });
-        } catch (err) {
-          set({
-            error: err instanceof Error ? err.message : 'Search failed',
-            loading: false,
-          });
+        const allowed = get().allowedEngineIds ?? WEB_ENGINE_IDS;
+        const enabledSources = get().sources.filter((s) => s.enabled && allowed.includes(s.id));
+        const settled = await mapSettledWithConcurrency(enabledSources, SEARCH_ENGINE_CONCURRENCY, (source) =>
+          searchSource(source, query, { workspaceId, signal: abort.signal })
+        );
+        if (gen !== searchGen) return;
+        if (!isCurrent()) {
+          // Workspace switched under us: drop the results without a newer search to wait for.
+          set({ results: [], loading: false });
+          return;
         }
+
+        // Source order first, then the stable relevance sort, as before.
+        const results: SearchResult[] = [];
+        settled.forEach((outcome, index) => {
+          if (outcome.status === 'fulfilled') {
+            results.push(...outcome.value);
+          } else {
+            console.error(`Search failed for source ${enabledSources[index].id}:`, outcome.reason);
+          }
+        });
+        results.sort((a, b) => (b.relevance || 0) - (a.relevance || 0));
+
+        const failed = settled.filter((o) => o.status === 'rejected');
+        const allFailed = settled.length > 0 && failed.length === settled.length;
+        const reason = allFailed ? (failed[0] as PromiseRejectedResult).reason : null;
+        set({
+          results,
+          loading: false,
+          error: allFailed ? (reason instanceof Error ? reason.message : 'Search failed') : null,
+        });
       },
 
-      clearResults: () => set({ results: [], query: '' }),
+      clearResults: () => {
+        invalidateSearch();
+        set({ results: [], query: '', loading: false });
+      },
 
       addRecentSearch: (query) =>
         set((state) => {
@@ -261,6 +341,15 @@ export const useSearchStore = create<SearchState>()(
     }),
     {
       name: 'nexus-search',
+      // v1: web engines start off (the Web scope sends the query outside Nexus).
+      version: 1,
+      migrate: (persisted, version) => {
+        const state = persisted as Partial<SearchState>;
+        if (version < 1 && Array.isArray(state.sources)) {
+          state.sources = state.sources.map((s) => (WEB_ENGINE_IDS.includes(s.id) ? { ...s, enabled: false } : s));
+        }
+        return state as SearchState;
+      },
       partialize: (state) => ({
         sources: state.sources,
         recentSearches: state.recentSearches,
@@ -273,7 +362,8 @@ export const useSearchStore = create<SearchState>()(
 // Helper function to search a specific source
 async function searchSource(
   source: SearchSource,
-  query: string
+  query: string,
+  context: { workspaceId: string | null; signal: AbortSignal }
 ): Promise<SearchResult[]> {
   const baseUrl = getApiUrl();
 
@@ -291,6 +381,7 @@ async function searchSource(
           query,
           engine: source.id,
         }),
+        signal: context.signal,
       });
       if (!webResponse.ok) {
         throw new Error(`Web search failed: ${webResponse.status}`);
@@ -312,8 +403,9 @@ async function searchSource(
         body: JSON.stringify({
           query,
           source: source.id,
-          workspace_id: useWorkspaceStore.getState().currentWorkspaceId,
+          workspace_id: context.workspaceId,
         }),
+        signal: context.signal,
       });
       if (!privateResponse.ok) {
         throw new Error(`Private search failed: ${privateResponse.status}`);
@@ -331,6 +423,7 @@ async function searchSource(
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query }),
+          signal: context.signal,
         });
         if (!customResponse.ok) {
           throw new Error(`Custom search failed: ${customResponse.status}`);
@@ -354,6 +447,9 @@ export const selectPrivateSources = (state: SearchState) =>
 
 export const selectCustomSources = (state: SearchState) =>
   state.sources.filter((s) => s.category === 'custom');
+
+export const selectWebEngines = (state: SearchState) =>
+  state.sources.filter((s) => WEB_ENGINE_IDS.includes(s.id));
 
 export const selectEnabledSources = (state: SearchState) =>
   state.sources.filter((s) => s.enabled);

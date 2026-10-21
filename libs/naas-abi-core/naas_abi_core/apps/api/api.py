@@ -8,9 +8,11 @@ print(
     flush=True,
 )
 
+import asyncio
 import html
 import os
 import subprocess
+from contextlib import asynccontextmanager
 from importlib.resources import files
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
@@ -46,14 +48,16 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
 )
 
 
-def _load_api_runtime_configuration() -> ApiConfiguration:
+def _load_api_runtime_configuration() -> tuple[ApiConfiguration, bool]:
+    """The API's settings, and whether the engine runs in NATS mode."""
     try:
-        return EngineConfiguration.load_configuration().api
+        configuration = EngineConfiguration.load_configuration()
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             f"Failed to load API runtime configuration from engine configuration: {exc}"
         )
-        return ApiConfiguration()
+        return ApiConfiguration(), False
+    return configuration.api, configuration.nats is not None
 
 
 class LazyEngine:
@@ -72,12 +76,69 @@ class LazyEngine:
 
 
 engine = LazyEngine()
-api_runtime_configuration = _load_api_runtime_configuration()
+api_runtime_configuration, _nats_mode = _load_api_runtime_configuration()
+
+
+async def _shutdown_engine() -> None:
+    # Read the private attribute directly, not through LazyEngine.__getattr__'s
+    # proxy -- going through the proxy would lazily construct and load a whole
+    # new Engine() just to shut down something that, in the common case (app
+    # never actually served a request needing it), was never loaded.
+    runtime_engine = engine._engine
+    if runtime_engine is None:
+        return
+    logger.debug("api: shutting down engine (NATS primary adapters, if any)")
+    # Engine.shutdown() is synchronous (it bridges to async NATS calls via
+    # nats_runtime.run_coro internally, same as every other engine-loading
+    # entry point) -- run it off the event loop so a slow drain can't block
+    # the rest of the shutdown sequence.
+    await asyncio.to_thread(runtime_engine.shutdown)
+
+
+def _abandon_engine() -> None:
+    """Shut down and forget the engine of an app that failed to start.
+
+    The engine loads first, so by then it may hold the ownership lease, serve
+    the kernel subjects and host jobs. Without this, the dying process keeps
+    them until it exits, and the next engine waits a whole lease period.
+    """
+    runtime_engine, engine._engine = engine._engine, None
+    if runtime_engine is None:
+        return
+    try:
+        runtime_engine.shutdown()
+    except Exception as exc:  # noqa: BLE001 - the start failure is what to report
+        logger.warning(f"api: shutting down the engine of a failed start failed: {exc!r}")
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    # Modules attach to this app with ``app.add_event_handler("startup"|
+    # "shutdown", ...)`` -- Nexus does, to run its migrations and seeds (see
+    # naas_abi/apps/nexus/apps/api/app/main.py::_register_startup_handlers).
+    # Passing ``lifespan=`` to FastAPI replaces Starlette's ``_DefaultLifespan``,
+    # which is the ONLY thing that would otherwise run those handlers (and it
+    # does so silently: no warning is raised for handlers added after
+    # construction). So drive them explicitly here, and tear the engine down
+    # last: it is the dependency the modules' shutdown hooks may still need.
+    try:
+        await app.router.startup()
+    except BaseException:
+        await asyncio.to_thread(_abandon_engine)
+        raise
+    try:
+        yield
+    finally:
+        try:
+            await app.router.shutdown()
+        finally:
+            await _shutdown_engine()
+
 
 # Init API
 TITLE = api_runtime_configuration.title
 DESCRIPTION = api_runtime_configuration.description
-app = FastAPI(title=TITLE, docs_url=None, redoc_url=None)
+app = FastAPI(title=TITLE, docs_url=None, redoc_url=None, lifespan=_lifespan)
 
 
 def resolve_branding_asset(configured: str) -> tuple[str, str | None]:
@@ -182,6 +243,9 @@ class QueryOrHeaderBearer(HTTPBearer):
 
 
 api_key_scheme = QueryOrHeaderBearer(scheme_name="ABI API key")
+
+# Former name, kept so modules that import ``oauth2_scheme`` keep loading.
+oauth2_scheme = api_key_scheme
 
 
 # Update the token validation dependency
@@ -375,7 +439,11 @@ def _load_runtime_routes():
 
 
 def get_app() -> FastAPI:
-    _load_runtime_routes()
+    try:
+        _load_runtime_routes()
+    except BaseException:
+        _abandon_engine()
+        raise
     return app
 
 
@@ -388,6 +456,13 @@ def api():
     import uvicorn
 
     reload_enabled = api_runtime_configuration.reload
+    if _nats_mode and not reload_enabled:
+        # NATS gone for good stops this process, so its supervisor restarts it,
+        # instead of an engine that serves nothing (naas_abi_sdk.lifeline). Not
+        # with reload: the reloader would not restart a worker that exits.
+        from naas_abi_sdk.lifeline import exit_on_connection_loss
+
+        exit_on_connection_loss()
     host = os.environ.get("ABI_HOST", api_runtime_configuration.host)
     port = int(os.environ.get("ABI_PORT", api_runtime_configuration.port))
 

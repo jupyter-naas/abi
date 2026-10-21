@@ -1,0 +1,72 @@
+name: CLI end-to-end
+# Creates a project with the CLI from this checkout, adds modules, starts it
+# with `abi dev up` and checks it serves: scripts/cli_smoke.sh, which runs the
+# same way locally. No Docker, no model download.
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: cli-e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: CLI smoke (${{ matrix.variant }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # nats: the default project. without-nats: the legacy one.
+        variant: [nats, without-nats]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            libs/*/pyproject.toml
+            libs/*/uv.lock
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.0
+
+      # After pnpm: the cache is pnpm's store, which `abi dev up` installs
+      # Nexus web from.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: libs/naas-abi/naas_abi/apps/nexus/pnpm-lock.yaml
+
+      - name: Install pinned native NATS server
+        if: matrix.variant == 'nats'
+        run: |
+          curl --fail --location --retry 3 -o /tmp/nats-server.tar.gz https://github.com/nats-io/nats-server/releases/download/v2.14.7/nats-server-v2.14.7-linux-amd64.tar.gz
+          echo "e5c20b1cb2c0566b54c544312e91e011f9e130c5c80f16a14f4cf28ef30b8be2  /tmp/nats-server.tar.gz" | sha256sum --check
+          tar -xzf /tmp/nats-server.tar.gz -C /tmp
+          sudo install /tmp/nats-server-v2.14.7-linux-amd64/nats-server /usr/local/bin/nats-server
+          nats-server --version
+
+      - name: CLI smoke test
+        env:
+          ABI_SMOKE_DIR: ${{ runner.temp }}/abi-cli-smoke
+        run: scripts/cli_smoke.sh ${{ matrix.variant }}
+
+      - name: Upload abi dev logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-smoke-logs-${{ matrix.variant }}
+          path: ${{ runner.temp }}/abi-cli-smoke/logs
+          if-no-files-found: ignore

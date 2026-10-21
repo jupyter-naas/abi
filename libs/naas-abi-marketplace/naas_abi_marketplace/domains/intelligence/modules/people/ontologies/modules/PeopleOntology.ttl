@@ -1,0 +1,1375 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix dc11:  <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix cco:   <https://www.commoncoreontologies.org/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+@prefix people: <http://ontology.naas.ai/people/> .
+
+abi:PeopleOntology a owl:Ontology ;
+  # One owl:imports statement per IRI - onto2py's codegen pre-scan only matches
+  # an IRI directly after the `owl:imports` keyword.
+  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <http://ontology.naas.ai/abi/DocumentContentEntityOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/QualityOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/FacilityOntology> ;
+  rdfs:seeAlso <https://raw.githubusercontent.com/jupyter-naas/abi/refs/heads/main/libs/naas-abi-marketplace/naas_abi_marketplace/domains/intelligence/modules/people/ontologies/modules/PeopleOntology.ttl> ;
+  abi:pythonPackage "naas_abi_marketplace.domains.intelligence.modules.people" ;
+  abi:ontologyResource "ontologies/modules/PeopleOntology.ttl" ;
+  abi:pythonResource "ontologies/modules/PeopleOntology.py" ;
+  dc:title "People Ontology"@en ;
+  dc:description "Shared vocabulary for people intelligence (S2): what can be known about any person, whoever employs them - the occupation and student roles they bear, the missions, skills, language capabilities and interests they carry, and the records and documents that report them. It also holds what a person is presented as: the profile summary and portrait published for them, the certifications they hold and the recommendations others write about them. Internal HR records (employee role, job position, employment record and contract, remuneration, grade, service line) are not here: an organization keeps those about its own staff, and specializes these classes to do so. Process slices (ActOfWorkingProcess, ActOfStudyingProcess, ActOfCertificationProcess, ActOfProfilingProcess) import nothing from this file; this ontology imports them and they restrict these classes in context."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  rdfs:comment "Shared people classes. Process restrictions live in ontologies/processes/. Nothing here depends on an organization's internal records: a vocabulary that specializes these classes imports this one, never the reverse."@en ;
+  dc11:contributor "Florent Ravenel" ;
+  dc11:date "2026-10-04"^^xsd:date .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+# WHO ↔ WHY - person bears an occupation role
+abi:hasOccupationRole a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:bearerOf ;
+    owl:inverseOf abi:isOccupationRoleOf ;
+    rdfs:label "has occupation role"@en ;
+    skos:definition "Relates a person to an occupation role that inheres in them for the duration of an act of working."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range abi:OccupationRole .
+
+abi:isOccupationRoleOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:inheresIn ;
+    owl:inverseOf abi:hasOccupationRole ;
+    rdfs:label "is occupation role of"@en ;
+    skos:definition "Relates an occupation role to the person in whom it inheres."@en ;
+    rdfs:domain abi:OccupationRole ;
+    rdfs:range abi:Person .
+
+# WHO ↔ WHO - convenience shortcut. Backbone is Person bears OccupationRole
+# and participates in ActOfWorking for an organization; do not use this as the
+# employment model.
+abi:worksFor a owl:ObjectProperty ;
+    owl:inverseOf abi:hasWorker ;
+    rdfs:label "works for"@en ;
+    skos:definition "Convenience relation from a person to an organization a source says they work for. Derived from ActOfWorking + forOrganization; not a BFO primitive, and not a statement of an employment contract."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range abi:Organization .
+
+abi:hasWorker a owl:ObjectProperty ;
+    owl:inverseOf abi:worksFor ;
+    rdfs:label "has worker"@en ;
+    skos:definition "Convenience relation from an organization to a person a source says works for it."@en ;
+    rdfs:domain abi:Organization ;
+    rdfs:range abi:Person .
+
+# WHO ↔ WHY - person bears a student role
+abi:hasStudentRole a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:bearerOf ;
+    owl:inverseOf abi:isStudentRoleOf ;
+    rdfs:label "has student role"@en ;
+    skos:definition "Relates a person to a student role that inheres in them for the duration of a course of study."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range abi:StudentRole .
+
+abi:isStudentRoleOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:inheresIn ;
+    owl:inverseOf abi:hasStudentRole ;
+    rdfs:label "is student role of"@en ;
+    skos:definition "Relates a student role to the person in whom it inheres."@en ;
+    rdfs:domain abi:StudentRole ;
+    rdfs:range abi:Person .
+
+# WHO ↔ HOW WE KNOW - person carries an enrollment record
+abi:hasEnrollmentRecord a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
+    owl:inverseOf abi:isEnrollmentRecordOf ;
+    rdfs:label "has enrollment record"@en ;
+    skos:definition "Relates a person to an enrollment record that generically depends on them."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range abi:EnrollmentRecord .
+
+abi:isEnrollmentRecordOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
+    owl:inverseOf abi:hasEnrollmentRecord ;
+    rdfs:label "is enrollment record of"@en ;
+    skos:definition "Relates an enrollment record to the person on which it generically depends."@en ;
+    rdfs:domain abi:EnrollmentRecord ;
+    rdfs:range abi:Person .
+
+# WHO ↔ HOW WE KNOW - person carries a certification
+abi:hasCertification a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
+    owl:inverseOf abi:isCertificationOf ;
+    rdfs:label "has certification"@en ;
+    skos:definition "Relates a person to a certification that generically depends on them."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range abi:Certification .
+
+abi:isCertificationOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
+    owl:inverseOf abi:hasCertification ;
+    rdfs:label "is certification of"@en ;
+    skos:definition "Relates a certification to the person on which it generically depends."@en ;
+    rdfs:domain abi:Certification ;
+    rdfs:range abi:Person .
+
+# HOW WE KNOW ↔ WHO - certification is issued by an organization
+abi:issuedByOrganization a owl:ObjectProperty ;
+    owl:inverseOf abi:isIssuerOfCertification ;
+    rdfs:label "issued by organization"@en ;
+    skos:definition "Relates a certification to the organization that issued it and stands behind what it attests."@en ;
+    rdfs:domain abi:Certification ;
+    rdfs:range abi:Organization .
+
+abi:isIssuerOfCertification a owl:ObjectProperty ;
+    owl:inverseOf abi:issuedByOrganization ;
+    rdfs:label "is issuer of certification"@en ;
+    skos:definition "Relates an organization to a certification it issued."@en ;
+    rdfs:domain abi:Organization ;
+    rdfs:range abi:Certification .
+
+# WHO ↔ HOW IT IS - person bears a language capability
+abi:hasLanguageCapability a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:bearerOf ;
+    owl:inverseOf abi:isLanguageCapabilityOf ;
+    rdfs:label "has language capability"@en ;
+    skos:definition "Relates a person to a language capability that inheres in them."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range abi:LanguageCapability .
+
+abi:isLanguageCapabilityOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:inheresIn ;
+    owl:inverseOf abi:hasLanguageCapability ;
+    rdfs:label "is language capability of"@en ;
+    skos:definition "Relates a language capability to the person in whom it inheres."@en ;
+    rdfs:domain abi:LanguageCapability ;
+    rdfs:range abi:Person .
+
+# HOW IT IS ↔ HOW WE KNOW - language capability is held for one language
+abi:ofLanguage a owl:ObjectProperty ;
+    owl:inverseOf abi:isLanguageOfCapability ;
+    rdfs:label "of language"@en ;
+    skos:definition "Relates a language capability to the language it is held for. The language is a CCO Language: a directive information content entity prescribing a canonical format for communication, shared by every speaker of it."@en ;
+    rdfs:domain abi:LanguageCapability ;
+    rdfs:range cco:ont00001175 .
+
+abi:isLanguageOfCapability a owl:ObjectProperty ;
+    owl:inverseOf abi:ofLanguage ;
+    rdfs:label "is language of capability"@en ;
+    skos:definition "Relates a language to a capability held for it by some person."@en ;
+    rdfs:domain cco:ont00001175 ;
+    rdfs:range abi:LanguageCapability .
+
+# WHO ↔ HOW WE KNOW - person is the subject of a recommendation
+abi:hasRecommendation a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
+    owl:inverseOf abi:isRecommendationOf ;
+    rdfs:label "has recommendation"@en ;
+    skos:definition "Relates a person to a recommendation written about them."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range abi:Recommendation .
+
+abi:isRecommendationOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
+    owl:inverseOf abi:hasRecommendation ;
+    rdfs:label "is recommendation of"@en ;
+    skos:definition "Relates a recommendation to the person it is about."@en ;
+    rdfs:domain abi:Recommendation ;
+    rdfs:range abi:Person .
+
+# HOW WE KNOW ↔ WHO - recommendation was written by a person
+abi:hasRecommendationAuthor a owl:ObjectProperty ;
+    owl:inverseOf abi:isAuthorOfRecommendation ;
+    rdfs:label "has recommendation author"@en ;
+    skos:definition "Relates a recommendation to the person who wrote it. Distinct from the person it is about: a recommendation always has two people."@en ;
+    rdfs:domain abi:Recommendation ;
+    rdfs:range abi:Person .
+
+abi:isAuthorOfRecommendation a owl:ObjectProperty ;
+    owl:inverseOf abi:hasRecommendationAuthor ;
+    rdfs:label "is author of recommendation"@en ;
+    skos:definition "Relates a person to a recommendation they wrote about someone else."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range abi:Recommendation .
+
+# WHO ↔ HOW IT IS - person bears an interest
+abi:hasInterest a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:bearerOf ;
+    owl:inverseOf abi:isInterestOf ;
+    rdfs:label "has interest"@en ;
+    skos:definition "Relates a person to an interest that inheres in them."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range abi:Interest .
+
+abi:isInterestOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:inheresIn ;
+    owl:inverseOf abi:hasInterest ;
+    rdfs:label "is interest of"@en ;
+    skos:definition "Relates an interest to the person in whom it inheres."@en ;
+    rdfs:domain abi:Interest ;
+    rdfs:range abi:Person .
+
+# HOW IT IS ↔ ANY - interest points at what it is an interest in
+abi:hasInterestTarget a owl:ObjectProperty ;
+    owl:inverseOf abi:isInterestTargetOf ;
+    rdfs:label "has interest target"@en ;
+    skos:definition "Relates an interest to the entity it is an interest in. Deliberately unrestricted in range: an interest can be in an organization, a person, a place or a subject that has no individual in this graph, in which case only abi:interest_name is asserted."@en ;
+    rdfs:domain abi:Interest .
+
+abi:isInterestTargetOf a owl:ObjectProperty ;
+    owl:inverseOf abi:hasInterestTarget ;
+    rdfs:label "is interest target of"@en ;
+    skos:definition "Relates an entity to an interest held in it."@en ;
+    rdfs:range abi:Interest .
+
+# WHO ↔ HOW WE KNOW - person carries a portrait
+abi:hasPortrait a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
+    owl:inverseOf abi:isPortraitOf ;
+    rdfs:label "has portrait"@en ;
+    skos:definition "Relates a person to a portrait image of them."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range abi:Portrait .
+
+abi:isPortraitOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
+    owl:inverseOf abi:hasPortrait ;
+    rdfs:label "is portrait of"@en ;
+    skos:definition "Relates a portrait image to the person it depicts."@en ;
+    rdfs:domain abi:Portrait ;
+    rdfs:range abi:Person .
+
+# WHO ↔ HOW WE KNOW - person carries a profile summary
+abi:hasProfileSummary a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:isCarrierOf ;
+    owl:inverseOf abi:isProfileSummaryOf ;
+    rdfs:label "has profile summary"@en ;
+    skos:definition "Relates a person to the profile summary that states how they present themselves."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range abi:ProfileSummary .
+
+abi:isProfileSummaryOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf abi:genericallyDependsOn ;
+    owl:inverseOf abi:hasProfileSummary ;
+    rdfs:label "is profile summary of"@en ;
+    skos:definition "Relates a profile summary to the person it is about."@en ;
+    rdfs:domain abi:ProfileSummary ;
+    rdfs:range abi:Person .
+
+# WHAT ↔ HOW IT IS - a planned act develops the skills the person bears
+abi:developsSkill a owl:ObjectProperty ;
+  owl:inverseOf abi:isSkillDevelopedIn ;
+  rdfs:label "develops skill"@en ;
+  skos:definition "Relates a planned act (an act of working or of studying, for one) to a skill exercised and developed in the course of it."@en ;
+  rdfs:domain cco:ont00000228 ;
+  rdfs:range  abi:Skill .
+
+abi:isSkillDevelopedIn a owl:ObjectProperty ;
+  owl:inverseOf abi:developsSkill ;
+  rdfs:label "is skill developed in"@en ;
+  skos:definition "Relates a skill to a planned act in which it is exercised and developed."@en ;
+  rdfs:domain abi:Skill ;
+  rdfs:range  cco:ont00000228 .
+
+# WHAT ↔ HOW IT IS - a planned act develops the language capabilities the person bears
+abi:developsLanguageCapability a owl:ObjectProperty ;
+  owl:inverseOf abi:isLanguageCapabilityDevelopedIn ;
+  rdfs:label "develops language capability"@en ;
+  skos:definition "Relates a planned act (an act of working, of studying or of certification) to a language capability exercised and developed in the course of it."@en ;
+  rdfs:domain cco:ont00000228 ;
+  rdfs:range  abi:LanguageCapability .
+
+abi:isLanguageCapabilityDevelopedIn a owl:ObjectProperty ;
+  owl:inverseOf abi:developsLanguageCapability ;
+  rdfs:label "is language capability developed in"@en ;
+  skos:definition "Relates a language capability to a planned act in which it is exercised and developed."@en ;
+  rdfs:domain abi:LanguageCapability ;
+  rdfs:range  cco:ont00000228 .
+
+# WHO ↔ HOW IT IS - the person bears the skill
+abi:hasSkill a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:bearerOf ;
+  owl:inverseOf abi:isSkillOf ;
+  rdfs:label "has skill"@en ;
+  skos:definition "Relates a person to a skill quality that inheres in them."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  abi:Skill .
+
+abi:isSkillOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:inheresIn ;
+  owl:inverseOf abi:hasSkill ;
+  rdfs:label "is skill of"@en ;
+  skos:definition "Relates a skill to the person in whom it inheres."@en ;
+  rdfs:domain abi:Skill ;
+  rdfs:range  abi:Person .
+
+# WHO ↔ HOW WE KNOW - the person carries the profile document
+abi:hasProfileDocument a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:isCarrierOf ;
+  owl:inverseOf abi:isProfileDocumentOf ;
+  rdfs:label "has profile document"@en ;
+  skos:definition "Relates a person to a profile document that generically depends on them."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  abi:ProfileDocument .
+
+abi:isProfileDocumentOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:genericallyDependsOn ;
+  owl:inverseOf abi:hasProfileDocument ;
+  rdfs:label "is profile document of"@en ;
+  skos:definition "Relates a profile document to the person it is about and on which it generically depends."@en ;
+  rdfs:domain abi:ProfileDocument ;
+  rdfs:range  abi:Person .
+
+# HOW WE KNOW ↔ HOW WE KNOW - provenance of an asserted entity
+abi:isSourcedFrom a owl:ObjectProperty ;
+  rdfs:subPropertyOf cco:ont00001808 ;
+  owl:inverseOf abi:isSourceOf ;
+  rdfs:label "is sourced from"@en ;
+  skos:definition "Relates an information content entity to the profile document it was read from."@en ;
+  rdfs:domain abi:GenericallyDependentContinuant ;
+  rdfs:range  abi:ProfileDocument .
+
+abi:isSourceOf a owl:ObjectProperty ;
+  owl:inverseOf abi:isSourcedFrom ;
+  rdfs:label "is source of"@en ;
+  skos:definition "Relates a profile document to an information content entity read from it."@en ;
+  rdfs:domain abi:ProfileDocument ;
+  rdfs:range  abi:GenericallyDependentContinuant .
+
+# WHAT ↔ HOW WE KNOW - a planned act, of whatever kind, informed by the profile
+# document it was read from. abi:isSourcedFrom carries this for a
+# generically dependent continuant (a Mission, a Certification); this is the
+# same idea for the act itself, so every act that registers something from a
+# profile document can say so, and the document is never left unconnected to
+# the acts it substantiates.
+abi:hasSourceDocument a owl:ObjectProperty ;
+  rdfs:subPropertyOf cco:ont00001808 ;
+  owl:inverseOf abi:isSourceDocumentOf ;
+  rdfs:label "has source document"@en ;
+  skos:definition "Relates a planned act to the profile document it was read from and registered against."@en ;
+  rdfs:domain cco:ont00000228 ;
+  rdfs:range  abi:ProfileDocument .
+
+abi:isSourceDocumentOf a owl:ObjectProperty ;
+  owl:inverseOf abi:hasSourceDocument ;
+  rdfs:label "is source document of"@en ;
+  skos:definition "Relates a profile document to a planned act that was read from it and registered against it."@en ;
+  rdfs:domain abi:ProfileDocument ;
+  rdfs:range  cco:ont00000228 .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+abi:job_title a owl:DatatypeProperty ;
+    rdfs:label "job title"@en ;
+    skos:definition "Title of an occupation role as the source states it."@en ;
+    skos:example "'Head of Product'; 'Senior Manager, Audit'."@en ;
+    rdfs:domain abi:OccupationRole ;
+    rdfs:range xsd:string .
+
+abi:family_name a owl:DatatypeProperty ;
+    rdfs:label "family name"@en ;
+    skos:altLabel "surname"@en ;
+    skos:definition "The name a person shares with or inherits from kin, as distinct from the given name conferred on them individually."@en ;
+    skos:example "'Ravenel'."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range  xsd:string .
+
+abi:instant_date a owl:DatatypeProperty ;
+    rdfs:label "instant date"@en ;
+    skos:definition "Calendar date a temporal instant denotes, carried so processes can be ordered and capped by recency without parsing display labels."@en ;
+    rdfs:domain abi:TemporalInstant ;
+    rdfs:range  xsd:date .
+
+abi:program_name a owl:DatatypeProperty ;
+    rdfs:label "program name"@en ;
+    skos:definition "Name of the curriculum or programme the enrollment is for."@en ;
+    rdfs:domain abi:EnrollmentRecord ;
+    rdfs:range  xsd:string .
+
+abi:enrollment_date a owl:DatatypeProperty ;
+    rdfs:label "enrollment date"@en ;
+    skos:definition "Date on which the course of study documented by this record began."@en ;
+    rdfs:domain abi:EnrollmentRecord ;
+    rdfs:range  xsd:date .
+
+abi:completion_date a owl:DatatypeProperty ;
+    rdfs:label "completion date"@en ;
+    skos:definition "Date on which the course of study documented by this record ended. Absent while the person is still enrolled."@en ;
+    rdfs:domain abi:EnrollmentRecord ;
+    rdfs:range  xsd:date .
+
+abi:profile_slug a owl:DatatypeProperty ;
+    rdfs:label "profile slug"@en ;
+    skos:definition "Stable, lowercase, ASCII key identifying a person in profile URLs and dataset rows. Assigned by the system that publishes the profile, not by the person."@en ;
+    skos:example "'alice_dupont'."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range  xsd:string .
+
+# Contact details. Stated on the person, like the profile slug, because they
+# address the person rather than any one role, document or job. A directory
+# publishes them only when its instance opts in (privacy.publish_contact_details).
+abi:email_address a owl:DatatypeProperty ;
+    rdfs:label "email address"@en ;
+    skos:definition "Address at which the person can be reached by email, as published for them by the directory that lists them."@en ;
+    skos:example "'alice.dupont@demo.example'."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range  xsd:string .
+
+abi:telephone_number a owl:DatatypeProperty ;
+    rdfs:label "telephone number"@en ;
+    skos:definition "Number at which the person can be reached by telephone, written in international form with its country code."@en ;
+    skos:example "'+33 1 99 00 00 01'."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range  xsd:string .
+
+abi:linkedin_url a owl:DatatypeProperty ;
+    rdfs:label "linkedin url"@en ;
+    skos:definition "Address of the person's own LinkedIn profile page. Distinct from the source a profile was read from, which may be any published page."@en ;
+    skos:example "'https://www.linkedin.com/in/alice-dupont-demo'."@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range  xsd:anyURI .
+
+abi:certification_name a owl:DatatypeProperty ;
+    rdfs:label "certification name"@en ;
+    skos:definition "Name of the certification as published by the issuing organization."@en ;
+    skos:example "'Certified Information Systems Auditor'."@en ;
+    rdfs:domain abi:Certification ;
+    rdfs:range  xsd:string .
+
+abi:issue_date a owl:DatatypeProperty ;
+    rdfs:label "issue date"@en ;
+    skos:definition "Date on which the certification was issued."@en ;
+    rdfs:domain abi:Certification ;
+    rdfs:range  xsd:date .
+
+abi:expiry_date a owl:DatatypeProperty ;
+    rdfs:label "expiry date"@en ;
+    skos:definition "Date on which the certification ceases to be valid. Absent when the certification does not expire."@en ;
+    rdfs:domain abi:Certification ;
+    rdfs:range  xsd:date .
+
+abi:credential_id a owl:DatatypeProperty ;
+    rdfs:label "credential id"@en ;
+    skos:definition "Identifier the issuing organization assigned to this certification, by which it can be verified."@en ;
+    rdfs:domain abi:Certification ;
+    rdfs:range  xsd:string .
+
+abi:credential_url a owl:DatatypeProperty ;
+    rdfs:label "credential url"@en ;
+    skos:definition "Address at which the issuing organization publishes verification of this certification."@en ;
+    rdfs:domain abi:Certification ;
+    rdfs:range  xsd:anyURI .
+
+abi:certification_status a owl:DatatypeProperty ;
+    rdfs:label "certification status"@en ;
+    skos:definition "State of a certification at a point in time, e.g. 'active', 'expired', 'in-progress'."@en ;
+    rdfs:domain abi:Certification ;
+    rdfs:range  xsd:string .
+
+abi:language_name a owl:DatatypeProperty ;
+    rdfs:label "language name"@en ;
+    skos:definition "Name of the language a capability is held for, as displayed."@en ;
+    skos:example "'French'; 'Mandarin'."@en ;
+    rdfs:domain abi:LanguageCapability ;
+    rdfs:range  xsd:string .
+
+abi:proficiency_level a owl:DatatypeProperty ;
+    rdfs:label "proficiency level"@en ;
+    skos:definition "Reported level of a language capability. Free text rather than a code list: sources state it in incompatible scales (CEFR, 'native', 'professional working proficiency') and converting between them would assert more than the source does."@en ;
+    skos:example "'Native or bilingual'; 'C1'."@en ;
+    rdfs:domain abi:LanguageCapability ;
+    rdfs:range  xsd:string .
+
+abi:recommendation_content a owl:DatatypeProperty ;
+    rdfs:label "recommendation content"@en ;
+    skos:definition "Full text of the recommendation, as written by its author."@en ;
+    rdfs:domain abi:Recommendation ;
+    rdfs:range  xsd:string .
+
+abi:recommendation_date a owl:DatatypeProperty ;
+    rdfs:label "recommendation date"@en ;
+    skos:definition "Date on which the recommendation was written."@en ;
+    rdfs:domain abi:Recommendation ;
+    rdfs:range  xsd:date .
+
+abi:relationship_label a owl:DatatypeProperty ;
+    rdfs:label "relationship label"@en ;
+    skos:definition "How the author of a recommendation describes their working relationship with the person it is about."@en ;
+    skos:example "'Managed Alice directly'; 'Worked with Alice on the same team'."@en ;
+    rdfs:domain abi:Recommendation ;
+    rdfs:range  xsd:string .
+
+abi:interest_name a owl:DatatypeProperty ;
+    rdfs:label "interest name"@en ;
+    skos:definition "Name of what the interest is in, carried on the interest itself so an interest with no individual to point at is still stated."@en ;
+    skos:example "'Ocean conservation'."@en ;
+    rdfs:domain abi:Interest ;
+    rdfs:range  xsd:string .
+
+abi:interest_description a owl:DatatypeProperty ;
+    rdfs:label "interest description"@en ;
+    skos:definition "Sentence stating what the interest consists in."@en ;
+    rdfs:domain abi:Interest ;
+    rdfs:range  xsd:string .
+
+abi:interest_kind a owl:DatatypeProperty ;
+    rdfs:label "interest kind"@en ;
+    skos:definition "Category of the interest target, used to group interests for display, e.g. 'organization', 'school', 'person', 'topic'."@en ;
+    rdfs:domain abi:Interest ;
+    rdfs:range  xsd:string .
+
+abi:portrait_url a owl:DatatypeProperty ;
+    rdfs:label "portrait url"@en ;
+    skos:definition "Address at which the portrait image can be retrieved."@en ;
+    rdfs:domain abi:Portrait ;
+    rdfs:range  xsd:anyURI .
+
+abi:portrait_path a owl:DatatypeProperty ;
+    rdfs:label "portrait path"@en ;
+    skos:definition "Repository-relative or object-storage path of the portrait image, for portraits that are not published at a public address."@en ;
+    rdfs:domain abi:Portrait ;
+    rdfs:range  xsd:string .
+
+abi:headline_text a owl:DatatypeProperty ;
+    rdfs:label "headline text"@en ;
+    skos:definition "One-line statement of what a person does, as they present it. Distinct from abi:job_title, which is the title of one occupation role."@en ;
+    skos:example "'Partner, Audit - Consumer goods and food & beverage'."@en ;
+    rdfs:domain abi:ProfileSummary ;
+    rdfs:range  xsd:string .
+
+abi:summary_content a owl:DatatypeProperty ;
+    rdfs:label "summary content"@en ;
+    skos:definition "Full text of the profile summary: the paragraph a person or their organization publishes about them."@en ;
+    rdfs:domain abi:ProfileSummary ;
+    rdfs:range  xsd:string .
+
+abi:quote_content a owl:DatatypeProperty ;
+    rdfs:label "quote content"@en ;
+    skos:definition "Sentence attributed to the person in their own words, published alongside the summary."@en ;
+    rdfs:domain abi:ProfileSummary ;
+    rdfs:range  xsd:string .
+
+abi:years_of_experience a owl:DatatypeProperty ;
+    rdfs:label "years of experience"@en ;
+    skos:definition "Number of years of professional experience the profile summary claims. A claim carried by the summary and traceable to its source, not a figure computed from the acts of working in this graph: the graph holds only the working history that has been recorded."@en ;
+    rdfs:domain abi:ProfileSummary ;
+    rdfs:range  xsd:integer .
+
+abi:office_label a owl:DatatypeProperty ;
+    rdfs:label "office label"@en ;
+    skos:definition "Name by which an organization refers to a site, as it appears in its own directory."@en ;
+    skos:example "'Paris La Défense'."@en ;
+    rdfs:domain abi:Site ;
+    rdfs:range  xsd:string .
+
+abi:city_name a owl:DatatypeProperty ;
+    rdfs:label "city name"@en ;
+    skos:definition "Name of the city a site is in."@en ;
+    rdfs:domain abi:Site ;
+    rdfs:range  xsd:string .
+
+abi:country_name a owl:DatatypeProperty ;
+    rdfs:label "country name"@en ;
+    skos:definition "Name of the country a site is in."@en ;
+    rdfs:domain abi:Site ;
+    rdfs:range  xsd:string .
+
+abi:site_country_code a owl:DatatypeProperty ;
+    rdfs:label "site country code"@en ;
+    skos:definition "ISO 3166-1 alpha-2 code of the country a site is in, carried so places can be grouped and flagged without matching country names across languages."@en ;
+    skos:example "'FR'; 'SG'; 'ZA'."@en ;
+    rdfs:domain abi:Site ;
+    rdfs:range  xsd:string .
+
+abi:skill_name a owl:DatatypeProperty ;
+  rdfs:label "skill name"@en ;
+  skos:definition "Name of a skill as stated on the source profile."@en ;
+  rdfs:domain abi:Skill ;
+  rdfs:range  xsd:string .
+
+abi:source_url a owl:DatatypeProperty ;
+  rdfs:label "source url"@en ;
+  skos:definition "Address at which a profile document can be retrieved."@en ;
+  rdfs:domain abi:ProfileDocument ;
+  rdfs:range  xsd:anyURI .
+
+abi:duration_label a owl:DatatypeProperty ;
+  rdfs:label "duration label"@en ;
+  skos:definition "Human-readable span of a temporal region as stated on the source profile, e.g. '3 yrs 5 mos'."@en ;
+  rdfs:domain abi:TemporalRegion ;
+  rdfs:range  xsd:string .
+
+#################################################################
+#    Classes - HOW WE KNOW
+#################################################################
+
+abi:EnrollmentRecord a owl:Class ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
+      [ a owl:Restriction ; owl:onProperty abi:isEnrollmentRecordOf ; owl:someValuesFrom abi:Person ] ,
+      [ a owl:Restriction ; owl:onProperty abi:genericallyDependsOn ; owl:someValuesFrom cco:ont00000564 ] ,
+      [ a owl:Restriction ; owl:onProperty abi:isConcretizedBy ; owl:someValuesFrom abi:ActOfStudying ] ;
+    rdfs:label "Enrollment Record"@en ;
+    skos:definition "An information content entity that documents a person's enrollment in a curriculum at an educational organization, including the programme name and its start and end dates."@en ;
+    skos:example "Enrollment in the Computer Science licence at Université de Rennes 1, 2009-09-01 to 2014-06-30."@en .
+
+abi:AcademicDegree a owl:Class ;
+    owl:equivalentClass cco:ont00002003 ;
+    rdfs:subClassOf abi:GenericallyDependentContinuant ,
+      [ a owl:Restriction ; owl:onProperty abi:genericallyDependsOn ; owl:someValuesFrom abi:Person ] ;
+    rdfs:label "Academic Degree"@en ;
+    skos:definition "A certificate issued by an educational organization to a person to indicate that the person has satisfactorily completed a course of study. Equivalent to CCO Academic Degree."@en ;
+    skos:example "Licence Informatique, Université de Rennes 1."@en .
+
+abi:Certification a owl:Class ;
+    rdfs:subClassOf cco:ont00002002 ,
+      abi:GenericallyDependentContinuant ,
+      [ a owl:Restriction ; owl:onProperty abi:isCertificationOf ; owl:someValuesFrom abi:Person ] ;
+    rdfs:label "Certification"@en ;
+    skos:definition "A certificate issued to a person by an organization to attest that they have demonstrated a competence, met a professional standard, or hold a licence to practise. Subclass of CCO Certificate, sibling of abi:AcademicDegree."@en ;
+    skos:example "Certified Information Systems Auditor, issued by ISACA in 2019; Commissaire aux comptes."@en ;
+    rdfs:comment "Covers both certifications and licences: the difference is who may withhold it and what it permits, not what kind of entity it is. Where that distinction matters, state it with abi:certification_status and the issuing organization."@en .
+
+abi:Recommendation a owl:Class ;
+    rdfs:subClassOf abi:DocumentContentEntity ,
+      [ a owl:Restriction ; owl:onProperty abi:isRecommendationOf ; owl:someValuesFrom abi:Person ] ,
+      [ a owl:Restriction ; owl:onProperty abi:hasRecommendationAuthor ; owl:someValuesFrom abi:Person ] ,
+      [ a owl:Restriction ; owl:onProperty abi:participatesIn ; owl:someValuesFrom abi:ActOfProfiling ] ;
+    rdfs:label "Recommendation"@en ;
+    skos:definition "A document content entity in which one person states, in their own words, what it was like to work with another and what that person is good at."@en ;
+    skos:example "'Alice rebuilt our close process in one quarter' - written by her former CFO, 2024-11-02."@en ;
+    rdfs:comment "Two people, and both are required: the subject it generically depends on, and the author who wrote it. An anonymous testimonial is not a recommendation in this sense and must not be minted as one."@en .
+
+abi:Portrait a owl:Class ;
+    rdfs:subClassOf cco:ont00002004 ,
+      abi:GenericallyDependentContinuant ,
+      [ a owl:Restriction ; owl:onProperty abi:isPortraitOf ; owl:someValuesFrom abi:Person ] ,
+      [ a owl:Restriction ; owl:onProperty abi:participatesIn ; owl:someValuesFrom abi:ActOfProfiling ] ;
+    rdfs:label "Portrait"@en ;
+    skos:definition "An image that depicts a person, published to identify them. Subclass of CCO Image."@en ;
+    skos:example "The photograph published on a person's directory page."@en ;
+    rdfs:comment "The individual carries the address of the image (abi:portrait_url or abi:portrait_path), never the bytes. Image data belongs in object storage."@en .
+
+abi:ProfileSummary a owl:Class ;
+    rdfs:subClassOf abi:DocumentContentEntity ,
+      [ a owl:Restriction ; owl:onProperty abi:isProfileSummaryOf ; owl:someValuesFrom abi:Person ] ,
+      [ a owl:Restriction ; owl:onProperty abi:isSourcedFrom ; owl:someValuesFrom abi:ProfileDocument ] ,
+      [ a owl:Restriction ; owl:onProperty abi:participatesIn ; owl:someValuesFrom abi:ActOfProfiling ] ;
+    rdfs:label "Profile Summary"@en ;
+    skos:definition "A document content entity that states how a person is presented in general: the one-line headline, the paragraph about them, an attributed quote, and the years of experience claimed for them."@en ;
+    skos:example "The headline and 'About' paragraph on a person's published directory page."@en ;
+    rdfs:comment "Person-level, where abi:Mission is job-level: the summary spans a career, a mission describes one act of working. Sourced from a ProfileDocument so every claim it carries stays traceable to where it was published."@en .
+
+abi:ProfileDocument a owl:Class ;
+  rdfs:subClassOf abi:DocumentContentEntity ,
+    [ a owl:Restriction ; owl:onProperty abi:genericallyDependsOn ; owl:someValuesFrom abi:Person ] ;
+  rdfs:label "Profile Document"@en ;
+  skos:definition "A document content entity, published at a retrievable address, from which statements about a person's history are taken: what they did, where they studied, what they hold. Carried by the person the profile is about."@en ;
+  skos:example "https://demo.example/profiles/demo"@en ;
+  rdfs:comment "The provenance anchor of the demo graph: everything asserted from a profile page: missions, roles, skills, enrollments, degrees, certifications points back to the ProfileDocument it was read from."@en .
+
+#################################################################
+#    Classes - WHY
+#################################################################
+
+abi:OccupationRole a owl:Class ;
+    owl:equivalentClass cco:ont00000984 ;
+    rdfs:subClassOf abi:Role ,
+      [ a owl:Restriction ; owl:onProperty abi:isOccupationRoleOf ; owl:someValuesFrom abi:Person ] ,
+      [ a owl:Restriction ; owl:onProperty abi:hasRealization ; owl:someValuesFrom abi:ActOfWorking ] ;
+    rdfs:label "Occupation Role"@en ;
+    skos:definition "A role that inheres in a person in virtue of the work they perform for an organization, realized in the Act of Working. Equivalent to CCO Occupation Role."@en ;
+    skos:example "The role Jane bears as a data engineer at ACME, as her published profile states it."@en ;
+    rdfs:comment "Externally grounded: it exists only while the person works in that capacity, and ends without the person ceasing to exist. What a source says about a job ends here; the employing organization's own view of it (the position it defined, the contract, the record) is internal and specializes this class elsewhere."@en .
+
+abi:StudentRole a owl:Class ;
+    rdfs:subClassOf abi:Role ,
+      [ a owl:Restriction ; owl:onProperty abi:isStudentRoleOf ; owl:someValuesFrom abi:Person ] ,
+      [ a owl:Restriction ; owl:onProperty abi:hasRealization ; owl:someValuesFrom abi:ActOfStudying ] ;
+    rdfs:label "Student Role"@en ;
+    skos:definition "A role that inheres in a person in virtue of being enrolled in a curriculum at an educational organization, realized in the Act of Studying."@en ;
+    skos:example "The role Florent bears as a computer-science student at Université de Rennes 1."@en ;
+    rdfs:comment "No CCO student-role class; minted in the people namespace. Ends when the enrollment ends, without the person ceasing to exist."@en .
+
+#################################################################
+#    Classes - HOW IT IS
+#################################################################
+
+abi:LanguageCapability a owl:Class ;
+    rdfs:subClassOf abi:Quality ,
+      [ a owl:Restriction ; owl:onProperty abi:isLanguageCapabilityOf ; owl:someValuesFrom abi:Person ] ,
+      [ a owl:Restriction ; owl:onProperty abi:isLanguageCapabilityDevelopedIn ; owl:someValuesFrom cco:ont00000228 ] ,
+      [ a owl:Restriction ; owl:onProperty abi:ofLanguage ; owl:someValuesFrom cco:ont00001175 ] ;
+    rdfs:label "Language Capability"@en ;
+    skos:definition "A quality that inheres in a person and holds how well they can communicate in one language, developed and exercised in the acts the person carries out: working, studying, being certified."@en ;
+    skos:example "Spanish at native or bilingual proficiency."@en ;
+    rdfs:comment "Deliberately NOT equivalent to CCO Language Skill (cco:ont00000181). That class is an Agent Capability and therefore a BFO realizable entity, which is disjoint from quality; this domain already models abi:Skill as a quality, and asserting both would make the ontology inconsistent. The language itself is a CCO Language, reached through abi:ofLanguage. Like a skill, it is borne by the person and outlives any one act: abi:developsLanguageCapability links a planned act, of whatever kind, to the capabilities exercised and grown in it."@en .
+
+abi:Interest a owl:Class ;
+    rdfs:subClassOf abi:Quality ,
+      [ a owl:Restriction ; owl:onProperty abi:isInterestOf ; owl:someValuesFrom abi:Person ] ,
+      [ a owl:Restriction ; owl:onProperty abi:participatesIn ; owl:someValuesFrom abi:ActOfProfiling ] ;
+    rdfs:label "Interest"@en ;
+    skos:definition "A quality that inheres in a person and holds what they follow, care about or give their attention to outside the duties of any one job."@en ;
+    skos:example "Ocean conservation; the alumni association of a school they attended."@en ;
+    rdfs:comment "Modelled as a quality for consistency with abi:Skill rather than as a disposition. Points at its target with abi:hasInterestTarget where an individual exists for it, and otherwise carries abi:interest_name alone."@en .
+
+abi:Skill a owl:Class ;
+  rdfs:subClassOf abi:Quality ,
+    [ a owl:Restriction ; owl:onProperty abi:inheresIn ; owl:someValuesFrom abi:Person ] ,
+    [ a owl:Restriction ; owl:onProperty abi:isSkillDevelopedIn ; owl:someValuesFrom cco:ont00000228 ] ;
+  rdfs:label "Skill"@en ;
+  skos:definition "A quality that inheres in a person, consisting in a learned capacity to perform a kind of task, developed and exercised in the acts the person carries out: working, studying, being certified."@en ;
+  skos:example "Python (Programming Language); Business Analysis; SAP BFC."@en ;
+  rdfs:comment "Borne by the person, not by the process: the skill outlives any one act of working. abi:developsSkill links a planned act, of whatever kind, to the skills exercised and grown in it."@en .
+
+# >>> onto2py:consolidated-processes >>>
+# Generated by naas_abi_core.utils.onto2py.consolidate from
+# ontologies/processes/*.ttl. Do not edit between these markers: edit the
+# process files and re-run onto2py on the module.
+
+<http://ontology.naas.ai/abi/PeopleOntology>
+  owl:imports <http://ontology.naas.ai/abi/GeospatialRegionOntology> ;
+  owl:imports <http://ontology.naas.ai/abi/OrganizationOntology> ;
+  owl:imports <http://ontology.naas.ai/abi/PersonOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/EventOntology> .
+
+#################################################################
+#    Process slice: http://ontology.naas.ai/abi/ActOfCertificationProcess
+#    Source: ontologies/processes/ActOfCertificationProcess.ttl
+#################################################################
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+abi:ActOfCertification a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 ,
+    [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Person ] ,
+    [ a owl:Restriction ; owl:onProperty abi:forCertifyingOrganization ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:GeospatialRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasAwardedCertification ; owl:someValuesFrom abi:Certification ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom abi:CertificationCandidateRole ] ,
+    [ a owl:Restriction ; owl:onProperty abi:demonstratesSkill ; owl:someValuesFrom abi:Skill ] ,
+    [ a owl:Restriction ; owl:onProperty abi:developsLanguageCapability ; owl:someValuesFrom abi:LanguageCapability ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasSourceDocument ; owl:someValuesFrom abi:ProfileDocument ] ;
+  rdfs:label "Act of Certification"@en ;
+  skos:definition "A Planned Act in which a certifying organization attests that a person has demonstrated a competence, met a professional standard or holds a licence to practise, realizing a certification candidate role and concretizing the certification it awards."@en ;
+  skos:example "Alice Dupont being certified as a Certified Information Systems Auditor by ISACA in 2019."@en ;
+  rdfs:comment "No CCO act of certification; the process is a direct subclass of CCO Planned Act. The act is not the certificate: it ends when the certification is awarded, whereas the Certification persists and may later expire."@en .
+
+#################################################################
+#    Classes - WHY
+#################################################################
+
+abi:CertificationCandidateRole a owl:Class ;
+  rdfs:subClassOf abi:Role ,
+    [ a owl:Restriction ; owl:onProperty abi:isCertificationCandidateRoleOf ; owl:someValuesFrom abi:Person ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasRealization ; owl:someValuesFrom abi:ActOfCertification ] ;
+  rdfs:label "Certification Candidate Role"@en ;
+  skos:definition "A role that inheres in a person in virtue of being assessed by a certifying organization for a certification, realized in the Act of Certification."@en ;
+  skos:example "The role Alice Dupont bears as a candidate for the Certified Information Systems Auditor certification."@en ;
+  rdfs:comment "No CCO candidate-role class; minted in the people namespace. Kept apart from the occupation and student roles: a person is a candidate whether or not they were working or enrolled at the time."@en .
+
+#################################################################
+#    Classes - HOW WE KNOW (restrictions on shared IRIs)
+#################################################################
+
+abi:Certification rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty abi:isConcretizedBy ; owl:someValuesFrom abi:ActOfCertification ] ,
+    [ a owl:Restriction ; owl:onProperty abi:isSourcedFrom ; owl:someValuesFrom abi:ProfileDocument ] .
+
+#################################################################
+#    Classes - WHO x WHERE (restrictions on shared IRIs)
+#################################################################
+
+# Person and Organization are ABI classes and Facility is a CCO class: this slice only
+# adds, by restriction, what the act of certification ties them to.
+abi:Person rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty abi:hasCertificationFacility ; owl:someValuesFrom cco:ont00000192 ] .
+
+abi:Organization rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty abi:hasAssessmentFacility ; owl:someValuesFrom cco:ont00000192 ] .
+
+# WHERE x WHERE - the facility stands at a geospatial location (a site), which is
+# a continuant part of the city, region and country the act occurs in.
+cco:ont00000192 rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty abi:locatedIn ; owl:someValuesFrom abi:GeospatialLocation ] .
+
+#################################################################
+#    Object properties - process-only
+#################################################################
+
+abi:hasActOfCertification a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:participatesIn ;
+  owl:inverseOf abi:isActOfCertificationOf ;
+  rdfs:label "has act of certification"@en ;
+  skos:definition "Relates a person to the act of certification in which they are certified."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  abi:ActOfCertification .
+
+abi:isActOfCertificationOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:hasParticipant ;
+  owl:inverseOf abi:hasActOfCertification ;
+  rdfs:label "is act of certification of"@en ;
+  skos:definition "Relates an act of certification to the person being certified."@en ;
+  rdfs:domain abi:ActOfCertification ;
+  rdfs:range  abi:Person .
+
+abi:forCertifyingOrganization a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:hasParticipant ;
+  owl:inverseOf abi:isCertifyingOrganizationOfAct ;
+  rdfs:label "for certifying organization"@en ;
+  skos:definition "Relates an act of certification to the organization that participates as the certifying body."@en ;
+  rdfs:domain abi:ActOfCertification ;
+  rdfs:range  abi:Organization .
+
+abi:isCertifyingOrganizationOfAct a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:participatesIn ;
+  owl:inverseOf abi:forCertifyingOrganization ;
+  rdfs:label "is certifying organization of act"@en ;
+  skos:definition "Relates an organization to an act of certification it participates in as the certifying body."@en ;
+  rdfs:domain abi:Organization ;
+  rdfs:range  abi:ActOfCertification .
+
+# WHAT <-> HOW WE KNOW - the act concretizes the certification it awards
+abi:hasAwardedCertification a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:concretizes ;
+  owl:inverseOf abi:isAwardedCertificationOf ;
+  rdfs:label "has awarded certification"@en ;
+  skos:definition "Relates an act of certification to the certification it concretizes."@en ;
+  rdfs:domain abi:ActOfCertification ;
+  rdfs:range  abi:Certification .
+
+abi:isAwardedCertificationOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:isConcretizedBy ;
+  owl:inverseOf abi:hasAwardedCertification ;
+  rdfs:label "is awarded certification of"@en ;
+  skos:definition "Relates a certification to the act of certification that concretizes it."@en ;
+  rdfs:domain abi:Certification ;
+  rdfs:range  abi:ActOfCertification .
+
+# WHAT <-> HOW IT IS - the competence the person demonstrates
+abi:demonstratesSkill a owl:ObjectProperty ;
+  owl:inverseOf abi:isSkillDemonstratedIn ;
+  rdfs:label "demonstrates skill"@en ;
+  skos:definition "Relates an act of certification to a skill the person demonstrates in the course of it."@en ;
+  rdfs:domain abi:ActOfCertification ;
+  rdfs:range  abi:Skill .
+
+abi:isSkillDemonstratedIn a owl:ObjectProperty ;
+  owl:inverseOf abi:demonstratesSkill ;
+  rdfs:label "is skill demonstrated in"@en ;
+  skos:definition "Relates a skill to an act of certification in which it is demonstrated."@en ;
+  rdfs:domain abi:Skill ;
+  rdfs:range  abi:ActOfCertification .
+
+# WHO <-> WHY - the person bears the candidate role
+abi:hasCertificationCandidateRole a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:bearerOf ;
+  owl:inverseOf abi:isCertificationCandidateRoleOf ;
+  rdfs:label "has certification candidate role"@en ;
+  skos:definition "Relates a person to a certification candidate role that inheres in them while they seek or hold a certification."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  abi:CertificationCandidateRole .
+
+abi:isCertificationCandidateRoleOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:inheresIn ;
+  owl:inverseOf abi:hasCertificationCandidateRole ;
+  rdfs:label "is certification candidate role of"@en ;
+  skos:definition "Relates a certification candidate role to the person in whom it inheres."@en ;
+  rdfs:domain abi:CertificationCandidateRole ;
+  rdfs:range  abi:Person .
+
+# WHO ↔ WHERE (facility) - the candidate and the facility they are assessed in.
+abi:hasCertificationFacility a owl:ObjectProperty ;
+  owl:inverseOf abi:isCertificationFacilityOf ;
+  rdfs:label "has certification facility"@en ;
+  skos:definition "Relates a person to the facility in which they are assessed in an act of certification."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  cco:ont00000192 .
+
+abi:isCertificationFacilityOf a owl:ObjectProperty ;
+  owl:inverseOf abi:hasCertificationFacility ;
+  rdfs:label "is certification facility of"@en ;
+  skos:definition "Relates a facility to a person who is assessed in it in an act of certification."@en ;
+  rdfs:domain cco:ont00000192 ;
+  rdfs:range  abi:Person .
+
+# WHO ↔ WHERE (facility) - the certifying organization and the facility it assesses in.
+abi:hasAssessmentFacility a owl:ObjectProperty ;
+  owl:inverseOf abi:isAssessmentFacilityOf ;
+  rdfs:label "has assessment facility"@en ;
+  skos:definition "Relates an organization to a facility in which it assesses candidates for a certification."@en ;
+  rdfs:domain abi:Organization ;
+  rdfs:range  cco:ont00000192 .
+
+abi:isAssessmentFacilityOf a owl:ObjectProperty ;
+  owl:inverseOf abi:hasAssessmentFacility ;
+  rdfs:label "is assessment facility of"@en ;
+  skos:definition "Relates a facility to an organization that assesses candidates for a certification in it."@en ;
+  rdfs:domain cco:ont00000192 ;
+  rdfs:range  abi:Organization .
+
+#################################################################
+#    Process slice: http://ontology.naas.ai/abi/ActOfProfilingProcess
+#    Source: ontologies/processes/ActOfProfilingProcess.ttl
+#################################################################
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+abi:ActOfProfiling a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 ,
+    [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Person ] ,
+    [ a owl:Restriction ; owl:onProperty abi:fromProfileDocument ; owl:someValuesFrom abi:ProfileDocument ] ;
+  rdfs:label "Act of Profiling"@en ;
+  skos:definition "A Planned Act in which a person is registered in the knowledge graph from a published profile document: working and studying episodes plus person-level presentation facts, with provenance on the document URL."@en ;
+  skos:example "Registering Alice Dupont from https://demo.example/profiles/alice_dupont into the people graph."@en ;
+  rdfs:comment "Orchestration only. Episode triples are written by the working and studying pipelines; summary, certifications and social proof by the person profile pipeline."@en .
+
+#################################################################
+#    Object properties - process-only
+#################################################################
+
+abi:hasActOfProfiling a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:participatesIn ;
+  owl:inverseOf abi:isActOfProfilingOf ;
+  rdfs:label "has act of profiling"@en ;
+  skos:definition "Relates a person to an act of profiling in which they were registered from a profile document."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range abi:ActOfProfiling .
+
+abi:isActOfProfilingOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:hasParticipant ;
+  owl:inverseOf abi:hasActOfProfiling ;
+  rdfs:label "is act of profiling of"@en ;
+  skos:definition "Relates an act of profiling to the person who is its subject."@en ;
+  rdfs:domain abi:ActOfProfiling ;
+  rdfs:range abi:Person .
+
+abi:fromProfileDocument a owl:ObjectProperty ;
+  rdfs:subPropertyOf cco:ont00001808 , abi:hasSourceDocument ;
+  owl:inverseOf abi:isProfileDocumentForProfiling ;
+  rdfs:label "from profile document"@en ;
+  skos:definition "Relates an act of profiling to the profile document that was read as its source."@en ;
+  rdfs:domain abi:ActOfProfiling ;
+  rdfs:range abi:ProfileDocument .
+
+abi:isProfileDocumentForProfiling a owl:ObjectProperty ;
+  owl:inverseOf abi:fromProfileDocument ;
+  rdfs:label "is profile document for profiling"@en ;
+  skos:definition "Relates a profile document to an act of profiling that used it as input."@en ;
+  rdfs:domain abi:ProfileDocument ;
+  rdfs:range abi:ActOfProfiling .
+
+#################################################################
+#    Process slice: http://ontology.naas.ai/abi/ActOfStudyingProcess
+#    Source: ontologies/processes/ActOfStudyingProcess.ttl
+#################################################################
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+abi:ActOfStudying a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 ,
+    cco:ont00001074 ,
+    [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Person ] ,
+    [ a owl:Restriction ; owl:onProperty abi:forEducationalOrganization ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:GeospatialRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasEnrollment ; owl:someValuesFrom abi:EnrollmentRecord ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasDegree ; owl:someValuesFrom abi:AcademicDegree ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom abi:StudentRole ] ,
+    [ a owl:Restriction ; owl:onProperty abi:developsSkill ; owl:someValuesFrom abi:Skill ] ,
+    [ a owl:Restriction ; owl:onProperty abi:developsLanguageCapability ; owl:someValuesFrom abi:LanguageCapability ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasSourceDocument ; owl:someValuesFrom abi:ProfileDocument ] ;
+  rdfs:label "Act of Studying"@en ;
+  skos:definition "A Planned Act, and an Act of Educational Training Acquisition, in which a person acquires knowledge of a curriculum from an educational organization at a site (where an educational facility may stand) over a temporal region, realizing a student role, developing skills and language capabilities, under an enrollment record and academic degree."@en ;
+  skos:example "Alice Dupont studying for a Master's Degree in Corporate Finance at KEDGE Business School in Bordeaux from 2012 to 2016."@en .
+
+#################################################################
+#    Classes - HOW WE KNOW (restrictions on shared IRIs)
+#################################################################
+
+abi:EnrollmentRecord rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty abi:isSourcedFrom ; owl:someValuesFrom abi:ProfileDocument ] .
+
+abi:AcademicDegree rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty abi:isSourcedFrom ; owl:someValuesFrom abi:ProfileDocument ] .
+
+#################################################################
+#    Classes - WHO x WHERE (restrictions on shared IRIs)
+#################################################################
+
+# Person and Educational Organization are Agent classes and Educational Facility is
+# a CCO class: this slice only adds, by restriction, what the act of studying ties
+# them to.
+abi:Person rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty abi:hasStudyFacility ; owl:someValuesFrom cco:ont00000270 ] .
+
+cco:ont00000564 rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty abi:hasEducationalFacility ; owl:someValuesFrom cco:ont00000270 ] .
+
+# WHERE x WHERE - the educational facility stands at a geospatial location (a site), which is
+# a continuant part of the city, region and country the act occurs in.
+cco:ont00000270 rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty abi:locatedIn ; owl:someValuesFrom abi:GeospatialLocation ] .
+
+#################################################################
+#    Object properties - process-only
+#################################################################
+
+abi:hasActOfStudying a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:participatesIn ;
+  owl:inverseOf abi:isActOfStudyingOf ;
+  rdfs:label "has act of studying"@en ;
+  skos:definition "Relates a person to the act of studying in which they acquire a curriculum."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  abi:ActOfStudying .
+
+abi:isActOfStudyingOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:hasParticipant ;
+  owl:inverseOf abi:hasActOfStudying ;
+  rdfs:label "is act of studying of"@en ;
+  skos:definition "Relates an act of studying to the person acquiring the curriculum."@en ;
+  rdfs:domain abi:ActOfStudying ;
+  rdfs:range  abi:Person .
+
+abi:forEducationalOrganization a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:hasParticipant ;
+  owl:inverseOf abi:isEducationalOrganizationOfStudying ;
+  rdfs:label "for educational organization"@en ;
+  skos:definition "Relates an act of studying to the educational organization that participates as the training provider."@en ;
+  rdfs:domain abi:ActOfStudying ;
+  rdfs:range  abi:Organization .
+
+abi:isEducationalOrganizationOfStudying a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:participatesIn ;
+  owl:inverseOf abi:forEducationalOrganization ;
+  rdfs:label "is educational organization of studying"@en ;
+  skos:definition "Relates an educational organization to an act of studying it participates in as the training provider."@en ;
+  rdfs:domain abi:Organization ;
+  rdfs:range  abi:ActOfStudying .
+
+abi:hasEnrollment a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:concretizes ;
+  owl:inverseOf abi:isEnrollmentOf ;
+  rdfs:label "has enrollment"@en ;
+  skos:definition "Relates an act of studying to the enrollment record it concretizes."@en ;
+  rdfs:domain abi:ActOfStudying ;
+  rdfs:range  abi:EnrollmentRecord .
+
+abi:isEnrollmentOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:isConcretizedBy ;
+  owl:inverseOf abi:hasEnrollment ;
+  rdfs:label "is enrollment of"@en ;
+  skos:definition "Relates an enrollment record to the act of studying that concretizes it."@en ;
+  rdfs:domain abi:EnrollmentRecord ;
+  rdfs:range  abi:ActOfStudying .
+
+# WHAT ↔ HOW WE KNOW - the act concretizes the awarded degree document
+abi:hasDegree a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:concretizes ;
+  owl:inverseOf abi:isDegreeOf ;
+  rdfs:label "has degree"@en ;
+  skos:definition "Relates an act of studying to the academic degree it concretizes."@en ;
+  rdfs:domain abi:ActOfStudying ;
+  rdfs:range  abi:AcademicDegree .
+
+abi:isDegreeOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:isConcretizedBy ;
+  owl:inverseOf abi:hasDegree ;
+  rdfs:label "is degree of"@en ;
+  skos:definition "Relates an academic degree to the act of studying that concretizes it."@en ;
+  rdfs:domain abi:AcademicDegree ;
+  rdfs:range  abi:ActOfStudying .
+
+# WHO ↔ WHERE (place) - the place a student studies in, as a Site.
+# The same site the act of studying occurs in, stated on the person. Not the
+# facility: the school is a material entity located in that site (see
+# hasStudyFacility below). A source that only names a city gives the site at
+# that level, and the chain abi:continuantPartOf climbs from there.
+abi:hasStudyLocation a owl:ObjectProperty ;
+  owl:inverseOf abi:isStudyLocationOf ;
+  rdfs:label "has study location"@en ;
+  skos:definition "Relates a person to the place (a site: a city or a country) at which they study. Says where, not at which school: for the facility see has study facility."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  abi:Site .
+
+abi:isStudyLocationOf a owl:ObjectProperty ;
+  owl:inverseOf abi:hasStudyLocation ;
+  rdfs:label "is study location of"@en ;
+  skos:definition "Relates a site to a person who studies there."@en ;
+  rdfs:domain abi:Site ;
+  rdfs:range  abi:Person .
+
+# WHO ↔ WHERE (facility) - the student and the facility they study in.
+abi:hasStudyFacility a owl:ObjectProperty ;
+  owl:inverseOf abi:isStudyFacilityOf ;
+  rdfs:label "has study facility"@en ;
+  skos:definition "Relates a person to the educational facility in which they perform an act of studying."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  cco:ont00000270 .
+
+abi:isStudyFacilityOf a owl:ObjectProperty ;
+  owl:inverseOf abi:hasStudyFacility ;
+  rdfs:label "is study facility of"@en ;
+  skos:definition "Relates an educational facility to a person who performs an act of studying in it."@en ;
+  rdfs:domain cco:ont00000270 ;
+  rdfs:range  abi:Person .
+
+# WHO ↔ WHERE (facility) - the educational organization and its facility.
+abi:hasEducationalFacility a owl:ObjectProperty ;
+  owl:inverseOf abi:isEducationalFacilityOf ;
+  rdfs:label "has educational facility"@en ;
+  skos:definition "Relates an educational organization to an educational facility in which it teaches."@en ;
+  rdfs:domain cco:ont00000564 ;
+  rdfs:range  cco:ont00000270 .
+
+abi:isEducationalFacilityOf a owl:ObjectProperty ;
+  owl:inverseOf abi:hasEducationalFacility ;
+  rdfs:label "is educational facility of"@en ;
+  skos:definition "Relates an educational facility to the educational organization that teaches in it."@en ;
+  rdfs:domain cco:ont00000270 ;
+  rdfs:range  cco:ont00000564 .
+
+#################################################################
+#    Data properties
+#################################################################
+
+abi:activities_content a owl:DatatypeProperty ;
+  rdfs:label "activities content"@en ;
+  skos:definition "Extracurricular activities and societies listed under an enrollment on the source profile."@en ;
+  rdfs:domain abi:EnrollmentRecord ;
+  rdfs:range  xsd:string .
+
+#################################################################
+#    Process slice: http://ontology.naas.ai/abi/ActOfWorkingProcess
+#    Source: ontologies/processes/ActOfWorkingProcess.ttl
+#################################################################
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+abi:ActOfWorking a owl:Class ;
+  rdfs:subClassOf cco:ont00000228 ,
+    [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:someValuesFrom abi:Person ] ,
+    [ a owl:Restriction ; owl:onProperty abi:forOrganization ; owl:someValuesFrom abi:Organization ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occursIn ; owl:someValuesFrom abi:GeospatialRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom abi:OccupationRole ] ,
+    [ a owl:Restriction ; owl:onProperty abi:developsSkill ; owl:someValuesFrom abi:Skill ] ,
+    [ a owl:Restriction ; owl:onProperty abi:developsLanguageCapability ; owl:someValuesFrom abi:LanguageCapability ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasSourceDocument ; owl:someValuesFrom abi:ProfileDocument ] ;
+  rdfs:label "Act of Working"@en ;
+  skos:definition "A Planned Act in which a person performs work for an organization at a site (a street-level location, city or country, where an office building may stand) over a temporal region, realizing an occupation role and developing skills and language capabilities."@en ;
+  skos:example "Alice Dupont working as Head of Product for Demo, worldwide, since April 2023."@en .
+
+#################################################################
+#    Classes - HOW WE KNOW
+#################################################################
+
+abi:Mission a owl:Class ;
+  rdfs:subClassOf abi:GenericallyDependentContinuant ,
+    [ a owl:Restriction ; owl:onProperty abi:genericallyDependsOn ; owl:someValuesFrom abi:Person ] ,
+    [ a owl:Restriction ; owl:onProperty abi:isConcretizedBy ; owl:someValuesFrom abi:OccupationRole ] ,
+    [ a owl:Restriction ; owl:onProperty abi:isSourcedFrom ; owl:someValuesFrom abi:ProfileDocument ] ;
+  rdfs:label "Mission"@en ;
+  skos:definition "An information content entity that states what a person is charged with achieving in a working engagement: the remit, its objectives and its main activities. Generically dependent on the person, and concretized by the occupation role through which the person carries it out."@en ;
+  skos:example "'Leading the development of an open Universal Data & AI Platform to help organizations create powerful ecosystems of AI Agents.'"@en ;
+  rdfs:comment "Deliberately a GDC and NOT a BFO function. A mission is stated, copied between systems and survives the person leaving the post, which a disposition inhering in the person could not. The WHY that inheres in the person is abi:OccupationRole; the mission is what that role concretizes. rdfs:label carries the opening sentence; abi:mission_content carries the full text."@en .
+
+#################################################################
+#    Classes - HOW IT IS
+#################################################################
+
+#################################################################
+#    Classes - WHO x WHERE (restrictions on shared IRIs)
+#################################################################
+
+# Person and Organization are ABI classes and Office Building is a CCO class: this
+# slice only adds, by restriction, what the act of working ties them to.
+abi:Person rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty abi:hasWorkFacility ; owl:someValuesFrom cco:ont00000468 ] .
+
+abi:Organization rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty abi:hasOfficeBuilding ; owl:someValuesFrom cco:ont00000468 ] .
+
+# WHERE x WHERE - the office building stands at a geospatial location (a site), which is
+# a continuant part of the city, region and country the act occurs in.
+cco:ont00000468 rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty abi:locatedIn ; owl:someValuesFrom abi:GeospatialLocation ] .
+
+#################################################################
+#    Object properties - process-only
+#################################################################
+
+abi:hasActOfWorking a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:participatesIn ;
+  owl:inverseOf abi:isActOfWorkingOf ;
+  rdfs:label "has act of working"@en ;
+  skos:definition "Relates a person to an act of working in which they perform the work."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  abi:ActOfWorking .
+
+abi:isActOfWorkingOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:hasParticipant ;
+  owl:inverseOf abi:hasActOfWorking ;
+  rdfs:label "is act of working of"@en ;
+  skos:definition "Relates an act of working to the person performing the work."@en ;
+  rdfs:domain abi:ActOfWorking ;
+  rdfs:range  abi:Person .
+
+abi:forOrganization a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:hasParticipant ;
+  owl:inverseOf abi:isOrganizationOfWorking ;
+  rdfs:label "for organization"@en ;
+  skos:definition "Relates an act of working to the organization that participates as employer."@en ;
+  rdfs:domain abi:ActOfWorking ;
+  rdfs:range  abi:Organization .
+
+abi:isOrganizationOfWorking a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:participatesIn ;
+  owl:inverseOf abi:forOrganization ;
+  rdfs:label "is organization of working"@en ;
+  skos:definition "Relates an organization to an act of working it participates in as employer."@en ;
+  rdfs:domain abi:Organization ;
+  rdfs:range  abi:ActOfWorking .
+
+# WHO x WHO - a consulting/staffing engagement has both an employer (forOrganization)
+# and a client the work is performed for. Optional and separate from forOrganization:
+# a direct employee's act of working states forOrganization only and leaves this unset.
+abi:forClient a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:hasParticipant ;
+  owl:inverseOf abi:isClientOfWorking ;
+  rdfs:label "for client"@en ;
+  skos:definition "Relates an act of working to the client organization the work was performed for, when the worker was staffed there by their employer (forOrganization) rather than working for the client directly."@en ;
+  skos:example "Alexis Tourneux (employed by Forvis Mazars) working as Tech Lead for Allianz: forOrganization Forvis Mazars, forClient Allianz."@en ;
+  rdfs:domain abi:ActOfWorking ;
+  rdfs:range  abi:Organization .
+
+abi:isClientOfWorking a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:participatesIn ;
+  owl:inverseOf abi:forClient ;
+  rdfs:label "is client of working"@en ;
+  skos:definition "Relates a client organization to an act of working performed for it by a worker staffed there by another organization."@en ;
+  rdfs:domain abi:Organization ;
+  rdfs:range  abi:ActOfWorking .
+
+# WHY ↔ HOW WE KNOW - the occupation role concretizes the mission
+abi:hasMission a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:concretizes ;
+  owl:inverseOf abi:isMissionOf ;
+  rdfs:label "has mission"@en ;
+  skos:definition "Relates an occupation role to the mission it concretizes. Named sub-property of abi:concretizes: a role (SDC) concretizes a mission (GDC)."@en ;
+  rdfs:domain abi:OccupationRole ;
+  rdfs:range  abi:Mission .
+
+abi:isMissionOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:isConcretizedBy ;
+  owl:inverseOf abi:hasMission ;
+  rdfs:label "is mission of"@en ;
+  skos:definition "Relates a mission to the occupation role that concretizes it while the person works in that capacity."@en ;
+  rdfs:domain abi:Mission ;
+  rdfs:range  abi:OccupationRole .
+
+# WHO ↔ HOW WE KNOW - the person carries the mission
+abi:hasMissionCarried a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:isCarrierOf ;
+  owl:inverseOf abi:isMissionCarriedBy ;
+  rdfs:label "carries mission"@en ;
+  skos:definition "Relates a person to a mission that generically depends on them."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  abi:Mission .
+
+abi:isMissionCarriedBy a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:genericallyDependsOn ;
+  owl:inverseOf abi:hasMissionCarried ;
+  rdfs:label "is mission carried by"@en ;
+  skos:definition "Relates a mission to the person on which it generically depends."@en ;
+  rdfs:domain abi:Mission ;
+  rdfs:range  abi:Person .
+
+# WHO ↔ WHERE (place) - the place a worker is based in, as a Site.
+# The same site the act of working occurs in, stated on the person. Not the
+# facility: the building is a material entity located in that site (see
+# hasWorkFacility below). A source that only names a city or a country gives the
+# site at that level, and the chain abi:continuantPartOf climbs from there.
+abi:hasWorkLocation a owl:ObjectProperty ;
+  owl:inverseOf abi:isWorkLocationOf ;
+  rdfs:label "has work location"@en ;
+  skos:definition "Relates a person to the place (a site: an office as named in the directory, a city or a country) at which they work. Says where, not in which building: for the building see has work facility."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  abi:Site .
+
+abi:isWorkLocationOf a owl:ObjectProperty ;
+  owl:inverseOf abi:hasWorkLocation ;
+  rdfs:label "is work location of"@en ;
+  skos:definition "Relates a site to a person who works there."@en ;
+  rdfs:domain abi:Site ;
+  rdfs:range  abi:Person .
+
+# WHO ↔ WHERE (facility) - the person and the building they work in.
+abi:hasWorkFacility a owl:ObjectProperty ;
+  owl:inverseOf abi:isWorkFacilityOf ;
+  rdfs:label "has work facility"@en ;
+  skos:definition "Relates a person to the office building in which they perform an act of working."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  cco:ont00000468 .
+
+abi:isWorkFacilityOf a owl:ObjectProperty ;
+  owl:inverseOf abi:hasWorkFacility ;
+  rdfs:label "is work facility of"@en ;
+  skos:definition "Relates an office building to a person who performs an act of working in it."@en ;
+  rdfs:domain cco:ont00000468 ;
+  rdfs:range  abi:Person .
+
+# WHO ↔ WHERE (facility) - the employer and its office building.
+abi:hasOfficeBuilding a owl:ObjectProperty ;
+  owl:inverseOf abi:isOfficeBuildingOf ;
+  rdfs:label "has office building"@en ;
+  skos:definition "Relates an organization to an office building in which its people perform acts of working for it."@en ;
+  rdfs:domain abi:Organization ;
+  rdfs:range  cco:ont00000468 .
+
+abi:isOfficeBuildingOf a owl:ObjectProperty ;
+  owl:inverseOf abi:hasOfficeBuilding ;
+  rdfs:label "is office building of"@en ;
+  skos:definition "Relates an office building to an organization whose people perform acts of working for it there."@en ;
+  rdfs:domain cco:ont00000468 ;
+  rdfs:range  abi:Organization .
+
+#################################################################
+#    Data properties
+#################################################################
+
+abi:mission_context a owl:DatatypeProperty ;
+  rdfs:label "mission context"@en ;
+  skos:definition "The situation a mission was undertaken in: what the organization needed and why, stated as prose before the mission's own objectives and activities. Optional: a source that states only what was done, not the situation it responded to, leaves this unset."@en ;
+  rdfs:domain abi:Mission ;
+  rdfs:range  xsd:string .
+
+abi:mission_content a owl:DatatypeProperty ;
+  rdfs:label "mission content"@en ;
+  skos:definition "Full stated text of a mission: the objectives and activities listed under its opening sentence, one per line when the source enumerates them as discrete tasks. The opening sentence alone is carried by rdfs:label; the situation the mission responded to is carried by abi:mission_context, not here."@en ;
+  rdfs:domain abi:Mission ;
+  rdfs:range  xsd:string .
+
+abi:employment_type a owl:DatatypeProperty ;
+  rdfs:label "employment type"@en ;
+  skos:definition "Engagement type a source states for an act of working, e.g. 'Full-time', 'Freelance', 'Self-employed', 'Internship'. What was published, not the terms of a contract: a contract is an internal record of the employing organization, outside this vocabulary."@en ;
+  rdfs:domain abi:ActOfWorking ;
+  rdfs:range  xsd:string .
+# <<< onto2py:consolidated-processes <<<

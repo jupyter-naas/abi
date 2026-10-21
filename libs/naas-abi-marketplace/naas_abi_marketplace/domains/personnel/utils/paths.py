@@ -1,0 +1,76 @@
+"""Canonical filesystem paths for the personnel module."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from naas_abi_marketplace.domains.intelligence.modules.people.utils.paths import (
+    DEMO_SOURCE_DIR as PEOPLE_DEMO_SOURCE_DIR,
+)
+
+__all__ = ["PEOPLE_DEMO_SOURCE_DIR"]
+
+PERSONNEL_ROOT = Path(__file__).resolve().parents[1]
+ONTOLOGIES_DIR = PERSONNEL_ROOT / "ontologies"
+COCKPIT_ROOT = PERSONNEL_ROOT / "apps" / "cockpit"
+COCKPIT_DATA_ROOT = (
+    COCKPIT_ROOT / "data"
+)  # structure reference copy; app reads ObjectStorage
+
+# Demo inputs. The people module's files hold what each fictional person
+# publishes; personnel's own files hold what their employer records about the
+# same people (service line, grade, roster, contracts, pay) and are read by this
+# module only.
+DEMO_SOURCE_DIR = PERSONNEL_ROOT / "data" / "demo" / "person"
+
+# Demo graph (TTL): the people instances plus the personnel records on top, and
+# both schemas - what the cockpit's export scripts read.
+DEMO_GRAPH_DIR = PERSONNEL_ROOT / "graphs" / "demo"
+DEMO_GRAPH_FILE = DEMO_GRAPH_DIR / "personnel.ttl"
+
+
+def module_configuration_class() -> type:
+    from naas_abi_marketplace.domains.personnel import ABIModule
+
+    return ABIModule.Configuration
+
+
+def _configuration_default(field_name: str) -> str:
+    field = module_configuration_class().model_fields[field_name]
+    default = field.default
+    if default is None or default is ...:
+        raise ValueError(f"Missing default for personnel Configuration.{field_name}")
+    return str(default)
+
+
+def module_datastore_path() -> str:
+    try:
+        from naas_abi_marketplace.domains.personnel import ABIModule
+
+        return ABIModule.get_instance().configuration.datastore_path
+    except Exception:
+        return _configuration_default("datastore_path")
+
+
+def module_graph_name() -> str:
+    try:
+        from naas_abi_marketplace.domains.personnel import ABIModule
+
+        return ABIModule.get_instance().configuration.graph_name
+    except Exception:
+        return _configuration_default("graph_name")
+
+
+def module_ontology_namespace() -> str:
+    try:
+        from naas_abi_marketplace.domains.personnel import ABIModule
+
+        return ABIModule.get_instance().configuration.ontology_namespace
+    except Exception:
+        return _configuration_default("ontology_namespace")
+
+
+def cockpit_storage_prefix(datastore_path: str | None = None) -> str:
+    """ObjectStorage prefix for cockpit runtime datasets."""
+    path = datastore_path or module_datastore_path()
+    return f"{path.rstrip('/')}/apps/cockpit/data"

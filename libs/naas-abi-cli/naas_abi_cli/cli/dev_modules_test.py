@@ -1,0 +1,182 @@
+import json
+import os
+import sys
+
+import pytest
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_Dev import (
+    DevModuleConfiguration,
+)
+from naas_abi_core.engine.nats_auth import verify_service_token
+
+from naas_abi_cli.cli.dev_modules import (
+    load_dev_modules,
+    module_command,
+    module_environment,
+    read_overlay,
+)
+
+SECRET = "s" * 48
+MODULE_PASSWORD = "nats-" + "m" * 40
+OVERLAY = {
+    "nats": {
+        # The engine's login; a module logs in as `module` instead.
+        "nats_url": "nats://abi:nats-engine-password@127.0.0.1:13042",
+        "jwt_secret": SECRET,
+        "discovery": {"project": "zen"},
+    }
+}
+MODULE = DevModuleConfiguration(
+    name="probe-researcher",
+    module="operations.projects.nats_probe",
+    identity="operations.projects.nats_probe.researcher",
+    args=["researcher"],
+    env={"NATS_PROBE_DISCOVERY_PROJECT": "${ABI_DISCOVERY_PROJECT}", "KEEP": "$$1"},
+)
+
+
+def test_a_module_gets_the_dev_broker_and_a_service_token(tmp_path):
+    env = module_environment(
+        MODULE,
+        OVERLAY,
+        tmp_path,
+        {"HOME": "/home/me", "NATS_JWT_SECRET": SECRET},
+        nats_password=MODULE_PASSWORD,
+    )
+
+    assert env["HOME"] == "/home/me"
+    assert env["ABI_NATS_URL"] == f"nats://module:{MODULE_PASSWORD}@127.0.0.1:13042"
+    assert env["ABI_DISCOVERY_PROJECT"] == "zen"
+    assert (
+        verify_service_token(env["ABI_SERVICE_TOKEN"], SECRET)
+        == "operations.projects.nats_probe.researcher"
+    )
+    assert "OTEL_EXPORTER_OTLP_ENDPOINT" not in env
+
+
+def test_a_module_signs_for_its_identity_and_never_gets_the_secret(tmp_path):
+    from naas_abi_core.engine.nats_auth import module_key
+
+    module = MODULE.model_copy(update={"identity": "zen.nats_probe.researcher"})
+    env = module_environment(
+        module, OVERLAY, tmp_path, {"NATS_JWT_SECRET": SECRET}, nats_password=MODULE_PASSWORD
+    )
+
+    assert SECRET not in env.values()
+    assert env["ABI_MODULE_KEY"] == module_key(SECRET, "zen.nats_probe.researcher")
+    assert (
+        verify_service_token(env["ABI_SERVICE_TOKEN"], SECRET)
+        == "zen.nats_probe.researcher"
+    )
+
+
+def test_module_env_names_the_dev_settings(tmp_path):
+    env = module_environment(MODULE, OVERLAY, tmp_path, {}, nats_password=MODULE_PASSWORD)
+
+    assert env["NATS_PROBE_DISCOVERY_PROJECT"] == "zen"
+    assert env["KEEP"] == "$1"
+
+
+def test_tracing_and_the_src_layout_reach_the_module(tmp_path):
+    (tmp_path / "src").mkdir()
+    overlay = {
+        **OVERLAY,
+        "telemetry": {"enabled": True, "otlp_endpoint": "http://127.0.0.1:16000"},
+    }
+
+    env = module_environment(
+        MODULE, overlay, tmp_path, {"PYTHONPATH": "/x"}, nats_password=MODULE_PASSWORD
+    )
+
+    assert env["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://127.0.0.1:16000"
+    assert env["PYTHONPATH"].split(":") == [str(tmp_path / "src"), "/x"]
+
+
+def test_the_module_runs_under_the_supervisor():
+    command = module_command(MODULE)
+
+    assert command[:3] == [sys.executable, "-m", "naas_abi_cli.cli.dev_supervisor"]
+    assert command[command.index("--restart") + 1] == "on-failure"
+    assert command[command.index("--") + 1 :] == [
+        sys.executable,
+        "-m",
+        "operations.projects.nats_probe",
+        "researcher",
+    ]
+
+
+def test_the_overlay_is_json_after_its_comment(tmp_path):
+    path = tmp_path / "dev.overlay.yaml"
+    path.write_text("# generated\n" + json.dumps(OVERLAY))
+
+    assert read_overlay(path) == OVERLAY
+
+
+def test_only_enabled_modules_are_loaded(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ENV", raising=False)
+    (tmp_path / "config.yaml").write_text(
+        "dev:\n"
+        "  modules:\n"
+        "    - {name: first, module: a}\n"
+        "    - {name: second, module: b, enabled: false}\n"
+    )
+
+    assert list(load_dev_modules()) == ["first"]
+
+
+def test_no_config_means_no_modules(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ENV", raising=False)
+
+    assert load_dev_modules() == {}
+
+
+def test_an_invalid_dev_block_is_reported(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ENV", raising=False)
+    (tmp_path / "config.yaml").write_text("dev:\n  modules: [{name: x}]\n")
+
+    with pytest.raises(ValueError, match="module"):
+        load_dev_modules()
+
+
+def _package(tmp_path, name, body):
+    package = tmp_path / "src" / name
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text(body)
+
+
+def test_without_an_identity_a_module_registers_as_its_abimodule(tmp_path):
+    """A dev module's name (``a-b``) is never a module id: read the id its package
+    declares, as naas-abi-module does."""
+    from naas_abi_cli.cli.dev_modules import module_identity
+
+    _package(tmp_path, "acme_research", "class ABIModule:\n    module_id = 'acme.research'\n")
+    module = DevModuleConfiguration(name="research", module="acme_research")
+
+    assert module_identity(module, tmp_path, dict(os.environ)) == "acme.research"
+    env = module_environment(
+        module, OVERLAY, tmp_path, dict(os.environ), nats_password=MODULE_PASSWORD
+    )
+    assert verify_service_token(env["ABI_SERVICE_TOKEN"], SECRET) == "acme.research"
+
+
+def test_a_module_whose_id_cannot_be_told_is_refused(tmp_path):
+    from naas_abi_cli.cli.dev_modules import module_identity
+
+    _package(tmp_path, "no_module_here", "")
+    module = DevModuleConfiguration(name="research", module="no_module_here")
+
+    with pytest.raises(ValueError, match="exports no ABIModule.*identity: <module_id>"):
+        module_identity(module, tmp_path, dict(os.environ))
+
+
+def test_a_module_that_fails_to_import_shows_the_import_error(tmp_path):
+    from naas_abi_cli.cli.dev_modules import module_identity
+
+    _package(tmp_path, "broken_module", "import this_dependency_is_missing\n")
+    module = DevModuleConfiguration(name="research", module="broken_module")
+
+    with pytest.raises(ValueError, match="this_dependency_is_missing") as raised:
+        module_identity(module, tmp_path, dict(os.environ))
+    assert "exports no ABIModule" not in str(raised.value)

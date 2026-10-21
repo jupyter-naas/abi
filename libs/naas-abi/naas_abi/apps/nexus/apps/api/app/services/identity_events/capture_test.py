@@ -306,7 +306,7 @@ async def test_workspace_context_is_stamped(env) -> None:
     token = event_actor_workspace_id.set("ws-ctx")
     try:
         async with maker() as session:
-            (await session.get(UserModel, "usr-1")).company = "Acme"
+            (await session.get(UserModel, "usr-1")).organization = "Acme"
             await session.commit()
     finally:
         event_actor_workspace_id.reset(token)
@@ -345,7 +345,7 @@ async def test_bulk_statements_on_identity_tables_are_reported(env) -> None:
     try:
         async with maker() as session:
             await session.execute(
-                update(UserModel).where(UserModel.id == "usr-1").values(company="Acme")
+                update(UserModel).where(UserModel.id == "usr-1").values(organization="Acme")
             )
             await session.execute(
                 delete(AppConfigModel).where(AppConfigModel.workspace_id == "ws-x")

@@ -240,3 +240,20 @@ def test_upsert_files_deletes_in_the_same_commit(adapter: LocalGitAdapter) -> No
         for e in adapter.list_contents(repo_id=repo_id, path="apps/ws/demo", ref=branch)
     }
     assert names == {"index.html"}
+
+
+def test_delete_repo_removes_the_checkout_and_an_empty_owner(
+    adapter: LocalGitAdapter, tmp_path
+) -> None:
+    adapter.ensure_repo(owner="abi", name="demo")
+    adapter.ensure_repo(owner="team", name="one")
+    adapter.ensure_repo(owner="team", name="two")
+
+    adapter.delete_repo(repo_id="abi/demo")
+    adapter.delete_repo(repo_id="team/one")
+
+    assert [f"{r.owner}/{r.name}" for r in adapter.list_repos()] == ["team/two"]
+    assert not (tmp_path / "git" / "abi").exists()
+    assert (tmp_path / "git" / "team" / "two").is_dir()
+    with pytest.raises(RepoNotFoundError):
+        adapter.delete_repo(repo_id="abi/demo")

@@ -38,6 +38,31 @@ jobs:
           UV_PYTHON: ${{ matrix.python-version }}
           DOCUMENT_TEST_POSTGRES_DSN: postgresql://document_test:document_test@localhost:5432/document_test
         run: make test-document-core
+      - name: Run the event log and activity log on PostgreSQL
+        env:
+          UV_PYTHON: ${{ matrix.python-version }}
+          DOCUMENT_TEST_POSTGRES_DSN: postgresql://document_test:document_test@localhost:5432/document_test
+          EVENT_TEST_POSTGRES_DSN: postgresql://document_test:document_test@localhost:5432/document_test
+        run: make test-event-core
+      - name: Run the agent memory migration from PostgreSQL
+        env:
+          UV_PYTHON: ${{ matrix.python-version }}
+          DOCUMENT_TEST_POSTGRES_DSN: postgresql://document_test:document_test@localhost:5432/document_test
+        run: make test-agent-memory-core
+
+  # The CLI's own suite, which includes the reference-completeness test: every
+  # command and option has a row in docs/site/docs/user-guide/reference/cli.md.
+  cli-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: '3.12'
+      - name: Run the CLI test suite
+        working-directory: libs/naas-abi-cli
+        run: uv run pytest -q
 
   check:
     runs-on: ubuntu-latest

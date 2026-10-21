@@ -23,6 +23,7 @@ from typing import (
     Union,
     cast,
 )
+from urllib.parse import urlsplit
 
 import pydash as pd
 from langchain_core.language_models import BaseChatModel
@@ -56,7 +57,10 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import MessagesState
 from langgraph.types import Command
-from naas_abi_core.engine.context import get_default_event_service
+from naas_abi_core.engine.context import (
+    get_default_agent_checkpointer,
+    get_default_event_service,
+)
 from naas_abi_core.services.agent.context import (
     DOCUMENTS_RECURSION_LIMIT,
     SLIDES_RECURSION_LIMIT,
@@ -346,9 +350,15 @@ def compact_old_tool_messages(messages: list[AnyMessage]) -> list[AnyMessage]:
 def create_checkpointer() -> BaseCheckpointSaver:
     """Create a checkpointer based on environment configuration.
 
-    Returns a PostgreSQL-backed checkpointer if POSTGRES_URL is set,
-    otherwise returns an in-memory checkpointer.
+    Inside a loaded engine, returns the engine's agent checkpointer (the
+    Document Service, shared by every agent). Outside one, returns a
+    PostgreSQL-backed checkpointer if POSTGRES_URL is set, otherwise an
+    in-memory checkpointer.
     """
+    engine_checkpointer = get_default_agent_checkpointer()
+    if engine_checkpointer is not None:
+        return engine_checkpointer
+
     postgres_url = os.getenv("POSTGRES_URL")
 
     if postgres_url:
@@ -422,16 +432,19 @@ def create_checkpointer() -> BaseCheckpointSaver:
                     "PostgreSQL checkpointer requested but langgraph.checkpoint.postgres not available. Falling back to in-memory."
                 )
             except Exception as e:  # noqa: BLE001
-                error_msg = str(e)
+                # The URL carries the password: log its host only, and take
+                # the URL out of the driver's message (a DSN error echoes it).
+                error_msg = str(e).replace(postgres_url, "[POSTGRES_URL]")
                 if "nodename nor servname provided" in error_msg:
                     logger.error(
-                        f"PostgreSQL connection failed - cannot resolve hostname. Check if PostgreSQL is running and hostname is correct in POSTGRES_URL: {postgres_url}"
+                        "PostgreSQL connection failed - cannot resolve hostname. Check if PostgreSQL is running and hostname is correct in POSTGRES_URL "
+                        f"(host: {urlsplit(postgres_url).hostname})"
                     )
                     logger.error(
                         "Hint: If running outside Docker, use 'localhost' instead of 'postgres' in POSTGRES_URL"
                     )
                 else:
-                    logger.error(f"Failed to initialize PostgreSQL checkpointer: {e}")
+                    logger.error(f"Failed to initialize PostgreSQL checkpointer: {error_msg}")
                 logger.error("Falling back to in-memory checkpointer")
 
         # Fallback to in-memory checkpointer
@@ -528,7 +541,10 @@ class ToolUsageEvent(Event):
 
 @dataclass
 class ToolResponseEvent(Event):
-    pass
+    # False when the tool's output must not be listed as chat sources: a tool
+    # opts out with ``metadata={"chat_source": False}`` (internal lookups whose
+    # URLs are identifiers, not references).
+    chat_source: bool = True
 
 
 @dataclass
@@ -769,7 +785,8 @@ class Agent(Expose):
                 Should support tool binding.
             tools (list[Tool]): List of tools to make available to the agent.
             memory (BaseCheckpointSaver, optional): Component to save conversation state.
-                If None, will use PostgreSQL if POSTGRES_URL env var is set, otherwise in-memory.
+                If None, uses the engine's agent checkpointer (Document Service) when an
+                engine is loaded, else PostgreSQL if POSTGRES_URL is set, else in-memory.
         """
         if native_tools is None:
             native_tools = []
@@ -1100,6 +1117,24 @@ class Agent(Expose):
                 state["messages"][::-1], lambda m: isinstance(m, HumanMessage)
             )
 
+    def _path_to(self, name: str, _seen: set[int] | None = None) -> list[Agent] | None:
+        """Sub-agents from a direct one down to the agent ``name``, or None
+        when ``name`` is not in this agent's graph."""
+        seen = _seen if _seen is not None else {id(self)}
+        for agent in self._agents:
+            if id(agent) in seen:
+                continue
+            seen.add(id(agent))
+            if Agent.validate_name(agent.name) == name:
+                return [agent]
+            below = agent._path_to(name, seen)
+            if below is not None:
+                return [agent, *below]
+        return None
+
+    def _in_tree(self, name: str) -> bool:
+        return name == self._name or self._path_to(name) is not None
+
     def current_active_agent(self, state: ABIAgentState) -> Command:
         """Goto the current active agent.
 
@@ -1115,11 +1150,26 @@ class Agent(Expose):
         # of a new HTTP turn, where the agent tree was freshly duplicated with a
         # blank AgentSharedState. This is what makes a prior handoff survive
         # across requests instead of falling back to the supervisor every turn.
+        #
+        # The thread is not always this agent's: Nexus keeps one thread per
+        # conversation when the user switches agents, and every engine agent
+        # shares one checkpointer. Only adopt names from this agent's tree;
+        # routing to another agent's node ends the turn without a model call.
         persisted_active = state.get("current_active_agent")
         if persisted_active is not None and self._state.current_active_agent is None:
-            self._state.set_current_active_agent(persisted_active)
+            if self._in_tree(persisted_active):
+                self._state.set_current_active_agent(persisted_active)
+            else:
+                logger.debug(
+                    f"Ignoring active agent '{persisted_active}' from the thread: "
+                    f"not in '{self._name}' graph"
+                )
         persisted_supervisor = state.get("supervisor_agent")
-        if persisted_supervisor is not None and self._state.supervisor_agent is None:
+        if (
+            persisted_supervisor is not None
+            and self._state.supervisor_agent is None
+            and self._in_tree(persisted_supervisor)
+        ):
             self._state.set_supervisor_agent(persisted_supervisor)
 
         # Log the current active agent
@@ -1177,11 +1227,13 @@ class Agent(Expose):
                 and isinstance(last_human_message.content, str)
                 else ""
             )
-            active_agent = pd.find(
-                self._agents,
-                lambda a: Agent.validate_name(a.name) == active_name,
-            )
-            retain = True
+            path = self._path_to(active_name)
+            active_agent = path[-1] if path else None
+            retain = path is not None
+            if path is None:
+                logger.debug(
+                    f"Active agent '{active_name}' is not in '{self._name}' graph"
+                )
             retain_fn = (
                 getattr(type(active_agent), "retains_active_turn", None)
                 if active_agent is not None
@@ -1197,10 +1249,12 @@ class Agent(Expose):
                         exc_info=True,
                     )
                     retain = True
-            if retain:
+            if retain and path is not None:
                 logger.debug(f"⏩ Continuing conversation with: '{active_name}'")
                 # self._notify_agent_routing(active_name)
-                return Command(goto=active_name)
+                # Go through the direct sub-agent that holds it: a deeper agent
+                # is a node of that sub-agent's graph, not of this one.
+                return Command(goto=path[0].name)
             logger.debug(
                 f"↩️  Releasing sticky agent '{active_name}' back to '{self._name}'"
             )
@@ -2119,8 +2173,10 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             or not hasattr(last_message, "tool_calls")
             or len(last_message.tool_calls) == 0
         ):
+            # Never the message itself: it is the model's answer.
             logger.warning(
-                f"No tool calls found in last message but call_tools was called: {last_message}"
+                "No tool calls found in last message but call_tools was called "
+                f"({type(last_message).__name__}, id {getattr(last_message, 'id', None)})"
             )
             return [Command(goto="__end__", update={"messages": [last_message]})]
 
@@ -2458,8 +2514,37 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             return message.get("tool_call_id") or id(message)
         return getattr(message, "tool_call_id", None) or message.id or id(message)
 
+    def _find_tool(self, name: str, seen: set[int] | None = None) -> Any:
+        """The tool called *name* in this agent or, depth first, its sub-agents.
+
+        A supervisor streams its sub-agents' graphs too, so the tool behind a
+        response it reports may belong to any agent below it.
+        """
+        seen = seen if seen is not None else set()
+        if id(self) in seen:
+            return None
+        seen.add(id(self))
+        tool = getattr(self, "_tools_by_name", {}).get(name)
+        if tool is not None:
+            return tool
+        for agent in getattr(self, "_agents", None) or []:
+            tool = agent._find_tool(name, seen)
+            if tool is not None:
+                return tool
+        return None
+
+    def _is_chat_source(self, message: AnyMessage) -> bool:
+        """Whether the URLs in this tool response may be listed as sources."""
+        tool = self._find_tool(str(getattr(message, "name", "") or ""))
+        metadata = getattr(tool, "metadata", None) or {}
+        return metadata.get("chat_source") is not False
+
     def _notify_tool_response(self, message: AnyMessage):
-        self._event_queue.put(ToolResponseEvent(payload=message))
+        self._event_queue.put(
+            ToolResponseEvent(
+                payload=message, chat_source=self._is_chat_source(message)
+            )
+        )
         self._on_tool_response(message)
         content = self._stringify_content(getattr(message, "content", None))
         self._publish_agent_event(
@@ -2804,6 +2889,102 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             # If thread_id is not a valid integer, generate a new UUID
             self._state.set_thread_id(str(uuid.uuid4()))
 
+    def _tools_for_duplicate(self, clone: Agent) -> list[Tool | BaseTool | Agent]:
+        """Rebuild the tool list the same way ``__init__`` does, without re-init."""
+        from naas_abi_core.services.agent.tools.default_tools import default_tools
+
+        tools: list[Tool | BaseTool | Agent] = list(self._original_tools)
+        if clone._enable_default_tools:
+            tools.extend(default_tools(clone))
+
+        has_supervisor = (
+            clone._state.supervisor_agent is not None
+            and clone._state.supervisor_agent.strip() != ""
+            and clone._state.supervisor_agent != clone._name
+        )
+        if has_supervisor:
+
+            @tool(return_direct=True)
+            def request_help(reason: str):
+                """
+                Request help from the supervisor agent when you (the LLM) are uncertain about the next step or do not have the required capability to fulfill the user's request.
+
+                Use this tool if:
+                - You are unsure how to proceed.
+                - You lack the necessary knowledge or ability to complete the task.
+                - The user's request is outside your capabilities or unclear.
+
+                Args:
+                    reason (str): A brief explanation of why you are requesting help (e.g., "I am uncertain about the next step", "I do not have the required capability", "The user's request is unclear").
+
+                The supervisor agent will review your reason and provide assistance or take over the conversation.
+                """
+                logger.debug(
+                    f"'{clone.name}' is requesting help from the supervisor agent"
+                )
+                return f"Requesting help from the supervisor agent because {reason}."
+
+            tools.append(request_help)
+
+        return tools
+
+    def _populate_duplicate_shell(self, clone: Agent) -> None:
+        """Copy subclass-specific fields onto a shell duplicate before ``build_graph``."""
+
+    def _duplicate_shell(
+        self,
+        queue: Queue,
+        shared_state: AgentSharedState,
+        duplicated_children: list[Agent],
+    ) -> Agent:
+        """Fast per-request clone: reuse wired tools/models, only rebuild graphs."""
+        clone = object.__new__(type(self))
+
+        clone._name = self._name
+        clone._description = self._description
+        clone._markdown_pretty_display = self._markdown_pretty_display
+        clone._enable_default_tools = self._enable_default_tools
+        clone._configuration = self._configuration
+        clone._state = shared_state
+        clone._event_queue = queue
+        clone._checkpointer = self._checkpointer
+        clone._original_agents = duplicated_children
+        clone._original_tools = list(self._original_tools)
+        clone._native_tools = list(getattr(self, "_native_tools", None) or [])
+
+        clone._chat_model = self._chat_model
+        clone._chat_model_with_tools = self._chat_model_with_tools
+        clone._chat_model_without_workspace_tools = (
+            self._chat_model_without_workspace_tools
+        )
+        clone._chat_model_output_version = getattr(self, "_chat_model_output_version", None)
+
+        clone._on_tool_usage = self._configuration.on_tool_usage
+        clone._on_tool_response = self._configuration.on_tool_response
+        clone._on_ai_message = self._configuration.on_ai_message
+        clone._on_call_model = self._configuration.on_agent_calling
+        clone._on_agent_routing = self._configuration.on_agent_routing
+
+        tools = self._tools_for_duplicate(clone)
+        structured_tools, runtime_agents = clone.prepare_tools(
+            cast(list[Tool | BaseTool | Agent], tools),
+            duplicated_children,
+        )
+        clone._tools = tools
+        clone._structured_tools = structured_tools
+        clone._agents = runtime_agents
+        clone._tools_by_name = {tool.name: tool for tool in structured_tools}
+
+        if getattr(clone, "sequential_supervisor", False):
+            for sub_agent in clone._agents:
+                if sub_agent.name != clone._name:
+                    sub_agent._returns_to_supervisor = clone._name
+
+        self._populate_duplicate_shell(clone)
+        clone._sync_event_queue_with_subagents()
+        clone.build_graph()
+        return clone
+
     def duplicate(
         self,
         queue: Queue | None = None,
@@ -2823,27 +3004,12 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         if queue is None:
             queue = Queue()
 
-        # We duplicated each agent and add them as tools.
-        # This will be recursively done for each sub agents.
-        agents: list[Agent] = [
+        duplicated_children: list[Agent] = [
             agent.duplicate(queue, shared_state) for agent in self._original_agents
         ]
 
-        new_agent = self.__class__(
-            name=self._name,
-            description=self._description,
-            chat_model=self._chat_model,
-            tools=self._original_tools,
-            agents=agents,
-            memory=self._checkpointer,
-            state=shared_state,  # Create new state instance
-            configuration=self._configuration,
-            event_queue=queue,
-            enable_default_tools=self._enable_default_tools,
-            markdown_pretty_display=self._markdown_pretty_display,
-        )
-        # Per-request copies must keep the agent's own step budget (a class
-        # attribute on the subclass the copy does not inherit from).
+        new_agent = self._duplicate_shell(queue, shared_state, duplicated_children)
+
         own_limit = getattr(self, "recursion_limit", None)
         if isinstance(own_limit, int) and own_limit > 0:
             new_agent.recursion_limit = own_limit
@@ -2904,8 +3070,15 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             new_agent = self.duplicate(
                 queue=fresh_queue, agent_shared_state=fresh_state
             )
+            # Only SSE fields go on the wire; in-process flags such as
+            # `chat_source` are not ServerSentEvent arguments.
             return EventSourceResponse(
-                new_agent.stream_invoke(query.prompt),
+                (
+                    {"event": event["event"], "data": event["data"]}
+                    if isinstance(event, dict)
+                    else event
+                    for event in new_agent.stream_invoke(query.prompt)
+                ),
                 media_type="text/event-stream; charset=utf-8",
             )
 
@@ -2957,10 +3130,13 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                     }
                 elif isinstance(message, ToolResponseEvent):
                     raw = str(pd.get(message, "payload.content", "NULL"))
-                    yield {
+                    tool_response: dict[str, Any] = {
                         "event": "tool_response",
                         "data": _truncate_tool_content(raw, _MAX_TOOL_RESULT_CHARS),
                     }
+                    if not message.chat_source:
+                        tool_response["chat_source"] = False
+                    yield tool_response
                 elif isinstance(message, AIMessageEvent):
                     yield {
                         "event": "ai_message",

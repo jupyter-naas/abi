@@ -2,6 +2,7 @@ from typing import Any, Literal, Self
 
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader import (
     GenericLoader,
+    config_model,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_KeyValueService import (
     KeyValueServiceConfiguration,
@@ -152,6 +153,28 @@ class TripleStoreAdapterObjectStorageConfiguration(BaseModel):
     triples_prefix: str = "triples"
 
 
+class TripleStoreAdapterNATSConfiguration(BaseModel):
+    """Triple store adapter NATS RPC client configuration.
+
+    Talks to a remote ``TripleStorePrimaryAdapterNATS`` over NATS
+    request/reply -- see docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
+    (Stage 1) and naas_abi_core/proto/triple_store/v1/triple_store.proto.
+
+    triple_store_adapter:
+      adapter: "nats_rpc"
+      config:
+        nats_url: "nats://127.0.0.1:4222"
+        jwt_secret: "{{ secret.NATS_SERVICE_JWT_SECRET }}"
+        service_identity: "api"
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    nats_url: str = "nats://127.0.0.1:4222"
+    jwt_secret: str
+    service_identity: str = "api"
+
+
 class TripleStoreAdapterConfiguration(GenericLoader):
     adapter: Literal[
         "oxigraph",
@@ -161,10 +184,11 @@ class TripleStoreAdapterConfiguration(GenericLoader):
         "fs",
         "oxigraph_embedded",
         "object_storage",
+        "nats_rpc",
         "custom",
     ]
     config: (
-        OxigraphAdapterConfiguration | ApacheJenaTDB2AdapterConfiguration | AWSNeptuneAdapterConfiguration | AWSNeptuneSSHTunnelAdapterConfiguration | TripleStoreAdapterFilesystemConfiguration | TripleStoreAdapterOxigraphEmbeddedConfiguration | TripleStoreAdapterObjectStorageConfiguration | dict
+        OxigraphAdapterConfiguration | ApacheJenaTDB2AdapterConfiguration | AWSNeptuneAdapterConfiguration | AWSNeptuneSSHTunnelAdapterConfiguration | TripleStoreAdapterFilesystemConfiguration | TripleStoreAdapterOxigraphEmbeddedConfiguration | TripleStoreAdapterObjectStorageConfiguration | TripleStoreAdapterNATSConfiguration | dict
         | None
     ) = None
 
@@ -257,6 +281,15 @@ class TripleStoreAdapterConfiguration(GenericLoader):
                 self.config,
                 "Invalid configuration for services.triple_store.triple_store_adapter 'aws_neptune_sshtunnel' adapter",
             )
+        if self.adapter == "nats_rpc":
+            self.config = TripleStoreAdapterNATSConfiguration.model_validate(
+                _payload_for(TripleStoreAdapterNATSConfiguration)
+            )
+            pydantic_model_validator(
+                TripleStoreAdapterNATSConfiguration,
+                self.config,
+                "Invalid configuration for services.triple_store.triple_store_adapter 'nats_rpc' adapter",
+            )
 
         return self
 
@@ -339,10 +372,37 @@ class TripleStoreAdapterConfiguration(GenericLoader):
                 )
 
                 return TripleStoreService__SecondaryAdaptor__ObjectStorage(**arguments)
+            elif self.adapter == "nats_rpc":
+                from naas_abi_core.services.triple_store.adapters.secondary.TripleStoreSecondaryAdapterNATSClient import (
+                    TripleStoreSecondaryAdapterNATSClient,
+                )
+
+                TripleStoreAdapterNATSConfiguration.model_validate(arguments)
+
+                return TripleStoreSecondaryAdapterNATSClient(**arguments)
             else:
                 raise ValueError(f"Adapter {self.adapter} not supported")
         else:
             return super().load()
+
+    def local_storage(self) -> str | None:
+        """Where the triples live (single-serving-engine ADR)."""
+        if self.adapter == "fs":
+            files = config_model(TripleStoreAdapterFilesystemConfiguration, self.config)
+            return f"files under {files.store_path}"
+        if self.adapter == "oxigraph_embedded":
+            embedded = config_model(
+                TripleStoreAdapterOxigraphEmbeddedConfiguration, self.config
+            )
+            return f"embedded Oxigraph at {embedded.store_path}"
+        if self.adapter == "object_storage":
+            storage = config_model(
+                TripleStoreAdapterObjectStorageConfiguration, self.config
+            ).object_storage_service.object_storage_adapter.local_storage()
+            return f"object storage: {storage}" if storage else None
+        if self.adapter == "custom":
+            return self.custom_local_storage()
+        return None  # oxigraph, apache_jena_tdb2, aws_neptune*; nats_rpc is another engine's
 
 
 class TripleStoreServiceConfiguration(BaseModel):

@@ -49,6 +49,7 @@ class CodeServerComposeAdapter(ICodingEnvironmentAdapter):
             name=name or self.WORKSPACE_ID,
             phase=PHASE_RUNNING,
             agent_ready=True,
+            template=self.WORKSPACE_ID,
         )
 
     def provision(
@@ -64,6 +65,10 @@ class CodeServerComposeAdapter(ICodingEnvironmentAdapter):
 
     def list_environments(self, *, user_id: str) -> list[WorkspaceStatus]:
         # Exactly one always-on shared editor.
+        return [self._running()]
+
+    def list_all_environments(self) -> list[WorkspaceStatus]:
+        # The same shared editor; it has no single owner.
         return [self._running()]
 
     def start(

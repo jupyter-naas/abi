@@ -35,9 +35,14 @@ It also covers the full stack from ingestion to UI, so you are not stitching tog
 ### Prerequisites
 
 - Python 3.12+, Git, [uv](https://astral.sh/uv) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
-- Node.js 18+ and [pnpm](https://pnpm.io/installation) 8.15+ (`npm install -g pnpm`) — for the Nexus web app; required by `abi dev up`, not by the Docker stack
+- Node.js 18.17+ and [pnpm](https://pnpm.io/installation) 8.15+ (`npm install -g pnpm`) — for the Nexus web app; required by `abi dev up`, not by the Docker stack
+- [`nats-server`](https://docs.nats.io/running-a-nats-service/introduction/installation) 2.14 or later on `PATH` (`brew install nats-server`, or a release binary) — new projects run on NATS; required by `abi dev up`, not by the Docker stack
 - [Docker Desktop](https://www.docker.com/products/docker-desktop) (8GB+ RAM for full stack)
 - LLM API keys: any OpenAI-compatible provider (OpenAI, OpenRouter, or equivalent)
+
+Details and versions: [Install and prerequisites](docs/site/docs/user-guide/get-started/install.md).
+
+> **Upgrading from 2.x?** ABI 3.0 runs on NATS: read [Migrate from 2.x to 3.0](docs/site/docs/upgrade/migrate-to-3.md) and [Breaking changes in 3.0](docs/site/docs/upgrade/breaking-changes-3.md).
 
 ### Get started
 
@@ -80,7 +85,7 @@ abi chat             # Chat with Abi in the terminal
 abi logs             # Tail logs from a service (e.g. abi logs abi)
 abi stack status     # Check health of all running containers
 abi config validate  # Check your config.yaml for errors
-abi new module       # Scaffold a new module
+abi new module       # Scaffold a module that runs in its own process (NATS)
 abi new agent        # Scaffold a new agent
 abi new workflow     # Scaffold a new workflow
 ```
@@ -95,7 +100,7 @@ A module bundles:
 - **Applications**: web UI, REST API, and CLI surfaces that expose module capabilities to end users and operators
 - **Integrations**: connectors to external APIs (GitHub, Salesforce, LinkedIn, Notion, ...) that pull data into the module
 - **Ontologies**: OWL/Turtle files that define the domain as typed entities and relationships in a knowledge graph
-- **Orchestrations**: Dagster-based schedules, jobs, and event sensors that automate module execution
+- **Jobs**: scheduled and event-driven work the module runs itself (module jobs on NATS JetStream; Dagster orchestrations are legacy)
 - **Pipelines**: operations that read and write RDF triples to the knowledge graph (add, merge, insert)
 - **Workflows**: structured callable tools exposed to agents and users that query or act on the knowledge graph
 
@@ -105,13 +110,15 @@ Each infrastructure concern is abstracted as a port with a swappable adapter. Ch
 - **Vector store** (semantic search): Community: Qdrant / Enterprise: Pinecone, Weaviate, pgvector, Azure AI Search
 - **Relational store** (agent memory): Community: PostgreSQL / Enterprise: Amazon RDS, Azure Database, Cloud SQL
 - **Object storage** (files and artifacts): Community: MinIO / Enterprise: Amazon S3, Azure Blob Storage, Google Cloud Storage
-- **Message bus** (async task routing): Community: RabbitMQ / Enterprise: Amazon MQ, Azure Service Bus, Google Pub/Sub
+- **Message bus** (async task routing): Community: NATS JetStream / Enterprise: a managed NATS cluster (2.14 or later, JetStream on)
 - **Cache** (sessions and hot data): Community: Redis / Enterprise: Amazon ElastiCache, Azure Cache for Redis, Memorystore
-- **Orchestration** (schedules and sensors): Community: Dagster / Enterprise: Dagster Cloud, Airflow on MWAA, Cloud Composer
+- **Scheduling** (schedules and event triggers): module jobs on NATS JetStream, run by each module in its own process
+
+New projects run on **NATS**: the engine serves every kernel service over the broker, the bus is JetStream, and modules can run in their own process with `naas-abi-sdk`, registering through discovery. `abi new module` creates such a module; `abi new module --in-engine` and `abi new project --without-nats` keep the classic in-process setup. Dagster and RabbitMQ are legacy extras, removed in the next major. Existing projects move over with [Migrate from 2.x to 3.0](docs/site/docs/upgrade/migrate-to-3.md); the architecture is in [NATS and the Kernel Services](docs/site/docs/developer-guide/architecture/nats.md).
 
 The **Context Engine** wires all these services at startup and routes every request to the right agent. **Abi** acts as the supervisor: it reads the intent behind each request and dispatches to the right domain agent or answers directly from the knowledge graph, vector store, or file system.
 
-Start with the marketplace modules to get running immediately, then use `abi new module` to model your own domain. Full architecture reference: [The ABI Stack](https://docs.naas.ai/architecture/the-stack).
+Start with the marketplace modules to get running immediately, then use `abi new module` to model your own domain. Full architecture reference: [The ABI Stack](https://docs.naas.ai/developer-guide/architecture/the-stack).
 
 ## Repository Layout
 
@@ -120,11 +127,13 @@ Start with the marketplace modules to get running immediately, then use `abi new
 ```
 my_ai/
 ├── src/
-│   └── my_ai/                 # Your module (agents, integrations, ontologies, ...)
+│   ├── my_ai/                 # Your module (agents, integrations, ontologies, ...)
+│   └── research/              # A remote module (`abi new module research`), run in its own process
 ├── config.yaml                # Base module and service configuration
 ├── config.local.yaml          # Local overrides (ports, credentials, enabled modules)
 ├── config.remote.yaml         # Remote/production overrides
 ├── docker-compose.yml         # Local stack definition (generated)
+├── docker-compose.override.yml # Remote modules' services (`abi new module`)
 ├── pyproject.toml             # Python project, naas-abi-* installed as dependencies
 └── .env                       # Secrets and environment variables
 ```
@@ -137,6 +146,8 @@ abi/
 │   ├── naas-abi-core/         # Infrastructure adapters (storage, vector DB, message bus, SPARQL)
 │   ├── naas-abi/              # Core agents, ontologies, and the Nexus app (API + web UI)
 │   ├── naas-abi-cli/          # The abi CLI
+│   ├── naas-abi-sdk/          # The SDK for remote modules (NATS clients, module runtime)
+│   ├── naas-abi-proto/        # The protobuf contracts of the kernel services
 │   └── naas-abi-marketplace/  # Domain modules and third-party integrations
 ├── docs/site/                 # Docusaurus documentation site
 ├── docker/                    # Caddy, Dagster, Postgres, and service configs
@@ -148,7 +159,9 @@ abi/
 
 ## Working on ABI (development)
 
-`abi dev` is a no-docker dev runtime for hacking on the project itself. It spawns API, Dagster, Nexus web, and a bundled Oxigraph SPARQL server as native processes, sharing one terminal. Parallel branches (git worktrees) get their own deterministic ports automatically — no collisions, no `docker compose` shuffling.
+This repository runs what a project from `abi new project` runs: NATS by default, with Dagster and the RabbitMQ bus as opt-in legacy, to be removed in the next major.
+
+`abi dev` is a no-docker dev runtime for hacking on the project itself. It spawns the API, Nexus web, a bundled Oxigraph SPARQL server and `nats-server` as native processes, sharing one terminal, then the remote modules listed under `dev.modules`: this repository's `config.yaml` has a `nats:` block, like a generated project's. `abi dev up --without-nats` runs the legacy in-process engine instead, with Dagster when the legacy `naas-abi-core[dagster]` extra is installed, and `--with-tracing` adds Jaeger. Parallel branches (git worktrees) get their own deterministic ports automatically — no collisions, no `docker compose` shuffling.
 
 ### One-time setup
 
@@ -159,8 +172,11 @@ cd abi
 # uv + Python toolchain (skip if you already have uv globally)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Node toolchain for the Nexus web app (Node.js 18+, pnpm 8.15+ — required by `abi dev up`)
+# Node toolchain for the Nexus web app (Node.js 18.17+, pnpm 8.15+ — required by `abi dev up`)
 brew install pnpm        # or: npm install -g pnpm
+
+# NATS broker, 2.14 or later (required by `abi dev up`)
+brew install nats-server # or a release binary: https://github.com/nats-io/nats-server/releases
 
 # Install all libs in editable mode
 uv sync
@@ -179,14 +195,14 @@ You'll see a status table pinned at the bottom of the terminal with live health 
 
 ```
 oxigraph   http://127.0.0.1:7878   ● ready
+nats       http://127.0.0.1:13000  ● ready
 api        http://127.0.0.1:9879   ● ready
-dagster    http://127.0.0.1:11000  ● ready
 nexus-web  http://127.0.0.1:12000  ● ready
 
 Login: admin@example.com / <generated password>
 ```
 
-The admin password is generated for this project and written to `.env` as `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`; the Nexus seed picks it up on first boot. There is no default password.
+The admin password is generated for this project and written to `.env` as `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`; the Nexus seed picks it up on first boot. There is no default password. The broker's passwords (`NATS_ABI_PASSWORD`, `NATS_MODULE_PASSWORD`) and `NATS_JWT_SECRET` are generated into `.env` the same way.
 
 ### Hotkeys
 
@@ -196,7 +212,7 @@ While `abi dev up` is running:
 |---|---|
 | `1` / `2` / `3` / `4` | Filter logs to one service (other services still log to files) |
 | `0` | Back to interleaved output |
-| `o` / `a` / `d` / `n` | Open Oxigraph / API / Dagster / Nexus web in the browser |
+| `o` / `a` / `n` | Open Oxigraph / API / Nexus web in the browser (`d`: Dagster, legacy) |
 | `r` | Restart the whole stack in place (no need to quit) |
 | `q` / `Ctrl+C` | Graceful stop (SIGTERM, 10s grace, then SIGKILL) |
 | `Q` | Force kill (SIGKILL immediately) |
@@ -237,11 +253,11 @@ If the deterministic port is busy (stale process, three-way collision), the CLI 
 | Triple store | Apache Jena Fuseki | Bundled Oxigraph HTTP server (`pyoxigraph`) |
 | Vector store | Qdrant server | SQLite + `sqlite-vec` extension |
 | Key-value | Redis | SQLite (WAL) |
-| Message bus | RabbitMQ | SQLite (WAL) |
+| Message bus | NATS JetStream | `nats-server` (default) or SQLite (`--without-nats`, legacy) |
 | Object storage | MinIO / S3 | Local filesystem (`storage/datastore/`) |
 | Email | SMTP | Filesystem (`storage/email/*.eml`) |
 
-All adapters are interface-compatible — `config.yaml` selects which one. For changes touching schema, concurrency, or filter semantics, also run `abi start` (the full docker stack) before opening a PR.
+All adapters are interface-compatible — `config.yaml` selects which one. For changes touching schema, concurrency, or filter semantics, also run `abi stack start` (the full docker stack, on NATS; `config.local.yaml`) before opening a PR. `abi stack start --legacy` adds Dagster and the RabbitMQ bus, behind the `legacy` compose profile.
 
 ### Logs
 
@@ -249,12 +265,18 @@ Live, written to disk regardless of foreground/background mode:
 
 ```
 .abi/dev/logs/api.log
-.abi/dev/logs/dagster.log
+.abi/dev/logs/nats.log
 .abi/dev/logs/nexus-web.log
 .abi/dev/logs/oxigraph.log
 ```
 
 `abi dev logs <service> -f` follows one of them.
+
+## Documentation
+
+**User guide**: [Install and prerequisites](docs/site/docs/user-guide/get-started/install.md), [Quickstart](docs/site/docs/user-guide/get-started/quickstart.md), [Configuration](docs/site/docs/user-guide/get-started/configuration.md), [Build](docs/site/docs/user-guide/build/overview.md) (modules, [module jobs](docs/site/docs/user-guide/build/modules/module-jobs.md), agents, pipelines, the SDK), [Deploy](docs/site/docs/user-guide/deploy/overview.md) (Docker, Dokploy, production), [Upgrade to 3.0](docs/site/docs/upgrade/migrate-to-3.md), [CLI reference](docs/site/docs/user-guide/reference/cli.md).
+
+**Developer guide**: [Contribute to ABI](docs/site/docs/developer-guide/contributing/overview.md), [Testing](docs/site/docs/developer-guide/contributing/testing.md), [Releasing](docs/site/docs/developer-guide/releasing/release-process.md), [Architecture](docs/site/docs/developer-guide/architecture/what-is-abi.md), [ADR index](docs/site/docs/developer-guide/adr.md).
 
 ## Production Deployment
 
@@ -266,7 +288,7 @@ Copy your `.env` and config files to the target server, then run:
 docker compose -f docker-compose.yml up -d
 ```
 
-All services (PostgreSQL, Fuseki, Qdrant, MinIO, RabbitMQ, Redis, Dagster) start as containers. For production workloads, swap the Docker adapters for managed cloud services as described in [How It Works](#how-it-works).
+All services (NATS, PostgreSQL, Fuseki, Qdrant, MinIO, Redis) start as containers, with remote modules from `docker-compose.override.yml`. In NATS mode one engine serves the kernel services; for deploys without downtime see [one serving engine](docs/site/docs/developer-guide/architecture/nats.md#one-serving-engine). For production workloads, swap the Docker adapters for managed cloud services as described in [How It Works](#how-it-works).
 
 ### Managed Hosting
 
@@ -280,11 +302,10 @@ Collaborative effort between:
 - **[OpenTeams](https://openteams.com/)** - Open SaaS Infrastructure
 - **[University at Buffalo](https://www.buffalo.edu/)** - Research University
 - **[NCOR](https://ncor.buffalo.edu/)** - National Center for Ontological Research
-- **[Forvis Mazars](https://www.forvismazars.com/)** - Global Audit & Consulting
 
 ## Contributing
 
-We welcome contributions. Open an issue or pull request to get started.
+We welcome contributions. Open an issue or pull request to get started, and read [Contribute to ABI](docs/site/docs/developer-guide/contributing/overview.md) first.
 
 ## License
 

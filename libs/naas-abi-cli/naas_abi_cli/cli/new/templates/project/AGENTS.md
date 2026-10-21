@@ -7,7 +7,22 @@
 `{{project_name}}` is an ABI project scaffolded with `abi new project`. It runs on top of the **ABI framework** (`naas-abi-core`, `naas-abi`, `naas-abi-cli`, `naas-abi-marketplace`) and packages your own logic as one or more **modules** under `src/{{project_name_snake}}/`.
 
 The framework provides ports-and-adapters services (cache, bus, event, triple_store, vector_store, object_storage, secret, model_registry, agent, …). Your project consumes them through the standard service surface — never with direct infrastructure calls.
+{% if nats %}
+## Architecture: NATS
 
+The project runs on NATS (the `nats:` block in each `config*.yaml`). The engine serves every kernel service over the broker, the bus is JetStream, module jobs are JetStream schedules, and the engine hosts the module registry (discovery, project `{{project_name_snake}}`). There are two kinds of module:
+
+| Kind | Created with | Runs | Reaches the engine | Registered in |
+|---|---|---|---|---|
+| **Remote** (default) | `abi new module <name>` | its own process / container | NATS only, through `naas-abi-sdk` | discovery (it registers itself); `dev.modules` + `docker-compose.override.yml` start it |
+| **In-engine** | `abi new module <name> --in-engine` | inside the engine | in-process objects (`naas_abi_core`) | `modules:` in `config.yaml` |
+
+- **A remote module never imports `naas_abi_core`.** Its Dockerfile fails the build if core is installed, and its tests check the import. Use `naas_abi_sdk` (`BaseModule`, `AgentDescriptor`, `@job`, `naas_abi_sdk.agents.IntentAgent`) and reach services through `self.engine.services.<name>`, declared in `ModuleDependencies(services=(...))`.
+- Scheduled work is a `@job(..., triggers=(Every("1h"),))` on the module, not Dagster: the stack runs no Dagster.
+- `src/{{project_name_snake}}/` is the in-engine module holding the default agent.
+- Checks: `curl -s localhost:8222/healthz`, `curl -s localhost:8222/connz` (the broker; with `abi dev up` the monitoring port is printed at start), and a module logs `READY` once registered.
+- SDK reference: [`.abi/libs/naas-abi-sdk/README.md`](.abi/libs/naas-abi-sdk/README.md). Upgrade, NATS architecture and tuning: [`.abi/docs/site/docs/`](.abi/docs/site/docs/) (`upgrade/migrate-to-3.md`, `developer-guide/architecture/`, `user-guide/build/sdk/`).
+{% endif %}
 ## Where the framework lives (read this!)
 
 The upstream **ABI framework** is checked out at [`.abi/`](.abi) as a git submodule. Every framework AGENTS.md, service port, adapter, and reference scaffold is readable locally without leaving the project.
@@ -95,7 +110,10 @@ uv run pytest
 # Single test
 uv run pytest src/{{project_name_snake}}/agents/{{project_name_pascal}}Agent_test.py -v
 
-# Start the local stack (Postgres, Fuseki, Qdrant, MinIO, RabbitMQ as needed)
+# Run natively (no Docker){% if nats %}: nats-server, the engine, then the dev.modules{% endif %}
+abi dev up
+
+# Start the local stack (Postgres, Fuseki, Qdrant, MinIO, {% if nats %}NATS{% else %}RabbitMQ{% endif %} as needed)
 abi stack start
 abi stack status
 abi stack logs
@@ -112,8 +130,10 @@ abi new pipeline <name> src/{{project_name_snake}}/pipelines
 abi new orchestration <name> src/{{project_name_snake}}/orchestrations
 
 # Scaffold an additional module alongside the default
-abi new module <name> src
-```
+{% if nats %}abi new module <name>                # remote (SDK, own process): src/<name>, dev.modules, compose override
+abi new module <name> --in-engine    # classic, loaded by the engine: add it under `modules:`
+{% else %}abi new module <name> src
+{% endif %}```
 
 ## Architecture rules (non-negotiable)
 
@@ -134,7 +154,10 @@ abi new module <name> src
 
 | I want to … | How |
 |---|---|
-| Add a new module | `abi new module <kebab-name> src` |
+{% if nats %}| Add a module that runs on its own | `abi new module <kebab-name>` (remote, the default) |
+| Add a module the engine loads | `abi new module <kebab-name> --in-engine` |
+{% else %}| Add a new module | `abi new module <kebab-name> src` |
+{% endif %}
 | Add an agent | `abi new agent <name> src/{{project_name_snake}}/agents` |
 | Add a third-party integration | `abi new integration <name> src/{{project_name_snake}}/integrations` |
 | Add a workflow | `abi new workflow <name> src/{{project_name_snake}}/workflows` |

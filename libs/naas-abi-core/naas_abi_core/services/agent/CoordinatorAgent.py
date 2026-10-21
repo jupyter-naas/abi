@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from queue import Queue
-from typing import Literal, Union
+from typing import Literal, Union, cast
 
 import pydash as pd
 from langchain_core.embeddings import Embeddings
@@ -591,40 +591,11 @@ class CoordinatorAgent(IntentAgent):
     # Override: duplicate — must rebuild THIS subclass, not IntentAgent  #
     # ------------------------------------------------------------------ #
 
-    def duplicate(
-        self,
-        queue: Queue | None = None,
-        agent_shared_state: AgentSharedState | None = None,
-    ) -> "CoordinatorAgent":
-        shared_state = agent_shared_state or AgentSharedState()
-        if queue is None:
-            queue = Queue()
-
-        agents: list[IntentAgent | Agent] = [
-            agent.duplicate(queue, shared_state) for agent in self._original_agents
-        ]
-
-        # Use type(self)(...) so further subclasses (e.g. AbiAgent) duplicate
-        # themselves correctly without overriding duplicate again.
-        return type(self)(
-            name=self._name,
-            description=self._description,
-            chat_model=self._chat_model,
-            tools=self._original_tools,
-            agents=agents,
-            intents=self._intents,
-            memory=self._checkpointer,
-            state=shared_state,
-            configuration=self._configuration,
-            event_queue=queue,
-            embedding_model=self._embedding_model,
-            threshold=self._threshold,
-            threshold_neighbor=self._threshold_neighbor,
-            direct_intent_score=self._direct_intent_score,
-            enable_default_intents=self._enable_default_intents,
-            enable_default_tools=self._enable_default_tools,
-            markdown_pretty_display=self._markdown_pretty_display,
-            allow_tool_intents=self.allow_tool_intents,
-            borderline_behavior=self.borderline_behavior,
-            borderline_floor=self.borderline_floor,
-        )
+    def _populate_duplicate_shell(self, clone: Agent) -> None:
+        super()._populate_duplicate_shell(clone)
+        coordinator_clone = cast("CoordinatorAgent", clone)
+        coordinator_clone.allow_tool_intents = self.allow_tool_intents
+        coordinator_clone.borderline_behavior = self.borderline_behavior
+        coordinator_clone.borderline_floor = self.borderline_floor
+        coordinator_clone.refusal_message_template = self.refusal_message_template
+        coordinator_clone.suggestion_message_template = self.suggestion_message_template

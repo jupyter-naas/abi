@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { PLATFORM_TABLE_SLUGS } from './app/settings/lib/tables';
 
 /**
  * Route protection, legacy redirects, and org-scoped routing.
  *
  * Routing hierarchy:
  *   /account/*                        -> authed
+ *   /settings, /settings/<table slug> -> authed, Platform Settings (superadmins)
  *   /organizations/[orgId]/settings   -> authed
  *   /org/[orgSlug]/login              -> public, org-branded login
  *   /org/[orgSlug]/workspace/[id]/... -> authed, rewritten to /workspace/[id]/...
@@ -25,6 +27,18 @@ function resolveDefaultWorkspace(request: NextRequest): string {
 }
 
 const legacyRoutes = ['/home', '/maps', '/chat', '/search', '/lab', '/ontology', '/graph', '/apps', '/marketplace', '/help', '/files', '/settings'];
+
+// Platform Settings owns /settings (dashboard) and one page per table; any
+// other /settings/* path is a legacy workspace settings link and keeps redirecting.
+// Table slugs never reuse a legacy path (see platformTableSlug).
+const platformSettingsSections: readonly string[] = PLATFORM_TABLE_SLUGS;
+
+function isPlatformSettingsRoute(pathname: string): boolean {
+  if (pathname === '/settings' || pathname === '/settings/') return true;
+  return platformSettingsSections.some(
+    (s) => pathname === `/settings/${s}` || pathname.startsWith(`/settings/${s}/`),
+  );
+}
 
 const authRoutes = [
   '/auth/login',
@@ -70,7 +84,9 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(newUrl);
   }
 
-  const isLegacyRoute = legacyRoutes.some(r => pathname === r || pathname.startsWith(`${r}/`));
+  const isLegacyRoute =
+    !isPlatformSettingsRoute(pathname) &&
+    legacyRoutes.some(r => pathname === r || pathname.startsWith(`${r}/`));
   if (isLegacyRoute) {
     const newUrl = new URL(`/workspace/${resolveDefaultWorkspace(request)}${pathname}`, request.url);
     newUrl.search = request.nextUrl.search;
@@ -101,6 +117,7 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/workspace/') ||
     pathname.startsWith('/organizations/') ||
     pathname.startsWith('/account/') ||
+    isPlatformSettingsRoute(pathname) ||
     pathname === '/no-workspace' ||
     pathname.startsWith('/no-workspace/');
   const isAuthRoute = authRoutes.some(r => pathname === r || pathname.startsWith(`${r}/`));

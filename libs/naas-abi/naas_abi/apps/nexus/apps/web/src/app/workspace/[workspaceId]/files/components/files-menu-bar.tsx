@@ -6,6 +6,7 @@ import {
   ONTOLOGY_SPACING,
   type OntologySpacingValue,
 } from '@/lib/ontology-spacing';
+import { APP_MENU_ROW, APP_MENU_SURFACE, APP_MENU_TRIGGER } from '@/components/shell/app-menu-classes';
 
 export type FilesViewMode = 'list' | 'grid';
 
@@ -21,14 +22,17 @@ export type FilesMenuBarProps = {
   onNewFolder: () => void;
   onUpload: () => void;
   onRefresh: () => void;
+  onOpenDriveSettings: () => void;
+  /** The open folder is a system folder: nothing can be created or uploaded in it. */
+  isSystemFolder: boolean;
+  /** Names starting with "." — hidden unless on, and read-only either way. */
+  showSystemFiles: boolean;
+  onShowSystemFilesChange: (show: boolean) => void;
 };
 
-const row =
-  'flex cursor-default select-none items-center gap-2 px-3 py-1.5 text-xs outline-none ![border-radius:0] data-[highlighted]:bg-transparent data-[disabled]:opacity-50';
-const surface =
-  'z-[300] min-w-[190px] border-0 bg-card p-1 text-foreground !shadow-none outline-none !ring-0 focus:!ring-0 focus-visible:!ring-0 ![border-radius:0]';
-const trigger =
-  'flex items-center gap-1 border-0 bg-transparent px-2 py-1 text-xs shadow-none outline-none ring-0 ![border-radius:0] hover:bg-transparent focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 active:bg-transparent data-[state=open]:bg-transparent data-[state=open]:shadow-none';
+const row = APP_MENU_ROW;
+const surface = APP_MENU_SURFACE;
+const trigger = APP_MENU_TRIGGER;
 
 /**
  * App menu for Files. Mounted via `<Header nav=…>` into the shell TopNav
@@ -45,6 +49,10 @@ export function FilesMenuBar({
   onNewFolder,
   onUpload,
   onRefresh,
+  onOpenDriveSettings,
+  isSystemFolder,
+  showSystemFiles,
+  onShowSystemFilesChange,
 }: FilesMenuBarProps) {
   const spacingLabel =
     ONTOLOGY_SPACING.find((option) => option.value === spacing)?.label ?? 'Compact';
@@ -62,7 +70,7 @@ export function FilesMenuBar({
             <DropdownMenu.Content align="start" sideOffset={5} className={surface}>
               <DropdownMenu.Item
                 className={row}
-                disabled={isLocalFolder}
+                disabled={isLocalFolder || isSystemFolder}
                 onSelect={onNewFile}
                 data-testid="files-menuitem-new-file"
               >
@@ -70,7 +78,7 @@ export function FilesMenuBar({
               </DropdownMenu.Item>
               <DropdownMenu.Item
                 className={row}
-                disabled={isLocalFolder}
+                disabled={isLocalFolder || isSystemFolder}
                 onSelect={onNewFolder}
                 data-testid="files-menuitem-new-folder"
               >
@@ -79,11 +87,28 @@ export function FilesMenuBar({
               <DropdownMenu.Separator className="my-1 h-px bg-border" />
               <DropdownMenu.Item
                 className={row}
-                disabled={isLocalFolder}
+                disabled={isLocalFolder || isSystemFolder}
                 onSelect={onUpload}
                 data-testid="files-menuitem-upload"
               >
                 Upload…
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator className="my-1 h-px bg-border" />
+              <DropdownMenu.Item
+                className={row}
+                disabled={loading}
+                onSelect={onRefresh}
+                data-testid="files-menuitem-refresh"
+              >
+                {loading ? 'Refreshing…' : 'Refresh'}
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator className="my-1 h-px bg-border" />
+              <DropdownMenu.Item
+                className={row}
+                onSelect={onOpenDriveSettings}
+                data-testid="files-menuitem-drive-settings"
+              >
+                Drive settings…
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
@@ -152,14 +177,20 @@ export function FilesMenuBar({
                 </DropdownMenu.Portal>
               </DropdownMenu.Sub>
               <DropdownMenu.Separator className="my-1 h-px bg-border" />
-              <DropdownMenu.Item
+              <DropdownMenu.CheckboxItem
                 className={row}
-                disabled={loading}
-                onSelect={onRefresh}
-                data-testid="files-menuitem-refresh"
+                checked={showSystemFiles}
+                onCheckedChange={(checked) => onShowSystemFilesChange(checked === true)}
+                title='Files and folders whose name starts with "." — always read-only'
+                data-testid="files-menuitem-show-system-files"
               >
-                {loading ? 'Refreshing…' : 'Refresh'}
-              </DropdownMenu.Item>
+                <span className="flex w-3 items-center">
+                  <DropdownMenu.ItemIndicator>
+                    <Check size={12} />
+                  </DropdownMenu.ItemIndicator>
+                </span>
+                Show system files
+              </DropdownMenu.CheckboxItem>
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>

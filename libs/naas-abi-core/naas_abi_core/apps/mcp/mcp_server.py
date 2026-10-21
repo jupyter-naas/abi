@@ -16,8 +16,9 @@ from mcp.server.fastmcp import FastMCP
 # Load environment variables from .env file if present
 load_dotenv()
 
-# Initialize FastMCP server
-mcp = FastMCP("abi")
+# Initialize FastMCP server. MCP_HOST: the address the HTTP transports listen
+# on (0.0.0.0 in a container, where the port is published).
+mcp = FastMCP("abi", host=os.environ.get("MCP_HOST", "127.0.0.1"))
 
 # Constants - Default to localhost for development, can be overridden by env var
 ABI_API_BASE = os.environ.get("ABI_API_BASE", "http://localhost:9879")

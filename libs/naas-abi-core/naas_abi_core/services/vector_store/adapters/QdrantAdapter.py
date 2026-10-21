@@ -16,9 +16,36 @@ from qdrant_client.models import (
     VectorParams,
 )
 
-from ..IVectorStorePort import IVectorStorePort, SearchResult, VectorDocument
+from ..IVectorStorePort import (
+    CollectionInfo,
+    IVectorStorePort,
+    SearchResult,
+    VectorDocument,
+    VectorPage,
+)
 
 logger = logging.getLogger(__name__)
+
+
+_METRIC_NAMES = {
+    Distance.COSINE: "cosine",
+    Distance.EUCLID: "euclidean",
+    Distance.DOT: "dot",
+    Distance.MANHATTAN: "l1",
+}
+
+
+def _describe(collection_name: str, info: Any) -> CollectionInfo:
+    """Dimension and metric of a single-vector collection (named vectors: unknown)."""
+    params = info.config.params.vectors
+    dimension = getattr(params, "size", None)
+    distance = getattr(params, "distance", None)
+    return CollectionInfo(
+        name=collection_name,
+        dimension=int(dimension) if dimension is not None else None,
+        distance_metric=_METRIC_NAMES.get(distance) if distance is not None else None,
+        size=int(info.points_count or 0),
+    )
 
 
 class QdrantAdapter(IVectorStorePort):
@@ -243,6 +270,57 @@ class QdrantAdapter(IVectorStorePort):
 
         collection_info = self.client.get_collection(collection_name=collection_name)
         return collection_info.indexed_vectors_count or 0
+
+    def list_vectors(
+        self,
+        collection_name: str,
+        limit: int = 100,
+        cursor: str | None = None,
+        include_vectors: bool = False,
+    ) -> VectorPage:
+        """Documents in point-id order (Qdrant scroll); the cursor is a point id."""
+        if not self.client:
+            raise RuntimeError("Adapter not initialized")
+        if limit <= 0:
+            raise ValueError("limit must be a positive integer")
+
+        # Point ids are unsigned integers or UUIDs; the cursor carries either as text.
+        offset: int | str | None = (
+            int(cursor) if cursor is not None and cursor.isdigit() else cursor
+        )
+        points, next_offset = self.client.scroll(
+            collection_name=collection_name,
+            limit=limit,
+            offset=offset,
+            with_payload=True,
+            with_vectors=include_vectors,
+        )
+        documents = []
+        for point in points:
+            payload = dict(point.payload) if point.payload else {}
+            vector = point.vector if include_vectors else None
+            documents.append(
+                VectorDocument(
+                    id=str(point.id),
+                    vector=np.array(vector)
+                    if isinstance(vector, list)
+                    else np.array([]),
+                    metadata={k: v for k, v in payload.items() if k != "payload"},
+                    payload=payload.get("payload"),
+                )
+            )
+        return VectorPage(
+            documents=documents,
+            next_cursor=str(next_offset) if next_offset is not None else None,
+        )
+
+    def get_collection_info(self, collection_name: str) -> CollectionInfo:
+        if not self.client:
+            raise RuntimeError("Adapter not initialized")
+
+        return _describe(
+            collection_name, self.client.get_collection(collection_name=collection_name)
+        )
 
     def close(self) -> None:
         if self.client:

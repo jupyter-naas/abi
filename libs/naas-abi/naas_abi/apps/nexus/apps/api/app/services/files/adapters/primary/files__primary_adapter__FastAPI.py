@@ -13,6 +13,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     require_workspace_platform_drive,
     require_workspace_system_drive,
 )
+from naas_abi.apps.nexus.apps.api.app.core.content_disposition import content_disposition
 from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__primary_adapter__dependencies import (  # noqa: E501
     get_files_service,
 )
@@ -24,7 +25,10 @@ from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__pri
     FileListResponse,
     RenameRequest,
 )
-from naas_abi.apps.nexus.apps.api.app.services.files.drive_roots import (
+from naas_abi.apps.nexus.apps.api.app.services.files.drives.scripts.legacy_storage_migration import (
+    LegacyStorageMigrator,
+)
+from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.drive_roots import (
     PLATFORM_DRIVE_ROOT,
     SCOPE_MY_DRIVE,
     SCOPE_PATTERN,
@@ -40,9 +44,6 @@ from naas_abi.apps.nexus.apps.api.app.services.files.files__schema import (
     FileInfoData,
     FileListResponseData,
 )
-from naas_abi.apps.nexus.apps.api.app.services.files.legacy_storage_migration import (
-    LegacyStorageMigrator,
-)
 from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
@@ -51,6 +52,21 @@ router = APIRouter(dependencies=[Depends(get_current_user_required)])
 class FilesFastAPIPrimaryAdapter:
     def __init__(self) -> None:
         self.router = router
+
+
+def _reject_system_path(*paths: str) -> None:
+    """System files (any path segment starting with ".") are read-only over HTTP.
+
+    The UI hides and locks them; this is the same rule enforced server-side, so
+    no client can create, change, move or delete them. Server code that owns
+    them (folder markers, agents) goes through FilesService directly.
+    """
+    for path in paths:
+        if any(segment.startswith(".") for segment in path.split("/") if segment):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail='System files (names starting with ".") are read-only',
+            )
 
 
 def _to_file_info_schema(value: FileInfoData) -> FileInfo:
@@ -301,6 +317,10 @@ async def list_files(
         pattern="^(asc|desc)$",
         description="Sort direction",
     ),
+    include_hidden: bool = Query(
+        default=True,
+        description='List system entries (names starting with ".")',
+    ),
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
@@ -313,6 +333,7 @@ async def list_files(
             search=search,
             sort_by=sort_by,
             sort_dir=sort_dir,
+            include_hidden=include_hidden,
         )
     )
 
@@ -323,6 +344,7 @@ async def create_file(
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
+    _reject_system_path(payload.path)
     scoped_path = await _authorize_path(
         current_user, payload.path, payload.workspace_id, payload.scope, files_service=files_service
     )
@@ -341,6 +363,7 @@ async def create_folder(
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
+    _reject_system_path(payload.path)
     scoped_path = await _authorize_path(
         current_user, payload.path, payload.workspace_id, payload.scope, files_service=files_service
     )
@@ -353,6 +376,7 @@ async def rename_file(
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
+    _reject_system_path(payload.old_path, payload.new_path)
     scoped_old_path = await _authorize_path(
         current_user,
         payload.old_path,
@@ -398,6 +422,7 @@ async def upload_file(
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
+    _reject_system_path(path, file.filename or "")
     scoped_path = await _authorize_path(current_user, path, workspace_id, scope, files_service=files_service)
     content = await file.read()
     return _to_file_info_schema(
@@ -424,7 +449,7 @@ async def preview_file_as_pdf(
     return Response(
         content=preview.content,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="{preview.filename}"'},
+        headers={"Content-Disposition": content_disposition("inline", preview.filename)},
     )
 
 
@@ -441,7 +466,7 @@ async def download_folder_archive(
     return StreamingResponse(
         archive_iterator,
         media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": content_disposition("attachment", filename)},
     )
 
 
@@ -453,6 +478,7 @@ async def extract_archive(
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
+    _reject_system_path(path)
     scoped_path = await _authorize_path(
         current_user, path, workspace_id, scope, files_service=files_service
     )
@@ -473,7 +499,7 @@ async def read_file_raw(
     return Response(
         content=raw_file.content,
         media_type=raw_file.media_type,
-        headers={"Content-Disposition": f'inline; filename="{raw_file.filename}"'},
+        headers={"Content-Disposition": content_disposition("inline", raw_file.filename)},
     )
 
 
@@ -498,6 +524,7 @@ async def update_file(
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
+    _reject_system_path(path)
     effective_workspace_id = workspace_id or payload.workspace_id
     scoped_path = await _authorize_path(current_user, path, effective_workspace_id, scope, files_service=files_service)
     return _to_file_info_schema(
@@ -517,5 +544,6 @@ async def delete_file(
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
+    _reject_system_path(path)
     scoped_path = await _authorize_path(current_user, path, workspace_id, scope, files_service=files_service)
     return files_service.delete_path(path=scoped_path)

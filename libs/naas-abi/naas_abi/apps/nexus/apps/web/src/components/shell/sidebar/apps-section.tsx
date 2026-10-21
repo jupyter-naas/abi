@@ -155,9 +155,11 @@ function AppDetailView({ mod, onBack }: { mod: OpenAppModule; onBack: () => void
 }
 
 export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
-  const {
-    currentWorkspaceId, openAppModule, setOpenAppModule, appDetailOpen, setAppDetailOpen,
-  } = useWorkspaceStore();
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const openAppModule = useWorkspaceStore((s) => s.openAppModule);
+  const setOpenAppModule = useWorkspaceStore((s) => s.setOpenAppModule);
+  const appDetailOpen = useWorkspaceStore((s) => s.appDetailOpen);
+  const setAppDetailOpen = useWorkspaceStore((s) => s.setAppDetailOpen);
   const tenant = useTenant();
   const basePath = getWorkspacePath(currentWorkspaceId, '/apps');
   const pathname = usePathname();
@@ -285,14 +287,10 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
         <Link
           href={basePath}
           onClick={() => forgetAppsLastOpen(currentWorkspaceId)}
-          className={cn(
-            'flex w-full items-center gap-1 rounded-md px-2 py-1.5 apps-sidebar-list-row transition-colors',
-            isOnApps && !openAppModule
-              ? 'bg-muted text-foreground font-medium'
-              : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-          )}
+          aria-current={isOnApps && !openAppModule ? 'page' : undefined}
+          className="shell-sidebar-home"
         >
-          <LayoutGrid size={14} />
+          <LayoutGrid size={14} aria-hidden="true" />
           <span>All apps</span>
         </Link>
         {appLinks}

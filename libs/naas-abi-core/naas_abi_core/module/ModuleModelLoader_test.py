@@ -168,6 +168,26 @@ def test_register_failure_is_logged_and_does_not_abort_remaining_files(
     assert registry.list_canonical_ids() == ["ok-id"]
 
 
+def test_the_warning_names_the_file_and_the_error(tmp_path: Path) -> None:
+    """loguru formats with {}: a %s template would print the placeholders."""
+    from naas_abi_core import logger
+
+    cls = _make_fake_package(
+        tmp_path, "pkg_warn", {"broken.py": "import this_module_does_not_exist  # noqa\n"}
+    )
+    messages: list[str] = []
+    sink = logger.add(lambda message: messages.append(str(message)), level="WARNING")
+    try:
+        ModuleModelLoader.load_models(cls, ModelRegistryService())
+    finally:
+        logger.remove(sink)
+
+    (warning,) = [m for m in messages if "failed to import" in m]
+    assert "pkg_warn.models.broken" in warning
+    assert "this_module_does_not_exist" in warning
+    assert "%s" not in warning
+
+
 def test_loader_used_via_baseModule_on_load_smoke(tmp_path: Path) -> None:
     """Smoke check that the auto-loader exposes the same surface
     BaseModule.on_load expects: returns an int, accepts a class + registry."""

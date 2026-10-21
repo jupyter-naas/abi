@@ -28,4 +28,3 @@
 .ontology-icon-picker footer button { color:var(--workspace-accent,var(--color-primary)); cursor:pointer; }
 .ontology-icon-picker button:disabled { opacity:0.45; cursor:default; }
 .ontology-icon-picker button:focus-visible,.ontology-icon-trigger:focus-visible { outline:2px solid var(--workspace-accent,var(--color-primary)); outline-offset:2px; box-shadow:none; }
-.ontology-icon-picker-search:focus-within { border-color:var(--workspace-accent,var(--color-primary)); }

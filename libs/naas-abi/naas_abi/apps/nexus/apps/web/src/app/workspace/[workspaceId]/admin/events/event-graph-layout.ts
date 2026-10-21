@@ -1,8 +1,8 @@
 /**
  * Seeding and projection for the events graph.
  *
- * Ported from the Personnel Cockpit graph (`domains/personnel/apps/cockpit/
- * web/components/pages/graph/GraphPage.js`): the simulation stays 2D and each
+ * Ported from the person graph page (`domains/intelligence/modules/people/
+ * apps/people/graph_page/GraphPage.js`): the simulation stays 2D and each
  * cluster gets a fixed z at seed time, so orbiting reveals the grouping as
  * depth without re-running any layout.
  */

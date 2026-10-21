@@ -45,6 +45,71 @@ export function appHtmlPathPrefix(url: string): string | null {
   return `/${parts[0]}/${parts[1]}/${parts[2]}/`;
 }
 
+/**
+ * A remote module's app (``/app-html/remote/<module>/<app>/<rest>``). It never
+ * loads from this origin: the page asks the API for a grant
+ * (POST /apps/remote-grant) and frames ``<apiBase>/app-remote/<grant>/…``,
+ * sandboxed, as the app-project preview does.
+ */
+export type RemoteAppParts = { moduleId: string; app: string; rest: string };
+
+export function remoteAppParts(url: string): RemoteAppParts | null {
+  const path = toAppHtmlPath(url);
+  if (!path) return null;
+  const match = /^\/app-html\/remote\/([^/?#]+)\/([^/?#]+)(?:\/(.*)|([?#].*))?$/.exec(path);
+  if (!match) return null;
+  return { moduleId: match[1], app: match[2], rest: match[3] ?? match[4] ?? '' };
+}
+
+/** ``<apiBase><grant path><rest>``: the grant path ends with ``/``. */
+export function remoteAppGrantUrl(apiBase: string, grantPath: string, rest: string): string {
+  return `${apiBase.replace(/\/+$/, '')}${grantPath}${rest.replace(/^\/+/, '')}`;
+}
+
+/** Reopen a remote app this long before its grant expires... */
+const REMOTE_GRANT_RENEW_MARGIN_MS = 60_000;
+/** ...but not sooner than this after opening it (a reload loses the page's state)... */
+const REMOTE_GRANT_RENEW_FLOOR_MS = 5 * 60_000;
+
+/**
+ * When to reopen a remote app under a fresh grant, given the grant's
+ * ``expires_in`` (seconds); null when the answer gives none.
+ */
+export function remoteGrantRenewDelayMs(expiresIn: unknown): number | null {
+  const seconds = Number(expiresIn);
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+  // ...except that a grant shorter than the floor (the API allows one minute)
+  // is renewed within its first half: later it is already expired.
+  const lifetimeMs = seconds * 1000;
+  return Math.max(
+    lifetimeMs - REMOTE_GRANT_RENEW_MARGIN_MS,
+    Math.min(REMOTE_GRANT_RENEW_FLOOR_MS, lifetimeMs / 2),
+  );
+}
+
+/**
+ * A remote app's catalog URL opening it in ``workspaceId`` (``?workspace_id=``):
+ * the API grants it there when the app is enabled in it. Other URLs unchanged.
+ */
+export function withRemoteAppWorkspace(url: string, workspaceId: string): string {
+  if (!workspaceId || !remoteAppParts(url)) return url;
+  const hashIndex = url.indexOf('#');
+  const withoutHash = hashIndex >= 0 ? url.slice(0, hashIndex) : url;
+  const hash = hashIndex >= 0 ? url.slice(hashIndex) : '';
+  const join = withoutHash.includes('?') ? '&' : '?';
+  return `${withoutHash}${join}workspace_id=${encodeURIComponent(workspaceId)}${hash}`;
+}
+
+/** Same flags as the API's CSP sandbox: no allow-same-origin for module code. */
+export const REMOTE_APP_SANDBOX = 'allow-scripts allow-forms allow-popups allow-downloads';
+const APP_HTML_SANDBOX =
+  'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-downloads';
+
+/** The iframe sandbox for an app: remote module apps never share this origin. */
+export function appIframeSandbox(url: string): string {
+  return remoteAppParts(url) ? REMOTE_APP_SANDBOX : APP_HTML_SANDBOX;
+}
+
 /** Attach ``?token=`` (preserving existing query) for same-origin app HTML. */
 export function withAppHtmlAccessToken(url: string, token: string): string {
   if (!url || !token) return url;

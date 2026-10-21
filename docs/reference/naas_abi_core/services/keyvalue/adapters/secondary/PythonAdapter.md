@@ -8,56 +8,70 @@
 - Thread-safe via a re-entrant lock (`threading.RLock`).
 
 ## Public API
+
 ### Class: `PythonAdapter(IKeyValueAdapter)`
-#### `__init__(persistence_path: str | None = None, journal_mode: str = "WAL", busy_timeout_ms: int = 5000) -> None`
-- Creates an adapter instance.
-- If `persistence_path` is provided:
-  - Opens/creates an SQLite DB file.
-  - Ensures a `kv_store` table exists.
-  - Applies SQLite pragmas: `journal_mode`, `synchronous=NORMAL`.
+Key/value operations with optional persistence.
 
-#### `get(key: str) -> bytes`
-- Returns the stored value for `key` as `bytes`.
-- Purges the key first if it is expired.
-- Raises `KVNotFoundError` if missing (or expired and purged).
+- `__init__(persistence_path: str | None = None, journal_mode: str = "WAL", busy_timeout_ms: int = 5000) -> None`
+  - Creates an adapter instance.
+  - If `persistence_path` is provided:
+    - Creates parent directory if needed.
+    - Opens/creates an SQLite DB file and initializes table `kv_store(key, value, expires_at)`.
+    - Applies pragmas: `journal_mode`, `busy_timeout`, `synchronous=NORMAL`.
+    - Uses `check_same_thread=False` (adapter serializes access via its lock).
 
-#### `set(key: str, value: bytes, ttl: int | None = None) -> None`
-- Stores `value` under `key`.
-- Optional `ttl` (seconds) sets an expiration timestamp.
-- Value normalization:
-  - `str` is encoded as UTF-8.
-  - `memoryview` is converted to bytes.
-  - otherwise coerced via `bytes(value)`.
+- `get(key: str) -> bytes`
+  - Returns the stored value for `key` as `bytes`.
+  - Purges the key first if it is expired.
+  - Raises `KVNotFoundError` if missing (or expired and purged).
 
-#### `set_if_not_exists(key: str, value: bytes, ttl: int | None = None) -> bool`
-- Stores `key` only if it does not already exist (after purging expiration).
-- Returns:
-  - `True` if inserted.
-  - `False` if it already exists.
+- `set(key: str, value: bytes, ttl: int | None = None) -> None`
+  - Stores `value` under `key` (insert/replace).
+  - Optional `ttl` (seconds) sets an absolute expiration timestamp.
+  - Normalizes value:
+    - `str` → UTF-8 bytes
+    - `memoryview` → `.tobytes()`
+    - otherwise `bytes(value)`
 
-#### `delete(key: str) -> None`
-- Deletes `key` (after purging expiration).
-- Raises `KVNotFoundError` if missing.
+- `set_if_not_exists(key: str, value: bytes, ttl: int | None = None) -> bool`
+  - Stores `key` only if it does not already exist (after purging expiration).
+  - Returns:
+    - `True` if inserted
+    - `False` if it already exists
 
-#### `delete_if_value_matches(key: str, value: bytes) -> bool`
-- Deletes `key` only if the stored value matches `value` (after normalization).
-- Returns `True` if deleted, `False` otherwise (including key missing).
+- `delete(key: str) -> None`
+  - Deletes `key` (after purging expiration).
+  - Raises `KVNotFoundError` if missing.
 
-#### `exists(key: str) -> bool`
-- Returns `True` if `key` exists (after purging expiration), else `False`.
+- `delete_if_value_matches(key: str, value: bytes) -> bool`
+  - Deletes `key` only if the stored value matches the provided value (after normalization and expiration purge).
+  - Returns `True` if deleted, `False` otherwise (including key missing).
+
+- `exists(key: str) -> bool`
+  - Returns `True` if `key` exists (after purging expiration), else `False`.
+
+- `list_keys(prefix: str = "", *, limit: int = 100, after: str | None = None) -> KVKeyPage`
+  - Lists non-expired keys filtered by `prefix`, ordered lexicographically.
+  - Pagination:
+    - `limit` is validated via `check_page_limit(limit)`.
+    - `after` is an exclusive cursor (`key > after`).
+  - Returns `KVKeyPage(keys, next_after)` where `next_after` is the last key of the returned page when more results exist.
+
+- `get_ttl(key: str) -> int | None`
+  - Returns remaining TTL in seconds (rounded up), with a minimum of `1` when expiring in less than one second.
+  - Returns `None` if the key exists and has no expiration.
+  - Raises `KVNotFoundError` if missing (or expired and purged).
 
 ## Configuration/Dependencies
-- Dependencies:
-  - Python stdlib: `sqlite3`, `threading`, `time`, `os`.
-  - `naas_abi_core.services.keyvalue.KeyValuePorts`:
-    - `IKeyValueAdapter`
-    - `KVNotFoundError`
-- SQLite persistence settings (when `persistence_path` is set):
+- Stdlib dependencies: `math`, `os`, `sqlite3`, `threading`, `time`, `dataclasses`.
+- `naas_abi_core.services.keyvalue.KeyValuePorts`:
+  - `IKeyValueAdapter`, `KVKeyPage`, `KVNotFoundError`, `check_page_limit`, `paginate_keys`
+- SQLite options (when `persistence_path` is set):
   - `journal_mode` (default `"WAL"`)
   - `busy_timeout_ms` (default `5000` ms)
-  - `check_same_thread=False` (connection used across threads; access is guarded by the adapter lock)
 
 ## Usage
+
 ### In-memory
 ```python
 from naas_abi_core.services.keyvalue.adapters.secondary.PythonAdapter import PythonAdapter
@@ -87,7 +101,6 @@ print(kv.get("k"))
 
 ## Caveats
 - TTL expiration is enforced lazily:
-  - Expired keys are purged only when operating on that key (`get`, `exists`, `set_if_not_exists`, `delete`, `delete_if_value_matches`).
-  - No background cleanup of unrelated expired keys.
-- SQLite mode:
-  - Purging on expiration uses a `DELETE ... WHERE key = ? AND expires_at <= now`, but a non-expired row is still returned by `get` without checking `expires_at` in the `SELECT`. Expiration relies on the purge call happening first.
+  - Expired keys are purged only when operating on that specific key (`get`, `exists`, `set_if_not_exists`, `delete`, `delete_if_value_matches`, `get_ttl`).
+  - `list_keys` filters out expired entries by checking timestamps but does not delete them.
+- SQLite mode commits after purge/delete/write operations to avoid holding a write lock longer than necessary.

@@ -28,7 +28,13 @@ from typing import Any
 
 import numpy as np
 
-from ..IVectorStorePort import IVectorStorePort, SearchResult, VectorDocument
+from ..IVectorStorePort import (
+    CollectionInfo,
+    IVectorStorePort,
+    SearchResult,
+    VectorDocument,
+    VectorPage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -405,3 +411,52 @@ class SqliteVecAdapter(IVectorStorePort):
                 (collection_name,),
             ).fetchone()
             return int(row[0]) if row else 0
+
+    def list_vectors(
+        self,
+        collection_name: str,
+        limit: int = 100,
+        cursor: str | None = None,
+        include_vectors: bool = False,
+    ) -> VectorPage:
+        """Documents ordered by id; the cursor is the first id of the next page."""
+        if limit <= 0:
+            raise ValueError("limit must be a positive integer")
+        with self._lock:
+            conn = self._require()
+            dim, _ = self._collection_info(collection_name)
+            if cursor is None:
+                rows = conn.execute(
+                    "SELECT id, vector, metadata, payload FROM vectors"
+                    " WHERE collection = ? ORDER BY id LIMIT ?",
+                    (collection_name, limit + 1),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT id, vector, metadata, payload FROM vectors"
+                    " WHERE collection = ? AND id >= ? ORDER BY id LIMIT ?",
+                    (collection_name, cursor, limit + 1),
+                ).fetchall()
+            documents = [
+                VectorDocument(
+                    id=row["id"],
+                    vector=_unpack_vector(row["vector"], dim)
+                    if include_vectors
+                    else np.array([], dtype=np.float32),
+                    metadata=json.loads(row["metadata"]) if row["metadata"] else {},
+                    payload=json.loads(row["payload"]) if row["payload"] else None,
+                )
+                for row in rows[:limit]
+            ]
+            next_cursor = rows[limit]["id"] if len(rows) > limit else None
+            return VectorPage(documents=documents, next_cursor=next_cursor)
+
+    def get_collection_info(self, collection_name: str) -> CollectionInfo:
+        with self._lock:
+            dim, metric = self._collection_info(collection_name)
+            return CollectionInfo(
+                name=collection_name,
+                dimension=dim,
+                distance_metric=metric,
+                size=self.count_vectors(collection_name),
+            )

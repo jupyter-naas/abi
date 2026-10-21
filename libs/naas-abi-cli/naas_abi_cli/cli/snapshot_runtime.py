@@ -7,8 +7,8 @@ thin so this logic stays unit-testable.
 
 What is captured:
   * the stateful Docker volumes (``postgres_data``, ``minio_data``,
-    ``fuseki_data``, ``qdrant_storage``, ``redis_data``, ``rabbitmq_data``,
-    ``headscale_data``) -- copied cold as zstd-compressed tarballs so each
+    ``fuseki_data``, ``qdrant_storage``, ``redis_data``, ``nats_data``,
+    ``rabbitmq_data``, ``headscale_data``) -- copied cold as zstd-compressed tarballs so each
     engine's on-disk state is consistent;
   * the host ``storage/`` directory (the durable SQLite event log, the SQLite
     DuckLake catalog, and DuckLake data files). Because the stack is stopped,
@@ -33,13 +33,15 @@ from pathlib import Path
 import click
 
 from .bootstrap import find_abi_project_root
+from .private_dir import keep_out_of_git
 from .stack_runtime import run_compose
 
 # Stateful volumes worth snapshotting, by their docker-compose volume key.
-# redis runs with --appendonly yes (durable KV, not just a cache); rabbitmq
-# holds durable queues (see the hostname note in docker-compose.yml -- the node
-# name must be stable for its data to survive a restore); headscale_data holds
-# the users/nodes SQLite DB + noise key. The headscale_run socket dir, caddy
+# redis runs with --appendonly yes (durable KV, not just a cache); nats_data
+# holds JetStream (the bus, KV buckets, the module registry and job schedules);
+# rabbitmq (legacy) holds durable queues (see the hostname note in
+# docker-compose.yml -- the node name must be stable for its data to survive a
+# restore); headscale_data holds the users/nodes SQLite DB + noise key. The headscale_run socket dir, caddy
 # certs, dagster run history, and build/model caches are intentionally excluded.
 DATA_VOLUMES: tuple[str, ...] = (
     "postgres_data",
@@ -47,6 +49,7 @@ DATA_VOLUMES: tuple[str, ...] = (
     "fuseki_data",
     "qdrant_storage",
     "redis_data",
+    "nats_data",
     "rabbitmq_data",
     "headscale_data",
 )
@@ -627,6 +630,7 @@ def import_snapshot(src: Path, root: Path | None = None, force: bool = False) ->
         raise click.ClickException(f"Archive not found: {src}")
     base = snapshots_root(root)
     base.mkdir(parents=True, exist_ok=True)
+    keep_out_of_git(base)
     with tarfile.open(src, "r:gz") as tar:
         # Skip members with no path parts ('.', './', '') so a `tar -C dir .`
         # style archive resolves to its real top-level entries instead of raising
@@ -751,6 +755,7 @@ def create_snapshot(
         raise click.ClickException(f"Snapshot '{snapshot_id}' already exists.")
     volumes_dir = snap_dir / VOLUMES_DIRNAME
     volumes_dir.mkdir(parents=True)
+    keep_out_of_git(snapshots_root(root))
 
     emit("Stopping stack for a consistent copy...")
     run_compose(["stop"])

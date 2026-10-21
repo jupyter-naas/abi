@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffe
 import { createPortal } from 'react-dom';
 import { Send, Plus, Bot, AlertCircle, Brain, ChevronDown, X, ArrowUp, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square, Columns2 } from 'lucide-react';
 import Image from 'next/image';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
@@ -25,6 +25,7 @@ import { pickPaneAgentForSurface } from '@/lib/feature-agent-pane';
 import {
   appAgentRefForPane,
   featureChatContext,
+  routeWithSearch,
   getPaneSurfaceForPath,
 } from '@/lib/feature-office-agents';
 import { useFeaturePaneStore } from '@/stores/feature-pane';
@@ -85,8 +86,8 @@ import { activeSuggestions, type ChatSuggestion } from '@/lib/suggestion-row';
 
 const getApiBase = () => getApiUrl();
 
-// Max image size for uploads (5MB)
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+// Max file size for chat uploads (10MB)
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 const SUPPORTED_DOCUMENT_EXTENSIONS = ['pdf', 'docx', 'pptx', 'txt', 'md', 'json', 'csv'];
 const ATTACHMENT_ACCEPT = 'image/jpeg,image/png,image/gif,image/webp,.pdf,.docx,.pptx,.txt,.md,.json,.csv';
@@ -818,6 +819,7 @@ export function ChatInterface({
   }, [initialConversationId, isPane]);
 
   const pathname = usePathname();
+  const search = useSearchParams()?.toString();
   const slidesSlug = useSlidesStore((s) => s.selectedSlug);
   const slidesTitle = useSlidesStore((s) => s.selectedTitle);
   const slidesMode = useSlidesStore((s) => s.editorMode);
@@ -932,8 +934,8 @@ export function ChatInterface({
   // Chat and Slides return null (orchestrator surface / own slides block).
   const featureResource = useFeaturePaneStore((s) => s.resource);
   const featurePaneContext = useMemo(
-    () => (isPane ? featureChatContext(pathname, featureResource) : null),
-    [isPane, pathname, featureResource],
+    () => (isPane ? featureChatContext(routeWithSearch(pathname, search), featureResource) : null),
+    [isPane, pathname, search, featureResource],
   );
 
   const chatRequestContext = useMemo(() => {
@@ -1474,7 +1476,7 @@ export function ChatInterface({
       
       // Validate file size
       if (file.size > MAX_IMAGE_SIZE) {
-        setImageError(`File too large: ${file.name}. Max size is 5MB.`);
+        setImageError(`File too large: ${file.name}. Max size is 10MB.`);
         continue;
       }
       
@@ -2939,9 +2941,24 @@ export function ChatInterface({
             ))}
             {isLoading && !isStreaming && (
               <div className="flex items-start gap-3">
-                {/* Same geometry as an answer: avatar, gap, filled bubble. */}
-                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-workspace-accent text-white">
-                  <Bot size={16} />
+                {/* Same geometry as an answer: avatar, gap, filled bubble.
+                    The portrait pulses with the existing bounce while the reply starts. */}
+                <div
+                  className={cn(
+                    'flex h-8 w-8 flex-shrink-0 animate-pulse items-center justify-center overflow-hidden rounded-md',
+                    selectedAgentData?.logoUrl ? 'bg-transparent' : 'bg-workspace-accent text-white'
+                  )}
+                >
+                  {selectedAgentData?.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={getLogoUrl(selectedAgentData.logoUrl)}
+                      alt={selectedAgentData.name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <Bot size={16} />
+                  )}
                 </div>
                 <div className="flex items-center gap-2 rounded-2xl bg-muted px-4 py-3">
                   <div className="flex gap-1">

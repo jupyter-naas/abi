@@ -1,0 +1,2 @@
+syntax = "proto3";
+import public "naas_abi_proto/coding_environment/v1/coding_environment.proto";

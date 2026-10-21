@@ -1,47 +1,86 @@
 # `mcp_server` (ABI MCP Server)
 
 ## What it is
-A lightweight MCP server that discovers ABI “agents” from an ABI API OpenAPI spec and exposes them as MCP tools. It proxies tool calls to the ABI API over HTTP and supports multiple MCP transports.
+- A lightweight MCP server that:
+  - Discovers available ABI “agents” by fetching an ABI API OpenAPI spec (`/openapi.json`).
+  - Registers each discovered agent as an MCP tool.
+  - Proxies tool calls to the ABI API over HTTP.
 
 ## Public API
 - `mcp: FastMCP`
   - Global MCP server instance named `"abi"`.
+  - Uses `MCP_HOST` (default `127.0.0.1`) for HTTP-based transports.
+
 - `ABI_API_BASE: str`
-  - Base URL for the ABI API (defaults to `http://localhost:9879`).
+  - ABI API base URL (env `ABI_API_BASE`, default `http://localhost:9879`).
+
 - `get_api_key() -> str`
-  - Reads `ABI_API_KEY` from environment; exits the process if missing.
-- `fetch_openapi_spec() -> dict[str, Any]`
-  - Fetches `{ABI_API_BASE}/openapi.json` and returns the parsed JSON (or `{}` on failure).
+  - Reads `ABI_API_KEY` from environment.
+  - If missing, prints instructions and exits the process via `sys.exit(1)`.
+
+- `fetch_openapi_spec() -> dict[str, Any]` (async)
+  - GETs `{ABI_API_BASE}/openapi.json` and returns parsed JSON.
+  - On failure, prints an error and returns `{}`.
+
 - `extract_agents_from_openapi(openapi_spec: dict[str, Any]) -> list[dict[str, str]]`
-  - Scans OpenAPI `paths` for `"/agents/{name}/completion"` endpoints and returns agent metadata:
-    - `name`, `description` (from POST `summary`), `function_name` (sanitized).
+  - Scans OpenAPI `paths` for endpoints matching:
+    - path contains `"/agents/"` and ends with `"/completion"`.
+  - Extracts:
+    - `name`: from the path segment between `/agents/` and `/completion`
+    - `description`: POST method `summary` (fallback: `"{agent_name} agent completion"`)
+    - `function_name`: sanitized via `agent_name_to_function_name()`
+
 - `agent_name_to_function_name(agent_name: str) -> str`
-  - Converts an agent name into a valid Python function name (lowercase, underscores, no leading digit).
+  - Converts an agent name to a valid Python identifier:
+    - lowercases
+    - replaces non-alphanumeric/underscore with `_`
+    - collapses repeated `_`
+    - strips leading/trailing `_`
+    - prefixes with `agent_` if it starts with a digit
+    - returns `"unknown_agent"` if empty after normalization
+
 - `call_abi_agent_http(agent_name: str, prompt: str, thread_id: int = 1) -> str` (async)
-  - POSTs to `{ABI_API_BASE}/agents/{agent_name}/completion` with JSON `{prompt, thread_id}` and Bearer auth.
-  - Returns response text (with surrounding quotes stripped) or an error message string on failure.
+  - POSTs to `{ABI_API_BASE}/agents/{agent_name}/completion` with JSON:
+    - `{"prompt": prompt, "thread_id": thread_id}`
+  - Adds headers including `Authorization: Bearer {ABI_API_KEY}`.
+  - Returns `response.text.strip('"')`.
+  - On errors, returns human-readable error strings (does not raise).
+
 - `create_agent_function(agent_name: str, description: str)`
-  - Creates an async tool function `agent_function(prompt, thread_id=1)` that calls `call_abi_agent_http`.
-  - Sets `__name__` using `agent_name_to_function_name` and a docstring based on `description`.
+  - Builds an async function `(prompt: str, thread_id: int = 1) -> str` that calls `call_abi_agent_http`.
+  - Sets:
+    - `__name__` to a sanitized function name
+    - `__doc__` containing the description and argument notes
+
 - `wait_for_api() -> bool` (async)
-  - Polls `{ABI_API_BASE}` until it returns HTTP 200 (up to 30 retries, 10s delay).
+  - Polls `{ABI_API_BASE}` until HTTP 200 or timeout:
+    - 30 retries, 10 seconds between retries
+  - Returns `True` when ready, otherwise `False`.
+
 - `register_agents_dynamically()` (async)
-  - Optionally waits for API readiness (when `ABI_API_BASE` is not localhost).
-  - Fetches OpenAPI spec, extracts agents, registers each as an MCP tool via `mcp.tool()(agent_function)`.
+  - If `ABI_API_BASE` is not `http://localhost...`, waits for API readiness via `wait_for_api()`.
+  - Fetches OpenAPI spec and registers each discovered agent as an MCP tool using `mcp.tool()(agent_function)`.
+
 - `setup()` (async)
-  - Prints startup info, validates API key, and registers agents dynamically.
+  - Prints startup info, validates API key, then registers agents dynamically.
+
 - `run()`
-  - Runs `setup()` and starts the MCP server with transport controlled by `MCP_TRANSPORT`:
-    - `"stdio"` (default), `"sse"`, or `"http"` (streamable HTTP).
+  - Runs `setup()` and starts the MCP server using `MCP_TRANSPORT`:
+    - `stdio` (default)
+    - `sse`
+    - `http` (mapped to `streamable-http`)
 
 ## Configuration/Dependencies
+
 ### Environment variables
 - `ABI_API_KEY` (required)
-  - Used as `Authorization: Bearer ...` when calling the ABI API.
+  - Used for `Authorization: Bearer ...` when calling the ABI API.
 - `ABI_API_BASE` (optional)
   - Default: `http://localhost:9879`
 - `MCP_TRANSPORT` (optional)
-  - `stdio` (default), `sse`, or `http`
+  - `stdio` (default), `sse`, `http`
+- `MCP_HOST` (optional)
+  - Host binding passed to `FastMCP(..., host=...)` (default: `127.0.0.1`)
 
 ### Python dependencies
 - `httpx` (async HTTP client)
@@ -49,16 +88,8 @@ A lightweight MCP server that discovers ABI “agents” from an ABI API OpenAPI
 - `mcp.server.fastmcp` (`FastMCP`)
 
 ## Usage
-### Run as a script
-```python
-# mcp_server.py is intended to be executed directly
-from naas_abi_core.apps.mcp import mcp_server
 
-if __name__ == "__main__":
-    mcp_server.run()
-```
-
-### Minimal environment
+### Run as a module (typical)
 ```bash
 export ABI_API_KEY="your_key_here"
 export ABI_API_BASE="http://localhost:9879"   # optional
@@ -66,8 +97,15 @@ export MCP_TRANSPORT="stdio"                  # or: sse, http
 python -m naas_abi_core.apps.mcp.mcp_server
 ```
 
+### Run from Python
+```python
+from naas_abi_core.apps.mcp import mcp_server
+
+mcp_server.run()
+```
+
 ## Caveats
-- If `ABI_API_KEY` is missing, `get_api_key()` prints instructions and terminates the process via `exit(1)`.
-- Agent discovery depends on `{ABI_API_BASE}/openapi.json` and on paths matching `.../agents/<agent>/completion`.
-- `call_abi_agent_http()` returns human-readable error *strings* on failures (it does not raise), which will surface as tool outputs.
-- Response handling strips surrounding quotes from `response.text`; this assumes the API may return a JSON-quoted string in the body.
+- Missing `ABI_API_KEY` terminates the process (`sys.exit(1)`).
+- Agent discovery depends on `{ABI_API_BASE}/openapi.json` and on paths matching `.../agents/<name>/completion`.
+- `call_abi_agent_http()` returns error *strings* on failures (not exceptions), so failures surface as tool output.
+- HTTP response handling uses `response.text.strip('"')`, assuming the body may be a quoted JSON string.

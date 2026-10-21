@@ -1,0 +1,2 @@
+syntax = "proto3";
+import public "naas_abi_proto/common/v1/common.proto";

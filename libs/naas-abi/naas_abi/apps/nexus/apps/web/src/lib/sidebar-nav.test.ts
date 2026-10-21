@@ -18,8 +18,8 @@ describe('mergeNavOrder', () => {
   it('keeps a custom order and inserts new catalog ids at catalog position', () => {
     const persisted: NavSectionId[] = ['files', 'apps', 'chat'];
     const merged = mergeNavOrder(persisted);
-    expect(merged[0]).toBe('home');
-    expect(merged.slice(1, 4)).toEqual(['files', 'apps', 'chat']);
+    expect(merged.slice(0, 2)).toEqual(['home', 'search']);
+    expect(merged.filter((id) => persisted.includes(id))).toEqual(['files', 'apps', 'chat']);
     expect(merged).toContain('marketplace');
     expect(merged).not.toContain('lab');
     expect(new Set(merged)).toEqual(new Set(DEFAULT_NAV_ORDER));
@@ -29,9 +29,22 @@ describe('mergeNavOrder', () => {
     const persisted = ['apps', 'apps', 'not-a-section', 'lab'];
     const merged = mergeNavOrder(persisted);
     expect(merged.filter((id) => id === 'apps')).toHaveLength(1);
-    expect(merged[0]).toBe('home');
-    expect(merged[1]).toBe('apps');
+    expect(merged.slice(0, 3)).toEqual(['home', 'search', 'apps']);
     expect(merged).not.toContain('lab');
+  });
+
+  it('puts search right after home', () => {
+    expect(DEFAULT_NAV_ORDER.slice(0, 2)).toEqual(['home', 'search']);
+  });
+
+  it('moves search up in an order that is still the previous default', () => {
+    const previous = ['home', 'apps', 'files', 'chat', 'search', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'code', 'marketplace'];
+    expect(mergeNavOrder(previous)).toEqual([...DEFAULT_NAV_ORDER]);
+  });
+
+  it('leaves a customised order where the user put search', () => {
+    const custom = ['home', 'chat', 'apps', 'files', 'search', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'code', 'marketplace'];
+    expect(mergeNavOrder(custom)).toEqual(custom);
   });
 });
 

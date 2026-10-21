@@ -4,6 +4,17 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
+import { ArrowLeft } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input, Textarea } from '@/components/ui/input';
+import {
+  SettingsField,
+  SettingsLoading,
+  SettingsNotice,
+  SettingsPageHeader,
+  SettingsSection,
+} from '@/components/settings/settings-ui';
 
 const getApiBase = () => getApiUrl();
 
@@ -151,167 +162,111 @@ export default function ModelDetailPage() {
   }, [model]);
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-8">
-      <button
-        type="button"
-        onClick={() => router.push(backToList)}
-        className="mb-6 text-sm text-muted-foreground hover:text-foreground"
-      >
-        ← Back to models
-      </button>
+    <div className="space-y-6">
+      <div>
+        <Button variant="secondary" onClick={() => router.push(backToList)}>
+          <ArrowLeft size={16} />
+          Back to models
+        </Button>
+      </div>
 
       {loading ? (
-        <p className="text-sm text-muted-foreground">Loading model…</p>
+        <SettingsLoading label="Loading model…" />
       ) : error && !model ? (
         <div className="space-y-4">
-          <p className="text-sm text-destructive">{error}</p>
-          <button
-            type="button"
-            onClick={() => void load()}
-            className="rounded-md border px-3 py-1.5 text-sm hover:bg-muted"
-          >
+          <SettingsNotice tone="error">{error}</SettingsNotice>
+          <Button variant="secondary" onClick={() => void load()}>
             Retry
-          </button>
+          </Button>
         </div>
       ) : model ? (
-        <div className="space-y-8">
-          <header className="flex items-center gap-4">
-            <div className="flex h-12 w-12 flex-none items-center justify-center overflow-hidden rounded-lg border bg-muted">
-              {form.image ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={form.image}
-                  alt={model.name ?? model.canonical_id}
-                  className="h-full w-full object-contain"
+        <div className="space-y-6">
+          <SettingsPageHeader
+            leading={
+              <div className="flex h-10 w-10 flex-none items-center justify-center overflow-hidden border border-border bg-muted">
+                {form.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={form.image} alt={model.name ?? model.canonical_id} className="h-full w-full object-contain" />
+                ) : (
+                  <span className="text-xs text-muted-foreground">—</span>
+                )}
+              </div>
+            }
+            title={model.name ?? model.canonical_id}
+            description={<span className="font-mono text-xs">{model.canonical_id}</span>}
+            actions={
+              <Badge variant={model.configured ? 'primary' : 'neutral'}>
+                {model.configured ? 'Configured' : 'Not configured'}
+              </Badge>
+            }
+          />
+
+          <SettingsSection title="Display properties">
+            <div className="space-y-4">
+              <SettingsField label="Name">
+                <Input
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="Model display name"
                 />
-              ) : (
-                <span className="text-xs text-muted-foreground">—</span>
-              )}
+              </SettingsField>
+
+              <SettingsField label="Description">
+                <Textarea
+                  value={form.description}
+                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                  rows={4}
+                  className="resize-y"
+                  placeholder="Short description shown in the model list"
+                />
+              </SettingsField>
+
+              <SettingsField label="Image URL">
+                <Input
+                  type="text"
+                  value={form.image}
+                  onChange={(e) => setForm((f) => ({ ...f, image: e.target.value }))}
+                  placeholder="https://… or a relative asset path"
+                />
+              </SettingsField>
+
+              <SettingsField label="Context window">
+                <Input
+                  type="number"
+                  min={0}
+                  value={form.context_window}
+                  onChange={(e) => setForm((f) => ({ ...f, context_window: e.target.value }))}
+                  placeholder="e.g. 200000"
+                />
+                {contextWindowInvalid && <p className="text-xs text-destructive">Context window must be a number.</p>}
+              </SettingsField>
             </div>
-            <div className="min-w-0">
-              <h1 className="truncate text-xl font-semibold">
-                {model.name ?? model.canonical_id}
-              </h1>
-              <p className="truncate font-mono text-xs text-muted-foreground">
-                {model.canonical_id}
-              </p>
-            </div>
-          </header>
+          </SettingsSection>
 
-          {/* Editable display properties */}
-          <section className="space-y-5">
-            <h2 className="text-sm font-medium text-muted-foreground">
-              Display properties
-            </h2>
-
-            <Field label="Name">
-              <input
-                type="text"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                placeholder="Model display name"
-              />
-            </Field>
-
-            <Field label="Description">
-              <textarea
-                value={form.description}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, description: e.target.value }))
-                }
-                rows={4}
-                className="w-full resize-y rounded-md border bg-background px-3 py-2 text-sm"
-                placeholder="Short description shown in the model list"
-              />
-            </Field>
-
-            <Field label="Image URL">
-              <input
-                type="text"
-                value={form.image}
-                onChange={(e) => setForm((f) => ({ ...f, image: e.target.value }))}
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                placeholder="https://… or a relative asset path"
-              />
-            </Field>
-
-            <Field label="Context window">
-              <input
-                type="number"
-                min={0}
-                value={form.context_window}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, context_window: e.target.value }))
-                }
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                placeholder="e.g. 200000"
-              />
-              {contextWindowInvalid && (
-                <p className="mt-1 text-xs text-destructive">
-                  Context window must be a number.
-                </p>
-              )}
-            </Field>
-          </section>
-
-          {/* Read-only structural identity (always sourced from the Python module) */}
-          <section className="space-y-3">
-            <h2 className="text-sm font-medium text-muted-foreground">
-              Source identity (read-only)
-            </h2>
+          <SettingsSection title="Source identity (read-only)">
             <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
               <ReadOnly label="Model ID" value={model.model_id} mono />
               <ReadOnly label="Provider" value={model.provider} />
               <ReadOnly label="Provider ID" value={model.provider_id} />
-              <ReadOnly
-                label="Status"
-                value={model.configured ? 'Configured' : 'Not configured'}
-              />
+              <ReadOnly label="Status" value={model.configured ? 'Configured' : 'Not configured'} />
               <ReadOnly label="Module path" value={model.module_path} mono wide />
             </dl>
-          </section>
+          </SettingsSection>
 
-          <footer className="flex items-center gap-3 border-t pt-5">
-            <button
-              type="button"
-              onClick={() => void handleSave()}
-              disabled={!isDirty || saving || contextWindowInvalid}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-            >
+          <div className="flex items-center gap-3 border-t border-border pt-5">
+            <Button onClick={() => void handleSave()} disabled={!isDirty || saving || contextWindowInvalid}>
               {saving ? 'Saving…' : 'Save changes'}
-            </button>
-            <button
-              type="button"
-              onClick={handleReset}
-              disabled={!isDirty || saving}
-              className="rounded-md border px-4 py-2 text-sm hover:bg-muted disabled:opacity-50"
-            >
+            </Button>
+            <Button variant="secondary" onClick={handleReset} disabled={!isDirty || saving}>
               Reset
-            </button>
+            </Button>
             {error && <span className="text-sm text-destructive">{error}</span>}
-            {!error && savedAt && !isDirty && (
-              <span className="text-sm text-muted-foreground">Saved.</span>
-            )}
-          </footer>
+            {!error && savedAt && !isDirty && <span className="text-sm text-primary">Saved.</span>}
+          </div>
         </div>
       ) : null}
     </div>
-  );
-}
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1.5 block text-sm font-medium">{label}</span>
-      {children}
-    </label>
   );
 }
 

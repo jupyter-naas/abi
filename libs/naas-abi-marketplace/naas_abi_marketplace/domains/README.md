@@ -64,8 +64,7 @@ domains/
 │   └── agents/PersonnelAgent.py               # bucket-level module, no sub-module
 ├── intelligence/
 │   ├── agents/{OSINTResearcherAgent.py, PrivateInvestigatorAgent.py}
-│   ├── apps/wsr/
-│   └── ontologies/organizations/
+│   └── modules/{organizations, people, wsr}/   # loadable modules of their own
 ├── operations/
 │   └── agents/{account-executive, business-development-representative,
 │               customer-success-manager, inside-sales-representative,
@@ -92,7 +91,7 @@ All 25 modules, with why each one sits where it does.
 
 | Module | Path | Rationale |
 |---|---|---|
-| `personnel` | `personnel/` | The bucket *is* the module — `PersonnelAgent` sits directly in `personnel/agents/`, with no sub-module wrapper |
+| `personnel` | `personnel/` | The bucket *is* the module — what the organization records about its own staff (employee roles, positions, contracts, grades, service lines). `PersonnelAgent` sits directly in `personnel/agents/`. It specializes `intelligence/modules/people` |
 
 ### S2 — intelligence
 
@@ -101,8 +100,9 @@ All 25 modules, with why each one sits where it does.
 | `osint-researcher` | `intelligence/agents/` | Open-source collection — the core S2 discipline |
 | `private-investigator` | `intelligence/agents/` | Targeted investigation and due diligence |
 | `content-analyst` | `operations/agents/` | Measures and interprets content performance for execution |
-| `organizations` | `intelligence/ontologies/` | Ontology-only module describing organizational entities; the vocabulary intelligence reasons over |
-| `wsr` | `intelligence/apps/` | World Situation Room — a global situational-awareness dashboard (flights, conflict, earthquakes, satellites, news). Situational awareness is the S2 product |
+| `organizations` | `intelligence/modules/` | Organization vocabulary: who an organization is, how it allies and restructures; the vocabulary intelligence reasons over |
+| `people` | `intelligence/modules/` | People intelligence: anyone's career, studies, skills, certifications and published profile, plus People Search. Personnel specializes its vocabulary |
+| `wsr` | `intelligence/modules/` | World Situation Room — a global situational-awareness dashboard (flights, conflict, earthquakes, satellites, news), with its own config and agent. Situational awareness is the S2 product |
 
 ### S3 — operations
 
@@ -224,8 +224,9 @@ Modules that are importable ABI modules changed dotted path:
 | `naas_abi_marketplace.domains.document` | `naas_abi_marketplace.domains.signals.pipelines.document` |
 | `naas_abi_marketplace.domains.support` | `naas_abi_marketplace.domains.operations.modules.support` |
 | `naas_abi_marketplace.domains.ontology_engineer` | `naas_abi_marketplace.domains.signals.pipelines.ontology_engineer` |
-| `naas_abi_marketplace.domains.organizations` | `naas_abi_marketplace.domains.intelligence.ontologies.organizations` |
-| `naas_abi_marketplace.alpha.wsr` | *(no longer a module — an app of `…domains.intelligence`)* |
+| `naas_abi_marketplace.domains.organizations` | `naas_abi_marketplace.domains.intelligence.modules.organizations` |
+| `naas_abi_marketplace.alpha.wsr` | `naas_abi_marketplace.domains.intelligence.modules.wsr` |
+| `naas_abi_marketplace.domains.personnel` (career, profile, People Search) | `naas_abi_marketplace.domains.intelligence.modules.people` |
 | `naas_abi_marketplace.alpha.financial_cockpit` | `naas_abi_marketplace.domains.finance.apps.financial_cockpit` |
 
 ### Bucket apps are not modules
@@ -233,17 +234,16 @@ Modules that are importable ABI modules changed dotted path:
 An app shipped by a bucket is declared with a `manifest.json` at
 `<bucket>/apps/<app>/manifest.json` and configured through a field on the **bucket's** module
 config. It gets an app id of `<bucket module path>:<app folder>` and needs no `module:` entry of
-its own. WSR is the reference case:
-
-| | |
-|---|---|
-| Loaded module | `naas_abi_marketplace.domains.intelligence` |
-| App id | `naas_abi_marketplace.domains.intelligence:wsr` |
-| Config | `wsr:` block on the intelligence module (`WSRConfiguration`) |
-| Agent | `domains/intelligence/agents/WSRAgent.py`, flat with the bucket's other agents |
+its own. `finance/apps/financial_cockpit/` is the reference case.
 
 Adding a module per app would multiply the `modules:` list by the number of dashboards and split
 each bucket's configuration across several entries.
+
+When a unit carries more than an app - its own vocabulary, agent, pipelines and configuration -
+it is a loadable module under `<bucket>/modules/<module>/`, like `operations/modules/*` and
+`intelligence/modules/{organizations, people, wsr}`. WSR was a bucket app until its credentials
+and agent made it a module: app id `naas_abi_marketplace.domains.intelligence.modules.wsr:dashboard`,
+configured on its own `module:` entry.
 
 Every bucket and every filed module carries an `__init__.py` declaring an `ABIModule`, so all of
 them are importable. `personnel`, `operations`, `plans`, `intelligence`, `finance`, `external`,

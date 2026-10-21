@@ -63,7 +63,7 @@ No registration needed. As long as this module is enabled in `config.yaml`, its 
 
 ```yaml
 modules:
-  - path: src/custom/{{ module_name_snake }}
+  - module: {{ module_name_snake }}
     enabled: true
 ```
 

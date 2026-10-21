@@ -1,0 +1,46 @@
+/* Workspace Settings → General: the logo stays square (account avatars are round). */
+.workspace-logo-square {
+  border-radius: 0 !important;
+}
+
+/* Save changes uses the workspace accent, like the other workspace buttons
+   (Save wallpaper), not the Account Settings colour (--color-primary). */
+.workspace-general-save.account-profile-save-button {
+  background-color: var(--workspace-accent, #22c55e);
+  color: #fff;
+}
+
+.workspace-general-save.account-profile-save-button:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--workspace-accent, #22c55e) 90%, black);
+}
+
+.workspace-general-save.account-profile-save-button-saved {
+  background-color: color-mix(in srgb, var(--workspace-accent, #22c55e) 30%, transparent);
+  color: var(--workspace-accent, #22c55e);
+}
+
+/* Focused fields use the workspace accent, not the default focus colour. */
+.workspace-general .account-profile-field-input:focus,
+.workspace-general .account-profile-field-textarea:focus {
+  border-color: var(--workspace-accent, #22c55e);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--workspace-accent, #22c55e) 30%, transparent);
+}
+
+/* The description box is half the height of the account bio. */
+.workspace-general .account-profile-field-textarea {
+  min-height: 144px;
+}
+
+@media (max-width: 767px) {
+  .workspace-general .account-profile-field-textarea {
+    min-height: 100px;
+  }
+}
+
+/* Help under a field (the read-only slug), in the label style but not shouted. */
+.workspace-general-hint {
+  margin-top: var(--space-1);
+  font-weight: var(--font-weight-normal, 400);
+  text-transform: none;
+  letter-spacing: normal;
+}

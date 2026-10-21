@@ -1,0 +1,27 @@
+/* Platform default colours for a settings shell without an organization brand.
+   The workspace shell writes its theme into --primary/--accent/--workspace-* on
+   <html> and keeps it after leaving; these put back the defaults from globals.css
+   (:root and .dark). The --color-primary* hex tokens are never overwritten there. */
+.settings-layout-root-platform-colors {
+  --primary: 160 84% 39%;
+  --primary-foreground: 0 0% 100%;
+  --accent: 160 84% 39%;
+  --accent-foreground: 0 0% 100%;
+  --ring: 160 84% 39%;
+  --workspace-primary: hsl(160 84% 39%);
+  --workspace-accent: hsl(160 84% 39%);
+  --workspace-primary-hsl: 160 84% 39%;
+  --workspace-accent-hsl: 160 84% 39%;
+}
+
+.dark .settings-layout-root-platform-colors {
+  --primary: 160 84% 45%;
+  --primary-foreground: 240 6% 10%;
+  --accent: 160 84% 45%;
+  --accent-foreground: 240 6% 10%;
+  --ring: 160 84% 45%;
+  --workspace-primary: hsl(160 84% 45%);
+  --workspace-accent: hsl(160 84% 45%);
+  --workspace-primary-hsl: 160 84% 45%;
+  --workspace-accent-hsl: 160 84% 45%;
+}

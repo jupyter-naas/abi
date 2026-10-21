@@ -76,8 +76,18 @@ async def _sync_model_catalog() -> None:
             "✓ Model catalog synced at startup (%d override divergence warning(s))",
             len(warnings),
         )
+        # Settings pages opened while this ran may have cached the old catalog.
+        await asyncio.to_thread(_invalidate_settings_cache)
     except Exception:
         _log.exception("Background model catalog sync failed (non-fatal)")
+
+
+def _invalidate_settings_cache() -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.settings_cache.middleware import (
+        invalidate_on_startup,
+    )
+
+    invalidate_on_startup()
 
 
 async def _sync_identity_graph() -> None:
@@ -115,7 +125,26 @@ async def _sync_identity_graph() -> None:
                     module_config_getter=lambda: ABIModule.get_instance().configuration,
                 ),
             )
-            result = await service.sync()
+            # Boot races Fuseki writes from schema load and seeds. A single
+            # CLEAR/DROP can lose the dataset lock; retry rather than skip.
+            delays = (0.0, 2.0, 8.0)
+            result = None
+            for attempt, delay in enumerate(delays):
+                if delay:
+                    await asyncio.sleep(delay)
+                try:
+                    result = await service.sync()
+                    break
+                except Exception:
+                    if attempt == len(delays) - 1:
+                        raise
+                    _log.warning(
+                        "Identity graph sync failed (attempt %d/%d); retrying",
+                        attempt + 1,
+                        len(delays),
+                        exc_info=True,
+                    )
+        assert result is not None
         _log.info(
             "✓ Identity graph synced (%d users, %d organizations, %d workspaces, %d memberships, %d triples)",
             result.users,
@@ -147,6 +176,58 @@ def _schedule_identity_graph_sync(_published: int = 0, delay_seconds: float = 2.
         await _sync_identity_graph()
 
     _identity_graph_sync_task = loop.create_task(_later())
+
+
+def _install_drive_writers() -> None:
+    """Keep .manifest.json and the default folders in every workspace drive and My Drive."""
+    _log = logging.getLogger(__name__)
+    try:
+        from naas_abi import ABIModule
+        from naas_abi.apps.nexus.apps.api.app.services.files.drives.my_drive import MyDriveWriter
+        from naas_abi.apps.nexus.apps.api.app.services.files.drives.workspace_drive import (
+            WorkspaceDriveWriter,
+        )
+
+        def get_storage():  # noqa: ANN202 - the engine's ObjectStorageService
+            return ABIModule.get_instance().engine.services.object_storage
+
+        WorkspaceDriveWriter(get_storage=get_storage).install()
+        MyDriveWriter(get_storage=get_storage).install()
+        _log.info("✓ Drive writers installed")
+    except Exception:
+        _log.exception("Unable to install the drive writers")
+
+
+async def _backfill_drives() -> None:
+    """Write missing workspace and My Drive defaults, and the platform drive's staff folders."""
+    _log = logging.getLogger(__name__)
+    try:
+        from naas_abi import ABIModule
+        from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+        from naas_abi.apps.nexus.apps.api.app.services.files.drives.my_drive import (
+            backfill_my_drives,
+        )
+        from naas_abi.apps.nexus.apps.api.app.services.files.drives.platform_drive import (
+            backfill_platform_drive,
+        )
+        from naas_abi.apps.nexus.apps.api.app.services.files.drives.workspace_drive import (
+            backfill_workspace_drives,
+        )
+
+        storage = ABIModule.get_instance().engine.services.object_storage
+        async with AsyncSessionLocal() as session:
+            workspaces = await backfill_workspace_drives(session, storage)
+            users = await backfill_my_drives(session, storage)
+        platform = await backfill_platform_drive(storage)
+        if any(workspaces.values()) or any(users.values()) or any(platform.values()):
+            _log.info(
+                "✓ Drives backfilled: workspaces %s, my drives %s, platform %s",
+                workspaces,
+                users,
+                platform,
+            )
+    except Exception:
+        _log.exception("Drive backfill failed")
 
 
 def _install_identity_event_capture() -> None:
@@ -259,6 +340,8 @@ async def _startup(app: FastAPI) -> None:
     # Before seeds: users, workspaces and memberships the configuration creates
     # or changes are logged as identity events, triggered via "configuration".
     _install_identity_event_capture()
+    # Also before seeds, so users and workspaces the configuration creates get their drives set up.
+    _install_drive_writers()
     from naas_abi_core.services.event.context import event_triggered_via
 
     via = event_triggered_via.set("configuration")
@@ -267,8 +350,37 @@ async def _startup(app: FastAPI) -> None:
     finally:
         event_triggered_via.reset(via)
 
+    # Maps feeds, layers and basemaps declared by modules (artifacts/maps/{layers/**,basemaps/*}/manifest.json),
+    # then config Maps ids (workspaces[].maps) that nothing provides. Both only
+    # log errors, never fail the start.
+    from naas_abi.apps.nexus.apps.api.app.services.maps.adapters.primary.workspace_defaults import (  # noqa: E501
+        report_unknown_workspace_map_ids,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.maps.manifests import (
+        register_module_manifests,
+    )
+
+    try:
+        from naas_abi import ABIModule
+
+        abi_module = ABIModule.get_instance()
+        modules = [
+            abi_module,
+            *(m for m in abi_module.engine.modules.values() if m is not abi_module),
+        ]
+    except Exception:  # noqa: BLE001 - standalone Nexus: no ABI engine, no module manifests
+        modules = []
+    register_module_manifests(app, modules)
+    report_unknown_workspace_map_ids(app)
+
+    # An ABI restart clears the settings pages' 24h API cache (after seeds, which
+    # may have changed users, workspaces and organizations).
+    await asyncio.to_thread(_invalidate_settings_cache)
+
     # After seeds, so seeded users/workspaces are in the graph on first boot.
     asyncio.create_task(_sync_identity_graph())
+    # After seeds too: users and workspaces created before the drive writers get theirs.
+    asyncio.create_task(_backfill_drives())
 
     try:
         start_chat_ingestion_consumer(app)
@@ -375,15 +487,23 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                     if origin and origin not in ancestors:
                         ancestors.append(origin)
                 # Allow the embedding page even when it is not listed in config
-                # (e.g. http://localhost:3042 during local dev).
-                for header in (request.headers.get("origin"), request.headers.get("referer")):
+                # (e.g. http://localhost:3042 during local dev). Never for a
+                # remote module's app: only Nexus may frame it.
+                presented = (
+                    ()
+                    if request.url.path.startswith("/app-remote/")
+                    else (request.headers.get("origin"), request.headers.get("referer"))
+                )
+                for header in presented:
                     if not header:
                         continue
                     try:
                         from urllib.parse import urlparse
 
-                        ref_origin = f"{urlparse(header).scheme}://{urlparse(header).netloc}".rstrip("/")
-                        if ref_origin and ref_origin not in ancestors:
+                        parsed = urlparse(header)
+                        # "Origin: null" (a sandboxed page) names no origin.
+                        ref_origin = f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+                        if parsed.netloc and ref_origin not in ancestors:
                             ancestors.append(ref_origin)
                     except Exception:
                         pass
@@ -393,8 +513,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             else:
                 response.headers["X-Frame-Options"] = "DENY"
 
-            # Referrer policy
-            response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+            # Referrer policy, unless the route set a stricter one (remote apps).
+            response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
 
             # Permissions policy (restrict features)
             response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
@@ -490,8 +610,8 @@ def _configure_middleware(app: FastAPI) -> None:
         "allow_origins": cors_origins,
         "allow_credentials": True,
         "allow_methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        "allow_headers": ["Authorization", "Content-Type", "Accept", "X-Requested-With"],
-        "expose_headers": ["Content-Length", "Content-Range"],
+        "allow_headers": ["Authorization", "Content-Type", "Accept", "X-Requested-With", "X-Nexus-Cache"],
+        "expose_headers": ["Content-Length", "Content-Range", "X-Nexus-Cache"],
     }
     # In local development the web dev server can bind any free port (the allocator bumps
     # to the next port when one is still in TIME_WAIT after a restart), so accept any
@@ -499,6 +619,13 @@ def _configure_middleware(app: FastAPI) -> None:
     if settings.nexus_env == "local" or settings.environment == "development":
         cors_kwargs["allow_origin_regex"] = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
     logger.info(f"[CORS] Configured origins: {cors_origins} (regex: {cors_kwargs.get('allow_origin_regex')})")
+    # Settings pages' 24h API cache. Added before CORS so it sits inside it: cached
+    # answers still go out through CORS and get its headers.
+    from naas_abi.apps.nexus.apps.api.app.services.settings_cache.middleware import (
+        SettingsCacheMiddleware,
+    )
+
+    app.add_middleware(SettingsCacheMiddleware)
     app.add_middleware(CORSMiddleware, **cors_kwargs)
     app.add_middleware(SecurityHeadersMiddleware)
 
@@ -517,6 +644,23 @@ def _configure_middleware(app: FastAPI) -> None:
     )
 
     app.add_middleware(RequestIdentityMiddleware)
+
+    # Remote app pages preflight from an opaque origin, which the CORS
+    # middleware refuses: answered outside it.
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.http_routes import (
+        RemoteAppPreflight,
+        redact_grants_in_access_log,
+    )
+
+    app.add_middleware(RemoteAppPreflight)
+    # A remote app's path holds its grant: never print it in the access log.
+    redact_grants_in_access_log()
+
+    # Outermost: one span per request, around everything else (no-op unless the
+    # engine config enables telemetry).
+    from naas_abi.apps.nexus.apps.api.app.core.tracing import TracingMiddleware
+
+    app.add_middleware(TracingMiddleware)
 
 
 async def serve_app_html(path: str) -> FileResponse:
@@ -562,6 +706,16 @@ async def serve_provider_logo(provider_id: str) -> FileResponse:
 def _register_routes(app: FastAPI) -> None:
     # Include API router
     app.include_router(api_router, prefix="/api")
+    # Graph map layers: always mounted (empty until a module registers one), so
+    # the web's request is a list, not a 404. Needs the ABI engine.
+    try:
+        from naas_abi.apps.nexus.apps.api.app.services.maps.adapters.primary.fastapi import (
+            install_maps_layers,
+        )
+
+        install_maps_layers(app)
+    except ValueError:
+        logging.getLogger(__name__).info("Maps graph layers: no ABI engine, not mounted")
 
     app.add_api_route("/health", health_check, methods=["GET"])
     from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
@@ -592,6 +746,46 @@ def _register_routes(app: FastAPI) -> None:
     )
     # The core API's middleware already guards /app-html/; checking here too keeps
     # the route closed when Nexus is served without that middleware.
+    # Apps of remote modules, forwarded over NATS. The catalog URL redirects
+    # to a grant URL, before the /app-html/ catch-all below; the grant is the
+    # only credential of /app-remote/.
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.http_routes import (
+        METHODS as REMOTE_APP_METHODS,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.http_routes import (
+        open_remote_app,
+        redirect_remote_app_root,
+        serve_remote_app,
+    )
+
+    # Every method: a user's request is redirected with a 307, which keeps it,
+    # and an ABI_API_KEY caller's is answered directly.
+    app.add_api_route(
+        "/app-html/remote/{module_id}/{app}/{path:path}",
+        open_remote_app,
+        methods=REMOTE_APP_METHODS,
+        dependencies=[Depends(require_abi_api_token)],
+        include_in_schema=False,
+    )
+    app.add_api_route(
+        "/app-html/remote/{module_id}/{app}",
+        open_remote_app,
+        methods=REMOTE_APP_METHODS,
+        dependencies=[Depends(require_abi_api_token)],
+        include_in_schema=False,
+    )
+    app.add_api_route(
+        "/app-remote/{grant}/{module_id}/{app}/{path:path}",
+        serve_remote_app,
+        methods=REMOTE_APP_METHODS,
+        include_in_schema=False,
+    )
+    app.add_api_route(
+        "/app-remote/{grant}/{module_id}/{app}",
+        redirect_remote_app_root,
+        methods=["GET", "HEAD"],
+        include_in_schema=False,
+    )
     app.add_api_route(
         "/app-html/{path:path}",
         serve_app_html,

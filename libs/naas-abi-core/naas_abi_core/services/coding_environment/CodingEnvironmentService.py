@@ -39,6 +39,13 @@ class CodingEnvironmentService(ServiceBase):
         super().__init__()
         self._adapter = adapter
 
+    @property
+    def adapter(self) -> ICodingEnvironmentAdapter:
+        """The wrapped secondary adapter -- public so callers (e.g.
+        ``EngineNATSLoader``) can check what kind of adapter this service is
+        backed by, mirroring ``ObjectStorageService.adapter``."""
+        return self._adapter
+
     def __publish_event(self, event: object) -> None:
         if not self.services_wired:
             return
@@ -132,6 +139,9 @@ class CodingEnvironmentService(ServiceBase):
 
     def list_environments(self, *, user_id: str) -> list[WorkspaceStatus]:
         return self._adapter.list_environments(user_id=user_id)
+
+    def list_all_environments(self) -> list[WorkspaceStatus]:
+        return self._adapter.list_all_environments()
 
     def get_status(self, *, workspace_id: str) -> WorkspaceStatus:
         return self._adapter.get_status(workspace_id=workspace_id)

@@ -2,10 +2,14 @@ import pytest
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_DatasetService import (
     DatasetAdapterConfiguration,
     DatasetAdapterDuckLakeConfiguration,
+    DatasetAdapterNATSConfiguration,
     DatasetServiceConfiguration,
 )
 from naas_abi_core.services.dataset.adapters.secondary.DatasetSecondaryAdapterDuckLake import (
     DatasetSecondaryAdapterDuckLake,
+)
+from naas_abi_core.services.dataset.adapters.secondary.DatasetSecondaryAdapterNATSClient import (
+    DatasetSecondaryAdapterNATSClient,
 )
 from naas_abi_core.services.dataset.DatasetPort import IDatasetPort
 from naas_abi_core.services.dataset.DatasetService import DatasetService
@@ -28,6 +32,27 @@ def test_dataset_service_configuration(tmp_path):
 
     service = configuration.load()
     assert isinstance(service, DatasetService)
+
+
+def test_dataset_service_configuration_nats_rpc_is_lazy():
+    """Loading the "nats_rpc" adapter must construct the client without any
+    network I/O -- DatasetSecondaryAdapterNATSClient connects lazily on first
+    use, so this must succeed with no live NATS server."""
+    configuration = DatasetServiceConfiguration(
+        dataset_adapter=DatasetAdapterConfiguration(
+            adapter="nats_rpc",
+            config=DatasetAdapterNATSConfiguration(
+                nats_url="nats://127.0.0.1:4222",
+                jwt_secret="test-shared-secret",
+                service_identity="api",
+            ).model_dump(),
+        )
+    )
+
+    dataset_adapter = configuration.dataset_adapter.load()
+
+    assert isinstance(dataset_adapter, IDatasetPort)
+    assert isinstance(dataset_adapter, DatasetSecondaryAdapterNATSClient)
 
 
 def test_dataset_configuration_rejects_ambiguous_scheme_less_s3_endpoint():

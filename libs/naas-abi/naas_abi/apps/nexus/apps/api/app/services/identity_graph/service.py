@@ -35,7 +35,7 @@ from naas_abi.apps.nexus.apps.api.app.services.identity_graph.port import (
     PlatformConfigurationSourcePort,
     PlatformSnapshot,
 )
-from naas_abi.ontologies.modules.ABIOntology import Person, TemporalInstant
+from naas_abi.ontologies.modules.ABIOntology import TemporalInstant
 from naas_abi.ontologies.modules.NexusPlatformOntology import (
     AddUserToOrganization,
     AddUserToWorkspace,
@@ -69,6 +69,7 @@ from naas_abi.ontologies.modules.NexusPlatformOntology import (
     WorkspaceOwnerRole,
     WorkspaceViewerRole,
 )
+from naas_abi.ontologies.modules.PersonOntology import Person
 from naas_abi_core.services.event.local_identity import email_sha256
 from rdflib import Graph, Literal, URIRef
 
@@ -309,7 +310,8 @@ class _Builder:
         self.add(Person(_uri=str(person), label=user.name, full_name=user.name))
         profile = {
             "avatar_url": user.avatar,
-            "company": user.company,
+            # Account "Organization" field (users.organization), on nexus:company.
+            "company": user.organization,
             "job_title": user.job_title,
             "bio": user.bio,
         }

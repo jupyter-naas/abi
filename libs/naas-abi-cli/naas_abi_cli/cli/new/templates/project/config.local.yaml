@@ -16,7 +16,26 @@ global_config:
   # "local" when you enable the Ollama module below instead.
   ai_mode: "cloud"
   public_api_host: "{{ secret.PUBLIC_API_HOST }}"
-
+{% endraw %}{% if nats %}
+# NATS mode: kernel services, the bus (JetStream), module jobs and discovery
+# go through the `nats` service. Remote modules (`abi new module`) run in their
+# own containers and register here.
+nats:
+  # The Compose service, logged in as the broker user `abi` (nats.conf).
+  nats_url: "nats://abi:{% raw %}{{ secret.NATS_ABI_PASSWORD }}{% endraw %}@nats:4222"
+  jwt_secret: "{% raw %}{{ secret.NATS_JWT_SECRET }}{% endraw %}"
+  # One engine per project hosts the module registry: the `abi` service. The
+  # stack runs no second engine (no Dagster: module jobs replace it).
+  discovery:
+    project: "{{ project_name_snake }}"
+    # Outlives an engine restart: remote modules renew instead of dropping
+    # out. A crashed module stays listed up to this long; a clean stop
+    # (SIGTERM) unregisters at once.
+    lease_seconds: 180
+  # The broker's HTTP monitoring port, read by the Nexus System app. No auth:
+  # reachable on the Compose network and on 127.0.0.1 only.
+  monitoring_url: "http://nats:8222"
+{% endif %}{% raw %}
 opencode:
   auth_file_path: "~/.local/share/opencode/auth.json"
   # The coding agent reuses the same gateway key as the rest of the stack.
@@ -89,8 +108,8 @@ modules:
         users:
           - email: "admin@example.com"
             name: "ABI Admin"
-            # Platform-wide admin (admin console, live event stream). Kept in
-            # config so it is reconciled on every boot — flip to false to demote.
+            # Platform-wide admin (admin console, live event stream). Config only
+            # promotes on boot; manage superadmins in Platform Settings > Users.
             is_superadmin: true
         organizations:
           - name: "ABI"
@@ -100,18 +119,12 @@ modules:
             accent_color: "#34D399"
             login_footer_text: "© ABI"
             show_powered_by: false
-            members:
-              - email: "admin@example.com"
-                role: "owner"
             workspaces:
               - name: "ABI"
                 slug: "abi"
                 owner_email: "admin@example.com"
                 primary_color: "#34D399"
                 accent_color: "#34D399"
-                members:
-                  - email: "admin@example.com"
-                    role: "owner"
 
   # OpenRouter — the only AI provider enabled by default. One gateway key
   # serves both the default chat model (Gemma 4 26B-A4B) and the default
@@ -211,11 +224,13 @@ services:
       config:
         host: "qdrant"
         port: 6333
+{% endraw %}{% if not nats %}{% raw %}
   bus:
     bus_adapter:
       adapter: "rabbitmq"
       config:
         rabbitmq_url: "amqp://{{ secret.RABBITMQ_USER }}:{{ secret.RABBITMQ_PASSWORD }}@rabbitmq:5672"
+{% endraw %}{% endif %}{% raw %}
   kv:
     kv_adapter:
       adapter: "redis"

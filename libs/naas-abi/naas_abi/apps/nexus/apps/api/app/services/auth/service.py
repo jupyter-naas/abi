@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hmac
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from uuid import uuid4
 
@@ -10,6 +10,10 @@ import bcrypt
 from jose import JWTError, jwt
 from naas_abi.apps.nexus.apps.api.app.core.config import current_secret_key, settings
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
+from naas_abi.apps.nexus.apps.api.app.services.auth.account_fallbacks import (
+    FALLBACK_FIELDS,
+    effective_account_values,
+)
 from naas_abi.apps.nexus.apps.api.app.services.auth.default_passwords import (
     is_known_default_password,
 )
@@ -124,6 +128,14 @@ class ExpiredOtpError(ValueError):
 
 
 @dataclass
+class SuperadminChangeError(ValueError):
+    reason: str  # cannot_demote_self | last_superadmin
+
+    def __str__(self) -> str:
+        return self.reason
+
+
+@dataclass
 class SignupDisabledError(PermissionError):
     def __str__(self) -> str:
         return "signup_disabled"
@@ -161,7 +173,9 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> t
     expire = datetime.now(UTC) + (
         expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
     )
-    to_encode.update({"exp": expire, "jti": jti})
+    # iat, fractional: a credential issued before the user's latest logout
+    # mints no remote app grant (apps/remote/revocation.py).
+    to_encode.update({"exp": expire, "jti": jti, "iat": datetime.now(UTC).timestamp()})
     token = jwt.encode(to_encode, current_secret_key(), algorithm="HS256")
     return token, jti
 
@@ -172,6 +186,12 @@ def decode_token(token: str) -> dict | None:
         return payload
     except JWTError:
         return None
+
+
+def is_session_token(payload: dict) -> bool:
+    """A user's session token. A scoped one (an ``app-html`` link token) opens
+    only what its scope names, never the API or the WebSocket."""
+    return "scope" not in payload
 
 
 def now_utc_naive() -> datetime:
@@ -280,7 +300,7 @@ class AuthService:
         if not token:
             return None
         payload = decode_token(token)
-        if not payload:
+        if not payload or not is_session_token(payload):
             return None
 
         user_id = payload.get("sub")
@@ -296,8 +316,8 @@ class AuthService:
         user_id: str,
         name: str | None,
         email: str | None,
-        company: str | None,
-        role: str | None,
+        organization: str | None,
+        job_title: str | None,
         bio: str | None,
     ) -> AuthUserRecord:
         normalized_email = email.lower() if email is not None else None
@@ -311,8 +331,8 @@ class AuthService:
             user_id=user_id,
             name=name,
             email=normalized_email,
-            company=company,
-            role=role,
+            organization=organization,
+            job_title=job_title,
             bio=bio,
         )
         if updated_user is None:
@@ -322,6 +342,13 @@ class AuthService:
         return updated_user
 
     async def logout_user(self, user_id: str, token: str | None) -> None:
+        from naas_abi.apps.nexus.apps.api.app.services.apps.remote.revocation import (
+            revoke_remote_app_grants,
+        )
+
+        # Every remote app grant of the user ends, on every device, for as long
+        # as a grant can live (not only as long as this session token).
+        await revoke_remote_app_grants(user_id)
         if not token:
             return
         payload = decode_token(token)
@@ -446,6 +473,45 @@ class AuthService:
             user_id=user_id,
             avatar_url=avatar_url,
             now=now_utc_naive(),
+        )
+        if updated is None:
+            raise UserNotFoundError(user_id=user_id)
+        await self.adapter.commit()
+        return updated
+
+    async def list_users(self) -> list[AuthUserRecord]:
+        return await self.adapter.list_users()
+
+    async def get_user(self, user_id: str) -> AuthUserRecord | None:
+        return await self.adapter.get_user_by_id(user_id)
+
+    async def with_account_fallbacks(self, user: AuthUserRecord) -> AuthUserRecord:
+        """The account as shown to its owner: empty picture, organization and job
+        title filled from their organization member profiles (org -> account only)."""
+        if all(getattr(user, field) for field in FALLBACK_FIELDS):
+            return user
+        profiles = await self.adapter.list_member_profiles(user.id)
+        effective = effective_account_values(
+            {field: getattr(user, field) for field in FALLBACK_FIELDS}, profiles
+        )
+        return replace(user, **effective)
+
+    async def set_superadmin(
+        self, *, actor_id: str, user_id: str, is_superadmin: bool
+    ) -> AuthUserRecord:
+        """Promote or demote a platform superadmin. Never leaves the platform without one."""
+        user = await self.adapter.get_user_by_id(user_id)
+        if user is None:
+            raise UserNotFoundError(user_id=user_id)
+        if user.is_superadmin == is_superadmin:
+            return user
+        if not is_superadmin:
+            if user_id == actor_id:
+                raise SuperadminChangeError(reason="cannot_demote_self")
+            if await self.adapter.count_superadmins() <= 1:
+                raise SuperadminChangeError(reason="last_superadmin")
+        updated = await self.adapter.set_user_superadmin(
+            user_id=user_id, is_superadmin=is_superadmin, now=now_utc_naive()
         )
         if updated is None:
             raise UserNotFoundError(user_id=user_id)

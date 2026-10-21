@@ -36,11 +36,14 @@ from typing import TYPE_CHECKING, Any
 from naas_abi_core import logger
 from naas_abi_core.services.cache.CachePort import (
     CachedData,
+    CacheEntry,
     CacheExpiredError,
+    CacheKeyPage,
     CacheNotFoundError,
     DataType,
     ICacheAdapter,
     ICacheService,
+    check_page_limit,
 )
 from naas_abi_core.services.cache.ontologies.modules.CacheEventOntology import (
     CacheDeleted,
@@ -257,6 +260,17 @@ class SingleTierCacheService:
     def exists(self, key: str) -> bool:
         return self.adapter.exists(key)
 
+    def list_keys(
+        self, prefix: str = "", *, limit: int = 100, after: str | None = None
+    ) -> CacheKeyPage:
+        """A page of this tier's keys, ascending; pass ``page.next_after`` as ``after``."""
+        check_page_limit(limit)
+        return self.adapter.list_keys(prefix, limit=limit, after=after)
+
+    def get_entry(self, key: str) -> CacheEntry:
+        """The stored entry as is: never deserialized (pickle stays opaque), no TTL check."""
+        return CacheEntry(self._tier_name or "", self.adapter.get(key))
+
     def delete(self, key: str) -> None:
         self._run_mutation("delete", key, lambda: self.adapter.delete(key))
         self._emit(CacheDeleted(key=key, tier=self._tier_name))
@@ -372,6 +386,11 @@ class CacheService(ServiceBase, ICacheService):
             for tier, adapter in adapters
         }
 
+    @property
+    def adapters(self) -> tuple[tuple[str, ICacheAdapter], ...]:
+        """Ordered tier adapters for composition; callers cannot mutate the registry."""
+        return tuple(self._adapters)
+
     def __publish_event(self, event: Any) -> None:
         if not self.services_wired:
             return
@@ -418,6 +437,17 @@ class CacheService(ServiceBase, ICacheService):
     def hot_available(self) -> bool:
         """Return True if a hot tier is configured."""
         return TIER_HOT in self._tiers
+
+    @property
+    def tier_names(self) -> tuple[str, ...]:
+        """Configured tiers, in read order (hot first by convention)."""
+        return tuple(tier for tier, _ in self._adapters)
+
+    def tier(self, name: str) -> SingleTierCacheService:
+        """The view of one configured tier, by name."""
+        if name not in self._tiers:
+            raise ValueError(f"No cache tier named {name!r} (tiers: {self.tier_names})")
+        return self._tiers[name]
 
     # ------------------------------------------------------------------
     # Decorator — delegates to cold tier by default
@@ -466,10 +496,65 @@ class CacheService(ServiceBase, ICacheService):
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "Cache tier %r unavailable during get(%r), falling through: %s",
-                    tier_name, key, exc,
+                    tier_name,
+                    key,
+                    exc,
                 )
                 continue
         raise CacheNotFoundError(f"Cache not found in any tier: {key!r}")
+
+    def get_entry(self, key: str) -> CacheEntry:
+        """The first tier's stored entry (hot first), as is: never deserialized,
+        no TTL check. Raises :class:`CacheNotFoundError` when no tier has it."""
+        for tier_name, adapter in self._adapters:
+            try:
+                return CacheEntry(tier_name, adapter.get(key))
+            except CacheNotFoundError:
+                continue
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Cache tier %r unavailable during get_entry(%r), falling through: %s",
+                    tier_name,
+                    key,
+                    exc,
+                )
+        raise CacheNotFoundError(f"Cache not found in any tier: {key!r}")
+
+    def list_keys(
+        self, prefix: str = "", *, limit: int = 100, after: str | None = None
+    ) -> CacheKeyPage:
+        """Keys across all tiers, deduplicated, ascending, at most ``limit``.
+
+        Each tier returns its first ``limit`` keys after ``after``; the smallest
+        ``limit`` of their union are exactly the merged page. An unavailable tier
+        is skipped with a warning (as in ``get``); if every tier fails, the last
+        error is raised.
+        """
+        check_page_limit(limit)
+        merged: set[str] = set()
+        more = False
+        failure: Exception | None = None
+        answered = 0
+        for tier_name, adapter in self._adapters:
+            try:
+                page = adapter.list_keys(prefix, limit=limit, after=after)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Cache tier %r unavailable during list_keys, skipping: %s",
+                    tier_name,
+                    exc,
+                )
+                failure = exc
+                continue
+            answered += 1
+            merged.update(page.keys)
+            more = more or page.next_after is not None
+        if answered == 0 and failure is not None:
+            raise failure
+        ordered = sorted(merged)
+        keys = tuple(ordered[:limit])
+        has_more = more or len(ordered) > limit
+        return CacheKeyPage(keys, keys[-1] if has_more and keys else None)
 
     def exists(self, key: str) -> bool:
         """Return True if the key exists in *any* tier (hot checked first).
@@ -484,7 +569,9 @@ class CacheService(ServiceBase, ICacheService):
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "Cache tier %r unavailable during exists(%r), treating as miss: %s",
-                    tier_name, key, exc,
+                    tier_name,
+                    key,
+                    exc,
                 )
         return False
 

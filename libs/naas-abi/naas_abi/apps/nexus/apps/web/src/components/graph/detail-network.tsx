@@ -6,7 +6,8 @@ import type { GraphEdge, GraphNode } from '@/stores/knowledge-graph';
 import { Maximize2 } from 'lucide-react';
 import { individualHref } from '@/lib/graph-instance-browser';
 import { explorerQuery } from '@/lib/graph-explorer';
-import { instanceDomainGraph, instanceDomainRelationsKey, termEgoGraph, type InstanceRelation } from '@/lib/detail-network';
+import { instanceDomainGraph, instanceDomainRelationsKey, type InstanceRelation } from '@/lib/detail-network';
+import { BFO_LAYOUT_RELATIONS, buildTermGraph, filterTermGraph } from '@/lib/ontology-term-graph';
 import { termNetworkRoute, termRoute } from '@/lib/ontology-navigation';
 import type { DictionaryTerm } from '@/lib/ontology-dictionary-tree';
 import { INSTANCE_EGO_NODE_SPACING, InstanceNetworkCanvas } from './instance-network-canvas';
@@ -22,6 +23,8 @@ export function DetailNetwork({
   layout = 'preview',
   searchPlaceholder,
   onOpen,
+  bfoZones = false,
+  ontologyCards = false,
 }: {
   nodes: GraphNode[];
   edges: GraphEdge[];
@@ -32,6 +35,8 @@ export function DetailNetwork({
   layout?: 'preview' | 'page';
   searchPlaceholder?: string;
   onOpen?: () => void;
+  bfoZones?: boolean;
+  ontologyCards?: boolean;
 }) {
   const pin = layout === 'preview';
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
@@ -55,6 +60,8 @@ export function DetailNetwork({
           minimumAutoFitScale={layout === 'page' ? 0.35 : 0.2}
           focusOnSelection={false}
           interactive={!pin}
+          bfoZones={bfoZones}
+          ontologyCards={ontologyCards}
         />
         {onOpen && (
           <button type="button" className="graph-detail-network-open" onClick={onOpen}>
@@ -126,7 +133,11 @@ export function InstanceDetailNetwork({
   );
 }
 
-/** Details pin / Open Network preview. Fullscreen ontology Network uses OntologyTermNetwork (View → Connectors). */
+/**
+ * Details pin / Open Network preview: the Network page's default view (BFO 7
+ * buckets, restrictions only, zones hidden). Fullscreen ontology Network uses
+ * OntologyTermNetwork (View → Connectors).
+ */
 export function TermDetailNetwork({
   term,
   terms,
@@ -140,12 +151,12 @@ export function TermDetailNetwork({
 }) {
   const router = useRouter();
   const params = useSearchParams();
-  const graph = useMemo(() => termEgoGraph(term, terms), [term, terms]);
+  const graph = useMemo(() => filterTermGraph(buildTermGraph(term, terms), BFO_LAYOUT_RELATIONS), [term, terms]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   if (!graph.edges.length) {
     return layout === 'page'
       ? <div className="graph-detail-network-page"><p className="graph-detail-network-status" role="status">No connections to show in this network.</p></div>
-      : null;
+      : <p className="ontology-context-note">No restrictions to display.</p>;
   }
   const open = (id: string) => {
     if (id === graph.rootId) return;
@@ -172,6 +183,8 @@ export function TermDetailNetwork({
       layout={layout}
       searchPlaceholder="Search terms…"
       onOpen={layout === 'preview' ? openNetworkTab : undefined}
+      bfoZones
+      ontologyCards
     />
   );
   return layout === 'page' ? <div className="graph-detail-network-page">{body}</div> : body;

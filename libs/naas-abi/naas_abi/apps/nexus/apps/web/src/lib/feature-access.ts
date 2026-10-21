@@ -54,7 +54,7 @@ const DEFAULT_ROLE_BASELINE: Record<string, FeatureKey[]> = {
 };
 
 const FEATURE_FALLBACK_ROUTE: Record<FeatureKey, string> = {
-  maps: '/maps/presence',
+  maps: '/maps',
   chat: '/chat',
   files: '/files',
   agents: '/settings/agents',
@@ -231,8 +231,14 @@ export function getFirstAllowedWorkspacePath(params: {
   return `/workspace/${params.workspaceId}/chat`;
 }
 
+/** Where picking another workspace lands: its Home, which every workspace has. */
+export function getWorkspaceHomePath(workspaceId: string): string {
+  return `/workspace/${workspaceId}/home`;
+}
+
 /**
- * Destination when switching workspaces from the current URL.
+ * Destination when the current URL must move to another workspace (e.g. an
+ * unknown workspace in the URL falls back to the first one).
  *
  * Stays on the same product surface (apps stays apps) and drops resource ids
  * (a chat thread, an opened app) that belong to the previous workspace.

@@ -28,13 +28,13 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Iterator
+from collections.abc import Awaitable, Callable, Iterator
 from dataclasses import asdict
-from functools import lru_cache
+from functools import lru_cache, partial
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
@@ -60,6 +60,10 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.port import (
     AppInfo,
     AppPricing,
     AppsResponse,
+)
+from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import (
+    APP_NAME_PATTERN,
+    MODULE_ID_PATTERN,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.service import (
     AppAlreadyConfiguredError,
@@ -128,7 +132,7 @@ def _resolve_manifest_url(raw_url: str | None, module_path: str, app_name: str) 
     ``naas_abi_marketplace/ai/chatgpt`` in the URL.
     """
     if raw_url and raw_url.startswith("html:"):
-        filename = raw_url[len("html:"):]
+        filename = raw_url[len("html:") :]
         module_path_url = module_path.replace(".", "/")
         return f"/app-html/{module_path_url}/{app_name}/{filename}"
     return raw_url
@@ -221,6 +225,19 @@ def _iter_loaded_modules() -> Iterator[Any]:
         yield module
 
 
+def _shadowed_by_remote_apps(module_path: str) -> bool:
+    """A loaded module whose apps would be served under ``/app-html/remote/``,
+    where the apps of remote modules are: its apps are left out, with a warning."""
+    if module_path != "remote" and not module_path.startswith("remote."):
+        return False
+    _log.warning(
+        "Module %s: its apps are not served. /app-html/remote/ is where remote "
+        "modules' apps are; rename the package.",
+        module_path,
+    )
+    return True
+
+
 def _scan_module_apps(module: Any) -> list[AppInfo]:
     """Discover apps under ``<module_root_path>/apps/<app_name>/manifest.json``."""
     module_root = getattr(module, "module_root_path", None)
@@ -231,6 +248,8 @@ def _scan_module_apps(module: Any) -> list[AppInfo]:
         return []
 
     module_path = module.__class__.__module__
+    if _shadowed_by_remote_apps(module_path):
+        return []
 
     catalog: list[AppInfo] = []
     for app_dir in sorted(apps_dir.iterdir()):
@@ -297,7 +316,7 @@ def _scan_apps_html_paths() -> dict[str, str]:
         module_path = module.__class__.__module__
         module_path_url = module_path.replace(".", "/")
         apps_dir = Path(module_root) / "apps"
-        if not apps_dir.is_dir():
+        if not apps_dir.is_dir() or _shadowed_by_remote_apps(module_path):
             continue
         for app_dir in apps_dir.iterdir():
             if not app_dir.is_dir() or app_dir.name.startswith("_"):
@@ -306,16 +325,42 @@ def _scan_apps_html_paths() -> dict[str, str]:
             if not manifest_path.is_file():
                 continue
             for asset_file in app_dir.rglob("*"):
-                if (
-                    not asset_file.is_file()
-                    or asset_file.suffix.lower() not in _APP_ASSET_SUFFIXES
-                ):
+                if not asset_file.is_file() or asset_file.suffix.lower() not in _APP_ASSET_SUFFIXES:
                     continue
                 rel = asset_file.relative_to(app_dir).as_posix()
                 url_key = f"{module_path_url}/{app_dir.name}/{rel}"
                 html_map[url_key] = str(asset_file.resolve())
     _log.info("Apps browser asset map built: %d entries", len(html_map))
     return html_map
+
+
+def _remote_app_info(app: Any) -> AppInfo:
+    return AppInfo(
+        module_path=app.module_path,
+        module_name=app.module_id,
+        app_name=app.name,
+        app_id=app.app_id,
+        category=app.category or "module",
+        name=app.title or _fallback_name(app.name),
+        description=app.description,
+        url=app.url,
+        icon_emoji=app.icon_emoji or None,
+    )
+
+
+async def _remote_apps_catalog() -> tuple[AppInfo, ...]:
+    """Apps of READY remote modules (NATS discovery); none when it is off or
+    unreachable, so the loaded modules' apps are always listed."""
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.factory import (
+        get_remote_app_directory,
+    )
+
+    try:
+        apps = await get_remote_app_directory().list_apps()
+    except Exception:  # noqa: BLE001 - discovery down: list the local apps
+        _log.warning("Could not list remote module apps", exc_info=True)
+        return ()
+    return tuple(_remote_app_info(app) for app in apps)
 
 
 def apps_catalog() -> tuple[AppInfo, ...]:
@@ -343,8 +388,14 @@ def loaded_modules() -> list[Any]:
     return list(_iter_loaded_modules())
 
 
-def _app_exists(app_id: str) -> bool:
-    return any(a.app_id == app_id for a in _scan_apps_catalog())
+async def _app_exists(app_id: str) -> bool:
+    """In the catalog ``list_apps`` returns: a loaded module's app, or a
+    remote module's app (``remote/<module_id>:<app>``) that discovery lists."""
+    if any(a.app_id == app_id for a in _scan_apps_catalog()):
+        return True
+    if not app_id.startswith("remote/"):
+        return False
+    return any(a.app_id == app_id for a in await _remote_apps_catalog())
 
 
 # ---------------------------------------------------------------------------
@@ -365,9 +416,24 @@ def _serialize_record(record: AppConfigRecord) -> dict:
     return data
 
 
-def _ensure_app_exists(app_id: str) -> None:
-    if not _app_exists(app_id):
-        raise HTTPException(status_code=404, detail=f"Unknown app_id: {app_id}")
+async def _ensure_app_exists(
+    app_id: str,
+    configured: Callable[[], Awaitable[AppConfigRecord | None]] | None = None,
+) -> None:
+    """404 unless the catalog lists ``app_id``. A remote app's existing config
+    row (``configured``) stays reachable while its module is down, so it can
+    be read, disabled or deleted; creating or enabling one needs discovery."""
+    if await _app_exists(app_id):
+        return
+    if configured is not None and app_id.startswith("remote/") and await configured():
+        return
+    raise HTTPException(status_code=404, detail=f"Unknown app_id: {app_id}")
+
+
+def _existing_config(
+    apps_service: AppsService, workspace_id: str, app_id: str
+) -> Callable[[], Awaitable[AppConfigRecord | None]]:
+    return partial(apps_service.get_app_config, workspace_id, app_id)
 
 
 class AppsFastAPIPrimaryAdapter:
@@ -423,6 +489,64 @@ async def create_app_html_access_token(
     )
 
 
+class RemoteAppGrantRequest(BaseModel):
+    """Open one app of a remote module (``/app-remote/``) in a workspace."""
+
+    module_id: str = Field(..., pattern=MODULE_ID_PATTERN)
+    app: str = Field(..., pattern=APP_NAME_PATTERN)
+    workspace_id: str = Field(..., min_length=1, max_length=255)
+
+
+class RemoteAppGrantResponse(BaseModel):
+    path: str
+    expires_in: int
+
+
+@router.post("/remote-grant", response_model=RemoteAppGrantResponse)
+async def create_remote_app_grant(
+    body: RemoteAppGrantRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user_required),
+) -> RemoteAppGrantResponse:
+    """The app's root under a grant: the page runs sandboxed, from the API
+    origin, and the grant in its path is its only credential. The user must
+    be able to open the workspace, and the app be enabled in it.
+
+    The grant lasts ``remote_app_grant_expire_minutes``, not as long as the
+    access token it was asked with (minutes, refreshed in the background): it
+    is bound to the session by revocation instead. A logout, a password change
+    or ``/remote-grant/revoke`` ends it, and a token issued before one of
+    those mints none (401: the page refreshes its token and asks again)."""
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote import access
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.http_routes import (
+        refuse_revoked_credential,
+        remote_app_grant_url,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import RemoteApp
+
+    await refuse_revoked_credential(current_user.id, request)
+    workspace_id = await access.remote_app_workspace(
+        current_user.id, RemoteApp(body.module_id, body.app).app_id, body.workspace_id
+    )
+    return RemoteAppGrantResponse(
+        path=remote_app_grant_url(
+            current_user.id, body.module_id, body.app, workspace_id=workspace_id
+        ),
+        expires_in=nexus_config.settings.remote_app_grant_expire_minutes * 60,
+    )
+
+
+@router.post("/remote-grant/revoke", status_code=204, response_class=Response)
+async def revoke_remote_app_grants(
+    current_user: User = Depends(get_current_user_required),
+) -> Response:
+    """End every remote app grant of the current user (a logout does too)."""
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote import revocation
+
+    await revocation.revoke_remote_app_grants(current_user.id)
+    return Response(status_code=204)
+
+
 class PagesSsoTokenRequest(BaseModel):
     """Mint a short-lived HMAC token for a Cloudflare Pages portal."""
 
@@ -469,7 +593,7 @@ async def list_apps(
     current_user: User = Depends(get_current_user_required),
     apps_service: AppsService = Depends(get_apps_service),
 ) -> AppsResponse:
-    """Return every app discovered from loaded-module manifests.
+    """Return every app of the loaded modules and of READY remote modules.
 
     When ``workspace_id`` is provided, results carry the workspace's enable
     state. Apps without a stored record default to ``enabled=False``.
@@ -484,7 +608,7 @@ async def list_apps(
     except Exception:
         loaded_modules = {}
 
-    catalog = _scan_apps_catalog()
+    catalog = (*_scan_apps_catalog(), *await _remote_apps_catalog())
     workspace_slug: str | None = None
     if workspace_id:
         workspace_slug = await _workspace_slug(workspace_id)
@@ -496,15 +620,11 @@ async def list_apps(
     if workspace_id:
         seed = workspace_seed_for_slug(workspace_slug)
         if seed is not None and seed.apps:
-            seed_apps = {
-                str(app_id).strip() for app_id in seed.apps if str(app_id).strip()
-            }
+            seed_apps = {str(app_id).strip() for app_id in seed.apps if str(app_id).strip()}
 
     results: list[AppInfo] = []
     for app in catalog:
-        update: dict = {
-            "enabled": resolve_app_enabled(app.app_id, enabled_by_app_id, seed_apps)
-        }
+        update: dict = {"enabled": resolve_app_enabled(app.app_id, enabled_by_app_id, seed_apps)}
 
         # Manifest values take precedence; only fall back to runtime config
         # when the manifest omits the credential.
@@ -548,7 +668,7 @@ async def create_app_config(
 ) -> dict:
     """Create a new app config row (errors if one already exists)."""
     await require_workspace_access(current_user.id, workspace_id)
-    _ensure_app_exists(body.app_id)
+    await _ensure_app_exists(body.app_id)
     try:
         record = await apps_service.create_app_config(
             AppConfigCreateInput(
@@ -571,7 +691,7 @@ async def get_app_config(
 ) -> dict:
     """Get a single app config row."""
     await require_workspace_access(current_user.id, workspace_id)
-    _ensure_app_exists(app_id)
+    await _ensure_app_exists(app_id, _existing_config(apps_service, workspace_id, app_id))
     record = await apps_service.get_app_config(workspace_id, app_id)
     if record is None:
         raise HTTPException(status_code=404, detail="App config not found")
@@ -592,7 +712,10 @@ async def update_app_config(
     values. This lets the UI toggle simply call PATCH without a prior POST.
     """
     await require_workspace_access(current_user.id, workspace_id)
-    _ensure_app_exists(app_id)
+    await _ensure_app_exists(
+        app_id,
+        None if updates.enabled else _existing_config(apps_service, workspace_id, app_id),
+    )
 
     record = await apps_service.upsert_app_config(
         workspace_id=workspace_id,
@@ -611,7 +734,7 @@ async def delete_app_config(
 ) -> dict[str, str]:
     """Delete the app config (reverts to the default ``enabled=False``)."""
     await require_workspace_access(current_user.id, workspace_id)
-    _ensure_app_exists(app_id)
+    await _ensure_app_exists(app_id, _existing_config(apps_service, workspace_id, app_id))
     deleted = await apps_service.delete_app_config(workspace_id, app_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="App config not found")

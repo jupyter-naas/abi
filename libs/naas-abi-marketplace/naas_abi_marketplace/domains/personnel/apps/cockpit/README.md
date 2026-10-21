@@ -103,7 +103,7 @@ Browser paths use `url_slug`; datasets use `entity_id` (hyphens → underscores)
 | URL | Page module | Data folder |
 |---|---|---|
 | `/demo/workforce` | `web/components/pages/workforce/` | `data/entities/demo/workforce/` |
-| `/demo/graph` | `web/components/pages/graph/` | `data/entities/demo/graph/` |
+| `/demo/graph` | people module `apps/people/graph_page/` (served at `/api/personnel-cockpit/graph-page/`) | `data/entities/demo/graph/` |
 | `/demo/processes` | `web/components/pages/processes/` | `data/entities/demo/processes/` |
 | `/demo/logs` | `web/components/pages/logs/` | `data/entities/demo/logs/` |
 

@@ -121,7 +121,7 @@ Note: every bucket and every filed module carries an `__init__.py` declaring an 
 
 - `__demo__/` — reference implementations: `agents/MultiModelAgent.py`, `workflows/ExecutePythonCodeWorkflow.py`, `apps/` (Streamlit + dashboard / kanban / calendar / network visualization demos), `orchestration/` (Dagster definitions). Use these as the canonical "how it's done" examples when scaffolding.
 
-`alpha/` no longer exists — its two modules (`wsr`, `financial_cockpit`) were promoted into `domains/intelligence/apps/` and `domains/finance/apps/`.
+`alpha/` no longer exists — its two modules were promoted into the domains: `wsr` is the loadable module `domains/intelligence/modules/wsr/`, `financial_cockpit` an app at `domains/finance/apps/financial_cockpit/`.
 
 ## Agent file conventions
 

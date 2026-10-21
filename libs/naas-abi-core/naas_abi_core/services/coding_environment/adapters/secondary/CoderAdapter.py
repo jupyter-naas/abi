@@ -24,6 +24,8 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
 _RUNNING = {"running"}
 _STOPPED = {"stopped", "deleted"}
 _ERROR = {"failed", "canceled"}
+# Page size when listing every owner's workspaces (admin view).
+_ADMIN_PAGE_SIZE = 100
 
 
 class CoderAdapter(ICodingEnvironmentAdapter):
@@ -302,6 +304,26 @@ class CoderAdapter(ICodingEnvironmentAdapter):
             self._to_status(w) for w in (items or []) if not self._is_deleting(w)
         ]
 
+    def list_all_environments(self) -> list[WorkspaceStatus]:
+        # Every owner's workspaces (the admin token sees them all), page by page.
+        statuses: list[WorkspaceStatus] = []
+        offset = 0
+        while True:
+            result = self._request(
+                "GET", f"/workspaces?limit={_ADMIN_PAGE_SIZE}&offset={offset}"
+            )
+            items = result.get("workspaces", []) if isinstance(result, dict) else result
+            items = items or []
+            statuses.extend(
+                self._to_status(w) for w in items if not self._is_deleting(w)
+            )
+            offset += len(items)
+            total = result.get("count") if isinstance(result, dict) else None
+            if not items or len(items) < _ADMIN_PAGE_SIZE or (
+                isinstance(total, int) and offset >= total
+            ):
+                return statuses
+
     def get_status(self, *, workspace_id: str) -> WorkspaceStatus:
         workspace = self._request("GET", f"/workspaces/{workspace_id}")
         return self._to_status(workspace)
@@ -463,6 +485,9 @@ class CoderAdapter(ICodingEnvironmentAdapter):
             name=workspace.get("name", ""),
             phase=phase,
             agent_ready=agent_ready,
+            owner=workspace.get("owner_name") or "",
+            template=workspace.get("template_name") or "",
+            created_at=workspace.get("created_at") or None,
         )
 
     @staticmethod

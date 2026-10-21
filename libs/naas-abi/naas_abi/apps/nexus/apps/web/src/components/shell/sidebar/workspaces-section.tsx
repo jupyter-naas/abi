@@ -2,10 +2,10 @@
 
 import { useMemo, useState } from 'react';
 import { Check, Search } from 'lucide-react';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { listWorkspaces } from '@/lib/workspace-picker';
-import { getWorkspaceSwitchPath } from '@/lib/feature-access';
+import { groupWorkspaces, listWorkspaces } from '@/lib/workspace-picker';
+import { getWorkspaceHomePath } from '@/lib/feature-access';
 import { markAppsSkipRestore } from '@/app/workspace/[workspaceId]/apps/lib/apps-route';
 import { useWorkspaceStore, type Workspace } from '@/stores/workspace';
 import { WorkspaceMark, WorkspaceMarkFrame } from '../workspace-mark';
@@ -13,7 +13,6 @@ import { shellTokens } from '../tokens';
 
 export function WorkspacesSection({ onPicked }: { onPicked?: () => void }) {
   const router = useRouter();
-  const pathname = usePathname();
   const [query, setQuery] = useState('');
   const workspaces = useWorkspaceStore((s) => s.workspaces);
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
@@ -22,6 +21,8 @@ export function WorkspacesSection({ onPicked }: { onPicked?: () => void }) {
   const closeWorkspacesPanel = useWorkspaceStore((s) => s.closeWorkspacesPanel);
 
   const listed = useMemo(() => listWorkspaces(workspaces, query), [workspaces, query]);
+  // Grouped by workspace group (Settings → General); no group shows under "Others".
+  const grouped = useMemo(() => groupWorkspaces(listed), [listed]);
 
   const pick = (workspace: Workspace) => {
     if (workspace.id === currentWorkspaceId) {
@@ -32,14 +33,7 @@ export function WorkspacesSection({ onPicked }: { onPicked?: () => void }) {
     setActiveConversation(null);
     markAppsSkipRestore();
     setCurrentWorkspace(workspace.id);
-    router.push(
-      getWorkspaceSwitchPath({
-        pathname,
-        targetWorkspaceId: workspace.id,
-        role: workspace.currentUserRole,
-        workspaceFlags: workspace.featureFlags,
-      }),
-    );
+    router.push(getWorkspaceHomePath(workspace.id));
     onPicked?.();
   };
 
@@ -62,13 +56,21 @@ export function WorkspacesSection({ onPicked }: { onPicked?: () => void }) {
         {listed.length === 0 ? (
           <p className="px-2 py-2 text-xs text-muted-foreground">No workspaces match</p>
         ) : (
-          listed.map((workspace) => (
-            <WorkspaceRow
-              key={workspace.id}
-              workspace={workspace}
-              current={workspace.id === currentWorkspaceId}
-              onPick={pick}
-            />
+          grouped.map(({ group, workspaces: items }) => (
+            <section key={group} aria-label={group} className="flex flex-col gap-1">
+              <h3 className="px-2 pt-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                {group}
+                <span className="ml-1.5 tabular-nums opacity-70">{items.length}</span>
+              </h3>
+              {items.map((workspace) => (
+                <WorkspaceRow
+                  key={workspace.id}
+                  workspace={workspace}
+                  current={workspace.id === currentWorkspaceId}
+                  onPick={pick}
+                />
+              ))}
+            </section>
           ))
         )}
       </div>

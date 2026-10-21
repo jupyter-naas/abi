@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import threading
 import unittest
+from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -24,6 +25,7 @@ from naas_abi.apps.nexus.graph_policy_config import (
     SCHEMA_GRAPH,
     WorkspaceGraphPolicyConfig,
 )
+from naas_abi_core.services.triple_store.TripleStorePorts import QueryStream
 from rdflib import OWL, RDF, RDFS, Dataset, Graph, Literal, URIRef
 
 ALPHA, BETA, REF = "urn:graph:alpha", "urn:graph:beta", "urn:graph:reference"
@@ -47,6 +49,18 @@ class MemoryStore:
 
     def list_graphs(self):
         return list(self.names)
+
+    @contextmanager
+    def export(self, graph_name=None):
+        # TripleStoreService.export: one named graph's triples, read lazily.
+        with self.lock:
+            self.queries.append(f"export {graph_name}")
+            triples = list(self.dataset.graph(URIRef(graph_name)))
+        yield iter(triples)
+
+    @contextmanager
+    def query_stream(self, query):
+        yield QueryStream.from_result(self.query(query))
 
     def create_graph(self, graph_name):
         self.names.add(URIRef(graph_name))

@@ -9,6 +9,17 @@ import { getLogoUrl } from '@/lib/logo-url';
 import { authFetch } from '@/stores/auth';
 import { useAgentsStore } from '@/stores/agents';
 import { useIntegrationsStore } from '@/stores/integrations';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input, Textarea } from '@/components/ui/input';
+import {
+  SettingsEmpty,
+  SettingsField,
+  SettingsLoading,
+  SettingsNotice,
+  SettingsPageHeader,
+  SettingsSection,
+} from '@/components/settings/settings-ui';
 
 type ServiceIntent = {
   intent_value: string;
@@ -79,12 +90,12 @@ export default function AgentEditPage() {
         setLoading(true);
         setError(null);
 
-        await Promise.all([
+        // Run the three loads in parallel; they are independent.
+        const [response] = await Promise.all([
+          authFetch(`${getApiUrl()}/api/agents/?workspace_id=${workspaceId}`),
           fetchAgents(workspaceId, true),
           refreshProviders(),
         ]);
-
-        const response = await authFetch(`${getApiUrl()}/api/agents/?workspace_id=${workspaceId}`);
         if (!response.ok) {
           throw new Error('Failed to load agent from service');
         }
@@ -141,285 +152,202 @@ export default function AgentEditPage() {
     }
   };
 
+  const backButton = (
+    <Button variant="secondary" onClick={() => router.push(`/workspace/${workspaceId}/settings/agents`)}>
+      <ArrowLeft size={16} />
+      Back to agents
+    </Button>
+  );
+
   if (loading) {
-    return <div className="p-6 text-sm text-muted-foreground">Loading agent...</div>;
+    return <SettingsLoading label="Loading agent…" />;
   }
 
   if (error) {
     return (
-      <div className="space-y-4 p-6">
-        <button
-          onClick={() => router.push(`/workspace/${workspaceId}/settings/agents`)}
-          className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted"
-        >
-          <ArrowLeft size={16} />
-          Back to agents
-        </button>
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+      <div className="space-y-4">
+        {backButton}
+        <SettingsNotice tone="error" icon={<XCircle size={14} />}>
           {error}
-        </div>
+        </SettingsNotice>
       </div>
     );
   }
 
   if (!storeAgent || !serviceAgent) {
     return (
-      <div className="space-y-4 p-6">
-        <button
-          onClick={() => router.push(`/workspace/${workspaceId}/settings/agents`)}
-          className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted"
-        >
-          <ArrowLeft size={16} />
-          Back to agents
-        </button>
-        <p className="text-sm text-muted-foreground">Agent not found.</p>
+      <div className="space-y-4">
+        {backButton}
+        <SettingsEmpty title="Agent not found." />
       </div>
     );
   }
 
+  const listSection = (title: string, items: string[], empty: string, mono = true) => (
+    <SettingsSection title={title}>
+      {items.length > 0 ? (
+        <ul className="space-y-1">
+          {items.map((item) => (
+            <li key={item} className={cn('bg-muted/50 px-2 py-1', mono ? 'font-mono text-xs' : 'text-sm')}>
+              {item}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+          <XCircle size={14} />
+          {empty}
+        </p>
+      )}
+    </SettingsSection>
+  );
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <button
-            onClick={() => router.push(`/workspace/${workspaceId}/settings/agents`)}
-            className="mb-3 inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted"
-          >
-            <ArrowLeft size={16} />
-            Back to agents
-          </button>
-          <div className="flex items-center gap-3">
-            <div className={cn(
-              'flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg',
+      <div>{backButton}</div>
+      <SettingsPageHeader
+        leading={
+          <div
+            className={cn(
+              'flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden',
               serviceAgent.logo_url ? 'bg-transparent' : 'bg-muted'
-            )}>
-              {serviceAgent.logo_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={getLogoUrl(serviceAgent.logo_url)} alt={serviceAgent.name} className="h-full w-full object-cover" />
-              ) : (
-                <Bot size={16} />
-              )}
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold">Edit Agent</h2>
-              <p className="text-sm text-muted-foreground">{serviceAgent.name}</p>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Enabled</span>
-            <button
-              type="button"
-              onClick={() => setEnabled((current) => !current)}
-              className={cn(
-                'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
-                enabled ? 'bg-primary' : 'bg-muted'
-              )}
-              title={enabled ? 'Disable agent' : 'Enable agent'}
-            >
-              <span
-                className={cn(
-                  'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
-                  enabled ? 'translate-x-5' : 'translate-x-0.5'
-                )}
-              />
-            </button>
-          </div>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+            )}
           >
-            <Save size={16} />
-            {saving ? 'Saving...' : 'Save'}
-          </button>
-        </div>
-      </div>
+            {serviceAgent.logo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={getLogoUrl(serviceAgent.logo_url)} alt={serviceAgent.name} className="h-full w-full object-cover" />
+            ) : (
+              <Bot size={16} />
+            )}
+          </div>
+        }
+        title="Edit Agent"
+        description={serviceAgent.name}
+        actions={
+          <>
+            <Checkbox
+              checked={enabled}
+              onCheckedChange={setEnabled}
+              label="Enabled"
+              title={enabled ? 'Disable agent' : 'Enable agent'}
+            />
+            <Button onClick={handleSave} disabled={saving}>
+              <Save size={16} />
+              {saving ? 'Saving...' : 'Save'}
+            </Button>
+          </>
+        }
+      />
 
       {saved && (
-        <div className="inline-flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700 dark:border-green-900 dark:bg-green-950/40 dark:text-green-300">
-          <CheckCircle size={14} />
+        <SettingsNotice tone="success" icon={<CheckCircle size={14} />}>
           Agent updated
-        </div>
+        </SettingsNotice>
       )}
 
-      <div className="max-h-[75vh] space-y-4 overflow-y-auto rounded-lg border p-4 pr-2">
+      <SettingsSection title="General">
         <div className="space-y-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium">Name</label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium">Description</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={3}
-              className="w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium">System Prompt</label>
-            <textarea
+          <SettingsField label="Name">
+            <Input value={name} onChange={(e) => setName(e.target.value)} />
+          </SettingsField>
+          <SettingsField label="Description">
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className="resize-none" />
+          </SettingsField>
+          <SettingsField label="System Prompt">
+            <Textarea
               value={systemPrompt}
               onChange={(e) => setSystemPrompt(e.target.value)}
               rows={12}
-              className="min-h-[14rem] w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+              className="min-h-[14rem] resize-y"
             />
-          </div>
+          </SettingsField>
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-sm font-medium">Provider</label>
-              <input
-                value={provider}
-                onChange={(e) => setProvider(e.target.value)}
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Model ID</label>
-              <input
-                value={modelId}
-                onChange={(e) => setModelId(e.target.value)}
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-              />
-            </div>
+            <SettingsField label="Provider">
+              <Input value={provider} onChange={(e) => setProvider(e.target.value)} />
+            </SettingsField>
+            <SettingsField label="Model ID">
+              <Input value={modelId} onChange={(e) => setModelId(e.target.value)} />
+            </SettingsField>
           </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium">Logo URL</label>
-            <input
-              value={logoUrl}
-              onChange={(e) => setLogoUrl(e.target.value)}
-              className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
+          <SettingsField label="Logo URL">
+            <Input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} />
+          </SettingsField>
         </div>
-        <div className="rounded-lg border bg-muted/20 p-3">
-          <p className="mb-1 text-sm font-medium">Logo Preview</p>
-          {serviceAgent.logo_url ? (
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 overflow-hidden rounded-md border bg-white">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={getLogoUrl(serviceAgent.logo_url)} alt={serviceAgent.name} className="h-full w-full object-cover" />
+      </SettingsSection>
+
+      <SettingsSection title="Logo Preview">
+        {serviceAgent.logo_url ? (
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 overflow-hidden border border-border bg-white">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={getLogoUrl(serviceAgent.logo_url)} alt={serviceAgent.name} className="h-full w-full object-cover" />
+            </div>
+            <p className="break-all text-xs text-muted-foreground">{serviceAgent.logo_url}</p>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">No logo defined</p>
+        )}
+      </SettingsSection>
+
+      <SettingsSection title="Suggestions">
+        {serviceAgent.suggestions && serviceAgent.suggestions.length > 0 ? (
+          <ul className="space-y-1 text-sm">
+            {serviceAgent.suggestions.map((suggestion) => (
+              <li key={`${suggestion.label}-${suggestion.value}`} className="bg-muted/50 px-2 py-1">
+                <span className="font-medium">{suggestion.label}</span>
+                <span className="text-muted-foreground"> - {suggestion.value}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">No suggestions</p>
+        )}
+      </SettingsSection>
+
+      <SettingsSection title="Intents">
+        {serviceAgent.intents && serviceAgent.intents.length > 0 ? (
+          <div className="space-y-2">
+            {serviceAgent.intents.map((intent, index) => (
+              <div key={`${intent.intent_value}-${index}`} className="bg-muted/50 px-2 py-2 text-xs">
+                <p><span className="text-muted-foreground">Value:</span> {intent.intent_value || '-'}</p>
+                <p><span className="text-muted-foreground">Type:</span> {intent.intent_type || '-'}</p>
+                <p><span className="text-muted-foreground">Target:</span> {intent.intent_target || '-'}</p>
+                <p><span className="text-muted-foreground">Scope:</span> {intent.intent_scope || '-'}</p>
               </div>
-              <p className="break-all text-xs text-muted-foreground">{serviceAgent.logo_url}</p>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">No logo defined</p>
-          )}
-        </div>
-        <div className="rounded-lg border bg-muted/20 p-3">
-          <p className="mb-2 text-sm font-medium">Suggestions</p>
-          {serviceAgent.suggestions && serviceAgent.suggestions.length > 0 ? (
-            <ul className="space-y-1 text-sm">
-              {serviceAgent.suggestions.map((suggestion) => (
-                <li key={`${suggestion.label}-${suggestion.value}`} className="rounded bg-background px-2 py-1">
-                  <span className="font-medium">{suggestion.label}</span>
-                  <span className="text-muted-foreground"> - {suggestion.value}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-muted-foreground">No suggestions</p>
-          )}
-        </div>
-        <div className="rounded-lg border bg-muted/20 p-3">
-          <p className="mb-2 text-sm font-medium">Intents</p>
-          {serviceAgent.intents && serviceAgent.intents.length > 0 ? (
-            <div className="space-y-2">
-              {serviceAgent.intents.map((intent, index) => (
-                <div key={`${intent.intent_value}-${index}`} className="rounded bg-background px-2 py-2 text-xs">
-                  <p><span className="text-muted-foreground">Value:</span> {intent.intent_value || '-'}</p>
-                  <p><span className="text-muted-foreground">Type:</span> {intent.intent_type || '-'}</p>
-                  <p><span className="text-muted-foreground">Target:</span> {intent.intent_target || '-'}</p>
-                  <p><span className="text-muted-foreground">Scope:</span> {intent.intent_scope || '-'}</p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-              <XCircle size={14} />
-              No intents
-            </p>
-          )}
-        </div>
-        <div className="rounded-lg border bg-muted/20 p-3">
-          <p className="mb-2 text-sm font-medium">Tools</p>
-          {tools.length > 0 ? (
-            <ul className="space-y-1 text-sm">
-              {tools.map((toolId) => (
-                <li key={toolId} className="rounded bg-background px-2 py-1 font-mono text-xs">
-                  {toolId}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-              <XCircle size={14} />
-              No tools configured
-            </p>
-          )}
-        </div>
-        <div className="rounded-lg border bg-muted/20 p-3">
-          <p className="mb-2 text-sm font-medium">Subagents</p>
-          {subagents.length > 0 ? (
-            <ul className="space-y-1 text-sm">
-              {subagents.map((subagent) => (
-                <li key={subagent} className="rounded bg-background px-2 py-1 font-mono text-xs">
-                  {subagent}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-              <XCircle size={14} />
-              No subagents configured
-            </p>
-          )}
-        </div>
-        <div className="border-t pt-4">
-          <h4 className="mb-3 text-sm font-medium text-muted-foreground">Service Metadata</h4>
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <p className="text-muted-foreground">ID</p>
-              <p className="break-all font-mono text-xs">{serviceAgent.id}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Workspace</p>
-              <p className="break-all font-mono text-xs">{serviceAgent.workspace_id}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Class</p>
-              <p className="break-all font-mono text-xs">{serviceAgent.class_name || 'None'}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Status</p>
-              <p>{serviceAgent.enabled ? 'Enabled' : 'Disabled'}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Provider</p>
-              <p>{serviceAgent.provider || 'None'}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Model</p>
-              <p>{serviceAgent.model_id || 'None'}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Created</p>
-              <p>{new Date(serviceAgent.created_at).toLocaleString()}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Updated</p>
-              <p>{new Date(serviceAgent.updated_at).toLocaleString()}</p>
-            </div>
+            ))}
           </div>
-        </div>
-      </div>
+        ) : (
+          <p className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+            <XCircle size={14} />
+            No intents
+          </p>
+        )}
+      </SettingsSection>
+
+      {listSection('Tools', tools, 'No tools configured')}
+      {listSection('Subagents', subagents, 'No subagents configured')}
+
+      <SettingsSection title="Service Metadata">
+        <dl className="grid grid-cols-2 gap-3 text-sm">
+          {(
+            [
+              ['ID', serviceAgent.id, true],
+              ['Workspace', serviceAgent.workspace_id, true],
+              ['Class', serviceAgent.class_name || 'None', true],
+              ['Status', serviceAgent.enabled ? 'Enabled' : 'Disabled', false],
+              ['Provider', serviceAgent.provider || 'None', false],
+              ['Model', serviceAgent.model_id || 'None', false],
+              ['Created', new Date(serviceAgent.created_at).toLocaleString(), false],
+              ['Updated', new Date(serviceAgent.updated_at).toLocaleString(), false],
+            ] as const
+          ).map(([label, value, mono]) => (
+            <div key={label}>
+              <dt className="text-muted-foreground">{label}</dt>
+              <dd className={cn(mono && 'break-all font-mono text-xs')}>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </SettingsSection>
     </div>
   );
 }

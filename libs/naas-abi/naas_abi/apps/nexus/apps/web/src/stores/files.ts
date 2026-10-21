@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { useWorkspaceStore } from './workspace';
 import { authFetch } from './auth';
+import { isSystemPath } from '@/lib/system-files';
 
 // Helper to get current workspace ID
 const getWorkspaceIdFromPathname = (): string | null => {
@@ -140,6 +141,27 @@ const saveSort = (sortBy: FileSortKey, sortDir: SortDirection): void => {
   }
 };
 
+// View → Show system files (names starting with "."). Off unless chosen.
+const SHOW_SYSTEM_STORAGE_KEY = 'nexus-files-show-system';
+
+const getInitialShowSystemFiles = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  try {
+    return localStorage.getItem(SHOW_SYSTEM_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+};
+
+const saveShowSystemFiles = (show: boolean): void => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(SHOW_SYSTEM_STORAGE_KEY, String(show));
+  } catch {
+    // ignore storage errors
+  }
+};
+
 export interface FileContent {
   path: string;
   content: string;
@@ -164,6 +186,8 @@ interface FilesState {
   // Persisted sort preference, applied server-side (remote) or client-side (local).
   filesSortBy: FileSortKey;
   filesSortDir: SortDirection;
+  // Persisted: list system (dot) files. Applied server-side (remote) or client-side (local).
+  showSystemFiles: boolean;
   
   // Lab state (VS Code-like, always at workspace root)
   labFiles: FileInfo[];
@@ -207,6 +231,8 @@ interface FilesState {
   // Toggle/select the sort column. Same column flips direction; a new column
   // starts ascending. Persists the choice; the caller refetches to apply it.
   setFilesSort: (sortBy: FileSortKey) => void;
+  // Persists the choice; the caller refetches to apply it.
+  setShowSystemFiles: (show: boolean) => void;
   openFile: (path: string) => void;
   closeFile: (path: string) => void;
   setActiveFile: (path: string | null) => void;
@@ -261,6 +287,25 @@ const getFilesScope = (activeSource: string): 'workspace' | 'my_drive' | 'platfo
   return 'workspace';
 };
 
+// Files page listing requests. Each fetch bumps the generation; only the
+// latest one may commit files, errors or the loading flag. Switching drive or
+// reading a local folder also invalidates (and aborts) the pending listing.
+let filesRequestGen = 0;
+let filesRequestAbort: AbortController | null = null;
+
+const beginFilesRequest = (): { gen: number; signal: AbortSignal } => {
+  filesRequestAbort?.abort();
+  filesRequestAbort = new AbortController();
+  filesRequestGen += 1;
+  return { gen: filesRequestGen, signal: filesRequestAbort.signal };
+};
+
+export const invalidateFilesRequests = (): void => {
+  filesRequestAbort?.abort();
+  filesRequestAbort = null;
+  filesRequestGen += 1;
+};
+
 export const useFilesStore = create<FilesState>((set, get) => ({
   // Files page state (Finder-like)
   files: [],
@@ -274,6 +319,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   filesSearch: '',
   filesSortBy: getInitialSort().sortBy,
   filesSortDir: getInitialSort().sortDir,
+  showSystemFiles: getInitialShowSystemFiles(),
 
   // Lab state (VS Code-like, always workspace root)
   labFiles: [],
@@ -330,6 +376,11 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     saveSort(sortBy, sortDir);
     return { filesSortBy: sortBy, filesSortDir: sortDir };
   }),
+
+  setShowSystemFiles: (show) => {
+    saveShowSystemFiles(show);
+    set({ showSystemFiles: show });
+  },
   
   // Storage source actions
   toggleCategory: (category) => set((state) => ({
@@ -344,7 +395,10 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     ),
   })),
   
-  setActiveSource: (sourceId) => set({ activeSource: sourceId }),
+  setActiveSource: (sourceId) => {
+    if (sourceId !== get().activeSource) invalidateFilesRequests();
+    set({ activeSource: sourceId });
+  },
   
   connectSource: async (sourceId) => {
     // TODO: Implement OAuth or API key connection flow for cloud sources
@@ -436,6 +490,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   
   // Fetch files from a synced local folder using File System Access API
   fetchLocalFiles: async (folderId, subPath = '') => {
+    const { gen } = beginFilesRequest();
     const { syncedFolders } = get();
     const folder = syncedFolders.find((f) => f.id === folderId);
     
@@ -488,8 +543,10 @@ export const useFilesStore = create<FilesState>((set, get) => ({
         return a.name.localeCompare(b.name);
       });
       
+      if (gen !== filesRequestGen) return;
       set({ files, currentPath: subPath, loading: false });
     } catch (err) {
+      if (gen !== filesRequestGen) return;
       console.error('Error reading local folder:', err);
       set({ 
         error: 'Failed to read folder contents. You may need to re-grant access.',
@@ -555,6 +612,8 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     // Search: filtered on the server (current folder only) so paging walks the
     // matches, not just whatever happened to load on the current page.
     const search = (options?.search ?? '').trim();
+    const { gen, signal } = beginFilesRequest();
+    const isCurrent = () => gen === filesRequestGen;
 
     // The files API requires a workspace for workspace/platform-drive scopes.
     // During app bootstrap the workspace can still be null.
@@ -574,20 +633,22 @@ export const useFilesStore = create<FilesState>((set, get) => ({
 
     // Sort is a persisted preference, so read it from state — every fetch (page,
     // search, refresh) stays consistently ordered.
-    const { filesSortBy, filesSortDir } = get();
+    const { filesSortBy, filesSortDir, showSystemFiles } = get();
 
     set({ loading: true, error: null });
     try {
       const pageParams = limit != null ? `&limit=${limit}&offset=${offset}` : '';
       const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
       const sortParams = `&sort_by=${filesSortBy}&sort_dir=${filesSortDir}`;
+      const hiddenParam = `&include_hidden=${showSystemFiles}`;
       const fetchListing = async (targetPath: string) => {
         const workspaceParam = scope !== 'my_drive' && workspaceId
           ? `&workspace_id=${encodeURIComponent(workspaceId)}`
           : '';
         const scopeParam = `&scope=${scope}`;
         const response = await authFetch(
-          `${getApiBase()}/api/files/?path=${encodeURIComponent(targetPath)}${workspaceParam}${scopeParam}${pageParams}${searchParam}${sortParams}`
+          `${getApiBase()}/api/files/?path=${encodeURIComponent(targetPath)}${workspaceParam}${scopeParam}${pageParams}${searchParam}${sortParams}${hiddenParam}`,
+          { signal }
         );
         if (!response.ok) {
           throw new Error('Failed to fetch files');
@@ -604,6 +665,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       // Fallback: if the root has no entries at all, try the workspace root.
       // This handles deployments where objects are scoped under workspace IDs.
       // Keyed on total (not the page length) so an empty later page doesn't retry.
+      if (!isCurrent()) return;
       if (scope === 'workspace' && !relativePath && resolvedTotal === 0 && workspaceId) {
         const workspaceListing = await fetchListing(workspaceId);
         if (workspaceListing.total > 0) {
@@ -613,6 +675,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
         }
       }
 
+      if (!isCurrent()) return;
       set({
         files: resolvedFiles,
         currentPath: resolvedPath,
@@ -623,6 +686,8 @@ export const useFilesStore = create<FilesState>((set, get) => ({
         loading: false,
       });
     } catch (error) {
+      // Aborted or superseded: the newer request owns error/loading.
+      if (!isCurrent()) return;
       set({ error: (error as Error).message, loading: false });
     }
   },
@@ -905,7 +970,15 @@ export const useFilesStore = create<FilesState>((set, get) => ({
 
   uploadFiles: async (files) => {
     const results: FileInfo[] = [];
-    const fileArray = Array.from(files as ArrayLike<File | { file: File; relativeDir?: string }>);
+    // System files are read-only (the API refuses them): a dropped folder's
+    // .DS_Store or .git is skipped rather than counted as a failed upload.
+    const fileArray = Array.from(files as ArrayLike<File | { file: File; relativeDir?: string }>).filter(
+      (item) => {
+        const file = item instanceof File ? item : item.file;
+        const relativeDir = item instanceof File ? '' : item.relativeDir ?? '';
+        return !isSystemPath(relativeDir ? `${relativeDir}/${file.name}` : file.name);
+      },
+    );
 
     set({
       uploadProgress: {

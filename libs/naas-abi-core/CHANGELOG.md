@@ -2,6 +2,134 @@
 
 <!-- version list -->
 
+## v3.0.0 (2026-10-20)
+
+
+### Upgrade notes (3.0)
+
+- **NATS mode.** A top-level `nats:` block runs the engine on a NATS broker:
+  kernel services on `abi.svc.<service>.v1.*`, the JetStream bus, module jobs,
+  discovery for remote modules, one serving engine per NATS account. Without
+  the block the engine keeps its in-process wiring.
+- **Dagster and RabbitMQ are legacy extras.** `naas-abi-core` no longer
+  installs Dagster and `[all]` leaves out `dagster` and `rabbitmq`: a project
+  without NATS adds `naas-abi-core[all,dagster,rabbitmq]`. Both are removed in
+  the next major. `[all]` now includes `nats` and `otel`.
+- **Agent memory and the activity log** move to the Document Service in NATS
+  mode. Right after the switch, run `agent_memory_migrate` (`{}`, then
+  `{"apply": true}`) and `activity_log_migrate` from the Nexus System app.
+  `agent_memory_prune` runs daily.
+- Custom adapters must implement the ports' new abstract methods.
+- Upgrade `naas-abi-core`, `naas-abi` and `naas-abi-cli` together.
+- Guide: [Migrate from 2.x to 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/migrate-to-3.md).
+  Every change: [Breaking changes in 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/breaking-changes-3.md).
+
+## v2.44.0 (2026-10-20)
+
+### Bug Fixes
+
+- **slides**: Satisfy CI lint checks
+  ([`48c9102`](https://github.com/jupyter-naas/abi/commit/48c9102a3614a96edb8b0daafb030bc2299d8fa4))
+
+### Features
+
+- **slides**: Preserve semantic editor contributions
+  ([`6f244f6`](https://github.com/jupyter-naas/abi/commit/6f244f6b5165e2fd98850b6c00f3b9cbd1a0057e))
+
+## v2.43.0 (2026-10-14)
+
+### Chores
+
+- **nexus-map**: Commit staged changes and push
+  ([`df724fe`](https://github.com/jupyter-naas/abi/commit/df724fe722b9bf76d6508ac88c6ae26b2aa3a29f))
+
+### Features
+
+- **maps**: Add new map icons and layer colors
+  ([`36ab3d9`](https://github.com/jupyter-naas/abi/commit/36ab3d9544a495a2cf34983c4045b1a100c12807))
+
+
+## v2.42.1 (2026-10-12)
+
+### Bug Fixes
+
+- Qa for testing files
+  ([`6241eac`](https://github.com/jupyter-naas/abi/commit/6241eac59eafbfb08d7f742bf27f767bc1c7c7ee))
+
+
+## v2.42.0 (2026-10-09)
+
+### Bug Fixes
+
+- **identity_graph**: Drop graph silently instead of clear
+  ([`3353bef`](https://github.com/jupyter-naas/abi/commit/3353bef7ce404f9728aeb478c246627f5396b9b3))
+
+- **triple_store**: Decode invalid UTF-8 error bodies in _raise_for_status
+  ([`3353bef`](https://github.com/jupyter-naas/abi/commit/3353bef7ce404f9728aeb478c246627f5396b9b3))
+
+### Features
+
+- **identity_graph**: Retry sync on Fuseki dataset lock races
+  ([`3353bef`](https://github.com/jupyter-naas/abi/commit/3353bef7ce404f9728aeb478c246627f5396b9b3))
+
+### Testing
+
+- **triple_store**: Add test for _raise_for_status decoding invalid UTF-8
+  ([`3353bef`](https://github.com/jupyter-naas/abi/commit/3353bef7ce404f9728aeb478c246627f5396b9b3))
+
+
+## v2.41.3 (2026-10-09)
+
+### Bug Fixes
+
+- **agent**: Add chat_source flag to ToolResponseEvent and support tool metadata opt-out
+  ([`e197797`](https://github.com/jupyter-naas/abi/commit/e1977973d8d7c4809c2dd589553ecc7d51563825))
+
+- **triple_store**: Decode RDF body as UTF-8 to handle missing charset
+  ([`69f6574`](https://github.com/jupyter-naas/abi/commit/69f657450c054cbee47bbe3d75d7214703358699))
+
+### Refactoring
+
+- **people-intel**: Update multiple modules and scripts for improvements and fixes
+  ([`ed96de9`](https://github.com/jupyter-naas/abi/commit/ed96de9d594768c4053bf24850114b88a122b52c))
+
+
+## v2.41.2 (2026-10-06)
+
+### Bug Fixes
+
+- **api**: Keep oauth2_scheme as an alias of api_key_scheme
+  ([`d7b36c2`](https://github.com/jupyter-naas/abi/commit/d7b36c2b11b5541804a448a6f6931a5de7a24180))
+
+
+## v2.41.1 (2026-10-05)
+
+### Bug Fixes
+
+- Onto2py code generated
+  ([`3d4283a`](https://github.com/jupyter-naas/abi/commit/3d4283a305bf04794270d4704c3975be63f76e35))
+
+### Refactoring
+
+- **ontologies**: Add action classes for geospatial and administrative regions
+  ([`4dbffc8`](https://github.com/jupyter-naas/abi/commit/4dbffc8b5876b5e91593f8794ebef9d08ad196b4))
+
+- **ontologies**: Add new ontology-related modules and tests
+  ([`5e9ec6a`](https://github.com/jupyter-naas/abi/commit/5e9ec6a19162fe5263bf7bdcd203f22bb3eb33e4))
+
+- **ontologies**: Improve module ontology consolidation and path resolution
+  ([`7d3bc9a`](https://github.com/jupyter-naas/abi/commit/7d3bc9a3eb346e7f116e1f0fa5839c4c6011e64e))
+
+- **ontology**: Add process slices endpoint and tests
+  ([`d4ef150`](https://github.com/jupyter-naas/abi/commit/d4ef150dadf9489329134745d007e99c5f0c69b7))
+
+
+## v2.41.0 (2026-10-01)
+
+
+## v2.40.3 (2026-09-30)
+
+
 ## v2.40.2 (2026-09-24)
 
 ### Bug Fixes

@@ -169,6 +169,27 @@ def test_banded_facet_rollup_sums_the_bands_and_ranks_by_count():
     assert ctx.queries_run == 1
 
 
+def test_facet_values_differing_only_in_username_case_are_merged():
+    class _CaseContext(SnapshotContext):
+        def __init__(self) -> None:
+            super().__init__(None, None, queries=[], scenarios=SCENARIOS)  # type: ignore[arg-type]
+
+        def _query_banded_facet_values(
+            self, query_string: str, column: str
+        ) -> dict[int, dict[str, int]]:
+            return {0: {"NewsHub": 10, "newshub": 4, "Other": 7}}
+
+    ctx = _CaseContext()
+    by_id = {s["id"]: s for s in SCENARIOS}
+    values = ctx.facet_values_for_window(
+        "q", by_id["24h"]["start_time"], by_id["24h"]["end_time"], "username"
+    )
+    assert values == [
+        {"value": "NewsHub", "count": 14},
+        {"value": "Other", "count": 7},
+    ]
+
+
 def test_facet_values_differing_only_in_whitespace_are_merged():
     """`user_location` really does hold both "USA" and "USA " in the graph.
 

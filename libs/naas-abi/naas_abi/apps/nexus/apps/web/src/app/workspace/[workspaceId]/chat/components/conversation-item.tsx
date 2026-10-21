@@ -9,18 +9,21 @@ export type ConversationItemProps = {
   title: string;
   pinned?: boolean;
   isActive: boolean;
-  onClick: () => void;
-  onPin: () => void;
-  onArchive: () => void;
-  onRename: (newTitle: string) => void;
-  onDelete: () => void;
+  // Callbacks take the row's id so parents can pass stable functions and the
+  // memoized row skips re-rendering when the list re-renders.
+  onClick: (id: string) => void;
+  onPin: (id: string) => void;
+  onArchive: (id: string) => void;
+  onRename: (id: string, newTitle: string) => void;
+  onDelete: (id: string, title: string) => void;
   isRenaming?: boolean;
-  onStartRename: () => void;
+  onStartRename: (id: string) => void;
   onCancelRename: () => void;
   mobilePanel?: boolean;
 };
 
 export const ConversationItem = React.memo(function ConversationItem({
+  id,
   title,
   pinned,
   isActive,
@@ -40,7 +43,7 @@ export const ConversationItem = React.memo(function ConversationItem({
 
   const handleRenameSubmit = () => {
     if (editValue.trim() && editValue !== title) {
-      onRename(editValue.trim());
+      onRename(id, editValue.trim());
     }
     onCancelRename();
   };
@@ -72,7 +75,7 @@ export const ConversationItem = React.memo(function ConversationItem({
     <div className="chat-list-row-wrap">
       <button
         type="button"
-        onClick={onClick}
+        onClick={() => onClick(id)}
         className={`chat-list-row${isActive ? ' is-active' : ''}${mobilePanel ? ' is-mobile-panel' : ''}`}
       >
         {pinned && <Pin size={iconSize} className="chat-list-row-pin" />}
@@ -98,7 +101,7 @@ export const ConversationItem = React.memo(function ConversationItem({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                onPin();
+                onPin(id);
                 setShowMenu(false);
               }}
               className="chat-context-menu-item"
@@ -110,7 +113,7 @@ export const ConversationItem = React.memo(function ConversationItem({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                onStartRename();
+                onStartRename(id);
                 setShowMenu(false);
               }}
               className="chat-context-menu-item"
@@ -122,7 +125,7 @@ export const ConversationItem = React.memo(function ConversationItem({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                onArchive();
+                onArchive(id);
                 setShowMenu(false);
               }}
               className="chat-context-menu-item"
@@ -135,7 +138,7 @@ export const ConversationItem = React.memo(function ConversationItem({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                onDelete();
+                onDelete(id, title);
                 setShowMenu(false);
               }}
               className="chat-context-menu-item is-destructive"

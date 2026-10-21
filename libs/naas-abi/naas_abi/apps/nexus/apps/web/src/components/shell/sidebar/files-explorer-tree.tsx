@@ -11,6 +11,7 @@ import {
 import { createPortal } from 'react-dom';
 import { ChevronRight, Edit2, File, Folder, MoreVertical, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { isSystemPath } from '@/lib/system-files';
 import type { FileInfo } from '@/stores/files';
 import {
   placeDocumentsProjectMenu,
@@ -239,6 +240,9 @@ function ExplorerFileRow({
 }) {
   const [showMenu, setShowMenu] = useState(false);
   const filePath = normalizeExplorerPath(file.path);
+  // System files are read-only: no move, rename or delete.
+  const readOnly = isSystemPath(filePath);
+  const canDrag = canDragFolders && !readOnly;
   const selected = isExplorerPathSelected(
     filePath,
     currentPath,
@@ -247,7 +251,7 @@ function ExplorerFileRow({
   );
 
   const handleDragStart = (event: DragEvent) => {
-    if (!canDragFolders) return;
+    if (!canDrag) return;
     event.dataTransfer.setData(NEXUS_FILE_DRAG_MIME, filePath);
     event.dataTransfer.effectAllowed = 'move';
   };
@@ -258,7 +262,7 @@ function ExplorerFileRow({
         className={cn('sections-overflow-host flex items-center', showMenu && 'is-menu-open')}
         onContextMenu={(event) => {
           event.preventDefault();
-          setShowMenu(true);
+          if (!readOnly) setShowMenu(true);
         }}
       >
         {/* Spacer matches folder twisty width so icons align. */}
@@ -271,8 +275,8 @@ function ExplorerFileRow({
           data-ontology-tree-select
           data-testid="files-explorer-file"
           data-path={filePath}
-          draggable={canDragFolders}
-          onDragStart={canDragFolders ? handleDragStart : undefined}
+          draggable={canDrag}
+          onDragStart={canDrag ? handleDragStart : undefined}
           onClick={() => onOpenFile(source, file)}
           className={cn(
             ROW_CLASS,
@@ -286,12 +290,14 @@ function ExplorerFileRow({
           <File size={iconSize} className="flex-shrink-0 text-muted-foreground" />
           <span className="truncate">{file.name}</span>
         </button>
-        <FilesExplorerRowMenu
-          open={showMenu}
-          onOpenChange={setShowMenu}
-          onRename={() => onRenameFolder(source, file)}
-          onDelete={() => onDeleteFolder(source, file)}
-        />
+        {!readOnly && (
+          <FilesExplorerRowMenu
+            open={showMenu}
+            onOpenChange={setShowMenu}
+            onRename={() => onRenameFolder(source, file)}
+            onDelete={() => onDeleteFolder(source, file)}
+          />
+        )}
       </div>
     </li>
   );
@@ -341,6 +347,9 @@ function ExplorerFolderRow({
   const [showMenu, setShowMenu] = useState(false);
   const [isDropTarget, setIsDropTarget] = useState(false);
   const folderPath = normalizeExplorerPath(folder.path);
+  // System folders are read-only: no move, drop-into, rename or delete.
+  const readOnly = isSystemPath(folderPath);
+  const canDrag = canDragFolders && !readOnly;
   const dirKey = explorerDirKey(source, folderPath);
   const filtering = query.trim().length > 0;
   const nameMatch = matchesExplorerQuery(folder.name, query);
@@ -360,13 +369,13 @@ function ExplorerFolderRow({
     event.dataTransfer.types.includes(NEXUS_FILE_DRAG_MIME);
 
   const handleDragStart = (event: DragEvent) => {
-    if (!canDragFolders) return;
+    if (!canDrag) return;
     event.dataTransfer.setData(NEXUS_FILE_DRAG_MIME, folderPath);
     event.dataTransfer.effectAllowed = 'move';
   };
 
   const handleDragOver = (event: DragEvent) => {
-    if (!canDragFolders || !isInternalDrag(event)) return;
+    if (!canDrag || !isInternalDrag(event)) return;
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = 'move';
@@ -374,13 +383,13 @@ function ExplorerFolderRow({
   };
 
   const handleDragLeave = (event: DragEvent) => {
-    if (!canDragFolders || !isInternalDrag(event)) return;
+    if (!canDrag || !isInternalDrag(event)) return;
     event.stopPropagation();
     setIsDropTarget(false);
   };
 
   const handleDrop = (event: DragEvent) => {
-    if (!canDragFolders || !isInternalDrag(event)) return;
+    if (!canDrag || !isInternalDrag(event)) return;
     event.preventDefault();
     event.stopPropagation();
     setIsDropTarget(false);
@@ -400,11 +409,11 @@ function ExplorerFolderRow({
         )}
         onContextMenu={(event) => {
           event.preventDefault();
-          setShowMenu(true);
+          if (!readOnly) setShowMenu(true);
         }}
-        onDragOver={canDragFolders ? handleDragOver : undefined}
-        onDragLeave={canDragFolders ? handleDragLeave : undefined}
-        onDrop={canDragFolders ? handleDrop : undefined}
+        onDragOver={canDrag ? handleDragOver : undefined}
+        onDragLeave={canDrag ? handleDragLeave : undefined}
+        onDrop={canDrag ? handleDrop : undefined}
       >
         <Twisty
           expanded={expanded}
@@ -419,8 +428,8 @@ function ExplorerFolderRow({
           data-ontology-tree-select
           data-testid="files-explorer-folder"
           data-path={folderPath}
-          draggable={canDragFolders}
-          onDragStart={canDragFolders ? handleDragStart : undefined}
+          draggable={canDrag}
+          onDragStart={canDrag ? handleDragStart : undefined}
           onDragEnd={() => setIsDropTarget(false)}
           onClick={() => onOpenFolder(source, folderPath)}
           className={cn(
@@ -435,12 +444,14 @@ function ExplorerFolderRow({
           <Folder size={iconSize} className="flex-shrink-0 text-muted-foreground" />
           <span className="truncate">{folder.name}</span>
         </button>
-        <FilesExplorerRowMenu
-          open={showMenu}
-          onOpenChange={setShowMenu}
-          onRename={() => onRenameFolder(source, folder)}
-          onDelete={() => onDeleteFolder(source, folder)}
-        />
+        {!readOnly && (
+          <FilesExplorerRowMenu
+            open={showMenu}
+            onOpenChange={setShowMenu}
+            onRename={() => onRenameFolder(source, folder)}
+            onDelete={() => onDeleteFolder(source, folder)}
+          />
+        )}
       </div>
       {expanded ? (
         <FilesExplorerTree

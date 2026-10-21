@@ -7,9 +7,11 @@ import { useOntologyDictionaryStore } from '@/stores/ontology-dictionary';
 import { useOntologyStore } from '@/stores/ontology';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { cn } from '@/lib/utils';
+import { groupClassesByBfoBucket, referencedClasses } from '@/lib/ontology-bfo-groups';
 import { buildDictionaryTree, filterDictionaryTree, dictionaryKindLabel, type DictionaryNode, type DictionaryTerm } from '@/lib/ontology-dictionary-tree';
 import { dictionaryFilters, dictionaryFiltersRoute, termRoute } from '@/lib/ontology-navigation';
-import { dictionaryFiles, dictionaryFilesRoute, type DictionaryFile } from '@/lib/ontology-file-filter';
+import { dictionaryFiles, type DictionaryFile } from '@/lib/ontology-file-filter';
+import { dashboardFilesRoute } from '@/lib/ontology-dashboard';
 import { systemOntologyPaths } from '@/lib/ontology-system-filter';
 import { getWorkspacePath } from './utils';
 import { OntologyTopicIcon } from '@/components/ontology/ontology-topic-icon';
@@ -52,14 +54,16 @@ export function OntologyDictionary({files, filesLoading, filesError}: {
   function updateFiles(path?: string) {
     const selected = dictionaryFiles(latestQuery.current);
     const nextPaths = !path ? [] : selected.includes(path) ? selected.filter(value => value !== path) : [...selected, path];
-    const next = dictionaryFilesRoute(latestQuery.current, nextPaths);
+    const next = dashboardFilesRoute(latestQuery.current, nextPaths);
     latestQuery.current = next.toString();
     router.replace(`?${next}`, {scroll: false});
   }
-  const [preferredLayout, setLayout] = useState<'alphabetical' | 'hierarchy' | 'buckets'>(systemMode ? 'buckets' : 'alphabetical');
-  const layout = !systemMode && preferredLayout === 'buckets' ? 'alphabetical' : preferredLayout;
-  const bucketsView = layout === 'buckets';
+  const [preferredLayout, setLayout] = useState<'alphabetical' | 'hierarchy' | 'bfo' | 'buckets'>(systemMode ? 'buckets' : 'alphabetical');
   const kinds = useMemo(() => dictionaryFilters(routeQuery), [routeQuery]);
+  // BFO grouping applies to classes only, so it is offered while classes are in scope.
+  const classesInScope = !kinds.length || kinds.includes('entity');
+  const layout = (!systemMode && preferredLayout === 'buckets') || (!classesInScope && preferredLayout === 'bfo') ? 'alphabetical' : preferredLayout;
+  const bucketsView = layout === 'buckets';
   const typeLabel = !kinds.length ? 'All types' : kinds.length === 1 ? TYPE_OPTIONS.find(option => option.value === kinds[0])!.label : `${kinds.length} types selected`;
   function updateTypes(type?: DictionaryTerm['type']) {
     const current = dictionaryFilters(latestQuery.current);
@@ -80,9 +84,12 @@ export function OntologyDictionary({files, filesLoading, filesError}: {
     setClosed(new Set());
   }, [workspaceId, refresh, load]);
 
-  const scopedTerms = useMemo(() => fileTerms.filter(term => !kinds.length || kinds.includes(term.type)), [fileTerms, kinds]);
+  // Selected files also list the classes their restrictions point at, flagged referenced.
+  const scopedTerms = useMemo(() => [...fileTerms, ...(selectedFiles.length && classesInScope ? referencedClasses(fileTerms, terms, selectedFiles) : [])]
+    .filter(term => !kinds.length || kinds.includes(term.type)), [fileTerms, kinds, selectedFiles, classesInScope, terms]);
   const matches = useMemo(() => scopedTerms.filter(term => `${term.name} ${term.description || ''}`.toLowerCase().includes(query.trim().toLowerCase())), [scopedTerms, query]);
   const tree = useMemo(() => filterDictionaryTree(buildDictionaryTree(scopedTerms), query), [scopedTerms, query]);
+  const bfoGroups = useMemo(() => layout === 'bfo' ? groupClassesByBfoBucket(matches, terms) : [], [layout, matches, terms]);
 
   function selectTerm(term: DictionaryTerm) {
     const params = termRoute(searchParams?.toString() || '', term);
@@ -98,23 +105,44 @@ export function OntologyDictionary({files, filesLoading, filesError}: {
       className={cn('flex min-w-0 flex-1 items-center rounded-md min-h-7 px-2 py-1 text-left text-xs leading-[18px]', selected && 'bg-workspace-accent-10 text-workspace-accent')}>
       <OntologyTopicIcon subject={term} className="ontology-sidebar-topic-icon" />
       <span className="min-w-0 truncate">{term.name}</span>
+      {term.referenced && <span className="ml-1 shrink-0 text-muted-foreground" title="Declared elsewhere; the selection points at it">(referenced)</span>}
       <span className="sr-only">{dictionaryKindLabel(term.type)}</span>
     </button>;
   }
 
-  function renderNode(node: DictionaryNode, depth = 0, path: string[] = []) {
+  function renderNode(node: DictionaryNode, depth = 0, path: string[] = [], indent = 0) {
     const itemPath = [...path, node.id];
     const open = !closed.has(node.id);
     return <li key={node.id} data-ontology-tree-row>
-      <div className="flex items-center" style={{ paddingLeft: Math.min(depth, 6) * 12 }}>
+      <div className="flex items-center" style={{ paddingLeft: indent + Math.min(depth, 6) * 12 }}>
         {node.children.length > 0 ? <button type="button" data-ontology-tree-toggle aria-label={`${open ? 'Collapse' : 'Expand'} ${node.name}`} aria-expanded={open}
           onClick={() => toggleNode(node.id)}
           className="shrink-0 rounded p-1 hover:bg-workspace-accent-10"><ChevronRight size={12} className={cn(open && 'rotate-90')} /></button>
           : <span className="w-5 shrink-0" />}
-        {node.term ? renderTerm(node.term, JSON.stringify(itemPath)) : <button type="button" data-ontology-tree-item={JSON.stringify(itemPath)} onClick={() => toggleNode(node.id)} className="flex min-w-0 flex-1 items-center px-2 py-1 text-xs leading-[18px] text-muted-foreground" title="Parent declared outside this selection"><OntologyTopicIcon subject={iconSubjects.get(node.id) || { name: node.name }} className="ontology-sidebar-topic-icon" /><span className="min-w-0 truncate">{node.name}</span><span className="ml-1 shrink-0 text-xs">(parent)</span></button>}
+        {node.term && (!node.term.referenced || node.term.sources?.length) ? renderTerm(node.term, JSON.stringify(itemPath)) : <button type="button" data-ontology-tree-item={JSON.stringify(itemPath)} onClick={() => toggleNode(node.id)} className="flex min-w-0 flex-1 items-center px-2 py-1 text-xs leading-[18px] text-muted-foreground" title={node.term ? `${node.name}\n${node.term.id}\nReferenced by the selection, declared in an import` : 'Parent declared outside this selection'}><OntologyTopicIcon subject={iconSubjects.get(node.id) || { name: node.name }} className="ontology-sidebar-topic-icon" /><span className="min-w-0 truncate">{node.name}</span><span className="ml-1 shrink-0 text-xs">{node.term ? '(referenced)' : '(parent)'}</span></button>}
       </div>
-      {open && node.children.length > 0 && <ul>{node.children.map(child => renderNode(child, depth + 1, itemPath))}</ul>}
+      {open && node.children.length > 0 && <ul>{node.children.map(child => renderNode(child, depth + 1, itemPath, indent))}</ul>}
     </li>;
+  }
+
+  function renderBfoGroups() {
+    if (!bfoGroups.some(group => group.terms.length)) return <p className="text-xs text-muted-foreground">No classes to group.</p>;
+    return <ul>{bfoGroups.map(({ bucket, terms: grouped, tree: groupTree }) => {
+      const id = `bfo:${bucket.type}`;
+      const open = !closed.has(id) && grouped.length > 0;
+      return <li key={id} data-ontology-tree-row>
+        <button type="button" data-ontology-tree-item={id} data-ontology-tree-toggle aria-expanded={open} onClick={() => toggleNode(id)}
+          title={bucket.uri ? `${bucket.type}\n${bucket.uri}` : bucket.description}
+          disabled={!grouped.length}
+          className={cn('flex w-full min-w-0 items-center gap-1.5 rounded-md px-1 py-1 text-left text-xs font-medium', grouped.length ? 'hover:bg-workspace-accent-10' : 'text-muted-foreground opacity-60')}>
+          <ChevronRight size={12} className={cn('shrink-0', open && 'rotate-90', !grouped.length && 'invisible')} />
+          <span className="h-2.5 w-2.5 shrink-0 rounded-full border" style={{ backgroundColor: bucket.color, borderColor: bucket.border }} />
+          <span className="min-w-0 truncate">{bucket.type === 'Unknown' || bucket.type === 'Entity' ? bucket.type : `${bucket.label} · ${bucket.type}`}</span>
+          <span className="ml-auto shrink-0 text-muted-foreground">{grouped.length}</span>
+        </button>
+        {open && <ul>{groupTree.map(node => renderNode(node, 0, [id], 8))}</ul>}
+      </li>;
+    })}</ul>;
   }
 
   return <div className="space-y-2 px-2 pb-3">
@@ -129,9 +157,9 @@ export function OntologyDictionary({files, filesLoading, filesError}: {
       <input aria-label={bucketsView ? 'Search system elements' : 'Search types and definitions'} placeholder={bucketsView ? 'Search system elements…' : 'Search types and definitions…'} value={query} onChange={event => setQuery(event.target.value)}
         className="w-full rounded-md border bg-background py-2 pl-7 pr-2 text-xs" /></label>
     <div className="flex flex-wrap gap-1" aria-label="Sidebar view">
-      {(['alphabetical', 'hierarchy', ...(systemMode ? ['buckets' as const] : [])] as const).map(value => <button key={value} type="button" aria-pressed={layout === value} onClick={() => { setLayout(value); if (bucketsView !== (value === 'buckets')) setQuery(''); }}
+      {(['alphabetical', 'hierarchy', ...(classesInScope ? ['bfo' as const] : []), ...(systemMode ? ['buckets' as const] : [])] as const).map(value => <button key={value} type="button" aria-pressed={layout === value} onClick={() => { setLayout(value); if (bucketsView !== (value === 'buckets')) setQuery(''); }}
         className={cn('rounded-md px-2 py-1 text-xs', layout === value ? 'bg-workspace-accent-10 text-workspace-accent' : 'text-muted-foreground hover:bg-muted')}>
-        {value === 'alphabetical' ? 'A–Z' : value === 'hierarchy' ? 'Hierarchy' : '7 buckets'}</button>)}
+        {value === 'alphabetical' ? 'A–Z' : value === 'hierarchy' ? 'Hierarchy' : value === 'bfo' ? 'BFO 7 Buckets' : '7 buckets'}</button>)}
     </div>
     {loading ? <p role="status" className="text-xs text-muted-foreground">Loading terms…</p>
       : error ? <div role="alert" className="text-xs text-destructive">{error} <button type="button" onClick={() => { if (workspaceId) void load(workspaceId, refresh, true); }} className="underline">Retry</button></div>
@@ -139,6 +167,7 @@ export function OntologyDictionary({files, filesLoading, filesError}: {
         {!bucketsView && matches.length === 0 && <p className="text-xs text-muted-foreground">{selectedFiles.length ? 'No matching terms in the selected files.' : terms.length ? 'No matching terms.' : 'No declared terms in the workspace ontology files.'}</p>}
         {errors.length > 0 && <div role="alert" className="space-y-1 text-xs text-destructive"><p>Incomplete dictionary: {errors.length} files could not be read.</p>{errors.map(source => <p key={source.path}>{source.name}: {source.message}</p>)}<button type="button" className="underline" onClick={() => { if (workspaceId) void load(workspaceId, refresh, true); }}>Retry</button></div>}
         {bucketsView ? <OntologySystemTree key={workspaceId} query={query} /> : <nav {...keyboard} aria-label="Ontology terms">{layout === 'alphabetical' ? <ul>{matches.map(term => <li className="flex" key={`${term.type}:${term.id}`} data-ontology-tree-row>{renderTerm(term)}</li>)}</ul>
+          : layout === 'bfo' ? renderBfoGroups()
           : <ul>{tree.map(node => renderNode(node))}</ul>}</nav>}</>}
   </div>;
 }

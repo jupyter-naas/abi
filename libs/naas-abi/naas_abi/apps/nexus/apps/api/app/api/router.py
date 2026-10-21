@@ -38,6 +38,21 @@ from naas_abi.apps.nexus.apps.api.app.services.documents.handlers import (
     router as documents_router,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.handlers import router as files_router
+from naas_abi.apps.nexus.apps.api.app.services.maps.basemaps.handlers import (
+    router as maps_basemaps_router,
+)
+from naas_abi.apps.nexus.apps.api.app.services.maps.catalog.handlers import (
+    router as maps_catalog_router,
+)
+from naas_abi.apps.nexus.apps.api.app.services.maps.feed_layers.handlers import (
+    router as maps_feed_layers_router,
+)
+from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.handlers import (
+    router as maps_layouts_router,
+)
+from naas_abi.apps.nexus.apps.api.app.services.maps.permissions.handlers import (
+    router as maps_permissions_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.modules.handlers import router as modules_router
 from naas_abi.apps.nexus.apps.api.app.services.openai_gateway.handlers import (
     router as openai_gateway_router,
@@ -49,6 +64,7 @@ from naas_abi.apps.nexus.apps.api.app.services.providers.handlers import router 
 from naas_abi.apps.nexus.apps.api.app.services.sheets.handlers import router as sheets_router
 from naas_abi.apps.nexus.apps.api.app.services.skills.handlers import router as skills_router
 from naas_abi.apps.nexus.apps.api.app.services.slides.handlers import router as slides_router
+from naas_abi.apps.nexus.apps.api.app.services.sysadmin.handlers import router as sysadmin_router
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.handlers import (
     router as workspaces_router,
 )
@@ -82,6 +98,13 @@ api_router.include_router(modules_router, prefix="/modules", tags=["modules"])
 api_router.include_router(apps_router, prefix="/apps", tags=["apps"])
 api_router.include_router(app_projects_router, prefix="/app-projects", tags=["app-projects"])
 api_router.include_router(files_router, prefix="/files", tags=["files"])
+api_router.include_router(maps_layouts_router, prefix="/maps/layouts", tags=["maps"])
+# Feeds are the layout records; /maps/feeds is the name the UI uses.
+api_router.include_router(maps_layouts_router, prefix="/maps/feeds", tags=["maps"])
+api_router.include_router(maps_feed_layers_router, prefix="/maps/feed-layers", tags=["maps"])
+api_router.include_router(maps_basemaps_router, prefix="/maps/basemaps", tags=["maps"])
+api_router.include_router(maps_catalog_router, prefix="/maps/catalog", tags=["maps"])
+api_router.include_router(maps_permissions_router, prefix="/maps/permissions", tags=["maps"])
 api_router.include_router(datasets_router, prefix="/datasets", tags=["datasets"])
 api_router.include_router(secrets.router, prefix="/secrets", tags=["secrets"])
 api_router.include_router(providers_router, prefix="/providers", tags=["providers"])
@@ -92,3 +115,4 @@ api_router.include_router(transcribe.router, prefix="/transcribe", tags=["transc
 api_router.include_router(speech.router, prefix="/speech", tags=["speech"])
 api_router.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
+api_router.include_router(sysadmin_router, prefix="/admin/system", tags=["sysadmin"])
