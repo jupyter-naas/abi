@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v2.90.0 (2026-10-21)
+
+### Bug Fixes
+
+- **nexus-web-next15**: Update next-env.d.ts reference and bump naas-abi versions in uv.lock
+  ([`803a297`](https://github.com/jupyter-naas/abi/commit/803a297be093e3cae738102380b009fb56e395cb))
+
+### Continuous Integration
+
+- **release**: Release 2.x patches of core, naas-abi and the CLI from v2
+  ([`49f0fd3`](https://github.com/jupyter-naas/abi/commit/49f0fd3e37c2ba674c62b08337186f80062e1ee4))
+
+### Features
+
+- **nexus-web**: Update and add tests for chat primary adapter and web components
+  ([`0c289ba`](https://github.com/jupyter-naas/abi/commit/0c289baea1b62b06ccf583dad85fabaf44f84e96))
+
+
 ## v2.89.0 (2026-10-20)
 
 ### Bug Fixes
