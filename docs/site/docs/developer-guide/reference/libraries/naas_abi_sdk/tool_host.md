@@ -14,7 +14,7 @@
 1. Size limits (request 512 KiB; an overflow upload is refused).
 2. Discovery's `authorize_tool`: the provider's lease, the declared tool, a READY instance, and a caller token bound to this instance. It returns the verified caller identity.
 3. The module's `authorize_tool(name, caller)` hook. Default: the engine's own processes (`api`, `engine`, `dagster`) only. It replaces the default; only `True` allows.
-4. A named end user (`context.principal_id`) is honoured only from `api` and `engine`.
+4. A named end user (`context.principal_id`) or workspace (`context.workspace_id`) is honoured only from the callers in `user_callers` (`api` and `engine`). Any other caller that sets either, `dagster` included, gets `PERMISSION_DENIED`.
 5. The arguments are validated against the tool's input schema and the configuration against its descriptor (unknown or missing required key): `INVALID_ARGUMENT`, before the handler runs.
 6. The handler runs under the caller's deadline (`context.timeout_ms`, at most 300 s, 60 s when unset). A synchronous handler runs on a thread; its deadline stops the wait, not the thread.
 7. The result must be JSON (finite numbers), at most 512 KiB, and match the output schema if declared.

@@ -356,8 +356,10 @@ class NATSToolInvokeModuleConfiguration(BaseModel):
     def _secret_names(cls, value: list[str]) -> list[str]:
         import re
 
+        from naas_abi_sdk.tools import MAX_SECRET_NAME_CHARS, SECRET_NAME
+
         for name in value:
-            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,127}", name):
+            if len(name) > MAX_SECRET_NAME_CHARS or not re.fullmatch(SECRET_NAME, name):
                 raise ValueError(f"{name!r} is not a secret name")
         return value
 
@@ -369,10 +371,12 @@ class NATSToolInvokeConfiguration(BaseModel):
     The engine runs the tool and resolves its configuration and secrets itself; the
     caller sends a reference, JSON arguments, plain values and secret *names*.
     ``enabled: false`` answers every call with PERMISSION_DENIED. ``max_concurrent``
-    calls run at once (kept below ``nats.max_concurrent_requests`` so catalog reads
-    always find a free slot); the rest get RESOURCE_EXHAUSTED. A call's deadline is
-    its ``timeout_ms``, ``default_timeout_seconds`` when zero, at most
-    ``max_timeout_seconds``.
+    calls run at once, and the engine never runs more than half of
+    ``nats.max_concurrent_requests`` (it lowers the value, with a warning, see
+    ``NATSConfiguration.tool_invoke_concurrency``) so catalog reads always find a free
+    slot; the rest get RESOURCE_EXHAUSTED. A call's deadline is its ``timeout_ms``,
+    ``default_timeout_seconds`` when zero (lowered to ``max_timeout_seconds`` when that
+    is smaller), at most ``max_timeout_seconds``.
 
         tool_registry:
           module_scopes:
@@ -626,6 +630,16 @@ class NATSConfiguration(BaseModel):
     # The broker's HTTP monitoring endpoint (``nats-server -m 8222``), read by the
     # Nexus SysAdmin app (/varz, /connz, /jsz). It has no auth: keep it private.
     monitoring_url: str | None = Field(default=None, pattern=r"^https?://")
+
+    def tool_invoke_concurrency(self) -> int:
+        """How many engine tools run at once for other processes: the configured
+        ``tool_registry.invoke.max_concurrent``, at most half of
+        ``max_concurrent_requests`` (and one), so the catalog's reads, which share the
+        service's slots, are never starved by long tool calls."""
+        return min(
+            self.tool_registry.invoke.max_concurrent,
+            max(1, self.max_concurrent_requests // 2),
+        )
 
 
 class OpencodeProviderConfiguration(BaseModel):

@@ -478,6 +478,14 @@ class EngineNATSLoader:
             invoke = nats_config.tool_registry.invoke
             invoker = None
             if invoke.enabled:
+                concurrency = nats_config.tool_invoke_concurrency()
+                if concurrency < invoke.max_concurrent:
+                    logger.warning(
+                        f"tool_registry.invoke.max_concurrent is {invoke.max_concurrent}"
+                        f" but the service handles {nats_config.max_concurrent_requests}"
+                        f" calls at once: running {concurrency} tools at once, so "
+                        "catalog reads keep a free slot"
+                    )
                 from naas_abi_core.services.agent_composer.adapters.secondary.SecretServiceResolverAdapter import (
                     SecretServiceResolverAdapter,
                 )
@@ -490,7 +498,7 @@ class EngineNATSLoader:
                     SecretServiceResolverAdapter(services.secret)
                     if services.secret_available()
                     else None,
-                    max_concurrent=invoke.max_concurrent,
+                    max_concurrent=concurrency,
                     default_timeout=invoke.default_timeout_seconds,
                     max_timeout=invoke.max_timeout_seconds,
                     record_activity=services.activity_log.record

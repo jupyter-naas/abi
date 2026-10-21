@@ -16,6 +16,7 @@ extra ``engine-tools``) so an SDK agent can bind what it found by search.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 from collections.abc import Mapping, Sequence
@@ -24,6 +25,13 @@ from typing import Any
 
 from naas_abi_proto.tool_registry.v1 import tool_registry_pb2 as pb
 
+from naas_abi_sdk.tools import (
+    DEFAULT_DEADLINE_SECONDS,
+    MAX_ARGUMENTS_BYTES,
+    MAX_CONFIG_BYTES,
+    MAX_DEADLINE_SECONDS,
+    MAX_SECRET_REFS,
+)
 from naas_abi_sdk.services.errors import (
     ToolExecutionError,
     ToolPermissionDenied,
@@ -33,12 +41,12 @@ from naas_abi_sdk.tool_registry import ToolRegistryClient
 from naas_abi_sdk.transport import RPCError
 
 MAX_LIST_PAGES = 100
-# What the engine accepts of a call (abi.svc.tool_registry.v1.InvokeToolRequest).
-MAX_ARGUMENTS_BYTES = 256 * 1024
-MAX_CONFIG_BYTES = 64 * 1024
-MAX_SECRET_REFS = 16
-DEFAULT_INVOKE_TIMEOUT = 60.0
-MAX_INVOKE_TIMEOUT = 300.0
+# What the engine accepts of a call is `naas_abi_sdk.tools`' (one place for the contract).
+DEFAULT_INVOKE_TIMEOUT = DEFAULT_DEADLINE_SECONDS
+MAX_INVOKE_TIMEOUT = MAX_DEADLINE_SECONDS
+# The caller waits this long beyond the tool's deadline, so the engine's own
+# DEADLINE_EXCEEDED reply is the one it reads.
+INVOKE_GRACE_SECONDS = 5.0
 
 
 @dataclass(frozen=True)
@@ -230,7 +238,10 @@ class ToolRegistryService:
         ``ToolPermissionDenied`` (a secret it may not use, a credential written inline,
         a tool it is not granted), ``ToolExecutionError`` (the tool failed) and
         ``ServiceError`` for the other codes (``INVALID_ARGUMENT``,
-        ``PAYLOAD_TOO_LARGE``, ``RESOURCE_EXHAUSTED``, ``DEADLINE_EXCEEDED``).
+        ``PAYLOAD_TOO_LARGE``, ``RESOURCE_EXHAUSTED``, ``DEADLINE_EXCEEDED``). The
+        caller waits ``timeout`` plus a few seconds, so the engine's
+        ``DEADLINE_EXCEEDED`` is what a slow tool gives; a reply lost past that wait is
+        a ``DEADLINE_EXCEEDED`` too (the tool may still have run).
         Nothing is retried: a tool may have side effects.
         """
         if not isinstance(ref, str) or not ref:
@@ -266,7 +277,17 @@ class ToolRegistryService:
             secret_refs=secrets,
         )
         try:
-            response = await self._client.invoke_tool(request, timeout=timeout)
+            response = await self._client.invoke_tool(
+                request, timeout=timeout, grace=INVOKE_GRACE_SECONDS
+            )
+        except asyncio.TimeoutError as exc:  # noqa: UP041 - not the builtin on Python 3.10
+            raise domain_error(
+                RPCError(
+                    "DEADLINE_EXCEEDED",
+                    f"No reply from the engine within {timeout:g}s: the tool may still "
+                    "have run",
+                )
+            ) from exc
         except RPCError as exc:
             if exc.code == "PERMISSION_DENIED":
                 raise ToolPermissionDenied(

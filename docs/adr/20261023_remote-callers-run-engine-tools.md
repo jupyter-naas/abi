@@ -93,8 +93,12 @@ duration; arguments, configuration and secret names are not recorded.
 
 Limits (no Protovalidate; the proto's header and `EngineToolInvoker` state them): a
 request of 512 KiB, arguments 256 KiB, configuration 64 KiB, 16 secret references of 128
-characters, a result of 512 KiB. `nats.tool_registry.invoke.max_concurrent` (16) calls run
-at once, kept below the service's 64 slots so catalog reads always find one; a call over
+characters, a result of 512 KiB (declared once, in `naas_abi_sdk.tools`, which the
+engine and the SDK import). `nats.tool_registry.invoke.max_concurrent` (16) calls run
+at once, and the engine **lowers it to half of `nats.max_concurrent_requests`** (at least one,
+with a warning at startup; `NATSConfiguration.tool_invoke_concurrency`), so the catalog's
+reads, which share the service's slots, always find one. A `default_timeout_seconds`
+above `max_timeout_seconds` is lowered to it, so no call outlasts the cap. A call over
 the limit is refused with `RESOURCE_EXHAUSTED`, never queued. A slot is held until the
 tool returns, so a tool that outlives its deadline keeps it: a synchronous tool cannot be
 cancelled, and hung tools lead to `RESOURCE_EXHAUSTED`, not to unbounded threads.
@@ -132,7 +136,10 @@ configuration and secret-reference validation (a secret goes only to a key marke
 `invoke.modules` and `module_scopes` refuse a first-party identity as a key.
 
 The `principal_id` and `workspace_id` of a call from any other identity are refused
-(`PERMISSION_DENIED`): a module cannot run a tool as someone else's user or workspace. The
+(`PERMISSION_DENIED`): a module cannot run a tool as someone else's user or workspace.
+`ToolHost` (tools a module serves) now refuses a workspace the same way as a user: a
+first-party caller outside `user_callers`, `dagster`, gets `PERMISSION_DENIED` when it sets
+either. The
 tool receives the verified scopes, the user and the workspace in its `ToolContext`.
 
 ### The GitHub tools, and tools without a scope
@@ -167,13 +174,18 @@ the engine; nothing about the tools changes for in-process agents.
 
 `ToolRegistryService.invoke(ref, arguments, *, config, secrets, version, timeout)` (the
 SDK facade over `ToolRegistryClient.invoke_tool`, whose generated method takes a
-`timeout`, which the transport writes to `context.timeout_ms`) returns the JSON result and
-raises `ToolNotFound`, `ToolPermissionDenied`, `ToolExecutionError` or `ServiceError`.
+`timeout`, which the transport writes to `context.timeout_ms`, and a `grace`) returns the
+JSON result and raises `ToolNotFound`, `ToolPermissionDenied`, `ToolExecutionError` or
+`ServiceError`. The caller waits the deadline **plus 5 seconds** (`grace`), so a slow tool
+ends with the engine's `DEADLINE_EXCEEDED`; a reply lost even then is a `ServiceError`
+`DEADLINE_EXCEEDED` too ("the tool may still have run"), never a raw timeout.
 It refuses before sending what the engine would. `as_tool` and
 `naas_abi_sdk.engine_tools.engine_tool` wrap a definition, found by `get_tool` or
 `search_tools`, as a LangChain `StructuredTool` whose schema is the definition's JSON
 Schema and whose call is `invoke`; the configuration and the secret **names** are fixed
-when it is built, so the model never sees them, and a failure reaches the model as the
+when it is built, so the model never sees them, and every failure of the call (a refusal, a
+timeout, arguments over the limits, a lost connection: named without hosts or values)
+reaches the model as the
 tool's output. The proxy needs the extra `engine-tools` (`langchain-core`). An SDK
 `Agent` binds what a search returned:
 `tools=[await registry.as_tool(m, secrets=...) for m in await registry.search_tools(...)]`.

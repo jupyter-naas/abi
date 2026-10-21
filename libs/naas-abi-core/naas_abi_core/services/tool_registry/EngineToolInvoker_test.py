@@ -739,6 +739,58 @@ def test_the_deadline_is_clamped(registry, secrets):
     invoker.close()
 
 
+def test_a_default_deadline_above_the_cap_is_lowered_to_it(registry, secrets):
+    seen = []
+    invoker = EngineToolInvoker(registry, secrets, default_timeout=60, max_timeout=30)
+
+    async def scenario():
+        original = asyncio.wait_for
+
+        async def spy(awaitable, timeout):
+            seen.append(timeout)
+            return await original(awaitable, timeout)
+
+        invoker_module.asyncio.wait_for = spy
+        try:
+            for ms in (0, 20_000, 120_000):
+                await invoker.invoke(
+                    TRUSTED,
+                    ToolInvocation(
+                        tool=f"{GITHUB}/echo_token",
+                        arguments=b'{"repo": "r"}',
+                        timeout_ms=ms,
+                    ),
+                )
+        finally:
+            invoker_module.asyncio.wait_for = original
+
+    asyncio.run(scenario())
+    assert seen == [30, 20, 30]
+    invoker.close()
+
+
+def test_the_contracts_limits_are_declared_once():
+    from naas_abi_sdk import tools
+
+    assert invoker_module.MAX_ARGUMENTS_BYTES is tools.MAX_ARGUMENTS_BYTES
+    assert invoker_module.MAX_SECRET_REFS is tools.MAX_SECRET_REFS
+    assert invoker_module.SECRET_NAME == tools.SECRET_NAME
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["create_issue", "a b", "a__b", "x.y", "héllo", "", "ok-name_1", "!!"],
+)
+def test_the_sdk_proxy_names_tools_as_the_publisher_does(name):
+    from naas_abi_sdk.engine_tools import model_facing_name as sdk_name
+
+    from naas_abi_core.services.tool_registry.adapters.primary.LangChainToolPublisher import (
+        model_facing_name,
+    )
+
+    assert sdk_name(name) == model_facing_name(name)
+
+
 # -------------------------------------------------------------------- activity
 def test_each_call_leaves_one_activity_event_without_arguments_or_secrets(
     invoker, events

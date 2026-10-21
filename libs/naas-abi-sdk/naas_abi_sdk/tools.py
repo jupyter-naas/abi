@@ -34,6 +34,11 @@ MAX_RESULT_BYTES = 512 * 1024
 DEFAULT_DEADLINE_SECONDS = 60.0
 MAX_DEADLINE_SECONDS = 300.0
 MAX_ERROR_CHARACTERS = 1024
+# Running an engine tool (abi.svc.tool_registry.v1.InvokeToolRequest): `secret_refs` maps a
+# configuration key to the name of an engine secret.
+MAX_SECRET_REFS = 16
+MAX_SECRET_NAME_CHARS = 128
+SECRET_NAME = r"[A-Za-z_][A-Za-z0-9_]*"
 
 _NAME = re.compile(r"[A-Za-z0-9_-]{1,64}")
 _VERSION = re.compile(r"\d+(?:\.\d+){0,2}")

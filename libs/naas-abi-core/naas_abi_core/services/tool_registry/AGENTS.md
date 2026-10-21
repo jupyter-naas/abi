@@ -227,7 +227,7 @@ Only JSON crosses the wire; no binding, callable or secret value.
   failed" (type logged, never the message); one `tool_registry.invoke` activity event per call (tool,
   outcome, code, duration; no arguments, config or secret names).
 - **Limits.** 512 KiB request, 256 KiB arguments, 64 KiB config, 16 refs, 512 KiB result;
-  `nats.tool_registry.invoke: {enabled, max_concurrent (16, below the service's 64), default_timeout_seconds,
+  `nats.tool_registry.invoke: {enabled, max_concurrent (16, lowered with a warning to half of nats.max_concurrent_requests), default_timeout_seconds (lowered to max_timeout_seconds when above it),
   max_timeout_seconds, modules}`. Over the limit: `RESOURCE_EXHAUSTED` (retryable), never queued; a slot is
   held until the tool returns (a synchronous tool cannot be cancelled).
 - **Not here:** a client engine's `resolve` of a tool it has not loaded still raises. The composer resolves

@@ -47,10 +47,11 @@ Async transport wrapper around a NATS client.
 #### `async close() -> None`
 - Marks the transport closed and closes the underlying NATS connection.
 
-#### `async call(subject: str, request: Message, response_type: type[Response], *, transfer: TransferTrace | None = None, instance_id: str | None = None) -> Response`
+#### `async call(subject: str, request: Message, response_type: type[Response], *, transfer: TransferTrace | None = None, instance_id: str | None = None, timeout: float | None = None, grace: float = 0.0) -> Response`
 - Performs a single request/reply exchange.
 - Copies `request` before mutation.
-- Ensures `request.context.trace_id` is set (UUID if empty) and sets `request.context.timeout_ms`.
+- Ensures `request.context.trace_id` is set (UUID if empty) and sets `request.context.timeout_ms` to `timeout` (default: the transport's).
+- Waits `timeout + grace` (`grace`: finite, not negative, default 0): a callee that enforces the deadline (`invoke_tool`, tools a module serves) can still answer `DEADLINE_EXCEEDED` before the caller gives up.
 - Adds header `Nats-Auth-Token` from the configured token source.
   - If calling a module subject, `instance_id` is required and token source must provide `for_audience(audience)`; otherwise raises `ValueError`.
 - Handles overflow:

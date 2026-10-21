@@ -22,6 +22,7 @@ import re
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
+import nats.errors
 from langchain_core.tools import StructuredTool, ToolException
 
 from naas_abi_sdk.services.errors import ServiceError
@@ -87,8 +88,20 @@ def engine_tool(
                 secrets=fixed_secrets,
                 timeout=timeout,
             )
-        except (ServiceError, RPCError) as exc:
+        except (ServiceError, RPCError, ValueError, TypeError) as exc:
+            # The engine's messages hold no secret; the facade's own refusals name
+            # a limit, never a value.
             raise ToolException(str(exc)) from exc
+        except asyncio.TimeoutError as exc:  # noqa: UP041 - not the builtin on 3.10
+            raise ToolException(
+                f"DEADLINE_EXCEEDED: no reply within {timeout:g}s; the tool may still "
+                "have run"
+            ) from exc
+        except (OSError, nats.errors.Error) as exc:
+            # A broken connection: its message may name hosts, so say only what failed.
+            raise ToolException(
+                f"UNAVAILABLE: the engine could not be reached ({type(exc).__name__})"
+            ) from exc
         return tool_output(result)
 
     def sync_run(**arguments: Any) -> str:

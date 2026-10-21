@@ -77,7 +77,7 @@ def test_invoke_sends_names_json_and_the_deadline_never_a_value():
     assert json.loads(request.arguments_json) == {"title": "bug"}
     assert json.loads(request.config_json) == {"base_url": "https://ghe.example"}
     assert dict(request.secret_refs) == {"access_token": "GITHUB_ACCESS_TOKEN"}
-    assert client.invoke_tool.call_args.kwargs == {"timeout": 30}
+    assert client.invoke_tool.call_args.kwargs == {"timeout": 30, "grace": 5.0}
 
 
 def test_invoke_with_nothing_but_a_reference():
@@ -281,3 +281,76 @@ def test_an_sdk_agent_calls_a_tool_whose_schema_is_a_json_schema_dict():
     assert json.loads(client.invoke_tool.call_args.args[0].arguments_json) == {
         "title": "bug"
     }
+
+
+# ------------------------------------------------- failures of the call itself
+def test_the_caller_waits_beyond_the_deadline_so_the_engines_verdict_arrives():
+    service, client = registry()
+
+    asyncio.run(service.invoke("acme.github/open_issue", {"title": "x"}, timeout=30))
+
+    assert client.invoke_tool.call_args.kwargs == {"timeout": 30, "grace": 5.0}
+
+
+def test_a_reply_lost_past_the_wait_is_deadline_exceeded_not_a_raw_timeout():
+    from naas_abi_sdk.services.errors import ServiceError
+
+    service, _ = registry(error=asyncio.TimeoutError())
+
+    with pytest.raises(ServiceError) as raised:
+        asyncio.run(service.invoke("acme.github/open_issue", {"title": "x"}, timeout=2))
+
+    assert raised.value.code == "DEADLINE_EXCEEDED"
+    assert "may still have run" in str(raised.value)
+
+
+@pytest.mark.parametrize(
+    "error, expected",
+    [
+        (asyncio.TimeoutError(), "DEADLINE_EXCEEDED"),
+        (OSError("connect to 10.0.0.7:4222 refused"), "UNAVAILABLE"),
+        (RPCError("RESOURCE_EXHAUSTED", "busy"), "RESOURCE_EXHAUSTED"),
+    ],
+)
+def test_a_failure_of_the_call_reaches_the_model_not_the_agent_run(error, expected):
+    pytest.importorskip("langchain_core")
+    service, _ = registry(error=error)
+
+    async def scenario():
+        tool = await service.as_tool("acme.github/open_issue")
+        return await tool.ainvoke({"title": "bug"})
+
+    out = asyncio.run(scenario())
+
+    assert expected in out
+    assert "10.0.0.7" not in out
+
+
+def test_a_nats_connection_error_reaches_the_model_without_its_message():
+    pytest.importorskip("langchain_core")
+    import nats.errors
+
+    service, _ = registry(error=nats.errors.NoServersError())
+
+    async def scenario():
+        tool = await service.as_tool("acme.github/open_issue")
+        return await tool.ainvoke({"title": "bug"})
+
+    assert "UNAVAILABLE" in asyncio.run(scenario())
+
+
+def test_arguments_the_engine_could_not_take_reach_the_model_too():
+    pytest.importorskip("langchain_core")
+    service, client = registry()
+
+    async def scenario():
+        tool = await service.as_tool("acme.github/open_issue")
+        too_big = await tool.ainvoke({"title": "x" * (256 * 1024)})
+        not_json = await tool.ainvoke({"title": float("nan")})
+        return too_big, not_json
+
+    too_big, not_json = asyncio.run(scenario())
+
+    assert "256 KiB" in too_big
+    assert "JSON" in not_json
+    client.invoke_tool.assert_not_called()

@@ -44,6 +44,17 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import BaseTool, ToolException
+from naas_abi_sdk.tools import (
+    DEFAULT_DEADLINE_SECONDS,
+    MAX_ARGUMENTS_BYTES,
+    MAX_CONFIG_BYTES,
+    MAX_DEADLINE_SECONDS,
+    MAX_ERROR_CHARACTERS,
+    MAX_RESULT_BYTES,
+    MAX_SECRET_NAME_CHARS,
+    MAX_SECRET_REFS,
+    SECRET_NAME,
+)
 from pydantic import ValidationError
 
 from naas_abi_core.services.activity_log.ActivityLogPort import ActivityEvent
@@ -64,21 +75,15 @@ from naas_abi_core.services.tool_registry.ToolRegistryService import (
 )
 from naas_abi_core.utils.Logger import logger
 
-# The limits of abi.tool.v1 / abi.tool_registry.v1.InvokeToolRequest.
-MAX_ARGUMENTS_BYTES = 256 * 1024
-MAX_CONFIG_BYTES = 64 * 1024
-MAX_SECRET_REFS = 16
-MAX_SECRET_NAME_CHARS = 128
-MAX_RESULT_BYTES = 512 * 1024
-MAX_ERROR_CHARACTERS = 1024
-DEFAULT_TIMEOUT_SECONDS = 60.0
-MAX_TIMEOUT_SECONDS = 300.0
+# The limits of the call are the contract's, declared once in ``naas_abi_sdk.tools``.
+DEFAULT_TIMEOUT_SECONDS = DEFAULT_DEADLINE_SECONDS
+MAX_TIMEOUT_SECONDS = MAX_DEADLINE_SECONDS
 DEFAULT_MAX_CONCURRENT = 16
 # Shorter values are not worth hiding, and would mangle everything they match.
 MIN_SCRUBBED_LENGTH = 4
 REDACTED = "[redacted]"
 
-_SECRET_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_SECRET_NAME = re.compile(SECRET_NAME)
 ACTIVITY_ACTOR_PREFIX = "service:"
 
 
@@ -196,7 +201,8 @@ class EngineToolInvoker:
         self._registry = registry
         self._secrets = secrets
         self._max_concurrent = max_concurrent
-        self._default_timeout = default_timeout
+        # A default above the cap would let a call without a deadline outlast the rest.
+        self._default_timeout = min(default_timeout, max_timeout)
         self._max_timeout = max_timeout
         self._record_activity = record_activity
         self._in_flight = 0
@@ -298,7 +304,7 @@ class EngineToolInvoker:
         arguments = _json_object(invocation.arguments, "arguments", MAX_ARGUMENTS_BYTES)
         self._validate(definition, arguments)
         literal = self._configuration(definition, invocation)
-        references = self._references(caller, definition, invocation, literal)
+        references = self._references(caller, definition, invocation)
         seconds = (
             min(invocation.timeout_ms / 1000, self._max_timeout)
             if invocation.timeout_ms > 0
@@ -408,7 +414,6 @@ class EngineToolInvoker:
         caller: InvokeCaller,
         definition: ToolDefinition,
         invocation: ToolInvocation,
-        literal: Mapping[str, Any],
     ) -> dict[str, str]:
         declared = {r.key: r for r in definition.requirements.config}
         references: dict[str, str] = {}
@@ -419,10 +424,7 @@ class EngineToolInvoker:
                     f"'{key[:64]}' is not a credential of this tool: a secret "
                     "goes only to a configuration key the tool marks secret",
                 )
-            if literal.get(key) not in (None, ""):
-                raise ToolInvokeError(
-                    "INVALID_ARGUMENT", f"'{key}' is given twice: value and secret"
-                )
+            # (A value for a key marked secret was already refused in _configuration.)
             if (
                 not name
                 or len(name) > MAX_SECRET_NAME_CHARS

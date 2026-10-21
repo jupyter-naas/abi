@@ -737,6 +737,44 @@ def test_a_busy_engine_refuses_instead_of_queueing(engine_dir, broker):
         engine.shutdown()
 
 
+def test_a_tool_that_outlasts_its_deadline_is_deadline_exceeded(engine_dir, broker):
+    import sys
+
+    from naas_abi_core.engine.Engine import Engine
+    from naas_abi_sdk.services.errors import ServiceError
+
+    engine = Engine(engine_config(broker))
+    engine.load()
+    release = threading.Event()
+    try:
+        module = sys.modules[NAMESPACE]
+
+        class Blocking(list):
+            def append(self, item):
+                super().append(item)
+                release.wait(30)
+
+        module.CALLS = Blocking()
+
+        async def scenario(registry, client):
+            started = time.monotonic()
+            with pytest.raises(ServiceError) as error:
+                await registry.invoke(
+                    f"{NAMESPACE}/show_token", {"repo": "r"}, timeout=1
+                )
+            return error.value.code, time.monotonic() - started
+
+        code, seconds = as_module(broker, GRANTED, scenario)
+
+        # The engine's own verdict, not the caller giving up at the same instant.
+        assert code == "DEADLINE_EXCEEDED"
+        assert 0.9 < seconds < 5
+        never_on_the_wire()
+    finally:
+        release.set()
+        engine.shutdown()
+
+
 def test_the_operator_can_turn_running_tools_off(engine_dir, broker):
     from naas_abi_core.engine.Engine import Engine
     from naas_abi_sdk.services.errors import ToolPermissionDenied

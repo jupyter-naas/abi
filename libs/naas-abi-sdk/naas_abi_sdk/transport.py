@@ -171,15 +171,21 @@ class Transport:
         transfer: TransferTrace | None = None,
         instance_id: str | None = None,
         timeout: float | None = None,
+        grace: float = 0.0,
     ) -> Response:
         """One exchange. ``instance_id``: the module instance a call to a module
         subject goes to, which its token is bound to (required there). ``timeout``:
-        how long this call waits, instead of the transport's (the callee reads it
-        from the request's ``context.timeout_ms``)."""
+        the deadline of this call, instead of the transport's (the callee reads it
+        from the request's ``context.timeout_ms``) and how long it waits. ``grace``:
+        extra time to wait beyond the deadline, so a callee that enforces it can
+        still report ``DEADLINE_EXCEEDED`` instead of the caller giving up first."""
         if timeout is None:
             timeout = self.timeout
         elif not math.isfinite(timeout) or timeout <= 0:
             raise ValueError("timeout must be finite and positive")
+        if not math.isfinite(grace) or grace < 0:
+            raise ValueError("grace must be finite and not negative")
+        wait = timeout + grace
         # Copy so concurrent calls never mutate a caller-owned request.
         outgoing = type(request)()
         outgoing.CopyFrom(request)
@@ -198,7 +204,7 @@ class Transport:
         ) as span:
             if transfer is not None:  # a transfer's own chunk: always small
                 return await self._exchange(
-                    subject, payload, headers, response_type, transfer, timeout=timeout
+                    subject, payload, headers, response_type, transfer, timeout=wait
                 )
             headers[overflow.ACCEPT_HEADER] = "1"
             return await self._overflowing(
@@ -207,7 +213,7 @@ class Transport:
                 headers,
                 response_type,
                 TransferTrace(span),
-                timeout=timeout,
+                timeout=wait,
             )
 
     async def _overflowing(

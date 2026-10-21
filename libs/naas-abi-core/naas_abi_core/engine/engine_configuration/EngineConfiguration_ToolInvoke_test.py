@@ -72,3 +72,23 @@ def test_a_secret_is_named_not_matched(name):
 def test_limits_stay_within_the_contract(field, value):
     with pytest.raises(ValidationError):
         NATSToolInvokeConfiguration.model_validate({field: value})
+
+
+@pytest.mark.parametrize(
+    "slots, configured, expected",
+    [(64, 16, 16), (8, 16, 4), (16, 16, 8), (3, 16, 1), (1, 16, 1), (64, 2, 2)],
+)
+def test_tool_calls_leave_half_of_the_services_slots_to_the_catalog(
+    slots, configured, expected
+):
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+        NATSConfiguration,
+    )
+
+    nats = NATSConfiguration(
+        jwt_secret="x" * 32,
+        max_concurrent_requests=slots,
+        tool_registry={"invoke": {"max_concurrent": configured}},
+    )
+
+    assert nats.tool_invoke_concurrency() == expected

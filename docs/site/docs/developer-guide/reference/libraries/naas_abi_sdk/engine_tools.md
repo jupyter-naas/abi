@@ -10,7 +10,7 @@ The proxy holds the definition, the plain configuration and the **names** of eng
   - `tool`: a `ToolDefinition`, `ToolEntry` or `ToolMatch`. A `remote` definition (served by an SDK module) is refused with `ValueError`: call that module with `ModuleProxy.call_tool`.
   - `config`: plain values for non-secret keys. `secrets`: a configuration key the definition marks `secret=True` -> the name of an engine secret. Both are fixed when the tool is built, so the model never sees them.
   - The tool's schema is the definition's JSON Schema; its name is the definition's (made safe for a model), or `name`.
-  - A failure (`ToolNotFound`, `ToolPermissionDenied`, `ToolExecutionError`, a refused argument, a busy engine) reaches the model as the tool's output (`ToolException`), so it can recover; the engine's messages hold no secret.
+  - Every failure of the call (`ToolNotFound`, `ToolPermissionDenied`, `ToolExecutionError`, a refused argument or one over the limits, a busy engine, a timeout, a lost connection) reaches the model as the tool's output (`ToolException`), so it can recover; the engine's messages hold no secret.
 - `ToolRegistryService.as_tool(tool, ...)` does the same and fetches the definition when given a reference.
 - `tool_output(result)`: a string as it is, any other JSON value as JSON.
 

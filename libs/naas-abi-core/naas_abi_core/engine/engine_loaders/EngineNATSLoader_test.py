@@ -423,6 +423,65 @@ def test_expose_tool_registry_owner(monkeypatch):
     assert started[0]._module_scopes == {"crm_module": frozenset({"crm:read"})}
 
 
+def _expose_tools(monkeypatch, **nats):
+    from loguru import logger
+
+    config = SimpleNamespace(nats=NATSConfiguration(jwt_secret="x" * 32, **nats))
+    monkeypatch.setattr("naas_abi_core.engine.nats_runtime.get_connection", MagicMock())
+    monkeypatch.setattr(
+        "naas_abi_core.engine.nats_runtime.run_coro",
+        MagicMock(side_effect=lambda coro, *a, **k: coro.close()),
+    )
+    lines: list[str] = []
+    sink = logger.add(lines.append, level="WARNING", format="{message}")
+    try:
+        started = EngineNATSLoader(config).expose_services(
+            _services({"tool_registry": True})
+        )
+    finally:
+        logger.remove(sink)
+    return started[0], "".join(lines)
+
+
+def test_running_tools_never_takes_more_than_half_of_the_services_slots(monkeypatch):
+    primary, warnings = _expose_tools(
+        monkeypatch,
+        max_concurrent_requests=8,
+        tool_registry={"invoke": {"max_concurrent": 16}},
+    )
+
+    assert primary._invoker._max_concurrent == 4
+    assert "running 4 tools at once" in warnings
+
+    primary, warnings = _expose_tools(
+        monkeypatch,
+        max_concurrent_requests=1,
+        tool_registry={"invoke": {"max_concurrent": 3}},
+    )
+    assert primary._invoker._max_concurrent == 1
+
+    primary, warnings = _expose_tools(monkeypatch)  # the defaults: 16 of 64
+    assert primary._invoker._max_concurrent == 16 and not warnings
+
+
+def test_the_invoke_grants_and_switch_reach_the_primary(monkeypatch):
+    primary, _ = _expose_tools(
+        monkeypatch,
+        tool_registry={
+            "invoke": {
+                "modules": {
+                    "partner": {"secrets": ["TOKEN"], "unscoped_tools": ["ns/get_*"]}
+                }
+            }
+        },
+    )
+    assert primary._module_secrets == {"partner": frozenset({"TOKEN"})}
+    assert primary._module_unscoped_tools == {"partner": ("ns/get_*",)}
+
+    off, _ = _expose_tools(monkeypatch, tool_registry={"invoke": {"enabled": False}})
+    assert off._invoker is None
+
+
 def test_module_scopes_name_modules_not_the_engines_own_processes():
     from pydantic import ValidationError
 

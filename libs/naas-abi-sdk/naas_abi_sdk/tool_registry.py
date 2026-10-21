@@ -26,12 +26,17 @@ class ToolRegistryClient:
         )
 
     async def invoke_tool(
-        self, request: pb.InvokeToolRequest, *, timeout: float | None = None
+        self,
+        request: pb.InvokeToolRequest,
+        *,
+        timeout: float | None = None,
+        grace: float = 0.0,
     ) -> pb.InvokeToolResponse:
         kwargs = {} if timeout is None else {"timeout": timeout}
         return await self._transport.call(
             "abi.svc.tool_registry.v1.invoke_tool",
             request,
             pb.InvokeToolResponse,
+            grace=grace,
             **kwargs,
         )

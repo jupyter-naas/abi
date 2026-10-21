@@ -540,7 +540,7 @@ result = await tools.invoke(
     {"owner": "naas", "repo": "abi", "title": "Login fails"},
     config={},                                        # plain, non-secret values
     secrets={"access_token": "GITHUB_ACCESS_TOKEN"},  # config key -> NAME of an engine secret
-    timeout=30,                                       # the wait, and the tool's deadline
+    timeout=30,                                       # the tool's deadline (the call waits 5 s more)
 )
 ```
 

@@ -48,15 +48,16 @@ class {cls}:
                 f'transfer_subject("abi.svc.model_registry.v1", "{operation}", request.stream_id)',
             )
     if domain == "tool_registry":
-        # A tool runs for as long as its deadline: the caller waits that long, and the
-        # engine reads it from the request's context.timeout_ms.
+        # A tool runs for as long as its deadline: the engine reads it from the request's
+        # context.timeout_ms, and the caller waits that long plus `grace`, so the engine's
+        # DEADLINE_EXCEEDED reply arrives before the caller gives up.
         text = text.replace(
             "async def invoke_tool(self, request: pb.InvokeToolRequest) -> pb.InvokeToolResponse:",
-            "async def invoke_tool(self, request: pb.InvokeToolRequest, *, timeout: float | None = None) -> pb.InvokeToolResponse:",
+            "async def invoke_tool(self, request: pb.InvokeToolRequest, *, timeout: float | None = None, grace: float = 0.0) -> pb.InvokeToolResponse:",
         ).replace(
             'return await self._transport.call("abi.svc.tool_registry.v1.invoke_tool", request, pb.InvokeToolResponse)',
             'kwargs = {} if timeout is None else {"timeout": timeout}\n'
-            '        return await self._transport.call("abi.svc.tool_registry.v1.invoke_tool", request, pb.InvokeToolResponse, **kwargs)',
+            '        return await self._transport.call("abi.svc.tool_registry.v1.invoke_tool", request, pb.InvokeToolResponse, grace=grace, **kwargs)',
         )
     if domain == "cache":
         text = text.replace(
