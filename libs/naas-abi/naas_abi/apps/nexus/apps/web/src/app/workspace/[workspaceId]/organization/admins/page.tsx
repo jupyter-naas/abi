@@ -1,10 +1,11 @@
 import { redirect } from 'next/navigation';
 
 /** Legacy /organization/admins path; people management lives under Users. */
-export default function OrganizationAdminsRedirectPage({
+export default async function OrganizationAdminsRedirectPage({
   params,
 }: {
-  params: { workspaceId: string };
+  params: Promise<{ workspaceId: string }>;
 }) {
-  redirect(`/workspace/${params.workspaceId}/organization/users`);
+  const { workspaceId } = await params;
+  redirect(`/workspace/${workspaceId}/organization/users`);
 }

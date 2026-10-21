@@ -36,7 +36,10 @@ export function CollapsibleSection({
   onNavigate,
 }: SectionProps) {
   const pathname = usePathname();
-  const { expandedSections, toggleSection, sidebarCollapsed, toggleSidebar } = useWorkspaceStore();
+  const expandedSections = useWorkspaceStore((s) => s.expandedSections);
+  const toggleSection = useWorkspaceStore((s) => s.toggleSection);
+  const sidebarCollapsed = useWorkspaceStore((s) => s.sidebarCollapsed);
+  const toggleSidebar = useWorkspaceStore((s) => s.toggleSidebar);
   const isExpanded = expandedSections.includes(id);
   const [showTooltip, setShowTooltip] = useState(false);
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });

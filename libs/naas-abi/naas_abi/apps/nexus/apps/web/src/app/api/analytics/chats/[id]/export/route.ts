@@ -12,10 +12,11 @@ export const dynamic = 'force-dynamic';
 const UPSTREAM =
   process.env.NEXUS_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:9879';
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const url = new URL(req.url);
   const qs = url.searchParams.toString();
-  const target = `${UPSTREAM}/api/analytics/chats/${encodeURIComponent(params.id)}/export${
+  const target = `${UPSTREAM}/api/analytics/chats/${encodeURIComponent(id)}/export${
     qs ? `?${qs}` : ''
   }`;
 

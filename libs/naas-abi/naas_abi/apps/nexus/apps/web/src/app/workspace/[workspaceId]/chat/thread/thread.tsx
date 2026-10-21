@@ -6,14 +6,14 @@ import { ChatMenuBar } from '../components/chat-menu-bar';
 import { NEW_CHAT_SLUG } from '../lib/chat-route';
 
 interface ChatThreadPageProps {
-  params: {
+  params: Promise<{
     workspaceId: string;
     slug?: string[];
-  };
+  }>;
 }
 
-export default function ChatThreadPage({ params }: ChatThreadPageProps) {
-  const slug = params.slug?.[0] ?? null;
+export default async function ChatThreadPage({ params }: ChatThreadPageProps) {
+  const slug = (await params).slug?.[0] ?? null;
   const conversationId = slug === NEW_CHAT_SLUG ? null : slug;
   return (
     <div className="flex h-full flex-col">
