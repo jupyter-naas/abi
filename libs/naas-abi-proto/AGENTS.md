@@ -11,3 +11,9 @@ tools published by modules and for remote execution: add to it, never carry a bi
 credential in it (a requirement names a key; `secret` marks it). Limits are enforced by the
 serving engine (no Protovalidate) and written in the proto's header: change both together. No
 field grants rights: the caller's scopes come from its verified service identity.
+`tool/v1` is the call to a tool a module serves (`abi.mod.<project>.<instance>.tool.<name>.invoke`):
+JSON arguments, JSON configuration (plain values, never a secret), a JSON result. Its
+`ToolDefinition` is `tool_registry/v1`'s, declared in `ModuleDescriptor.tools` (discovery
+validates it; `remote` is set by the engine). Its limits are enforced by the serving module and
+written in the proto's header: change both together. The next step (running engine tools)
+reuses these messages.

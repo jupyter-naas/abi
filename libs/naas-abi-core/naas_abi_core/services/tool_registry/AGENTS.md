@@ -4,8 +4,9 @@
 
 ## Purpose
 
-Process-local catalog of the tools the modules *this process loads* publish
-(one registry per process, with NATS too: see "Engine wiring"), whose catalog
+Process-local catalog of the tools the modules *this process loads* publish, and the
+tools SDK modules serve ("Tools served by SDK modules"), one registry per process,
+with NATS too: see "Engine wiring". Its catalog
 reads also cover the serving engine's tools on an engine that does not serve
 ("Catalog over NATS"). Each tool has a serialisable
 **definition** (stable id, description, input contract, owning module, config
@@ -26,14 +27,17 @@ may omit the version (`ns/name`) and then resolves to the highest version.
 tool_registry/
 ├── ToolRegistryPort.py        # ToolId/ToolRef, ToolDefinition, ToolContext, ToolBinding, ToolListing/ToolFilter, ports, exceptions
 ├── ToolRegistryService.py     # in-memory registry + lazy fingerprinted indexing + search + optional catalog
+├── RemoteToolSynchronizer.py  # discovery -> registry: publishes the tools SDK modules serve, drops them with the module
 ├── ToolAccessPolicy.py        # ScopeToolAccessPolicy (default)
 ├── ToolRegistryFactory.py     # InMemory(...), VectorStore(...)
 ├── adapters/
 │   ├── tool_registry_nats_codec.py            # registry objects <-> abi.tool_registry.v1 messages, request limits
 │   ├── primary/LangChainToolPublisher.py      # ToolPublisher, StaticToolBinding, FactoryToolBinding
+│   ├── primary/RemoteToolBinding.py           # a tool a module serves, as a LangChain tool that calls it over NATS
 │   ├── primary/tool_registry__primary_adapter__NATS.py  # the serving engine's catalog over NATS (read only)
 │   └── secondary/
 │       ├── ToolRegistrySecondaryAdapterNATSClient.py  # IToolCatalogPort over NATS (client / standby engines)
+│       ├── RemoteToolsSecondaryAdapterNATS.py  # IRemoteToolDirectory (discovery) + IRemoteToolInvoker (abi.tool.v1)
 │       ├── InMemoryToolIndexAdapter.py        # numpy cosine index (default)
 │       ├── VectorStoreToolIndexAdapter.py     # index in the engine's VectorStoreService (UUID point ids)
 │       └── ModelRegistryEmbedderAdapter.py    # embeddings from the model registry (batches of 1024, one lookup per sync)
@@ -58,6 +62,8 @@ class IToolRegistry:
     sync_index() -> int                                   # definitions (re-)embedded
 
 class IToolCatalogPort:    list_tools(filter), get_tool(ref), search_tools(query, limit, min_score, filter) -> ToolCatalogSearch(results, truncated)   # another process's catalog, read only; raises ToolCatalogError
+class IRemoteToolDirectory: list_modules() -> [RemoteModuleTools]   # modules with a READY instance that declare tools; RemoteToolDirectoryError
+class IRemoteToolInvoker:   invoke / ainvoke(definition, contract_major, arguments, config, context)   # one attempt; RemoteToolError(code)
 class IToolIndexPort:      prepare(model_key), fingerprints(ids), upsert(entries), delete(ids), search(vector, limit), size(),
                            collect_garbage(keep_ids)          # the writer's cleanup, never automatic
 class IToolEmbedderPort:   model_key, embed_documents(texts), embed_query(text), resolve() -> ResolvedEmbedder  # model looked up once
@@ -189,6 +195,38 @@ handover) and removes for `SOLE_WRITER` and `PEER`.
   `ToolRegistryCatalog_test.py` (registry with a catalog) and, on a real broker,
   `engine/Engine_tool_registry_nats_integration_test.py`.
 
+### Tools served by SDK modules
+
+ADR `docs/adr/20261022_remote-module-tools.md`. An SDK module declares
+`tools = (ToolDescriptor(...),)` and binds each with `expose_tool(name, handler)`;
+discovery stores them in its descriptor (`ModuleDescriptor.tools`, the portable
+`ToolDefinition`), and the module serves `abi.mod.<project>.<instance>.tool.<name>.invoke`
+(`abi.tool.v1`: JSON arguments and result, one attempt, validated against the input schema
+before the handler, sanitized errors, deadline, size caps).
+
+- **In.** `RemoteToolSynchronizer` reads discovery every
+  `nats.tool_registry.remote_modules.refresh_seconds` (5 s) and `publish`es each module with a
+  READY instance as `<module_id>/<name>@<version>` (`ToolDefinition.remote = True`, binding
+  `RemoteToolBinding`); a module with none is `unpublish`ed, and the index follows at the
+  next search (`_sync` deletes what this registry indexed). A failed read keeps what is
+  published. `EngineRemoteToolLoader` starts it after `publish_tools`, in every NATS role
+  (serving, standby, client: bindings are per process), and `Engine.shutdown` stops it.
+  A module named like a loaded module, or a tool another module holds, is not published.
+- **Out.** `resolve` builds a `StructuredTool` whose schema is the module's JSON Schema; a
+  call looks up a READY instance in discovery and sends one `InvokeToolRequest` as the
+  `engine` identity with the caller's user and workspace (`ToolContext`). A module error is the
+  tool's output (`ToolException`: the model can recover); nothing is retried.
+- **Credentials.** No engine secret reaches a module: discovery refuses a secret
+  requirement, a remote binding's `default_config` is empty and it refuses undeclared
+  configuration keys, and the composer rejects `{secret: NAME}` on a `remote` definition
+  (`AgentCompositionError`, also in `capabilities.tool_config`). A remote tool's config is plain
+  values; the module holds its own credentials.
+- Access and scopes are the registry's, as for local tools. Config:
+  `nats.tool_registry.remote_modules: {enabled, refresh_seconds, call_timeout_seconds}`
+  (needs `nats.discovery`). Tests: `RemoteToolSynchronizer_test.py`,
+  `adapters/primary/RemoteToolBinding_test.py`, and on a real broker
+  `engine/Engine_remote_tools_nats_integration_test.py`.
+
 **Several processes on one vector store** (the sqlite_vec dev default shares a
 file between `api` and `dagster`): an engine without NATS writes the shared
 index but only deletes what it indexed itself. Engines that publish different
@@ -223,8 +261,8 @@ ToolRegistryFactory.VectorStore(
 ## Tests
 
 ```bash
-# the catalog over a real broker (nats-server on PATH; fails instead of skipping):
-ABI_REQUIRE_NATS_SERVER=1 uv run pytest libs/naas-abi-core/naas_abi_core/engine/Engine_tool_registry_nats_integration_test.py -o addopts=""
+# the catalog and the tools SDK modules serve, over a real broker (nats-server on PATH; fails instead of skipping):
+ABI_REQUIRE_NATS_SERVER=1 uv run pytest libs/naas-abi-core/naas_abi_core/engine/Engine_tool_registry_nats_integration_test.py libs/naas-abi-core/naas_abi_core/engine/Engine_remote_tools_nats_integration_test.py -o addopts=""
 uv run pytest libs/naas-abi-core/naas_abi_core/services/tool_registry -o addopts=""
 # real embeddings (skips unless Ollama serves nomic-embed-text):
 uv run pytest libs/naas-abi-core/naas_abi_core/services/tool_registry/tests/ToolRegistry_real_embedding_smoke_test.py -o addopts=""

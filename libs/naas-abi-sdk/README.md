@@ -500,7 +500,7 @@ and cancellation; declaration checks alone are not authorization.
 ## Tool catalog
 
 A module can find the tools the engine's modules published (it cannot run them
-yet), by meaning, with `tool_registry`. Calls are read only: nothing here builds
+yet; it can publish its own, see "Serving tools"), by meaning, with `tool_registry`. Calls are read only: nothing here builds
 or runs a tool, and no reply holds a credential: a tool's config requirements name
 the keys it needs (`secret=True` for a credential) and `availability` says which
 the engine still lacks.
@@ -525,6 +525,64 @@ until the operator grants the module those scopes in the engine's configuration,
 `limit` (1 to 50), `min_score`, `modules`, `tags` and `available_only`, and raises
 `ToolSearchUnavailable` when the engine has no embedding model or index.
 `docs/adr/20261021_tool-catalog-over-nats.md` has the contract.
+
+## Serving tools
+
+A module can publish tools that agents in the engine find by meaning, enable and
+call over NATS, while the module has a ready instance. Install
+`naas-abi-sdk[tools]` (arguments are validated with `jsonschema`).
+
+```python
+from naas_abi_sdk import BaseModule, ToolConfig, ToolDescriptor, ToolError
+
+class ABIModule(BaseModule):
+    module_id = "acme_crm"          # letters, digits, _ and .: it is the tool namespace
+    tools = (
+        ToolDescriptor(
+            "open_ticket",
+            "Create a new ticket to report a bug or defect.",
+            {
+                "type": "object",
+                "properties": {"title": {"type": "string"}},
+                "required": ["title"],
+            },
+            config=(ToolConfig("region"),),
+            required_scopes=("crm:write",),   # optional: the engine's access policy applies it
+        ),
+    )
+
+    def on_initialized(self):
+        self.expose_tool("open_ticket", self.open_ticket)   # sync or async
+
+    async def open_ticket(self, arguments, call):           # ``call`` is optional
+        if not arguments["title"].strip():
+            raise ToolError("A ticket needs a title")        # the caller reads this
+        return {"ticket": "T-1", "region": call.config["region"], "user": call.caller.user_id}
+
+    def authorize_tool(self, name, caller):
+        return caller.engine                                 # the default
+```
+
+The engine publishes it as `acme_crm/open_ticket@1`; a `CapabilityAgent` finds it with
+`search_capabilities`, and a record binds it like any tool
+(`{tool: acme_crm/open_ticket, config: {region: eu}}`).
+
+- **Arguments** are JSON, validated against the input schema before the handler runs;
+  the result is JSON (at most 512 KiB). A call is one attempt, never replayed, and its
+  deadline is the caller's (at most 300 s). A sync handler runs on a thread.
+- **Who may call.** Discovery checks the caller's token is bound to this instance, then
+  `authorize_tool(name, caller)` decides. The default allows the engine's own processes
+  (`api`, `engine`, `dagster`) and refuses every other caller, other modules included;
+  an override replaces it, and only `True` allows. Only `api` and `engine` may name an
+  end user (`call.caller.user_id`).
+- **Errors.** `ToolError` reaches the caller with its message; any other exception is
+  logged here and reported as a generic failure.
+- **No engine secret reaches a module.** `ToolConfig` takes plain values only (discovery
+  refuses a secret requirement, and a `{secret: NAME}` binding on a remote tool is a
+  composition error). Keep the module's own credentials in its own environment.
+- Replicas must declare the same tools; at most 32 tools, 64 KiB of descriptors.
+
+`docs/adr/20261022_remote-module-tools.md` has the contract.
 
 ## Remote models
 

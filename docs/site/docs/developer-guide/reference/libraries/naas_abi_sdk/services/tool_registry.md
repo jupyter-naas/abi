@@ -10,7 +10,7 @@
   - `list_tools(*, modules=(), tags=(), available_only=False) -> list[ToolEntry]`: every visible tool, sorted by id. `modules`: the tool's module is one of them. `tags`: it has all of them.
   - `get_tool(ref: str) -> ToolEntry`: `<namespace>/<name>` (highest version) or `<namespace>/<name>@<version>`. Raises `ToolNotFound`.
   - `search_tools(query, *, limit=5, min_score=None, modules=(), tags=(), available_only=False) -> list[ToolMatch]`: best first, `limit` 1 to 50. Raises `ToolSearchUnavailable` when the engine has no embedding model or index.
-- Results are frozen dataclasses: `ToolEntry(definition, availability)`, `ToolMatch(definition, availability, score)` with a `tool_id`, `ToolDefinition` (id, namespace, name, version, module, description, `input_schema`, `output_schema`, tags, `config` requirements, `requires_workspace`, `required_scopes`) and `ToolAvailability(available, missing_config)`.
+- Results are frozen dataclasses: `ToolEntry(definition, availability)`, `ToolMatch(definition, availability, score)` with a `tool_id`, `ToolDefinition` (id, namespace, name, version, module, description, `input_schema`, `output_schema`, tags, `config` requirements, `requires_workspace`, `required_scopes`, `remote`: served by an SDK module, see [tools](../tools.md)) and `ToolAvailability(available, missing_config)`.
 
 ## Configuration/Dependencies
 - Declare `ModuleDependencies(services=("tool_registry",))`.

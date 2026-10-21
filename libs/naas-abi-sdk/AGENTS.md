@@ -80,6 +80,19 @@ module exits.
 its identity on the engine (`nats.tool_registry.module_scopes`), never from the request. Keep
 its DTOs aligned with `tool_registry/v1` (`ToolDefinition` is reused by the next steps).
 
+A module can serve tools (`tools.py` descriptors, `tool_host.py`, `BaseModule.tools`/`expose_tool`/
+`authorize_tool`, ADR docs/adr/20261022_remote-module-tools.md): `ToolDescriptor`s go in the discovery
+descriptor as the portable `ToolDefinition` (canonical JSON, so replicas compare equal), and
+`ToolHost` serves `abi.mod.<project>.<instance>.tool.<name>.invoke`. Order of a call: size limits,
+discovery's `authorize_tool` (token bound to this instance), the module's `authorize_tool` hook
+(default: the engine's own processes only; it replaces the default), arguments validated against the
+input schema and configuration against the descriptor, then the handler under the caller's deadline.
+Only `api` and `engine` may name an end user. A handler's exception never travels (generic
+`TOOL_ERROR`); only `ToolError` carries its message. No secret in a descriptor or a call: engine
+secrets never reach a module, which holds its own. Serving needs the `tools` extra (`jsonschema`);
+`tools.py` stays stdlib and proto only. Tests: `tests/test_tool_host.py`; the real-broker
+suite is core's `engine/Engine_remote_tools_nats_integration_test.py`.
+
 A module can serve a chat model (`ModelDescriptor`, `expose_model`, `ModelHost`).
 Another module calls `engine.modules[id].get_chat_model(name)`. The call is unary,
 instance-addressed, and authorized with `authorize_model`. The handler returns

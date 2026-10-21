@@ -4,8 +4,9 @@
 
 Accepted. Covers modules that run in the engine, with NATS off and on (issue
 #1245). Other processes read its catalog over NATS
-(`docs/adr/20261021_tool-catalog-over-nats.md`); the contracts for tools
-published by SDK modules and for remote execution come in later steps (see
+(`docs/adr/20261021_tool-catalog-over-nats.md`), and SDK modules publish tools
+that agents find and run over NATS (`docs/adr/20261022_remote-module-tools.md`);
+the contract for remote execution of engine tools comes in a later step (see
 "Contracts").
 
 ## Date
@@ -260,7 +261,9 @@ services validate requests on the server side (there is no Protovalidate):
    for client engines and SDK modules
    (`docs/adr/20261021_tool-catalog-over-nats.md`). Its `ToolDefinition` message
    is the portable form of a definition, for the next two.
-2. Tools published by remote SDK modules.
+2. Done: tools published by remote SDK modules (`abi.tool.v1`, `ModuleDescriptor.tools`;
+   `docs/adr/20261022_remote-module-tools.md`). A remote tool's configuration holds no
+   secret: the composer rejects a `{secret: NAME}` binding on it.
 3. Remote execution of engine tools, where the engine resolves the tool's
    configuration and secrets and enforces access.
 

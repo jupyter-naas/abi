@@ -5,7 +5,7 @@
 - Provides:
   - Dependency-declared access to remote ABI services and other modules.
   - A structured startup/shutdown sequence (`on_load` → `on_initialized` → `run` → drain → `on_unloaded`).
-  - Optional discovery registration, hosting for agents/models/apps/jobs, and an optional health probe port.
+  - Optional discovery registration, hosting for agents/models/tools/apps/jobs, and an optional health probe port.
   - A task-local `current_module()` context helper.
 
 ## Public API
@@ -41,6 +41,7 @@ Key class attributes (override in subclasses):
 - `contract_major: int = 1`
 - `agents: tuple[AgentDescriptor, ...] = ()`
 - `models: tuple[ModelDescriptor, ...] = ()`
+- `tools: tuple[ToolDescriptor, ...] = ()` (see [tools](tools.md): bind each with `expose_tool`)
 - `apps: tuple[AppDescriptor, ...] | None = None`  
   - If `None`, apps are discovered from `apps/<name>/manifest.json` next to the package.
 
@@ -61,6 +62,10 @@ Exposure/binding APIs (call during `on_initialized`, before readiness):
   - Registers an async `handler.invoke(...)` for an `AgentDescriptor` that includes capability `"agent.invoke.v1"`.
 - `expose_model(name: str, handler) -> None`
   - Registers an async `handler.invoke(...)` for a chat `ModelDescriptor` (`kind == "chat"`).
+- `expose_tool(name: str, handler) -> None`
+  - Binds a sync or async `handler(arguments)` (or `handler(arguments, call)`) for a declared `ToolDescriptor`. Arguments arrive validated against the input schema. Every declared tool needs a handler before readiness.
+- `authorize_tool(name: str, caller: ToolCaller) -> bool` (override)
+  - Whether `caller` may run the tool. Default: the engine's own processes only.
 - `expose_app(name: str, asgi_app) -> None`
   - Binds an ASGI app (callable) to a declared/discovered app.
 - `@classmethod get_apps() -> tuple[AppDescriptor, ...]`

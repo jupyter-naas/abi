@@ -16,7 +16,7 @@ Portable discovery utilities for:
   - Fields: `name`, `description`, `kind` (default `"chat"`)
 - `ModuleInstance`
   - Fields: `module_id`, `instance_id`, `package_version`, `contract_major`, `status`, `expires_at`,
-    `agents`, `jobs`, `dependencies`, `models`, `apps`
+    `agents`, `jobs`, `dependencies`, `models`, `apps`, `tools` (`ToolDescriptor`s, see [tools](tools.md))
 - `DiscoveryConfiguration`
   - Fields: `project="default"`, `startup_timeout=60`, `refresh_seconds=2`,
     `rollout_id=""`, `rollout_modules=()`
@@ -29,7 +29,7 @@ Portable discovery utilities for:
   - Builds a `naas_abi_proto.discovery.v1.discovery_pb2.ModuleDescriptor` from a module type/object.
   - Pulls:
     - `module_type.package_version`, `module_type.contract_major`, `module_type.agents`
-    - optional: `module_type.jobs`, `module_type.models`
+    - optional: `module_type.jobs`, `module_type.models`, `module_type.tools` (as `ToolDefinition`s; discovery validates them)
     - optional: `module_type.get_apps()` (if present)
 
 ### Classes
@@ -53,6 +53,8 @@ Convenience wrapper around a specific `(module_id, contract_major)`.
   - Filters instances with `status == "READY"`, else raises `RPCError("MODULE_UNAVAILABLE", ...)`.
 - `list_agents() -> tuple[AgentDescriptor, ...]`
   - Returns agents from the first ready instance.
+- `call_tool(name, arguments=None, *, config=None, timeout=None) -> Any`
+  - Runs a tool a ready instance serves and returns its JSON result. The module authorizes the caller (by default only the engine's own processes may).
 - `get_agent(name: str)`
   - Returns an `naas_abi_sdk.agent.AgentProxy` if the agent exists and supports invocation:
     - `descriptor.contract_major == 1`
