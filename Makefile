@@ -1040,7 +1040,7 @@ triplestore-export-turtle: deps
 # DOCUMENTATION & PUBLISHING
 # =============================================================================
 
-# Public product docs live at https://docs.naas.ai (Zen: external.naasai apps/naas_docs).
+# Public product docs live at https://docs.naas.ai.
 # Do not revive a local docs site here; see docs/README.md.
 
 # Generate ontology documentation

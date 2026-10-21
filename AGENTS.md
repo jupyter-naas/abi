@@ -377,7 +377,7 @@ in-process and uses the `bus:` adapter below.
 - Preserve existing architecture patterns over stylistic rewrites.
 - If unsure, follow nearest module conventions.
 - When a change introduces or updates an architecture-level decision (boundaries, ownership, cross-cutting configuration, major tradeoffs), write it into the nearest `AGENTS.md` (Decision / Consequences). Do not add narrative docs under `docs/`.
-- Product docs live at https://docs.naas.ai (maintained in the Zen NaasAI module). Historical ADRs are archived there under `apps/archive/abi-engineering-docs/adr/`.
+- Product docs live at https://docs.naas.ai. Do not revive a docs site or ADR tree in this repository.
 
 ## Quick Cheat Sheet
 
