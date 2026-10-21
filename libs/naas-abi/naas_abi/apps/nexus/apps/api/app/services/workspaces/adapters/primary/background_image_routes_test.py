@@ -142,8 +142,10 @@ def test_stage_requires_exactly_one_source_and_a_real_image(client_for) -> None:
 
 def test_current_restores_the_pointer_when_the_file_is_still_in_home(client_for) -> None:
     client, workspaces = client_for("admin")
+    # No wallpaper is a normal state, not an error: 200 with a null URL.
     missing = client.get("/api/workspaces/ws-1/background-image/current")
-    assert missing.status_code == 404
+    assert missing.status_code == 200
+    assert missing.json() == {"background_image_url": None}
 
     draft = client.post(
         "/api/workspaces/ws-1/background-image/draft", files={"file": ("a.png", PNG, "image/png")}

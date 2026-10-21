@@ -479,10 +479,13 @@ async def get_workspace_configuration(
     service: WorkspaceService = Depends(get_workspace_service),
     org_service: OrganizationService = Depends(get_organization_service),
 ) -> dict:
-    """Read-only features and config preseeding (Settings > General).
+    """Features and config preseeding (Settings > General).
 
     ``seeds`` lists what ``nexus_config.organizations[].workspaces[]`` preloads
     for this workspace slug, read from the loaded config on each call.
+    ``can_edit_features`` is true for the organization's owners and admins,
+    who save the overrides through ``PUT /organizations/{org_id}/workspaces/
+    {workspace_id}/features`` (same rule as Organization Settings).
     """
     role = await require_workspace_access(current_user.id, workspace_id)
     if role not in ("owner", "admin"):
@@ -499,7 +502,16 @@ async def get_workspace_configuration(
         workspace_id=record.id,
         workspace_override=record.feature_overrides,
     )
+    org_role = (
+        await org_service.get_organization_role(
+            user_id=current_user.id, org_id=record.organization_id
+        )
+        if record.organization_id
+        else None
+    )
     return {
+        "organization_id": record.organization_id,
+        "can_edit_features": org_role in ("owner", "admin"),
         # Features on for at least one role, after the overrides.
         "features": workspace_features(
             roles=BASELINE_ROLES,
@@ -891,7 +903,8 @@ class BackgroundImageDraft(BaseModel):
 
 
 class BackgroundImageCurrent(BaseModel):
-    background_image_url: str
+    # None when the workspace has no wallpaper.
+    background_image_url: str | None = None
 
 
 class BackgroundImageCommit(BaseModel):
@@ -1050,7 +1063,8 @@ async def get_current_background_image(
 
     The URL on the workspace row is the pointer. When that pointer is empty
     but a file is still committed under ``.home/background-img`` (a restart
-    used to clear the column), point the workspace at the file again.
+    used to clear the column), point the workspace at the file again. No
+    wallpaper at all is ``background_image_url: null``, not a 404.
     """
     await require_workspace_access(current_user.id, workspace_id)
     record = await service.get_workspace(workspace_id=workspace_id)
@@ -1060,7 +1074,7 @@ async def get_current_background_image(
         return BackgroundImageCurrent(background_image_url=record.background_image_url)
     name = WorkspaceBackgroundImage(files_service, workspace_id).current_name()
     if not name:
-        raise HTTPException(status_code=404, detail="No background image")
+        return BackgroundImageCurrent(background_image_url=None)
     url = background_image_url(workspace_id, name)
     await service.update_workspace(
         workspace_id=workspace_id,
