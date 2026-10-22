@@ -11,10 +11,14 @@ from naas_abi.apps.nexus.apps.api.app.core.config import FeatureKey, settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
+    BASELINE_ROLES,
     KNOWN_FEATURE_KEYS,
+    PINNED_FEATURES,
+    InvalidFeatureOverridesError,
     effective_workspace_overrides,
     enabled_feature_catalog,
     resolve_role_baseline,
+    validate_workspace_feature_overrides,
     workspace_features,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth import avatar_store, user_drive_profile
@@ -588,10 +592,6 @@ async def upload_org_logo_rectangle(
     return {"logo_rectangle_url": updated.logo_rectangle_url}
 
 
-# Settings always stays reachable, so it cannot be overridden per workspace.
-_PINNED_FEATURES = ("settings",)
-
-
 def _workspace_payload(
     ws: OrganizationWorkspaceRecord,
     *,
@@ -621,7 +621,7 @@ def _workspace_payload(
         "organization_logo_rectangle_url": resolve_stored_asset_url(org_logo_rect_url),
         # Features on for at least one role, after the overrides.
         "features": workspace_features(
-            roles=_BASELINE_ROLES,
+            roles=BASELINE_ROLES,
             feature_flags_config=flags,
             workspace_slug=ws.slug,
             workspace_id=ws.id,
@@ -733,11 +733,11 @@ async def get_org_workspace_features(
     catalog = enabled_feature_catalog(flags)
     return {
         "catalog": catalog,
-        "pinned": [key for key in _PINNED_FEATURES if key in catalog],
-        "roles": list(_BASELINE_ROLES),
+        "pinned": [key for key in PINNED_FEATURES if key in catalog],
+        "roles": list(BASELINE_ROLES),
         "role_baseline": {
             role_name: [key for key in role_baseline.get(role_name, []) if key in catalog]
-            for role_name in _BASELINE_ROLES
+            for role_name in BASELINE_ROLES
         },
     }
 
@@ -758,19 +758,10 @@ async def update_org_workspace_features(
         raise HTTPException(status_code=404, detail="Workspace not found in this organization")
     overrides = None
     if body.overrides is not None:
-        catalog = set(enabled_feature_catalog(settings.feature_flags))
-        outside = sorted(key for key in body.overrides if key not in catalog)
-        if outside:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Features not enabled in deployment catalog: {', '.join(outside)}",
-            )
-        pinned = sorted(key for key in body.overrides if key in _PINNED_FEATURES)
-        if pinned:
-            raise HTTPException(
-                status_code=400, detail=f"Features always on: {', '.join(pinned)}"
-            )
-        overrides = {str(key): bool(value) for key, value in body.overrides.items()}
+        try:
+            overrides = validate_workspace_feature_overrides(settings.feature_flags, body.overrides)
+        except InvalidFeatureOverridesError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     await workspace_service.set_workspace_feature_overrides(
         workspace_id=workspace_id, overrides=overrides
     )
@@ -880,9 +871,6 @@ async def sync_org_member_workspaces(
     }
 
 
-_BASELINE_ROLES = ("owner", "admin", "member", "viewer")
-
-
 @router.get("/{org_id}/roles/features")
 async def get_org_role_features(
     org_id: str,
@@ -903,10 +891,10 @@ async def get_org_role_features(
     return {
         "enabled_features": list(flags.enabled_features),
         "role_baseline": {
-            role_name: list(role_baseline.get(role_name, [])) for role_name in _BASELINE_ROLES
+            role_name: list(role_baseline.get(role_name, [])) for role_name in BASELINE_ROLES
         },
         "known_features": list(KNOWN_FEATURE_KEYS),
-        "roles": list(_BASELINE_ROLES),
+        "roles": list(BASELINE_ROLES),
         "persistence": "database" if stored is not None else "deployment",
         "updated_at": stored.updated_at.isoformat() if stored and stored.updated_at else None,
         "updated_by": stored.updated_by if stored else None,
@@ -930,7 +918,7 @@ async def update_org_role_features(
     if role not in ("owner", "admin"):
         raise HTTPException(status_code=403, detail="Only admins can update role features")
 
-    allowed_roles = set(_BASELINE_ROLES)
+    allowed_roles = set(BASELINE_ROLES)
     unknown_roles = sorted(set(body.role_baseline) - allowed_roles)
     if unknown_roles:
         raise HTTPException(
@@ -943,14 +931,14 @@ async def update_org_role_features(
             status_code=400,
             detail=(
                 "role_baseline must include all baseline roles "
-                f"({', '.join(_BASELINE_ROLES)}); missing: {', '.join(missing_roles)}"
+                f"({', '.join(BASELINE_ROLES)}); missing: {', '.join(missing_roles)}"
             ),
         )
 
     known = set(KNOWN_FEATURE_KEYS)
     enabled = set(settings.feature_flags.enabled_features) or known
     cleaned: dict[str, list[FeatureKey]] = {}
-    for role_name in _BASELINE_ROLES:
+    for role_name in BASELINE_ROLES:
         features = body.role_baseline[role_name]
         invalid = sorted({f for f in features if f not in known})
         if invalid:

@@ -14,10 +14,20 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     require_workspace_access,
 )
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.secrets import deprecated_encrypt
-from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from naas_abi.apps.nexus.apps.api.app.core.config import FeatureKey, settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
-from naas_abi.apps.nexus.apps.api.app.core.feature_flags import build_feature_flags
+from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
+    BASELINE_ROLES,
+    PINNED_FEATURES,
+    InvalidFeatureOverridesError,
+    build_feature_flags,
+    effective_workspace_overrides,
+    enabled_feature_catalog,
+    validate_workspace_feature_overrides,
+    workspace_features,
+)
+from naas_abi.apps.nexus.apps.api.app.core.workspace_config_seeds import workspace_seed_rows
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
     get_auth_service,
 )
@@ -147,6 +157,9 @@ class WorkspaceCreate(BaseModel):
     font_family: str | None = None
     description: str | None = Field(default=None, max_length=200)
     workspace_group: str | None = Field(default=None, max_length=100)
+    # Feature overrides of the role defaults, chosen on the create page. None
+    # (the default) keeps the deployment config, like "Use config".
+    feature_overrides: dict[FeatureKey, bool] | None = None
 
 
 class WorkspaceUpdate(BaseModel):
@@ -367,6 +380,21 @@ async def create_workspace(
                 status_code=403,
                 detail="Only organization owners and admins can create workspaces",
             )
+    feature_overrides = None
+    if workspace.feature_overrides is not None:
+        # Overrides are an org admin's call (like the org Features modal); a
+        # personal workspace follows the role defaults.
+        if not workspace.organization_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Feature overrides need an organization workspace",
+            )
+        try:
+            feature_overrides = validate_workspace_feature_overrides(
+                settings.feature_flags, workspace.feature_overrides
+            )
+        except InvalidFeatureOverridesError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     try:
         record = await service.create_workspace(
             WorkspaceCreateInput(
@@ -388,6 +416,13 @@ async def create_workspace(
         )
     except WorkspaceSlugAlreadyExistsError as exc:
         raise HTTPException(status_code=400, detail="Slug already exists") from exc
+    if feature_overrides is not None:
+        record = (
+            await service.set_workspace_feature_overrides(
+                workspace_id=record.id, overrides=feature_overrides
+            )
+            or record
+        )
     return _to_schema(
         record,
         "owner",
@@ -452,6 +487,65 @@ async def update_workspace(
         role,
         organization_override=await _load_org_role_override(record.organization_id, org_service),
     )
+
+
+@router.get("/{workspace_id}/configuration")
+async def get_workspace_configuration(
+    workspace_id: str,
+    current_user: User = Depends(get_current_user_required),
+    service: WorkspaceService = Depends(get_workspace_service),
+    org_service: OrganizationService = Depends(get_organization_service),
+) -> dict:
+    """Features and config preseeding (Settings > General).
+
+    ``seeds`` lists what ``nexus_config.organizations[].workspaces[]`` preloads
+    for this workspace slug, read from the loaded config on each call.
+    ``can_edit_features`` is true for the organization's owners and admins,
+    who save the overrides through ``PUT /organizations/{org_id}/workspaces/
+    {workspace_id}/features`` (same rule as Organization Settings).
+    """
+    role = await require_workspace_access(current_user.id, workspace_id)
+    if role not in ("owner", "admin"):
+        raise HTTPException(
+            status_code=403, detail="Only admins can view the workspace configuration"
+        )
+    record = await service.get_workspace(workspace_id=workspace_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    flags = settings.feature_flags
+    overrides, overrides_source = effective_workspace_overrides(
+        flags,
+        workspace_slug=record.slug,
+        workspace_id=record.id,
+        workspace_override=record.feature_overrides,
+    )
+    org_role = (
+        await org_service.get_organization_role(
+            user_id=current_user.id, org_id=record.organization_id
+        )
+        if record.organization_id
+        else None
+    )
+    return {
+        "organization_id": record.organization_id,
+        "can_edit_features": org_role in ("owner", "admin"),
+        # Features on for at least one role, after the overrides.
+        "features": workspace_features(
+            roles=BASELINE_ROLES,
+            feature_flags_config=flags,
+            workspace_slug=record.slug,
+            workspace_id=record.id,
+            organization_id=record.organization_id,
+            organization_override=await _load_org_role_override(
+                record.organization_id, org_service
+            ),
+            workspace_override=record.feature_overrides,
+        ),
+        "pinned": [key for key in PINNED_FEATURES if key in enabled_feature_catalog(flags)],
+        "feature_overrides": overrides,
+        "feature_overrides_source": overrides_source,
+        "seeds": workspace_seed_rows(settings.organizations, record.slug),
+    }
 
 
 @router.get("/{workspace_id}/stats")
@@ -826,7 +920,8 @@ class BackgroundImageDraft(BaseModel):
 
 
 class BackgroundImageCurrent(BaseModel):
-    background_image_url: str
+    # None when the workspace has no wallpaper.
+    background_image_url: str | None = None
 
 
 class BackgroundImageCommit(BaseModel):
@@ -985,7 +1080,8 @@ async def get_current_background_image(
 
     The URL on the workspace row is the pointer. When that pointer is empty
     but a file is still committed under ``.home/background-img`` (a restart
-    used to clear the column), point the workspace at the file again.
+    used to clear the column), point the workspace at the file again. No
+    wallpaper at all is ``background_image_url: null``, not a 404.
     """
     await require_workspace_access(current_user.id, workspace_id)
     record = await service.get_workspace(workspace_id=workspace_id)
@@ -995,7 +1091,7 @@ async def get_current_background_image(
         return BackgroundImageCurrent(background_image_url=record.background_image_url)
     name = WorkspaceBackgroundImage(files_service, workspace_id).current_name()
     if not name:
-        raise HTTPException(status_code=404, detail="No background image")
+        return BackgroundImageCurrent(background_image_url=None)
     url = background_image_url(workspace_id, name)
     await service.update_workspace(
         workspace_id=workspace_id,

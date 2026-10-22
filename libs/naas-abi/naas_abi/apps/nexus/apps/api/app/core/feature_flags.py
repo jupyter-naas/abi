@@ -31,6 +31,16 @@ KNOWN_FEATURE_KEYS: tuple[str, ...] = (
     "sheets",
 )
 
+# Roles a workspace grants; a feature is "offered" when on for one of them.
+BASELINE_ROLES: tuple[str, ...] = ("owner", "admin", "member", "viewer")
+
+# Settings always stays reachable, so it cannot be overridden per workspace.
+PINNED_FEATURES: tuple[str, ...] = ("settings",)
+
+
+class InvalidFeatureOverridesError(ValueError):
+    """Workspace feature overrides outside the catalog or on a pinned feature."""
+
 
 def resolve_role_baseline(
     feature_flags_config: FeatureFlagsConfig,
@@ -162,6 +172,25 @@ def enabled_feature_catalog(feature_flags_config: FeatureFlagsConfig) -> list[st
     """Deployment catalog (``enabled_features``) in ``KNOWN_FEATURE_KEYS`` order."""
     catalog = _resolve_enabled_catalog(feature_flags_config.enabled_features)
     return [key for key in KNOWN_FEATURE_KEYS if key in catalog]
+
+
+def validate_workspace_feature_overrides(
+    feature_flags_config: FeatureFlagsConfig, overrides: Mapping[str, bool]
+) -> dict[str, bool]:
+    """Check per-workspace overrides against the deployment catalog and pins.
+
+    Raises ``InvalidFeatureOverridesError`` naming the offending features.
+    """
+    catalog = set(enabled_feature_catalog(feature_flags_config))
+    outside = sorted(key for key in overrides if key not in catalog)
+    if outside:
+        raise InvalidFeatureOverridesError(
+            f"Features not enabled in deployment catalog: {', '.join(outside)}"
+        )
+    pinned = sorted(key for key in overrides if key in PINNED_FEATURES)
+    if pinned:
+        raise InvalidFeatureOverridesError(f"Features always on: {', '.join(pinned)}")
+    return {str(key): bool(value) for key, value in overrides.items()}
 
 
 def parse_feature_overrides(raw: str | None) -> dict[str, bool] | None:

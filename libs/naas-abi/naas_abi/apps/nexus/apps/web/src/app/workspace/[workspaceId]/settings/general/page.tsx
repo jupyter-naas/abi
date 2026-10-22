@@ -32,6 +32,7 @@ import {
 } from '@/stores/workspace';
 import { BackgroundImageEditor } from '../../home/components/background-image-editor';
 import { resolveDeskImageUrl } from '../../home/home-desk';
+import { WorkspaceConfiguration } from './workspace-configuration';
 import '@/app/account/profile/profile.css';
 import './general.css';
 
@@ -82,6 +83,8 @@ export default function GeneralSettingsPage() {
   const [uploading, setUploading] = useState(false);
   const [logoError, setLogoError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // The wallpaper editor renders its Save / Discard / Remove in the section header.
+  const [wallpaperActions, setWallpaperActions] = useState<HTMLDivElement | null>(null);
   // Remounts the inline wallpaper editor after Save/Cancel so it reloads the current wallpaper.
   const [wallpaperEditorKey, setWallpaperEditorKey] = useState(0);
   const [driveBackgroundUrl, setDriveBackgroundUrl] = useState<string | undefined>();
@@ -231,7 +234,7 @@ export default function GeneralSettingsPage() {
     <div className="workspace-general space-y-6">
       <AccountPageHeader
         title="General"
-        subtitle="The workspace name, group, description, logo, desk wallpaper and colors."
+        subtitle="The workspace name, group, description, logo, desk wallpaper and colors, plus its features and config preseeding."
         actions={
           canEdit ? (
             <button
@@ -396,6 +399,7 @@ export default function GeneralSettingsPage() {
             Desktop wallpaper
           </span>
         }
+        actions={canEdit ? <div ref={setWallpaperActions} /> : undefined}
       >
         {canEdit ? (
           <>
@@ -418,6 +422,7 @@ export default function GeneralSettingsPage() {
               }}
               saveLabel="Save wallpaper"
               cancelLabel="Discard changes"
+              actionsContainer={wallpaperActions}
             />
           </>
         ) : (
@@ -433,6 +438,12 @@ export default function GeneralSettingsPage() {
             <Palette size={16} className="text-muted-foreground" />
             Colors
           </span>
+        }
+        actions={
+          <Button variant="secondary" size="sm" onClick={handleResetColors}>
+            <RefreshCw size={14} />
+            Reset colors
+          </Button>
         }
       >
         <div className="space-y-6">
@@ -499,14 +510,10 @@ export default function GeneralSettingsPage() {
             </div>
           </SettingsField>
 
-          <div className="flex justify-end">
-            <Button variant="secondary" onClick={handleResetColors}>
-              <RefreshCw size={16} />
-              Reset colors
-            </Button>
-          </div>
         </div>
       </SettingsSection>
+
+      {canEdit && workspace && <WorkspaceConfiguration workspaceId={workspace.id} />}
     </div>
   );
 }
