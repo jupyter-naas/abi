@@ -6,7 +6,6 @@ import { Brush, Camera, Check, Palette, Save, SlidersHorizontal, Trash2, X } fro
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { SettingsField, SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
-import { OTHERS_GROUP } from '@/lib/workspace-picker';
 import { authFetch } from '@/stores/auth';
 import { DEFAULT_THEME, PRESET_COLORS } from '@/stores/workspace';
 import { AccountPageHeader } from '@/app/account/components/account-page-header';
@@ -19,6 +18,7 @@ import {
   type FeatureChoice,
   type WorkspaceFeatureCatalog,
 } from '../workspace-features-table';
+import { WorkspaceGroupSelect } from '../workspace-group-select';
 import { WorkspaceOwnerSelect } from '../workspace-owner-select';
 import {
   catalogSeedPayload,
@@ -35,9 +35,6 @@ const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/
 const LOGO_MAX_BYTES = 5 * 1024 * 1024;
 /** Same limit as the API (WorkspaceCreate.description). */
 const DESCRIPTION_MAX_LENGTH = 200;
-/** Group dropdown value that switches to typing a new group. */
-const NEW_GROUP = '__new__';
-
 async function readApiError(response: Response, fallback: string): Promise<string> {
   try {
     const data = await response.json();
@@ -70,7 +67,6 @@ export default function OrgCreateWorkspacePage() {
 
   const [name, setName] = useState('');
   const [group, setGroup] = useState('');
-  const [newGroup, setNewGroup] = useState(false);
   const [existingGroups, setExistingGroups] = useState<string[]>([]);
   const [slug, setSlug] = useState('');
   const [slugEdited, setSlugEdited] = useState(false);
@@ -337,42 +333,13 @@ export default function OrgCreateWorkspacePage() {
             <label className="account-profile-field-label" htmlFor="create-workspace-group">
               Group
             </label>
-            <select
+            <WorkspaceGroupSelect
               id="create-workspace-group"
-              value={newGroup ? NEW_GROUP : group}
-              onChange={(event) => {
-                if (event.target.value === NEW_GROUP) {
-                  setNewGroup(true);
-                  setGroup('');
-                  return;
-                }
-                setNewGroup(false);
-                setGroup(event.target.value);
-              }}
+              value={group}
+              onChange={setGroup}
+              existingGroups={existingGroups}
               disabled={creating}
-              className="account-profile-field-input"
-            >
-              <option value="">{OTHERS_GROUP} (no group)</option>
-              {existingGroups.map((existing) => (
-                <option key={existing} value={existing}>
-                  {existing}
-                </option>
-              ))}
-              <option value={NEW_GROUP}>+ New group…</option>
-            </select>
-            {newGroup && (
-              <input
-                type="text"
-                value={group}
-                onChange={(event) => setGroup(event.target.value)}
-                placeholder="New group name"
-                aria-label="New group name"
-                maxLength={100}
-                disabled={creating}
-                className="account-profile-field-input org-create-workspace-new-group"
-                autoFocus
-              />
-            )}
+            />
           </div>
           <div className="account-profile-field">
             <label className="account-profile-field-label">Owner</label>

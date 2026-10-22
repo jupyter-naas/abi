@@ -23,7 +23,6 @@ import { getApiUrl } from '@/lib/config';
 import { fetchCurrentBackgroundImage } from '@/lib/home-background';
 import { AccountPageHeader } from '@/app/account/components/account-page-header';
 import { AccountSectionCard } from '@/app/account/components/account-section-card';
-import { OTHERS_GROUP } from '@/lib/workspace-picker';
 import { authFetch } from '@/stores/auth';
 import {
   useWorkspaceStore,
@@ -33,6 +32,7 @@ import {
 import { BackgroundImageEditor } from '../../home/components/background-image-editor';
 import { resolveDeskImageUrl } from '../../home/home-desk';
 import { WorkspaceConfiguration } from './workspace-configuration';
+import { WorkspaceGroupSelect } from '@/app/organizations/[orgId]/settings/workspaces/workspace-group-select';
 import { WorkspaceOwnerSelect } from '@/app/organizations/[orgId]/settings/workspaces/workspace-owner-select';
 import '@/app/account/profile/profile.css';
 import './general.css';
@@ -77,6 +77,7 @@ export default function GeneralSettingsPage() {
   const [name, setName] = useState(workspace?.name ?? '');
   const [description, setDescription] = useState(workspace?.description ?? '');
   const [group, setGroup] = useState(workspace?.group ?? '');
+  const [existingGroups, setExistingGroups] = useState<string[]>([]);
   const [ownerId, setOwnerId] = useState(workspace?.ownerId ?? '');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -94,6 +95,30 @@ export default function GeneralSettingsPage() {
   useEffect(() => {
     if (workspace) setCustomColor(workspace.theme?.primaryColor || DEFAULT_THEME.primaryColor);
   }, [workspace]);
+
+  useEffect(() => {
+    const orgId = workspace?.organizationId;
+    if (!orgId) {
+      setExistingGroups([]);
+      return;
+    }
+    let cancelled = false;
+    void authFetch(`/api/organizations/${orgId}/workspaces`)
+      .then(async (res) => {
+        if (!res.ok || cancelled) return;
+        const rows: { workspace_group?: string | null }[] = await res.json();
+        const groups = new Set(
+          rows.map((row) => row.workspace_group?.trim()).filter(Boolean) as string[]
+        );
+        setExistingGroups([...groups].sort((a, b) => a.localeCompare(b)));
+      })
+      .catch(() => {
+        if (!cancelled) setExistingGroups([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspace?.organizationId]);
 
   // Follow the store when switching workspace or after a save (not on every keystroke).
   const workspaceName = workspace?.name ?? '';
@@ -352,15 +377,12 @@ export default function GeneralSettingsPage() {
             <label className="account-profile-field-label" htmlFor="workspace-group">
               Group
             </label>
-            <input
+            <WorkspaceGroupSelect
               id="workspace-group"
-              type="text"
               value={group}
-              onChange={(event) => setGroup(event.target.value)}
-              placeholder={`${OTHERS_GROUP} when empty`}
-              maxLength={100}
+              onChange={setGroup}
+              existingGroups={existingGroups}
               disabled={!canEdit || saving}
-              className="account-profile-field-input"
             />
           </div>
           <div className="account-profile-field">
@@ -375,10 +397,6 @@ export default function GeneralSettingsPage() {
               disabled
               className="account-profile-field-input"
             />
-            <span className="account-profile-field-label workspace-general-hint">
-              Set at creation. /workspace/{workspace.slug || '<slug>'} opens this workspace like
-              its id.
-            </span>
           </div>
           {workspace.organizationId && canEdit && (
             <div className="account-profile-field">
