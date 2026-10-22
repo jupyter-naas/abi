@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v3.2.0 (2026-10-22)
+
+### Chores
+
+- Update lockfiles and fix next-env.d.ts reference path
+  ([`b9c49a0`](https://github.com/jupyter-naas/abi/commit/b9c49a0665440dd44bf7ccc6a771e9590ba4719b))
+
+### Features
+
+- **workspace**: Add workspace feature overrides validation and preseeding config
+  ([`ea6c951`](https://github.com/jupyter-naas/abi/commit/ea6c95154f7a239883a8a55a067a993d4e00faef))
+
+- **workspaces**: Let org admins edit features from workspace settings
+  ([`5007e31`](https://github.com/jupyter-naas/abi/commit/5007e31512a24173ba96fcfbf47453f40872ba5d))
+
+- **workspaces**: Reject feature overrides on personal workspaces
+  ([`7f56a3e`](https://github.com/jupyter-naas/abi/commit/7f56a3eb47ade9be8a29c179d694a6c4a4e6faa7))
+
+
 ## v3.1.2 (2026-10-21)
 
 ### Bug Fixes
