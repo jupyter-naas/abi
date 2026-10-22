@@ -1,0 +1,11 @@
+Project context for the security review of ABI (FastAPI backend + Next.js "Nexus" frontend).
+
+Pay particular attention to the bug classes a 2026-09 audit found in this codebase:
+- New or changed FastAPI routes that lack an authentication dependency, or that authenticate but never check the caller owns the workspace, organization, repository or file identified in the path or body (cross-tenant access, IDOR).
+- Identifiers supplied by the caller (workspace_id, repo_id, org_id, user_id) trusted without a membership or role check.
+- Sign-in, registration, OTP and password-reset endpoints: missing rate limiting, user enumeration, open self-registration.
+- JWTs: scoped or short-lived tokens that are accepted as full sessions, missing expiry, signature verification disabled.
+- Default or hard-coded credentials, API keys or SECRET_KEY values.
+- Infrastructure services (Fuseki, Redis, Qdrant, Dagster, MinIO) exposed without authentication in docker-compose or deploy templates.
+- SPARQL built by string concatenation from user input (SPARQL injection).
+- Agent tools that execute code, shell commands or HTTP requests on behalf of a user (command injection, SSRF, sandbox escape).

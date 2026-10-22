@@ -1,0 +1,54 @@
+# AI security review of each pull request's diff with Claude.
+#
+# Catches intent-level bugs the rule-based scanners miss: missing ownership
+# checks, cross-workspace access, auth bypasses in new routes. Advisory: it
+# comments on the PR but does not block (LLM findings have false positives).
+#
+# Needs the `ANTHROPIC_API_KEY` repo secret; skipped cleanly without it.
+#
+# Rollout: limited to the `ci/security-pipeline` branch for now. To enable for
+# every PR from this repository, drop the `github.head_ref == ...` condition.
+# Fork PRs never run here: no secrets, and no access to the self-hosted runner.
+
+name: Security AI review
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: security-ai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  claude-security-review:
+    name: Claude security review
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository
+      && github.head_ref == 'ci/security-pipeline'
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+    steps:
+      - name: Skip without an API key
+        if: env.HAS_KEY != 'true'
+        run: echo "::notice::ANTHROPIC_API_KEY is not set; skipping the Claude security review."
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.HAS_KEY == 'true'
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: anthropics/claude-code-security-review@0c6a49f1fa56a1d472575da86a94dbc1edb78eda # main
+        if: env.HAS_KEY == 'true'
+        with:
+          claude-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          comment-pr: true
+          exclude-directories: docs,.github/security/baselines
+          custom-security-scan-instructions: .github/security/ai-review-instructions.txt
