@@ -168,6 +168,26 @@ def test_configuration_without_seed_is_empty(monkeypatch) -> None:
     assert resp.json()["seeds"] == []
 
 
+def test_configuration_lets_org_admins_edit_features(monkeypatch) -> None:
+    client, service, role = _client(org_role="admin", ws_role="admin")
+    monkeypatch.setattr(ws_api, "require_workspace_access", role)
+    service.get_workspace.return_value = _record()
+
+    body = client.get("/api/workspaces/ws-1/configuration").json()
+
+    assert body["organization_id"] == "org-1"
+    assert body["can_edit_features"] is True
+
+
+def test_configuration_is_read_only_for_workspace_admins(monkeypatch) -> None:
+    # A workspace admin who is only an org member sees the features read-only.
+    client, service, role = _client(org_role="member", ws_role="admin")
+    monkeypatch.setattr(ws_api, "require_workspace_access", role)
+    service.get_workspace.return_value = _record()
+
+    assert client.get("/api/workspaces/ws-1/configuration").json()["can_edit_features"] is False
+
+
 def test_configuration_is_for_admins(monkeypatch) -> None:
     client, _, role = _client(ws_role="member")
     monkeypatch.setattr(ws_api, "require_workspace_access", role)
