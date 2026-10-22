@@ -234,18 +234,31 @@ async def stream_chat_response(
     )
 
     if request.workspace_id:
+        from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_workspace_role
+        from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
+            caller_enabled_class_names,
+            caller_feature_flags,
+            filter_feature_agents,
+        )
         from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__primary_adapter__FastAPI import (
             pick_workspace_chat_agent_id,
             pick_workspace_documents_agent_id,
             pick_workspace_sheets_agent_id,
             pick_workspace_slides_agent_id,
         )
+        from naas_abi_core.services.agent.context import agent_workspace_enabled_class_names
 
         async with AsyncSessionLocal() as db:
             with bind_registry(db) as registry:
                 workspace_agents = await registry.agents.list_workspace_agents(
                     context=request_context(current_user),
                     workspace_id=request.workspace_id,
+                )
+                role = await get_workspace_role(current_user.id, request.workspace_id)
+                flags = await caller_feature_flags(db, request.workspace_id, role)
+                workspace_agents = filter_feature_agents(workspace_agents, flags)
+                agent_workspace_enabled_class_names.set(
+                    caller_enabled_class_names(workspace_agents, flags)
                 )
         resolved_agent = pick_workspace_chat_agent_id(
             workspace_agents, request.agent
@@ -335,6 +348,7 @@ async def stream_chat_response(
                     agent_user_email,
                     agent_user_id,
                     agent_user_name,
+                    agent_workspace_enabled_class_names,
                     agent_workspace_id,
                     coder_workspace_base,
                     coder_workspace_secret,
@@ -358,6 +372,28 @@ async def stream_chat_response(
                 agent_chat_id.set(str(conversation_id))
                 if request.workspace_id is not None:
                     agent_workspace_id.set(str(request.workspace_id))
+                    if agent_workspace_enabled_class_names.get() is None:
+                        from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
+                            get_workspace_role,
+                        )
+                        from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
+                            caller_enabled_class_names,
+                            caller_feature_flags,
+                            filter_feature_agents,
+                        )
+
+                        role = await get_workspace_role(
+                            current_user.id, request.workspace_id
+                        )
+                        flags = await caller_feature_flags(db, request.workspace_id, role)
+                        roster = await registry.agents.list_workspace_agents(
+                            context=request_context(current_user),
+                            workspace_id=request.workspace_id,
+                        )
+                        visible = filter_feature_agents(roster, flags)
+                        agent_workspace_enabled_class_names.set(
+                            caller_enabled_class_names(visible, flags)
+                        )
 
                 # Bind open Slides deck or Documents file + Coder sidecar.
                 client_ctx = request.context if isinstance(request.context, dict) else {}

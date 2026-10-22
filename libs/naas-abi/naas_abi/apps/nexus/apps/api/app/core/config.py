@@ -419,6 +419,8 @@ class WorkspaceSeedConfig(BaseModel):
     # Group in the workspace lists ("Others" when empty). Bootstrap only: applied
     # when the workspace has no group yet, so a group changed in the UI stays.
     group: str | None = Field(default=None, max_length=100)
+    # Client/module workspace default (``external.acme AcmeAgent``). When unset,
+    # sync uses engine ``default_agent`` (typically naas_abi AbiAgent).
     default_agent: str | None = None
     agents: list[str] | None = None
     apps: list[str] | None = None

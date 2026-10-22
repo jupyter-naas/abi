@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
     feature_agent_visible,
+    feature_office_class_names_for_flags,
     filter_feature_agents,
 )
 
@@ -62,3 +63,18 @@ def test_filter_keeps_the_allowed_features_and_the_default() -> None:
 def test_filter_never_drops_the_default_office_agent() -> None:
     rows = [Row("1", APPS, is_default=True)]
     assert filter_feature_agents(rows, {"apps": False}) == rows
+
+
+def test_feature_office_class_names_follow_flags() -> None:
+    registry = {
+        APPS: object(),
+        ONTOLOGY: object(),
+        "naas_abi.agents.SearchAgent/SearchAgent": object(),
+    }
+    names = feature_office_class_names_for_flags(
+        {"apps": True, "ontology": False, "search": True},
+        registry,
+    )
+    assert APPS in names
+    assert ONTOLOGY not in names
+    assert "naas_abi.agents.SearchAgent/SearchAgent" in names

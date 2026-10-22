@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import threading
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from typing import Any
 from dataclasses import replace
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -211,6 +212,16 @@ def _get_engine_default_agent_class_name() -> str | None:
     except Exception:
         logger.debug("Could not resolve engine default_agent", exc_info=True)
     return None
+
+
+def _resolve_workspace_default_class_name(
+    known_class_names: Mapping[str, Any],
+) -> str | None:
+    """Workspace chat default: engine ``default_agent``, then naas_abi Abi."""
+    resolved = _get_engine_default_agent_class_name()
+    if resolved:
+        return resolved
+    return _nexus_abi_class_name(known_class_names)
 
 
 def pick_workspace_chat_agent_id(
@@ -737,11 +748,11 @@ async def _reconcile_workspace_agents(
     if seed is not None and seed.agents is not None:
         seeded_class_names = resolve_agent_refs(seed.agents, known_class_names)
 
-    default_class_name: str | None = None
+    default_class_name = _resolve_workspace_default_class_name(known_class_names)
     if seed is not None and seed.default_agent:
-        default_class_name = resolve_agent_ref(seed.default_agent, known_class_names)
-    if default_class_name is None:
-        default_class_name = _get_engine_default_agent_class_name()
+        seed_default = resolve_agent_ref(seed.default_agent, known_class_names)
+        if seed_default:
+            default_class_name = seed_default
 
     # An empty roster from a missing seed plus a failed default resolve must
     # not disable every row. That is how a workspace that exists in the DB
@@ -750,6 +761,20 @@ async def _reconcile_workspace_agents(
     roster, align_enabled_to_roster = _roster_alignment(
         seeded_class_names, default_class_name, class_name_to_agent_class
     )
+
+    from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
+        feature_office_class_names_for_flags,
+        workspace_union_feature_flags,
+    )
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as db:
+        workspace_flags = await workspace_union_feature_flags(db, workspace_id)
+    roster.update(
+        feature_office_class_names_for_flags(workspace_flags, known_class_names)
+    )
+    if roster:
+        align_enabled_to_roster = True
 
     # Persist any newly discovered agent classes to the database.
     for class_name, agent_cls in class_name_to_agent_class.items():

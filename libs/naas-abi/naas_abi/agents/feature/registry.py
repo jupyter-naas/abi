@@ -101,6 +101,27 @@ FEATURE_AGENTS: tuple[FeatureAgentSpec, ...] = (
     ),
 )
 
+# Office agents with feature keys not yet in the competency eval suite.
+ADDITIONAL_FEATURE_OFFICE_AGENTS: tuple[FeatureAgentSpec, ...] = (
+    FeatureAgentSpec(
+        "Documents",
+        "DocumentsAgent",
+        ("documents",),
+        "business documents: HTML pages, Monaco editing, export",
+    ),
+    FeatureAgentSpec(
+        "Sheets",
+        "SheetsAgent",
+        ("sheets",),
+        "spreadsheets and workbooks: HTML tables, XLSX export",
+    ),
+)
+
+
+def feature_office_agent_specs() -> tuple[FeatureAgentSpec, ...]:
+    """Every naas_abi office agent keyed to a Nexus feature flag."""
+    return FEATURE_AGENTS + ADDITIONAL_FEATURE_OFFICE_AGENTS
+
 
 def spec_for_agent(name: str) -> FeatureAgentSpec:
     for spec in FEATURE_AGENTS:

@@ -14,11 +14,13 @@ export type FeatureOfficeAgentSpec = {
  * Home and Chat have no row: they use the workspace default (Abi when the
  * workspace has none, see pickWorkspaceDefaultAgent). Keep in sync with
  * FEATURE_AGENTS in naas_abi/agents/feature/registry.py (a Python test checks
- * both sides). An agent only binds when the workspace roster lists it;
- * otherwise the pane keeps the workspace default.
+ * both sides). Sync also enables office agents when the workspace feature is on;
+ * the pane binds one when that agent is enabled and the caller has the feature.
  */
 export const FEATURE_OFFICE_AGENTS: Partial<Record<FeatureKey, FeatureOfficeAgentSpec>> = {
   slides: { name: 'Slides', className: 'SlidesAgent' },
+  documents: { name: 'Documents', className: 'DocumentsAgent' },
+  sheets: { name: 'Sheets', className: 'SheetsAgent' },
   apps: { name: 'Apps', className: 'AppsAgent' },
   marketplace: { name: 'Marketplace', className: 'MarketplaceAgent' },
   ontology: { name: 'Ontology', className: 'OntologyAgent' },
