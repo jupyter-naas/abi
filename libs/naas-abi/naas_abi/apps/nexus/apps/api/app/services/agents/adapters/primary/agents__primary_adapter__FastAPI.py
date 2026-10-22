@@ -170,6 +170,19 @@ async def _workspace_slug(workspace_id: str) -> str | None:
         return result.scalar_one_or_none()
 
 
+async def _workspace_catalog_seed(workspace_id: str) -> dict | None:
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import parse_catalog_seed
+    from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(WorkspaceModel.catalog_seed).where(WorkspaceModel.id == workspace_id)
+        )
+        raw = result.scalar_one_or_none()
+    return parse_catalog_seed(raw)
+
+
 async def _caller_feature_flags(workspace_id: str, role: str | None) -> dict[str, bool]:
     """``caller_feature_flags`` on a session of our own (routes hold none)."""
     from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
@@ -743,14 +756,22 @@ async def _reconcile_workspace_agents(
     # Workspace refs ("module Agent") resolve against in-process and remote agents.
     known_class_names = {**class_name_to_agent_class, **dict.fromkeys(remote_by_class_name)}
 
-    seed = workspace_seed_for_slug(await _workspace_slug(workspace_id))
+    slug = await _workspace_slug(workspace_id)
+    catalog_seed = await _workspace_catalog_seed(workspace_id)
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import (
+        effective_seed_agents,
+        effective_seed_default_agent,
+    )
+
+    agent_refs = effective_seed_agents(slug, catalog_seed)
     seeded_class_names: set[str] | None = None
-    if seed is not None and seed.agents is not None:
-        seeded_class_names = resolve_agent_refs(seed.agents, known_class_names)
+    if agent_refs is not None:
+        seeded_class_names = resolve_agent_refs(agent_refs, known_class_names)
 
     default_class_name = _resolve_workspace_default_class_name(known_class_names)
-    if seed is not None and seed.default_agent:
-        seed_default = resolve_agent_ref(seed.default_agent, known_class_names)
+    seed_default_ref = effective_seed_default_agent(slug, catalog_seed)
+    if seed_default_ref:
+        seed_default = resolve_agent_ref(seed_default_ref, known_class_names)
         if seed_default:
             default_class_name = seed_default
 

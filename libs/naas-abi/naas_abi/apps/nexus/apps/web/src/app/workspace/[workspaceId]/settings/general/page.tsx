@@ -33,6 +33,7 @@ import {
 import { BackgroundImageEditor } from '../../home/components/background-image-editor';
 import { resolveDeskImageUrl } from '../../home/home-desk';
 import { WorkspaceConfiguration } from './workspace-configuration';
+import { WorkspaceOwnerSelect } from '@/app/organizations/[orgId]/settings/workspaces/workspace-owner-select';
 import '@/app/account/profile/profile.css';
 import './general.css';
 
@@ -76,6 +77,7 @@ export default function GeneralSettingsPage() {
   const [name, setName] = useState(workspace?.name ?? '');
   const [description, setDescription] = useState(workspace?.description ?? '');
   const [group, setGroup] = useState(workspace?.group ?? '');
+  const [ownerId, setOwnerId] = useState(workspace?.ownerId ?? '');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [detailsError, setDetailsError] = useState<string | null>(null);
@@ -138,10 +140,15 @@ export default function GeneralSettingsPage() {
   const trimmedName = name.trim();
   const trimmedDescription = description.trim();
   const trimmedGroup = group.trim();
+  useEffect(() => {
+    setOwnerId(workspace?.ownerId ?? '');
+  }, [workspace?.ownerId]);
+
   const dirty =
     trimmedName !== workspace.name ||
     trimmedDescription !== (workspace.description ?? '') ||
-    trimmedGroup !== (workspace.group ?? '');
+    trimmedGroup !== (workspace.group ?? '') ||
+    (workspace.organizationId ? ownerId !== (workspace.ownerId ?? '') : false);
 
   /** Save changes (top right): the workspace name, group and description. */
   const handleSaveDetails = async () => {
@@ -159,6 +166,7 @@ export default function GeneralSettingsPage() {
           name: trimmedName,
           description: trimmedDescription,
           workspace_group: trimmedGroup,
+          ...(workspace.organizationId && ownerId ? { owner_id: ownerId } : {}),
         }),
       });
       if (!res.ok) throw new Error(await readApiError(res, 'Failed to save the workspace'));
@@ -166,6 +174,7 @@ export default function GeneralSettingsPage() {
         name: trimmedName,
         description: trimmedDescription,
         group: trimmedGroup || undefined,
+        ...(workspace.organizationId && ownerId ? { ownerId } : {}),
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -371,6 +380,17 @@ export default function GeneralSettingsPage() {
               its id.
             </span>
           </div>
+          {workspace.organizationId && canEdit && (
+            <div className="account-profile-field">
+              <label className="account-profile-field-label">Owner</label>
+              <WorkspaceOwnerSelect
+                orgId={workspace.organizationId}
+                value={ownerId}
+                onChange={setOwnerId}
+                disabled={saving}
+              />
+            </div>
+          )}
         </div>
         <div className="account-profile-field">
           <div className="account-profile-bio-header">

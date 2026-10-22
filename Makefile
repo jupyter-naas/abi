@@ -472,17 +472,26 @@ chat-youtube-agent: deps
 chat-zoho-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.zoho ZohoAgent
 
-pull-request-description: deps
-	@ echo "generate the pull request description please." | LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.git PullRequestDescriptionAgent
+# The Git agents need no module fabric: run them with NATS off, so they work
+# whether this project's broker is down or another project's holds its port
+# (nats: 'Authorization Violation').
+NO_NATS_OVERLAY := .abi/no-nats.overlay.yaml
+git_agent_env = ABI_CONFIG_OVERLAY=$(CURDIR)/$(NO_NATS_OVERLAY) LOG_LEVEL=$(log_level)
 
-commit:
-	@ echo "commit the changes please." | LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.git GitAgent
+$(NO_NATS_OVERLAY):
+	@ mkdir -p $(@D) && printf 'nats: null\n' > $@
 
-push:
-	@ echo "commit the changes if there are any and push them please." | LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.git GitAgent
+pull-request-description: deps $(NO_NATS_OVERLAY)
+	@ echo "generate the pull request description please." | $(git_agent_env) uv run abi chat naas_abi_marketplace.applications.git PullRequestDescriptionAgent
 
-pr:
-	@ echo "open the pull request or update it if it already exists please." | LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.git GitAgent
+commit: $(NO_NATS_OVERLAY)
+	@ echo "commit the changes please." | $(git_agent_env) uv run abi chat naas_abi_marketplace.applications.git GitAgent
+
+push: $(NO_NATS_OVERLAY)
+	@ echo "commit the changes if there are any and push them please." | $(git_agent_env) uv run abi chat naas_abi_marketplace.applications.git GitAgent
+
+pr: $(NO_NATS_OVERLAY)
+	@ echo "open the pull request or update it if it already exists please." | $(git_agent_env) uv run abi chat naas_abi_marketplace.applications.git GitAgent
 
 # =============================================================================
 # CHAT WITH MARKETPLACE DOMAINS AGENTS

@@ -19,6 +19,13 @@ import {
   type FeatureChoice,
   type WorkspaceFeatureCatalog,
 } from '../workspace-features-table';
+import { WorkspaceOwnerSelect } from '../workspace-owner-select';
+import {
+  catalogSeedPayload,
+  WorkspaceInstancesSection,
+  type CatalogSeedDraft,
+} from '../workspace-instances-section';
+import { useAuthStore } from '@/stores/auth';
 import { slugify, WORKSPACE_SLUG } from './slug';
 import '@/app/account/profile/profile.css';
 import '@/app/workspace/[workspaceId]/settings/general/general.css';
@@ -59,6 +66,7 @@ export default function OrgCreateWorkspacePage() {
   const router = useRouter();
   const orgId = params.orgId as string;
   const listHref = orgSettingsSectionPath(orgId, 'workspaces');
+  const currentUserId = useAuthStore((state) => state.user?.id);
 
   const [name, setName] = useState('');
   const [group, setGroup] = useState('');
@@ -74,6 +82,8 @@ export default function OrgCreateWorkspacePage() {
   const [featureCatalog, setFeatureCatalog] = useState<WorkspaceFeatureCatalog | null>(null);
   const [featureChoices, setFeatureChoices] = useState<Record<string, FeatureChoice>>({});
   const [featureCatalogFailed, setFeatureCatalogFailed] = useState(false);
+  const [ownerId, setOwnerId] = useState('');
+  const [catalogSeedDraft, setCatalogSeedDraft] = useState<CatalogSeedDraft>({});
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -98,6 +108,10 @@ export default function OrgCreateWorkspacePage() {
       cancelled = true;
     };
   }, [orgId]);
+
+  useEffect(() => {
+    if (currentUserId && !ownerId) setOwnerId(currentUserId);
+  }, [currentUserId, ownerId]);
 
   // Feature catalog and role defaults, for the Features section.
   useEffect(() => {
@@ -161,6 +175,7 @@ export default function OrgCreateWorkspacePage() {
       featureChoices,
       configurableFeatures(featureCatalog)
     );
+    const catalog_seed = catalogSeedPayload(catalogSeedDraft);
     try {
       const res = await authFetch('/api/workspaces', {
         method: 'POST',
@@ -169,12 +184,14 @@ export default function OrgCreateWorkspacePage() {
           name: trimmedName,
           slug: effectiveSlug,
           organization_id: orgId,
+          owner_id: ownerId || currentUserId || undefined,
           workspace_group: group.trim() || null,
           description: description.trim() || null,
           primary_color: primaryColor,
           accent_color: accentColor || null,
           // Nothing changed: keep following the role defaults and the config.
           feature_overrides: Object.keys(featureOverrides).length ? featureOverrides : null,
+          catalog_seed,
         }),
       });
       if (!res.ok) {
@@ -215,7 +232,7 @@ export default function OrgCreateWorkspacePage() {
     >
       <AccountPageHeader
         title="Create workspace"
-        subtitle="Add a workspace to this organization. You become its owner; org owners and admins reach it too."
+        subtitle="Add a workspace to this organization. Pick an owner, features, and optional instances; org owners and admins reach every workspace."
         actions={
           <div className="org-create-workspace-actions">
             <button
@@ -358,6 +375,15 @@ export default function OrgCreateWorkspacePage() {
             )}
           </div>
           <div className="account-profile-field">
+            <label className="account-profile-field-label">Owner</label>
+            <WorkspaceOwnerSelect
+              orgId={orgId}
+              value={ownerId}
+              onChange={setOwnerId}
+              disabled={creating}
+            />
+          </div>
+          <div className="account-profile-field">
             <label className="account-profile-field-label" htmlFor="create-workspace-slug">
               Slug
             </label>
@@ -431,6 +457,15 @@ export default function OrgCreateWorkspacePage() {
           <p className="text-sm text-muted-foreground">Loading features...</p>
         )}
       </SettingsSection>
+
+      <WorkspaceInstancesSection
+        orgId={orgId}
+        featureCatalog={featureCatalog}
+        featureChoices={featureChoices}
+        draft={catalogSeedDraft}
+        onDraftChange={setCatalogSeedDraft}
+        disabled={creating}
+      />
 
       <SettingsSection
         title={

@@ -618,9 +618,20 @@ async def list_apps(
     )
     seed_apps: set[str] = set()
     if workspace_id:
-        seed = workspace_seed_for_slug(workspace_slug)
-        if seed is not None and seed.apps:
-            seed_apps = {str(app_id).strip() for app_id in seed.apps if str(app_id).strip()}
+        from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+        from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import (
+            effective_seed_apps,
+            parse_catalog_seed,
+        )
+        from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
+
+        catalog_seed = None
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(WorkspaceModel.catalog_seed).where(WorkspaceModel.id == workspace_id)
+            )
+            catalog_seed = parse_catalog_seed(result.scalar_one_or_none())
+        seed_apps = effective_seed_apps(workspace_slug, catalog_seed)
 
     results: list[AppInfo] = []
     for app in catalog:

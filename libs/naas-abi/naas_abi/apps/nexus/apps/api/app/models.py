@@ -262,6 +262,8 @@ class WorkspaceModel(Base):
     workspace_group = Column(String(100), nullable=True)  # workspace lists ("Others" if empty)
     # JSON {feature: bool} saved in Organization Settings; NULL = config overrides.
     feature_overrides = Column(Text, nullable=True)
+    # JSON catalog chosen at workspace create (agents, apps, ontologies, …).
+    catalog_seed = Column(Text, nullable=True)
 
     # Drive-scope feature flags
     platform_drive_enabled = Column(Boolean, nullable=False, default=False)
