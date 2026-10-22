@@ -169,8 +169,10 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
     if (!needsAgents || !currentWorkspaceId) return;
     const loadAgents = async () => {
       const { ensureAgentsSynced, useAgentsStore } = await import('@/stores/agents');
-      // The pane binds per-section office agents: pick up roster changes once.
-      if (contextPanelOpen) await ensureAgentsSynced(currentWorkspaceId);
+      // Chat and agent settings need a reconciled roster; Apps only need GET.
+      if (contextPanelOpen || pathNeedsAgentCatalog(pathname)) {
+        await ensureAgentsSynced(currentWorkspaceId);
+      }
       await useAgentsStore.getState().fetchAgents(currentWorkspaceId);
     };
     const loadSkills = async () => {
@@ -179,7 +181,7 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
     };
     loadAgents();
     loadSkills();
-  }, [currentWorkspaceId, contextPanelOpen, needsAgents]);
+  }, [currentWorkspaceId, contextPanelOpen, needsAgents, pathname]);
 
   // Keyboard shortcut: Cmd+K to toggle the side chat pane (desktop only).
   // Capture phase so Monaco / editors do not swallow ⌘K as a chord starter.

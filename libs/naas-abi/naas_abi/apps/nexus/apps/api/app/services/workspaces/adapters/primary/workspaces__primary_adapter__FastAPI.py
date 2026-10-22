@@ -78,6 +78,13 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     WorkspaceRecord,
     WorkspaceUpdateInput,
 )
+from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__primary_adapter__FastAPI import (
+    seed_workspace_agents,
+)
+from naas_abi.apps.nexus.apps.api.app.services.registry import (
+    ServiceRegistry,
+    get_service_registry,
+)
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
     WorkspaceMemberAlreadyExistsError,
     WorkspaceService,
@@ -369,6 +376,7 @@ async def create_workspace(
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
     org_service: OrganizationService = Depends(get_organization_service),
+    registry: ServiceRegistry = Depends(get_service_registry),
 ) -> Workspace:
     if workspace.organization_id:
         # Only the organization's owners and admins add workspaces to it.
@@ -423,6 +431,11 @@ async def create_workspace(
             )
             or record
         )
+    await seed_workspace_agents(
+        workspace_id=record.id,
+        current_user=current_user,
+        agent_service=registry.agents,
+    )
     return _to_schema(
         record,
         "owner",

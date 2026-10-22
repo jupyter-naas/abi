@@ -926,42 +926,88 @@ async def _reconcile_workspace_agents(
     return reconciled
 
 
-@router.get("/")
-async def list_agents(
-    workspace_id: str | None = None,
-    current_user: User = Depends(get_current_user_required),
-    agent_service: AgentService = Depends(get_agent_service),
+async def _enriched_workspace_agents(
+    *,
+    workspace_id: str,
+    current_user: User,
+    agent_service: AgentService,
+    role: str,
+    always_reconcile: bool,
 ) -> list[AgentRecord]:
-    """Read-only listing of a workspace's persisted agents, enriched for display.
-
-    Scoped to the caller: the naas_abi office agents of a feature this user
-    cannot open are left out (see ``core.agent_feature_access``), so two
-    members of one workspace can get different rosters.
-
-    Does not create, delete or otherwise mutate agent records; call
-    ``POST /sync`` to reconcile the database with the code class registry.
-    """
-    if not workspace_id:
-        return []
-
-    role = await require_workspace_access(current_user.id, workspace_id)
-
-    # Retrieve agent records from the database (fast)
-    agent_list = await agent_service.list_workspace_agents(
-        context=request_context(current_user),
-        workspace_id=workspace_id,
-    )
-
-    # Retrieve the cached class registry, expensive only on the very first call
-    # (triggers dynamic Python imports for all agent modules).  Subsequent calls
-    # return instantly from the process-level cache.
+    """Load workspace agents, optionally reconcile, enrich, and apply feature scoping."""
     class_name_to_agent_class = _get_agent_class_registry()
+
+    async with _workspace_sync_lock(workspace_id):
+        agent_list = await agent_service.list_workspace_agents(
+            context=request_context(current_user),
+            workspace_id=workspace_id,
+        )
+        if always_reconcile or not agent_list:
+            if not agent_list:
+                logger.info(
+                    "Auto-reconciling empty agent roster for workspace=%s",
+                    workspace_id,
+                )
+            agent_list = await _reconcile_workspace_agents(
+                agent_service=agent_service,
+                current_user=current_user,
+                workspace_id=workspace_id,
+                agent_list=agent_list,
+                class_name_to_agent_class=class_name_to_agent_class,
+                remote_agents=await _discovered_remote_agents(),
+            )
 
     flags = await _caller_feature_flags(workspace_id, role)
     return [
         _enrich_agent(agent, class_name_to_agent_class)
         for agent in filter_feature_agents(agent_list, flags)
     ]
+
+
+async def seed_workspace_agents(
+    *,
+    workspace_id: str,
+    current_user: User,
+    agent_service: AgentService,
+) -> None:
+    """Populate ``agent_configs`` when a workspace is first created."""
+    role = await require_workspace_access(current_user.id, workspace_id)
+    await _enriched_workspace_agents(
+        workspace_id=workspace_id,
+        current_user=current_user,
+        agent_service=agent_service,
+        role=role,
+        always_reconcile=True,
+    )
+
+
+@router.get("/")
+async def list_agents(
+    workspace_id: str | None = None,
+    current_user: User = Depends(get_current_user_required),
+    agent_service: AgentService = Depends(get_agent_service),
+) -> list[AgentRecord]:
+    """List a workspace's persisted agents, enriched for display.
+
+    Scoped to the caller: the naas_abi office agents of a feature this user
+    cannot open are left out (see ``core.agent_feature_access``), so two
+    members of one workspace can get different rosters.
+
+    When the workspace has no persisted agent rows yet, reconciles once with
+    the code class registry (same work as ``POST /sync``) before returning.
+    Use ``POST /sync`` when config rosters change and rows already exist.
+    """
+    if not workspace_id:
+        return []
+
+    role = await require_workspace_access(current_user.id, workspace_id)
+    return await _enriched_workspace_agents(
+        workspace_id=workspace_id,
+        current_user=current_user,
+        agent_service=agent_service,
+        role=role,
+        always_reconcile=False,
+    )
 
 
 @router.post("/sync")
@@ -985,29 +1031,13 @@ async def sync_agents(
         return []
 
     role = await require_workspace_access(current_user.id, workspace_id)
-
-    class_name_to_agent_class = _get_agent_class_registry()
-
-    async with _workspace_sync_lock(workspace_id):
-        agent_list = await agent_service.list_workspace_agents(
-            context=request_context(current_user),
-            workspace_id=workspace_id,
-        )
-
-        agent_list = await _reconcile_workspace_agents(
-            agent_service=agent_service,
-            current_user=current_user,
-            workspace_id=workspace_id,
-            agent_list=agent_list,
-            class_name_to_agent_class=class_name_to_agent_class,
-            remote_agents=await _discovered_remote_agents(),
-        )
-
-    flags = await _caller_feature_flags(workspace_id, role)
-    return [
-        _enrich_agent(agent, class_name_to_agent_class)
-        for agent in filter_feature_agents(agent_list, flags)
-    ]
+    return await _enriched_workspace_agents(
+        workspace_id=workspace_id,
+        current_user=current_user,
+        agent_service=agent_service,
+        role=role,
+        always_reconcile=True,
+    )
 
 
 @router.post("/")
