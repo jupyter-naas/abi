@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v2.93.0 (2026-10-22)
+
+### Bug Fixes
+
+- **nexus-web**: Restore next-env.d.ts reference to .next types
+  ([`c3feb5b`](https://github.com/jupyter-naas/abi/commit/c3feb5bc2e0671681c62ae5bad107cf802a19c18))
+
+### Chores
+
+- Update lockfiles and fix next-env.d.ts reference path
+  ([`b019740`](https://github.com/jupyter-naas/abi/commit/b01974069bf9692102c3dcb347fd099d61bfa8a9))
+
+### Features
+
+- **workspaces**: Let org admins edit features from workspace settings
+  ([`132af82`](https://github.com/jupyter-naas/abi/commit/132af82bf165fd394ae78fdcb30c1a06a79daf3e))
+
+
 ## v2.92.0 (2026-10-21)
 
 ### Features
