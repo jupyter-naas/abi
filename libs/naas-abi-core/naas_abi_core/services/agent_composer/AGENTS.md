@@ -137,6 +137,12 @@ root (`engine.services.document` of an `Engine`: records go to the namespace
 composer touches nothing. Records saved through one process are read by the
 others.
 
+**Trust:** over NATS the Document Service has no per-module authorization (namespaces are
+explicit on the wire, see `services/document/AGENTS.md`), so any SDK module that can reach
+it can write or replace composer records. Records can name tools and engine secrets: treat
+write access to the document namespace `naas_abi_core.services.agent_composer` as the right to
+compose agents until the Document Service scopes namespaces per module.
+
 ## Tests
 
 ```bash

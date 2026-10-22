@@ -575,13 +575,16 @@ def _real_secret(tmp_path, monkeypatch, *, base64_bundle: bool):
         DotenvSecretSecondaryAdaptor,
     )
     from naas_abi_core.services.secret.Secret import Secret
+    from naas_abi_core.services.secret.SecretPorts import ISecretAdapter
 
     path = tmp_path / ".env"
     path.write_text("NATS_JWT_SECRET='orig'\nB64=\n")
     monkeypatch.delenv("ENGINE_ONLY", raising=False)
     monkeypatch.setenv("ENGINE_ONLY", "engine-only-value")
     dotenv = DotenvSecretSecondaryAdaptor(str(path))
-    adapters = [Base64Secret(dotenv, "B64"), dotenv] if base64_bundle else [dotenv]
+    adapters: list[ISecretAdapter] = (
+        [Base64Secret(dotenv, "B64"), dotenv] if base64_bundle else [dotenv]
+    )
     return path, Secret(adapters)
 
 

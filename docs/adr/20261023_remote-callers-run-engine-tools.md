@@ -243,4 +243,7 @@ tools its own process loads or a module serves.
 - Out of scope: per-module broker users, streaming results, client engines' `resolve` proxy
   (above), and the composer's own handling of secret references (records may still name any
   engine secret for a tool the process holds; restricting it to keys marked secret and to a
-  per-tool allow list belongs with records).
+  per-tool allow list belongs with records), and who may write records: over NATS the
+  Document Service has no per-module authorization, so any SDK module can write composer
+  records (namespace `naas_abi_core.services.agent_composer`). Records are not served to a
+  caller yet; scoping that namespace per module belongs with the endpoint that does.

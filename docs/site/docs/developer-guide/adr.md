@@ -7,7 +7,7 @@ title: "Architecture decision records"
 
 # Architecture decision records
 
-An ADR records a decision about a boundary, an ownership, cross-cutting configuration or a major trade-off: its context, the decision and its consequences. They live in [`docs/adr/`](https://github.com/jupyter-naas/abi/tree/main/docs/adr), one file each, named `YYYYMMDD_topic.md`; add one when a change makes such a decision (see [Contribute to ABI](/developer-guide/contributing/overview#conventions)). 51 are listed here, oldest first within a group.
+An ADR records a decision about a boundary, an ownership, cross-cutting configuration or a major trade-off: its context, the decision and its consequences. They live in [`docs/adr/`](https://github.com/jupyter-naas/abi/tree/main/docs/adr), one file each, named `YYYYMMDD_topic.md`; add one when a change makes such a decision (see [Contribute to ABI](/developer-guide/contributing/overview#conventions)). 56 are listed here, oldest first within a group.
 
 ## Deployment, releases and documentation
 
@@ -71,3 +71,11 @@ An ADR records a decision about a boundary, an ownership, cross-cutting configur
 - [Stop the process when NATS is gone for good](https://github.com/jupyter-naas/abi/blob/main/docs/adr/20261008_stop-on-nats-loss.md) (2026-10-08)
 - [Apps served by remote modules over NATS](https://github.com/jupyter-naas/abi/blob/main/docs/adr/20261012_remote-module-apps.md) (2026-10-12)
 - [Modules sign as themselves, register as themselves, and stay off the engine's subjects](https://github.com/jupyter-naas/abi/blob/main/docs/adr/20261014_module-identities.md) (2026-10-14)
+- [The tool catalog over NATS: list, get and search, read only](https://github.com/jupyter-naas/abi/blob/main/docs/adr/20261021_tool-catalog-over-nats.md) (2026-10-21)
+- [Tools published by SDK modules, found and run over NATS](https://github.com/jupyter-naas/abi/blob/main/docs/adr/20261022_remote-module-tools.md) (2026-10-22)
+- [Remote callers run the engine's tools over NATS](https://github.com/jupyter-naas/abi/blob/main/docs/adr/20261023_remote-callers-run-engine-tools.md) (2026-10-23)
+- [The engine's secret service is closed to SDK modules](https://github.com/jupyter-naas/abi/blob/main/docs/adr/20261024_secret-service-closed-to-sdk-modules.md) (2026-10-24)
+
+## Other
+
+- [A shared tool registry for composing agents from records and discovering tools at runtime](https://github.com/jupyter-naas/abi/blob/main/docs/adr/20260923_tool-registry-and-agent-composition.md) (2026-09-23)
