@@ -7,12 +7,15 @@ from typing import Any
 from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
 from naas_abi.apps.nexus.apps.api.app.models import (
     BoardIterationModel,
+    BoardSettingsModel,
     BoardTaskActivityModel,
     BoardTaskCommentModel,
     BoardTaskModel,
 )
 from naas_abi.apps.nexus.apps.api.app.services.board.board__schema import (
     ActivityEntry,
+    BoardSettings,
+    Choice,
     Comment,
     Iteration,
     Task,
@@ -50,9 +53,48 @@ def _iteration(row: BoardIterationModel) -> Iteration:
         id=str(row.id),
         workspace_id=str(row.workspace_id),
         start_date=row.start_date,  # type: ignore[arg-type]
+        end_date=row.end_date,  # type: ignore[arg-type]
         goal=str(row.goal or ""),
         created_by=row.created_by,  # type: ignore[arg-type]
         created_at=row.created_at,  # type: ignore[arg-type]
+        updated_by=row.updated_by,  # type: ignore[arg-type]
+        updated_at=row.updated_at,  # type: ignore[arg-type]
+    )
+
+
+def _settings_to_json(settings: BoardSettings) -> str:
+    return json.dumps(
+        {
+            "iteration_weeks": settings.iteration_weeks,
+            "iteration_start_day": settings.iteration_start_day,
+            "iteration_anchor": settings.iteration_anchor.isoformat(),
+            "stages": [vars(c) for c in settings.stages],
+            "priorities": [vars(c) for c in settings.priorities],
+            "default_stage": settings.default_stage,
+            "suggested_labels": list(settings.suggested_labels),
+        }
+    )
+
+
+def _settings(row: BoardSettingsModel) -> BoardSettings:
+    data = _json_value(row.data) or {}
+    defaults = BoardSettings()
+
+    def choices(raw: Any, fallback: tuple[Choice, ...]) -> tuple[Choice, ...]:
+        if not isinstance(raw, list) or not raw:
+            return fallback
+        return tuple(Choice(str(c["key"]), str(c["label"]), str(c["color"])) for c in raw)
+
+    return BoardSettings(
+        iteration_weeks=int(data.get("iteration_weeks", defaults.iteration_weeks)),
+        iteration_start_day=int(data.get("iteration_start_day", defaults.iteration_start_day)),
+        iteration_anchor=date.fromisoformat(
+            data.get("iteration_anchor", defaults.iteration_anchor.isoformat())
+        ),
+        stages=choices(data.get("stages"), defaults.stages),
+        priorities=choices(data.get("priorities"), defaults.priorities),
+        default_stage=str(data.get("default_stage", defaults.default_stage)),
+        suggested_labels=_json_list(json.dumps(data.get("suggested_labels", []))),
         updated_by=row.updated_by,  # type: ignore[arg-type]
         updated_at=row.updated_at,  # type: ignore[arg-type]
     )
@@ -80,6 +122,22 @@ def _task(row: BoardTaskModel) -> Task:
 
 
 class PostgresBoardStore(BoardStorePort):
+    async def get_settings(self, workspace_id: str) -> BoardSettings | None:
+        async with AsyncSessionLocal() as db:
+            row = await db.get(BoardSettingsModel, workspace_id)
+            return _settings(row) if row is not None else None
+
+    async def save_settings(self, workspace_id: str, settings: BoardSettings) -> None:
+        async with AsyncSessionLocal() as db:
+            row = await db.get(BoardSettingsModel, workspace_id)
+            if row is None:
+                row = BoardSettingsModel(workspace_id=workspace_id)
+                db.add(row)
+            row.data = _settings_to_json(settings)  # type: ignore[assignment]
+            row.updated_by = settings.updated_by  # type: ignore[assignment]
+            row.updated_at = settings.updated_at  # type: ignore[assignment]
+            await db.commit()
+
     async def list_iterations(self, workspace_id: str) -> list[Iteration]:
         async with AsyncSessionLocal() as db:
             result = await db.execute(
@@ -114,6 +172,7 @@ class PostgresBoardStore(BoardStorePort):
                         id=iteration.id,
                         workspace_id=iteration.workspace_id,
                         start_date=iteration.start_date,
+                        end_date=iteration.end_date,
                         goal=iteration.goal,
                         created_by=iteration.created_by,
                         created_at=iteration.created_at,

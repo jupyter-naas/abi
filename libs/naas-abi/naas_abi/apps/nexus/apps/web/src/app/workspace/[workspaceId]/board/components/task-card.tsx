@@ -3,7 +3,7 @@
 import { CalendarDays, MessageSquareText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PropertyTags } from '@/components/database-view/primitives';
-import { PRIORITY_LABELS, type BoardTask } from '@/lib/board';
+import { DONE_STAGE, choiceColor, choiceLabel, type BoardChoice, type BoardTask } from '@/lib/board';
 import type { TaskPropertyKey, TaskSchema } from '../lib/task-schema';
 
 function initials(name: string): string {
@@ -26,7 +26,7 @@ export function Avatars({ names }: { names: string[] }) {
 }
 
 export function isOverdue(task: BoardTask, today: string): boolean {
-  return !!task.due_date && task.stage !== 'done' && task.due_date < today;
+  return !!task.due_date && task.stage !== DONE_STAGE && task.due_date < today;
 }
 
 /** One property of a task, as list, table and card cells show it. */
@@ -34,20 +34,22 @@ export function TaskPropertyValue({
   task,
   propertyKey,
   schema,
+  priorities,
   today,
   className,
 }: {
   task: BoardTask;
   propertyKey: TaskPropertyKey;
   schema: TaskSchema;
+  priorities: BoardChoice[];
   today: string;
   className?: string;
 }) {
   const values = schema.propertyValues(task, propertyKey);
   if (propertyKey === 'priority' && task.priority) {
     return (
-      <span className={cn('board-tag', `board-priority-${task.priority}`, className)}>
-        {PRIORITY_LABELS[task.priority]}
+      <span className={cn('board-tag', `board-color-${choiceColor(priorities, task.priority)}`, className)}>
+        {choiceLabel(priorities, task.priority)}
       </span>
     );
   }
@@ -75,12 +77,14 @@ export function TaskCard({
   task,
   visible,
   schema,
+  priorities,
   today,
   onOpen,
 }: {
   task: BoardTask;
   visible: TaskPropertyKey[];
   schema: TaskSchema;
+  priorities: BoardChoice[];
   today: string;
   onOpen: () => void;
 }) {
@@ -106,7 +110,14 @@ export function TaskCard({
       {shown.length > 0 && (
         <div className="board-task-card-props">
           {shown.map((key) => (
-            <TaskPropertyValue key={key} task={task} propertyKey={key} schema={schema} today={today} />
+            <TaskPropertyValue
+              key={key}
+              task={task}
+              propertyKey={key}
+              schema={schema}
+              priorities={priorities}
+              today={today}
+            />
           ))}
         </div>
       )}

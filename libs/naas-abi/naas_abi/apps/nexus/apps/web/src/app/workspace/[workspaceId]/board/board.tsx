@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { Columns3, List, Plus, SquareKanban, Table2, UserRound, X } from 'lucide-react';
+import { CalendarDays, Columns3, Flag, LayoutGrid, Plus, SquareKanban, Table2, Tag, UserRound, X } from 'lucide-react';
 import { Header } from '@/components/shell/header';
 import { useConfirm, usePrompt } from '@/components/ui/dialogs';
 import { ViewBar, type ViewTypeDef } from '@/components/database-view/view-bar';
@@ -10,15 +10,23 @@ import { DatabaseBody } from '@/components/database-view/views';
 import { useDatabaseViews } from '@/components/database-view/use-database-views';
 import type { RecordGroup } from '@/components/database-view/model';
 import {
+  BOARD_SCOPES,
+  DONE_STAGE,
+  INBOX_STAGE,
+  NO_LABEL,
+  NO_PRIORITY,
   SCOPE_LABELS,
-  STAGE_LABELS,
   UNASSIGNED,
   boardPath,
+  boardSettingsPath,
+  choiceColor,
+  choiceFromLabel,
+  choiceLabel,
   formatWeekRange,
   parseScope,
-  priorityFromLabel,
-  stageFromLabel,
+  toIsoDate,
   type BoardScope,
+  type BoardSettings,
   type BoardTask,
   type TaskFields,
 } from '@/lib/board';
@@ -42,22 +50,63 @@ import './board.css';
 const VIEW_TYPES: ViewTypeDef<TaskViewType>[] = [
   { type: 'board', label: TASK_VIEW_TYPE_LABELS.board, icon: Columns3 },
   { type: 'table', label: TASK_VIEW_TYPE_LABELS.table, icon: Table2 },
-  { type: 'list', label: TASK_VIEW_TYPE_LABELS.list, icon: List },
+  { type: 'gallery', label: TASK_VIEW_TYPE_LABELS.gallery, icon: LayoutGrid },
+  { type: 'calendar', label: TASK_VIEW_TYPE_LABELS.calendar, icon: CalendarDays },
 ];
 
 /** Groupings whose columns a card can be dragged between. */
 const DRAGGABLE_GROUPS: TaskPropertyKey[] = ['stage', 'priority', 'project'];
 
 /** What dropping a card on a board column changes, per grouping property. */
-function fieldsForGroup(groupBy: TaskPropertyKey | null, groupKey: string): TaskFields | null {
+function fieldsForGroup(
+  settings: BoardSettings,
+  groupBy: TaskPropertyKey | null,
+  groupKey: string,
+): TaskFields | null {
   const empty = groupKey === '__empty__';
   if (groupBy === 'stage') {
-    const stage = stageFromLabel(groupKey);
+    const stage = choiceFromLabel(settings.stages, groupKey);
     return stage ? { stage } : null;
   }
-  if (groupBy === 'priority') return { priority: empty ? null : priorityFromLabel(groupKey) };
+  if (groupBy === 'priority') return { priority: empty ? null : choiceFromLabel(settings.priorities, groupKey) };
   if (groupBy === 'project') return { project: empty ? '' : groupKey };
   return null;
+}
+
+/** The viewer's tab order, per workspace (a browser convenience, not shared). */
+function useTabOrder(workspaceId: string) {
+  const key = `nexus.board.tab-order.${workspaceId}`;
+  const [order, setOrder] = useState<BoardScope[]>(BOARD_SCOPES);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(key) ?? 'null') as unknown;
+      if (Array.isArray(saved)) {
+        const known = saved.filter((s): s is BoardScope => BOARD_SCOPES.includes(s as BoardScope));
+        setOrder([...new Set([...known, ...BOARD_SCOPES])]);
+        return;
+      }
+    } catch {
+      // Unavailable or corrupt storage: the default order.
+    }
+    setOrder(BOARD_SCOPES);
+  }, [key]);
+  const save = useCallback(
+    (next: BoardScope[]) => {
+      setOrder(next);
+      try {
+        localStorage.setItem(key, JSON.stringify(next));
+      } catch {
+        // The order then lasts for this visit only.
+      }
+    },
+    [key],
+  );
+  return [order, save] as const;
+}
+
+/** Local calendar day of a UTC timestamp from the API. */
+function createdDay(timestamp: string): string {
+  return toIsoDate(new Date(timestamp.endsWith('Z') ? timestamp : `${timestamp}Z`));
 }
 
 function ColumnAdd({ onCreate }: { onCreate: (title: string) => Promise<unknown> }) {
@@ -118,6 +167,7 @@ export default function BoardPage() {
   const [notice, setNotice] = useState<{ text: string; scope?: BoardScope } | null>(null);
 
   const board = useBoard(workspaceId, scope, showArchived);
+  const [tabOrder, setTabOrder] = useTabOrder(workspaceId);
 
   const navigate = useCallback(
     (next: { view?: BoardScope; task?: string | null }) => {
@@ -137,19 +187,22 @@ export default function BoardPage() {
       const iteration = iterationById.get(iterationId);
       if (!iteration) return 'Another iteration';
       const range = formatWeekRange(iteration.start_date, iteration.end_date);
-      return iteration.start_date === board.currentWeek ? `${range} (current)` : range;
+      return iteration.id === board.currentIteration?.id ? `${range} (current)` : range;
     },
-    [iterationById, board.currentWeek],
+    [iterationById, board.currentIteration],
   );
 
+  const { settings } = board;
   const schema = useMemo(
-    () => createTaskSchema({ memberName: board.memberName, iterationLabel }),
-    [board.memberName, iterationLabel],
+    () => createTaskSchema({ memberName: board.memberName, iterationLabel, settings }),
+    [board.memberName, iterationLabel, settings],
   );
   const iterationViews = useDatabaseViews(workspaceId, ITERATION_VIEWS);
   const inboxViews = useDatabaseViews(workspaceId, INBOX_VIEWS);
   const backlogViews = useDatabaseViews(workspaceId, BACKLOG_VIEWS);
-  const views = scope === 'inbox' ? inboxViews : scope === 'backlog' ? backlogViews : iterationViews;
+  const viewsFor = (target: BoardScope) =>
+    target === 'inbox' ? inboxViews : target === 'backlog' ? backlogViews : iterationViews;
+  const views = viewsFor(scope);
   const view = views.activeView;
   const groupBy = view.type === 'board' ? view.groupBy ?? 'stage' : view.groupBy;
 
@@ -164,9 +217,10 @@ export default function BoardPage() {
       groupBy,
       view.sort && view.sort.property === groupBy ? view.sort.direction : 'asc',
     );
-    // Inbox has its own tab: iterations start at Ready.
-    return groupBy === 'stage' ? grouped.filter((g) => g.key !== STAGE_LABELS.inbox) : grouped;
-  }, [schema, board.tasks, view.filters, view.sort, search, groupBy]);
+    // Inbox has its own tab: iteration columns start after it.
+    const inboxLabel = choiceLabel(settings.stages, INBOX_STAGE);
+    return isIteration && groupBy === 'stage' ? grouped.filter((g) => g.key !== inboxLabel) : grouped;
+  }, [schema, board.tasks, view.filters, view.sort, search, groupBy, isIteration, settings.stages]);
   const visibleCount = useMemo(
     () => new Set(groups.flatMap((g) => g.records.map((t) => t.id))).size,
     [groups],
@@ -266,14 +320,40 @@ export default function BoardPage() {
   };
 
   const canDrag = view.type === 'board' && !!groupBy && DRAGGABLE_GROUPS.includes(groupBy);
-  const assigneeNames = board.assignees.map((id) => (id === UNASSIGNED ? 'Unassigned' : board.memberName(id)));
+  const filterChips = [
+    {
+      kind: 'assignees' as const,
+      icon: UserRound,
+      plural: 'assignees',
+      names: board.filters.assignees.map((id) => (id === UNASSIGNED ? 'Unassigned' : board.memberName(id))),
+    },
+    {
+      kind: 'priorities' as const,
+      icon: Flag,
+      plural: 'priorities',
+      names: board.filters.priorities.map((key) =>
+        key === NO_PRIORITY ? 'No priority' : choiceLabel(settings.priorities, key),
+      ),
+    },
+    {
+      kind: 'labels' as const,
+      icon: Tag,
+      plural: 'labels',
+      names: board.filters.labels.map((label) => (label === NO_LABEL ? 'No label' : label)),
+    },
+  ].filter((chip) => chip.names.length > 0);
 
   return (
     <div className="board-page">
       <Header
         title="Board"
         subtitle="Project tasks in weekly iterations"
-        nav={<BoardMenuBar onNewTask={() => void handleNewTask()} />}
+        nav={
+          <BoardMenuBar
+            onNewTask={() => void handleNewTask()}
+            onSettings={() => router.push(boardSettingsPath(workspaceId))}
+          />
+        }
       />
       {confirmDialog}
       {promptDialog}
@@ -311,10 +391,10 @@ export default function BoardPage() {
 
       <IterationBar
         scope={scope}
-        week={board.week}
+        day={board.day}
         iteration={board.iteration}
         showArchived={showArchived}
-        canCarryOver={board.tasks.some((t) => t.stage !== 'done' && !t.archived)}
+        canCarryOver={board.tasks.some((t) => t.stage !== DONE_STAGE && !t.archived)}
         onToggleArchived={() => setShowArchived((v) => !v)}
         onSaveGoal={(goal) => void board.setGoal(goal).catch(() => undefined)}
         onCarryOver={() => void handleCarryOver()}
@@ -332,32 +412,44 @@ export default function BoardPage() {
         defaultFilterProperty="project"
         groupedTypes={['board']}
         defaultGroupBy="stage"
+        iconOnly
         tabs={
           <ScopeTabs
+            order={tabOrder}
+            onReorder={setTabOrder}
             active={scope}
             counts={board.counts}
+            layouts={VIEW_TYPES}
+            layoutOf={(target) => viewsFor(target).activeView.type}
+            onChangeLayout={(type) =>
+              views.updateActiveView({ type, groupBy: type === 'board' ? view.groupBy ?? 'stage' : view.groupBy })
+            }
             onSelect={(next) => navigate({ view: next, task: null })}
             onDropTask={(taskId, target) => void handleDropOnScope(taskId, target)}
           />
         }
         actions={
           <>
-            {assigneeNames.length > 0 && (
-              <span className="board-filter-chip" title={`Set from the Board dashboard in the sidebar: ${assigneeNames.join(', ')}`}>
-                <UserRound size={12} />
+            {filterChips.map(({ kind, icon: Icon, plural, names }) => (
+              <span
+                key={kind}
+                className="board-filter-chip"
+                title={`Set from the Board dashboard in the sidebar: ${names.join(', ')}`}
+              >
+                <Icon size={12} />
                 <span className="board-filter-chip-label">
-                  {assigneeNames.length === 1 ? assigneeNames[0] : `${assigneeNames.length} assignees`}
+                  {names.length === 1 ? names[0] : `${names.length} ${plural}`}
                 </span>
                 <button
                   type="button"
                   className="board-filter-chip-clear"
-                  title="Show every assignee"
-                  onClick={board.clearAssignees}
+                  title={`Show every ${plural === 'priorities' ? 'priority' : plural.slice(0, -1)}`}
+                  onClick={() => board.clearFilter(kind)}
                 >
                   <X size={11} />
                 </button>
               </span>
-            )}
+            ))}
           </>
         }
       />
@@ -367,7 +459,7 @@ export default function BoardPage() {
           <div className="board-empty">
             <SquareKanban size={18} className="animate-pulse" /> Loading board…
           </div>
-        ) : view.type !== 'board' && visibleCount === 0 ? (
+        ) : (view.type === 'table' || view.type === 'gallery') && visibleCount === 0 ? (
           <div className="board-empty">
             <p className="board-empty-title">{board.tasks.length ? 'No task matches' : 'No tasks yet'}</p>
             <p>
@@ -389,31 +481,51 @@ export default function BoardPage() {
             onOpen={(task) => navigate({ task: task.id })}
             draggableRows
             fitColumns
+            calendar={
+              scope === 'inbox'
+                ? { getDate: (task) => (task.created_at ? createdDay(task.created_at) : null), dateLabel: 'Created date' }
+                : {
+                    getDate: (task) => task.due_date,
+                    dateLabel: 'Due date',
+                    onMoveToDate: (task, day) => void board.updateTask(task.id, { due_date: day }).catch(() => undefined),
+                  }
+            }
             renderCard={(task, visible) => (
               <TaskCard
                 task={task}
                 visible={visible}
                 schema={schema}
+                priorities={settings.priorities}
                 today={board.today}
                 onOpen={() => navigate({ task: task.id })}
               />
             )}
             renderValue={(task, key) => (
-              <TaskPropertyValue task={task} propertyKey={key} schema={schema} today={board.today} />
+              <TaskPropertyValue
+                task={task}
+                propertyKey={key}
+                schema={schema}
+                priorities={settings.priorities}
+                today={board.today}
+              />
             )}
-            renderLeading={(task) => <span className={`board-stage-dot board-stage-${task.stage}`} />}
+            renderLeading={(task) => (
+              <span className={`board-stage-dot board-dot-${choiceColor(settings.stages, task.stage)}`} />
+            )}
             renderColumnMarker={
               groupBy === 'stage'
                 ? (group: RecordGroup<BoardTask>) => {
-                    const stage = stageFromLabel(group.key);
-                    return stage ? <span className={`board-stage-dot board-stage-${stage}`} /> : null;
+                    const stage = choiceFromLabel(settings.stages, group.key);
+                    return stage ? (
+                      <span className={`board-stage-dot board-dot-${choiceColor(settings.stages, stage)}`} />
+                    ) : null;
                   }
                 : undefined
             }
             onMoveToGroup={
               canDrag
                 ? (task, groupKey) => {
-                    const fields = fieldsForGroup(groupBy, groupKey);
+                    const fields = fieldsForGroup(settings, groupBy, groupKey);
                     if (fields) void board.updateTask(task.id, fields).catch(() => undefined);
                   }
                 : undefined
@@ -421,7 +533,7 @@ export default function BoardPage() {
             renderColumnFooter={
               isIteration && groupBy === 'stage'
                 ? (group) => {
-                    const stage = stageFromLabel(group.key);
+                    const stage = choiceFromLabel(settings.stages, group.key);
                     return stage ? (
                       <ColumnAdd onCreate={(title) => board.createTask({ title, stage })} />
                     ) : null;
@@ -443,6 +555,7 @@ export default function BoardPage() {
           memberName={board.memberName}
           projects={projects}
           labels={labels}
+          settings={settings}
           onUpdate={(fields) => board.updateTask(openTask.id, fields)}
           onArchive={(archived) => board.setArchived(openTask.id, archived)}
           onDelete={() => handleDelete(openTask)}

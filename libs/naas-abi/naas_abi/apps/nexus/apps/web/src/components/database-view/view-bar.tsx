@@ -300,6 +300,7 @@ export function ViewBar<R, K extends string, T extends string>({
   defaultGroupBy,
   actions,
   tabs,
+  iconOnly = false,
 }: {
   api: DatabaseViewsApi<K, T>;
   schema: DatabaseSchema<R, K>;
@@ -320,6 +321,8 @@ export function ViewBar<R, K extends string, T extends string>({
   actions?: ReactNode;
   /** Replaces the saved-view tabs (the page picks what the tabs mean). */
   tabs?: ReactNode;
+  /** Filter, Sort, Group and Properties as icons only (name in the tooltip). */
+  iconOnly?: boolean;
 }) {
   const view = api.activeView;
   const activeFilters = view.filters.length;
@@ -370,9 +373,9 @@ export function ViewBar<R, K extends string, T extends string>({
           align="right"
           width="w-80"
           trigger={({ toggle }) => (
-            <ToolbarButton onClick={toggle} active={activeFilters > 0}>
+            <ToolbarButton onClick={toggle} active={activeFilters > 0} title="Filter" aria-label="Filter">
               <FilterIcon size={13} />
-              Filter
+              {!iconOnly && 'Filter'}
               {activeFilters > 0 && <span className="text-[10px]">({activeFilters})</span>}
             </ToolbarButton>
           )}
@@ -425,9 +428,9 @@ export function ViewBar<R, K extends string, T extends string>({
           align="right"
           width="w-64"
           trigger={({ toggle }) => (
-            <ToolbarButton onClick={toggle} active={!!view.sort}>
+            <ToolbarButton onClick={toggle} active={!!view.sort} title="Sort" aria-label="Sort">
               <ArrowUpDown size={13} />
-              Sort
+              {!iconOnly && 'Sort'}
             </ToolbarButton>
           )}
         >
@@ -480,9 +483,9 @@ export function ViewBar<R, K extends string, T extends string>({
           align="right"
           width="w-56"
           trigger={({ toggle }) => (
-            <ToolbarButton onClick={toggle} active={!!view.groupBy}>
+            <ToolbarButton onClick={toggle} active={!!view.groupBy} title="Group" aria-label="Group">
               <Group size={13} />
-              Group
+              {!iconOnly && 'Group'}
             </ToolbarButton>
           )}
         >
@@ -537,9 +540,9 @@ export function ViewBar<R, K extends string, T extends string>({
           align="right"
           width="w-64"
           trigger={({ toggle }) => (
-            <ToolbarButton onClick={toggle}>
+            <ToolbarButton onClick={toggle} title="Properties" aria-label="Properties">
               <Settings2 size={13} />
-              Properties
+              {!iconOnly && 'Properties'}
             </ToolbarButton>
           )}
         >

@@ -7,6 +7,7 @@ from datetime import date
 
 from naas_abi.apps.nexus.apps.api.app.services.board.board__schema import (
     ActivityEntry,
+    BoardSettings,
     Comment,
     Iteration,
     Task,
@@ -14,6 +15,14 @@ from naas_abi.apps.nexus.apps.api.app.services.board.board__schema import (
 
 
 class BoardStorePort(ABC):
+    @abstractmethod
+    async def get_settings(self, workspace_id: str) -> BoardSettings | None:
+        """The workspace's saved settings, or None when it uses the defaults."""
+
+    @abstractmethod
+    async def save_settings(self, workspace_id: str, settings: BoardSettings) -> None:
+        """Insert or replace the workspace's settings."""
+
     @abstractmethod
     async def list_iterations(self, workspace_id: str) -> list[Iteration]:
         """Every iteration of the workspace, in any order."""

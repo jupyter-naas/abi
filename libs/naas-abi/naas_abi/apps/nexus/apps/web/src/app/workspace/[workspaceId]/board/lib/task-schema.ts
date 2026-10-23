@@ -3,8 +3,8 @@
  *
  * Properties read display values (stage labels, member names, formatted
  * dates), so filters, search and grouping work on what the user sees. Stages
- * and priorities carry their natural order: board columns follow the stage
- * order and include empty stages; sorting by priority goes Urgent → Low.
+ * and priorities carry their configured order: board columns follow the stage
+ * order and include empty stages; sorting by priority goes most urgent first.
  */
 
 import {
@@ -14,14 +14,7 @@ import {
   type ViewConfig,
 } from '@/components/database-view/model';
 import type { DatabaseViewsOptions } from '@/components/database-view/use-database-views';
-import {
-  BOARD_PRIORITIES,
-  BOARD_STAGES,
-  PRIORITY_LABELS,
-  STAGE_LABELS,
-  parseIsoDate,
-  type BoardTask,
-} from '@/lib/board';
+import { choiceLabel, parseIsoDate, type BoardSettings, type BoardTask } from '@/lib/board';
 
 export type TaskPropertyKey =
   | 'title'
@@ -38,7 +31,7 @@ export type TaskPropertyKey =
   | 'updated_by'
   | 'updated_at';
 
-export type TaskViewType = 'board' | 'table' | 'list';
+export type TaskViewType = 'board' | 'table' | 'gallery' | 'calendar';
 export type TaskViewConfig = ViewConfig<TaskPropertyKey, TaskViewType>;
 export type TaskSchema = DatabaseSchema<BoardTask, TaskPropertyKey>;
 
@@ -47,6 +40,8 @@ export interface TaskSchemaContext {
   memberName: (userId: string) => string;
   /** Display name of an iteration id ("Oct 19 – Oct 25"). */
   iterationLabel: (iterationId: string) => string;
+  /** Stages and priorities, in their configured order. */
+  settings: Pick<BoardSettings, 'stages' | 'priorities'>;
 }
 
 const one = (value: string | null | undefined): string[] => (value ? [value] : []);
@@ -65,8 +60,8 @@ export function createTaskSchema(ctx: TaskSchemaContext): TaskSchema {
       key: 'stage',
       label: 'Stage',
       type: 'select',
-      values: (t) => one(STAGE_LABELS[t.stage]),
-      options: BOARD_STAGES.map((s) => STAGE_LABELS[s]),
+      values: (t) => one(choiceLabel(ctx.settings.stages, t.stage)),
+      options: ctx.settings.stages.map((s) => s.label),
     },
     {
       key: 'assignees',
@@ -78,8 +73,8 @@ export function createTaskSchema(ctx: TaskSchemaContext): TaskSchema {
       key: 'priority',
       label: 'Priority',
       type: 'select',
-      values: (t) => one(t.priority ? PRIORITY_LABELS[t.priority] : ''),
-      options: BOARD_PRIORITIES.map((p) => PRIORITY_LABELS[p]),
+      values: (t) => one(choiceLabel(ctx.settings.priorities, t.priority)),
+      options: ctx.settings.priorities.map((p) => p.label),
     },
     { key: 'project', label: 'Project', type: 'select', values: (t) => one(t.project) },
     { key: 'labels', label: 'Labels', type: 'multi', values: (t) => t.labels.filter(Boolean) },
@@ -125,13 +120,15 @@ export const TASK_PROPERTY_KEYS: TaskPropertyKey[] = [
 export const TASK_VIEW_TYPE_LABELS: Record<TaskViewType, string> = {
   board: 'Board',
   table: 'Table',
-  list: 'List',
+  gallery: 'Gallery',
+  calendar: 'Calendar',
 };
 
 const DEFAULT_VISIBLE: Record<TaskViewType, TaskPropertyKey[]> = {
   board: ['assignees', 'priority', 'labels', 'due_date'],
   table: ['stage', 'assignees', 'priority', 'project', 'labels', 'due_date', 'updated_at'],
-  list: ['stage', 'assignees', 'priority'],
+  gallery: ['stage', 'assignees', 'priority', 'labels', 'due_date'],
+  calendar: [],
 };
 
 function createTaskView(type: TaskViewType, name: string): Omit<TaskViewConfig, 'id'> {

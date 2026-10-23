@@ -15,6 +15,7 @@ from naas_abi.apps.nexus.apps.api.app.services.board.board__schema import (
     ACTIVITY_STAGE,
     BoardAssigneeError,
     BoardNotFoundError,
+    BoardSettings,
     BoardValidationError,
     iso_week_label,
     week_start,
@@ -114,7 +115,7 @@ async def test_iterations_are_workspace_scoped(service: BoardService):
 # ---------------------------------------------------------------------------
 
 
-async def test_new_task_defaults_to_inbox_in_selected_iteration(service: BoardService):
+async def test_new_iteration_task_starts_in_the_default_stage(service: BoardService):
     iteration = await service.ensure_iteration(WS, THURSDAY, user_id=ALICE)
 
     task = await service.create_task(
@@ -122,7 +123,7 @@ async def test_new_task_defaults_to_inbox_in_selected_iteration(service: BoardSe
     )
 
     assert task.title == "Write spec"
-    assert task.stage == "inbox"
+    assert task.stage == "ready"
     assert task.iteration_id == iteration.id
     assert task.created_by == ALICE and task.updated_by == ALICE
     assert task.created_at is not None
@@ -347,3 +348,143 @@ async def test_comments_are_listed_oldest_first(service: BoardService):
         await service.add_comment(WS, task.id, "  ", user_id=ALICE)
     with pytest.raises(BoardNotFoundError):
         await service.add_comment(OTHER_WS, task.id, "Hi", user_id=ALICE)
+
+
+# ---------------------------------------------------------------------------
+# Settings
+# ---------------------------------------------------------------------------
+
+
+def _settings_payload(settings: BoardSettings, **changes) -> dict:
+    payload = {
+        "iteration_weeks": settings.iteration_weeks,
+        "iteration_start_day": settings.iteration_start_day,
+        "stages": [vars(c) for c in settings.stages],
+        "priorities": [vars(c) for c in settings.priorities],
+        "default_stage": settings.default_stage,
+        "suggested_labels": list(settings.suggested_labels),
+    }
+    payload.update(changes)
+    return payload
+
+
+async def test_defaults_match_iso_weeks(service: BoardService):
+    settings = await service.get_settings(WS)
+    assert settings.stage_keys[0] == "inbox" and settings.stage_keys[-1] == "done"
+    assert settings.period(THURSDAY) == (date(2026, 10, 19), date(2026, 10, 25))
+
+
+async def test_two_week_iterations_start_after_the_ongoing_one(service: BoardService):
+    ongoing = await service.ensure_iteration(WS, THURSDAY, user_id=ALICE)
+    current = await service.get_settings(WS)
+
+    updated = await service.update_settings(
+        WS, _settings_payload(current, iteration_weeks=2), today=THURSDAY, user_id=ALICE
+    )
+
+    assert updated.iteration_anchor == date(2026, 10, 26)
+    # The ongoing week keeps its dates; the next iteration spans two weeks.
+    assert (await service.ensure_iteration(WS, THURSDAY, user_id=ALICE)).id == ongoing.id
+    following = await service.adjacent_iteration(WS, ongoing.id, 1, user_id=ALICE)
+    assert (following.start_date, following.end_date) == (date(2026, 10, 26), date(2026, 11, 8))
+    assert following.iso_week == "2026-W44–W45"
+
+
+async def test_new_start_day_bridges_the_gap_without_overlap(service: BoardService):
+    ongoing = await service.ensure_iteration(WS, THURSDAY, user_id=ALICE)
+    current = await service.get_settings(WS)
+    # Iterations now start on Wednesdays.
+    await service.update_settings(
+        WS, _settings_payload(current, iteration_start_day=2), today=THURSDAY, user_id=ALICE
+    )
+
+    bridge = await service.adjacent_iteration(WS, ongoing.id, 1, user_id=ALICE)
+    assert (bridge.start_date, bridge.end_date) == (date(2026, 10, 26), date(2026, 10, 27))
+    regular = await service.adjacent_iteration(WS, bridge.id, 1, user_id=ALICE)
+    assert (regular.start_date, regular.end_date) == (date(2026, 10, 28), date(2026, 11, 3))
+
+
+async def test_custom_stages_and_priorities_drive_validation(service: BoardService):
+    current = await service.get_settings(WS)
+    stages = [vars(c) for c in current.stages]
+    stages.insert(2, {"key": "", "label": "QA check", "color": "pink"})
+    priorities = [
+        {"key": "", "label": "P0", "color": "red"},
+        *[vars(c) for c in current.priorities],
+    ]
+
+    updated = await service.update_settings(
+        WS,
+        _settings_payload(current, stages=stages, priorities=priorities),
+        today=THURSDAY,
+        user_id=ALICE,
+    )
+
+    assert updated.stage_keys[2] == "qa_check"
+    assert updated.priority_keys[0] == "p0"
+    task = await service.create_task(
+        WS, {"title": "T", "stage": "qa_check", "priority": "p0"}, user_id=ALICE
+    )
+    assert (task.stage, task.priority) == ("qa_check", "p0")
+    with pytest.raises(BoardValidationError):
+        await service.create_task(WS, {"title": "T", "stage": "doing"}, user_id=ALICE)
+
+
+async def test_settings_validation(service: BoardService):
+    current = await service.get_settings(WS)
+    bad = [
+        {"iteration_weeks": 5},
+        {"iteration_start_day": 7},
+        {"stages": [vars(c) for c in current.stages][1:]},
+        {
+            "stages": [
+                *[vars(c) for c in current.stages],
+                {"key": "", "label": "x", "color": "neon"},
+            ]
+        },
+        {"default_stage": "inbox"},
+        {"priorities": []},
+    ]
+    for changes in bad:
+        with pytest.raises(BoardValidationError):
+            await service.update_settings(
+                WS, _settings_payload(current, **changes), today=THURSDAY, user_id=ALICE
+            )
+
+
+async def test_removing_a_stage_or_priority_in_use_is_refused(service: BoardService):
+    current = await service.get_settings(WS)
+    await service.create_task(
+        WS, {"title": "T", "stage": "on_hold", "priority": "low"}, user_id=ALICE
+    )
+    without_hold = [vars(c) for c in current.stages if c.key != "on_hold"]
+    without_low = [vars(c) for c in current.priorities if c.key != "low"]
+
+    with pytest.raises(BoardValidationError, match="1 task in stage on_hold"):
+        await service.update_settings(
+            WS, _settings_payload(current, stages=without_hold), today=THURSDAY, user_id=ALICE
+        )
+    with pytest.raises(BoardValidationError, match="priority low"):
+        await service.update_settings(
+            WS, _settings_payload(current, priorities=without_low), today=THURSDAY, user_id=ALICE
+        )
+    # Unused ones can go.
+    without_review = [vars(c) for c in current.stages if c.key != "review"]
+    updated = await service.update_settings(
+        WS, _settings_payload(current, stages=without_review), today=THURSDAY, user_id=ALICE
+    )
+    assert "review" not in updated.stage_keys
+
+
+async def test_tasks_and_their_records_carry_the_workspace(service: BoardService):
+    iteration = await service.ensure_iteration(WS, THURSDAY, user_id=ALICE)
+    task = await service.create_task(
+        WS, {"title": "T", "iteration_id": iteration.id}, user_id=ALICE
+    )
+    comment = await service.add_comment(WS, task.id, "Hi", user_id=ALICE)
+    activity = await service.list_activity(WS, task.id)
+
+    assert iteration.workspace_id == WS
+    assert task.workspace_id == WS
+    assert comment.workspace_id == WS
+    assert {a.workspace_id for a in activity} == {WS}

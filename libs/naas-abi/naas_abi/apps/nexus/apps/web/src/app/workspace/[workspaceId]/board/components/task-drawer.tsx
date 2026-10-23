@@ -5,18 +5,13 @@ import { Archive, ArchiveRestore, Plus, Trash2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Popover } from '@/components/database-view/primitives';
 import {
-  BOARD_PRIORITIES,
-  BOARD_STAGES,
-  PRIORITY_LABELS,
-  STAGE_LABELS,
-  SUGGESTED_LABELS,
   boardApi,
+  choiceLabel,
   type BoardActivity,
   type BoardComment,
   type BoardIteration,
   type BoardMember,
-  type BoardPriority,
-  type BoardStage,
+  type BoardSettings,
   type BoardTask,
   type TaskFields,
 } from '@/lib/board';
@@ -35,15 +30,17 @@ function asList(value: unknown): string[] {
 
 export function describeActivity(
   entry: BoardActivity,
-  names: { member: (id: string) => string; iteration: (id: string | null) => string },
+  names: {
+    member: (id: string) => string;
+    iteration: (id: string | null) => string;
+    stage: (key: string) => string;
+  },
 ): string {
   switch (entry.field) {
     case 'created':
       return 'created the task';
     case 'stage':
-      return `moved it from ${STAGE_LABELS[entry.old_value as BoardStage] ?? entry.old_value} to ${
-        STAGE_LABELS[entry.new_value as BoardStage] ?? entry.new_value
-      }`;
+      return `moved it from ${names.stage(String(entry.old_value))} to ${names.stage(String(entry.new_value))}`;
     case 'assignees': {
       const before = asList(entry.old_value);
       const after = asList(entry.new_value);
@@ -132,6 +129,7 @@ export function TaskDrawer({
   memberName,
   projects,
   labels,
+  settings,
   onUpdate,
   onArchive,
   onDelete,
@@ -146,6 +144,8 @@ export function TaskDrawer({
   /** Projects and labels already used on the board, offered as suggestions. */
   projects: string[];
   labels: string[];
+  /** Stages, priorities and suggested labels. */
+  settings: Pick<BoardSettings, 'stages' | 'priorities' | 'suggested_labels'>;
   onUpdate: (fields: TaskFields) => Promise<unknown>;
   onArchive: (archived: boolean) => Promise<unknown>;
   onDelete: () => Promise<unknown>;
@@ -256,11 +256,12 @@ export function TaskDrawer({
               id="board-task-stage"
               className="board-drawer-select"
               value={task.stage}
-              onChange={(e) => save({ stage: e.target.value as BoardStage })}
+              onChange={(e) => save({ stage: e.target.value })}
             >
-              {BOARD_STAGES.map((stage) => (
-                <option key={stage} value={stage}>{STAGE_LABELS[stage]}</option>
+              {settings.stages.map((stage) => (
+                <option key={stage.key} value={stage.key}>{stage.label}</option>
               ))}
+              {!settings.stages.some((s) => s.key === task.stage) && <option value={task.stage}>{task.stage}</option>}
             </select>
 
             <span className="board-drawer-label">Assignees</span>
@@ -348,11 +349,11 @@ export function TaskDrawer({
               id="board-task-priority"
               className="board-drawer-select"
               value={task.priority ?? ''}
-              onChange={(e) => save({ priority: (e.target.value || null) as BoardPriority | null })}
+              onChange={(e) => save({ priority: e.target.value || null })}
             >
               <option value="">No priority</option>
-              {BOARD_PRIORITIES.map((priority) => (
-                <option key={priority} value={priority}>{PRIORITY_LABELS[priority]}</option>
+              {settings.priorities.map((priority) => (
+                <option key={priority.key} value={priority.key}>{priority.label}</option>
               ))}
             </select>
 
@@ -368,7 +369,7 @@ export function TaskDrawer({
             <span className="board-drawer-label">Labels</span>
             <ChipEditor
               values={task.labels}
-              suggestions={Array.from(new Set([...SUGGESTED_LABELS, ...labels]))}
+              suggestions={Array.from(new Set([...settings.suggested_labels, ...labels]))}
               placeholder="Add a label"
               onChange={(next) => save({ labels: next })}
             />
@@ -448,7 +449,11 @@ export function TaskDrawer({
                 {activity.map((entry) => (
                   <li key={entry.id} className="board-drawer-feed-item">
                     <strong>{entry.actor_id ? memberName(entry.actor_id) : 'Someone'}</strong>{' '}
-                    {describeActivity(entry, { member: memberName, iteration: iterationName })}
+                    {describeActivity(entry, {
+                      member: memberName,
+                      iteration: iterationName,
+                      stage: (key) => choiceLabel(settings.stages, key),
+                    })}
                     <span className="board-drawer-feed-meta">{formatTimestamp(entry.created_at)}</span>
                   </li>
                 ))}

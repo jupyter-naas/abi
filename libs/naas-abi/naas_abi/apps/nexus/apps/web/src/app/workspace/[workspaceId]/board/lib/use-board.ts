@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import {
   BOARD_SCOPES,
+  INBOX_STAGE,
   fieldsForScope,
-  matchesAssignee,
-  scopeWeek,
+  matchesFilters,
+  scopeDay,
+  scopeIterations,
   taskInScope,
   toIsoDate,
-  weekStart,
   type BoardScope,
   type BoardTask,
   type TaskFields,
@@ -17,37 +18,35 @@ import { useBoardStore } from '@/stores/board';
 
 /**
  * The board page's view of the shared board store: the tasks of one scope,
- * after the assignee filter, plus the scope-aware actions (creating a task in
+ * after the sidebar filters, plus the scope-aware actions (creating a task in
  * the scope, moving a task to another scope).
  */
 export function useBoard(workspaceId: string, scope: BoardScope, showArchived: boolean) {
   const today = useMemo(() => toIsoDate(new Date()), []);
-  const currentWeek = weekStart(today);
 
   const store = useBoardStore();
-  const { load, iterations, members, tasks, assignees, ensureWeek } = store;
+  const { load, settings, iterations, members, tasks, filters, ensureIteration } = store;
 
   // Fresh data on every visit; the sidebar may have loaded it earlier.
   useEffect(() => {
     if (workspaceId) void load(workspaceId, { force: true });
   }, [workspaceId, load]);
 
-  const iterationOfWeek = useCallback(
-    (week: string | null) => (week ? iterations.find((i) => i.start_date === week) ?? null : null),
-    [iterations],
-  );
+  const scopes = useMemo(() => scopeIterations(iterations, today), [iterations, today]);
   const scopeIterationId = useCallback(
-    (target: BoardScope) => iterationOfWeek(scopeWeek(target, currentWeek))?.id ?? null,
-    [iterationOfWeek, currentWeek],
+    (target: BoardScope) =>
+      target === 'inbox' || target === 'backlog' ? null : scopes[target]?.id ?? null,
+    [scopes],
   );
 
-  const week = scopeWeek(scope, currentWeek);
-  const iteration = iterationOfWeek(week);
+  /** A day inside the scope (null for Inbox and Backlog), even before its iteration exists. */
+  const day = scopeDay(scope, scopes.current, today);
+  const iteration = scope === 'inbox' || scope === 'backlog' ? null : scopes[scope];
 
   /** Tasks the filters let through, whatever their scope. */
   const filtered = useMemo(
-    () => tasks.filter((t) => (showArchived || !t.archived) && matchesAssignee(t, assignees)),
-    [tasks, showArchived, assignees],
+    () => tasks.filter((t) => (showArchived || !t.archived) && matchesFilters(t, filters)),
+    [tasks, showArchived, filters],
   );
   const scopeTasks = useMemo(
     () => filtered.filter((t) => taskInScope(t, scope, iteration?.id ?? null)),
@@ -71,53 +70,56 @@ export function useBoard(workspaceId: string, scope: BoardScope, showArchived: b
     [memberById],
   );
 
-  /** The iteration a scope needs for a write, created when the week has none. */
+  /** The iteration a scope needs for a write, created when it has none yet. */
   const iterationIdFor = useCallback(
     async (target: BoardScope) => {
-      const targetWeek = scopeWeek(target, currentWeek);
-      return targetWeek ? (await ensureWeek(targetWeek)).id : null;
+      const targetDay = scopeDay(target, scopes.current, today);
+      return targetDay ? (await ensureIteration(targetDay)).id : null;
     },
-    [ensureWeek, currentWeek],
+    [ensureIteration, scopes, today],
   );
 
   /** New task in this scope: Inbox triage, the backlog, or an iteration column. */
   const createTask = useCallback(
     async (fields: TaskFields & { title: string }) => {
-      if (scope === 'inbox') return store.createTask({ ...fields, stage: 'inbox', iteration_id: null });
+      if (scope === 'inbox') return store.createTask({ ...fields, stage: INBOX_STAGE, iteration_id: null });
       const iterationId = await iterationIdFor(scope);
-      return store.createTask({ stage: 'ready', ...fields, iteration_id: iterationId });
+      return store.createTask({ stage: settings.default_stage, ...fields, iteration_id: iterationId });
     },
-    [scope, iterationIdFor, store],
+    [scope, iterationIdFor, store, settings.default_stage],
   );
 
   /** Drop on a scope tab. Resolves false when the task was already there. */
   const moveToScope = useCallback(
     async (task: BoardTask, target: BoardScope) => {
-      if (fieldsForScope(task, target, scopeIterationId(target)) === null) return false;
-      const fields = fieldsForScope(task, target, await iterationIdFor(target));
+      const stage = settings.default_stage;
+      if (fieldsForScope(task, target, scopeIterationId(target), stage) === null) return false;
+      const fields = fieldsForScope(task, target, await iterationIdFor(target), stage);
       if (fields) await store.updateTask(task.id, fields);
       return !!fields;
     },
-    [scopeIterationId, iterationIdFor, store],
+    [scopeIterationId, iterationIdFor, store, settings.default_stage],
   );
 
   return {
     today,
-    currentWeek,
-    week,
+    settings,
+    saveSettings: store.saveSettings,
+    day,
     iteration,
+    currentIteration: scopes.current,
     iterations,
     members,
     memberName,
     allTasks: tasks,
     tasks: scopeTasks,
     counts,
-    assignees,
-    clearAssignees: store.clearAssignees,
+    filters,
+    clearFilter: store.clearFilter,
     loading: !store.loaded,
     error: store.error,
     clearError: store.clearError,
-    setGoal: (goal: string) => (week ? store.setGoal(week, goal) : Promise.resolve()),
+    setGoal: (goal: string) => (day ? store.setGoal(day, goal) : Promise.resolve()),
     carryOver: () => (iteration ? store.carryOver(iteration.id) : Promise.resolve(null)),
     createTask,
     moveToScope,

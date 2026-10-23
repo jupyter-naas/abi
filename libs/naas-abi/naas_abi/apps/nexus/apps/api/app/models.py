@@ -741,9 +741,7 @@ class OrganizationRoleFeaturesModel(Base):
         primary_key=True,
     )
     role_baseline = Column(Text, nullable=False)  # JSON object
-    updated_by = Column(
-        String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
-    )
+    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 
@@ -944,7 +942,7 @@ class MapsSettingsModel(Base):
 
 
 class BoardIterationModel(Base):
-    """One ISO week of a workspace's project board, keyed by its Monday."""
+    """A run of whole weeks of a workspace's project board, keyed by its first day."""
 
     __tablename__ = "board_iterations"
     __table_args__ = (UniqueConstraint("workspace_id", "start_date"),)
@@ -952,9 +950,22 @@ class BoardIterationModel(Base):
     id = Column(String(48), primary_key=True)
     workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
     start_date = Column(Date, nullable=False)
+    # Last day, inclusive; NULL for iterations made before settings (one week).
+    end_date = Column(Date, nullable=True)
     goal = Column(String(200), nullable=False, default="")
     created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+
+
+class BoardSettingsModel(Base):
+    """A workspace's board configuration (iterations, stages, priorities, labels)."""
+
+    __tablename__ = "board_settings"
+
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
+    data = Column(Text, nullable=False, default="{}")  # JSON
     updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
 

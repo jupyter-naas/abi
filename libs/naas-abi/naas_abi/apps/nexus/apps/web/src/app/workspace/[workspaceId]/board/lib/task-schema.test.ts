@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { BoardTask } from '@/lib/board';
+import { DEFAULT_BOARD_SETTINGS, type BoardTask } from '@/lib/board';
 import { sanitizeViews } from '@/components/database-view/use-database-views';
 import { BACKLOG_VIEWS, INBOX_VIEWS, ITERATION_VIEWS, createTaskSchema } from './task-schema';
 
@@ -25,6 +25,7 @@ const task = (overrides: Partial<BoardTask> & Pick<BoardTask, 'id' | 'title'>): 
 const schema = createTaskSchema({
   memberName: (id) => ({ 'u-1': 'Ada', 'u-2': 'Grace' })[id] ?? 'Former member',
   iterationLabel: () => 'Oct 19 – Oct 25',
+  settings: DEFAULT_BOARD_SETTINGS,
 });
 
 const tasks = [
@@ -110,7 +111,7 @@ describe('task views', () => {
     const views = sanitizeViews(
       [
         { id: '1', name: 'Mine', type: 'board', visible: ['priority', 'nope', 'title'], filters: [], sort: null, groupBy: 'stage' },
-        { id: '2', name: 'Old', type: 'gallery', visible: [], filters: [], sort: null, groupBy: null },
+        { id: '2', name: 'Old', type: 'list', visible: [], filters: [], sort: null, groupBy: null },
       ],
       ITERATION_VIEWS,
     );

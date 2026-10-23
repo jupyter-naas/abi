@@ -1,19 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_BOARD_SETTINGS,
+  NO_FILTERS,
+  NO_LABEL,
+  NO_PRIORITY,
   UNASSIGNED,
   addWeeks,
   boardPath,
+  choiceColor,
+  choiceFromLabel,
+  choiceLabel,
   fieldsForScope,
-  iterationName,
+  iterationContaining,
   matchesAssignee,
+  matchesFilters,
+  matchesLabel,
+  matchesPriority,
   parseScope,
-  priorityFromLabel,
+  scopeDay,
+  scopeIterations,
   scopeOfTask,
-  scopeWeek,
-  stageFromLabel,
   taskInScope,
   toIsoDate,
   weekStart,
+  type BoardIteration,
   type BoardTask,
 } from './board';
 
@@ -70,24 +80,6 @@ describe('toIsoDate', () => {
   });
 });
 
-describe('iterationName', () => {
-  it('names the current, previous and next weeks', () => {
-    const today = '2026-10-22';
-    expect(iterationName('2026-10-19', today)).toBe('Current iteration');
-    expect(iterationName('2026-10-12', today)).toBe('Last iteration');
-    expect(iterationName('2026-10-26', today)).toBe('Next iteration');
-    expect(iterationName('2026-11-02', today)).toMatch(/^Week of /);
-  });
-});
-
-describe('labels', () => {
-  it('maps display labels back to stage and priority ids', () => {
-    expect(stageFromLabel('In progress')).toBe('in_progress');
-    expect(stageFromLabel('Doing')).toBeNull();
-    expect(priorityFromLabel('Urgent')).toBe('urgent');
-  });
-});
-
 describe('boardPath', () => {
   it('builds scope and task links; the current iteration is the default', () => {
     expect(boardPath('ws 1')).toBe('/workspace/ws%201/board');
@@ -104,14 +96,36 @@ describe('boardPath', () => {
   });
 });
 
-describe('scopes', () => {
-  const current = '2026-10-19';
+const iteration = (id: string, start_date: string, end_date: string): BoardIteration => ({
+  id,
+  workspace_id: 'ws',
+  start_date,
+  end_date,
+  iso_week: '',
+  goal: '',
+  created_by: null,
+  created_at: null,
+  updated_by: null,
+  updated_at: null,
+});
 
-  it('maps iteration scopes to their week', () => {
-    expect(scopeWeek('current', current)).toBe('2026-10-19');
-    expect(scopeWeek('last', current)).toBe('2026-10-12');
-    expect(scopeWeek('next', current)).toBe('2026-10-26');
-    expect(scopeWeek('inbox', current)).toBeNull();
+describe('scopes', () => {
+  const today = '2026-10-22';
+  const iterations = [
+    iteration('it-0', '2026-10-12', '2026-10-18'),
+    iteration('it-1', '2026-10-19', '2026-10-25'),
+    // Two-week rhythm after the current week.
+    iteration('it-2', '2026-10-26', '2026-11-08'),
+  ];
+
+  it('resolves last, current and next from the iteration today falls in', () => {
+    const scopes = scopeIterations(iterations, today);
+    expect([scopes.last?.id, scopes.current?.id, scopes.next?.id]).toEqual(['it-0', 'it-1', 'it-2']);
+    expect(scopeIterations(iterations.slice(1, 2), today).next).toBeNull();
+    expect(scopeDay('next', iterations[1], today)).toBe('2026-10-26');
+    expect(scopeDay('last', iterations[1], today)).toBe('2026-10-18');
+    expect(scopeDay('inbox', iterations[1], today)).toBeNull();
+    expect(iterationContaining(iterations, '2026-11-08')?.id).toBe('it-2');
   });
 
   it('shows Inbox tasks only in Inbox, wherever they are scheduled', () => {
@@ -125,25 +139,90 @@ describe('scopes', () => {
     expect(taskInScope(task({ iteration_id: 'it-1' }), 'current', 'it-1')).toBe(true);
     expect(taskInScope(task({ iteration_id: 'it-1' }), 'next', 'it-2')).toBe(false);
     expect(taskInScope(task({}), 'backlog', null)).toBe(true);
-    // A week without an iteration yet shows nothing, not the backlog.
+    // A scope without an iteration yet shows nothing, not the backlog.
     expect(taskInScope(task({}), 'next', null)).toBe(false);
   });
 
   it('turns a drop on a scope into the fields to change', () => {
     expect(fieldsForScope(task({ stage: 'inbox' }), 'current', 'it-1')).toEqual({ stage: 'ready', iteration_id: 'it-1' });
+    expect(fieldsForScope(task({ stage: 'inbox' }), 'current', 'it-1', 'qa')).toEqual({ stage: 'qa', iteration_id: 'it-1' });
     expect(fieldsForScope(task({ stage: 'review', iteration_id: 'it-1' }), 'backlog', null)).toEqual({ iteration_id: null });
     expect(fieldsForScope(task({ stage: 'done', iteration_id: 'it-1' }), 'inbox', null)).toEqual({ stage: 'inbox' });
     expect(fieldsForScope(task({ iteration_id: 'it-1' }), 'current', 'it-1')).toBeNull();
   });
 
   it('finds the scope a task lives in', () => {
-    const weeks: Record<string, string> = { 'it-1': '2026-10-19', 'it-0': '2026-10-12', 'it-old': '2026-09-28' };
-    const week = (id: string) => weeks[id] ?? null;
-    expect(scopeOfTask(task({ stage: 'inbox', iteration_id: 'it-1' }), week, current)).toBe('inbox');
-    expect(scopeOfTask(task({}), week, current)).toBe('backlog');
-    expect(scopeOfTask(task({ iteration_id: 'it-1' }), week, current)).toBe('current');
-    expect(scopeOfTask(task({ iteration_id: 'it-0' }), week, current)).toBe('last');
-    expect(scopeOfTask(task({ iteration_id: 'it-old' }), week, current)).toBeNull();
+    const scopes = scopeIterations(iterations, today);
+    expect(scopeOfTask(task({ stage: 'inbox', iteration_id: 'it-1' }), scopes)).toBe('inbox');
+    expect(scopeOfTask(task({}), scopes)).toBe('backlog');
+    expect(scopeOfTask(task({ iteration_id: 'it-1' }), scopes)).toBe('current');
+    expect(scopeOfTask(task({ iteration_id: 'it-0' }), scopes)).toBe('last');
+    expect(scopeOfTask(task({ iteration_id: 'it-old' }), scopes)).toBeNull();
+  });
+});
+
+describe('settings choices', () => {
+  const { stages } = DEFAULT_BOARD_SETTINGS;
+
+  it('maps keys and labels both ways, keeping unknown keys readable', () => {
+    expect(choiceLabel(stages, 'in_progress')).toBe('In progress');
+    expect(choiceLabel(stages, 'gone')).toBe('gone');
+    expect(choiceFromLabel(stages, 'Review')).toBe('review');
+    expect(choiceFromLabel(stages, 'Doing')).toBeNull();
+    expect(choiceColor(stages, 'done')).toBe('green');
+    expect(choiceColor(stages, 'gone')).toBe('slate');
+  });
+
+  it('starts with Inbox and ends with Done', () => {
+    expect(stages[0].key).toBe('inbox');
+    expect(stages[stages.length - 1].key).toBe('done');
+  });
+});
+
+describe('matchesPriority', () => {
+  it('keeps tasks of any selected priority, or without one', () => {
+    expect(matchesPriority(task({ priority: 'high' }), [])).toBe(true);
+    expect(matchesPriority(task({ priority: 'high' }), ['urgent', 'high'])).toBe(true);
+    expect(matchesPriority(task({ priority: 'low' }), ['urgent'])).toBe(false);
+    expect(matchesPriority(task({}), [NO_PRIORITY])).toBe(true);
+    expect(matchesPriority(task({}), ['urgent'])).toBe(false);
+  });
+});
+
+describe('matchesLabel', () => {
+  it('keeps tasks with any selected label, or without one', () => {
+    expect(matchesLabel(task({ labels: ['Bug', 'Data'] }), [])).toBe(true);
+    expect(matchesLabel(task({ labels: ['Bug', 'Data'] }), ['Data'])).toBe(true);
+    expect(matchesLabel(task({ labels: ['Bug'] }), ['Feature'])).toBe(false);
+    expect(matchesLabel(task({}), [NO_LABEL])).toBe(true);
+    expect(matchesLabel(task({ labels: ['Bug'] }), [NO_LABEL])).toBe(false);
+  });
+});
+
+describe('matchesFilters', () => {
+  const tasks = [
+    task({ id: 'a', assignee_ids: ['u-1'], priority: 'high', labels: ['Bug'] }),
+    task({ id: 'b', assignee_ids: ['u-1'], priority: 'low', labels: ['Feature'] }),
+    task({ id: 'c', assignee_ids: ['u-2'], priority: 'high', labels: ['Bug', 'Data'] }),
+    task({ id: 'd', priority: null, labels: [] }),
+  ];
+  const ids = (filters: Partial<typeof NO_FILTERS>) =>
+    tasks.filter((t) => matchesFilters(t, { ...NO_FILTERS, ...filters })).map((t) => t.id);
+
+  it('shows everything without filters', () => {
+    expect(ids({})).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('combines filters with AND and values within one filter with OR', () => {
+    expect(ids({ assignees: ['u-1'], priorities: ['high'] })).toEqual(['a']);
+    expect(ids({ assignees: ['u-1', 'u-2'], labels: ['Bug'] })).toEqual(['a', 'c']);
+    expect(ids({ priorities: ['high', 'low'], labels: ['Feature', 'Data'] })).toEqual(['b', 'c']);
+    expect(ids({ assignees: ['u-1'], priorities: ['high'], labels: ['Feature'] })).toEqual([]);
+  });
+
+  it('selects tasks missing a value with the "none" options', () => {
+    expect(ids({ assignees: [UNASSIGNED], priorities: [NO_PRIORITY], labels: [NO_LABEL] })).toEqual(['d']);
+    expect(ids({ assignees: [UNASSIGNED, 'u-2'] })).toEqual(['c', 'd']);
   });
 });
 

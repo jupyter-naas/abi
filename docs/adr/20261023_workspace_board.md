@@ -28,9 +28,11 @@ workspace overrides), which until now only drove the frontend.
    `BoardMemberDirectoryPort`), service, Postgres and in-memory adapters, and a
    FastAPI primary adapter. Migration `0059_add_board.sql` adds iterations, tasks,
    comments and activity, all scoped by `workspace_id`.
-4. **An iteration is one ISO week keyed by its Monday.** The client sends its
-   local date to get "the iteration of this week", so week boundaries follow the
-   user's timezone. A unique `(workspace_id, start_date)` makes creation
+4. **An iteration is a run of whole weeks keyed by its first day.** One ISO
+   week by default; the length and start weekday come from the board settings
+   (decision 7). Iterations never overlap and store their last day. The client
+   sends its local date to get "the iteration of this date", so boundaries follow
+   the user's timezone. A unique `(workspace_id, start_date)` makes creation
    idempotent across concurrent users. A task with no iteration is in the backlog.
 6. **The page shows five scopes, not saved-view tabs.** Current, last and next
    iteration (stage columns from Ready to Done), Inbox (every task still in the
@@ -48,6 +50,18 @@ workspace overrides), which until now only drove the frontend.
    `options` (stages, priorities) so grouping lists every option in order,
    including empty ones.
 
+7. **Board settings per workspace, enforced by the API.** `GET/PUT
+   /api/board/settings` (migration `0060_board_settings.sql`, JSON in
+   `board_settings`) hold the iteration length (1–4 weeks) and start weekday,
+   the stages (Inbox and Done are fixed system stages, custom ones go between),
+   the priorities, the default stage of new iteration tasks and the suggested
+   labels. Task stages and priorities are validated against them. Owners and
+   admins save them; anyone with the board reads them. A new rhythm starts after
+   the ongoing iteration (an anchor date), so existing iterations keep their
+   dates and a short bridging iteration fills any gap. Removing a stage or
+   priority that tasks still use is refused. Colors are palette names, mapped to
+   theme-aware classes, not free hex values.
+
 ## Consequences
 
 - Apps keeps its behavior and saved views (same storage key); its tests are
@@ -63,5 +77,7 @@ workspace overrides), which until now only drove the frontend.
 - Assignees are validated against the workspace member listing (explicit and
   organization-inherited members), so an assignee can be a member who cannot
   open the board under the default roles.
-- Custom stages, dependencies, estimates, notifications and the delivery /
-  data & AI fields stay out of scope (#1384).
+- Stage and priority keys are fixed once created (renaming changes the label
+  only), so task history and saved filters keep working.
+- Dependencies, estimates, notifications and the delivery / data & AI fields
+  stay out of scope (#1384).

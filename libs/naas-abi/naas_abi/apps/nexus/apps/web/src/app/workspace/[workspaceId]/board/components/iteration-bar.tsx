@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Archive, Forward } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { SCOPE_LABELS, addDays, formatWeekRange, type BoardIteration, type BoardScope } from '@/lib/board';
+import { SCOPE_LABELS, formatWeekRange, parseIsoDate, type BoardIteration, type BoardScope } from '@/lib/board';
 
 const SCOPE_DESCRIPTIONS: Partial<Record<BoardScope, string>> = {
   inbox: 'New requests waiting for triage. Drag one onto an iteration or the backlog.',
@@ -12,7 +12,7 @@ const SCOPE_DESCRIPTIONS: Partial<Record<BoardScope, string>> = {
 
 export function IterationBar({
   scope,
-  week,
+  day,
   iteration,
   showArchived,
   canCarryOver,
@@ -21,9 +21,9 @@ export function IterationBar({
   onCarryOver,
 }: {
   scope: BoardScope;
-  /** Monday of the shown week; null for Inbox and Backlog. */
-  week: string | null;
-  /** The week's iteration; null until a task or a goal creates it. */
+  /** A day inside the shown iteration; null for Inbox and Backlog. */
+  day: string | null;
+  /** The scope's iteration; null until a task or a goal creates it. */
   iteration: BoardIteration | null;
   showArchived: boolean;
   canCarryOver: boolean;
@@ -39,12 +39,14 @@ export function IterationBar({
       <div className="board-iteration-heading">
         <h2 className="board-iteration-title">{SCOPE_LABELS[scope]}</h2>
         <span className="board-iteration-range">
-          {week
-            ? `${formatWeekRange(week, addDays(week, 6))}${iteration ? ` · ${iteration.iso_week}` : ''}`
-            : SCOPE_DESCRIPTIONS[scope]}
+          {iteration
+            ? `${formatWeekRange(iteration.start_date, iteration.end_date)} · ${iteration.iso_week}`
+            : day
+              ? `Not planned yet: ${scope === 'last' ? 'ended' : 'starts'} around ${parseIsoDate(day).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+              : SCOPE_DESCRIPTIONS[scope]}
         </span>
       </div>
-      {week && (
+      {day && (
         <label className="board-iteration-goal">
           <span className="board-iteration-goal-label">Goal</span>
           <input
@@ -65,7 +67,7 @@ export function IterationBar({
             type="button"
             className="board-button"
             disabled={!canCarryOver}
-            title="Move every task that is not Done to the following week's iteration"
+            title="Move every task that is not Done to the following iteration"
             onClick={onCarryOver}
           >
             <Forward size={13} /> Move unfinished to next

@@ -10,16 +10,20 @@ import { useBoardStore } from '@/stores/board';
 import { useWorkspaceStore } from '@/stores/workspace';
 import {
   SCOPE_LABELS,
-  STAGE_LABELS,
   UNASSIGNED,
   boardPath,
   formatWeekRange,
-  matchesAssignee,
+  matchesFilters,
+  NO_LABEL,
+  NO_PRIORITY,
   parseScope,
+  choiceColor,
+  choiceLabel,
+  scopeIterations,
   scopeOfTask,
   toIsoDate,
-  weekStart,
-  type BoardStage,
+  type BoardColor,
+  type BoardFilterKind,
 } from '@/lib/board';
 import { CollapsibleSection } from './collapsible-section';
 import { OntologyMultiPicker, type OntologyPickerOption } from './ontology-multi-picker';
@@ -27,13 +31,17 @@ import { SidebarNewItem } from './sidebar-new-item';
 import { getWorkspacePath } from './utils';
 
 // board.css only loads on the board route: the sidebar colors its own dots.
-const STAGE_DOT: Record<BoardStage, string> = {
-  inbox: 'bg-slate-400',
-  ready: 'bg-blue-500',
-  in_progress: 'bg-amber-500',
-  on_hold: 'bg-purple-500',
-  review: 'bg-cyan-500',
-  done: 'bg-green-500',
+const DOT: Record<BoardColor, string> = {
+  slate: 'bg-slate-400',
+  blue: 'bg-blue-500',
+  amber: 'bg-amber-500',
+  purple: 'bg-purple-500',
+  cyan: 'bg-cyan-500',
+  green: 'bg-green-500',
+  red: 'bg-red-500',
+  orange: 'bg-orange-500',
+  yellow: 'bg-yellow-500',
+  pink: 'bg-pink-500',
 };
 
 const createdOn = (value: string | null) =>
@@ -51,8 +59,18 @@ export function BoardSection({ collapsed, detailOnly }: { collapsed: boolean; de
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { load, tasks, members, iterations, assignees, toggleAssignee, clearAssignees, loaded, error } =
-    useBoardStore();
+  const {
+    load,
+    settings,
+    tasks,
+    members,
+    iterations,
+    filters,
+    toggleFilter,
+    clearFilter,
+    loaded,
+    error,
+  } = useBoardStore();
 
   useEffect(() => {
     if (workspaceId) void load(workspaceId);
@@ -60,7 +78,7 @@ export function BoardSection({ collapsed, detailOnly }: { collapsed: boolean; de
 
   const onBoard = pathname?.includes('/board') ?? false;
   const openTaskId = onBoard ? searchParams?.get('task') : null;
-  const currentWeek = weekStart(toIsoDate(new Date()));
+  const scopes = useMemo(() => scopeIterations(iterations, toIsoDate(new Date())), [iterations]);
   const currentView = onBoard ? parseScope(searchParams?.get('view')) : 'current';
 
   const memberName = useMemo(() => {
@@ -72,9 +90,9 @@ export function BoardSection({ collapsed, detailOnly }: { collapsed: boolean; de
   const shown = useMemo(
     () =>
       tasks
-        .filter((t) => !t.archived && matchesAssignee(t, assignees))
+        .filter((t) => !t.archived && matchesFilters(t, filters))
         .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? '')),
-    [tasks, assignees],
+    [tasks, filters],
   );
 
   const assigneeOptions = useMemo<OntologyPickerOption[]>(
@@ -91,16 +109,38 @@ export function BoardSection({ collapsed, detailOnly }: { collapsed: boolean; de
     [members, userId],
   );
 
+  const priorityOptions = useMemo<OntologyPickerOption[]>(
+    () => [
+      ...settings.priorities.map((p) => ({ value: p.key, label: p.label })),
+      { value: NO_PRIORITY, label: 'No priority' },
+    ],
+    [settings.priorities],
+  );
+
+  // Suggested labels first, then every other label already on a task.
+  const labelOptions = useMemo<OntologyPickerOption[]>(() => {
+    const used = tasks.flatMap((t) => t.labels).filter((l) => !settings.suggested_labels.includes(l));
+    return [
+      ...[...settings.suggested_labels, ...Array.from(new Set(used)).sort()].map((l) => ({ value: l, label: l })),
+      { value: NO_LABEL, label: 'No label' },
+    ];
+  }, [tasks, settings.suggested_labels]);
+
   if (!workspaceId) return null;
 
-  const pickerLabel =
-    assignees.length === 0
-      ? 'All assignees'
-      : assignees.length === 1
-        ? assignees[0] === UNASSIGNED
-          ? 'Unassigned'
-          : memberName(assignees[0])
-        : `${assignees.length} assignees`;
+  const pickers: { kind: BoardFilterKind; items: OntologyPickerOption[]; noun: string; allLabel: string }[] = [
+    { kind: 'assignees', items: assigneeOptions, noun: 'assignees', allLabel: 'All assignees' },
+    { kind: 'priorities', items: priorityOptions, noun: 'priorities', allLabel: 'All priorities' },
+    { kind: 'labels', items: labelOptions, noun: 'labels', allLabel: 'All labels' },
+  ];
+  /** "All …", the one selected value's name, or "3 labels". */
+  const pickerLabel = ({ kind, items, noun, allLabel }: (typeof pickers)[number]) => {
+    const selected = filters[kind];
+    if (selected.length === 0) return allLabel;
+    if (selected.length > 1) return `${selected.length} ${noun}`;
+    const option = items.find((o) => o.value === selected[0]);
+    return kind === 'assignees' && !option ? memberName(selected[0]) : (option?.label ?? selected[0]);
+  };
   const whereLabel = (iterationId: string | null, scope: ReturnType<typeof scopeOfTask>) => {
     if (scope) return SCOPE_LABELS[scope];
     const iteration = iterationId ? iterationById.get(iterationId) : undefined;
@@ -131,18 +171,20 @@ export function BoardSection({ collapsed, detailOnly }: { collapsed: boolean; de
         <span>Dashboard</span>
       </Link>
       <div className="shell-sidebar-home-gutter pb-2 pt-1">
-        <OntologyMultiPicker
-          key={workspaceId}
-          items={assigneeOptions}
-          value={assignees}
-          onToggle={toggleAssignee}
-          onClear={clearAssignees}
-          loading={!loaded}
-          error={null}
-          label={pickerLabel}
-          allLabel="All assignees"
-          noun="assignees"
-        />
+        {pickers.map((picker) => (
+          <OntologyMultiPicker
+            key={`${picker.kind}:${workspaceId}`}
+            items={picker.items}
+            value={filters[picker.kind]}
+            onToggle={(value) => toggleFilter(picker.kind, value)}
+            onClear={() => clearFilter(picker.kind)}
+            loading={!loaded}
+            error={null}
+            label={pickerLabel(picker)}
+            allLabel={picker.allLabel}
+            noun={picker.noun}
+          />
+        ))}
       </div>
 
       <div className="shell-sidebar-home-gutter space-y-0.5">
@@ -160,14 +202,14 @@ export function BoardSection({ collapsed, detailOnly }: { collapsed: boolean; de
               {shown.length} {shown.length === 1 ? 'task' : 'tasks'}, newest first
             </p>
             {shown.map((task) => {
-              const scope = scopeOfTask(task, (id) => iterationById.get(id)?.start_date ?? null, currentWeek);
+              const scope = scopeOfTask(task, scopes);
               const view = scope ?? currentView;
               const names = task.assignee_ids.map(memberName);
               return (
                 <Link
                   key={task.id}
                   href={boardPath(workspaceId, { view, task: task.id })}
-                  title={`${STAGE_LABELS[task.stage]}${names.length ? ` · ${names.join(', ')}` : ''}`}
+                  title={`${choiceLabel(settings.stages, task.stage)}${names.length ? ` · ${names.join(', ')}` : ''}`}
                   className={cn(
                     'flex w-full items-start gap-2 px-2 py-1.5 text-sm transition-colors',
                     openTaskId === task.id
@@ -175,7 +217,7 @@ export function BoardSection({ collapsed, detailOnly }: { collapsed: boolean; de
                       : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                   )}
                 >
-                  <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', STAGE_DOT[task.stage])} />
+                  <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', DOT[choiceColor(settings.stages, task.stage)])} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate">{task.title}</span>
                     <span className="block truncate text-xs text-muted-foreground">

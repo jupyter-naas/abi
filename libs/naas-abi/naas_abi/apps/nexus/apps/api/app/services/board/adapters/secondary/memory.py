@@ -4,6 +4,7 @@ from datetime import date
 
 from naas_abi.apps.nexus.apps.api.app.services.board.board__schema import (
     ActivityEntry,
+    BoardSettings,
     Comment,
     Iteration,
     Task,
@@ -22,6 +23,13 @@ class InMemoryBoardStore(BoardStorePort):
         self._tasks: dict[str, Task] = {}
         self._comments: list[Comment] = []
         self._activity: list[ActivityEntry] = []
+        self._settings: dict[str, BoardSettings] = {}
+
+    async def get_settings(self, workspace_id: str) -> BoardSettings | None:
+        return self._settings.get(workspace_id)
+
+    async def save_settings(self, workspace_id: str, settings: BoardSettings) -> None:
+        self._settings[workspace_id] = settings
 
     async def list_iterations(self, workspace_id: str) -> list[Iteration]:
         return [i for i in self._iterations.values() if i.workspace_id == workspace_id]

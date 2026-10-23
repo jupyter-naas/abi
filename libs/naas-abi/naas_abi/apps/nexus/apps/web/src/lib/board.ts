@@ -1,10 +1,12 @@
 /**
  * Workspace project board: weekly iterations, tasks, comments and activity.
  *
- * API: /api/board (see services/board in the API). An iteration is one ISO
- * week, Monday through Sunday, keyed by its Monday. The board asks for "the
- * iteration of this date" with the user's local date, so the week boundary
- * follows the user's timezone.
+ * API: /api/board (see services/board in the API). An iteration is a run of
+ * whole weeks (length and start weekday come from the workspace's board
+ * settings), keyed by its first day; iterations never overlap. The board asks
+ * for "the iteration of this date" with the user's local date, so boundaries
+ * follow the user's timezone. Stages, priorities and suggested labels also
+ * come from the settings.
  *
  * The page shows five scopes: the current, last and next iterations (their
  * tasks past Inbox), Inbox (every task waiting for triage, scheduled or not)
@@ -12,47 +14,92 @@
  */
 import { authFetch } from '@/stores/auth';
 
-export type BoardStage = 'inbox' | 'ready' | 'in_progress' | 'on_hold' | 'review' | 'done';
-export type BoardPriority = 'urgent' | 'high' | 'medium' | 'low';
+/** A stage key from the settings; ``inbox`` and ``done`` always exist. */
+export type BoardStage = string;
+/** A priority key from the settings. */
+export type BoardPriority = string;
 
-export const BOARD_STAGES: BoardStage[] = ['inbox', 'ready', 'in_progress', 'on_hold', 'review', 'done'];
-export const BOARD_PRIORITIES: BoardPriority[] = ['urgent', 'high', 'medium', 'low'];
+export const INBOX_STAGE = 'inbox';
+export const DONE_STAGE = 'done';
 
-export const STAGE_LABELS: Record<BoardStage, string> = {
-  inbox: 'Inbox',
-  ready: 'Ready',
-  in_progress: 'In progress',
-  on_hold: 'On hold',
-  review: 'Review',
-  done: 'Done',
+/** Colors a stage or priority may use; each maps to theme-aware classes. */
+export const BOARD_PALETTE = [
+  'slate', 'blue', 'amber', 'purple', 'cyan', 'green', 'red', 'orange', 'yellow', 'pink',
+] as const;
+export type BoardColor = (typeof BOARD_PALETTE)[number];
+
+/** A stage or a priority. ``key`` is empty for one not saved yet. */
+export type BoardChoice = { key: string; label: string; color: BoardColor };
+
+export const WEEKDAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+export type BoardSettings = {
+  iteration_weeks: number;
+  /** 0 = Monday … 6 = Sunday. */
+  iteration_start_day: number;
+  iteration_anchor: string;
+  /** Ordered; Inbox first, Done last. */
+  stages: BoardChoice[];
+  /** Ordered, most urgent first. */
+  priorities: BoardChoice[];
+  /** Stage of a task created in an iteration. */
+  default_stage: BoardStage;
+  suggested_labels: string[];
+  updated_by: string | null;
+  updated_at: string | null;
+  /** Whether the caller may save changes (owners and admins). */
+  can_edit: boolean;
 };
 
-export const PRIORITY_LABELS: Record<BoardPriority, string> = {
-  urgent: 'Urgent',
-  high: 'High',
-  medium: 'Medium',
-  low: 'Low',
+/** What a workspace without saved settings uses (mirrors the API defaults). */
+export const DEFAULT_BOARD_SETTINGS: BoardSettings = {
+  iteration_weeks: 1,
+  iteration_start_day: 0,
+  iteration_anchor: '2024-01-01',
+  stages: [
+    { key: 'inbox', label: 'Inbox', color: 'slate' },
+    { key: 'ready', label: 'Ready', color: 'blue' },
+    { key: 'in_progress', label: 'In progress', color: 'amber' },
+    { key: 'on_hold', label: 'On hold', color: 'purple' },
+    { key: 'review', label: 'Review', color: 'cyan' },
+    { key: 'done', label: 'Done', color: 'green' },
+  ],
+  priorities: [
+    { key: 'urgent', label: 'Urgent', color: 'red' },
+    { key: 'high', label: 'High', color: 'orange' },
+    { key: 'medium', label: 'Medium', color: 'yellow' },
+    { key: 'low', label: 'Low', color: 'slate' },
+  ],
+  default_stage: 'ready',
+  suggested_labels: ['Feature', 'Bug', 'Data', 'Model', 'Research', 'Chore'],
+  updated_by: null,
+  updated_at: null,
+  can_edit: false,
 };
 
-/** Label suggestions; any label can be typed. */
-export const SUGGESTED_LABELS = ['Feature', 'Bug', 'Data', 'Model', 'Research', 'Chore'];
-
-export function stageFromLabel(label: string): BoardStage | null {
-  return BOARD_STAGES.find((stage) => STAGE_LABELS[stage] === label) ?? null;
+/** Display label of a key; unknown keys (removed since) show as they are. */
+export function choiceLabel(choices: BoardChoice[], key: string | null): string {
+  if (!key) return '';
+  return choices.find((c) => c.key === key)?.label ?? key;
 }
 
-export function priorityFromLabel(label: string): BoardPriority | null {
-  return BOARD_PRIORITIES.find((priority) => PRIORITY_LABELS[priority] === label) ?? null;
+export function choiceColor(choices: BoardChoice[], key: string | null): BoardColor {
+  return choices.find((c) => c.key === key)?.color ?? 'slate';
+}
+
+/** The key behind a display label (board columns are grouped by label). */
+export function choiceFromLabel(choices: BoardChoice[], label: string): string | null {
+  return choices.find((c) => c.label === label)?.key ?? null;
 }
 
 export type BoardIteration = {
   id: string;
   workspace_id: string;
-  /** YYYY-MM-DD, a Monday. */
+  /** YYYY-MM-DD, first day. */
   start_date: string;
-  /** YYYY-MM-DD, the Sunday after. */
+  /** YYYY-MM-DD, last day (inclusive). */
   end_date: string;
-  /** e.g. 2026-W43 */
+  /** e.g. 2026-W43, or 2026-W43–W44 for two weeks */
   iso_week: string;
   goal: string;
   created_by: string | null;
@@ -158,15 +205,6 @@ export function formatWeekRange(start: string, end: string, locale?: string): st
   return `${full(a)} – ${full(b)}`;
 }
 
-/** Relative name of a week from today's week: "Current iteration", "Next iteration"… */
-export function iterationName(start: string, today: string): string {
-  const current = weekStart(today);
-  if (start === current) return 'Current iteration';
-  if (start === addWeeks(current, -1)) return 'Last iteration';
-  if (start === addWeeks(current, 1)) return 'Next iteration';
-  return `Week of ${parseIsoDate(start).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
-}
-
 // -- Scopes ---------------------------------------------------------------------
 
 export type BoardScope = 'current' | 'last' | 'next' | 'inbox' | 'backlog';
@@ -185,43 +223,73 @@ export function parseScope(value: string | null | undefined): BoardScope {
   return BOARD_SCOPES.find((scope) => scope === value) ?? 'current';
 }
 
-/** Monday of the week an iteration scope shows; null for Inbox and Backlog. */
-export function scopeWeek(scope: BoardScope, currentWeek: string): string | null {
-  if (scope === 'current') return currentWeek;
-  if (scope === 'last') return addWeeks(currentWeek, -1);
-  if (scope === 'next') return addWeeks(currentWeek, 1);
+/** The iteration a date falls in, if one exists. */
+export function iterationContaining(iterations: BoardIteration[], day: string): BoardIteration | null {
+  return iterations.find((i) => i.start_date <= day && day <= i.end_date) ?? null;
+}
+
+/**
+ * A day inside an iteration scope, given the current iteration: what to ask
+ * the API for when the scope's iteration does not exist yet. Null for Inbox
+ * and Backlog.
+ */
+export function scopeDay(scope: BoardScope, current: BoardIteration | null, today: string): string | null {
+  if (scope === 'current') return today;
+  if (!current) return null;
+  if (scope === 'last') return addDays(current.start_date, -1);
+  if (scope === 'next') return addDays(current.end_date, 1);
   return null;
+}
+
+/** The iteration each iteration scope shows, from today's iteration outwards. */
+export function scopeIterations(
+  iterations: BoardIteration[],
+  today: string,
+): Record<'current' | 'last' | 'next', BoardIteration | null> {
+  const current = iterationContaining(iterations, today);
+  const at = (scope: BoardScope) => {
+    const day = scopeDay(scope, current, today);
+    return day ? iterationContaining(iterations, day) : null;
+  };
+  return { current, last: at('last'), next: at('next') };
 }
 
 /**
  * Whether a task shows in a scope. ``iterationId`` is the scope's iteration
- * (null when that week has none yet). Inbox tasks only show in Inbox.
+ * (null when it has none yet). Inbox tasks only show in Inbox.
  */
 export function taskInScope(task: BoardTask, scope: BoardScope, iterationId: string | null): boolean {
-  if (scope === 'inbox') return task.stage === 'inbox';
-  if (task.stage === 'inbox') return false;
+  if (scope === 'inbox') return task.stage === INBOX_STAGE;
+  if (task.stage === INBOX_STAGE) return false;
   if (scope === 'backlog') return task.iteration_id === null;
   return iterationId !== null && task.iteration_id === iterationId;
 }
 
 /**
  * What dropping a task on a scope changes, or null when it is already there.
- * Leaving Inbox makes a task Ready; going to Inbox keeps its iteration, so it
- * returns there once triaged.
+ * Leaving Inbox puts a task in ``defaultStage``; going to Inbox keeps its
+ * iteration, so it returns there once triaged.
  */
-export function fieldsForScope(task: BoardTask, scope: BoardScope, iterationId: string | null): TaskFields | null {
+export function fieldsForScope(
+  task: BoardTask,
+  scope: BoardScope,
+  iterationId: string | null,
+  defaultStage: BoardStage = DEFAULT_BOARD_SETTINGS.default_stage,
+): TaskFields | null {
   if (taskInScope(task, scope, iterationId)) return null;
-  if (scope === 'inbox') return { stage: 'inbox' };
-  const stage = task.stage === 'inbox' ? { stage: 'ready' as const } : {};
+  if (scope === 'inbox') return { stage: INBOX_STAGE };
+  const stage = task.stage === INBOX_STAGE ? { stage: defaultStage } : {};
   return { ...stage, iteration_id: scope === 'backlog' ? null : iterationId };
 }
 
 /** The scope a task shows in, or null for an iteration outside last/current/next. */
-export function scopeOfTask(task: BoardTask, iterationWeek: (iterationId: string) => string | null, currentWeek: string): BoardScope | null {
-  if (task.stage === 'inbox') return 'inbox';
+export function scopeOfTask(
+  task: BoardTask,
+  scopes: Record<'current' | 'last' | 'next', BoardIteration | null>,
+): BoardScope | null {
+  if (task.stage === INBOX_STAGE) return 'inbox';
   if (task.iteration_id === null) return 'backlog';
-  const week = iterationWeek(task.iteration_id);
-  return (['current', 'last', 'next'] as const).find((scope) => scopeWeek(scope, currentWeek) === week) ?? null;
+  return (['current', 'last', 'next'] as const).find((scope) => scopes[scope]?.id === task.iteration_id) ?? null;
 }
 
 /** Assignee filter value for tasks nobody is assigned to. */
@@ -232,6 +300,43 @@ export function matchesAssignee(task: BoardTask, assignees: string[]): boolean {
   if (assignees.length === 0) return true;
   if (task.assignee_ids.length === 0) return assignees.includes(UNASSIGNED);
   return task.assignee_ids.some((id) => assignees.includes(id));
+}
+
+/** Priority filter value for tasks without a priority. */
+export const NO_PRIORITY = '__no_priority__';
+
+/** ``priorities`` holds priority keys and/or NO_PRIORITY; empty means any. */
+export function matchesPriority(task: BoardTask, priorities: string[]): boolean {
+  if (priorities.length === 0) return true;
+  return priorities.includes(task.priority ?? NO_PRIORITY);
+}
+
+/** Label filter value for tasks without a label. */
+export const NO_LABEL = '__no_label__';
+
+/** ``labels`` holds label names and/or NO_LABEL; empty means any. */
+export function matchesLabel(task: BoardTask, labels: string[]): boolean {
+  if (labels.length === 0) return true;
+  if (task.labels.length === 0) return labels.includes(NO_LABEL);
+  return task.labels.some((label) => labels.includes(label));
+}
+
+/** The sidebar filters, shared with the board page. Empty lists filter nothing. */
+export type BoardFilters = { assignees: string[]; priorities: string[]; labels: string[] };
+export type BoardFilterKind = keyof BoardFilters;
+export const NO_FILTERS: BoardFilters = { assignees: [], priorities: [], labels: [] };
+
+/** Every active filter must match (AND); within one, any selected value does (OR). */
+export function matchesFilters(task: BoardTask, filters: BoardFilters): boolean {
+  return (
+    matchesAssignee(task, filters.assignees) &&
+    matchesPriority(task, filters.priorities) &&
+    matchesLabel(task, filters.labels)
+  );
+}
+
+export function boardSettingsPath(workspaceId: string): string {
+  return `/workspace/${encodeURIComponent(workspaceId)}/board/settings`;
 }
 
 /** ``newTask`` opens the board's "New task" prompt on arrival. */
@@ -274,6 +379,20 @@ const q = (params: Record<string, string | boolean | undefined>) => {
 };
 
 export const boardApi = {
+  getSettings: (workspaceId: string) =>
+    call<BoardSettings>(`/api/board/settings?${q({ workspace_id: workspaceId })}`),
+  saveSettings: (
+    workspaceId: string,
+    settings: Pick<
+      BoardSettings,
+      'iteration_weeks' | 'iteration_start_day' | 'stages' | 'priorities' | 'default_stage' | 'suggested_labels'
+    >,
+    today: string,
+  ) =>
+    call<BoardSettings>(`/api/board/settings?${q({ workspace_id: workspaceId })}`, {
+      method: 'PUT',
+      body: JSON.stringify({ ...settings, today }),
+    }),
   listIterations: (workspaceId: string) =>
     call<BoardIteration[]>(`/api/board/iterations?${q({ workspace_id: workspaceId })}`),
   /** The iteration of the week ``date`` falls in, created when missing. */

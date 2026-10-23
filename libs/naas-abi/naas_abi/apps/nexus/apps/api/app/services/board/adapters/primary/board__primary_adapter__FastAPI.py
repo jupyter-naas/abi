@@ -3,6 +3,7 @@
 Every route takes ``workspace_id`` and needs workspace access plus the
 ``board`` feature for the caller's role. By default only workspace owners and
 admins have it; an organization or workspace override can open it to members.
+Changing the board settings also takes the owner or admin role.
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ from naas_abi.apps.nexus.apps.api.app.services.board.board__schema import (
     MAX_TITLE_LENGTH,
     ActivityEntry,
     BoardNotFoundError,
+    BoardSettings,
     BoardValidationError,
     Comment,
     Iteration,
@@ -42,6 +44,7 @@ router = APIRouter()
 _service = BoardService(PostgresBoardStore(), PostgresBoardMemberDirectory())
 
 BOARD_FEATURE = "board"
+SETTINGS_ROLES = frozenset({"owner", "admin"})
 
 
 def get_board_service() -> BoardService:
@@ -53,7 +56,8 @@ async def _caller_flags(workspace_id: str, role: str) -> dict[str, bool]:
         return await caller_feature_flags(db, workspace_id, role)
 
 
-async def _require_board(user_id: str, workspace_id: str) -> None:
+async def _require_board(user_id: str, workspace_id: str) -> str:
+    """The caller's workspace role, once workspace access and the feature are checked."""
     role = await require_workspace_access(user_id, workspace_id)
     flags = await _caller_flags(workspace_id, role)
     if not flags.get(BOARD_FEATURE, False):
@@ -61,6 +65,7 @@ async def _require_board(user_id: str, workspace_id: str) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="The board is not enabled for your role in this workspace",
         )
+    return role
 
 
 def _http_error(exc: Exception) -> HTTPException:
@@ -165,8 +170,55 @@ class TaskPatchIn(BaseModel):
     assignee_ids: list[str] | None = Field(default=None, max_length=100)
 
 
+class ChoiceIO(BaseModel):
+    # Empty for a new stage or priority: the server derives one from the label.
+    key: str = ""
+    label: str
+    color: str = "slate"
+
+
+class SettingsOut(BaseModel):
+    iteration_weeks: int
+    iteration_start_day: int
+    iteration_anchor: date
+    stages: list[ChoiceIO]
+    priorities: list[ChoiceIO]
+    default_stage: str
+    suggested_labels: list[str]
+    updated_by: str | None
+    updated_at: datetime | None
+    # Whether the caller may save changes (owners and admins).
+    can_edit: bool
+
+
+class SettingsIn(BaseModel):
+    iteration_weeks: int
+    iteration_start_day: int
+    stages: list[ChoiceIO] = Field(max_length=50)
+    priorities: list[ChoiceIO] = Field(max_length=50)
+    default_stage: str
+    suggested_labels: list[str] = Field(default_factory=list, max_length=100)
+    # The caller's local date: a new iteration rhythm starts after its ongoing iteration.
+    today: date
+
+
 class CommentIn(BaseModel):
     body: str = Field(max_length=MAX_COMMENT_LENGTH * 2)
+
+
+def _settings_out(settings: BoardSettings, *, can_edit: bool) -> SettingsOut:
+    return SettingsOut(
+        iteration_weeks=settings.iteration_weeks,
+        iteration_start_day=settings.iteration_start_day,
+        iteration_anchor=settings.iteration_anchor,
+        stages=[ChoiceIO(key=c.key, label=c.label, color=c.color) for c in settings.stages],
+        priorities=[ChoiceIO(key=c.key, label=c.label, color=c.color) for c in settings.priorities],
+        default_stage=settings.default_stage,
+        suggested_labels=list(settings.suggested_labels),
+        updated_by=settings.updated_by,
+        updated_at=settings.updated_at,
+        can_edit=can_edit,
+    )
 
 
 def _iteration_out(iteration: Iteration) -> IterationOut:
@@ -229,6 +281,47 @@ def _activity_out(entry: ActivityEntry) -> ActivityOut:
 
 
 # ---------------------------------------------------------------------------
+# Settings
+# ---------------------------------------------------------------------------
+
+
+@router.get("/settings")
+async def get_settings(
+    workspace_id: str = Query(...),
+    current_user: User = Depends(get_current_user_required),
+    service: BoardService = Depends(get_board_service),
+) -> SettingsOut:
+    role = await _require_board(current_user.id, workspace_id)
+    settings = await service.get_settings(workspace_id)
+    return _settings_out(settings, can_edit=role in SETTINGS_ROLES)
+
+
+@router.put("/settings")
+async def update_settings(
+    body: SettingsIn,
+    workspace_id: str = Query(...),
+    current_user: User = Depends(get_current_user_required),
+    service: BoardService = Depends(get_board_service),
+) -> SettingsOut:
+    role = await _require_board(current_user.id, workspace_id)
+    if role not in SETTINGS_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only workspace owners and admins can change the board settings",
+        )
+    try:
+        settings = await service.update_settings(
+            workspace_id,
+            body.model_dump(exclude={"today"}),
+            today=body.today,
+            user_id=current_user.id,
+        )
+    except BoardValidationError as exc:
+        raise _http_error(exc) from exc
+    return _settings_out(settings, can_edit=True)
+
+
+# ---------------------------------------------------------------------------
 # Iterations
 # ---------------------------------------------------------------------------
 
@@ -250,7 +343,7 @@ async def ensure_iteration(
     current_user: User = Depends(get_current_user_required),
     service: BoardService = Depends(get_board_service),
 ) -> IterationOut:
-    """The iteration of the week ``date`` falls in, created when missing."""
+    """The iteration ``date`` falls in, created when missing."""
     await _require_board(current_user.id, workspace_id)
     iteration = await service.ensure_iteration(workspace_id, body.date, user_id=current_user.id)
     return _iteration_out(iteration)
@@ -281,7 +374,7 @@ async def carry_over(
     current_user: User = Depends(get_current_user_required),
     service: BoardService = Depends(get_board_service),
 ) -> CarryOverOut:
-    """Move the iteration's unfinished tasks to the next week's iteration."""
+    """Move the iteration's unfinished tasks to the iteration after it."""
     await _require_board(current_user.id, workspace_id)
     try:
         result = await service.carry_over(workspace_id, iteration_id, user_id=current_user.id)

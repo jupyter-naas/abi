@@ -100,7 +100,8 @@ def test_task_lifecycle_over_http(client_for):
     )
     assert created.status_code == 201
     task = created.json()
-    assert task["stage"] == "inbox"
+    # Created in an iteration without a stage: the settings' default stage.
+    assert task["stage"] == "ready"
     assert task["created_by"] == USER
 
     patched = client.patch(
@@ -209,3 +210,58 @@ def test_validation_and_workspace_isolation_over_http(client_for):
     )
     assert client.get(f"/api/board/tasks?workspace_id={OTHER_WS}&backlog=true").json() == []
     assert client.get(f"/api/board/tasks?workspace_id={OTHER_WS}").json() == []
+
+
+def test_settings_are_read_by_board_users_and_saved_by_owners_and_admins(client_for):
+    admin = client_for("admin")
+    settings = admin.get(f"/api/board/settings?workspace_id={WS}")
+    assert settings.status_code == 200
+    body = settings.json()
+    assert body["can_edit"] is True
+    assert [s["key"] for s in body["stages"]][0] == "inbox"
+
+    payload = {
+        key: body[key]
+        for key in (
+            "iteration_weeks",
+            "iteration_start_day",
+            "stages",
+            "priorities",
+            "default_stage",
+            "suggested_labels",
+        )
+    }
+    payload.update(iteration_weeks=2, suggested_labels=["Ops"], today="2026-10-22")
+    saved = admin.put(f"/api/board/settings?workspace_id={WS}", json=payload)
+    assert saved.status_code == 200
+    assert saved.json()["iteration_weeks"] == 2
+    assert saved.json()["suggested_labels"] == ["Ops"]
+
+    payload["iteration_weeks"] = 9
+    assert admin.put(f"/api/board/settings?workspace_id={WS}", json=payload).status_code == 422
+
+    # A member the board was opened to can read but not change the settings.
+    member = client_for("member", overrides={"board": True})
+    read = member.get(f"/api/board/settings?workspace_id={WS}")
+    assert read.status_code == 200 and read.json()["can_edit"] is False
+    assert member.put(f"/api/board/settings?workspace_id={WS}", json=payload).status_code == 403
+
+
+def test_created_tasks_carry_the_route_workspace(client_for):
+    client = client_for("owner")
+    # A workspace_id in the body is ignored: the route's workspace is the one used.
+    created = client.post(
+        f"/api/board/tasks?workspace_id={WS}", json={"title": "Mine", "workspace_id": OTHER_WS}
+    )
+    assert created.status_code == 201
+    task = created.json()
+    assert task["workspace_id"] == WS
+
+    listed = client.get(f"/api/board/tasks?workspace_id={WS}").json()
+    assert [t["workspace_id"] for t in listed] == [WS]
+    assert client.get(f"/api/board/tasks?workspace_id={OTHER_WS}").json() == []
+
+    patched = client.patch(
+        f"/api/board/tasks/{task['id']}?workspace_id={WS}", json={"title": "Still mine"}
+    )
+    assert patched.json()["workspace_id"] == WS
