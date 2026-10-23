@@ -4,7 +4,11 @@
  * API: /api/board (see services/board in the API). An iteration is one ISO
  * week, Monday through Sunday, keyed by its Monday. The board asks for "the
  * iteration of this date" with the user's local date, so the week boundary
- * follows the user's timezone. A task without an iteration is in the backlog.
+ * follows the user's timezone.
+ *
+ * The page shows five scopes: the current, last and next iterations (their
+ * tasks past Inbox), Inbox (every task waiting for triage, scheduled or not)
+ * and Backlog (triaged tasks without an iteration).
  */
 import { authFetch } from '@/stores/auth';
 
@@ -158,16 +162,87 @@ export function formatWeekRange(start: string, end: string, locale?: string): st
 export function iterationName(start: string, today: string): string {
   const current = weekStart(today);
   if (start === current) return 'Current iteration';
-  if (start === addWeeks(current, -1)) return 'Previous iteration';
+  if (start === addWeeks(current, -1)) return 'Last iteration';
   if (start === addWeeks(current, 1)) return 'Next iteration';
   return `Week of ${parseIsoDate(start).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
 }
 
-export function boardPath(workspaceId: string, params?: { week?: string; backlog?: boolean; task?: string }): string {
+// -- Scopes ---------------------------------------------------------------------
+
+export type BoardScope = 'current' | 'last' | 'next' | 'inbox' | 'backlog';
+
+export const BOARD_SCOPES: BoardScope[] = ['current', 'last', 'next', 'inbox', 'backlog'];
+
+export const SCOPE_LABELS: Record<BoardScope, string> = {
+  current: 'Current iteration',
+  last: 'Last iteration',
+  next: 'Next iteration',
+  inbox: 'Inbox',
+  backlog: 'Backlog',
+};
+
+export function parseScope(value: string | null | undefined): BoardScope {
+  return BOARD_SCOPES.find((scope) => scope === value) ?? 'current';
+}
+
+/** Monday of the week an iteration scope shows; null for Inbox and Backlog. */
+export function scopeWeek(scope: BoardScope, currentWeek: string): string | null {
+  if (scope === 'current') return currentWeek;
+  if (scope === 'last') return addWeeks(currentWeek, -1);
+  if (scope === 'next') return addWeeks(currentWeek, 1);
+  return null;
+}
+
+/**
+ * Whether a task shows in a scope. ``iterationId`` is the scope's iteration
+ * (null when that week has none yet). Inbox tasks only show in Inbox.
+ */
+export function taskInScope(task: BoardTask, scope: BoardScope, iterationId: string | null): boolean {
+  if (scope === 'inbox') return task.stage === 'inbox';
+  if (task.stage === 'inbox') return false;
+  if (scope === 'backlog') return task.iteration_id === null;
+  return iterationId !== null && task.iteration_id === iterationId;
+}
+
+/**
+ * What dropping a task on a scope changes, or null when it is already there.
+ * Leaving Inbox makes a task Ready; going to Inbox keeps its iteration, so it
+ * returns there once triaged.
+ */
+export function fieldsForScope(task: BoardTask, scope: BoardScope, iterationId: string | null): TaskFields | null {
+  if (taskInScope(task, scope, iterationId)) return null;
+  if (scope === 'inbox') return { stage: 'inbox' };
+  const stage = task.stage === 'inbox' ? { stage: 'ready' as const } : {};
+  return { ...stage, iteration_id: scope === 'backlog' ? null : iterationId };
+}
+
+/** The scope a task shows in, or null for an iteration outside last/current/next. */
+export function scopeOfTask(task: BoardTask, iterationWeek: (iterationId: string) => string | null, currentWeek: string): BoardScope | null {
+  if (task.stage === 'inbox') return 'inbox';
+  if (task.iteration_id === null) return 'backlog';
+  const week = iterationWeek(task.iteration_id);
+  return (['current', 'last', 'next'] as const).find((scope) => scopeWeek(scope, currentWeek) === week) ?? null;
+}
+
+/** Assignee filter value for tasks nobody is assigned to. */
+export const UNASSIGNED = '__unassigned__';
+
+/** ``assignees`` holds user ids and/or UNASSIGNED; empty means everyone. */
+export function matchesAssignee(task: BoardTask, assignees: string[]): boolean {
+  if (assignees.length === 0) return true;
+  if (task.assignee_ids.length === 0) return assignees.includes(UNASSIGNED);
+  return task.assignee_ids.some((id) => assignees.includes(id));
+}
+
+/** ``newTask`` opens the board's "New task" prompt on arrival. */
+export function boardPath(
+  workspaceId: string,
+  params?: { view?: BoardScope; task?: string; newTask?: boolean },
+): string {
   const search = new URLSearchParams();
-  if (params?.backlog) search.set('backlog', '1');
-  else if (params?.week) search.set('week', params.week);
+  if (params?.view && params.view !== 'current') search.set('view', params.view);
   if (params?.task) search.set('task', params.task);
+  if (params?.newTask) search.set('new', '1');
   const qs = search.toString();
   return `/workspace/${encodeURIComponent(workspaceId)}/board${qs ? `?${qs}` : ''}`;
 }
@@ -217,18 +292,10 @@ export const boardApi = {
       `/api/board/iterations/${encodeURIComponent(iterationId)}/carry-over?${q({ workspace_id: workspaceId })}`,
       { method: 'POST' },
     ),
-  listTasks: (
-    workspaceId: string,
-    scope: { iterationId: string } | { backlog: true },
-    includeArchived = false,
-  ) =>
+  /** Every task of the workspace, newest first. */
+  listAllTasks: (workspaceId: string, includeArchived = false) =>
     call<BoardTask[]>(
-      `/api/board/tasks?${q({
-        workspace_id: workspaceId,
-        iteration_id: 'iterationId' in scope ? scope.iterationId : undefined,
-        backlog: 'backlog' in scope,
-        include_archived: includeArchived,
-      })}`,
+      `/api/board/tasks?${q({ workspace_id: workspaceId, include_archived: includeArchived })}`,
     ),
   createTask: (workspaceId: string, fields: TaskFields & { title: string }) =>
     call<BoardTask>(`/api/board/tasks?${q({ workspace_id: workspaceId })}`, {

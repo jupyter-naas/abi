@@ -32,6 +32,15 @@ workspace overrides), which until now only drove the frontend.
    local date to get "the iteration of this week", so week boundaries follow the
    user's timezone. A unique `(workspace_id, start_date)` makes creation
    idempotent across concurrent users. A task with no iteration is in the backlog.
+6. **The page shows five scopes, not saved-view tabs.** Current, last and next
+   iteration (stage columns from Ready to Done), Inbox (every task still in the
+   Inbox stage, scheduled or not) and Backlog (triaged tasks without an
+   iteration). The client loads every task of the workspace once
+   (`GET /api/board/tasks` without a scope) into a shared store, so the tabs, the
+   task drawer and the sidebar dashboard read the same rows and share one
+   assignee filter. Dropping a card on a column changes its stage; dropping it on
+   a tab moves it to that scope. Weeks other than the current one get their
+   iteration when a task or a goal first needs it.
 5. **The database view is extracted into `components/database-view/`.** It
    holds a generic schema (properties plus filter/search/sort/group pipeline),
    saved views per user in localStorage, the view bar and the layouts. Apps and
@@ -43,6 +52,10 @@ workspace overrides), which until now only drove the frontend.
 
 - Apps keeps its behavior and saved views (same storage key); its tests are
   unchanged.
+- Iterations older than last week have no tab; their tasks stay reachable from
+  the sidebar dashboard and the task drawer.
+- Loading every task suits workspace-sized boards; a very large workspace would
+  need paging.
 - Concurrent edits are last-write-wins. There is no real-time sync and no manual
   ordering within a column (cards follow the view's sort).
 - Saved board views are per user and per browser, not shared across the

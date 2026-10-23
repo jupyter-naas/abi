@@ -1,5 +1,5 @@
 /* workspace/board — semantic page styles (vanilla CSS, theme tokens).
-   The view tabs, toolbar and layouts come from components/database-view. */
+   The toolbar and layouts come from components/database-view. */
 
 .board-page {
   display: flex;
@@ -70,12 +70,6 @@
   border-bottom: 1px solid var(--border-hex);
 }
 
-.board-iteration-nav {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
 .board-iteration-heading {
   display: flex;
   min-width: 0;
@@ -138,6 +132,88 @@
   align-items: center;
   gap: var(--space-2);
   margin-left: auto;
+}
+
+/* Scope tabs ---------------------------------------------------------------- */
+
+.board-tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.board-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 40px;
+  padding: 0 var(--space-2);
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  font-size: var(--font-size-sm);
+  color: var(--muted-foreground-hex);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.board-tab:hover {
+  color: var(--foreground-hex);
+}
+
+.board-tab-active {
+  border-bottom-color: var(--foreground-hex);
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground-hex);
+}
+
+/* A card dragged over the tab: dropping moves the task there. */
+.board-tab-drop {
+  background-color: var(--color-primary-subtle);
+  border-bottom-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.board-tab-count {
+  min-width: 18px;
+  padding: 0 var(--space-1);
+  border-radius: 9999px;
+  background-color: var(--muted-bg-hex);
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  line-height: 18px;
+  text-align: center;
+  color: var(--muted-foreground-hex);
+}
+
+.board-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 32px;
+  padding: 0 var(--space-1) 0 var(--space-2);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--org-border-radius, 0px);
+  font-size: var(--font-size-xs);
+  color: var(--color-primary);
+  white-space: nowrap;
+}
+
+.board-filter-chip-label {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.board-filter-chip-clear {
+  display: inline-flex;
+  padding: var(--space-1);
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
 }
 
 /* Buttons ------------------------------------------------------------------ */

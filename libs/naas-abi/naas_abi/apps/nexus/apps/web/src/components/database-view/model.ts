@@ -103,7 +103,7 @@ export interface DatabaseSchema<R, K extends string> {
   titleKey: K;
   /** Every property but the title: the ones a view can show, hide and filter on. */
   optionalProperties: PropertyDef<R, K>[];
-  /** Properties with a bounded set of values — the ones worth grouping by. */
+  /** Properties with a bounded set of values, plus dates (one group per day). */
   groupableProperties: PropertyDef<R, K>[];
   propertyValues: (record: R, key: K) => string[];
   /** Single display string for a property ("—" is left to the renderer). */
@@ -116,9 +116,11 @@ export interface DatabaseSchema<R, K extends string> {
   /**
    * Split rows by a property. Multi-value properties place a row in every
    * matching group, like Notion does. Rows without a value land in a trailing
-   * "No <property>" group.
+   * "No <property>" group. Groups follow the property's option order, else
+   * its sort value (dates chronologically), else the alphabet; ``direction``
+   * 'desc' reverses that order (the empty group stays last).
    */
-  groupRecords: (records: R[], groupBy: K | null) => RecordGroup<R>[];
+  groupRecords: (records: R[], groupBy: K | null, direction?: 'asc' | 'desc') => RecordGroup<R>[];
 }
 
 export function createSchema<R, K extends string>(
@@ -211,7 +213,7 @@ export function createSchema<R, K extends string>(
     });
   };
 
-  const groupRecords = (records: R[], groupBy: K | null): RecordGroup<R>[] => {
+  const groupRecords = (records: R[], groupBy: K | null, direction: 'asc' | 'desc' = 'asc'): RecordGroup<R>[] => {
     if (!groupBy || !(groupBy in propertyByKey)) return [{ key: '__all__', label: '', records }];
     const def = propertyByKey[groupBy];
 
@@ -242,9 +244,13 @@ export function createSchema<R, K extends string>(
         if (ib >= 0) return 1;
         return compareText(a, b);
       });
+    } else if (def.sortValue) {
+      const sortValue = def.sortValue;
+      entries.sort(([, a], [, b]) => compareText(sortValue(a[0]), sortValue(b[0])));
     } else {
       entries.sort(([a], [b]) => compareText(a, b));
     }
+    if (direction === 'desc') entries.reverse();
     const result: RecordGroup<R>[] = entries.map(([key, groupedRecords]) => ({
       key,
       label: key,
@@ -263,7 +269,7 @@ export function createSchema<R, K extends string>(
     propertyByKey,
     titleKey,
     optionalProperties,
-    groupableProperties: properties.filter((p) => isBoundedType(p.type)),
+    groupableProperties: properties.filter((p) => isBoundedType(p.type) || p.type === 'date'),
     propertyValues,
     propertyText,
     facetValues,

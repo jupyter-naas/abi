@@ -307,13 +307,17 @@ async def list_tasks(
     current_user: User = Depends(get_current_user_required),
     service: BoardService = Depends(get_board_service),
 ) -> list[TaskOut]:
-    """Tasks of ``iteration_id``, or of the backlog with ``backlog=true``."""
+    """Tasks of ``iteration_id``, of the backlog with ``backlog=true``, or every
+    task of the workspace (newest first) when neither is given."""
     await _require_board(current_user.id, workspace_id)
-    if bool(iteration_id) == backlog:
+    if iteration_id and backlog:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Pass either iteration_id or backlog=true",
+            detail="Pass iteration_id or backlog=true, not both",
         )
+    if not iteration_id and not backlog:
+        tasks = await service.list_all_tasks(workspace_id, include_archived=include_archived)
+        return [_task_out(t) for t in tasks]
     try:
         tasks = await service.list_tasks(
             workspace_id,

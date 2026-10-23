@@ -62,6 +62,15 @@ class InMemoryBoardStore(BoardStorePort):
             and (include_archived or not t.archived)
         ]
 
+    async def list_workspace_tasks(
+        self, workspace_id: str, *, include_archived: bool
+    ) -> list[Task]:
+        return [
+            t
+            for t in self._tasks.values()
+            if t.workspace_id == workspace_id and (include_archived or not t.archived)
+        ]
+
     async def get_task(self, workspace_id: str, task_id: str) -> Task | None:
         task = self._tasks.get(task_id)
         return task if task and task.workspace_id == workspace_id else None

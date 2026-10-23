@@ -42,6 +42,12 @@ class BoardStorePort(ABC):
         """Tasks of one iteration, or of the backlog when ``iteration_id`` is None."""
 
     @abstractmethod
+    async def list_workspace_tasks(
+        self, workspace_id: str, *, include_archived: bool
+    ) -> list[Task]:
+        """Every task of the workspace, scheduled or not."""
+
+    @abstractmethod
     async def get_task(self, workspace_id: str, task_id: str) -> Task | None:
         """The task, or None when missing or in another workspace."""
 

@@ -43,7 +43,7 @@ describe('mergeNavOrder', () => {
   });
 
   it('leaves a customised order where the user put search', () => {
-    const custom = ['home', 'chat', 'apps', 'files', 'search', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'board', 'code', 'marketplace'];
+    const custom = ['home', 'chat', 'board', 'apps', 'files', 'search', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'code', 'marketplace'];
     expect(mergeNavOrder(custom)).toEqual(custom);
   });
 
@@ -52,10 +52,18 @@ describe('mergeNavOrder', () => {
     expect(mergeNavOrder(beforeBoard)).toEqual([...DEFAULT_NAV_ORDER]);
   });
 
-  it('slots a new section into a customised order at its catalog place', () => {
+  it('puts board right below chat', () => {
+    expect(DEFAULT_NAV_ORDER.indexOf('board')).toBe(DEFAULT_NAV_ORDER.indexOf('chat') + 1);
+    // The order saved while Board sat after Sheets was never customised.
+    const boardAfterSheets = ['home', 'search', 'apps', 'files', 'chat', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'board', 'code', 'marketplace'];
+    expect(mergeNavOrder(boardAfterSheets)).toEqual([...DEFAULT_NAV_ORDER]);
+  });
+
+  it('slots a new section into a customised order after its catalog predecessor', () => {
     const custom = ['home', 'chat', 'apps', 'files', 'search', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'code', 'marketplace'];
-    expect(mergeNavOrder(custom)).toContain('board');
-    expect(mergeNavOrder(custom).filter((id) => id !== 'board')).toEqual(custom);
+    const merged = mergeNavOrder(custom);
+    expect(merged.indexOf('board')).toBe(merged.indexOf('chat') + 1);
+    expect(merged.filter((id) => id !== 'board')).toEqual(custom);
   });
 });
 

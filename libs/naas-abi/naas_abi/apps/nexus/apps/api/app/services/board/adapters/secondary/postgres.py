@@ -156,6 +156,16 @@ class PostgresBoardStore(BoardStorePort):
             result = await db.execute(query)
             return [_task(row) for row in result.scalars().all()]
 
+    async def list_workspace_tasks(
+        self, workspace_id: str, *, include_archived: bool
+    ) -> list[Task]:
+        query = select(BoardTaskModel).where(BoardTaskModel.workspace_id == workspace_id)
+        if not include_archived:
+            query = query.where(BoardTaskModel.archived_at.is_(None))
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(query)
+            return [_task(row) for row in result.scalars().all()]
+
     async def get_task(self, workspace_id: str, task_id: str) -> Task | None:
         async with AsyncSessionLocal() as db:
             row = await db.get(BoardTaskModel, task_id)

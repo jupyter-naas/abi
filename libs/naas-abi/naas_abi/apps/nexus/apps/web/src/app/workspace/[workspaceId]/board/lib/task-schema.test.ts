@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BoardTask } from '@/lib/board';
 import { sanitizeViews } from '@/components/database-view/use-database-views';
-import { TASK_VIEWS, createTaskSchema } from './task-schema';
+import { BACKLOG_VIEWS, INBOX_VIEWS, ITERATION_VIEWS, createTaskSchema } from './task-schema';
 
 const task = (overrides: Partial<BoardTask> & Pick<BoardTask, 'id' | 'title'>): BoardTask => ({
   workspace_id: 'ws',
@@ -63,18 +63,47 @@ describe('task schema', () => {
     expect(schema.groupRecords(tasks, 'project').map((g) => g.key)).toEqual(['Abi', 'Nexus', '__empty__']);
   });
 
+  it('groups the inbox by creation day, newest day first', () => {
+    const rows = [
+      task({ id: 'd1', title: 'Early', created_at: '2026-10-21T08:00:00' }),
+      task({ id: 'd2', title: 'Late', created_at: '2026-10-22T15:00:00' }),
+      task({ id: 'd3', title: 'Morning', created_at: '2026-10-22T09:00:00' }),
+    ];
+    const sorted = schema.applySort(rows, { property: 'created_at', direction: 'desc' });
+    const groups = schema.groupRecords(sorted, 'created_at', 'desc');
+    expect(groups).toHaveLength(2);
+    expect(titles(groups[0].records)).toEqual(['Late', 'Morning']);
+    expect(titles(groups[1].records)).toEqual(['Early']);
+    expect(schema.groupableProperties.map((p) => p.key)).toContain('created_at');
+  });
+
+  it('groups the backlog by priority from urgent to low, unset last', () => {
+    const groups = schema.groupRecords(tasks, 'priority').filter((g) => g.records.length > 0);
+    expect(groups.map((g) => g.label)).toEqual(['Urgent', 'Low', 'No priority']);
+  });
+
   it('searches titles and resolved names', () => {
     expect(titles(schema.applySearch(tasks, 'grace'))).toEqual(['Alpha']);
   });
 });
 
 describe('task views', () => {
-  it('starts with a board grouped by stage and a table', () => {
-    const [board, table] = TASK_VIEWS.defaultViews();
-    expect(board.type).toBe('board');
-    expect(board.groupBy).toBe('stage');
-    expect(table.type).toBe('table');
-    expect(table.groupBy).toBeNull();
+  it('shows iterations as stage columns and Inbox / Backlog as tables', () => {
+    const [iteration] = ITERATION_VIEWS.defaultViews();
+    expect(iteration.type).toBe('board');
+    expect(iteration.groupBy).toBe('stage');
+    const [inbox] = INBOX_VIEWS.defaultViews();
+    expect(inbox.type).toBe('table');
+    expect(inbox.groupBy).toBe('created_at');
+    expect(inbox.sort).toEqual({ property: 'created_at', direction: 'desc' });
+    const [backlog] = BACKLOG_VIEWS.defaultViews();
+    expect(backlog.type).toBe('table');
+    expect(backlog.groupBy).toBe('priority');
+  });
+
+  it('keeps each kind of tab in its own storage', () => {
+    const prefixes = [ITERATION_VIEWS, INBOX_VIEWS, BACKLOG_VIEWS].map((v) => v.storagePrefix);
+    expect(new Set(prefixes).size).toBe(3);
   });
 
   it('drops saved views that reference unknown properties or layouts', () => {
@@ -83,7 +112,7 @@ describe('task views', () => {
         { id: '1', name: 'Mine', type: 'board', visible: ['priority', 'nope', 'title'], filters: [], sort: null, groupBy: 'stage' },
         { id: '2', name: 'Old', type: 'gallery', visible: [], filters: [], sort: null, groupBy: null },
       ],
-      TASK_VIEWS,
+      ITERATION_VIEWS,
     );
     expect(views).toHaveLength(1);
     expect(views?.[0].visible).toEqual(['priority']);

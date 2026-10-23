@@ -239,6 +239,24 @@ async def test_tasks_are_workspace_scoped(service: BoardService):
         await service.update_task(WS, task.id, {"iteration_id": other_iteration.id}, user_id=ALICE)
 
 
+async def test_list_all_tasks_spans_iterations_newest_first(service: BoardService):
+    iteration = await service.ensure_iteration(WS, THURSDAY, user_id=ALICE)
+    backlog = await service.create_task(WS, {"title": "Idea"}, user_id=ALICE)
+    scheduled = await service.create_task(
+        WS, {"title": "Planned", "iteration_id": iteration.id}, user_id=ALICE
+    )
+    archived = await service.create_task(WS, {"title": "Old"}, user_id=ALICE)
+    await service.set_archived(WS, archived.id, True, user_id=ALICE)
+    await service.create_task(OTHER_WS, {"title": "Elsewhere"}, user_id=ALICE)
+
+    assert [t.id for t in await service.list_all_tasks(WS)] == [scheduled.id, backlog.id]
+    assert [t.id for t in await service.list_all_tasks(WS, include_archived=True)] == [
+        archived.id,
+        scheduled.id,
+        backlog.id,
+    ]
+
+
 async def test_archive_hides_and_restore_recovers(service: BoardService):
     task = await service.create_task(WS, {"title": "T"}, user_id=ALICE)
 

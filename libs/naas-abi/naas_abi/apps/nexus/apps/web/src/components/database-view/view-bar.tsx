@@ -299,6 +299,7 @@ export function ViewBar<R, K extends string, T extends string>({
   groupedTypes = [],
   defaultGroupBy,
   actions,
+  tabs,
 }: {
   api: DatabaseViewsApi<K, T>;
   schema: DatabaseSchema<R, K>;
@@ -317,6 +318,8 @@ export function ViewBar<R, K extends string, T extends string>({
   defaultGroupBy?: K;
   /** Extra controls at the end of the bar (e.g. a "New" button). */
   actions?: ReactNode;
+  /** Replaces the saved-view tabs (the page picks what the tabs mean). */
+  tabs?: ReactNode;
 }) {
   const view = api.activeView;
   const activeFilters = view.filters.length;
@@ -347,7 +350,7 @@ export function ViewBar<R, K extends string, T extends string>({
 
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border/50 px-4">
-      <ViewTabs api={api} viewTypes={viewTypes} groupByForType={groupByForType} />
+      {tabs ?? <ViewTabs api={api} viewTypes={viewTypes} groupByForType={groupByForType} />}
 
       <div className="ml-auto flex items-center gap-1 py-1">
         <span className="hidden pr-1 text-xs text-muted-foreground sm:inline">{countLabel(count)}</span>

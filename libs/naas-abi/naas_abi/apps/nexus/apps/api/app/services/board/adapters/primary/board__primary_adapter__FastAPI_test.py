@@ -161,7 +161,17 @@ def test_backlog_goal_and_carry_over_over_http(client_for):
     assert [
         t["id"] for t in client.get(f"/api/board/tasks?workspace_id={WS}&backlog=true").json()
     ] == [backlog["id"]]
-    assert client.get(f"/api/board/tasks?workspace_id={WS}").status_code == 422
+    # Without a scope: every task of the workspace, newest first.
+    assert [t["id"] for t in client.get(f"/api/board/tasks?workspace_id={WS}").json()] == [
+        open_task["id"],
+        backlog["id"],
+    ]
+    assert (
+        client.get(
+            f"/api/board/tasks?workspace_id={WS}&backlog=true&iteration_id={iteration['id']}"
+        ).status_code
+        == 422
+    )
 
     goal = client.patch(
         f"/api/board/iterations/{iteration['id']}?workspace_id={WS}", json={"goal": "Ship it"}
@@ -198,3 +208,4 @@ def test_validation_and_workspace_isolation_over_http(client_for):
         == 404
     )
     assert client.get(f"/api/board/tasks?workspace_id={OTHER_WS}&backlog=true").json() == []
+    assert client.get(f"/api/board/tasks?workspace_id={OTHER_WS}").json() == []

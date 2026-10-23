@@ -134,22 +134,47 @@ const DEFAULT_VISIBLE: Record<TaskViewType, TaskPropertyKey[]> = {
   list: ['stage', 'assignees', 'priority'],
 };
 
-/** Saved views of the board, per user and workspace. */
-export const TASK_VIEWS: DatabaseViewsOptions<TaskPropertyKey, TaskViewType> = {
-  storagePrefix: 'nexus.board.views',
-  viewTypeLabels: TASK_VIEW_TYPE_LABELS,
-  propertyKeys: TASK_PROPERTY_KEYS,
-  titleKey: 'title',
-  createView: (type, name) => ({
+function createTaskView(type: TaskViewType, name: string): Omit<TaskViewConfig, 'id'> {
+  return {
     name,
     type,
     visible: [...DEFAULT_VISIBLE[type]],
     filters: [],
     sort: type === 'board' ? { property: 'priority', direction: 'asc' } : null,
     groupBy: type === 'board' ? 'stage' : null,
-  }),
-  defaultViews: () => [
-    TASK_VIEWS.createView('board', 'Board'),
-    TASK_VIEWS.createView('table', 'Table'),
-  ],
-};
+  };
+}
+
+/** One saved view (properties, filters, sort, grouping) per user and workspace. */
+function taskViews(
+  storagePrefix: string,
+  initial: Omit<TaskViewConfig, 'id'>,
+): DatabaseViewsOptions<TaskPropertyKey, TaskViewType> {
+  return {
+    storagePrefix,
+    viewTypeLabels: TASK_VIEW_TYPE_LABELS,
+    propertyKeys: TASK_PROPERTY_KEYS,
+    titleKey: 'title',
+    createView: createTaskView,
+    defaultViews: () => [{ ...initial, visible: [...initial.visible] }],
+  };
+}
+
+/** The current, last and next iterations: stage columns, most urgent first. */
+export const ITERATION_VIEWS = taskViews('nexus.board.iteration-view', createTaskView('board', 'Iteration'));
+
+/** Inbox: one group per day the requests came in, newest day and request first. */
+export const INBOX_VIEWS = taskViews('nexus.board.inbox-view.v2', {
+  ...createTaskView('table', 'Inbox'),
+  visible: ['assignees', 'priority', 'project', 'labels', 'created_by', 'created_at'],
+  sort: { property: 'created_at', direction: 'desc' },
+  groupBy: 'created_at',
+});
+
+/** Backlog: one group per priority, Urgent to Low, newest first within each. */
+export const BACKLOG_VIEWS = taskViews('nexus.board.backlog-view.v2', {
+  ...createTaskView('table', 'Backlog'),
+  visible: ['stage', 'assignees', 'priority', 'project', 'labels', 'due_date'],
+  sort: { property: 'created_at', direction: 'desc' },
+  groupBy: 'priority',
+});

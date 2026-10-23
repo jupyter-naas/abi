@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useState, type DragEvent, type ReactNode } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { DatabaseSchema, RecordGroup, ViewConfig } from './model';
@@ -23,6 +23,10 @@ export interface DatabaseBodyProps<R, K extends string, T extends ViewLayout> {
   renderTableTrailing?: (record: R) => ReactNode;
   /** Board only: called when a card is dropped on another column. */
   onMoveToGroup?: (record: R, groupKey: string) => void;
+  /** Rows and cards can be dragged out, e.g. onto tabs (see `readDraggedRecordId`). */
+  draggableRows?: boolean;
+  /** Board only: columns share the available width (stacked on narrow screens). */
+  fitColumns?: boolean;
   /** Board only: extra content under a column's cards (e.g. "New task"). */
   renderColumnFooter?: (group: RecordGroup<R>) => ReactNode;
   /** Board only: a marker next to the column title (e.g. a stage dot). */
@@ -83,7 +87,7 @@ function GalleryRows<R, K extends string, T extends ViewLayout>({
 }
 
 function ListRows<R, K extends string, T extends ViewLayout>({
-  records, view, schema, getId, onOpen, renderValue, renderLeading,
+  records, view, schema, getId, onOpen, renderValue, renderLeading, draggableRows,
 }: RowsProps<R, K, T>) {
   return (
     <div className="divide-y divide-border/50 border border-border/50">
@@ -92,6 +96,8 @@ function ListRows<R, K extends string, T extends ViewLayout>({
           key={getId(record)}
           role="button"
           tabIndex={0}
+          draggable={draggableRows}
+          onDragStart={draggableRows ? (e) => startRowDrag(e, getId(record)) : undefined}
           onClick={() => onOpen(record)}
           onKeyDown={(e) => e.key === 'Enter' && onOpen(record)}
           className="flex cursor-pointer items-center gap-3 px-3 py-2 transition-colors hover:bg-muted/40 focus:outline-none focus-visible:bg-muted/40"
@@ -112,7 +118,7 @@ function ListRows<R, K extends string, T extends ViewLayout>({
 }
 
 function TableRows<R, K extends string, T extends ViewLayout>({
-  records, view, schema, getId, onOpen, renderValue, renderLeading, renderTableTrailing,
+  records, view, schema, getId, onOpen, renderValue, renderLeading, renderTableTrailing, draggableRows,
 }: RowsProps<R, K, T>) {
   return (
     <div className="overflow-x-auto border border-border/50">
@@ -138,6 +144,8 @@ function TableRows<R, K extends string, T extends ViewLayout>({
             <tr
               key={getId(record)}
               tabIndex={0}
+              draggable={draggableRows}
+              onDragStart={draggableRows ? (e) => startRowDrag(e, getId(record)) : undefined}
               onClick={() => onOpen(record)}
               onKeyDown={(e) => e.key === 'Enter' && onOpen(record)}
               className="cursor-pointer border-b border-border/30 transition-colors last:border-0 hover:bg-muted/40 focus:bg-muted/40 focus:outline-none"
@@ -168,20 +176,45 @@ function TableRows<R, K extends string, T extends ViewLayout>({
 
 const DRAG_MIME = 'application/x-nexus-database-row';
 
+function startRowDrag(e: DragEvent<HTMLElement>, id: string) {
+  e.dataTransfer.setData(DRAG_MIME, id);
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+/** Whether a drag carries a database row, for drop targets outside the body. */
+export function isRecordDrag(e: DragEvent<HTMLElement>): boolean {
+  return Array.from(e.dataTransfer.types).includes(DRAG_MIME);
+}
+
+/** The dragged row's id on drop, or null when the drag is something else. */
+export function readDraggedRecordId(e: DragEvent<HTMLElement>): string | null {
+  return e.dataTransfer.getData(DRAG_MIME) || null;
+}
+
 function BoardView<R, K extends string, T extends ViewLayout>({
   view, groups, getId, renderCard, onMoveToGroup, renderColumnFooter, renderColumnMarker,
+  draggableRows, fitColumns,
 }: DatabaseBodyProps<R, K, T>) {
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [dragging, setDragging] = useState<string | null>(null);
   const byId = new Map(groups.flatMap((g) => g.records.map((r) => [getId(r), r] as const)));
-  const draggable = !!onMoveToGroup;
+  const droppable = !!onMoveToGroup;
+  const draggable = droppable || !!draggableRows;
 
   return (
-    <div className="flex gap-4 overflow-x-auto pb-2">
+    <div
+      className={cn(
+        'pb-2',
+        fitColumns
+          ? 'grid grid-cols-1 gap-3 md:auto-cols-[minmax(0,1fr)] md:grid-flow-col'
+          : 'flex gap-4 overflow-x-auto',
+      )}
+    >
       {groups.map((group) => (
         <div
           key={group.key}
           onDragOver={(e) => {
-            if (!draggable || !e.dataTransfer.types.includes(DRAG_MIME)) return;
+            if (!droppable || !isRecordDrag(e)) return;
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
             if (dropTarget !== group.key) setDropTarget(group.key);
@@ -198,7 +231,8 @@ function BoardView<R, K extends string, T extends ViewLayout>({
             if (!group.records.some((r) => getId(r) === id)) onMoveToGroup(record, group.key);
           }}
           className={cn(
-            'flex w-72 flex-shrink-0 flex-col gap-2 p-1 transition-colors',
+            'flex flex-col gap-2 p-1 transition-colors',
+            fitColumns ? 'min-w-0' : 'w-72 flex-shrink-0',
             dropTarget === group.key && 'bg-workspace-accent/5 ring-1 ring-workspace-accent/30',
           )}
         >
@@ -213,9 +247,11 @@ function BoardView<R, K extends string, T extends ViewLayout>({
                 key={getId(record)}
                 draggable={draggable}
                 onDragStart={(e) => {
-                  e.dataTransfer.setData(DRAG_MIME, getId(record));
-                  e.dataTransfer.effectAllowed = 'move';
+                  startRowDrag(e, getId(record));
+                  setDragging(getId(record));
                 }}
+                onDragEnd={() => setDragging(null)}
+                className={cn(draggable && 'cursor-grab active:cursor-grabbing', dragging === getId(record) && 'opacity-40')}
               >
                 {renderCard(record, view.visible)}
               </div>
@@ -247,7 +283,8 @@ export function DatabaseBody<R, K extends string, T extends ViewLayout>(props: D
 
   return (
     <div className="space-y-5">
-      {groups.map((group) => {
+      {/* Empty groups only make sense as board columns (a drop target). */}
+      {groups.filter((group) => group.records.length > 0).map((group) => {
         const groupKey = `${view.id}:${group.key}`;
         const rowsProps = { ...props, records: group.records };
         const rows =

@@ -142,6 +142,15 @@ class BoardService:
         )
         return sorted(tasks, key=lambda t: (t.created_at or datetime.min, t.id))
 
+    async def list_all_tasks(
+        self, workspace_id: str, *, include_archived: bool = False
+    ) -> list[Task]:
+        """Every task of the workspace, newest first."""
+        tasks = await self._store.list_workspace_tasks(
+            workspace_id, include_archived=include_archived
+        )
+        return sorted(tasks, key=lambda t: (t.created_at or datetime.min, t.id), reverse=True)
+
     async def get_task(self, workspace_id: str, task_id: str) -> Task:
         task = await self._store.get_task(workspace_id, task_id)
         if task is None:

@@ -1,113 +1,66 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import {
-  addWeeks,
-  boardApi,
+  BOARD_SCOPES,
+  fieldsForScope,
+  matchesAssignee,
+  scopeWeek,
+  taskInScope,
   toIsoDate,
   weekStart,
-  type BoardIteration,
-  type BoardMember,
+  type BoardScope,
   type BoardTask,
   type TaskFields,
 } from '@/lib/board';
-
-export type BoardScope = { kind: 'week'; week: string } | { kind: 'backlog' };
+import { useBoardStore } from '@/stores/board';
 
 /**
- * Board data for one scope (a week or the backlog): iterations, tasks and the
- * members who can be assigned. Task edits apply locally first and roll back
- * when the API refuses them; last write wins between users.
- *
- * The current week's iteration is created on first open. Any other week is
- * only created when the user asks (`createIteration`).
+ * The board page's view of the shared board store: the tasks of one scope,
+ * after the assignee filter, plus the scope-aware actions (creating a task in
+ * the scope, moving a task to another scope).
  */
 export function useBoard(workspaceId: string, scope: BoardScope, showArchived: boolean) {
   const today = useMemo(() => toIsoDate(new Date()), []);
   const currentWeek = weekStart(today);
 
-  const [iterations, setIterations] = useState<BoardIteration[]>([]);
-  const [iterationsLoaded, setIterationsLoaded] = useState(false);
-  const [members, setMembers] = useState<BoardMember[]>([]);
-  const [tasks, setTasks] = useState<BoardTask[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const tasksRef = useRef<BoardTask[]>([]);
-  tasksRef.current = tasks;
+  const store = useBoardStore();
+  const { load, iterations, members, tasks, assignees, ensureWeek } = store;
 
-  const week = scope.kind === 'week' ? weekStart(scope.week) : null;
-  const iteration = useMemo(
-    () => (week ? iterations.find((i) => i.start_date === week) ?? null : null),
-    [iterations, week],
+  // Fresh data on every visit; the sidebar may have loaded it earlier.
+  useEffect(() => {
+    if (workspaceId) void load(workspaceId, { force: true });
+  }, [workspaceId, load]);
+
+  const iterationOfWeek = useCallback(
+    (week: string | null) => (week ? iterations.find((i) => i.start_date === week) ?? null : null),
+    [iterations],
   );
-  const missingIteration = scope.kind === 'week' && iterationsLoaded && !iteration;
+  const scopeIterationId = useCallback(
+    (target: BoardScope) => iterationOfWeek(scopeWeek(target, currentWeek))?.id ?? null,
+    [iterationOfWeek, currentWeek],
+  );
 
-  const upsertIteration = useCallback((next: BoardIteration) => {
-    setIterations((prev) =>
-      [...prev.filter((i) => i.id !== next.id), next].sort((a, b) => a.start_date.localeCompare(b.start_date)),
-    );
-  }, []);
+  const week = scopeWeek(scope, currentWeek);
+  const iteration = iterationOfWeek(week);
 
-  // Iterations and members, once per workspace. The current week always exists.
-  useEffect(() => {
-    if (!workspaceId) return;
-    let cancelled = false;
-    setIterationsLoaded(false);
-    setError(null);
-    (async () => {
-      try {
-        const [listed, people] = await Promise.all([
-          boardApi.listIterations(workspaceId),
-          boardApi.listMembers(workspaceId).catch(() => [] as BoardMember[]),
-        ]);
-        let all = listed;
-        if (!listed.some((i) => i.start_date === currentWeek)) {
-          all = [...listed, await boardApi.ensureIteration(workspaceId, today)];
-        }
-        if (cancelled) return;
-        setIterations(all.sort((a, b) => a.start_date.localeCompare(b.start_date)));
-        setMembers(people);
-        setIterationsLoaded(true);
-      } catch (e) {
-        if (!cancelled) {
-          setError((e as Error).message);
-          setLoading(false);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [workspaceId, today, currentWeek]);
-
-  // Tasks of the scope.
-  const iterationId = iteration?.id ?? null;
-  const reloadTasks = useCallback(async () => {
-    if (!workspaceId || !iterationsLoaded) return;
-    if (scope.kind === 'week' && !iterationId) {
-      setTasks([]);
-      setLoading(false);
-      return;
+  /** Tasks the filters let through, whatever their scope. */
+  const filtered = useMemo(
+    () => tasks.filter((t) => (showArchived || !t.archived) && matchesAssignee(t, assignees)),
+    [tasks, showArchived, assignees],
+  );
+  const scopeTasks = useMemo(
+    () => filtered.filter((t) => taskInScope(t, scope, iteration?.id ?? null)),
+    [filtered, scope, iteration],
+  );
+  const counts = useMemo(() => {
+    const result = {} as Record<BoardScope, number>;
+    for (const target of BOARD_SCOPES) {
+      const id = scopeIterationId(target);
+      result[target] = filtered.filter((t) => !t.archived && taskInScope(t, target, id)).length;
     }
-    setLoading(true);
-    try {
-      const listed = await boardApi.listTasks(
-        workspaceId,
-        scope.kind === 'backlog' ? { backlog: true } : { iterationId: iterationId as string },
-        showArchived,
-      );
-      setTasks(listed);
-      setError(null);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }, [workspaceId, iterationsLoaded, scope.kind, iterationId, showArchived]);
-
-  useEffect(() => {
-    void reloadTasks();
-  }, [reloadTasks]);
+    return result;
+  }, [filtered, scopeIterationId]);
 
   const memberById = useMemo(() => new Map(members.map((m) => [m.user_id, m])), [members]);
   const memberName = useCallback(
@@ -118,148 +71,59 @@ export function useBoard(workspaceId: string, scope: BoardScope, showArchived: b
     [memberById],
   );
 
-  // -- Mutations ----------------------------------------------------------------
-
-  const fail = (e: unknown) => {
-    setError((e as Error).message);
-    throw e;
-  };
-
-  /** Keep a task in the list only while it still belongs to the scope. */
-  const inScope = useCallback(
-    (task: BoardTask) =>
-      (showArchived || !task.archived) &&
-      (scope.kind === 'backlog' ? task.iteration_id === null : task.iteration_id === iterationId),
-    [showArchived, scope.kind, iterationId],
-  );
-
-  const replaceTask = useCallback(
-    (next: BoardTask) => {
-      setTasks((prev) => {
-        const without = prev.filter((t) => t.id !== next.id);
-        return inScope(next) ? [...without, next] : without;
-      });
+  /** The iteration a scope needs for a write, created when the week has none. */
+  const iterationIdFor = useCallback(
+    async (target: BoardScope) => {
+      const targetWeek = scopeWeek(target, currentWeek);
+      return targetWeek ? (await ensureWeek(targetWeek)).id : null;
     },
-    [inScope],
+    [ensureWeek, currentWeek],
   );
 
-  const createIteration = useCallback(async () => {
-    if (!week) return;
-    try {
-      upsertIteration(await boardApi.ensureIteration(workspaceId, week));
-    } catch (e) {
-      fail(e);
-    }
-  }, [workspaceId, week, upsertIteration]);
-
-  const setGoal = useCallback(
-    async (goal: string) => {
-      if (!iteration) return;
-      try {
-        upsertIteration(await boardApi.updateGoal(workspaceId, iteration.id, goal));
-      } catch (e) {
-        fail(e);
-      }
-    },
-    [workspaceId, iteration, upsertIteration],
-  );
-
-  /** Moves unfinished tasks to next week. Returns the next week's Monday. */
-  const carryOver = useCallback(async (): Promise<{ week: string; moved: number } | null> => {
-    if (!iteration) return null;
-    try {
-      const result = await boardApi.carryOver(workspaceId, iteration.id);
-      upsertIteration(result.iteration);
-      const movedIds = new Set(result.moved.map((t) => t.id));
-      setTasks((prev) => prev.filter((t) => !movedIds.has(t.id)));
-      return { week: result.iteration.start_date, moved: result.moved.length };
-    } catch (e) {
-      return fail(e);
-    }
-  }, [workspaceId, iteration, upsertIteration]);
-
+  /** New task in this scope: Inbox triage, the backlog, or an iteration column. */
   const createTask = useCallback(
     async (fields: TaskFields & { title: string }) => {
-      try {
-        const created = await boardApi.createTask(workspaceId, {
-          iteration_id: scope.kind === 'week' ? iterationId : null,
-          ...fields,
-        });
-        replaceTask(created);
-        return created;
-      } catch (e) {
-        return fail(e);
-      }
+      if (scope === 'inbox') return store.createTask({ ...fields, stage: 'inbox', iteration_id: null });
+      const iterationId = await iterationIdFor(scope);
+      return store.createTask({ stage: 'ready', ...fields, iteration_id: iterationId });
     },
-    [workspaceId, scope.kind, iterationId, replaceTask],
+    [scope, iterationIdFor, store],
   );
 
-  const updateTask = useCallback(
-    async (taskId: string, fields: TaskFields) => {
-      const before = tasksRef.current.find((t) => t.id === taskId);
-      if (before) setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...fields } : t)));
-      try {
-        const updated = await boardApi.updateTask(workspaceId, taskId, fields);
-        replaceTask(updated);
-        return updated;
-      } catch (e) {
-        if (before) setTasks((prev) => prev.map((t) => (t.id === taskId ? before : t)));
-        return fail(e);
-      }
+  /** Drop on a scope tab. Resolves false when the task was already there. */
+  const moveToScope = useCallback(
+    async (task: BoardTask, target: BoardScope) => {
+      if (fieldsForScope(task, target, scopeIterationId(target)) === null) return false;
+      const fields = fieldsForScope(task, target, await iterationIdFor(target));
+      if (fields) await store.updateTask(task.id, fields);
+      return !!fields;
     },
-    [workspaceId, replaceTask],
-  );
-
-  const setArchived = useCallback(
-    async (taskId: string, archived: boolean) => {
-      try {
-        const updated = archived
-          ? await boardApi.archiveTask(workspaceId, taskId)
-          : await boardApi.restoreTask(workspaceId, taskId);
-        replaceTask(updated);
-        return updated;
-      } catch (e) {
-        return fail(e);
-      }
-    },
-    [workspaceId, replaceTask],
-  );
-
-  const deleteTask = useCallback(
-    async (taskId: string) => {
-      try {
-        await boardApi.deleteTask(workspaceId, taskId);
-        setTasks((prev) => prev.filter((t) => t.id !== taskId));
-      } catch (e) {
-        fail(e);
-      }
-    },
-    [workspaceId],
+    [scopeIterationId, iterationIdFor, store],
   );
 
   return {
     today,
     currentWeek,
     week,
-    previousWeek: week ? addWeeks(week, -1) : null,
-    nextWeek: week ? addWeeks(week, 1) : null,
-    iterations,
     iteration,
-    missingIteration,
-    tasks,
+    iterations,
     members,
     memberName,
-    loading: loading || !iterationsLoaded,
-    error,
-    clearError: () => setError(null),
-    reloadTasks,
-    createIteration,
-    setGoal,
-    carryOver,
+    allTasks: tasks,
+    tasks: scopeTasks,
+    counts,
+    assignees,
+    clearAssignees: store.clearAssignees,
+    loading: !store.loaded,
+    error: store.error,
+    clearError: store.clearError,
+    setGoal: (goal: string) => (week ? store.setGoal(week, goal) : Promise.resolve()),
+    carryOver: () => (iteration ? store.carryOver(iteration.id) : Promise.resolve(null)),
     createTask,
-    updateTask,
-    setArchived,
-    deleteTask,
+    moveToScope,
+    updateTask: store.updateTask,
+    setArchived: store.setArchived,
+    deleteTask: store.deleteTask,
   };
 }
 
