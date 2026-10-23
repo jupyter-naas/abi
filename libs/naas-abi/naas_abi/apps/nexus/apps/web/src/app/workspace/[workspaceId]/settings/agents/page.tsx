@@ -81,7 +81,7 @@ export default function AgentsPage() {
     const loadAgents = async () => {
       try {
         if (!workspaceId) return;
-        await fetchAgents(workspaceId);
+        await fetchAgents(workspaceId, true);
         await fetchServers(workspaceId);
       } catch (error) {
         console.error('Failed to fetch agents:', error);

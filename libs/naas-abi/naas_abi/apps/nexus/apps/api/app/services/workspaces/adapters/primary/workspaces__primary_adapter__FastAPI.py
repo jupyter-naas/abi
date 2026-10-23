@@ -28,6 +28,10 @@ from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
     workspace_features,
 )
 from naas_abi.apps.nexus.apps.api.app.core.workspace_config_seeds import workspace_seed_rows
+from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import catalog_seed_rows
+from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__primary_adapter__FastAPI import (
+    seed_workspace_agents,
+)
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
     get_auth_service,
 )
@@ -55,6 +59,10 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
 from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
     check_rate_limit,
     get_rate_limit_identifier,
+)
+from naas_abi.apps.nexus.apps.api.app.services.registry import (
+    ServiceRegistry,
+    get_service_registry,
 )
 from naas_abi.apps.nexus.apps.api.app.services.workspaces import logo_store
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary.resource_access import (
@@ -143,10 +151,20 @@ class Workspace(BaseModel):
     feature_flags: dict[str, bool] = Field(default_factory=dict)
 
 
+class WorkspaceCatalogSeedInput(BaseModel):
+    default_agent: str | None = None
+    agents: list[str] | None = None
+    apps: list[str] | None = None
+    ontologies: list[str] | None = None
+    maps: dict[str, Any] | None = None
+
+
 class WorkspaceCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     slug: str = Field(..., min_length=1, max_length=100, pattern=r"^[a-z0-9][a-z0-9\-]*[a-z0-9]$")
     organization_id: str | None = None
+    owner_id: str | None = None
+    catalog_seed: WorkspaceCatalogSeedInput | None = None
     logo_url: str | None = None
     logo_emoji: str | None = None
     primary_color: str | None = "#22c55e"
@@ -163,6 +181,7 @@ class WorkspaceCreate(BaseModel):
 
 
 class WorkspaceUpdate(BaseModel):
+    owner_id: str | None = None
     name: str | None = None
     logo_url: str | None = None
     logo_emoji: str | None = None
@@ -369,6 +388,7 @@ async def create_workspace(
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
     org_service: OrganizationService = Depends(get_organization_service),
+    registry: ServiceRegistry = Depends(get_service_registry),
 ) -> Workspace:
     if workspace.organization_id:
         # Only the organization's owners and admins add workspaces to it.
@@ -395,12 +415,27 @@ async def create_workspace(
             )
         except InvalidFeatureOverridesError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+    owner_id = workspace.owner_id or current_user.id
+    if workspace.organization_id and owner_id != current_user.id:
+        member_role = await org_service.get_organization_role(
+            user_id=owner_id, org_id=workspace.organization_id
+        )
+        if member_role is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Workspace owner must be a member of the organization",
+            )
+    catalog_seed = (
+        workspace.catalog_seed.model_dump(exclude_none=True)
+        if workspace.catalog_seed is not None
+        else None
+    )
     try:
         record = await service.create_workspace(
             WorkspaceCreateInput(
                 name=workspace.name,
                 slug=workspace.slug,
-                owner_id=current_user.id,
+                owner_id=owner_id,
                 organization_id=workspace.organization_id,
                 logo_url=workspace.logo_url,
                 logo_emoji=workspace.logo_emoji,
@@ -412,6 +447,7 @@ async def create_workspace(
                 font_family=workspace.font_family,
                 description=workspace.description,
                 workspace_group=workspace.workspace_group,
+                catalog_seed=catalog_seed,
             )
         )
     except WorkspaceSlugAlreadyExistsError as exc:
@@ -423,6 +459,11 @@ async def create_workspace(
             )
             or record
         )
+    await seed_workspace_agents(
+        workspace_id=record.id,
+        current_user=current_user,
+        agent_service=registry.agents,
+    )
     return _to_schema(
         record,
         "owner",
@@ -475,6 +516,20 @@ async def update_workspace(
     else:
         # A superadmin toggling drives needs no membership in the workspace.
         role = await get_workspace_role(current_user.id, workspace_id)
+
+    if "owner_id" in changes:
+        existing = await service.get_workspace(workspace_id=workspace_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Workspace not found")
+        if existing.organization_id:
+            member_role = await org_service.get_organization_role(
+                user_id=changes["owner_id"], org_id=existing.organization_id
+            )
+            if member_role is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Workspace owner must be a member of the organization",
+                )
 
     record = await service.update_workspace(
         workspace_id=workspace_id,
@@ -544,7 +599,8 @@ async def get_workspace_configuration(
         "pinned": [key for key in PINNED_FEATURES if key in enabled_feature_catalog(flags)],
         "feature_overrides": overrides,
         "feature_overrides_source": overrides_source,
-        "seeds": workspace_seed_rows(settings.organizations, record.slug),
+        "seeds": catalog_seed_rows(record.catalog_seed)
+        + workspace_seed_rows(settings.organizations, record.slug),
     }
 
 

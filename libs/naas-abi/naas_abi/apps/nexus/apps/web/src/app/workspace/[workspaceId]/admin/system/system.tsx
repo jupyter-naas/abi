@@ -3,23 +3,17 @@
 import './system.css';
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/shell/header';
 import { usePlatformStatusStore } from '@/stores/platform-status';
 import type { Loaded } from './system-api';
 import { useSuperadminAccess } from './system-access';
-import { AgentsTab } from './agents/agents';
-import { DataExplorer } from './data/explorer';
 import { useJobFailures } from './jobs/failures';
 import { createJobsApi } from './jobs/jobs-api';
-import { JobsTab } from './jobs/jobs';
-import { TracesTab } from './traces/traces';
-import { SystemModules } from './system-modules';
-import { SystemNats } from './system-nats';
 import { SystemOverview } from './system-overview';
 import { useSystemResource } from './system-resource';
 import { SystemServices } from './system-services';
-import { SystemTraffic } from './system-traffic';
 import { SYSTEM_TABS, parseSystemTab, type SystemTab } from './system-tabs';
 import type {
   JetStreamSummary,
@@ -36,6 +30,16 @@ const POLL_MS = 10_000;
 function Loading() {
   return <p className="system-empty">Loading…</p>;
 }
+
+// The heavier tabs load on first open: importing them all up front made the
+// route thousands of modules, slow to compile in dev and to load and leave.
+const DataExplorer = dynamic(() => import('./data/explorer').then((m) => m.DataExplorer), { ssr: false, loading: Loading });
+const JobsTab = dynamic(() => import('./jobs/jobs').then((m) => m.JobsTab), { ssr: false, loading: Loading });
+const AgentsTab = dynamic(() => import('./agents/agents').then((m) => m.AgentsTab), { ssr: false, loading: Loading });
+const TracesTab = dynamic(() => import('./traces/traces').then((m) => m.TracesTab), { ssr: false, loading: Loading });
+const SystemModules = dynamic(() => import('./system-modules').then((m) => m.SystemModules), { ssr: false, loading: Loading });
+const SystemNats = dynamic(() => import('./system-nats').then((m) => m.SystemNats), { ssr: false, loading: Loading });
+const SystemTraffic = dynamic(() => import('./system-traffic').then((m) => m.SystemTraffic), { ssr: false, loading: Loading });
 
 function Failed({ state }: { state: Extract<Loaded<unknown>, { ok: false }> }) {
   return <SourceNote label={state.status === 403 ? 'Access' : 'This view'} reason={state.reason} />;

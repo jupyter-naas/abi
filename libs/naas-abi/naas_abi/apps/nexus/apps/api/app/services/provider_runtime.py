@@ -1461,6 +1461,53 @@ def _retarget_inprocess_chat_model(agent: Any, model_id: str) -> None:
         _retarget_inprocess_chat_model(sub_agent, model_id)
 
 
+def _inprocess_agent_class_name(agent: Any) -> str:
+    cls = type(agent)
+    return f"{cls.__module__}/{cls.__name__}"
+
+
+def _prune_inprocess_subagents_for_roster(agent: Any, allowed: frozenset[str]) -> None:
+    """Drop sub-agents absent from the caller's enabled workspace roster."""
+    from naas_abi.agents.feature.registry import spec_for_class_name
+
+    subagents = getattr(agent, "_agents", None) or []
+    if not subagents:
+        return
+
+    def keep(sub: Any) -> bool:
+        class_name = _inprocess_agent_class_name(sub)
+        if spec_for_class_name(class_name) is None:
+            return class_name in allowed
+        return class_name in allowed
+
+    pruned = [sub for sub in subagents if keep(sub)]
+    if len(pruned) == len(subagents):
+        return
+
+    agent._agents = pruned
+    for sub in pruned:
+        _prune_inprocess_subagents_for_roster(sub, allowed)
+
+    if type(agent).__name__ == "AbiAgent":
+        from naas_abi.agents.AbiAgent import AbiAgent
+
+        agent._intents = AbiAgent.get_intents(agents=pruned)
+        configuration = getattr(agent, "configuration", None)
+        agents_section = (
+            "\n".join(f"- {sub.name}: {sub.description}" for sub in pruned) or ""
+        )
+        if configuration is not None and hasattr(configuration, "system_prompt"):
+            import re
+
+            configuration.system_prompt = re.sub(
+                r"(<agents>)(.*?)(</agents>)",
+                rf"\1\n{agents_section}\n\3",
+                configuration.system_prompt,
+                count=1,
+                flags=re.DOTALL,
+            )
+
+
 def _duplicate_inprocess_agent(template: Any, thread_id: str | None) -> Any:
     """Return a per-request copy of the cached template agent.
 
@@ -1650,6 +1697,11 @@ async def stream_with_abi_inprocess(
     agent = await asyncio.to_thread(
         _duplicate_inprocess_agent, template_agent, thread_id
     )
+    from naas_abi_core.services.agent.context import agent_workspace_enabled_class_names
+
+    allowed = agent_workspace_enabled_class_names.get()
+    if allowed:
+        _prune_inprocess_subagents_for_roster(agent, allowed)
     if llm_model:
         try:
             _retarget_inprocess_chat_model(agent, llm_model)

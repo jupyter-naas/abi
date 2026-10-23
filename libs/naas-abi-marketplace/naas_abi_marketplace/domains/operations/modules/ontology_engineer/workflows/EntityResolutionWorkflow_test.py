@@ -1,12 +1,11 @@
 from contextlib import contextmanager
 
 from naas_abi_core.services.triple_store.TripleStorePorts import QueryStream
-from rdflib import OWL, RDF, URIRef
-
 from naas_abi_marketplace.domains.operations.modules.ontology_engineer.workflows.EntityResolutionWorkflow import (
     EntityResolutionWorkflow,
     EntityResolutionWorkflowConfiguration,
 )
+from rdflib import OWL, RDF, URIRef
 
 TRIPLES = [
     (URIRef("urn:a"), RDF.type, OWL.NamedIndividual),

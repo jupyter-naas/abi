@@ -14,6 +14,10 @@ from naas_abi.apps.nexus.apps.api.app.core.workspace_access import (
     accessible_workspace_ids,
     resolve_workspace_role,
 )
+from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import (
+    dump_catalog_seed,
+    parse_catalog_seed,
+)
 from naas_abi.apps.nexus.apps.api.app.models import (
     AgentConfigModel,
     ConversationModel,
@@ -82,6 +86,7 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             description=model.description,
             workspace_group=model.workspace_group,
             feature_overrides=parse_feature_overrides(getattr(model, "feature_overrides", None)),
+            catalog_seed=parse_catalog_seed(getattr(model, "catalog_seed", None)),
             platform_drive_enabled=bool(model.platform_drive_enabled),
             system_drive_enabled=bool(model.system_drive_enabled),
             created_at=model.created_at,
@@ -180,6 +185,7 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             font_family=workspace.font_family,
             description=(workspace.description or "").strip() or None,
             workspace_group=(workspace.workspace_group or "").strip() or None,
+            catalog_seed=dump_catalog_seed(workspace.catalog_seed),
             created_at=now,
             updated_at=now,
         )
@@ -209,6 +215,42 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
         workspace.updated_at = datetime.now(UTC).replace(tzinfo=None)
         await self.db.flush()
         return self._to_workspace_record(workspace)
+
+    async def _transfer_workspace_owner(
+        self, workspace: WorkspaceModel, new_owner_id: str
+    ) -> None:
+        old_owner_id = workspace.owner_id
+        workspace.owner_id = new_owner_id
+        now = datetime.now(UTC).replace(tzinfo=None)
+        result = await self.db.execute(
+            select(WorkspaceMemberModel).where(
+                WorkspaceMemberModel.workspace_id == workspace.id,
+                WorkspaceMemberModel.user_id == new_owner_id,
+            )
+        )
+        new_row = result.scalar_one_or_none()
+        if new_row is None:
+            self.db.add(
+                WorkspaceMemberModel(
+                    id=str(uuid4()),
+                    workspace_id=workspace.id,
+                    user_id=new_owner_id,
+                    role="owner",
+                    created_at=now,
+                )
+            )
+        else:
+            new_row.role = "owner"
+        if old_owner_id and old_owner_id != new_owner_id:
+            old_result = await self.db.execute(
+                select(WorkspaceMemberModel).where(
+                    WorkspaceMemberModel.workspace_id == workspace.id,
+                    WorkspaceMemberModel.user_id == old_owner_id,
+                )
+            )
+            old_row = old_result.scalar_one_or_none()
+            if old_row is not None and old_row.role == "owner":
+                old_row.role = "admin"
 
     async def delete_workspace(self, workspace_id: str) -> bool:
         result = await self.db.execute(
@@ -251,6 +293,8 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
         if updates.workspace_group is not None:
             # A blank group clears it (the workspace lists under "Others").
             workspace.workspace_group = updates.workspace_group.strip() or None
+        if updates.owner_id is not None and updates.owner_id != workspace.owner_id:
+            await self._transfer_workspace_owner(workspace, updates.owner_id)
         workspace.updated_at = datetime.now(UTC).replace(tzinfo=None)
         await self.db.flush()
         return self._to_workspace_record(workspace)

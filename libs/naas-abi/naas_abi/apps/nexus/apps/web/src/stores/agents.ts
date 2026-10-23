@@ -158,7 +158,12 @@ export const useAgentsStore = create<AgentsState>()(
         const sameWorkspace = get().agentsWorkspaceId === workspaceId;
         if (!force && sameWorkspace) {
           const lastFetched = get().lastFetchedAt[workspaceId];
-          if (lastFetched && Date.now() - lastFetched < AGENTS_CACHE_TTL_MS) {
+          const hasCachedAgents = get().agents.length > 0;
+          if (
+            hasCachedAgents &&
+            lastFetched &&
+            Date.now() - lastFetched < AGENTS_CACHE_TTL_MS
+          ) {
             return;
           }
         }
@@ -171,10 +176,9 @@ export const useAgentsStore = create<AgentsState>()(
           const { getApiUrl } = await import('@/lib/config');
           const API_BASE = getApiUrl();
 
-          // Reconcile the DB with the code class registry (POST /sync) only when
-          // the caller asks (`force`). A workspace switch used to POST /sync on
-          // the first GET, which blocks the API (Python agent imports + DB
-          // writes) while Apps is still loading. Chat and agent settings pass force.
+          // POST /sync when `force` (chat pane, agent settings). Otherwise GET
+          // /agents — the API auto-reconciles when the workspace has no rows yet.
+          // We still avoid POST on every Apps navigation to keep load off the API.
           const shouldSync = force;
           if (shouldSync) syncedWorkspaces.add(workspaceId);
           let response: Response;

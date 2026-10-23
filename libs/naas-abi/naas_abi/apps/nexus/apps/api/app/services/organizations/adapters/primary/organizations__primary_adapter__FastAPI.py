@@ -716,6 +716,25 @@ async def bulk_update_org_workspaces(
     }
 
 
+@router.get("/{org_id}/workspace-seed-catalog")
+async def get_org_workspace_seed_catalog(
+    org_id: str,
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+) -> dict:
+    """Instance catalog for the create-workspace picker (agents, apps, …)."""
+    await _require_org_admin(current_user.id, org_id, service, "view workspace seed catalog")
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import (
+        build_workspace_seed_catalog,
+    )
+
+    catalog = build_workspace_seed_catalog()
+    return {
+        key: [{"id": option.id, "label": option.label, "kind": option.kind} for option in options]
+        for key, options in catalog.items()
+    }
+
+
 @router.get("/{org_id}/workspace-features")
 async def get_org_workspace_features(
     org_id: str,

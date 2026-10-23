@@ -43,6 +43,12 @@ agent_user_name: ContextVar[str | None] = ContextVar("agent_user_name", default=
 agent_user_email: ContextVar[str | None] = ContextVar("agent_user_email", default=None)
 agent_chat_id: ContextVar[str | None] = ContextVar("agent_chat_id", default=None)
 agent_workspace_id: ContextVar[str | None] = event_actor_workspace_id
+# Enabled agent registry keys (``module/Class``) for the current chat turn after
+# workspace roster and per-caller feature gating. Abi uses this to attach only
+# the office sub-agents the user may reach.
+agent_workspace_enabled_class_names: ContextVar[frozenset[str] | None] = ContextVar(
+    "agent_workspace_enabled_class_names", default=None
+)
 
 # Coding-workspace bridge: base URL + bearer secret of the exec sidecar running
 # inside the caller's Coder coding workspace. Set at the request boundary (the

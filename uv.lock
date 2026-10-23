@@ -2361,7 +2361,7 @@ name = "importlib-metadata"
 version = "8.7.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "zipp" },
+    { name = "zipp", marker = "python_full_version < '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f3/49/3b30cad09e7771a4982d9975a8cbf64f00d4a1ececb53297f1d9a7be1b10/importlib_metadata-8.7.1.tar.gz", hash = "sha256:49fef1ae6440c182052f407c8d34a68f72efc36db9ca90dc0113398f2fdde8bb", size = 57107, upload-time = "2025-12-21T10:00:19.278Z" }
 wheels = [
@@ -3600,7 +3600,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi"
-version = "2.90.0"
+version = "3.1.2"
 source = { editable = "libs/naas-abi" }
 dependencies = [
     { name = "aiosqlite" },
@@ -3686,7 +3686,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-cli"
-version = "2.28.1"
+version = "3.0.1"
 source = { editable = "libs/naas-abi-cli" }
 dependencies = [
     { name = "naas-abi" },
@@ -3712,7 +3712,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-core"
-version = "2.44.0"
+version = "3.0.1"
 source = { editable = "libs/naas-abi-core" }
 dependencies = [
     { name = "click" },
@@ -3857,7 +3857,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-marketplace"
-version = "3.60.0"
+version = "3.61.1"
 source = { editable = "libs/naas-abi-marketplace" }
 dependencies = [
     { name = "ijson" },
@@ -4002,7 +4002,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-proto"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "libs/naas-abi-proto" }
 dependencies = [
     { name = "protobuf" },
@@ -4019,7 +4019,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-sdk"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "libs/naas-abi-sdk" }
 dependencies = [
     { name = "naas-abi-proto" },
@@ -6398,8 +6398,8 @@ name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography" },
-    { name = "jeepney" },
+    { name = "cryptography", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "jeepney", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [

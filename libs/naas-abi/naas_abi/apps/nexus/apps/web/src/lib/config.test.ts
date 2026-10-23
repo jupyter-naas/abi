@@ -93,4 +93,21 @@ describe('getApiUrl public-origin fallback', () => {
     expect(getEnvironment()).toBe('local');
     expect(getApiUrl()).toBe('http://localhost:9879');
   });
+
+  it('uses api.localhost on https nexus.localhost instead of loopback ABI', async () => {
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        location: {
+          hostname: 'nexus.localhost',
+          origin: 'https://nexus.localhost',
+          protocol: 'https:',
+        },
+        __NEXUS_RUNTIME_CONFIG__: undefined,
+      },
+    });
+
+    const { getApiUrl } = await import('./config');
+    expect(getApiUrl()).toBe('https://api.localhost');
+  });
 });

@@ -1,43 +1,32 @@
-"""Per-caller visibility of the naas_abi feature office agents.
+"""Feature office agents: workspace roster + per-caller visibility.
 
-``agent_configs.enabled`` is workspace-scoped: it answers "does this
-workspace run this agent", which the ``agents:`` roster seed decides. It
-cannot answer "may *this* user see it", because two members of the same
-workspace hold different roles and therefore different feature access.
+On sync, naas_abi office agents are enabled when their Nexus feature is on
+for the workspace (union across roles). That keeps ``agent_configs`` aligned
+with Apps, Search, Ontology, and the other sections without listing every
+office agent in YAML.
 
-So the role rule is applied when a listing is rendered, never by writing
-``enabled``. A member who cannot open Ontology does not get the Ontology
-agent in the picker, and the right pane falls back to the workspace
-default there, while the owner in the same workspace still sees it.
-
-The rule covers the ``naas_abi`` office agents only: every other module's
-agents (and naas_abi's own Abi orchestrator) pass through untouched, since
-no feature flag governs them.
+Per-caller filtering still applies at list/chat time: a member without
+Ontology does not see OntologyAgent in the picker, and Abi drops that
+sub-agent for their turn. Non-office agents (client modules, Abi itself)
+are not feature-gated.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from typing import TypeVar
+from typing import Any, TypeVar
 
-from naas_abi.agents.feature.registry import spec_for_class_name
+from naas_abi.agents.feature.registry import feature_office_agent_specs, spec_for_class_name
+from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import resolve_agent_ref
 
 AgentT = TypeVar("AgentT")
 
 
-async def caller_feature_flags(db: object, workspace_id: str, role: str | None) -> dict[str, bool]:
-    """Feature access this caller holds in this workspace, on an open session.
-
-    Same resolution the workspace listing sends the frontend (deployment
-    ``role_baseline``, org overlay, workspace overrides), so the agents a
-    user is offered match the sections they can open. Callers that own a
-    session pass it; the HTTP adapter opens one of its own.
-    """
-    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
-        build_feature_flags,
-        parse_feature_overrides,
-    )
-    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+async def _workspace_feature_inputs(
+    db: object,
+    workspace_id: str,
+) -> tuple[str | None, str | None, dict[str, bool] | None, Mapping[str, list[str]] | None]:
+    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import parse_feature_overrides
     from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
     from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
         OrganizationSecondaryAdapterPostgres,
@@ -57,21 +46,95 @@ async def caller_feature_flags(db: object, workspace_id: str, role: str | None) 
     organization_id = row[1] if row else None
     workspace_override = parse_feature_overrides(row[2]) if row else None
 
-    override = None
+    org_baseline = None
     if organization_id:
         org_service = OrganizationService(adapter=OrganizationSecondaryAdapterPostgres(db=db))
         record = await org_service.get_role_features(org_id=organization_id)
-        override = record.role_baseline if record is not None else None
+        org_baseline = record.role_baseline if record is not None else None
 
+    return slug, organization_id, workspace_override, org_baseline
+
+
+async def caller_feature_flags(db: object, workspace_id: str, role: str | None) -> dict[str, bool]:
+    """Feature access this caller holds in this workspace, on an open session.
+
+    Same resolution the workspace listing sends the frontend (deployment
+    ``role_baseline``, org overlay, workspace overrides), so the agents a
+    user is offered match the sections they can open. Callers that own a
+    session pass it; the HTTP adapter opens one of its own.
+    """
+    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import build_feature_flags
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+
+    slug, organization_id, workspace_override, org_baseline = await _workspace_feature_inputs(
+        db, workspace_id
+    )
     return build_feature_flags(
         role=role or "member",
         feature_flags_config=live_settings().feature_flags,
         workspace_slug=slug,
         workspace_id=workspace_id,
         organization_id=organization_id,
-        organization_override=override,
+        organization_override=org_baseline,
         workspace_override=workspace_override,
     )
+
+
+async def workspace_union_feature_flags(db: object, workspace_id: str) -> dict[str, bool]:
+    """Features any baseline role may use in this workspace (for agent sync)."""
+    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
+        BASELINE_ROLES,
+        KNOWN_FEATURE_KEYS,
+        build_feature_flags,
+    )
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+
+    slug, organization_id, workspace_override, org_baseline = await _workspace_feature_inputs(
+        db, workspace_id
+    )
+    merged = dict.fromkeys(KNOWN_FEATURE_KEYS, False)
+    for role in BASELINE_ROLES:
+        flags = build_feature_flags(
+            role=role,
+            feature_flags_config=live_settings().feature_flags,
+            workspace_slug=slug,
+            workspace_id=workspace_id,
+            organization_id=organization_id,
+            organization_override=org_baseline,
+            workspace_override=workspace_override,
+        )
+        for key, value in flags.items():
+            merged[key] = merged.get(key, False) or bool(value)
+    return merged
+
+
+def feature_office_class_names_for_flags(
+    flags: Mapping[str, bool],
+    registry: Mapping[str, Any],
+) -> set[str]:
+    """Registry keys for naas_abi office agents whose feature is on."""
+    resolved: set[str] = set()
+    for spec in feature_office_agent_specs():
+        if not any(flags.get(key, False) for key in spec.feature_keys):
+            continue
+        class_name = resolve_agent_ref(spec.roster_ref, registry)
+        if class_name:
+            resolved.add(class_name)
+    return resolved
+
+
+def caller_enabled_class_names(
+    agents: Iterable[AgentT],
+    flags: Mapping[str, bool],
+) -> frozenset[str]:
+    """Enabled registry keys visible to this caller (roster ∩ feature access)."""
+    names = [
+        class_name
+        for agent in filter_feature_agents(agents, flags)
+        if getattr(agent, "enabled", False)
+        and (class_name := getattr(agent, "class_name", None))
+    ]
+    return frozenset(names)
 
 
 def feature_agent_visible(class_name: str | None, flags: Mapping[str, bool]) -> bool:
