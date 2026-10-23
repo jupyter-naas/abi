@@ -2,6 +2,38 @@
 
 <!-- version list -->
 
+## v3.3.0 (2026-10-23)
+
+### Features
+
+- **config**: Improve API URL resolution for local and HTTPS environments
+  ([`64b6a41`](https://github.com/jupyter-naas/abi/commit/64b6a41ca4c7c33c3e2abf7370ae573c2c3fa559))
+
+- **workspace**: Add WorkspaceGroupSelect component and refactor workspace group selection
+  ([`10a8657`](https://github.com/jupyter-naas/abi/commit/10a8657b244e25e8d521d00bec515ae32edba54a))
+
+- **workspace**: Commit staged changes for workspace features
+  ([`e1d6e58`](https://github.com/jupyter-naas/abi/commit/e1d6e586e8c9fc234159bad7d52aa6278d6e98bb))
+
+- **workspace-owner-select**: Enhance workspace owner select component with searchable dropdown and
+  keyboard navigation
+  ([`bf042b4`](https://github.com/jupyter-naas/abi/commit/bf042b4809e39d0c417a933f98526fec843bd9b4))
+
+- **workspaces**: Add default workspace colors from org branding and instance search filter
+  ([`44aa71f`](https://github.com/jupyter-naas/abi/commit/44aa71f59d4bb29a8e213e7cb351fbfaed38e0ca))
+
+### Refactoring
+
+- Add owner + enable feature instances on workspace creation
+  ([`222e3f4`](https://github.com/jupyter-naas/abi/commit/222e3f4494b239a68074c67ea787c02ecfa97d35))
+
+- Commit staged changes for various libs and apps
+  ([`3c52466`](https://github.com/jupyter-naas/abi/commit/3c5246681dfe4a341e18c43897439f1e8989e676))
+
+- **workspace-features**: Update agent feature access and registry
+  ([`c898df7`](https://github.com/jupyter-naas/abi/commit/c898df7846fe43200d34aa8f8fb910f46df2092d))
+
+
 ## v3.2.0 (2026-10-22)
 
 ### Chores
