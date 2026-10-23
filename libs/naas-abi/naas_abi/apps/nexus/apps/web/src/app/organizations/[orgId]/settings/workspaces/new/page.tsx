@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Brush, Camera, Check, Palette, Save, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -99,6 +99,35 @@ export default function OrgCreateWorkspacePage() {
       })
       .catch(() => {
         // No suggestions: "New group" still works.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [orgId]);
+
+  // Default workspace colours from organization branding (UI chrome stays on org colours via SettingsLayoutRoot).
+  useEffect(() => {
+    if (!orgId) return;
+    let cancelled = false;
+    void authFetch(`/api/organizations/${orgId}`)
+      .then(async (res) => {
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        const orgPrimary = (data.primary_color ?? data.primaryColor) as string | undefined;
+        const orgAccent = (data.accent_color ?? data.accentColor) as string | undefined;
+        setPrimaryColor((current) =>
+          current === DEFAULT_THEME.primaryColor && orgPrimary ? orgPrimary : current
+        );
+        setAccentColor((current) => {
+          const defaultAccent = DEFAULT_THEME.accentColor ?? '';
+          if (current !== defaultAccent) return current;
+          if (orgAccent) return orgAccent;
+          if (orgPrimary) return orgPrimary;
+          return current;
+        });
+      })
+      .catch(() => {
+        // Keep platform defaults for the new workspace payload.
       });
     return () => {
       cancelled = true;
@@ -221,11 +250,7 @@ export default function OrgCreateWorkspacePage() {
   const isCustomColor = !PRESET_COLORS.some((c) => c.value === primaryColor);
 
   return (
-    <div
-      className="workspace-general space-y-6"
-      // Focus rings and Save follow the colour picked below.
-      style={{ '--workspace-accent': primaryColor } as CSSProperties}
-    >
+    <div className="workspace-general org-create-workspace space-y-6">
       <AccountPageHeader
         title="Create workspace"
         subtitle="Add a workspace to this organization. Pick an owner, features, and optional instances; org owners and admins reach every workspace."

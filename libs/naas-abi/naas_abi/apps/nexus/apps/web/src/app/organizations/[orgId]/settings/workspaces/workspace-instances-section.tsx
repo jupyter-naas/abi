@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Package } from 'lucide-react';
+import { Package, Search } from 'lucide-react';
 import { SettingsSection } from '@/components/settings/settings-ui';
 import { authFetch } from '@/stores/auth';
 import type { FeatureChoice, WorkspaceFeatureCatalog } from './workspace-features-table';
@@ -36,19 +36,39 @@ function featureEnabled(
   return catalog.roles.some((role) => catalog.role_baseline[role]?.includes(feature));
 }
 
+function matchesInstanceQuery(option: CatalogOption, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return (
+    option.label.toLowerCase().includes(q) ||
+    option.id.toLowerCase().includes(q) ||
+    option.kind.toLowerCase().includes(q)
+  );
+}
+
 function InstanceChecklist({
   title,
   options,
   selected,
   onChange,
   disabled,
+  searchPlaceholder,
 }: {
   title: string;
   options: CatalogOption[];
   selected: Set<string>;
   onChange: (next: Set<string>) => void;
   disabled?: boolean;
+  searchPlaceholder?: string;
 }) {
+  const [query, setQuery] = useState('');
+  const visible = useMemo(
+    () => options.filter((option) => matchesInstanceQuery(option, query)),
+    [options, query]
+  );
+  const q = query.trim();
+  const searchLabel = `Search ${title.toLowerCase()}`;
+
   if (!options.length) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -58,9 +78,31 @@ function InstanceChecklist({
   }
   return (
     <div className="space-y-2">
-      <p className="text-sm font-medium text-foreground">{title}</p>
+      <p className="text-sm font-medium text-foreground">
+        {title}
+        {q && (
+          <span className="ml-2 font-normal text-muted-foreground">
+            ({visible.length} of {options.length})
+          </span>
+        )}
+      </p>
+      <div className="flex items-center gap-2 rounded border border-border bg-background px-3 py-2">
+        <Search size={14} className="shrink-0 text-muted-foreground opacity-70" aria-hidden />
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={searchPlaceholder ?? `Search ${title.toLowerCase()}…`}
+          disabled={disabled}
+          aria-label={searchLabel}
+          className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+        />
+      </div>
       <div className="max-h-48 space-y-1 overflow-y-auto rounded border border-border p-2">
-        {options.map((option) => {
+        {visible.length === 0 && q ? (
+          <p className="px-1 py-2 text-sm text-muted-foreground">No matching {title.toLowerCase()}.</p>
+        ) : null}
+        {visible.map((option) => {
           const checked = selected.has(option.id);
           return (
             <label
