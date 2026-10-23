@@ -47,3 +47,23 @@ export function layerPinColor(entry: { id: string; color?: string }): string {
   if (isHexColor(entry.color)) return entry.color;
   return BUILTIN_LAYER_COLORS[entry.id] ?? hashLayerColor(entry.id);
 }
+
+/** One hex when every pin that has a color shares it. */
+export function sharedPinColor(pins: readonly { color?: string }[]): string | undefined {
+  const hexes = pins.map((pin) => pin.color).filter(isHexColor);
+  if (!hexes.length) return undefined;
+  const first = hexes[0];
+  return hexes.every((color) => color.toLowerCase() === first.toLowerCase()) ? first : undefined;
+}
+
+/**
+ * Paint color for dots and clusters: the layer hex (catalog or Settings), else
+ * a shared pin hex, else the built-in / hash fallback.
+ */
+export function layerPaintColor(
+  entry: { id: string; color?: string },
+  pins: readonly { color?: string }[] = [],
+): string {
+  if (isHexColor(entry.color)) return entry.color;
+  return sharedPinColor(pins) ?? layerPinColor(entry);
+}
