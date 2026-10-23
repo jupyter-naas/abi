@@ -74,15 +74,50 @@ function derivePublicApiUrl(): string {
   return `${protocol}//api.${hostname}`;
 }
 
+/** BOB/Caddy local compose serves the API at api.localhost, not api.<web-host>. */
+function deriveLocalComposeApiUrl(): string | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  const { protocol, hostname } = window.location;
+  if (!hostname.endsWith('.localhost') || hostname === 'api.localhost') {
+    return null;
+  }
+  return `${protocol}//api.localhost`;
+}
+
+function isLoopbackAbiUrl(url: string): boolean {
+  return /^https?:\/\/(localhost|127\.0\.0\.1):9879\/?$/i.test(url.trim());
+}
+
+/**
+ * When the UI is on https://nexus.localhost, calling http://localhost:9879 is
+ * mixed content and surfaces as TypeError: Failed to fetch. Prefer the Caddy
+ * API host (https://api.localhost) instead.
+ */
+function avoidHttpsMixedContentLoopback(resolved: string): string {
+  if (typeof window === 'undefined' || window.location.protocol !== 'https:') {
+    return resolved;
+  }
+  if (!isLoopbackAbiUrl(resolved)) {
+    return resolved;
+  }
+  const envUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXUS_API_URL;
+  if (envUrl && !isLoopbackAbiUrl(envUrl)) {
+    return envUrl;
+  }
+  return deriveLocalComposeApiUrl() ?? resolved;
+}
+
 function getResolvedApiUrl(defaultValue: string): string {
   const runtimeUrl = getRuntimeConfig()?.apiUrl;
   if (runtimeUrl) {
-    return runtimeUrl;
+    return avoidHttpsMixedContentLoopback(runtimeUrl);
   }
 
   const envUrl = process.env.NEXUS_API_URL || process.env.NEXT_PUBLIC_API_URL;
   if (envUrl) {
-    return envUrl;
+    return avoidHttpsMixedContentLoopback(envUrl);
   }
 
   // Next.js can evaluate client modules before /runtime-config.js runs. On a
@@ -95,10 +130,15 @@ function getResolvedApiUrl(defaultValue: string): string {
         `Nexus apiUrl missing at runtime on ${window.location.origin}; using ${derived} instead of ${defaultValue}.`
       );
     }
-    return derived;
+    return avoidHttpsMixedContentLoopback(derived);
   }
 
-  return defaultValue;
+  const localCompose = deriveLocalComposeApiUrl();
+  if (localCompose) {
+    return avoidHttpsMixedContentLoopback(localCompose);
+  }
+
+  return avoidHttpsMixedContentLoopback(defaultValue);
 }
 
 function getResolvedWebsocketPath(defaultValue: string): string {
