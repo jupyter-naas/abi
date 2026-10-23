@@ -12,6 +12,7 @@ from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from sqlalchemy import (
     Boolean,
     Column,
+    Date,
     DateTime,
     ForeignKey,
     Integer,
@@ -935,3 +936,75 @@ class MapsSettingsModel(Base):
     settings = Column(Text, nullable=False)  # JSON MapsWorkspaceSettings
     updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+
+# ============================================
+# Board
+# ============================================
+
+
+class BoardIterationModel(Base):
+    """One ISO week of a workspace's project board, keyed by its Monday."""
+
+    __tablename__ = "board_iterations"
+    __table_args__ = (UniqueConstraint("workspace_id", "start_date"),)
+
+    id = Column(String(48), primary_key=True)
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    start_date = Column(Date, nullable=False)
+    goal = Column(String(200), nullable=False, default="")
+    created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+
+
+class BoardTaskModel(Base):
+    """A board task. No iteration means it sits in the backlog."""
+
+    __tablename__ = "board_tasks"
+
+    id = Column(String(48), primary_key=True)
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    iteration_id = Column(
+        String(48), ForeignKey("board_iterations.id", ondelete="SET NULL"), nullable=True
+    )
+    title = Column(String(300), nullable=False)
+    content = Column(Text, nullable=False, default="")
+    stage = Column(String(32), nullable=False, default="inbox")
+    project = Column(String(120), nullable=False, default="")
+    priority = Column(String(16), nullable=True)
+    due_date = Column(Date, nullable=True)
+    labels = Column(Text, nullable=False, default="[]")  # JSON list
+    assignee_ids = Column(Text, nullable=False, default="[]")  # JSON list
+    archived_at = Column(DateTime(timezone=False), nullable=True)
+    created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+
+
+class BoardTaskCommentModel(Base):
+    __tablename__ = "board_task_comments"
+
+    id = Column(String(48), primary_key=True)
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    task_id = Column(String(48), ForeignKey("board_tasks.id", ondelete="CASCADE"), nullable=False)
+    author_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    body = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+
+
+class BoardTaskActivityModel(Base):
+    """A recorded change on a task: stage, assignees, iteration, archive state."""
+
+    __tablename__ = "board_task_activity"
+
+    id = Column(String(48), primary_key=True)
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    task_id = Column(String(48), ForeignKey("board_tasks.id", ondelete="CASCADE"), nullable=False)
+    actor_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    field = Column(String(32), nullable=False)
+    old_value = Column(Text, nullable=True)  # JSON
+    new_value = Column(Text, nullable=True)  # JSON
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)

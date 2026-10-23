@@ -1,0 +1,456 @@
+"""HTTP routes for the workspace project board, mounted under ``/api/board``.
+
+Every route takes ``workspace_id`` and needs workspace access plus the
+``board`` feature for the caller's role. By default only workspace owners and
+admins have it; an organization or workspace override can open it to members.
+"""
+
+from __future__ import annotations
+
+from datetime import date, datetime
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import User, get_current_user_required
+from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import caller_feature_flags
+from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
+    require_workspace_access,
+)
+from naas_abi.apps.nexus.apps.api.app.services.board.adapters.secondary.postgres import (
+    PostgresBoardMemberDirectory,
+    PostgresBoardStore,
+)
+from naas_abi.apps.nexus.apps.api.app.services.board.board__schema import (
+    MAX_COMMENT_LENGTH,
+    MAX_CONTENT_LENGTH,
+    MAX_GOAL_LENGTH,
+    MAX_PROJECT_LENGTH,
+    MAX_TITLE_LENGTH,
+    ActivityEntry,
+    BoardNotFoundError,
+    BoardValidationError,
+    Comment,
+    Iteration,
+    Task,
+)
+from naas_abi.apps.nexus.apps.api.app.services.board.service import BoardService
+from pydantic import BaseModel, Field
+
+router = APIRouter()
+
+_service = BoardService(PostgresBoardStore(), PostgresBoardMemberDirectory())
+
+BOARD_FEATURE = "board"
+
+
+def get_board_service() -> BoardService:
+    return _service
+
+
+async def _caller_flags(workspace_id: str, role: str) -> dict[str, bool]:
+    async with AsyncSessionLocal() as db:
+        return await caller_feature_flags(db, workspace_id, role)
+
+
+async def _require_board(user_id: str, workspace_id: str) -> None:
+    role = await require_workspace_access(user_id, workspace_id)
+    flags = await _caller_flags(workspace_id, role)
+    if not flags.get(BOARD_FEATURE, False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The board is not enabled for your role in this workspace",
+        )
+
+
+def _http_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, BoardNotFoundError):
+        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Schemas
+# ---------------------------------------------------------------------------
+
+
+class IterationOut(BaseModel):
+    id: str
+    workspace_id: str
+    start_date: date
+    end_date: date
+    iso_week: str
+    goal: str
+    created_by: str | None
+    created_at: datetime | None
+    updated_by: str | None
+    updated_at: datetime | None
+
+
+class TaskOut(BaseModel):
+    id: str
+    workspace_id: str
+    title: str
+    content: str
+    stage: str
+    iteration_id: str | None
+    project: str
+    priority: str | None
+    due_date: date | None
+    labels: list[str]
+    assignee_ids: list[str]
+    archived: bool
+    archived_at: datetime | None
+    created_by: str | None
+    created_at: datetime | None
+    updated_by: str | None
+    updated_at: datetime | None
+
+
+class CommentOut(BaseModel):
+    id: str
+    task_id: str
+    author_id: str | None
+    body: str
+    created_at: datetime
+
+
+class ActivityOut(BaseModel):
+    id: str
+    task_id: str
+    actor_id: str | None
+    field: str
+    old_value: Any = None
+    new_value: Any = None
+    created_at: datetime | None
+
+
+class CarryOverOut(BaseModel):
+    iteration: IterationOut
+    moved: list[TaskOut]
+
+
+class EnsureIterationIn(BaseModel):
+    # The caller's local date: the week boundary follows the user's timezone.
+    date: date
+
+
+class GoalIn(BaseModel):
+    goal: str = Field(default="", max_length=MAX_GOAL_LENGTH * 2)
+
+
+class TaskCreateIn(BaseModel):
+    title: str = Field(max_length=MAX_TITLE_LENGTH * 2)
+    content: str = Field(default="", max_length=MAX_CONTENT_LENGTH)
+    stage: str | None = None
+    iteration_id: str | None = None
+    project: str = Field(default="", max_length=MAX_PROJECT_LENGTH * 2)
+    priority: str | None = None
+    due_date: date | None = None
+    labels: list[str] = Field(default_factory=list, max_length=100)
+    assignee_ids: list[str] = Field(default_factory=list, max_length=100)
+
+
+class TaskPatchIn(BaseModel):
+    """Only the fields sent are changed; ``null`` clears an optional field."""
+
+    title: str | None = Field(default=None, max_length=MAX_TITLE_LENGTH * 2)
+    content: str | None = Field(default=None, max_length=MAX_CONTENT_LENGTH)
+    stage: str | None = None
+    iteration_id: str | None = None
+    project: str | None = Field(default=None, max_length=MAX_PROJECT_LENGTH * 2)
+    priority: str | None = None
+    due_date: date | None = None
+    labels: list[str] | None = Field(default=None, max_length=100)
+    assignee_ids: list[str] | None = Field(default=None, max_length=100)
+
+
+class CommentIn(BaseModel):
+    body: str = Field(max_length=MAX_COMMENT_LENGTH * 2)
+
+
+def _iteration_out(iteration: Iteration) -> IterationOut:
+    return IterationOut(
+        id=iteration.id,
+        workspace_id=iteration.workspace_id,
+        start_date=iteration.start_date,
+        end_date=iteration.end_date,
+        iso_week=iteration.iso_week,
+        goal=iteration.goal,
+        created_by=iteration.created_by,
+        created_at=iteration.created_at,
+        updated_by=iteration.updated_by,
+        updated_at=iteration.updated_at,
+    )
+
+
+def _task_out(task: Task) -> TaskOut:
+    return TaskOut(
+        id=task.id,
+        workspace_id=task.workspace_id,
+        title=task.title,
+        content=task.content,
+        stage=task.stage,
+        iteration_id=task.iteration_id,
+        project=task.project,
+        priority=task.priority,
+        due_date=task.due_date,
+        labels=list(task.labels),
+        assignee_ids=list(task.assignee_ids),
+        archived=task.archived,
+        archived_at=task.archived_at,
+        created_by=task.created_by,
+        created_at=task.created_at,
+        updated_by=task.updated_by,
+        updated_at=task.updated_at,
+    )
+
+
+def _comment_out(comment: Comment) -> CommentOut:
+    return CommentOut(
+        id=comment.id,
+        task_id=comment.task_id,
+        author_id=comment.author_id,
+        body=comment.body,
+        created_at=comment.created_at,
+    )
+
+
+def _activity_out(entry: ActivityEntry) -> ActivityOut:
+    return ActivityOut(
+        id=entry.id,
+        task_id=entry.task_id,
+        actor_id=entry.actor_id,
+        field=entry.field,
+        old_value=entry.old_value,
+        new_value=entry.new_value,
+        created_at=entry.created_at,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Iterations
+# ---------------------------------------------------------------------------
+
+
+@router.get("/iterations")
+async def list_iterations(
+    workspace_id: str = Query(...),
+    current_user: User = Depends(get_current_user_required),
+    service: BoardService = Depends(get_board_service),
+) -> list[IterationOut]:
+    await _require_board(current_user.id, workspace_id)
+    return [_iteration_out(i) for i in await service.list_iterations(workspace_id)]
+
+
+@router.post("/iterations")
+async def ensure_iteration(
+    body: EnsureIterationIn,
+    workspace_id: str = Query(...),
+    current_user: User = Depends(get_current_user_required),
+    service: BoardService = Depends(get_board_service),
+) -> IterationOut:
+    """The iteration of the week ``date`` falls in, created when missing."""
+    await _require_board(current_user.id, workspace_id)
+    iteration = await service.ensure_iteration(workspace_id, body.date, user_id=current_user.id)
+    return _iteration_out(iteration)
+
+
+@router.patch("/iterations/{iteration_id}")
+async def update_iteration(
+    iteration_id: str,
+    body: GoalIn,
+    workspace_id: str = Query(...),
+    current_user: User = Depends(get_current_user_required),
+    service: BoardService = Depends(get_board_service),
+) -> IterationOut:
+    await _require_board(current_user.id, workspace_id)
+    try:
+        iteration = await service.update_iteration_goal(
+            workspace_id, iteration_id, body.goal, user_id=current_user.id
+        )
+    except (BoardNotFoundError, BoardValidationError) as exc:
+        raise _http_error(exc) from exc
+    return _iteration_out(iteration)
+
+
+@router.post("/iterations/{iteration_id}/carry-over")
+async def carry_over(
+    iteration_id: str,
+    workspace_id: str = Query(...),
+    current_user: User = Depends(get_current_user_required),
+    service: BoardService = Depends(get_board_service),
+) -> CarryOverOut:
+    """Move the iteration's unfinished tasks to the next week's iteration."""
+    await _require_board(current_user.id, workspace_id)
+    try:
+        result = await service.carry_over(workspace_id, iteration_id, user_id=current_user.id)
+    except (BoardNotFoundError, BoardValidationError) as exc:
+        raise _http_error(exc) from exc
+    return CarryOverOut(
+        iteration=_iteration_out(result.iteration),
+        moved=[_task_out(t) for t in result.moved],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tasks
+# ---------------------------------------------------------------------------
+
+
+@router.get("/tasks")
+async def list_tasks(
+    workspace_id: str = Query(...),
+    iteration_id: str | None = Query(default=None),
+    backlog: bool = Query(default=False),
+    include_archived: bool = Query(default=False),
+    current_user: User = Depends(get_current_user_required),
+    service: BoardService = Depends(get_board_service),
+) -> list[TaskOut]:
+    """Tasks of ``iteration_id``, or of the backlog with ``backlog=true``."""
+    await _require_board(current_user.id, workspace_id)
+    if bool(iteration_id) == backlog:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Pass either iteration_id or backlog=true",
+        )
+    try:
+        tasks = await service.list_tasks(
+            workspace_id,
+            iteration_id=None if backlog else iteration_id,
+            include_archived=include_archived,
+        )
+    except BoardNotFoundError as exc:
+        raise _http_error(exc) from exc
+    return [_task_out(t) for t in tasks]
+
+
+@router.post("/tasks", status_code=status.HTTP_201_CREATED)
+async def create_task(
+    body: TaskCreateIn,
+    workspace_id: str = Query(...),
+    current_user: User = Depends(get_current_user_required),
+    service: BoardService = Depends(get_board_service),
+) -> TaskOut:
+    await _require_board(current_user.id, workspace_id)
+    fields = body.model_dump(exclude_none=True)
+    try:
+        task = await service.create_task(workspace_id, fields, user_id=current_user.id)
+    except (BoardNotFoundError, BoardValidationError) as exc:
+        raise _http_error(exc) from exc
+    return _task_out(task)
+
+
+@router.patch("/tasks/{task_id}")
+async def update_task(
+    task_id: str,
+    body: TaskPatchIn,
+    workspace_id: str = Query(...),
+    current_user: User = Depends(get_current_user_required),
+    service: BoardService = Depends(get_board_service),
+) -> TaskOut:
+    await _require_board(current_user.id, workspace_id)
+    changes = body.model_dump(exclude_unset=True)
+    try:
+        task = await service.update_task(workspace_id, task_id, changes, user_id=current_user.id)
+    except (BoardNotFoundError, BoardValidationError) as exc:
+        raise _http_error(exc) from exc
+    return _task_out(task)
+
+
+@router.post("/tasks/{task_id}/archive")
+async def archive_task(
+    task_id: str,
+    workspace_id: str = Query(...),
+    current_user: User = Depends(get_current_user_required),
+    service: BoardService = Depends(get_board_service),
+) -> TaskOut:
+    await _require_board(current_user.id, workspace_id)
+    try:
+        task = await service.set_archived(workspace_id, task_id, True, user_id=current_user.id)
+    except BoardNotFoundError as exc:
+        raise _http_error(exc) from exc
+    return _task_out(task)
+
+
+@router.post("/tasks/{task_id}/restore")
+async def restore_task(
+    task_id: str,
+    workspace_id: str = Query(...),
+    current_user: User = Depends(get_current_user_required),
+    service: BoardService = Depends(get_board_service),
+) -> TaskOut:
+    await _require_board(current_user.id, workspace_id)
+    try:
+        task = await service.set_archived(workspace_id, task_id, False, user_id=current_user.id)
+    except BoardNotFoundError as exc:
+        raise _http_error(exc) from exc
+    return _task_out(task)
+
+
+@router.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_task(
+    task_id: str,
+    workspace_id: str = Query(...),
+    current_user: User = Depends(get_current_user_required),
+    service: BoardService = Depends(get_board_service),
+) -> Response:
+    await _require_board(current_user.id, workspace_id)
+    try:
+        await service.delete_task(workspace_id, task_id)
+    except BoardNotFoundError as exc:
+        raise _http_error(exc) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Comments and activity
+# ---------------------------------------------------------------------------
+
+
+@router.get("/tasks/{task_id}/comments")
+async def list_comments(
+    task_id: str,
+    workspace_id: str = Query(...),
+    current_user: User = Depends(get_current_user_required),
+    service: BoardService = Depends(get_board_service),
+) -> list[CommentOut]:
+    await _require_board(current_user.id, workspace_id)
+    try:
+        comments = await service.list_comments(workspace_id, task_id)
+    except BoardNotFoundError as exc:
+        raise _http_error(exc) from exc
+    return [_comment_out(c) for c in comments]
+
+
+@router.post("/tasks/{task_id}/comments", status_code=status.HTTP_201_CREATED)
+async def add_comment(
+    task_id: str,
+    body: CommentIn,
+    workspace_id: str = Query(...),
+    current_user: User = Depends(get_current_user_required),
+    service: BoardService = Depends(get_board_service),
+) -> CommentOut:
+    await _require_board(current_user.id, workspace_id)
+    try:
+        comment = await service.add_comment(
+            workspace_id, task_id, body.body, user_id=current_user.id
+        )
+    except (BoardNotFoundError, BoardValidationError) as exc:
+        raise _http_error(exc) from exc
+    return _comment_out(comment)
+
+
+@router.get("/tasks/{task_id}/activity")
+async def list_activity(
+    task_id: str,
+    workspace_id: str = Query(...),
+    current_user: User = Depends(get_current_user_required),
+    service: BoardService = Depends(get_board_service),
+) -> list[ActivityOut]:
+    await _require_board(current_user.id, workspace_id)
+    try:
+        entries = await service.list_activity(workspace_id, task_id)
+    except BoardNotFoundError as exc:
+        raise _http_error(exc) from exc
+    return [_activity_out(e) for e in entries]

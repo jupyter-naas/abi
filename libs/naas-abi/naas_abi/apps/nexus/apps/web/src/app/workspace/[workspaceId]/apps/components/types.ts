@@ -6,9 +6,28 @@
  * list, board) reads one shape and every property is filterable, sortable and
  * groupable regardless of where the app came from. Splitting by module is a
  * grouping choice made inside the page — never a fixed layout.
+ *
+ * Filtering, search, sorting and grouping come from the shared database model
+ * (`components/database-view`); this file only describes the app properties.
  */
 
 import type { OpenAppModule } from '@/stores/workspace';
+import {
+  createSchema,
+  type Filter as DatabaseFilter,
+  type PropertyDef as DatabasePropertyDef,
+  type RecordGroup as DatabaseRecordGroup,
+  type SortRule as DatabaseSortRule,
+  type ViewConfig as DatabaseViewConfig,
+} from '@/components/database-view/model';
+
+export {
+  FILTER_OPERATOR_LABELS,
+  operatorNeedsValue,
+  operatorsFor,
+  type FilterOperator,
+  type PropertyType,
+} from '@/components/database-view/model';
 
 // ---------------------------------------------------------------------------
 // Raw API shapes
@@ -173,16 +192,7 @@ export type PropertyKey =
   | 'keywords'
   | 'url';
 
-/** `title` is the row name — always visible, never hideable. */
-export type PropertyType = 'title' | 'text' | 'select' | 'multi' | 'url';
-
-export interface PropertyDef {
-  key: PropertyKey;
-  label: string;
-  type: PropertyType;
-  /** Raw values of the property on a row; empty array when unset. */
-  values: (record: AppRecord) => string[];
-}
+export type PropertyDef = DatabasePropertyDef<AppRecord, PropertyKey>;
 
 const one = (value: string): string[] => (value ? [value] : []);
 
@@ -201,34 +211,21 @@ export const PROPERTIES: PropertyDef[] = [
   { key: 'url', label: 'URL', type: 'url', values: (r) => one(r.url) },
 ];
 
-export const PROPERTY_BY_KEY: Record<PropertyKey, PropertyDef> = PROPERTIES.reduce(
-  (acc, def) => ({ ...acc, [def.key]: def }),
-  {} as Record<PropertyKey, PropertyDef>,
-);
+export const APPS_SCHEMA = createSchema<AppRecord, PropertyKey>(PROPERTIES);
 
-/** Properties the user can show/hide, filter and group by (everything but the title). */
-export const OPTIONAL_PROPERTIES = PROPERTIES.filter((p) => p.type !== 'title');
+export const PROPERTY_BY_KEY = APPS_SCHEMA.propertyByKey;
+export const OPTIONAL_PROPERTIES = APPS_SCHEMA.optionalProperties;
+export const GROUPABLE_PROPERTIES = APPS_SCHEMA.groupableProperties;
 
-/** Properties with a bounded set of values — the ones worth grouping by. */
-export const GROUPABLE_PROPERTIES = PROPERTIES.filter((p) => p.type === 'select' || p.type === 'multi');
-
-export function propertyValues(record: AppRecord, key: PropertyKey): string[] {
-  return PROPERTY_BY_KEY[key].values(record);
-}
-
-/** Single display string for a property ("—" is left to the renderer). */
-export function propertyText(record: AppRecord, key: PropertyKey): string {
-  return propertyValues(record, key).join(', ');
-}
-
-/** Distinct values seen for a property across rows, sorted alphabetically. */
-export function facetValues(records: AppRecord[], key: PropertyKey): string[] {
-  const seen = new Set<string>();
-  for (const record of records) {
-    for (const value of propertyValues(record, key)) seen.add(value);
-  }
-  return Array.from(seen).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-}
+export const {
+  propertyValues,
+  propertyText,
+  facetValues,
+  applyFilters,
+  applySearch,
+  applySort,
+  groupRecords,
+} = APPS_SCHEMA;
 
 // ---------------------------------------------------------------------------
 // Views
@@ -236,36 +233,10 @@ export function facetValues(records: AppRecord[], key: PropertyKey): string[] {
 
 export type ViewType = 'gallery' | 'table' | 'list' | 'board';
 
-export type FilterOperator =
-  | 'is'
-  | 'is_not'
-  | 'contains'
-  | 'not_contains'
-  | 'is_empty'
-  | 'is_not_empty';
-
-export interface Filter {
-  id: string;
-  property: PropertyKey;
-  operator: FilterOperator;
-  value: string;
-}
-
-export interface SortRule {
-  property: PropertyKey;
-  direction: 'asc' | 'desc';
-}
-
-export interface ViewConfig {
-  id: string;
-  name: string;
-  type: ViewType;
-  /** Ordered list of properties shown besides the title. */
-  visible: PropertyKey[];
-  filters: Filter[];
-  sort: SortRule | null;
-  groupBy: PropertyKey | null;
-}
+export type Filter = DatabaseFilter<PropertyKey>;
+export type SortRule = DatabaseSortRule<PropertyKey>;
+export type ViewConfig = DatabaseViewConfig<PropertyKey, ViewType>;
+export type RecordGroup = DatabaseRecordGroup<AppRecord>;
 
 export const VIEW_TYPE_LABELS: Record<ViewType, string> = {
   gallery: 'Gallery',
@@ -280,117 +251,3 @@ export const DEFAULT_VISIBLE: Record<ViewType, PropertyKey[]> = {
   list: ['category', 'module'],
   board: ['description', 'category'],
 };
-
-export const FILTER_OPERATOR_LABELS: Record<FilterOperator, string> = {
-  is: 'is',
-  is_not: 'is not',
-  contains: 'contains',
-  not_contains: 'does not contain',
-  is_empty: 'is empty',
-  is_not_empty: 'is not empty',
-};
-
-export function operatorsFor(type: PropertyType): FilterOperator[] {
-  if (type === 'select') return ['is', 'is_not', 'is_empty', 'is_not_empty'];
-  return ['contains', 'not_contains', 'is', 'is_not', 'is_empty', 'is_not_empty'];
-}
-
-export function operatorNeedsValue(operator: FilterOperator): boolean {
-  return operator !== 'is_empty' && operator !== 'is_not_empty';
-}
-
-// ---------------------------------------------------------------------------
-// Query pipeline: filter → search → sort → group
-// ---------------------------------------------------------------------------
-
-function matchesFilter(record: AppRecord, filter: Filter): boolean {
-  const values = propertyValues(record, filter.property);
-  const needle = filter.value.trim().toLowerCase();
-
-  switch (filter.operator) {
-    case 'is_empty':
-      return values.length === 0;
-    case 'is_not_empty':
-      return values.length > 0;
-    case 'is':
-      return values.some((v) => v.toLowerCase() === needle);
-    case 'is_not':
-      return !values.some((v) => v.toLowerCase() === needle);
-    case 'contains':
-      return values.some((v) => v.toLowerCase().includes(needle));
-    case 'not_contains':
-      return !values.some((v) => v.toLowerCase().includes(needle));
-  }
-}
-
-export function applyFilters(records: AppRecord[], filters: Filter[]): AppRecord[] {
-  const active = filters.filter((f) => !operatorNeedsValue(f.operator) || f.value.trim() !== '');
-  if (active.length === 0) return records;
-  return records.filter((record) => active.every((filter) => matchesFilter(record, filter)));
-}
-
-export function applySearch(records: AppRecord[], search: string): AppRecord[] {
-  const q = search.trim().toLowerCase();
-  if (!q) return records;
-  return records.filter((record) =>
-    PROPERTIES.some((def) => def.values(record).some((v) => v.toLowerCase().includes(q))),
-  );
-}
-
-export function applySort(records: AppRecord[], sort: SortRule | null): AppRecord[] {
-  const rule = sort ?? { property: 'name' as PropertyKey, direction: 'asc' as const };
-  const sorted = [...records].sort((a, b) => {
-    const left = propertyText(a, rule.property);
-    const right = propertyText(b, rule.property);
-    // Rows missing the sort property sink to the bottom in either direction.
-    if (!left && right) return 1;
-    if (left && !right) return -1;
-    const cmp = left.localeCompare(right, undefined, { sensitivity: 'base' });
-    if (cmp !== 0) return rule.direction === 'asc' ? cmp : -cmp;
-    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
-  });
-  return sorted;
-}
-
-export interface RecordGroup {
-  key: string;
-  label: string;
-  records: AppRecord[];
-}
-
-/**
- * Split rows by a property. Multi-value properties (keywords) place a row in
- * every matching group, like Notion does. Rows without a value land in a
- * trailing "No <property>" group.
- */
-export function groupRecords(records: AppRecord[], groupBy: PropertyKey | null): RecordGroup[] {
-  if (!groupBy) return [{ key: '__all__', label: '', records }];
-
-  const groups = new Map<string, AppRecord[]>();
-  const empty: AppRecord[] = [];
-  for (const record of records) {
-    const values = propertyValues(record, groupBy);
-    if (values.length === 0) {
-      empty.push(record);
-      continue;
-    }
-    for (const value of values) {
-      const bucket = groups.get(value);
-      if (bucket) bucket.push(record);
-      else groups.set(value, [record]);
-    }
-  }
-
-  const result: RecordGroup[] = Array.from(groups.entries())
-    .sort(([a], [b]) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
-    .map(([key, groupedRecords]) => ({ key, label: key, records: groupedRecords }));
-
-  if (empty.length > 0) {
-    result.push({
-      key: '__empty__',
-      label: `No ${PROPERTY_BY_KEY[groupBy].label.toLowerCase()}`,
-      records: empty,
-    });
-  }
-  return result;
-}

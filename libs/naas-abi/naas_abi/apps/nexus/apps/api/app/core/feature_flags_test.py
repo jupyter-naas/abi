@@ -39,7 +39,22 @@ class TestBuildFeatureFlags:
             "slides": True,
             "sheets": True,
             "documents": True,
+            "board": False,
         }
+
+    @pytest.mark.parametrize(
+        ("role", "expected"),
+        [("owner", True), ("admin", True), ("member", False), ("viewer", False)],
+    )
+    def test_board_defaults_to_owners_and_admins_only(self, role: str, expected: bool) -> None:
+        flags = build_feature_flags(
+            role=role,
+            feature_flags_config=FeatureFlagsConfig(),
+            workspace_slug="demo",
+            workspace_id="ws-1",
+        )
+
+        assert flags["board"] is expected
 
     def test_workspace_overrides_apply_on_top_of_role_baseline(self) -> None:
         config = FeatureFlagsConfig(

@@ -11,6 +11,7 @@ export const DEFAULT_NAV_ORDER = [
   'slides',
   'documents',
   'sheets',
+  'board',
   'code',
   'marketplace',
 ] as const;
@@ -39,6 +40,7 @@ export function shiftForReorder(index: number, from: number, to: number): number
 /** Earlier defaults: a saved order still equal to one of them was never customised. */
 const PREVIOUS_DEFAULT_NAV_ORDERS: readonly (readonly string[])[] = [
   ['home', 'apps', 'files', 'chat', 'search', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'code', 'marketplace'],
+  ['home', 'search', 'apps', 'files', 'chat', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'code', 'marketplace'],
 ];
 
 /**

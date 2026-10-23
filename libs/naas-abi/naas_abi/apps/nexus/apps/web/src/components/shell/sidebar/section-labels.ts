@@ -18,6 +18,7 @@ export const SECTION_LABELS: Record<SidebarSection, string> = {
   code: 'Code',
   slides: 'Slides',
   sheets: 'Sheets',
+  board: 'Board',
   documents: 'Documents',
   apps: 'Apps',
   marketplace: 'Marketplace',

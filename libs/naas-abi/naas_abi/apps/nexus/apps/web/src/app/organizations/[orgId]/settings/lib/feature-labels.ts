@@ -16,6 +16,7 @@ export const FEATURE_LABELS: Record<string, string> = {
   slides: 'Slides',
   documents: 'Documents',
   sheets: 'Sheets',
+  board: 'Board',
 };
 
 export function featureLabel(feature: string): string {

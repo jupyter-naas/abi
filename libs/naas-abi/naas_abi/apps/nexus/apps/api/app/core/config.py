@@ -265,6 +265,7 @@ FeatureKey = Literal[
     "slides",
     "documents",
     "sheets",
+    "board",
 ]
 
 
@@ -290,6 +291,7 @@ class FeatureFlagsConfig(BaseModel):
             "slides",
             "documents",
             "sheets",
+            "board",
         ]
     )
     role_baseline: dict[str, list[FeatureKey]] = Field(
@@ -310,6 +312,7 @@ class FeatureFlagsConfig(BaseModel):
                 "slides",
                 "documents",
                 "sheets",
+                "board",
             ],
             "admin": [
                 "maps",
@@ -327,6 +330,7 @@ class FeatureFlagsConfig(BaseModel):
                 "slides",
                 "documents",
                 "sheets",
+                "board",
             ],
             "member": [
                 "maps",

@@ -43,8 +43,19 @@ describe('mergeNavOrder', () => {
   });
 
   it('leaves a customised order where the user put search', () => {
-    const custom = ['home', 'chat', 'apps', 'files', 'search', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'code', 'marketplace'];
+    const custom = ['home', 'chat', 'apps', 'files', 'search', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'board', 'code', 'marketplace'];
     expect(mergeNavOrder(custom)).toEqual(custom);
+  });
+
+  it('follows the new default when the saved order is the one before Board', () => {
+    const beforeBoard = ['home', 'search', 'apps', 'files', 'chat', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'code', 'marketplace'];
+    expect(mergeNavOrder(beforeBoard)).toEqual([...DEFAULT_NAV_ORDER]);
+  });
+
+  it('slots a new section into a customised order at its catalog place', () => {
+    const custom = ['home', 'chat', 'apps', 'files', 'search', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'code', 'marketplace'];
+    expect(mergeNavOrder(custom)).toContain('board');
+    expect(mergeNavOrder(custom).filter((id) => id !== 'board')).toEqual(custom);
   });
 });
 
