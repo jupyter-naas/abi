@@ -836,7 +836,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
                     }
                   : msg
               ),
-              updatedAt: new Date(),
+              // Content-only stream chunk: keep updatedAt (addMessage already bumped it
+              // for this turn) so conversation-list metadata stays referentially stable.
             }
           : conv
       ),

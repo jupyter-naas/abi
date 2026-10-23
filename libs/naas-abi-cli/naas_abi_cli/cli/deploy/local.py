@@ -27,7 +27,7 @@ LOCAL_ENV_MARKER = "# Added by abi deploy local command execution"
 HEADSCALE_SERVICE_MARKER = "  headscale:"
 BACKUP_DIRECTORY = os.path.join(".abi-backups", "deploy-local")
 MIGRATE_TO_NATS_DOC = (
-    "https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/migrate-to-3.md"
+    "https://docs.naas.ai/user-guide/upgrade/migrate-to-3"
 )
 # The configs a project's mode is read from, the one docker-compose runs first.
 _PROJECT_CONFIGS = ("config.local.yaml", "config.yaml")

@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.11, <4"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32'",
@@ -2203,7 +2203,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi"
-version = "3.0.0"
+version = "3.2.0"
 source = { editable = "../naas-abi" }
 dependencies = [
     { name = "aiosqlite" },
@@ -2289,7 +2289,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-cli"
-version = "3.0.0"
+version = "3.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "naas-abi" },
@@ -2322,7 +2322,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-core"
-version = "3.0.0"
+version = "3.0.1"
 source = { editable = "../naas-abi-core" }
 dependencies = [
     { name = "click" },
@@ -2446,7 +2446,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-marketplace"
-version = "3.61.0"
+version = "3.61.1"
 source = { editable = "../naas-abi-marketplace" }
 dependencies = [
     { name = "ijson" },
@@ -2514,7 +2514,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-proto"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "../naas-abi-proto" }
 dependencies = [
     { name = "protobuf" },
@@ -2531,7 +2531,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-sdk"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "../naas-abi-sdk" }
 dependencies = [
     { name = "naas-abi-proto" },

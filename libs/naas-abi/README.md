@@ -23,7 +23,7 @@ pip install naas-abi
 installed in every mode). It no longer pulls Dagster: a project without NATS
 adds the legacy `naas-abi-core[dagster,rabbitmq]` extras itself. Upgrade
 `naas-abi`, `naas-abi-core` and `naas-abi-cli` to 3.0 together; see
-[Migrate from 2.x to 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/migrate-to-3.md).
+[Migrate from 2.x to 3.0](https://docs.naas.ai/user-guide/upgrade/migrate-to-3).
 
 ## Nexus in 3.0
 
@@ -38,8 +38,8 @@ also:
 - has the super-admin **System** app (Overview, Services, Data, Jobs, Agents,
   Modules, NATS, Live traffic, Traces), backed by `/api/admin/system/`.
 
-See [Remote Apps](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/developer-guide/architecture/remote-apps.md) and
-[Observability](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/developer-guide/architecture/observability.md).
+See [Remote Apps](https://docs.naas.ai/developer-guide/architecture/remote-apps) and
+[Observability](https://docs.naas.ai/developer-guide/architecture/observability).
 
 ## Core Components
 
@@ -599,8 +599,8 @@ MIT License
 
 ## Documentation
 
-- [Quickstart](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/get-started/quickstart.md)
-- [Build modules and agents](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/build/overview.md)
-- [Deploy](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/deploy/overview.md)
-- [Upgrade to 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/migrate-to-3.md)
-- [Contribute to ABI](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/developer-guide/contributing/overview.md)
+- [Quickstart](https://docs.naas.ai/user-guide/get-started/quickstart)
+- [Build modules and agents](https://docs.naas.ai/user-guide/build/overview)
+- [Deploy](https://docs.naas.ai/user-guide/deploy/overview)
+- [Upgrade to 3.0](https://docs.naas.ai/user-guide/upgrade/migrate-to-3)
+- [Contribute to ABI](https://docs.naas.ai/developer-guide/contributing/overview)

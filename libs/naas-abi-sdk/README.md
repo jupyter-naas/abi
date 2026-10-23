@@ -2,8 +2,8 @@
 
 Small, async Python clients for ABI engine services over NATS, and the runtime
 of remote modules: modules that run in their own process and reach the engine
-only through NATS. Guide: [Build a Remote Module](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/build/sdk/build-a-remote-module.md);
-architecture: [Remote Modules and Jobs](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/developer-guide/architecture/remote-modules.md). Runtime dependencies:
+only through NATS. Guide: [Build a Remote Module](https://docs.naas.ai/user-guide/build/sdk/build-a-remote-module);
+architecture: [Remote Modules and Jobs](https://docs.naas.ai/developer-guide/architecture/remote-modules). Runtime dependencies:
 `naas-abi-proto`, `protobuf` (transitive), and `nats-py`. No ABI core, LangChain,
 Dagster, RDF library, database drivers, or HTTP framework.
 
@@ -755,7 +755,7 @@ endpoint rebinds clean up partial subscriptions and retain the previous bindings
 
 ## Documentation
 
-- [Quickstart](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/get-started/quickstart.md)
-- [Module jobs and scheduling](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/build/modules/module-jobs.md)
-- [SDK and proto internals](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/developer-guide/sdk-and-proto.md)
-- [Deploy](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/deploy/overview.md)
+- [Quickstart](https://docs.naas.ai/user-guide/get-started/quickstart)
+- [Module jobs and scheduling](https://docs.naas.ai/user-guide/build/modules/module-jobs)
+- [SDK and proto internals](https://docs.naas.ai/developer-guide/sdk-and-proto)
+- [Deploy](https://docs.naas.ai/user-guide/deploy/overview)

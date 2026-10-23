@@ -12,6 +12,7 @@ ACTIONS = (
     action("ListWorkspaces", "list", "workspace"),
     action("GetWorkspace", "read", "workspace"),
     action("GetWorkspaceStats", "read", "workspace"),
+    action("GetWorkspaceConfiguration", "admin", "workspace"),
     action("UpdateWorkspace", "admin", "workspace"),
     action("UpdateWorkspaceTheme", "admin", "workspace"),
     action("DeleteWorkspace", "admin", "workspace"),

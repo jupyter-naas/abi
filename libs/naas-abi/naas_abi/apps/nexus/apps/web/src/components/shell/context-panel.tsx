@@ -7,7 +7,8 @@ import { useWorkspaceStore } from '@/stores/workspace';
 
 export function ContextPanel() {
   const [mounted, setMounted] = useState(false);
-  const { contextPanelOpen, toggleContextPanel } = useWorkspaceStore();
+  const contextPanelOpen = useWorkspaceStore((s) => s.contextPanelOpen);
+  const toggleContextPanel = useWorkspaceStore((s) => s.toggleContextPanel);
 
   useEffect(() => {
     setMounted(true);

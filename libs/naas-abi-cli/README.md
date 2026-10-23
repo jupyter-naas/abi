@@ -9,8 +9,8 @@ Command Line Interface (CLI) tool for building and managing ABI (Agentic Brain I
 Since 3.0, `abi new project` creates projects that run on NATS and `abi new
 module` creates remote modules (`naas-abi-sdk`). Dagster and RabbitMQ are
 legacy extras for projects without NATS, removed in the next major. Upgrading
-a 2.x project: [Migrate from 2.x to 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/migrate-to-3.md).
-Every command: [CLI Reference](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/reference/cli.md). Start with [Install and prerequisites](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/get-started/install.md) and the [Quickstart](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/get-started/quickstart.md); deploy with [Docker](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/deploy/local-docker.md), [Dokploy](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/deploy/dokploy.md) or [production](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/deploy/production.md).
+a 2.x project: [Migrate from 2.x to 3.0](https://docs.naas.ai/user-guide/upgrade/migrate-to-3).
+Every command: [CLI Reference](https://docs.naas.ai/user-guide/reference/cli). Start with [Install and prerequisites](https://docs.naas.ai/user-guide/get-started/install) and the [Quickstart](https://docs.naas.ai/user-guide/get-started/quickstart); deploy with [Docker](https://docs.naas.ai/user-guide/deploy/local-docker), [Dokploy](https://docs.naas.ai/user-guide/deploy/dokploy) or [production](https://docs.naas.ai/user-guide/deploy/production).
 
 ## Installation
 
@@ -324,7 +324,7 @@ abi deploy dokploy --domain example.com
 abi deploy dokploy --domain example.com --coding
 ```
 
-Guide: [Deploy with Dokploy](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/deploy/dokploy.md).
+Guide: [Deploy with Dokploy](https://docs.naas.ai/user-guide/deploy/dokploy).
 
 ### Stack Management
 

@@ -395,7 +395,7 @@ async def update_conversation(
     await chat_service.update_conversation(
         user_id=current_user.id,
         conversation_id=conversation_id,
-        now=datetime.now(UTC),
+        now=datetime.now(UTC).replace(tzinfo=None),
         title=updates.get("title"),
         pinned=updates.get("pinned"),
         archived=updates.get("archived"),

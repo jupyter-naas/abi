@@ -40,9 +40,9 @@ It also covers the full stack from ingestion to UI, so you are not stitching tog
 - [Docker Desktop](https://www.docker.com/products/docker-desktop) (8GB+ RAM for full stack)
 - LLM API keys: any OpenAI-compatible provider (OpenAI, OpenRouter, or equivalent)
 
-Details and versions: [Install and prerequisites](docs/site/docs/user-guide/get-started/install.md).
+Details and versions: [Install and prerequisites](https://docs.naas.ai/user-guide/get-started/install).
 
-> **Upgrading from 2.x?** ABI 3.0 runs on NATS: read [Migrate from 2.x to 3.0](docs/site/docs/upgrade/migrate-to-3.md) and [Breaking changes in 3.0](docs/site/docs/upgrade/breaking-changes-3.md).
+> **Upgrading from 2.x?** ABI 3.0 runs on NATS: read [Migrate from 2.x to 3.0](https://docs.naas.ai/user-guide/upgrade/migrate-to-3) and [Breaking changes in 3.0](https://docs.naas.ai/user-guide/upgrade/breaking-changes-3).
 
 ### Get started
 
@@ -59,7 +59,7 @@ abi dev up
 The main interface. Chat with Abi, switch agents, manage your workspace, and access your knowledge graph. Open [http://localhost:3042](http://localhost:3042) and sign in as `admin@example.com` with the code the identity provider emails (no password; `abi dev code` prints it).
 
 <div align="center">
-  <img src="docs/site/static/abi/Screenshot_Local_WebUI.png" alt="ABI web UI" width="800">
+  <img src="https://docs.naas.ai/abi/Screenshot_Local_WebUI.png" alt="ABI web UI" width="800">
 </div>
 
 ### API
@@ -67,7 +67,7 @@ The main interface. Chat with Abi, switch agents, manage your workspace, and acc
 Every agent is exposed as a REST endpoint. Useful for integrating ABI into your own tools, triggering agents from scripts, or building on top of the platform. Explore the full reference at [http://localhost:9879/docs](http://localhost:9879/docs).
 
 <div align="center">
-  <img src="docs/site/static/abi/Screenshot_Local_API.png" alt="ABI API docs" width="800">
+  <img src="https://docs.naas.ai/abi/Screenshot_Local_API.png" alt="ABI API docs" width="800">
 </div>
 
 ### CLI
@@ -75,7 +75,7 @@ Every agent is exposed as a REST endpoint. Useful for integrating ABI into your 
 Run `abi chat` to talk to Abi directly from your terminal. No browser needed.
 
 <div align="center">
-  <img src="docs/site/static/abi/Screenshot_Local_CLI.png" alt="ABI CLI" width="800">
+  <img src="https://docs.naas.ai/abi/Screenshot_Local_CLI.png" alt="ABI CLI" width="800">
 </div>
 
 ```bash
@@ -114,11 +114,11 @@ Each infrastructure concern is abstracted as a port with a swappable adapter. Ch
 - **Cache** (sessions and hot data): Community: Redis / Enterprise: Amazon ElastiCache, Azure Cache for Redis, Memorystore
 - **Scheduling** (schedules and event triggers): module jobs on NATS JetStream, run by each module in its own process
 
-New projects run on **NATS**: the engine serves every kernel service over the broker, the bus is JetStream, and modules can run in their own process with `naas-abi-sdk`, registering through discovery. `abi new module` creates such a module; `abi new module --in-engine` and `abi new project --without-nats` keep the classic in-process setup. Dagster and RabbitMQ are legacy extras, removed in the next major. Existing projects move over with [Migrate from 2.x to 3.0](docs/site/docs/upgrade/migrate-to-3.md); the architecture is in [NATS and the Kernel Services](docs/site/docs/developer-guide/architecture/nats.md).
+New projects run on **NATS**: the engine serves every kernel service over the broker, the bus is JetStream, and modules can run in their own process with `naas-abi-sdk`, registering through discovery. `abi new module` creates such a module; `abi new module --in-engine` and `abi new project --without-nats` keep the classic in-process setup. Dagster and RabbitMQ are legacy extras, removed in the next major. Existing projects move over with [Migrate from 2.x to 3.0](https://docs.naas.ai/user-guide/upgrade/migrate-to-3); the architecture is in [NATS and the Kernel Services](https://docs.naas.ai/user-guide/get-started/nats).
 
 The **Context Engine** wires all these services at startup and routes every request to the right agent. **Abi** acts as the supervisor: it reads the intent behind each request and dispatches to the right domain agent or answers directly from the knowledge graph, vector store, or file system.
 
-Start with the marketplace modules to get running immediately, then use `abi new module` to model your own domain. Full architecture reference: [The ABI Stack](https://docs.naas.ai/developer-guide/architecture/the-stack).
+Start with the marketplace modules to get running immediately, then use `abi new module` to model your own domain. Product docs: [docs.naas.ai](https://docs.naas.ai/).
 
 ## Repository Layout
 
@@ -149,7 +149,7 @@ abi/
 │   ├── naas-abi-sdk/          # The SDK for remote modules (NATS clients, module runtime)
 │   ├── naas-abi-proto/        # The protobuf contracts of the kernel services
 │   └── naas-abi-marketplace/  # Domain modules and third-party integrations
-├── docs/site/                 # Docusaurus documentation site
+├── docs/                      # Pointer only: product docs at docs.naas.ai; AGENTS.md in-tree
 ├── docker/                    # Caddy, Dagster, Postgres, and service configs
 ├── scripts/                   # Utility scripts (sync, export, datastore, docs generation)
 ├── config.local.yaml          # Module and service configuration (local)
@@ -274,9 +274,9 @@ Live, written to disk regardless of foreground/background mode:
 
 ## Documentation
 
-**User guide**: [Install and prerequisites](docs/site/docs/user-guide/get-started/install.md), [Quickstart](docs/site/docs/user-guide/get-started/quickstart.md), [Configuration](docs/site/docs/user-guide/get-started/configuration.md), [Build](docs/site/docs/user-guide/build/overview.md) (modules, [module jobs](docs/site/docs/user-guide/build/modules/module-jobs.md), agents, pipelines, the SDK), [Deploy](docs/site/docs/user-guide/deploy/overview.md) (Docker, Dokploy, production), [Upgrade to 3.0](docs/site/docs/upgrade/migrate-to-3.md), [CLI reference](docs/site/docs/user-guide/reference/cli.md).
+**User guide**: [Install and prerequisites](https://docs.naas.ai/user-guide/get-started/install), [Quickstart](https://docs.naas.ai/user-guide/get-started/quickstart), [Configuration](https://docs.naas.ai/user-guide/get-started/configuration), [Build](https://docs.naas.ai/user-guide/build/overview) (modules, [module jobs](https://docs.naas.ai/user-guide/build/modules/module-jobs), agents, pipelines, the SDK), [Deploy](https://docs.naas.ai/user-guide/deploy/overview) (Docker, Dokploy, production), [Upgrade to 3.0](https://docs.naas.ai/user-guide/upgrade/migrate-to-3), [CLI reference](https://docs.naas.ai/user-guide/reference/cli).
 
-**Developer guide**: [Contribute to ABI](docs/site/docs/developer-guide/contributing/overview.md), [Testing](docs/site/docs/developer-guide/contributing/testing.md), [Releasing](docs/site/docs/developer-guide/releasing/release-process.md), [Architecture](docs/site/docs/developer-guide/architecture/what-is-abi.md), [ADR index](docs/site/docs/developer-guide/adr.md).
+**Developer guide**: [Contribute to ABI](https://docs.naas.ai/developer-guide/contributing/overview), [Testing](https://docs.naas.ai/developer-guide/contributing/testing), [Releasing](https://docs.naas.ai/developer-guide/releasing/release-process), [Architecture](https://docs.naas.ai/developer-guide/architecture/what-is-abi), [ADR index](https://docs.naas.ai/developer-guide/adr).
 
 ## Production Deployment
 
@@ -288,7 +288,7 @@ Copy your `.env` and config files to the target server, then run:
 docker compose -f docker-compose.yml up -d
 ```
 
-All services (NATS, PostgreSQL, Fuseki, Qdrant, MinIO, Redis) start as containers, with remote modules from `docker-compose.override.yml`. In NATS mode one engine serves the kernel services; for deploys without downtime see [one serving engine](docs/site/docs/developer-guide/architecture/nats.md#one-serving-engine). For production workloads, swap the Docker adapters for managed cloud services as described in [How It Works](#how-it-works).
+All services (NATS, PostgreSQL, Fuseki, Qdrant, MinIO, Redis) start as containers, with remote modules from `docker-compose.override.yml`. In NATS mode one engine serves the kernel services; for deploys without downtime see [one serving engine](https://docs.naas.ai/developer-guide/architecture/nats#one-serving-engine). For production workloads, swap the Docker adapters for managed cloud services as described in [How It Works](#how-it-works).
 
 ### Managed Hosting
 
@@ -305,7 +305,7 @@ Collaborative effort between:
 
 ## Contributing
 
-We welcome contributions. Open an issue or pull request to get started, and read [Contribute to ABI](docs/site/docs/developer-guide/contributing/overview.md) first.
+We welcome contributions. Open an issue or pull request to get started, and read [Contribute to ABI](https://docs.naas.ai/developer-guide/contributing/overview) first.
 
 ## License
 

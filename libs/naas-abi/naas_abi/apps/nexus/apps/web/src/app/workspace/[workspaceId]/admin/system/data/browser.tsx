@@ -103,7 +103,7 @@ export function Toolbar({
   onUp: () => void;
   search: string;
   onSearch: (text: string) => void;
-  searchRef: React.RefObject<HTMLInputElement>;
+  searchRef: React.RefObject<HTMLInputElement | null>;
   placeholder: string;
 }) {
   return (

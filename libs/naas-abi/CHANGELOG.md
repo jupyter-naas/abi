@@ -2,6 +2,71 @@
 
 <!-- version list -->
 
+## v3.2.0 (2026-10-22)
+
+### Chores
+
+- Update lockfiles and fix next-env.d.ts reference path
+  ([`b9c49a0`](https://github.com/jupyter-naas/abi/commit/b9c49a0665440dd44bf7ccc6a771e9590ba4719b))
+
+### Features
+
+- **workspace**: Add workspace feature overrides validation and preseeding config
+  ([`ea6c951`](https://github.com/jupyter-naas/abi/commit/ea6c95154f7a239883a8a55a067a993d4e00faef))
+
+- **workspaces**: Let org admins edit features from workspace settings
+  ([`5007e31`](https://github.com/jupyter-naas/abi/commit/5007e31512a24173ba96fcfbf47453f40872ba5d))
+
+- **workspaces**: Reject feature overrides on personal workspaces
+  ([`7f56a3e`](https://github.com/jupyter-naas/abi/commit/7f56a3eb47ade9be8a29c179d694a6c4a4e6faa7))
+
+
+## v3.1.2 (2026-10-21)
+
+### Bug Fixes
+
+- **cli**: Keep docs/reference; stop copying into docs/site
+  ([#1380](https://github.com/jupyter-naas/abi/pull/1380),
+  [`2a96b60`](https://github.com/jupyter-naas/abi/commit/2a96b603a9fde09b9a02b5a29dd154a7be3f19d2))
+
+### Documentation
+
+- Drop Zen naming from docs pointers ([#1380](https://github.com/jupyter-naas/abi/pull/1380),
+  [`2a96b60`](https://github.com/jupyter-naas/abi/commit/2a96b603a9fde09b9a02b5a29dd154a7be3f19d2))
+
+- Fix NATS deep link (no .md in docs.naas.ai URL)
+  ([#1380](https://github.com/jupyter-naas/abi/pull/1380),
+  [`2a96b60`](https://github.com/jupyter-naas/abi/commit/2a96b603a9fde09b9a02b5a29dd154a7be3f19d2))
+
+- Remove narrative docs from ABI; point to docs.naas.ai
+  ([#1380](https://github.com/jupyter-naas/abi/pull/1380),
+  [`2a96b60`](https://github.com/jupyter-naas/abi/commit/2a96b603a9fde09b9a02b5a29dd154a7be3f19d2))
+
+- Remove narrative docs; point to docs.naas.ai
+  ([#1380](https://github.com/jupyter-naas/abi/pull/1380),
+  [`2a96b60`](https://github.com/jupyter-naas/abi/commit/2a96b603a9fde09b9a02b5a29dd154a7be3f19d2))
+
+- Retarget package README and CLI links to docs.naas.ai
+  ([#1380](https://github.com/jupyter-naas/abi/pull/1380),
+  [`2a96b60`](https://github.com/jupyter-naas/abi/commit/2a96b603a9fde09b9a02b5a29dd154a7be3f19d2))
+
+
+## v3.1.1 (2026-10-21)
+
+
+## v3.1.0 (2026-10-21)
+
+### Bug Fixes
+
+- **nexus-web**: Port code added on main to Next 15 and React 19
+  ([`7d9d902`](https://github.com/jupyter-naas/abi/commit/7d9d902ef95afcb5913249509e63408dc411c5f4))
+
+### Features
+
+- **nexus-web**: Update and add tests for chat primary adapter and web components
+  ([`eda0e8e`](https://github.com/jupyter-naas/abi/commit/eda0e8e6d8b167990115cb053b79640b87daec98))
+
+
 ## v3.0.0 (2026-10-20)
 
 
@@ -17,8 +82,8 @@
 - App link tokens (`POST /api/apps/access-token`) no longer authenticate
   `/api/*`; a user's agent toggle now sticks across config syncs (migration
   `0057_agent_enabled_override`).
-- Guide: [Migrate from 2.x to 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/migrate-to-3.md).
-  Every change: [Breaking changes in 3.0](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/upgrade/breaking-changes-3.md).
+- Guide: [Migrate from 2.x to 3.0](https://docs.naas.ai/user-guide/upgrade/migrate-to-3).
+  Every change: [Breaking changes in 3.0](https://docs.naas.ai/user-guide/upgrade/breaking-changes-3).
 
 ## v2.89.0 (2026-10-20)
 

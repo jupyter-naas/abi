@@ -307,18 +307,20 @@ def test_generate_documentation_for_items_rejects_invalid_workers() -> None:
         generate_documentation_for_items(stale_docs=[], model="gpt-5.2", workers=0)
 
 
-def test_docs_sync_help_names_where_the_site_shows_the_reference() -> None:
+def test_docs_sync_help_names_the_library_reference_output() -> None:
     result = CliRunner().invoke(docs, ["sync", "--help"])
 
     assert result.exit_code == 0
-    assert "developer-guide/reference/libraries" in result.output.replace("\n", "")
+    assert "docs/reference" in result.output.replace("\n", "")
 
 
-def test_site_library_reference_is_where_the_sync_script_publishes_it() -> None:
+def test_library_reference_is_where_the_sync_script_publishes_it() -> None:
     repository = Path(__file__).resolve().parents[4]
     script = repository / "scripts" / "abi_docs_sync.sh"
     if not script.exists():
         pytest.skip("not running from a checkout of the ABI repository")
 
-    assert f"{SITE_LIBRARY_REFERENCE}/" in script.read_text()
+    text = script.read_text()
+    assert "abi docs sync" in text
+    assert "docs/site" not in text
     assert (repository / SITE_LIBRARY_REFERENCE).is_dir()

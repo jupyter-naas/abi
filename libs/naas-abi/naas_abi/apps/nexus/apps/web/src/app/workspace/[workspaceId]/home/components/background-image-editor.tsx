@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ImageIcon, Link2, Loader2, Minus, Move, Plus, RotateCcw, Trash2, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -45,6 +46,7 @@ export function BackgroundImageEditor({
   onRemoved,
   saveLabel = 'Validate',
   cancelLabel = 'Cancel',
+  actionsContainer,
 }: {
   /** Loads the current wallpaper each time it becomes true (always true inline). */
   open: boolean;
@@ -59,6 +61,11 @@ export function BackgroundImageEditor({
   onRemoved?: () => void;
   saveLabel?: string;
   cancelLabel?: string;
+  /**
+   * Where to render Remove / Cancel / Save instead of under the preview, e.g.
+   * the top right of a settings section header (Settings > General).
+   */
+  actionsContainer?: HTMLElement | null;
 }) {
   const [source, setSource] = useState<Source>('file');
   const [url, setUrl] = useState('');
@@ -417,13 +424,19 @@ export function BackgroundImageEditor({
           </p>
         )}
 
-        <div className="mt-4 flex justify-end gap-2">
+      {(() => {
+        const inHeader = Boolean(actionsContainer);
+        const actions = (
+        <div className={inHeader ? 'flex items-center gap-2' : 'mt-4 flex justify-end gap-2'}>
           {onRemoved && currentBackgroundUrl ? (
             <button
               type="button"
               onClick={() => void remove()}
               disabled={busy !== null}
-              className="mr-auto flex items-center gap-1.5 px-3 py-2 text-sm text-red-500 transition-colors hover:bg-red-500/10 disabled:opacity-50"
+              className={cn(
+                'flex items-center gap-1.5 text-sm text-red-500 transition-colors hover:bg-red-500/10 disabled:opacity-50',
+                inHeader ? 'h-8 px-3' : 'mr-auto px-3 py-2'
+              )}
             >
               {busy === 'remove' ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
               Remove wallpaper
@@ -433,7 +446,10 @@ export function BackgroundImageEditor({
             type="button"
             onClick={cancel}
             disabled={busy === 'save'}
-            className="px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+            className={cn(
+              'text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50',
+              inHeader ? 'h-8 px-3' : 'px-4 py-2'
+            )}
           >
             {cancelLabel}
           </button>
@@ -441,12 +457,18 @@ export function BackgroundImageEditor({
             type="button"
             onClick={() => void validate()}
             disabled={!(draft || current) || busy !== null}
-            className="flex items-center gap-1.5 bg-workspace-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-workspace-accent/90 disabled:opacity-50"
+            className={cn(
+              'flex items-center gap-1.5 bg-workspace-accent text-sm font-medium text-white transition-colors hover:bg-workspace-accent/90 disabled:opacity-50',
+              inHeader ? 'h-8 px-3' : 'px-4 py-2'
+            )}
           >
             {busy === 'save' && <Loader2 size={14} className="animate-spin" />}
             {saveLabel}
           </button>
         </div>
+        );
+        return actionsContainer ? createPortal(actions, actionsContainer) : actions;
+      })()}
     </div>
   );
 }
