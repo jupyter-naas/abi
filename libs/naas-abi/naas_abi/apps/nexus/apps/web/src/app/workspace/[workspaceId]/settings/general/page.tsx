@@ -131,6 +131,10 @@ export default function GeneralSettingsPage() {
     setDetailsError(null);
   }, [currentWorkspaceId, workspaceName, workspaceDescription, workspaceGroup]);
 
+  useEffect(() => {
+    setOwnerId(workspace?.ownerId ?? '');
+  }, [workspace?.ownerId]);
+
   // As on Home: the wallpaper lives in the workspace drive; when the theme lost
   // its pointer, ask the API for the committed file.
   const themeBackgroundUrl = resolveDeskImageUrl(theme.backgroundImageUrl);
@@ -165,9 +169,6 @@ export default function GeneralSettingsPage() {
   const trimmedName = name.trim();
   const trimmedDescription = description.trim();
   const trimmedGroup = group.trim();
-  useEffect(() => {
-    setOwnerId(workspace?.ownerId ?? '');
-  }, [workspace?.ownerId]);
 
   const dirty =
     trimmedName !== workspace.name ||

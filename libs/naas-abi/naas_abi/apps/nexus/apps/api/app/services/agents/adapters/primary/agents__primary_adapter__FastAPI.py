@@ -6,8 +6,8 @@ import asyncio
 import threading
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
-from typing import Any
 from dataclasses import replace
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
@@ -22,7 +22,6 @@ from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
 from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
     resolve_agent_ref,
     resolve_agent_refs,
-    workspace_seed_for_slug,
 )
 from naas_abi.apps.nexus.apps.api.app.services.agents import (
     AgentCreateInput,

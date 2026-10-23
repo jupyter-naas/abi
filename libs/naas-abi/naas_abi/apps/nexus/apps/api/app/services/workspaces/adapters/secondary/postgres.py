@@ -9,14 +9,14 @@ from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
     dump_feature_overrides,
     parse_feature_overrides,
 )
-from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import (
-    dump_catalog_seed,
-    parse_catalog_seed,
-)
 from naas_abi.apps.nexus.apps.api.app.core.workspace_access import (
     INHERITED_FROM_ORG,
     accessible_workspace_ids,
     resolve_workspace_role,
+)
+from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import (
+    dump_catalog_seed,
+    parse_catalog_seed,
 )
 from naas_abi.apps.nexus.apps.api.app.models import (
     AgentConfigModel,

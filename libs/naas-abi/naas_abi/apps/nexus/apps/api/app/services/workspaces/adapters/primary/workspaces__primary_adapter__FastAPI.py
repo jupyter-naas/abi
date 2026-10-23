@@ -29,6 +29,9 @@ from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
 )
 from naas_abi.apps.nexus.apps.api.app.core.workspace_config_seeds import workspace_seed_rows
 from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import catalog_seed_rows
+from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__primary_adapter__FastAPI import (
+    seed_workspace_agents,
+)
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
     get_auth_service,
 )
@@ -57,6 +60,10 @@ from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
     check_rate_limit,
     get_rate_limit_identifier,
 )
+from naas_abi.apps.nexus.apps.api.app.services.registry import (
+    ServiceRegistry,
+    get_service_registry,
+)
 from naas_abi.apps.nexus.apps.api.app.services.workspaces import logo_store
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary.resource_access import (
     router as resource_access_router,
@@ -78,13 +85,6 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     WorkspaceMemberRecord,
     WorkspaceRecord,
     WorkspaceUpdateInput,
-)
-from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__primary_adapter__FastAPI import (
-    seed_workspace_agents,
-)
-from naas_abi.apps.nexus.apps.api.app.services.registry import (
-    ServiceRegistry,
-    get_service_registry,
 )
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
     WorkspaceMemberAlreadyExistsError,

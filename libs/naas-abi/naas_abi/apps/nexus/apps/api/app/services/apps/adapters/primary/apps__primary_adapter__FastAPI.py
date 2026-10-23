@@ -43,7 +43,6 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
 from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
 from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
     resolve_app_enabled,
-    workspace_seed_for_slug,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.app_html_access import (
     mint_app_html_access_token,
