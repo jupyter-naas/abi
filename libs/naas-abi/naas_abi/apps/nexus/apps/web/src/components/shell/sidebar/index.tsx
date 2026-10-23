@@ -39,7 +39,7 @@ type SectionDef = {
   label: string;
   description: string;
   href: string;
-  feature?: 'maps' | 'chat' | 'files' | 'datasets' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'code' | 'slides' | 'documents' | 'sheets' | 'board' | 'settings.workspace';
+  feature?: 'maps' | 'chat' | 'files' | 'datasets' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'code' | 'slides' | 'documents' | 'sheets' | 'tasks' | 'settings.workspace';
   extraHref?: string;
 };
 
@@ -56,7 +56,7 @@ const SECTIONS: SectionDef[] = [
   { id: 'slides',      icon: <Presentation size={18} />,  label: 'Slides',      description: 'Create and edit presentation decks',    href: '/slides',      feature: 'slides' },
   { id: 'documents',   icon: <FileText size={18} />,      label: 'Documents',   description: 'Create and edit rich documents',        href: '/documents',   feature: 'documents' },
   { id: 'sheets',      icon: <Table2 size={18} />,        label: 'Sheets',      description: 'Spreadsheets with HTML source and XLSX export', href: '/sheets', feature: 'sheets' },
-  { id: 'board',       icon: <SquareKanban size={18} />,  label: 'Board',       description: 'Project tasks in weekly iterations',    href: '/board',       feature: 'board' },
+  { id: 'tasks',       icon: <SquareKanban size={18} />,  label: 'Tasks',       description: 'Project tasks in weekly iterations',    href: '/tasks',       feature: 'tasks' },
   { id: 'code',        icon: <Code size={18} />,          label: 'Code',        description: 'Code editor and repositories',          href: '/code',        feature: 'code' },
   { id: 'marketplace', icon: <Store size={18} />,        label: 'Marketplace', description: 'Discover and install new apps',          href: '/marketplace', feature: 'marketplace' },
 ];
@@ -144,7 +144,7 @@ export function Sidebar() {
   const canSlides = useFeature('slides');
   const canDocuments = useFeature('documents');
   const canSheets = useFeature('sheets');
-  const canBoard = useFeature('board');
+  const canTasks = useFeature('tasks');
   const canSettingsWorkspace = useFeature('settings.workspace');
   const isSuperadmin = useAuthStore((s) => !!s.user?.is_superadmin);
 
@@ -264,7 +264,7 @@ export function Sidebar() {
     if (feature === 'slides') return !!canSlides;
     if (feature === 'documents') return !!canDocuments;
     if (feature === 'sheets') return !!canSheets;
-    if (feature === 'board') return !!canBoard;
+    if (feature === 'tasks') return !!canTasks;
     if (feature === 'settings.workspace') return !!canSettingsWorkspace;
     return true;
   };
@@ -290,7 +290,7 @@ export function Sidebar() {
       .filter((s) => isFeatureEnabled(s.feature))
       .sort((a, b) => (index.get(a.id) ?? 999) - (index.get(b.id) ?? 999));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sidebarNavOrder, canMaps, canChat, canFiles, canDatasets, canApps, canMarketplace, canSearch, canOntology, canGraph, canCode, canSlides, canDocuments, canSheets, canBoard]);
+  }, [sidebarNavOrder, canMaps, canChat, canFiles, canDatasets, canApps, canMarketplace, canSearch, canOntology, canGraph, canCode, canSlides, canDocuments, canSheets, canTasks]);
 
   const dockLayout = layoutDockNav(
     navMeasure?.available ?? Number.POSITIVE_INFINITY,
@@ -322,7 +322,7 @@ export function Sidebar() {
       case 'slides':   return getWorkspacePath(currentWorkspaceId, '/slides');
       case 'documents': return getWorkspacePath(currentWorkspaceId, '/documents');
       case 'sheets':    return getWorkspacePath(currentWorkspaceId, '/sheets');
-      case 'board':     return getWorkspacePath(currentWorkspaceId, '/board');
+      case 'tasks':     return getWorkspacePath(currentWorkspaceId, '/tasks');
       case 'apps':         return getWorkspacePath(currentWorkspaceId, '/apps');
       case 'marketplace':  return getWorkspacePath(currentWorkspaceId, '/marketplace');
       case 'infrastructure': return getWorkspacePath(currentWorkspaceId, '/settings/infrastructure');

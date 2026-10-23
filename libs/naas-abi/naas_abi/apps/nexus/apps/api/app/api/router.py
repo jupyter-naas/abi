@@ -24,7 +24,6 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.projects.handlers import (
     router as app_projects_router,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.handlers import router as auth_router
-from naas_abi.apps.nexus.apps.api.app.services.board.handlers import router as board_router
 from naas_abi.apps.nexus.apps.api.app.services.chat.handlers import router as chat_router
 from naas_abi.apps.nexus.apps.api.app.services.code_review.handlers import (
     router as code_review_router,
@@ -66,6 +65,7 @@ from naas_abi.apps.nexus.apps.api.app.services.sheets.handlers import router as 
 from naas_abi.apps.nexus.apps.api.app.services.skills.handlers import router as skills_router
 from naas_abi.apps.nexus.apps.api.app.services.slides.handlers import router as slides_router
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.handlers import router as sysadmin_router
+from naas_abi.apps.nexus.apps.api.app.services.tasks.handlers import router as tasks_router
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.handlers import (
     router as workspaces_router,
 )
@@ -86,7 +86,7 @@ api_router.include_router(
 api_router.include_router(slides_router, prefix="/slides", tags=["slides"])
 api_router.include_router(documents_router, prefix="/documents", tags=["documents"])
 api_router.include_router(sheets_router, prefix="/sheets", tags=["sheets"])
-api_router.include_router(board_router, prefix="/board", tags=["board"])
+api_router.include_router(tasks_router, prefix="/tasks", tags=["tasks"])
 api_router.include_router(openai_gateway_router, prefix="/v1", tags=["openai"])
 api_router.include_router(code_review_router, prefix="/code-review", tags=["code-review"])
 api_router.include_router(platform_router, prefix="/platform", tags=["platform"])

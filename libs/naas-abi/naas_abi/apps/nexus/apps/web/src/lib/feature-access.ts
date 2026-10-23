@@ -14,7 +14,7 @@ export type FeatureKey =
   | 'slides'
   | 'documents'
   | 'sheets'
-  | 'board'
+  | 'tasks'
   | 'settings'
   | 'settings.workspace'
   | 'settings.organization';
@@ -37,7 +37,7 @@ export const FEATURE_KEYS: FeatureKey[] = [
   'slides',
   'documents',
   'sheets',
-  'board',
+  'tasks',
   'settings',
   'settings.workspace',
   'settings.organization',
@@ -71,7 +71,7 @@ const FEATURE_FALLBACK_ROUTE: Record<FeatureKey, string> = {
   slides: '/slides',
   documents: '/documents',
   sheets: '/sheets',
-  board: '/board',
+  tasks: '/tasks',
   settings: '/settings',
   'settings.workspace': '/settings',
   'settings.organization': '/organization',
@@ -160,8 +160,8 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
   if (firstSegment === 'sheets') {
     return 'sheets';
   }
-  if (firstSegment === 'board') {
-    return 'board';
+  if (firstSegment === 'tasks') {
+    return 'tasks';
   }
   if (firstSegment === 'apps') {
     return 'apps';

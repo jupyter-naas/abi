@@ -4,7 +4,7 @@ export const DEFAULT_NAV_ORDER = [
   'apps',
   'files',
   'chat',
-  'board',
+  'tasks',
   'maps',
   'ontology',
   'graph',
@@ -37,7 +37,10 @@ export function shiftForReorder(index: number, from: number, to: number): number
   return 0;
 }
 
-/** Earlier defaults: a saved order still equal to one of them was never customised. */
+/**
+ * Earlier defaults: a saved order still equal to one of them was never customised.
+ * `board` is the id Tasks had before its rename.
+ */
 const PREVIOUS_DEFAULT_NAV_ORDERS: readonly (readonly string[])[] = [
   ['home', 'apps', 'files', 'chat', 'search', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'code', 'marketplace'],
   ['home', 'search', 'apps', 'files', 'chat', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'code', 'marketplace'],

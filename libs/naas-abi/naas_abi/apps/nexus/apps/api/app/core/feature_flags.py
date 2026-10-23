@@ -29,9 +29,9 @@ KNOWN_FEATURE_KEYS: tuple[str, ...] = (
     "documents",
     # Business sheets (Forgejo HTML workbook + XLSX export). Same default as slides.
     "sheets",
-    # Workspace project board (weekly iterations). Owners and admins only by
+    # Workspace tasks (weekly iterations, board view). Owners and admins only by
     # default; members and viewers get it through an org or workspace override.
-    "board",
+    "tasks",
 )
 
 # Roles a workspace grants; a feature is "offered" when on for one of them.

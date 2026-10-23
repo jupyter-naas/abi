@@ -54,7 +54,7 @@ const SheetsSection = dynamic(() => import('./sheets-section').then((m) => m.She
   ssr: false,
   loading: sectionLoading,
 });
-const BoardSection = dynamic(() => import('./board-section').then((m) => m.BoardSection), {
+const TasksSection = dynamic(() => import('./tasks-section').then((m) => m.TasksSection), {
   ssr: false,
   loading: sectionLoading,
 });
@@ -93,7 +93,7 @@ const SECTION_CHUNK: Partial<Record<SidebarSection, () => Promise<unknown>>> = {
   slides: () => import('./slides-section'),
   documents: () => import('./documents-section'),
   sheets: () => import('./sheets-section'),
-  board: () => import('./board-section'),
+  tasks: () => import('./tasks-section'),
   marketplace: () => import('./marketplace-section'),
   apps: () => import('./apps-section'),
   infrastructure: () => import('@/app/workspace/[workspaceId]/settings/infrastructure/infrastructure-section'),
@@ -120,7 +120,7 @@ function SectionContent({ section }: { section: SidebarSection }) {
   const canSlides = useFeature('slides');
   const canDocuments = useFeature('documents');
   const canSheets = useFeature('sheets');
-  const canBoard = useFeature('board');
+  const canTasks = useFeature('tasks');
 
   if (section === 'maps' && canMaps) return <MapsSection collapsed={false} detailOnly />;
   if (section === 'search' && canSearch) return <SearchSection collapsed={false} detailOnly />;
@@ -133,7 +133,7 @@ function SectionContent({ section }: { section: SidebarSection }) {
   if (section === 'slides' && canSlides) return <SlidesSection collapsed={false} detailOnly />;
   if (section === 'documents' && canDocuments) return <DocumentsSection collapsed={false} detailOnly />;
   if (section === 'sheets' && canSheets) return <SheetsSection collapsed={false} detailOnly />;
-  if (section === 'board' && canBoard) return <BoardSection collapsed={false} detailOnly />;
+  if (section === 'tasks' && canTasks) return <TasksSection collapsed={false} detailOnly />;
   if (section === 'apps' && canApps) return <AppsSection collapsed={false} detailOnly />;
   if (section === 'marketplace' && canMarketplace) return <MarketplaceSection collapsed={false} detailOnly />;
   if (section === 'infrastructure' && canSettings) return <InfrastructureSection />;

@@ -937,14 +937,14 @@ class MapsSettingsModel(Base):
 
 
 # ============================================
-# Board
+# Tasks
 # ============================================
 
 
-class BoardIterationModel(Base):
-    """A run of whole weeks of a workspace's project board, keyed by its first day."""
+class TaskIterationModel(Base):
+    """A run of whole weeks of a workspace's tasks, keyed by its first day."""
 
-    __tablename__ = "board_iterations"
+    __tablename__ = "task_iterations"
     __table_args__ = (UniqueConstraint("workspace_id", "start_date"),)
 
     id = Column(String(48), primary_key=True)
@@ -959,10 +959,10 @@ class BoardIterationModel(Base):
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
 
 
-class BoardSettingsModel(Base):
-    """A workspace's board configuration (iterations, stages, priorities, labels)."""
+class TasksSettingsModel(Base):
+    """A workspace's tasks configuration (iterations, stages, priorities, labels)."""
 
-    __tablename__ = "board_settings"
+    __tablename__ = "task_settings"
 
     workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
     data = Column(Text, nullable=False, default="{}")  # JSON
@@ -970,15 +970,15 @@ class BoardSettingsModel(Base):
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
 
 
-class BoardTaskModel(Base):
-    """A board task. No iteration means it sits in the backlog."""
+class TaskModel(Base):
+    """A workspace task. No iteration means it sits in the backlog."""
 
-    __tablename__ = "board_tasks"
+    __tablename__ = "tasks"
 
     id = Column(String(48), primary_key=True)
     workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
     iteration_id = Column(
-        String(48), ForeignKey("board_iterations.id", ondelete="SET NULL"), nullable=True
+        String(48), ForeignKey("task_iterations.id", ondelete="SET NULL"), nullable=True
     )
     title = Column(String(300), nullable=False)
     content = Column(Text, nullable=False, default="")
@@ -995,25 +995,25 @@ class BoardTaskModel(Base):
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
 
 
-class BoardTaskCommentModel(Base):
-    __tablename__ = "board_task_comments"
+class TaskCommentModel(Base):
+    __tablename__ = "task_comments"
 
     id = Column(String(48), primary_key=True)
     workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
-    task_id = Column(String(48), ForeignKey("board_tasks.id", ondelete="CASCADE"), nullable=False)
+    task_id = Column(String(48), ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
     author_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     body = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
 
 
-class BoardTaskActivityModel(Base):
+class TaskActivityModel(Base):
     """A recorded change on a task: stage, assignees, iteration, archive state."""
 
-    __tablename__ = "board_task_activity"
+    __tablename__ = "task_activity"
 
     id = Column(String(48), primary_key=True)
     workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
-    task_id = Column(String(48), ForeignKey("board_tasks.id", ondelete="CASCADE"), nullable=False)
+    task_id = Column(String(48), ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
     actor_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     field = Column(String(32), nullable=False)
     old_value = Column(Text, nullable=True)  # JSON
