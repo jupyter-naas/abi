@@ -382,8 +382,11 @@ export function ViewBar<R, K extends string, T extends string>({
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Search"
             className={cn(
-              'h-8 border bg-background pl-7 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-workspace-accent/40',
-              singleRow ? 'w-24 focus:w-36 sm:w-32 sm:focus:w-44' : 'w-36 focus:w-52',
+              'h-8 border bg-background pl-7 pr-2 text-xs focus:outline-none',
+              singleRow
+                ? // Neutral border while typing: no colored ring.
+                  'w-48 focus:w-72 focus:ring-0 focus-visible:ring-0 sm:w-64 sm:focus:w-[22rem]'
+                : 'w-36 focus:w-52 focus:ring-1 focus:ring-workspace-accent/40',
             )}
           />
         </div>
