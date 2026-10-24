@@ -111,7 +111,7 @@ export function WorkspacesSection({ onPicked }: { onPicked?: () => void }) {
         />
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto scrollbar-none">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pt-2 scrollbar-none">
         {listed.length === 0 ? (
           <p className="px-2 py-2 text-xs text-muted-foreground">No workspaces match</p>
         ) : (
