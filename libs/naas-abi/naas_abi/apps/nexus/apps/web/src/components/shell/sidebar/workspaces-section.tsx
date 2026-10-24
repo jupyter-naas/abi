@@ -1,12 +1,19 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { Check, Search, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Check, ChevronRight, Search, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { groupWorkspaces, listWorkspaces } from '@/lib/workspace-picker';
+import {
+  isWorkspaceGroupExpanded,
+  readWorkspaceGroupCollapse,
+  writeWorkspaceGroupCollapsed,
+  workspaceGroupKey,
+} from '@/lib/workspace-group-collapse';
 import { getWorkspaceHomePath } from '@/lib/feature-access';
 import { markAppsSkipRestore } from '@/app/workspace/[workspaceId]/apps/lib/apps-route';
+import { useOrganizationStore } from '@/stores/organization';
 import { useWorkspaceStore, type Workspace } from '@/stores/workspace';
 import { WorkspaceMark, WorkspaceMarkFrame } from '../workspace-mark';
 import { shellTokens } from '../tokens';
@@ -32,6 +39,37 @@ export function WorkspacesSection({ onPicked }: { onPicked?: () => void }) {
   const listed = useMemo(() => listWorkspaces(workspaces, query), [workspaces, query]);
   // Grouped by workspace group (Settings → General); no group shows under "Others".
   const grouped = useMemo(() => groupWorkspaces(listed), [listed]);
+  const searching = query.trim().length > 0;
+
+  const organizations = useOrganizationStore((s) => s.organizations);
+  const currentOrgSlug = useOrganizationStore((s) => s.currentOrgSlug);
+  const orgScope = useMemo(() => {
+    const org = currentOrgSlug
+      ? organizations.find((row) => row.slug === currentOrgSlug)
+      : organizations[0];
+    return org?.id ?? 'default';
+  }, [organizations, currentOrgSlug]);
+
+  const [collapsedByKey, setCollapsedByKey] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    setCollapsedByKey(readWorkspaceGroupCollapse(orgScope));
+  }, [orgScope]);
+
+  const groupExpanded = useCallback(
+    (group: string) =>
+      isWorkspaceGroupExpanded(group, collapsedByKey, { forceExpanded: searching }),
+    [collapsedByKey, searching],
+  );
+
+  const toggleGroup = useCallback(
+    (group: string) => {
+      const nextCollapsed = groupExpanded(group);
+      const row = writeWorkspaceGroupCollapsed(orgScope, group, nextCollapsed);
+      setCollapsedByKey(row);
+    },
+    [groupExpanded, orgScope],
+  );
 
   const pick = (workspace: Workspace) => {
     if (workspace.id === currentWorkspaceId) {
@@ -77,22 +115,46 @@ export function WorkspacesSection({ onPicked }: { onPicked?: () => void }) {
         {listed.length === 0 ? (
           <p className="px-2 py-2 text-xs text-muted-foreground">No workspaces match</p>
         ) : (
-          grouped.map(({ group, workspaces: items }) => (
-            <section key={group} aria-label={group} className="flex flex-col gap-1">
-              <h3 className="px-2 pt-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                {group}
-                <span className="ml-1.5 tabular-nums opacity-70">{items.length}</span>
-              </h3>
-              {items.map((workspace) => (
-                <WorkspaceRow
-                  key={workspace.id}
-                  workspace={workspace}
-                  current={workspace.id === currentWorkspaceId}
-                  onPick={pick}
-                />
-              ))}
-            </section>
-          ))
+          grouped.map(({ group, workspaces: items }) => {
+            const expanded = groupExpanded(group);
+            const panelId = `workspace-group-${workspaceGroupKey(group)}`;
+            return (
+              <section key={group} aria-label={group} className="flex flex-col gap-1">
+                <button
+                  type="button"
+                  id={`${panelId}-label`}
+                  aria-expanded={expanded}
+                  aria-controls={panelId}
+                  onClick={() => toggleGroup(group)}
+                  className={cn(
+                    'flex w-full items-center gap-1 px-2 pt-2 text-left hover:text-foreground',
+                    shellTokens.sidebar.sectionLabel,
+                    'uppercase tracking-wide',
+                  )}
+                >
+                  <ChevronRight
+                    size={12}
+                    className={cn('shrink-0 transition-transform', expanded && 'rotate-90')}
+                    aria-hidden
+                  />
+                  <span className="min-w-0 flex-1 truncate">{group}</span>
+                  <span className="shrink-0 tabular-nums opacity-70">{items.length}</span>
+                </button>
+                {expanded && (
+                  <div id={panelId} role="region" aria-labelledby={`${panelId}-label`} className="flex flex-col gap-1">
+                    {items.map((workspace) => (
+                      <WorkspaceRow
+                        key={workspace.id}
+                        workspace={workspace}
+                        current={workspace.id === currentWorkspaceId}
+                        onPick={pick}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            );
+          })
         )}
       </div>
     </div>
