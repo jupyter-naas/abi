@@ -14,3 +14,6 @@ CREATE INDEX IF NOT EXISTS idx_task_activity_workspace_created
     ON task_activity (workspace_id, created_at);
 
 ALTER TABLE task_comments ADD COLUMN IF NOT EXISTS parent_id VARCHAR(48) REFERENCES task_comments(id) ON DELETE CASCADE;
+
+-- Events recorded before titles were kept: name them after their task.
+UPDATE task_activity SET task_title = (SELECT title FROM tasks WHERE tasks.id = task_activity.task_id) WHERE task_title = '' AND EXISTS (SELECT 1 FROM tasks WHERE tasks.id = task_activity.task_id);

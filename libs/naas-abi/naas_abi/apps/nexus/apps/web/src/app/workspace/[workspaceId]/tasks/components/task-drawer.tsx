@@ -5,6 +5,7 @@ import { Archive, ArchiveRestore, CornerDownRight, Plus, Reply, Trash2, X } from
 import { cn } from '@/lib/utils';
 import { Popover } from '@/components/database-view/primitives';
 import { describeTaskEvent } from '@/lib/task-events';
+import { TASKS_CHANGED_EVENT } from '@/stores/tasks';
 import {
   tasksApi,
   choiceLabel,
@@ -133,7 +134,7 @@ export function TaskDrawer({
   const [comments, setComments] = useState<TaskComment[]>([]);
   const [activity, setActivity] = useState<TaskActivity[]>([]);
   const [commentDraft, setCommentDraft] = useState('');
-  const [githubIssue, setGithubIssue] = useState(task.github_issue_url);
+  const [githubIssue, setGithubIssue] = useState(task.github_issue_url ?? '');
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [replyDraft, setReplyDraft] = useState('');
   const [posting, setPosting] = useState(false);
@@ -143,7 +144,7 @@ export function TaskDrawer({
   useEffect(() => {
     setTitle(task.title);
     setContent(task.content);
-    setGithubIssue(task.github_issue_url);
+    setGithubIssue(task.github_issue_url ?? '');
   }, [task.id, task.title, task.content, task.github_issue_url]);
 
   const loadFeed = useCallback(async () => {
@@ -160,10 +161,16 @@ export function TaskDrawer({
     }
   }, [workspaceId, task.id]);
 
-  // Reload after every change of the task, so its own edits show in Activity.
+  // Reload after every change of the task, so its own edits show in Activity,
+  // and when the Tasks agent in the chat pane commented or changed something.
   useEffect(() => {
     void loadFeed();
   }, [loadFeed, task.updated_at]);
+  useEffect(() => {
+    const reload = () => void loadFeed();
+    window.addEventListener(TASKS_CHANGED_EVENT, reload);
+    return () => window.removeEventListener(TASKS_CHANGED_EVENT, reload);
+  }, [loadFeed]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -260,9 +267,10 @@ export function TaskDrawer({
   const iterationName = (id: string | null) => (id ? iterationLabel(id) : 'Backlog');
 
   return (
-    <>
-      <div className="tasks-drawer-backdrop" onClick={onClose} />
-      <aside className="tasks-drawer" role="dialog" aria-label={`Task ${task.title}`}>
+    // Centered on the Tasks page, like the New task form (never over the shell bars).
+    <div className="tasks-create-overlay">
+      <div className="tasks-create-backdrop" onClick={onClose} />
+      <aside className="tasks-create-dialog tasks-task-dialog" role="dialog" aria-modal="true" aria-label={`Task ${task.title}`}>
         <header className="tasks-drawer-header">
           <input
             className="tasks-drawer-title"
@@ -388,7 +396,7 @@ export function TaskDrawer({
               value={githubIssue}
               onChange={setGithubIssue}
               onCommit={() =>
-                githubIssue.trim() !== task.github_issue_url && save({ github_issue_url: githubIssue.trim() })
+                githubIssue.trim() !== (task.github_issue_url ?? '') && save({ github_issue_url: githubIssue.trim() })
               }
             />
 
@@ -549,6 +557,6 @@ export function TaskDrawer({
           </button>
         </footer>
       </aside>
-    </>
+    </div>
   );
 }

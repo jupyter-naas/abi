@@ -2,6 +2,11 @@
    The toolbar and layouts come from components/database-view. */
 
 .tasks-page {
+  /* Tasks follow the workspace accent, not the app's default primary color. */
+  --tasks-accent: var(--workspace-accent, #22c55e);
+  --tasks-accent-subtle: color-mix(in srgb, var(--tasks-accent) 12%, transparent);
+  --tasks-accent-hover: color-mix(in srgb, var(--tasks-accent) 90%, #000);
+  --tasks-accent-focus: color-mix(in srgb, var(--tasks-accent) 45%, transparent);
   position: relative;
   display: flex;
   height: 100%;
@@ -33,7 +38,7 @@
   gap: var(--space-3);
   padding: var(--space-2) var(--space-4);
   border-bottom: 1px solid var(--border-hex);
-  background-color: var(--color-primary-subtle);
+  background-color: var(--tasks-accent-subtle);
   font-size: var(--font-size-xs);
   color: var(--foreground-hex);
 }
@@ -48,7 +53,7 @@
   border: none;
   background: none;
   font-size: inherit;
-  color: var(--color-primary);
+  color: var(--tasks-accent);
   text-decoration: underline;
   cursor: pointer;
 }
@@ -170,9 +175,9 @@
 
 /* A card dragged over the tab: dropping moves the task there. */
 .tasks-tab-drop {
-  background-color: var(--color-primary-subtle);
-  border-bottom-color: var(--color-primary);
-  color: var(--color-primary);
+  background-color: var(--tasks-accent-subtle);
+  border-bottom-color: var(--tasks-accent);
+  color: var(--tasks-accent);
 }
 
 .tasks-tab-dragging {
@@ -197,10 +202,10 @@
   gap: var(--space-1);
   height: 32px;
   padding: 0 var(--space-1) 0 var(--space-2);
-  border: 1px solid var(--color-primary);
+  border: 1px solid var(--tasks-accent);
   border-radius: var(--org-border-radius, 0px);
   font-size: var(--font-size-xs);
-  color: var(--color-primary);
+  color: var(--tasks-accent);
   white-space: nowrap;
 }
 
@@ -247,18 +252,18 @@
 }
 
 .tasks-button-active {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
+  border-color: var(--tasks-accent);
+  color: var(--tasks-accent);
 }
 
 .tasks-button-primary {
-  border-color: var(--color-primary);
-  background-color: var(--color-primary);
-  color: var(--color-primary-foreground);
+  border-color: var(--tasks-accent);
+  background-color: var(--tasks-accent);
+  color: #fff;
 }
 
 .tasks-button-primary:hover:not(:disabled) {
-  background-color: var(--color-primary-hover);
+  background-color: var(--tasks-accent-hover);
 }
 
 .tasks-button-danger {
@@ -322,9 +327,10 @@
 
 .tasks-task-card {
   display: flex;
+  min-width: 0;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-3);
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border-hex);
   border-radius: var(--org-border-radius, 0px);
   background-color: var(--card-hex);
@@ -332,11 +338,11 @@
 }
 
 .tasks-task-card:hover {
-  border-color: var(--color-primary);
+  border-color: var(--tasks-accent);
 }
 
 .tasks-task-card:focus-visible {
-  outline: 2px solid var(--color-primary-focus);
+  outline: 2px solid var(--tasks-accent-focus);
   outline-offset: 1px;
 }
 
@@ -345,12 +351,18 @@
 }
 
 .tasks-task-card-title {
+  display: -webkit-box;
   margin: 0;
-  font-size: var(--font-size-sm);
+  overflow: hidden;
+  font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-sm);
+  line-height: 1.4;
   color: var(--foreground-hex);
   overflow-wrap: anywhere;
+  /* Up to three lines: a 100-character title fits in a narrow column. */
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
 }
 
 .tasks-task-card-props {
@@ -437,10 +449,10 @@
   margin-left: -4px;
   border: 1px solid var(--card-hex);
   border-radius: 9999px;
-  background-color: var(--color-primary-subtle);
+  background-color: var(--tasks-accent-subtle);
   font-size: 10px;
   font-weight: var(--font-weight-semibold);
-  color: var(--color-primary);
+  color: var(--tasks-accent);
 }
 
 .tasks-avatar:first-child {
@@ -528,6 +540,11 @@
   border-radius: var(--org-border-radius, 0px);
   background-color: var(--background-hex);
   box-shadow: var(--glass-shadow);
+}
+
+/* The open task: same centered dialog, wider for comments and activity. */
+.tasks-task-dialog {
+  width: min(760px, 100%);
 }
 
 /* Workspace colors inside the dialog: checkboxes, date picker, Assign. */

@@ -351,13 +351,13 @@ function FeedItem({
       <span className="line-clamp-2 break-words">
         <span className="font-medium text-foreground">{actor}</span> {summary}
       </span>
-      <span className="block text-xs text-muted-foreground" title={entry.created_at ?? undefined}>
+      <span className="block text-[10px] text-muted-foreground" title={entry.created_at ?? undefined}>
         {when}
       </span>
     </span>
   );
   const className = cn(
-    'flex w-full items-start gap-2 px-2 py-1.5 text-sm transition-colors',
+    'flex w-full items-start gap-2 px-2 py-1 text-xs leading-snug transition-colors',
     active ? 'bg-muted text-foreground' : 'text-muted-foreground',
   );
   return href ? (

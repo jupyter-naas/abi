@@ -89,6 +89,13 @@ export function TaskPropertyValue({
   );
 }
 
+/** Characters of a title a card shows; the full title is in the tooltip and the task panel. */
+export const CARD_TITLE_LENGTH = 100;
+
+export function cardTitle(title: string): string {
+  return title.length > CARD_TITLE_LENGTH ? `${title.slice(0, CARD_TITLE_LENGTH - 1).trimEnd()}…` : title;
+}
+
 export function TaskCard({
   task,
   visible,
@@ -116,7 +123,9 @@ export function TaskCard({
       onKeyDown={(e) => e.key === 'Enter' && onOpen()}
       className={cn('tasks-task-card', task.archived && 'tasks-task-card-archived')}
     >
-      <p className="tasks-task-card-title">{task.title}</p>
+      <p className="tasks-task-card-title" title={task.title.length > CARD_TITLE_LENGTH ? task.title : undefined}>
+        {cardTitle(task.title)}
+      </p>
       {preview && (
         <p className="tasks-task-card-meta line-clamp-2">
           <MessageSquareText size={11} className="mr-1 inline" />

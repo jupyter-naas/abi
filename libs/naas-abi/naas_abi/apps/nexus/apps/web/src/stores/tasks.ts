@@ -258,3 +258,42 @@ export const useTasksStore = create<TasksState>()((set, get) => {
     },
   };
 });
+
+/**
+ * Every tool in tasks_tools.py that changes tasks, comments or settings: keep
+ * in sync with TASK_WRITE_TOOLS there. The Tasks agent works in the chat pane
+ * next to the board, which must show its changes at once.
+ */
+export const TASK_WRITE_TOOLS = [
+  'create_task',
+  'update_task',
+  'archive_task',
+  'delete_task',
+  'add_task_comment',
+  'delete_task_comment',
+  'carry_over_unfinished_tasks',
+  'update_tasks_settings',
+] as const;
+
+/** Fired after the agent changed tasks: an open task panel reloads its comments. */
+export const TASKS_CHANGED_EVENT = 'nexus:tasks-changed';
+
+export function isTasksWriteTool(rawName: string | null | undefined): boolean {
+  const name = (rawName || '').toLowerCase().split(/[.:/\s]+/).filter(Boolean).pop() || '';
+  return (TASK_WRITE_TOOLS as readonly string[]).includes(name);
+}
+
+/** Chat stream hook: the Tasks agent changed something — reload the board, feed and panel. */
+export function noteTasksToolResult(rawTool: string, output: string, workspaceId: string | null): void {
+  if (!workspaceId || !isTasksWriteTool(rawTool)) return;
+  try {
+    const parsed = JSON.parse(output) as { error?: unknown; needs_confirmation?: unknown };
+    if (parsed && (parsed.error || parsed.needs_confirmation)) return;
+  } catch {
+    /* plain-text tool output: reload anyway */
+  }
+  const store = useTasksStore.getState();
+  if (store.workspaceId !== workspaceId) return;
+  void store.load(workspaceId, { force: true }).then(() => store.refreshFeed());
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(TASKS_CHANGED_EVENT));
+}

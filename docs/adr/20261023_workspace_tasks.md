@@ -83,6 +83,17 @@ generic `board` view type of the database view keeps its name.
    `0062_task_github_issue.sql`). The API accepts only
    `https://github.com/<owner>/<repo>/issues/<number>` and stores it without a
    query or fragment. The UI shows it as `owner/repo#42`.
+10. **A Tasks office agent.** `naas_abi/agents/TasksAgent.py` with
+    `naas_abi/tools/tasks_tools.py` runs every action of the page (create,
+    update, move, assign, archive, delete with confirmation, comments and
+    replies, carry-over, activity, settings) through the same `TasksService`
+    and access rules as the HTTP routes. It is registered under the `tasks`
+    feature key, so the roster sync enables it in every workspace where Tasks
+    is on, and Abi hands Tasks requests off to it. On the Tasks page the chat
+    pane binds it, opens by default on wide screens (until the viewer closes
+    it in that browser session), and receives the open task as the feature
+    resource. The store takes a session factory so the tools run on their own
+    session, not the API's pool.
 
 ## Consequences
 

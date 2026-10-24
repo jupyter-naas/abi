@@ -5,6 +5,8 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { CalendarDays, Columns3, Flag, LayoutGrid, Plus, SquareKanban, Table2, Tag, UserRound, X } from 'lucide-react';
 import { Header } from '@/components/shell/header';
 import { useAuthStore } from '@/stores/auth';
+import { usePublishFeatureResource } from '@/stores/feature-pane';
+import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useConfirm } from '@/components/ui/dialogs';
 import { ViewBar, type ViewTypeDef } from '@/components/database-view/view-bar';
@@ -106,6 +108,36 @@ function useTabOrder(workspaceId: string) {
   return [order, save] as const;
 }
 
+/** Set once the viewer closes the chat pane on Tasks: it stays closed for the session. */
+const PANE_DISMISSED_KEY = 'nexus.tasks.pane-dismissed';
+
+/**
+ * Opens the chat pane (bound to the Tasks agent) when Tasks opens, on wide
+ * screens, until the viewer closes it on Tasks once in this browser session.
+ */
+function useTasksAgentPane() {
+  const isMobile = useIsMobile();
+  useEffect(() => {
+    if (isMobile) return;
+    let dismissed = false;
+    try {
+      dismissed = sessionStorage.getItem(PANE_DISMISSED_KEY) === '1';
+    } catch {
+      // Unavailable storage: open it, as on a first visit.
+    }
+    if (!dismissed) useWorkspaceStore.getState().setContextPanelOpen(true);
+    return useWorkspaceStore.subscribe((state, previous) => {
+      if (previous.contextPanelOpen && !state.contextPanelOpen) {
+        try {
+          sessionStorage.setItem(PANE_DISMISSED_KEY, '1');
+        } catch {
+          // The pane then reopens on the next visit.
+        }
+      }
+    });
+  }, [isMobile]);
+}
+
 /** Local calendar day of a UTC timestamp from the API. */
 function createdDay(timestamp: string): string {
   return toIsoDate(new Date(timestamp.endsWith('Z') ? timestamp : `${timestamp}Z`));
@@ -198,6 +230,12 @@ export default function TasksPage() {
   );
 
   const openTask = store.allTasks.find((t) => t.id === openTaskId) ?? null;
+
+  useTasksAgentPane();
+  // The open task rides into the chat pane: the Tasks agent's tools default to it.
+  usePublishFeatureResource(
+    openTask ? { feature: 'tasks', kind: 'task', id: openTask.id, label: openTask.title } : null,
+  );
 
   /** Opens the New task form, preset for the open tab (and the clicked column's stage). */
   const handleNewTask = (stage?: string) => {

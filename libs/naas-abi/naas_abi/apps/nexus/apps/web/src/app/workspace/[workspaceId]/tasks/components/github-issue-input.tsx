@@ -4,7 +4,8 @@ import { ExternalLink } from 'lucide-react';
 import { githubIssueRef } from '@/lib/tasks';
 
 /** True for an empty value (no issue) or a GitHub issue URL the API accepts. */
-export const isGithubIssueUrl = (value: string) => !value.trim() || githubIssueRef(value) !== null;
+export const isGithubIssueUrl = (value: string | null | undefined) =>
+  !value?.trim() || githubIssueRef(value) !== null;
 
 /** A GitHub issue URL field: says when the link is not an issue, opens it when it is. */
 export function GithubIssueInput({

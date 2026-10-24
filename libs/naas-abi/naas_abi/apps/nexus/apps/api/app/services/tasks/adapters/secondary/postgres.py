@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
 from datetime import date
 from typing import Any
 
@@ -30,6 +32,10 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.pos
 )
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+# ``AsyncSessionLocal`` or anything with its shape: ``async with factory() as db``.
+SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 
 
 def _json_list(raw: Any) -> tuple[str, ...]:
@@ -133,13 +139,20 @@ def _task(row: TaskModel) -> Task:
 
 
 class PostgresTasksStore(TasksStorePort):
+    """``session_factory`` opens each operation's session: the API's pool by
+    default, a caller's own session for agent tools (they run on another event
+    loop and must not touch the API pool)."""
+
+    def __init__(self, session_factory: SessionFactory = AsyncSessionLocal) -> None:
+        self._session = session_factory
+
     async def get_settings(self, workspace_id: str) -> TasksSettings | None:
-        async with AsyncSessionLocal() as db:
+        async with self._session() as db:
             row = await db.get(TasksSettingsModel, workspace_id)
             return _settings(row) if row is not None else None
 
     async def save_settings(self, workspace_id: str, settings: TasksSettings) -> None:
-        async with AsyncSessionLocal() as db:
+        async with self._session() as db:
             row = await db.get(TasksSettingsModel, workspace_id)
             if row is None:
                 row = TasksSettingsModel(workspace_id=workspace_id)
@@ -150,21 +163,21 @@ class PostgresTasksStore(TasksStorePort):
             await db.commit()
 
     async def list_iterations(self, workspace_id: str) -> list[Iteration]:
-        async with AsyncSessionLocal() as db:
+        async with self._session() as db:
             result = await db.execute(
                 select(TaskIterationModel).where(TaskIterationModel.workspace_id == workspace_id)
             )
             return [_iteration(row) for row in result.scalars().all()]
 
     async def get_iteration(self, workspace_id: str, iteration_id: str) -> Iteration | None:
-        async with AsyncSessionLocal() as db:
+        async with self._session() as db:
             row = await db.get(TaskIterationModel, iteration_id)
             if row is None or row.workspace_id != workspace_id:
                 return None
             return _iteration(row)
 
     async def get_iteration_by_start(self, workspace_id: str, start: date) -> Iteration | None:
-        async with AsyncSessionLocal() as db:
+        async with self._session() as db:
             result = await db.execute(
                 select(TaskIterationModel).where(
                     (TaskIterationModel.workspace_id == workspace_id)
@@ -175,7 +188,7 @@ class PostgresTasksStore(TasksStorePort):
             return _iteration(row) if row is not None else None
 
     async def save_iteration(self, iteration: Iteration) -> Iteration:
-        async with AsyncSessionLocal() as db:
+        async with self._session() as db:
             row = await db.get(TaskIterationModel, iteration.id)
             if row is None:
                 db.add(
@@ -222,7 +235,7 @@ class PostgresTasksStore(TasksStorePort):
             query = query.where(TaskModel.iteration_id == iteration_id)
         if not include_archived:
             query = query.where(TaskModel.archived_at.is_(None))
-        async with AsyncSessionLocal() as db:
+        async with self._session() as db:
             result = await db.execute(query)
             return [_task(row) for row in result.scalars().all()]
 
@@ -232,12 +245,12 @@ class PostgresTasksStore(TasksStorePort):
         query = select(TaskModel).where(TaskModel.workspace_id == workspace_id)
         if not include_archived:
             query = query.where(TaskModel.archived_at.is_(None))
-        async with AsyncSessionLocal() as db:
+        async with self._session() as db:
             result = await db.execute(query)
             return [_task(row) for row in result.scalars().all()]
 
     async def get_task(self, workspace_id: str, task_id: str) -> Task | None:
-        async with AsyncSessionLocal() as db:
+        async with self._session() as db:
             row = await db.get(TaskModel, task_id)
             if row is None or row.workspace_id != workspace_id:
                 return None
@@ -261,7 +274,7 @@ class PostgresTasksStore(TasksStorePort):
             "updated_by": task.updated_by,
             "updated_at": task.updated_at,
         }
-        async with AsyncSessionLocal() as db:
+        async with self._session() as db:
             row = await db.get(TaskModel, task.id)
             if row is None:
                 db.add(TaskModel(id=task.id, **values))
@@ -271,7 +284,7 @@ class PostgresTasksStore(TasksStorePort):
             await db.commit()
 
     async def delete_task(self, workspace_id: str, task_id: str) -> bool:
-        async with AsyncSessionLocal() as db:
+        async with self._session() as db:
             scope = (TaskModel.workspace_id == workspace_id) & (TaskModel.id == task_id)
             exists = (await db.execute(select(TaskModel.id).where(scope))).first()
             if exists is None:
@@ -284,7 +297,7 @@ class PostgresTasksStore(TasksStorePort):
             return True
 
     async def list_comments(self, workspace_id: str, task_id: str) -> list[Comment]:
-        async with AsyncSessionLocal() as db:
+        async with self._session() as db:
             result = await db.execute(
                 select(TaskCommentModel).where(
                     (TaskCommentModel.workspace_id == workspace_id)
@@ -305,7 +318,7 @@ class PostgresTasksStore(TasksStorePort):
             ]
 
     async def add_comment(self, comment: Comment) -> None:
-        async with AsyncSessionLocal() as db:
+        async with self._session() as db:
             db.add(
                 TaskCommentModel(
                     id=comment.id,
@@ -323,7 +336,7 @@ class PostgresTasksStore(TasksStorePort):
         scope = (TaskCommentModel.workspace_id == workspace_id) & (
             TaskCommentModel.task_id == task_id
         )
-        async with AsyncSessionLocal() as db:
+        async with self._session() as db:
             # Replies first: SQLite test databases do not enforce ON DELETE CASCADE.
             await db.execute(
                 delete(TaskCommentModel).where(scope & (TaskCommentModel.parent_id == comment_id))
@@ -334,7 +347,7 @@ class PostgresTasksStore(TasksStorePort):
             await db.commit()
 
     async def list_activity(self, workspace_id: str, task_id: str) -> list[ActivityEntry]:
-        async with AsyncSessionLocal() as db:
+        async with self._session() as db:
             result = await db.execute(
                 select(TaskActivityModel).where(
                     (TaskActivityModel.workspace_id == workspace_id)
@@ -346,7 +359,7 @@ class PostgresTasksStore(TasksStorePort):
     async def add_activity(self, entries: list[ActivityEntry]) -> None:
         if not entries:
             return
-        async with AsyncSessionLocal() as db:
+        async with self._session() as db:
             for entry in entries:
                 db.add(
                     TaskActivityModel(
@@ -368,7 +381,7 @@ class PostgresTasksStore(TasksStorePort):
     ) -> list[ActivityEntry]:
         if not fields:
             return []
-        async with AsyncSessionLocal() as db:
+        async with self._session() as db:
             result = await db.execute(
                 select(TaskActivityModel)
                 .where(
@@ -398,8 +411,11 @@ def _activity(row: TaskActivityModel) -> ActivityEntry:
 class PostgresTasksMemberDirectory(TasksMemberDirectoryPort):
     """The workspace member listing, including members inherited from the organization."""
 
+    def __init__(self, session_factory: SessionFactory = AsyncSessionLocal) -> None:
+        self._session = session_factory
+
     async def member_ids(self, workspace_id: str) -> set[str]:
-        async with AsyncSessionLocal() as db:
+        async with self._session() as db:
             adapter = WorkspaceSecondaryAdapterPostgres(db=db)
             members = await adapter.list_workspace_members(workspace_id=workspace_id)
             return {member.user_id for member in members}

@@ -472,6 +472,12 @@ class TasksService:
         entries = await self._store.list_activity(workspace_id, task_id)
         return sorted(entries, key=lambda a: a.created_at or datetime.min)
 
+    async def list_recent_activity(self, workspace_id: str, *, limit: int) -> list[ActivityEntry]:
+        """The workspace's latest events of every kind, newest first (feed settings aside)."""
+        return await self._store.list_workspace_activity(
+            workspace_id, fields=ACTIVITY_KINDS, limit=limit
+        )
+
     async def list_feed(self, workspace_id: str) -> list[ActivityEntry]:
         """The sidebar feed: the latest events of the kinds the settings show, newest first."""
         settings = await self.get_settings(workspace_id)
