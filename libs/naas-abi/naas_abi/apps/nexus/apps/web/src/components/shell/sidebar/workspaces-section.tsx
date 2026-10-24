@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, ChevronRight, Search, X } from 'lucide-react';
+import { Check, ChevronRight, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { groupWorkspaces, listWorkspaces } from '@/lib/workspace-picker';
@@ -20,7 +20,6 @@ import { shellTokens } from '../tokens';
 
 export function WorkspacesSection({ onPicked }: { onPicked?: () => void }) {
   const router = useRouter();
-  const [query, setQuery] = useState('');
   const workspaces = useWorkspaceStore((s) => s.workspaces);
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const setCurrentWorkspace = useWorkspaceStore((s) => s.setCurrentWorkspace);
@@ -36,10 +35,9 @@ export function WorkspacesSection({ onPicked }: { onPicked?: () => void }) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [dismissWorkspacesPanel]);
 
-  const listed = useMemo(() => listWorkspaces(workspaces, query), [workspaces, query]);
+  const listed = useMemo(() => listWorkspaces(workspaces, ''), [workspaces]);
   // Grouped by workspace group (Settings → General); no group shows under "Others".
   const grouped = useMemo(() => groupWorkspaces(listed), [listed]);
-  const searching = query.trim().length > 0;
 
   const organizations = useOrganizationStore((s) => s.organizations);
   const currentOrgSlug = useOrganizationStore((s) => s.currentOrgSlug);
@@ -57,9 +55,8 @@ export function WorkspacesSection({ onPicked }: { onPicked?: () => void }) {
   }, [orgScope]);
 
   const groupExpanded = useCallback(
-    (group: string) =>
-      isWorkspaceGroupExpanded(group, collapsedByKey, { forceExpanded: searching }),
-    [collapsedByKey, searching],
+    (group: string) => isWorkspaceGroupExpanded(group, collapsedByKey),
+    [collapsedByKey],
   );
 
   const toggleGroup = useCallback(
@@ -86,7 +83,7 @@ export function WorkspacesSection({ onPicked }: { onPicked?: () => void }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-3 py-2">
+      <div className="flex shrink-0 items-center justify-between gap-2 bg-background px-3 py-2">
         <span className="text-sm font-semibold">Workspaces</span>
         <button
           type="button"
@@ -98,22 +95,10 @@ export function WorkspacesSection({ onPicked }: { onPicked?: () => void }) {
           <X size={16} />
         </button>
       </div>
-      <div className="flex shrink-0 items-center gap-2 border-b border-border bg-background px-3 py-2">
-        <Search size={14} className="shrink-0 opacity-70 text-muted-foreground" />
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search workspaces"
-          autoFocus
-          className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none focus-visible:ring-0 placeholder:text-muted-foreground"
-          aria-label="Search workspaces"
-        />
-      </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto scrollbar-none">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto scrollbar-none px-1 pb-2">
         {listed.length === 0 ? (
-          <p className="px-2 py-2 text-xs text-muted-foreground">No workspaces match</p>
+          <p className="px-2 py-2 text-xs text-muted-foreground">No workspaces</p>
         ) : (
           grouped.map(({ group, workspaces: items }) => {
             const expanded = groupExpanded(group);
