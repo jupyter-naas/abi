@@ -31,6 +31,7 @@ export function TopNav() {
   const toggleContextPanel = useWorkspaceStore((s) => s.toggleContextPanel);
   const activePanelSection = useWorkspaceStore((s) => s.activePanelSection);
   const setActivePanelSection = useWorkspaceStore((s) => s.setActivePanelSection);
+  const dismissWorkspacesPanel = useWorkspaceStore((s) => s.dismissWorkspacesPanel);
   const lastActivePanelSection = useWorkspaceStore((s) => s.lastActivePanelSection);
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
 
@@ -46,8 +47,7 @@ export function TopNav() {
       ? lastActivePanelSection
       : 'chat';
 
-  // Workspaces sits left of the dock, so its title does not occupy TopNav.
-  const sectionTitleOpen = mounted && activePanelSection !== null && activePanelSection !== 'workspaces';
+  const sectionTitleOpen = mounted && activePanelSection !== null;
   // Title follows the open column, so Workspaces opened over Events reads Workspaces.
   const panelTitle = activePanelSection ? SECTION_LABELS[activePanelSection] : '';
   const panelHref =
@@ -80,7 +80,13 @@ export function TopNav() {
           {mounted && (
             <button
               type="button"
-              onClick={() => setActivePanelSection(activePanelSection ? null : sectionToToggle)}
+              onClick={() => {
+                if (activePanelSection === 'workspaces') {
+                  dismissWorkspacesPanel();
+                  return;
+                }
+                setActivePanelSection(activePanelSection ? null : sectionToToggle);
+              }}
               className={cn(
                 'flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-all',
                 'hover:bg-muted hover:text-foreground',

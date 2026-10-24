@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { Check, Search } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Check, Search, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { groupWorkspaces, listWorkspaces } from '@/lib/workspace-picker';
@@ -19,6 +19,15 @@ export function WorkspacesSection({ onPicked }: { onPicked?: () => void }) {
   const setCurrentWorkspace = useWorkspaceStore((s) => s.setCurrentWorkspace);
   const setActiveConversation = useWorkspaceStore((s) => s.setActiveConversation);
   const closeWorkspacesPanel = useWorkspaceStore((s) => s.closeWorkspacesPanel);
+  const dismissWorkspacesPanel = useWorkspaceStore((s) => s.dismissWorkspacesPanel);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') dismissWorkspacesPanel();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [dismissWorkspacesPanel]);
 
   const listed = useMemo(() => listWorkspaces(workspaces, query), [workspaces, query]);
   // Grouped by workspace group (Settings → General); no group shows under "Others".
@@ -39,6 +48,18 @@ export function WorkspacesSection({ onPicked }: { onPicked?: () => void }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-3 py-2">
+        <span className="text-sm font-semibold">Workspaces</span>
+        <button
+          type="button"
+          onClick={() => dismissWorkspacesPanel()}
+          className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label="Close workspaces"
+          title="Close workspaces"
+        >
+          <X size={16} />
+        </button>
+      </div>
       <div className="flex shrink-0 items-center gap-2 border-b border-border bg-background px-3 py-2">
         <Search size={14} className="shrink-0 opacity-70 text-muted-foreground" />
         <input

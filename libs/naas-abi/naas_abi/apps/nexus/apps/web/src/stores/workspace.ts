@@ -234,6 +234,8 @@ interface WorkspaceState {
   setKeepPanelClosedOnNextRoute: (keep: boolean) => void;
   /** Dismiss the mark-opened Workspaces list, putting back the column it covered. */
   closeWorkspacesPanel: () => void;
+  /** Hide the Workspaces list without restoring the column it replaced. */
+  dismissWorkspacesPanel: () => void;
   /** Icon order for the workspace nav. Settings stays pinned and is omitted. */
   sidebarNavOrder: SidebarSection[];
   setSidebarNavOrder: (order: SidebarSection[]) => void;
@@ -570,6 +572,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   closeWorkspacesPanel: () => set((state) => (
     state.activePanelSection === 'workspaces'
       ? { activePanelSection: state.panelSectionBeforeWorkspaces }
+      : {}
+  )),
+  dismissWorkspacesPanel: () => set((state) => (
+    state.activePanelSection === 'workspaces'
+      ? { activePanelSection: null, panelSectionBeforeWorkspaces: null }
       : {}
   )),
   sidebarNavOrder: [...DEFAULT_NAV_ORDER],

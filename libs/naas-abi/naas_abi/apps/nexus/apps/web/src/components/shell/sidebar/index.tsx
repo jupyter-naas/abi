@@ -186,10 +186,13 @@ export function Sidebar() {
     setActivePanelSection(id);
   };
 
-  // Other entry points (Home, quick open, the top bar) write the store
-  // directly. Follow them unless a click is already queued ahead of the store.
+  // Other entry points (workspace mark, top bar) write the store directly.
+  // Drop any queued dock open so a stale timeout cannot undo an explicit close.
   useEffect(() => {
-    if (panelTimerRef.current) return;
+    if (panelTimerRef.current) {
+      clearTimeout(panelTimerRef.current);
+      panelTimerRef.current = null;
+    }
     intendedPanelRef.current = activePanelSection;
   }, [activePanelSection]);
 

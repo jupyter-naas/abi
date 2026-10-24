@@ -50,4 +50,15 @@ describe('workspaces panel return section', () => {
 
     expect(useWorkspaceStore.getState().activePanelSection).toBe('chat');
   });
+
+  it('dismissWorkspacesPanel hides the list without restoring the column', () => {
+    const { setActivePanelSection } = useWorkspaceStore.getState();
+    setActivePanelSection('events');
+    setActivePanelSection('workspaces');
+
+    useWorkspaceStore.getState().dismissWorkspacesPanel();
+
+    expect(useWorkspaceStore.getState().activePanelSection).toBeNull();
+    expect(useWorkspaceStore.getState().panelSectionBeforeWorkspaces).toBeNull();
+  });
 });

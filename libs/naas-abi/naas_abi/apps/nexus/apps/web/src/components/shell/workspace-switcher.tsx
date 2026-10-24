@@ -32,6 +32,7 @@ export function WorkspaceSwitcher() {
         className={cn(
           'flex h-full w-full items-center outline-none focus-visible:ring-0',
           labeled ? 'gap-3 px-3' : 'justify-center',
+          open && 'bg-workspace-accent-10',
         )}
       >
         <WorkspaceMarkFrame
