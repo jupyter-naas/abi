@@ -1,4 +1,5 @@
 import base64
+import threading
 from unittest.mock import patch
 
 import pytest
@@ -39,6 +40,14 @@ def _build_app(tmp_path, **mw_kwargs):
     @app.post("/upload")
     async def _upload(request: Request):
         await request.body()
+        return {"ok": True}
+
+    @app.get("/")
+    def _root():
+        return {"ok": True}
+
+    @app.get("/health")
+    def _health():
         return {"ok": True}
 
     @app.get("/boom")
@@ -103,6 +112,37 @@ def test_invalid_bearer_token_falls_back_to_anonymous(app_with_middleware):
 
     assert response.status_code == 200
     assert len(service.query("anonymous")) == 1
+
+
+def test_health_probes_are_not_recorded(app_with_middleware):
+    app, service = app_with_middleware
+    client = TestClient(app)
+    assert client.get("/").status_code == 200
+    assert client.get("/health").status_code == 200
+
+    assert service.query("anonymous") == []
+
+
+def test_recording_runs_off_the_event_loop_thread():
+    recorded_on: list[threading.Thread] = []
+
+    class _Service:
+        def record(self, event):
+            recorded_on.append(threading.current_thread())
+
+    app = FastAPI()
+    app.state.activity_log_service = _Service()
+    app.add_middleware(HttpActivityLogMiddleware)
+    loop_threads: list[threading.Thread] = []
+
+    @app.get("/hello")
+    async def _hello():
+        loop_threads.append(threading.current_thread())
+        return {"ok": True}
+
+    assert TestClient(app).get("/hello").status_code == 200
+    assert len(recorded_on) == 1
+    assert recorded_on[0] is not loop_threads[0]
 
 
 def test_missing_activity_log_service_does_not_break_requests(tmp_path):
