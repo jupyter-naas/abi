@@ -6,7 +6,11 @@ import { useParams, useRouter } from 'next/navigation';
 import { ArrowDown, ArrowLeft, ArrowUp, Plus, Trash2, X } from 'lucide-react';
 import { Header } from '@/components/shell/header';
 import { Popover } from '@/components/database-view/primitives';
+import { TASK_EVENT_GROUPS, TASK_EVENT_LABELS } from '@/lib/task-events';
 import {
+  MAX_FEED_LIMIT,
+  MIN_FEED_LIMIT,
+  TASK_ACTIVITY_FIELDS,
   TASK_PALETTE,
   DONE_STAGE,
   INBOX_STAGE,
@@ -23,7 +27,15 @@ import '../tasks.css';
 
 type Draft = Pick<
   TasksSettings,
-  'iteration_weeks' | 'iteration_start_day' | 'stages' | 'priorities' | 'default_stage' | 'suggested_labels'
+  | 'iteration_weeks'
+  | 'iteration_start_day'
+  | 'stages'
+  | 'priorities'
+  | 'default_stage'
+  | 'suggested_labels'
+  | 'feed_enabled'
+  | 'feed_events'
+  | 'feed_limit'
 >;
 
 const toDraft = (settings: TasksSettings): Draft => ({
@@ -33,6 +45,9 @@ const toDraft = (settings: TasksSettings): Draft => ({
   priorities: settings.priorities.map((c) => ({ ...c })),
   default_stage: settings.default_stage,
   suggested_labels: [...settings.suggested_labels],
+  feed_enabled: settings.feed_enabled,
+  feed_events: [...settings.feed_events],
+  feed_limit: settings.feed_limit,
 });
 
 function ColorPicker({
@@ -273,7 +288,7 @@ export default function TasksSettingsPage() {
     <div className="tasks-page">
       <Header
         title="Tasks settings"
-        subtitle="Iterations, stages, priorities and labels of this workspace's tasks"
+        subtitle="Iterations, stages, priorities, labels and activity feed of this workspace's tasks"
         nav={
           <TasksMenuBar
             onNewTask={() => router.push(tasksPath(workspaceId, { newTask: true }))}
@@ -402,6 +417,64 @@ export default function TasksSettingsPage() {
               disabled={disabled}
               onChange={(suggested_labels) => set({ suggested_labels })}
             />
+          </section>
+
+          <section className="tasks-settings-section">
+            <div>
+              <h2 className="tasks-settings-title">Activity feed</h2>
+              <p className="tasks-settings-hint">
+                The latest task events of the workspace, newest first, in the Tasks sidebar. Turned off, the sidebar
+                lists the tasks instead.
+              </p>
+            </div>
+            <div className="tasks-drawer-fields">
+              <label className="tasks-drawer-label" htmlFor="tasks-settings-feed">Show in sidebar</label>
+              <label className="tasks-settings-check">
+                <input
+                  id="tasks-settings-feed"
+                  type="checkbox"
+                  checked={draft.feed_enabled}
+                  disabled={disabled}
+                  onChange={(e) => set({ feed_enabled: e.target.checked })}
+                />
+                {draft.feed_enabled ? 'On' : 'Off'}
+              </label>
+              <label className="tasks-drawer-label" htmlFor="tasks-settings-feed-limit">Events shown</label>
+              <input
+                id="tasks-settings-feed-limit"
+                type="number"
+                className="tasks-drawer-input tasks-settings-number"
+                min={MIN_FEED_LIMIT}
+                max={MAX_FEED_LIMIT}
+                value={draft.feed_limit}
+                disabled={disabled || !draft.feed_enabled}
+                onChange={(e) => set({ feed_limit: Number(e.target.value) })}
+              />
+            </div>
+            <div className="tasks-settings-event-groups">
+              {TASK_EVENT_GROUPS.map((group) => (
+                <fieldset key={group.label} className="tasks-settings-event-group" disabled={disabled || !draft.feed_enabled}>
+                  <legend className="tasks-drawer-label">{group.label}</legend>
+                  {group.fields.map((field) => (
+                    <label key={field} className="tasks-settings-check">
+                      <input
+                        type="checkbox"
+                        checked={draft.feed_events.includes(field)}
+                        onChange={(e) =>
+                          set({
+                            // Kept in the API's order, so an unchanged set compares equal.
+                            feed_events: TASK_ACTIVITY_FIELDS.filter((f) =>
+                              f === field ? e.target.checked : draft.feed_events.includes(f),
+                            ),
+                          })
+                        }
+                      />
+                      {TASK_EVENT_LABELS[field]}
+                    </label>
+                  ))}
+                </fieldset>
+              ))}
+            </div>
           </section>
 
           {settings.can_edit && (

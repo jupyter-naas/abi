@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from naas_abi.apps.nexus.apps.api.app.services.tasks.port import (
     TasksMemberDirectoryPort,
@@ -91,7 +91,6 @@ class InMemoryTasksStore(TasksStorePort):
             return False
         del self._tasks[task_id]
         self._comments = [c for c in self._comments if c.task_id != task_id]
-        self._activity = [a for a in self._activity if a.task_id != task_id]
         return True
 
     async def list_comments(self, workspace_id: str, task_id: str) -> list[Comment]:
@@ -102,6 +101,17 @@ class InMemoryTasksStore(TasksStorePort):
     async def add_comment(self, comment: Comment) -> None:
         self._comments.append(comment)
 
+    async def delete_comment(self, workspace_id: str, task_id: str, comment_id: str) -> None:
+        self._comments = [
+            c
+            for c in self._comments
+            if not (
+                c.workspace_id == workspace_id
+                and c.task_id == task_id
+                and comment_id in (c.id, c.parent_id)
+            )
+        ]
+
     async def list_activity(self, workspace_id: str, task_id: str) -> list[ActivityEntry]:
         return [
             a for a in self._activity if a.workspace_id == workspace_id and a.task_id == task_id
@@ -109,6 +119,18 @@ class InMemoryTasksStore(TasksStorePort):
 
     async def add_activity(self, entries: list[ActivityEntry]) -> None:
         self._activity.extend(entries)
+
+    async def list_workspace_activity(
+        self, workspace_id: str, *, fields: tuple[str, ...], limit: int
+    ) -> list[ActivityEntry]:
+        entries = [
+            a for a in self._activity if a.workspace_id == workspace_id and a.field in fields
+        ]
+        # Stable on equal timestamps: later inserts first.
+        ordered = sorted(
+            enumerate(entries), key=lambda pair: (pair[1].created_at or datetime.min, pair[0])
+        )
+        return [entry for _, entry in reversed(ordered)][:limit]
 
 
 class InMemoryTasksMemberDirectory(TasksMemberDirectoryPort):

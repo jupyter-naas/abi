@@ -70,6 +70,20 @@ generic `board` view type of the database view keeps its name.
    priority that tasks still use is refused. Colors are palette names, mapped to
    theme-aware classes, not free hex values.
 
+8. **Task events feed the sidebar.** Every task change (one event per field),
+   archive, deletion, comment, reply and comment removal is recorded in
+   `task_activity` with the task's title at that time. Events have no foreign
+   key to `tasks` (migration `0061_task_events.sql`), so a deleted task's
+   history stays in the workspace feed. `GET /api/tasks/feed` returns the latest
+   events, newest first. Which kinds appear, how many, and whether the feed shows
+   at all are part of the tasks settings (`feed_enabled`, `feed_events`,
+   `feed_limit`). Comments thread one level deep (`parent_id`). Authors remove
+   their own comments, and owners and admins remove anyone's.
+9. **A task may link one GitHub issue** (`github_issue_url`, migration
+   `0062_task_github_issue.sql`). The API accepts only
+   `https://github.com/<owner>/<repo>/issues/<number>` and stores it without a
+   query or fragment. The UI shows it as `owner/repo#42`.
+
 ## Consequences
 
 - Apps keeps its behavior and saved views (same storage key); its tests are
@@ -93,3 +107,8 @@ generic `board` view type of the database view keeps its name.
   feature key, tables and localStorage keys (`nexus.tasks.*`) were renamed
   without aliases. Only the sidebar keeps the old `board` id as a known
   earlier nav order and a retired panel id, so a stored layout still restores.
+- `task_activity` grows with every change and is never pruned; the feed reads
+  only its latest rows (index on `workspace_id, created_at`). Feed updates reach
+  other users within a minute (sidebar polling), not in real time.
+- GitHub Enterprise hosts are not accepted as issue links, and nothing is
+  synced with GitHub: the link is a pointer only.

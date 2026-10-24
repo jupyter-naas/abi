@@ -5,6 +5,7 @@ import {
   CalendarDays,
   CircleDot,
   Flag,
+  Github,
   Plus,
   Repeat,
   Tag,
@@ -16,6 +17,7 @@ import { Popover } from '@/components/database-view/primitives';
 import type { TaskFields, TaskIteration, TasksMember, TasksSettings } from '@/lib/tasks';
 import { Avatars } from './task-card';
 import { MarkdownEditor } from './markdown-editor';
+import { GithubIssueInput, isGithubIssueUrl } from './github-issue-input';
 import { ChipEditor } from './task-drawer';
 
 /** Iteration choice standing for the open tab's own iteration, created on save if needed. */
@@ -71,6 +73,7 @@ export function TaskCreateDialog({
   const [dueDate, setDueDate] = useState('');
   const [taskLabels, setTaskLabels] = useState<string[]>([]);
   const [content, setContent] = useState('');
+  const [githubIssue, setGithubIssue] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -86,7 +89,7 @@ export function TaskCreateDialog({
 
   const submit = async () => {
     const value = title.trim();
-    if (!value || saving) return;
+    if (!value || saving || !isGithubIssueUrl(githubIssue)) return;
     setSaving(true);
     try {
       await onCreate({
@@ -97,6 +100,7 @@ export function TaskCreateDialog({
         priority: priority || null,
         due_date: dueDate || null,
         labels: taskLabels,
+        github_issue_url: githubIssue.trim(),
         content,
       });
       onClose();
@@ -226,6 +230,9 @@ export function TaskCreateDialog({
               onChange={(e) => setDueDate(e.target.value)}
             />
 
+            <PropLabel icon={Github} htmlFor="tasks-new-github">GitHub issue</PropLabel>
+            <GithubIssueInput id="tasks-new-github" value={githubIssue} onChange={setGithubIssue} />
+
             <PropLabel icon={Repeat} htmlFor="tasks-new-iteration">Iteration</PropLabel>
             <select
               id="tasks-new-iteration"
@@ -260,7 +267,7 @@ export function TaskCreateDialog({
           <button type="button" className="tasks-button" onClick={onClose}>
             Cancel
           </button>
-          <button type="submit" className="tasks-button tasks-button-accent" disabled={saving || !title.trim()}>
+          <button type="submit" className="tasks-button tasks-button-accent" disabled={saving || !title.trim() || !isGithubIssueUrl(githubIssue)}>
             Create task
           </button>
         </footer>

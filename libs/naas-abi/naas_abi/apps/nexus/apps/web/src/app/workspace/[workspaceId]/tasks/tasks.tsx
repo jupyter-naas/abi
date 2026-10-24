@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { CalendarDays, Columns3, Flag, LayoutGrid, Plus, SquareKanban, Table2, Tag, UserRound, X } from 'lucide-react';
 import { Header } from '@/components/shell/header';
+import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useConfirm } from '@/components/ui/dialogs';
 import { ViewBar, type ViewTypeDef } from '@/components/database-view/view-bar';
@@ -153,6 +154,7 @@ export default function TasksPage() {
 
   const { settings } = store;
   const workspaces = useWorkspaceStore((s) => s.workspaces);
+  const currentUserId = useAuthStore((s) => s.user?.id ?? null);
   const workspaceName = useCallback(
     (id: string) => workspaces.find((w) => w.id === id)?.name ?? id,
     [workspaces],
@@ -357,12 +359,11 @@ export default function TasksPage() {
         records={store.tasks}
         search={search}
         onSearchChange={setSearch}
-        count={visibleCount}
-        countLabel={(n) => `${n} ${n === 1 ? 'task' : 'tasks'}`}
         defaultFilterProperty="labels"
         groupedTypes={['board']}
         defaultGroupBy="stage"
         iconOnly
+        singleRow
         tabs={
           <ScopeTabs
             order={tabOrder}
@@ -527,6 +528,16 @@ export default function TasksPage() {
           onArchive={(archived) => store.setArchived(openTask.id, archived)}
           onDelete={() => handleDelete(openTask)}
           onClose={() => navigate({ task: null })}
+          currentUserId={currentUserId}
+          canModerate={settings.can_edit}
+          confirmRemoveComment={(comment) =>
+            confirm({
+              title: 'Remove comment?',
+              description: `"${comment.body.length > 80 ? `${comment.body.slice(0, 79)}…` : comment.body}" and its replies are removed for everyone.`,
+              confirmLabel: 'Remove',
+            })
+          }
+          onFeedChange={() => void store.refreshFeed()}
         />
       )}
     </div>

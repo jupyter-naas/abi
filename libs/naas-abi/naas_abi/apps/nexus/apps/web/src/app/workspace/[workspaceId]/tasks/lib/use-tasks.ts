@@ -117,6 +117,7 @@ export function useTasks(workspaceId: string, scope: TasksScope, showArchived: b
     counts,
     filters,
     clearFilter: store.clearFilter,
+    refreshFeed: store.refreshFeed,
     loading: !store.loaded,
     error: store.error,
     clearError: store.clearError,

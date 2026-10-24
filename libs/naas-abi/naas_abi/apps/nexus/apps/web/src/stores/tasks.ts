@@ -7,6 +7,7 @@ import {
   tasksApi,
   iterationContaining,
   toIsoDate,
+  type TaskActivity,
   type TaskIteration,
   type TasksFilterKind,
   type TasksFilters,
@@ -19,8 +20,8 @@ import {
 /**
  * Tasks data of the current workspace, shared by the Tasks page, its settings
  * page and the sidebar dashboard: settings, iterations, members, every task
- * (archived included) and the sidebar filters (assignees, priorities, labels)
- * that both apply.
+ * (archived included), the workspace's latest task events (sidebar feed) and
+ * the sidebar filters (assignees, priorities, labels) that both apply.
  *
  * Task edits apply locally first and roll back when the API refuses them;
  * last write wins between users. The current iteration is created on first
@@ -33,6 +34,8 @@ interface TasksState {
   iterations: TaskIteration[];
   members: TasksMember[];
   tasks: Task[];
+  /** Latest task events of the workspace, newest first (empty when the feed is off). */
+  feed: TaskActivity[];
   /** False until the workspace's first load finishes. */
   loaded: boolean;
   error: string | null;
@@ -44,6 +47,8 @@ interface TasksState {
   toggleFilter: (kind: TasksFilterKind, value: string) => void;
   clearFilter: (kind: TasksFilterKind) => void;
   clearError: () => void;
+  /** Reloads the feed: after a change here, or to pick up other people's. */
+  refreshFeed: () => Promise<void>;
   saveSettings: (settings: Parameters<typeof tasksApi.saveSettings>[1]) => Promise<TasksSettings>;
   /** The iteration ``day`` falls in, created when missing. */
   ensureIteration: (day: string) => Promise<TaskIteration>;
@@ -87,6 +92,7 @@ export const useTasksStore = create<TasksState>()((set, get) => {
     iterations: [],
     members: [],
     tasks: [],
+    feed: [],
     loaded: false,
     error: null,
     filters: NO_FILTERS,
@@ -103,6 +109,7 @@ export const useTasksStore = create<TasksState>()((set, get) => {
           iterations: [],
           members: [],
           tasks: [],
+          feed: [],
           loaded: false,
           error: null,
           filters: NO_FILTERS,
@@ -111,18 +118,20 @@ export const useTasksStore = create<TasksState>()((set, get) => {
       const promise = (async () => {
         try {
           const today = toIsoDate(new Date());
-          const [settings, iterations, members, tasks] = await Promise.all([
+          const [settings, iterations, members, tasks, feed] = await Promise.all([
             tasksApi.getSettings(workspaceId),
             tasksApi.listIterations(workspaceId),
             tasksApi.listMembers(workspaceId).catch(() => [] as TasksMember[]),
             tasksApi.listAllTasks(workspaceId, true),
+            // The feed is a side panel: the rest of Tasks works without it.
+            tasksApi.listFeed(workspaceId).catch(() => [] as TaskActivity[]),
           ]);
           let all = iterations;
           if (!iterationContaining(iterations, today)) {
             all = [...iterations, await tasksApi.ensureIteration(workspaceId, today)];
           }
           if (get().workspaceId !== workspaceId) return;
-          set({ settings, iterations: all.sort(byStart), members, tasks, loaded: true, error: null });
+          set({ settings, iterations: all.sort(byStart), members, tasks, feed, loaded: true, error: null });
         } catch (e) {
           if (get().workspaceId === workspaceId) set({ error: (e as Error).message, loaded: true });
         } finally {
@@ -142,10 +151,22 @@ export const useTasksStore = create<TasksState>()((set, get) => {
     clearFilter: (kind) => set((s) => ({ filters: { ...s.filters, [kind]: [] } })),
     clearError: () => set({ error: null }),
 
+    refreshFeed: async () => {
+      const workspaceId = get().workspaceId;
+      if (!workspaceId) return;
+      try {
+        const feed = await tasksApi.listFeed(workspaceId);
+        if (get().workspaceId === workspaceId) set({ feed });
+      } catch {
+        // Keeps the last feed; the next change or refresh tries again.
+      }
+    },
+
     saveSettings: async (next) => {
       try {
         const saved = await tasksApi.saveSettings(workspace(), next, toIsoDate(new Date()));
         set({ settings: saved, error: null });
+        void get().refreshFeed();
         return saved;
       } catch (e) {
         return fail(e);
@@ -179,6 +200,7 @@ export const useTasksStore = create<TasksState>()((set, get) => {
         upsertIteration(result.iteration);
         const moved = new Map(result.moved.map((t) => [t.id, t]));
         set((s) => ({ tasks: s.tasks.map((t) => moved.get(t.id) ?? t) }));
+        void get().refreshFeed();
         return { week: result.iteration.start_date, moved: result.moved.length };
       } catch (e) {
         return fail(e);
@@ -189,6 +211,7 @@ export const useTasksStore = create<TasksState>()((set, get) => {
       try {
         const created = await tasksApi.createTask(workspace(), fields);
         replaceTask(created);
+        void get().refreshFeed();
         return created;
       } catch (e) {
         return fail(e);
@@ -203,6 +226,7 @@ export const useTasksStore = create<TasksState>()((set, get) => {
         set((s) => ({
           tasks: s.tasks.map((t) => (t.id === taskId && updated.workspace_id === s.workspaceId ? updated : t)),
         }));
+        void get().refreshFeed();
         return updated;
       } catch (e) {
         if (before) set((s) => ({ tasks: s.tasks.map((t) => (t.id === taskId ? before : t)) }));
@@ -216,6 +240,7 @@ export const useTasksStore = create<TasksState>()((set, get) => {
           ? await tasksApi.archiveTask(workspace(), taskId)
           : await tasksApi.restoreTask(workspace(), taskId);
         set((s) => ({ tasks: s.tasks.map((t) => (t.id === taskId ? updated : t)) }));
+        void get().refreshFeed();
         return updated;
       } catch (e) {
         return fail(e);
@@ -226,6 +251,7 @@ export const useTasksStore = create<TasksState>()((set, get) => {
       try {
         await tasksApi.deleteTask(workspace(), taskId);
         set((s) => ({ tasks: s.tasks.filter((t) => t.id !== taskId) }));
+        void get().refreshFeed();
       } catch (e) {
         fail(e);
       }

@@ -33,6 +33,38 @@ export type TaskChoice = { key: string; label: string; color: TaskColor };
 
 export const WEEKDAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
+/** What a task event records, in the order the settings list them (matches the API). */
+export const TASK_ACTIVITY_FIELDS = [
+  'created',
+  'title',
+  'content',
+  'stage',
+  'assignees',
+  'priority',
+  'due_date',
+  'labels',
+  'github_issue',
+  'iteration',
+  'archived',
+  'deleted',
+  'comment_added',
+  'comment_replied',
+  'comment_removed',
+] as const;
+
+export type TaskActivityField = (typeof TASK_ACTIVITY_FIELDS)[number];
+
+const GITHUB_ISSUE_RE = /^https:\/\/github\.com\/([A-Za-z0-9-]+)\/([A-Za-z0-9._-]+)\/issues\/(\d+)\/?(?:[?#].*)?$/;
+
+/** "acme/abi#42" for a GitHub issue URL; null when it is not one (the API refuses those). */
+export function githubIssueRef(url: string | null | undefined): string | null {
+  const match = GITHUB_ISSUE_RE.exec((url ?? '').trim());
+  return match ? `${match[1]}/${match[2]}#${match[3]}` : null;
+}
+
+export const MIN_FEED_LIMIT = 5;
+export const MAX_FEED_LIMIT = 100;
+
 export type TasksSettings = {
   iteration_weeks: number;
   /** 0 = Monday … 6 = Sunday. */
@@ -45,6 +77,10 @@ export type TasksSettings = {
   /** Stage of a task created in an iteration. */
   default_stage: TaskStage;
   suggested_labels: string[];
+  /** Sidebar activity feed: shown or not, which event kinds, how many events. */
+  feed_enabled: boolean;
+  feed_events: TaskActivityField[];
+  feed_limit: number;
   updated_by: string | null;
   updated_at: string | null;
   /** Whether the caller may save changes (owners and admins). */
@@ -72,6 +108,9 @@ export const DEFAULT_TASKS_SETTINGS: TasksSettings = {
   ],
   default_stage: 'ready',
   suggested_labels: ['Feature', 'Bug', 'Data', 'Model', 'Research', 'Chore'],
+  feed_enabled: true,
+  feed_events: [...TASK_ACTIVITY_FIELDS],
+  feed_limit: 20,
   updated_by: null,
   updated_at: null,
   can_edit: false,
@@ -119,6 +158,8 @@ export type Task = {
   due_date: string | null;
   labels: string[];
   assignee_ids: string[];
+  /** https://github.com/<owner>/<repo>/issues/<number>, or empty. */
+  github_issue_url: string;
   archived: boolean;
   archived_at: string | null;
   created_by: string | null;
@@ -133,13 +174,15 @@ export type TaskComment = {
   author_id: string | null;
   body: string;
   created_at: string;
+  /** The comment this one replies to (threads are one level deep). */
+  parent_id: string | null;
 };
-
-export type TaskActivityField = 'created' | 'stage' | 'assignees' | 'iteration' | 'archived';
 
 export type TaskActivity = {
   id: string;
   task_id: string;
+  /** The task's title when it happened (the task may be deleted since). */
+  task_title: string;
   actor_id: string | null;
   field: TaskActivityField | string;
   old_value: unknown;
@@ -157,7 +200,15 @@ export type TasksMember = {
 export type TaskFields = Partial<
   Pick<
     Task,
-    'title' | 'content' | 'stage' | 'iteration_id' | 'priority' | 'due_date' | 'labels' | 'assignee_ids'
+    | 'title'
+    | 'content'
+    | 'stage'
+    | 'iteration_id'
+    | 'priority'
+    | 'due_date'
+    | 'labels'
+    | 'assignee_ids'
+    | 'github_issue_url'
   >
 >;
 
@@ -384,7 +435,15 @@ export const tasksApi = {
     workspaceId: string,
     settings: Pick<
       TasksSettings,
-      'iteration_weeks' | 'iteration_start_day' | 'stages' | 'priorities' | 'default_stage' | 'suggested_labels'
+      | 'iteration_weeks'
+      | 'iteration_start_day'
+      | 'stages'
+      | 'priorities'
+      | 'default_stage'
+      | 'suggested_labels'
+      | 'feed_enabled'
+      | 'feed_events'
+      | 'feed_limit'
     >,
     today: string,
   ) =>
@@ -443,11 +502,20 @@ export const tasksApi = {
     call<TaskComment[]>(
       `/api/tasks/${encodeURIComponent(taskId)}/comments?${q({ workspace_id: workspaceId })}`,
     ),
-  addComment: (workspaceId: string, taskId: string, body: string) =>
+  addComment: (workspaceId: string, taskId: string, body: string, parentId?: string) =>
     call<TaskComment>(
       `/api/tasks/${encodeURIComponent(taskId)}/comments?${q({ workspace_id: workspaceId })}`,
-      { method: 'POST', body: JSON.stringify({ body }) },
+      { method: 'POST', body: JSON.stringify({ body, parent_id: parentId ?? null }) },
     ),
+  /** Removes the comment and its replies (its author, or an owner or admin). */
+  deleteComment: (workspaceId: string, taskId: string, commentId: string) =>
+    call<void>(
+      `/api/tasks/${encodeURIComponent(taskId)}/comments/${encodeURIComponent(commentId)}?${q({ workspace_id: workspaceId })}`,
+      { method: 'DELETE' },
+    ),
+  /** The workspace's latest task events, newest first, as the feed settings configure it. */
+  listFeed: (workspaceId: string) =>
+    call<TaskActivity[]>(`/api/tasks/feed?${q({ workspace_id: workspaceId })}`),
   listActivity: (workspaceId: string, taskId: string) =>
     call<TaskActivity[]>(
       `/api/tasks/${encodeURIComponent(taskId)}/activity?${q({ workspace_id: workspaceId })}`,

@@ -9,8 +9,8 @@ server's.
 Each workspace's settings set the iteration length and start weekday, the
 stages (Inbox and Done are fixed; custom ones go between), the priorities and
 the suggested labels. A task without an iteration sits in the backlog.
-Changes to a task's stage, assignees, iteration and archive state are recorded
-as activity.
+Every change to a task, its deletion and its comments are recorded as events:
+the task's history, and the workspace feed shown in the sidebar.
 """
 
 from __future__ import annotations
@@ -53,13 +53,50 @@ MAX_LABELS = 20
 MAX_ASSIGNEES = 50
 MAX_GOAL_LENGTH = 200
 MAX_COMMENT_LENGTH = 5_000
+MAX_GITHUB_ISSUE_URL_LENGTH = 500
 
-# Activity ``field`` values.
+# Activity ``field`` values: what an event records.
 ACTIVITY_CREATED = "created"
+ACTIVITY_TITLE = "title"
+ACTIVITY_CONTENT = "content"
 ACTIVITY_STAGE = "stage"
 ACTIVITY_ASSIGNEES = "assignees"
+ACTIVITY_PRIORITY = "priority"
+ACTIVITY_DUE_DATE = "due_date"
+ACTIVITY_LABELS = "labels"
+ACTIVITY_GITHUB_ISSUE = "github_issue"
 ACTIVITY_ITERATION = "iteration"
 ACTIVITY_ARCHIVED = "archived"
+ACTIVITY_DELETED = "deleted"
+ACTIVITY_COMMENT_ADDED = "comment_added"
+ACTIVITY_COMMENT_REPLIED = "comment_replied"
+ACTIVITY_COMMENT_REMOVED = "comment_removed"
+
+# Every event kind, in the order the settings list them.
+ACTIVITY_KINDS: tuple[str, ...] = (
+    ACTIVITY_CREATED,
+    ACTIVITY_TITLE,
+    ACTIVITY_CONTENT,
+    ACTIVITY_STAGE,
+    ACTIVITY_ASSIGNEES,
+    ACTIVITY_PRIORITY,
+    ACTIVITY_DUE_DATE,
+    ACTIVITY_LABELS,
+    ACTIVITY_GITHUB_ISSUE,
+    ACTIVITY_ITERATION,
+    ACTIVITY_ARCHIVED,
+    ACTIVITY_DELETED,
+    ACTIVITY_COMMENT_ADDED,
+    ACTIVITY_COMMENT_REPLIED,
+    ACTIVITY_COMMENT_REMOVED,
+)
+
+# Sidebar feed: how many events it shows.
+MIN_FEED_LIMIT = 5
+MAX_FEED_LIMIT = 100
+DEFAULT_FEED_LIMIT = 20
+# Comment text quoted in an event.
+COMMENT_EXCERPT_LENGTH = 120
 
 # Task fields a client may change, besides archiving (its own route).
 EDITABLE_TASK_FIELDS: frozenset[str] = frozenset(
@@ -72,6 +109,7 @@ EDITABLE_TASK_FIELDS: frozenset[str] = frozenset(
         "due_date",
         "labels",
         "assignee_ids",
+        "github_issue_url",
     }
 )
 
@@ -90,6 +128,10 @@ class TasksValidationError(TasksError):
 
 class TasksAssigneeError(TasksValidationError):
     """An assignee who is not a member of the workspace."""
+
+
+class TasksForbiddenError(TasksError):
+    """An action the caller's role does not allow (removing someone else's comment)."""
 
 
 def week_start(day: date, start_day: int = 0) -> date:
@@ -154,6 +196,10 @@ class TasksSettings:
     # Stage of a task created in an iteration without an explicit stage.
     default_stage: str = "ready"
     suggested_labels: tuple[str, ...] = DEFAULT_SUGGESTED_LABELS
+    # Sidebar activity feed: shown or not, which event kinds, how many events.
+    feed_enabled: bool = True
+    feed_events: tuple[str, ...] = ACTIVITY_KINDS
+    feed_limit: int = DEFAULT_FEED_LIMIT
     updated_by: str | None = None
     updated_at: datetime | None = None
 
@@ -210,6 +256,8 @@ class Task:
     due_date: date | None = None
     labels: tuple[str, ...] = ()
     assignee_ids: tuple[str, ...] = ()
+    # The GitHub issue the task tracks, or empty.
+    github_issue_url: str = ""
     archived_at: datetime | None = None
     created_by: str | None = None
     created_at: datetime | None = None
@@ -229,6 +277,8 @@ class Comment:
     author_id: str | None
     body: str
     created_at: datetime
+    # The comment this one replies to (one level: replies to a reply join its thread).
+    parent_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -241,6 +291,8 @@ class ActivityEntry:
     old_value: Any = None
     new_value: Any = None
     created_at: datetime | None = None
+    # The task's title when it happened: the feed names deleted tasks too.
+    task_title: str = ""
 
 
 @dataclass(frozen=True)

@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { LayoutGrid, SquareKanban } from 'lucide-react';
+import { History, LayoutGrid, SquareKanban } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useTasksStore } from '@/stores/tasks';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { describeTaskEvent } from '@/lib/task-events';
 import {
   SCOPE_LABELS,
   UNASSIGNED,
@@ -22,6 +23,7 @@ import {
   scopeIterations,
   scopeOfTask,
   toIsoDate,
+  type TaskActivity,
   type TaskColor,
   type TasksFilterKind,
 } from '@/lib/tasks';
@@ -44,14 +46,33 @@ const DOT: Record<TaskColor, string> = {
   pink: 'bg-pink-500',
 };
 
+/** Other people's changes show up within this delay (and on every change made here). */
+const FEED_REFRESH_MS = 60_000;
+
+const toDate = (value: string) => new Date(value.endsWith('Z') ? value : `${value}Z`);
+
+/** "just now", "5 min ago", "3 h ago", "yesterday", then the date. */
+function timeAgo(value: string | null, now: number): string {
+  if (!value) return '';
+  const date = toDate(value);
+  const minutes = Math.floor((now - date.getTime()) / 60_000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)} h ago`;
+  if (minutes < 48 * 60) return 'yesterday';
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 const createdOn = (value: string | null) =>
   value
     ? new Date(value.endsWith('Z') ? value : `${value}Z`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
     : '';
 
 /**
- * Board dashboard: every task of the workspace, newest first, filtered by
- * assignee. The assignee filter is shared with the Tasks page.
+ * Tasks dashboard: the workspace's latest task events (created, changed,
+ * deleted, commented), newest first, or every task when the feed is turned off
+ * in the tasks settings. The assignee, priority and label filters are shared
+ * with the Tasks page.
  */
 export function TasksSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
@@ -70,11 +91,25 @@ export function TasksSection({ collapsed, detailOnly }: { collapsed: boolean; de
     clearFilter,
     loaded,
     error,
+    feed,
+    refreshFeed,
   } = useTasksStore();
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     if (workspaceId) void load(workspaceId);
   }, [workspaceId, load]);
+
+  // Picks up other people's events while the sidebar is open (and ages "5 min ago").
+  useEffect(() => {
+    if (!workspaceId || !settings.feed_enabled) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      setNow(Date.now());
+      void refreshFeed();
+    }, FEED_REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, [workspaceId, settings.feed_enabled, refreshFeed]);
 
   const onTasks = pathname?.includes('/tasks') ?? false;
   const openTaskId = onTasks ? searchParams?.get('task') : null;
@@ -93,6 +128,30 @@ export function TasksSection({ collapsed, detailOnly }: { collapsed: boolean; de
         .filter((t) => !t.archived && matchesFilters(t, filters))
         .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? '')),
     [tasks, filters],
+  );
+
+  const taskById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
+  const filtering = filters.assignees.length + filters.priorities.length + filters.labels.length > 0;
+  /** Events of tasks the filters let through; a deleted task's events only show unfiltered. */
+  const events = useMemo(
+    () =>
+      feed.filter((e) => {
+        const task = taskById.get(e.task_id);
+        return task ? matchesFilters(task, filters) : !filtering;
+      }),
+    [feed, taskById, filters, filtering],
+  );
+  const eventNames = useMemo(
+    () => ({
+      member: memberName,
+      iteration: (id: string | null) => {
+        const iteration = id ? iterationById.get(id) : undefined;
+        return iteration ? formatWeekRange(iteration.start_date, iteration.end_date) : 'another iteration';
+      },
+      stage: (key: string) => choiceLabel(settings.stages, key),
+      priority: (key: string) => choiceLabel(settings.priorities, key),
+    }),
+    [memberName, iterationById, settings.stages, settings.priorities],
   );
 
   const assigneeOptions = useMemo<OntologyPickerOption[]>(
@@ -187,50 +246,125 @@ export function TasksSection({ collapsed, detailOnly }: { collapsed: boolean; de
         ))}
       </div>
 
-      <div className="shell-sidebar-home-gutter space-y-0.5">
-        {!loaded ? (
-          <p className="px-2 py-1 text-xs text-muted-foreground">Loading tasks…</p>
-        ) : error && tasks.length === 0 ? (
-          <p className="px-2 py-1 text-xs text-destructive">{error}</p>
-        ) : shown.length === 0 ? (
-          <p className="px-2 py-1 text-xs text-muted-foreground">
-            {tasks.some((t) => !t.archived) ? 'No task matches.' : 'No tasks yet.'}
-          </p>
-        ) : (
-          <>
-            <p className="px-2 pb-1 text-[11px] text-muted-foreground">
-              {shown.length} {shown.length === 1 ? 'task' : 'tasks'}, newest first
+      {settings.feed_enabled ? (
+        <div className="shell-sidebar-home-gutter space-y-0.5">
+          {!loaded ? (
+            <p className="px-2 py-1 text-xs text-muted-foreground">Loading activity…</p>
+          ) : events.length === 0 ? (
+            <p className="px-2 py-1 text-xs text-muted-foreground">
+              {feed.length ? 'No activity matches.' : 'No activity yet.'}
             </p>
-            {shown.map((task) => {
-              const scope = scopeOfTask(task, scopes);
-              const view = scope ?? currentView;
-              const names = task.assignee_ids.map(memberName);
-              return (
-                <Link
-                  key={task.id}
-                  href={tasksPath(workspaceId, { view, task: task.id })}
-                  title={`${choiceLabel(settings.stages, task.stage)}${names.length ? ` · ${names.join(', ')}` : ''}`}
-                  className={cn(
-                    'flex w-full items-start gap-2 px-2 py-1.5 text-sm transition-colors',
-                    openTaskId === task.id
-                      ? 'bg-muted font-medium text-foreground'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                  )}
-                >
-                  <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', DOT[choiceColor(settings.stages, task.stage)])} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate">{task.title}</span>
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {whereLabel(task.iteration_id, scope)} · {createdOn(task.created_at)}
-                      {names.length > 0 && ` · ${names.join(', ')}`}
+          ) : (
+            <>
+              <p className="flex items-center gap-1 px-2 pb-1 text-[11px] text-muted-foreground">
+                <History size={11} aria-hidden="true" /> Latest activity
+              </p>
+              {events.map((entry) => (
+                <FeedItem
+                  key={entry.id}
+                  entry={entry}
+                  actor={entry.actor_id ? memberName(entry.actor_id) : 'Someone'}
+                  summary={describeTaskEvent(entry, eventNames, { withTask: true })}
+                  when={timeAgo(entry.created_at, now)}
+                  // A deleted task has nothing to open.
+                  href={
+                    taskById.has(entry.task_id)
+                      ? tasksPath(workspaceId, {
+                          view: scopeOfTask(taskById.get(entry.task_id)!, scopes) ?? currentView,
+                          task: entry.task_id,
+                        })
+                      : null
+                  }
+                  active={openTaskId === entry.task_id}
+                />
+              ))}
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="shell-sidebar-home-gutter space-y-0.5">
+          {!loaded ? (
+            <p className="px-2 py-1 text-xs text-muted-foreground">Loading tasks…</p>
+          ) : error && tasks.length === 0 ? (
+            <p className="px-2 py-1 text-xs text-destructive">{error}</p>
+          ) : shown.length === 0 ? (
+            <p className="px-2 py-1 text-xs text-muted-foreground">
+              {tasks.some((t) => !t.archived) ? 'No task matches.' : 'No tasks yet.'}
+            </p>
+          ) : (
+            <>
+              <p className="px-2 pb-1 text-[11px] text-muted-foreground">
+                {shown.length} {shown.length === 1 ? 'task' : 'tasks'}, newest first
+              </p>
+              {shown.map((task) => {
+                const scope = scopeOfTask(task, scopes);
+                const view = scope ?? currentView;
+                const names = task.assignee_ids.map(memberName);
+                return (
+                  <Link
+                    key={task.id}
+                    href={tasksPath(workspaceId, { view, task: task.id })}
+                    title={`${choiceLabel(settings.stages, task.stage)}${names.length ? ` · ${names.join(', ')}` : ''}`}
+                    className={cn(
+                      'flex w-full items-start gap-2 px-2 py-1.5 text-sm transition-colors',
+                      openTaskId === task.id
+                        ? 'bg-muted font-medium text-foreground'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                    )}
+                  >
+                    <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', DOT[choiceColor(settings.stages, task.stage)])} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate">{task.title}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {whereLabel(task.iteration_id, scope)} · {createdOn(task.created_at)}
+                        {names.length > 0 && ` · ${names.join(', ')}`}
+                      </span>
                     </span>
-                  </span>
-                </Link>
-              );
-            })}
-          </>
-        )}
-      </div>
+                  </Link>
+                );
+              })}
+            </>
+          )}
+        </div>
+      )}
     </CollapsibleSection>
+  );
+}
+
+function FeedItem({
+  entry,
+  actor,
+  summary,
+  when,
+  href,
+  active,
+}: {
+  entry: TaskActivity;
+  actor: string;
+  summary: string;
+  when: string;
+  href: string | null;
+  active: boolean;
+}) {
+  const body = (
+    <span className="min-w-0 flex-1">
+      <span className="line-clamp-2 break-words">
+        <span className="font-medium text-foreground">{actor}</span> {summary}
+      </span>
+      <span className="block text-xs text-muted-foreground" title={entry.created_at ?? undefined}>
+        {when}
+      </span>
+    </span>
+  );
+  const className = cn(
+    'flex w-full items-start gap-2 px-2 py-1.5 text-sm transition-colors',
+    active ? 'bg-muted text-foreground' : 'text-muted-foreground',
+  );
+  return href ? (
+    <Link href={href} className={cn(className, !active && 'hover:bg-muted hover:text-foreground')}>
+      {body}
+    </Link>
+  ) : (
+    <div className={className}>{body}</div>
   );
 }

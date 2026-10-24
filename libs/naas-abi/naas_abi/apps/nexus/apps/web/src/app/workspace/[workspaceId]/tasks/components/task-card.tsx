@@ -1,6 +1,6 @@
 'use client';
 
-import { CalendarDays, MessageSquareText } from 'lucide-react';
+import { CalendarDays, Github, MessageSquareText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PropertyTags } from '@/components/database-view/primitives';
 import { DONE_STAGE, choiceColor, choiceLabel, type TaskChoice, type Task } from '@/lib/tasks';
@@ -55,6 +55,22 @@ export function TaskPropertyValue({
   }
   if (propertyKey === 'assignees' && values.length > 0) {
     return <Avatars names={values} />;
+  }
+  if (propertyKey === 'github_issue' && values.length > 0) {
+    return (
+      <a
+        href={task.github_issue_url}
+        target="_blank"
+        rel="noreferrer"
+        title={task.github_issue_url}
+        className={cn('tasks-task-card-meta tasks-github-link', className)}
+        // Opens the issue, not the task.
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Github size={11} className="mr-1 inline" />
+        {values[0]}
+      </a>
+    );
   }
   if (propertyKey === 'due_date' && values.length > 0) {
     return (

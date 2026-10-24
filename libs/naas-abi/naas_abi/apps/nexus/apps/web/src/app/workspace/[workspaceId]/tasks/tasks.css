@@ -103,13 +103,20 @@
 .tasks-tabs {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: 2px;
   max-width: 100%;
   overflow-x: auto;
+  /* Scrolls sideways when the row is short of room; no scrollbar under the tabs. */
+  scrollbar-width: none;
+}
+
+.tasks-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .tasks-tab-wrap {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
 }
 
@@ -117,8 +124,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 40px;
+  width: 18px;
+  height: 36px;
   border: none;
   background: none;
   color: var(--muted-foreground-hex);
@@ -132,16 +139,23 @@
 .tasks-tab {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 40px;
-  padding: 0 var(--space-2);
+  gap: 5px;
+  height: 36px;
+  padding: 0 6px;
   border: none;
   border-bottom: 2px solid transparent;
   background: none;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   color: var(--muted-foreground-hex);
   white-space: nowrap;
   cursor: pointer;
+}
+
+/* Narrow screens: the layout icon goes, the names and counts stay. */
+@media (max-width: 640px) {
+  .tasks-tab > svg {
+    display: none;
+  }
 }
 
 .tasks-tab:hover {
@@ -166,13 +180,13 @@
 }
 
 .tasks-tab-count {
-  min-width: 18px;
-  padding: 0 var(--space-1);
+  min-width: 16px;
+  padding: 0 4px;
   border-radius: 9999px;
   background-color: var(--muted-bg-hex);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: var(--font-weight-medium);
-  line-height: 18px;
+  line-height: 16px;
   text-align: center;
   color: var(--muted-foreground-hex);
 }
@@ -272,6 +286,16 @@
 .tasks-icon-button:hover {
   background-color: var(--muted-bg-hex);
   color: var(--foreground-hex);
+}
+
+/* Close buttons in the dialog and panel headers: icon only, no frame. */
+.tasks-drawer-header .tasks-icon-button {
+  border: none;
+  background: none;
+}
+
+.tasks-drawer-header .tasks-icon-button:hover {
+  background-color: var(--muted-bg-hex);
 }
 
 /* Empty states -------------------------------------------------------------- */
@@ -883,6 +907,43 @@
   overflow-wrap: anywhere;
 }
 
+.tasks-drawer-comment-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.tasks-drawer-comment .tasks-drawer-comment-actions {
+  justify-content: flex-start;
+  margin-top: var(--space-1);
+}
+
+.tasks-drawer-comment-action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground-hex);
+  cursor: pointer;
+}
+
+.tasks-drawer-comment-action:hover {
+  color: var(--workspace-accent, #22c55e);
+}
+
+.tasks-drawer-replies {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0 var(--space-3);
+  padding: 0 0 0 var(--space-3);
+  border-left: 2px solid var(--border-hex);
+  list-style: none;
+}
+
 .tasks-drawer-comment-form {
   display: flex;
   flex-direction: column;
@@ -1015,4 +1076,81 @@
   .tasks-drawer-fields {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* Activity feed settings ---------------------------------------------------- */
+
+.tasks-settings-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--foreground-hex);
+  accent-color: var(--workspace-accent, #22c55e);
+}
+
+.tasks-settings-number {
+  width: 96px;
+}
+
+.tasks-settings-event-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-3);
+}
+
+.tasks-settings-event-group {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.tasks-settings-event-group:disabled {
+  opacity: 0.5;
+}
+
+/* GitHub issue link ------------------------------------------------------- */
+
+.tasks-github-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.tasks-github-field-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.tasks-github-field input[aria-invalid='true'] {
+  border-color: var(--destructive-hex);
+}
+
+.tasks-github-open {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+}
+
+.tasks-github-error {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--destructive-hex);
+}
+
+.tasks-github-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.tasks-github-link:hover {
+  color: var(--workspace-accent, #22c55e);
+  text-decoration: underline;
 }

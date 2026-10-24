@@ -66,7 +66,7 @@ class TasksStorePort(ABC):
 
     @abstractmethod
     async def delete_task(self, workspace_id: str, task_id: str) -> bool:
-        """Remove a task with its comments and activity. False when nothing was stored."""
+        """Remove a task with its comments; its activity stays. False when nothing was stored."""
 
     @abstractmethod
     async def list_comments(self, workspace_id: str, task_id: str) -> list[Comment]:
@@ -77,12 +77,22 @@ class TasksStorePort(ABC):
         """Store a new comment."""
 
     @abstractmethod
+    async def delete_comment(self, workspace_id: str, task_id: str, comment_id: str) -> None:
+        """Remove a comment and its replies."""
+
+    @abstractmethod
     async def list_activity(self, workspace_id: str, task_id: str) -> list[ActivityEntry]:
         """Activity of a task, oldest first."""
 
     @abstractmethod
     async def add_activity(self, entries: list[ActivityEntry]) -> None:
         """Store new activity entries."""
+
+    @abstractmethod
+    async def list_workspace_activity(
+        self, workspace_id: str, *, fields: tuple[str, ...], limit: int
+    ) -> list[ActivityEntry]:
+        """The workspace's latest events of these kinds, newest first, deleted tasks included."""
 
 
 class TasksMemberDirectoryPort(ABC):

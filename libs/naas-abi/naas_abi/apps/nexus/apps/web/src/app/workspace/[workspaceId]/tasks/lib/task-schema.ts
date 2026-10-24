@@ -14,7 +14,7 @@ import {
   type ViewConfig,
 } from '@/components/database-view/model';
 import type { DatabaseViewsOptions } from '@/components/database-view/use-database-views';
-import { choiceLabel, parseIsoDate, type TasksSettings, type Task } from '@/lib/tasks';
+import { choiceLabel, githubIssueRef, parseIsoDate, type TasksSettings, type Task } from '@/lib/tasks';
 
 export type TaskPropertyKey =
   | 'title'
@@ -23,6 +23,7 @@ export type TaskPropertyKey =
   | 'priority'
   | 'workspace'
   | 'labels'
+  | 'github_issue'
   | 'due_date'
   | 'iteration'
   | 'content'
@@ -80,6 +81,8 @@ export function createTaskSchema(ctx: TaskSchemaContext): TaskSchema {
     },
     { key: 'workspace', label: 'Workspace', type: 'select', values: (t) => one(ctx.workspaceName(t.workspace_id)) },
     { key: 'labels', label: 'Labels', type: 'multi', values: (t) => t.labels.filter(Boolean) },
+    // Shown, filtered and grouped as "owner/repo#42"; the task stores the URL.
+    { key: 'github_issue', label: 'GitHub issue', type: 'url', values: (t) => one(githubIssueRef(t.github_issue_url)) },
     {
       key: 'due_date',
       label: 'Due date',
@@ -115,7 +118,7 @@ export function createTaskSchema(ctx: TaskSchemaContext): TaskSchema {
 }
 
 export const TASK_PROPERTY_KEYS: TaskPropertyKey[] = [
-  'title', 'stage', 'assignees', 'priority', 'workspace', 'labels', 'due_date', 'iteration',
+  'title', 'stage', 'assignees', 'priority', 'workspace', 'labels', 'github_issue', 'due_date', 'iteration',
   'content', 'created_by', 'created_at', 'updated_by', 'updated_at',
 ];
 

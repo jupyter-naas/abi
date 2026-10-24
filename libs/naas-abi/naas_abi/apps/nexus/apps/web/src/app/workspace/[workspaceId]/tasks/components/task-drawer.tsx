@@ -1,14 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Archive, ArchiveRestore, Plus, Trash2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, CornerDownRight, Plus, Reply, Trash2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Popover } from '@/components/database-view/primitives';
+import { describeTaskEvent } from '@/lib/task-events';
 import {
   tasksApi,
   choiceLabel,
-  type TaskActivity,
   type TaskComment,
+  type TaskActivity,
   type TaskIteration,
   type TasksMember,
   type TasksSettings,
@@ -18,50 +19,12 @@ import {
 import { formatDate } from '../lib/task-schema';
 import { Avatars } from './task-card';
 import { MarkdownEditor } from './markdown-editor';
+import { GithubIssueInput } from './github-issue-input';
 
 function formatTimestamp(value: string | null): string {
   if (!value) return '';
   const date = new Date(value.endsWith('Z') ? value : `${value}Z`);
   return date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
-function asList(value: unknown): string[] {
-  return Array.isArray(value) ? value.map(String) : [];
-}
-
-export function describeActivity(
-  entry: TaskActivity,
-  names: {
-    member: (id: string) => string;
-    iteration: (id: string | null) => string;
-    stage: (key: string) => string;
-  },
-): string {
-  switch (entry.field) {
-    case 'created':
-      return 'created the task';
-    case 'stage':
-      return `moved it from ${names.stage(String(entry.old_value))} to ${names.stage(String(entry.new_value))}`;
-    case 'assignees': {
-      const before = asList(entry.old_value);
-      const after = asList(entry.new_value);
-      const added = after.filter((id) => !before.includes(id)).map(names.member);
-      const removed = before.filter((id) => !after.includes(id)).map(names.member);
-      const parts = [
-        added.length ? `assigned ${added.join(', ')}` : '',
-        removed.length ? `unassigned ${removed.join(', ')}` : '',
-      ].filter(Boolean);
-      return parts.join(' and ') || 'changed the assignees';
-    }
-    case 'iteration':
-      return `moved it from ${names.iteration(entry.old_value as string | null)} to ${names.iteration(
-        entry.new_value as string | null,
-      )}`;
-    case 'archived':
-      return entry.new_value ? 'archived the task' : 'restored the task';
-    default:
-      return `changed ${entry.field}`;
-  }
 }
 
 export function ChipEditor({
@@ -135,6 +98,10 @@ export function TaskDrawer({
   onArchive,
   onDelete,
   onClose,
+  currentUserId,
+  canModerate,
+  confirmRemoveComment,
+  onFeedChange,
 }: {
   workspaceId: string;
   task: Task;
@@ -152,6 +119,13 @@ export function TaskDrawer({
   onArchive: (archived: boolean) => Promise<unknown>;
   onDelete: () => Promise<unknown>;
   onClose: () => void;
+  /** The viewer: they may remove their own comments. */
+  currentUserId: string | null;
+  /** Owners and admins may remove anyone's comment. */
+  canModerate: boolean;
+  confirmRemoveComment: (comment: TaskComment) => Promise<boolean>;
+  /** A comment was added or removed: the workspace feed has a new event. */
+  onFeedChange: () => void;
 }) {
   const [title, setTitle] = useState(task.title);
   const [content, setContent] = useState(task.content);
@@ -159,6 +133,9 @@ export function TaskDrawer({
   const [comments, setComments] = useState<TaskComment[]>([]);
   const [activity, setActivity] = useState<TaskActivity[]>([]);
   const [commentDraft, setCommentDraft] = useState('');
+  const [githubIssue, setGithubIssue] = useState(task.github_issue_url);
+  const [replyTo, setReplyTo] = useState<string | null>(null);
+  const [replyDraft, setReplyDraft] = useState('');
   const [posting, setPosting] = useState(false);
   const [feedError, setFeedError] = useState<string | null>(null);
 
@@ -166,7 +143,8 @@ export function TaskDrawer({
   useEffect(() => {
     setTitle(task.title);
     setContent(task.content);
-  }, [task.id, task.title, task.content]);
+    setGithubIssue(task.github_issue_url);
+  }, [task.id, task.title, task.content, task.github_issue_url]);
 
   const loadFeed = useCallback(async () => {
     try {
@@ -212,21 +190,72 @@ export function TaskDrawer({
     save({ assignee_ids: next });
   };
 
-  const postComment = async () => {
-    const body = commentDraft.trim();
-    if (!body) return;
+  /** A new comment, or a reply when ``parentId`` is set. */
+  const postComment = async (body: string, parentId?: string) => {
+    const text = body.trim();
+    if (!text) return false;
     setPosting(true);
     try {
-      const created = await tasksApi.addComment(workspaceId, task.id, body);
+      const created = await tasksApi.addComment(workspaceId, task.id, text, parentId);
       setComments((prev) => [...prev, created]);
-      setCommentDraft('');
       setFeedError(null);
+      void loadFeed();
+      onFeedChange();
+      return true;
     } catch (e) {
       setFeedError((e as Error).message);
+      return false;
     } finally {
       setPosting(false);
     }
   };
+
+  const removeComment = async (comment: TaskComment) => {
+    if (!(await confirmRemoveComment(comment))) return;
+    try {
+      await tasksApi.deleteComment(workspaceId, task.id, comment.id);
+      // Its replies go with it.
+      setComments((prev) => prev.filter((c) => c.id !== comment.id && c.parent_id !== comment.id));
+      setFeedError(null);
+      void loadFeed();
+      onFeedChange();
+    } catch (e) {
+      setFeedError((e as Error).message);
+    }
+  };
+
+  const threads = comments.filter((c) => !c.parent_id);
+  const repliesOf = (id: string) => comments.filter((c) => c.parent_id === id);
+
+  const renderComment = (comment: TaskComment, threadId: string) => (
+    <div className="tasks-drawer-comment">
+      <span className="tasks-drawer-feed-meta">
+        {comment.author_id ? memberName(comment.author_id) : 'Former member'} · {formatTimestamp(comment.created_at)}
+      </span>
+      <p className="tasks-drawer-comment-body">{comment.body}</p>
+      <span className="tasks-drawer-comment-actions">
+        <button
+          type="button"
+          className="tasks-drawer-comment-action"
+          onClick={() => {
+            setReplyTo(threadId);
+            setReplyDraft('');
+          }}
+        >
+          <Reply size={12} /> Reply
+        </button>
+        {(comment.author_id === currentUserId || canModerate) && (
+          <button
+            type="button"
+            className="tasks-drawer-comment-action"
+            onClick={() => void removeComment(comment)}
+          >
+            <Trash2 size={12} /> Remove
+          </button>
+        )}
+      </span>
+    </div>
+  );
 
   const iterationName = (id: string | null) => (id ? iterationLabel(id) : 'Backlog');
 
@@ -353,6 +382,16 @@ export function TaskDrawer({
               onChange={(e) => save({ due_date: e.target.value || null })}
             />
 
+            <label className="tasks-drawer-label" htmlFor="tasks-task-github">GitHub issue</label>
+            <GithubIssueInput
+              id="tasks-task-github"
+              value={githubIssue}
+              onChange={setGithubIssue}
+              onCommit={() =>
+                githubIssue.trim() !== task.github_issue_url && save({ github_issue_url: githubIssue.trim() })
+              }
+            />
+
             <span className="tasks-drawer-label">Labels</span>
             <ChipEditor
               values={task.labels}
@@ -399,14 +438,56 @@ export function TaskDrawer({
             {tab === 'comments' ? (
               <div className="mt-3 space-y-3">
                 <ul className="tasks-drawer-feed">
-                  {comments.length === 0 && <li className="tasks-drawer-feed-meta">No comments yet.</li>}
-                  {comments.map((comment) => (
-                    <li key={comment.id} className="tasks-drawer-feed-item">
-                      <span className="tasks-drawer-feed-meta">
-                        {comment.author_id ? memberName(comment.author_id) : 'Former member'} ·{' '}
-                        {formatTimestamp(comment.created_at)}
-                      </span>
-                      <p className="tasks-drawer-comment-body">{comment.body}</p>
+                  {threads.length === 0 && <li className="tasks-drawer-feed-meta">No comments yet.</li>}
+                  {threads.map((thread) => (
+                    <li key={thread.id} className="tasks-drawer-feed-item">
+                      {renderComment(thread, thread.id)}
+                      {(repliesOf(thread.id).length > 0 || replyTo === thread.id) && (
+                        <ul className="tasks-drawer-replies">
+                          {repliesOf(thread.id).map((reply) => (
+                            <li key={reply.id} className="tasks-drawer-feed-item">
+                              {renderComment(reply, thread.id)}
+                            </li>
+                          ))}
+                          {replyTo === thread.id && (
+                            <li className="tasks-drawer-comment-form">
+                              <textarea
+                                autoFocus
+                                className="tasks-drawer-textarea"
+                                value={replyDraft}
+                                maxLength={5000}
+                                placeholder="Write a reply…"
+                                onChange={(e) => setReplyDraft(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Escape') {
+                                    e.stopPropagation();
+                                    e.nativeEvent.stopImmediatePropagation();
+                                    setReplyTo(null);
+                                  }
+                                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                                    void postComment(replyDraft, thread.id).then((ok) => ok && setReplyTo(null));
+                                  }
+                                }}
+                              />
+                              <span className="tasks-drawer-comment-actions">
+                                <button type="button" className="tasks-button" onClick={() => setReplyTo(null)}>
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  className="tasks-button tasks-button-accent"
+                                  disabled={posting || !replyDraft.trim()}
+                                  onClick={() =>
+                                    void postComment(replyDraft, thread.id).then((ok) => ok && setReplyTo(null))
+                                  }
+                                >
+                                  <CornerDownRight size={12} /> Reply
+                                </button>
+                              </span>
+                            </li>
+                          )}
+                        </ul>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -418,14 +499,16 @@ export function TaskDrawer({
                     placeholder="Write a comment…"
                     onChange={(e) => setCommentDraft(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void postComment();
+                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                        void postComment(commentDraft).then((ok) => ok && setCommentDraft(''));
+                      }
                     }}
                   />
                   <button
                     type="button"
-                    className="tasks-button tasks-button-primary"
+                    className="tasks-button tasks-button-accent"
                     disabled={posting || !commentDraft.trim()}
-                    onClick={() => void postComment()}
+                    onClick={() => void postComment(commentDraft).then((ok) => ok && setCommentDraft(''))}
                   >
                     Comment
                   </button>
@@ -436,10 +519,11 @@ export function TaskDrawer({
                 {activity.map((entry) => (
                   <li key={entry.id} className="tasks-drawer-feed-item">
                     <strong>{entry.actor_id ? memberName(entry.actor_id) : 'Someone'}</strong>{' '}
-                    {describeActivity(entry, {
+                    {describeTaskEvent(entry, {
                       member: memberName,
                       iteration: iterationName,
                       stage: (key) => choiceLabel(settings.stages, key),
+                      priority: (key) => choiceLabel(settings.priorities, key),
                     })}
                     <span className="tasks-drawer-feed-meta">{formatTimestamp(entry.created_at)}</span>
                   </li>

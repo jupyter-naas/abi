@@ -301,6 +301,7 @@ export function ViewBar<R, K extends string, T extends string>({
   actions,
   tabs,
   iconOnly = false,
+  singleRow = false,
 }: {
   api: DatabaseViewsApi<K, T>;
   schema: DatabaseSchema<R, K>;
@@ -309,9 +310,10 @@ export function ViewBar<R, K extends string, T extends string>({
   records: R[];
   search: string;
   onSearchChange: (value: string) => void;
-  count: number;
+  /** Records shown; left out, the bar shows no count. */
+  count?: number;
   /** "3 apps", "1 task". */
-  countLabel: (count: number) => string;
+  countLabel?: (count: number) => string;
   defaultFilterProperty: K;
   /** Layouts that always need a grouping axis (a board's columns). */
   groupedTypes?: T[];
@@ -323,6 +325,8 @@ export function ViewBar<R, K extends string, T extends string>({
   tabs?: ReactNode;
   /** Filter, Sort, Group and Properties as icons only (name in the tooltip). */
   iconOnly?: boolean;
+  /** Tabs and tools on one row at any width: the tabs scroll, the tools stay compact. */
+  singleRow?: boolean;
 }) {
   const view = api.activeView;
   const activeFilters = view.filters.length;
@@ -352,11 +356,24 @@ export function ViewBar<R, K extends string, T extends string>({
   const titleLabel = schema.propertyByKey[schema.titleKey].label;
 
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border/50 px-4">
-      {tabs ?? <ViewTabs api={api} viewTypes={viewTypes} groupByForType={groupByForType} />}
+    <div
+      className={cn(
+        'flex items-center border-b border-border/50',
+        singleRow ? 'flex-nowrap gap-2 px-2 sm:px-4' : 'flex-wrap gap-x-2 gap-y-1 px-4',
+      )}
+    >
+      {singleRow ? (
+        <div className="min-w-0 flex-1">
+          {tabs ?? <ViewTabs api={api} viewTypes={viewTypes} groupByForType={groupByForType} />}
+        </div>
+      ) : (
+        (tabs ?? <ViewTabs api={api} viewTypes={viewTypes} groupByForType={groupByForType} />)
+      )}
 
-      <div className="ml-auto flex items-center gap-1 py-1">
-        <span className="hidden pr-1 text-xs text-muted-foreground sm:inline">{countLabel(count)}</span>
+      <div className={cn('ml-auto flex items-center gap-1 py-1', singleRow && 'shrink-0')}>
+        {count !== undefined && countLabel && (
+          <span className="hidden pr-1 text-xs text-muted-foreground sm:inline">{countLabel(count)}</span>
+        )}
 
         <div className="relative">
           <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -364,7 +381,10 @@ export function ViewBar<R, K extends string, T extends string>({
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Search"
-            className="h-8 w-36 border bg-background pl-7 pr-2 text-xs focus:w-52 focus:outline-none focus:ring-1 focus:ring-workspace-accent/40"
+            className={cn(
+              'h-8 border bg-background pl-7 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-workspace-accent/40',
+              singleRow ? 'w-24 focus:w-36 sm:w-32 sm:focus:w-44' : 'w-36 focus:w-52',
+            )}
           />
         </div>
 

@@ -11,10 +11,22 @@ from naas_abi.apps.nexus.apps.api.app.services.tasks.service import TasksService
 from naas_abi.apps.nexus.apps.api.app.services.tasks.tasks__schema import (
     ACTIVITY_ARCHIVED,
     ACTIVITY_ASSIGNEES,
+    ACTIVITY_COMMENT_ADDED,
+    ACTIVITY_COMMENT_REMOVED,
+    ACTIVITY_COMMENT_REPLIED,
+    ACTIVITY_CONTENT,
     ACTIVITY_CREATED,
+    ACTIVITY_DELETED,
+    ACTIVITY_DUE_DATE,
+    ACTIVITY_GITHUB_ISSUE,
     ACTIVITY_ITERATION,
+    ACTIVITY_KINDS,
+    ACTIVITY_LABELS,
+    ACTIVITY_PRIORITY,
     ACTIVITY_STAGE,
+    ACTIVITY_TITLE,
     TasksAssigneeError,
+    TasksForbiddenError,
     TasksNotFoundError,
     TasksSettings,
     TasksValidationError,
@@ -198,12 +210,40 @@ async def test_update_records_audit_and_activity(service: TasksService):
     assert activity[-1].actor_id == BOB
 
 
-async def test_update_without_tracked_change_records_no_activity(service: TasksService):
+async def test_unchanged_fields_record_no_activity(service: TasksService):
     task = await service.create_task(WS, {"title": "T"}, user_id=ALICE)
 
-    await service.update_task(WS, task.id, {"title": "Renamed", "stage": "inbox"}, user_id=ALICE)
+    await service.update_task(WS, task.id, {"title": "T", "stage": "inbox"}, user_id=ALICE)
 
     assert [a.field for a in await service.list_activity(WS, task.id)] == [ACTIVITY_CREATED]
+
+
+async def test_each_changed_field_records_an_event_named_after_the_task(service: TasksService):
+    task = await service.create_task(WS, {"title": "Spec"}, user_id=ALICE)
+
+    await service.update_task(
+        WS,
+        task.id,
+        {
+            "title": "Write the spec",
+            "content": "## Scope",
+            "priority": "high",
+            "due_date": date(2026, 11, 2),
+            "labels": ["Data"],
+        },
+        user_id=BOB,
+    )
+
+    events = (await service.list_activity(WS, task.id))[1:]
+    assert [(e.field, e.old_value, e.new_value) for e in events] == [
+        (ACTIVITY_TITLE, "Spec", "Write the spec"),
+        (ACTIVITY_CONTENT, None, None),
+        (ACTIVITY_PRIORITY, None, "high"),
+        (ACTIVITY_DUE_DATE, None, "2026-11-02"),
+        (ACTIVITY_LABELS, [], ["Data"]),
+    ]
+    assert {e.task_title for e in events} == {"Write the spec"}
+    assert {e.actor_id for e in events} == {BOB}
 
 
 async def test_assign_and_unassign_members(service: TasksService):
@@ -232,7 +272,7 @@ async def test_tasks_are_workspace_scoped(service: TasksService):
     with pytest.raises(TasksNotFoundError):
         await service.update_task(OTHER_WS, task.id, {"title": "x"}, user_id=ALICE)
     with pytest.raises(TasksNotFoundError):
-        await service.delete_task(OTHER_WS, task.id)
+        await service.delete_task(OTHER_WS, task.id, user_id=ALICE)
     # A task cannot be moved into another workspace's iteration.
     with pytest.raises(TasksNotFoundError):
         await service.update_task(WS, task.id, {"iteration_id": other_iteration.id}, user_id=ALICE)
@@ -273,16 +313,167 @@ async def test_archive_hides_and_restore_recovers(service: TasksService):
     ]
 
 
-async def test_delete_removes_task_comments_and_activity(service: TasksService):
+async def test_delete_removes_the_task_and_comments_but_keeps_its_history(
+    service: TasksService,
+):
     task = await service.create_task(WS, {"title": "T"}, user_id=ALICE)
     await service.add_comment(WS, task.id, "Hello", user_id=ALICE)
 
-    await service.delete_task(WS, task.id)
+    await service.delete_task(WS, task.id, user_id=BOB)
 
     with pytest.raises(TasksNotFoundError):
         await service.list_comments(WS, task.id)
     with pytest.raises(TasksNotFoundError):
-        await service.delete_task(WS, task.id)
+        await service.delete_task(WS, task.id, user_id=BOB)
+    latest = (await service.list_feed(WS))[0]
+    assert (latest.field, latest.task_title, latest.actor_id) == (ACTIVITY_DELETED, "T", BOB)
+
+
+async def test_a_task_links_to_a_github_issue(service: TasksService):
+    task = await service.create_task(
+        WS,
+        {
+            "title": "T",
+            "github_issue_url": " https://github.com/acme/abi/issues/42/#issuecomment-1 ",
+        },
+        user_id=ALICE,
+    )
+    assert task.github_issue_url == "https://github.com/acme/abi/issues/42"
+
+    task = await service.update_task(WS, task.id, {"github_issue_url": None}, user_id=BOB)
+
+    assert task.github_issue_url == ""
+    unlinked = (await service.list_activity(WS, task.id))[-1]
+    assert (unlinked.field, unlinked.old_value, unlinked.new_value) == (
+        ACTIVITY_GITHUB_ISSUE,
+        "https://github.com/acme/abi/issues/42",
+        None,
+    )
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "github.com/acme/abi/issues/42",
+        "https://github.com/acme/abi/pull/42",
+        "https://gitlab.com/acme/abi/issues/42",
+        "https://github.com/acme/abi/issues/",
+    ],
+)
+async def test_other_links_are_not_github_issues(service: TasksService, url: str):
+    with pytest.raises(TasksValidationError):
+        await service.create_task(WS, {"title": "T", "github_issue_url": url}, user_id=ALICE)
+
+
+# ---------------------------------------------------------------------------
+# Comments
+# ---------------------------------------------------------------------------
+
+
+async def test_replies_join_the_thread_of_the_comment_they_answer(service: TasksService):
+    task = await service.create_task(WS, {"title": "T"}, user_id=ALICE)
+    root = await service.add_comment(WS, task.id, "Ready to start?", user_id=ALICE)
+
+    reply = await service.add_comment(WS, task.id, "Yes", user_id=BOB, parent_id=root.id)
+    nested = await service.add_comment(WS, task.id, "Great", user_id=ALICE, parent_id=reply.id)
+
+    assert reply.parent_id == root.id
+    assert nested.parent_id == root.id
+    events = (await service.list_activity(WS, task.id))[1:]
+    assert [(e.field, e.old_value, e.new_value) for e in events] == [
+        (ACTIVITY_COMMENT_ADDED, None, "Ready to start?"),
+        (ACTIVITY_COMMENT_REPLIED, ALICE, "Yes"),
+        (ACTIVITY_COMMENT_REPLIED, BOB, "Great"),
+    ]
+    with pytest.raises(TasksNotFoundError):
+        await service.add_comment(WS, task.id, "?", user_id=BOB, parent_id="missing")
+
+
+async def test_comment_events_quote_a_short_excerpt(service: TasksService):
+    task = await service.create_task(WS, {"title": "T"}, user_id=ALICE)
+
+    await service.add_comment(WS, task.id, "word " * 100, user_id=ALICE)
+
+    excerpt = (await service.list_activity(WS, task.id))[-1].new_value
+    assert len(excerpt) == 120
+    assert excerpt.endswith("…")
+
+
+async def test_only_the_author_or_a_moderator_removes_a_comment(service: TasksService):
+    task = await service.create_task(WS, {"title": "T"}, user_id=ALICE)
+    root = await service.add_comment(WS, task.id, "Mine", user_id=ALICE)
+    await service.add_comment(WS, task.id, "Reply", user_id=BOB, parent_id=root.id)
+
+    with pytest.raises(TasksForbiddenError):
+        await service.delete_comment(WS, task.id, root.id, user_id=BOB, can_moderate=False)
+    await service.delete_comment(WS, task.id, root.id, user_id=BOB, can_moderate=True)
+
+    assert await service.list_comments(WS, task.id) == []
+    removed = (await service.list_activity(WS, task.id))[-1]
+    assert (removed.field, removed.old_value, removed.new_value) == (
+        ACTIVITY_COMMENT_REMOVED,
+        "Mine",
+        ALICE,
+    )
+
+
+async def test_authors_remove_their_own_comment(service: TasksService):
+    task = await service.create_task(WS, {"title": "T"}, user_id=ALICE)
+    comment = await service.add_comment(WS, task.id, "Oops", user_id=BOB)
+
+    await service.delete_comment(WS, task.id, comment.id, user_id=BOB, can_moderate=False)
+
+    assert await service.list_comments(WS, task.id) == []
+
+
+# ---------------------------------------------------------------------------
+# Feed
+# ---------------------------------------------------------------------------
+
+
+async def test_feed_lists_workspace_events_newest_first(service: TasksService):
+    first = await service.create_task(WS, {"title": "First"}, user_id=ALICE)
+    await service.create_task(OTHER_WS, {"title": "Elsewhere"}, user_id=ALICE)
+    await service.update_task(WS, first.id, {"stage": "ready"}, user_id=BOB)
+
+    feed = await service.list_feed(WS)
+
+    assert [(e.field, e.task_title) for e in feed] == [
+        (ACTIVITY_STAGE, "First"),
+        (ACTIVITY_CREATED, "First"),
+    ]
+
+
+async def test_feed_follows_the_settings(service: TasksService):
+    task = await service.create_task(WS, {"title": "T"}, user_id=ALICE)
+    for n in range(3):
+        await service.add_comment(WS, task.id, f"c{n}", user_id=ALICE)
+
+    await service.update_settings(
+        WS,
+        {"feed_events": [ACTIVITY_COMMENT_ADDED, ACTIVITY_CREATED], "feed_limit": 5},
+        today=THURSDAY,
+        user_id=ALICE,
+    )
+    assert len(await service.list_feed(WS)) == 4
+
+    await service.update_settings(
+        WS, {"feed_events": [ACTIVITY_COMMENT_ADDED]}, today=THURSDAY, user_id=ALICE
+    )
+    assert [e.new_value for e in await service.list_feed(WS)] == ["c2", "c1", "c0"]
+
+    await service.update_settings(WS, {"feed_enabled": False}, today=THURSDAY, user_id=ALICE)
+    assert await service.list_feed(WS) == []
+
+
+async def test_feed_settings_are_validated(service: TasksService):
+    assert (await service.get_settings(WS)).feed_events == ACTIVITY_KINDS
+    with pytest.raises(TasksValidationError):
+        await service.update_settings(
+            WS, {"feed_events": ["exploded"]}, today=THURSDAY, user_id=ALICE
+        )
+    with pytest.raises(TasksValidationError):
+        await service.update_settings(WS, {"feed_limit": 1000}, today=THURSDAY, user_id=ALICE)
 
 
 # ---------------------------------------------------------------------------

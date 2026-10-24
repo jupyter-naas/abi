@@ -3,7 +3,8 @@
 Every route takes ``workspace_id`` and needs workspace access plus the
 ``tasks`` feature for the caller's role. By default only workspace owners and
 admins have it; an organization or workspace override can open it to members.
-Changing the tasks settings also takes the owner or admin role.
+Changing the tasks settings also takes the owner or admin role, and so does
+removing someone else's comment.
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ from naas_abi.apps.nexus.apps.api.app.services.tasks.tasks__schema import (
     Comment,
     Iteration,
     Task,
+    TasksForbiddenError,
     TasksNotFoundError,
     TasksSettings,
     TasksValidationError,
@@ -70,6 +72,8 @@ async def _require_tasks(user_id: str, workspace_id: str) -> str:
 def _http_error(exc: Exception) -> HTTPException:
     if isinstance(exc, TasksNotFoundError):
         return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    if isinstance(exc, TasksForbiddenError):
+        return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
 
@@ -100,6 +104,7 @@ class TaskOut(BaseModel):
     iteration_id: str | None
     priority: str | None
     due_date: date | None
+    github_issue_url: str
     labels: list[str]
     assignee_ids: list[str]
     archived: bool
@@ -116,6 +121,7 @@ class CommentOut(BaseModel):
     author_id: str | None
     body: str
     created_at: datetime
+    parent_id: str | None = None
 
 
 class ActivityOut(BaseModel):
@@ -126,6 +132,8 @@ class ActivityOut(BaseModel):
     old_value: Any = None
     new_value: Any = None
     created_at: datetime | None
+    # The task's title when it happened (the task may be deleted since).
+    task_title: str = ""
 
 
 class CarryOverOut(BaseModel):
@@ -149,6 +157,7 @@ class TaskCreateIn(BaseModel):
     iteration_id: str | None = None
     priority: str | None = None
     due_date: date | None = None
+    github_issue_url: str = Field(default="", max_length=1000)
     labels: list[str] = Field(default_factory=list, max_length=100)
     assignee_ids: list[str] = Field(default_factory=list, max_length=100)
 
@@ -162,6 +171,7 @@ class TaskPatchIn(BaseModel):
     iteration_id: str | None = None
     priority: str | None = None
     due_date: date | None = None
+    github_issue_url: str | None = Field(default=None, max_length=1000)
     labels: list[str] | None = Field(default=None, max_length=100)
     assignee_ids: list[str] | None = Field(default=None, max_length=100)
 
@@ -181,6 +191,9 @@ class SettingsOut(BaseModel):
     priorities: list[ChoiceIO]
     default_stage: str
     suggested_labels: list[str]
+    feed_enabled: bool
+    feed_events: list[str]
+    feed_limit: int
     updated_by: str | None
     updated_at: datetime | None
     # Whether the caller may save changes (owners and admins).
@@ -194,12 +207,18 @@ class SettingsIn(BaseModel):
     priorities: list[ChoiceIO] = Field(max_length=50)
     default_stage: str
     suggested_labels: list[str] = Field(default_factory=list, max_length=100)
+    # Sidebar feed; left out, the current values stay.
+    feed_enabled: bool | None = None
+    feed_events: list[str] | None = Field(default=None, max_length=50)
+    feed_limit: int | None = None
     # The caller's local date: a new iteration rhythm starts after its ongoing iteration.
     today: date
 
 
 class CommentIn(BaseModel):
     body: str = Field(max_length=MAX_COMMENT_LENGTH * 2)
+    # The comment this one replies to.
+    parent_id: str | None = None
 
 
 def _settings_out(settings: TasksSettings, *, can_edit: bool) -> SettingsOut:
@@ -211,6 +230,9 @@ def _settings_out(settings: TasksSettings, *, can_edit: bool) -> SettingsOut:
         priorities=[ChoiceIO(key=c.key, label=c.label, color=c.color) for c in settings.priorities],
         default_stage=settings.default_stage,
         suggested_labels=list(settings.suggested_labels),
+        feed_enabled=settings.feed_enabled,
+        feed_events=list(settings.feed_events),
+        feed_limit=settings.feed_limit,
         updated_by=settings.updated_by,
         updated_at=settings.updated_at,
         can_edit=can_edit,
@@ -242,6 +264,7 @@ def _task_out(task: Task) -> TaskOut:
         iteration_id=task.iteration_id,
         priority=task.priority,
         due_date=task.due_date,
+        github_issue_url=task.github_issue_url,
         labels=list(task.labels),
         assignee_ids=list(task.assignee_ids),
         archived=task.archived,
@@ -260,6 +283,7 @@ def _comment_out(comment: Comment) -> CommentOut:
         author_id=comment.author_id,
         body=comment.body,
         created_at=comment.created_at,
+        parent_id=comment.parent_id,
     )
 
 
@@ -272,6 +296,7 @@ def _activity_out(entry: ActivityEntry) -> ActivityOut:
         old_value=entry.old_value,
         new_value=entry.new_value,
         created_at=entry.created_at,
+        task_title=entry.task_title,
     )
 
 
@@ -307,13 +332,29 @@ async def update_settings(
     try:
         settings = await service.update_settings(
             workspace_id,
-            body.model_dump(exclude={"today"}),
+            body.model_dump(exclude={"today"}, exclude_none=True),
             today=body.today,
             user_id=current_user.id,
         )
     except TasksValidationError as exc:
         raise _http_error(exc) from exc
     return _settings_out(settings, can_edit=True)
+
+
+# ---------------------------------------------------------------------------
+# Feed
+# ---------------------------------------------------------------------------
+
+
+@router.get("/feed")
+async def list_feed(
+    workspace_id: str = Query(...),
+    current_user: User = Depends(get_current_user_required),
+    service: TasksService = Depends(get_tasks_service),
+) -> list[ActivityOut]:
+    """The workspace's latest task events for the sidebar, as the settings configure it."""
+    await _require_tasks(current_user.id, workspace_id)
+    return [_activity_out(e) for e in await service.list_feed(workspace_id)]
 
 
 # ---------------------------------------------------------------------------
@@ -489,7 +530,7 @@ async def delete_task(
 ) -> Response:
     await _require_tasks(current_user.id, workspace_id)
     try:
-        await service.delete_task(workspace_id, task_id)
+        await service.delete_task(workspace_id, task_id, user_id=current_user.id)
     except TasksNotFoundError as exc:
         raise _http_error(exc) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -526,11 +567,33 @@ async def add_comment(
     await _require_tasks(current_user.id, workspace_id)
     try:
         comment = await service.add_comment(
-            workspace_id, task_id, body.body, user_id=current_user.id
+            workspace_id, task_id, body.body, user_id=current_user.id, parent_id=body.parent_id
         )
     except (TasksNotFoundError, TasksValidationError) as exc:
         raise _http_error(exc) from exc
     return _comment_out(comment)
+
+
+@router.delete("/{task_id}/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_comment(
+    task_id: str,
+    comment_id: str,
+    workspace_id: str = Query(...),
+    current_user: User = Depends(get_current_user_required),
+    service: TasksService = Depends(get_tasks_service),
+) -> Response:
+    role = await _require_tasks(current_user.id, workspace_id)
+    try:
+        await service.delete_comment(
+            workspace_id,
+            task_id,
+            comment_id,
+            user_id=current_user.id,
+            can_moderate=role in SETTINGS_ROLES,
+        )
+    except (TasksNotFoundError, TasksForbiddenError) as exc:
+        raise _http_error(exc) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{task_id}/activity")

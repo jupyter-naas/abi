@@ -986,6 +986,8 @@ class TaskModel(Base):
     priority = Column(String(16), nullable=True)
     due_date = Column(Date, nullable=True)
     labels = Column(Text, nullable=False, default="[]")  # JSON list
+    # https://github.com/<owner>/<repo>/issues/<number>, or empty.
+    github_issue_url = Column(String(500), nullable=False, default="")
     assignee_ids = Column(Text, nullable=False, default="[]")  # JSON list
     archived_at = Column(DateTime(timezone=False), nullable=True)
     created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
@@ -1001,18 +1003,25 @@ class TaskCommentModel(Base):
     workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
     task_id = Column(String(48), ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
     author_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # The comment this one replies to; replies go with it.
+    parent_id = Column(
+        String(48), ForeignKey("task_comments.id", ondelete="CASCADE"), nullable=True
+    )
     body = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
 
 
 class TaskActivityModel(Base):
-    """A recorded change on a task: stage, assignees, iteration, archive state."""
+    """A task event: a change, a comment, its deletion. Outlives the task (feed history)."""
 
     __tablename__ = "task_activity"
 
     id = Column(String(48), primary_key=True)
     workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
-    task_id = Column(String(48), ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    # No foreign key: a deleted task's events stay in the workspace feed.
+    task_id = Column(String(48), nullable=False)
+    # The task's title when the event happened.
+    task_title = Column(String(300), nullable=False, default="")
     actor_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     field = Column(String(32), nullable=False)
     old_value = Column(Text, nullable=True)  # JSON

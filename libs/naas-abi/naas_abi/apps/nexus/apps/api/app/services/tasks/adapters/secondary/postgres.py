@@ -17,6 +17,7 @@ from naas_abi.apps.nexus.apps.api.app.services.tasks.port import (
     TasksStorePort,
 )
 from naas_abi.apps.nexus.apps.api.app.services.tasks.tasks__schema import (
+    ACTIVITY_KINDS,
     ActivityEntry,
     Choice,
     Comment,
@@ -72,6 +73,9 @@ def _settings_to_json(settings: TasksSettings) -> str:
             "priorities": [vars(c) for c in settings.priorities],
             "default_stage": settings.default_stage,
             "suggested_labels": list(settings.suggested_labels),
+            "feed_enabled": settings.feed_enabled,
+            "feed_events": list(settings.feed_events),
+            "feed_limit": settings.feed_limit,
         }
     )
 
@@ -95,6 +99,13 @@ def _settings(row: TasksSettingsModel) -> TasksSettings:
         priorities=choices(data.get("priorities"), defaults.priorities),
         default_stage=str(data.get("default_stage", defaults.default_stage)),
         suggested_labels=_json_list(json.dumps(data.get("suggested_labels", []))),
+        feed_enabled=bool(data.get("feed_enabled", defaults.feed_enabled)),
+        feed_events=tuple(
+            str(kind)
+            for kind in data.get("feed_events", defaults.feed_events)
+            if kind in ACTIVITY_KINDS
+        ),
+        feed_limit=int(data.get("feed_limit", defaults.feed_limit)),
         updated_by=row.updated_by,  # type: ignore[arg-type]
         updated_at=row.updated_at,  # type: ignore[arg-type]
     )
@@ -110,6 +121,7 @@ def _task(row: TaskModel) -> Task:
         iteration_id=row.iteration_id,  # type: ignore[arg-type]
         priority=row.priority,  # type: ignore[arg-type]
         due_date=row.due_date,  # type: ignore[arg-type]
+        github_issue_url=str(row.github_issue_url or ""),
         labels=_json_list(row.labels),
         assignee_ids=_json_list(row.assignee_ids),
         archived_at=row.archived_at,  # type: ignore[arg-type]
@@ -240,6 +252,7 @@ class PostgresTasksStore(TasksStorePort):
             "stage": task.stage,
             "priority": task.priority,
             "due_date": task.due_date,
+            "github_issue_url": task.github_issue_url,
             "labels": json.dumps(list(task.labels)),
             "assignee_ids": json.dumps(list(task.assignee_ids)),
             "archived_at": task.archived_at,
@@ -263,9 +276,9 @@ class PostgresTasksStore(TasksStorePort):
             exists = (await db.execute(select(TaskModel.id).where(scope))).first()
             if exists is None:
                 return False
-            # Explicit deletes: SQLite test databases do not enforce ON DELETE CASCADE.
+            # Explicit delete: SQLite test databases do not enforce ON DELETE CASCADE.
+            # Activity stays: the workspace feed keeps the deletion and what came before.
             await db.execute(delete(TaskCommentModel).where(TaskCommentModel.task_id == task_id))
-            await db.execute(delete(TaskActivityModel).where(TaskActivityModel.task_id == task_id))
             await db.execute(delete(TaskModel).where(scope))
             await db.commit()
             return True
@@ -286,6 +299,7 @@ class PostgresTasksStore(TasksStorePort):
                     author_id=row.author_id,  # type: ignore[arg-type]
                     body=str(row.body),
                     created_at=row.created_at,  # type: ignore[arg-type]
+                    parent_id=row.parent_id,  # type: ignore[arg-type]
                 )
                 for row in result.scalars().all()
             ]
@@ -298,9 +312,24 @@ class PostgresTasksStore(TasksStorePort):
                     workspace_id=comment.workspace_id,
                     task_id=comment.task_id,
                     author_id=comment.author_id,
+                    parent_id=comment.parent_id,
                     body=comment.body,
                     created_at=comment.created_at,
                 )
+            )
+            await db.commit()
+
+    async def delete_comment(self, workspace_id: str, task_id: str, comment_id: str) -> None:
+        scope = (TaskCommentModel.workspace_id == workspace_id) & (
+            TaskCommentModel.task_id == task_id
+        )
+        async with AsyncSessionLocal() as db:
+            # Replies first: SQLite test databases do not enforce ON DELETE CASCADE.
+            await db.execute(
+                delete(TaskCommentModel).where(scope & (TaskCommentModel.parent_id == comment_id))
+            )
+            await db.execute(
+                delete(TaskCommentModel).where(scope & (TaskCommentModel.id == comment_id))
             )
             await db.commit()
 
@@ -312,19 +341,7 @@ class PostgresTasksStore(TasksStorePort):
                     & (TaskActivityModel.task_id == task_id)
                 )
             )
-            return [
-                ActivityEntry(
-                    id=str(row.id),
-                    workspace_id=str(row.workspace_id),
-                    task_id=str(row.task_id),
-                    actor_id=row.actor_id,  # type: ignore[arg-type]
-                    field=str(row.field),
-                    old_value=_json_value(row.old_value),
-                    new_value=_json_value(row.new_value),
-                    created_at=row.created_at,  # type: ignore[arg-type]
-                )
-                for row in result.scalars().all()
-            ]
+            return [_activity(row) for row in result.scalars().all()]
 
     async def add_activity(self, entries: list[ActivityEntry]) -> None:
         if not entries:
@@ -336,6 +353,7 @@ class PostgresTasksStore(TasksStorePort):
                         id=entry.id,
                         workspace_id=entry.workspace_id,
                         task_id=entry.task_id,
+                        task_title=entry.task_title,
                         actor_id=entry.actor_id,
                         field=entry.field,
                         old_value=json.dumps(entry.old_value),
@@ -344,6 +362,37 @@ class PostgresTasksStore(TasksStorePort):
                     )
                 )
             await db.commit()
+
+    async def list_workspace_activity(
+        self, workspace_id: str, *, fields: tuple[str, ...], limit: int
+    ) -> list[ActivityEntry]:
+        if not fields:
+            return []
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(TaskActivityModel)
+                .where(
+                    (TaskActivityModel.workspace_id == workspace_id)
+                    & TaskActivityModel.field.in_(fields)
+                )
+                .order_by(TaskActivityModel.created_at.desc(), TaskActivityModel.id.desc())
+                .limit(limit)
+            )
+            return [_activity(row) for row in result.scalars().all()]
+
+
+def _activity(row: TaskActivityModel) -> ActivityEntry:
+    return ActivityEntry(
+        id=str(row.id),
+        workspace_id=str(row.workspace_id),
+        task_id=str(row.task_id),
+        task_title=str(row.task_title or ""),
+        actor_id=row.actor_id,  # type: ignore[arg-type]
+        field=str(row.field),
+        old_value=_json_value(row.old_value),
+        new_value=_json_value(row.new_value),
+        created_at=row.created_at,  # type: ignore[arg-type]
+    )
 
 
 class PostgresTasksMemberDirectory(TasksMemberDirectoryPort):

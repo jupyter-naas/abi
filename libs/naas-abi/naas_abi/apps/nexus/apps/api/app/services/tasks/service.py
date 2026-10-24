@@ -22,9 +22,21 @@ from naas_abi.apps.nexus.apps.api.app.services.tasks.port import (
 from naas_abi.apps.nexus.apps.api.app.services.tasks.tasks__schema import (
     ACTIVITY_ARCHIVED,
     ACTIVITY_ASSIGNEES,
+    ACTIVITY_COMMENT_ADDED,
+    ACTIVITY_COMMENT_REMOVED,
+    ACTIVITY_COMMENT_REPLIED,
+    ACTIVITY_CONTENT,
     ACTIVITY_CREATED,
+    ACTIVITY_DELETED,
+    ACTIVITY_DUE_DATE,
+    ACTIVITY_GITHUB_ISSUE,
     ACTIVITY_ITERATION,
+    ACTIVITY_KINDS,
+    ACTIVITY_LABELS,
+    ACTIVITY_PRIORITY,
     ACTIVITY_STAGE,
+    ACTIVITY_TITLE,
+    COMMENT_EXCERPT_LENGTH,
     DEFAULT_STAGE,
     DONE_STAGE,
     EDITABLE_TASK_FIELDS,
@@ -34,12 +46,15 @@ from naas_abi.apps.nexus.apps.api.app.services.tasks.tasks__schema import (
     MAX_CHOICES,
     MAX_COMMENT_LENGTH,
     MAX_CONTENT_LENGTH,
+    MAX_FEED_LIMIT,
+    MAX_GITHUB_ISSUE_URL_LENGTH,
     MAX_GOAL_LENGTH,
     MAX_ITERATION_WEEKS,
     MAX_LABEL_LENGTH,
     MAX_LABELS,
     MAX_SUGGESTED_LABELS,
     MAX_TITLE_LENGTH,
+    MIN_FEED_LIMIT,
     MIN_ITERATION_WEEKS,
     PALETTE,
     ActivityEntry,
@@ -49,6 +64,7 @@ from naas_abi.apps.nexus.apps.api.app.services.tasks.tasks__schema import (
     Iteration,
     Task,
     TasksAssigneeError,
+    TasksForbiddenError,
     TasksNotFoundError,
     TasksSettings,
     TasksValidationError,
@@ -189,6 +205,17 @@ class TasksService:
                 f"Up to {MAX_SUGGESTED_LABELS} labels of {MAX_LABEL_LENGTH} characters"
             )
 
+        feed_events = tuple(raw.get("feed_events", current.feed_events))
+        unknown_events = sorted(set(feed_events) - set(ACTIVITY_KINDS))
+        if unknown_events:
+            raise TasksValidationError(f"Unknown feed events: {', '.join(unknown_events)}")
+        feed_limit = _int_in(
+            raw.get("feed_limit", current.feed_limit),
+            "Feed length",
+            MIN_FEED_LIMIT,
+            MAX_FEED_LIMIT,
+        )
+
         await self._refuse_removed_in_use(
             workspace_id,
             removed_stages=set(current.stage_keys) - {s.key for s in stages},
@@ -217,6 +244,10 @@ class TasksService:
             priorities=priorities,
             default_stage=default_stage,
             suggested_labels=labels,
+            feed_enabled=bool(raw.get("feed_enabled", current.feed_enabled)),
+            # Kept in the settings' order, whatever order the client sent.
+            feed_events=tuple(kind for kind in ACTIVITY_KINDS if kind in feed_events),
+            feed_limit=feed_limit,
             updated_by=user_id,
             updated_at=self._clock(),
         )
@@ -326,9 +357,13 @@ class TasksService:
         )
         return updated
 
-    async def delete_task(self, workspace_id: str, task_id: str) -> None:
+    async def delete_task(self, workspace_id: str, task_id: str, *, user_id: str) -> None:
+        task = await self.get_task(workspace_id, task_id)
         if not await self._store.delete_task(workspace_id, task_id):
             raise TasksNotFoundError(f"Task {task_id} not found")
+        await self._store.add_activity(
+            [self._activity(task, user_id, ACTIVITY_DELETED, now=self._clock())]
+        )
 
     async def carry_over(
         self, workspace_id: str, iteration_id: str, *, user_id: str
@@ -357,9 +392,16 @@ class TasksService:
         return sorted(comments, key=lambda c: (c.created_at, c.id))
 
     async def add_comment(
-        self, workspace_id: str, task_id: str, body: str, *, user_id: str
+        self,
+        workspace_id: str,
+        task_id: str,
+        body: str,
+        *,
+        user_id: str,
+        parent_id: str | None = None,
     ) -> Comment:
-        await self.get_task(workspace_id, task_id)
+        task = await self.get_task(workspace_id, task_id)
+        parent = await self._comment(workspace_id, task_id, parent_id) if parent_id else None
         cleaned = body.strip()
         if not cleaned:
             raise TasksValidationError("A comment cannot be empty")
@@ -372,14 +414,72 @@ class TasksService:
             author_id=user_id,
             body=cleaned,
             created_at=self._clock(),
+            # One level of threads: a reply to a reply joins the same thread.
+            parent_id=(parent.parent_id or parent.id) if parent else None,
         )
         await self._store.add_comment(comment)
+        await self._store.add_activity(
+            [
+                self._activity(
+                    task,
+                    user_id,
+                    ACTIVITY_COMMENT_REPLIED if parent else ACTIVITY_COMMENT_ADDED,
+                    # A reply records whose comment it answers.
+                    parent.author_id if parent else None,
+                    _excerpt(cleaned),
+                    now=comment.created_at,
+                )
+            ]
+        )
         return comment
+
+    async def delete_comment(
+        self,
+        workspace_id: str,
+        task_id: str,
+        comment_id: str,
+        *,
+        user_id: str,
+        can_moderate: bool,
+    ) -> None:
+        """Remove a comment and its replies: its author, or an owner or admin."""
+        task = await self.get_task(workspace_id, task_id)
+        comment = await self._comment(workspace_id, task_id, comment_id)
+        if comment.author_id != user_id and not can_moderate:
+            raise TasksForbiddenError("Only its author or a workspace admin can remove a comment")
+        await self._store.delete_comment(workspace_id, task_id, comment_id)
+        await self._store.add_activity(
+            [
+                self._activity(
+                    task,
+                    user_id,
+                    ACTIVITY_COMMENT_REMOVED,
+                    _excerpt(comment.body),
+                    comment.author_id,
+                    now=self._clock(),
+                )
+            ]
+        )
+
+    async def _comment(self, workspace_id: str, task_id: str, comment_id: str) -> Comment:
+        for comment in await self._store.list_comments(workspace_id, task_id):
+            if comment.id == comment_id:
+                return comment
+        raise TasksNotFoundError(f"Comment {comment_id} not found")
 
     async def list_activity(self, workspace_id: str, task_id: str) -> list[ActivityEntry]:
         await self.get_task(workspace_id, task_id)
         entries = await self._store.list_activity(workspace_id, task_id)
         return sorted(entries, key=lambda a: a.created_at or datetime.min)
+
+    async def list_feed(self, workspace_id: str) -> list[ActivityEntry]:
+        """The sidebar feed: the latest events of the kinds the settings show, newest first."""
+        settings = await self.get_settings(workspace_id)
+        if not settings.feed_enabled:
+            return []
+        return await self._store.list_workspace_activity(
+            workspace_id, fields=settings.feed_events, limit=settings.feed_limit
+        )
 
     # ------------------------------------------------------------------
     # Helpers
@@ -438,6 +538,8 @@ class TasksService:
                         f"Labels are limited to {MAX_LABEL_LENGTH} characters"
                     )
                 values[key] = labels
+            elif key == "github_issue_url":
+                values[key] = _github_issue_url(raw)
             elif key == "assignee_ids":
                 assignees = _unique(str(user) for user in raw or [])
                 if len(assignees) > MAX_ASSIGNEES:
@@ -455,34 +557,38 @@ class TasksService:
     def _tracked_changes(
         self, before: Task, after: Task, user_id: str, now: datetime
     ) -> list[ActivityEntry]:
-        entries: list[ActivityEntry] = []
+        """One event per changed field, named after the task's new title."""
+        changes: list[tuple[str, Any, Any]] = []
+        if before.title != after.title:
+            changes.append((ACTIVITY_TITLE, before.title, after.title))
+        if before.content != after.content:
+            # Content can be long: the event says it changed, the task holds the text.
+            changes.append((ACTIVITY_CONTENT, None, None))
         if before.stage != after.stage:
-            entries.append(
-                self._activity(before, user_id, ACTIVITY_STAGE, before.stage, after.stage, now=now)
-            )
+            changes.append((ACTIVITY_STAGE, before.stage, after.stage))
         if before.assignee_ids != after.assignee_ids:
-            entries.append(
-                self._activity(
-                    before,
-                    user_id,
-                    ACTIVITY_ASSIGNEES,
-                    list(before.assignee_ids),
-                    list(after.assignee_ids),
-                    now=now,
+            changes.append(
+                (ACTIVITY_ASSIGNEES, list(before.assignee_ids), list(after.assignee_ids))
+            )
+        if before.priority != after.priority:
+            changes.append((ACTIVITY_PRIORITY, before.priority, after.priority))
+        if before.due_date != after.due_date:
+            changes.append((ACTIVITY_DUE_DATE, _iso(before.due_date), _iso(after.due_date)))
+        if before.labels != after.labels:
+            changes.append((ACTIVITY_LABELS, list(before.labels), list(after.labels)))
+        if before.github_issue_url != after.github_issue_url:
+            changes.append(
+                (
+                    ACTIVITY_GITHUB_ISSUE,
+                    before.github_issue_url or None,
+                    after.github_issue_url or None,
                 )
             )
         if before.iteration_id != after.iteration_id:
-            entries.append(
-                self._activity(
-                    before,
-                    user_id,
-                    ACTIVITY_ITERATION,
-                    before.iteration_id,
-                    after.iteration_id,
-                    now=now,
-                )
-            )
-        return entries
+            changes.append((ACTIVITY_ITERATION, before.iteration_id, after.iteration_id))
+        return [
+            self._activity(after, user_id, field, old, new, now=now) for field, old, new in changes
+        ]
 
     @staticmethod
     def _activity(
@@ -503,7 +609,40 @@ class TasksService:
             old_value=old_value,
             new_value=new_value,
             created_at=now,
+            task_title=task.title,
         )
+
+
+# https://github.com/<owner>/<repo>/issues/<number>, optionally with a #fragment or ?query.
+_GITHUB_ISSUE_RE = re.compile(
+    r"^https://github\.com/([A-Za-z0-9-]+)/([A-Za-z0-9._-]+)/issues/(\d+)/?(?:[?#].*)?$"
+)
+
+
+def _github_issue_url(raw: Any) -> str:
+    """The canonical issue URL (no query, fragment or trailing slash), or empty."""
+    url = str(raw or "").strip()
+    if not url:
+        return ""
+    match = _GITHUB_ISSUE_RE.match(url)
+    if len(url) > MAX_GITHUB_ISSUE_URL_LENGTH or match is None:
+        raise TasksValidationError(
+            "A GitHub issue URL looks like https://github.com/<owner>/<repo>/issues/<number>"
+        )
+    owner, repo, number = match.groups()
+    return f"https://github.com/{owner}/{repo}/issues/{number}"
+
+
+def _iso(day: date | None) -> str | None:
+    return day.isoformat() if day else None
+
+
+def _excerpt(body: str) -> str:
+    """A comment's first characters, on one line, for its event."""
+    text = " ".join(body.split())
+    if len(text) <= COMMENT_EXCERPT_LENGTH:
+        return text
+    return text[: COMMENT_EXCERPT_LENGTH - 1].rstrip() + "…"
 
 
 def _unique(values: Iterable[str]) -> tuple[str, ...]:
