@@ -4,8 +4,8 @@ import { reorderScopes } from './scope-tabs';
 
 describe('reorderScopes', () => {
   it('drops a tab after a tab to its right and before a tab to its left', () => {
-    expect(reorderScopes(TASK_SCOPES, 'current', 'next')).toEqual(['last', 'next', 'current', 'inbox', 'backlog']);
-    expect(reorderScopes(TASK_SCOPES, 'backlog', 'last')).toEqual(['current', 'backlog', 'last', 'next', 'inbox']);
+    expect(reorderScopes(TASK_SCOPES, 'last', 'next')).toEqual(['inbox', 'backlog', 'current', 'next', 'last']);
+    expect(reorderScopes(TASK_SCOPES, 'next', 'backlog')).toEqual(['inbox', 'next', 'backlog', 'last', 'current']);
   });
 
   it('leaves the order alone when a tab is dropped on itself', () => {

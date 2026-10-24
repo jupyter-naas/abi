@@ -61,6 +61,8 @@ const VIEW_TYPES: ViewTypeDef<TaskViewType>[] = [
 
 /** Groupings whose columns a card can be dragged between. */
 const DRAGGABLE_GROUPS: TaskPropertyKey[] = ['stage', 'priority'];
+/** Scopes backed by an iteration, in the order the Iteration dropdown offers them. */
+const ITERATION_SCOPES = ['next', 'current', 'last'] as const;
 
 /** What dropping a card on a board column changes, per grouping property. */
 function fieldsForGroup(
@@ -79,7 +81,8 @@ function fieldsForGroup(
 
 /** The viewer's tab order, per workspace (a browser convenience, not shared). */
 function useTabOrder(workspaceId: string) {
-  const key = `nexus.tasks.tab-order.${workspaceId}`;
+  // v2: the default order changed (Inbox, Backlog, Last, Current, Next); older saved orders are dropped.
+  const key = `nexus.tasks.tab-order.v2.${workspaceId}`;
   const [order, setOrder] = useState<TasksScope[]>(TASK_SCOPES);
   useEffect(() => {
     try {
@@ -179,9 +182,15 @@ export default function TasksPage() {
       const iteration = iterationById.get(iterationId);
       if (!iteration) return 'Another iteration';
       const range = formatWeekRange(iteration.start_date, iteration.end_date);
-      return iteration.id === store.currentIteration?.id ? `${range} (current)` : range;
+      const scope = ITERATION_SCOPES.find((target) => store.scopes[target]?.id === iteration.id);
+      return scope ? `${range} (${scope})` : range;
     },
-    [iterationById, store.currentIteration],
+    [iterationById, store.scopes],
+  );
+  /** Last / current / next iterations not created yet: still offered when moving a task. */
+  const pendingScopes = useMemo(
+    () => ITERATION_SCOPES.filter((target) => !store.scopes[target] && (target === 'current' || store.scopes.current)),
+    [store.scopes],
   );
 
   const { settings } = store;
@@ -557,6 +566,8 @@ export default function TasksPage() {
           task={openTask}
           iterations={store.iterations}
           iterationLabel={iterationLabel}
+          pendingScopes={pendingScopes}
+          resolveScopeIteration={store.iterationIdFor}
           members={store.members}
           memberName={store.memberName}
           workspaceName={workspaceName}

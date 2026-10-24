@@ -9,6 +9,7 @@ import { TASKS_CHANGED_EVENT } from '@/stores/tasks';
 import {
   tasksApi,
   choiceLabel,
+  SCOPE_LABELS,
   type TaskComment,
   type TaskActivity,
   type TaskIteration,
@@ -21,6 +22,9 @@ import { formatDate } from '../lib/task-schema';
 import { Avatars } from './task-card';
 import { MarkdownEditor } from './markdown-editor';
 import { GithubIssueInput } from './github-issue-input';
+
+/** Iteration choice standing for a scope whose iteration is created on select. */
+const PENDING_SCOPE = 'scope:';
 
 function formatTimestamp(value: string | null): string {
   if (!value) return '';
@@ -90,6 +94,8 @@ export function TaskDrawer({
   task,
   iterations,
   iterationLabel,
+  pendingScopes = [],
+  resolveScopeIteration,
   members,
   memberName,
   workspaceName,
@@ -108,6 +114,10 @@ export function TaskDrawer({
   task: Task;
   iterations: TaskIteration[];
   iterationLabel: (iterationId: string) => string;
+  /** Last / current / next iterations that do not exist yet, still offered as targets. */
+  pendingScopes?: readonly ('last' | 'current' | 'next')[];
+  /** Creates a pending scope's iteration and returns its id. */
+  resolveScopeIteration?: (scope: 'last' | 'current' | 'next') => Promise<string | null>;
   members: TasksMember[];
   memberName: (userId: string) => string;
   /** Display name of the task's workspace (it stores the id). */
@@ -182,6 +192,13 @@ export function TaskDrawer({
 
   const save = (fields: TaskFields) => {
     void onUpdate(fields).catch(() => undefined);
+  };
+
+  const moveToIteration = async (value: string) => {
+    if (!value.startsWith(PENDING_SCOPE)) return save({ iteration_id: value || null });
+    const scope = value.slice(PENDING_SCOPE.length) as 'last' | 'current' | 'next';
+    const iterationId = await resolveScopeIteration?.(scope).catch(() => null);
+    if (iterationId) save({ iteration_id: iterationId });
   };
 
   const commitTitle = () => {
@@ -355,9 +372,14 @@ export function TaskDrawer({
               id="tasks-task-iteration"
               className="tasks-drawer-select"
               value={task.iteration_id ?? ''}
-              onChange={(e) => save({ iteration_id: e.target.value || null })}
+              onChange={(e) => void moveToIteration(e.target.value)}
             >
               <option value="">Backlog</option>
+              {pendingScopes.map((scope) => (
+                <option key={scope} value={`${PENDING_SCOPE}${scope}`}>
+                  {SCOPE_LABELS[scope]}
+                </option>
+              ))}
               {[...iterations].reverse().map((iteration) => (
                 <option key={iteration.id} value={iteration.id}>
                   {iterationLabel(iteration.id)}

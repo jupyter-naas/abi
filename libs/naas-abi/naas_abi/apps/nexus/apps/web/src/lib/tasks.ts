@@ -259,7 +259,8 @@ export function formatWeekRange(start: string, end: string, locale?: string): st
 
 export type TasksScope = 'current' | 'last' | 'next' | 'inbox' | 'backlog';
 
-export const TASK_SCOPES: TasksScope[] = ['current', 'last', 'next', 'inbox', 'backlog'];
+/** Tab order: triage first, then the iterations oldest to newest. Current stays the default tab. */
+export const TASK_SCOPES: TasksScope[] = ['inbox', 'backlog', 'last', 'current', 'next'];
 
 export const SCOPE_LABELS: Record<TasksScope, string> = {
   current: 'Current iteration',

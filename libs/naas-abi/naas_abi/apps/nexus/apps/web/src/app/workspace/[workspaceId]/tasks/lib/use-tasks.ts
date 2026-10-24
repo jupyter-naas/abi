@@ -109,6 +109,8 @@ export function useTasks(workspaceId: string, scope: TasksScope, showArchived: b
     day,
     iteration,
     currentIteration: scopes.current,
+    scopes,
+    iterationIdFor,
     iterations,
     members,
     memberName,
