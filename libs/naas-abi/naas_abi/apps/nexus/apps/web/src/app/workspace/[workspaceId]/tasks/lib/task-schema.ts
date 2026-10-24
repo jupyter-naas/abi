@@ -21,7 +21,7 @@ export type TaskPropertyKey =
   | 'stage'
   | 'assignees'
   | 'priority'
-  | 'project'
+  | 'workspace'
   | 'labels'
   | 'due_date'
   | 'iteration'
@@ -38,6 +38,8 @@ export type TaskSchema = DatabaseSchema<Task, TaskPropertyKey>;
 export interface TaskSchemaContext {
   /** Display name of a user id; unknown ids still render. */
   memberName: (userId: string) => string;
+  /** Display name of a workspace id; the task stores the id. */
+  workspaceName: (workspaceId: string) => string;
   /** Display name of an iteration id ("Oct 19 – Oct 25"). */
   iterationLabel: (iterationId: string) => string;
   /** Stages and priorities, in their configured order. */
@@ -76,7 +78,7 @@ export function createTaskSchema(ctx: TaskSchemaContext): TaskSchema {
       values: (t) => one(choiceLabel(ctx.settings.priorities, t.priority)),
       options: ctx.settings.priorities.map((p) => p.label),
     },
-    { key: 'project', label: 'Project', type: 'select', values: (t) => one(t.project) },
+    { key: 'workspace', label: 'Workspace', type: 'select', values: (t) => one(ctx.workspaceName(t.workspace_id)) },
     { key: 'labels', label: 'Labels', type: 'multi', values: (t) => t.labels.filter(Boolean) },
     {
       key: 'due_date',
@@ -113,7 +115,7 @@ export function createTaskSchema(ctx: TaskSchemaContext): TaskSchema {
 }
 
 export const TASK_PROPERTY_KEYS: TaskPropertyKey[] = [
-  'title', 'stage', 'assignees', 'priority', 'project', 'labels', 'due_date', 'iteration',
+  'title', 'stage', 'assignees', 'priority', 'workspace', 'labels', 'due_date', 'iteration',
   'content', 'created_by', 'created_at', 'updated_by', 'updated_at',
 ];
 
@@ -126,7 +128,7 @@ export const TASK_VIEW_TYPE_LABELS: Record<TaskViewType, string> = {
 
 const DEFAULT_VISIBLE: Record<TaskViewType, TaskPropertyKey[]> = {
   board: ['assignees', 'priority', 'labels', 'due_date'],
-  table: ['stage', 'assignees', 'priority', 'project', 'labels', 'due_date', 'updated_at'],
+  table: ['stage', 'assignees', 'priority', 'labels', 'due_date', 'updated_at'],
   gallery: ['stage', 'assignees', 'priority', 'labels', 'due_date'],
   calendar: [],
 };
@@ -163,7 +165,7 @@ export const ITERATION_VIEWS = taskViews('nexus.tasks.iteration-view', createTas
 /** Inbox: one group per day the requests came in, newest day and request first. */
 export const INBOX_VIEWS = taskViews('nexus.tasks.inbox-view.v2', {
   ...createTaskView('table', 'Inbox'),
-  visible: ['assignees', 'priority', 'project', 'labels', 'created_by', 'created_at'],
+  visible: ['assignees', 'priority', 'labels', 'created_by', 'created_at'],
   sort: { property: 'created_at', direction: 'desc' },
   groupBy: 'created_at',
 });
@@ -171,7 +173,7 @@ export const INBOX_VIEWS = taskViews('nexus.tasks.inbox-view.v2', {
 /** Backlog: one group per priority, Urgent to Low, newest first within each. */
 export const BACKLOG_VIEWS = taskViews('nexus.tasks.backlog-view.v2', {
   ...createTaskView('table', 'Backlog'),
-  visible: ['stage', 'assignees', 'priority', 'project', 'labels', 'due_date'],
+  visible: ['stage', 'assignees', 'priority', 'labels', 'due_date'],
   sort: { property: 'created_at', direction: 'desc' },
   groupBy: 'priority',
 });

@@ -48,7 +48,6 @@ DEFAULT_ITERATION_ANCHOR = date(2024, 1, 1)
 
 MAX_TITLE_LENGTH = 300
 MAX_CONTENT_LENGTH = 20_000
-MAX_PROJECT_LENGTH = 120
 MAX_LABEL_LENGTH = 40
 MAX_LABELS = 20
 MAX_ASSIGNEES = 50
@@ -69,7 +68,6 @@ EDITABLE_TASK_FIELDS: frozenset[str] = frozenset(
         "content",
         "stage",
         "iteration_id",
-        "project",
         "priority",
         "due_date",
         "labels",
@@ -208,7 +206,6 @@ class Task:
     content: str = ""
     stage: str = DEFAULT_STAGE
     iteration_id: str | None = None
-    project: str = ""
     priority: str | None = None
     due_date: date | None = None
     labels: tuple[str, ...] = ()

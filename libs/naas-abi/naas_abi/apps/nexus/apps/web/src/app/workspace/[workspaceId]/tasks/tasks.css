@@ -2,6 +2,7 @@
    The toolbar and layouts come from components/database-view. */
 
 .tasks-page {
+  position: relative;
   display: flex;
   height: 100%;
   flex-direction: column;
@@ -88,43 +89,6 @@
   font-size: var(--font-size-xs);
   line-height: var(--line-height-xs);
   color: var(--muted-foreground-hex);
-}
-
-.tasks-iteration-goal {
-  display: flex;
-  min-width: 200px;
-  flex: 1;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--font-size-sm);
-  color: var(--muted-foreground-hex);
-}
-
-.tasks-iteration-goal-label {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.tasks-iteration-goal-input {
-  min-width: 0;
-  flex: 1;
-  padding: var(--space-1) var(--space-2);
-  border: 1px solid transparent;
-  border-radius: var(--org-border-radius, 0px);
-  background: none;
-  font-size: var(--font-size-sm);
-  color: var(--foreground-hex);
-}
-
-.tasks-iteration-goal-input:hover {
-  border-color: var(--border-hex);
-}
-
-.tasks-iteration-goal-input:focus {
-  border-color: var(--color-primary);
-  outline: none;
 }
 
 .tasks-iteration-actions {
@@ -478,23 +442,14 @@
   width: auto;
 }
 
+.tasks-column-add:not(.tasks-column-add-inline) {
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+}
+
 .tasks-column-add:hover {
   background-color: var(--muted-bg-hex);
   color: var(--foreground-hex);
-}
-
-.tasks-column-add-input {
-  width: 100%;
-  padding: var(--space-2);
-  border: 1px solid var(--color-primary);
-  border-radius: var(--org-border-radius, 0px);
-  background-color: var(--background-hex);
-  font-size: var(--font-size-sm);
-  color: var(--foreground-hex);
-}
-
-.tasks-column-add-input:focus {
-  outline: none;
 }
 
 /* Task drawer ---------------------------------------------------------------- */
@@ -519,6 +474,204 @@
   border-left: 1px solid var(--border-hex);
   background-color: var(--background-hex);
   box-shadow: var(--glass-shadow);
+}
+
+/* New task dialog: centered on the Tasks page, below the shell's navigation. */
+.tasks-create-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+}
+
+.tasks-create-backdrop {
+  position: absolute;
+  inset: 0;
+  background-color: #0f172a;
+  opacity: 0.25;
+}
+
+.tasks-create-dialog {
+  position: relative;
+  display: flex;
+  width: min(640px, 100%);
+  max-height: 100%;
+  flex-direction: column;
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--background-hex);
+  box-shadow: var(--glass-shadow);
+}
+
+/* Workspace colors inside the dialog: checkboxes, date picker, Assign. */
+.tasks-create-dialog {
+  accent-color: var(--workspace-accent, #22c55e);
+}
+
+.tasks-create-dialog .tasks-column-add:hover {
+  background-color: color-mix(in srgb, var(--workspace-accent, #22c55e) 10%, transparent);
+  color: var(--workspace-accent, #22c55e);
+}
+
+.tasks-button-accent {
+  border-color: var(--workspace-accent, #22c55e);
+  background-color: var(--workspace-accent, #22c55e);
+  color: #fff;
+}
+
+.tasks-button-accent:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--workspace-accent, #22c55e) 90%, #000);
+}
+
+.tasks-create-prop-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tasks-drawer-readonly {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--muted-foreground-hex);
+}
+
+/* Markdown content: rendered until clicked, then its source (Notion style). */
+.tasks-markdown,
+.tasks-markdown-source {
+  width: 100%;
+  min-height: 160px;
+  padding: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--org-border-radius, 0px);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-md);
+  color: var(--foreground-hex);
+}
+
+.tasks-markdown {
+  cursor: text;
+  overflow-wrap: anywhere;
+}
+
+.tasks-markdown:hover {
+  background-color: var(--muted-bg-hex);
+}
+
+.tasks-markdown:focus-visible {
+  border-color: var(--border-hex);
+  outline: none;
+  box-shadow: none;
+}
+
+.tasks-markdown-source {
+  display: block;
+  resize: none;
+  overflow: hidden;
+  border-color: var(--border-hex);
+  background-color: var(--input-bg-hex);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--font-size-xs);
+}
+
+.tasks-markdown-source:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.tasks-markdown-hint {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground-hex);
+}
+
+.tasks-markdown-placeholder {
+  color: var(--muted-foreground-hex);
+}
+
+.tasks-markdown > * + * {
+  margin-top: var(--space-2);
+}
+
+.tasks-markdown h1 {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.tasks-markdown h2 {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+}
+
+.tasks-markdown h3 {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.tasks-markdown ul {
+  padding-left: 1.25rem;
+  list-style: disc;
+}
+
+.tasks-markdown ol {
+  padding-left: 1.25rem;
+  list-style: decimal;
+}
+
+.tasks-markdown li.task-list-item {
+  margin-left: -1.25rem;
+  list-style: none;
+}
+
+.tasks-markdown li.task-list-item input {
+  margin-right: var(--space-1);
+  accent-color: var(--workspace-accent, #22c55e);
+}
+
+.tasks-markdown a {
+  color: var(--workspace-accent, #22c55e);
+  text-decoration: underline;
+}
+
+.tasks-markdown code {
+  padding: 0 0.25rem;
+  border-radius: 3px;
+  background-color: var(--muted-bg-hex);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.9em;
+}
+
+.tasks-markdown pre {
+  overflow-x: auto;
+  padding: var(--space-2);
+  background-color: var(--muted-bg-hex);
+}
+
+.tasks-markdown pre code {
+  padding: 0;
+  background: none;
+}
+
+.tasks-markdown blockquote {
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--border-hex);
+  color: var(--muted-foreground-hex);
+}
+
+.tasks-markdown table {
+  border-collapse: collapse;
+}
+
+.tasks-markdown th,
+.tasks-markdown td {
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-hex);
+}
+
+.tasks-markdown hr {
+  border-color: var(--border-hex);
 }
 
 .tasks-drawer-header {
@@ -547,8 +700,9 @@
 }
 
 .tasks-drawer-title:focus {
-  border-color: var(--color-primary);
+  border-color: var(--border-hex);
   outline: none;
+  box-shadow: none;
 }
 
 .tasks-drawer-body {
@@ -587,8 +741,9 @@
 .tasks-drawer-input:focus,
 .tasks-drawer-select:focus,
 .tasks-drawer-textarea:focus {
-  border-color: var(--color-primary);
+  border-color: var(--border-hex);
   outline: none;
+  box-shadow: none;
 }
 
 .tasks-drawer-textarea {
@@ -636,6 +791,7 @@
 
 .tasks-drawer-chip-input:focus {
   outline: none;
+  box-shadow: none;
 }
 
 .tasks-drawer-member-option {

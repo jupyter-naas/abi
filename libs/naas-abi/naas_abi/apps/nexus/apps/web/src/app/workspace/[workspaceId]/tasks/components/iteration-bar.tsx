@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { Archive, Forward } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SCOPE_LABELS, formatWeekRange, parseIsoDate, type TaskIteration, type TasksScope } from '@/lib/tasks';
@@ -17,23 +16,18 @@ export function IterationBar({
   showArchived,
   canCarryOver,
   onToggleArchived,
-  onSaveGoal,
   onCarryOver,
 }: {
   scope: TasksScope;
   /** A day inside the shown iteration; null for Inbox and Backlog. */
   day: string | null;
-  /** The scope's iteration; null until a task or a goal creates it. */
+  /** The scope's iteration; null until a task creates it. */
   iteration: TaskIteration | null;
   showArchived: boolean;
   canCarryOver: boolean;
   onToggleArchived: () => void;
-  onSaveGoal: (goal: string) => void;
   onCarryOver: () => void;
 }) {
-  const [goal, setGoal] = useState(iteration?.goal ?? '');
-  useEffect(() => setGoal(iteration?.goal ?? ''), [iteration?.id, iteration?.goal]);
-
   return (
     <div className="tasks-iteration-bar">
       <div className="tasks-iteration-heading">
@@ -46,21 +40,6 @@ export function IterationBar({
               : SCOPE_DESCRIPTIONS[scope]}
         </span>
       </div>
-      {day && (
-        <label className="tasks-iteration-goal">
-          <span className="tasks-iteration-goal-label">Goal</span>
-          <input
-            className="tasks-iteration-goal-input"
-            value={goal}
-            maxLength={200}
-            placeholder="One line on what this iteration delivers"
-            onChange={(e) => setGoal(e.target.value)}
-            onBlur={() => goal.trim() !== (iteration?.goal ?? '') && onSaveGoal(goal.trim())}
-            onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
-          />
-        </label>
-      )}
-
       <div className="tasks-iteration-actions">
         {(scope === 'current' || scope === 'last') && (
           <button

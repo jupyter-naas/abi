@@ -27,7 +27,6 @@ from naas_abi.apps.nexus.apps.api.app.services.tasks.tasks__schema import (
     MAX_COMMENT_LENGTH,
     MAX_CONTENT_LENGTH,
     MAX_GOAL_LENGTH,
-    MAX_PROJECT_LENGTH,
     MAX_TITLE_LENGTH,
     ActivityEntry,
     Comment,
@@ -99,7 +98,6 @@ class TaskOut(BaseModel):
     content: str
     stage: str
     iteration_id: str | None
-    project: str
     priority: str | None
     due_date: date | None
     labels: list[str]
@@ -149,7 +147,6 @@ class TaskCreateIn(BaseModel):
     content: str = Field(default="", max_length=MAX_CONTENT_LENGTH)
     stage: str | None = None
     iteration_id: str | None = None
-    project: str = Field(default="", max_length=MAX_PROJECT_LENGTH * 2)
     priority: str | None = None
     due_date: date | None = None
     labels: list[str] = Field(default_factory=list, max_length=100)
@@ -163,7 +160,6 @@ class TaskPatchIn(BaseModel):
     content: str | None = Field(default=None, max_length=MAX_CONTENT_LENGTH)
     stage: str | None = None
     iteration_id: str | None = None
-    project: str | None = Field(default=None, max_length=MAX_PROJECT_LENGTH * 2)
     priority: str | None = None
     due_date: date | None = None
     labels: list[str] | None = Field(default=None, max_length=100)
@@ -244,7 +240,6 @@ def _task_out(task: Task) -> TaskOut:
         content=task.content,
         stage=task.stage,
         iteration_id=task.iteration_id,
-        project=task.project,
         priority=task.priority,
         due_date=task.due_date,
         labels=list(task.labels),

@@ -17,6 +17,7 @@ import {
 } from '@/lib/tasks';
 import { formatDate } from '../lib/task-schema';
 import { Avatars } from './task-card';
+import { MarkdownEditor } from './markdown-editor';
 
 function formatTimestamp(value: string | null): string {
   if (!value) return '';
@@ -63,7 +64,7 @@ export function describeActivity(
   }
 }
 
-function ChipEditor({
+export function ChipEditor({
   values,
   suggestions,
   placeholder,
@@ -127,7 +128,7 @@ export function TaskDrawer({
   iterationLabel,
   members,
   memberName,
-  projects,
+  workspaceName,
   labels,
   settings,
   onUpdate,
@@ -141,8 +142,9 @@ export function TaskDrawer({
   iterationLabel: (iterationId: string) => string;
   members: TasksMember[];
   memberName: (userId: string) => string;
-  /** Projects and labels already used in the workspace's tasks, offered as suggestions. */
-  projects: string[];
+  /** Display name of the task's workspace (it stores the id). */
+  workspaceName: (workspaceId: string) => string;
+  /** Labels already used in the workspace's tasks, offered as suggestions. */
   labels: string[];
   /** Stages, priorities and suggested labels. */
   settings: Pick<TasksSettings, 'stages' | 'priorities' | 'suggested_labels'>;
@@ -153,7 +155,6 @@ export function TaskDrawer({
 }) {
   const [title, setTitle] = useState(task.title);
   const [content, setContent] = useState(task.content);
-  const [project, setProject] = useState(task.project);
   const [tab, setTab] = useState<'comments' | 'activity'>('comments');
   const [comments, setComments] = useState<TaskComment[]>([]);
   const [activity, setActivity] = useState<TaskActivity[]>([]);
@@ -165,8 +166,7 @@ export function TaskDrawer({
   useEffect(() => {
     setTitle(task.title);
     setContent(task.content);
-    setProject(task.project);
-  }, [task.id, task.title, task.content, task.project]);
+  }, [task.id, task.title, task.content]);
 
   const loadFeed = useCallback(async () => {
     try {
@@ -328,21 +328,8 @@ export function TaskDrawer({
               ))}
             </select>
 
-            <label className="tasks-drawer-label" htmlFor="tasks-task-project">Project</label>
-            <input
-              id="tasks-task-project"
-              className="tasks-drawer-input"
-              list="tasks-task-projects"
-              value={project}
-              maxLength={120}
-              placeholder="No project"
-              onChange={(e) => setProject(e.target.value)}
-              onBlur={() => project.trim() !== task.project && save({ project: project.trim() })}
-              onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
-            />
-            <datalist id="tasks-task-projects">
-              {projects.map((p) => <option key={p} value={p} />)}
-            </datalist>
+            <span className="tasks-drawer-label">Workspace</span>
+            <span className="tasks-drawer-readonly" title={task.workspace_id}>{workspaceName(task.workspace_id)}</span>
 
             <label className="tasks-drawer-label" htmlFor="tasks-task-priority">Priority</label>
             <select
@@ -377,12 +364,12 @@ export function TaskDrawer({
 
           <div>
             <p className="tasks-drawer-section-title">Content</p>
-            <textarea
-              className="tasks-drawer-textarea"
+            <MarkdownEditor
               value={content}
               maxLength={20000}
-              placeholder="Context, acceptance criteria, links…"
-              onChange={(e) => setContent(e.target.value)}
+              ariaLabel="Content"
+              placeholder="Context, acceptance criteria, links… Markdown supported."
+              onChange={setContent}
               onBlur={() => content !== task.content && save({ content })}
             />
           </div>

@@ -34,7 +34,6 @@ const task = (overrides: Partial<Task>): Task => ({
   content: '',
   stage: 'ready',
   iteration_id: null,
-  project: '',
   priority: null,
   due_date: null,
   labels: [],

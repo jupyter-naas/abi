@@ -158,7 +158,6 @@ async def test_task_properties_are_normalised(service: TasksService):
         {
             "title": "Model eval",
             "content": "line 1\nline 2",
-            "project": "  Nexus ",
             "priority": "high",
             "due_date": date(2026, 11, 2),
             "labels": ["Feature", " Data ", "Feature", ""],
@@ -167,7 +166,6 @@ async def test_task_properties_are_normalised(service: TasksService):
     )
 
     assert task.content == "line 1\nline 2"
-    assert task.project == "Nexus"
     assert task.priority == "high"
     assert task.due_date == date(2026, 11, 2)
     assert task.labels == ("Feature", "Data")

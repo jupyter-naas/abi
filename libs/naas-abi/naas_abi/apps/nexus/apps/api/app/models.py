@@ -983,7 +983,6 @@ class TaskModel(Base):
     title = Column(String(300), nullable=False)
     content = Column(Text, nullable=False, default="")
     stage = Column(String(32), nullable=False, default="inbox")
-    project = Column(String(120), nullable=False, default="")
     priority = Column(String(16), nullable=True)
     due_date = Column(Date, nullable=True)
     labels = Column(Text, nullable=False, default="[]")  # JSON list

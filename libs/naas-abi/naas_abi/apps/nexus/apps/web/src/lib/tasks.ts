@@ -115,7 +115,6 @@ export type Task = {
   content: string;
   stage: TaskStage;
   iteration_id: string | null;
-  project: string;
   priority: TaskPriority | null;
   due_date: string | null;
   labels: string[];
@@ -158,7 +157,7 @@ export type TasksMember = {
 export type TaskFields = Partial<
   Pick<
     Task,
-    'title' | 'content' | 'stage' | 'iteration_id' | 'project' | 'priority' | 'due_date' | 'labels' | 'assignee_ids'
+    'title' | 'content' | 'stage' | 'iteration_id' | 'priority' | 'due_date' | 'labels' | 'assignee_ids'
   >
 >;
 

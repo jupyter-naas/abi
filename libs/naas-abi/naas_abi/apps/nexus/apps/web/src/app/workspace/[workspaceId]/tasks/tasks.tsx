@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { CalendarDays, Columns3, Flag, LayoutGrid, Plus, SquareKanban, Table2, Tag, UserRound, X } from 'lucide-react';
 import { Header } from '@/components/shell/header';
-import { useConfirm, usePrompt } from '@/components/ui/dialogs';
+import { useWorkspaceStore } from '@/stores/workspace';
+import { useConfirm } from '@/components/ui/dialogs';
 import { ViewBar, type ViewTypeDef } from '@/components/database-view/view-bar';
 import { DatabaseBody } from '@/components/database-view/views';
 import { useDatabaseViews } from '@/components/database-view/use-database-views';
@@ -45,6 +46,7 @@ import { ScopeTabs } from './components/scope-tabs';
 import { TasksMenuBar } from './components/tasks-menu-bar';
 import { TaskCard, TaskPropertyValue } from './components/task-card';
 import { TaskDrawer } from './components/task-drawer';
+import { TaskCreateDialog, type TaskCreateDefaults } from './components/task-create-dialog';
 import './tasks.css';
 
 const VIEW_TYPES: ViewTypeDef<TaskViewType>[] = [
@@ -55,7 +57,7 @@ const VIEW_TYPES: ViewTypeDef<TaskViewType>[] = [
 ];
 
 /** Groupings whose columns a card can be dragged between. */
-const DRAGGABLE_GROUPS: TaskPropertyKey[] = ['stage', 'priority', 'project'];
+const DRAGGABLE_GROUPS: TaskPropertyKey[] = ['stage', 'priority'];
 
 /** What dropping a card on a board column changes, per grouping property. */
 function fieldsForGroup(
@@ -69,7 +71,6 @@ function fieldsForGroup(
     return stage ? { stage } : null;
   }
   if (groupBy === 'priority') return { priority: empty ? null : choiceFromLabel(settings.priorities, groupKey) };
-  if (groupBy === 'project') return { project: empty ? '' : groupKey };
   return null;
 }
 
@@ -109,55 +110,12 @@ function createdDay(timestamp: string): string {
   return toIsoDate(new Date(timestamp.endsWith('Z') ? timestamp : `${timestamp}Z`));
 }
 
-function ColumnAdd({ onCreate }: { onCreate: (title: string) => Promise<unknown> }) {
-  const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState('');
-  if (!open) {
-    return (
-      <button type="button" className="tasks-column-add" onClick={() => setOpen(true)}>
-        <Plus size={12} /> New task
-      </button>
-    );
-  }
-  const submit = () => {
-    const value = title.trim();
-    setTitle('');
-    if (!value) {
-      setOpen(false);
-      return;
-    }
-    void onCreate(value).catch(() => undefined);
-  };
-  return (
-    <input
-      autoFocus
-      className="tasks-column-add-input"
-      value={title}
-      maxLength={300}
-      placeholder="Task title, then Enter"
-      onChange={(e) => setTitle(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') submit();
-        if (e.key === 'Escape') {
-          setTitle('');
-          setOpen(false);
-        }
-      }}
-      onBlur={() => {
-        if (title.trim()) submit();
-        setOpen(false);
-      }}
-    />
-  );
-}
-
 export default function TasksPage() {
   const params = useParams();
   const workspaceId = params.workspaceId as string;
   const searchParams = useSearchParams();
   const router = useRouter();
   const { confirm, dialog: confirmDialog } = useConfirm();
-  const { prompt, dialog: promptDialog } = usePrompt();
 
   const scope = parseScope(searchParams?.get('view'));
   const openTaskId = searchParams?.get('task') ?? null;
@@ -165,6 +123,7 @@ export default function TasksPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [search, setSearch] = useState('');
   const [notice, setNotice] = useState<{ text: string; scope?: TasksScope } | null>(null);
+  const [creating, setCreating] = useState<TaskCreateDefaults | null>(null);
 
   const store = useTasks(workspaceId, scope, showArchived);
   const [tabOrder, setTabOrder] = useTabOrder(workspaceId);
@@ -193,9 +152,14 @@ export default function TasksPage() {
   );
 
   const { settings } = store;
+  const workspaces = useWorkspaceStore((s) => s.workspaces);
+  const workspaceName = useCallback(
+    (id: string) => workspaces.find((w) => w.id === id)?.name ?? id,
+    [workspaces],
+  );
   const schema = useMemo(
-    () => createTaskSchema({ memberName: store.memberName, iterationLabel, settings }),
-    [store.memberName, iterationLabel, settings],
+    () => createTaskSchema({ memberName: store.memberName, workspaceName, iterationLabel, settings }),
+    [store.memberName, workspaceName, iterationLabel, settings],
   );
   const iterationViews = useDatabaseViews(workspaceId, ITERATION_VIEWS);
   const inboxViews = useDatabaseViews(workspaceId, INBOX_VIEWS);
@@ -226,10 +190,6 @@ export default function TasksPage() {
     [groups],
   );
 
-  const projects = useMemo(
-    () => Array.from(new Set(store.allTasks.map((t) => t.project).filter(Boolean))).sort(),
-    [store.allTasks],
-  );
   const labels = useMemo(
     () => Array.from(new Set(store.allTasks.flatMap((t) => t.labels))).sort(),
     [store.allTasks],
@@ -237,25 +197,17 @@ export default function TasksPage() {
 
   const openTask = store.allTasks.find((t) => t.id === openTaskId) ?? null;
 
-  const handleNewTask = async () => {
-    const title = await prompt({
-      title: 'New task',
-      description:
-        scope === 'inbox'
-          ? 'Added to Inbox for triage.'
-          : scope === 'backlog'
-            ? 'Added to the backlog as Ready.'
-            : `Added to ${SCOPE_LABELS[scope].toLowerCase()} as Ready.`,
-      placeholder: 'Task title',
-      confirmLabel: 'Create',
+  /** Opens the New task form, preset for the open tab (and the clicked column's stage). */
+  const handleNewTask = (stage?: string) => {
+    setCreating({
+      stage: stage ?? (scope === 'inbox' ? INBOX_STAGE : settings.default_stage),
+      // The tab's iteration may not exist yet: the form then names it and it is created on save.
+      iterationId: isIteration ? store.iteration?.id : null,
     });
-    if (!title?.trim()) return;
-    try {
-      const created = await store.createTask({ title: title.trim() });
-      navigate({ task: created.id });
-    } catch {
-      // Shown in the error banner.
-    }
+  };
+
+  const handleCreate = async (fields: TaskFields & { title: string }) => {
+    await store.createTask(fields);
   };
 
   // The sidebar's "New task" opens the Tasks page with ?new=1.
@@ -271,7 +223,7 @@ export default function TasksPage() {
     if (newHandled.current) return;
     newHandled.current = true;
     router.replace(tasksPath(workspaceId, { view: scope, task: openTaskId ?? undefined }));
-    void handleNewTaskRef.current();
+    handleNewTaskRef.current();
   }, [newRequested, router, workspaceId, scope, openTaskId]);
 
   const handleDropOnScope = async (taskId: string, target: TasksScope) => {
@@ -350,13 +302,12 @@ export default function TasksPage() {
         subtitle="Project tasks in weekly iterations"
         nav={
           <TasksMenuBar
-            onNewTask={() => void handleNewTask()}
+            onNewTask={() => handleNewTask()}
             onSettings={() => router.push(tasksSettingsPath(workspaceId))}
           />
         }
       />
       {confirmDialog}
-      {promptDialog}
 
       {store.error && (
         <div className="tasks-error" role="alert">
@@ -396,7 +347,6 @@ export default function TasksPage() {
         showArchived={showArchived}
         canCarryOver={store.tasks.some((t) => t.stage !== DONE_STAGE && !t.archived)}
         onToggleArchived={() => setShowArchived((v) => !v)}
-        onSaveGoal={(goal) => void store.setGoal(goal).catch(() => undefined)}
         onCarryOver={() => void handleCarryOver()}
       />
 
@@ -409,7 +359,7 @@ export default function TasksPage() {
         onSearchChange={setSearch}
         count={visibleCount}
         countLabel={(n) => `${n} ${n === 1 ? 'task' : 'tasks'}`}
-        defaultFilterProperty="project"
+        defaultFilterProperty="labels"
         groupedTypes={['board']}
         defaultGroupBy="stage"
         iconOnly
@@ -535,7 +485,9 @@ export default function TasksPage() {
                 ? (group) => {
                     const stage = choiceFromLabel(settings.stages, group.key);
                     return stage ? (
-                      <ColumnAdd onCreate={(title) => store.createTask({ title, stage })} />
+                      <button type="button" className="tasks-column-add" onClick={() => handleNewTask(stage)}>
+                        <Plus size={12} /> New task
+                      </button>
                     ) : null;
                   }
                 : undefined
@@ -543,6 +495,21 @@ export default function TasksPage() {
           />
         )}
       </div>
+
+      {creating && (
+        <TaskCreateDialog
+          defaults={creating}
+          scopeIterationLabel={isIteration && !store.iteration ? SCOPE_LABELS[scope] : null}
+          iterations={store.iterations}
+          iterationLabel={iterationLabel}
+          members={store.members}
+          memberName={store.memberName}
+          labels={labels}
+          settings={settings}
+          onCreate={handleCreate}
+          onClose={() => setCreating(null)}
+        />
+      )}
 
       {openTask && (
         <TaskDrawer
@@ -553,7 +520,7 @@ export default function TasksPage() {
           iterationLabel={iterationLabel}
           members={store.members}
           memberName={store.memberName}
-          projects={projects}
+          workspaceName={workspaceName}
           labels={labels}
           settings={settings}
           onUpdate={(fields) => store.updateTask(openTask.id, fields)}

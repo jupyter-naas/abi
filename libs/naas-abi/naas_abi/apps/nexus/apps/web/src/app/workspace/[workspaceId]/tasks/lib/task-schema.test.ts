@@ -8,7 +8,6 @@ const task = (overrides: Partial<Task> & Pick<Task, 'id' | 'title'>): Task => ({
   content: '',
   stage: 'inbox',
   iteration_id: null,
-  project: '',
   priority: null,
   due_date: null,
   labels: [],
@@ -24,14 +23,15 @@ const task = (overrides: Partial<Task> & Pick<Task, 'id' | 'title'>): Task => ({
 
 const schema = createTaskSchema({
   memberName: (id) => ({ 'u-1': 'Ada', 'u-2': 'Grace' })[id] ?? 'Former member',
+  workspaceName: (id) => ({ ws: 'Nexus', 'ws-abi': 'Abi' })[id] ?? id,
   iterationLabel: () => 'Oct 19 – Oct 25',
   settings: DEFAULT_TASKS_SETTINGS,
 });
 
 const tasks = [
-  task({ id: 'a', title: 'Alpha', stage: 'review', priority: 'low', assignee_ids: ['u-2'], project: 'Nexus' }),
+  task({ id: 'a', title: 'Alpha', stage: 'review', priority: 'low', assignee_ids: ['u-2'] }),
   task({ id: 'b', title: 'Bravo', stage: 'inbox', priority: 'urgent', labels: ['Bug', 'Data'] }),
-  task({ id: 'c', title: 'Charlie', stage: 'review', due_date: '2026-11-02', project: 'Abi' }),
+  task({ id: 'c', title: 'Charlie', stage: 'review', due_date: '2026-11-02', workspace_id: 'ws-abi' }),
 ];
 
 const titles = (rows: Task[]) => rows.map((t) => t.title);
@@ -57,11 +57,11 @@ describe('task schema', () => {
     ]);
   });
 
-  it('filters and groups by project, labels and assignee names', () => {
-    expect(titles(schema.applyFilters(tasks, [{ id: 'f', property: 'project', operator: 'is', value: 'nexus' }]))).toEqual(['Alpha']);
+  it('filters and groups by workspace name, labels and assignee names', () => {
+    expect(titles(schema.applyFilters(tasks, [{ id: 'f', property: 'workspace', operator: 'is', value: 'nexus' }]))).toEqual(['Alpha', 'Bravo']);
     expect(titles(schema.applyFilters(tasks, [{ id: 'f', property: 'labels', operator: 'is', value: 'Bug' }]))).toEqual(['Bravo']);
     expect(titles(schema.applyFilters(tasks, [{ id: 'f', property: 'assignees', operator: 'is', value: 'Grace' }]))).toEqual(['Alpha']);
-    expect(schema.groupRecords(tasks, 'project').map((g) => g.key)).toEqual(['Abi', 'Nexus', '__empty__']);
+    expect(schema.groupRecords(tasks, 'workspace').map((g) => g.key)).toEqual(['Abi', 'Nexus']);
   });
 
   it('groups the inbox by creation day, newest day first', () => {

@@ -38,7 +38,6 @@ from naas_abi.apps.nexus.apps.api.app.services.tasks.tasks__schema import (
     MAX_ITERATION_WEEKS,
     MAX_LABEL_LENGTH,
     MAX_LABELS,
-    MAX_PROJECT_LENGTH,
     MAX_SUGGESTED_LABELS,
     MAX_TITLE_LENGTH,
     MIN_ITERATION_WEEKS,
@@ -422,13 +421,6 @@ class TasksService:
                 if raw:
                     await self.get_iteration(workspace_id, str(raw))
                 values[key] = str(raw) if raw else None
-            elif key == "project":
-                project = " ".join(str(raw or "").split())
-                if len(project) > MAX_PROJECT_LENGTH:
-                    raise TasksValidationError(
-                        f"Projects are limited to {MAX_PROJECT_LENGTH} characters"
-                    )
-                values[key] = project
             elif key == "priority":
                 if raw and (settings is None or raw not in settings.priority_keys):
                     raise TasksValidationError(f"Unknown priority: {raw}")

@@ -82,8 +82,9 @@ export function useTasks(workspaceId: string, scope: TasksScope, showArchived: b
   /** New task in this scope: Inbox triage, the backlog, or an iteration column. */
   const createTask = useCallback(
     async (fields: TaskFields & { title: string }) => {
-      if (scope === 'inbox') return store.createTask({ ...fields, stage: INBOX_STAGE, iteration_id: null });
-      const iterationId = await iterationIdFor(scope);
+      // Stage and iteration default to the scope's; the caller's choice wins.
+      if (scope === 'inbox') return store.createTask({ stage: INBOX_STAGE, iteration_id: null, ...fields });
+      const iterationId = fields.iteration_id !== undefined ? fields.iteration_id : await iterationIdFor(scope);
       return store.createTask({ stage: settings.default_stage, ...fields, iteration_id: iterationId });
     },
     [scope, iterationIdFor, store, settings.default_stage],
@@ -119,7 +120,6 @@ export function useTasks(workspaceId: string, scope: TasksScope, showArchived: b
     loading: !store.loaded,
     error: store.error,
     clearError: store.clearError,
-    setGoal: (goal: string) => (day ? store.setGoal(day, goal) : Promise.resolve()),
     carryOver: () => (iteration ? store.carryOver(iteration.id) : Promise.resolve(null)),
     createTask,
     moveToScope,

@@ -240,22 +240,24 @@ function BoardView<R, K extends string, T extends ViewLayout>({
             <span className="truncate text-sm font-medium">{group.label || 'All'}</span>
             <span className="text-xs text-muted-foreground">{group.records.length}</span>
           </div>
-          <div className="flex min-h-[3rem] flex-col gap-2">
-            {group.records.map((record) => (
-              <div
-                key={getId(record)}
-                draggable={draggable}
-                onDragStart={(e) => {
-                  startRowDrag(e, getId(record));
-                  setDragging(getId(record));
-                }}
-                onDragEnd={() => setDragging(null)}
-                className={cn(draggable && 'cursor-grab active:cursor-grabbing', dragging === getId(record) && 'opacity-40')}
-              >
-                {renderCard(record, view.visible)}
-              </div>
-            ))}
-          </div>
+          {group.records.length > 0 && (
+            <div className="flex flex-col gap-2">
+              {group.records.map((record) => (
+                <div
+                  key={getId(record)}
+                  draggable={draggable}
+                  onDragStart={(e) => {
+                    startRowDrag(e, getId(record));
+                    setDragging(getId(record));
+                  }}
+                  onDragEnd={() => setDragging(null)}
+                  className={cn(draggable && 'cursor-grab active:cursor-grabbing', dragging === getId(record) && 'opacity-40')}
+                >
+                  {renderCard(record, view.visible)}
+                </div>
+              ))}
+            </div>
+          )}
           {renderColumnFooter?.(group)}
         </div>
       ))}

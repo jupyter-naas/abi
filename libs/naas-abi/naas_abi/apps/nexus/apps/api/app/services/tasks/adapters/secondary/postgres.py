@@ -108,7 +108,6 @@ def _task(row: TaskModel) -> Task:
         content=str(row.content or ""),
         stage=str(row.stage),
         iteration_id=row.iteration_id,  # type: ignore[arg-type]
-        project=str(row.project or ""),
         priority=row.priority,  # type: ignore[arg-type]
         due_date=row.due_date,  # type: ignore[arg-type]
         labels=_json_list(row.labels),
@@ -239,7 +238,6 @@ class PostgresTasksStore(TasksStorePort):
             "title": task.title,
             "content": task.content,
             "stage": task.stage,
-            "project": task.project,
             "priority": task.priority,
             "due_date": task.due_date,
             "labels": json.dumps(list(task.labels)),

@@ -24,7 +24,6 @@ CREATE TABLE IF NOT EXISTS tasks (
     title VARCHAR(300) NOT NULL,
     content TEXT NOT NULL DEFAULT '',
     stage VARCHAR(32) NOT NULL DEFAULT 'inbox',
-    project VARCHAR(120) NOT NULL DEFAULT '',
     priority VARCHAR(16),
     due_date DATE,
     labels TEXT NOT NULL DEFAULT '[]',
