@@ -17,7 +17,14 @@ message JobTrigger {
   // An `event` trigger's filter on the event's fields, as JSON (EventBridge-style,
   // naas_abi_sdk/event_filter.py); empty: every event.
   string filter = 4;
+  // A `cron` or `every` trigger's input, as a JSON object (the schedule message
+  // body, delivered as the run's payload); empty: no input (`{}`). At most 4 KiB.
+  string input = 5;
 }
+// A job, or a workflow: a job with a typed input and output whose handler
+// checkpoints its steps (naas_abi_sdk/workflows.py). Descriptors are bounded: each
+// schema at most 16 KiB, the whole descriptor at most 64 KiB (the registry
+// snapshot holds every module and is capped at 512 KiB).
 message JobDescriptor {
   string name = 1;
   string description = 2;
@@ -26,6 +33,12 @@ message JobDescriptor {
   uint32 max_concurrency = 5;
   uint32 max_attempts = 6;
   double timeout_seconds = 7;
+  // "job" or "workflow". Empty (a descriptor written before the field existed) is "job".
+  string kind = 8;
+  // JSON Schema (a JSON object) of the run's input and of its output. Empty:
+  // unspecified. Set for workflows.
+  string input_schema = 9;
+  string output_schema = 10;
 }
 message Dependency { string module_id = 1; uint32 contract_major = 2; }
 // A chat model this module serves. Inference stays in the module process.
