@@ -421,3 +421,26 @@ def test_an_overlapping_compaction_tick_is_skipped_not_queued(broker, world):
 
     assert skipped["status"] == "SKIPPED" and "still running" in skipped["skip_reason"]
     assert done["status"] == "SUCCEEDED" and world.compactions == 1
+
+
+def test_a_mapping_run_that_ends_skipped_is_awaited_and_its_envelope_is_not_synced(
+    broker, world
+):
+    docs = Documents()
+    world.in_graph.add(PATHS[1])  # already complete: its mapping run is SKIPPED
+    world.in_dataset.add(PATHS[1])
+    module, host = start_host(broker, docs, search_filter("news"))
+    try:
+        out = asyncio.run(
+            module.get_workflow("search_recent_tweets").run(
+                {"filter": "news"}, timeout=30
+            )
+        )
+    finally:
+        host.stop()
+
+    assert (out.envelopes, out.mapped) == (3, 2)
+    statuses = Counter(r["status"] for r in runs_of(docs, "map_tweet_envelope"))
+    assert statuses == {"SUCCEEDED": 2, "SKIPPED": 1}
+    assert PATHS[1] not in world.synced[-1] and len(world.synced[-1]) == 2
+    assert world.pipeline[PATHS[1]] == 0
