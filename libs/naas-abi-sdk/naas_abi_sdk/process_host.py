@@ -271,6 +271,8 @@ class ProcessHost:
         lifetime = min(AUTHORIZATION_SECONDS, _token_expiry(token) - time.time())
         if lifetime > 0:
             now = loop.time()
+            # Reinserted last, so eviction below is oldest-first.
+            self._authorized.pop((token, kind, name), None)
             if len(self._authorized) >= MAX_AUTHORIZATIONS:
                 self._authorized = {
                     k: v for k, v in self._authorized.items() if v[0] > now

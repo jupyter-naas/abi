@@ -173,16 +173,55 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
         for ref in (
             "acme.reports:ReportsOntology.ttl",
             "ACME.reports:reportsontology.ttl",
-            "ReportsOntology.ttl",
             REPORTS_ID,
         ):
             with self.subTest(ref=ref):
                 files = await self.service.list_ontology_files(catalog_refs=[ref])
                 self.assertEqual([item.path for item in files], [REPORTS_ID])
-        for ref in ("other:ReportsOntology.ttl", "acme.reports:Other.ttl"):
+        # Not by the bare file name, nor by a path suffix: another module could
+        # push a file of the same name, and would be admitted.
+        for ref in (
+            "ReportsOntology.ttl",
+            "modules/ReportsOntology.ttl",
+            "other:ReportsOntology.ttl",
+            "acme.reports:Other.ttl",
+        ):
             with self.subTest(ref=ref):
                 self.assertEqual(await self.service.list_ontology_files(catalog_refs=[ref]), [])
         self.assertEqual(await self.service.list_ontology_files(catalog_refs=[]), [])
+
+    async def test_a_workspace_enabling_a_file_does_not_list_another_modules_remote_one(
+        self,
+    ) -> None:
+        evil_id = "module/evil/modules/ReportsOntology.ttl"
+        service = service_with(FakeTripleStore({**REMOTE_FILES, evil_id: REPORTS}))
+
+        everything = {item.path for item in await service.list_ontology_files()}
+        self.assertEqual(everything, {REPORTS_ID, evil_id})
+        for refs in (["ReportsOntology.ttl"], ["modules/ReportsOntology.ttl"]):
+            self.assertEqual(await service.list_ontology_files(catalog_refs=refs), [])
+        enabled = await service.list_ontology_files(
+            catalog_refs=["acme.reports:ReportsOntology.ttl"]
+        )
+        self.assertEqual([item.path for item in enabled], [REPORTS_ID])
+        with self.assertRaises(OntologyPathNotFoundError):
+            await http._require_catalog_path(
+                evil_id, ["acme.reports:ReportsOntology.ttl"], service
+            )
+
+    async def test_listing_reads_the_schema_graph_once_and_parses_a_file_once(
+        self,
+    ) -> None:
+        with patch.object(
+            OntologyService, "_file_item", autospec=True, side_effect=OntologyService._file_item
+        ) as file_item:
+            await self.service.list_ontology_files()
+            await self.service.list_ontology_files(catalog_refs=[REPORTS_ID])
+            await self.service.list_ontology_files()
+        # One query for every file's text, then the cache.
+        self.assertEqual(self.store.queries, 1)
+        # The titled file and the one without an ontology header: once each.
+        self.assertEqual(file_item.call_count, 2)
 
     async def test_overview_stats_listings_and_counts_read_the_stored_text(self) -> None:
         stats = await self.service.get_overview_stats(REPORTS_ID)

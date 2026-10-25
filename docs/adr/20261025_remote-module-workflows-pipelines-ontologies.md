@@ -123,7 +123,7 @@ schema graph, as an in-engine module's files do at boot. Remote modules do it ov
   read from the schema graph through the triple store service (cached 30 s, at most 64
   texts), and never opened as a file: a remote id cannot reach the disk. The in-engine
   filters (`owl:Ontology` required, `sandbox` and `processes` skipped) and the workspace
-  allowlist (the id, the file name or `<module_id>:<file name>`) apply as before; stats, listings, the dictionary, graphs and export
+  allowlist applies as before for in-engine files (the file name, a path suffix or `<module_id>:<file name>`); a remote file answers only to its full id or `<module_id>:<file name>`, never to a bare file name or a path suffix, so a module cannot reach a workspace that enabled another module's file of the same name; stats, listings, the dictionary, graphs and export
   resolve both kinds.
 
 ### Checked end to end

@@ -424,7 +424,7 @@ def test_the_loader_retries_with_a_doubling_delay_up_to_a_cap(monkeypatch, tmp_p
         async def load_schema(self, source, content):
             calls.append(source)
             if len(calls) < 6:
-                raise ServiceError("PERMISSION_DENIED", "no")
+                raise ServiceError("UNAVAILABLE", "no")
             return False
 
     async def sleep(delay):
@@ -446,6 +446,46 @@ def test_the_loader_retries_with_a_doubling_delay_up_to_a_cap(monkeypatch, tmp_p
     asyncio.run(scenario())
 
     assert delays == [1.0, 2.0, 4.0, 4.0, 4.0]
+
+
+@pytest.mark.parametrize("code", ["INVALID_ARGUMENT", "PERMISSION_DENIED"])
+def test_a_refusal_that_cannot_change_is_logged_once_and_not_retried(
+    tmp_path, caplog, code
+):
+    bad, good = tmp_path / "Bad.ttl", tmp_path / "Good.ttl"
+    bad.write_text("not turtle")
+    good.write_text(TTL)
+    calls: list[str] = []
+
+    class Store:
+        async def load_schema(self, source, content):
+            calls.append(source)
+            if source.endswith("Bad.ttl"):
+                raise ServiceError(code, "refused")
+            if calls.count(source) < 2:
+                raise ServiceError("UNAVAILABLE", "busy")
+            return True
+
+    async def scenario():
+        loader = OntologyLoader(
+            Store(),  # type: ignore[arg-type]
+            "acme.foo",
+            (OntologyFile(bad, "Bad.ttl"), OntologyFile(good, "Good.ttl")),
+            retry_first_seconds=0.001,
+        )
+        await loader.run()
+        return loader
+
+    with caplog.at_level(logging.ERROR, logger="naas_abi_sdk.ontologies"):
+        loader = asyncio.run(scenario())
+
+    # Bad.ttl is sent once; the transient failure of Good.ttl is retried.
+    assert calls.count("module/acme.foo/Bad.ttl") == 1
+    assert calls.count("module/acme.foo/Good.ttl") == 2
+    assert loader.pending == {}
+    assert loader.refused == {"Bad.ttl": "module/acme.foo/Bad.ttl"}
+    refusals = [r.getMessage() for r in caplog.records if "Bad.ttl" in r.getMessage()]
+    assert len(refusals) == 1 and code in refusals[0] and "refused" in refusals[0]
 
 
 def test_the_loader_reads_the_file_again_for_each_attempt(tmp_path):

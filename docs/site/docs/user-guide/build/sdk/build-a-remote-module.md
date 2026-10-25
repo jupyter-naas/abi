@@ -215,9 +215,14 @@ abi new pipeline catalog pipelines
 abi new integration crm integrations
 ```
 
+Run from the package folder (`src/research`), without a path, each writes into its own
+folder (`workflows/`, `pipelines/`, `integrations/`): the module finds classes there only.
+A path elsewhere is written, with a warning that the module will not build or serve it.
+
 Each writes a class on `naas_abi_sdk` and a test beside it
 (`DigestWorkflow.py` and `DigestWorkflow_test.py`; no `naas_abi_core` import).
-A workflow returns a JSON value, a pipeline an rdflib `Graph`; both have an
+A workflow returns a JSON value (pydantic models, dataclasses, datetimes, UUIDs and
+decimals inside it are converted), a pipeline an rdflib `Graph`; both have an
 async `run`:
 
 ```python
@@ -325,13 +330,16 @@ ontologies/
 - Use absolute IRIs, and an `owl:Ontology` declaration if you want the file listed
   in the Nexus ontology catalog (`sandbox` and `processes` paths are not listed).
 - Sending is in the background and is retried if the engine is down; it never
-  changes the module's readiness. A file the engine already holds is not
+  changes the module's readiness. A file the engine refuses (not valid Turtle, a
+  path it does not accept) is logged once as an error and not sent again until the
+  module restarts: fix the file. A file the engine already holds is not
   rewritten, and a changed file applies the difference.
 - **Loading is additive**: a file you remove or rename stays in the schema graph.
 - A module may load only under its own id; Turtle the engine cannot parse is refused.
 - Nexus lists the files in the ontology catalog next to the engine's own ones, as
   `module/<module_id>/<path>`, with stats, graphs and export. A workspace enables
-  one in its `ontologies` allowlist, by that id or its file name.
+  one in its `ontologies` allowlist, by that id or by `<module_id>:<file name>`
+  (not by the file name alone: it would also match another module's file).
 
 ## 7. Add an app
 

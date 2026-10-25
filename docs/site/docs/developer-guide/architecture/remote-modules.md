@@ -137,13 +137,15 @@ drain first) with `triple_store.load_schema(source, content)`:
   only under its own id (`PERMISSION_DENIED` otherwise), and Turtle it cannot parse
   (`INVALID_ARGUMENT`) writes nothing.
 - The send runs in the background and is retried after 1 s, doubling up to 1 minute: a
-  down engine never changes the module's readiness.
+  down engine never changes the module's readiness. A refusal no retry can change
+  (`INVALID_ARGUMENT`, `PERMISSION_DENIED`) is logged once and that file is not sent
+  again until the module restarts; fix the file.
 - Loading is **additive**: a file the module removes or renames later stays in the schema
   graph. A file the engine already holds is not written again.
 - The Nexus ontology catalog lists these files with the in-engine ones (as
   `module/<module_id>/<path>`), with stats, graphs and export. A workspace enables one in
-  its `ontologies` allowlist by that id, its file name or `<module_id>:<file name>`; a
-  workspace that enables none sees none.
+  its `ontologies` allowlist by that id or by `<module_id>:<file name>`, never by the bare
+  file name (another module could push the same one); a workspace that enables none sees none.
 
 ### Jobs
 

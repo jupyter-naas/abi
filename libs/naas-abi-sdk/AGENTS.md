@@ -133,7 +133,10 @@ has ontologies but does not declare `triple_store`. `OntologyLoader` runs as a b
 task once the instance is `READY` or `DEGRADED` (never `STAGED`, and not at all when it is
 asked to drain first; a module without discovery sends at start). A failed load is logged
 at error level (`naas_abi_sdk.ontologies`) and retried, after 1 s and doubling to 60 s,
-reading the file again each time; it never changes readiness or ends the module.
+reading the file again each time; it never changes readiness or ends the module. A
+refusal no retry changes (`TERMINAL_CODES`: `INVALID_ARGUMENT`, `PERMISSION_DENIED`) is
+logged once, the file moves to `OntologyLoader.refused` and is not sent again until the
+process restarts.
 A timeout can hide a completed load: the retry reports no change. Loading is
 additive: a file removed later stays in the schema graph, and nothing here unloads it.
 Keep `MAX_SOURCE_LENGTH` and the name rules equal to core's `parse_schema_source`.
@@ -207,6 +210,11 @@ agent takes its tools at construction, inside `on_initialized`, so
 `build_processes()` is public and idempotent (locked): modules call it before
 creating their agents, and `run_module`'s own call skips what is built; an
 unbuildable, unbound class fails startup (the host serves every declared one).
+The package is `module.__package__` (so `python -m pkg` works); a module in a top-level
+script (`python worker.py`) has none, and its `workflows/` etc. are top-level packages
+next to it (the folder is appended to `sys.path`). `serialize_result` is pydantic's
+`to_jsonable_python`: models, dataclasses, datetimes, UUIDs and decimals nested in a
+result are converted, an rdflib graph is turtle, anything else is a `PROCESS_ERROR`.
 Integrations are a pattern, never discovered. Tests:
 `tests/test_workflows.py` (extras: `--extra workflows --extra rdf --extra agents`,
 a CI step) and `tests/test_workflows_extras.py` (no extras needed).

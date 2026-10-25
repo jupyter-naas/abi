@@ -121,6 +121,18 @@ def built(module_type: type[BaseModule]) -> BaseModule:
 # --- descriptors ------------------------------------------------------------------
 
 
+def test_a_blank_docstring_gives_the_job_the_class_name_as_description():
+    class BlankWorkflow(Workflow[WorkflowParameters]):
+        """ """  # noqa: D419
+
+        job = JobSettings()
+
+    (descriptor,) = module_of(workflows=(BlankWorkflow,)).get_jobs()
+
+    assert descriptor.name == "workflow.blank_workflow"
+    assert descriptor.description == "blank_workflow"
+
+
 def test_a_process_with_job_settings_gets_a_descriptor_named_after_kind_and_name():
     module_type = module_of(
         workflows=(GreetWorkflow, ManualWorkflow, PlainWorkflow),
@@ -389,7 +401,7 @@ def test_an_event_run_takes_the_events_data_as_its_parameters():
 def test_a_result_the_process_cannot_encode_fails_the_run():
     class Bytes(Workflow[WorkflowParameters]):
         async def run(self, parameters):
-            return {"data": b"bytes"}
+            return {"data": object()}
 
     class NotAGraph(Pipeline[PipelineParameters]):
         async def run(self, parameters):
@@ -399,6 +411,33 @@ def test_a_result_the_process_cannot_encode_fails_the_run():
         asyncio.run(handler_of(Bytes)(context({})))
     with pytest.raises(RPCError, match="rdflib Graph"):
         asyncio.run(handler_of(NotAGraph, "pipeline")(context({})))
+
+
+def test_a_result_with_nested_models_and_common_scalars_is_the_runs_json():
+    from datetime import datetime, timezone
+    from decimal import Decimal
+    from uuid import UUID
+
+    class Item(WorkflowParameters):
+        at: datetime
+        id: UUID
+        price: Decimal
+
+    class Nested(Workflow[WorkflowParameters]):
+        async def run(self, parameters):
+            item = Item(
+                at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+                id=UUID(int=1),
+                price=Decimal("2.5"),
+            )
+            return {"items": [item], "list": [item]}
+
+    item = {"at": "2026-01-02T00:00:00Z", "id": str(UUID(int=1)), "price": "2.5"}
+
+    assert asyncio.run(handler_of(Nested)(context({}))) == {
+        "items": [item],
+        "list": [item],
+    }
 
 
 def test_the_processs_own_error_reaches_the_run_unchanged():

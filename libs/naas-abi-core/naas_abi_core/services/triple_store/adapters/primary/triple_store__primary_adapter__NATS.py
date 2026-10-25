@@ -544,9 +544,6 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
         except InvalidServiceTokenError:
             return None
 
-    def _is_authenticated(self, request: Request) -> bool:
-        return self._caller_identity(request) is not None
-
     @staticmethod
     async def _respond_error(
         request: Request,

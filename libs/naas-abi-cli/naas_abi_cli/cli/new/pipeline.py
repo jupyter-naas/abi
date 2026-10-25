@@ -7,7 +7,12 @@ import naas_abi_cli
 from naas_abi_cli.cli.utils.Copier import Copier
 
 from .new import new
-from .remote_module import ensure_package, is_remote_module, target_dir
+from .remote_module import (
+    component_destination,
+    ensure_package,
+    is_remote_module,
+    target_dir,
+)
 from .utils import to_pascal_case, to_snake_case
 
 
@@ -18,8 +23,13 @@ def _new_pipeline(pipeline_name: str, pipeline_path: str = "."):
     """Create a pipeline: an SDK one inside a remote module, a naas_abi_core one
     inside an in-engine module."""
     remote = is_remote_module(target_dir(pipeline_path))
-    new_pipeline(pipeline_name, pipeline_path, remote=remote)
+    found = False
     if remote:
+        pipeline_path, found = component_destination(
+            pipeline_path, "pipelines", "pipeline"
+        )
+    new_pipeline(pipeline_name, pipeline_path, remote=remote)
+    if remote and found:
         name = to_snake_case(to_pascal_case(pipeline_name) + "Pipeline")
         click.echo(
             f"Created {to_pascal_case(pipeline_name)}Pipeline.py (naas_abi_sdk). "
@@ -28,6 +38,11 @@ def _new_pipeline(pipeline_name: str, pipeline_path: str = "."):
             f"self.get_pipeline('{name}').as_tools() (pass them as `tools=` to "
             "create_agent). It needs the naas-abi-sdk[workflows,rdf] extras (and [agents] "
             "for as_tools)."
+        )
+    elif remote:
+        click.echo(
+            f"Created {to_pascal_case(pipeline_name)}Pipeline.py in {pipeline_path} "
+            "(naas_abi_sdk), outside the folder the module builds from."
         )
 
 

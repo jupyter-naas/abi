@@ -88,7 +88,7 @@ abi new agent analyst agents
 abi new app reports apps
 ```
 
-- In a remote module, `agent`, `workflow`, `pipeline` and `integration` write SDK classes (they import `naas_abi_sdk` only) with a test beside each, and `app` an app. `orchestration` refuses, because it writes `naas_abi_core` and Dagster code: a remote module schedules with jobs.
+- In a remote module, `agent`, `workflow`, `pipeline` and `integration` write SDK classes (they import `naas_abi_sdk` only) with a test beside each, and `app` an app. Without a path, `workflow`, `pipeline` and `integration` write into the `workflows/`, `pipelines/` or `integrations/` folder of the module's package, the only place it looks for them; with a path elsewhere they warn that the module will not build or serve the file. `orchestration` refuses, because it writes `naas_abi_core` and Dagster code: a remote module schedules with jobs.
 - In an in-engine module: `agent`, `workflow`, `pipeline`, `integration` and `app` write `naas_abi_core` code (`orchestration` too, in a project without NATS).
 - A remote module's `ontologies/` is a folder, not a scaffold: every `.ttl` file in it is sent to the engine's schema graph once the module is `READY`.
 

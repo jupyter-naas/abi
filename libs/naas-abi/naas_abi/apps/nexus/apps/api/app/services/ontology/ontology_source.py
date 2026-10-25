@@ -101,11 +101,13 @@ class RemoteOntologyReader:
         self._clock = clock
         self._lock = threading.Lock()
         self._sources: tuple[float, list[str]] | None = None
+        self._files: tuple[float, list[tuple[str, str]]] | None = None
         self._texts: OrderedDict[str, tuple[float, str]] = OrderedDict()
 
     def clear(self) -> None:
         with self._lock:
             self._sources = None
+            self._files = None
             self._texts.clear()
 
     def sources(self) -> list[str]:
@@ -132,6 +134,38 @@ class RemoteOntologyReader:
         with self._lock:
             self._sources = (now, found)
         return list(found)
+
+    def files(self) -> list[tuple[str, str]]:
+        """``(remote id, Turtle text)`` of every well-formed remote ontology, sorted,
+        from one query: a listing reads them all, and asking for each text would
+        cost one query per file."""
+        now = self._clock()
+        with self._lock:
+            if self._files and now - self._files[0] < self._ttl:
+                return list(self._files[1])
+        rows = self._triple_store_getter().query(
+            f"""
+            PREFIX internal: <{_INTERNAL}>
+            SELECT ?filePath ?content WHERE {{
+                GRAPH <{SCHEMA_GRAPH}> {{
+                    ?schema a internal:Schema ;
+                        internal:filePath ?filePath ;
+                        internal:content ?content .
+                    FILTER(STRSTARTS(STR(?filePath), "{REMOTE_PREFIX}"))
+                }}
+            }}
+            """
+        )
+        found: dict[str, str] = {}
+        for row in rows:
+            path = str(row[0])
+            if parse_remote_id(path) is None or path in found:
+                continue
+            found[path] = base64.b64decode(str(row[1])).decode("utf-8")
+        listing = sorted(found.items())
+        with self._lock:
+            self._files = (now, listing)
+        return list(listing)
 
     def read(self, path: str) -> str:
         """The Turtle text stored for remote id ``path``.
