@@ -30,6 +30,7 @@ from naas_abi_core.engine.engine_loaders.EngineModuleLoader import EngineModuleL
 from naas_abi_core.engine.engine_loaders.EngineOntologyLoader import (
     EngineOntologyLoader,
 )
+from naas_abi_core.engine.engine_loaders.EngineProcessBridge import bridge_processes
 from naas_abi_core.engine.engine_loaders.EngineServiceLoader import EngineServiceLoader
 from naas_abi_core.engine.IEngine import IEngine
 from naas_abi_core.engine.ownership.ownership_service import Claim
@@ -223,6 +224,10 @@ class Engine(IEngine):
         self.on_initialized()
         logger.debug("Engine initialized")
 
+        # Workflow/Pipeline instances exist now; their jobs go to a host below. Done
+        # in every NATS engine, hosting or not, so job_owners() lists the same jobs.
+        bridge_processes(self.__modules, self.__configuration.nats)
+
         # Module jobs start last: their handlers may use anything initialized above.
         # A standby or client engine hosts none: the serving engine does.
         if self.__configuration.nats is None or claim is Claim.SERVING:
@@ -368,7 +373,8 @@ class Engine(IEngine):
             )
 
     def __start_jobs(self) -> None:
-        self.__job_loader = EngineJobLoader(self.__configuration.nats)
+        if self.__job_loader is None:
+            self.__job_loader = EngineJobLoader(self.__configuration.nats)
         self.__job_loader.start(
             self.job_owners(), document_available=self.__services.document_available()
         )
@@ -418,6 +424,24 @@ class Engine(IEngine):
         """Whether this engine hosts jobs (NATS mode with ``nats.jobs.enabled``)."""
         nats = self.__configuration.nats
         return nats is not None and nats.jobs.enabled
+
+    def workflow(
+        self,
+        module_id: str,
+        name: str,
+        *,
+        input_type: Any = None,
+        output_type: Any = None,
+    ) -> Any:
+        """The workflow ``name`` of any module, engine or remote, on this engine's
+        NATS connection: ``start(input)`` returns a run, ``run(input)`` its output.
+        NATS mode only (``JobsNotHosted`` otherwise). Works on any engine, also one
+        that hosts no jobs (a client, a CLI), which then only starts and watches runs."""
+        if self.__job_loader is None:
+            self.__job_loader = EngineJobLoader(self.__configuration.nats)
+        return self.__job_loader.workflow(
+            module_id, name, input_type=input_type, output_type=output_type
+        )
 
     def job_owners(self) -> dict[str, object]:
         """Modules plus kernel job owners (NATS mode only), keyed by owner id.

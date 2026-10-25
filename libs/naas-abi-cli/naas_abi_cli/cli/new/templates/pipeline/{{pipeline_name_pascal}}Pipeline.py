@@ -56,3 +56,6 @@ class {{pipeline_name_pascal}}Pipeline(Pipeline):
 
     # as_api is inherited from Expose: POST /{slug} calls run() when this
     # method is not overridden. Override only for a custom HTTP surface.
+    # In NATS mode the engine also publishes a live typed run() as a one-step
+    # durable workflow named pipeline.<slug> (nats.workflows.bridge), so it can be
+    # launched and watched like any workflow. Nothing to do here for that.
