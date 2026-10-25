@@ -674,6 +674,65 @@ tools = greet.as_tools()                          # an agent's tool, on the modu
 - On SIGTERM the module stops taking calls, finishes the runs in progress (up to
   the drain timeout), then unregisters.
 
+### Workflows and pipelines as jobs
+
+A call above waits for the answer, within a deadline. For work that runs on a
+schedule, on events, or for longer than a caller should wait, declare job settings
+on the class: the module then hosts a job for it, with a run record, retries and
+the System app's job list (see "Jobs").
+
+```python
+from datetime import timedelta
+from naas_abi_sdk.jobs import Every, JobSettings
+
+
+class IngestPipeline(Pipeline[IngestParameters]):
+    """Loads the nightly export."""
+
+    job = JobSettings(triggers=(Every("1h"),), timeout=timedelta(minutes=10), max_attempts=3)
+
+    async def run(self, parameters: IngestParameters) -> Graph: ...
+
+
+class ExportWorkflow(Workflow[ExportParameters]):
+    job = JobSettings()   # no triggers: runs only when a caller starts it
+```
+
+```python
+run = await self.engine.modules["a"].get_workflow("export_workflow").trigger(
+    {"since": "2026-01-01"}, idempotency_key="export-2026-01-01"
+)
+record = await run.wait(timeout=600)
+record["status"], record["result"]
+```
+
+- `job` is a `JobSettings(triggers=(), timeout=None, max_attempts=1, max_concurrency=1)`
+  (defaults as `@job`'s). A class without `job` has no job and no consumer. The job
+  is named `<kind>.<name>`: `workflow.export_workflow`, `pipeline.ingest_pipeline`
+  (`process_job_name`), so it is stable across restarts and replicas. The module's
+  descriptor lists it with its triggers, and the System app shows it under the module.
+- Startup fails (`run_module` raises before it connects) when the derived name is
+  also an explicit job's (`jobs`, `@job`), or a `Cron`/`Every` trigger sits on a
+  process whose parameters model has required fields: a scheduled run has the payload
+  `{}`. Give the fields defaults, or use `OnEvent` or manual runs.
+- A run validates its payload into the parameters model (the job fails, naming the
+  fields and not their values, when the model refuses it), then awaits `run`. The
+  payload is the parameters `trigger` sent, `{}` for a schedule, and for `OnEvent`
+  the event's `data` (a JSON object, or none for `{}`). `JobRun.cancel()` cancels `run`;
+  `timeout` cancels it too and ends the run `TIMED_OUT`. Since delivery is at least
+  once, and a run is retried up to `max_attempts` times, `run` must be safe to repeat.
+- The run record's `result` is the workflow's JSON value, or the pipeline's graph as
+  N-Triples text. A record keeps at most 64 KiB (`job_host.MAX_RESULT_BYTES`): above
+  it, `result` is `{"truncated": true, "preview": "<first 2,000 characters>"}`. A
+  pipeline's graph that large should be written to the triple store by the pipeline
+  itself, or fetched with `run()`, which carries up to 256 MiB.
+- `proxy.trigger(params, *, idempotency_key=None)` returns the `JobRun` without waiting
+  (a dict or a pydantic model of parameters; a repeated key within 2 minutes is the same
+  run). It raises `RPCError` `PROCESS_NOT_A_JOB` when the module declares no job for
+  the process, and `MODULE_UNAVAILABLE` when it has no ready instance. Unlike `run`, a
+  refused parameters model is not an error here: the host validates, and the run ends
+  `FAILED`. Job hosting needs the `document` service dependency, like any job.
+
 ## Apps
 
 A module serves web apps through Nexus without a port, hostname or route of its

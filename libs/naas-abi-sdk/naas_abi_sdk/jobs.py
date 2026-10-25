@@ -277,6 +277,45 @@ class JobDescriptor:
         )
 
 
+def process_job_name(kind: str, name: str) -> str:
+    """The job of a workflow or pipeline: ``workflow.greet``, ``pipeline.ingest``.
+
+    Derived, so it is stable across restarts and replicas; a slug is lowercase
+    ASCII, digits and ``_`` (no ``:``, which run ids use as their separator).
+    """
+    return f"{kind}.{name}"
+
+
+@dataclass(frozen=True)
+class JobSettings:
+    """How a workflow or pipeline runs as a job (``Process.job``).
+
+    Declaring it is what makes ``BaseModule`` add a job for the process. Without
+    ``triggers`` the job only runs when a caller triggers it (``proxy.trigger``);
+    with them it also runs on its schedule or on events. Defaults are ``@job``'s.
+    """
+
+    triggers: tuple[Trigger, ...] = ()
+    timeout: timedelta | None = None
+    max_attempts: int = 1
+    max_concurrency: int = 1
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "triggers", tuple(self.triggers))
+        # The descriptor's own checks (ranges, trigger count), at declaration.
+        self.descriptor("check")
+
+    def descriptor(self, name: str, description: str = "") -> JobDescriptor:
+        return JobDescriptor(
+            name=name,
+            description=description,
+            triggers=self.triggers,
+            max_concurrency=self.max_concurrency,
+            timeout=self.timeout,
+            max_attempts=self.max_attempts,
+        )
+
+
 JobHandler = Callable[["JobContext"], Awaitable[Any]]
 
 
@@ -402,8 +441,14 @@ class JobsMixin:
             raise TypeError("Job handler must be an async callable taking a JobContext")
         self._job_handlers[name] = handler
 
+    @classmethod
+    def get_jobs(cls) -> tuple[JobDescriptor, ...]:
+        """Every job the module declares: ``jobs``, and for an SDK module the
+        ones its workflows and pipelines derive."""
+        return tuple(cls.jobs)
+
     def missing_job_handlers(self) -> set[str]:
-        return {j.name for j in self.jobs} - set(self._job_handlers)
+        return {j.name for j in self.get_jobs()} - set(self._job_handlers)
 
     # A module's own triggers go through its job host, on the host's loop.
 

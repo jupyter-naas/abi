@@ -122,6 +122,20 @@ def _validation_message(exc: Any) -> str:
     return text if len(text) <= MAX_ERROR_CHARS else text[: MAX_ERROR_CHARS - 1] + "…"
 
 
+def parse_parameters(cls: Any, data: Any) -> Any:
+    """``data`` (decoded JSON) as the parameters model of the process class
+    ``cls``; ``INVALID_ARGUMENT`` names the fields the model refused, never their
+    values. A job run validates its payload the same way (``process_jobs``)."""
+    from pydantic import ValidationError
+
+    if not isinstance(data, dict):
+        raise RPCError("INVALID_ARGUMENT", "Parameters must be a JSON object")
+    try:
+        return cls.parameters_type().model_validate(data)
+    except ValidationError as exc:
+        raise RPCError("INVALID_ARGUMENT", _validation_message(exc)) from None
+
+
 class ProcessHost:
     def __init__(
         self,
@@ -414,20 +428,13 @@ class ProcessHost:
 
     @staticmethod
     def _validate(instance: Any, raw: bytes) -> Any:
-        from pydantic import ValidationError
-
         try:
             data = json.loads(raw) if raw else {}
         except (ValueError, RecursionError):
             raise RPCError(
                 "INVALID_ARGUMENT", "Parameters are not valid JSON"
             ) from None
-        if not isinstance(data, dict):
-            raise RPCError("INVALID_ARGUMENT", "Parameters must be a JSON object")
-        try:
-            return type(instance).parameters_type().model_validate(data)
-        except ValidationError as exc:
-            raise RPCError("INVALID_ARGUMENT", _validation_message(exc)) from None
+        return parse_parameters(type(instance), data)
 
     async def _place(
         self, kind: str, payload: bytes, response: pb.RunResponse

@@ -559,7 +559,14 @@ def module_descriptor(
             )
             for a in module_type.agents
         ],
-        jobs=[j.to_pb() for j in getattr(module_type, "jobs", ())],
+        jobs=[
+            j.to_pb()
+            for j in (
+                module_type.get_jobs()
+                if hasattr(module_type, "get_jobs")
+                else getattr(module_type, "jobs", ())
+            )
+        ],
         models=[
             pb.ModelDescriptor(name=m.name, description=m.description, kind=m.kind)
             for m in getattr(module_type, "models", ())
