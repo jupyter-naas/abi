@@ -96,6 +96,8 @@ try:
             from naas_abi_core.module.workflows import sync_workflow_handler
             from naas_abi_sdk.workflows import derive_spec
 
+            # What naas_abi_sdk.workflows.declare_workflow does for an async handler,
+            # with a sync one: keep the two in step.
             spec, in_schema, out_schema = derive_spec(
                 handler,
                 positional=2,

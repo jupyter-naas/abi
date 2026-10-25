@@ -332,6 +332,7 @@ def test_engines_hand_out_workflows_and_modules_ask_for_declared_dependencies():
         e = Engine.__new__(Engine)
         e._Engine__configuration = SimpleNamespace(nats=nats)  # type: ignore[attr-defined]
         e._Engine__job_loader = None  # type: ignore[attr-defined]
+        e._Engine__job_loader_lock = threading.Lock()  # type: ignore[attr-defined]
         return e
 
     nats = engine(_config())
@@ -365,9 +366,39 @@ def test_an_engine_makes_its_loader_on_the_first_workflow_call():
     e = Engine.__new__(Engine)
     e._Engine__configuration = SimpleNamespace(nats=_config())  # type: ignore[attr-defined]
     e._Engine__job_loader = None  # type: ignore[attr-defined]
+    e._Engine__job_loader_lock = threading.Lock()  # type: ignore[attr-defined]
     try:
         e.workflow("acme.remote", "report")
         made = e._Engine__job_loader  # type: ignore[attr-defined]
         assert made is not None
     finally:
         made.stop()
+
+
+def test_threads_asking_at_once_share_one_loader_one_loop_and_one_connection():
+    from naas_abi_core.engine.Engine import Engine
+
+    e = Engine.__new__(Engine)
+    e._Engine__configuration = SimpleNamespace(nats=_config())  # type: ignore[attr-defined]
+    e._Engine__job_loader = None  # type: ignore[attr-defined]
+    e._Engine__job_loader_lock = threading.Lock()  # type: ignore[attr-defined]
+    start, proxies = threading.Barrier(8), []
+
+    def ask(i):
+        start.wait()
+        proxies.append(e.workflow(f"acme.m{i % 2}", "report"))
+
+    threads = [threading.Thread(target=ask, args=(i,)) for i in range(8)]
+    try:
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(10)
+        loader = e._Engine__job_loader  # type: ignore[attr-defined]
+        assert len(proxies) == 8
+        assert len({id(p.transport) for p in proxies}) == 1
+        assert len({id(p._loop) for p in proxies}) == 1
+        assert len({id(p._documents) for p in proxies if p.module_id == "acme.m0"}) == 1
+    finally:
+        e._Engine__job_loader.stop()  # type: ignore[attr-defined]
+    assert loader._loop is None and loader._transport is None
