@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import click
 
@@ -6,19 +7,35 @@ import naas_abi_cli
 from naas_abi_cli.cli.utils.Copier import Copier
 
 from .new import new
-from .remote_module import refuse_in_remote_module
-from .utils import to_pascal_case
+from .remote_module import ensure_package, is_remote_module, target_dir
+from .utils import to_pascal_case, to_snake_case
 
 
 @new.command("pipeline")
 @click.argument("pipeline_name", required=True)
 @click.argument("pipeline_path", required=False, default=".")
 def _new_pipeline(pipeline_name: str, pipeline_path: str = "."):
-    refuse_in_remote_module("pipeline", pipeline_path)
-    new_pipeline(pipeline_name, pipeline_path)
+    """Create a pipeline: an SDK one inside a remote module, a naas_abi_core one
+    inside an in-engine module."""
+    remote = is_remote_module(target_dir(pipeline_path))
+    new_pipeline(pipeline_name, pipeline_path, remote=remote)
+    if remote:
+        name = to_snake_case(to_pascal_case(pipeline_name) + "Pipeline")
+        click.echo(
+            f"Created {to_pascal_case(pipeline_name)}Pipeline.py (naas_abi_sdk). "
+            f"The module builds it after on_initialized, as '{name}'; its agents call "
+            f"it with self.get_pipeline('{name}').as_tools(). It needs the "
+            "naas-abi-sdk[workflows,rdf] extras (and [agents] for as_tools)."
+        )
 
 
-def new_pipeline(pipeline_name: str, pipeline_path: str = ".", extra_values: dict | None = None):
+def new_pipeline(
+    pipeline_name: str,
+    pipeline_path: str = ".",
+    extra_values: dict | None = None,
+    remote: bool = False,
+):
+    """``remote``: an SDK pipeline for a remote module (no naas_abi_core)."""
     if extra_values is None:
         extra_values = {}
     pipeline_name = to_pascal_case(pipeline_name)
@@ -28,14 +45,24 @@ def new_pipeline(pipeline_name: str, pipeline_path: str = ".", extra_values: dic
 
     if not os.path.exists(pipeline_path):
         os.makedirs(pipeline_path, exist_ok=True)
+    if remote:
+        ensure_package(Path(pipeline_path))
 
     copier = Copier(
         templates_path=os.path.join(
-            os.path.dirname(naas_abi_cli.__file__), "cli/new/templates/pipeline"
+            os.path.dirname(naas_abi_cli.__file__),
+            "cli/new/templates/remote_pipeline"
+            if remote
+            else "cli/new/templates/pipeline",
         ),
         destination_path=pipeline_path,
     )
 
     copier.copy(
-        values={"pipeline_name_pascal": to_pascal_case(pipeline_name)} | extra_values
+        values={
+            "pipeline_name_pascal": to_pascal_case(pipeline_name),
+            "pipeline_name_snake": to_snake_case(pipeline_name),
+            "pipeline_name_upper": to_snake_case(pipeline_name).upper(),
+        }
+        | extra_values
     )

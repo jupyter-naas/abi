@@ -136,14 +136,9 @@ def is_remote_module(path: Path) -> bool:
     return False
 
 
-# What a remote module does instead of the in-engine scaffolds (naas_abi_core).
+# What a remote module does instead of the in-engine scaffolds that stay
+# refused (naas_abi_core). Workflows, pipelines and integrations have SDK ones.
 _REMOTE_ALTERNATIVES = {
-    "workflow": "put the logic in a plain async function and call it from an "
-    "agent tool or a @job on ABIModule",
-    "pipeline": "put the logic in a plain async function, write through "
-    "self.engine.services.triple_store, and run it from a @job on ABIModule",
-    "integration": "call the third-party API from plain Python (httpx, "
-    "requests) in the module, with its credentials from self.engine.services.secret",
     "orchestration": "declare a @job on ABIModule with Every/Cron/OnEvent "
     "triggers: remote modules schedule work on JetStream, not Dagster",
 }
@@ -163,6 +158,15 @@ def refuse_in_remote_module(scaffold: str, path: str) -> None:
             f"import. Instead, {_REMOTE_ALTERNATIVES[scaffold]}. Or create an "
             "in-engine module: `abi new module <name> --in-engine`."
         )
+
+
+def ensure_package(folder: Path) -> None:
+    """Make ``folder`` a package: a scaffold's test imports its component
+    relatively, and discovery imports the component by its dotted name."""
+    folder.mkdir(parents=True, exist_ok=True)
+    init = folder / "__init__.py"
+    if not init.exists():
+        init.write_text(f'"""{folder.name}"""\n', encoding="utf-8")
 
 
 def template_values(

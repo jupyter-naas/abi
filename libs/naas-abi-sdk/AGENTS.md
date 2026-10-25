@@ -190,6 +190,24 @@ OpenTelemetry API, and a no-op without a provider. Modules
 export spans when `OTEL_EXPORTER_OTLP_ENDPOINT` is set (`[otel]` extra). See
 docs/adr/20261002_observability.md.
 
+`integration.py`, `workflow.py`, `pipeline.py` (with `processes.py`: the shared
+`Process` base, `as_tools`, construction) and `components.py` (names, discovery,
+stdlib only) are the in-engine bases without core. Keep them importable without
+extras: `components.py`, `integration.py` and `module.py` import neither pydantic,
+rdflib nor LangChain (pydantic is imported by `processes.py`, rdflib by
+`pipeline.py`, each raising an `ImportError` that names the extra; LangChain only
+inside `as_tools`). The package `__init__` stays lazy. A component's name is
+`component_slug(class name)`, mirroring core's `process_route_slug`: change them
+together. `BaseModule` finds `Workflow`/`Pipeline` classes under `workflows/` and
+`pipelines/` at class level (`get_workflow_classes`, `get_pipeline_classes`; names
+unique per kind, one NATS subject token), and `run_module` validates them before
+connecting. After `on_initialized` it builds each one (`New(module)`, else an empty
+`<Name>Configuration`) unless `expose_workflow`/`expose_pipeline` bound it; an
+unbuildable, unbound class fails startup (the later serving work declares every
+one of them). Integrations are a pattern, never discovered. Tests:
+`tests/test_workflows.py` (extras: `--extra workflows --extra rdf --extra agents`,
+a CI step) and `tests/test_workflows_extras.py` (no extras needed).
+
 Test layout is a deliberate exception to the monorepo rule of a `_test.py` beside
 each file: SDK tests live in `tests/test_<module>.py`, outside the published
 package, and the CI `packages` job runs them alone on Python 3.10 to 3.12. Add a
