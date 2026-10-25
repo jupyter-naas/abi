@@ -74,12 +74,18 @@ def test_a_module_registers_only_under_its_own_identity():
 
     async def scenario():
         primary = DiscoveryNATS(DiscoveryService(MemoryRegistry()), SECRET, "test")
-        refused = await _register_as(primary, "acme.intruder", "acme.research", module_token=True)
+        refused = await _register_as(
+            primary, "acme.intruder", "acme.research", module_token=True
+        )
         assert refused.error.code == "PERMISSION_DENIED"
         assert "acme.intruder" in refused.error.message
         # First-party identities do not register modules either.
-        assert (await _register_as(primary, "api", "acme.research")).error.code == "PERMISSION_DENIED"
-        accepted = await _register_as(primary, "acme.research", "acme.research", module_token=True)
+        assert (
+            await _register_as(primary, "api", "acme.research")
+        ).error.code == "PERMISSION_DENIED"
+        accepted = await _register_as(
+            primary, "acme.research", "acme.research", module_token=True
+        )
         assert accepted.error.code == ""
         assert accepted.instance.descriptor.module_id == "acme.research"
 
@@ -175,6 +181,50 @@ def test_authorize_agent_names_the_caller_and_whether_it_is_an_admin():
         # A token bound to another instance, or to none, is not this caller's.
         assert (await authorize("api", audience="r-2")).error.code == "UNAUTHENTICATED"
         assert (await authorize("api", audience=None)).error.code == "UNAUTHENTICATED"
+
+    asyncio.run(scenario())
+
+
+def test_authorize_process_needs_a_caller_token_bound_to_the_instance_asking():
+    async def scenario():
+        service = AsyncMock()
+        service.admin_identities = frozenset({"api", "engine"})
+        service.authorize_process.return_value = pb.AuthorizeProcessResponse()
+        primary = DiscoveryNATS(service, SECRET, "test")
+
+        async def authorize(caller_token):
+            msg = SimpleNamespace(
+                data=pb.AuthorizeProcessRequest(
+                    instance_id="r-1",
+                    process_name="greet",
+                    process_kind="workflow",
+                    caller_token=caller_token,
+                ).SerializeToString(),
+                headers={"Nats-Auth-Token": issue_service_token("research", SECRET)},
+                reply="reply",
+                _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
+            )
+            await primary._handle("authorize_process", msg)
+            return pb.AuthorizeProcessResponse.FromString(
+                msg._client.publish.call_args.args[1]
+            )
+
+        caller = await authorize(issue_service_token("b", SECRET, audience="r-1"))
+        assert (caller.caller_identity, caller.caller_admin) == ("b", False)
+        assert service.authorize_process.await_count == 1
+        api = await authorize(issue_service_token("api", SECRET, audience="r-1"))
+        assert (api.caller_identity, api.caller_admin) == ("api", True)
+        service.authorize_process.reset_mock()
+        # Bound to another instance, to none, or not a token: refused before discovery
+        # looks at the process.
+        for token in (
+            issue_service_token("b", SECRET, audience="r-2"),
+            issue_service_token("b", SECRET),
+            "not-a-token",
+            "",
+        ):
+            assert (await authorize(token)).error.code == "UNAUTHENTICATED"
+        service.authorize_process.assert_not_awaited()
 
     asyncio.run(scenario())
 

@@ -33,7 +33,8 @@ initialized renewal).
 
 ## Generations
 Replicas of one generation (the same rollout id, or none on both) must declare
-identical dependencies, agents, jobs and models for a contract major, or the
+identical dependencies, agents, jobs, models, apps, workflows and pipelines for a
+contract major, or the
 registration fails with DESCRIPTOR_CONFLICT. A rollout may change them for the
 generation it replaces: it stays STAGED, outside READY lookups and READY-gated
 authorizations, until its cohort cuts over.
@@ -54,6 +55,20 @@ against the clock at use. A submit, and anything the snapshot would refuse,
 reads the registry, so a snapshot never refuses what the registry allows. An
 eviction or unregister through another replica can still let polls through for
 up to that second. Every read and successful write refreshes the snapshot.
+
+## Workflows and pipelines
+A descriptor lists the `processes` a module serves over NATS (`abi.process.v1`): a
+`name` (one subject token, up to 64 characters), a `kind` (`workflow` or `pipeline`;
+a name is unique per kind), a description of at most 4 KiB, a contract major above
+zero; at most 128 per module and 128 KiB of descriptors in all, so they stay a
+small part of the 512 KiB snapshot. The parameter schema is not registered: callers
+ask the module (`describe`). `authorize_process` (instance, lease token, kind, name,
+caller token) is answered like `authorize_app`, from a recent snapshot when it
+already allows the call, else from the registry: the caller's token must be bound to
+the instance asking (the NATS adapter verifies `aud` as for the other `authorize_*`
+calls), the lease and owner must match, the process must be declared (`PROCESS_NOT_FOUND`)
+and the instance READY (`MODULE_UNAVAILABLE`), so a draining or staged instance
+authorizes nothing.
 
 ## Concurrency
 `DiscoveryNATS` answers calls side by side, up to `nats.max_concurrent_requests`
