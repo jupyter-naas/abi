@@ -61,7 +61,8 @@ A descriptor lists the `processes` a module serves over NATS (`abi.process.v1`):
 `name` (one subject token, up to 64 characters), a `kind` (`workflow` or `pipeline`;
 a name is unique per kind), a description of at most 4 KiB, a contract major above
 zero; at most 128 per module and 128 KiB of descriptors in all, so they stay a
-small part of the 512 KiB snapshot. The parameter schema is not registered: callers
+small part of the 512 KiB snapshot (a refusal names the limit hit; the SDK cuts
+descriptions to 512 UTF-8 bytes so its own can never exceed it). The parameter schema is not registered: callers
 ask the module (`describe`). `authorize_process` (instance, lease token, kind, name,
 caller token) is answered like `authorize_app`, from a recent snapshot when it
 already allows the call, else from the registry: the caller's token must be bound to

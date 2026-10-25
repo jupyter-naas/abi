@@ -149,24 +149,32 @@ def _process_name(value: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z0-9_-]{1,64}", value))
 
 
-def _valid_process(process: pb.ProcessDescriptor) -> bool:
-    return (
-        _process_name(process.name)
-        and process.kind in PROCESS_KINDS
-        and process.contract_major > 0
-        and len(process.description) <= 4096
-    )
-
-
-def _valid_processes(processes: Iterable[pb.ProcessDescriptor]) -> bool:
-    """Valid descriptors, a name unique per kind, within the byte cap."""
+def _process_problem(processes: Iterable[pb.ProcessDescriptor]) -> str | None:
+    """Why ``processes`` cannot be registered, naming the limit that was hit."""
     processes = list(processes)
-    return (
-        len(processes) <= MAX_PROCESSES
-        and len({(p.kind, p.name) for p in processes}) == len(processes)
-        and all(_valid_process(p) for p in processes)
-        and sum(p.ByteSize() for p in processes) <= MAX_PROCESSES_BYTES
-    )
+    if len(processes) > MAX_PROCESSES:
+        return f"Too many processes: {len(processes)}, at most {MAX_PROCESSES}"
+    seen: set[tuple[str, str]] = set()
+    for process in processes:
+        label = f"{process.kind or '?'} {process.name!r}"
+        if not _process_name(process.name):
+            return f"Invalid process name {process.name!r}: 1 to 64 letters, digits, '_' or '-'"
+        if process.kind not in PROCESS_KINDS:
+            return f"Invalid kind {process.kind!r} for process {process.name!r}: workflow or pipeline"
+        if process.contract_major <= 0:
+            return f"Process {label} needs a contract major above zero"
+        if len(process.description) > 4096:
+            return f"Description of process {label} exceeds 4096 characters"
+        if (process.kind, process.name) in seen:
+            return f"Duplicate process {label}: a name is unique per kind"
+        seen.add((process.kind, process.name))
+    size = sum(p.ByteSize() for p in processes)
+    if size > MAX_PROCESSES_BYTES:
+        return (
+            f"Processes take {size} bytes, at most {MAX_PROCESSES_BYTES}: "
+            "shorten their descriptions"
+        )
+    return None
 
 
 class DiscoveryService:
@@ -451,13 +459,8 @@ class DiscoveryService:
             "INVALID_ARGUMENT",
             "Invalid app descriptor",
         )
-        _require(
-            _valid_processes(d.processes),
-            "INVALID_ARGUMENT",
-            "Invalid, too many or duplicate processes: at most 128 workflows and "
-            "pipelines, each name a subject token unique per kind, a description of "
-            "at most 4 KiB, 128 KiB in all",
-        )
+        problem = _process_problem(d.processes)
+        _require(problem is None, "INVALID_ARGUMENT", problem or "")
         for record in state.records:
             other = record.instance.descriptor
             if req.rollout_id and record.rollout_id == req.rollout_id:

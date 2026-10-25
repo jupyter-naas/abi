@@ -32,7 +32,9 @@ subjects, with a deadline.** It follows the model and app hosts.
 `ModuleDescriptor.processes = 9` lists `ProcessDescriptor { name, kind, description,
 contract_major }`. `kind` is `workflow` or `pipeline`; a name is a subject token of at
 most 64 characters, unique per kind. At most 128 per module, a description of at most
-4 KiB (the SDK sends 512 characters of the class docstring) and 128 KiB in all.
+4 KiB (the SDK sends the class docstring cut to 512 UTF-8 bytes, on a character
+boundary, so 128 descriptors always fit) and 128 KiB in all. A refused registration names
+the limit it hit (count, name, kind, description, duplicate or total size).
 Replicas of one generation declare identical processes.
 
 `authorize_process` (`AuthorizeProcessRequest`/`Response`) is `authorize_model` for
@@ -53,8 +55,11 @@ snapshot that already allows the call answers it; a refusal always reads the reg
 - The module authorizes the caller (an answer is reused for at most 5 seconds, never
   past the token's `exp`, and a refusal is never kept), validates the parameters into
   the process's pydantic model (`INVALID_ARGUMENT`, naming fields and no values), runs
-  it for the caller's deadline (300 seconds by default) and cancels it when it passes
-  (`DEADLINE_EXCEEDED`). A failing process answers `PROCESS_ERROR` without its
+  it for the caller's deadline (300 seconds by default, at most 3600 like an agent run: a
+  longer one would pin a call slot and a drain; `INVALID_ARGUMENT` above it) and cancels it
+  when it passes (`DEADLINE_EXCEEDED`). A `CancelledError` the process raises itself is
+  its failure (`PROCESS_ERROR`), not a cancelled call. A run is awaited to the end of its
+  cleanup when it is cancelled, by the deadline or by `close()`. A failing process answers `PROCESS_ERROR` without its
   exception text. Runs go side by side up to `max_concurrency` (64), like the other
   hosts; describing is apart.
 - **A run is never retried**, by the proxy or anything else: it may have run when a call
@@ -67,7 +72,10 @@ snapshot that already allows the call answers it; a refusal always reads the reg
   may not subscribe to. Parameters above one message (about 250 KiB, less on a small
   broker) go in `parameters_inbox` (the caller holds them, the module pulls them after it
   authorized the call), a result in `body_inbox`; at most 256 MiB each way. An inbox a
-  peer names must be an `_INBOX` subject.
+  peer names must be an `_INBOX` subject. A result stream keeps its call slot until the
+  reader has pulled it all (a drain waits for it), so a reader that stops pulling for 20
+  seconds is dropped, and the slot with it. A schema too large for one message is
+  answered `PAYLOAD_TOO_LARGE` by `describe`.
 - **Shutdown.** The host joins `run_module`'s drain: on SIGTERM it stops taking calls,
   finishes the runs in progress (up to the drain timeout), and the module then
   unregisters. It is closed after the app host.

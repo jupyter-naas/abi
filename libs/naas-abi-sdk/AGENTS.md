@@ -213,7 +213,7 @@ a CI step) and `tests/test_workflows_extras.py` (no extras needed).
 
 Workflows and pipelines are served (`process_host.py`, `process_proxy.py`, proto
 `abi.process.v1`, ADR docs/adr/20261025_remote-module-processes.md). `module_descriptor`
-publishes them (`ProcessDescriptor`: name, kind, description cut to 512 characters,
+publishes them (`ProcessDescriptor`: name, kind, description cut to 512 UTF-8 bytes,
 contract 1; `ModuleInstance.processes`), so a module that has any needs discovery:
 `run_module` raises before it connects without it. `ProcessHost` subscribes
 `abi.mod.<project>.<instance>.process.<kind>.<name>.run|describe` and answers like
@@ -221,8 +221,9 @@ contract 1; `ModuleInstance.processes`), so a module that has any needs discover
 through `authorize_process` before the parameters are read (`AUTHORIZATION_SECONDS`,
 `_token_expiry`, no cached refusal, concurrent first calls share one discovery call),
 parameters validated into `parameters_type()` (`INVALID_ARGUMENT` with field names
-only), the run cancelled at the caller's deadline (`_within`: a `TimeoutError` the
-process raises is its own `PROCESS_ERROR`), the process's exception text never sent.
+only), the run cancelled at the caller's deadline, at most 3600 s (`_within`: a
+`TimeoutError` or `CancelledError` the process raises is its own `PROCESS_ERROR`, and a
+cancelled run is awaited to the end of its cleanup), the process's exception text never sent.
 It closes in `run_module`'s order: drain with the other hosts (new calls refused, runs
 finish), then `close()` after the app host (a cut-off run tells its caller `CANCELLED`).
 Payloads above one message use the app body streams (`BodySource`, `pull_body`), not

@@ -690,9 +690,7 @@ async def run_module(
                     {a.name: (a, module._app_handlers.get(a.name)) for a in apps},
                 )
                 await app_host.start()
-            if served:
-                if registration is None:
-                    raise ValueError("Workflow and pipeline hosting requires discovery")
+            if served:  # with discovery: run_module checked it before connecting
                 from naas_abi_sdk.process_host import ProcessHost
 
                 process_host = ProcessHost(

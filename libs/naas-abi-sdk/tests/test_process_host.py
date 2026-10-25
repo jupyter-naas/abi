@@ -734,9 +734,9 @@ def test_the_default_deadline_is_300_seconds(broker, monkeypatch):
         seen = []
         original = process_host._within
 
-        async def spy(coroutine, seconds, message):
+        async def spy(coroutine, seconds, message, **kwargs):
             seen.append(seconds)
-            return await original(coroutine, seconds, message)
+            return await original(coroutine, seconds, message, **kwargs)
 
         monkeypatch.setattr(process_host, "_within", spy)
         try:
@@ -920,6 +920,239 @@ def test_the_discovery_calls_name_the_instance_kind_and_process(broker):
                 request.lease_token,
             ) == (INSTANCE, "pipeline", "load_pipeline", "l" * 32)
             assert request.caller_token  # the caller's, bound to the instance
+        finally:
+            await world.close()
+
+    run(scenario)
+
+
+# -- review round 1 ---------------------------------------------------------------
+
+
+def _raw_run(world, deadline):
+    """A run request as a caller that does not use the proxy sends it."""
+    from naas_abi_proto.process.v1 import process_pb2 as pb
+
+    async def send():
+        module = world.module()
+        return await module.client.transport.call(
+            process_host.process_subject(
+                PROJECT, INSTANCE, "workflow", "echo_workflow", "run"
+            ),
+            pb.RunRequest(
+                name="echo_workflow",
+                parameters_json=b'{"name": "a"}',
+                deadline_seconds=deadline,
+            ),
+            pb.RunResponse,
+            instance_id=INSTANCE,
+        )
+
+    return send()
+
+
+def test_the_host_refuses_a_deadline_above_an_hour(broker):
+    async def scenario():
+        world = await serve(broker)
+        try:
+            for deadline in (3600.5, 1e9, float("inf"), float("nan"), -1.0):
+                with pytest.raises(RPCError) as error:
+                    await _raw_run(world, deadline)
+                assert error.value.code == "INVALID_ARGUMENT"
+                assert "3600" in str(error.value)
+            assert EchoWorkflow.runs == 0
+            # The hour itself is allowed, and zero means the default.
+            assert (await _raw_run(world, 3600.0)).result_json
+            assert (await _raw_run(world, 0.0)).result_json
+            assert EchoWorkflow.runs == 2
+        finally:
+            await world.close()
+
+    run(scenario)
+
+
+def test_the_proxy_refuses_a_deadline_above_an_hour_before_sending(broker):
+    async def scenario():
+        world = await serve(broker)
+        try:
+            workflow = world.module().get_workflow("echo_workflow")
+            for bad in (3600.5, 1e9):
+                with pytest.raises(ValueError, match="3600"):
+                    await workflow.run({"name": "a"}, timeout=bad)
+            assert world.discovery.calls == 0
+            assert await workflow.run({"name": "a"}, timeout=3600) == {"echo": "a"}
+        finally:
+            await world.close()
+
+    run(scenario)
+
+
+def test_the_target_is_resolved_before_any_inbox_is_set_up(broker, monkeypatch):
+    from naas_abi_sdk import process_proxy
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("an inbox was set up for a run that cannot be sent")
+
+    async def scenario():
+        world = await serve(broker)
+        monkeypatch.setattr(process_proxy, "BodySource", refuse)
+        try:
+            starting = world.module(status="STARTING").get_workflow("length_workflow")
+            with pytest.raises(RPCError) as error:
+                await starting.run({"name": "n" * (3 * MB)})
+            assert error.value.code == "MODULE_UNAVAILABLE"
+        finally:
+            await world.close()
+
+    run(scenario)
+
+
+def _wide_workflow():
+    from pydantic import Field
+
+    class Wide(WorkflowParameters):
+        value: str = Field(default="x", description="d" * (2 * MB))
+
+    class WideWorkflow(Workflow[Wide]):
+        """Has a huge schema."""
+
+        async def run(self, parameters: Wide):
+            return {"ok": True}
+
+    return WideWorkflow
+
+
+def test_a_schema_above_the_brokers_message_size_is_refused_not_awaited(broker):
+    async def scenario():
+        world = await serve(
+            broker, workflows={"wide_workflow": _wide_workflow()}, pipelines={}
+        )
+        try:
+            started = time.monotonic()
+            with pytest.raises(RPCError) as error:
+                await world.module().get_workflow("wide_workflow").describe()
+            assert error.value.code == "PAYLOAD_TOO_LARGE"
+            assert time.monotonic() - started < 5  # not the 30 s describe timeout
+            # Running it does not need the schema.
+            assert await world.module().get_workflow("wide_workflow").run({}) == {
+                "ok": True
+            }
+        finally:
+            await world.close()
+
+    run(scenario)
+
+
+def test_a_description_that_cannot_be_sent_gets_an_error_not_silence(
+    broker, monkeypatch
+):
+    async def scenario():
+        world = await serve(broker)
+        real = process_host.reply
+        failures = []
+
+        async def flaky(msg, data, headers=None):
+            from naas_abi_proto.process.v1 import process_pb2 as pb
+
+            if not pb.DescribeResponse.FromString(data).error.code and not failures:
+                failures.append(True)
+                raise ConnectionError("the connection is closing")
+            return await real(msg, data, headers)
+
+        monkeypatch.setattr(process_host, "reply", flaky)
+        try:
+            started = time.monotonic()
+            with pytest.raises(RPCError) as error:
+                await world.module().get_workflow("echo_workflow").describe()
+            assert error.value.code == "PROCESS_ERROR"
+            assert time.monotonic() - started < 5
+        finally:
+            await world.close()
+
+    run(scenario)
+
+
+class CancelsItself(Workflow[WorkflowParameters]):
+    async def run(self, parameters: WorkflowParameters):
+        raise asyncio.CancelledError()
+
+
+class AwaitsACancelledChild(Workflow[WorkflowParameters]):
+    async def run(self, parameters: WorkflowParameters):
+        child = asyncio.ensure_future(asyncio.sleep(30))
+        child.cancel()
+        await child
+
+
+class SlowToClean(Workflow[WorkflowParameters]):
+    cleaned = False
+
+    async def run(self, parameters: WorkflowParameters):
+        try:
+            await asyncio.sleep(30)
+        finally:
+            await asyncio.sleep(0.3)
+            type(self).cleaned = True
+
+
+def test_a_cancellation_the_process_raises_is_its_failure_not_the_deadline(broker):
+    async def scenario():
+        world = await serve(
+            broker,
+            workflows={
+                "cancels_itself": CancelsItself,
+                "awaits_a_cancelled_child": AwaitsACancelledChild,
+            },
+            pipelines={},
+        )
+        try:
+            module = world.module()
+            for name in ("cancels_itself", "awaits_a_cancelled_child"):
+                started = time.monotonic()
+                with pytest.raises(RPCError) as error:
+                    await module.get_workflow(name).run({}, timeout=30)
+                assert error.value.code == "PROCESS_ERROR"
+                assert "cancelled" in str(error.value)
+                assert time.monotonic() - started < 5  # not the 30 s deadline
+        finally:
+            await world.close()
+
+    run(scenario)
+
+
+def test_close_returns_once_a_cut_off_process_has_cleaned_up(broker):
+    async def scenario():
+        SlowToClean.cleaned = False
+        world = await serve(
+            broker, workflows={"slow_to_clean": SlowToClean}, pipelines={}
+        )
+        try:
+            call = asyncio.create_task(
+                world.module().get_workflow("slow_to_clean").run({}, timeout=60)
+            )
+            await asyncio.sleep(0.4)
+            await world.host.close()
+            assert SlowToClean.cleaned  # not still cleaning up behind close()
+            with pytest.raises(RPCError) as error:
+                await asyncio.wait_for(call, 5)
+            assert error.value.code == "CANCELLED"
+        finally:
+            await world.close()
+
+    run(scenario)
+
+
+def test_a_deadline_waits_for_the_process_to_clean_up_too(broker):
+    async def scenario():
+        SlowToClean.cleaned = False
+        world = await serve(
+            broker, workflows={"slow_to_clean": SlowToClean}, pipelines={}
+        )
+        try:
+            with pytest.raises(RPCError) as error:
+                await world.module().get_workflow("slow_to_clean").run({}, timeout=0.3)
+            assert error.value.code == "DEADLINE_EXCEEDED"
+            assert SlowToClean.cleaned
         finally:
             await world.close()
 
