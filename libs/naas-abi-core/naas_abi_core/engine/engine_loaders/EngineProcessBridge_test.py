@@ -165,7 +165,7 @@ def test_the_workflow_carries_the_schema_the_description_and_one_attempt():
     assert json.loads(pipeline.output_schema) == json.loads(
         json.dumps(GRAPH_OUTPUT_SCHEMA, sort_keys=True)
     )
-    assert json.loads(workflow.output_schema)["required"] == ["greeting"]
+    assert json.loads(workflow.output_schema)["anyOf"][0]["required"] == ["greeting"]
     # The class's own docstring only: ReportWorkflow has none, Workflow's is generic.
     assert workflow.description == "ReportWorkflow"
 
@@ -247,6 +247,125 @@ def test_other_results_are_kept_as_they_are():
     assert encode_process_result("done") == "done"
     assert encode_process_result(None) is None
     assert encode_process_result(b"raw") == {"data": "raw"}
+
+
+def test_values_the_rest_route_can_send_do_not_fail_the_step():
+    import datetime
+    import decimal
+    import enum
+    import pathlib
+
+    class Color(enum.Enum):
+        RED = "red"
+
+    result = {
+        "when": datetime.datetime(2026, 10, 25, 10, 0, tzinfo=datetime.UTC),
+        "day": datetime.date(2026, 10, 25),
+        "path": pathlib.Path("/tmp/x"),
+        "price": decimal.Decimal("1.50"),
+        "tags": {"b"},
+        "color": Color.RED,
+        "ratio": float("nan"),
+        "inf": float("inf"),
+        "odd": object,
+    }
+
+    encoded = encode_process_result(result)
+
+    json.dumps(encoded, allow_nan=False)  # what the step journal requires
+    assert encoded["when"].startswith("2026-10-25T10:00:00")
+    assert encoded["day"] == "2026-10-25" and encoded["path"] == "/tmp/x"
+    assert (
+        encoded["price"] == 1.5
+        and encoded["tags"] == ["b"]
+        and encoded["color"] == "red"
+    )
+    assert encoded["ratio"] is None and encoded["inf"] is None
+    assert isinstance(encoded["odd"], str)
+    assert encode_process_result({("a", "b"): 1}) == {"('a', 'b')": 1}
+    loop: list = []
+    loop.append(loop)
+    assert encode_process_result(loop)["repr"].startswith("[")
+
+
+def test_a_pipeline_returning_such_a_dict_still_succeeds_after_its_work():
+    import datetime
+
+    class Dated(_NoTools, Workflow[ReportParameters]):
+        wrote = 0
+
+        def run(self, parameters: ReportParameters) -> dict:
+            Dated.wrote += 1  # the work, done before the result is encoded
+            return {"at": datetime.datetime(2026, 1, 1), "score": float("nan")}
+
+    module = _Module(workflows=[Dated(WorkflowConfiguration())])
+    bridge_processes({"acme.mod": module}, _config())
+
+    result, docs = _run(module, "workflow.dated", {"name": "x"})
+
+    assert result == {"at": "2026-01-01T00:00:00", "score": None}
+    assert Dated.wrote == 1 and docs.statuses() == {"run": "SUCCEEDED"}
+
+
+def test_a_result_over_the_cap_becomes_a_marker_for_every_result_type():
+    class Big(BaseModel):
+        items: list[str]
+
+    huge = ["x" * 100] * 1000  # about 100 KB of JSON
+    for result in ({"items": huge}, huge, Big(items=huge), "y" * 200_000):
+        encoded = encode_process_result(result)
+        assert encoded["omitted"] is True and encoded["limit"] == 60 * 1024
+        assert encoded["bytes"] > 60 * 1024 and "left out" in encoded["note"]
+        assert len(json.dumps(encoded)) < 1000
+    small = {"items": ["x"]}
+    assert encode_process_result(small) == small
+    assert encode_process_result(huge, max_bytes=10**6) == huge
+
+
+def test_the_advertised_output_schema_admits_the_marker():
+    class Out(BaseModel):
+        n: int
+
+    class Typed(_NoTools, Workflow[ReportParameters]):
+        def run(self, parameters: ReportParameters) -> Out:
+            return Out(n=1)
+
+    module = _Module(workflows=[Typed(WorkflowConfiguration())])
+    bridge_processes({"acme.mod": module}, _config())
+
+    schema = json.loads(module.jobs[0].output_schema)
+
+    assert [s.get("title") for s in schema["anyOf"]] == ["Out", None]
+    assert schema["anyOf"][1]["required"] == ["omitted", "bytes", "limit"]
+
+
+def test_bridging_the_same_modules_twice_declares_each_class_once_without_warnings(
+    caplog,
+):
+    module = _Module(pipelines=[_tweets()], workflows=[_report()])
+
+    first = bridge_processes({"acme.mod": module}, _config())
+    with caplog.at_level("WARNING"):
+        second = bridge_processes({"acme.mod": module}, _config())
+
+    assert len(first) == 2 and second == []
+    assert len(module.jobs) == 2
+    assert not [r for r in caplog.records if "exists" in r.getMessage()]
+
+
+def test_a_users_workflow_of_the_same_name_still_wins():
+    class Mine(JobsMixin):
+        _sync_jobs = True
+        workflows = [_report()]
+        pipelines: list = []
+
+    module = Mine()
+    module.declare_workflow(
+        "workflow.report_workflow", lambda ctx, inp: {}, input_schema={"type": "object"}
+    )
+
+    assert bridge_processes({"acme.mod": module}, _config()) == []
+    assert len(module.jobs) == 1
 
 
 def _run(module, name, payload):

@@ -115,12 +115,19 @@ class SyncFlowContext:
             task: asyncio.Task[Any] = self._loop.create_task(coro)  # type: ignore[arg-type]
 
             def finished(done: asyncio.Task[Any]) -> None:
-                if done.cancelled():
-                    future.cancel()
-                elif done.exception() is not None:
-                    future.set_exception(done.exception())  # type: ignore[arg-type]
-                else:
-                    future.set_result(done.result())
+                # The waiting thread may have cancelled the future already (an
+                # interrupt), and the task finished before its cancel arrived.
+                if future.cancelled():
+                    return
+                try:
+                    if done.cancelled():
+                        future.cancel()
+                    elif done.exception() is not None:
+                        future.set_exception(done.exception())  # type: ignore[arg-type]
+                    else:
+                        future.set_result(done.result())
+                except concurrent.futures.InvalidStateError:
+                    pass  # cancelled between the check and the set
 
             task.add_done_callback(finished)
             # A cancel from this thread (an interrupt while it waits) reaches the task.
@@ -356,6 +363,8 @@ if WORKFLOWS_AVAILABLE:
                 output_schema=output_schema,
             )
             doc = inspect.getdoc(method) or ""
+            # The descriptor of naas_abi_sdk.workflows.workflow, for a sync method: keep
+            # the two in step.
             method.__abi_job__ = JobDescriptor(  # type: ignore[attr-defined]
                 name=name or method.__name__,
                 description=description or (doc.splitlines()[0] if doc else ""),

@@ -192,17 +192,27 @@ exist) and before `EngineJobLoader.start` (the descriptors are sealed then):
   parameters model. The description is the class's own docstring (`getdoc` would
   give a subclass without one the base class's text). The output schema comes from
   the return annotation (a model, a dict, the graph envelope), else none.
-  `max_concurrency=1` and `max_attempts=1`: a pipeline writes to the graph, and a
-  retry or a second run at once would write twice.
+  `max_attempts=1`: a pipeline writes to the graph, and a retry would write twice.
+  `max_concurrency=1`: durable runs of one class do not overlap (a REST call or an
+  agent tool can still run the same instance at the same time).
 - **Handler.** The input is validated (invalid: `InvalidWorkflowInput`, no retry),
   then `run(params)` is the one step `run`, in the worker thread. The step is
   journaled, so the timeline shows it, and its result is the encoded result.
-- **Result.** A pydantic model is `model_dump`ed; `dict`, `list` and `str` are kept;
-  an rdflib `Graph` becomes `{"format": "text/turtle", "triples": n, "data":
-  "<turtle>"}`. `data` is dropped for a `note` when the Turtle is over **60 KiB**:
-  the run record keeps 64 KiB of output, and a larger one comes back truncated
-  (the step cap is 256 KiB, which is not the limit that matters). Most pipelines
-  insert into the triple store themselves, so the graph is a courtesy.
+- **Result.** The step journal takes only strict JSON, and `run()` has done its work
+  by the time it is encoded, so the result is normalized first, the way the REST
+  route sends it: containers are walked, leaves go through FastAPI's encoder
+  (models, datetimes, paths, decimals, sets, enums, dataclasses), NaN and infinity
+  become `null`, anything else becomes its text. An rdflib `Graph` becomes
+  `{"format": "text/turtle", "triples": n, "data": "<turtle>"}`, with `data` dropped
+  for a `note` when the Turtle is over **60 KiB**. Every other result over 60 KiB
+  of JSON becomes `{"omitted": true, "bytes": n, "limit": n, "note": ...}` instead.
+  The cap is the run record's (64 KiB, a larger output comes back as a truncation
+  marker that does not validate against the advertised schema), not the step's
+  256 KiB. The declared output schema is the return model's or `anyOf` it and the
+  marker. We return a marker rather than fail the run (`NonRetryable`): the pipeline
+  has already written its triples, and a failed run invites a re-launch that writes
+  them twice. Most pipelines insert into the triple store themselves, so the result
+  is a courtesy.
 - **Everywhere.** The bridge runs in every NATS engine, whether it hosts or not, so
   `Engine.job_owners()` lists the same jobs in the API process and in the serving
   engine. Without NATS, or with the switch off, nothing is declared.
@@ -277,9 +287,11 @@ job descriptor at most 64 KiB. Replica equality already covered the new fields.
   callers (agent tools, REST) are not limited. A bridged pipeline that a REST call and
   a workflow run write with at the same time is not serialized across the two paths.
 - A graph result over 60 KiB comes back without its Turtle, only the triple count and a
-  note. A bridged workflow whose dict result is between 64 and 256 KiB succeeds, but its
-  run record keeps a truncated marker and `WorkflowRun.result()` raises: return a
-  reference to object storage.
+  note. Any other bridged result over 60 KiB of JSON comes back as the `omitted` marker
+  (`bytes`, `limit`, `note`), and the run still succeeds: callers that need the data read
+  what `run()` wrote (the triple store, object storage), or call a workflow that returns a
+  reference. A caller that validates the output as a model (`output_type`, `ctx.call`
+  into a typed consumer) must accept the marker.
 - The bridge is evaluated once per engine start, from the instances `on_initialized`
   built. A class that could not be instantiated has no workflow. Changing a class's
   parameters model changes its input schema on the next start; there is no schema

@@ -309,9 +309,12 @@ instance of an engine module that has a live typed `run()` (the ones that get a
 `POST /workflows/<slug>` or `/pipelines/<slug>` route) is also published as a
 one-step workflow, `workflow.<slug>` or `pipeline.<slug>`, with the parameters
 model as its input schema and the class docstring as its description. It runs with
-`max_concurrency=1` and `max_attempts=1`, because pipelines write to the graph. An
-rdflib `Graph` result comes back as `{"format": "text/turtle", "triples": n,
-"data": "<turtle>"}`, with `data` left out when it would not fit in a run record.
+`max_attempts=1` (pipelines write to the graph, so a retry would write twice) and
+`max_concurrency=1` (durable runs of one class do not overlap; a REST call or an
+agent tool can still run it at the same time). The result is made plain JSON the way
+the REST route sends it. An rdflib `Graph` comes back as `{"format": "text/turtle",
+"triples": n, "data": "<turtle>"}`, with `data` left out when it would not fit in a
+run record; any other result over 60 KiB comes back as `{"omitted": true, ...}`.
 The classes, their agent tools and their REST routes do not change; without NATS
 nothing is published.
 

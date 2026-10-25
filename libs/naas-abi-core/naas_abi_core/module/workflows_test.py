@@ -409,3 +409,30 @@ def test_a_base_module_declares_sync_workflows_and_hosts_them_like_jobs():
     assert [j.kind for j in Acme.jobs] == ["workflow"]
     assert module.missing_job_handlers() == set()
     assert asyncio.run(handler(_flow(Documents(), payload={"n": 3}))) == {"n": 3}
+
+
+def test_a_task_that_ends_after_its_future_was_cancelled_does_not_break_the_loop(
+    host_loop,
+):
+    errors = []
+    host_loop.loop.call_soon_threadsafe(
+        host_loop.loop.set_exception_handler,
+        lambda loop, context: errors.append(context),
+    )
+    ctx = _sync_ctx(Documents(), host_loop)
+    started = threading.Event()
+
+    async def stubborn():
+        started.set()
+        try:
+            await asyncio.sleep(30)
+        except asyncio.CancelledError:
+            return "finished anyway"  # swallows the cancel and ends normally
+
+    future = ctx._submit(stubborn())
+    assert started.wait(5)
+    assert future.cancel()  # the interrupted thread gives up on it
+    time.sleep(0.3)  # the task sees its cancel, then ends
+
+    assert future.cancelled()
+    assert errors == []  # no InvalidStateError in a loop callback

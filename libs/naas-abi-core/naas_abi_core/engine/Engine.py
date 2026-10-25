@@ -59,6 +59,7 @@ class Engine(IEngine):
     __ownership: EngineOwnershipLoader | None
     # Serving starts and stops from the lease's callbacks as well as load/shutdown.
     __serving_lock: threading.RLock
+    __job_loader_lock: threading.Lock
     # Memory of agents built with memory=None, bound by load() (see context.py).
     __agent_checkpointer: BaseCheckpointSaver | None = None
 
@@ -101,6 +102,7 @@ class Engine(IEngine):
         self.__job_loader = None
         self.__ownership = None
         self.__serving_lock = threading.RLock()
+        self.__job_loader_lock = threading.Lock()
 
     def load(self, module_names: list[str] | None = None):
         try:
@@ -373,11 +375,17 @@ class Engine(IEngine):
             )
 
     def __start_jobs(self) -> None:
-        if self.__job_loader is None:
-            self.__job_loader = EngineJobLoader(self.__configuration.nats)
-        self.__job_loader.start(
+        self.__ensure_job_loader().start(
             self.job_owners(), document_available=self.__services.document_available()
         )
+
+    def __ensure_job_loader(self) -> EngineJobLoader:
+        """The one loader, made on first use: jobs start on the engine's own (or a
+        take-over) thread while request threads may already ask for workflows."""
+        with self.__job_loader_lock:
+            if self.__job_loader is None:
+                self.__job_loader = EngineJobLoader(self.__configuration.nats)
+            return self.__job_loader
 
     def __serve_after_handover(self) -> None:
         """A standby took the lease: serve, then host the jobs."""
@@ -437,9 +445,7 @@ class Engine(IEngine):
         NATS connection: ``start(input)`` returns a run, ``run(input)`` its output.
         NATS mode only (``JobsNotHosted`` otherwise). Works on any engine, also one
         that hosts no jobs (a client, a CLI), which then only starts and watches runs."""
-        if self.__job_loader is None:
-            self.__job_loader = EngineJobLoader(self.__configuration.nats)
-        return self.__job_loader.workflow(
+        return self.__ensure_job_loader().workflow(
             module_id, name, input_type=input_type, output_type=output_type
         )
 
@@ -503,7 +509,8 @@ class Engine(IEngine):
         actually clean, it's not required for correctness.
         """
         # Jobs first: running ones still save their run records over NATS.
-        job_loader, self.__job_loader = self.__job_loader, None
+        with self.__job_loader_lock:
+            job_loader, self.__job_loader = self.__job_loader, None
         if job_loader is not None:
             job_loader.stop()
         # Agents built from now on must not reach storage this engine releases.
