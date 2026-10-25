@@ -173,6 +173,18 @@ def test_the_broker_being_down_is_an_unavailable_source_and_the_failure_is_audit
     assert [r.phase for r in audit.records] == ["requested", "failed"]
 
 
+def test_a_repeated_start_answers_with_the_first_runs_state_even_without_wait():
+    control = InMemoryJobControl()
+    done = replace(fixtures.workflow_runs()[1], run_id="ingest:101", result={"count": 2})
+    flows = service(control=control, runs=InMemoryJobRunStore(fixtures.workflow_runs() + [done]))
+
+    first = run(flows.start(KEY, "acme.flows", "ingest", {"filter": "news"}, idempotency_key="k"))
+    again = run(flows.start(KEY, "acme.flows", "ingest", {"filter": "news"}, idempotency_key="k"))
+
+    assert first.run_id == again.run_id == "ingest:101"
+    assert again.view.finished and again.view.run.result == {"count": 2}
+
+
 def test_waiting_returns_the_run_as_soon_as_it_ends():
     clock = Clock()
     runs = InMemoryJobRunStore(fixtures.workflow_runs())

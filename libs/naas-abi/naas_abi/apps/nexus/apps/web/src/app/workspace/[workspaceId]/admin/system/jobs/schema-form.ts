@@ -165,7 +165,9 @@ function objectFields(schema: Schema, root: Schema, depth: number): FormField[] 
     if (!built) return null;
     fields.push(built);
   }
-  return fields;
+  // Required inputs first, each group in the schema's order (a descriptor's schema is
+  // written with sorted keys, so its order says nothing about which fields matter).
+  return [...fields.filter((f) => f.required), ...fields.filter((f) => !f.required)];
 }
 
 /** The form for an input schema, or null when the schema needs the raw JSON editor. */

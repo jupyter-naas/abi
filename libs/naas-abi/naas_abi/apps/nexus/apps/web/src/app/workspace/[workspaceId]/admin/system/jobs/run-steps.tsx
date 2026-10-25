@@ -25,7 +25,7 @@ export function StepTimeline({
       <EmptyState icon={ListOrdered} title="No steps yet">
         {isActive(run.status)
           ? 'The workflow has not started a step. Each ctx.step and ctx.call shows up here as it starts.'
-          : 'This run recorded no steps (its journal may have been removed with its retention).'}
+          : 'No step was recorded for this run. A workflow that never calls ctx.step or ctx.call has none, and a run\u2019s journal goes with the run when its retention ends.'}
       </EmptyState>
     );
   }

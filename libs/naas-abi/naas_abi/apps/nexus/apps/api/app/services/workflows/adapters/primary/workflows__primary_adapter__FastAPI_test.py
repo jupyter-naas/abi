@@ -237,6 +237,7 @@ def test_invalid_input_is_a_422_with_the_faults_and_starts_nothing(client, contr
 
     assert response.status_code == 422
     detail = response.json()["detail"]
+    assert detail["source"] == "workflows"
     assert detail["reason"] == "The input does not match the workflow's input schema"
     assert detail["errors"] == [
         {"path": "", "message": "'filter' is a required property"},
@@ -268,6 +269,22 @@ def test_the_idempotency_key_makes_a_repeated_start_the_same_run(client, control
     assert first.json()["run_id"] == again.json()["run_id"] == "ingest:101"
     assert control.keys == ["import-1", "import-1"]
     assert len(audit.records) == 4  # each start, repeated or not, is on record
+
+
+def test_repeating_a_start_whose_run_is_over_answers_200_with_its_result(control, audit):
+    done = replace(fixtures.workflow_runs()[1], run_id="ingest:101", result={"count": 9})
+    client = _client(
+        _service(control, audit, runs=InMemoryJobRunStore(fixtures.workflow_runs() + [done]))
+    )
+
+    response = client.post(
+        f"{BASE}/acme.flows/ingest/runs",
+        json={"filter": "news"},
+        headers={"Idempotency-Key": "import-1"},
+    )
+
+    assert response.status_code == 200
+    assert (response.json()["status"], response.json()["result"]) == ("SUCCEEDED", {"count": 9})
 
 
 def test_an_idempotency_key_that_cannot_be_a_header_value_is_a_422(client, control):

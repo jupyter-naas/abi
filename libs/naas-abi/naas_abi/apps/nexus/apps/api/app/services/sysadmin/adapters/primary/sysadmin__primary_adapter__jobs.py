@@ -53,11 +53,11 @@ def _error(status: int, source: str, reason: str) -> HTTPException:
     return HTTPException(status, detail={"source": source, "reason": reason})
 
 
-def invalid_input(exc: InvalidInput) -> HTTPException:
+def invalid_input(exc: InvalidInput, source: str = "jobs") -> HTTPException:
     return HTTPException(
         422,
         detail={
-            "source": "jobs",
+            "source": source,
             "reason": str(exc),
             "errors": [{"path": i.path, "message": i.message} for i in exc.issues],
         },
