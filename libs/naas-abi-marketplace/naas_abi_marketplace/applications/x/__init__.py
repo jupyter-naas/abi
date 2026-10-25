@@ -1,9 +1,14 @@
+from datetime import timedelta
+from typing import Any
+
 from fastapi import FastAPI
+from naas_abi_core.module.jobs import Cron, JobContext, job
 from naas_abi_core.module.Module import (
     BaseModule,
     ModuleConfiguration,
     ModuleDependencies,
 )
+from naas_abi_core.module.workflows import SyncFlowContext, workflow
 from naas_abi_core.services.dataset.DatasetService import DatasetService
 from naas_abi_core.services.event.EventService import EventService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
@@ -12,6 +17,16 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.triple_store.TripleStoreService import (
     TripleStoreService,
+)
+from naas_abi_marketplace.applications.x.flows.models import (
+    CountRecentTweetsInput,
+    CountRecentTweetsOutput,
+    MapTweetEnvelopeInput,
+    MapTweetEnvelopeOutput,
+    ReprocessTweetEnvelopesInput,
+    ReprocessTweetEnvelopesOutput,
+    SearchRecentTweetsInput,
+    SearchRecentTweetsOutput,
 )
 from pydantic import BaseModel, Field, model_validator
 
@@ -22,6 +37,7 @@ DEFAULT_SEARCH_INTERVAL_SECONDS = 60
 # Cadence applied to a files-reprocess entry that sets neither `interval_seconds`
 # nor `cron` — the sensor wakes every 1 h 30 min.
 DEFAULT_FILES_INTERVAL_SECONDS = 5400
+
 
 def validate_cron(value: str, setting: str) -> str:
     """Return *value* stripped, or raise if it is not cron-shaped.
@@ -525,6 +541,13 @@ class ABIModule(BaseModule):
 
     class Configuration(ModuleConfiguration):
         """
+        Under NATS (the default) this configuration drives durable workflows, with no
+        Dagster process: each ``search_recent_tweets_workflow`` entry is one trigger of
+        the ``search_recent_tweets`` workflow, which maps the envelopes it saves itself;
+        ``search_recent_tweets_event`` and ``search_recent_tweets_files`` entries are
+        used by the Dagster orchestrations only (``--without-nats``), and the
+        ``reprocess_tweet_envelopes`` workflow is launched by hand. See ``AGENTS.md``.
+
         Configuration example:
 
         module: naas_abi_marketplace.applications.x
@@ -676,9 +699,144 @@ class ABIModule(BaseModule):
         super().on_load()
         # Dagster jobs/schedules are registered once from the marketplace module
         # when both ``signals.x`` and ``naas_abi_marketplace.applications.x`` are
-        # enabled (same pattern as ``register_x_count_app_routes``).
+        # enabled (same pattern as ``register_x_count_app_routes``). The durable
+        # NATS workflows and jobs follow the same rule.
         if self.__class__.__module__ == "signals.x":
             self._BaseModule__orchestrations = []
+            self.__dict__["jobs"] = ()
+            return
+        self._declare_search_workflows()
+
+    # ----- Durable workflows and jobs (NATS mode) ------------------------------
+    # The bodies live in ``flows/``; see its AGENTS.md. Without NATS none of this
+    # runs and the Dagster orchestrations drive the same flow.
+
+    def _declare_search_workflows(self) -> None:
+        """``search_recent_tweets``: one workflow, one trigger per configured filter.
+
+        The triggers come from the configuration, so the workflow is declared at
+        load (``declare_workflow``) rather than with ``@workflow``. A tick carries
+        ``{"filter": <name>}``. A descriptor holds 16 triggers at most, so a module
+        with more filters declares ``search_recent_tweets_2`` and so on.
+        """
+        from naas_abi_marketplace.applications.x.flows.search import (
+            run_search_recent_tweets,
+        )
+        from naas_abi_marketplace.applications.x.flows.triggers import (
+            search_triggers,
+            shards,
+        )
+
+        def search_recent_tweets(
+            ctx: SyncFlowContext, inp: SearchRecentTweetsInput
+        ) -> Any:
+            return run_search_recent_tweets(self, ctx, inp)
+
+        for index, group in enumerate(
+            shards(search_triggers(self.configuration.search_recent_tweets_workflow)),
+            start=1,
+        ):
+            self.declare_workflow(
+                "search_recent_tweets"
+                if index == 1
+                else f"search_recent_tweets_{index}",
+                search_recent_tweets,
+                input_type=SearchRecentTweetsInput,
+                output_type=SearchRecentTweetsOutput,
+                description=(
+                    "One tick of an X search filter: spend guard, fetch and save the "
+                    "envelopes, map them, follow the counts, sync the dataset, publish the app."
+                ),
+                triggers=group,
+                # Different filters run side by side; a tick of a filter that is
+                # still running is SKIPPED (flows/guard.py), not queued.
+                max_concurrency=min(64, len(group)),
+                max_attempts=3,
+            )
+
+    @workflow(
+        description="Map one saved X search envelope into the graph (idempotent).",
+        max_concurrency=4,  # flows.search.MAP_CONCURRENCY
+        max_attempts=3,
+    )
+    def map_tweet_envelope(
+        self, ctx: SyncFlowContext, inp: MapTweetEnvelopeInput
+    ) -> MapTweetEnvelopeOutput:
+        from naas_abi_marketplace.applications.x.flows.mapping import (
+            run_map_tweet_envelope,
+        )
+
+        return run_map_tweet_envelope(self, ctx, inp)  # type: ignore[return-value]
+
+    @workflow(
+        description=(
+            "Re-map every search envelope under a prefix that is not yet in the "
+            "graph and the dataset, then sync the dataset and publish the app."
+        ),
+        max_attempts=2,
+    )
+    def reprocess_tweet_envelopes(
+        self, ctx: SyncFlowContext, inp: ReprocessTweetEnvelopesInput
+    ) -> ReprocessTweetEnvelopesOutput:
+        from naas_abi_marketplace.applications.x.flows.reprocess import (
+            run_reprocess_tweet_envelopes,
+        )
+
+        return run_reprocess_tweet_envelopes(self, ctx, inp)
+
+    @workflow(
+        description="Follow the hourly recent-post count of an X query: fetch, then map.",
+        max_attempts=3,
+    )
+    def count_recent_tweets(
+        self, ctx: SyncFlowContext, inp: CountRecentTweetsInput
+    ) -> CountRecentTweetsOutput:
+        from naas_abi_marketplace.applications.x.flows.count import (
+            run_count_recent_tweets,
+        )
+
+        return run_count_recent_tweets(self, ctx, inp)
+
+    @job(
+        description="Rebuild the Recent Tweets app from Dataset Service, then one media batch.",
+        triggers=(Cron("0 0 * * * *", time_zone="UTC"),),
+    )
+    def build_app(self, ctx: JobContext) -> dict:
+        from naas_abi_marketplace.applications.x.flows.common import (
+            jsonable,
+            publish_x_app,
+        )
+        from naas_abi_marketplace.applications.x.flows.guard import (
+            earlier_active_runs_sync,
+        )
+        from naas_abi_marketplace.applications.x.flows.maintenance import (
+            run_media_batch,
+        )
+
+        if earlier_active_runs_sync(self, ctx):
+            ctx.skip("the previous rebuild is still running")
+            return {}
+        return jsonable({"app": publish_x_app(self), "media": run_media_batch(self)})
+
+    @job(
+        description="Compact the X Dataset Service tables (every six hours, at :30).",
+        # Dagster's "30 */6 * * *"; half past, so it never overlaps the :00 rebuild.
+        triggers=(Cron("0 30 */6 * * *", time_zone="UTC"),),
+        timeout=timedelta(hours=5),
+    )
+    def compact_dataset(self, ctx: JobContext) -> dict:
+        from naas_abi_marketplace.applications.x.flows.common import jsonable
+        from naas_abi_marketplace.applications.x.flows.guard import (
+            earlier_active_runs_sync,
+        )
+        from naas_abi_marketplace.applications.x.flows.maintenance import (
+            run_compaction,
+        )
+
+        if earlier_active_runs_sync(self, ctx):
+            ctx.skip("the previous compaction is still running")
+            return {}
+        return jsonable(run_compaction(self))
 
     # Optional FastAPI integration hook.
     # This mirrors how `naas_abi` wires API settings and services into app.state.

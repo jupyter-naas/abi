@@ -15,7 +15,6 @@ starts **RUNNING**; ``x_dataset_compaction`` can also be launched by hand.
 from __future__ import annotations
 
 import dagster as dg
-from naas_abi_core import logger
 from naas_abi_core.orchestrations.DagsterOrchestration import DagsterOrchestration
 
 _JOB_NAME = "x_dataset_compaction"
@@ -32,20 +31,9 @@ _IN_PROGRESS_STATUSES = [
 
 def _run_compaction() -> dict:
     from naas_abi_marketplace.applications.x import ABIModule
-    from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.maintenance import (
-        compact_x_datasets,
-    )
-    from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
-        x_dataset_sync_enabled,
-    )
+    from naas_abi_marketplace.applications.x.flows.maintenance import run_compaction
 
-    module = ABIModule.get_instance()
-    if not x_dataset_sync_enabled(module):
-        logger.info("XDatasetCompactionOrchestration: dataset sync disabled; skipped")
-        return {"skipped": "dataset sync disabled"}
-    report = compact_x_datasets(module.engine.services.dataset)
-    logger.info(f"XDatasetCompactionOrchestration: done — {report}")
-    return report
+    return run_compaction(ABIModule.get_instance())
 
 
 class XDatasetCompactionOrchestration(DagsterOrchestration):

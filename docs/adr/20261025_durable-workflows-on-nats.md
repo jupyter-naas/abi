@@ -1,9 +1,9 @@
 # Durable workflows on NATS
 
 ## Status
-Accepted. Step 1 (proto and SDK runtime) and step 2 (engine modules and the
-`Workflow`/`Pipeline` bridge) implemented. Nexus (System → Jobs and `/api/workflows`)
-and the port of X build on them and follow.
+Accepted. Step 1 (proto and SDK runtime), step 2 (engine modules and the
+`Workflow`/`Pipeline` bridge) and step 4 (the port of X) implemented. Nexus
+(System → Jobs and `/api/workflows`) builds on them and follows.
 
 ## Date
 2026-10-25
@@ -231,6 +231,39 @@ exist) and before `EngineJobLoader.start` (the descriptors are sealed then):
   engine. Without NATS, or with the switch off, nothing is declared.
 - **Unchanged.** The classes, `as_tools`, `as_api` and the `/workflows` and
   `/pipelines` routes keep calling `run()` in-process.
+
+### The first real use: X on workflows
+
+The X application's recent-tweets flow (`applications/x`, `AGENTS.md` there) runs as
+workflows and jobs under NATS, with no Dagster process; its Dagster orchestrations are
+kept for `--without-nats`, and both call the same bodies (`x/flows/common.py`, none of
+which imports Dagster).
+- **Search.** `search_recent_tweets` (input `{"filter": name}`) has one `Cron`/`Every`
+  trigger per configured filter, carrying the filter name as its input. Steps: overlap,
+  spend guard, fetch and save, `map_call` of `map_tweet_envelope` over the envelopes it
+  saved, a `call` of `count_recent_tweets` when the filter follows counts, dataset sync,
+  app publish. A retry after the fetch does not call the X API again and re-attaches to
+  its mapping children.
+- **Not on `OnEvent`.** The Dagster sensor mapped envelopes from `ObjectPut` events with
+  a durable cursor; `OnEvent` is at-most-once, so the search run hands the envelopes it
+  saved to the mapping workflow itself. The mapping is idempotent (an envelope that is
+  gone, or already in the graph and the dataset, ends SKIPPED), and
+  `reprocess_tweet_envelopes` (manual) re-maps a prefix and is a no-op the second time.
+- **Overlap is skipped, not queued.** `max_concurrency` queues a tick behind the runs in
+  the slots, which is wrong for a poller. A tick whose previous run of the same filter
+  is `RUNNING` or `RETRYING` ends SKIPPED, decided from the job's run records in a
+  journaled step. Only a run that started earlier (a lower stream sequence) blocks, so
+  two ticks that start together do not both skip. The job's `max_concurrency` is its
+  number of filters, so filters run side by side.
+- **Triggers from configuration.** A workflow declared with `@workflow` has static
+  triggers; X's come from its configuration, so `search_recent_tweets` is declared at
+  load with `declare_workflow` (a descriptor holds 16 triggers: more filters declare
+  `search_recent_tweets_2`, and so on). The configured cron keeps Dagster's dialect and
+  is converted to NATS's (seconds first).
+- **Jobs.** The hourly app build and the six-hourly compaction are `@job`s with the same
+  schedules, and skip a tick whose previous run is still going.
+- **Consequence.** Envelopes saved by other callers (the X agent's tools, scripts) are no
+  longer mapped automatically under NATS; `reprocess_tweet_envelopes` maps them.
 
 ### Discovery
 Core's discovery service validates the new descriptor fields with the SDK's
