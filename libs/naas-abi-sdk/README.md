@@ -603,12 +603,25 @@ class GreetWorkflow(Workflow[GreetWorkflowParameters]):
   `on_initialized` with `self.expose_workflow(name, instance)` or
   `self.expose_pipeline(name, instance)`. A discovered class that is neither
   buildable nor bound stops the module from starting, with a message naming it.
+- An agent takes its tools when it is built, and agents are built in
+  `on_initialized`, before that build. Call `await self.build_processes()` there
+  first (bind the classes that need arguments with `expose_*` before it); it builds
+  what is not bound yet, and is idempotent, so the build after `on_initialized`
+  leaves those instances alone:
+
+  ```python
+  async def on_initialized(self):
+      await self.build_processes()
+      tools = self.get_workflow("greet_workflow").as_tools()
+      agent = IntentAgent(..., tools=tools)
+      self.expose_agent("greeter", agent.as_handler())
+  ```
 - `self.get_workflow(name)`, `self.get_pipeline(name)`, `self.get_workflows()` and
   `self.get_pipelines()` return the built instances.
 - `instance.as_tools()` returns a LangChain `StructuredTool` (extra `[agents]` or
   `[agent]`): named by the slug, described by the class docstring, taking the
   parameters model, and running `run` on the module's loop (call it from
-  `on_initialized` or later, on that loop). A pydantic result comes back as JSON
+  `on_initialized` after `build_processes()`, or later, on that loop). A pydantic result comes back as JSON
   data and a graph as `{"format": "turtle", "data": ...}`.
 - `import naas_abi_sdk` needs none of pydantic, rdflib or LangChain. Importing
   `Workflow` without pydantic, `Pipeline` without rdflib, or calling `as_tools()`

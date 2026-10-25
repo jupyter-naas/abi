@@ -21,6 +21,10 @@ module folder.
 - Read credentials with `await module.engine.services.secret.get("KEY")`
   (declare `secret` in `ModuleDependencies`), never from the environment.
 - Use them from the module: `self.get_pipeline(name)` and `.as_tools()` for an
-  agent (the graph is returned as turtle).
+  agent (the graph is returned as turtle). An agent takes its tools when it is
+  built, in `on_initialized`, where the pipelines are not built yet:
+  `await self.build_processes()` first (idempotent; `expose_pipeline` the classes
+  that need arguments before it), then pass the tools to
+  `create_agent(..., tools=tools)`.
 - Needs `naas-abi-sdk[workflows,rdf]`.
 - Tests sit beside the code, `<Name>Pipeline_test.py`, and run offline.

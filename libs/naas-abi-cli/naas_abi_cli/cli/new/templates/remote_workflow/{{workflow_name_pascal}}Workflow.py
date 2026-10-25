@@ -1,16 +1,19 @@
 """{{workflow_name_pascal}}Workflow: a workflow of this remote module.
 
 Written like an in-engine workflow, on ``naas_abi_sdk`` only. ``ABIModule`` finds
-it under ``workflows/`` and builds it once ``on_initialized`` has run, and the
-module's agents call it as a tool:
+it under ``workflows/`` and builds it once ``on_initialized`` has run. An agent
+created in ``on_initialized`` takes its tools at construction, so build first:
 
+    await self.build_processes()
     tools = self.get_workflow("{{workflow_name_snake}}_workflow").as_tools()
+    agent = await create_agent(self.engine, MODULE_ID, tools=tools)
 
 Its name, ``{{workflow_name_snake}}_workflow``, is the class name in snake case.
 Built with an empty ``{{workflow_name_pascal}}WorkflowConfiguration`` unless it
 needs more: define ``New(module)`` on the class (sync or async; read credentials
 with ``await module.engine.services.secret.get("KEY")``), or bind an instance in
-``on_initialized`` with ``self.expose_workflow(name, instance)``.
+``on_initialized`` with ``self.expose_workflow(name, instance)``, before
+``build_processes()``.
 """
 
 from __future__ import annotations

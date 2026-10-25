@@ -11,6 +11,13 @@ To publish it, declare it in ``ABIModule`` and bind it in ``on_initialized``:
     ...
     agent = await create_agent(self.engine, MODULE_ID)
     self.expose_agent(NAME, agent.as_handler())
+
+To give it the module's workflows or pipelines as tools, build them first and
+pass ``tools`` (an agent takes its tools when it is built):
+
+    await self.build_processes()
+    tools = self.get_workflow("my_workflow").as_tools()
+    agent = await create_agent(self.engine, MODULE_ID, tools=tools)
 """
 
 from __future__ import annotations
@@ -37,10 +44,13 @@ Help the user accomplish their tasks using the tools available to you.
 """
 
 
-async def create_agent(engine: Any, module_id: str, *, chat_model: str = "") -> IntentAgent:
+async def create_agent(
+    engine: Any, module_id: str, *, chat_model: str = "", tools: list[Any] | None = None
+) -> IntentAgent:
     """``engine``: the module's ``self.engine``; it must declare the
     ``model_registry`` and ``document`` services. ``chat_model``: a canonical
-    model id the engine registers, or empty for its default."""
+    model id the engine registers, or empty for its default. ``tools``: LangChain
+    tools, such as a workflow's ``as_tools()``."""
     registry = engine.services.model_registry
     chat = await (
         registry.get_chat_model(chat_model)
@@ -53,6 +63,7 @@ async def create_agent(engine: Any, module_id: str, *, chat_model: str = "") -> 
         description=DESCRIPTION,
         chat_model=chat.model,
         embedding_model=embeddings.model,
+        tools=tools or [],
         # Keyed by module and agent, so a renamed module starts a new memory.
         memory=await document_memory(
             engine.services.document, agent_memory_id(module_id, NAME)

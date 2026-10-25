@@ -412,9 +412,144 @@ def test_expose_refuses_unknown_duplicate_and_foreign_instances(package):
         module.expose_pipeline("needs_workflow", cls("k"))
 
 
+PIPELINE = """
+from naas_abi_sdk.pipeline import Pipeline, PipelineParameters
+from rdflib import RDFS, Graph, Literal, URIRef
+
+
+class LoadPipelineParameters(PipelineParameters):
+    label: str = "x"
+
+
+class LoadPipeline(Pipeline[LoadPipelineParameters]):
+    \"\"\"Loads a labelled individual.\"\"\"
+
+    async def run(self, parameters: LoadPipelineParameters) -> Graph:
+        graph = Graph()
+        graph.add((URIRef("urn:a"), RDFS.label, Literal(parameters.label)))
+        return graph
+"""
+
+
+class FakeAgent:
+    """What an agent is to the module: it takes its tools when it is built."""
+
+    def __init__(self, tools):
+        self.tools = {tool.name: tool for tool in tools}
+
+
+def test_an_agent_built_in_on_initialized_gets_the_tools_of_both_kinds(
+    package, monkeypatch
+):
+    pytest.importorskip("langchain_core")
+    module_type = package({"workflows/greet.py": GREET, "pipelines/load.py": PIPELINE})
+    state = {}
+
+    async def on_initialized(self):
+        await self.build_processes()
+        state["agent"] = FakeAgent(
+            [
+                *self.get_workflow("greet_workflow").as_tools(),
+                *self.get_pipeline("load_pipeline").as_tools(),
+            ]
+        )
+
+    async def run(self):
+        tools = state["agent"].tools
+        return (
+            await tools["greet_workflow"].ainvoke({"name": "Ada"}),
+            (await tools["load_pipeline"].ainvoke({"label": "A"}))["format"],
+            tools["load_pipeline"].description,
+        )
+
+    with_methods(monkeypatch, module_type, on_initialized=on_initialized, run=run)
+
+    assert asyncio.run(run_module_with_fake_client(monkeypatch, module_type)) == (
+        {"message": "Hello, Ada!"},
+        "turtle",
+        "Loads a labelled individual.",
+    )
+
+
+def test_build_processes_is_idempotent_and_run_module_does_not_rebuild(
+    package, monkeypatch
+):
+    module_type = package(
+        {
+            "workflows/counted.py": """
+            from naas_abi_sdk.workflow import Workflow
+
+            BUILT = []
+
+            class CountedWorkflow(Workflow):
+                @classmethod
+                def New(cls, module):
+                    BUILT.append(1)
+                    return cls(None)
+            """
+        }
+    )
+    seen = {}
+
+    async def on_initialized(self):
+        await asyncio.gather(self.build_processes(), self.build_processes())
+        seen["first"] = self.get_workflow("counted_workflow")
+        await self.build_processes()
+
+    async def run(self):
+        import importlib
+
+        built = importlib.import_module(
+            f"{module_type.__module__}.workflows.counted"
+        ).BUILT
+        return built, self.get_workflow("counted_workflow") is seen["first"]
+
+    with_methods(monkeypatch, module_type, on_initialized=on_initialized, run=run)
+
+    assert asyncio.run(run_module_with_fake_client(monkeypatch, module_type)) == (
+        [1],
+        True,
+    )
+
+
+def test_a_class_bound_before_build_processes_is_left_alone(package, monkeypatch):
+    module_type = package(
+        {"workflows/needs.py": NEEDS_ARGUMENTS, "workflows/greet.py": GREET}
+    )
+
+    async def on_initialized(self):
+        cls = self.get_workflow_classes()["needs_workflow"]
+        self.expose_workflow("needs_workflow", cls("secret"))
+        await self.build_processes()
+
+    async def run(self):
+        return sorted(self.get_workflows()), self.get_workflow("needs_workflow").api_key
+
+    with_methods(monkeypatch, module_type, on_initialized=on_initialized, run=run)
+
+    assert asyncio.run(run_module_with_fake_client(monkeypatch, module_type)) == (
+        ["greet_workflow", "needs_workflow"],
+        "secret",
+    )
+
+
+def test_build_processes_in_on_initialized_fails_for_an_unbuildable_class(
+    package, monkeypatch
+):
+    module_type = package({"workflows/needs.py": NEEDS_ARGUMENTS})
+
+    async def on_initialized(self):
+        await self.build_processes()
+
+    with_methods(monkeypatch, module_type, on_initialized=on_initialized)
+
+    with pytest.raises(ValueError, match=r"NeedsWorkflow.*expose_workflow"):
+        asyncio.run(run_module_with_fake_client(monkeypatch, module_type))
+
+
 def test_a_workflow_before_it_is_built_is_not_available(package):
     module = engine_module(package({"workflows/greet.py": GREET}))
-    with pytest.raises(ValueError, match="built after on_initialized"):
+    with pytest.raises(ValueError, match="build_processes"):
         module.get_workflow("greet_workflow")
 
 

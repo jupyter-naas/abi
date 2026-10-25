@@ -27,7 +27,10 @@ the engine's.
   `on_initialized`: with `New(module)` if the class has one, else with an empty
   `<Name>Configuration`. One that needs arguments is bound in `on_initialized`
   with `self.expose_workflow(name, instance)` / `self.expose_pipeline(...)`, or
-  the module does not start. The name is the class name in snake case.
+  the module does not start. The name is the class name in snake case. An agent
+  takes its tools when it is built, in `on_initialized`: call
+  `await self.build_processes()` there first (idempotent; bind the classes that
+  need arguments before it), then `self.get_workflow(name).as_tools()`.
 - Scheduled or event-driven work is a `@job(...)` method (`Every`, `Cron`,
   `OnEvent` triggers from `naas_abi_sdk.jobs`). Delivery is at least once.
 - Ontologies are the `.ttl` files of `ontologies/`: sent to the engine's schema
@@ -67,7 +70,9 @@ It is up when it logs `READY`. `ABI_HEALTH_PORT=8080` opens `/health` and
 - An agent: `abi new agent <Name> agents` from this folder, then declare and
   expose it in `ABIModule`.
 - A workflow: `abi new workflow <Name> workflows` from this folder. Its agents
-  use it with `self.get_workflow("<name>").as_tools()` (the name is printed).
+  use it with `await self.build_processes()` then
+  `self.get_workflow("<name>").as_tools()` in `on_initialized`, before creating
+  the agent, passed as `create_agent(..., tools=tools)` (the name is printed).
   Reads credentials with `await module.engine.services.secret.get("KEY")` in
   `New(module)`.
 - A pipeline: `abi new pipeline <Name> pipelines`; it returns an rdflib `Graph`

@@ -60,7 +60,12 @@ class ABIModule(BaseModule[{{module_name_pascal}}Configuration]):
 
     async def on_initialized(self) -> None:
         # Runs once the engine's services are reachable, before the module is
-        # READY: bind every agent declared above here.
+        # READY: bind every agent declared above here. Workflows and pipelines
+        # (workflows/, pipelines/) are built after this hook; an agent takes its
+        # tools when it is built, so build them first to give it theirs:
+        #     await self.build_processes()
+        #     tools = self.get_workflow("my_workflow").as_tools()
+        # and pass `tools=tools` to create_agent.
         agent = await create_agent(
             self.engine, MODULE_ID, chat_model=self.configuration.chat_model
         )

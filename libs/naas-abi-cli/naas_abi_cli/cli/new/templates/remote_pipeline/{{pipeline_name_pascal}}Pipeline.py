@@ -7,16 +7,19 @@ to the engine's triple store (declare the ``triple_store`` service):
     await self.engine.services.triple_store.insert(graph, "my-graph")
 
 ``ABIModule`` finds the pipeline under ``pipelines/`` and builds it once
-``on_initialized`` has run. The module's agents call it as a tool (the graph comes
-back as turtle):
+``on_initialized`` has run. An agent created in ``on_initialized`` takes its tools
+at construction, so build first (the tool returns the graph as turtle):
 
+    await self.build_processes()
     tools = self.get_pipeline("{{pipeline_name_snake}}_pipeline").as_tools()
+    agent = await create_agent(self.engine, MODULE_ID, tools=tools)
 
 Its name, ``{{pipeline_name_snake}}_pipeline``, is the class name in snake case.
 Built with an empty ``{{pipeline_name_pascal}}PipelineConfiguration`` unless it needs
 more: define ``New(module)`` on the class (sync or async; read credentials with
 ``await module.engine.services.secret.get("KEY")``), or bind an instance in
-``on_initialized`` with ``self.expose_pipeline(name, instance)``.
+``on_initialized`` with ``self.expose_pipeline(name, instance)``, before
+``build_processes()``.
 """
 
 from __future__ import annotations

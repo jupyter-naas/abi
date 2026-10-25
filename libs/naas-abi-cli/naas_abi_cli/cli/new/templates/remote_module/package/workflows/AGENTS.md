@@ -20,6 +20,10 @@ module folder.
 - Read credentials with `await module.engine.services.secret.get("KEY")`
   (declare `secret` in `ModuleDependencies`), never from the environment.
 - Use them from the module: `self.get_workflow(name)` (an instance) and
-  `.as_tools()` for an agent (LangChain, extra `[agents]` or `[agent]`).
+  `.as_tools()` for an agent (LangChain, extra `[agents]` or `[agent]`). An agent
+  takes its tools when it is built, in `on_initialized`, where the workflows are
+  not built yet: `await self.build_processes()` first (idempotent; `expose_workflow`
+  the classes that need arguments before it), then pass the tools to
+  `create_agent(..., tools=tools)`.
 - Needs `naas-abi-sdk[workflows]`.
 - Tests sit beside the code, `<Name>Workflow_test.py`, and run offline.
