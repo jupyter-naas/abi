@@ -72,11 +72,16 @@ def test_a_remote_reference_is_never_fetched(monkeypatch):
     import socket
     import urllib.request
 
-    def refuse(*args, **kwargs):
+    attempts: list[str] = []
+
+    def record(*args, **kwargs):
+        # Recorded, not only refused: validate() swallows any exception, so a
+        # refusal alone would not show that the fetch was tried.
+        attempts.append(repr(args[:1]))
         raise AssertionError("the validator went to the network")
 
-    monkeypatch.setattr(urllib.request, "urlopen", refuse)
-    monkeypatch.setattr(socket, "create_connection", refuse)
+    monkeypatch.setattr(urllib.request, "urlopen", record)
+    monkeypatch.setattr(socket, "create_connection", record)
     schema = {
         "type": "object",
         "properties": {"a": {"$ref": "http://169.254.169.254/latest/meta-data/"}},
@@ -84,3 +89,24 @@ def test_a_remote_reference_is_never_fetched(monkeypatch):
 
     assert validator.validate(schema, {"a": 1}) == []
     assert validator.validate({"$ref": "https://example.invalid/schema.json"}, {"a": 1}) == []
+    assert attempts == []
+
+
+def test_a_local_file_reference_is_never_read(tmp_path, monkeypatch):
+    import urllib.request
+
+    attempts: list[str] = []
+    real = urllib.request.urlopen
+
+    def record(*args, **kwargs):
+        attempts.append(repr(args[:1]))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(urllib.request, "urlopen", record)
+    target = tmp_path / "r.json"
+    target.write_text('{"type": "integer"}')
+    schema = {"type": "object", "properties": {"a": {"$ref": target.as_uri()}}}
+
+    # Were the file read, "notint" would be an issue; the reference is unusable instead.
+    assert validator.validate(schema, {"a": "notint"}) == []
+    assert attempts == []
