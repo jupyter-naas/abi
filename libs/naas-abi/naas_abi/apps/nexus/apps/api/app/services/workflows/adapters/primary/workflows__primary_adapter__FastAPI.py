@@ -75,16 +75,30 @@ def _caller(platform: PlatformCaller) -> Caller:
     return Caller(platform.via, platform.user_id)
 
 
+# What a client reads of the run record (an allow-list: a field added to the Jobs tab's
+# run summary does not reach this API unless it is named here).
+RUN_FIELDS = (
+    "key",
+    "module_id",
+    "run_id",
+    "status",
+    "attempt",
+    "max_attempts",
+    "fired_at",
+    "started_at",
+    "finished_at",
+    "duration_ms",
+    "error",
+    "trace_id",
+)
+
+
 def run_view(view: WorkflowRunView) -> dict[str, Any]:
     """A run as a client reads it. ``result`` is the whole of what the run returned."""
     run = view.run
     summary = run_summary(run)
     return {
-        **{
-            k: v
-            for k, v in summary.items()
-            if k not in ("job", "trigger", "instance", "skip_reason")
-        },
+        **{k: summary[k] for k in RUN_FIELDS},
         "workflow": run.job,
         "result": run.result,
         "steps": [step_view(s) for s in view.workflow.steps],

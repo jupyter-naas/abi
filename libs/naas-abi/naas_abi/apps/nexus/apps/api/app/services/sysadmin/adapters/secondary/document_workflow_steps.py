@@ -18,6 +18,7 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs import (
     WorkflowDetail,
 )
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.port import SourceUnavailable
+from naas_abi_core import logger
 from naas_abi_core.services.document.DocumentPort import CollectionNotFound
 
 # One page: a run with more steps shows the first of them and says so.
@@ -82,7 +83,14 @@ class DocumentWorkflowSteps:
             # A recreated jobs stream reuses run ids: another trigger's steps are not this run's.
             if not fired_at or not doc.data.get("fired_at") or doc.data.get("fired_at") == fired_at
         ]
-        steps = sorted((step(d) for d in data), key=lambda s: (s.started_at or "", s.key))
+        steps = []
+        for d in data:
+            try:
+                steps.append(step(d))
+            except (ValueError, TypeError, OverflowError, AttributeError):
+                # One document a host wrote badly must not hide the run's other steps.
+                logger.warning(f"workflow step skipped: unreadable summary {d.get('key')!r}")
+        steps.sort(key=lambda s: (s.started_at or "", s.key))
         return WorkflowDetail(tuple(steps), truncated=page.cursor is not None)
 
     async def journal(

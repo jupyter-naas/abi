@@ -386,6 +386,25 @@ def test_a_large_workflow_result_is_cut_for_display_but_a_job_result_is_not():
     assert run(service.run("acme.jobs", "nightly:3")).run.result == big
 
 
+def test_the_preview_is_cut_in_bytes_not_characters():
+    result = {"text": "é" * 20_000}  # 2 bytes each: 40 KB of text in 20 000 characters
+
+    cut = preview_result(result)
+
+    assert cut["truncated"] is True and cut["bytes"] > 2 * 20_000
+    assert len(cut["preview"].encode()) <= RESULT_PREVIEW_BYTES
+    assert len(cut["preview"].encode()) >= RESULT_PREVIEW_BYTES - 1  # at most one split character
+    assert cut["preview"].startswith('{"text": "é')
+
+
+def test_a_cut_through_a_character_drops_it_instead_of_failing():
+    # '{"s": "' is 7 bytes: a 3-byte character then straddles the limit.
+    cut = preview_result({"s": "€" * 10_000})
+
+    assert cut["preview"].encode() and "\ufffd" not in cut["preview"]
+    assert len(cut["preview"].encode()) <= RESULT_PREVIEW_BYTES
+
+
 def replace_result(job_run, result):
     from dataclasses import replace
 

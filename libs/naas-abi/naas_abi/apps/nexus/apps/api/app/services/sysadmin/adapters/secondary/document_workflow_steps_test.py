@@ -113,6 +113,55 @@ def test_steps_of_another_trigger_that_reused_the_run_id_are_left_out(root):
     assert {s.key for s in mine.steps} == {"fetch"}
 
 
+@pytest.mark.parametrize(
+    "bad",
+    [{"attempt": "two"}, {"attempt": [1]}],
+)
+def test_a_step_summary_that_cannot_be_read_is_skipped_not_fatal(root, bad):
+    _seed(root)
+    good = fixtures.workflow_steps()[("acme.flows", "ingest:6")].steps[0]
+    broken = _as_journaled("ingest:6", good) | {
+        "key": "broken",
+        "status": "SUCCEEDED",
+        "finished_at": "2026-10-02T12:00:02+00:00",
+    }
+    root.for_namespace("acme.flows").put(steps_collection(PROJECT), "ingest:6#broken", broken | bad)
+
+    assert [s.key for s in _journal(root, "ingest:6").steps] == ["fetch"]
+
+
+def test_a_duration_or_size_that_is_not_a_number_is_left_out_of_the_step(root):
+    _seed(root)
+    good = fixtures.workflow_steps()[("acme.flows", "ingest:6")].steps[0]
+    root.for_namespace("acme.flows").put(
+        steps_collection(PROJECT),
+        "ingest:6#fetch",
+        _as_journaled("ingest:6", good)
+        | {"status": "SUCCEEDED", "finished_at": "2026-10-02T12:00:02+00:00"}
+        | {"duration_ms": "long", "result_bytes": "big"},
+    )
+
+    (step,) = _journal(root, "ingest:6").steps
+
+    assert (step.status, step.duration_ms, step.result_bytes) == ("SUCCEEDED", None, None)
+
+
+def test_a_bad_attempt_skips_only_that_step(root):
+    _seed(root)
+    steps = _journal(root, "ingest:5")
+    root.for_namespace("acme.flows").put(
+        steps_collection(PROJECT),
+        "ingest:5#fetch",
+        _as_journaled("ingest:5", fixtures.workflow_steps()[("acme.flows", "ingest:5")].steps[0])
+        | {"attempt": "two"},
+    )
+
+    after = _journal(root, "ingest:5")
+
+    assert [s.key for s in steps.steps] == ["fetch", "map[0]", "map[1]"]
+    assert [s.key for s in after.steps] == ["map[0]", "map[1]"]
+
+
 def test_a_module_without_a_journal_has_no_steps(root):
     assert _journal(root, "ingest:5").steps == ()
 

@@ -372,7 +372,10 @@ class JobsAdminService:
             else await self._find(module_id, job)
         )
         if definition.is_workflow and definition.input_schema and self._validator:
-            issues = self._validator.validate(definition.input_schema, payload)
+            # Off the event loop: a schema's pattern can take long to check.
+            issues = await asyncio.to_thread(
+                self._validator.validate, definition.input_schema, payload
+            )
             if issues:
                 raise InvalidInput(issues)
         control = self._controller()
@@ -407,10 +410,12 @@ def preview_result(result: Any) -> Any:
     if result is None:
         return None
     try:
-        text = json.dumps(result, default=str)
+        text = json.dumps(result, default=str, ensure_ascii=False)
     except (TypeError, ValueError):
         text = str(result)
-    size = len(text.encode())
-    if size <= RESULT_PREVIEW_BYTES:
+    encoded = text.encode()
+    if len(encoded) <= RESULT_PREVIEW_BYTES:
         return result
-    return {"truncated": True, "bytes": size, "preview": text[:RESULT_PREVIEW_BYTES]}
+    # Cut the bytes the limit counts, not characters; a split character is dropped.
+    preview = encoded[:RESULT_PREVIEW_BYTES].decode(errors="ignore")
+    return {"truncated": True, "bytes": len(encoded), "preview": preview}
