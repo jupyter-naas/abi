@@ -13,6 +13,8 @@ export interface Failure {
   source?: string;
   confirm?: string;
   operation?: string;
+  /** A refused input (422): where it is wrong, as JSON pointers. */
+  errors?: { path: string; message: string }[];
 }
 
 export type Result<T> = { ok: true; data: T } | Failure;

@@ -44,6 +44,15 @@ async function call<T>(fetcher: Fetch, path: string, init?: RequestInit): Promis
     const d = detail as Record<string, unknown>;
     if (typeof d.reason === 'string') failure.reason = d.reason;
     if (typeof d.source === 'string') failure.source = d.source;
+    if (Array.isArray(d.errors)) {
+      failure.errors = d.errors
+        .filter((e): e is { path: string; message: string } => typeof e?.message === 'string')
+        .map((e) => ({ path: typeof e.path === 'string' ? e.path : '', message: e.message }));
+    }
+  } else if (Array.isArray(detail) && detail.length) {
+    // FastAPI's own validation errors (a body that is not an object).
+    const first = detail[0] as { msg?: unknown };
+    if (typeof first?.msg === 'string') failure.reason = first.msg;
   }
   return failure;
 }
