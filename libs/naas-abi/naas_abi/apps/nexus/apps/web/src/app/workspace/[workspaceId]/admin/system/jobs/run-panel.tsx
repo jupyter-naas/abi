@@ -9,7 +9,7 @@ import { Badge, CopyButton, EmptyState, Hint, Notice, RelativeTime, SkeletonRows
 import { JsonTree } from '../data/viewers/json-tree';
 import type { TracesApi } from '../traces/traces-api';
 import { TraceView } from '../traces/trace-view';
-import { formatMs, isActive, moduleLabel, startDelay, truncatedResult } from './jobs-model';
+import { formatMs, isActive, moduleLabel, startDelay, truncatedResult, type TruncatedResult } from './jobs-model';
 import type { RunDetail, RunSummary } from './jobs-types';
 import { StepTimeline } from './run-steps';
 import { RunDuration, RunStatus, TriggerTag } from './jobs-ui';
@@ -110,13 +110,14 @@ function Logs({ lines }: { lines: string[] }) {
 }
 
 /** A workflow's large result, cut by the API: its start, and what to do about it. */
-function TruncatedResult({ bytes, preview }: { bytes: number; preview: string }) {
+function TruncatedResultView({ bytes, preview }: TruncatedResult) {
   return (
     <div className="run-result-cut">
       <Notice tone="warn">
         <span>
-          The result is {formatBytes(bytes)}: the first {formatBytes(preview.length)} are shown. A workflow should store large
-          data in object storage and return a reference to it.
+          {bytes === undefined ? 'The result is too large to keep' : `The result is ${formatBytes(bytes)}`}: the first{' '}
+          {formatBytes(preview.length)} are shown. A workflow should store large data in object storage and return a
+          reference to it.
         </span>
       </Notice>
       <pre className="data-text">{preview}</pre>
@@ -286,7 +287,7 @@ export function RunPanel({
                 : 'Only successful runs record what the handler returned.'}
             </EmptyState>
           ) : truncatedResult(detail.result) ? (
-            <TruncatedResult {...(truncatedResult(detail.result) as { bytes: number; preview: string })} />
+            <TruncatedResultView {...(truncatedResult(detail.result) as TruncatedResult)} />
           ) : typeof detail.result === 'object' ? (
             <JsonTree value={detail.result} />
           ) : (

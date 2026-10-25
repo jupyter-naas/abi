@@ -383,18 +383,13 @@ def test_status_has_result_error_and_steps_with_child_links(client):
     )
 
 
-def test_status_of_a_run_nobody_recorded_yet_is_queued(client):
-    body = client.get(f"{BASE}/acme.flows/runs/ingest:77").json()
-
-    assert (body["status"], body["steps"]) == ("QUEUED", [])
-
-
 @pytest.mark.parametrize(
     "path",
     [
         "/acme.jobs/runs/nightly:3",
         "/acme.flows/runs/nope:1",
         "/acme.flows/runs/garbage",
+        "/acme.flows/runs/ingest:77",  # pruned, or never recorded
         "/no.module/runs/ingest:1",
     ],
 )

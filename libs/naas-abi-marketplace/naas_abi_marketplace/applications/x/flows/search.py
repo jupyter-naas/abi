@@ -15,7 +15,8 @@ A stage that fails does not stop the ones that can still run, as one bad envelop
 only affected itself under Dagster. A fetch that failed after saving, a mapping run
 that failed, a dataset sync that failed: the rest goes on (the envelopes that did
 map are synced and published), and the run ends FAILED at the end, with what
-worked and what did not in its error (``FlowIncomplete``). A failed app publish is
+worked and what did not in its error (``FlowIncomplete``; ``FetchFailed``, which is
+not retried, when the fetch failed). A failed app publish is
 only logged, as ``publish_app_after_search`` always did: the next rebuild catches up.
 """
 
@@ -37,6 +38,7 @@ from naas_abi_marketplace.applications.x.flows.common import (
     sync_x_dataset_paths_batched,
 )
 from naas_abi_marketplace.applications.x.flows.fanout import (
+    FetchFailed,
     FlowIncomplete,
     call_each,
     describe_failures,
@@ -192,7 +194,10 @@ def run_search_recent_tweets(
         )
         for problem in problems:
             ctx.log(problem)
-        raise FlowIncomplete(f"{summary}; " + "; ".join(problems))
+        # A failed fetch is journaled: another attempt would replay it. End the run
+        # (what it saved is mapped); the next tick fetches again.
+        failure = FetchFailed if fetched.get("error") else FlowIncomplete
+        raise failure(f"{summary}; " + "; ".join(problems))
 
     return SearchRecentTweetsOutput(
         filter=config.name,

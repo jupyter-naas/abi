@@ -88,8 +88,11 @@ does not fail the run) → `dataset` (`sync_x_dataset_paths_batched`) → `publi
     *what worked* (`saved N envelope(s), mapped M`) and what did not in its error, so the failure does not hide the work.
     A retry re-runs only what failed: a child that failed starts again (`map[i]` is FAILED in the journal), the finished
     ones are replayed, and the dataset and publish steps are keyed by the number of envelopes mapped (`dataset[n]`), so
-    a retry that mapped more syncs again. A run whose *fetch* failed replays the journaled fetch (it does not call X
-    again, by design) and fails again; the next tick continues from the `since_id` cursor.
+    a retry that mapped more syncs again. A run whose *fetch* failed is **not retried**: it raises `FetchFailed` (a
+    `FlowIncomplete` that is also `NonRetryable`), because the journaled fetch would be replayed and fail the same way
+    while the RETRYING run made the next ticks of the filter skip. What it saved is mapped first; the next tick fetches
+    again from the `since_id` cursor. (An envelope whose mapping failed in such a run is caught up by
+    `reprocess_tweet_envelopes`.)
 
 ### `reprocess_tweet_envelopes` — every envelope under a prefix
 
@@ -98,7 +101,7 @@ does not fail the run) → `dataset` (`sync_x_dataset_paths_batched`) → `publi
 nothing. Then it maps the first ones as child runs, syncs the dataset and (with `app_publish`) republishes the app.
 A **second run finds nothing to do**: no child, no sync. A mapping run that fails does not stop the dataset sync of the
 others (`FlowIncomplete` at the end, as for the search), and a later run maps only what failed. `force` re-maps everything. One run takes at most
-`max_envelopes` (default 1000, at most 1500: the plan is a journaled step, 256 KiB); launch it again for the rest
+`max_envelopes` (default 1000, at most 1500, and at most 200 KiB of paths, whichever comes first: the plan is a journaled step, 256 KiB); launch it again for the rest
 (`truncated` in the output). Launch it by hand from System → Jobs, `/api/workflows`, or `module.get_workflow("reprocess_tweet_envelopes")`.
 
 **Envelopes saved by other callers are not mapped automatically.** The X agent's tools and the scripts save envelopes

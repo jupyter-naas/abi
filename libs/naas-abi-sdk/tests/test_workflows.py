@@ -1069,6 +1069,29 @@ def test_cancelling_the_run_stops_a_waiting_step():
     assert "next" not in docs.steps("flow:1")
 
 
+def test_cancelling_the_run_during_a_steps_retry_backoff_ends_it_cancelled():
+    docs = MemoryDocuments()
+    attempts: list[int] = []
+
+    async def scenario():
+        ctx = _context(docs)
+
+        def flaky():
+            attempts.append(1)
+            raise RuntimeError("once")
+
+        task = asyncio.create_task(ctx.step("flaky", flaky, retries=2, backoff=60))
+        await asyncio.sleep(0.2)  # the first attempt failed, the backoff started
+        ctx.cancelled.set()
+        with pytest.raises(WorkflowCancelled):
+            await task
+
+    asyncio.run(scenario())
+    step = docs.steps("flow:1")["flaky"]
+    assert step["status"] == "CANCELLED" and step["finished_at"] is not None
+    assert attempts == [1]  # no second attempt after the cancel
+
+
 def test_the_step_summary_is_readable_without_results():
     docs = MemoryDocuments()
 

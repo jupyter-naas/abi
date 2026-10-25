@@ -853,8 +853,9 @@ class FlowContext(JobContext):
             if n:
                 await journal.retry(key)
                 delay = backoff(n) if callable(backoff) else backoff * 2 ** (n - 1)
-                await self._race(asyncio.sleep(max(0.0, delay)))
             try:
+                if n:  # a cancel during the backoff ends the step CANCELLED too
+                    await self._race(asyncio.sleep(max(0.0, delay)))
                 value = await self._race(self._invoke(fn, args, kwargs))
                 encoded = encode_result(key, value)
             except WorkflowCancelled:
@@ -909,9 +910,7 @@ class FlowContext(JobContext):
             asyncio.ensure_future(guarded(i, item)) for i, item in enumerate(items)
         ]
         try:
-            _, pending = await asyncio.wait(
-                tasks, return_when=asyncio.FIRST_EXCEPTION
-            )
+            _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
         except asyncio.CancelledError:
             for task in tasks:
                 task.cancel()

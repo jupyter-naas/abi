@@ -126,7 +126,10 @@ describe('workflows in the jobs model', () => {
 
   it('recognises a result cut for display', () => {
     expect(truncatedResult({ truncated: true, bytes: 20000, preview: '{"rows"' })).toEqual({ bytes: 20000, preview: '{"rows"' });
+    // the job host's own marker has no byte count
+    expect(truncatedResult({ truncated: true, preview: '{"rows"' })).toEqual({ preview: '{"rows"' });
     expect(truncatedResult({ truncated: true })).toBeNull();
+    expect(truncatedResult({ truncated: false, preview: 'x' })).toBeNull();
     expect(truncatedResult({ count: 3 })).toBeNull();
     expect(truncatedResult(null)).toBeNull();
     expect(truncatedResult('text')).toBeNull();

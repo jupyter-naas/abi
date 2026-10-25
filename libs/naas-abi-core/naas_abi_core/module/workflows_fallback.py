@@ -18,6 +18,10 @@ from naas_abi_core.module.jobs_fallback import JobContext, JobDescriptor, JobsNo
 WORKFLOWS_AVAILABLE = False
 
 
+class NonRetryable(Exception):
+    """A failure another attempt cannot fix: the run fails at once."""
+
+
 class WorkflowError(Exception):
     """A workflow could not run, or ended without an output."""
 

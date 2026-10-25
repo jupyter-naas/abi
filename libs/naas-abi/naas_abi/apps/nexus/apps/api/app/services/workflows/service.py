@@ -36,11 +36,6 @@ POLL_FIRST_SECONDS = 0.2
 POLL_MAX_SECONDS = 1.0
 
 
-def _job_of(run_id: str) -> str:
-    """Run ids are ``<job>:<stream sequence>``."""
-    return run_id.rsplit(":", 1)[0] if ":" in run_id else ""
-
-
 class WorkflowsService:
     def __init__(
         self,
@@ -58,17 +53,10 @@ class WorkflowsService:
         return WorkflowList(tuple(d for d in definitions if d.is_workflow), sources)
 
     async def _view(self, module_id: str, run_id: str) -> WorkflowRunView:
-        """The run's record and steps. A run no host has recorded yet (its trigger
-        is stored, nothing took it) reads as QUEUED when its workflow exists."""
-        try:
-            found = await self._jobs.run(module_id, run_id, preview=False)
-        except RunNotFound:
-            job = _job_of(run_id)
-            if not job:
-                raise
-            await self._jobs.find_workflow(module_id, job)  # WorkflowNotFound: no such run
-            queued = JobRun(module_id, job, run_id, "QUEUED")
-            return WorkflowRunView(queued, WorkflowDetail())
+        """The run's record and steps; ``RunNotFound`` when no host has one (a pruned
+        run, a mistyped id, a plain job's run). A run just started has no record
+        until a host takes it: ``start`` reports it as QUEUED itself."""
+        found = await self._jobs.run(module_id, run_id, preview=False)
         if found.workflow is None:  # a plain job's run
             raise RunNotFound(module_id, run_id)
         return WorkflowRunView(found.run, found.workflow)

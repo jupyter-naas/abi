@@ -258,10 +258,19 @@ def test_status_has_the_whole_result_and_the_steps():
     assert [s.key for s in view.workflow.steps] == ["fetch", "map[0]", "map[1]"]
 
 
-def test_a_run_nobody_recorded_yet_reads_as_queued_when_its_workflow_exists():
-    view = run(service().status("acme.flows", "ingest:77"))
+def test_a_run_nobody_recorded_is_not_found_whatever_its_workflow():
+    # a pruned run, a mistyped id: a poller must not wait forever on a QUEUED that
+    # will never change
+    with pytest.raises(RunNotFound):
+        run(service().status("acme.flows", "ingest:77"))
 
-    assert (view.run.status, view.run.run_id, view.workflow.steps) == ("QUEUED", "ingest:77", ())
+
+def test_a_run_just_started_reads_as_queued_until_a_host_records_it():
+    started = run(service().start(KEY, "acme.flows", "ingest", {"filter": "news"}))
+
+    assert started.view.run.status == "QUEUED" and started.view.workflow.steps == ()
+    with pytest.raises(RunNotFound):  # a later status read has no such grace
+        run(service().status("acme.flows", started.run_id))
 
 
 @pytest.mark.parametrize(
