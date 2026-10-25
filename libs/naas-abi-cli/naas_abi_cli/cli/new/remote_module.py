@@ -166,7 +166,8 @@ def ensure_package(folder: Path) -> None:
     folder.mkdir(parents=True, exist_ok=True)
     init = folder / "__init__.py"
     if not init.exists():
-        init.write_text(f'"""{folder.name}"""\n', encoding="utf-8")
+        # Path(".") has no name: write an empty marker then.
+        init.write_text(f'"""{folder.name}"""\n' if folder.name else "", encoding="utf-8")
 
 
 def template_values(

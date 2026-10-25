@@ -202,7 +202,10 @@ together. `BaseModule` finds `Workflow`/`Pipeline` classes under `workflows/` an
 `pipelines/` at class level (`get_workflow_classes`, `get_pipeline_classes`; names
 unique per kind, one NATS subject token), and `run_module` validates them before
 connecting. After `on_initialized` it builds each one (`New(module)`, else an empty
-`<Name>Configuration`) unless `expose_workflow`/`expose_pipeline` bound it; an
+`<Name>Configuration`) unless `expose_workflow`/`expose_pipeline` bound it. An
+agent takes its tools at construction, inside `on_initialized`, so
+`build_processes()` is public and idempotent (locked): modules call it before
+creating their agents, and `run_module`'s own call skips what is built; an
 unbuildable, unbound class fails startup (the later serving work declares every
 one of them). Integrations are a pattern, never discovered. Tests:
 `tests/test_workflows.py` (extras: `--extra workflows --extra rdf --extra agents`,

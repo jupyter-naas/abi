@@ -23,9 +23,11 @@ def _new_workflow(workflow_name: str, workflow_path: str = "."):
         name = to_snake_case(to_pascal_case(workflow_name) + "Workflow")
         click.echo(
             f"Created {to_pascal_case(workflow_name)}Workflow.py (naas_abi_sdk). "
-            f"The module builds it after on_initialized, as '{name}'; its agents call "
-            f"it with self.get_workflow('{name}').as_tools(). It needs the "
-            "naas-abi-sdk[workflows] extra (and [agents] for as_tools)."
+            f"The module builds it after on_initialized, as '{name}'. An agent created in "
+            f"on_initialized needs `await self.build_processes()` first, then "
+            f"self.get_workflow('{name}').as_tools() (pass them as `tools=` to "
+            "create_agent). It needs the naas-abi-sdk[workflows] extra (and [agents] "
+            "for as_tools)."
         )
 
 

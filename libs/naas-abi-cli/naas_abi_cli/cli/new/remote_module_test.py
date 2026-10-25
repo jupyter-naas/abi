@@ -445,6 +445,15 @@ def test_new_agent_in_a_remote_module_is_an_sdk_agent(tmp_path: Path) -> None:
     code = (agents / "CriticAgent.py").read_text()
     assert "naas_abi_sdk.agents" in code and not _CORE_IMPORT.search(code)
     assert "expose_agent" in result.output
+    # The agent can take the module's workflow and pipeline tools.
+    import ast
+
+    (create,) = [
+        node
+        for node in ast.parse(code).body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "create_agent"
+    ]
+    assert "tools" in [arg.arg for arg in create.args.kwonlyargs]
 
 
 def test_new_app_in_a_remote_module_says_how_nexus_serves_it(tmp_path: Path) -> None:
@@ -563,6 +572,9 @@ def test_a_remote_scaffold_is_sdk_code_with_its_test(
     assert "naas_abi_sdk" in result.output
     if slug:
         assert f"'{slug}'" in result.output
+        # An agent built in on_initialized needs the instances built first.
+        assert "build_processes()" in result.output
+        assert "build_processes()" in (package / folder / f"{cls}.py").read_text()
     for written in (
         package / folder / f"{cls}.py",
         package / folder / f"{cls}_test.py",
@@ -657,23 +669,59 @@ def test_a_module_with_every_scaffold_passes_its_own_tests_and_builds_them(
     assert "passed" in tests.stdout and "FooWorkflow_test" not in tests.stderr
 
     code = """
-import asyncio, research
-from unittest.mock import MagicMock
+import asyncio
+from unittest.mock import AsyncMock, MagicMock
+
+import research
+from naas_abi_sdk import module as sdk_module
 
 module_type = research.ABIModule
 assert list(module_type.get_workflow_classes()) == ["baz_workflow", "foo_workflow"]
 assert list(module_type.get_pipeline_classes()) == ["foo_pipeline"]
 
-async def main():
-    module = module_type(MagicMock(), module_type.Configuration())
-    await module._build_processes()
-    (tool,) = module.get_workflow("foo_workflow").as_tools()
-    answer = await tool.ainvoke({"message": "hi"})
-    (graph_tool,) = module.get_pipeline("foo_pipeline").as_tools()
-    graph = await graph_tool.ainvoke({"iri": "urn:a", "label": "A"})
-    return tool.name, answer, graph["format"]
+client = MagicMock()
+client.__aenter__ = AsyncMock(return_value=client)
+client.__aexit__ = AsyncMock(return_value=False)
+sdk_module.ABIClient = lambda *a, **k: client
 
-print(asyncio.run(main()))
+
+class Agent:
+    # An agent takes its tools when it is built, in on_initialized.
+    def __init__(self, tools):
+        self.tools = {tool.name: tool for tool in tools}
+
+
+agents = []
+
+
+async def on_initialized(self):
+    await self.build_processes()
+    agents.append(
+        Agent(
+            [
+                *self.get_workflow("foo_workflow").as_tools(),
+                *self.get_pipeline("foo_pipeline").as_tools(),
+            ]
+        )
+    )
+
+
+async def run(self):
+    tools = agents[0].tools
+    answer = await tools["foo_workflow"].ainvoke({"message": "hi"})
+    graph = await tools["foo_pipeline"].ainvoke({"iri": "urn:a", "label": "A"})
+    return sorted(tools), answer, graph["format"]
+
+
+# Without discovery or the engine's models, the template's agent, app and job
+# cannot be hosted: this run keeps what the test is about.
+module_type.agents = ()
+module_type.apps = ()
+module_type.jobs = ()
+module_type._decorated_jobs = {}
+module_type.on_initialized = on_initialized
+module_type.run = run
+print(asyncio.run(sdk_module.run_module(module_type, url="nats://unused", token="t")))
 """
     built = subprocess.run(
         [sys.executable, "-c", code],
@@ -685,7 +733,10 @@ print(asyncio.run(main()))
         check=False,
     )
     assert built.returncode == 0, built.stderr
-    assert built.stdout.strip() == "('foo_workflow', {'message': 'hi'}, 'turtle')"
+    assert (
+        built.stdout.strip()
+        == "(['foo_pipeline', 'foo_workflow'], {'message': 'hi'}, 'turtle')"
+    )
 
 
 def test_core_scaffolds_still_work_in_an_in_engine_module(tmp_path: Path) -> None:

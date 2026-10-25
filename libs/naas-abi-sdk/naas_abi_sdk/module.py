@@ -207,6 +207,7 @@ class BaseModule(JobsMixin, Generic[Config]):
         self._app_handlers: dict[str, Any] = {}
         self._workflows: dict[str, Any] = {}
         self._pipelines: dict[str, Any] = {}
+        self._build_lock = asyncio.Lock()
         self._health_port: int | None = None
 
     @property
@@ -370,39 +371,52 @@ class BaseModule(JobsMixin, Generic[Config]):
         except KeyError:
             raise ValueError(
                 f"No {kind} named {name!r} is built (known: {sorted(bound)}); "
-                "they are built after on_initialized"
+                "they are built after on_initialized, or by an earlier "
+                "`await self.build_processes()`"
             ) from None
 
-    async def _build_processes(self) -> None:
-        """Build every declared workflow and pipeline not bound with expose_*.
+    async def build_processes(self) -> None:
+        """Build every declared workflow and pipeline not yet bound.
 
-        A class that is neither buildable nor bound fails startup: the module
-        declares it, so callers expect it.
+        ``run_module`` calls it after ``on_initialized``. Call it yourself in
+        ``on_initialized`` when an agent created there needs their tools::
+
+            self.expose_workflow("needs_args_workflow", instance)  # first
+            await self.build_processes()
+            tools = self.get_workflow("greet_workflow").as_tools()
+
+        Idempotent: a class already bound or built is left alone, so bind the
+        ones that need arguments with ``expose_*`` before calling it. A class
+        that is neither buildable nor bound fails startup: the module declares
+        it, so callers expect it.
         """
-        for kind, declared, bound in (
-            ("workflow", self.get_workflow_classes(), self._workflows),
-            ("pipeline", self.get_pipeline_classes(), self._pipelines),
-        ):
-            for name, cls in declared.items():
-                if name in bound:
-                    continue
-                try:
-                    instance, reason = await cls.build(self)
-                except Exception as exc:
-                    raise RuntimeError(
-                        f"Building {kind} {cls.__name__} ({name!r}) failed: {exc!r}"
-                    ) from exc
-                if instance is None:
-                    raise ValueError(
-                        f"The {kind} {cls.__name__} ({name!r}) cannot be built: "
-                        f"{reason}. Give it a classmethod New(module), or bind an "
-                        f"instance in on_initialized with self.expose_{kind}({name!r}, instance)."
-                    )
-                if not isinstance(instance, cls):
-                    raise TypeError(
-                        f"{cls.__name__}.New(module) must return a {cls.__name__}"
-                    )
-                bound[name] = instance
+        async with self._build_lock:
+            for kind, declared, bound in (
+                ("workflow", self.get_workflow_classes(), self._workflows),
+                ("pipeline", self.get_pipeline_classes(), self._pipelines),
+            ):
+                for name, cls in declared.items():
+                    if name not in bound:
+                        bound[name] = await self._build(kind, name, cls)
+
+    async def _build(self, kind: str, name: str, cls: type) -> Any:
+        try:
+            instance, reason = await cls.build(self)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Building {kind} {cls.__name__} ({name!r}) failed: {exc!r}"
+            ) from exc
+        if instance is None:
+            raise ValueError(
+                f"The {kind} {cls.__name__} ({name!r}) cannot be built: "
+                f"{reason}. Give it a classmethod New(module), or bind an "
+                f"instance in on_initialized with self.expose_{kind}({name!r}, instance)."
+            )
+        if not isinstance(instance, cls):
+            raise TypeError(
+                f"{cls.__name__}.New(module) must return a {cls.__name__}"
+            )
+        return instance
 
     @property
     def discovery_status(self) -> str:
@@ -613,7 +627,7 @@ async def run_module(
                 await registration.start()
                 await module.engine.modules.wait_ready(discovery)
             await _invoke(module.on_initialized)
-            await module._build_processes()
+            await module.build_processes()
             declared = {
                 a.name for a in module.agents if "agent.invoke.v1" in a.capabilities
             }
