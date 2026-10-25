@@ -22,6 +22,16 @@ the engine's.
   `self.expose_agent(name, agent.as_handler())`, before the module is READY.
 - Scheduled or event-driven work is a `@job(...)` method (`Every`, `Cron`,
   `OnEvent` triggers from `naas_abi_sdk.jobs`). Delivery is at least once.
+- Multi-step work is a `@workflow(...)` method
+  (`async def m(self, ctx: FlowContext, inp: In) -> Out`, from
+  `naas_abi_sdk.workflows`): a job with a typed input and output (pydantic
+  models, or `dict` with `input_schema=`). `await ctx.step("key", fn, ...)`
+  stores the result, so a retried run skips the finished steps; `ctx.map`
+  fans out in this process, `ctx.call` / `ctx.map_call` run other modules'
+  workflows. Step keys are unique per run and the same on every attempt; a
+  step result is JSON, at most 256 KiB (store large data in object storage
+  and return a reference). `Cron(..., input={...})` and `Every(..., input={...})`
+  give a schedule its input. `digest` in `jobs.py` is the example.
 - Keep `MODULE_ID` stable: discovery, job subjects and agent memory use it.
 
 ## Files
@@ -31,7 +41,7 @@ the engine's.
 | `__init__.py` | `ABIModule`: id, configuration, dependencies, agents, jobs, lifecycle |
 | `__main__.py` | `python -m {{module_name_snake}}`: `run_module` with discovery, signals |
 | `agents/` | SDK `IntentAgent`s on the engine's models, memory in the Document Service |
-| `jobs.py` | job bodies, testable without a broker |
+| `jobs.py` | job and workflow bodies, testable without a broker |
 | `apps/` | web apps, served through Nexus at `/app-html/remote/{{module_id}}/<app>/` |
 | `tests/` | offline tests (`uv run pytest`) |
 
