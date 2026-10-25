@@ -62,7 +62,7 @@ async def _call(call: Awaitable[T]) -> T:
     except RunNotCancellable as exc:
         raise _error(409, "workflows", str(exc)) from exc
     except InvalidInput as exc:
-        raise invalid_input(exc) from exc
+        raise invalid_input(exc, "workflows") from exc
     except InvalidIdempotencyKey as exc:
         raise _error(422, "workflows", str(exc)) from exc
     except AuditUnavailable as exc:

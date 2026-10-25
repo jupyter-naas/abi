@@ -104,10 +104,19 @@ class WorkflowsService:
         )
         queued = WorkflowRunView(JobRun(module_id, name, run_id, "QUEUED"), WorkflowDetail())
         if not wait or wait <= 0:
-            return Started(run_id, queued)
+            return Started(run_id, await self._peek(module_id, run_id, queued))
         return Started(
             run_id, await self._wait(module_id, run_id, min(wait, MAX_WAIT_SECONDS), queued)
         )
+
+    async def _peek(self, module_id: str, run_id: str, queued: WorkflowRunView) -> WorkflowRunView:
+        """The run's record if a host has one already (a repeated idempotency key
+        answers with the first start's run, maybe long finished), else ``queued``."""
+        try:
+            found = await self._jobs.run(module_id, run_id, preview=False)
+        except (SourceUnavailable, RunNotFound):
+            return queued
+        return WorkflowRunView(found.run, found.workflow or WorkflowDetail())
 
     async def _wait(
         self, module_id: str, run_id: str, seconds: float, last: WorkflowRunView

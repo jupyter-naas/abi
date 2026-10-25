@@ -61,6 +61,16 @@ describe('buildForm', () => {
     expect(form?.[3].description).toBe('Which');
   });
 
+  it('lists the required fields first, each group in the schema order', () => {
+    const schema = {
+      type: 'object',
+      properties: { a: { type: 'string' }, b: { type: 'string' }, c: { type: 'string' }, d: { type: 'string' } },
+      required: ['d', 'b'],
+    };
+
+    expect(buildForm(schema)?.map((f) => f.name)).toEqual(['b', 'd', 'a', 'c']);
+  });
+
   it.each([
     ['no schema', null],
     ['a root that is not an object', { type: 'array', items: { type: 'string' } }],
