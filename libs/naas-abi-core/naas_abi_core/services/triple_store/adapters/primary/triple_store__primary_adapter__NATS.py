@@ -38,6 +38,7 @@ constructed directly over a raw ``ITripleStorePort`` (e.g. in tests).
 
 from __future__ import annotations
 
+import re
 from collections.abc import AsyncIterator, Callable
 from functools import partial
 from typing import TypeVar
@@ -48,6 +49,7 @@ import rdflib
 from google.protobuf.message import DecodeError, Message
 from naas_abi_core import logger
 from naas_abi_core.engine.nats_auth import (
+    FIRST_PARTY_IDENTITIES,
     InvalidServiceTokenError,
     verify_service_token,
 )
@@ -96,6 +98,44 @@ __all__ = [
 
 _RequestT = TypeVar("_RequestT", bound=Message)
 _ResponseT = TypeVar("_ResponseT", bound=Message)
+
+
+class _InvalidArgumentError(Exception):
+    """A request that is well-formed protobuf but not an acceptable call."""
+
+
+class _PermissionDeniedError(Exception):
+    """The caller's identity may not do this."""
+
+
+# ``module/<module_id>/<relative path>.ttl``: the key a remote module's ontology is stored
+# under in the schema graph (internal:filePath). A module id is discovery's name pattern
+# (it may hold ``.`` and ``:``, never ``/``); a path segment is plain file-name characters.
+MAX_SCHEMA_SOURCE_LENGTH = 512
+_SCHEMA_SOURCE = re.compile(
+    r"module/(?P<module_id>[A-Za-z0-9_][A-Za-z0-9_.:-]{0,255})"
+    r"/(?P<path>[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*\.ttl)"
+)
+
+
+def parse_schema_source(source: str) -> tuple[str, str]:
+    """Split a schema ``source`` into (module id, relative path).
+
+    Raises ``ValueError`` unless it is ``module/<module_id>/<relative path ending in
+    .ttl>``: bounded length, no empty, ``.`` or ``..`` segment.
+    """
+    if len(source) > MAX_SCHEMA_SOURCE_LENGTH:
+        raise ValueError(
+            f"schema source is longer than {MAX_SCHEMA_SOURCE_LENGTH} characters"
+        )
+    match = _SCHEMA_SOURCE.fullmatch(source)
+    if match is None or any(
+        segment in (".", "..") for segment in match["path"].split("/")
+    ):
+        raise ValueError(
+            "schema source must be module/<module_id>/<relative path ending in .ttl>"
+        )
+    return match["module_id"], match["path"]
 
 
 class _OperationNotSupportedError(Exception):
@@ -302,6 +342,11 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
             subject=f"{SUBJECT_PREFIX}.list_graphs",
             handler=self._handle_list_graphs,
         )
+        await service.add_endpoint(
+            name="load_schema",
+            subject=f"{SUBJECT_PREFIX}.load_schema",
+            handler=self._handle_load_schema,
+        )
         self._service = service
         await self._transfer.start(nc)
 
@@ -360,9 +405,12 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
         request: Request,
         request_cls: type[_RequestT],
         response_cls: Callable[..., _ResponseT],
-        call: Callable[[_RequestT], _ResponseT],
+        call: Callable[..., _ResponseT],
+        *,
+        with_identity: bool = False,
     ) -> None:
-        if not self._is_authenticated(request):
+        identity = self._caller_identity(request)
+        if identity is None:
             await self._respond_error(
                 request,
                 response_cls,
@@ -396,7 +444,24 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
             # ONE connection (nats_runtime), so run the call on a worker thread:
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
+            if with_identity:
+                call = partial(call, identity)
             response = await self._dispatch.call(call, parsed_request)
+        except _InvalidArgumentError as exc:
+            await self._respond_error(
+                request, response_cls, "INVALID_ARGUMENT", str(exc), retryable=False
+            )
+            return
+        except Exceptions.InvalidSchemaError as exc:
+            await self._respond_error(
+                request, response_cls, "INVALID_ARGUMENT", str(exc), retryable=False
+            )
+            return
+        except _PermissionDeniedError as exc:
+            await self._respond_error(
+                request, response_cls, "PERMISSION_DENIED", str(exc), retryable=False
+            )
+            return
         except Exceptions.SubjectNotFoundError as exc:
             await self._respond_error(
                 request, response_cls, "SUBJECT_NOT_FOUND", str(exc), retryable=False
@@ -468,16 +533,19 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
 
         await respond_protobuf(request, response, response_cls)
 
-    def _is_authenticated(self, request: Request) -> bool:
+    def _caller_identity(self, request: Request) -> str | None:
+        """The verified identity of the caller, None without a valid token."""
         headers = request.headers or {}
         token = headers.get(AUTH_HEADER)
         if not token:
-            return False
+            return None
         try:
-            verify_service_token(token, self._jwt_secret)
+            return verify_service_token(token, self._jwt_secret)
         except InvalidServiceTokenError:
-            return False
-        return True
+            return None
+
+    def _is_authenticated(self, request: Request) -> bool:
+        return self._caller_identity(request) is not None
 
     @staticmethod
     async def _respond_error(
@@ -677,4 +745,44 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
             graph_names=triple_store_pb2.GraphNames(
                 graph_names=[str(g) for g in graph_names]
             )
+        )
+
+    async def _handle_load_schema(self, request: Request) -> None:
+        await self._handle(
+            request,
+            triple_store_pb2.LoadSchemaRequest,
+            triple_store_pb2.LoadSchemaResponse,
+            self._call_load_schema,
+            with_identity=True,
+        )
+
+    def _call_load_schema(
+        self, identity: str, req: triple_store_pb2.LoadSchemaRequest
+    ) -> triple_store_pb2.LoadSchemaResponse:
+        """Load a module's ontology into the schema graph (docs/adr/20261014_module-identities.md).
+
+        A module loads only under its own id; a first-party identity (api, engine,
+        dagster) may load under any. Nothing is written for a refused call.
+        """
+        try:
+            module_id, _ = parse_schema_source(req.source)
+        except ValueError as exc:
+            raise _InvalidArgumentError(str(exc)) from exc
+        if identity != module_id and identity not in FIRST_PARTY_IDENTITIES:
+            raise _PermissionDeniedError(
+                f"Identity {identity!r} cannot load schemas of module {module_id!r}: "
+                "a module loads only under module/<its own id>/"
+            )
+        load = getattr(self._adapter, "load_schema_content", None)
+        if load is None:
+            raise _OperationNotSupportedError(
+                "load_schema is only available when this primary adapter wraps the "
+                "triple store domain service (ITripleStoreService)."
+            )
+        try:
+            content = req.content_ttl.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise _InvalidArgumentError("schema content is not UTF-8") from exc
+        return triple_store_pb2.LoadSchemaResponse(
+            changed=bool(load(req.source, content))
         )

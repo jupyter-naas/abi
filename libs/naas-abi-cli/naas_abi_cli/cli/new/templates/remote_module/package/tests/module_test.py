@@ -19,10 +19,26 @@ def test_the_module_declares_its_agent_services_and_job() -> None:
     assert ABIModule.module_id == MODULE_ID
     assert [agent.name for agent in ABIModule.agents] == [NAME]
     assert "agent.invoke.v1" in ABIModule.agents[0].capabilities
-    assert set(ABIModule.dependencies.services) == {"model_registry", "document"}
+    assert set(ABIModule.dependencies.services) == {
+        "model_registry",
+        "document",
+        "triple_store",
+    }
     (heartbeat,) = ABIModule.jobs
     assert heartbeat.name == "heartbeat"
     assert [trigger.spec for trigger in heartbeat.triggers] == ["1h"]
+
+
+def test_the_module_sends_its_ontologies_to_the_engine() -> None:
+    """ontologies/**/*.ttl reaches the schema graph as module/<id>/<path>."""
+    (ontology,) = ABIModule.get_ontologies()
+    assert ontology.source(MODULE_ID) == (
+        f"module/{MODULE_ID}/modules/{{module_name_pascal}}Ontology.ttl"
+    )
+    assert "triple_store" in ABIModule.dependencies.services
+    import rdflib
+
+    assert len(rdflib.Graph().parse(ontology.path)) > 0
 
 
 def test_the_configuration_comes_from_the_environment() -> None:

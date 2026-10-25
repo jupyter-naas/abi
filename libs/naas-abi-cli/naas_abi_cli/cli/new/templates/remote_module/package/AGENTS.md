@@ -22,6 +22,10 @@ the engine's.
   `self.expose_agent(name, agent.as_handler())`, before the module is READY.
 - Scheduled or event-driven work is a `@job(...)` method (`Every`, `Cron`,
   `OnEvent` triggers from `naas_abi_sdk.jobs`). Delivery is at least once.
+- Ontologies are the `.ttl` files of `ontologies/`: sent to the engine's schema
+  graph once the module is READY, additively, and retried in the background if
+  a load fails. A module with ontologies declares `triple_store`. See
+  `ontologies/AGENTS.md`.
 - Keep `MODULE_ID` stable: discovery, job subjects and agent memory use it.
 
 ## Files
@@ -33,6 +37,7 @@ the engine's.
 | `agents/` | SDK `IntentAgent`s on the engine's models, memory in the Document Service |
 | `jobs.py` | job bodies, testable without a broker |
 | `apps/` | web apps, served through Nexus at `/app-html/remote/{{module_id}}/<app>/` |
+| `ontologies/` | `.ttl` files sent to the engine's schema graph as `module/{{module_id}}/<path>` |
 | `tests/` | offline tests (`uv run pytest`) |
 
 ## Run it
@@ -51,6 +56,8 @@ It is up when it logs `READY`. `ABI_HEALTH_PORT=8080` opens `/health` and
 - An agent: `abi new agent <Name> agents` from this folder, then declare and
   expose it in `ABIModule`.
 - A service: add it to `dependencies`, call `self.engine.services.<name>`.
+- An ontology: add a `.ttl` file under `ontologies/` (see `ontologies/AGENTS.md`);
+  the module sends it at its next start.
 - Another module's agent: add its id to `ModuleDependencies(modules=(...))`,
   then `await self.engine.modules["<id>"].get_agent("<Name>")`.
 - An app: `abi new app <name> apps` from this folder. Nexus lists it on its

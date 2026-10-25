@@ -101,6 +101,8 @@ def test_a_new_module_is_a_remote_module_in_the_project_src(tmp_path: Path) -> N
         "tests/module_test.py",
         "Dockerfile",
         "apps/research/manifest.json",
+        "ontologies/AGENTS.md",
+        "ontologies/modules/ResearchOntology.ttl",
         "AGENTS.md",
     ):
         assert (package / name).is_file(), name

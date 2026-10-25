@@ -51,7 +51,10 @@ class ABIModule(BaseModule[{{module_name_pascal}}Configuration]):
     module_id = MODULE_ID
     package_version = "0.1.0"
     # Services this module calls on the engine. Undeclared ones are refused.
-    dependencies = ModuleDependencies(services=("model_registry", "document"))
+    # triple_store: ontologies/ is sent to the engine's schema graph through it.
+    dependencies = ModuleDependencies(
+        services=("model_registry", "document", "triple_store")
+    )
     # Published in discovery; Nexus lists them with the engine's agents.
     agents = (AgentDescriptor(NAME, DESCRIPTION, capabilities=AGENT_INVOKE),)
 
