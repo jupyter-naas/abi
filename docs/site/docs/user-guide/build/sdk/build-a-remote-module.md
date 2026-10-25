@@ -6,20 +6,22 @@ title: "Build a Remote Module"
 # Build a Remote Module
 
 A remote module runs in its own process and reaches the engine only through
-NATS, with `naas-abi-sdk`. It can publish agents, run jobs and serve web apps,
-and it deploys, restarts and scales on its own. How it works underneath is in
+NATS, with `naas-abi-sdk`. It can publish agents, offer workflows and pipelines
+other modules call, send its ontologies to the engine, run jobs and serve web
+apps, and it deploys, restarts and scales on its own. How it works underneath is in
 [Remote Modules and Jobs](/developer-guide/architecture/remote-modules).
 
 This guide builds one in a project made by `abi new project`, runs it with
 `abi dev up`, and deploys it with Docker Compose.
 
-A remote module offers agents, apps and jobs. If you need pipelines,
-workflows, integrations or ontologies, which use `naas_abi_core` directly,
-create an in-engine module instead (`abi new module <name> --in-engine`); the
-two are compared in [Creating a Module](/user-guide/build/modules/creating-a-module#remote-or-in-engine).
-Inside a remote module, `abi new workflow`, `abi new pipeline`,
-`abi new integration` and `abi new orchestration` refuse to run and say what to
-do instead.
+A remote module offers agents, workflows, pipelines, integrations, ontologies,
+apps and jobs, written on `naas_abi_sdk` only. What it cannot do: mount its
+workflows and pipelines on the kernel's REST API (`/workflows/<slug>`), which
+only an in-engine module does, and `abi new orchestration` (Dagster), which
+refuses to run in a remote module: schedule with [jobs](#4-add-a-job) instead.
+Use an in-engine module (`abi new module <name> --in-engine`) when you need
+`naas_abi_core` itself; the two are compared in
+[Creating a Module](/user-guide/build/modules/creating-a-module#remote-or-in-engine).
 
 ## Before you start
 
@@ -54,6 +56,8 @@ What it wrote:
 | `src/research/__main__.py` | `python -m research`: `run_module` with discovery and signal handling |
 | `src/research/agents/ResearchAgent.py` | An SDK `IntentAgent` on the engine's models, with its memory in the Document Service |
 | `src/research/jobs.py` | Job bodies, testable without a broker |
+| `src/research/workflows/`, `pipelines/`, `integrations/` | Where `abi new workflow`, `pipeline` and `integration` write (empty, each with an `AGENTS.md`) |
+| `src/research/ontologies/modules/ResearchOntology.ttl` | An ontology, sent to the engine's schema graph |
 | `src/research/apps/research/` | A web app (`manifest.json`, `index.html`) |
 | `src/research/tests/` | Offline tests |
 | `src/research/Dockerfile` | An image with the SDK only: the build fails if `naas_abi_core` is installed |
@@ -87,7 +91,8 @@ class ABIModule(BaseModule[ResearchConfiguration]):
     module_id = MODULE_ID
     package_version = "0.1.0"
     # Services this module calls on the engine. Undeclared ones are refused.
-    dependencies = ModuleDependencies(services=("model_registry", "document"))
+    # triple_store: ontologies/ is sent to the engine's schema graph through it.
+    dependencies = ModuleDependencies(services=("model_registry", "document", "triple_store"))
     # Published in discovery; Nexus lists them with the engine's agents.
     agents = (AgentDescriptor(NAME, DESCRIPTION, capabilities=("agent.invoke.v1",)),)
 
@@ -116,7 +121,8 @@ The rules:
   `secret`, `source_control`, `triple_store`, `vector_store`. Calls are async:
   `await self.engine.services.object_storage.put_object(prefix, key, data)`.
 - **Bind in `on_initialized`** every agent, app and job handler the class
-  declares: the module becomes `READY` right after.
+  declares: the module becomes `READY` right after. Workflows and pipelines
+  are found in their folders and built after this hook.
 - Hooks run in this order: `on_load`, `on_initialized`, `run()`, then
   `on_unloaded` at the end. Stop your own background tasks in `on_unloaded`.
 - Outside the class, `current_module()` (from `naas_abi_sdk`) returns the
@@ -198,7 +204,136 @@ Triggers, retries, idempotency and retention are described in
 [Module jobs and scheduling](/user-guide/build/modules/module-jobs) and, in
 depth, in [Remote Modules and Jobs](/developer-guide/architecture/remote-modules#module-jobs).
 
-## 5. Add an app
+## 5. Add a workflow, a pipeline or an integration
+
+From the module's folder:
+
+```bash
+cd src/research
+abi new workflow digest workflows
+abi new pipeline catalog pipelines
+abi new integration crm integrations
+```
+
+Each writes a class on `naas_abi_sdk` and a test beside it
+(`DigestWorkflow.py` and `DigestWorkflow_test.py`; no `naas_abi_core` import).
+A workflow returns a JSON value, a pipeline an rdflib `Graph`; both have an
+async `run`:
+
+```python
+# workflows/DigestWorkflow.py
+class DigestWorkflowParameters(WorkflowParameters):
+    message: str = Field(default="hello", description="Text the workflow echoes back")
+
+
+class DigestWorkflow(Workflow[DigestWorkflowParameters]):
+    """Echoes a message: this text is the description an agent or a caller reads."""
+
+    async def run(self, parameters: DigestWorkflowParameters) -> dict[str, Any]:
+        return {"message": parameters.message}
+```
+
+The module finds the classes in `workflows/` and `pipelines/`, builds them after
+`on_initialized` and publishes them in discovery by their class name in snake
+case (`digest_workflow`, `catalog_pipeline`). The extras `naas-abi-sdk[workflows]`
+(pydantic) and `[rdf]` (rdflib) are in the module's image and, in a standalone
+module, its `pyproject.toml`. Run the tests offline:
+
+```bash
+uv run pytest src/research/workflows src/research/pipelines
+```
+
+**Give an agent the workflow as a tool.** An agent takes its tools when it is
+built, so build the processes first in `on_initialized`:
+
+```python
+async def on_initialized(self) -> None:
+    await self.build_processes()
+    tools = self.get_workflow("digest_workflow").as_tools()
+    agent = await create_agent(self.engine, MODULE_ID, tools=tools)
+    self.expose_agent(NAME, agent.as_handler())
+```
+
+**Call it from another module.** Declare the module, then ask discovery. The
+call is a request with a deadline (300 seconds by default), the module checks
+the caller's token with discovery before it runs anything, and a run is never
+retried:
+
+```python
+dependencies = ModuleDependencies(services=("document",), modules=("my_project.research",))
+
+async def digest(self) -> dict:
+    research = self.engine.modules["my_project.research"]
+    result = await research.get_workflow("digest_workflow").run({"message": "hi"})
+    graph = await research.get_pipeline("catalog_pipeline").run({})   # an rdflib Graph
+    tools = (await research.get_workflow("digest_workflow")).as_tools()   # for an agent here
+    return result
+```
+
+**Run it as a job.** Declare job settings on the class and the module hosts a
+job for it (`workflow.digest_workflow`), with a run record and the System app's
+job list. `JobSettings()` alone means it runs only when someone starts it:
+
+```python
+from datetime import timedelta
+from naas_abi_sdk.jobs import Every, JobSettings
+
+class DigestWorkflow(Workflow[DigestWorkflowParameters]):
+    job = JobSettings(triggers=(Every("1h"),), timeout=timedelta(minutes=10), max_attempts=3)
+```
+
+```python
+run = await research.get_workflow("digest_workflow").trigger({"message": "hi"})
+record = await run.wait(timeout=600)   # record["status"], record["result"]
+```
+
+A `Cron` or `Every` trigger needs parameters that all have defaults (a scheduled
+run sends `{}`). The run record keeps up to 64 KiB of the result.
+
+**An integration** is the plain class that talks to one third-party service.
+Nothing in the engine consumes it: build it in a workflow, a pipeline or an
+agent, with its credentials from the engine's secret service (declare
+`secret` in `ModuleDependencies`):
+
+```python
+key = await self.engine.services.secret.get("CRM_API_KEY")
+crm = CrmIntegration(CrmIntegrationConfiguration(api_key=key))
+```
+
+A workflow or pipeline that needs such arguments defines `New(module)` on the
+class (sync or async), or you bind an instance in `on_initialized` with
+`self.expose_workflow(name, instance)` before `build_processes()`.
+
+A module with workflows or pipelines runs with discovery (`abi dev up` and the
+Compose service do); calling them over NATS needs it. Details and limits:
+[Remote Modules and Jobs](/developer-guide/architecture/remote-modules#workflows-and-pipelines).
+
+## 6. Add ontologies
+
+Every `.ttl` file under `ontologies/` next to the module's package is sent to the
+engine's schema graph once the module is `READY`, as an in-engine module's files
+are loaded at boot (`abi new module` wrote `ontologies/modules/ResearchOntology.ttl`
+and the `triple_store` dependency). The module's id scopes the file:
+`module/my_project.research/modules/ResearchOntology.ttl` in the schema graph.
+
+```text
+ontologies/
+├── modules/    ResearchOntology.ttl    shared classes and properties
+└── sandbox/    work in progress: never sent
+```
+
+- Use absolute IRIs, and an `owl:Ontology` declaration if you want the file listed
+  in the Nexus ontology catalog (`sandbox` and `processes` paths are not listed).
+- Sending is in the background and is retried if the engine is down; it never
+  changes the module's readiness. A file the engine already holds is not
+  rewritten, and a changed file applies the difference.
+- **Loading is additive**: a file you remove or rename stays in the schema graph.
+- A module may load only under its own id; Turtle the engine cannot parse is refused.
+- Nexus lists the files in the ontology catalog next to the engine's own ones, as
+  `module/<module_id>/<path>`, with stats, graphs and export. A workspace enables
+  one in its `ontologies` allowlist, by that id or its file name.
+
+## 7. Add an app
 
 ```bash
 cd src/research
@@ -236,7 +371,7 @@ no `localStorage` or `document.cookie`, and absolute URLs start with the app's
 The module's image installs the SDK only. Add what your backend needs (here
 `fastapi`) to the `pip install` line of `src/research/Dockerfile`.
 
-## 6. Run it with `abi dev up`
+## 8. Run it with `abi dev up`
 
 ```bash
 abi dev up
@@ -269,8 +404,9 @@ Each entry also takes `args`, `env` (values may name `${ABI_NATS_URL}` and the
 other variables), `enabled` and `restart` (`on-failure`, `always`, `never`).
 
 Once the module is `READY`, Nexus lists its agent, the System app shows it on
-the **Modules** tab and its job on the **Jobs** tab, and its app appears on the
-Apps page.
+the **Modules** tab and its jobs (the derived ones of workflows and pipelines
+with job settings too) on the **Jobs** tab, its ontologies are in the engine's
+schema graph, and its app appears on the Apps page.
 
 Test it offline, with no broker:
 
@@ -278,7 +414,7 @@ Test it offline, with no broker:
 uv run --with pytest pytest src/research/tests
 ```
 
-## 7. Deploy it with Docker Compose
+## 9. Deploy it with Docker Compose
 
 `abi new module` added a service to `docker-compose.override.yml`, which
 Compose merges into the project's `docker-compose.yml`:

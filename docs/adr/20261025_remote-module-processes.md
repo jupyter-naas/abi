@@ -105,6 +105,12 @@ before it connects otherwise.
 - A body inbox is a random `_INBOX_MODULES` subject known to the two parties; modules
   can still see each other's subjects on the shared `module` broker user
   (20261014_module-identities.md), as with app bodies.
-- Out of scope here: running processes as jobs, calls from in-engine modules, kernel
-  REST exposure, listing processes in Nexus. Each can be added on the same
-  descriptor and subjects.
+- Out of scope here: calls from in-engine modules, kernel REST exposure, listing
+  processes in Nexus. Each can be added on the same descriptor and subjects.
+
+## Amendment (2026-10-25): jobs and ontologies
+Running a process as a job (`job = JobSettings(...)`, `ProcessProxy.trigger`) and the
+remote ontologies are decided in
+`20261025_remote-module-workflows-pipelines-ontologies.md`, which also records the
+whole feature and what stays out of scope. A derived job adds no descriptor field: it is
+listed with the module's jobs, named `<kind>.<name>`.

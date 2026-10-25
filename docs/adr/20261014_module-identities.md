@@ -197,3 +197,19 @@ The app scope also carries the workspace the user opened the app from,
 the same rule: a request from another caller than `api` that names a
 workspace is refused with `PERMISSION_DENIED` (remote apps ADR, amendment of
 2026-10-14).
+
+## Amendment (2026-10-25): processes and ontologies
+- A call to a workflow or a pipeline of another module carries a token bound to the instance
+  it calls, and the provider has discovery authorize it (`authorize_process`) before it
+  reads the parameters, like agents, models and apps. The caller needs no declaration
+  beyond the binding.
+- `triple_store.v1.load_schema(source, content)` loads under the caller's identity: a module
+  only under `module/<its module id>/`, so a module cannot overwrite another module's
+  ontology, and the first-party identities (`api`, `engine`, `dagster`) any `module/` source.
+  The identity is the token's `sub`, which a module key cannot set to a first-party one.
+  Content may not use the `http://triple-store.internal` vocabulary, which would let a
+  module forge another source's `internal:Schema`. Other triple-store operations still have
+  no identity scoping: a module with the `triple_store` dependency reads and writes the
+  engine's triples, as before.
+
+See `20261025_remote-module-workflows-pipelines-ontologies.md`.

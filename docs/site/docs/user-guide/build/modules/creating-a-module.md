@@ -19,7 +19,7 @@ Since 3.0 there are two kinds, and `abi new module` creates the remote one by de
 | Registered by | Discovery, at run time: it is **not** listed under `modules:` | `modules:` in `config.yaml` |
 | Imports | `naas_abi_sdk` only | `naas_abi_core` directly |
 | Reaches services | Through NATS, async, only the services it declares | Through the engine (`self.engine.services.<name>`) |
-| Offers | Agents, apps, jobs | Agents, workflows, pipelines, integrations, ontologies, apps, jobs |
+| Offers | Agents, workflows, pipelines (called over NATS, not mounted on REST), integrations, ontologies, apps, jobs | Agents, workflows, pipelines (also REST endpoints), integrations, ontologies, apps, jobs |
 | Needs the broker | Yes | Only in a NATS project; it also works with NATS off |
 
 **Choose a remote module** when the module should have its own life:
@@ -27,15 +27,16 @@ Since 3.0 there are two kinds, and `abi new module` creates the remote one by de
 - it has its own dependencies, which must not end up in the engine's environment;
 - it should deploy, scale and restart on its own, and survive an engine restart (it renews its lease in discovery);
 - a separate team ships it (`abi new module <name> --standalone` creates a repository of its own);
-- what it needs is an agent, an app or scheduled work, through the SDK's facades of the kernel services.
+- what it needs is an agent, a workflow or pipeline other modules call over NATS, an ontology, an app or scheduled work, through the SDK's facades of the kernel services.
 
 **Choose an in-engine module** when it works on the engine's own objects and code:
 
-- pipelines that write RDF to the triple store, workflows exposed as tools and REST endpoints, integrations, ontologies loaded into the knowledge graph;
+- workflows and pipelines that must also be mounted as REST endpoints (`/workflows/<slug>`, `/pipelines/<slug>`), or that run as in-engine tools next to in-engine agents;
+- ontologies and code that use `naas_abi_core` classes (`onto2py` generated classes, the engine's `Expose` base);
 - anything that imports `naas_abi_core`;
 - a project that has no broker (NATS off), where a remote module would not run.
 
-The scaffolds follow the kind: `abi new workflow`, `abi new pipeline` and `abi new integration` write `naas_abi_core` code, so they refuse to run inside a remote module (the error says what to do instead). A project can mix both kinds. This page covers the in-engine module. For the remote one, see [Build a Remote Module](/user-guide/build/sdk/build-a-remote-module).
+The scaffolds follow the kind: `abi new agent`, `workflow`, `pipeline` and `integration` write SDK classes inside a remote module (imports `naas_abi_sdk` only, a test beside each) and `naas_abi_core` ones inside an in-engine module; only `abi new orchestration` refuses in a remote module, which schedules with jobs instead. A project can mix both kinds. This page covers the in-engine module. For the remote one, see [Build a Remote Module](/user-guide/build/sdk/build-a-remote-module).
 
 :::note
 In a project whose config has no `nats:` block, `abi new module <name>` creates an in-engine module and says so; `--remote` forces a remote one, which runs once the project is on NATS.

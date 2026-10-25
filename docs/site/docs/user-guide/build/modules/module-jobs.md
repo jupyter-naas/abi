@@ -48,6 +48,26 @@ functions, which run in a worker thread.
 
 A generated remote module already has a `heartbeat` job in `jobs.py`: start from it.
 
+### A workflow or a pipeline as a job
+
+In a remote module, a workflow or pipeline class becomes a job when it declares job
+settings, with no handler to write: the module hosts a job named `<kind>.<name>`
+(`workflow.digest_workflow`) that validates its payload into the parameters model and
+runs the class.
+
+```python
+from naas_abi_sdk.jobs import Every, JobSettings
+
+class DigestWorkflow(Workflow[DigestWorkflowParameters]):
+    job = JobSettings(triggers=(Every("1h"),), timeout=timedelta(minutes=10))
+```
+
+`JobSettings()` alone means it runs only when someone starts it, from another module with
+`await engine.modules[id].get_workflow(name).trigger({...})`, or the System app's **Run now**.
+A `Cron` or `Every` trigger needs parameters that all have defaults, since a scheduled run
+sends `{}`. The run record's result is the workflow's JSON or the pipeline's graph as
+N-Triples, up to 64 KiB. See [Build a Remote Module](/user-guide/build/sdk/build-a-remote-module#5-add-a-workflow-a-pipeline-or-an-integration).
+
 ## Triggers
 
 | Trigger | Fires |

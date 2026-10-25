@@ -182,7 +182,7 @@ modules, jobs, agents, NATS and traces: see [Observability](/developer-guide/arc
 
 ## Next steps
 
-- [Build a Remote Module](/user-guide/build/sdk/build-a-remote-module): agents, apps and jobs in their own process.
+- [Build a Remote Module](/user-guide/build/sdk/build-a-remote-module): agents, workflows, pipelines, ontologies, apps and jobs in their own process.
 - [Module jobs and scheduling](/user-guide/build/modules/module-jobs): run work on a schedule or on an event.
 - [Configuration Reference](/user-guide/get-started/configuration): the `nats:` block, services and secrets.
 - [Deploy](/user-guide/deploy/overview): Docker, Dokploy, production.

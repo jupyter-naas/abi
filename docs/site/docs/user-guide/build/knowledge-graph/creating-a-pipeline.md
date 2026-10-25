@@ -2,7 +2,7 @@
 
 Pipelines transform raw data from integrations into OWL/RDF triples for the knowledge graph. They are the semantic ingestion layer: a pipeline's `run()` returns an `rdflib.Graph`.
 
-Pipelines are `naas_abi_core` code, so they belong in an [in-engine module](/user-guide/build/modules/creating-a-module#remote-or-in-engine). `abi new pipeline` refuses to run inside a remote module; there, put the logic in a plain async function, write through `self.engine.services.triple_store`, and run it from a `@job`.
+A pipeline lives in a module, and the module's kind decides what it is written on: in an [in-engine module](/user-guide/build/modules/creating-a-module#remote-or-in-engine) it is `naas_abi_core` code, mounted on the REST API; in a [remote module](/user-guide/build/sdk/build-a-remote-module) it is `naas_abi_sdk` code that other modules call over NATS. `abi new pipeline` writes the right one for the module you run it in. This page describes the in-engine pipeline; [the remote one](#in-a-remote-module) follows.
 
 ---
 
@@ -153,6 +153,42 @@ Return something JSON-serializable (a count, not the graph). A run's result, log
 :::warning Legacy: Dagster
 Projects without NATS can schedule a pipeline with a Dagster asset (`abi new orchestration`), a [legacy](/user-guide/build/applications/dagster) extra removed in the next major. New projects use module jobs.
 :::
+
+---
+
+## In a remote module
+
+`abi new pipeline catalog pipelines`, run in a remote module's folder, writes a pipeline on `naas_abi_sdk` (no `naas_abi_core` import, and rdflib through the `[rdf]` extra) and a test beside it. `run` is async and returns the `Graph`; the module decides what to do with it:
+
+```python
+# src/research/pipelines/CatalogPipeline.py
+from naas_abi_sdk.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
+from pydantic import Field
+from rdflib import RDF, RDFS, Graph, Literal, URIRef
+
+
+class CatalogPipelineParameters(PipelineParameters):
+    iri: str = Field(default="urn:example:thing", description="IRI of the individual to describe")
+    label: str = Field(default="Thing", description="Its label")
+
+
+class CatalogPipeline(Pipeline[CatalogPipelineParameters]):
+    """Describes an individual as RDF: this text is the description an agent or a caller reads."""
+
+    async def run(self, parameters: CatalogPipelineParameters) -> Graph:
+        graph = Graph()
+        individual = URIRef(parameters.iri)
+        graph.add((individual, RDF.type, RDFS.Resource))
+        graph.add((individual, RDFS.label, Literal(parameters.label)))
+        # Declare the `triple_store` service to persist it:
+        #   await self.engine.services.triple_store.insert(graph, "my-graph")
+        return graph
+```
+
+- **Discovery.** The module imports every `Pipeline` under `pipelines/`, builds it after `on_initialized` and lists it by its class name in snake case: `catalog_pipeline`. A pipeline that needs the engine's services defines `New(module)` on the class.
+- **Calling it.** `graph = await engine.modules["my_project.research"].get_pipeline("catalog_pipeline").run({})` runs it over NATS and returns an rdflib `Graph` (carried as N-Triples; a graph above one NATS message streams, up to 256 MiB). The same deadline, authorization and no-retry rules as a workflow apply. As an agent tool, the graph comes back as `{"format": "turtle", "data": "..."}`.
+- **Jobs.** `job = JobSettings(triggers=(Every("1h"),), timeout=timedelta(minutes=30))` on the class runs it on a schedule as the job `pipeline.catalog_pipeline`. The run record keeps up to 64 KiB of the graph as N-Triples (more is cut to a preview), so a pipeline that produces a large graph writes it to the triple store itself.
+- **Not mounted on REST.** `POST /pipelines/<slug>` belongs to in-engine modules.
 
 ---
 

@@ -158,3 +158,16 @@ the same treatment in every host, races each run's own writes, and still
 leaves callers holding the old id. While the registration is absent, other
 replicas see the owner as gone, as before: a submit to one of its conversations
 in that window can release the claim and fail the run as `OWNER_GONE`.
+
+## Amendment (2026-10-25): processes
+`ModuleDescriptor.processes` (field 9) lists a module's workflows and pipelines as
+`ProcessDescriptor { name, kind, description, contract_major }`: at most 128, a description
+of at most 4 KiB (the SDK sends 512 bytes) and 128 KiB in all, so the snapshot stays bounded
+and a refused registration names the limit. The parameters' schema is not registered: the
+module serves it (`describe`). Replicas of one generation declare identical processes, and a
+process that is also a job adds an entry to `jobs`, named `<kind>.<name>`, not a new field.
+`authorize_process` is `authorize_app` for them: the provider asks discovery to authorize a
+call (lease, owner, declaration, `READY`) before it runs anything. A module also sends its
+ontologies only once its instance is `READY` or `DEGRADED`, never while `STAGED`, for the
+reason a staged generation starts no job host above. See
+`20261025_remote-module-workflows-pipelines-ontologies.md`.

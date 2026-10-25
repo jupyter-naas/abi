@@ -2,7 +2,7 @@
 
 Integrations are the external API adapters in ABI. They are the smallest, most atomic units - they talk to a specific external service and nothing else. They do not depend on pipelines, workflows, or agents.
 
-Integrations are `naas_abi_core` code, so they belong in an [in-engine module](/user-guide/build/modules/creating-a-module#remote-or-in-engine). `abi new integration` refuses to run inside a remote module; there, call the third-party API from plain Python (`httpx`, `requests`) in the module, with credentials read through `self.engine.services.secret`.
+`abi new integration` writes the right one for the module you run it in: `naas_abi_core` code in an [in-engine module](/user-guide/build/modules/creating-a-module#remote-or-in-engine), and `naas_abi_sdk` code in a [remote module](/user-guide/build/sdk/build-a-remote-module) (see [in a remote module](#in-a-remote-module)).
 
 ---
 
@@ -175,5 +175,45 @@ def test_list_items():
         result = integration.list_items()
     assert len(result) == 1
 ```
+
+---
+
+## In a remote module
+
+`abi new integration crm integrations`, run in a remote module's folder, writes `CrmIntegration.py` and a test beside it, on `naas_abi_sdk` (no `naas_abi_core` import). The class has the same shape, with async methods (use `httpx`) and `IntegrationConnectionError` for a tool that cannot be reached:
+
+```python
+# src/research/integrations/CrmIntegration.py
+from dataclasses import dataclass
+
+from naas_abi_sdk.integration import (
+    Integration,
+    IntegrationConfiguration,
+    IntegrationConnectionError,
+)
+
+
+@dataclass
+class CrmIntegrationConfiguration(IntegrationConfiguration):
+    api_key: str = ""
+    base_url: str = "https://api.example.com"
+
+
+class CrmIntegration(Integration):
+    def __init__(self, configuration: CrmIntegrationConfiguration):
+        super().__init__(configuration)
+        self.__configuration = configuration
+
+    async def ping(self) -> str:
+        if not self.__configuration.api_key:
+            raise IntegrationConnectionError("CRM: no API key in its configuration")
+        return self.__configuration.base_url
+```
+
+- **Nothing consumes it.** As in an in-engine module, an integration is a code pattern: the module's workflows, pipelines and agents build it and call it. It is not published in discovery.
+- **Credentials** come from the engine's secret service, not from `config.yaml`: declare it in the module (`ModuleDependencies(services=("secret",))`) and read `await self.engine.services.secret.get("CRM_API_KEY")`, in a workflow's or pipeline's `New(module)` or in `on_initialized`, then pass the value in the configuration.
+- **Test it** offline: `CrmIntegration_test.py` checks the configuration and the refusal without credentials, and a patched HTTP client covers your own calls.
+
+---
 
 Next: [Creating a Pipeline](/user-guide/build/knowledge-graph/creating-a-pipeline) to ingest this data into the knowledge graph.

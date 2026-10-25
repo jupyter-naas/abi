@@ -219,7 +219,7 @@ sequenceDiagram
   M->>D: register (STARTING)
   M->>D: wait until its module dependencies are READY
   M->>E: services reachable (declared ones only)
-  M->>M: on_initialized(): expose agents, apps, jobs
+  M->>M: on_initialized(): expose agents, apps, jobs; build workflows, pipelines
   M->>D: renew (initialized) → READY
   M->>M: run()
   Note over M: SIGTERM: drain, finish running work
@@ -229,9 +229,10 @@ sequenceDiagram
 
 A module declares the services it calls (`ModuleDependencies(services=...)`)
 and the modules it depends on (`modules=...`); undeclared calls are refused.
-It binds its agents, apps and job handlers in `on_initialized`, before it
-becomes `READY`. On `SIGTERM` it stops taking new work, finishes the agent runs
-and jobs it started, and unregisters. Read on in
+It binds its agents, apps and job handlers in `on_initialized`, and builds its
+workflows and pipelines right after, before it becomes `READY`; once `READY`, it sends
+its ontologies to the engine's schema graph. On `SIGTERM` it stops taking new work,
+finishes the agent runs, workflow and pipeline calls and jobs it started, and unregisters. Read on in
 [Remote modules and jobs](./remote-modules).
 
 → [Remote modules and jobs](./remote-modules)

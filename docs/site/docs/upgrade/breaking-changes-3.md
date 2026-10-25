@@ -313,9 +313,9 @@ working.
 - **Migration:** pass `--in-engine` for a classic module; pass the target
   folder explicitly to nest a module elsewhere.
 - Related: an in-engine module created in a NATS project has no
-  `orchestrations/`; inside a remote module, `abi new workflow`, `pipeline`,
-  `integration` and `orchestration` refuse, and `abi new agent` writes an SDK
-  agent.
+  `orchestrations/`; inside a remote module, `abi new orchestration` refuses
+  (schedule with jobs), and `abi new agent`, `workflow`, `pipeline` and
+  `integration` write SDK scaffolds that import `naas_abi_sdk` only.
 
 ### `abi deploy local` changes the project's dependencies
 - **What changed:** for a project without a `nats:` block, `abi deploy local`

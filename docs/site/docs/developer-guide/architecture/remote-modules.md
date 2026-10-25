@@ -23,7 +23,7 @@ This page explains how remote modules and module jobs work. To write one, follow
 | Listed in | `modules:` in the config | Discovery, at run time |
 | Imports | `naas_abi_core` | `naas_abi_sdk` only |
 | Calls services | Through the engine (NATS facades in NATS mode) | `self.engine.services.<name>`, async, declared services only |
-| Offers | Agents, workflows, pipelines, integrations, ontologies, apps, jobs | Agents, apps, jobs |
+| Offers | Agents, workflows, pipelines, integrations, ontologies, apps, jobs; workflows and pipelines also on the kernel REST API | Agents, workflows, pipelines, integrations, ontologies, apps, jobs; workflows and pipelines are called over NATS, not on REST |
 | Scheduled work | Module jobs (NATS mode); Dagster orchestrations (legacy, NATS off) | Module jobs |
 
 Both kinds coexist: a project keeps its engine modules and adds remote ones.
@@ -33,9 +33,9 @@ repository of its own).
 
 ## What a remote module offers
 
-A module publishes a descriptor in discovery: its agents, jobs, models and
-apps, and the services and modules it depends on. Replicas of one generation
-must declare the same descriptor.
+A module publishes a descriptor in discovery: its agents, jobs, models, apps and
+processes (workflows and pipelines), and the services and modules it depends on.
+Replicas of one generation must declare the same descriptor.
 
 ### Agents
 
@@ -77,6 +77,74 @@ Install `naas-abi-sdk[models]` (or `[agent]`).
 A module serves web apps through Nexus, with no port of its own. See
 [Remote apps and large payloads](./remote-apps).
 
+### Workflows and pipelines
+
+A workflow returns a JSON value and a pipeline an rdflib `Graph`. Both are classes
+of the SDK (`naas_abi_sdk.workflow.Workflow`, `naas_abi_sdk.pipeline.Pipeline`),
+written like the engine's, with an `async run`, and found in the module's
+`workflows/` and `pipelines/` folders. The module lists each in its descriptor as
+a **process** (`name`, `kind`, a short description) and serves it; the parameters'
+JSON schema stays in the module, so the registry carries names only.
+
+```python
+research = self.engine.modules["my_project.research"]
+result = await research.get_workflow("digest_workflow").run({"since": "2026-01-01"})
+graph = await research.get_pipeline("catalog_pipeline").run({})  # an rdflib Graph
+tools = (await research.get_workflow("digest_workflow")).as_tools()  # for an agent
+```
+
+- A call is a unary request/reply on `abi.mod.<project>.<instance_id>.process.<kind>.<name>.run`,
+  with a **deadline** (300 seconds by default, at most 3600): the module cancels the run
+  when it passes (`DEADLINE_EXCEEDED`).
+- **Authorization.** The caller's token is bound to the instance it calls, and the module
+  asks discovery to authorize it (`authorize_process`: the lease, a declared process, a
+  `READY` instance) before it reads the parameters or runs anything.
+  `PROCESS_NOT_FOUND`, `MODULE_UNAVAILABLE`, `PERMISSION_DENIED` and `UNAUTHENTICATED`
+  come back before the handler ran.
+- **A run is never retried**: a timeout can hide a completed run, so a process that
+  matters must be idempotent. A failing process answers `PROCESS_ERROR` without its
+  exception text; refused parameters answer `INVALID_ARGUMENT`, naming the fields.
+- Parameters or a result above one NATS message stream through an inbox the other side
+  pulls, up to 256 MiB each way.
+- A module with workflows or pipelines must run with discovery (`run_module(discovery=...)`),
+  as `abi dev up` and the Compose service do.
+- Another module needs the module in `dependencies.modules`, as for agents. In-engine
+  code cannot call them yet, and the kernel REST API does not mount them: use an
+  [in-engine module](/user-guide/build/modules/creating-a-module#remote-or-in-engine) when
+  a workflow must be a REST endpoint.
+
+A process runs as a [job](#workflows-and-pipelines-as-jobs) when its class declares job
+settings. The decision, the wire contract and what is out of scope: `docs/adr/20261025_remote-module-workflows-pipelines-ontologies.md`
+and `docs/adr/20261025_remote-module-processes.md`.
+
+### Integrations
+
+An integration (`naas_abi_sdk.integration.Integration`) is the same code pattern as the
+engine's: a class that talks to one third-party service, with its credentials passed in
+(read them with `await self.engine.services.secret.get("KEY")`, declaring the `secret`
+service). Nothing in the engine consumes it: the module's workflows, pipelines and agents
+build it and call it. It is not published in discovery.
+
+### Ontologies
+
+`ontologies/**/*.ttl` next to the module's package (except any path with `sandbox` in it)
+is sent to the engine's schema graph, as an in-engine module's files are loaded at boot.
+The module declares the `triple_store` service, and `run_module` sends each file once the
+instance is `READY` or `DEGRADED` (never while `STAGED`, and nothing when it is asked to
+drain first) with `triple_store.load_schema(source, content)`:
+
+- `source` is `module/<module_id>/<path under ontologies/>`; the engine accepts a module
+  only under its own id (`PERMISSION_DENIED` otherwise), and Turtle it cannot parse
+  (`INVALID_ARGUMENT`) writes nothing.
+- The send runs in the background and is retried after 1 s, doubling up to 1 minute: a
+  down engine never changes the module's readiness.
+- Loading is **additive**: a file the module removes or renames later stays in the schema
+  graph. A file the engine already holds is not written again.
+- The Nexus ontology catalog lists these files with the in-engine ones (as
+  `module/<module_id>/<path>`), with stats, graphs and export. A workspace enables one in
+  its `ontologies` allowlist by that id, its file name or `<module_id>:<file name>`; a
+  workspace that enables none sees none.
+
 ### Jobs
 
 Scheduled and event-driven work, described below.
@@ -110,6 +178,40 @@ class ABIModule(BaseModule):
 
 Engine modules declare jobs the same way (`naas_abi_core.module.jobs`); their
 handlers may also be synchronous, and run in a worker thread.
+
+### Workflows and pipelines as jobs
+
+A workflow or pipeline class declares job settings to run as a job too, with a run
+record, retries and the System app's job list:
+
+```python
+from datetime import timedelta
+from naas_abi_sdk.jobs import Every, JobSettings
+
+class IngestPipeline(Pipeline[IngestParameters]):
+    """Loads the nightly export."""
+
+    job = JobSettings(triggers=(Every("1h"),), timeout=timedelta(minutes=10), max_attempts=3)
+
+    async def run(self, parameters: IngestParameters) -> Graph: ...
+
+class ExportWorkflow(Workflow[ExportParameters]):
+    job = JobSettings()   # no trigger: runs only when a caller starts it
+```
+
+- The job is named `<kind>.<name>` (`workflow.export_workflow`, `pipeline.ingest_pipeline`)
+  and listed with the module's jobs. A class without `job` has none.
+- The module fails at start when that name clashes with an explicit `@job`, or when a
+  `Cron` or `Every` trigger sits on parameters with required fields: a scheduled run has
+  the payload `{}`. Give the fields defaults, or use `OnEvent` or manual runs.
+- A run validates its payload into the parameters model, then awaits `run`. A model that
+  refuses the payload ends the run `FAILED`, naming the fields. `OnEvent` runs take the
+  event's `data` as payload.
+- The run record's `result` is the workflow's JSON value or the pipeline's graph as
+  N-Triples, kept up to 64 KiB (above it: `{"truncated": true, "preview": ...}`).
+- Another module starts it with
+  `run = await engine.modules[id].get_workflow(name).trigger(params, idempotency_key=...)`
+  (`PROCESS_NOT_A_JOB` when the class declares no job), then `await run.wait()`.
 
 ### Triggers
 

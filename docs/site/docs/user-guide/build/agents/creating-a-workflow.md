@@ -2,7 +2,7 @@
 
 Workflows implement business logic. They sit at the top of the stack, orchestrating integrations and querying the knowledge graph to fulfill specific user intents. They are exposed as agent tools and as REST API endpoints.
 
-Workflows are `naas_abi_core` code, so they belong in an [in-engine module](/user-guide/build/modules/creating-a-module#remote-or-in-engine). `abi new workflow` refuses to run inside a remote module; there, put the logic in a plain async function that an agent tool or a `@job` calls.
+A workflow lives in a module, and the module's kind decides what it is written on: in an [in-engine module](/user-guide/build/modules/creating-a-module#remote-or-in-engine) it is `naas_abi_core` code, mounted on the REST API; in a [remote module](/user-guide/build/sdk/build-a-remote-module) it is `naas_abi_sdk` code that other modules call over NATS. `abi new workflow` writes the right one for the module you run it in. This page describes the in-engine workflow; [the remote one](#in-a-remote-module) is at the end.
 
 ---
 
@@ -178,6 +178,45 @@ class ABIModule(BaseModule):
 :::warning Legacy: Dagster
 Dagster jobs (`abi new orchestration`) are the [legacy](/user-guide/build/applications/dagster) way to schedule a workflow in a project without NATS. They are removed in the next major.
 :::
+
+---
+
+## In a remote module
+
+`abi new workflow digest workflows`, run in a remote module's folder, writes the same three classes on `naas_abi_sdk` (no `naas_abi_core` import) and a test beside them. `run` is async, and the workflow is found, built and published by the module:
+
+```python
+# src/research/workflows/DigestWorkflow.py
+from dataclasses import dataclass
+from typing import Any
+
+from naas_abi_sdk.workflow import Workflow, WorkflowConfiguration, WorkflowParameters
+from pydantic import Field
+
+
+@dataclass
+class DigestWorkflowConfiguration(WorkflowConfiguration):
+    """Configuration for DigestWorkflow."""
+
+
+class DigestWorkflowParameters(WorkflowParameters):
+    message: str = Field(default="hello", description="Text the workflow echoes back")
+
+
+class DigestWorkflow(Workflow[DigestWorkflowParameters]):
+    """Echoes a message: this text is the description an agent or a caller reads."""
+
+    async def run(self, parameters: DigestWorkflowParameters) -> dict[str, Any]:
+        return {"message": parameters.message}
+```
+
+- **Discovery.** The module imports every `Workflow` under `workflows/`, builds it after `on_initialized` (with `New(module)` if the class defines it, else an empty configuration) and lists it in its descriptor by its class name in snake case: `digest_workflow`. Read what you need from the engine in `New(module)`: `await module.engine.services.secret.get("KEY")`. A workflow that cannot be built stops the module at start, naming it.
+- **Tools.** In `on_initialized`, `await self.build_processes()` then `self.get_workflow("digest_workflow").as_tools()` gives the agent you create its tools.
+- **Other modules.** `await engine.modules["my_project.research"].get_workflow("digest_workflow").run({"message": "hi"})` runs it over NATS: a request with a deadline (300 seconds by default), authorized through discovery before it runs, never retried. `as_tools()` on the awaited proxy gives a caller's agent the same tool. The kernel REST API does not mount remote workflows: for `POST /workflows/<slug>`, use an in-engine module.
+- **Jobs.** Declare `job = JobSettings(triggers=(Every("1h"),))` on the class (`JobSettings()` alone: manual runs only) and the module hosts a job `workflow.digest_workflow`, with run records and the System app's list; `proxy.trigger({...})` starts a run from another module. A scheduled trigger needs parameters that all have defaults.
+- **Test it** without a broker: `asyncio.run(workflow.run(DigestWorkflowParameters(message="hi")))` in `DigestWorkflow_test.py`.
+
+The full walk-through, with the pipeline and the integration: [Build a Remote Module](/user-guide/build/sdk/build-a-remote-module#5-add-a-workflow-a-pipeline-or-an-integration).
 
 ---
 

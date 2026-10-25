@@ -71,7 +71,7 @@ abi new module research --standalone      # remote, in a repository of its own
 
 | Option | Effect |
 |---|---|
-| `--in-engine`, `--local` | A classic module the engine loads (agents, integrations, pipelines, workflows, ontologies). Add it under `modules:` in `config.yaml`. |
+| `--in-engine`, `--local` | A classic module the engine loads, on `naas_abi_core` (it also mounts workflows and pipelines on the REST API). Add it under `modules:` in `config.yaml`. |
 | `--remote` | A remote module in a project without NATS too (it runs once the project is on NATS). |
 | `--standalone` | A remote module as a repository of its own (`pyproject.toml`, `Dockerfile`, README): the default outside a project. |
 | `--abi-ref REF` | With `--standalone`: the ABI branch, tag or commit `naas-abi-sdk` and `naas-abi-proto` install from. Default: this CLI's release tag, `naas-abi-cli-v<version>`. |
@@ -88,8 +88,9 @@ abi new agent analyst agents
 abi new app reports apps
 ```
 
-- In a remote module, `abi new agent <Name> agents` writes an SDK agent and `abi new app <name> apps` an app; `workflow`, `pipeline`, `integration` and `orchestration` refuse, because they write `naas_abi_core` code.
-- In an in-engine module: `agent`, `workflow`, `pipeline`, `integration` and `app`.
+- In a remote module, `agent`, `workflow`, `pipeline` and `integration` write SDK classes (they import `naas_abi_sdk` only) with a test beside each, and `app` an app. `orchestration` refuses, because it writes `naas_abi_core` and Dagster code: a remote module schedules with jobs.
+- In an in-engine module: `agent`, `workflow`, `pipeline`, `integration` and `app` write `naas_abi_core` code (`orchestration` too, in a project without NATS).
+- A remote module's `ontologies/` is a folder, not a scaffold: every `.ttl` file in it is sent to the engine's schema graph once the module is `READY`.
 
 ### `abi new agent`
 
@@ -97,15 +98,15 @@ abi new app reports apps
 
 ### `abi new workflow`
 
-`abi new workflow <name> [PATH]`: a workflow of an in-engine module. See [Creating a workflow](/user-guide/build/agents/creating-a-workflow).
+`abi new workflow <name> [PATH]`: a workflow, `naas_abi_core` in an in-engine module and `naas_abi_sdk` in a remote one, where other modules call it over NATS and it can run as a job. See [Creating a workflow](/user-guide/build/agents/creating-a-workflow).
 
 ### `abi new pipeline`
 
-`abi new pipeline <name> [PATH]`: a knowledge-graph pipeline of an in-engine module. See [Creating a pipeline](/user-guide/build/knowledge-graph/creating-a-pipeline).
+`abi new pipeline <name> [PATH]`: a knowledge-graph pipeline, `naas_abi_core` in an in-engine module and `naas_abi_sdk` in a remote one (callable over NATS, runnable as a job). See [Creating a pipeline](/user-guide/build/knowledge-graph/creating-a-pipeline).
 
 ### `abi new integration`
 
-`abi new integration <name> [PATH]`: an integration of an in-engine module. See [Creating an integration](/user-guide/build/agents/creating-an-integration).
+`abi new integration <name> [PATH]`: an integration, `naas_abi_core` in an in-engine module and `naas_abi_sdk` in a remote one. See [Creating an integration](/user-guide/build/agents/creating-an-integration).
 
 ### `abi new app`
 
