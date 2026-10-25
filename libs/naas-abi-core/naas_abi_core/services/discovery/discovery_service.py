@@ -136,6 +136,39 @@ def _valid_app(app: pb.AppDescriptor) -> bool:
     )
 
 
+# Workflows and pipelines a module serves over NATS (abi.process.v1). Only names and
+# descriptions are registered (the parameter schema stays in the module), and the
+# whole list is capped, so it stays a small part of the bounded registry snapshot.
+MAX_PROCESSES = 128
+MAX_PROCESSES_BYTES = 128 * 1024
+PROCESS_KINDS = ("workflow", "pipeline")
+
+
+def _process_name(value: str) -> bool:
+    """One NATS subject token: ``abi.mod.<project>.<instance>.process.<kind>.<name>.run``."""
+    return bool(re.fullmatch(r"[A-Za-z0-9_-]{1,64}", value))
+
+
+def _valid_process(process: pb.ProcessDescriptor) -> bool:
+    return (
+        _process_name(process.name)
+        and process.kind in PROCESS_KINDS
+        and process.contract_major > 0
+        and len(process.description) <= 4096
+    )
+
+
+def _valid_processes(processes: Iterable[pb.ProcessDescriptor]) -> bool:
+    """Valid descriptors, a name unique per kind, within the byte cap."""
+    processes = list(processes)
+    return (
+        len(processes) <= MAX_PROCESSES
+        and len({(p.kind, p.name) for p in processes}) == len(processes)
+        and all(_valid_process(p) for p in processes)
+        and sum(p.ByteSize() for p in processes) <= MAX_PROCESSES_BYTES
+    )
+
+
 class DiscoveryService:
     def __init__(
         self,
@@ -418,6 +451,13 @@ class DiscoveryService:
             "INVALID_ARGUMENT",
             "Invalid app descriptor",
         )
+        _require(
+            _valid_processes(d.processes),
+            "INVALID_ARGUMENT",
+            "Invalid, too many or duplicate processes: at most 128 workflows and "
+            "pipelines, each name a subject token unique per kind, a description of "
+            "at most 4 KiB, 128 KiB in all",
+        )
         for record in state.records:
             other = record.instance.descriptor
             if req.rollout_id and record.rollout_id == req.rollout_id:
@@ -438,9 +478,10 @@ class DiscoveryService:
                     and other.agents == d.agents
                     and other.jobs == d.jobs
                     and other.models == d.models
-                    and other.apps == d.apps,
+                    and other.apps == d.apps
+                    and other.processes == d.processes,
                     "DESCRIPTOR_CONFLICT",
-                    "Replicas of a contract in one rollout must declare identical dependencies, agents, jobs, models and apps",
+                    "Replicas of a contract in one rollout must declare identical dependencies, agents, jobs, models, apps, workflows and pipelines",
                 )
         self._refuse_cycles(req, state)
 
@@ -685,7 +726,9 @@ class DiscoveryService:
             "Only platform administrators can evict registrations",
         )
         _require(
-            _instance_id(req.instance_id), "INVALID_ARGUMENT", "Invalid instance identity"
+            _instance_id(req.instance_id),
+            "INVALID_ARGUMENT",
+            "Invalid instance identity",
         )
 
         def apply(state):
@@ -867,3 +910,45 @@ class DiscoveryService:
             "Provider is not ready",
         )
         return pb.AuthorizeAppResponse()
+
+    async def authorize_process(
+        self, req: pb.AuthorizeProcessRequest, owner: str
+    ) -> pb.AuthorizeProcessResponse:
+        """Every call of a process is authorized (the SDK caches the answer
+        briefly), so a recent snapshot serves it when it already shows the
+        process READY; a refusal always reads the registry."""
+        recent = self._recent_record(req.instance_id)
+        if recent is not None:
+            with contextlib.suppress(DiscoveryError):
+                return self._authorize_process(recent, req, owner)
+        state, _ = await self._read()
+        self._ready(state)
+        record = next(
+            (r for r in state.records if r.instance.instance_id == req.instance_id),
+            None,
+        )
+        return self._authorize_process(record, req, owner)
+
+    def _authorize_process(
+        self,
+        record: pb.RegistryRecord | None,
+        req: pb.AuthorizeProcessRequest,
+        owner: str,
+    ) -> pb.AuthorizeProcessResponse:
+        if record is None:
+            raise DiscoveryError("LEASE_EXPIRED", "Provider registration expired")
+        self._authorize(record, req.lease_token, owner)
+        _require(
+            any(
+                p.name == req.process_name and p.kind == req.process_kind
+                for p in record.instance.descriptor.processes
+            ),
+            "PROCESS_NOT_FOUND",
+            f"{req.process_kind} {req.process_name}",
+        )
+        _require(
+            record.instance.status == "READY",
+            "MODULE_UNAVAILABLE",
+            "Provider is not ready",
+        )
+        return pb.AuthorizeProcessResponse()

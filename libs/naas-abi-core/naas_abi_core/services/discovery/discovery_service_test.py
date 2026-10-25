@@ -1071,6 +1071,167 @@ def test_replicas_must_declare_the_same_apps():
     asyncio.run(scenario())
 
 
+def _with_process(req, name="greet", kind="workflow", **fields):
+    req.descriptor.processes.add(name=name, kind=kind, contract_major=1, **fields)
+    return req
+
+
+def test_process_authorization_requires_provider_lease_readiness_and_declaration():
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        req = _with_process(registration("provider", "instance"), description="Hi")
+        _with_process(req, "ingest", "pipeline")
+        await service.register(req, "provider-identity")
+        auth = pb.AuthorizeProcessRequest(
+            instance_id="instance",
+            lease_token=req.lease_token,
+            process_name="greet",
+            process_kind="workflow",
+        )
+        with pytest.raises(DiscoveryError, match="MODULE_UNAVAILABLE"):
+            await service.authorize_process(auth, "provider-identity")
+        await service.renew(
+            pb.RenewRequest(
+                instance_id="instance", lease_token=req.lease_token, initialized=True
+            ),
+            "provider-identity",
+        )
+        await service.authorize_process(auth, "provider-identity")
+        auth.process_name, auth.process_kind = "ingest", "pipeline"
+        await service.authorize_process(auth, "provider-identity")
+        # Another owner, or another lease, is not the provider.
+        with pytest.raises(DiscoveryError, match="PERMISSION_DENIED"):
+            await service.authorize_process(auth, "someone-else")
+        wrong_lease = pb.AuthorizeProcessRequest()
+        wrong_lease.CopyFrom(auth)
+        wrong_lease.lease_token = "b" * 40
+        with pytest.raises(DiscoveryError, match="PERMISSION_DENIED"):
+            await service.authorize_process(wrong_lease, "provider-identity")
+        # A name is declared for one kind: a pipeline is not a workflow.
+        auth.process_kind = "workflow"
+        with pytest.raises(DiscoveryError, match="PROCESS_NOT_FOUND"):
+            await service.authorize_process(auth, "provider-identity")
+        auth.process_name = "missing"
+        with pytest.raises(DiscoveryError, match="PROCESS_NOT_FOUND"):
+            await service.authorize_process(auth, "provider-identity")
+        auth.instance_id = "gone"
+        with pytest.raises(DiscoveryError, match="LEASE_EXPIRED"):
+            await service.authorize_process(auth, "provider-identity")
+
+    asyncio.run(scenario())
+
+
+def test_a_draining_instance_no_longer_authorizes_processes():
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        req = _with_process(registration("provider", "instance"))
+        await _up(service, req)
+        auth = pb.AuthorizeProcessRequest(
+            instance_id="instance",
+            lease_token=req.lease_token,
+            process_name="greet",
+            process_kind="workflow",
+        )
+        await service.authorize_process(auth, "owner")
+        await service.renew(
+            pb.RenewRequest(
+                instance_id="instance",
+                lease_token=req.lease_token,
+                initialized=True,
+                draining=True,
+            ),
+            "owner",
+        )
+        with pytest.raises(DiscoveryError, match="MODULE_UNAVAILABLE"):
+            await service.authorize_process(auth, "owner")
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"name": "a.b"},  # one subject token: no dots
+        {"name": "a*"},
+        {"name": "a b"},
+        {"name": ""},
+        {"name": "n" * 65},
+        {"kind": "job"},
+        {"kind": ""},
+        {"contract_major": 0},
+        {"description": "d" * 4097},
+    ],
+)
+def test_invalid_processes_are_refused(fields):
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        req = registration("provider", "instance")
+        req.descriptor.processes.add(
+            **{"name": "greet", "kind": "workflow", "contract_major": 1, **fields}
+        )
+        with pytest.raises(DiscoveryError, match="INVALID_ARGUMENT"):
+            await service.register(req, "owner")
+
+    asyncio.run(scenario())
+
+
+def test_processes_are_bounded_and_unique_per_kind():
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        req = registration("provider", "instance")
+        for _ in range(2):
+            _with_process(req)
+        with pytest.raises(DiscoveryError, match="INVALID_ARGUMENT"):
+            await service.register(req, "owner")
+        req = registration("provider", "instance")
+        for index in range(129):
+            _with_process(req, f"p{index}")
+        with pytest.raises(DiscoveryError, match="INVALID_ARGUMENT"):
+            await service.register(req, "owner")
+        # The same name as a workflow and as a pipeline is two processes.
+        req = registration("provider", "instance")
+        _with_process(req, "shared", "workflow")
+        _with_process(req, "shared", "pipeline")
+        for index in range(126):
+            _with_process(req, f"p{index}", description="d" * 4096)
+        with pytest.raises(DiscoveryError, match="INVALID_ARGUMENT"):  # 128 KiB in all
+            await service.register(req, "owner")
+        req = registration("provider", "instance")
+        _with_process(req, "shared", "workflow")
+        _with_process(req, "shared", "pipeline")
+        for index in range(126):
+            _with_process(req, f"p{index}", description="d" * 512)
+        await service.register(req, "owner")
+
+    asyncio.run(scenario())
+
+
+def test_replicas_must_declare_the_same_processes():
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        await service.register(_with_process(registration("m", "one")), "owner")
+        for other in (
+            _with_process(registration("m", "two"), description="Different"),
+            _with_process(registration("m", "two"), kind="pipeline"),
+            registration("m", "two"),
+        ):
+            with pytest.raises(DiscoveryError, match="DESCRIPTOR_CONFLICT"):
+                await service.register(other, "owner")
+        await service.register(_with_process(registration("m", "two")), "owner")
+
+    asyncio.run(scenario())
+
+
+def test_a_rollout_may_change_the_processes_of_the_generation_it_replaces():
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        await service.register(_with_process(registration("m", "old")), "owner")
+        new = _with_process(registration("m", "new", rollout="r-2"), "other")
+        await service.register(new, "owner")
+
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize("instance_id", ["victim.x", "a.b.c", "*", ">", "x y", ""])
 def test_an_instance_id_is_one_subject_token(instance_id):
     """Callers bind the token they send to the subject's instance token: an id

@@ -28,6 +28,11 @@ OPERATIONS: dict[str, tuple[Any, Any, bool]] = {
     "authorize_agent": (pb.AuthorizeAgentRequest, pb.AuthorizeAgentResponse, True),
     "authorize_model": (pb.AuthorizeModelRequest, pb.AuthorizeModelResponse, True),
     "authorize_app": (pb.AuthorizeAppRequest, pb.AuthorizeAppResponse, True),
+    "authorize_process": (
+        pb.AuthorizeProcessRequest,
+        pb.AuthorizeProcessResponse,
+        True,
+    ),
     "register": (pb.RegisterRequest, pb.RegisterResponse, True),
     "renew": (pb.RenewRequest, pb.RenewResponse, True),
     "unregister": (pb.UnregisterRequest, pb.UnregisterResponse, True),
@@ -36,6 +41,14 @@ OPERATIONS: dict[str, tuple[Any, Any, bool]] = {
     "get_module": (pb.GetModuleRequest, pb.GetModuleResponse, False),
     "list_modules": (pb.ListModulesRequest, pb.ListModulesResponse, False),
 }
+
+# The operations a provider asks to authorize a caller's token, bound to its instance.
+AUTHORIZE_OPERATIONS = (
+    "authorize_agent",
+    "authorize_model",
+    "authorize_app",
+    "authorize_process",
+)
 
 
 class DiscoveryNATS:
@@ -109,7 +122,7 @@ class DiscoveryNATS:
                 verify_service_token(
                     request.caller_token, self.secret, audience=request.instance_id
                 )
-                if operation in ("authorize_agent", "authorize_model", "authorize_app")
+                if operation in AUTHORIZE_OPERATIONS
                 else None
             )
             handler = getattr(self.service, operation)

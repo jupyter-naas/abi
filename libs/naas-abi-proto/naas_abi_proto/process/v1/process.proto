@@ -1,0 +1,50 @@
+syntax = "proto3";
+package abi.process.v1;
+import "naas_abi_proto/common/v1/common.proto";
+
+// A module's workflows and pipelines, called by other modules on
+//   abi.mod.<project>.<instance_id>.process.<kind>.<name>.run
+//   abi.mod.<project>.<instance_id>.process.<kind>.<name>.describe
+// where <kind> is "workflow" or "pipeline" (docs/adr/20261025_remote-module-processes.md).
+// The calls are unary and instance-addressed; the module authorizes each caller
+// through discovery (AuthorizeProcessRequest) before it decodes anything.
+//
+// A payload that does not fit one message (a module cannot use the engine's RPC
+// overflow: the engine refuses tokens bound to an instance) follows from an
+// inbox, pulled with abi.app.v1 BodyPull/BodyChunk, one chunk at a time.
+
+message RunRequest {
+  abi.common.v1.CallContext context = 1;
+  // The process's name, as declared in the module's descriptor.
+  string name = 2;
+  // The parameters as a JSON object, validated by the process's parameters model.
+  bytes parameters_json = 3;
+  // The caller's deadline in seconds; zero: 300. The run is cancelled when it
+  // passes, and its reply is an error.
+  double deadline_seconds = 4;
+  // The parameters are larger than a message holds: parameters_json is empty and
+  // the caller holds them, parameters_bytes long, at parameters_inbox.
+  string parameters_inbox = 5;
+  uint64 parameters_bytes = 6;
+}
+// A workflow answers result_json (any JSON value: a model dumped, a value); a
+// pipeline answers graph_nt (N-Triples). A result larger than a message holds
+// follows from body_inbox, body_bytes long, in the field that kind uses.
+message RunResponse {
+  abi.common.v1.CallError error = 1;
+  bytes result_json = 2;
+  bytes graph_nt = 3;
+  string body_inbox = 4;
+  uint64 body_bytes = 5;
+}
+message DescribeRequest {
+  abi.common.v1.CallContext context = 1;
+  string name = 2;
+}
+message DescribeResponse {
+  abi.common.v1.CallError error = 1;
+  // The JSON schema of the parameters model.
+  bytes parameters_schema_json = 2;
+  string description = 3;
+  string kind = 4;
+}
