@@ -36,9 +36,8 @@ def test_the_module_sends_its_ontologies_to_the_engine() -> None:
         f"module/{MODULE_ID}/modules/{{module_name_pascal}}Ontology.ttl"
     )
     assert "triple_store" in ABIModule.dependencies.services
-    import rdflib
-
-    assert len(rdflib.Graph().parse(ontology.path)) > 0
+    # rdflib is an optional SDK extra, not a dependency of the module: no parsing here.
+    assert "owl:Ontology" in ontology.path.read_text(encoding="utf-8")
 
 
 def test_the_configuration_comes_from_the_environment() -> None:
