@@ -890,6 +890,14 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
             "tweets": tweets,
         }
 
+    def budget_exhausted_reason(self) -> str | None:
+        """Why a daily or monthly spend cap forbids fetching now, else ``None``.
+
+        The check :meth:`run` makes before it calls the X API, public so that a
+        caller (the durable search flow) can make it as a step of its own.
+        """
+        return self.__budget.exhausted_reason()
+
     def run(self, parameters: XSearchRecentTweetsWorkflowParameters) -> dict:
         if not isinstance(parameters, XSearchRecentTweetsWorkflowParameters):
             raise TypeError(
