@@ -368,6 +368,13 @@ def test_new_project_runs_on_nats_by_default(tmp_path, monkeypatch) -> None:
     # The built-in identity provider `abi dev up` runs, and its client's secret.
     assert "naas-abi-idp" in _uv_add(commands)
     assert len(env["ABI_IDP_CLIENT_SECRET"]) >= 24
+    # The IdP mails its sign-in code: with no mail server in dev it is a file.
+    import yaml
+
+    email = yaml.safe_load(_config(tmp_path).replace("{% raw %}", ""))["services"][
+        "email"
+    ]
+    assert email["email_adapter"]["adapter"] == "filesystem"
     # No legacy extras: Dagster and RabbitMQ are not installed.
     assert "naas-abi-core[all]" in _uv_add(commands)
     assert "nats-server" in result.output

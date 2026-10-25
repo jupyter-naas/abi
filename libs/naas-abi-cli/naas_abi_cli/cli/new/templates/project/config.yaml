@@ -162,6 +162,13 @@ services:
     secret_adapters:
       - adapter: "dotenv"
         config: {}
+  # The built-in identity provider emails a sign-in code: here it is a file
+  # (`abi dev code` prints the newest). Point it at SMTP or SES to mail it.
+  email:
+    email_adapter:
+      adapter: "filesystem"
+      config:
+        directory: "storage/email"
   object_storage:
     object_storage_adapter:
       adapter: "fs"
