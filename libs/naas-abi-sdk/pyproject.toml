@@ -31,6 +31,9 @@ models = ["langchain-core>=0.3.78,<2"]
 # project installs both: the agent extras accept the same range as models.
 agents = ["langchain-core>=0.3.78,<2"]
 rdf = ["rdflib>=7,<8"]
+# Workflows and pipelines (naas_abi_sdk.workflow, .pipeline): pydantic parameters.
+# Pipelines also need [rdf]; as_tools() needs [agents] or [agent].
+workflows = ["pydantic>=2,<3"]
 langgraph = ["langgraph-checkpoint>=3.0.1,<4"]
 # Agents written like naas_abi_core agents (naas_abi_sdk.agents).
 agent = ["langchain-core>=0.3.78,<2", "langgraph>=1,<2", "langgraph-checkpoint>=3.0.1,<4"]

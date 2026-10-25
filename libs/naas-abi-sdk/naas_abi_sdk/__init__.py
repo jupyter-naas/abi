@@ -23,6 +23,11 @@ if TYPE_CHECKING:
         DiscoveryConfiguration,
         ModelDescriptor,
     )
+    from naas_abi_sdk.integration import (
+        Integration,
+        IntegrationConfiguration,
+        IntegrationConnectionError,
+    )
     from naas_abi_sdk.module import (
         BaseModule,
         ModuleConfiguration,
@@ -30,10 +35,29 @@ if TYPE_CHECKING:
         current_module,
         run_module,
     )
+    from naas_abi_sdk.pipeline import (
+        Pipeline,
+        PipelineConfiguration,
+        PipelineParameters,
+    )
     from naas_abi_sdk.transport import RPCError
+    from naas_abi_sdk.workflow import (
+        Workflow,
+        WorkflowConfiguration,
+        WorkflowParameters,
+    )
 
 _EXPORTS = {
     "ABIClient": "naas_abi_sdk.client",
+    "Integration": "naas_abi_sdk.integration",
+    "IntegrationConfiguration": "naas_abi_sdk.integration",
+    "IntegrationConnectionError": "naas_abi_sdk.integration",
+    "Pipeline": "naas_abi_sdk.pipeline",
+    "PipelineConfiguration": "naas_abi_sdk.pipeline",
+    "PipelineParameters": "naas_abi_sdk.pipeline",
+    "Workflow": "naas_abi_sdk.workflow",
+    "WorkflowConfiguration": "naas_abi_sdk.workflow",
+    "WorkflowParameters": "naas_abi_sdk.workflow",
     "AgentDescriptor": "naas_abi_sdk.discovery",
     "AgentProxy": "naas_abi_sdk.agent",
     "AgentState": "naas_abi_sdk.agent",
@@ -58,12 +82,21 @@ __all__ = [
     "AppDescriptor",
     "BaseModule",
     "DiscoveryConfiguration",
+    "Integration",
+    "IntegrationConfiguration",
+    "IntegrationConnectionError",
     "InvocationHandle",
     "ModelDescriptor",
     "ModuleConfiguration",
     "ModuleDependencies",
+    "Pipeline",
+    "PipelineConfiguration",
+    "PipelineParameters",
     "RPCError",
     "SubmissionUncertain",
+    "Workflow",
+    "WorkflowConfiguration",
+    "WorkflowParameters",
     "current_module",
     "run_module",
 ]
