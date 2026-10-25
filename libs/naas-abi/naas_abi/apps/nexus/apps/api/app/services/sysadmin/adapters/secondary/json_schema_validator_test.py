@@ -66,3 +66,21 @@ def test_issues_are_capped():
     schema = {"type": "array", "items": {"type": "integer"}}
 
     assert len(validator.validate(schema, ["x"] * 100)) == MAX_ISSUES
+
+
+def test_a_remote_reference_is_never_fetched(monkeypatch):
+    import socket
+    import urllib.request
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("the validator went to the network")
+
+    monkeypatch.setattr(urllib.request, "urlopen", refuse)
+    monkeypatch.setattr(socket, "create_connection", refuse)
+    schema = {
+        "type": "object",
+        "properties": {"a": {"$ref": "http://169.254.169.254/latest/meta-data/"}},
+    }
+
+    assert validator.validate(schema, {"a": 1}) == []
+    assert validator.validate({"$ref": "https://example.invalid/schema.json"}, {"a": 1}) == []
