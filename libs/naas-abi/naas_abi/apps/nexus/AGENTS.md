@@ -590,6 +590,16 @@ The optional catch-all `[[...slug]]/page.tsx` re-exports the thread module so al
   - Pure helpers (tree, self time, ticks, placement, filters) live in `traces-model.ts`; tests in `traces/*.test.ts` with `traces-fixtures.ts`.
 - A source that is down (NATS mode off, discovery not configured, `nats.monitoring_url` unset or unreachable) never fails a whole view: the API returns the others plus a reason, or a 503 `{source, reason}` for NATS-only views, and the page shows that reason.
 
+## Ontology catalog: in-engine and remote ontologies
+
+`apps/api/app/services/ontology/` lists an ontology by its `path`, one opaque string the web app passes back on every call. It is either a file on disk (in-engine modules, from `module.ontologies`) or a **remote id** `module/<module_id>/<path relative to ontologies/>`, the key a remote module's file has in the engine's schema graph (`http://ontology.naas.ai/graph/schema`, an `internal:Schema` with base64 `internal:content`).
+
+- `ontology_source.py` owns the remote side: `parse_remote_id` (rejects `..`, `.`, empty segments, backslashes, control characters), `RemoteOntologyReader` (reads the schema graph through the engine's triple store service; the listing and each text are cached 30 s, at most 64 texts) and `load_remote_graph`. `_load_ontology_graph` and the import resolver (`ontology_imports.py`) dispatch on it: a `module/` path is **never opened as a file**, so a remote id cannot read the disk. An in-engine path that starts with `module/` is skipped.
+- `list_ontology_files` adds the remote files with the in-engine filters (`owl:Ontology` required, `sandbox` and `processes` skipped); `module_name` is the remote module id, so a catalog ref `acme.reports:ReportsOntology.ttl` matches. An unreachable schema graph never hides the in-engine files.
+- Export: `export_ontology` returns a file (in-engine) or the stored text (remote); the `/export` route answers either as an attachment. `process_slices` is empty for a remote file (its slice files stay in the module).
+- A change a module pushes shows within the cache TTL (or at once after `POST /cache/clear`). Files a module later removes stay listed: nothing unloads them.
+- Tests: `ontology_remote_test.py` (fake schema graph, listing, stats, export, traversal, cache bounds).
+
 ## Mobile list-detail pattern
 
 Several NEXUS surfaces use the same mobile UX: a **list screen first**, then a **detail screen** with back navigation. Desktop keeps the two-column sidebar + content layout unchanged.

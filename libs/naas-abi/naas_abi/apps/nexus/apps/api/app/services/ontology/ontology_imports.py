@@ -4,6 +4,12 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology_source import (
+    active_reader,
+    content_version,
+    is_remote_id,
+    load_remote_graph,
+)
 from rdflib import Graph, URIRef
 from rdflib.namespace import OWL, RDF
 
@@ -11,25 +17,30 @@ Snapshot = tuple[tuple[str, int, int], ...]
 _ABI = "http://ontology.naas.ai/abi/"
 
 
+def _version(path: str) -> tuple[int, int]:
+    """A change token: a file's mtime and size, or a remote text's hash and length."""
+    if is_remote_id(path):
+        return content_version(active_reader().read(path))
+    stat = Path(path).stat()
+    return stat.st_mtime_ns, stat.st_size
+
+
 def _snapshot(paths: list[str]) -> Snapshot:
-    return tuple(
-        sorted(
-            (path, stat.st_mtime_ns, stat.st_size)
-            for path in set(paths)
-            for stat in [Path(path).stat()]
-        )
-    )
+    return tuple(sorted((path, *_version(path)) for path in set(paths)))
 
 
 _FORMATS = {".ttl": "turtle", ".nt": "nt", ".owl": "xml", ".rdf": "xml"}
 
 
+def _parse(path: str) -> Graph:
+    if is_remote_id(path):
+        return load_remote_graph(path)
+    return Graph().parse(path, format=_FORMATS.get(Path(path).suffix.lower()))
+
+
 @lru_cache(maxsize=8)
 def _catalog_graphs(snapshot: Snapshot) -> dict[str, Graph]:
-    return {
-        path: Graph().parse(path, format=_FORMATS.get(Path(path).suffix.lower()))
-        for path, _, _ in snapshot
-    }
+    return {path: _parse(path) for path, _, _ in snapshot}
 
 
 @lru_cache(maxsize=64)
@@ -48,7 +59,8 @@ def _resolve(
     by_iri: dict[str, set[str]] = {}
     suffixes: dict[str, set[str]] = {}
     for path, graph in graphs.items():
-        by_iri.setdefault(Path(path).resolve().as_uri(), set()).add(path)
+        if not is_remote_id(path):
+            by_iri.setdefault(Path(path).resolve().as_uri(), set()).add(path)
         for subject in graph.subjects(RDF.type, OWL.Ontology):
             by_iri.setdefault(str(subject), set()).add(path)
             package = graph.value(subject, URIRef(_ABI + "pythonPackage"))
