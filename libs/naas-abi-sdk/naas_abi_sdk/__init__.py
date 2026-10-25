@@ -31,6 +31,7 @@ if TYPE_CHECKING:
         run_module,
     )
     from naas_abi_sdk.transport import RPCError
+    from naas_abi_sdk.workflows import FlowContext, WorkflowProxy, WorkflowRun, workflow
 
 _EXPORTS = {
     "ABIClient": "naas_abi_sdk.client",
@@ -40,14 +41,18 @@ _EXPORTS = {
     "AppDescriptor": "naas_abi_sdk.apps",
     "BaseModule": "naas_abi_sdk.module",
     "DiscoveryConfiguration": "naas_abi_sdk.discovery",
+    "FlowContext": "naas_abi_sdk.workflows",
     "InvocationHandle": "naas_abi_sdk.agent",
     "ModuleConfiguration": "naas_abi_sdk.module",
     "ModelDescriptor": "naas_abi_sdk.discovery",
     "ModuleDependencies": "naas_abi_sdk.module",
     "RPCError": "naas_abi_sdk.transport",
     "SubmissionUncertain": "naas_abi_sdk.agent",
+    "WorkflowProxy": "naas_abi_sdk.workflows",
+    "WorkflowRun": "naas_abi_sdk.workflows",
     "current_module": "naas_abi_sdk.module",
     "run_module": "naas_abi_sdk.module",
+    "workflow": "naas_abi_sdk.workflows",
 }
 
 __all__ = [
@@ -58,14 +63,18 @@ __all__ = [
     "AppDescriptor",
     "BaseModule",
     "DiscoveryConfiguration",
+    "FlowContext",
     "InvocationHandle",
     "ModelDescriptor",
     "ModuleConfiguration",
     "ModuleDependencies",
     "RPCError",
     "SubmissionUncertain",
+    "WorkflowProxy",
+    "WorkflowRun",
     "current_module",
     "run_module",
+    "workflow",
 ]
 
 

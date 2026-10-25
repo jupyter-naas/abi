@@ -9,6 +9,10 @@ that cannot read or write its run (the store is down) is retried with backoff
 and uses none. A run whose host stopped on its last attempt, or whose trigger
 expired (``Nats-TTL``) before its retry, is never run again, so the host's
 upkeep fails it (``reap_lost_runs``).
+
+Workflows (``kind="workflow"``) run here as jobs, with a ``FlowContext``; the
+host also clears their journals with their run records, and publishes a
+core-NATS completion notice when a run is saved terminal (``JobSubjects.done``).
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from naas_abi_sdk.jobs import (
+    INPUT_HASH_HEADER,
     MAX_TRIGGERS,
     TERMINAL_STATUSES,
     TRIGGER_HEADER,
@@ -32,6 +37,7 @@ from naas_abi_sdk.jobs import (
     JobProxy,
     JobRetention,
     JobRun,
+    NonRetryable,
     OnEvent,
     go_duration_seconds,
     job_subjects,
@@ -42,6 +48,15 @@ from naas_abi_sdk.jobs import (
 from naas_abi_sdk.services.errors import DocumentNotFound, VersionConflict
 from naas_abi_sdk.services.models import CollectionSpec, FieldSpec
 from naas_abi_sdk.telemetry import current_trace_id, record_error, server_span
+from naas_abi_sdk.workflows import (
+    NOTICE_FALLBACK_POLL_SECONDS,
+    FlowContext,
+    FlowRuntime,
+    StepJournal,
+    delete_steps,
+    results_collection,
+    steps_collection,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +72,8 @@ SCHEDULE_HEADERS = (
     "Nats-Schedule-Target",
     "Nats-Schedule-TTL",
     TRIGGER_HEADER,
+    # Present only on a schedule with an input (a changed input changes the schedule).
+    INPUT_HASH_HEADER,
 )
 WRONG_LAST_SEQUENCE = 10071  # JetStream: Nats-Expected-Last-Subject-Sequence failed
 
@@ -169,6 +186,8 @@ class JobHost:
         retention: JobRetention | None = DEFAULT_RETENTION,
         lost_after_seconds: float = 300.0,
         completion_error_after_seconds: float = 60.0,
+        module_documents: Any = None,
+        workflow_poll_seconds: float = NOTICE_FALLBACK_POLL_SECONDS,
     ):
         self.transport, self.documents = transport, documents
         self.module_id, self.project = module_id, project
@@ -189,6 +208,17 @@ class JobHost:
         # A completion still unsaved after this long is logged as an error.
         self.completion_error_after_seconds = completion_error_after_seconds
         self.collection = runs_collection(project)
+        # What workflow runs need: their journal's store, and how to read the runs
+        # of other modules (``module_documents(module_id)``; None: over the transport).
+        self.workflow_poll_seconds = workflow_poll_seconds
+        self._flow_runtime = FlowRuntime(
+            transport,
+            documents,
+            module_id,
+            project,
+            module_documents,
+            workflow_poll_seconds,
+        )
         self._running: dict[str, JobContext] = {}
         self._work: dict[str, asyncio.Task] = {}
         # Runs stopped by close(): retried elsewhere, never recorded as user cancels.
@@ -254,6 +284,8 @@ class JobHost:
                 ),
             )
         )
+        if any(d.kind == "workflow" for d, _ in self.handlers.values()):
+            await StepJournal(self.documents, self.project, "").ensure()
         nc = await self.transport.connect()
         js = nc.jetstream()
         await ensure_stream(js, self.project)
@@ -394,21 +426,25 @@ class JobHost:
                 "Nats-Schedule-TTL": scheduled_tick_ttl(trigger),
                 TRIGGER_HEADER: "schedule",
             }
-            await self._ensure_schedule(js, subjects.schedule(index), headers)
+            await self._ensure_schedule(
+                js, subjects.schedule(index), headers, trigger.body
+            )
         for index in range(len(schedules), MAX_TRIGGERS):
             await js.purge_stream(
                 stream_name(self.project), subject=subjects.schedule(index)
             )
 
     async def _ensure_schedule(
-        self, js: Any, subject: str, headers: dict[str, str]
+        self, js: Any, subject: str, headers: dict[str, str], body: bytes = b"{}"
     ) -> None:
         """Publish a schedule only when it is missing or changed.
 
         Replacing a schedule message restarts an ``@every`` interval: hosts that
         restart more often than the interval would keep it from ever firing. The
         publish expects the sequence just read, so hosts starting together write
-        it once; the loser reads it again.
+        it once; the loser reads it again. ``body`` is the trigger's input
+        (``b"{}"`` without one), delivered as each run's payload; the input's hash
+        is in the headers, so a changed input publishes the schedule again.
         """
         from nats.js.errors import BadRequestError, NotFoundError
 
@@ -427,7 +463,7 @@ class JobHost:
             try:
                 await js.publish(
                     subject,
-                    b"{}",
+                    body,
                     headers={
                         **headers,
                         "Nats-Expected-Last-Subject-Sequence": str(sequence),
@@ -573,6 +609,7 @@ class JobHost:
                         if_version=doc.version,
                     )
                     reaped += 1
+                    await self._notify(descriptor, doc.id, "FAILED")
                 except (DocumentNotFound, VersionConflict):
                     continue  # its host is alive after all, or another replica reaped it
         return reaped
@@ -632,6 +669,7 @@ class JobHost:
         budget = retention.batch
         kept = [s for s in TERMINAL_STATUSES if s != "SKIPPED"]
         for name in self.handlers:
+            workflow = self.handlers[name][0].kind == "workflow"
             for statuses, max_age in (
                 (kept, retention.max_age),
                 (["SKIPPED"], retention.skipped_max_age),
@@ -646,6 +684,7 @@ class JobHost:
                         ("finished_at", "lt", cutoff),
                     ],
                     budget,
+                    workflow=workflow,
                 )
             if budget <= 0:
                 return retention.batch
@@ -655,11 +694,16 @@ class JobHost:
             )
             if excess > 0:
                 budget -= await self._delete(
-                    finished, min(excess, budget), order_by=("finished_at", "asc")
+                    finished,
+                    min(excess, budget),
+                    order_by=("finished_at", "asc"),
+                    workflow=workflow,
                 )
         return retention.batch - budget
 
-    async def _delete(self, where: list, limit: int, order_by: Any = None) -> int:
+    async def _delete(
+        self, where: list, limit: int, order_by: Any = None, workflow: bool = False
+    ) -> int:
         page = await self.documents.find(
             self.collection, where=where, order_by=order_by, limit=min(limit, 1000)
         )
@@ -672,7 +716,31 @@ class JobHost:
                 deleted += 1
             except (DocumentNotFound, VersionConflict):
                 continue  # another replica pruned or updated it
+            if workflow:
+                await delete_steps(
+                    self.documents,
+                    steps_collection(self.project),
+                    results_collection(self.project),
+                    doc.id,
+                )
         return deleted
+
+    async def _notify(
+        self, descriptor: JobDescriptor, run_id: str, status: str
+    ) -> None:
+        """Tell waiters a run ended (core NATS, at-most-once: they poll too). Sent
+        after the record is saved; never fails the run."""
+        try:
+            nc = await self.transport.connect()
+            # run id and status: a few hundred bytes at most
+            await nc.publish(
+                self._subjects(descriptor).done,
+                json.dumps({"run_id": run_id, "status": status}).encode(),
+            )
+        except Exception:
+            logger.warning(
+                "Could not publish the completion of run %s", run_id, exc_info=True
+            )
 
     async def _on_cancel(self, msg: Any) -> None:
         self.cancel(msg.data.decode(errors="replace"))
@@ -881,6 +949,7 @@ class JobHost:
         trigger = {"kind": headers.get(TRIGGER_HEADER, "manual")}
         if headers.get("Nats-Scheduler"):
             trigger["scheduler"] = headers["Nats-Scheduler"]
+        fired_at = _fired_at(msg)
         try:
             payload = await self._payload(msg)
             await self._save(
@@ -896,7 +965,7 @@ class JobHost:
                     "payload": payload,
                     "instance": self.instance_id,
                     "sequence": sequence,
-                    "fired_at": _fired_at(msg),
+                    "fired_at": fired_at,
                     "started_at": _now(),
                     "heartbeat_at": _now(),
                     "trace_id": current_trace_id(),
@@ -906,7 +975,19 @@ class JobHost:
             )
         except Exception as exc:  # noqa: BLE001 - logged and redelivered by _defer
             return await self._defer(msg, run_id, delivery, exc)
-        context = JobContext(run_id, descriptor.name, attempt, trigger, payload)
+        context: JobContext
+        if descriptor.kind == "workflow":
+            context = FlowContext(
+                run_id,
+                descriptor.name,
+                attempt,
+                trigger,
+                payload,
+                runtime=self._flow_runtime,
+                fired_at=fired_at,
+            )
+        else:
+            context = JobContext(run_id, descriptor.name, attempt, trigger, payload)
         self._running[run_id] = context
         heartbeat = asyncio.create_task(self._heartbeat(msg))
         progress = asyncio.create_task(self._persist_progress(context))
@@ -915,6 +996,7 @@ class JobHost:
         timeout = descriptor.timeout.total_seconds() if descriptor.timeout else None
         result: Any = None
         error = ""
+        retryable = True
         try:
             done, _ = await asyncio.wait(
                 {work, heartbeat}, timeout=timeout, return_when=asyncio.FIRST_COMPLETED
@@ -945,12 +1027,15 @@ class JobHost:
                     "FAILED",
                     f"{type(work.exception()).__name__}: {work.exception()}",
                 )
+                # A bad input, an oversized result: no attempt would do better.
+                retryable = not isinstance(work.exception(), NonRetryable)
             else:
                 result = self._result(work.result())
                 status = "SKIPPED" if context.skipped is not None else "SUCCEEDED"
             if (
                 status not in ("SUCCEEDED", "SKIPPED", "CANCELLED")
                 and attempt < descriptor.max_attempts
+                and retryable
             ):
                 status = "RETRYING"
             retry_delay = self._backoff(attempt)
@@ -958,6 +1043,9 @@ class JobHost:
                 # JetStream would never redeliver it: the run would stay RETRYING.
                 status = "FAILED"
                 error = f"Trigger expired before it could be retried; {error}"
+            if isinstance(context, FlowContext):
+                # A cancelled run cancels its running children.
+                await context.finish(status)
             fields: dict[str, Any] = {
                 "status": status,
                 "logs": list(context.logs),
@@ -978,6 +1066,8 @@ class JobHost:
                 await self._save(run_id, fields)
             else:
                 await self._save_completion(run_id, fields, heartbeat)
+            if status in TERMINAL_STATUSES:
+                await self._notify(descriptor, run_id, status)
             # Persist liveness until completion is durable, then stop before redelivery.
             progress.cancel()
             await asyncio.gather(progress, return_exceptions=True)
@@ -988,6 +1078,8 @@ class JobHost:
             return status
         finally:
             context.cancelled.set()
+            if isinstance(context, FlowContext):
+                await context.close()
             for task in (heartbeat, progress, work):
                 task.cancel()
             await asyncio.gather(heartbeat, progress, work, return_exceptions=True)

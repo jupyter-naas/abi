@@ -203,6 +203,36 @@ class ABIModule(BaseModule):
   host jobs only with discovery; the engine that hosts it creates the jobs
   stream.
 
+### Workflows
+
+A workflow is a job with a typed input and output whose handler checkpoints its
+steps (docs/adr/20261025_durable-workflows-on-nats.md): when a run is retried, the
+steps that finished return their stored results and only the rest run.
+
+```python
+from naas_abi_sdk.workflows import FlowContext, workflow
+
+
+class ABIModule(BaseModule):
+    @workflow(triggers=(Cron("0 0 * * * *", input={"topic": "db"}),), max_attempts=3)
+    async def digest(self, ctx: FlowContext, inp: DigestInput) -> DigestOutput:
+        items = await ctx.step("collect", self.collect, inp.topic, retries=2)
+        await ctx.map_call("map", "acme.items", "enrich", [{"id": i} for i in items])
+        return DigestOutput(count=len(items))
+```
+
+- Input and output are pydantic v2 models (duck-typed: the SDK does not depend on
+  pydantic) or `dict` with `input_schema=`/`output_schema=`. The JSON Schemas are in
+  the descriptor. An invalid input fails the run without a retry.
+- `ctx.step`, `ctx.map` (in-process fan-out), `ctx.call` and `ctx.map_call` (child
+  runs on any replica of any module). Step keys are unique per run and the same on
+  every attempt; a step result is JSON, at most 256 KiB.
+- Callers: `await ABIClient(...).get_workflow(module_id, name, project=...).run(input)`,
+  `await self.engine.modules[id].get_workflow(name)`, `self.get_workflow(name)`;
+  `start(input)` returns a `WorkflowRun` (`status`, `wait`, `result`, `steps`, `cancel`).
+- `Cron(..., input={...})` and `Every(..., input={...})` are the run's payload;
+  changing the input republishes that schedule only.
+
 ## Document state and LangGraph checkpoints
 
 Modules can declare `"document"`. `self.engine.services.document` binds requests

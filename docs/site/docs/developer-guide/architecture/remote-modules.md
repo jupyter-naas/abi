@@ -77,9 +77,10 @@ Install `naas-abi-sdk[models]` (or `[agent]`).
 A module serves web apps through Nexus, with no port of its own. See
 [Remote apps and large payloads](./remote-apps).
 
-### Jobs
+### Jobs and workflows
 
-Scheduled and event-driven work, described below.
+Scheduled and event-driven work, described below. A **workflow** is a job with a
+typed input and output and checkpointed steps (see [Workflows](#workflows)).
 
 ## Module jobs
 
@@ -207,6 +208,76 @@ In NATS mode the engine hosts these jobs itself:
 Every process that loads the engine in NATS mode hosts jobs, and the shared
 consumers make each trigger run once. Set `nats.jobs.enabled: false` on a
 one-off engine that should not take work.
+
+### Workflows
+
+A workflow is a job (`kind="workflow"` in its descriptor) with a typed input and
+output, whose handler checkpoints its steps. If a host stops, a deploy rolls or a
+step fails, the retry of the run returns the stored results of the steps that
+finished and runs the rest. It uses the same consumer, run record, attempts,
+cancel and retention as any job.
+
+```python
+from naas_abi_sdk.jobs import Cron
+from naas_abi_sdk.workflows import FlowContext, workflow
+
+class ABIModule(BaseModule):
+    @workflow(
+        triggers=(Cron("0 0 * * * *", input={"filter": "db"}),),
+        max_concurrency=1,
+        max_attempts=3,
+    )
+    async def tweets(self, ctx: FlowContext, inp: TweetsInput) -> TweetsOutput:
+        files = await ctx.step("fetch", self.fetch, inp, retries=2)
+        await ctx.map_call("map", "acme.tweets", "map_envelope", [{"path": f} for f in files])
+        await ctx.step("publish", self.publish_app)
+        return TweetsOutput(count=len(files))
+```
+
+`TweetsInput` and `TweetsOutput` are pydantic v2 models (their JSON Schemas go in
+the descriptor, so Nexus and callers see them), or `dict` with
+`input_schema=`/`output_schema=`. The SDK does not depend on pydantic. The input
+is validated before the handler runs; an invalid one fails the run without a
+retry. Declare workflows only on async methods; `declare_workflow(name, handler,
+input_type=..., output_type=...)` declares one at runtime (in `on_load`).
+
+| `FlowContext` | What it does |
+|---|---|
+| `await ctx.step(key, fn, *args, retries=0, backoff=1.0, **kwargs)` | Runs `fn` (async, or sync in a thread) once for the run and stores its JSON result. A later attempt returns the stored result without calling `fn`. `retries` local attempts follow a failure. |
+| `await ctx.map(key, items, fn, concurrency=8)` | `step` per item, in this process; item `i` is `key[i]`. |
+| `await ctx.call(module_id, workflow, input, key=None)` | Runs another module's workflow as a child run and returns its output. |
+| `await ctx.map_call(key, module_id, workflow, inputs, concurrency=8)` | One child run per input, on whichever replica takes each. |
+
+Rules that keep a replay correct:
+
+- **Step keys** are unique within a run and the same on every attempt: derive them
+  from the input, not from time or randomness. `map` and `map_call` need their
+  items in the same order each time, so take them from an earlier step.
+- A step result is JSON, at most **256 KiB**; the error says to store large data in
+  object storage and return a reference. A run record keeps at most 64 KiB of the
+  output.
+- **Child runs** are journaled before the parent waits: a replay waits for the
+  same run instead of starting another. The child is triggered with an
+  idempotency key, but JetStream deduplicates only within 2 minutes, so a parent
+  that dies between triggering and journaling, and replays later, can start a
+  second child: make child workflows idempotent.
+- A parent keeps its concurrency slot and its heartbeats while it waits. Cancelling
+  it cancels the children it waits for. A workflow that calls itself is refused.
+- Long waits (`sleep`, waiting for an event or an approval) are not supported yet.
+
+A `Cron` or `Every` trigger can carry an `input` (a JSON object of at most 4 KiB):
+the run's payload on each tick. Changing it publishes that schedule again;
+unchanged schedules, and their intervals, are left alone.
+
+To call a workflow: `ABIClient.get_workflow(module_id, name, project=...)`,
+`await self.engine.modules["<id>"].get_workflow(name)` or `self.get_workflow(name)`
+for the module's own. `await wf.run(input)` returns the output;
+`run = await wf.start(input, idempotency_key=...)` returns a handle with
+`status()`, `wait()`, `result()`, `steps()` (key, status, attempt, timings, errors
+and child run ids of each step, without results) and `cancel()`. Hosts publish a
+completion notice when a run ends, so `wait()` does not poll hard; polling every
+5 seconds stays as the fallback. See
+[ADR: durable workflows on NATS](https://github.com/jupyter-naas/abi/blob/main/docs/adr/20261025_durable-workflows-on-nats.md).
 
 ### From Dagster to module jobs
 
