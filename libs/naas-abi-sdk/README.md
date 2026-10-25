@@ -652,7 +652,8 @@ tools = greet.as_tools()                          # an agent's tool, on the modu
 - `await proxy.run(params, *, timeout=None)`: `params` is a dict or a pydantic
   model. The module validates it into the process's parameters model
   (`INVALID_ARGUMENT` names the fields it refused, never the values) and cancels
-  the run when `timeout` seconds pass (300 by default; `DEADLINE_EXCEEDED`). A
+  the run when `timeout` seconds pass (300 by default, at most 3600;
+  `DEADLINE_EXCEEDED`). A
   pipeline's graph arrives as N-Triples (`[rdf]`).
 - A run is one attempt, never retried: the process may have run when a call times
   out or the module stops mid-run. A failing process answers `PROCESS_ERROR`

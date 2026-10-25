@@ -27,6 +27,7 @@ from naas_abi_sdk.app_streams import BodySource, ReaderGone, chunk_bytes, pull_b
 from naas_abi_sdk.process_host import (
     DEFAULT_DEADLINE_SECONDS,
     MAX_BODY_BYTES,
+    MAX_DEADLINE_SECONDS,
     fits_inline,
     process_subject,
     valid_inbox,
@@ -108,9 +109,15 @@ class ProcessProxy:
         return instance
 
     async def _call(
-        self, operation: str, request: Any, response_type: Any, timeout: float
+        self,
+        operation: str,
+        request: Any,
+        response_type: Any,
+        timeout: float,
+        instance: ModuleInstance | None = None,
     ) -> Any:
-        instance = await self._target()
+        if instance is None:
+            instance = await self._target()
         client = self.module.client
         try:
             return await client.transport.call(
@@ -161,16 +168,21 @@ class ProcessProxy:
         """Run it with ``params`` (a dict, or a pydantic model) and return its result:
         the workflow's JSON value, or the pipeline's rdflib ``Graph``.
 
-        ``timeout`` is the deadline in seconds (300 by default): the module
+        ``timeout`` is the deadline in seconds (300 by default, at most 3600): the module
         cancels the run when it passes. One attempt, never retried; raises
         ``RPCError`` (``PROCESS_NOT_FOUND``, ``MODULE_UNAVAILABLE``,
         ``INVALID_ARGUMENT`` for parameters the process refuses,
         ``DEADLINE_EXCEEDED``, ``PROCESS_ERROR``, ``PERMISSION_DENIED``).
         """
         seconds = DEFAULT_DEADLINE_SECONDS if timeout is None else float(timeout)
-        if not math.isfinite(seconds) or seconds <= 0:
-            raise ValueError("timeout must be finite and positive")
+        if not math.isfinite(seconds) or not 0 < seconds <= MAX_DEADLINE_SECONDS:
+            raise ValueError(
+                f"timeout must be above 0 and at most {MAX_DEADLINE_SECONDS:g} seconds"
+            )
         raw = _encode_parameters(params)
+        # Before any inbox or feeder exists: nothing to undo if discovery is slow
+        # or says no.
+        instance = await self._target()
         nc = await self.module.client.transport.connect()
         request = pb.RunRequest(name=self.name, deadline_seconds=seconds)
         source: BodySource | None = None
@@ -190,7 +202,11 @@ class ProcessProxy:
             )
         try:
             response = await self._call(
-                "run", request, pb.RunResponse, seconds + REPLY_MARGIN_SECONDS
+                "run",
+                request,
+                pb.RunResponse,
+                seconds + REPLY_MARGIN_SECONDS,
+                instance,
             )
             payload = await self._payload(nc, response)
         finally:

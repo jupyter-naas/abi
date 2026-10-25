@@ -53,6 +53,12 @@ logger = logging.getLogger(__name__)
 KINDS = ("workflow", "pipeline")
 # A run lasts at most this long unless the caller asks for another deadline.
 DEFAULT_DEADLINE_SECONDS = 300.0
+# The longest deadline a caller may ask for, as an agent run's: a longer one would
+# hold a call slot (64 of them stop the module serving anyone else) and a drain.
+MAX_DEADLINE_SECONDS = 3600.0
+# A result stream whose reader stops pulling for this long is dropped. The call keeps
+# its slot until then, so a drain waits for the stream: keep the wait short.
+STREAM_IDLE_SECONDS = 20.0
 # Discovery's answer for a (token, process) is reused this long: never past the
 # token's own expiry, and a refusal is never kept.
 AUTHORIZATION_SECONDS = 5.0
@@ -345,9 +351,14 @@ class ProcessHost:
         # Before the parameters are read, however large: an unauthorized caller
         # makes this process pull nothing and run nothing.
         await self._authorize(kind, name, headers.get("Nats-Auth-Token", ""))
+        # Zero asks for the default.
         deadline = request.deadline_seconds or DEFAULT_DEADLINE_SECONDS
-        if not math.isfinite(deadline) or deadline < 0:
-            raise RPCError("INVALID_ARGUMENT", "The deadline must be a positive number")
+        if not math.isfinite(deadline) or not 0 < deadline <= MAX_DEADLINE_SECONDS:
+            raise RPCError(
+                "INVALID_ARGUMENT",
+                f"The deadline must be above 0 and at most {MAX_DEADLINE_SECONDS:g} "
+                f"seconds (0 means the default, {DEFAULT_DEADLINE_SECONDS:g})",
+            )
         instance = self.processes[(kind, name)]
 
         async def compute() -> bytes:
@@ -363,7 +374,10 @@ class ProcessHost:
 
         remaining = deadline - (asyncio.get_running_loop().time() - started)
         return await _within(
-            compute(), remaining, f"The {kind} passed its {deadline:g} s deadline"
+            compute(),
+            remaining,
+            f"The {kind} passed its {deadline:g} s deadline",
+            cancelled=f"The {kind} was cancelled",
         )
 
     async def _parameters(self, request: pb.RunRequest) -> bytes:
@@ -432,7 +446,7 @@ class ProcessHost:
                 "PAYLOAD_TOO_LARGE", f"The result exceeds {MAX_BODY_BYTES} bytes"
             )
         self._sources = {s for s in self._sources if not s.gone.is_set()}
-        source = BodySource(nc)
+        source = BodySource(nc, idle_seconds=STREAM_IDLE_SECONDS)
         await source.start()
         self._sources.add(source)
         response.body_inbox, response.body_bytes = source.inbox, len(payload)
@@ -482,7 +496,15 @@ class ProcessHost:
             await self._authorize(
                 kind, name, (msg.headers or {}).get("Nats-Auth-Token", "")
             )
-            response.CopyFrom(self._schema(kind, name))
+            described = self._schema(kind, name)
+            # It must fit one message: the caller would wait out its timeout otherwise.
+            nc = await self._nc()
+            if described.ByteSize() + ENVELOPE_BYTES > nc.max_payload:
+                raise RPCError(
+                    "PAYLOAD_TOO_LARGE",
+                    f"The {kind}'s parameter schema exceeds the broker's message size",
+                )
+            response.CopyFrom(described)
         except RPCError as exc:
             response = pb.DescribeResponse()
             response.error.code, response.error.message = exc.code, str(exc)
@@ -499,8 +521,21 @@ class ProcessHost:
                 "PROCESS_ERROR",
                 f"Could not describe the {kind}",
             )
-        if msg.reply:
+        if not msg.reply:
+            return
+        try:
             await reply(msg, response.SerializeToString())
+        except Exception:
+            logger.warning(
+                "Could not send the %s %s's description", kind, name, exc_info=True
+            )
+            failed = pb.DescribeResponse()
+            failed.error.code, failed.error.message = (
+                "PROCESS_ERROR",
+                f"Could not send the {kind}'s description",
+            )
+            with contextlib.suppress(Exception):
+                await reply(msg, failed.SerializeToString())
 
     def _schema(self, kind: str, name: str) -> pb.DescribeResponse:
         described = self._schemas.get((kind, name))
@@ -517,9 +552,15 @@ class ProcessHost:
         return described
 
 
-async def _within(coroutine: Any, seconds: float, message: str) -> Any:
+async def _within(
+    coroutine: Any, seconds: float, message: str, *, cancelled: str
+) -> Any:
     """``await coroutine`` for at most ``seconds``, then cancel it and raise
-    DEADLINE_EXCEEDED. A timeout the coroutine raises itself is its own error."""
+    DEADLINE_EXCEEDED. A timeout the coroutine raises itself is its own error, and
+    so is a ``CancelledError`` it raises itself (a child task it awaited was
+    cancelled, or it cancelled itself): ``PROCESS_ERROR`` with ``cancelled``, never
+    a cancellation of this call. However it ends, the coroutine has finished, and
+    cleaned up, when this returns or raises."""
     task = asyncio.ensure_future(coroutine)
     try:
         done, _ = await asyncio.wait({task}, timeout=max(0.0, seconds))
@@ -527,7 +568,10 @@ async def _within(coroutine: Any, seconds: float, message: str) -> Any:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
             raise RPCError("DEADLINE_EXCEEDED", message)
+        if task.cancelled():
+            raise RPCError("PROCESS_ERROR", cancelled)
         return task.result()
     finally:
-        if not task.done():
+        if not task.done():  # this call was cancelled (the host closes)
             task.cancel()
+            await asyncio.gather(task, return_exceptions=True)

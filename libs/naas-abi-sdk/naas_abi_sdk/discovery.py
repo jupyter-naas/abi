@@ -113,9 +113,22 @@ def _jobs(descriptor: pb.ModuleDescriptor) -> tuple[Any, ...]:
     return tuple(JobDescriptor.from_pb(j) for j in descriptor.jobs)
 
 
-# What a descriptor keeps of a workflow's or pipeline's docstring: discovery bounds
-# the registry snapshot, and `describe` answers with the whole text.
-PROCESS_DESCRIPTION_CHARS = 512
+# What a descriptor keeps of a workflow's or pipeline's docstring, in UTF-8 bytes:
+# discovery bounds the registry snapshot in bytes (128 descriptors of at most this
+# size, name and kind included, stay within its 128 KiB for processes), and `describe`
+# answers with the whole text.
+PROCESS_DESCRIPTION_BYTES = 512
+
+
+def _cut(text: str, limit: int) -> str:
+    """``text`` within ``limit`` UTF-8 bytes, cut on a character boundary and
+    ending in an ellipsis when something was left out."""
+    if len(text.encode("utf-8")) <= limit:
+        return text
+    ellipsis = "…"
+    room = limit - len(ellipsis.encode("utf-8"))
+    kept = text.encode("utf-8")[:room].decode("utf-8", errors="ignore")
+    return kept.rstrip() + ellipsis
 
 
 def _process_descriptors(module_type) -> list[pb.ProcessDescriptor]:
@@ -128,12 +141,12 @@ def _process_descriptors(module_type) -> list[pb.ProcessDescriptor]:
     ):
         classes = getattr(module_type, getter)() if hasattr(module_type, getter) else {}
         for name, cls in classes.items():
-            text = cls.description()
-            if len(text) > PROCESS_DESCRIPTION_CHARS:
-                text = text[: PROCESS_DESCRIPTION_CHARS - 1].rstrip() + "…"
             descriptors.append(
                 pb.ProcessDescriptor(
-                    name=name, kind=kind, description=text, contract_major=1
+                    name=name,
+                    kind=kind,
+                    description=_cut(cls.description(), PROCESS_DESCRIPTION_BYTES),
+                    contract_major=1,
                 )
             )
     return descriptors

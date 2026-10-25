@@ -5,7 +5,7 @@ import pytest
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 
 from naas_abi_sdk.discovery import (
-    PROCESS_DESCRIPTION_CHARS,
+    PROCESS_DESCRIPTION_BYTES,
     DiscoveryClient,
     DiscoveryConfiguration,
     DiscoverySession,
@@ -336,7 +336,7 @@ def test_the_descriptor_declares_the_workflows_and_pipelines():
     assert all(p.contract_major == 1 for p in descriptor.processes)
     # Discovery bounds the registry snapshot: only the start of a long text is kept.
     long = declared[("pipeline", "load")].description
-    assert len(long) == PROCESS_DESCRIPTION_CHARS and long.endswith("…")
+    assert len(long.encode()) <= PROCESS_DESCRIPTION_BYTES and long.endswith("…")
     # A module type without them (or an older one) declares none.
     assert not module_descriptor(
         type("Bare", (), {"package_version": "0", "contract_major": 1, "agents": ()}),
@@ -387,3 +387,25 @@ def test_get_workflow_and_get_pipeline_send_nothing_until_used():
     assert (workflow.kind, workflow.name) == ("workflow", "greet")
     assert (pipeline.kind, pipeline.name) == ("pipeline", "load")
     client.transport.call.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "text", ["日本語" * 600, "😀" * 600, "é" * 600, "ascii " * 600]
+)
+def test_a_description_is_cut_in_bytes_on_a_character_boundary(text):
+    module = _module_with({"greet": _Process(text)}, {})
+    (declared,) = module_descriptor(module, "m", ()).processes
+    raw = declared.description.encode("utf-8")  # valid UTF-8, or this raises
+    assert 0 < len(raw) <= PROCESS_DESCRIPTION_BYTES
+    assert declared.description.endswith("…")
+    assert text.startswith(declared.description[:-1])
+    # What fits is left whole.
+    short = module_descriptor(_module_with({"g": _Process("日本語")}, {}), "m", ())
+    assert short.processes[0].description == "日本語"
+
+
+def test_the_most_processes_the_service_allows_always_fit_its_byte_cap():
+    # 128 processes with the longest names and the widest characters.
+    classes = {f"{'n' * 60}{i:04d}": _Process("😀" * 5000) for i in range(128)}
+    descriptor = module_descriptor(_module_with(classes, {}), "m", ())
+    assert sum(p.ByteSize() for p in descriptor.processes) <= 128 * 1024

@@ -1243,3 +1243,66 @@ def test_an_instance_id_is_one_subject_token(instance_id):
             await service.register(registration("acme.c", instance_id), "acme.c")
 
     asyncio.run(scenario())
+
+
+def test_registering_what_the_sdk_declares_never_fails_on_size():
+    """128 processes of the widest characters, as ``module_descriptor`` cuts them."""
+    from naas_abi_sdk.discovery import module_descriptor
+
+    class Described:
+        def __init__(self, text):
+            self.text = text
+
+        def description(self):
+            return self.text
+
+    class Module:
+        package_version, contract_major, agents = "1", 1, ()
+
+        @classmethod
+        def get_workflow_classes(cls):
+            return {f"{'w' * 60}{i:04d}": Described("😀日本" * 3000) for i in range(64)}
+
+        @classmethod
+        def get_pipeline_classes(cls):
+            return {f"{'p' * 60}{i:04d}": Described("日本語" * 3000) for i in range(64)}
+
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        req = registration("provider", "instance")
+        req.descriptor.CopyFrom(module_descriptor(Module, "provider", ()))
+        assert len(req.descriptor.processes) == 128
+        await service.register(req, "owner")
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    "mutate, said",
+    [
+        (lambda r: [_with_process(r, f"p{i}") for i in range(129)], "Too many"),
+        (
+            lambda r: [_with_process(r), _with_process(r)],
+            "Duplicate process workflow 'greet'",
+        ),
+        (lambda r: _with_process(r, "a.b"), "Invalid process name 'a.b'"),
+        (lambda r: _with_process(r, kind="job"), "Invalid kind 'job'"),
+        (lambda r: _with_process(r, description="d" * 4097), "exceeds 4096"),
+        (
+            lambda r: [
+                _with_process(r, f"p{i}", description="d" * 4000) for i in range(40)
+            ],
+            "at most 131072",
+        ),
+    ],
+)
+def test_a_refused_process_set_says_which_limit_it_hit(mutate, said):
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        req = registration("provider", "instance")
+        mutate(req)
+        with pytest.raises(DiscoveryError, match="INVALID_ARGUMENT") as error:
+            await service.register(req, "owner")
+        assert said in str(error.value)
+
+    asyncio.run(scenario())
