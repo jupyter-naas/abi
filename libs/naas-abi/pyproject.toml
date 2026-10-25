@@ -50,6 +50,8 @@ dependencies = [
     # an extra: a default install would advertise a tool it cannot run.
     "ddgs>=9.0.0",
     "openpyxl>=3.1.5,<4",
+    # Checks a workflow's input against its JSON Schema (Nexus /api/workflows).
+    "jsonschema>=4.0.0",
 ]
 
 license = { text = "MIT License" }

@@ -1,7 +1,8 @@
 """Manual triggers and cancels over NATS, through the SDK's JobProxy and JobRun.
 
 A trigger is a JetStream message on the job's trigger subject (the host's
-consumer turns it into a run); the run id is its stream sequence. A cancel is a
+consumer turns it into a run); the run id is its stream sequence. An idempotency key makes a repeated trigger within
+the stream's duplicate window the first one's run. A cancel is a
 core-NATS message the hosts of the module listen to; it is cooperative.
 """
 
@@ -29,12 +30,20 @@ class NatsJobControl:
         self.project = project
         self._timeout = timeout
 
-    async def trigger(self, module_id: str, job: str, payload: dict[str, Any]) -> str:
+    async def trigger(
+        self,
+        module_id: str,
+        job: str,
+        payload: dict[str, Any],
+        idempotency_key: str | None = None,
+    ) -> str:
         from naas_abi_sdk.jobs import JobDescriptor, JobProxy
 
         proxy = JobProxy(self._transport(), self.project, module_id, JobDescriptor(job))
         try:
-            run = await asyncio.wait_for(proxy.trigger(payload), self._timeout)
+            run = await asyncio.wait_for(
+                proxy.trigger(payload, idempotency_key=idempotency_key), self._timeout
+            )
         except Exception as exc:  # noqa: BLE001 - no broker, no stream, timeouts
             raise _unavailable(exc) from exc
         return run.run_id

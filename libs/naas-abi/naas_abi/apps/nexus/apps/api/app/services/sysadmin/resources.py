@@ -213,6 +213,8 @@ class AdminAction:
     service: str
     operation: Literal["create", "replace", "delete", "reveal", "trigger", "cancel"]
     resource_id: str
+    # How the actor authenticated: a Nexus user, or the ABI API key (no user id).
+    via: Literal["user", "api_key"] = "user"
 
 
 Phase = Literal["requested", "succeeded", "failed"]
