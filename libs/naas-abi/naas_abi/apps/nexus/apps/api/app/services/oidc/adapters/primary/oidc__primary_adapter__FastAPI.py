@@ -7,13 +7,13 @@
 * ``GET  /session``    the signed-in user and the session's CSRF token.
 * ``POST /logout``     end the session (CSRF-checked like every cookie request).
 
-The session cookie is httpOnly, Secure and SameSite; nothing the browser can
+The session cookie is httpOnly, Secure (but on plain http on this machine) and SameSite; nothing the browser can
 read holds a token.
 """
 
 from __future__ import annotations
 
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -52,10 +52,22 @@ def _frontend(path: str, **query: str) -> str:
     return f"{base}{path}" + (f"?{urlencode(query)}" if query else "")
 
 
+_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def _secure_cookies() -> bool:
+    """Secure, except for a deployment served over plain http on this machine
+    (``abi dev``): a browser may keep a Secure cookie on http://localhost, but
+    Safari, scripts and proxies do not, and the sign-in would end in
+    ``browser_mismatch``. Anything else is Secure."""
+    url = urlparse(settings.frontend_url)
+    return not (url.scheme == "http" and url.hostname in _LOCAL_HOSTS)
+
+
 def _cookie_options() -> dict:
     return {
         "httponly": True,
-        "secure": True,
+        "secure": _secure_cookies(),
         "samesite": settings.oidc_cookie_samesite,
     }
 
@@ -137,9 +149,7 @@ async def callback(
         response = RedirectResponse(_frontend("/auth/login", sso_error=exc.code), status_code=302)
         response.delete_cookie(BINDING_COOKIE, path=_BINDING_PATH)
         return response
-    await log_login(
-        signed_in.user_id, success=True, request=request, details={"method": "oidc"}
-    )
+    await log_login(signed_in.user_id, success=True, request=request, details={"method": "oidc"})
     response = RedirectResponse(
         _frontend("/auth/callback", next=signed_in.next_path), status_code=302
     )
