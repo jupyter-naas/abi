@@ -48,7 +48,9 @@ class FakeFlowContext:
         module_id: str = "naas_abi_marketplace.applications.x",
         journal: dict[str, Any] | None = None,
         children: Callable[[str, dict[str, Any]], Any] | None = None,
+        payload: dict[str, Any] | None = None,
     ):
+        self.payload = payload or {}
         self.job, self.run_id = job, run_id
         self.journal = journal if journal is not None else {}
         self.children = children or (lambda workflow, payload: {"ok": True})
@@ -58,6 +60,27 @@ class FakeFlowContext:
         self.ran: list[str] = []  # steps that really ran, in order
         self.fanned: list[tuple[str, str, list[dict[str, Any]]]] = []
         self.called: list[tuple[str, str, dict[str, Any]]] = []
+
+    @property
+    def stages(self) -> list[str]:
+        """The steps that really ran, a fan-out's ``key[i]`` collapsed to ``key``."""
+        return list(dict.fromkeys(k.split("[")[0] for k in self.ran))
+
+    def attach(self, module) -> FakeFlowContext:
+        """What the host does before the handler starts: its run is a RUNNING
+        record of the job, which the overlap check must find."""
+        host = module._job_host()[0]
+        if not any(r["run_id"] == self.run_id for r in host.documents.records):
+            host.documents.records.append(
+                {
+                    "run_id": self.run_id,
+                    "job": self.job,
+                    "status": "RUNNING",
+                    "sequence": int(self.run_id.rsplit(":", 1)[1]),
+                    "payload": self.payload,
+                }
+            )
+        return self
 
     def step(self, key, fn, *args, retries=0, backoff=1.0, **kwargs):
         if key in self.journal:
@@ -128,12 +151,18 @@ def x_module(
 
 
 def real_x_module(
-    *filters: XTweetSearchWorkflowConfiguration, **services: Any
+    *filters: XTweetSearchWorkflowConfiguration,
+    files: list[Any] | None = None,
+    **services: Any,
 ) -> ABIModule:
-    """The real ``ABIModule`` (its workflows and jobs), on a fake engine."""
+    """The real ``ABIModule`` (its workflows and jobs, declared as ``on_load`` does),
+    on a fake engine. ``files`` are ``search_recent_tweets_files`` entries."""
     configuration = ABIModule.Configuration(
         global_config=GlobalConfig(ai_mode="local"),
         search_recent_tweets_workflow=list(filters),
+        search_recent_tweets_files=files or [],
     )
     engine = SimpleNamespace(services=SimpleNamespace(**services))
-    return ABIModule(engine=engine, configuration=configuration)  # type: ignore[arg-type]
+    module = ABIModule(engine=engine, configuration=configuration)  # type: ignore[arg-type]
+    module._declare_workflows()  # what on_load does
+    return module

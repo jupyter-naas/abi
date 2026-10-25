@@ -705,24 +705,32 @@ class ABIModule(BaseModule):
             self._BaseModule__orchestrations = []
             self.__dict__["jobs"] = ()
             return
-        self._declare_search_workflows()
+        self._declare_workflows()
 
     # ----- Durable workflows and jobs (NATS mode) ------------------------------
     # The bodies live in ``flows/``; see its AGENTS.md. Without NATS none of this
     # runs and the Dagster orchestrations drive the same flow.
 
-    def _declare_search_workflows(self) -> None:
-        """``search_recent_tweets``: one workflow, one trigger per configured filter.
+    def _declare_workflows(self) -> None:
+        """The workflows whose triggers come from the configuration, so they are
+        declared at load (``declare_workflow``) rather than with ``@workflow``:
 
-        The triggers come from the configuration, so the workflow is declared at
-        load (``declare_workflow``) rather than with ``@workflow``. A tick carries
-        ``{"filter": <name>}``. A descriptor holds 16 triggers at most, so a module
-        with more filters declares ``search_recent_tweets_2`` and so on.
+        - ``search_recent_tweets``: one trigger per ``search_recent_tweets_workflow``
+          entry, each tick carrying ``{"filter": <name>}``. Not declared without entries.
+        - ``reprocess_tweet_envelopes``: manual, plus one trigger per
+          ``search_recent_tweets_files`` entry (none by default).
+
+        A descriptor holds 16 triggers at most, so a module with more entries declares
+        ``<name>_2`` and so on.
         """
+        from naas_abi_marketplace.applications.x.flows.reprocess import (
+            run_reprocess_tweet_envelopes,
+        )
         from naas_abi_marketplace.applications.x.flows.search import (
             run_search_recent_tweets,
         )
         from naas_abi_marketplace.applications.x.flows.triggers import (
+            reprocess_triggers,
             search_triggers,
             shards,
         )
@@ -732,14 +740,15 @@ class ABIModule(BaseModule):
         ) -> Any:
             return run_search_recent_tweets(self, ctx, inp)
 
-        for index, group in enumerate(
-            shards(search_triggers(self.configuration.search_recent_tweets_workflow)),
-            start=1,
-        ):
+        def reprocess_tweet_envelopes(
+            ctx: SyncFlowContext, inp: ReprocessTweetEnvelopesInput
+        ) -> Any:
+            return run_reprocess_tweet_envelopes(self, ctx, inp)
+
+        searches = shards(search_triggers(self.configuration.search_recent_tweets_workflow))
+        for index, group in enumerate(searches, start=1):
             self.declare_workflow(
-                "search_recent_tweets"
-                if index == 1
-                else f"search_recent_tweets_{index}",
+                "search_recent_tweets" if index == 1 else f"search_recent_tweets_{index}",
                 search_recent_tweets,
                 input_type=SearchRecentTweetsInput,
                 output_type=SearchRecentTweetsOutput,
@@ -753,6 +762,24 @@ class ABIModule(BaseModule):
                 # slot of its own to be started and skip, so two per filter.
                 max_concurrency=min(64, 2 * len(group)),
                 max_attempts=3,
+            )
+        sweeps = shards(reprocess_triggers(self.configuration.search_recent_tweets_files))
+        for index, group in enumerate(sweeps or [()], start=1):
+            self.declare_workflow(
+                "reprocess_tweet_envelopes"
+                if index == 1
+                else f"reprocess_tweet_envelopes_{index}",
+                reprocess_tweet_envelopes,
+                input_type=ReprocessTweetEnvelopesInput,
+                output_type=ReprocessTweetEnvelopesOutput,
+                description=(
+                    "Re-map every search envelope under a prefix that is not yet in the "
+                    "graph and the dataset, then sync the dataset and publish the app."
+                ),
+                triggers=group,
+                # a running sweep, and the next tick, which skips
+                max_concurrency=2,
+                max_attempts=2,
             )
 
     @workflow(
@@ -768,22 +795,6 @@ class ABIModule(BaseModule):
         )
 
         return run_map_tweet_envelope(self, ctx, inp)  # type: ignore[return-value]
-
-    @workflow(
-        description=(
-            "Re-map every search envelope under a prefix that is not yet in the "
-            "graph and the dataset, then sync the dataset and publish the app."
-        ),
-        max_attempts=2,
-    )
-    def reprocess_tweet_envelopes(
-        self, ctx: SyncFlowContext, inp: ReprocessTweetEnvelopesInput
-    ) -> ReprocessTweetEnvelopesOutput:
-        from naas_abi_marketplace.applications.x.flows.reprocess import (
-            run_reprocess_tweet_envelopes,
-        )
-
-        return run_reprocess_tweet_envelopes(self, ctx, inp)
 
     @workflow(
         description="Follow the hourly recent-post count of an X query: fetch, then map.",

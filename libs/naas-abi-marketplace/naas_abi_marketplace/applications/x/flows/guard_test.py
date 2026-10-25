@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
 from naas_abi_marketplace.applications.x.flows.conftest import FakeDocuments
-from naas_abi_marketplace.applications.x.flows.guard import earlier_active_runs
+from naas_abi_marketplace.applications.x.flows.guard import (
+    OverlapCheckBlind,
+    earlier_active_runs,
+)
 
 
 def record(sequence: int, status: str = "RUNNING", filter: str = "news") -> dict:
@@ -19,8 +23,16 @@ def record(sequence: int, status: str = "RUNNING", filter: str = "news") -> dict
 
 
 def blocking(records, run_id="search:10", **kwargs):
+    """The runs that block *run_id*, whose own record the host saved as RUNNING."""
+    own = (
+        []
+        if any(r["run_id"] == run_id for r in records)
+        else [record(int(run_id.split(":")[1]))]
+    )
     return asyncio.run(
-        earlier_active_runs(FakeDocuments(records), "runs", "search", run_id, **kwargs)
+        earlier_active_runs(
+            FakeDocuments([*records, *own]), "runs", "search", run_id, **kwargs
+        )
     )
 
 
@@ -54,7 +66,37 @@ def test_only_the_same_target_blocks():
 
 
 def test_it_reads_the_runs_of_the_job_in_the_given_collection():
-    documents = FakeDocuments([record(4)])
+    documents = FakeDocuments([record(4), record(10)])
     asyncio.run(earlier_active_runs(documents, "runs_x", "search", "search:10"))
     assert documents.finds[0]["collection"] == "runs_x"
     assert ("job", "eq", "search") in documents.finds[0]["where"]
+
+
+def test_a_check_that_cannot_see_the_running_run_fails_loudly_instead_of_finding_nothing():
+    # The host saved this run as RUNNING before its handler started: not finding it
+    # means the collection or a field changed, and "no overlap" would be a guess.
+    documents = FakeDocuments([record(4)])  # an active run, but not this one
+    with pytest.raises(OverlapCheckBlind, match="search:10"):
+        asyncio.run(earlier_active_runs(documents, "runs", "search", "search:10"))
+
+
+def test_no_records_at_all_fails_loudly_too():
+    with pytest.raises(OverlapCheckBlind):
+        asyncio.run(
+            earlier_active_runs(FakeDocuments([]), "runs", "search", "search:10")
+        )
+
+
+def test_a_lookup_in_the_wrong_collection_is_caught():
+    class OtherCollection(FakeDocuments):
+        async def find(self, collection, **kwargs):
+            if collection != "runs_default":
+                return await FakeDocuments([]).find(collection, **kwargs)
+            return await super().find(collection, **kwargs)
+
+    documents = OtherCollection([record(10)])
+    asyncio.run(earlier_active_runs(documents, "runs_default", "search", "search:10"))
+    with pytest.raises(OverlapCheckBlind):
+        asyncio.run(
+            earlier_active_runs(documents, "runs_renamed", "search", "search:10")
+        )

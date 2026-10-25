@@ -6,11 +6,16 @@ from datetime import timedelta
 
 import pytest
 from naas_abi_core.module.jobs import Cron, Every
-from naas_abi_marketplace.applications.x import XTweetSearchWorkflowConfiguration
+from naas_abi_marketplace.applications.x import (
+    XSearchRecentTweetsFilesConfiguration,
+    XTweetSearchWorkflowConfiguration,
+)
 from naas_abi_marketplace.applications.x.flows.conftest import search_filter
 from naas_abi_marketplace.applications.x.flows.triggers import (
     MAX_TRIGGERS_PER_WORKFLOW,
     nats_cron,
+    reprocess_trigger,
+    reprocess_triggers,
     search_trigger,
     search_triggers,
     shards,
@@ -83,3 +88,48 @@ def test_triggers_are_split_to_what_a_descriptor_holds():
     triggers = search_triggers([search_filter(f"f{i}") for i in range(35)])
     groups = shards(triggers)
     assert [len(g) for g in groups] == [MAX_TRIGGERS_PER_WORKFLOW, 16, 3]
+
+
+def files_entry(name="sweep", **overrides):
+    return XSearchRecentTweetsFilesConfiguration(name=name, **overrides)
+
+
+def test_a_files_entry_is_a_scheduled_reprocess_carrying_its_input():
+    trigger = reprocess_trigger(
+        files_entry(
+            cron="0,15,30,45 * * * *",
+            prefix="x/search_recent_tweets/news",
+            skip_existing=False,
+            max_age_hours=24,
+            persist=False,
+            app_publish=True,
+        )
+    )
+    assert isinstance(trigger, Cron) and trigger.spec == "0 0,15,30,45 * * * *"
+    assert trigger.input == {
+        "prefix": "x/search_recent_tweets/news",
+        "persist": False,
+        "force": True,  # skip_existing: false
+        "app_publish": True,
+        "max_age_hours": 24,
+    }
+
+
+def test_a_files_entry_without_a_cadence_sweeps_every_hour_and_a_half():
+    trigger = reprocess_trigger(files_entry())
+    assert trigger == Every(
+        timedelta(seconds=5400),
+        input={
+            "prefix": "x/search_recent_tweets",
+            "persist": True,
+            "force": False,
+            "app_publish": False,
+        },
+    )
+
+
+def test_files_entries_are_one_trigger_each_by_name():
+    triggers = reprocess_triggers(
+        [files_entry("a"), files_entry("b"), files_entry("a")]
+    )
+    assert list(triggers) == ["a", "b"]

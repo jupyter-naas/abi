@@ -244,6 +244,12 @@ which imports Dagster).
   saved, a `call` of `count_recent_tweets` when the filter follows counts, dataset sync,
   app publish. A retry after the fetch does not call the X API again and re-attaches to
   its mapping children.
+- **A failing stage does not stop the others.** `ctx.map_call` raises on the first child
+  that fails and stops the rest, and a fetch that fails part-way has already saved its first
+  batches (the Dagster sensor mapped them). The search therefore fans out over `ctx.call`
+  (one step `map[i]` each), collects the failures, maps what a failed fetch saved, and goes on
+  to the dataset sync and publish with what worked; it then raises, so the run is FAILED
+  and its error says what worked. A failed publish is only logged, as it always was.
 - **Not on `OnEvent`.** The Dagster sensor mapped envelopes from `ObjectPut` events with
   a durable cursor; `OnEvent` is at-most-once, so the search run hands the envelopes it
   saved to the mapping workflow itself. The mapping is idempotent (an envelope that is
@@ -262,7 +268,8 @@ which imports Dagster).
   `search_recent_tweets_2`, and so on). The configured cron keeps Dagster's dialect and
   is converted to NATS's (seconds first).
 - **Jobs.** The hourly app build and the six-hourly compaction are `@job`s with the same
-  schedules, and skip a tick whose previous run is still going.
+  schedules, and skip a tick whose previous run is still going. `search_recent_tweets_files`
+  entries become triggers of the manual `reprocess_tweet_envelopes`.
 - **Consequence.** Envelopes saved by other callers (the X agent's tools, scripts) are no
   longer mapped automatically under NATS; `reprocess_tweet_envelopes` maps them.
 

@@ -313,6 +313,7 @@ def fetch_search_envelopes(
     op_cfg: dict | None = None,
     *,
     max_pages: Any = _UNSET,
+    saved_paths: list[str] | None = None,
 ) -> dict:
     """Fetch tweets for *filter_config* and persist the JSON envelopes.
 
@@ -325,6 +326,10 @@ def fetch_search_envelopes(
     override the filter/launchpad value — ``launchpad_override`` coerces a ``None``
     launchpad value back to the filter default, so a true "no page cap" must come
     through this argument.
+
+    A fetch that fails part-way has saved the batches before the failing one.
+    Pass ``saved_paths`` to learn them: the envelopes saved so far are added to it
+    before the error propagates.
     """
     from naas_abi_marketplace.applications.x.workflows.XSearchRecentTweetsWorkflow import (
         XSearchRecentTweetsWorkflowParameters,
@@ -359,9 +364,14 @@ def fetch_search_envelopes(
     )
 
     workflow = build_search_workflow(module, filter_config, op_cfg)
-    output = workflow.run(
-        XSearchRecentTweetsWorkflowParameters(queries=[query], options=options)
-    )
+    try:
+        output = workflow.run(
+            XSearchRecentTweetsWorkflowParameters(queries=[query], options=options)
+        )
+    except Exception:
+        if saved_paths is not None:
+            saved_paths.extend(workflow.saved_file_paths())
+        raise
 
     file_paths: list[str] = []
     for item in output.get("results", []):

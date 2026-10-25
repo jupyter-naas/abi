@@ -57,7 +57,13 @@ from naas_abi_marketplace.applications.x import (
     ABIModule,
     XSearchRecentTweetsFilesConfiguration,
 )
-from naas_abi_marketplace.applications.x.flows import envelopes as _envelopes
+from naas_abi_marketplace.applications.x.flows.envelopes import (
+    ListEnvelopeProgress,
+    filter_paths_by_max_age,
+    list_envelope_paths,
+    mapped_file_paths,
+    reprocess_log,
+)
 from naas_abi_marketplace.applications.x.orchestrations.utils import (
     has_in_progress_run,
     launchpad_override,
@@ -74,24 +80,6 @@ from naas_abi_marketplace.applications.x.orchestrations.utils._common import (
 _REPROCESS_MAX_RUNTIME_SECONDS = 5 * 60
 _DATASET_PROBE_PROGRESS_EVERY = 25
 T = TypeVar("T")
-
-# The listing helpers moved to ``flows/envelopes.py`` (no Dagster there, so the
-# durable reprocess flow can use them); the old names stay for this module's code
-# and its tests.
-_ENVELOPE_EXTENSIONS = _envelopes.ENVELOPE_EXTENSIONS
-_ENVELOPE_TS_RE = _envelopes.ENVELOPE_TS_RE
-_ListEnvelopeProgress = _envelopes.ListEnvelopeProgress
-_envelope_path_timestamp = _envelopes.envelope_path_timestamp
-_filter_dir_envelopes_by_cutoff = _envelopes.filter_dir_envelopes_by_cutoff
-_filter_paths_by_max_age = _envelopes.filter_paths_by_max_age
-_full_object_path = _envelopes.full_object_path
-_list_envelope_paths = _envelopes.list_envelope_paths
-_list_envelope_paths_within_cutoff = _envelopes.list_envelope_paths_within_cutoff
-_list_envelopes_in_prefix_dir = _envelopes.list_envelopes_in_prefix_dir
-_mapped_file_paths = _envelopes.mapped_file_paths
-_path_is_envelope = _envelopes.path_is_envelope
-_reprocess_log = _envelopes.reprocess_log
-_within_max_age = _envelopes.within_max_age
 
 
 class OrchestrationTimeoutError(TimeoutError):
@@ -112,7 +100,7 @@ def _with_signal_timeout(
             f"X file reprocessing exceeded {timeout_seconds}s (run_id={run_id})."
         )
     if not hasattr(signal, "SIGALRM"):
-        _reprocess_log(
+        reprocess_log(
             log,
             config_name=config_name,
             run_id=run_id,
@@ -127,7 +115,7 @@ def _with_signal_timeout(
     previous_handler = signal.getsignal(signal.SIGALRM)
 
     def _handler(_signum, _frame) -> None:  # pragma: no cover - raised by signal
-        _reprocess_log(
+        reprocess_log(
             log,
             config_name=config_name,
             run_id=run_id,
@@ -138,7 +126,7 @@ def _with_signal_timeout(
             f"X file reprocessing exceeded {timeout_seconds}s (run_id={run_id})."
         )
 
-    _reprocess_log(
+    reprocess_log(
         log,
         config_name=config_name,
         run_id=run_id,
@@ -227,7 +215,7 @@ def _reprocess_files(
     if max_age_hours is not None:
         cutoff = datetime.now(UTC) - timedelta(hours=int(max_age_hours))
 
-    _reprocess_log(
+    reprocess_log(
         log,
         config_name=config.name,
         run_id=run_id,
@@ -239,19 +227,19 @@ def _reprocess_files(
     )
 
     list_started = time.monotonic()
-    list_progress = _ListEnvelopeProgress(log, config.name, run_id)
-    _reprocess_log(
+    list_progress = ListEnvelopeProgress(log, config.name, run_id)
+    reprocess_log(
         log,
         config_name=config.name,
         run_id=run_id,
         phase="list_envelopes",
         message=f"started prefix={prefix!r} max_age_hours={max_age_hours}",
     )
-    paths, skipped_age = _list_envelope_paths(
+    paths, skipped_age = list_envelope_paths(
         object_storage, prefix, cutoff=cutoff, progress=list_progress
     )
     list_progress.maybe_log_progress(force=True)
-    _reprocess_log(
+    reprocess_log(
         log,
         config_name=config.name,
         run_id=run_id,
@@ -266,9 +254,9 @@ def _reprocess_files(
     if cutoff is not None:
         recheck_started = time.monotonic()
         before = len(paths)
-        paths, skipped_recheck = _filter_paths_by_max_age(paths, cutoff=cutoff)
+        paths, skipped_recheck = filter_paths_by_max_age(paths, cutoff=cutoff)
         skipped_age += skipped_recheck
-        _reprocess_log(
+        reprocess_log(
             log,
             config_name=config.name,
             run_id=run_id,
@@ -285,19 +273,19 @@ def _reprocess_files(
     skipped_fully_projected = 0
     if skip_existing:
         mapped_started = time.monotonic()
-        _reprocess_log(
+        reprocess_log(
             log,
             config_name=config.name,
             run_id=run_id,
             phase="mapped_paths_query",
             message=f"started graph_name={graph_name!r}",
         )
-        mapped = _mapped_file_paths(
+        mapped = mapped_file_paths(
             module.engine.services.triple_store,
             graph_name,
             module.configuration.ontology_namespace,
         )
-        _reprocess_log(
+        reprocess_log(
             log,
             config_name=config.name,
             run_id=run_id,
@@ -309,7 +297,7 @@ def _reprocess_files(
         )
 
         probe_started = time.monotonic()
-        _reprocess_log(
+        reprocess_log(
             log,
             config_name=config.name,
             run_id=run_id,
@@ -327,7 +315,7 @@ def _reprocess_files(
             else:
                 paths_dataset_only.append(path)
             if index == len(paths) or index % _DATASET_PROBE_PROGRESS_EVERY == 0:
-                _reprocess_log(
+                reprocess_log(
                     log,
                     config_name=config.name,
                     run_id=run_id,
@@ -341,7 +329,7 @@ def _reprocess_files(
                     ),
                 )
         paths = to_map
-        _reprocess_log(
+        reprocess_log(
             log,
             config_name=config.name,
             run_id=run_id,
@@ -356,7 +344,7 @@ def _reprocess_files(
     age_note = (
         f", {skipped_age} older than {max_age_hours}h skipped" if max_age_hours else ""
     )
-    _reprocess_log(
+    reprocess_log(
         log,
         config_name=config.name,
         run_id=run_id,
@@ -372,7 +360,7 @@ def _reprocess_files(
     failed = 0
     processed_paths: list[str] = []
     map_started = time.monotonic()
-    _reprocess_log(
+    reprocess_log(
         log,
         config_name=config.name,
         run_id=run_id,
@@ -387,7 +375,7 @@ def _reprocess_files(
             )
             processed += 1
             processed_paths.append(file_path)
-            _reprocess_log(
+            reprocess_log(
                 log,
                 config_name=config.name,
                 run_id=run_id,
@@ -402,7 +390,7 @@ def _reprocess_files(
         except Exception as exc:  # noqa: BLE001
             # Don't let one bad envelope abort the whole reprocess run.
             failed += 1
-            _reprocess_log(
+            reprocess_log(
                 log,
                 config_name=config.name,
                 run_id=run_id,
@@ -412,7 +400,7 @@ def _reprocess_files(
                     f"continuing"
                 ),
             )
-    _reprocess_log(
+    reprocess_log(
         log,
         config_name=config.name,
         run_id=run_id,
@@ -438,7 +426,7 @@ def _reprocess_files(
     # paths missing from envelopes_v1.
     if dataset_paths:
         sync_started = time.monotonic()
-        _reprocess_log(
+        reprocess_log(
             log,
             config_name=config.name,
             run_id=run_id,
@@ -448,7 +436,7 @@ def _reprocess_files(
         summary["dataset"] = sync_x_dataset_paths_batched(
             module, dataset_paths, batch_size=64
         )
-        _reprocess_log(
+        reprocess_log(
             log,
             config_name=config.name,
             run_id=run_id,
@@ -460,7 +448,7 @@ def _reprocess_files(
         )
     else:
         summary["dataset"] = {"skipped": True, "reason": "no_paths_to_sync"}
-        _reprocess_log(
+        reprocess_log(
             log,
             config_name=config.name,
             run_id=run_id,
@@ -469,7 +457,7 @@ def _reprocess_files(
         )
     # Republish static app snapshots only when this sweep actually mapped
     # something (same gate as primary event path, but optional via app_publish).
-    _reprocess_log(
+    reprocess_log(
         log,
         config_name=config.name,
         run_id=run_id,
@@ -482,14 +470,14 @@ def _reprocess_files(
         app_publish=launchpad_override(op_cfg, "app_publish", config.app_publish),
         ran=processed > 0,
     )
-    _reprocess_log(
+    reprocess_log(
         log,
         config_name=config.name,
         run_id=run_id,
         phase="app_publish",
         message=f"done result={summary['app']}",
     )
-    _reprocess_log(
+    reprocess_log(
         log,
         config_name=config.name,
         run_id=run_id,
