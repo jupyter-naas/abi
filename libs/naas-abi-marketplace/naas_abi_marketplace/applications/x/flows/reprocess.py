@@ -13,6 +13,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from naas_abi_core import logger
+from naas_abi_core.module.workflows import WorkflowCancelled
 from naas_abi_marketplace.applications.x.flows.common import (
     envelope_paths_in_dataset,
     jsonable,
@@ -25,6 +27,12 @@ from naas_abi_marketplace.applications.x.flows.envelopes import (
     list_envelope_paths,
     mapped_file_paths,
 )
+from naas_abi_marketplace.applications.x.flows.fanout import (
+    FlowIncomplete,
+    call_each,
+    describe_failures,
+)
+from naas_abi_marketplace.applications.x.flows.guard import skip_if_overlapping
 from naas_abi_marketplace.applications.x.flows.models import (
     ReprocessTweetEnvelopesInput,
     ReprocessTweetEnvelopesOutput,
@@ -98,14 +106,28 @@ def _publish(module) -> dict[str, Any]:
 
 def run_reprocess_tweet_envelopes(
     module, ctx, inp: ReprocessTweetEnvelopesInput
-) -> ReprocessTweetEnvelopesOutput:
-    """Handler body (``ctx`` is a ``SyncFlowContext``)."""
+) -> ReprocessTweetEnvelopesOutput | None:
+    """Handler body (``ctx`` is a ``SyncFlowContext``).
+
+    As for the search: a mapping run that fails does not stop the dataset sync of
+    the envelopes that mapped; the run ends FAILED at the end, saying what worked
+    (``FlowIncomplete``). A failed app publish is only logged.
+    """
+    # A scheduled sweep that outlasts its interval, or a manual launch over the
+    # same folder, would map the same envelopes twice: SKIPPED, not queued.
+    if skip_if_overlapping(
+        module, ctx, same_target=lambda payload: payload.get("prefix") == inp.prefix
+    ):
+        return None
+
     plan = ctx.step("plan", lambda: jsonable(plan_reprocess(module, inp)))
     to_map: list[str] = plan["to_map"]
+    problems: list[str] = []
 
     mapped_paths: list[str] = []
     if to_map:
-        results = ctx.map_call(
+        outputs, failures = call_each(
+            ctx,
             "map",
             ctx.runtime.module_id,
             MAP_WORKFLOW,
@@ -115,15 +137,43 @@ def run_reprocess_tweet_envelopes(
             ],
             concurrency=MAP_CONCURRENCY,
         )
-        mapped_paths = [p for p, result in zip(to_map, results) if result is not None]
+        mapped_paths = [
+            path
+            for i, path in enumerate(to_map)
+            if i not in failures and outputs[i] is not None
+        ]
+        if failures:
+            problems.append(describe_failures("mapping", to_map, failures))
 
     to_sync = mapped_paths + plan["dataset_only"]
-    dataset = ctx.step("dataset", _sync_dataset, module, to_sync) if to_sync else None
-    app = (
-        ctx.step("publish", _publish, module)
-        if inp.app_publish and mapped_paths
-        else None
-    )
+    dataset = None
+    if to_sync:
+        try:
+            dataset = ctx.step(
+                f"dataset[{len(to_sync)}]", _sync_dataset, module, to_sync
+            )
+        except WorkflowCancelled:
+            raise
+        except Exception as error:  # noqa: BLE001 - the rest still goes on
+            problems.append(f"the dataset sync failed: {error}")
+    app = None
+    if inp.app_publish and mapped_paths:
+        try:
+            app = ctx.step(f"publish[{len(mapped_paths)}]", _publish, module)
+        except WorkflowCancelled:
+            raise
+        except Exception as error:  # noqa: BLE001 - never fail the sweep on publish
+            ctx.log(f"app publish failed: {error}")
+            logger.warning(f"X reprocess: app republish failed ({error})")
+            app = {"failed": True, "error": str(error)[:500]}
+
+    if problems:
+        for problem in problems:
+            ctx.log(problem)
+        raise FlowIncomplete(
+            f"reprocess of {inp.prefix!r}: listed {plan['listed']}, mapped "
+            f"{len(mapped_paths)}; " + "; ".join(problems)
+        )
     return ReprocessTweetEnvelopesOutput(
         prefix=inp.prefix,
         listed=plan["listed"],

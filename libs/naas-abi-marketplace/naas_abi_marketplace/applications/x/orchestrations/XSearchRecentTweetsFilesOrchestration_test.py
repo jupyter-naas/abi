@@ -9,14 +9,16 @@ from unittest.mock import MagicMock, patch
 import dagster as dg
 import pytest
 from naas_abi_marketplace.applications.x import XSearchRecentTweetsFilesConfiguration
+from naas_abi_marketplace.applications.x.flows.envelopes import (
+    filter_dir_envelopes_by_cutoff,
+    list_envelope_paths,
+    reprocess_log,
+)
 from naas_abi_marketplace.applications.x.orchestrations.XSearchRecentTweetsFilesOrchestration import (
     OrchestrationTimeoutError,
     XSearchRecentTweetsFilesOrchestration,
     _build_reprocess_files_definitions,
-    _filter_dir_envelopes_by_cutoff,
-    _list_envelope_paths,
     _reprocess_files,
-    _reprocess_log,
     _with_signal_timeout,
 )
 
@@ -99,7 +101,7 @@ def test_definitions_skip_duplicate_files_names():
 def test_reprocess_log_includes_run_id_and_phase():
     lines: list[str] = []
 
-    _reprocess_log(
+    reprocess_log(
         lines.append,
         config_name="reprocess_envelopes",
         run_id="run-test",
@@ -133,12 +135,12 @@ def test_reprocess_emits_phase_logs_for_each_stage():
         ),
         patch(
             "naas_abi_marketplace.applications.x.orchestrations."
-            "XSearchRecentTweetsFilesOrchestration._list_envelope_paths",
+            "XSearchRecentTweetsFilesOrchestration.list_envelope_paths",
             return_value=([path_graph_only, path_needs_map], 3),
         ),
         patch(
             "naas_abi_marketplace.applications.x.orchestrations."
-            "XSearchRecentTweetsFilesOrchestration._mapped_file_paths",
+            "XSearchRecentTweetsFilesOrchestration.mapped_file_paths",
             return_value={path_graph_only},
         ),
         patch(
@@ -202,12 +204,12 @@ def test_reprocess_syncs_dataset_only_when_graph_mapped_but_not_envelopes_v1():
         ),
         patch(
             "naas_abi_marketplace.applications.x.orchestrations."
-            "XSearchRecentTweetsFilesOrchestration._list_envelope_paths",
+            "XSearchRecentTweetsFilesOrchestration.list_envelope_paths",
             return_value=([path_graph_only, path_needs_map], 0),
         ),
         patch(
             "naas_abi_marketplace.applications.x.orchestrations."
-            "XSearchRecentTweetsFilesOrchestration._mapped_file_paths",
+            "XSearchRecentTweetsFilesOrchestration.mapped_file_paths",
             return_value={path_graph_only},
         ),
         patch(
@@ -260,7 +262,7 @@ def test_filter_dir_envelopes_by_cutoff_stops_after_newest_in_window_run():
     older = "x/search_recent_tweets/slug/2026-09-22T10:00:00+00:00_slug.json"
     legacy = "x/search_recent_tweets/slug/2026-06-29T17_58_45.974146+00_00_slug.json"
 
-    kept, skipped = _filter_dir_envelopes_by_cutoff([older, recent, legacy], cutoff)
+    kept, skipped = filter_dir_envelopes_by_cutoff([older, recent, legacy], cutoff)
 
     assert kept == [recent]
     assert skipped == 2
@@ -282,7 +284,7 @@ def test_list_envelope_paths_with_cutoff_uses_per_slug_listing():
         "x/search_recent_tweets/query_slug": [recent, old],
     }.get(prefix.rstrip("/"), [])
 
-    paths, skipped_age = _list_envelope_paths(
+    paths, skipped_age = list_envelope_paths(
         storage, "x/search_recent_tweets", cutoff=cutoff
     )
 
@@ -310,12 +312,12 @@ def test_reprocess_uses_bulk_dataset_lookup():
         ),
         patch(
             "naas_abi_marketplace.applications.x.orchestrations."
-            "XSearchRecentTweetsFilesOrchestration._list_envelope_paths",
+            "XSearchRecentTweetsFilesOrchestration.list_envelope_paths",
             return_value=([path_graph_only, path_needs_map], 0),
         ),
         patch(
             "naas_abi_marketplace.applications.x.orchestrations."
-            "XSearchRecentTweetsFilesOrchestration._mapped_file_paths",
+            "XSearchRecentTweetsFilesOrchestration.mapped_file_paths",
             return_value={path_graph_only},
         ),
         patch(

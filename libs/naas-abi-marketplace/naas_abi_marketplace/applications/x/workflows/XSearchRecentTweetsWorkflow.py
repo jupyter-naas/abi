@@ -354,6 +354,8 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
         self.__cursor_path = os.path.join(
             self.__configuration.datastore_path, "_cursors"
         )
+        self.__saved_file_paths: list[str] = []
+        self.__saved_tweets = 0
         # Global spend ledger lives under <datastore_path>/_budget so it sits
         # next to (but never collides with) the per-query search_recent_tweets
         # envelopes this workflow writes.
@@ -369,6 +371,15 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
                 monthly_max_usd=self.__configuration.monthly_max_usd,
             ),
         )
+
+    def saved_file_paths(self) -> list[str]:
+        """Envelopes this instance has written so far, in order.
+
+        A run that fails part-way (a rate limit on a later batch) has already saved
+        the earlier batches, and its return value never reaches the caller: this
+        is how the durable search flow still maps them.
+        """
+        return list(self.__saved_file_paths)
 
     def _query_prefix(self, query: str) -> str:
         return os.path.join(
@@ -639,6 +650,8 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
         # Advance the cursor with the envelope just written, so the next run
         # resumes from it without re-reading the whole envelope archive.
         self._advance_cursor(query, envelope, envelope_filename)
+        self.__saved_file_paths.append(file_path)
+        self.__saved_tweets += tweet_count
         logger.info(
             "XSearchRecentTweetsWorkflow: saved envelope %s "
             "(%s tweets, %s pages, has_more=%s)",
@@ -937,13 +950,19 @@ class XSearchRecentTweetsWorkflow(Workflow[XSearchRecentTweetsWorkflowParameters
         # One worker thread per query, as requested — each thread fetches its
         # query independently. ``ThreadPoolExecutor.map`` preserves input order,
         # so ``results`` lines up with ``queries``.
-        with ThreadPoolExecutor(max_workers=len(queries)) as executor:
-            results = list(
-                executor.map(
-                    lambda query: self._process_query(query, options),
-                    queries,
+        try:
+            with ThreadPoolExecutor(max_workers=len(queries)) as executor:
+                results = list(
+                    executor.map(
+                        lambda query: self._process_query(query, options),
+                        queries,
+                    )
                 )
-            )
+        except Exception:
+            # A later batch failed after earlier ones were saved: those tweets
+            # were billed, so charge them before the error goes up.
+            self.__budget.record(self.__saved_tweets)
+            raise
 
         total_new = sum(item["new_count"] for item in results)
         # Charge the budget for every tweet ('resource') actually retrieved so

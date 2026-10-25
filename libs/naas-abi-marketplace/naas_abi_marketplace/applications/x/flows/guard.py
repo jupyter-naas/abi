@@ -23,6 +23,15 @@ ACTIVE_STATUSES = ["RUNNING", "RETRYING"]
 PAGE_SIZE = 1000
 
 
+class OverlapCheckBlind(RuntimeError):
+    """The overlap check cannot see this run's own record, so it cannot be trusted.
+
+    The host saves a run as RUNNING before its handler starts, so the lookup must
+    find it. If it does not, the collection, a status or a field it relies on
+    changed: a check that quietly found nothing would let overlapping ticks fetch
+    and spend twice, so the run fails here instead."""
+
+
 def run_sequence(run_id: str) -> int:
     """The stream sequence in a run id (``<job>:<sequence>``)."""
     return int(run_id.rsplit(":", 1)[1])
@@ -37,6 +46,8 @@ async def earlier_active_runs(
 ) -> list[str]:
     """Ids of the runs of *job* that started before *run_id* and are still active.
 
+    ``OverlapCheckBlind`` when *run_id* itself is not among the active records.
+
     *documents* and *collection* are where the job's run records are. *same_target*
     looks at a run's trigger payload: a job that serves several targets (one search
     filter each) only blocks on its own.
@@ -46,6 +57,12 @@ async def earlier_active_runs(
         where=[("job", "eq", job), ("status", "in", ACTIVE_STATUSES)],
         limit=PAGE_SIZE,
     )
+    if not any(doc.id == run_id for doc in page.items):
+        raise OverlapCheckBlind(
+            f"The run records of job {job!r} in {collection!r} do not list the running "
+            f"run {run_id!r} ({len(page.items)} active record(s) found): the overlap "
+            "check cannot tell whether another tick is running"
+        )
     mine = run_sequence(run_id)
     return sorted(
         doc.id
@@ -71,9 +88,11 @@ def skip_if_overlapping(
     one's first attempt cannot exist, and one that was active then must not make a
     half-done run skip itself.
     """
-    host, _ = module._job_host()  # the run records are the host's
 
     async def look() -> dict[str, Any]:
+        # The run records are the host's. Looked up here, not before the step: a
+        # replay (the step is journaled) must not need a host that may be stopping.
+        host, _ = module._job_host()
         runs = await earlier_active_runs(
             host.documents, host.collection, ctx.job, ctx.run_id, same_target
         )

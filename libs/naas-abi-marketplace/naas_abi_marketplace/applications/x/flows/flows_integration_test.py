@@ -25,6 +25,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
 from naas_abi_core.engine.engine_loaders.EngineJobLoader import EngineJobLoader
 from naas_abi_core.engine.nats_auth import issue_service_token
 from naas_abi_core.module.workflows_test import Documents
+from naas_abi_marketplace.applications.x import XSearchRecentTweetsFilesConfiguration
 from naas_abi_marketplace.applications.x.flows import (
     common,
     maintenance,
@@ -112,9 +113,10 @@ def loader(url, docs):
     )
 
 
-def start_host(url, docs, *filters):
-    module = real_x_module(*filters, object_storage=object(), triple_store=object())
-    module._declare_search_workflows()
+def start_host(url, docs, *filters, files=None):
+    module = real_x_module(
+        *filters, files=files, object_storage=object(), triple_store=object()
+    )
     host = loader(url, docs)
     host.start({MODULE_ID: module}, document_available=True)
     return module, host
@@ -154,14 +156,19 @@ class World:
         self.compactions = 0
         self.compaction_gate: threading.Event | None = None
         self.builds = 0
+        self.fetch_error: str | None = None
+        self.bad_paths: set[str] = set()
 
 
 @pytest.fixture
 def world(monkeypatch):
     world = World()
 
-    def fetch(module, config, *args, **kwargs):
+    def fetch(module, config, *args, saved_paths=None, **kwargs):
         world.fetches[config.name] += 1
+        if world.fetch_error:  # the first batch was saved, the next one failed
+            saved_paths.append(PATHS[0])
+            raise RuntimeError(world.fetch_error)
         while world.fetch_gate is not None and not world.fetch_gate.is_set():
             time.sleep(0.01)
         return {
@@ -173,6 +180,8 @@ def world(monkeypatch):
 
     def pipeline(path, **kwargs):
         world.pipeline[path] += 1
+        if path in world.bad_paths:
+            raise ValueError(f"cannot map {path}")
         while (
             path == PATHS[0]
             and world.pipeline_gate is not None
@@ -270,7 +279,7 @@ def test_a_search_run_fans_out_the_mapping_and_survives_a_kill_without_refetchin
     assert world.published == 1
     by_key = {s["key"]: s for s in steps}
     assert by_key["fetch"]["attempt"] == 1 and by_key["fetch"]["status"] == "SUCCEEDED"
-    assert {"overlap", "budget", "fetch", "dataset", "publish"} <= set(by_key)
+    assert {"overlap", "budget", "fetch", "dataset[3]", "publish[3]"} <= set(by_key)
     assert {"map[0]", "map[1]", "map[2]"} <= set(by_key)  # one per child run
     assert record["result"]["mapped"] == 3 and record["result"]["envelopes"] == 3
 
@@ -444,3 +453,67 @@ def test_a_mapping_run_that_ends_skipped_is_awaited_and_its_envelope_is_not_sync
     assert statuses == {"SUCCEEDED": 2, "SKIPPED": 1}
     assert PATHS[1] not in world.synced[-1] and len(world.synced[-1]) == 2
     assert world.pipeline[PATHS[1]] == 0
+
+
+def test_envelopes_saved_before_a_fetch_failed_are_mapped_and_the_run_still_fails(
+    broker, world
+):
+    docs = Documents()
+    world.fetch_error = "429 Too Many Requests"
+    module, host = start_host(broker, docs, search_filter("news"))
+    try:
+        run = asyncio.run(
+            module.get_workflow("search_recent_tweets").start({"filter": "news"})
+        )
+        record, _ = asyncio.run(
+            record_of(broker, docs, run.run_id, "search_recent_tweets")
+        )
+    finally:
+        host.stop()
+
+    assert record["status"] == "FAILED"
+    assert "the fetch failed after saving 1 envelope(s)" in record["error"]
+    assert "429 Too Many Requests" in record["error"] and "mapped 1" in record["error"]
+    assert world.fetches == {"news": 1}  # the retries replayed the journal
+    assert world.pipeline == {PATHS[0]: 1} and world.synced == [[PATHS[0]]]
+
+
+def test_one_envelope_that_cannot_be_mapped_does_not_stop_the_others(broker, world):
+    docs = Documents()
+    world.bad_paths = {PATHS[1]}
+    module, host = start_host(broker, docs, search_filter("news", app_publish=True))
+    try:
+        run = asyncio.run(
+            module.get_workflow("search_recent_tweets").start({"filter": "news"})
+        )
+        record, _ = asyncio.run(
+            record_of(broker, docs, run.run_id, "search_recent_tweets", timeout=60)
+        )
+    finally:
+        host.stop()
+
+    assert record["status"] == "FAILED"
+    assert "mapping failed for 1 of 3 envelope(s)" in record["error"]
+    assert PATHS[1] in record["error"] and "mapped 2" in record["error"]
+    assert world.fetches == {"news": 1}
+    assert set(world.synced[0]) == {PATHS[0], PATHS[2]}  # the good ones went on
+    assert world.published >= 1
+
+
+def test_a_scheduled_reprocess_is_accepted_by_the_broker_and_runs_when_launched(
+    broker, world
+):
+    docs = Documents()
+    sweep = XSearchRecentTweetsFilesConfiguration(
+        name="sweep", cron="0,30 * * * *", max_age_hours=24
+    )
+    module, host = start_host(broker, docs, files=[sweep])  # publishes its schedule
+    try:
+        out = asyncio.run(
+            module.get_workflow("reprocess_tweet_envelopes").run(
+                {"prefix": "x/search_recent_tweets"}, timeout=30
+            )
+        )
+    finally:
+        host.stop()
+    assert out.mapped == 3

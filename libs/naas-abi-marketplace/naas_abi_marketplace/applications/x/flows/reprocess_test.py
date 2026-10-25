@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import pytest
+from naas_abi_core.module.workflows import ChildRunFailed
 from naas_abi_marketplace.applications.x.flows import reprocess
 from naas_abi_marketplace.applications.x.flows.conftest import FakeFlowContext, x_module
+from naas_abi_marketplace.applications.x.flows.fanout import FlowIncomplete
 from naas_abi_marketplace.applications.x.flows.models import (
     ReprocessTweetEnvelopesInput,
 )
@@ -59,17 +61,25 @@ def world(monkeypatch):
     return world
 
 
-def run(world, **inp):
+def run(world, fail=(), records=None, **inp):
     """One run; its children map what they are given, as ``map_tweet_envelope`` does."""
     mapped: list[dict] = []
 
     def children(workflow, payload):
         mapped.append(payload)
+        if payload["path"] in fail:
+            raise ChildRunFailed(f"{payload['path']} ended FAILED: boom")
         world.map_all([payload["path"]])
         return {"path": payload["path"], "status": "mapped"}
 
-    ctx = FakeFlowContext(job="reprocess_tweet_envelopes", children=children)
-    module = x_module(object_storage=object(), triple_store=object())
+    ctx = FakeFlowContext(
+        job="reprocess_tweet_envelopes",
+        run_id="reprocess_tweet_envelopes:10",
+        children=children,
+        payload={"prefix": PREFIX},
+    )
+    module = x_module(object_storage=object(), triple_store=object(), records=records)
+    ctx.attach(module)
     out = reprocess.run_reprocess_tweet_envelopes(
         module, ctx, ReprocessTweetEnvelopesInput(prefix=PREFIX, **inp)
     )
@@ -78,7 +88,7 @@ def run(world, **inp):
 
 def test_every_envelope_under_the_prefix_is_mapped_then_synced(world):
     out, ctx, mapped = run(world, persist=False)
-    assert ctx.ran == ["plan", "map", "dataset"]
+    assert ctx.stages == ["overlap", "plan", "map", "dataset"]
     assert [m["path"] for m in mapped] == sorted(ENVELOPES)
     assert all(m["persist"] is False for m in mapped)
     assert (out.listed, out.mapped, out.skipped) == (4, 4, 0)
@@ -88,7 +98,10 @@ def test_every_envelope_under_the_prefix_is_mapped_then_synced(world):
 def test_a_second_run_is_a_no_op(world):
     run(world)
     out, ctx, mapped = run(world)
-    assert mapped == [] and ctx.ran == ["plan"]  # no child, no sync, no publish
+    assert mapped == [] and ctx.stages == [
+        "overlap",
+        "plan",
+    ]  # no child, no sync, no publish
     assert (out.listed, out.mapped, out.skipped) == (4, 0, 4)
     assert len(world.synced) == 1
 
@@ -96,7 +109,7 @@ def test_a_second_run_is_a_no_op(world):
 def test_envelopes_the_graph_has_only_need_the_dataset_sync(world):
     world.in_graph = set(ENVELOPES)
     out, ctx, mapped = run(world)
-    assert mapped == [] and ctx.ran == ["plan", "dataset"]
+    assert mapped == [] and ctx.stages == ["overlap", "plan", "dataset"]
     assert out.dataset_only == 4 and out.mapped == 0
 
 
@@ -127,10 +140,43 @@ def test_one_run_takes_at_most_max_envelopes_and_says_so(world):
 
 def test_an_envelope_skipped_by_its_mapping_run_is_not_synced(world):
     ctx = FakeFlowContext(
-        children=lambda wf, p: None if p["path"] == min(ENVELOPES) else {"ok": 1}
+        run_id="reprocess_tweet_envelopes:10",
+        children=lambda wf, p: None if p["path"] == min(ENVELOPES) else {"ok": 1},
     )
     module = x_module(object_storage=object(), triple_store=object())
+    ctx.attach(module)
     out = reprocess.run_reprocess_tweet_envelopes(
         module, ctx, ReprocessTweetEnvelopesInput(prefix=PREFIX)
     )
     assert out.mapped == 3 and min(ENVELOPES) not in world.synced[0]
+
+
+def test_a_failing_mapping_run_does_not_stop_the_dataset_sync_of_the_others(world):
+    bad = min(ENVELOPES)
+    with pytest.raises(FlowIncomplete) as failure:
+        run(world, fail={bad}, app_publish=True)
+    assert world.synced == [sorted(set(ENVELOPES) - {bad})]
+    assert world.published == 1
+    assert "mapping failed for 1 of 4 envelope(s)" in str(failure.value)
+    assert "mapped 3" in str(failure.value)
+
+
+def test_the_next_run_maps_only_what_failed(world):
+    bad = min(ENVELOPES)
+    with pytest.raises(FlowIncomplete):
+        run(world, fail={bad})
+    out, _, mapped = run(world)
+    assert [m["path"] for m in mapped] == [bad]
+    assert (out.mapped, out.skipped) == (1, 3)
+
+
+def test_a_sweep_that_is_still_running_makes_the_next_one_skip(world):
+    running = {
+        "run_id": "reprocess_tweet_envelopes:4",
+        "job": "reprocess_tweet_envelopes",
+        "status": "RUNNING",
+        "sequence": 4,
+        "payload": {"prefix": PREFIX},
+    }
+    out, ctx, mapped = run(world, records=[running])
+    assert out is None and mapped == [] and "reprocess_tweet_envelopes:4" in ctx.skipped

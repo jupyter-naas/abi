@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from naas_abi_core.module.jobs import Cron, Every
+from naas_abi_marketplace.applications.x import XSearchRecentTweetsFilesConfiguration
 from naas_abi_marketplace.applications.x.flows.conftest import (
     real_x_module,
     search_filter,
@@ -30,7 +31,7 @@ def test_the_module_declares_the_mapping_reprocess_and_count_workflows_and_two_j
     }
 
 
-def test_the_reprocess_workflow_is_manual_only():
+def test_the_reprocess_workflow_is_manual_only_unless_a_files_entry_schedules_it():
     jobs = declared(real_x_module())
     assert jobs["reprocess_tweet_envelopes"].triggers == ()
     assert jobs["map_tweet_envelope"].triggers == ()
@@ -54,7 +55,6 @@ def test_the_workflows_have_typed_inputs_the_launch_form_can_use():
 
 def test_without_filters_there_is_no_search_workflow():
     module = real_x_module()
-    module._declare_search_workflows()
     assert "search_recent_tweets" not in declared(module)
 
 
@@ -64,7 +64,6 @@ def test_each_filter_is_one_trigger_of_the_search_workflow_carrying_its_name():
         search_filter("sports", interval_seconds=900),
         search_filter("misc"),
     )
-    module._declare_search_workflows()
 
     search = declared(module)["search_recent_tweets"]
     assert search.kind == "workflow"
@@ -80,7 +79,6 @@ def test_each_filter_is_one_trigger_of_the_search_workflow_carrying_its_name():
 
 def test_more_filters_than_a_descriptor_holds_declare_more_workflows():
     module = real_x_module(*(search_filter(f"f{i}") for i in range(20)))
-    module._declare_search_workflows()
     jobs = declared(module)
     assert len(jobs["search_recent_tweets"].triggers) == 16
     assert len(jobs["search_recent_tweets_2"].triggers) == 4
@@ -88,7 +86,6 @@ def test_more_filters_than_a_descriptor_holds_declare_more_workflows():
 
 def test_every_declared_job_has_a_handler():
     module = real_x_module(search_filter("news"))
-    module._declare_search_workflows()
     assert module.missing_job_handlers() == set()
 
 
@@ -108,3 +105,24 @@ def test_the_jobs_have_a_spare_slot_so_an_overlapping_tick_skips_instead_of_queu
     jobs = declared(real_x_module())
     assert jobs["build_app"].max_concurrency == 2
     assert jobs["compact_dataset"].max_concurrency == 2
+
+
+def test_a_files_entry_schedules_the_reprocess_workflow_with_its_input():
+    module = real_x_module(
+        files=[
+            XSearchRecentTweetsFilesConfiguration(
+                name="sweep", cron="0,30 * * * *", max_age_hours=24
+            )
+        ]
+    )
+    reprocess = declared(module)["reprocess_tweet_envelopes"]
+    assert [t.spec for t in reprocess.triggers] == ["0 0,30 * * * *"]
+    assert reprocess.triggers[0].input["max_age_hours"] == 24
+    # a running sweep and the next tick, which skips instead of queueing
+    assert reprocess.max_concurrency == 2
+
+
+def test_the_manual_reprocess_workflow_exists_without_files_entries():
+    jobs = declared(real_x_module())
+    assert jobs["reprocess_tweet_envelopes"].kind == "workflow"
+    assert "reprocess_tweet_envelopes_2" not in jobs
