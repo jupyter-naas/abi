@@ -709,6 +709,15 @@ class JobHost:
         )
         deleted = 0
         for doc in page.items[:limit]:
+            if workflow:
+                # Before the record: a failure here leaves the run for the next
+                # pass, which still finds it; after, its journal would stay forever.
+                await delete_steps(
+                    self.documents,
+                    steps_collection(self.project),
+                    results_collection(self.project),
+                    doc.id,
+                )
             try:
                 await self.documents.delete(
                     self.collection, doc.id, if_version=doc.version
@@ -716,13 +725,6 @@ class JobHost:
                 deleted += 1
             except (DocumentNotFound, VersionConflict):
                 continue  # another replica pruned or updated it
-            if workflow:
-                await delete_steps(
-                    self.documents,
-                    steps_collection(self.project),
-                    results_collection(self.project),
-                    doc.id,
-                )
         return deleted
 
     async def _notify(

@@ -164,6 +164,18 @@ as a model; `self.get_workflow` passes the module's declared types.
   only running handlers (as for any job). A fan-out that stops on a failure leaves
   the children it started running; its journal keeps their ids, and a retry
   re-attaches.
+- **Skipping.** A workflow that calls `ctx.skip(reason)` and returns `None` ends
+  SKIPPED, whatever its output type (the handler lets `None` through only then).
+  A skipped run has no output: `WorkflowRun.result()` returns `None`, and a parent's
+  `call` gets `None` (journaled as a succeeded step with a `null` result). Callers
+  that need to tell a skip from a result read `status()`.
+- A parent that replays after its child's run record was pruned (7 days by
+  default, or 1 hour for a skipped run) finds no record, which reads as QUEUED, and
+  waits until the parent's timeout. A retry that late is unlikely; set `timeout`.
+- Step keys have no control characters (a child's idempotency key, which includes
+  the key, is a message id header). Keys built from data should be hashed or sanitized.
+- A model instance returned by a typed workflow must be of the declared output
+  class; a dict is validated into it.
 - A failed step is journaled FAILED and runs again when the run is retried; the
   completed steps before it are kept. With `max_attempts=1` a failed run is
   not retried at all: set `max_attempts` for workflows that should resume.

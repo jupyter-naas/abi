@@ -170,7 +170,10 @@ deterministic; results are capped at 256 KiB. `call`/`map_call` journal the chil
 before waiting, with the idempotency key `<run>/<key>/<attempt>`; a failed child fails the
 step and the next attempt starts a new one. A parent holds its slot; only a run that ends
 CANCELLED cancels its waited-for children (`FlowContext.finish`, called by the host), not a
-shutdown or a timeout. `NonRetryable` exceptions fail a run without retry. Hosts publish
+shutdown or a timeout. `NonRetryable` exceptions fail a run without retry. A typed workflow that called
+`ctx.skip()` returns `None` and ends SKIPPED; `WorkflowRun.result()` and a parent's `call`
+then give `None`. Step keys reject control characters; a failed attempt's child is never
+carried into the next attempt of a `call`. Retention deletes a run's journal before its record. Hosts publish
 `{run_id, status}` on `JobSubjects.done` (core NATS, outside the jobs stream) when a run
 is saved terminal; `CompletionNotices` waits on it with a 5 s poll fallback. A `Cron`/`Every`
 `input` is the schedule body; its hash header is in `SCHEDULE_HEADERS` only when set, so
