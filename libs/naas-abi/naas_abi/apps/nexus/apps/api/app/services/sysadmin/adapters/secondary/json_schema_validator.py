@@ -1,7 +1,9 @@
 """Workflow inputs checked against their JSON Schema (``jsonschema``).
 
-Schemas come from module descriptors, so they are untrusted: remote references
-are never fetched, and a schema this validator cannot use (invalid, or with a
+Schemas come from module descriptors, so they are untrusted: references are
+resolved inside the schema only. The validator gets an empty ``referencing``
+registry; without one, jsonschema falls back to a registry that fetches ``http(s)``
+and ``file`` references (with a DeprecationWarning). A schema this validator cannot use (invalid, or with a
 reference it cannot resolve) accepts everything rather than blocking the run;
 the module validates its own input anyway.
 """
@@ -12,6 +14,7 @@ from typing import Any
 
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs import SchemaIssue
 from naas_abi_core import logger
+from referencing import Registry
 
 # Enough to fix an input; a payload with hundreds of faults is not listed in full.
 MAX_ISSUES = 20
@@ -29,7 +32,7 @@ class JsonSchemaValidator:
             cls = validators.validator_for(schema)
             cls.check_schema(schema)
             errors = sorted(
-                cls(schema).iter_errors(payload),
+                cls(schema, registry=Registry()).iter_errors(payload),
                 key=lambda e: (list(map(str, e.absolute_path)), e.message),
             )
         except Exception as exc:  # noqa: BLE001 - a schema we cannot use must not block a run
