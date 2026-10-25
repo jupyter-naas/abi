@@ -19,6 +19,7 @@ from naas_abi_sdk import lifeline, telemetry
 from naas_abi_sdk.apps import AppDescriptor, discover_apps
 from naas_abi_sdk.catalog import OPERATIONS
 from naas_abi_sdk.client import ABIClient
+from naas_abi_sdk.components import by_name, discover_components
 from naas_abi_sdk.discovery import (
     AgentDescriptor,
     DiscoveryClient,
@@ -186,6 +187,12 @@ class BaseModule(JobsMixin, Generic[Config]):
     # package, except under "sandbox". A tuple names the files, relative to ontologies/
     # (() sends none). A module with ontologies declares the triple_store service.
     ontologies: tuple[str | Path, ...] | None = None
+    # Workflow and Pipeline classes (naas_abi_sdk.workflow, .pipeline). None:
+    # every subclass found under the package's workflows/ and pipelines/
+    # (recursively, tests and merely imported classes left out), like in-engine
+    # modules. Their names (the class slug) are known before registration.
+    workflows: tuple[type, ...] | None = None
+    pipelines: tuple[type, ...] | None = None
 
     def __init__(self, engine: EngineProxy, configuration: Config):
         if not isinstance(configuration, self.Configuration):
@@ -198,6 +205,8 @@ class BaseModule(JobsMixin, Generic[Config]):
         self._agent_handlers = {}
         self._model_handlers = {}
         self._app_handlers: dict[str, Any] = {}
+        self._workflows: dict[str, Any] = {}
+        self._pipelines: dict[str, Any] = {}
         self._health_port: int | None = None
 
     @property
@@ -269,6 +278,131 @@ class BaseModule(JobsMixin, Generic[Config]):
         if not callable(asgi_app):
             raise TypeError("expose_app needs an ASGI application")
         self._app_handlers[name] = asgi_app
+
+    @classmethod
+    def get_workflow_classes(cls) -> dict[str, type]:
+        """The declared workflows by name, else those found under workflows/."""
+        return cls._component_classes("workflow", "workflows")
+
+    @classmethod
+    def get_pipeline_classes(cls) -> dict[str, type]:
+        """The declared pipelines by name, else those found under pipelines/."""
+        return cls._component_classes("pipeline", "pipelines")
+
+    @classmethod
+    def _component_classes(cls, kind: str, folder: str) -> dict[str, type]:
+        def load_base() -> type:
+            if kind == "workflow":
+                from naas_abi_sdk.workflow import Workflow
+
+                return Workflow
+            from naas_abi_sdk.pipeline import Pipeline
+
+            return Pipeline
+
+        declared = getattr(cls, folder)
+        if declared is not None:
+            if declared:
+                base = load_base()
+                for item in declared:
+                    if not (isinstance(item, type) and issubclass(item, base)):
+                        raise TypeError(
+                            f"{folder} must hold {base.__name__} subclasses"
+                        )
+            return by_name(kind, declared)
+        key = f"_discovered_{folder}"
+        if key not in cls.__dict__:
+            setattr(
+                cls, key, by_name(kind, discover_components(cls, folder, load_base))
+            )
+        return dict(cls.__dict__[key])
+
+    def expose_workflow(self, name: str, workflow) -> None:
+        """Bind a workflow instance during on_initialized, for a class
+        that needs arguments to be built (no ``New``, no empty configuration)."""
+        self._expose(
+            "workflow", self.get_workflow_classes(), self._workflows, name, workflow
+        )
+
+    def expose_pipeline(self, name: str, pipeline) -> None:
+        """Bind a pipeline instance during on_initialized, like expose_workflow."""
+        self._expose(
+            "pipeline", self.get_pipeline_classes(), self._pipelines, name, pipeline
+        )
+
+    @staticmethod
+    def _expose(
+        kind: str, declared: dict[str, type], bound: dict[str, Any], name: str, instance
+    ) -> None:
+        if name not in declared:
+            raise ValueError(
+                f"Declare the {kind} first: a {kind.capitalize()} subclass named "
+                f"{name!r} under {kind}s/ (known: {sorted(declared)})"
+            )
+        if name in bound:
+            raise ValueError(f"{kind.capitalize()} already registered: {name}")
+        if not isinstance(instance, declared[name]):
+            raise TypeError(
+                f"{name!r} is a {declared[name].__name__}, not {type(instance)}"
+            )
+        bound[name] = instance
+
+    def get_workflow(self, name: str):
+        """The built workflow named ``name`` (the slug of its class name)."""
+        return self._bound("workflow", self._workflows, name)
+
+    def get_pipeline(self, name: str):
+        """The built pipeline named ``name`` (the slug of its class name)."""
+        return self._bound("pipeline", self._pipelines, name)
+
+    def get_workflows(self) -> dict[str, Any]:
+        """Every built workflow by name; empty until on_initialized has run."""
+        return dict(self._workflows)
+
+    def get_pipelines(self) -> dict[str, Any]:
+        """Every built pipeline by name; empty until on_initialized has run."""
+        return dict(self._pipelines)
+
+    @staticmethod
+    def _bound(kind: str, bound: dict[str, Any], name: str):
+        try:
+            return bound[name]
+        except KeyError:
+            raise ValueError(
+                f"No {kind} named {name!r} is built (known: {sorted(bound)}); "
+                "they are built after on_initialized"
+            ) from None
+
+    async def _build_processes(self) -> None:
+        """Build every declared workflow and pipeline not bound with expose_*.
+
+        A class that is neither buildable nor bound fails startup: the module
+        declares it, so callers expect it.
+        """
+        for kind, declared, bound in (
+            ("workflow", self.get_workflow_classes(), self._workflows),
+            ("pipeline", self.get_pipeline_classes(), self._pipelines),
+        ):
+            for name, cls in declared.items():
+                if name in bound:
+                    continue
+                try:
+                    instance, reason = await cls.build(self)
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"Building {kind} {cls.__name__} ({name!r}) failed: {exc!r}"
+                    ) from exc
+                if instance is None:
+                    raise ValueError(
+                        f"The {kind} {cls.__name__} ({name!r}) cannot be built: "
+                        f"{reason}. Give it a classmethod New(module), or bind an "
+                        f"instance in on_initialized with self.expose_{kind}({name!r}, instance)."
+                    )
+                if not isinstance(instance, cls):
+                    raise TypeError(
+                        f"{cls.__name__}.New(module) must return a {cls.__name__}"
+                    )
+                bound[name] = instance
 
     @property
     def discovery_status(self) -> str:
@@ -426,6 +560,9 @@ async def run_module(
     # Before any connection: a file the engine would refuse, or ontologies without the
     # triple_store dependency, stop the module here, not in a background task.
     ontology_files = module_ontology_files(module_type, identity)
+    # Names are known (and a bad folder fails) before anything connects.
+    module_type.get_workflow_classes()
+    module_type.get_pipeline_classes()
     # Spans export when OTEL_EXPORTER_OTLP_ENDPOINT is set (needs naas-abi-sdk[otel]).
     telemetry.configure_from_env(identity)
     # Named after the module so the broker's /connz shows which module is which.
@@ -476,6 +613,7 @@ async def run_module(
                 await registration.start()
                 await module.engine.modules.wait_ready(discovery)
             await _invoke(module.on_initialized)
+            await module._build_processes()
             declared = {
                 a.name for a in module.agents if "agent.invoke.v1" in a.capabilities
             }
