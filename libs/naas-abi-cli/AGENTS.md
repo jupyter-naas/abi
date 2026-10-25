@@ -67,6 +67,13 @@ ABI_SMOKE_DIR=~/abi-smoke ABI_SMOKE_KEEP=1 scripts/cli_smoke.sh nats   # keep it
 
 - A template change gets a render test (`config_template_test.py`,
   `pyproject_template_test.py`, ...). Rendered TOML/YAML is parsed in the test.
+- Inside a remote module (`is_remote_module`), `abi new agent|workflow|pipeline|integration`
+  write SDK scaffolds from `templates/remote_*` (imports `naas_abi_sdk` only, a
+  `<Name>_test.py` beside each, the target folder made a package); elsewhere the
+  in-engine templates are unchanged. `abi new orchestration` still refuses
+  (`_REMOTE_ALTERNATIVES`). The SDK's rules for these classes (names, building,
+  `expose_workflow`) are in `libs/naas-abi-sdk/AGENTS.md`; the module template's
+  `workflows/`, `pipelines/` and `integrations/` folders each carry an `AGENTS.md`.
 - Messages tell the user the next command to run; failures raise
   `click.ClickException` with what to do, never a traceback.
 - Generated projects need Python 3.12+. A NATS project resolves the framework from

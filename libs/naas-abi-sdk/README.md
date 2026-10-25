@@ -5,7 +5,8 @@ of remote modules: modules that run in their own process and reach the engine
 only through NATS. Guide: [Build a Remote Module](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/build/sdk/build-a-remote-module.md);
 architecture: [Remote Modules and Jobs](https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/developer-guide/architecture/remote-modules.md). Runtime dependencies:
 `naas-abi-proto`, `protobuf` (transitive), and `nats-py`. No ABI core, LangChain,
-Dagster, RDF library, database drivers, or HTTP framework.
+Dagster, RDF library, database drivers, or HTTP framework (workflows and
+pipelines bring pydantic and rdflib through the `[workflows]` and `[rdf]` extras).
 
 ```python
 from dataclasses import dataclass
@@ -557,6 +558,63 @@ Runnable example: `examples/standalone_module/model_module.py`. `make demo-sdk`
 launches it in a separate environment containing LangChain, SDK and proto, with
 no ABI core installed. The base worker still verifies its four-package install.
 
+
+## Workflows, pipelines and integrations
+
+A module holds them like an in-engine module does, written on `naas_abi_sdk`
+only. Nothing here crosses the network yet: they run in the module's process,
+for its own agents and jobs.
+
+```python
+# <package>/workflows/GreetWorkflow.py   (pip install 'naas-abi-sdk[workflows]')
+from naas_abi_sdk.workflow import Workflow, WorkflowConfiguration, WorkflowParameters
+
+
+class GreetWorkflowParameters(WorkflowParameters):
+    name: str
+
+
+class GreetWorkflow(Workflow[GreetWorkflowParameters]):
+    """Greets someone: an agent reads this to decide when to call it."""
+
+    async def run(self, parameters: GreetWorkflowParameters) -> dict:
+        return {"message": f"Hello, {parameters.name}!"}
+```
+
+- `Workflow[P]` and `Pipeline[P]` (`naas_abi_sdk.pipeline`, needs `[workflows,rdf]`)
+  have `async def run(self, parameters: P)`; parameters are a pydantic model
+  (`WorkflowParameters`, `PipelineParameters`). A workflow returns a
+  JSON-serializable value or a pydantic model, a pipeline an rdflib `Graph`.
+  Each has a `<Name>Configuration` dataclass. `Integration`,
+  `IntegrationConfiguration` and `IntegrationConnectionError`
+  (`naas_abi_sdk.integration`) are standard library only: a code pattern, as in
+  engine modules. The module neither finds nor serves integrations.
+- `BaseModule` finds the `Workflow` and `Pipeline` subclasses defined under the
+  package's `workflows/` and `pipelines/` (recursively; `*_test.py`, `test_*.py`,
+  `tests/`, abstract classes and classes that are only imported are skipped). Set
+  `workflows = (...)` or `pipelines = (...)` on the class to declare them instead.
+  `ABIModule.get_workflow_classes()` and `get_pipeline_classes()` return them by
+  name at class level, before the module registers. The name is the class name
+  in snake case (`GreetWorkflow` is `greet_workflow`), one NATS subject token,
+  unique per kind.
+- After `on_initialized` the module builds each one: `New(module)` (a
+  classmethod, sync or async) if the class defines it, else the class with an
+  empty `<Name>Configuration`. A class that needs arguments is bound in
+  `on_initialized` with `self.expose_workflow(name, instance)` or
+  `self.expose_pipeline(name, instance)`. A discovered class that is neither
+  buildable nor bound stops the module from starting, with a message naming it.
+- `self.get_workflow(name)`, `self.get_pipeline(name)`, `self.get_workflows()` and
+  `self.get_pipelines()` return the built instances.
+- `instance.as_tools()` returns a LangChain `StructuredTool` (extra `[agents]` or
+  `[agent]`): named by the slug, described by the class docstring, taking the
+  parameters model, and running `run` on the module's loop (call it from
+  `on_initialized` or later, on that loop). A pydantic result comes back as JSON
+  data and a graph as `{"format": "turtle", "data": ...}`.
+- `import naas_abi_sdk` needs none of pydantic, rdflib or LangChain. Importing
+  `Workflow` without pydantic, `Pipeline` without rdflib, or calling `as_tools()`
+  without LangChain raises an `ImportError` that names the extra.
+- `abi new workflow|pipeline|integration <Name> <folder>` inside a remote module
+  writes these classes and a test beside them.
 
 ## Apps
 

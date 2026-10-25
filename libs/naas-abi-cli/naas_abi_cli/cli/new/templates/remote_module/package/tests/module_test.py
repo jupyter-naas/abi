@@ -47,10 +47,23 @@ def test_the_configuration_comes_from_the_environment() -> None:
     )
 
 
+def test_the_workflows_and_pipelines_are_found_and_named() -> None:
+    """Importing every file under workflows/ and pipelines/ is what finds them: a
+    broken import, or two classes with one name, fails here, offline."""
+    for found in (ABIModule.get_workflow_classes(), ABIModule.get_pipeline_classes()):
+        assert all(name == cls.slug() for name, cls in found.items())
+
+
 def test_the_module_never_imports_abi_core() -> None:
     """A remote module reaches the engine only through NATS."""
     code = (
-        "import sys, {{module_name_snake}}, {{module_name_snake}}.__main__; "
+        "import importlib, pkgutil, sys, {{module_name_snake}}, {{module_name_snake}}.__main__, "
+        "{{module_name_snake}}.integrations; "
+        "{{module_name_snake}}.ABIModule.get_workflow_classes(); "
+        "{{module_name_snake}}.ABIModule.get_pipeline_classes(); "
+        "[importlib.import_module(m.name) for m in pkgutil.walk_packages("
+        "{{module_name_snake}}.integrations.__path__, '{{module_name_snake}}.integrations.') "
+        "if not m.name.endswith('_test')]; "
         "core = [m for m in sys.modules if m.split('.')[0] == 'naas_abi_core']; "
         "sys.exit(f'imports {core[0]}' if core else 0)"
     )
