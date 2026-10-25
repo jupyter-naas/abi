@@ -564,6 +564,8 @@ no ABI core installed. The base worker still verifies its four-package install.
 A module holds them like an in-engine module does, written on `naas_abi_sdk`
 only. They run in the module's process, for its own agents, and other modules
 call them over NATS (see "Calling another module's workflows and pipelines").
+The decisions, with what stays out of scope, are in
+`docs/adr/20261025_remote-module-workflows-pipelines-ontologies.md`.
 
 ```python
 # <package>/workflows/GreetWorkflow.py   (pip install 'naas-abi-sdk[workflows]')

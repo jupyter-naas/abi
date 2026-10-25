@@ -31,10 +31,9 @@ def test_the_module_declares_its_agent_services_and_job() -> None:
 
 def test_the_module_sends_its_ontologies_to_the_engine() -> None:
     """ontologies/**/*.ttl reaches the schema graph as module/<id>/<path>."""
-    (ontology,) = ABIModule.get_ontologies()
-    assert ontology.source(MODULE_ID) == (
-        f"module/{MODULE_ID}/modules/{{module_name_pascal}}Ontology.ttl"
-    )
+    # Other files may sit next to it: pick this module's own by the source it is sent as.
+    source = f"module/{MODULE_ID}/modules/{{module_name_pascal}}Ontology.ttl"
+    (ontology,) = [o for o in ABIModule.get_ontologies() if o.source(MODULE_ID) == source]
     assert "triple_store" in ABIModule.dependencies.services
     # rdflib is an optional SDK extra, not a dependency of the module: no parsing here.
     assert "owl:Ontology" in ontology.path.read_text(encoding="utf-8")
