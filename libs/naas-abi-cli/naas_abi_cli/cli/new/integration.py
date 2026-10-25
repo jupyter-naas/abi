@@ -7,7 +7,12 @@ import naas_abi_cli
 from naas_abi_cli.cli.utils.Copier import Copier
 
 from .new import new
-from .remote_module import ensure_package, is_remote_module, target_dir
+from .remote_module import (
+    component_destination,
+    ensure_package,
+    is_remote_module,
+    target_dir,
+)
 from .utils import to_pascal_case, to_snake_case
 
 
@@ -18,13 +23,23 @@ def _new_integration(integration_name: str, integration_path: str = "."):
     """Create an integration: an SDK one inside a remote module, a naas_abi_core one
     inside an in-engine module."""
     remote = is_remote_module(target_dir(integration_path))
-    new_integration(integration_name, integration_path, remote=remote)
+    found = False
     if remote:
+        integration_path, found = component_destination(
+            integration_path, "integrations", "integration"
+        )
+    new_integration(integration_name, integration_path, remote=remote)
+    if remote and found:
         click.echo(
             f"Created {to_pascal_case(integration_name)}Integration.py (naas_abi_sdk). "
             "Nothing in the engine consumes it: build it in a workflow, pipeline or "
             "agent, with credentials from self.engine.services.secret (declare the "
             "secret service in ModuleDependencies)."
+        )
+    elif remote:
+        click.echo(
+            f"Created {to_pascal_case(integration_name)}Integration.py in {integration_path} "
+            "(naas_abi_sdk), outside the folder the module builds from."
         )
 
 

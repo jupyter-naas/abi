@@ -15,8 +15,11 @@ import shutil
 import socket
 import subprocess
 import time
+from datetime import datetime, timezone
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+from uuid import UUID
 
 import pytest
 
@@ -95,7 +98,31 @@ class BytesWorkflow(Workflow[WorkflowParameters]):
     """Answers something JSON cannot hold."""
 
     async def run(self, parameters: WorkflowParameters):
-        return {"data": b"bytes"}
+        return {"data": object()}
+
+
+class NestedParameters(WorkflowParameters):
+    pass
+
+
+class Item(WorkflowParameters):
+    name: str
+    at: datetime
+    id: UUID
+    price: Decimal
+
+
+class NestedWorkflow(Workflow[NestedParameters]):
+    """Returns models and scalars nested in plain containers."""
+
+    async def run(self, parameters: NestedParameters):
+        item = Item(
+            name="a",
+            at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc),
+            id=UUID(int=7),
+            price=Decimal("1.50"),
+        )
+        return {"items": [item, item], "when": item.at, "tags": {"x"}}
 
 
 class SizeParameters(WorkflowParameters):
@@ -144,6 +171,7 @@ WORKFLOWS = {
     "sleep_workflow": SleepWorkflow,
     "broken_workflow": BrokenWorkflow,
     "bytes_workflow": BytesWorkflow,
+    "nested_workflow": NestedWorkflow,
     "big_workflow": BigWorkflow,
     "length_workflow": LengthWorkflow,
 }
@@ -413,6 +441,28 @@ def test_a_failing_process_is_one_attempt_and_leaks_nothing(broker):
             assert error.value.code == "PROCESS_ERROR"
             with pytest.raises(RPCError, match="rdflib Graph"):
                 await module.get_pipeline("not_a_graph_pipeline").run({})
+        finally:
+            await world.close()
+
+    run(scenario)
+
+
+def test_a_result_with_nested_models_and_common_scalars_is_served(broker):
+    async def scenario():
+        world = await serve(broker)
+        try:
+            result = await world.module().get_workflow("nested_workflow").run({})
+            item = {
+                "name": "a",
+                "at": "2026-01-02T03:04:05Z",
+                "id": str(UUID(int=7)),
+                "price": "1.50",
+            }
+            assert result == {
+                "items": [item, item],
+                "when": "2026-01-02T03:04:05Z",
+                "tags": ["x"],
+            }
         finally:
             await world.close()
 

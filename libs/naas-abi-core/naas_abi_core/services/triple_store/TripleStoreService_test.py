@@ -549,6 +549,31 @@ def test_load_schema_content_writes_nothing_for_unchanged_content():
     assert len(_schema_entries(service, _SOURCE)) == 1
 
 
+def test_load_schema_content_parses_unchanged_content_never_and_new_content_once(
+    monkeypatch,
+):
+    adapter = _InMemoryTripleStoreAdapter()
+    service = TripleStoreService(adapter)
+    parsed: list[str] = []
+    parse = TripleStoreService._parse_schema
+
+    def counting(content, rdf_format, base):
+        parsed.append(content)
+        return parse(content, rdf_format, base)
+
+    monkeypatch.setattr(TripleStoreService, "_parse_schema", staticmethod(counting))
+
+    service.load_schema_content(_SOURCE, _FOO_V1)
+    assert parsed == [_FOO_V1]  # a new source: once, checks included
+
+    service.load_schema_content(_SOURCE, _FOO_V1)
+    assert parsed == [_FOO_V1]  # unchanged: the hash answers, nothing is parsed
+
+    service.load_schema_content(_SOURCE, _FOO_V2)
+    # changed: the new content once, the stored one for the diff
+    assert parsed == [_FOO_V1, _FOO_V2, _FOO_V1]
+
+
 def test_load_schema_content_applies_the_diff_for_changed_content():
     adapter = _InMemoryTripleStoreAdapter()
     service = TripleStoreService(adapter)
@@ -691,7 +716,9 @@ def test_a_write_deadline_reaches_only_an_adapter_that_takes_one():
 
     graph_name = URIRef("http://example.org/graph/billing")
     triples = Graph()
-    triples.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
+    triples.add(
+        (URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C"))
+    )
 
     remote = _RemoteAdapter()
     remote.schema_graph_present = True

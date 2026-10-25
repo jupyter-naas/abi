@@ -6,7 +6,10 @@ the triple store (``load_schema``) as ``module/<module_id>/<path relative to ont
 the key the engine stores it under. The engine accepts a module's files only under its own id.
 
 Loading is additive, as for in-engine modules: a file removed later stays in the schema graph.
-A failed load never changes readiness: it is logged as an error and retried in the background.
+A failed load never changes readiness: it is logged as an error. A transient failure (the
+engine unreachable or busy) is retried in the background; a refusal that cannot change
+(``INVALID_ARGUMENT``: not Turtle, a forged ``internal:`` vocabulary, a malformed source;
+``PERMISSION_DENIED``) is logged once, and that file is not sent again by this process.
 """
 
 from __future__ import annotations
@@ -30,6 +33,8 @@ MAX_SOURCE_LENGTH = 512
 SOURCE_PREFIX = "module"
 _MODULE_ID = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:-]{0,255}")
 _SEGMENT = re.compile(r"[A-Za-z0-9_.-]+")
+# What the engine answers to a file that no retry makes acceptable.
+TERMINAL_CODES = frozenset({"INVALID_ARGUMENT", "PERMISSION_DENIED"})
 # Seconds between attempts at a failed load: doubled each time, up to the cap.
 RETRY_FIRST_SECONDS = 1.0
 RETRY_MAX_SECONDS = 60.0
@@ -119,7 +124,8 @@ def declared_ontologies(
 
 
 class OntologyLoader:
-    """Sends a module's ontologies to the schema graph, retrying failures until all load.
+    """Sends a module's ontologies to the schema graph, retrying transient failures
+    until all load.
 
     ``serving`` says whether the instance may send (``READY`` or ``DEGRADED``, never while
     ``STAGED``) and ``stopping`` whether it was asked to drain. A file is read again for
@@ -147,6 +153,7 @@ class OntologyLoader:
         self._poll = poll_seconds
         self._retry_first, self._retry_max = retry_first_seconds, retry_max_seconds
         self.pending: dict[str, OntologyFile] = {f.name: f for f in files}
+        self.refused: dict[str, str] = {}
 
     async def run(self) -> None:
         """Return when every file is loaded, or the module is asked to drain."""
@@ -159,24 +166,38 @@ class OntologyLoader:
             for name, file in list(self.pending.items()):
                 if self._stopping():
                     return
-                if await self._load(file):
+                outcome = await self._load(file)
+                if outcome is not None:
                     del self.pending[name]
+                    if outcome is False:
+                        self.refused[name] = self._sources[name]
             if self.pending:
                 await asyncio.sleep(delay)
                 delay = min(delay * 2, self._retry_max)
 
-    async def _load(self, file: OntologyFile) -> bool:
+    async def _load(self, file: OntologyFile) -> bool | None:
+        """True: loaded. False: refused for good. None: failed, to retry."""
         source = self._sources[file.name]
         try:
             content = await asyncio.to_thread(file.path.read_bytes)
             changed = await self._triple_store.load_schema(source, content)
-        except Exception as exc:  # noqa: BLE001 - never ends the module; retried
+        except Exception as exc:  # noqa: BLE001 - never ends the module
+            if getattr(exc, "code", None) in TERMINAL_CODES:
+                logger.error(
+                    "The engine refused ontology %s (%s), so it is not loaded and "
+                    "not sent again until the module restarts: fix %s. %s",
+                    source,
+                    exc.code,  # type: ignore[attr-defined]
+                    file.path,
+                    exc,
+                )
+                return False
             logger.error(
                 "Could not load ontology %s into the schema graph (will retry): %s",
                 source,
                 exc,
             )
-            return False
+            return None
         logger.info(
             "Ontology %s %s", source, "loaded" if changed else "already up to date"
         )

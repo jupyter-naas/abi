@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import shutil
@@ -36,9 +37,11 @@ from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology_imports import 
 )
 from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology_source import (
     RemoteOntologyReader,
+    content_version,
     install_reader,
     is_remote_id,
     load_remote_graph,
+    parse_remote_graph,
     parse_remote_id,
 )
 from naas_abi_core import logger
@@ -731,6 +734,11 @@ class OntologyService:
         # triple store; the module-level graph loaders read them through this.
         self._remote = RemoteOntologyReader(self._get_triple_store)
         install_reader(self._remote)
+        # The listing row of each remote file, by id, for the content it was
+        # built from: a file nobody changed is not parsed again.
+        self._remote_items: dict[
+            str, tuple[tuple[int, int], OntologyFileItemData | None]
+        ] = {}
 
     # ── Internal ──────────────────────────────────────────────────────────────
 
@@ -771,6 +779,7 @@ class OntologyService:
     async def clear_cache(self, catalog_refs: list[str] | None = None) -> None:
         """Workspace refresh only invalidates permission-keyed graph snapshots."""
         self._remote.clear()
+        self._remote_items = {}
         if catalog_refs is not None:
             clear_catalog_import_caches()
         else:
@@ -1024,12 +1033,14 @@ class OntologyService:
         in-engine ontologies.
         """
         try:
-            sources = self._remote.sources()
+            files = self._remote.files()
         except Exception as exc:
             logger.warning(f"Could not list remote module ontologies: {exc}")
             return []
+        known = self._remote_items
+        current: dict[str, tuple[tuple[int, int], OntologyFileItemData | None]] = {}
         items: list[OntologyFileItemData] = []
-        for source in sources:
+        for source, text in files:
             parsed = parse_remote_id(source)
             if parsed is None:
                 continue
@@ -1041,14 +1052,29 @@ class OntologyService:
                 source, module_id, catalog_refs
             ):
                 continue
-            try:
-                graph = _load_ontology_graph(source)
-            except Exception as exc:
-                logger.warning(f"Skipping unreadable remote ontology {source}: {exc}")
-                continue
-            item = self._file_item(graph, source, module_id)
+            version = content_version(text)
+            cached = known.get(source)
+            if cached is not None and cached[0] == version:
+                item = cached[1]
+            else:
+                try:
+                    item = self._file_item(
+                        parse_remote_graph(source, text), source, module_id
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        f"Skipping unreadable remote ontology {source}: {exc}"
+                    )
+                    continue
+            current[source] = (version, item)
             if item is not None:
                 items.append(item)
+        # Rows a seed filter skipped this time stay; those of removed files go.
+        present = {source for source, _ in files}
+        self._remote_items = {
+            **{source: row for source, row in known.items() if source in present},
+            **current,
+        }
         return items
 
     async def list_ontology_files(
@@ -1112,7 +1138,10 @@ class OntologyService:
                 if item is not None:
                     ontology_files.append(item)
 
-            ontology_files.extend(self._list_remote_ontology_files(catalog_refs))
+            # Blocking triple store reads and Turtle parsing: off the event loop.
+            ontology_files.extend(
+                await asyncio.to_thread(self._list_remote_ontology_files, catalog_refs)
+            )
             ontology_files.sort(key=lambda item: (item.module_name.lower(), item.name.lower()))
             return filter_ontology_catalog(ontology_files, catalog_refs)
         except OntologyServiceUnavailableError:

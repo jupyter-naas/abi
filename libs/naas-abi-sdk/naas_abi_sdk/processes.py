@@ -19,6 +19,7 @@ from naas_abi_sdk.jobs import JobSettings
 
 try:
     from pydantic import BaseModel
+    from pydantic_core import to_jsonable_python
 except ImportError as exc:  # pragma: no cover - exercised without the extra
     raise ImportError(
         "naas_abi_sdk workflows and pipelines need pydantic: "
@@ -38,13 +39,22 @@ class ProcessParameters(BaseModel):
     pass
 
 
+def _is_graph(value: Any) -> bool:
+    return callable(getattr(value, "serialize", None)) and hasattr(value, "triples")
+
+
+def _graph_to_json(value: Any) -> Any:
+    if _is_graph(value):
+        return {"format": "turtle", "data": value.serialize(format="turtle")}
+    raise TypeError(f"{type(value).__name__} is not JSON serializable")
+
+
 def serialize_result(result: Any) -> Any:
-    """A JSON-serializable value: a model is dumped, an rdflib graph is turtle."""
-    if isinstance(result, BaseModel):
-        return result.model_dump(mode="json")
-    if callable(getattr(result, "serialize", None)) and hasattr(result, "triples"):
-        return {"format": "turtle", "data": result.serialize(format="turtle")}
-    return result
+    """A JSON-serializable value: models (nested too), dataclasses, datetimes,
+    UUIDs and decimals are dumped as pydantic does, an rdflib graph is turtle."""
+    if _is_graph(result):
+        return _graph_to_json(result)
+    return to_jsonable_python(result, fallback=_graph_to_json)
 
 
 def _parameters_model(annotation: Any, base: type[BaseModel]) -> type[BaseModel] | None:
@@ -96,8 +106,8 @@ class Process:
     def description(cls) -> str:
         """What the class's docstring says (not its base's), else its name:
         the tool's description, and what discovery registers for it."""
-        doc = cls.__doc__
-        return inspect.cleandoc(doc) if doc else cls.slug()
+        doc = inspect.cleandoc(cls.__doc__) if cls.__doc__ else ""
+        return doc or cls.slug()
 
     @classmethod
     def parameters_type(cls) -> type[BaseModel]:

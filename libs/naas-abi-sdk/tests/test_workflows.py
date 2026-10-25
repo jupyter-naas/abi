@@ -204,6 +204,32 @@ def test_a_module_without_folders_has_none(package):
     assert module_type.get_pipeline_classes() == {}
 
 
+def test_a_module_defined_in_a_top_level_script_discovers_its_folders(
+    tmp_path, monkeypatch
+):
+    """``python worker.py`` has no package: ``workflows/`` next to it is a top-level one."""
+    import importlib
+
+    name = f"worker_script_{next(_COUNTER)}"
+    (tmp_path / f"{name}.py").write_text(textwrap.dedent(MODULE), encoding="utf-8")
+    (tmp_path / "workflows").mkdir()
+    (tmp_path / "workflows" / "greet.py").write_text(
+        textwrap.dedent(GREET), encoding="utf-8"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    importlib.invalidate_caches()
+    try:
+        module_type = importlib.import_module(name).ABIModule
+        # The script's folder is on sys.path when it runs; not here once imported.
+        monkeypatch.setattr(sys, "path", [p for p in sys.path if p != str(tmp_path)])
+        assert list(module_type.get_workflow_classes()) == ["greet_workflow"]
+        assert str(tmp_path) in sys.path
+    finally:
+        for loaded in list(sys.modules):
+            if loaded == name or loaded.split(".")[0] == "workflows":
+                del sys.modules[loaded]
+
+
 def test_a_file_that_cannot_be_imported_fails_discovery_naming_it(package):
     module_type = package({"workflows/broken.py": "import not_a_real_dependency_xyz\n"})
     with pytest.raises(
@@ -777,3 +803,37 @@ def test_an_integration_keeps_its_configuration_and_names_connection_errors():
 
     assert FakeIntegration(Fake())
     assert issubclass(IntegrationConnectionError, Exception)
+
+
+def test_as_tools_return_nested_models_and_common_scalars_as_json():
+    pytest.importorskip("langchain_core")
+    from datetime import datetime, timezone
+    from decimal import Decimal
+    from uuid import UUID
+
+    class Item(WorkflowParameters):
+        at: datetime
+        price: Decimal
+        id: UUID
+
+    class Nested(Workflow[WorkflowParameters]):
+        """Models in a dict."""
+
+        async def run(self, parameters):
+            return {
+                "items": [
+                    Item(
+                        at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+                        price=Decimal(3),
+                        id=UUID(int=2),
+                    )
+                ]
+            }
+
+    async def scenario():
+        (tool,) = Nested(None).as_tools()
+        return await tool.ainvoke({})
+
+    assert asyncio.run(scenario()) == {
+        "items": [{"at": "2026-01-02T00:00:00Z", "price": "3", "id": str(UUID(int=2))}]
+    }

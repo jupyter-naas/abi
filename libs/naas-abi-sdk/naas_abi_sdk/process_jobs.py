@@ -57,7 +57,9 @@ def process_job_descriptors(
             settings = job_settings(cls)
             if settings is None:
                 continue
-            first_line = cls.description().splitlines()[0]
+            # A blank docstring has no lines: the class name stands in.
+            lines = cls.description().splitlines()
+            first_line = lines[0] if lines else cls.slug()
             descriptor = settings.descriptor(
                 process_job_name(kind, name), first_line[:DESCRIPTION_CHARS]
             )

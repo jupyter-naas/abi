@@ -80,9 +80,11 @@ get_schema_graph() -> Graph
 lives in the schema graph `http://ontology.naas.ai/graph/schema`, next to the triples.
 `load_schema(filepath)` and `load_schema_content(source, content)` share one
 implementation, `_apply_schema_content(source, content, update time, entries, format,
-base)`: no entry → insert the triples and the metadata; same hash → write nothing (a hash
+base, validate=None)`: no entry → insert the triples and the metadata; same hash → write nothing (a hash
 comparison, no parse); different hash → apply the diff (triples added and removed) and
-swap the metadata. `source` is the `filePath` key: a file path for engine modules,
+swap the metadata. New content is parsed once there, and `validate` (for
+`load_schema_content`, the refusal of the service's own `internal:` vocabulary) checks
+that parse: unchanged content is neither parsed nor checked. `source` is the `filePath` key: a file path for engine modules,
 `module/<module_id>/<path>` for a remote module's ontology.
 
 - `load_schema` logs and swallows a failure (as it always did) and returns nothing;

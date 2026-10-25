@@ -76,7 +76,10 @@ ABI_SMOKE_DIR=~/abi-smoke ABI_SMOKE_KEEP=1 scripts/cli_smoke.sh nats   # keep it
   `pyproject_template_test.py`, ...). Rendered TOML/YAML is parsed in the test.
 - Inside a remote module (`is_remote_module`), `abi new agent|workflow|pipeline|integration`
   write SDK scaffolds from `templates/remote_*` (imports `naas_abi_sdk` only, a
-  `<Name>_test.py` beside each, the target folder made a package); elsewhere the
+  `<Name>_test.py` beside each, the target folder made a package). The default path
+  is the package's `workflows/`, `pipelines/` or `integrations/` folder
+  (`component_destination`), the only folders discovery scans; an explicit path
+  elsewhere warns and prints no "builds it" promise. Elsewhere the
   in-engine templates are unchanged. `abi new orchestration` still refuses
   (`_REMOTE_ALTERNATIVES`). The SDK's rules for these classes (names, building,
   `expose_workflow`) are in `libs/naas-abi-sdk/AGENTS.md`; the module template's

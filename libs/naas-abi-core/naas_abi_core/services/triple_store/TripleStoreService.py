@@ -672,15 +672,6 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         service's own ``internal:`` vocabulary, which the bookkeeping owns.
         """
         try:
-            graph = self._parse_schema(content, "turtle", self._source_base(source))
-            if any(
-                str(term).startswith(_INTERNAL_NAMESPACE)
-                for triple in graph
-                for term in triple
-            ):
-                raise Exceptions.InvalidSchemaError(
-                    f"schema content may not use the {_INTERNAL_NAMESPACE} vocabulary"
-                )
             # One writer per service: two loads of a source (two replicas of a
             # module starting together) would each find no entry and add one.
             with self._schema_content_lock:
@@ -696,6 +687,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
                     entries,
                     "turtle",
                     self._source_base(source),
+                    validate=self._refuse_internal_vocabulary,
                 )
         except Exception as exc:
             self.__publish_event(
@@ -708,6 +700,17 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             raise
         self.__publish_event(SchemaLoaded(filepath=source))
         return changed
+
+    @staticmethod
+    def _refuse_internal_vocabulary(graph: Graph) -> None:
+        if any(
+            str(term).startswith(_INTERNAL_NAMESPACE)
+            for triple in graph
+            for term in triple
+        ):
+            raise Exceptions.InvalidSchemaError(
+                f"schema content may not use the {_INTERNAL_NAMESPACE} vocabulary"
+            )
 
     @staticmethod
     def _source_base(source: str) -> str:
@@ -762,9 +765,12 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         entries: list[_SchemaIndexEntry],
         rdf_format: str,
         base: str,
+        validate: Callable[[Graph], None] | None = None,
     ) -> bool:
         """Apply ``content`` as the schema of ``source``, given its stored
         ``entries``. Shared by files and content loads; raises on failure.
+        ``validate`` checks the parsed content (it raises to refuse it) and runs
+        only when the content differs from what is stored: it is parsed once, here.
         Returns True when the schema graph was written."""
         new_content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
 
@@ -772,6 +778,8 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         matching = next((e for e in entries if e.hash == new_content_hash), None)
         if matching is None:
             new_schema = self._parse_schema(content, rdf_format, base)
+            if validate is not None:
+                validate(new_schema)
             new_content_b64 = base64.b64encode(content.encode("utf-8")).decode("utf-8")
 
         if not entries:

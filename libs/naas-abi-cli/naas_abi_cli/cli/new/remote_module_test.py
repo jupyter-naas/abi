@@ -599,6 +599,59 @@ def test_a_scaffold_in_a_subfolder_makes_it_a_package(tmp_path: Path) -> None:
     assert (package / "workflows" / "crm" / "ThingWorkflow.py").is_file()
 
 
+def _scaffold_at(kind: str, cwd: Path, *args: str):
+    import importlib
+
+    command = getattr(
+        importlib.import_module(f"naas_abi_cli.cli.new.{kind}"), f"_new_{kind}"
+    )
+    return _invoke(command, cwd, "Thing", *args)
+
+
+@pytest.mark.parametrize(("kind", "_command", "folder", "cls", "_slug"), _SCAFFOLDS)
+def test_a_scaffold_with_the_default_path_lands_where_discovery_looks(
+    tmp_path: Path, kind, _command, folder, cls, _slug
+) -> None:
+    root = _project(tmp_path)
+    _invoke(_new_module, root, "research")
+    package = root / "src" / "research"
+
+    result = _scaffold_at(kind, package)
+
+    assert result.exit_code == 0, result.output
+    assert (package / folder / f"{cls}.py").is_file()
+    assert not (package / f"{cls}.py").exists()
+    assert f"Created {cls}.py (naas_abi_sdk)" in result.output
+
+
+def test_a_scaffold_run_inside_its_folder_stays_there(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    _invoke(_new_module, root, "research")
+    package = root / "src" / "research"
+    (package / "workflows" / "crm").mkdir()
+
+    result = _scaffold_at("workflow", package / "workflows" / "crm")
+
+    assert result.exit_code == 0, result.output
+    assert (package / "workflows" / "crm" / "ThingWorkflow.py").is_file()
+    assert not (package / "workflows" / "workflows").exists()
+
+
+def test_a_scaffold_outside_its_folder_warns_and_does_not_promise_a_build(
+    tmp_path: Path,
+) -> None:
+    root = _project(tmp_path)
+    _invoke(_new_module, root, "research")
+    package = root / "src" / "research"
+
+    result = _scaffold_at("workflow", package, "agents")
+
+    assert result.exit_code == 0, result.output
+    assert "Warning" in result.output and "workflows/" in result.output
+    assert "builds it after on_initialized" not in result.output
+    assert (package / "agents" / "ThingWorkflow.py").is_file()
+
+
 def test_a_scaffold_keeps_an_existing_package_marker(tmp_path: Path) -> None:
     root = _project(tmp_path)
     _invoke(_new_module, root, "research")

@@ -115,3 +115,34 @@ def test_ontology_refs_do_not_match_partial_names_or_paths() -> None:
     assert not ontology_matches_seed(path, "example", ["/modules/PrivateExample.ttl"])
     assert ontology_matches_seed(path, "example", ["example/ontologies/modules/PrivateExample.ttl"])
     assert ontology_matches_seed(path, "example", [path])
+
+
+def test_a_remote_ontology_is_not_admitted_by_a_bare_file_name_or_a_path_suffix() -> None:
+    evil = "module/evil/modules/FooOntology.ttl"
+    for ref in (
+        "FooOntology.ttl",
+        "fooontology.ttl",
+        "modules/FooOntology.ttl",
+        "naas_abi:FooOntology.ttl",
+        "other.module:FooOntology.ttl",
+    ):
+        assert ontology_matches_seed(evil, "evil", [ref]) is False, ref
+    assert ontology_matches_seed("module/evil/Foo.ttl", "evil", ["Foo.ttl"]) is False
+    items = [SimpleNamespace(path="module/evil/Foo.ttl", module_name="evil")]
+    assert filter_ontology_catalog(items, ["Foo.ttl"]) == []
+
+
+def test_a_remote_ontology_matches_its_full_id_and_its_modules_file_ref() -> None:
+    path = "module/acme.foo/domain/Review.ttl"
+    assert ontology_matches_seed(path, "acme.foo", [path]) is True
+    assert ontology_matches_seed(path, "acme.foo", ["acme.foo:Review.ttl"]) is True
+    assert ontology_matches_seed(path, "acme.foo", ["ACME.foo:review.ttl"]) is True
+    # The module comes from the id, not from the caller's module name.
+    assert ontology_matches_seed(path, "evil", ["evil:Review.ttl"]) is False
+    assert ontology_matches_seed(path, "evil", ["acme.foo:Review.ttl"]) is True
+
+
+def test_an_in_engine_ontology_still_matches_by_file_name_and_path_suffix() -> None:
+    path = "/app/naas_abi/ontologies/modules/FooOntology.ttl"
+    assert ontology_matches_seed(path, "naas_abi", ["FooOntology.ttl"]) is True
+    assert ontology_matches_seed(path, "naas_abi", ["modules/FooOntology.ttl"]) is True

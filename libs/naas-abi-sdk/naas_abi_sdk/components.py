@@ -57,7 +57,12 @@ def by_name(kind: str, classes: Any) -> dict[str, type]:
 
 
 def module_package(module_type: type) -> tuple[Path, str] | None:
-    """The folder and dotted name of the package ``module_type`` is defined in."""
+    """The folder and dotted name of the package ``module_type`` is defined in.
+
+    The name is empty for a module that is no part of a package: a script run as
+    ``python worker.py``, whose class lives in ``__main__``. ``python -m pkg`` runs
+    ``pkg/__main__.py``, and ``__package__`` names ``pkg`` then.
+    """
     module = sys.modules.get(module_type.__module__)
     file = getattr(module, "__file__", None)
     if not file:
@@ -65,7 +70,10 @@ def module_package(module_type: type) -> tuple[Path, str] | None:
     path = Path(file).resolve()
     if path.name == "__init__.py":
         return path.parent, module_type.__module__
-    return path.parent, module_type.__module__.rpartition(".")[0]
+    package = getattr(module, "__package__", None)
+    if package is None:
+        package = module_type.__module__.rpartition(".")[0]
+    return path.parent, package
 
 
 def _is_component_source(filename: str) -> bool:
@@ -90,7 +98,11 @@ def component_files(module_type: type, folder: str) -> list[str]:
         dirnames[:] = sorted(
             d for d in dirnames if d not in _SKIPPED_DIRS and not d.startswith(".")
         )
-        parts = [located[1], folder, *Path(dirpath).relative_to(root).parts]
+        parts = [
+            *([located[1]] if located[1] else []),
+            folder,
+            *Path(dirpath).relative_to(root).parts,
+        ]
         dotted.extend(
             ".".join([*parts, name[:-3]])
             for name in sorted(filenames)
@@ -111,6 +123,10 @@ def discover_components(
     dotted_names = component_files(module_type, folder)
     if not dotted_names:
         return []
+    located = module_package(module_type)
+    if located is not None and not located[1] and str(located[0]) not in sys.path:
+        # A top-level script: its folders are top-level packages next to it.
+        sys.path.append(str(located[0]))
     base = load_base()
     found: list[type] = []
     for dotted in dotted_names:

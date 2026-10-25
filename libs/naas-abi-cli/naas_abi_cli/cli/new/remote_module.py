@@ -50,6 +50,8 @@ def default_abi_git_ref() -> str:
             "Cannot tell which naas-abi-cli release this is; pass --abi-ref "
             "with the ABI tag or commit to install naas-abi-sdk from."
         ) from exc
+
+
 # A dev module's name (EngineConfiguration_Dev.DevModuleConfiguration.name).
 _DEV_MODULE_NAME = re.compile(r"^[a-z][a-z0-9-]{0,62}$")
 # What reading a project config can raise: the file, its Jinja, its YAML, or
@@ -119,9 +121,9 @@ def find_project(start: Path) -> Project | None:
 _NON_PACKAGE_LEVELS = 3
 
 
-def is_remote_module(path: Path) -> bool:
-    """Whether ``path`` lies in a remote module: a package whose ``__init__.py``
-    (it, or a parent package's) builds on ``naas_abi_sdk``."""
+def module_package_root(path: Path) -> Path | None:
+    """The package of the remote module ``path`` lies in: the nearest folder, from
+    ``path`` up, whose ``__init__.py`` builds on ``naas_abi_sdk``."""
     folder = path
     while not folder.exists() and folder != folder.parent:
         folder = folder.parent
@@ -131,9 +133,15 @@ def is_remote_module(path: Path) -> bool:
         folder = folder.parent
     while (folder / "__init__.py").is_file():
         if "naas_abi_sdk" in (folder / "__init__.py").read_text(encoding="utf-8"):
-            return True
+            return folder
         folder = folder.parent
-    return False
+    return None
+
+
+def is_remote_module(path: Path) -> bool:
+    """Whether ``path`` lies in a remote module: a package whose ``__init__.py``
+    (it, or a parent package's) builds on ``naas_abi_sdk``."""
+    return module_package_root(path) is not None
 
 
 # What a remote module does instead of the in-engine scaffolds that stay
@@ -160,6 +168,33 @@ def refuse_in_remote_module(scaffold: str, path: str) -> None:
         )
 
 
+def component_destination(path: str, folder: str, noun: str) -> tuple[str, bool]:
+    """Where ``abi new <noun>`` writes in a remote module, and whether discovery
+    finds it there.
+
+    The module serves what is under ``<package>/<folder>/`` only. The default
+    path (``.``) therefore means that folder, unless the working directory is in
+    it already. An explicit path elsewhere is kept, with a warning.
+    """
+    target = target_dir(path)
+    root = module_package_root(target)
+    if root is None:
+        return path, False
+    inside = root.resolve() / folder
+    resolved = target.resolve()
+    if resolved == inside or inside in resolved.parents:
+        return path, True
+    if path == ".":
+        return str(inside), True
+    click.echo(
+        f"Warning: {resolved} is not under {folder}/ of the module package "
+        f"({inside}), the only place the module looks for {noun}s: it will not be "
+        f"built or served there. Move it into {folder}/.",
+        err=True,
+    )
+    return path, False
+
+
 def ensure_package(folder: Path) -> None:
     """Make ``folder`` a package: a scaffold's test imports its component
     relatively, and discovery imports the component by its dotted name."""
@@ -167,7 +202,9 @@ def ensure_package(folder: Path) -> None:
     init = folder / "__init__.py"
     if not init.exists():
         # Path(".") has no name: write an empty marker then.
-        init.write_text(f'"""{folder.name}"""\n' if folder.name else "", encoding="utf-8")
+        init.write_text(
+            f'"""{folder.name}"""\n' if folder.name else "", encoding="utf-8"
+        )
 
 
 def template_values(
