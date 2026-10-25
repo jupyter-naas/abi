@@ -121,6 +121,23 @@ agent with `expose_agent(name, agent.as_handler())` and checkpoint it with
 `document_memory(engine.services.document, agent_memory_id(module_id, name))`.
 v1 has no local sub-agents; remote agents (AgentProxy) are passed as tools.
 
+Ontologies (`ontologies.py`): a module sends the `.ttl` files of `ontologies/` (next to
+its package, found like `apps/`) to the engine's schema graph with
+`engine.services.triple_store.load_schema(source, content)` (the endpoint's rules are in
+core's `services/triple_store/AGENTS.md`). `BaseModule.ontologies` is `None` (discover
+`ontologies/**/*.ttl`, skipping a path under `ontologies/` with `sandbox` in it, any
+case), a tuple of files relative to `ontologies/`, or `()`. Each is sent as
+`module/<module_id>/<path relative to ontologies/>`; `schema_source` checks the names
+the engine would refuse, and `run_module` raises before it connects, also when a module
+has ontologies but does not declare `triple_store`. `OntologyLoader` runs as a background
+task once the instance is `READY` or `DEGRADED` (never `STAGED`, and not at all when it is
+asked to drain first; a module without discovery sends at start). A failed load is logged
+at error level (`naas_abi_sdk.ontologies`) and retried, after 1 s and doubling to 60 s,
+reading the file again each time; it never changes readiness or ends the module.
+A timeout can hide a completed load: the retry reports no change. Loading is
+additive: a file removed later stays in the schema graph, and nothing here unloads it.
+Keep `MAX_SOURCE_LENGTH` and the name rules equal to core's `parse_schema_source`.
+
 Jobs (`jobs.py`, `job_host.py`, ADR docs/adr/20261001_nats-jobs.md) replace Dagster
 schedules. Declare `JobDescriptor`s in `jobs` or use `@job` on async methods; bind
 others with `expose_job`. `JobsMixin` is shared with core modules (sync handlers

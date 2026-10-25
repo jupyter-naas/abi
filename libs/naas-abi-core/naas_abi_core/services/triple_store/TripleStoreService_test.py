@@ -8,6 +8,7 @@ from typing import Any, cast
 import pytest
 import rdflib
 from naas_abi_core.services.triple_store.TripleStorePorts import (
+    Exceptions,
     ITripleStorePort,
     OntologyEvent,
 )
@@ -481,6 +482,183 @@ SELECT ?filePath (COUNT(?s) AS ?n) WHERE {
     service.load_schemas(filepaths)
     assert len(adapter.insert_calls) == inserts_before
     assert len(adapter.remove_calls) == removes_before
+
+
+_SCHEMA_GRAPH = URIRef("http://ontology.naas.ai/graph/schema")
+_EX = "http://example.org/"
+_SOURCE = "module/foo/modules/FooOntology.ttl"
+_FOO_V1 = """@prefix ex: <http://example.org/> .
+
+ex:Thing a ex:Class .
+"""
+_FOO_V2 = """@prefix ex: <http://example.org/> .
+
+ex:Other a ex:Class .
+"""
+
+
+def _schema_entries(service: TripleStoreService, source: str) -> list:
+    return list(
+        service.query(
+            f"""PREFIX internal: <http://triple-store.internal#>
+SELECT ?s ?hash WHERE {{
+    GRAPH <{_SCHEMA_GRAPH}> {{
+        ?s a internal:Schema ; internal:filePath "{source}" ; internal:hash ?hash .
+    }}
+}}"""
+        )
+    )
+
+
+def _in_schema(adapter: _InMemoryTripleStoreAdapter, name: str) -> bool:
+    return (
+        URIRef(_EX + name),
+        RDF.type,
+        URIRef(_EX + "Class"),
+    ) in adapter.graph.get_context(_SCHEMA_GRAPH)
+
+
+def test_load_schema_content_adds_a_new_source():
+    adapter = _InMemoryTripleStoreAdapter()
+    service = TripleStoreService(adapter)
+
+    assert service.load_schema_content(_SOURCE, _FOO_V1, 1700000000.0) is True
+
+    assert _in_schema(adapter, "Thing")
+    [(subject, content_hash)] = _schema_entries(service, _SOURCE)
+    assert str(content_hash) == hashlib.sha256(_FOO_V1.encode()).hexdigest()
+    stored = service._fetch_schema_content(cast(URIRef, subject))
+    assert stored is not None
+    assert base64.b64decode(stored).decode() == _FOO_V1
+    assert (
+        subject,
+        URIRef("http://triple-store.internal#fileLastUpdateTime"),
+        Literal("1700000000.0"),
+    ) in adapter.graph.get_context(_SCHEMA_GRAPH)
+
+
+def test_load_schema_content_writes_nothing_for_unchanged_content():
+    adapter = _InMemoryTripleStoreAdapter()
+    service = TripleStoreService(adapter)
+    service.load_schema_content(_SOURCE, _FOO_V1)
+    inserts, removes = len(adapter.insert_calls), len(adapter.remove_calls)
+
+    assert service.load_schema_content(_SOURCE, _FOO_V1) is False
+
+    assert (len(adapter.insert_calls), len(adapter.remove_calls)) == (inserts, removes)
+    assert len(_schema_entries(service, _SOURCE)) == 1
+
+
+def test_load_schema_content_applies_the_diff_for_changed_content():
+    adapter = _InMemoryTripleStoreAdapter()
+    service = TripleStoreService(adapter)
+    service.load_schema_content(_SOURCE, _FOO_V1)
+
+    assert service.load_schema_content(_SOURCE, _FOO_V2) is True
+
+    assert _in_schema(adapter, "Other")
+    assert not _in_schema(adapter, "Thing")
+    [(_, content_hash)] = _schema_entries(service, _SOURCE)
+    assert str(content_hash) == hashlib.sha256(_FOO_V2.encode()).hexdigest()
+    assert service.load_schema_content(_SOURCE, _FOO_V2) is False
+
+
+def test_load_schema_content_refuses_invalid_turtle_and_writes_nothing():
+    adapter = _InMemoryTripleStoreAdapter()
+    service = TripleStoreService(adapter)
+    service.load_schema_content(_SOURCE, _FOO_V1)
+    inserts, removes = len(adapter.insert_calls), len(adapter.remove_calls)
+
+    with pytest.raises(Exceptions.InvalidSchemaError):
+        service.load_schema_content(_SOURCE, "ex:Thing a ex:Class")
+    with pytest.raises(Exceptions.InvalidSchemaError):
+        service.load_schema_content("module/foo/new.ttl", "this is not turtle")
+
+    assert (len(adapter.insert_calls), len(adapter.remove_calls)) == (inserts, removes)
+    assert _schema_entries(service, "module/foo/new.ttl") == []
+    assert _in_schema(adapter, "Thing")
+
+
+def test_load_schema_content_refuses_the_services_own_vocabulary():
+    adapter = _InMemoryTripleStoreAdapter()
+    service = TripleStoreService(adapter)
+    service.load_schema_content(_SOURCE, _FOO_V1)
+    forged = """@prefix internal: <http://triple-store.internal#> .
+
+<http://example.org/forged> a internal:Schema ;
+    internal:filePath "module/foo/modules/FooOntology.ttl" ;
+    internal:hash "x" .
+"""
+
+    with pytest.raises(Exceptions.InvalidSchemaError):
+        service.load_schema_content("module/bar/Forged.ttl", forged)
+
+    assert len(_schema_entries(service, _SOURCE)) == 1
+    assert _schema_entries(service, "module/bar/Forged.ttl") == []
+
+
+def test_load_schema_content_resolves_relative_iris_independently_of_the_cwd(
+    tmp_path, monkeypatch
+):
+    relative = "<thing> a <http://example.org/Class> .\n"
+    first, second = tmp_path / "a", tmp_path / "b"
+    first.mkdir()
+    second.mkdir()
+    subjects = []
+    for cwd in (first, second):
+        monkeypatch.chdir(cwd)
+        adapter = _InMemoryTripleStoreAdapter()
+        TripleStoreService(adapter).load_schema_content(_SOURCE, relative)
+        subjects.append(
+            {
+                str(s)
+                for s, _, o in adapter.graph.get_context(_SCHEMA_GRAPH)
+                if o == URIRef(_EX + "Class")
+            }
+        )
+
+    assert subjects[0] == subjects[1]
+    assert all(s.startswith("http://ontology.naas.ai/module/foo/") for s in subjects[0])
+
+
+def test_load_schema_content_publishes_loaded_and_error_events():
+    adapter = _InMemoryTripleStoreAdapter()
+    service = TripleStoreService(adapter)
+    events = []
+    service.set_services(
+        cast(
+            Any,
+            SimpleNamespace(
+                bus=_FakeBus(),
+                events_available=lambda: True,
+                events=SimpleNamespace(publish=events.append),
+            ),
+        )
+    )
+
+    service.load_schema_content(_SOURCE, _FOO_V1)
+    with pytest.raises(Exceptions.InvalidSchemaError):
+        service.load_schema_content(_SOURCE, "nope")
+
+    names = [type(event).__name__ for event in events]
+    assert [n for n in names if n in ("SchemaLoaded", "TripleStoreError")] == [
+        "SchemaLoaded",
+        "TripleStoreError",
+    ]
+
+
+def test_load_schema_file_and_content_share_one_implementation(tmp_path):
+    adapter = _InMemoryTripleStoreAdapter()
+    service = TripleStoreService(adapter)
+    schema_file = tmp_path / "schema.ttl"
+    schema_file.write_text(_FOO_V1, encoding="utf-8")
+    service.load_schema(str(schema_file))
+
+    # The same key and content as the file: nothing to write.
+    assert service.load_schema_content(str(schema_file), _FOO_V1) is False
+    # Changed content under the file's key applies the diff, as a changed file would.
+    assert service.load_schema_content(str(schema_file), _FOO_V2) is True
+    assert _in_schema(adapter, "Other") and not _in_schema(adapter, "Thing")
 
 
 def test_a_write_deadline_reaches_only_an_adapter_that_takes_one():

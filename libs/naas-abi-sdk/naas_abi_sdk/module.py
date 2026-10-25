@@ -12,6 +12,7 @@ import socket
 from collections.abc import Awaitable
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from naas_abi_sdk import lifeline, telemetry
@@ -30,6 +31,13 @@ from naas_abi_sdk.discovery import (
 )
 from naas_abi_sdk.health import HealthServer
 from naas_abi_sdk.jobs import JobsMixin
+from naas_abi_sdk.ontologies import (
+    OntologyFile,
+    OntologyLoader,
+    declared_ontologies,
+    discover_ontologies,
+    module_ontology_files,
+)
 from naas_abi_sdk.services import service_proxy
 from naas_abi_sdk.transport import MODULE_INBOX_PREFIX
 
@@ -173,6 +181,11 @@ class BaseModule(JobsMixin, Generic[Config]):
     # Web apps it serves over NATS. None: one per apps/<name>/manifest.json
     # next to the module's package (naas_abi_sdk.apps.discover_apps).
     apps: tuple[AppDescriptor, ...] | None = None
+    # The .ttl files it sends to the engine's schema graph once the instance serves
+    # (naas_abi_sdk.ontologies). None: every ontologies/**/*.ttl next to the module's
+    # package, except under "sandbox". A tuple names the files, relative to ontologies/
+    # (() sends none). A module with ontologies declares the triple_store service.
+    ontologies: tuple[str | Path, ...] | None = None
 
     def __init__(self, engine: EngineProxy, configuration: Config):
         if not isinstance(configuration, self.Configuration):
@@ -233,6 +246,17 @@ class BaseModule(JobsMixin, Generic[Config]):
         if "_discovered_apps" not in cls.__dict__:
             cls._discovered_apps = discover_apps(cls)
         return cls._discovered_apps
+
+    @classmethod
+    def get_ontologies(cls) -> tuple[OntologyFile, ...]:
+        """The ontology files to send, as ``ontologies`` declares or discovery finds."""
+        if "_ontology_files" not in cls.__dict__:
+            cls._ontology_files = (
+                discover_ontologies(cls)
+                if cls.ontologies is None
+                else declared_ontologies(cls, tuple(cls.ontologies))
+            )
+        return cls._ontology_files
 
     def expose_app(self, name: str, asgi_app) -> None:
         """Bind an ASGI application (FastAPI, Starlette) to a declared app during
@@ -399,6 +423,9 @@ async def run_module(
         raise ValueError("Drain timeout must be finite and positive")
     probe = _health_bind(health_port, health_host)
     identity = module_type.module_id or module_type.__module__
+    # Before any connection: a file the engine would refuse, or ontologies without the
+    # triple_store dependency, stop the module here, not in a background task.
+    ontology_files = module_ontology_files(module_type, identity)
     # Spans export when OTEL_EXPORTER_OTLP_ENDPOINT is set (needs naas-abi-sdk[otel]).
     telemetry.configure_from_env(identity)
     # Named after the module so the broker's /connz shows which module is which.
@@ -441,6 +468,7 @@ async def run_module(
         app_host = None
         job_host = None
         jobs_after_cutover: asyncio.Task | None = None
+        ontologies_task: asyncio.Task | None = None
         health_server = None
         try:
             await _invoke(module.on_load)
@@ -536,6 +564,28 @@ async def run_module(
                     )
                 else:
                     await _host_jobs(job_host, module)
+            if ontology_files:
+                # Once this instance serves (READY or DEGRADED, never while STAGED), in
+                # the background: a failed load is logged and retried, and does not
+                # change readiness. It is not watched: it never ends the module.
+                ontologies_task = asyncio.create_task(
+                    OntologyLoader(
+                        module.engine.services.triple_store,
+                        identity,
+                        ontology_files,
+                        serving=(
+                            (lambda: registration.status in ("READY", "DEGRADED"))
+                            if registration is not None
+                            else (lambda: True)
+                        ),
+                        stopping=(
+                            registration.drain_requested.is_set
+                            if registration is not None
+                            else (lambda: False)
+                        ),
+                        poll_seconds=discovery.refresh_seconds if discovery else 2.0,
+                    ).run()
+                )
             if probe is not None:
                 health_server = HealthServer(
                     lambda: module.discovery_status, probe[0], probe[1]
@@ -587,6 +637,7 @@ async def run_module(
                                 "Could not mark module draining", exc_info=True
                             )
                     await _cancel(jobs_after_cutover)
+                    await _cancel(ontologies_task)
                     await _drain_hosts(
                         agent_host,
                         job_host,
@@ -608,6 +659,7 @@ async def run_module(
         finally:
             try:
                 await _cancel(jobs_after_cutover)
+                await _cancel(ontologies_task)
                 if health_server is not None:
                     await health_server.close()
                 if work:

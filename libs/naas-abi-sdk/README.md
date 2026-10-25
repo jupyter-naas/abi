@@ -68,7 +68,8 @@ chunked transfer contract described below. Agent invocation
 uses the separate contract described below. Cache v1 addresses
 the engine's cold adapter by default; `cache.tier(index)` selects an explicit tier. Decorators remain local. Event v1 is the durable
 log port; live messages use the bus. The engine's triple-store service rejects
-`handle_view_event`, an adapter-internal callback, with `NOT_SUPPORTED`.
+`handle_view_event`, an adapter-internal callback, with `NOT_SUPPORTED`. Its `load_schema`
+takes the content of a Turtle file, for ontologies (see Ontologies).
 
 See `../../examples/standalone_module/README.md` for the executable full-surface
 module and wheel-only dependency isolation check. Run `make deps test lint build`
@@ -636,6 +637,39 @@ included, is a 502 for the browser. Multipart forms
 work, but FastAPI's `UploadFile` spools each file (to disk above 1 MB): send a
 very large file as the raw body instead. No WebSockets yet. Declare `apps = (AppDescriptor(...),)` on the class instead
 of the folder for an app without files.
+
+## Ontologies
+
+A module sends its ontologies to the engine's schema graph, as an in-engine module does.
+Put `.ttl` files under `ontologies/` next to the package (for example
+`ontologies/modules/FooOntology.ttl`) and declare the `triple_store` service:
+
+```python
+class ABIModule(BaseModule):
+    module_id = "acme.foo"
+    dependencies = ModuleDependencies(services=("triple_store",))
+    # ontologies = None   # the default: every ontologies/**/*.ttl, except under "sandbox"
+    # ontologies = ("modules/FooOntology.ttl",)   # or name the files; () sends none
+```
+
+Once the instance is `READY` or `DEGRADED`, `run_module` sends each file as
+`module/<module_id>/<path relative to ontologies/>` (`module/acme.foo/modules/FooOntology.ttl`):
+the schema graph then holds an `internal:Schema` with that `filePath` and the file's triples.
+A restart with the same file writes nothing; a changed file applies the difference. A module
+can load only under its own id (`PERMISSION_DENIED` otherwise), and the engine refuses content
+that is not Turtle (`INVALID_ARGUMENT`).
+
+- A `STAGED` generation (behind a live one, in a rollout) sends nothing until it takes over,
+  and a process asked to drain first sends nothing at all.
+- Sending is in the background. A failure (the engine down, a timeout, invalid Turtle) is
+  logged as an error by `naas_abi_sdk.ontologies` and retried after 1 s, then twice as long
+  up to a minute; it never changes readiness or stops the module.
+- Loading is additive, as for in-engine modules: a file you remove or rename later stays in
+  the schema graph.
+- A module with ontologies that does not declare `triple_store`, or has a file name the engine
+  would refuse (letters, digits, `_`, `.`, `-`, ending in `.ttl`), stops at start with a message.
+- `await engine.services.triple_store.load_schema(source, content)` sends one ontology built at
+  runtime; it returns whether the graph was written.
 
 ## Object streams and transfer configuration
 
