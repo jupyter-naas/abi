@@ -748,9 +748,10 @@ class ABIModule(BaseModule):
                     "envelopes, map them, follow the counts, sync the dataset, publish the app."
                 ),
                 triggers=group,
-                # Different filters run side by side; a tick of a filter that is
-                # still running is SKIPPED (flows/guard.py), not queued.
-                max_concurrency=min(64, len(group)),
+                # Different filters run side by side, and a tick of a filter that is
+                # still running is SKIPPED (flows/guard.py), not queued: it needs a
+                # slot of its own to be started and skip, so two per filter.
+                max_concurrency=min(64, 2 * len(group)),
                 max_attempts=3,
             )
 
@@ -800,6 +801,7 @@ class ABIModule(BaseModule):
     @job(
         description="Rebuild the Recent Tweets app from Dataset Service, then one media batch.",
         triggers=(Cron("0 0 * * * *", time_zone="UTC"),),
+        max_concurrency=2,  # a running rebuild, and the next tick, which skips
     )
     def build_app(self, ctx: JobContext) -> dict:
         from naas_abi_marketplace.applications.x.flows.common import (
@@ -823,6 +825,7 @@ class ABIModule(BaseModule):
         # Dagster's "30 */6 * * *"; half past, so it never overlaps the :00 rebuild.
         triggers=(Cron("0 30 */6 * * *", time_zone="UTC"),),
         timeout=timedelta(hours=5),
+        max_concurrency=2,  # a running compaction, and the next tick, which skips
     )
     def compact_dataset(self, ctx: JobContext) -> dict:
         from naas_abi_marketplace.applications.x.flows.common import jsonable
