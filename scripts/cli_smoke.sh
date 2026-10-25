@@ -23,7 +23,7 @@
 #   4. `abi dev up -d`, then waits for the API's /docs, the remote module READY
 #      in discovery with its job, the agents and apps in Nexus, its ontologies in
 #      the engine's schema graph, and the Nexus web app; calls the module's
-#      workflow and pipeline over NATS as a peer, and runs the workflow as a job
+#      workflow and pipeline over NATS with the module's own token, and runs the workflow as a job
 #      (scripts/cli_smoke_processes.py);
 #   5. `abi dev down`.
 # On failure it prints `abi dev status` and `abi dev logs` and exits non-zero.
@@ -85,6 +85,7 @@ export PATH="$WORK/bin:$PATH"
 PROJECT=""        # the project `abi dev` runs in, while it runs
 VARIANT=""
 PROCESS_CHECKS=() # cli_smoke_processes.py's arguments, when the variant has any
+PROCESS_MODULE_ID=""  # the module id they name (its key is derived from it)
 
 dump_logs() {
     local logs="$WORK/logs/$VARIANT"
@@ -151,11 +152,9 @@ from pathlib import Path
 
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
-text = text.replace(
-    "from naas_abi_sdk.workflow import",
-    "from naas_abi_sdk.jobs import JobSettings\nfrom naas_abi_sdk.workflow import",
-    1,
-)
+anchor = "from naas_abi_sdk.workflow import"
+assert text.count(anchor) == 1, "the workflow scaffold's import changed"
+text = text.replace(anchor, "from naas_abi_sdk.jobs import JobSettings\n" + anchor, 1)
 marker = '    __configuration: '
 assert text.count(marker) == 1, "the workflow scaffold changed"
 text = text.replace(marker, "    job = JobSettings()\n\n" + marker, 1)
@@ -196,9 +195,10 @@ start_and_check() {
     if [[ ${#PROCESS_CHECKS[@]} -gt 0 ]]; then
         step "the remote module's workflow and pipeline over NATS"
         # Signed as the module itself, with its key: a module acts only as itself.
-        uv run python "$REPO/scripts/cli_smoke_processes.py" \
-            --nats-url "nats://module:$(env_value NATS_MODULE_PASSWORD)@127.0.0.1:$(port nats)" \
-            --key "$(abi module key "${PROCESS_CHECKS[1]}")" \
+        # The broker login and the key go through the environment, not argv.
+        ABI_NATS_URL="nats://module:$(env_value NATS_MODULE_PASSWORD)@127.0.0.1:$(port nats)" \
+            ABI_MODULE_KEY="$(abi module key "$PROCESS_MODULE_ID")" \
+            uv run python "$REPO/scripts/cli_smoke_processes.py" \
             --timeout "$TIMEOUT" "${PROCESS_CHECKS[@]}"
         PROCESS_CHECKS=()
     fi
@@ -234,17 +234,19 @@ smoke_nats() {
         abi new integration crm integrations
     )
     add_job_settings src/research/workflows/DigestWorkflow.py
-    write_ontology src/research/ontologies/processes/ReviewOntology.ttl
+    write_ontology src/research/ontologies/domain/ReviewOntology.ttl
 
     step "uv run pytest (the modules' scaffolded tests, the new processes' too)"
     uv run pytest -q
-    uv run pytest -q \
-        src/research/workflows/DigestWorkflow_test.py \
-        src/research/pipelines/CatalogPipeline_test.py \
-        src/research/integrations/CrmIntegration_test.py
+    # The run above collects the scaffolds' tests: make sure they exist.
+    test -f src/research/workflows/DigestWorkflow_test.py \
+        -a -f src/research/pipelines/CatalogPipeline_test.py \
+        -a -f src/research/integrations/CrmIntegration_test.py \
+        || fail "a scaffold did not write its test"
 
+    PROCESS_MODULE_ID=nats_smoke.research
     PROCESS_CHECKS=(
-        --module-id nats_smoke.research --project nats_smoke
+        --module-id "$PROCESS_MODULE_ID" --project nats_smoke
         --workflow digest_workflow --pipeline catalog_pipeline --job
     )
     start_and_check \
@@ -252,7 +254,7 @@ smoke_nats() {
         --remote-jobs "workflow.digest_workflow" \
         --agents "Research,Legacy,Analyst" \
         --apps "remote/nats_smoke.research:board,legacy:reports" \
-        --ontologies "module/nats_smoke.research/modules/ResearchOntology.ttl,module/nats_smoke.research/processes/ReviewOntology.ttl" \
+        --ontologies "module/nats_smoke.research/modules/ResearchOntology.ttl,module/nats_smoke.research/domain/ReviewOntology.ttl" \
         --ontology-class "http://ontology.naas.ai/nats_smoke/Review"
 }
 
