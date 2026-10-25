@@ -5,10 +5,12 @@ from __future__ import annotations
 import asyncio
 import sys
 import textwrap
+from typing import ClassVar
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from naas_abi_sdk.discovery import DiscoveryConfiguration
 from naas_abi_sdk.module import BaseModule, run_module
 
 pydantic = pytest.importorskip("pydantic")
@@ -248,11 +250,54 @@ def test_run_module_builds_each_class_with_its_empty_configuration(
     ) == {"message": "Hello, Ada!"}
 
 
+class FakeSession:
+    """A registration that is READY at once: no broker, no discovery service."""
+
+    def __init__(self, client, descriptor, rollout_id="", rollout_modules=()):
+        self.client, self.descriptor = client, descriptor
+        self.rollout_id, self.rollout_modules = rollout_id, rollout_modules
+        self.instance_id, self.lease_token = "instance", "lease"
+        self.initialized = self.draining = False
+        self.status, self.task = "READY", None
+        self.drain_requested = asyncio.Event()
+
+    async def start(self):
+        pass
+
+    async def renew(self):
+        pass
+
+    async def close(self):
+        pass
+
+
+class FakeProcessHost:
+    """Records what the module would serve; the host itself is tested apart."""
+
+    hosted: ClassVar[list] = []
+
+    def __init__(self, session, workflows, pipelines):
+        FakeProcessHost.hosted.append((sorted(workflows), sorted(pipelines)))
+
+    async def start(self):
+        pass
+
+    async def drain(self, timeout):
+        pass
+
+    async def close(self):
+        pass
+
+
 async def run_module_with_fake_client(monkeypatch, module_type, **options):
     client = MagicMock()
     client.__aenter__ = AsyncMock(return_value=client)
     client.__aexit__ = AsyncMock(return_value=False)
     monkeypatch.setattr("naas_abi_sdk.module.ABIClient", lambda *a, **k: client)
+    monkeypatch.setattr("naas_abi_sdk.module.DiscoverySession", FakeSession)
+    monkeypatch.setattr("naas_abi_sdk.process_host.ProcessHost", FakeProcessHost)
+    options.setdefault("discovery", DiscoveryConfiguration())
+    FakeProcessHost.hosted.clear()
     return await run_module(module_type, url="nats://unused", token="issued", **options)
 
 
@@ -385,6 +430,50 @@ def test_a_class_that_fails_to_build_fails_startup_naming_it(package, monkeypatc
     with pytest.raises(RuntimeError, match=r"BadWorkflow.*API_KEY") as error:
         asyncio.run(run_module_with_fake_client(monkeypatch, module_type))
     assert isinstance(error.value.__cause__, KeyError)
+
+
+def test_run_module_hosts_what_it_built_and_refuses_to_without_discovery(
+    package, monkeypatch
+):
+    module_type = package(
+        {
+            "workflows/greet.py": GREET,
+            "pipelines/load.py": """
+            from naas_abi_sdk.pipeline import Pipeline
+            from rdflib import Graph
+
+            class LoadPipeline(Pipeline):
+                async def run(self, parameters):
+                    return Graph()
+            """,
+        }
+    )
+
+    async def run(self):
+        return "ran"
+
+    with_methods(monkeypatch, module_type, run=run)
+
+    assert asyncio.run(run_module_with_fake_client(monkeypatch, module_type)) == "ran"
+    assert FakeProcessHost.hosted == [(["greet_workflow"], ["load_pipeline"])]
+
+    client = MagicMock()
+    monkeypatch.setattr("naas_abi_sdk.module.ABIClient", client)
+    with pytest.raises(ValueError, match="requires discovery"):
+        asyncio.run(run_module(module_type, url="nats://unused", token="issued"))
+    client.assert_not_called()  # before it connects
+
+
+def test_a_module_without_workflows_or_pipelines_hosts_none(package, monkeypatch):
+    module_type = package({})
+
+    async def run(self):
+        return "ran"
+
+    with_methods(monkeypatch, module_type, run=run)
+
+    assert asyncio.run(run_module_with_fake_client(monkeypatch, module_type)) == "ran"
+    assert FakeProcessHost.hosted == []
 
 
 def test_a_bad_folder_fails_before_the_module_connects(package, monkeypatch):

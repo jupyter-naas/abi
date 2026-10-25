@@ -5,10 +5,13 @@ import pytest
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 
 from naas_abi_sdk.discovery import (
+    PROCESS_DESCRIPTION_CHARS,
     DiscoveryClient,
     DiscoveryConfiguration,
     DiscoverySession,
+    ModuleProxy,
     ModulesProxy,
+    module_descriptor,
 )
 from naas_abi_sdk.transport import RPCError
 
@@ -290,3 +293,97 @@ def test_rollout_is_registered_and_draining_wakes_the_runner():
 def test_rollout_configuration_rejects_a_cohort_without_an_id():
     with pytest.raises(ValueError, match="rollout id"):
         DiscoveryConfiguration(rollout_modules=("a",))
+
+
+class _Process:
+    """What module_descriptor reads of a workflow or pipeline class."""
+
+    def __init__(self, text):
+        self.text = text
+
+    def description(self):
+        return self.text
+
+
+def _module_with(workflows, pipelines):
+    class Module:
+        package_version, contract_major, agents = "1.2.3", 4, ()
+
+        @classmethod
+        def get_workflow_classes(cls):
+            return workflows
+
+        @classmethod
+        def get_pipeline_classes(cls):
+            return pipelines
+
+    return Module
+
+
+def test_the_descriptor_declares_the_workflows_and_pipelines():
+    module = _module_with(
+        {"greet": _Process("Say hello."), "plain": _Process("plain")},
+        {"load": _Process("Load " + "x" * 2000)},
+    )
+    descriptor = module_descriptor(module, "acme.mod", ())
+    declared = {(p.kind, p.name): p for p in descriptor.processes}
+    assert set(declared) == {
+        ("workflow", "greet"),
+        ("workflow", "plain"),
+        ("pipeline", "load"),
+    }
+    assert declared[("workflow", "greet")].description == "Say hello."
+    assert all(p.contract_major == 1 for p in descriptor.processes)
+    # Discovery bounds the registry snapshot: only the start of a long text is kept.
+    long = declared[("pipeline", "load")].description
+    assert len(long) == PROCESS_DESCRIPTION_CHARS and long.endswith("…")
+    # A module type without them (or an older one) declares none.
+    assert not module_descriptor(
+        type("Bare", (), {"package_version": "0", "contract_major": 1, "agents": ()}),
+        "m",
+        (),
+    ).processes
+
+
+def test_instances_list_their_processes():
+    transport = AsyncMock()
+    transport.call.return_value = pb.GetModuleResponse(
+        instances=[
+            pb.Instance(
+                descriptor=pb.ModuleDescriptor(
+                    module_id="provider",
+                    contract_major=1,
+                    processes=[
+                        pb.ProcessDescriptor(
+                            name="greet",
+                            kind="workflow",
+                            description="Hi",
+                            contract_major=1,
+                        )
+                    ],
+                ),
+                instance_id="one",
+                status="READY",
+            ),
+            # An older module, or one without any.
+            pb.Instance(
+                descriptor=pb.ModuleDescriptor(module_id="provider", contract_major=1),
+                instance_id="two",
+                status="READY",
+            ),
+        ]
+    )
+    first, second = asyncio.run(DiscoveryClient(transport).get_module("provider"))
+    assert [
+        (p.name, p.kind, p.description, p.contract_major) for p in first.processes
+    ] == [("greet", "workflow", "Hi", 1)]
+    assert second.processes == ()
+
+
+def test_get_workflow_and_get_pipeline_send_nothing_until_used():
+    client = DiscoveryClient(AsyncMock())
+    proxy = ModuleProxy(client, "provider")
+    workflow, pipeline = proxy.get_workflow("greet"), proxy.get_pipeline("load")
+    assert (workflow.kind, workflow.name) == ("workflow", "greet")
+    assert (pipeline.kind, pipeline.name) == ("pipeline", "load")
+    client.transport.call.assert_not_called()

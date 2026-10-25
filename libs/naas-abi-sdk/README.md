@@ -140,7 +140,7 @@ module only under a token for its own module id. `ModuleToken(module_id, key)`
 signs and refreshes the token; `token_from_env(os.environ, module_id)` reads
 `ABI_MODULE_KEY`, else `ABI_SERVICE_TOKEN`.
 
-A call to another module (its agents, models, apps) carries a token bound to the
+A call to another module (its agents, models, apps, workflows, pipelines) carries a token bound to the
 instance called, for five minutes and sent with at least 4.5 of them left:
 `Transport` asks the token source for it (`ModuleToken.for_audience`), bound to
 the instance id the caller passes (`call(..., instance_id=...)`), so that module
@@ -562,8 +562,8 @@ no ABI core installed. The base worker still verifies its four-package install.
 ## Workflows, pipelines and integrations
 
 A module holds them like an in-engine module does, written on `naas_abi_sdk`
-only. Nothing here crosses the network yet: they run in the module's process,
-for its own agents and jobs.
+only. They run in the module's process, for its own agents, and other modules
+call them over NATS (see "Calling another module's workflows and pipelines").
 
 ```python
 # <package>/workflows/GreetWorkflow.py   (pip install 'naas-abi-sdk[workflows]')
@@ -628,6 +628,50 @@ class GreetWorkflow(Workflow[GreetWorkflowParameters]):
   without LangChain raises an `ImportError` that names the extra.
 - `abi new workflow|pipeline|integration <Name> <folder>` inside a remote module
   writes these classes and a test beside them.
+- A module with workflows or pipelines serves them: `run_module` needs
+  `discovery=` (it raises before connecting without it), declares them in the
+  module's descriptor (name, kind, description) and starts a `ProcessHost`.
+
+### Calling another module's workflows and pipelines
+
+Declare the module in `dependencies.modules`, then:
+
+```python
+a = self.engine.modules["a"]
+result = await a.get_workflow("greet_workflow").run({"name": "Ada"})   # a JSON value
+graph = await a.get_pipeline("load_pipeline").run({"count": 3})         # an rdflib Graph
+
+greet = await a.get_workflow("greet_workflow")   # checks it exists, loads its schema
+tools = greet.as_tools()                          # an agent's tool, on the module's loop
+```
+
+- `get_workflow(name)` and `get_pipeline(name)` return a `ProcessProxy` and send
+  nothing. `await proxy` asks the module to `describe()` it (its description and
+  parameters JSON schema) and returns the proxy: `as_tools()` needs that, and
+  raises until it is done. `describe()` asks again.
+- `await proxy.run(params, *, timeout=None)`: `params` is a dict or a pydantic
+  model. The module validates it into the process's parameters model
+  (`INVALID_ARGUMENT` names the fields it refused, never the values) and cancels
+  the run when `timeout` seconds pass (300 by default; `DEADLINE_EXCEEDED`). A
+  pipeline's graph arrives as N-Triples (`[rdf]`).
+- A run is one attempt, never retried: the process may have run when a call times
+  out or the module stops mid-run. A failing process answers `PROCESS_ERROR`
+  without its exception text. Errors: `PROCESS_NOT_FOUND` (no ready instance
+  declares it), `MODULE_UNAVAILABLE` (none is ready, or it is draining or gone),
+  `PERMISSION_DENIED`/`UNAUTHENTICATED` (discovery refused the caller's token).
+- A call goes to a ready instance that declares the process, with a token bound to
+  that instance. The module asks discovery to authorize it (`authorize_process`)
+  before it reads the parameters or runs anything, and reuses the answer for at most
+  5 seconds, never past the token's expiry, and never a refusal.
+- Parameters or a result above one message (about 250 KiB, or what the broker's
+  limit leaves) follow from an inbox the other side pulls chunk by chunk, up to
+  256 MiB each way. The engine's RPC overflow cannot carry them: it refuses a token
+  bound to an instance.
+- `as_tools()` gives one LangChain tool named after the process, with the module's
+  description and parameter schema; a pipeline's graph comes back as
+  `{"format": "turtle", "data": ...}`.
+- On SIGTERM the module stops taking calls, finishes the runs in progress (up to
+  the drain timeout), then unregisters.
 
 ## Apps
 

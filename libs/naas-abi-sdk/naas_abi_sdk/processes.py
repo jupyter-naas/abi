@@ -88,6 +88,13 @@ class Process:
         return component_slug(cls.__name__)
 
     @classmethod
+    def description(cls) -> str:
+        """What the class's docstring says (not its base's), else its name:
+        the tool's description, and what discovery registers for it."""
+        doc = cls.__doc__
+        return inspect.cleandoc(doc) if doc else cls.slug()
+
+    @classmethod
     def parameters_type(cls) -> type[BaseModel]:
         """The model ``run`` takes: its annotation, else the generic argument
         the class was given, else ``<Name>Parameters`` beside the class."""
@@ -145,14 +152,12 @@ class Process:
                 raise RuntimeError("Use tool.ainvoke on the module event loop")
             return asyncio.run_coroutine_threadsafe(call(**arguments), loop).result()
 
-        # Not inherited: a class without a docstring is not described by its base's.
-        doc = type(self).__doc__
         return [
             StructuredTool.from_function(
                 func=call_from_thread,
                 coroutine=call,
                 name=self.slug(),
-                description=inspect.cleandoc(doc) if doc else self.slug(),
+                description=self.description(),
                 args_schema=parameters_type,
             )
         ]

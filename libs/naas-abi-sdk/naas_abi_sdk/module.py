@@ -479,14 +479,22 @@ async def _invoke(hook):
 
 
 async def _drain_hosts(
-    agent_host, job_host, model_host, timeout: float, app_host=None
+    agent_host,
+    job_host,
+    model_host,
+    timeout: float,
+    app_host=None,
+    process_host=None,
 ) -> None:
-    """Stop new work and wait for runs, jobs and app requests that already started."""
+    """Stop new work and wait for runs, jobs, app requests and workflow or
+    pipeline runs that already started."""
     if model_host is not None:
         model_host.closing = True
     waits = []
     if app_host is not None:
         waits.append(asyncio.create_task(app_host.drain(timeout)))
+    if process_host is not None:
+        waits.append(asyncio.create_task(process_host.drain(timeout)))
     if agent_host is not None:
         waits.append(asyncio.create_task(agent_host.drain(timeout)))
     if job_host is not None:
@@ -575,8 +583,15 @@ async def run_module(
     # triple_store dependency, stop the module here, not in a background task.
     ontology_files = module_ontology_files(module_type, identity)
     # Names are known (and a bad folder fails) before anything connects.
-    module_type.get_workflow_classes()
-    module_type.get_pipeline_classes()
+    served = bool(
+        module_type.get_workflow_classes() or module_type.get_pipeline_classes()
+    )
+    if served and discovery is None:
+        # Other modules call them over NATS, which they find through discovery.
+        raise ValueError(
+            "Workflow and pipeline hosting requires discovery: pass "
+            "discovery=DiscoveryConfiguration(...) to run_module"
+        )
     # Spans export when OTEL_EXPORTER_OTLP_ENDPOINT is set (needs naas-abi-sdk[otel]).
     telemetry.configure_from_env(identity)
     # Named after the module so the broker's /connz shows which module is which.
@@ -617,6 +632,7 @@ async def run_module(
         agent_host = None
         model_host = None
         app_host = None
+        process_host = None
         job_host = None
         jobs_after_cutover: asyncio.Task | None = None
         ontologies_task: asyncio.Task | None = None
@@ -674,6 +690,15 @@ async def run_module(
                     {a.name: (a, module._app_handlers.get(a.name)) for a in apps},
                 )
                 await app_host.start()
+            if served:
+                if registration is None:
+                    raise ValueError("Workflow and pipeline hosting requires discovery")
+                from naas_abi_sdk.process_host import ProcessHost
+
+                process_host = ProcessHost(
+                    registration, module.get_workflows(), module.get_pipelines()
+                )
+                await process_host.start()
             if module.missing_job_handlers():
                 raise ValueError(
                     "Every declared job must have a handler before module readiness"
@@ -796,6 +821,7 @@ async def run_module(
                         model_host,
                         drain_timeout_seconds,
                         app_host,
+                        process_host,
                     )
                     if not work.done():
                         work.cancel()
@@ -833,6 +859,8 @@ async def run_module(
                     await model_host.close()
                 if app_host:
                     await app_host.close()
+                if process_host:
+                    await process_host.close()
                 if agent_host:
                     await agent_host.close()
                 await _invoke(module.on_unloaded)
