@@ -238,8 +238,9 @@ class ABIModule(BaseModule):
 the descriptor, so Nexus and callers see them), or `dict` with
 `input_schema=`/`output_schema=`. The SDK does not depend on pydantic. The input
 is validated before the handler runs; an invalid one fails the run without a
-retry. Declare workflows only on async methods; `declare_workflow(name, handler,
-input_type=..., output_type=...)` declares one at runtime (in `on_load`).
+retry. In an SDK module, declare workflows only on async methods;
+`declare_workflow(name, handler, input_type=..., output_type=...)` declares one at
+runtime (in `on_load`). Engine modules may also write sync workflows (below).
 
 | `FlowContext` | What it does |
 |---|---|
@@ -278,6 +279,41 @@ and child run ids of each step, without results) and `cancel()`. Hosts publish a
 completion notice when a run ends, so `wait()` does not poll hard; polling every
 5 seconds stays as the fallback. See
 [ADR: durable workflows on NATS](https://github.com/jupyter-naas/abi/blob/main/docs/adr/20261025_durable-workflows-on-nats.md).
+
+#### Engine modules and the Workflow/Pipeline bridge
+
+Engine modules (core `BaseModule`) get the same workflows, from
+`naas_abi_core.module.workflows`. Async handlers are the SDK's. A sync handler runs
+in a worker thread, like a sync job, and receives a `SyncFlowContext` with blocking
+`step`, `map`, `call` and `map_call`:
+
+```python
+from naas_abi_core.module.workflows import SyncFlowContext, workflow
+
+class ABIModule(BaseModule):
+    @workflow(max_attempts=3)
+    def report(self, ctx: SyncFlowContext, inp: ReportInput) -> ReportOutput:
+        rows = ctx.step("load", self.load, inp.table)
+        ctx.map_call("push", "acme.sink", "push", [{"row": r} for r in rows])
+        return ReportOutput(count=len(rows))
+```
+
+A step function runs in the handler's own thread, so a run that times out or is
+cancelled is interrupted like a sync job. `self.get_workflow(name)` calls the
+module's own workflow; `engine.modules["<id>"].get_workflow(name)` another engine
+module's; `self.engine.get_workflow("<module id>", name)` any module by id, remote
+ones included (declare a remote module as a `#soft` dependency).
+
+With `nats.workflows.bridge` on (the default), every `Workflow` and `Pipeline`
+instance of an engine module that has a live typed `run()` (the ones that get a
+`POST /workflows/<slug>` or `/pipelines/<slug>` route) is also published as a
+one-step workflow, `workflow.<slug>` or `pipeline.<slug>`, with the parameters
+model as its input schema and the class docstring as its description. It runs with
+`max_concurrency=1` and `max_attempts=1`, because pipelines write to the graph. An
+rdflib `Graph` result comes back as `{"format": "text/turtle", "triples": n,
+"data": "<turtle>"}`, with `data` left out when it would not fit in a run record.
+The classes, their agent tools and their REST routes do not change; without NATS
+nothing is published.
 
 ### From Dagster to module jobs
 

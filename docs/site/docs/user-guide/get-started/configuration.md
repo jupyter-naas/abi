@@ -130,6 +130,7 @@ nats:
 | `jobs.enabled` | true | Host module jobs in this engine (`false` on one-off engines). |
 | `jobs.interrupt_grace_seconds` | 5 | Before a timed-out synchronous job is interrupted (`null`: never). |
 | `jobs.retention.max_age_days`, `.max_runs_per_job`, `.skipped_max_age_minutes`, `.interval_minutes` | 7, 1000, 60, 10 | Finished job runs kept. |
+| `workflows.bridge` | true | Publish every `Workflow` and `Pipeline` with a live typed `run()` as a one-step durable workflow (`workflow.<slug>`, `pipeline.<slug>`). The classes, agent tools and REST routes are unchanged; `false` publishes none. |
 | `engine.role` | `serve` | `serve`, `client` or `auto` (`ABI_ENGINE_ROLE` overrides). |
 | `engine.rollout_id` | empty | Deploys without downtime (`ABI_ROLLOUT_ID` overrides). |
 | `engine.lease_seconds`, `.standby_timeout_seconds`, `.drain_seconds` | 20, 900, 60 | The serving engine's lease, a standby's wait, the drain at shutdown. |

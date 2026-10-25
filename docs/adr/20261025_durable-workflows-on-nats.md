@@ -1,9 +1,9 @@
 # Durable workflows on NATS
 
 ## Status
-Accepted. Step 1 (proto and SDK runtime) implemented. Engine modules and the
-`Workflow`/`Pipeline` bridge, Nexus (System → Jobs and `/api/workflows`) and the
-port of X build on it and follow.
+Accepted. Step 1 (proto and SDK runtime) and step 2 (engine modules and the
+`Workflow`/`Pipeline` bridge) implemented. Nexus (System → Jobs and `/api/workflows`)
+and the port of X build on them and follow.
 
 ## Date
 2026-10-25
@@ -138,6 +138,83 @@ through its bound host (it runs on the host's loop; `JobsNotHosted` outside).
 as a model; `self.get_workflow` passes the module's declared types.
 `get_job` keeps working on workflows. `steps()` returns the summaries in start order.
 
+### Engine modules
+Core `BaseModule` gets workflows through `naas_abi_core.module.workflows` (a sibling
+of `module/jobs.py`, with the same inert fallback when `naas-abi-sdk` is not
+installed). Hosting is the jobs path: `EngineJobLoader` already hosts every module
+with `jobs`, so a workflow, declared on a class or at runtime, needs nothing more,
+and a declared one without a handler fails `Engine.load` as a job does. The loader
+gives each host a `module_documents` resolver over the engine's own document
+namespaces, which is how a workflow reads the run records of its children.
+
+**Sync handlers.** Engine code blocks, so `@workflow` also accepts a plain `def`
+(`declare_workflow` a sync callable). It runs in a worker thread (`SyncJobRunner`),
+and gets a `SyncFlowContext` whose `step`, `map`, `call`, `map_call` and `steps`
+submit the `FlowContext` call to the host's loop (in a copy of the thread's context,
+so the journal's service calls nest under the run's trace span) and block, waking
+every 200 ms so that `JobInterrupted` can land. Two choices:
+- A **`step` function runs in the handler's own thread**, not in a pool: the journal
+  work happens on the loop and the function runs where an interrupt reaches it, so
+  a run stopped by a timeout or a cancel keeps its concurrency slot until the
+  function has returned, as a sync job does. (The loop-side step waits for the
+  function through a queue the handler thread serves.)
+- **`map` items run on worker threads of the call**, `concurrency` at a time, each
+  item a step `key[i]` that again runs in its own thread. `JobInterrupted` does
+  not reach them: the call returns only after its workers finish, and long item
+  functions look at `ctx.cancelled`.
+`ctx.cancelled` and the grace behaviour are unchanged. A skipped run (`ctx.skip`)
+returns no output, as for async workflows. Async handlers are the SDK's, unchanged.
+
+**Calling.** `module.get_workflow(name)` (the SDK's, through the module's bound host)
+works on any engine module's instance, so `engine.modules[m].get_workflow(name)`
+reaches another engine module. A module is not in `engine.modules` unless the
+engine runs it, and remote modules are not (their ids are `#soft` dependencies the
+engine does not require), so `EngineProxy.get_workflow(module_id, name)`
+(`Engine.workflow`, `EngineJobLoader.workflow`) returns a `WorkflowProxy` for any
+module by id on the engine's connection and the loader's loop, for declared
+dependencies only. It works on engines that host nothing (a client, a CLI), which
+then only start and watch runs, and, like `ABIClient.get_workflow`, it checks nothing
+until a start. Its methods are coroutines, awaitable from any loop (sync code uses
+`asyncio.run`).
+
+### The Workflow/Pipeline bridge
+With `nats.workflows.bridge` (new engine config, default `true`), `Engine.load`
+declares each instance in an engine module's `workflows` and `pipelines` that has a
+live typed `run()` as a one-step workflow, after `on_initialized` (the instances
+exist) and before `EngineJobLoader.start` (the descriptors are sealed then):
+- **Which.** The `register_run_route` predicate, extracted as
+  `process_api.process_parameters_type`: `run()` is a real override that is not a
+  `pass` or `raise NotImplementedError` stub, and a pydantic parameters model is
+  found. About 22 of the 60 classes qualify. An async `run()` is skipped, as are
+  names already taken in the module. Others are skipped with a debug log.
+- **Name and descriptor.** `workflow.<slug>` or `pipeline.<slug>` with
+  `process_route_slug`, the slug of the REST route. The input schema is the
+  parameters model. The description is the class's own docstring (`getdoc` would
+  give a subclass without one the base class's text). The output schema comes from
+  the return annotation (a model, a dict, the graph envelope), else none.
+  `max_concurrency=1` and `max_attempts=1`: a pipeline writes to the graph, and a
+  retry or a second run at once would write twice.
+- **Handler.** The input is validated (invalid: `InvalidWorkflowInput`, no retry),
+  then `run(params)` is the one step `run`, in the worker thread. The step is
+  journaled, so the timeline shows it, and its result is the encoded result.
+- **Result.** A pydantic model is `model_dump`ed; `dict`, `list` and `str` are kept;
+  an rdflib `Graph` becomes `{"format": "text/turtle", "triples": n, "data":
+  "<turtle>"}`. `data` is dropped for a `note` when the Turtle is over **60 KiB**:
+  the run record keeps 64 KiB of output, and a larger one comes back truncated
+  (the step cap is 256 KiB, which is not the limit that matters). Most pipelines
+  insert into the triple store themselves, so the graph is a courtesy.
+- **Everywhere.** The bridge runs in every NATS engine, whether it hosts or not, so
+  `Engine.job_owners()` lists the same jobs in the API process and in the serving
+  engine. Without NATS, or with the switch off, nothing is declared.
+- **Unchanged.** The classes, `as_tools`, `as_api` and the `/workflows` and
+  `/pipelines` routes keep calling `run()` in-process.
+
+### Discovery
+Core's discovery service validates the new descriptor fields with the SDK's
+bounds: `kind` is `job` or `workflow` (empty, from before the field, is a job),
+schemas and trigger inputs are JSON objects of at most 16 KiB and 4 KiB, a whole
+job descriptor at most 64 KiB. Replica equality already covered the new fields.
+
 ## Consequences
 - **Children are at-least-once.** Deduplication covers only the window before the
   child run id is journaled, and only inside JetStream's 2 minute duplicate window;
@@ -185,9 +262,25 @@ as a model; `self.get_workflow` passes the module's declared types.
 - The journal is two documents per step, and three writes for a step that
   succeeds (start, result, summary). A workflow with thousands of tiny steps
   should batch them into fewer steps, or use `map` over items with real work.
-- Core's discovery validates job descriptors; it does not yet check `kind`, the
-  schemas or trigger inputs against these bounds. The SDK enforces them when a
-  descriptor is built, so only a hand-written descriptor can exceed them.
+- Core's discovery validates `kind`, the schemas and the trigger inputs against these
+  bounds as well as the SDK, so a hand-written descriptor cannot exceed them.
 - Hosts of engine modules need the notice subject: the broker's `module` user may
   publish and subscribe on it (its deny lists name only the engine's own subjects).
 - Not hosted without NATS, like jobs.
+- **Engine modules.** A sync `step` function blocks the handler's thread but not the
+  host's loop; a `map` of sync items uses threads that an interrupt does not reach.
+  A step function cannot be cancelled in the middle of a blocking C call, as for
+  sync jobs.
+- **The bridge adds a concurrency limit and a retry limit the classes never had.**
+  Two launches of the same bridged pipeline run one after the other
+  (`max_concurrency=1`), and a failed run is not retried (`max_attempts=1`). In-process
+  callers (agent tools, REST) are not limited. A bridged pipeline that a REST call and
+  a workflow run write with at the same time is not serialized across the two paths.
+- A graph result over 60 KiB comes back without its Turtle, only the triple count and a
+  note. A bridged workflow whose dict result is between 64 and 256 KiB succeeds, but its
+  run record keeps a truncated marker and `WorkflowRun.result()` raises: return a
+  reference to object storage.
+- The bridge is evaluated once per engine start, from the instances `on_initialized`
+  built. A class that could not be instantiated has no workflow. Changing a class's
+  parameters model changes its input schema on the next start; there is no schema
+  version.
