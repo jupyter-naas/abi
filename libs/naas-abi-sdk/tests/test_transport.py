@@ -47,6 +47,30 @@ def test_mutations_are_never_replayed(error):
     assert nc.request.await_count == 1
 
 
+def test_a_call_may_wait_longer_than_the_transports_timeout():
+    rpc, nc = transport()  # its own timeout is 20 ms
+    sent = []
+
+    async def slow(subject, payload, *, timeout, headers):
+        sent.append((timeout, kv.GetRequest.FromString(payload).context.timeout_ms))
+        await asyncio.sleep(0.1)
+        return SimpleNamespace(data=kv.GetResponse().SerializeToString(), headers=None)
+
+    nc.request.side_effect = slow
+    asyncio.run(rpc.call("get", kv.GetRequest(), kv.GetResponse, timeout=1.5))
+    assert sent == [(1.5, 1500)]
+    # The context's milliseconds are an int32, whatever the wait.
+    sent.clear()
+    asyncio.run(rpc.call("get", kv.GetRequest(), kv.GetResponse, timeout=1e9))
+    assert sent == [(1e9, 2**31 - 1)]
+    for bad in (0, -1, float("nan"), float("inf")):
+        with pytest.raises(ValueError, match="timeout"):
+            asyncio.run(rpc.call("get", kv.GetRequest(), kv.GetResponse, timeout=bad))
+    # Without one, the transport's own applies.
+    with pytest.raises(asyncio.TimeoutError):
+        asyncio.run(rpc.call("get", kv.GetRequest(), kv.GetResponse))
+
+
 def test_deadline_cancels_local_wait():
     rpc, nc = transport()
     cancelled = []

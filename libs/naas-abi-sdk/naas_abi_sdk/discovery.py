@@ -36,6 +36,17 @@ class ModelDescriptor:
 
 
 @dataclass(frozen=True)
+class ProcessDescriptor:
+    """A workflow or pipeline a module serves over NATS (``naas_abi_sdk.process_host``).
+    Its parameter schema is not registered: ``describe`` asks the module."""
+
+    name: str
+    kind: str  # "workflow" or "pipeline"
+    description: str = ""
+    contract_major: int = 1
+
+
+@dataclass(frozen=True)
 class ModuleInstance:
     module_id: str
     instance_id: str
@@ -49,6 +60,7 @@ class ModuleInstance:
     dependencies: tuple[tuple[str, int], ...] = ()
     models: tuple[ModelDescriptor, ...] = ()
     apps: tuple[Any, ...] = ()  # naas_abi_sdk.apps.AppDescriptor, without root
+    processes: tuple[ProcessDescriptor, ...] = ()
 
 
 def _instance(value: pb.Instance) -> ModuleInstance:
@@ -70,6 +82,10 @@ def _instance(value: pb.Instance) -> ModuleInstance:
         tuple((x.module_id, x.contract_major) for x in d.dependencies),
         tuple(ModelDescriptor(m.name, m.description, m.kind) for m in d.models),
         _apps(d),
+        tuple(
+            ProcessDescriptor(p.name, p.kind, p.description, p.contract_major)
+            for p in d.processes
+        ),
     )
 
 
@@ -95,6 +111,32 @@ def _jobs(descriptor: pb.ModuleDescriptor) -> tuple[Any, ...]:
     from naas_abi_sdk.jobs import JobDescriptor
 
     return tuple(JobDescriptor.from_pb(j) for j in descriptor.jobs)
+
+
+# What a descriptor keeps of a workflow's or pipeline's docstring: discovery bounds
+# the registry snapshot, and `describe` answers with the whole text.
+PROCESS_DESCRIPTION_CHARS = 512
+
+
+def _process_descriptors(module_type) -> list[pb.ProcessDescriptor]:
+    """The module's workflows and pipelines, from the classes it declares or
+    discovers (known before it registers)."""
+    descriptors = []
+    for kind, getter in (
+        ("workflow", "get_workflow_classes"),
+        ("pipeline", "get_pipeline_classes"),
+    ):
+        classes = getattr(module_type, getter)() if hasattr(module_type, getter) else {}
+        for name, cls in classes.items():
+            text = cls.description()
+            if len(text) > PROCESS_DESCRIPTION_CHARS:
+                text = text[: PROCESS_DESCRIPTION_CHARS - 1].rstrip() + "…"
+            descriptors.append(
+                pb.ProcessDescriptor(
+                    name=name, kind=kind, description=text, contract_major=1
+                )
+            )
+    return descriptors
 
 
 _ROLLOUT_ID = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:-]{0,127}")
@@ -266,6 +308,25 @@ class ModuleProxy:
         return JobProxy(
             self.client.transport, self.client.project, self.module_id, descriptor
         )
+
+    def get_workflow(self, name: str):
+        """A proxy for the workflow ``name`` of this module, called over NATS.
+
+        Nothing is sent yet: ``await proxy.run({...})`` runs it, ``await proxy``
+        first checks it exists and loads its parameter schema (needed by
+        ``as_tools()``). ``PROCESS_NOT_FOUND`` or ``MODULE_UNAVAILABLE`` come with
+        that first call.
+        """
+        from naas_abi_sdk.process_proxy import ProcessProxy
+
+        return ProcessProxy(self, "workflow", name)
+
+    def get_pipeline(self, name: str):
+        """A proxy for the pipeline ``name``, like ``get_workflow``; its ``run``
+        returns an rdflib ``Graph`` (``pip install 'naas-abi-sdk[rdf]'``)."""
+        from naas_abi_sdk.process_proxy import ProcessProxy
+
+        return ProcessProxy(self, "pipeline", name)
 
     async def list_agents(self) -> tuple[AgentDescriptor, ...]:
         return (await self.ready_instances())[0].agents
@@ -496,4 +557,5 @@ def module_descriptor(
                 module_type.get_apps() if hasattr(module_type, "get_apps") else ()
             )
         ],
+        processes=_process_descriptors(module_type),
     )

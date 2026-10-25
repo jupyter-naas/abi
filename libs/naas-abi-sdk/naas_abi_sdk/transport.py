@@ -170,16 +170,22 @@ class Transport:
         *,
         transfer: TransferTrace | None = None,
         instance_id: str | None = None,
+        timeout: float | None = None,
     ) -> Response:
         """One exchange. ``instance_id``: the module instance a call to a module
-        subject goes to, which its token is bound to (required there)."""
+        subject goes to, which its token is bound to (required there).
+        ``timeout``: seconds this exchange waits for its reply, instead of the
+        transport's (a call that runs for minutes names its own)."""
+        wait = self.timeout if timeout is None else timeout
+        if not math.isfinite(wait) or wait <= 0:
+            raise ValueError("timeout must be finite and positive")
         # Copy so concurrent calls never mutate a caller-owned request.
         outgoing = type(request)()
         outgoing.CopyFrom(request)
         context = cast(Any, outgoing).context
         if not context.trace_id:
             context.trace_id = str(uuid.uuid4())
-        context.timeout_ms = int(self.timeout * 1000)
+        context.timeout_ms = min(int(wait * 1000), 2**31 - 1)  # an int32
         token = self._token(subject, instance_id)
         if not token or "\r" in token or "\n" in token:
             raise ValueError("A nonempty service token without newlines is required")
@@ -191,11 +197,16 @@ class Transport:
         ) as span:
             if transfer is not None:  # a transfer's own chunk: always small
                 return await self._exchange(
-                    subject, payload, headers, response_type, transfer
+                    subject, payload, headers, response_type, transfer, timeout=wait
                 )
             headers[overflow.ACCEPT_HEADER] = "1"
             return await self._overflowing(
-                subject, payload, headers, response_type, TransferTrace(span)
+                subject,
+                payload,
+                headers,
+                response_type,
+                TransferTrace(span),
+                timeout=wait,
             )
 
     async def _overflowing(
@@ -205,6 +216,8 @@ class Transport:
         headers: dict[str, str],
         response_type: type[Response],
         trace: TransferTrace,
+        *,
+        timeout: float,
     ) -> Response:
         """Upload a request above the broker limit first; download a parked reply.
 
@@ -232,7 +245,12 @@ class Transport:
             payload = b""
         try:
             return await self._exchange(
-                subject, payload, headers, response_type, download=chunk
+                subject,
+                payload,
+                headers,
+                response_type,
+                download=chunk,
+                timeout=timeout,
             )
         finally:
             if upload is not None:
@@ -248,6 +266,7 @@ class Transport:
         transfer: TransferTrace | None = None,
         *,
         download: overflow.Call | None = None,
+        timeout: float,
     ) -> Response:
         async def send():
             nc = await self.connect()
@@ -263,7 +282,7 @@ class Transport:
                     subject,
                     payload,
                     headers=headers,
-                    timeout=self.timeout,
+                    timeout=timeout,
                     retry_seconds=no_responders.RETRY_SECONDS if resend else 0,
                 )
             except MaxPayloadError as exc:
@@ -271,7 +290,7 @@ class Transport:
                     "PAYLOAD_TOO_LARGE", "Request exceeds broker limit"
                 ) from exc
 
-        reply = await asyncio.wait_for(send(), timeout=self.timeout)
+        reply = await asyncio.wait_for(send(), timeout=timeout)
         record_reply(len(reply.data or b""), transfer=transfer)
         h = reply.headers or {}
         if "Nats-Service-Error" in h or "Nats-Service-Error-Code" in h:

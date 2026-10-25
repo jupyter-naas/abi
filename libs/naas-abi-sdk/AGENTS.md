@@ -206,10 +206,37 @@ connecting. After `on_initialized` it builds each one (`New(module)`, else an em
 agent takes its tools at construction, inside `on_initialized`, so
 `build_processes()` is public and idempotent (locked): modules call it before
 creating their agents, and `run_module`'s own call skips what is built; an
-unbuildable, unbound class fails startup (the later serving work declares every
-one of them). Integrations are a pattern, never discovered. Tests:
+unbuildable, unbound class fails startup (the host serves every declared one).
+Integrations are a pattern, never discovered. Tests:
 `tests/test_workflows.py` (extras: `--extra workflows --extra rdf --extra agents`,
 a CI step) and `tests/test_workflows_extras.py` (no extras needed).
+
+Workflows and pipelines are served (`process_host.py`, `process_proxy.py`, proto
+`abi.process.v1`, ADR docs/adr/20261025_remote-module-processes.md). `module_descriptor`
+publishes them (`ProcessDescriptor`: name, kind, description cut to 512 characters,
+contract 1; `ModuleInstance.processes`), so a module that has any needs discovery:
+`run_module` raises before it connects without it. `ProcessHost` subscribes
+`abi.mod.<project>.<instance>.process.<kind>.<name>.run|describe` and answers like
+`ModelHost`: `ConcurrentCalls` for runs (64) and apart for describes, authorization
+through `authorize_process` before the parameters are read (`AUTHORIZATION_SECONDS`,
+`_token_expiry`, no cached refusal, concurrent first calls share one discovery call),
+parameters validated into `parameters_type()` (`INVALID_ARGUMENT` with field names
+only), the run cancelled at the caller's deadline (`_within`: a `TimeoutError` the
+process raises is its own `PROCESS_ERROR`), the process's exception text never sent.
+It closes in `run_module`'s order: drain with the other hosts (new calls refused, runs
+finish), then `close()` after the app host (a cut-off run tells its caller `CANCELLED`).
+Payloads above one message use the app body streams (`BodySource`, `pull_body`), not
+RPC overflow: the engine's overflow host refuses a token bound to an instance, and
+modules may not subscribe to `abi.rpc.>`. A body inbox a peer names must be an `_INBOX`
+subject (`valid_inbox`). `ModuleProxy.get_workflow`/`get_pipeline` return a
+`ProcessProxy` at once (it is awaitable: `await proxy` loads the schema `as_tools()`
+needs); `run` picks a ready instance that declares the process, never retries, and
+sends the deadline with `Transport.call(timeout=)`. Only `process_host.py` and
+`process_proxy.py` use the new send paths, through `reply`, `pull_body` and
+`Transport.call`: nothing new for core's `nats_send_sites_test.py`. Tests:
+`tests/test_process_host.py` (real `nats-server`, extras `workflows`, `rdf`, `agents`) and
+core's `services/discovery/process_integration_test.py` (two modules, the real discovery
+service, SIGTERM).
 
 Test layout is a deliberate exception to the monorepo rule of a `_test.py` beside
 each file: SDK tests live in `tests/test_<module>.py`, outside the published
