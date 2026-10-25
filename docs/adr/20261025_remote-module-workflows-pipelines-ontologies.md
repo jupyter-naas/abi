@@ -130,9 +130,11 @@ schema graph, as an in-engine module's files do at boot. Remote modules do it ov
 `scripts/cli_smoke.sh nats` scaffolds a workflow (with job settings), a pipeline, an
 integration and a second ontology in a remote module of a new project, runs their tests,
 starts the project with `abi dev up`, and checks that discovery lists the processes and the
-derived job, that the ontologies are in the schema graph, that another identity's token calls
-both processes and one that names an undeclared process is refused, and that the workflow
-runs as a job (`scripts/cli_smoke_processes.py`).
+derived job, that the ontologies are in the schema graph (a SPARQL query on the dev triple
+store; the Nexus catalog is not covered, since it lists only what a workspace enables), that
+a call signed with the module's own token (a module acts only as itself, so this is not a
+call between two modules) runs both processes and one that names an undeclared process is
+refused, and that the workflow runs as a job (`scripts/cli_smoke_processes.py`).
 
 ## Consequences
 - A remote module reaches parity with an in-engine one for the components this record

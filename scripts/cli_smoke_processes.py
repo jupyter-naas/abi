@@ -1,24 +1,27 @@
-"""Calls a running remote module's workflows and pipelines over NATS, as a peer.
+"""Calls a running remote module's workflows and pipelines over NATS.
 
 Run by scripts/cli_smoke.sh inside the generated project (`uv run python`), once
 `abi dev up` has started the module: it needs `naas_abi_sdk`, which a standard
 library script cannot stand in for. It checks what discovery lists for the
-module, calls each process the way another module would (a token bound to the
-instance), and starts the workflow as a job.
+module, calls each process with a token bound to the instance, as a caller
+does, and starts the workflow as a job.
 
+    ABI_NATS_URL=nats://module:<password>@127.0.0.1:4222 \
+    ABI_MODULE_KEY="$(abi module key my_project.research)" \
     python scripts/cli_smoke_processes.py --module-id my_project.research \
-        --nats-url nats://module:<password>@127.0.0.1:4222 --project my_project \
-        --key "$(abi module key my_project.research)" \
-        --workflow digest_workflow --pipeline catalog_pipeline
+        --project my_project --workflow digest_workflow --pipeline catalog_pipeline
 
-The probe signs as the module itself (its own key): a module acts only as itself,
-and discovery authorizes a call by the token's binding, not by who is asking.
+The probe signs as the module itself (its own key): a module acts only as itself, so
+this is a call with the module's own token, not one between two modules. Discovery
+authorizes a call by the token's binding to the instance, not by who is asking. The
+broker URL and the key come from ABI_NATS_URL and ABI_MODULE_KEY, like a module's.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 import time
 from typing import Any
@@ -29,7 +32,10 @@ from naas_abi_sdk.transport import Transport
 
 
 class NotYet(Exception):
-    """The check does not pass yet; the message says what it saw."""
+    """The check does not pass yet; the message says what it saw.
+
+    Same as scripts/cli_smoke_checks.py, which cannot be imported here: it is
+    standard library only and this one runs in the project's environment."""
 
 
 async def wait(name: str, deadline: float, check: Any) -> Any:
@@ -52,8 +58,18 @@ async def wait(name: str, deadline: float, check: Any) -> Any:
 
 
 async def main(args: argparse.Namespace) -> None:
+    transport = Transport(
+        os.environ["ABI_NATS_URL"],
+        ModuleToken(args.module_id, os.environ["ABI_MODULE_KEY"]),
+    )
+    try:
+        await probe(args, transport)
+    finally:
+        await transport.close()
+
+
+async def probe(args: argparse.Namespace, transport: Transport) -> None:
     deadline = time.monotonic() + args.timeout
-    transport = Transport(args.nats_url, ModuleToken(args.module_id, args.key))
     client = DiscoveryClient(transport, args.project)
     module = ModuleProxy(client, args.module_id)
 
@@ -111,28 +127,34 @@ async def main(args: argparse.Namespace) -> None:
     await wait("an undeclared process is refused", deadline, refused)
 
     if args.job:
-
-        async def job() -> str:
-            run = await module.get_workflow(args.workflow).trigger(
+        # Triggered once: a run that ends badly is a failure, not a reason to start another.
+        async def trigger() -> Any:
+            return await module.get_workflow(args.workflow).trigger(
                 {"message": "job"}, idempotency_key=f"smoke-{int(time.time())}"
             )
-            record = await run.wait(timeout=60)
-            if record.get("status") != "SUCCEEDED" or record.get("result") != {
-                "message": "job"
-            }:
-                raise NotYet(f"the job run ended {record!r}")
+
+        run = await wait("workflow job triggered", deadline, trigger)
+
+        async def job() -> str:
+            try:
+                record = await run.wait(
+                    timeout=min(60, max(1, deadline - time.monotonic()))
+                )
+            except TimeoutError as exc:
+                raise NotYet(f"the job run is still {(await run.status())!r}") from exc
+            if record.get("status") != "SUCCEEDED":
+                sys.exit(f"FAIL  workflow run as a job: the run ended {record!r}")
+            if record.get("result") != {"message": "job"}:
+                sys.exit(f"FAIL  workflow run as a job: its result is {record!r}")
             return record["status"]
 
         await wait("workflow run as a job", deadline, job)
-    await transport.close()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--module-id", required=True)
-    parser.add_argument("--nats-url", required=True)
     parser.add_argument("--project", required=True, help="the discovery project")
-    parser.add_argument("--key", required=True, help="the module's key")
     parser.add_argument("--workflow", required=True, help="a workflow's name")
     parser.add_argument("--pipeline", required=True, help="a pipeline's name")
     parser.add_argument(
