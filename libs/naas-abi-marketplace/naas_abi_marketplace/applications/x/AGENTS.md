@@ -34,16 +34,19 @@ Dagster sensor had a durable cursor. The search run knows which envelopes it jus
 
 | Name | Kind | Input | Trigger | Body |
 |---|---|---|---|---|
-| `search_recent_tweets` | workflow, `max_concurrency` = number of filters, `max_attempts=3` | `{"filter": <name>}` | one `Cron`/`Every` per `search_recent_tweets_workflow` entry, input `{"filter": name}` | `flows/search.py` |
+| `search_recent_tweets` | workflow, `max_concurrency` = 2 per filter, `max_attempts=3` | `{"filter": <name>}` | one `Cron`/`Every` per `search_recent_tweets_workflow` entry, input `{"filter": name}` | `flows/search.py` |
 | `map_tweet_envelope` | workflow, `max_concurrency=4`, `max_attempts=3` | `{"path", "persist", "force", "graph_name"}` | none (child of the two above; launchable by hand) | `flows/mapping.py` |
 | `reprocess_tweet_envelopes` | workflow, `max_attempts=2` | `{"prefix", "persist", "force", "max_age_hours", "max_envelopes", "app_publish"}` | none: manual only | `flows/reprocess.py` |
 | `count_recent_tweets` | workflow, `max_attempts=3` | `{"query"}` | none (called by a search run whose filter has `count_recent_tweets: true`) | `flows/count.py` |
-| `build_app` | job | none | `Cron("0 0 * * * *")` UTC (hourly) | `__init__.py`, `flows/maintenance.py` |
-| `compact_dataset` | job | none | `Cron("0 30 */6 * * *")` UTC (every 6 h at :30) | `__init__.py`, `flows/maintenance.py` |
+| `build_app` | job, `max_concurrency=2` | none | `Cron("0 0 * * * *")` UTC (hourly) | `__init__.py`, `flows/maintenance.py` |
+| `compact_dataset` | job, `max_concurrency=2` | none | `Cron("0 30 */6 * * *")` UTC (every 6 h at :30) | `__init__.py`, `flows/maintenance.py` |
 
 Inputs and outputs are pydantic models in `flows/models.py` (no module import, so `__init__.py` can use them).
 Handlers are thin: `ABIModule.<name>` imports its body from `flows/` and calls `run_<name>(module, ctx, inp)`; the
 bodies take the module and a `SyncFlowContext`, so tests drive them with fakes (`flows/conftest.py`).
+
+The two jobs skip a tick whose previous run is still going, like the search (a second slot lets the overlapping tick
+start and skip; their guard is `flows/guard.py: earlier_active_runs_sync`).
 
 ### `search_recent_tweets` — one tick of one filter
 
@@ -51,8 +54,8 @@ Steps, each journaled (`ctx.step`): `overlap` → `budget` → `fetch` → `map`
 child per saved envelope) → `count` (`ctx.call`, only for a filter with `count_recent_tweets`; a failure is logged and
 does not fail the run) → `dataset` (`sync_x_dataset_paths_batched`) → `publish` (only for a filter with `app_publish`).
 - **Overlap.** A tick of a filter whose previous run is still `RUNNING` (or `RETRYING`) ends **SKIPPED** with the older
-  run's id; it is never queued behind it. Different filters run independently (that is why `max_concurrency` is the
-  number of filters). The check reads the job's run records (`flows/guard.py`); only a run that **started earlier**
+  run's id; it is never queued behind it. Different filters run independently. `max_concurrency` is two per filter: a running tick
+  and the overlapping one, which needs a slot of its own to start and skip (with one slot it would queue). The check reads the job's run records (`flows/guard.py`); only a run that **started earlier**
   blocks, so two ticks that start together do not both skip, and a run never skips itself on a retry (the decision is
   a journaled step). A crashed host's run blocks until the upkeep fails it (heartbeats stop).
 - **Spend guard.** `budget` asks the workflow's ledger (`XSearchRecentTweetsWorkflow.budget_exhausted_reason`); a spent

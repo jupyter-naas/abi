@@ -253,8 +253,9 @@ which imports Dagster).
   the slots, which is wrong for a poller. A tick whose previous run of the same filter
   is `RUNNING` or `RETRYING` ends SKIPPED, decided from the job's run records in a
   journaled step. Only a run that started earlier (a lower stream sequence) blocks, so
-  two ticks that start together do not both skip. The job's `max_concurrency` is its
-  number of filters, so filters run side by side.
+  two ticks that start together do not both skip. The job's `max_concurrency` is two per
+  filter (a running tick, and the overlapping one, which needs a slot to start and skip; with
+  one slot it would queue behind the running one), so filters run side by side.
 - **Triggers from configuration.** A workflow declared with `@workflow` has static
   triggers; X's come from its configuration, so `search_recent_tweets` is declared at
   load with `declare_workflow` (a descriptor holds 16 triggers: more filters declare

@@ -74,8 +74,8 @@ def test_each_filter_is_one_trigger_of_the_search_workflow_carrying_its_name():
         Every(timedelta(seconds=60), input={"filter": "misc"}),
     )
     assert '"filter"' in search.input_schema
-    # filters run side by side; the overlap of one filter is skipped, not queued
-    assert search.max_concurrency == 3 and search.max_attempts == 3
+    # a running tick and the overlapping one that skips, per filter: never queued
+    assert search.max_concurrency == 6 and search.max_attempts == 3
 
 
 def test_more_filters_than_a_descriptor_holds_declare_more_workflows():
@@ -102,3 +102,9 @@ def test_a_downstream_subclass_does_not_host_the_jobs_twice(monkeypatch):
     )
     module.on_load()
     assert module.jobs == ()
+
+
+def test_the_jobs_have_a_spare_slot_so_an_overlapping_tick_skips_instead_of_queueing():
+    jobs = declared(real_x_module())
+    assert jobs["build_app"].max_concurrency == 2
+    assert jobs["compact_dataset"].max_concurrency == 2

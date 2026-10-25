@@ -152,6 +152,7 @@ class World:
         self.in_graph: set[str] = set()
         self.in_dataset: set[str] = set()
         self.compactions = 0
+        self.compaction_gate: threading.Event | None = None
         self.builds = 0
 
 
@@ -224,13 +225,14 @@ def world(monkeypatch):
             world.__setattr__("builds", world.builds + 1) or {"processed": 0}
         ),
     )
-    monkeypatch.setattr(
-        maintenance,
-        "run_compaction",
-        lambda module: (
-            world.__setattr__("compactions", world.compactions + 1) or {"files": {}}
-        ),
-    )
+
+    def compaction(module):
+        world.compactions += 1
+        while world.compaction_gate is not None and not world.compaction_gate.is_set():
+            time.sleep(0.01)
+        return {"files": {}}
+
+    monkeypatch.setattr(maintenance, "run_compaction", compaction)
     return world
 
 
@@ -368,3 +370,54 @@ def test_the_app_build_and_compaction_jobs_run_when_triggered(broker, world):
         host.stop()
     assert build["status"] == "SUCCEEDED" and build["result"]["app"] == {"app": True}
     assert compaction["status"] == "SUCCEEDED" and compaction["result"] == {"files": {}}
+
+
+def test_with_a_single_filter_the_overlapping_tick_is_skipped_not_queued(broker, world):
+    docs = Documents()
+    world.fetch_gate = threading.Event()
+    module, host = start_host(broker, docs, search_filter("news"))
+    try:
+        proxy = module.get_workflow("search_recent_tweets")
+        first = asyncio.run(proxy.start({"filter": "news"}))
+        wait_for(lambda: world.fetches["news"] == 1)  # running, and the gate holds it
+
+        overlapping = asyncio.run(proxy.start({"filter": "news"}))
+        # The run is skipped while the first is still held: it did not wait for it.
+        skipped, _ = asyncio.run(
+            record_of(
+                broker, docs, overlapping.run_id, "search_recent_tweets", timeout=10
+            )
+        )
+        still_running = runs_of(docs, "search_recent_tweets")
+        world.fetch_gate.set()
+        done, _ = asyncio.run(
+            record_of(broker, docs, first.run_id, "search_recent_tweets")
+        )
+    finally:
+        world.fetch_gate.set()
+        host.stop()
+
+    assert skipped["status"] == "SKIPPED"
+    assert {r["run_id"]: r["status"] for r in still_running}[first.run_id] == "RUNNING"
+    assert done["status"] == "SUCCEEDED" and world.fetches == {"news": 1}
+
+
+def test_an_overlapping_compaction_tick_is_skipped_not_queued(broker, world):
+    docs = Documents()
+    world.compaction_gate = threading.Event()
+    module, host = start_host(broker, docs)
+    try:
+        first = module.trigger_job("compact_dataset")
+        wait_for(lambda: world.compactions == 1)  # running, held by the gate
+        second = module.trigger_job("compact_dataset")
+        skipped, _ = asyncio.run(
+            record_of(broker, docs, second.run_id, "compact_dataset", timeout=10)
+        )
+        world.compaction_gate.set()
+        done, _ = asyncio.run(record_of(broker, docs, first.run_id, "compact_dataset"))
+    finally:
+        world.compaction_gate.set()
+        host.stop()
+
+    assert skipped["status"] == "SKIPPED" and "still running" in skipped["skip_reason"]
+    assert done["status"] == "SUCCEEDED" and world.compactions == 1
