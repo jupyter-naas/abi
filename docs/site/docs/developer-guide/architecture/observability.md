@@ -34,6 +34,29 @@ Jobs can be triggered from a script with
 `POST /api/admin/system/jobs/<module>/<job>/trigger` and the body
 `{"payload": {...}}`.
 
+**Workflows** (jobs with a typed input and checkpointed steps) are in the Jobs tab
+too: a "workflow" badge, a launch form generated from the input schema (a JSON
+editor when the schema has no form), and a **Steps** tab on each run with the
+attempts, durations, errors and links to child runs. Scripts use `/api/workflows`
+with `Authorization: Bearer $ABI_API_KEY` (or a super admin's session):
+
+```bash
+# List, with each workflow's input and output schemas
+curl -H "Authorization: Bearer $ABI_API_KEY" $NEXUS/api/workflows
+
+# Start; ?wait=30 holds the call up to 30 s and answers 200 with the result if the
+# run ends in time, else 202 with the run. A wrong input is a 422 and starts nothing.
+curl -X POST -H "Authorization: Bearer $ABI_API_KEY" -H "Idempotency-Key: import-1" \
+  -d '{"filter": "news"}' "$NEXUS/api/workflows/<module>/<workflow>/runs?wait=30"
+
+# Status, result and steps; cancel
+curl -H "Authorization: Bearer $ABI_API_KEY" $NEXUS/api/workflows/<module>/runs/<run_id>
+curl -X POST -H "Authorization: Bearer $ABI_API_KEY" $NEXUS/api/workflows/<module>/runs/<run_id>/cancel
+```
+
+Every start and cancel is audited like a job trigger; a call with the API key has
+no user, so its audit record says it came from the API key.
+
 ### Where live traffic comes from
 
 With tracing configured, the System app reads recent spans from the tracing

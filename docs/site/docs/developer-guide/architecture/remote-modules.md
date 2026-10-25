@@ -277,7 +277,17 @@ for the module's own. `await wf.run(input)` returns the output;
 `status()`, `wait()`, `result()`, `steps()` (key, status, attempt, timings, errors
 and child run ids of each step, without results) and `cancel()`. Hosts publish a
 completion notice when a run ends, so `wait()` does not poll hard; polling every
-5 seconds stays as the fallback. See
+5 seconds stays as the fallback.
+
+Super admins see and launch workflows in the System app's Jobs tab (badge, form
+generated from the input schema, step timeline). Scripts use Nexus' REST API with
+`ABI_API_KEY`: `GET /api/workflows`, `POST /api/workflows/<module>/<name>/runs`
+(the body is the input; `?wait=<seconds>` returns the result if the run ends in
+time; an `Idempotency-Key` header makes a repeated start the same run; an input
+that does not match the schema is a 422 and starts nothing),
+`GET /api/workflows/<module>/runs/<run_id>` (status, result, steps) and
+`POST /api/workflows/<module>/runs/<run_id>/cancel`. Starts and cancels are
+audited. See [observability](./observability.md) for examples. See
 [ADR: durable workflows on NATS](https://github.com/jupyter-naas/abi/blob/main/docs/adr/20261025_durable-workflows-on-nats.md).
 
 #### Engine modules and the Workflow/Pipeline bridge

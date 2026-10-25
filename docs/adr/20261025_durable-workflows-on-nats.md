@@ -127,6 +127,19 @@ at-most-once, and a notice can be missed (a restart, a slow consumer), so every
 wait also reads the run record every 5 seconds; a notice only shortens the wait.
 If subscribing fails, waits poll.
 
+### Nexus
+System → Jobs lists workflows beside jobs (`kind`, schemas and trigger inputs from
+both catalogs), launches them from a form generated from the input schema, and
+shows each run's steps with links to its child runs. `/api/workflows` lists, starts
+(`?wait`, `Idempotency-Key`), reads and cancels runs. The API validates the input
+against the schema before anything is triggered (422, nothing audited or sent); a
+schema it cannot use accepts everything, because the module validates its own
+input. Access is a super admin's session or `ABI_API_KEY` (a new dependency,
+`require_superadmin_or_api_key`, `Authorization` header only): the key is the
+instance's shared operator key, so it now also reaches these routes. Starts and cancels are audited like job triggers (service
+`jobs`) before they happen, with how the caller authenticated; a key caller has no
+user, so its `audit_logs.user_id` is NULL and `details.via` is `api_key`.
+
 ### Calling
 `WorkflowProxy(start(input, idempotency_key=None) -> WorkflowRun, run(input,
 timeout=None) -> output)`; `WorkflowRun(status(), wait(), result(), steps(),
@@ -296,3 +309,12 @@ job descriptor at most 64 KiB. Replica equality already covered the new fields.
   built. A class that could not be instantiated has no workflow. Changing a class's
   parameters model changes its input schema on the next start; there is no schema
   version.
+- **`ABI_API_KEY` reaches `/api/workflows`.** It was a credential for agents and
+  `/app-html/`; a script holding it can now also start and cancel workflow runs, as
+  an operator. Rotating the key revokes both. Its calls are told apart in the audit
+  log (`via: api_key`), not by person.
+- Nexus reads a run's steps from the module's document namespace and does not wait
+  on completion notices: `?wait` polls the run record (every 0.2 s, backing off to
+  1 s, at most 120 s). A run no host has recorded yet reads as QUEUED for any run id
+  of an existing workflow, so a mistyped sequence number reads as queued rather
+  than missing.
