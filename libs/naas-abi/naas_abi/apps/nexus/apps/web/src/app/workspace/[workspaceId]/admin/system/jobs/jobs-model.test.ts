@@ -5,6 +5,7 @@ import {
   filterJobs,
   formatMs,
   health,
+  isWorkflow,
   moduleLabel,
   runDuration,
   sortJobs,
@@ -12,9 +13,11 @@ import {
   startDelay,
   statusLabel,
   statusTone,
+  stepBars,
+  truncatedResult,
 } from './jobs-model';
 import { STATUS_FILTERS } from './runs-list';
-import { job, run } from './jobs-fixtures';
+import { job, run, step, workflowJob } from './jobs-fixtures';
 
 describe('jobs model', () => {
   it('formats durations and delays', () => {
@@ -44,7 +47,13 @@ describe('jobs model', () => {
   });
 
   it('round-trips the location and splits keys', () => {
-    const location = { view: 'runs' as const, job: 'ops.reports/digest', run: 'ops.reports/digest:7', statuses: ['FAILED', 'TIMED_OUT'] };
+    const location = {
+      view: 'runs' as const,
+      job: 'ops.reports/digest',
+      run: 'ops.reports/digest:7',
+      statuses: ['FAILED', 'TIMED_OUT'],
+      kind: 'workflow' as const,
+    };
     expect(decodeJobsLocation(encodeJobsLocation(location, new URLSearchParams('tab=jobs')))).toEqual(location);
     expect(splitKey('ops.reports/digest:7')).toEqual(['ops.reports', 'digest:7']);
     expect(moduleLabel('operations.projects.nats_probe.researcher')).toBe('researcher');
@@ -57,5 +66,69 @@ describe('jobs model', () => {
     const h = health([run(), run({ status: 'SKIPPED', duration_ms: 5 }), run({ status: 'FAILED', duration_ms: 1000 })]);
     expect(h).toMatchObject({ total: 2, succeeded: 1, failed: 1, rate: 0.5, averageMs: 2000 });
     expect(STATUS_FILTERS.find((f) => f.id === 'skipped')?.statuses).toEqual(['SKIPPED']);
+  });
+});
+
+describe('workflows in the jobs model', () => {
+  it('filters by kind, then by text', () => {
+    const plain = job();
+    const flow = workflowJob();
+
+    expect([plain, flow].map(isWorkflow)).toEqual([false, true]);
+    expect(filterJobs([plain, flow], '', 'workflow').map((j) => j.key)).toEqual(['ops.flows/ingest']);
+    expect(filterJobs([plain, flow], '', 'job').map((j) => j.key)).toEqual(['ops.reports/digest']);
+    expect(filterJobs([plain, flow], 'INGEST', 'all').map((j) => j.key)).toEqual(['ops.flows/ingest']);
+    expect(filterJobs([plain, flow], 'ingest', 'job')).toEqual([]);
+    expect(filterJobs([plain, flow], '')).toHaveLength(2);
+  });
+
+  it('keeps the kind filter in the URL only when it is not "all"', () => {
+    const base = { view: 'jobs' as const, job: null, run: null, statuses: [] };
+
+    expect(encodeJobsLocation({ ...base, kind: 'all' }, new URLSearchParams('tab=jobs')).toString()).toBe('tab=jobs');
+    expect(encodeJobsLocation({ ...base, kind: 'workflow' }, new URLSearchParams('tab=jobs')).toString()).toBe('tab=jobs&kind=workflow');
+    expect(decodeJobsLocation(new URLSearchParams('kind=workflow')).kind).toBe('workflow');
+    expect(decodeJobsLocation(new URLSearchParams('kind=nonsense')).kind).toBe('all');
+  });
+
+  it('lays the steps out on one time axis', () => {
+    const bars = stepBars([
+      step({ key: 'a', started_at: '2026-10-02T10:00:00+00:00', finished_at: '2026-10-02T10:00:02+00:00', duration_ms: 2000 }),
+      step({ key: 'b', started_at: '2026-10-02T10:00:02+00:00', finished_at: '2026-10-02T10:00:08+00:00', duration_ms: 6000 }),
+      step({ key: 'c', started_at: '2026-10-02T10:00:08+00:00', finished_at: '2026-10-02T10:00:10+00:00', duration_ms: 2000 }),
+    ]);
+
+    expect(bars.map((b) => [b.step.key, b.offsetMs, b.durationMs])).toEqual([
+      ['a', 0, 2000],
+      ['b', 2000, 6000],
+      ['c', 8000, 2000],
+    ]);
+    expect(bars.map((b) => Math.round(b.left))).toEqual([0, 20, 80]);
+    expect(bars.map((b) => Math.round(b.width))).toEqual([20, 60, 20]);
+  });
+
+  it('times a running step against now, and draws a very short one as a mark', () => {
+    const now = Date.parse('2026-10-02T10:00:05+00:00');
+    const bars = stepBars(
+      [
+        step({ key: 'done', started_at: '2026-10-02T10:00:00+00:00', finished_at: '2026-10-02T10:00:00.010+00:00', duration_ms: 10 }),
+        step({ key: 'live', status: 'RUNNING', started_at: '2026-10-02T10:00:01+00:00', finished_at: null, duration_ms: null }),
+        step({ key: 'later', status: 'RUNNING', started_at: null, finished_at: null, duration_ms: null }),
+      ],
+      now,
+    );
+
+    expect(bars[0].width).toBeGreaterThanOrEqual(0.8);
+    expect([bars[1].offsetMs, bars[1].durationMs]).toEqual([1000, 4000]);
+    expect([bars[2].offsetMs, bars[2].durationMs]).toEqual([null, null]);
+    expect(stepBars([])).toEqual([]);
+  });
+
+  it('recognises a result cut for display', () => {
+    expect(truncatedResult({ truncated: true, bytes: 20000, preview: '{"rows"' })).toEqual({ bytes: 20000, preview: '{"rows"' });
+    expect(truncatedResult({ truncated: true })).toBeNull();
+    expect(truncatedResult({ count: 3 })).toBeNull();
+    expect(truncatedResult(null)).toBeNull();
+    expect(truncatedResult('text')).toBeNull();
   });
 });
