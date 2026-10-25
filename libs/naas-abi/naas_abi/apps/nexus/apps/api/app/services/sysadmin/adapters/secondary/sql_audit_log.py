@@ -22,6 +22,8 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import (
 from sqlalchemy import text
 
 ACTION_PREFIX = "sysadmin."
+# What history shows as the actor of a record written with the ABI API key.
+API_KEY_ACTOR = "ABI API key"
 
 INSERT = text(
     """
@@ -62,6 +64,8 @@ class SqlAdminAuditLog:
 
     async def record(self, record: AuditRecord) -> None:
         details: dict[str, str] = {"phase": record.phase}
+        if record.action.via != "user":
+            details["via"] = record.action.via
         if record.error:
             details["error"] = record.error
         try:
@@ -70,7 +74,8 @@ class SqlAdminAuditLog:
                     INSERT,
                     {
                         "id": f"audit-{uuid4().hex[:12]}",
-                        "user_id": record.action.actor_id,
+                        # An API-key caller has no user row to reference.
+                        "user_id": record.action.actor_id or None,
                         "action": ACTION_PREFIX + record.action.operation,
                         "resource_type": record.action.service,
                         "resource_id": record.action.resource_id,
@@ -105,7 +110,7 @@ class SqlAdminAuditLog:
                 AuditEntry(
                     at=_iso(created_at),
                     actor_id=user_id or "",
-                    actor=actor or "",
+                    actor=actor or (API_KEY_ACTOR if info.get("via") == "api_key" else ""),
                     service=service_name or "",
                     operation=action.removeprefix(ACTION_PREFIX),
                     resource_id=rid or "",

@@ -3,20 +3,29 @@ from datetime import UTC, datetime
 
 import pytest
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.secondary.in_memory_jobs import (
+    InMemoryInputValidator,
     InMemoryJobCatalog,
     InMemoryJobControl,
     InMemoryJobQueue,
     InMemoryJobRunStore,
+    InMemoryStepStore,
 )
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.secondary.in_memory_resources import (
     InMemoryAuditLog,
 )
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs import (
+    InvalidInput,
     JobNotFound,
     RunNotCancellable,
     RunNotFound,
+    SchemaIssue,
+    WorkflowNotFound,
 )
-from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs_service import JobsAdminService
+from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs_service import (
+    RESULT_PREVIEW_BYTES,
+    JobsAdminService,
+    preview_result,
+)
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.port import SourceUnavailable
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import (
     AdminAction,
@@ -169,12 +178,12 @@ def test_runs_need_the_run_store():
 
 
 def test_a_run_with_its_trace_link():
-    detail, trace_url = run(_service().run("acme.jobs", "nightly:3"))
+    found = run(_service().run("acme.jobs", "nightly:3"))
 
-    assert detail.result == {"rows": 3}
-    assert trace_url == "http://jaeger:16686/trace/" + "b" * 32
-    _, no_trace = run(_service().run("acme.jobs", "sync:9"))
-    assert no_trace is None
+    assert found.run.result == {"rows": 3}
+    assert found.trace_url == "http://jaeger:16686/trace/" + "b" * 32
+    assert found.workflow is None
+    assert run(_service().run("acme.jobs", "sync:9")).trace_url is None
     with pytest.raises(RunNotFound):
         run(_service().run("acme.jobs", "nightly:99"))
 
@@ -308,3 +317,172 @@ def test_skipped_runs_are_never_failures():
     found = run(_service(runs=_with_skipped_runs()).failures(since="2026-10-01T00:00:00+00:00"))
 
     assert all(r.status in ("FAILED", "TIMED_OUT") for r in found.runs)
+
+
+# --- workflows ---------------------------------------------------------------------------
+
+
+def _flows(**overrides):
+    """The jobs fixtures plus acme.flows' workflows, runs and journals."""
+    parts = {
+        "catalogs": [
+            InMemoryJobCatalog(fixtures.job_definitions() + fixtures.workflow_definitions())
+        ],
+        "runs": InMemoryJobRunStore(fixtures.job_runs() + fixtures.workflow_runs()),
+        "steps": InMemoryStepStore(fixtures.workflow_steps()),
+        "validator": InMemoryInputValidator(),
+    }
+    parts.update(overrides)
+    return _service(**parts)
+
+
+def test_the_overview_lists_workflows_beside_jobs_with_their_kind_and_schemas():
+    jobs = {j.definition.key: j.definition for j in run(_flows().overview()).jobs}
+
+    ingest = jobs["acme.flows/ingest"]
+    assert ingest.kind == "workflow" and ingest.is_workflow
+    assert ingest.input_schema == fixtures.INGEST_INPUT_SCHEMA
+    assert ingest.output_schema == fixtures.INGEST_OUTPUT_SCHEMA
+    assert ingest.triggers[0].input == {"filter": "news"}
+    assert jobs["acme.flows/map_item"].input_schema is None
+    assert jobs["acme.jobs/nightly"].kind == "job" and not jobs["acme.jobs/nightly"].is_workflow
+
+
+def test_a_workflow_run_carries_its_steps_and_child_links():
+    found = run(_flows().run("acme.flows", "ingest:5"))
+
+    assert [(s.key, s.status, s.attempt) for s in found.workflow.steps] == [
+        ("fetch", "SUCCEEDED", 2),
+        ("map[0]", "SUCCEEDED", 1),
+        ("map[1]", "FAILED", 1),
+    ]
+    assert found.workflow.steps[1].child.key == "acme.flows/map_item:1"
+    assert found.workflow.steps[2].error.startswith("ChildRunFailed")
+    assert found.run.result == {"count": 2}
+    # A child run is a run like any other: its link opens its own detail.
+    assert run(_flows().run("acme.flows", "map_item:2")).run.error == "ValueError: bad item"
+
+
+def test_a_workflow_run_without_a_journal_still_answers():
+    for steps in (None, InMemoryStepStore(fail="down"), SourceUnavailable("steps", "off")):
+        found = run(_flows(steps=steps).run("acme.flows", "ingest:5"))
+
+        assert found.run.status == "SUCCEEDED"
+        assert found.workflow is not None and found.workflow.steps == ()
+
+
+def test_a_large_workflow_result_is_cut_for_display_but_a_job_result_is_not():
+    big = {"rows": ["x" * 100 for _ in range(400)]}
+    runs = [
+        replace_result(fixtures.workflow_runs()[1], big),
+        replace_result(fixtures.job_runs()[1], big),
+    ]
+    service = _flows(runs=InMemoryJobRunStore(runs))
+
+    cut = run(service.run("acme.flows", "ingest:5")).run.result
+    assert cut["truncated"] is True and cut["bytes"] > RESULT_PREVIEW_BYTES
+    assert len(cut["preview"]) == RESULT_PREVIEW_BYTES
+    assert run(service.run("acme.flows", "ingest:5", preview=False)).run.result == big
+    assert run(service.run("acme.jobs", "nightly:3")).run.result == big
+
+
+def replace_result(job_run, result):
+    from dataclasses import replace
+
+    return replace(job_run, result=result)
+
+
+def test_preview_keeps_small_and_empty_results_as_they_are():
+    assert preview_result(None) is None
+    assert preview_result({"count": 2}) == {"count": 2}
+    assert preview_result("text") == "text"
+
+
+def test_a_workflow_trigger_is_checked_against_its_input_schema_before_anything_happens():
+    control, audit = InMemoryJobControl(), InMemoryAuditLog()
+    validator = InMemoryInputValidator(
+        {"bad": [SchemaIssue("/limit", "0 is less than the minimum of 1")]}
+    )
+    service = _flows(control=control, audit=audit, validator=validator)
+
+    with pytest.raises(InvalidInput) as exc:
+        run(service.trigger("u1", "acme.flows", "ingest", {"name": "bad"}))
+
+    assert exc.value.issues == (SchemaIssue("/limit", "0 is less than the minimum of 1"),)
+    assert control.triggered == [] and audit.records == []
+    assert validator.seen == [(fixtures.INGEST_INPUT_SCHEMA, {"name": "bad"})]
+
+
+def test_valid_input_starts_the_run_and_the_key_reaches_the_broker():
+    control, audit = InMemoryJobControl(), InMemoryAuditLog()
+    service = _flows(control=control, audit=audit)
+
+    first = run(
+        service.trigger(
+            "u1", "acme.flows", "ingest", {"filter": "news"}, idempotency_key="k1", via="user"
+        )
+    )
+    again = run(
+        service.trigger("u1", "acme.flows", "ingest", {"filter": "news"}, idempotency_key="k1")
+    )
+
+    assert first == again == "ingest:101"
+    assert control.keys == ["k1", "k1"]
+    assert len(audit.records) == 4  # both starts are on record
+
+
+def test_plain_jobs_and_workflows_without_a_schema_are_not_validated():
+    validator = InMemoryInputValidator()
+    service = _flows(validator=validator)
+
+    run(service.trigger("u1", "acme.jobs", "nightly", {"anything": 1}))
+    run(service.trigger("u1", "acme.flows", "map_item", {"anything": 1}))
+
+    assert validator.seen == []
+
+
+def test_an_api_key_start_is_audited_without_a_user():
+    audit = InMemoryAuditLog()
+
+    run(_flows(audit=audit).trigger("", "acme.flows", "ingest", {"filter": "news"}, via="api_key"))
+
+    assert [(r.action.actor_id, r.action.via, r.phase) for r in audit.records] == [
+        ("", "api_key", "requested"),
+        ("", "api_key", "succeeded"),
+    ]
+    assert audit.records[0].action.resource_id == "acme.flows/ingest"
+
+
+def test_workflow_only_refuses_a_plain_job_and_an_unknown_name():
+    control = InMemoryJobControl()
+    service = _flows(control=control)
+
+    for name in ("nightly", "nope"):
+        with pytest.raises(WorkflowNotFound):
+            run(service.trigger("u1", "acme.jobs", name, {}, workflow_only=True))
+    assert issubclass(WorkflowNotFound, JobNotFound)
+    assert control.triggered == []
+
+
+def test_workflow_only_cancel_leaves_plain_job_runs_alone():
+    control, audit = InMemoryJobControl(), InMemoryAuditLog()
+    service = _flows(control=control, audit=audit)
+
+    with pytest.raises(RunNotFound):
+        run(service.cancel("u1", "acme.jobs", "sync:9", workflow_only=True))
+    run(service.cancel("", "acme.flows", "ingest:6", via="api_key", workflow_only=True))
+
+    assert control.cancelled == [("acme.flows", "ingest", "ingest:6")]
+    assert [(r.action.via, r.phase) for r in audit.records] == [
+        ("api_key", "requested"),
+        ("api_key", "succeeded"),
+    ]
+    with pytest.raises(RunNotCancellable):
+        run(service.cancel("u1", "acme.flows", "ingest:5", workflow_only=True))
+
+
+def test_a_run_of_a_module_nobody_registers_is_a_workflow_run_when_it_has_a_journal():
+    service = _flows(catalogs=[InMemoryJobCatalog([])])
+
+    assert run(service.run("acme.flows", "ingest:5")).workflow is not None
+    assert run(service.run("acme.jobs", "nightly:3")).workflow is None

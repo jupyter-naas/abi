@@ -10,6 +10,8 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs import (
     JobDefinition,
     JobRun,
     RunNotFound,
+    SchemaIssue,
+    WorkflowDetail,
 )
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.port import SourceUnavailable
 
@@ -81,15 +83,30 @@ class InMemoryJobControl:
     def __init__(self, *, fail: str = "", first_sequence: int = 100) -> None:
         self.triggered: list[tuple[str, str, dict[str, Any]]] = []
         self.cancelled: list[tuple[str, str, str]] = []
+        # Idempotency keys given to each trigger, in the same order as ``triggered``.
+        self.keys: list[str | None] = []
         self.fail = fail
         self._sequence = first_sequence
+        self._by_key: dict[tuple[str, str, str], str] = {}
 
-    async def trigger(self, module_id: str, job: str, payload: dict[str, Any]) -> str:
+    async def trigger(
+        self,
+        module_id: str,
+        job: str,
+        payload: dict[str, Any],
+        idempotency_key: str | None = None,
+    ) -> str:
         if self.fail:
             raise SourceUnavailable("jobs", self.fail)
         self.triggered.append((module_id, job, payload))
+        self.keys.append(idempotency_key)
+        if idempotency_key and (module_id, job, idempotency_key) in self._by_key:
+            return self._by_key[(module_id, job, idempotency_key)]
         self._sequence += 1
-        return f"{job}:{self._sequence}"
+        run_id = f"{job}:{self._sequence}"
+        if idempotency_key:
+            self._by_key[(module_id, job, idempotency_key)] = run_id
+        return run_id
 
     async def cancel(self, module_id: str, job: str, run_id: str) -> None:
         if self.fail:
@@ -108,3 +125,34 @@ class InMemoryJobQueue:
         if self.fail:
             raise SourceUnavailable("queue", self.fail)
         return self.depths.get((module_id, job))
+
+
+class InMemoryStepStore:
+    """Steps by (module, run id); ``fired_at`` filtering is the real adapter's."""
+
+    def __init__(
+        self, journals: dict[tuple[str, str], WorkflowDetail] | None = None, *, fail: str = ""
+    ) -> None:
+        self.journals = dict(journals or {})
+        self.fail = fail
+
+    async def journal(
+        self, module_id: str, run_id: str, fired_at: str | None = None
+    ) -> WorkflowDetail:
+        if self.fail:
+            raise SourceUnavailable("steps", self.fail)
+        return self.journals.get((module_id, run_id), WorkflowDetail())
+
+
+class InMemoryInputValidator:
+    """Accepts everything but the payloads it was told to refuse."""
+
+    def __init__(self, refuse: dict[str, list[SchemaIssue]] | None = None) -> None:
+        self.refuse = dict(refuse or {})
+        self.seen: list[tuple[dict[str, Any], Any]] = []
+
+    def validate(self, schema: dict[str, Any], payload: Any) -> list[SchemaIssue]:
+        self.seen.append((schema, payload))
+        return list(
+            self.refuse.get(str(payload.get("name", "")) if isinstance(payload, dict) else "", [])
+        )

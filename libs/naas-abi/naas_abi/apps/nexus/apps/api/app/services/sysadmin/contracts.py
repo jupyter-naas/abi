@@ -415,6 +415,16 @@ class AdminAuditLogContract:
         assert [e.phase for e in secrets] == ["succeeded", "requested"]
         assert [(e.resource_id, e.error) for e in one] == [("a/b.txt", "RuntimeError")]
 
+    def test_an_api_key_actor_has_no_user_and_is_named_in_history(self, audit, recorded):
+        action = AdminAction("", "jobs", "trigger", "acme.flows/ingest", via="api_key")
+
+        asyncio.run(audit.record(AuditRecord(action, "requested")))
+        asyncio.run(audit.record(AuditRecord(action, "succeeded")))
+
+        assert recorded() == [AuditRecord(action, "requested"), AuditRecord(action, "succeeded")]
+        (newest, _) = asyncio.run(audit.history(service="jobs"))
+        assert (newest.actor_id, newest.actor) == ("", "ABI API key")
+
     def test_a_record_that_cannot_be_written_raises(self, broken_audit):
         action = AdminAction("u1", "object_storage", "delete", "a/b.txt")
         try:
