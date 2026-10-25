@@ -17,7 +17,7 @@ from collections.abc import Iterable
 from concurrent.futures import FIRST_EXCEPTION, ThreadPoolExecutor, wait
 from typing import Any
 
-from naas_abi_core.module.workflows import POLL_SECONDS, ChildRunFailed
+from naas_abi_core.module.workflows import POLL_SECONDS, ChildRunFailed, NonRetryable
 
 MAX_ERROR_CHARS = 300
 
@@ -27,6 +27,14 @@ class FlowIncomplete(RuntimeError):
 
     Raised after every stage that could still run did: the message says what
     succeeded and what failed, so a FAILED run does not hide the work it did."""
+
+
+class FetchFailed(FlowIncomplete, NonRetryable):
+    """``FlowIncomplete`` for a run whose fetch failed: it ends FAILED without a retry.
+
+    The fetch is a journaled step, so every attempt would replay the same failure
+    while the RETRYING run made the next ticks of its filter skip. The next tick
+    fetches again, from the ``since_id`` cursor."""
 
 
 def call_each(

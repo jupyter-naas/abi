@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import pytest
-from naas_abi_core.module.workflows import ChildRunFailed, InvalidWorkflowInput
+from naas_abi_core.module.workflows import (
+    ChildRunFailed,
+    InvalidWorkflowInput,
+    NonRetryable,
+)
 from naas_abi_marketplace.applications.x.flows import search
 from naas_abi_marketplace.applications.x.flows.conftest import (
     FakeFlowContext,
@@ -12,6 +16,7 @@ from naas_abi_marketplace.applications.x.flows.conftest import (
 )
 from naas_abi_marketplace.applications.x.flows.fanout import FlowIncomplete
 from naas_abi_marketplace.applications.x.flows.models import SearchRecentTweetsInput
+from pydantic import ValidationError
 
 PATHS = ["x/search_recent_tweets/news/1.json", "x/search_recent_tweets/news/2.json"]
 MAPPED = "map_tweet_envelope"
@@ -213,6 +218,28 @@ def test_envelopes_saved_by_a_fetch_that_fails_part_way_are_mapped_then_the_run_
     assert "saved 1 envelope(s), mapped 1" in message
     assert "the fetch failed after saving 1 envelope(s)" in message
     assert "429 Too Many Requests" in message
+
+
+def test_a_run_whose_fetch_failed_is_not_retried(calls):
+    # the fetch is journaled: another attempt would replay it, and the RETRYING run
+    # would make the next ticks of the filter skip
+    calls.fetch_error = RuntimeError("429")
+    with pytest.raises(FlowIncomplete) as failure:
+        run(x_module(search_filter("news")), ctx_for(calls))
+    assert isinstance(failure.value, NonRetryable)
+
+
+def test_a_run_whose_mapping_failed_is_retried(calls):
+    calls.fail_mapping = {PATHS[0]}
+    with pytest.raises(FlowIncomplete) as failure:
+        run(x_module(search_filter("news")), ctx_for(calls))
+    assert not isinstance(failure.value, NonRetryable)
+
+
+def test_a_search_needs_its_filter_to_start():
+    # the overlap guard compares payload filters: a payload without one never starts
+    with pytest.raises(ValidationError):
+        SearchRecentTweetsInput.model_validate({})
 
 
 def test_a_retry_of_a_run_whose_fetch_failed_does_not_call_x_again(calls):

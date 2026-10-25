@@ -198,11 +198,16 @@ export function stepBars(steps: RunStep[], now: number = Date.now()): StepBar[] 
   }));
 }
 
-/** A workflow result the API cut for display: ``{truncated: true, bytes, preview}``. */
-export function truncatedResult(value: unknown): { bytes: number; preview: string } | null {
+export type TruncatedResult = { bytes?: number; preview: string };
+
+/**
+ * A result cut for display: the API's ``{truncated: true, bytes, preview}``, or the
+ * job host's own marker for a result over what a run record keeps,
+ * ``{truncated: true, preview}`` (no byte count).
+ */
+export function truncatedResult(value: unknown): TruncatedResult | null {
   if (!value || typeof value !== 'object') return null;
   const v = value as Record<string, unknown>;
-  return v.truncated === true && typeof v.preview === 'string' && typeof v.bytes === 'number'
-    ? { bytes: v.bytes, preview: v.preview }
-    : null;
+  if (v.truncated !== true || typeof v.preview !== 'string') return null;
+  return typeof v.bytes === 'number' ? { bytes: v.bytes, preview: v.preview } : { preview: v.preview };
 }

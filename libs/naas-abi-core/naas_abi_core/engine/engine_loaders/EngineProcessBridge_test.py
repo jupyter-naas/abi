@@ -322,6 +322,34 @@ def test_a_result_over_the_cap_becomes_a_marker_for_every_result_type():
     assert encode_process_result(huge, max_bytes=10**6) == huge
 
 
+def test_a_result_that_is_not_an_object_is_not_advertised_as_one():
+    class Names(_NoTools, Workflow[ReportParameters]):
+        def run(self, parameters: ReportParameters) -> list[str]:
+            return ["a", "b"]
+
+    class Count(_NoTools, Workflow[ReportParameters]):
+        def run(self, parameters: ReportParameters) -> int:
+            return 2
+
+    class Untyped(_NoTools, Workflow[ReportParameters]):
+        def run(self, parameters: ReportParameters):  # type: ignore[no-untyped-def]
+            return "done"
+
+    module = _Module(
+        workflows=[
+            Names(WorkflowConfiguration()),
+            Count(WorkflowConfiguration()),
+            Untyped(WorkflowConfiguration()),
+        ]
+    )
+    bridge_processes({"acme.mod": module}, _config())
+
+    assert len(module.jobs) == 3
+    for job in module.jobs:
+        schema = json.loads(job.output_schema)
+        assert "type" not in schema and "description" in schema, job.name
+
+
 def test_the_advertised_output_schema_admits_the_marker():
     class Out(BaseModel):
         n: int

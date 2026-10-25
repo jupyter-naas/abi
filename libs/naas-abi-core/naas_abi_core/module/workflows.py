@@ -30,7 +30,12 @@ from datetime import timedelta
 from typing import Any
 
 try:
-    from naas_abi_sdk.jobs import JobDescriptor, Trigger, is_async_callable
+    from naas_abi_sdk.jobs import (
+        JobDescriptor,
+        NonRetryable,
+        Trigger,
+        is_async_callable,
+    )
     from naas_abi_sdk.workflows import (
         DEFAULT_FAN_OUT_CONCURRENCY,
         MAX_FAN_OUT,
@@ -60,6 +65,7 @@ except ImportError:  # core without [nats]
         FlowContext,
         InvalidWorkflowInput,
         InvalidWorkflowOutput,
+        NonRetryable,
         SelfCall,
         StepKeyError,
         StepResultTooLarge,
@@ -389,6 +395,7 @@ __all__ = [
     "FlowContext",
     "InvalidWorkflowInput",
     "InvalidWorkflowOutput",
+    "NonRetryable",
     "SelfCall",
     "StepKeyError",
     "StepResultTooLarge",

@@ -151,14 +151,24 @@ def encode_process_result(result: Any, max_bytes: int = MAX_RESULT_BYTES) -> Any
     return value
 
 
-def _output_schema(instance: Any) -> dict[str, Any] | None:
-    """The JSON Schema of what ``run()`` returns, when its annotation says."""
+ANY_OUTPUT_SCHEMA: dict[str, Any] = {
+    "description": (
+        "Whatever run() returns, as JSON (a list, a string, a number, an object...), "
+        "or the marker of a result too large to keep"
+    )
+}
+
+
+def _output_schema(instance: Any) -> dict[str, Any]:
+    """The JSON Schema of what ``run()`` returns, when its annotation says; else a
+    permissive one. (Left out, the SDK would derive ``{"type": "object"}`` from the
+    bridge handler's own ``-> Any``, wrong for a list or a string result.)"""
     from rdflib import Graph
 
     try:
         returned = get_type_hints(type(instance).run).get("return")
     except Exception:  # noqa: BLE001 - an unresolvable annotation just has no schema
-        return None
+        return ANY_OUTPUT_SCHEMA
     if isinstance(returned, type):
         if issubclass(returned, Graph):
             return GRAPH_OUTPUT_SCHEMA  # its own note covers a large graph
@@ -169,7 +179,7 @@ def _output_schema(instance: Any) -> dict[str, Any] | None:
             }
         if issubclass(returned, dict):
             return {"type": "object"}  # the marker is an object too
-    return None
+    return ANY_OUTPUT_SCHEMA
 
 
 def _description(instance: Any) -> str:

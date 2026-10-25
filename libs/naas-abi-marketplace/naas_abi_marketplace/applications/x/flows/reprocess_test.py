@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from naas_abi_core.module.workflows import ChildRunFailed
 from naas_abi_marketplace.applications.x.flows import reprocess
@@ -61,7 +63,7 @@ def world(monkeypatch):
     return world
 
 
-def run(world, fail=(), records=None, **inp):
+def run(world, fail=(), records=None, payload=None, **inp):
     """One run; its children map what they are given, as ``map_tweet_envelope`` does."""
     mapped: list[dict] = []
 
@@ -76,7 +78,7 @@ def run(world, fail=(), records=None, **inp):
         job="reprocess_tweet_envelopes",
         run_id="reprocess_tweet_envelopes:10",
         children=children,
-        payload={"prefix": PREFIX},
+        payload={"prefix": PREFIX} if payload is None else payload,
     )
     module = x_module(object_storage=object(), triple_store=object(), records=records)
     ctx.attach(module)
@@ -180,3 +182,35 @@ def test_a_sweep_that_is_still_running_makes_the_next_one_skip(world):
     }
     out, ctx, mapped = run(world, records=[running])
     assert out is None and mapped == [] and "reprocess_tweet_envelopes:4" in ctx.skipped
+
+
+def test_a_launch_without_a_prefix_overlaps_a_sweep_of_the_default_prefix(world):
+    # a manual launch with `{}` resolves to the default prefix, as the scheduled
+    # sweep's payload does: each sees the other
+    earlier = {
+        "run_id": "reprocess_tweet_envelopes:4",
+        "job": "reprocess_tweet_envelopes",
+        "status": "RUNNING",
+        "sequence": 4,
+        "payload": {},
+    }
+    out, ctx, mapped = run(world, records=[earlier], payload={})
+    assert out is None and mapped == [] and "reprocess_tweet_envelopes:4" in ctx.skipped
+    other = {**earlier, "payload": {"prefix": "x/other"}}
+    out, _, mapped = run(world, records=[other])
+    assert out is not None and len(mapped) == 4  # another folder does not block
+
+
+def test_a_plan_with_long_paths_stays_under_the_step_cap(world):
+    slug = "q" * 120
+    world.listed = [
+        f"{PREFIX}/{slug}/2026-10-25T10:{i // 60:02d}:{i % 60:02d}_{slug}.json"
+        for i in range(1500)
+    ]
+    module = x_module(object_storage=object(), triple_store=object())
+    plan = reprocess.plan_reprocess(
+        module, ReprocessTweetEnvelopesInput(prefix=PREFIX, max_envelopes=1500)
+    )
+    assert plan["truncated"] is True
+    assert 0 < len(plan["to_map"]) < 1500
+    assert len(json.dumps(plan)) < 256 * 1024

@@ -10,6 +10,7 @@ syncs nothing.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -42,6 +43,37 @@ from naas_abi_marketplace.applications.x.flows.search import (
     MAP_CONCURRENCY,
     MAP_WORKFLOW,
 )
+from pydantic import ValidationError
+
+# What the paths of a plan may weigh: the step cap is 256 KiB, the rest of the plan
+# (counts, the other list's envelope) fits in the margin.
+PLAN_MAX_BYTES = 200 * 1024
+
+
+def _encoded_size(path: str) -> int:
+    """Bytes a path takes in the journaled plan (JSON string and separator)."""
+    return len(json.dumps(path)) + 1
+
+
+def _page(paths: list[str], count: int, size: int) -> list[str]:
+    """The first *paths*, at most *count* of them and *size* bytes once encoded."""
+    page: list[str] = []
+    used = 0
+    for path in paths[: max(count, 0)]:
+        used += _encoded_size(path)
+        if used > size:
+            break
+        page.append(path)
+    return page
+
+
+def _prefix_of(payload: Any) -> str | None:
+    """The prefix a run's trigger payload resolves to: a payload without one (a
+    manual launch with ``{}``) means the default, as the validated input says."""
+    try:
+        return ReprocessTweetEnvelopesInput.model_validate(payload or {}).prefix
+    except ValidationError:
+        return None
 
 
 def plan_reprocess(module, inp: ReprocessTweetEnvelopesInput) -> dict[str, Any]:
@@ -80,10 +112,14 @@ def plan_reprocess(module, inp: ReprocessTweetEnvelopesInput) -> dict[str, Any]:
                 complete += 1
             else:
                 dataset_only.append(path)
-    # One page of work per run: the plan is a journaled step (256 KiB at most).
-    truncated = len(to_map) + len(dataset_only) > inp.max_envelopes
-    to_map = to_map[: inp.max_envelopes]
-    dataset_only = dataset_only[: inp.max_envelopes - len(to_map)]
+    # One page of work per run: the plan is a journaled step (256 KiB at most), so
+    # the page is bounded by count and by the size of the paths it carries.
+    total = len(to_map) + len(dataset_only)
+    to_map = _page(to_map, inp.max_envelopes, PLAN_MAX_BYTES)
+    room = inp.max_envelopes - len(to_map)
+    used = sum(_encoded_size(path) for path in to_map)
+    dataset_only = _page(dataset_only, room, PLAN_MAX_BYTES - used)
+    truncated = len(to_map) + len(dataset_only) < total
     return {
         "listed": len(paths),
         "skipped_age": skipped_age,
@@ -116,7 +152,7 @@ def run_reprocess_tweet_envelopes(
     # A scheduled sweep that outlasts its interval, or a manual launch over the
     # same folder, would map the same envelopes twice: SKIPPED, not queued.
     if skip_if_overlapping(
-        module, ctx, same_target=lambda payload: payload.get("prefix") == inp.prefix
+        module, ctx, same_target=lambda payload: _prefix_of(payload) == inp.prefix
     ):
         return None
 

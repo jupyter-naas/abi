@@ -8,7 +8,7 @@ Durable workflows over REST at `/api/workflows`, for scripts (`Authorization: Be
 - `service.py`: `WorkflowsService(jobs: JobsAdminService)`.
   - `list`: the workflows of every catalog, with schemas and triggers, and how each source answered.
   - `start`: `JobsAdminService.trigger(workflow_only=True)`: the input is checked against the input schema (`InvalidInput`, nothing audited or sent), the start is audited, then the trigger is sent with the idempotency key. `wait` (seconds) then reads the run record, quickly at first and about once a second after, until the run is terminal or the time is up; the run goes on either way, and a run store failing mid-wait answers with what was last known.
-  - `status`: the run's record with its whole result and its steps. A run no host has recorded yet reads as QUEUED when its workflow exists; a plain job's run, an unknown workflow or a malformed id is `RunNotFound`.
+  - `status`: the run's record with its whole result and its steps. A run no host has a record of (pruned, mistyped, not taken yet) is `RunNotFound` (404), as are a plain job's run, an unknown workflow and a malformed id; only `start` reports the run it just started as QUEUED before a host records it.
   - `cancel`: `JobsAdminService.cancel(workflow_only=True)`: audited, cooperative; a cancelled parent cancels the children it waits for (the SDK does that).
 - `adapters/primary/workflows__primary_adapter__FastAPI.py`: the router (`handlers/` re-exports it, mounted in `app/api/router.py`).
 - `factory.py`: `get_workflows_service` (one per API process, over `get_jobs_admin`).
@@ -40,7 +40,7 @@ curl -s -X POST -H "Authorization: Bearer $ABI_API_KEY" "$NEXUS/api/workflows/ac
 
 ## Tests
 
-- `service_test.py`: audit with each caller, refused input, `wait` (fake clock), QUEUED reads, cancel.
+- `service_test.py`: audit with each caller, refused input, `wait` (fake clock), QUEUED only for a just-started run, cancel.
 - `adapters/primary/workflows__primary_adapter__FastAPI_test.py`: every route for a super admin, the API key, a user who is not one (403) and no credentials (401), over in-memory adapters.
 - `sysadmin/adapters/secondary/jobs_integration_test.py` runs the service over the real adapters and an SDK job host on `nats-server -js`.
 - Run: `uv run --frozen pytest libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/workflows libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/sysadmin`.
