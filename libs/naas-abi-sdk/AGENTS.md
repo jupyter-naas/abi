@@ -154,6 +154,30 @@ RUNNING/RETRYING with attempts left whose trigger left the stream).
 trigger is published; `event_filter.py` mirrors core's `EventFilter.matches`,
 change them together.
 
+Workflows (`workflows.py`, ADR docs/adr/20261025_durable-workflows-on-nats.md) are jobs
+with `kind="workflow"`, JSON Schemas on the descriptor and a step journal. Same rules
+as jobs.py: stdlib and proto only at import (nats and `services.errors` load lazily),
+no pydantic import (models are duck-typed: `model_json_schema`, `model_validate`,
+`model_dump`). `@workflow` methods are `(self, ctx: FlowContext, inp) -> out`;
+`declare_job`/`declare_workflow` add jobs at runtime (instance level, before the host
+starts; `run_module` takes the descriptor after `on_load`). Descriptors are bounded
+(schema 16 KiB, trigger input 4 KiB, whole 64 KiB: `jobs.py` enforces it). The journal is
+`workflow_steps_<h>` (summaries, no results) and `workflow_results_<h>` (JSON text) in
+the module namespace, ids `<run id>#<step key>`, results written before the summary,
+`fired_at` guarding recreated streams; `job_host.prune` deletes it with its run.
+`FlowContext.step` returns the JSON a replay returns; step keys are unique per run and
+deterministic; results are capped at 256 KiB. `call`/`map_call` journal the child run id
+before waiting, with the idempotency key `<run>/<key>/<attempt>`; a failed child fails the
+step and the next attempt starts a new one. A parent holds its slot; only a run that ends
+CANCELLED cancels its waited-for children (`FlowContext.finish`, called by the host), not a
+shutdown or a timeout. `NonRetryable` exceptions fail a run without retry. Hosts publish
+`{run_id, status}` on `JobSubjects.done` (core NATS, outside the jobs stream) when a run
+is saved terminal; `CompletionNotices` waits on it with a 5 s poll fallback. A `Cron`/`Every`
+`input` is the schedule body; its hash header is in `SCHEDULE_HEADERS` only when set, so
+schedules from before it are not republished. Any new raw send is registered in core's
+`nats_send_sites_test.py`. Tests: `tests/test_workflows.py`, and with `nats-server`
+`tests/test_workflows_integration.py` (run both broker kinds with core importable).
+
 `lifeline.py` stops a process whose NATS connection closed for good (nats-py
 gave up reconnecting), so its supervisor restarts it (ADR
 docs/adr/20261008_stop-on-nats-loss.md). Every long-lived connection passes a
