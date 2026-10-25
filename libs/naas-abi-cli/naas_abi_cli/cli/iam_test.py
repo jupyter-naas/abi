@@ -1,3 +1,4 @@
+import importlib
 import json
 
 import pytest
@@ -467,3 +468,57 @@ def test_a_provider_warning_is_shown(run, identity):
     )
     result = run("invite", "bob@example.com", "--org", "acme", "--org-role", "member")
     assert "warning: no mail server" in result.output
+
+
+# -- the change notice --------------------------------------------------------------------
+
+
+def test_the_change_notice_gives_up_when_no_broker_listens(monkeypatch) -> None:
+    # The NATS client retries an unreachable server for as long as it is let: a
+    # notice with no deadline held `abi dev up` for ever.
+    import socket
+    import time
+
+    iam_cli = importlib.import_module("naas_abi_cli.cli.iam")
+
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]  # nothing listens here once it is closed
+    monkeypatch.setattr(iam_cli, "NOTIFY_TIMEOUT_SECONDS", 1.0)
+
+    started = time.monotonic()
+    iam_cli.notify_engine(f"nats://127.0.0.1:{port}", revision=1)
+
+    assert time.monotonic() - started < 10
+
+
+def test_a_dev_module_key_tells_the_broker_of_the_dev_run(monkeypatch) -> None:
+    # `abi dev up` runs its own broker on another port than the config names.
+    from types import SimpleNamespace
+
+    dev = importlib.import_module("naas_abi_cli.cli.dev")
+
+    iam_cli = importlib.import_module("naas_abi_cli.cli.iam")
+
+    told: list[str | None] = []
+
+    def opener(nats_url=None):
+        told.append(nats_url)
+        service = IAMService(IAMStoreMemory())
+        service.bootstrap()
+        return service, lambda: None
+
+    monkeypatch.setattr(iam_cli, "open_project_iam", opener)
+    overlay = {
+        "nats": {
+            "nats_url": "nats://engine:pw@127.0.0.1:13136",
+            "discovery": {"project": "demo"},
+        }
+    }
+
+    key = dev._module_key(
+        SimpleNamespace(name="research", identity="acme.research"), overlay
+    )
+
+    assert key.startswith("abi_sk_")
+    assert told == ["nats://engine:pw@127.0.0.1:13136"]

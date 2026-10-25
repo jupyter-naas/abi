@@ -1216,7 +1216,8 @@ def _module_key(module, overlay: dict) -> str:
 
     project = overlay["nats"]["discovery"]["project"]
     try:
-        iam, notify = open_project_iam()
+        # Tell the dev broker of this run, not the one the config names.
+        iam, notify = open_project_iam(nats_url=overlay["nats"].get("nats_url"))
     except Exception as exc:
         raise click.ClickException(
             f"{module.name}: cannot open IAM for its key: {exc}"
