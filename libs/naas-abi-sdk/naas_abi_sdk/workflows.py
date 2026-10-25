@@ -238,6 +238,14 @@ def validate_input(spec: WorkflowSpec, payload: dict[str, Any]) -> Any:
 
 def dump_output(spec: WorkflowSpec, value: Any) -> Any:
     """The handler's return value as the JSON the run record keeps."""
+    if (
+        spec.output_type is not None
+        and _is_model_value(value)
+        and not isinstance(value, spec.output_type)
+    ):
+        raise InvalidWorkflowOutput(
+            f"A {spec.output_type.__name__} was expected, got {type(value).__name__}"
+        )
     if spec.output_type is not None and not _is_model_value(value):
         if value is None or not isinstance(value, dict):
             raise InvalidWorkflowOutput(
@@ -254,11 +262,16 @@ def workflow_handler(
     fn: Callable[..., Awaitable[Any]], spec: WorkflowSpec
 ) -> Callable[[JobContext], Awaitable[Any]]:
     """The job handler of ``async fn(ctx, inp)``: validates the input before ``fn``
-    runs (an invalid input fails the run, without retry) and dumps its output."""
+    runs (an invalid input fails the run, without retry) and dumps its output.
+    A handler that called ``ctx.skip()`` returns ``None``, whatever its output
+    type: the run is SKIPPED and has no output."""
 
     async def handler(ctx: JobContext) -> Any:
         inp = validate_input(spec, ctx.payload)
-        return dump_output(spec, await fn(ctx, inp))
+        value = await fn(ctx, inp)
+        if value is None and ctx.skipped is not None:
+            return None
+        return dump_output(spec, value)
 
     handler.__name__ = getattr(fn, "__name__", "workflow")
     handler.__qualname__ = getattr(fn, "__qualname__", handler.__name__)
@@ -376,8 +389,12 @@ def _now() -> str:
 
 
 def check_step_key(key: Any) -> str:
-    if not isinstance(key, str) or not key or "\x00" in key:
+    if not isinstance(key, str) or not key:
         raise StepKeyError("A step key is a non-empty string")
+    # The key is part of a message id header (a child's idempotency key): a CR or
+    # LF in a key built from data would corrupt it.
+    if any(ord(c) < 0x20 or ord(c) == 0x7F for c in key):
+        raise StepKeyError("A step key has no control characters")
     if len(key) > MAX_STEP_KEY_LENGTH:
         raise StepKeyError(f"A step key is at most {MAX_STEP_KEY_LENGTH} characters")
     return key
@@ -488,9 +505,13 @@ class StepJournal:
                 "duration_ms": 0,
                 "error": "",
                 "fired_at": self.fired_at,
+                # Only a start that never journaled its child run continues: the
+                # child of a FAILED (or cancelled) attempt is over, not this one's.
                 **(
                     {"child": prior["child"]}
-                    if reuse_running and "child" in prior
+                    if reuse_running
+                    and prior.get("status") == "RUNNING"
+                    and "child" in prior
                     else {}
                 ),
             }
@@ -993,7 +1014,7 @@ class FlowContext(JobContext):
         record = await self._await_run(run)
         self._children.pop(key, None)
         status = record.get("status")
-        if status not in ("SUCCEEDED", "SKIPPED"):
+        if status not in ("SUCCEEDED", "SKIPPED"):  # a skipped child's output is None
             error = (
                 f"Child run {run.run_id} of {module_id}.{workflow} ended {status}: "
                 f"{record.get('error') or 'no error recorded'}"
@@ -1176,12 +1197,15 @@ class WorkflowRun:
 
     async def result(self, *, timeout: float | None = None) -> Any:
         """The output (a model when ``output_type`` says so) once the run
-        succeeded; ``WorkflowRunFailed`` if it ended any other way."""
+        succeeded; ``None`` for a run that skipped (``ctx.skip()``: nothing to do,
+        so no output); ``WorkflowRunFailed`` if it ended any other way."""
         record = await self.wait(timeout=timeout)
         if record.get("status") not in ("SUCCEEDED", "SKIPPED"):
             raise WorkflowRunFailed(
                 self.run_id, str(record.get("status")), str(record.get("error") or "")
             )
+        if record.get("status") == "SKIPPED":
+            return None
         output = record.get("result")
         if (
             isinstance(output, dict)

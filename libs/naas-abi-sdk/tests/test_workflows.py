@@ -1578,3 +1578,143 @@ def test_pydantic_models():
     assert out == {"titles": ["t", "t"]}
     with pytest.raises(InvalidWorkflowInput, match="term"):
         asyncio.run(handler(_context(MemoryDocuments(), payload={"limit": 2})))
+
+
+# --- review fixes ----------------------------------------------------------------------
+
+
+def test_a_new_attempt_does_not_inherit_the_child_of_a_failed_one():
+    docs, outcomes = MemoryDocuments(), _Outcomes()
+    outcomes.records["child:100"] = {"status": "FAILED", "error": "x"}
+    with pytest.raises(ChildRunFailed):
+        asyncio.run(
+            _context(docs, outcomes=outcomes).call("acme.child", "child", key="c")
+        )
+    assert docs.steps("flow:1")["c"]["child"]["run_id"] == "child:100"
+
+    # The next attempt starts, and its host dies before it journals the new child.
+    async def die_before_journaling():
+        ctx = _context(docs, outcomes=outcomes)
+
+        async def die(key, child):
+            raise RuntimeError("host died")
+
+        ctx._journal.set_child = die
+        with pytest.raises(RuntimeError):
+            await ctx.call("acme.child", "child", key="c")
+
+    asyncio.run(die_before_journaling())
+    stuck = docs.steps("flow:1")["c"]
+    assert stuck["status"] == "RUNNING" and "child" not in stuck  # not the failed run
+
+    outcomes.records["child:102"] = {"status": "SUCCEEDED", "result": 7}
+    # The replay triggers a child; it does not wait for the failed one again.
+    assert (
+        asyncio.run(
+            _context(docs, outcomes=outcomes).call("acme.child", "child", key="c")
+        )
+        == 7
+    )
+    assert len(_FakeProxy.triggers) == 3
+    assert "child:100" not in outcomes.waited[1:]
+
+
+def test_step_keys_have_no_control_characters():
+    docs = MemoryDocuments()
+    for bad in ("a\nb", "a\rb", "a\tb", "a\x7fb", "a\x1fb"):
+        with pytest.raises(StepKeyError, match="control characters"):
+            asyncio.run(_context(docs).step(bad, lambda: 1))
+        with pytest.raises(StepKeyError, match="control characters"):
+            asyncio.run(
+                _context(docs, outcomes=_Outcomes()).map_call(
+                    bad, "acme.child", "child", [{}]
+                )
+            )
+    assert _FakeProxy.triggers == []
+    assert asyncio.run(_context(docs).step("file name.csv/é", lambda: 1)) == 1
+
+
+def test_a_typed_workflow_can_skip():
+    module = _bound()
+    docs = MemoryDocuments()
+
+    async def nothing_to_do(ctx, inp):
+        ctx.skip("nothing new")
+
+    module.declare_workflow(
+        "quiet", nothing_to_do, input_type=TweetsInput, output_type=TweetsOutput
+    )
+    descriptor = next(j for j in module.jobs if j.name == "quiet")
+    handler = module._job_handlers["quiet"]
+    host = _host(docs, [(descriptor, handler)])
+
+    asyncio.run(
+        host.handle(descriptor, handler, _Msg(sequence=4, payload={"filter": "db"}))
+    )
+
+    record = docs.data[(runs_collection(PROJECT), "quiet:4")].data
+    assert record["status"] == "SKIPPED" and record["skip_reason"] == "nothing new"
+    assert record["result"] is None
+    # Without skip(), None is still not a TweetsOutput.
+    module.declare_workflow("lazy", _returns(None), output_type=TweetsOutput)
+    with pytest.raises(InvalidWorkflowOutput):
+        asyncio.run(module._job_handlers["lazy"](_context(docs)))
+
+
+def test_a_skipped_run_has_no_output_for_result_and_for_a_parent():
+    docs = MemoryDocuments()
+    skipped = WorkflowRun(
+        _Finished(docs, {"status": "SKIPPED", "result": None}), output_type=TweetsOutput
+    )
+    assert asyncio.run(skipped.result(timeout=2)) is None  # not model_validate(None)
+
+    outcomes = _Outcomes()
+    outcomes.records["child:100"] = {"status": "SKIPPED", "result": None}
+    assert (
+        asyncio.run(
+            _context(docs, outcomes=outcomes).call("acme.child", "child", key="c")
+        )
+        is None
+    )
+    assert docs.steps("flow:1")["c"]["status"] == "SUCCEEDED"
+
+
+def test_a_model_of_another_class_is_not_the_output_type():
+    Other = model("Other", {"count": "integer"})
+
+    module = _bound()
+    module.declare_workflow("wrong", _returns(Other(count=1)), output_type=TweetsOutput)
+
+    with pytest.raises(
+        InvalidWorkflowOutput, match="TweetsOutput was expected, got Other"
+    ):
+        asyncio.run(module._job_handlers["wrong"](_context(MemoryDocuments())))
+
+
+def test_a_failing_journal_cleanup_leaves_the_run_for_the_next_pass(monkeypatch):
+    docs = MemoryDocuments()
+
+    async def handler(ctx):
+        await ctx.step("one", lambda: 1)
+
+    descriptor = JobDescriptor("w", kind="workflow")
+    host = _host(docs, [(descriptor, handler)])
+    asyncio.run(host.handle(descriptor, handler, _Msg(sequence=3)))
+    later = datetime.now(timezone.utc) + timedelta(days=30)
+
+    from naas_abi_sdk import job_host as job_host_module
+
+    real = job_host_module.delete_steps
+
+    async def broken(*args):
+        raise RuntimeError("store hiccup")
+
+    monkeypatch.setattr(job_host_module, "delete_steps", broken)
+    with pytest.raises(RuntimeError):
+        asyncio.run(host.prune(later))
+    # The record is still there: its journal is not orphaned.
+    assert (runs_collection(PROJECT), "w:3") in docs.data and docs.steps("w:3")
+
+    monkeypatch.setattr(job_host_module, "delete_steps", real)
+    assert asyncio.run(host.prune(later)) == 1
+    assert not docs.steps("w:3") and (runs_collection(PROJECT), "w:3") not in docs.data
