@@ -125,3 +125,57 @@ def test_a_broken_engine_module_does_not_hide_the_others():
     jobs = asyncio.run(EngineJobCatalog(lambda: {"a.broken": Broken(), "b.ok": ok}).list_jobs())
 
     assert [j.key for j in jobs] == ["b.ok/ping"]
+
+
+def test_the_jobs_of_a_remote_workflow_and_pipeline_are_listed_under_their_module():
+    """What discovery hands back for a module whose processes declare ``job``."""
+    pytest.importorskip("pydantic")
+    pytest.importorskip("rdflib")
+    from naas_abi_proto.discovery.v1 import discovery_pb2
+    from naas_abi_sdk.discovery import _instance, module_descriptor
+    from naas_abi_sdk.jobs import JobSettings
+    from naas_abi_sdk.module import BaseModule
+    from naas_abi_sdk.pipeline import Pipeline
+    from naas_abi_sdk.workflow import Workflow
+
+    class IngestPipeline(Pipeline):
+        """Loads the nightly export."""
+
+        job = JobSettings(triggers=(Every("1h"),), timeout=timedelta(minutes=10))
+
+    class ExportWorkflow(Workflow):
+        job = JobSettings(max_attempts=3)
+
+    class QuietWorkflow(Workflow):
+        """Declares no job."""
+
+    class ABIModule(BaseModule):
+        module_id = "acme.process"
+        workflows = (ExportWorkflow, QuietWorkflow)
+        pipelines = (IngestPipeline,)
+
+    instance = _instance(
+        discovery_pb2.Instance(
+            instance_id="p-1",
+            status="READY",
+            descriptor=module_descriptor(ABIModule, "acme.process", ()),
+        )
+    )
+
+    class Discovery:
+        async def list_modules(self, *, limit, after_instance_id):
+            return [instance], ""
+
+    jobs = {j.key: j for j in asyncio.run(DiscoveryJobCatalog(Discovery).list_jobs())}
+
+    assert sorted(jobs) == [
+        "acme.process/pipeline.ingest_pipeline",
+        "acme.process/workflow.export_workflow",
+    ]
+    ingest = jobs["acme.process/pipeline.ingest_pipeline"]
+    assert ingest.location == "remote" and ingest.module_id == "acme.process"
+    assert ingest.description == "Loads the nightly export."
+    assert [(t.kind, t.spec) for t in ingest.triggers] == [("every", "1h")]
+    assert ingest.timeout_seconds == 600
+    export = jobs["acme.process/workflow.export_workflow"]
+    assert export.triggers == () and export.max_attempts == 3

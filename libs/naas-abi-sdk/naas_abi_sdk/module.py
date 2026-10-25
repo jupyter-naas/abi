@@ -31,7 +31,7 @@ from naas_abi_sdk.discovery import (
     validate_rollout_id,
 )
 from naas_abi_sdk.health import HealthServer
-from naas_abi_sdk.jobs import JobsMixin
+from naas_abi_sdk.jobs import JobDescriptor, JobsMixin, process_job_name
 from naas_abi_sdk.ontologies import (
     OntologyFile,
     OntologyLoader,
@@ -281,6 +281,32 @@ class BaseModule(JobsMixin, Generic[Config]):
         self._app_handlers[name] = asgi_app
 
     @classmethod
+    def get_jobs(cls) -> tuple[JobDescriptor, ...]:
+        """``jobs``, plus one job per workflow or pipeline that declares ``job``
+        (``naas_abi_sdk.process_jobs``). Raises when a derived job's name is also
+        an explicit job's, or a schedule's process needs parameters."""
+        workflows, pipelines = cls.get_workflow_classes(), cls.get_pipeline_classes()
+        if not any(
+            getattr(c, "job", None) is not None
+            for c in (*workflows.values(), *pipelines.values())
+        ):
+            return tuple(cls.jobs)
+        from naas_abi_sdk.process_jobs import process_job_descriptors
+
+        derived = process_job_descriptors(
+            {"workflow": workflows, "pipeline": pipelines}
+        )
+        explicit = {j.name for j in cls.jobs}
+        clashes = sorted(d.name for d in derived if d.name in explicit)
+        if clashes:
+            raise ValueError(
+                f"{cls.__name__} declares the jobs {clashes} itself, and its "
+                "workflows or pipelines derive jobs with those names: rename "
+                "the explicit job"
+            )
+        return (*cls.jobs, *derived)
+
+    @classmethod
     def get_workflow_classes(cls) -> dict[str, type]:
         """The declared workflows by name, else those found under workflows/."""
         return cls._component_classes("workflow", "workflows")
@@ -398,6 +424,17 @@ class BaseModule(JobsMixin, Generic[Config]):
                 for name, cls in declared.items():
                     if name not in bound:
                         bound[name] = await self._build(kind, name, cls)
+                    self._bind_process_job(kind, name, cls, bound[name])
+
+    def _bind_process_job(self, kind: str, name: str, cls: type, instance: Any) -> None:
+        """The job handler of a process that declares ``job``, once it is built."""
+        if getattr(cls, "job", None) is None:
+            return
+        from naas_abi_sdk.process_jobs import process_job_handler
+
+        self._job_handlers.setdefault(
+            process_job_name(kind, name), process_job_handler(kind, instance)
+        )
 
     async def _build(self, kind: str, name: str, cls: type) -> Any:
         try:
@@ -586,6 +623,8 @@ async def run_module(
     served = bool(
         module_type.get_workflow_classes() or module_type.get_pipeline_classes()
     )
+    # Their jobs too: a name clash or a schedule that cannot run stops it here.
+    module_type.get_jobs()
     if served and discovery is None:
         # Other modules call them over NATS, which they find through discovery.
         raise ValueError(
@@ -713,7 +752,10 @@ async def run_module(
                     module.engine.services.document,
                     identity,
                     discovery.project,
-                    {j.name: (j, module._job_handlers[j.name]) for j in module.jobs},
+                    {
+                        j.name: (j, module._job_handlers[j.name])
+                        for j in module.get_jobs()
+                    },
                     instance_id=registration.instance_id,
                 )
                 if not registration.rollout_id:

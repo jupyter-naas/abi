@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from naas_abi_sdk.components import component_slug, configuration_class
+from naas_abi_sdk.jobs import JobSettings
 
 try:
     from pydantic import BaseModel
@@ -64,6 +65,10 @@ class Process:
     """
 
     kind: ClassVar[str] = "process"
+    # Declaring it runs the process as a job of its module (naas_abi_sdk.process_jobs):
+    # ``job = JobSettings(triggers=(Every("1h"),))`` on a schedule or events,
+    # ``job = JobSettings()`` for runs started with ``proxy.trigger`` only.
+    job: ClassVar[JobSettings | None] = None
     _configuration_base: ClassVar[type] = ProcessConfiguration
     _parameters_base: ClassVar[type[BaseModel]] = ProcessParameters
 

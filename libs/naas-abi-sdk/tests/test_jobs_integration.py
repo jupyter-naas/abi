@@ -13,6 +13,8 @@ import socket
 import subprocess
 import time
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import broker_users
 import pytest
@@ -975,9 +977,178 @@ def test_a_module_that_may_not_create_the_jobs_stream_says_so(broker):
     async def scenario():
         nc = await broker_users.connect(broker)
         try:
-            with pytest.raises(StreamNotCreated, match="may not create or update streams"):
+            with pytest.raises(
+                StreamNotCreated, match="may not create or update streams"
+            ):
                 await ensure_stream(nc.jetstream(timeout=1), "unprepared")
         finally:
             await nc.close()
 
     asyncio.run(scenario())
+
+
+# --- workflows and pipelines as jobs (extras: workflows, rdf) -------------------------
+
+
+def _process_module():
+    """A module whose pipeline runs every second, and whose workflow runs by hand."""
+    pytest.importorskip("pydantic")
+    pytest.importorskip("rdflib")
+    from unittest.mock import MagicMock
+
+    from rdflib import Graph, Literal, URIRef
+
+    from naas_abi_sdk.jobs import JobSettings
+    from naas_abi_sdk.module import BaseModule
+    from naas_abi_sdk.pipeline import Pipeline, PipelineParameters
+    from naas_abi_sdk.workflow import Workflow, WorkflowParameters
+
+    class TickParameters(PipelineParameters):
+        count: int = 2
+
+    class TickPipeline(Pipeline[TickParameters]):
+        """Writes a few triples."""
+
+        job = JobSettings(triggers=(Every("1s"),))
+
+        async def run(self, parameters: TickParameters):
+            graph = Graph()
+            for index in range(parameters.count):
+                graph.add(
+                    (
+                        URIRef(f"http://example.org/s{index}"),
+                        URIRef("http://example.org/p"),
+                        Literal(f"v{index}"),
+                    )
+                )
+            return graph
+
+    class AddParameters(WorkflowParameters):
+        a: int
+        b: int
+
+    class AddWorkflow(Workflow[AddParameters]):
+        """Adds two numbers."""
+
+        job = JobSettings(max_attempts=1)
+
+        async def run(self, parameters: AddParameters):
+            return {"sum": parameters.a + parameters.b}
+
+    class ABIModule(BaseModule):
+        module_id = MODULE
+        workflows = (AddWorkflow,)
+        pipelines = (TickPipeline,)
+
+    module = ABIModule(MagicMock(), ABIModule.Configuration())
+    asyncio.run(module.build_processes())
+    return module
+
+
+def _process_host(broker, docs, module):
+    return _host(
+        broker,
+        docs,
+        [(d, module._job_handlers[d.name]) for d in module.get_jobs()],
+    )
+
+
+def test_a_scheduled_pipeline_runs_in_its_module_and_records_its_graph(broker):
+    from rdflib import Graph
+
+    docs = Documents()
+    module = _process_module()
+
+    async def scenario():
+        host = _process_host(broker, docs, module)
+        await host.start()
+        try:
+            await _until(
+                lambda: any(
+                    r["status"] == "SUCCEEDED"
+                    for r in docs.runs("pipeline.tick_pipeline")
+                )
+            )
+        finally:
+            await host.close()
+
+    asyncio.run(scenario())
+
+    done = [
+        r for r in docs.runs("pipeline.tick_pipeline") if r["status"] == "SUCCEEDED"
+    ]
+    assert done[0]["trigger"]["kind"] == "schedule" and done[0]["payload"] == {}
+    graph = Graph().parse(data=done[0]["result"], format="nt")
+    assert len(graph) == 2
+    assert docs.runs("workflow.add_workflow") == []  # no schedule: only by hand
+
+
+def _proxy_of(broker, module, kind, name, docs):
+    from naas_abi_sdk.discovery import ModuleInstance, ModuleProxy
+    from naas_abi_sdk.process_proxy import ProcessProxy
+
+    transport = Transport(broker, "t")
+    instance = ModuleInstance(
+        MODULE, "i-1", "0.0.0", 1, "READY", 0.0, (), jobs=module.get_jobs()
+    )
+    discovery = SimpleNamespace(
+        project=PROJECT,
+        transport=transport,
+        get_module=AsyncMock(return_value=(instance,)),
+    )
+    return ProcessProxy(ModuleProxy(discovery, MODULE), kind, name), transport
+
+
+def test_a_trigger_through_the_proxy_returns_a_run_whose_result_can_be_read(broker):
+    docs = Documents()
+    module = _process_module()
+
+    async def scenario():
+        host = _process_host(broker, docs, module)
+        await host.start()
+        proxy, transport = _proxy_of(broker, module, "workflow", "add_workflow", docs)
+        try:
+            run = await proxy.trigger({"a": 2, "b": 3}, idempotency_key="sum-1")
+            again = await proxy.trigger({"a": 2, "b": 3}, idempotency_key="sum-1")
+            bad = await proxy.trigger({"a": "x"})
+            for each in (run, bad):
+                each._documents = docs  # the run records live in this test's store
+            return (
+                run,
+                again,
+                await run.wait(timeout=8, poll_seconds=0.05),
+                await bad.wait(timeout=8, poll_seconds=0.05),
+            )
+        finally:
+            await host.close()
+            await transport.close()
+
+    run, again, record, refused = asyncio.run(scenario())
+
+    assert record["status"] == "SUCCEEDED" and record["result"] == {"sum": 5}
+    assert record["trigger"]["kind"] == "manual"
+    assert record["payload"] == {"a": 2, "b": 3}
+    assert again.run_id == run.run_id and again.duplicate
+    # The host validates: parameters the model refuses end the run, naming fields.
+    assert refused["status"] == "FAILED"
+    assert "a: " in refused["error"] and "b: " in refused["error"]
+    assert len(docs.runs("workflow.add_workflow")) == 2
+
+
+def test_a_trigger_for_a_process_that_is_no_job_is_refused_before_the_broker(broker):
+    from naas_abi_sdk.transport import RPCError
+
+    module = _process_module()
+
+    async def scenario():
+        proxy, transport = _proxy_of(broker, module, "workflow", "other_workflow", None)
+        try:
+            with pytest.raises(RPCError) as raised:
+                await proxy.trigger({})
+            return raised.value
+        finally:
+            await transport.close()
+
+    error = asyncio.run(scenario())
+
+    assert error.code == "PROCESS_NOT_A_JOB"

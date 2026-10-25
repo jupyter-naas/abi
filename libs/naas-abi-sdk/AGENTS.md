@@ -239,6 +239,28 @@ sends the deadline with `Transport.call(timeout=)`. Only `process_host.py` and
 core's `services/discovery/process_integration_test.py` (two modules, the real discovery
 service, SIGTERM).
 
+Workflows and pipelines run as jobs (`process_jobs.py`, `JobSettings` and `process_job_name`
+in `jobs.py`, still stdlib and proto only). A class that declares `Process.job =
+JobSettings(...)` gets the job `<kind>.<name>`, `JobSettings()` alone being manual runs
+only. `BaseModule.get_jobs()` is `jobs` plus those (`JobsMixin.get_jobs` is `jobs` for
+engine modules): discovery's descriptor, `missing_job_handlers` and `run_module`'s
+`JobHost` use it, never `cls.jobs` directly. It raises on a name clash with an explicit
+job and on a `Cron`/`Every` trigger whose parameters model has required fields (a
+scheduled run is `{}`), and `run_module` calls it before connecting. `build_processes()`
+binds each handler (`process_job_handler`) to the built instance, an `expose_*`-bound one
+included. The handler parses the payload with `process_host.parse_parameters`, the
+host's own check (the event's `data` for an `OnEvent` run), awaits `run`, cancels it with
+`ctx.cancelled`, and encodes with `process_host.encode_result`: JSON for a workflow,
+N-Triples text for a pipeline, so the run record is held to `MAX_RESULT_BYTES` (64 KiB,
+truncated to a preview above it). `ProcessProxy.trigger` finds the job in the module's
+instances (`ModuleProxy.get_job`), so it needs a ready instance; `PROCESS_NOT_A_JOB`
+when there is none for the process. A run with a refused payload is `FAILED` and
+retried to `max_attempts`: keep `max_attempts` low on a process with required
+parameters. Tests: `tests/test_process_jobs.py` (no broker), and the last three tests of
+`tests/test_jobs_integration.py` (`nats-server`: a scheduled pipeline, `trigger` through the
+proxy). Nexus lists the job from discovery with no change of its own
+(`job_catalogs_test.py` pins it).
+
 Test layout is a deliberate exception to the monorepo rule of a `_test.py` beside
 each file: SDK tests live in `tests/test_<module>.py`, outside the published
 package, and the CI `packages` job runs them alone on Python 3.10 to 3.12. Add a

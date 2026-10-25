@@ -24,6 +24,7 @@ from naas_abi_proto.process.v1 import process_pb2 as pb
 from nats.errors import NoRespondersError
 
 from naas_abi_sdk.app_streams import BodySource, ReaderGone, chunk_bytes, pull_body
+from naas_abi_sdk.jobs import JobRun, process_job_name
 from naas_abi_sdk.process_host import (
     DEFAULT_DEADLINE_SECONDS,
     MAX_BODY_BYTES,
@@ -217,6 +218,41 @@ class ProcessProxy:
                 await source.close()
         return await self._decode(payload)
 
+    async def trigger(
+        self, params: Mapping[str, Any] | Any, *, idempotency_key: str | None = None
+    ) -> JobRun:
+        """Start it as a durable job run and return the ``JobRun``, without waiting.
+
+        Needs the process to be bound as a job (``job = JobSettings(...)`` on its
+        class): ``RPCError`` ``PROCESS_NOT_A_JOB`` otherwise, ``MODULE_UNAVAILABLE``
+        when the module has no ready instance to read that from. Any replica takes
+        the run, and it waits in the stream until one does::
+
+            run = await proxy.trigger({"since": "2026-01-01"})
+            record = await run.wait(timeout=600)
+            record["result"]  # a workflow's JSON; a pipeline's graph as N-Triples text
+
+        The record keeps at most 64 KiB of result (``job_host.MAX_RESULT_BYTES``);
+        above it, a ``{"truncated": true, "preview": ...}``. Parameters the process
+        refuses end the run ``FAILED`` (the host validates them, not this call).
+        A repeated ``idempotency_key`` within 2 minutes is the same run
+        (``JobRun.duplicate``). Delivery is at least once: a run can start again
+        after a host crashed, so the process must be safe to repeat.
+        """
+        data = _parameters(params)
+        job_name = process_job_name(self.kind, self.name)
+        try:
+            job = await self.module.get_job(job_name)
+        except RPCError as exc:
+            if exc.code != "JOB_NOT_FOUND":
+                raise
+            raise RPCError(
+                "PROCESS_NOT_A_JOB",
+                f"{self.module.module_id} has no job for the {self.kind} "
+                f"{self.name!r}: declare `job = JobSettings(...)` on its class",
+            ) from None
+        return await job.trigger(data, idempotency_key=idempotency_key)
+
     async def _payload(self, nc: Any, response: pb.RunResponse) -> bytes:
         if not response.body_inbox:
             return (
@@ -296,7 +332,8 @@ class ProcessProxy:
         ]
 
 
-def _encode_parameters(params: Any) -> bytes:
+def _parameters(params: Any) -> dict[str, Any]:
+    """``params`` as a JSON-checked dict."""
     if callable(getattr(params, "model_dump", None)):
         data = params.model_dump(mode="json")
     elif isinstance(params, Mapping):
@@ -304,9 +341,16 @@ def _encode_parameters(params: Any) -> bytes:
     else:
         raise TypeError("A run takes a dict or a pydantic model of parameters")
     try:
-        return json.dumps(data, allow_nan=False, separators=(",", ":")).encode("utf-8")
+        json.dumps(data, allow_nan=False)
     except (TypeError, ValueError, RecursionError) as exc:
         raise ValueError(f"Parameters must be JSON-serializable: {exc}") from exc
+    return data
+
+
+def _encode_parameters(params: Any) -> bytes:
+    return json.dumps(
+        _parameters(params), allow_nan=False, separators=(",", ":")
+    ).encode("utf-8")
 
 
 async def _feed(source: BodySource, data: bytes, size: int) -> None:
