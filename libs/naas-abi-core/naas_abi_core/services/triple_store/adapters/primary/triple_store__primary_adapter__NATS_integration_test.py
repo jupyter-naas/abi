@@ -14,6 +14,7 @@ import sys
 import textwrap
 import uuid
 from pathlib import Path
+from typing import Any, cast
 
 import nats
 import pytest
@@ -127,10 +128,13 @@ class _Spy:
 def _schema_files(service: TripleStoreService) -> dict[str, str]:
     return {
         str(path): str(hash_)
-        for path, hash_ in service.query(
-            f"""PREFIX internal: <http://triple-store.internal#>
+        for path, hash_ in cast(
+            Any,
+            service.query(
+                f"""PREFIX internal: <http://triple-store.internal#>
 SELECT ?path ?hash WHERE {{ GRAPH <{SCHEMA_GRAPH}> {{
     ?s a internal:Schema ; internal:filePath ?path ; internal:hash ?hash }} }}"""
+            ),
         )
     }
 

@@ -8,6 +8,7 @@ same pattern).
 """
 
 import asyncio
+from typing import Any, cast
 
 import pytest
 import rdflib
@@ -883,7 +884,7 @@ def _load_schema(
         headers={AUTH_HEADER: token} if token else None,
         subject="abi.svc.triple_store.v1.load_schema",
     )
-    asyncio.run(adapter._handle_load_schema(request))
+    asyncio.run(adapter._handle_load_schema(cast(Any, request)))
     response = triple_store_pb2.LoadSchemaResponse()
     response.ParseFromString(request.responses[0])
     return response
@@ -892,10 +893,13 @@ def _load_schema(
 def _schema_sources(stub: _StubPort) -> set[str]:
     return {
         str(row[0])
-        for row in stub.query(
-            f"""PREFIX internal: <http://triple-store.internal#>
+        for row in cast(
+            Any,
+            stub.query(
+                f"""PREFIX internal: <http://triple-store.internal#>
 SELECT ?path WHERE {{ GRAPH <{_SCHEMA_GRAPH}> {{
     ?s a internal:Schema ; internal:filePath ?path }} }}"""
+            ),
         )
     }
 

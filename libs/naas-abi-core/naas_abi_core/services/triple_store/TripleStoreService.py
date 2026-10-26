@@ -979,7 +979,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
                     metadata_triples.add((subject, predicate, obj))
 
             if len(schema_triples) > 0:
-                own = {row[0] for row in rows}  # type: ignore[index]
+                own = {URIRef(str(row[0])) for row in rows}  # type: ignore[index]
                 self.remove(
                     schema_triples - self._asserted_elsewhere(schema_triples, own),
                     graph_name=self.__schema_graph,
