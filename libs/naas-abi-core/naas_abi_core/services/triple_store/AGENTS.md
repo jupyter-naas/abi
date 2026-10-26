@@ -175,6 +175,16 @@ principals, in process and over NATS.
   schema graph itself. The service checks the source, then reads and writes the
   graph as the engine, and a source removes only triples no other stored schema
   asserts.
+* The schema graph (`http://ontology.naas.ai/graph/schema`) is written directly
+  only by a caller who may load every schema (`LoadSchema` on all of `schema/*`:
+  the engine, `api`, the platform admin). For anyone else, `Insert`, `Remove`,
+  `CreateGraph`, `ClearGraph` and `DropGraph` on it are refused
+  (`PERMISSION_DENIED`), and so is a SPARQL update that reaches it, by name or
+  through every graph (`ALL`, `NAMED`, `DEFAULT`, a graph variable), whatever
+  `graph/...` grant the caller holds. A module's `triple_store:*` on `graph/*`
+  thus leaves other modules' ontologies and the `internal:Schema` bookkeeping
+  alone. A caller allowed every graph still has its updates parsed for this,
+  unless it may load every schema.
 * Actions (subject is the operation under `abi.svc.triple_store.v1.`):
 
 | Action | Level | Resource | Subject |

@@ -123,6 +123,9 @@ _UPDATE_ACTIONS = (
     "DropGraph",
     "CreateGraph",
 )
+# What writes a graph: the schema graph takes these only from a caller who may load
+# every schema (LoadSchema on schema/*): a module loads its own through LoadSchema.
+_GRAPH_WRITES = frozenset({"Insert", "Remove", "CreateGraph", "ClearGraph", "DropGraph"})
 # Every triple of a query's default graph: a confined dump or export.
 _EVERYTHING = "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }"
 
@@ -280,6 +283,30 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             iri,
             not_found=lambda: Exceptions.GraphNotFoundError(f"Graph {iri} not found"),
         )
+        self.__schema_write(action, iri)
+
+    def __schema_writer(self) -> bool:
+        """Whether the caller may write the schema graph directly: it may load
+        every schema (the engine, ``api``, the platform admin)."""
+        return self._guard.allows_every("LoadSchema", SCHEMA)
+
+    def __schema_write(self, action: str, graph: str) -> None:
+        """Refuse a write that reaches the shared schema graph (by name, or every
+        graph) to a caller who may not load every schema: ``graph/*`` grants do
+        not reach it, so a module changes only its own sources, through
+        ``load_schema_content``."""
+        if (
+            action in _GRAPH_WRITES
+            and graph in (str(self.__schema_graph), sparql.EVERY_GRAPH)
+            and not self.__schema_writer()
+        ):
+            raise PermissionDeniedError(
+                self._guard.action(action),
+                message=(
+                    f"{action} on the schema graph {self.__schema_graph} is not "
+                    "allowed to this caller: an ontology is loaded with LoadSchema"
+                ),
+            )
 
     @staticmethod
     def __parsed_name(graph: URIRef | str) -> None:
@@ -294,6 +321,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
                 self._guard.action(action),
                 message=f"{action} on every graph is not allowed to this caller",
             )
+        self.__schema_write(action, sparql.EVERY_GRAPH)
 
     def __confined(self, action: str) -> bool:
         """Whether ``action`` must be confined to some graphs for the caller."""
@@ -338,7 +366,10 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         if analysis is not None and analysis.update:
             raise Exceptions.InvalidRequest("A SPARQL update is not a query")
         actions = (action, *_UPDATE_ACTIONS) if updates else (action,)
-        if all(self._guard.allows_every(a, GRAPH) for a in actions):
+        broad = all(self._guard.allows_every(a, GRAPH) for a in actions)
+        # A caller allowed every graph is parsed all the same when the request
+        # may update the schema graph, which `graph/*` does not reach.
+        if broad and (not updates or self.__schema_writer()):
             return None
         if analysis is None:
             analysis = self.__analyze(request)
@@ -346,13 +377,17 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             # Every name an IRI before any check: no answer depends on a later one.
             for need in analysis.needs:
                 self.__parsed_name(need.graph)
+            if broad:
+                for need in analysis.needs:
+                    self.__schema_write(need.action, str(need.graph))
+                return None
             for need in analysis.needs:
                 if need.graph == sparql.EVERY_GRAPH:
                     self.__every(need.action)
                 else:
                     self.__graph(need.action, need.graph, parsed=True)
             return None
-        if not self.__confined(action):
+        if broad or not self.__confined(action):
             return None
         shape = analysis.shape
         for graph in shape.named:
@@ -650,6 +685,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
                 f"Graph {graph_name} not found"
             ),
         )
+        self.__schema_write("CreateGraph", str(graph_name))
 
         method = self.__triple_store_adapter.create_graph
         try:

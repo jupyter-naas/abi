@@ -962,7 +962,9 @@ iam.broker_permissions(principal, key)  # records from authenticate_key; never c
   `ModuleDependencies` (each declared service maps to its catalog's actions on the
   module's own namespaces; `secret` is `secret/<module id>/...` only, `email` is `Send`
   alone, `triple_store` is graphs and views plus `LoadSchema` on its own ontologies
-  (`schema/module/<module id>/...`), `dataset` denies `QueryUnchecked`, `source_control`
+  (`schema/module/<module id>/...`; the triple store refuses direct writes to the
+  shared schema graph to whoever may not load every schema, so `graph/*` does not
+  reach it), `dataset` denies `QueryUnchecked`, `source_control`
   denies `AddCollaborator`: no
   default grants an admin action, and a Deny is not overridden by an Allow of the same
   policy, so a module needing one writes its own manifest).

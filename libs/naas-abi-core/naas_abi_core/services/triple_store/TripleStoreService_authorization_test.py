@@ -606,3 +606,95 @@ def test_over_nats_the_caller_of_a_load_is_the_verified_token(tmp_path):
         "NOT_FOUND"
     )
     assert _schema_classes(owner) == {"Own"}
+
+
+# --- the schema graph is written only through LoadSchema ------------------------
+
+
+def _default_manifest_module(tmp_path):
+    """A wired store and a module whose approved manifest is the SDK's default
+    for a module declaring ``triple_store``: every action on graphs and views,
+    LoadSchema on its own sources."""
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        Principal,
+        as_service_account,
+        use_call_context,
+    )
+    from naas_abi_core.engine.IEngine import IEngine
+    from naas_abi_core.services.iam.tests.authorization_contract import contract_iam
+    from naas_abi_sdk.module import ModuleDependencies
+    from naas_abi_sdk.permissions import default_manifest
+
+    iam = contract_iam()
+    with as_service_account("engine"):
+        account = iam.create_service_account("module/acme/foo")
+    module = CallContext(
+        principal=Principal(id=account.id, kind="service_account", name=account.name)
+    )
+    with use_call_context(module):
+        iam.submit_manifest(
+            "foo",
+            "acme",
+            default_manifest(ModuleDependencies(services=("triple_store",))),
+        )
+    with as_service_account("engine"):
+        iam.approve_manifest(account.id)
+    owner = TripleStoreService(OxigraphEmbedded(str(tmp_path / "manifest-store")))
+    owner.set_services(IEngine.Services(iam=iam, bus=_Bus()))
+    with as_service_account("engine"):
+        owner.load_schema_content("module/bar/B.ttl", _ontology("Bar"))
+    return owner, module
+
+
+def test_a_modules_graph_grant_does_not_reach_the_schema_graph(tmp_path):
+    from naas_abi_core.engine.call_context import use_call_context
+    from naas_abi_core.services.iam.IAMPorts import (
+        PermissionDeniedError,
+        ResourceNotFoundError,
+    )
+
+    owner, module = _default_manifest_module(tmp_path)
+    own_graph = URIRef("http://g/foo-data")
+    forged = Graph()
+    forged.add(
+        (
+            URIRef("http://example.org/Bar"),
+            URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+            URIRef("http://example.org/Stolen"),
+        )
+    )
+    with use_call_context(module):
+        # Its own graphs and its own ontology: allowed.
+        owner.insert(_triple("mine"), own_graph)
+        assert owner.load_schema_content("module/foo/A.ttl", _ontology("Own"))
+        # The schema graph, directly: refused, whatever the statement.
+        for write in (
+            lambda: owner.insert(forged, SCHEMA_GRAPH),
+            lambda: owner.remove(forged, SCHEMA_GRAPH),
+            lambda: owner.clear_graph(SCHEMA_GRAPH),
+            lambda: owner.drop_graph(SCHEMA_GRAPH),
+            lambda: owner.query(
+                f"INSERT DATA {{ GRAPH <{SCHEMA_GRAPH}> {{ <urn:x> <urn:p> <urn:o> }} }}"
+            ),
+            lambda: owner.query(
+                f"DELETE WHERE {{ GRAPH <{SCHEMA_GRAPH}> {{ ?s ?p ?o }} }}"
+            ),
+            lambda: owner.query("CLEAR ALL"),
+            lambda: owner.query(
+                "INSERT { GRAPH ?g { <urn:x> <urn:p> <urn:o> } } WHERE { GRAPH ?g { ?s ?p ?o } }"
+            ),
+        ):
+            with pytest.raises(PermissionDeniedError):
+                write()
+        # Another module's source does not exist for it.
+        with pytest.raises(ResourceNotFoundError):
+            owner.load_schema_content("module/bar/B.ttl", _ontology("Stolen"))
+        # Reading the schema graph stays open to it.
+        assert "Bar" in {
+            str(row[0]).removeprefix("http://example.org/")
+            for row in owner.query(
+                f"SELECT ?s WHERE {{ GRAPH <{SCHEMA_GRAPH}> {{ ?s a <http://example.org/Class> }} }}"
+            )
+        }
+    assert _schema_classes(owner) == {"Own", "Bar"}
