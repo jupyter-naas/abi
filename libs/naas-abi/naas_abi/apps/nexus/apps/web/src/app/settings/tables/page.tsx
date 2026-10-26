@@ -18,7 +18,7 @@ import {
   downloadWorkbookExport,
 } from '@/app/organizations/[orgId]/settings/users/users-table-export';
 import { ColumnFilterPopover } from '@/components/graph/explore/ColumnFilterPopover';
-import { isBlank, type ColumnFilterState } from '@/lib/graph-query/filters';
+import { isBlank } from '@/lib/graph-query/filters';
 import type { FacetBucket } from '@/lib/graph-query/types';
 import { rowMatchesColumnFilter } from '@/app/organizations/[orgId]/settings/users/users-table-filter';
 import { authFetch } from '@/stores/auth';
