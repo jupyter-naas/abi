@@ -826,7 +826,13 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         addition_triples = new_schema - old_schema
         deletion_triples = old_schema - new_schema
         self.insert(addition_triples, graph_name=self.__schema_graph)
-        self.remove(deletion_triples, graph_name=self.__schema_graph)
+        # The schema graph is shared: a triple this source no longer asserts stays
+        # while another source still does (a module may repeat a core class).
+        self.remove(
+            deletion_triples
+            - self._asserted_elsewhere(deletion_triples, {e.subject for e in entries}),
+            graph_name=self.__schema_graph,
+        )
 
         self.remove(
             self._schema_metadata(
@@ -855,6 +861,52 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             for duplicate_subject in duplicate_subjects:
                 self._remove_schema_subject(duplicate_subject)
         return True
+
+    def _asserted_elsewhere(self, triples: Graph, own: set[URIRef]) -> Graph:
+        """The triples of ``triples`` that a stored schema other than the
+        ``internal:Schema`` subjects ``own`` asserts too, read from each one's stored
+        content. When a stored schema cannot be read, every triple is kept: a stale
+        triple is better than one deleted from under another source."""
+        kept = Graph()
+        if len(triples) == 0:
+            return kept
+        rows = self.query(
+            f"""
+            PREFIX internal: <http://triple-store.internal#>
+            SELECT ?s ?path ?content
+            WHERE {{
+                GRAPH <{self.__schema_graph!s}> {{
+                    ?s a internal:Schema ;
+                       internal:filePath ?path ;
+                       internal:content ?content .
+                }}
+            }}
+            """
+        )
+        for row in rows:
+            assert isinstance(row, rdflib.query.ResultRow)
+            subject, path, content = row
+            if subject in own:
+                continue
+            source = str(path)
+            try:
+                other = self._parse_schema(
+                    base64.b64decode(str(content)).decode("utf-8"),
+                    guess_format(source) or "turtle",
+                    Path(source).absolute().as_uri()
+                    if Path(source).exists()
+                    else self._source_base(source),
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    f"Schema {source} could not be read to check shared triples: "
+                    f"{exc!s}; no triple is removed"
+                )
+                return triples
+            for triple in triples:
+                if triple in other:
+                    kept.add(triple)
+        return kept
 
     def remove_schema(self, filepath: str):
         logger.debug(f"Removing schema: {filepath}")
@@ -927,7 +979,11 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
                     metadata_triples.add((subject, predicate, obj))
 
             if len(schema_triples) > 0:
-                self.remove(schema_triples, graph_name=self.__schema_graph)
+                own = {row[0] for row in rows}  # type: ignore[index]
+                self.remove(
+                    schema_triples - self._asserted_elsewhere(schema_triples, own),
+                    graph_name=self.__schema_graph,
+                )
 
             if len(metadata_triples) > 0:
                 self.remove(metadata_triples, graph_name=self.__schema_graph)

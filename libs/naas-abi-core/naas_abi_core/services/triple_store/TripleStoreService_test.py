@@ -740,3 +740,47 @@ def test_a_write_deadline_reaches_only_an_adapter_that_takes_one():
     assert [name for _, name in local.remove_calls] == [graph_name]
     service.clear_graph(graph_name, timeout_seconds=900.0)
     assert local.clear_graph_calls == [graph_name]
+
+
+_SHARED = f"""@prefix ex: <{_EX}> .
+ex:Shared a ex:Class .
+ex:Own a ex:Class .
+"""
+_SHARED_DROPPED = f"""@prefix ex: <{_EX}> .
+ex:Own a ex:Class .
+"""
+
+
+def test_a_triple_another_source_asserts_stays_when_one_source_drops_it():
+    adapter = _InMemoryTripleStoreAdapter()
+    service = TripleStoreService(adapter)
+    service.load_schema_content("module/core.like/base.ttl", _SHARED)
+    service.load_schema_content("module/evil/repeat.ttl", _SHARED)
+
+    # The second source drops the shared class: the first one still asserts it.
+    assert service.load_schema_content("module/evil/repeat.ttl", _SHARED_DROPPED)
+
+    assert _in_schema(adapter, "Shared") and _in_schema(adapter, "Own")
+
+
+def test_a_triple_no_other_source_asserts_is_removed_with_its_source():
+    adapter = _InMemoryTripleStoreAdapter()
+    service = TripleStoreService(adapter)
+    service.load_schema_content("module/a/one.ttl", _SHARED)
+    service.load_schema_content("module/b/two.ttl", _SHARED_DROPPED)
+
+    service.load_schema_content("module/a/one.ttl", _SHARED_DROPPED)
+
+    assert not _in_schema(adapter, "Shared") and _in_schema(adapter, "Own")
+
+
+def test_removing_a_schema_keeps_the_triples_another_source_asserts():
+    adapter = _InMemoryTripleStoreAdapter()
+    service = TripleStoreService(adapter)
+    service.load_schema_content("module/a/one.ttl", _SHARED)
+    service.load_schema_content("module/b/two.ttl", _SHARED_DROPPED)
+
+    service.remove_schema("module/a/one.ttl")
+
+    assert not _in_schema(adapter, "Shared") and _in_schema(adapter, "Own")
+    assert _schema_entries(service, "module/a/one.ttl") == []
