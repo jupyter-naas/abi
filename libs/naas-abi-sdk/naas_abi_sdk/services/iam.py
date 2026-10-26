@@ -132,17 +132,19 @@ class IAMService(ServiceProxy):
     # -- groups ---------------------------------------------------------------------
 
     async def create_group(
-        self, name: str, *, org: str | None = None
+        self, name: str, *, org: str | None = None, scope: str | None = None
     ) -> dict[str, Any]:
-        return await self._request("create_group", name=name, org=org)
+        """A group owned by ``scope``: ``abi:-:-`` (the default), ``abi:<org>:-``
+        (also what ``org`` alone means) or ``abi:<org>:<ws>``."""
+        return await self._request("create_group", name=name, org=org, scope=scope)
 
     async def get_group(self, group_id: str) -> dict[str, Any]:
         return await self._request("get_group", group_id=group_id)
 
     async def list_groups(
-        self, *, limit: int = 100, after: str | None = None
+        self, *, limit: int = 100, after: str | None = None, scope: str | None = None
     ) -> dict[str, Any]:
-        return await self._request("list_groups", limit=limit, after=after)
+        return await self._request("list_groups", limit=limit, after=after, scope=scope)
 
     async def delete_group(self, group_id: str) -> dict[str, Any]:
         return await self._request("delete_group", group_id=group_id)
@@ -184,14 +186,22 @@ class IAMService(ServiceProxy):
     # -- policies and attachments ------------------------------------------------------
 
     async def create_policy(
-        self, name: str, document: Mapping[str, Any] | str, *, description: str = ""
+        self,
+        name: str,
+        document: Mapping[str, Any] | str,
+        *,
+        description: str = "",
+        scope: str | None = None,
     ) -> dict[str, Any]:
+        """A policy owned by ``scope`` (the platform when None); an org's or a
+        workspace's names only ``${scope}:`` resources."""
         return _policy(
             await self._request(
                 "create_policy",
                 name=name,
                 document_json=_document(document),
                 description=description,
+                scope=scope,
             )
         )
 
@@ -199,9 +209,11 @@ class IAMService(ServiceProxy):
         return _policy(await self._request("get_policy", policy_id=policy_id))
 
     async def list_policies(
-        self, *, limit: int = 100, after: str | None = None
+        self, *, limit: int = 100, after: str | None = None, scope: str | None = None
     ) -> dict[str, Any]:
-        page = await self._request("list_policies", limit=limit, after=after)
+        page = await self._request(
+            "list_policies", limit=limit, after=after, scope=scope
+        )
         return {**page, "policies": [_policy(p) for p in page["policies"]]}
 
     async def update_policy(

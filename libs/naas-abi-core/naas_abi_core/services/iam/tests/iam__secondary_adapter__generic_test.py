@@ -257,6 +257,29 @@ class IAMStoreContract(ABC):
             2:
         ]
 
+    def test_owner_scopes_are_kept_and_filter_lists(self, store: IAMStore):
+        from dataclasses import replace
+
+        platform = store.create_policy(policy())
+        mine = store.create_policy(replace(policy(), owner_scope="abi:org-1:ws-1"))
+        org = store.create_policy(replace(policy(), owner_scope="abi:org-1:-"))
+        assert platform.owner_scope == "abi:-:-"
+        assert store.get_policy(mine.id).owner_scope == "abi:org-1:ws-1"
+        listed = store.list_policies(owner_scopes=["abi:org-1:ws-1", "abi:org-1:-"])
+        assert [p.id for p in listed.items] == sorted([mine.id, org.id])
+        assert store.list_policies(owner_scopes=[]).items == []
+        updated = store.update_policy(replace(mine, name="renamed"), 1)
+        assert updated.owner_scope == "abi:org-1:ws-1"
+
+        team = store.create_principal(replace(group(), owner_scope="abi:org-1:ws-1"))
+        everyone = store.create_principal(group("everyone", org=None))
+        assert everyone.owner_scope == "abi:-:-"
+        assert store.get_principal(team.id).owner_scope == "abi:org-1:ws-1"
+        owned = store.list_principals("group", owner_scopes=["abi:org-1:ws-1"])
+        assert [g.id for g in owned.items] == [team.id]
+        kept = store.update_principal(replace(team, name="analysts"))
+        assert (kept.name, kept.owner_scope) == ("analysts", "abi:org-1:ws-1")
+
     def test_attached_policy_cannot_be_deleted(self, store: IAMStore):
         read = store.create_policy(policy())
         bob = store.create_principal(user())

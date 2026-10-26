@@ -227,7 +227,9 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
     # -- groups ---------------------------------------------------------------------
 
     def _call_create_group(self, req: pb.CreateGroupRequest) -> pb.CreateGroupResponse:
-        record = self._iam.create_group(req.name, org=_opt(req, "org"))
+        record = self._iam.create_group(
+            req.name, org=_opt(req, "org"), scope=_opt(req, "scope")
+        )
         return pb.CreateGroupResponse(group=codec.principal_to_pb(record))
 
     def _call_get_group(self, req: pb.GetGroupRequest) -> pb.GetGroupResponse:
@@ -236,7 +238,9 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
         )
 
     def _call_list_groups(self, req: pb.ListGroupsRequest) -> pb.ListGroupsResponse:
-        page = self._iam.list_groups(limit=req.limit or 100, after=_opt(req, "after"))
+        page = self._iam.list_groups(
+            limit=req.limit or 100, after=_opt(req, "after"), scope=_opt(req, "scope")
+        )
         return pb.ListGroupsResponse(
             groups=[codec.principal_to_pb(g) for g in page.items],
             next_after=page.next_after,
@@ -290,7 +294,10 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
         self, req: pb.CreatePolicyRequest
     ) -> pb.CreatePolicyResponse:
         policy = self._iam.create_policy(
-            req.name, req.document_json, description=req.description
+            req.name,
+            req.document_json,
+            description=req.description,
+            scope=_opt(req, "scope"),
         )
         return pb.CreatePolicyResponse(policy=codec.policy_to_pb(policy))
 
@@ -302,7 +309,9 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
     def _call_list_policies(
         self, req: pb.ListPoliciesRequest
     ) -> pb.ListPoliciesResponse:
-        page = self._iam.list_policies(limit=req.limit or 100, after=_opt(req, "after"))
+        page = self._iam.list_policies(
+            limit=req.limit or 100, after=_opt(req, "after"), scope=_opt(req, "scope")
+        )
         return pb.ListPoliciesResponse(
             policies=[codec.policy_to_pb(p) for p in page.items],
             next_after=page.next_after,

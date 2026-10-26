@@ -151,11 +151,28 @@ attachments `att_`). Ids never change and are never reused.
 
 **Groups**
 
-- A group has a `name` and an optional `org` (null: a platform group). Groups
-  cannot contain groups.
-- **Static members** are users or service accounts, kept in IAM.
+- A group has a `name` and an **owner scope** (`owner_scope`): the platform
+  (`abi:-:-`), an org (`abi:<org>:-`) or a workspace (`abi:<org>:<ws>`). Its name
+  carries it (`abi:<org>:<ws>:iam:group/<id>`, see "Resource names"), so the admins
+  of that level manage it. `org` is the owner's org (null for a platform group; a
+  group made before owner scopes may still name one while the platform owns it).
+  Groups cannot contain groups.
+- **Static members** are users or service accounts, kept in IAM. A group owned by
+  an org or a workspace holds only **users of that org**: users with an attachment
+  of their own under `abi:<org>:…` (a role at the org, org-wide or at one of its
+  workspaces). Service accounts never join one: a module's account is approved by
+  its manifest. A user whose last attachment under the org is detached
+  (`detach_policy`) leaves the org's groups and its workspaces' groups. Platform
+  groups take any user or service account.
+- **Where it is attached.** A group owned by an org or a workspace receives
+  attachments only at its owner's scope or below (an org's at the org, org-wide or
+  at any of its workspaces; a workspace's at that workspace), always at a scope.
+  IAM's own companions (`builtin.platform.*`, feature policies) follow its roles as
+  for any principal. Platform groups receive attachments anywhere.
 - **Mapped members** come from IdP group claims: a mapping `(provider name,
-  claim value) -> group id` is set with `iam:MapIdpGroup`. At a token exchange
+  claim value) -> group id` is set with `iam:MapIdpGroup`. Mappings stay the
+  platform admin's, whatever owns the group: `MapIdpGroup` and `UnmapIdpGroup`
+  are decided on the group's platform name, which no role reaches. At a token exchange
   IAM reads the provider's `groups_claim`, maps each value and writes the group ids
   into the engine token's `grp` claim. Mapped membership lasts as long as the
   token, ten minutes at most.
@@ -225,8 +242,25 @@ and validated without catalogs, since they may name services that register later
 
 **Stored policies**: `id` (`pol_<ulid>`, or `builtin.<name>` / `module.<project>.<module_id>`
 for managed ones), `name`, `description`, `document`, `managed` (only IAM rewrites
-it) and `revision` (increments on every change; `update_policy(expected_revision=)`
-is optimistic concurrency).
+it), `revision` (increments on every change; `update_policy(expected_revision=)`
+is optimistic concurrency) and `owner_scope`.
+
+**Owner scopes.** Every policy is owned by the platform (`abi:-:-`, the default and
+every managed policy's), an org (`abi:<org>:-`) or a workspace (`abi:<org>:<ws>`),
+never an org-wide scope; it never changes. Its name carries it,
+`abi:<org>:<ws>:iam:policy/<id>`, so whoever holds `iam:CreatePolicy` (and the
+rest) there manages it. An org or a workspace owns something only once Nexus
+registered it (`iam:PutScope`). A policy owned by an org or a workspace:
+
+- is written for its scope: **every** resource pattern, a Deny's included, starts
+  with `${scope}:` (refused at create and update with `PolicyValidationError`), so
+  attached to anyone it neither grants nor refuses anything beyond its scope;
+- is attached only at its owner's scope or below, always at a scope: an org's at the
+  org, org-wide or at any of its workspaces, a workspace's at that workspace
+  (`names.within_owner`). No unscoped attachment of it exists.
+
+A refusal names the owner to whoever may read the policy or the group, and is "not
+found" for anyone else.
 
 **Action patterns.** An action is `<service>:<Action>`: `service` is the catalog
 name `^[a-z][a-z0-9_]*$`, `Action` is PascalCase `^[A-Z][A-Za-z0-9]*$`. Patterns
@@ -292,13 +326,19 @@ pct-encoded   = "%" 2HEXDIG                               ; uppercase hex
   IAM itself); a workspace in no org `abi:-:<ws>:…` (legacy workspaces with a null
   `organization_id`).
 - `%2A` as the workspace names what spans every workspace of an org, and `%2A` as
-  both org and workspace what spans every org: only `iam:attachment` resources
-  are named with them (`abi:<org>:%2A:iam:attachment/…` for an org-wide
-  attachment, which an `abi:<org>:*` grant reaches and an org-level `abi:<org>:-`
-  one does not, so an org admin cannot attach itself to every workspace;
-  `abi:%2A:%2A:iam:attachment/…` for an unscoped one, which no `${scope}` expands
-  to, the platform scope `abi:-:-` included: only grants written for every org, `*` and
-  `abi:*:…`, the platform admin's, reach it). No other resource may use `%2A`.
+  both org and workspace what spans every org (`names.EVERY_ORG_TYPES`):
+  - `abi:<org>:%2A:iam:attachment/…`, an org-wide attachment, which an
+    `abi:<org>:*` grant reaches and an org-level `abi:<org>:-` one does not, so an
+    org admin cannot attach itself to every workspace;
+  - `abi:%2A:%2A:iam:attachment/…`, an unscoped attachment, and
+    `abi:%2A:%2A:iam:policy/…` and `…:iam:group/…`, the **platform's** policies and
+    groups: no `${scope}` expands to them, the platform scope `abi:-:-` included,
+    so only grants written for every org (`*` and `abi:*:…`, the platform admin's,
+    `engine`'s, `api`'s) reach them. A role attached at `abi:-:-` therefore never
+    edits a platform policy, which may be attached unscoped.
+
+  No other resource may use `%2A`. An org's or a workspace's policies and groups
+  are named at their owner, `abi:<org>:-:iam:policy/…`, `abi:<org>:<ws>:iam:group/…`.
 - `-` as the whole `id` names a singleton (`service/-`).
 
 **Encoding ids.** The id is percent-encoded UTF-8: every octet outside
@@ -575,7 +615,7 @@ operations map):
 | `source_control` | `repo` (container), `branch`, `proposal` (path), `forge_user` (personal, platform) |
 | `coding_environment` | `environment` (path, personal, placed), `template` (platform), `coder_user` (personal, platform) |
 | `identity` | `provider` (opaque, platform) |
-| `iam` | `principal`, `group`, `policy`, `attachment`, `key` (personal for personal keys), `manifest`, `placement`, `scope`, `catalog`, `audience`: platform unless scoped |
+| `iam` | `attachment` (path, at its scope), `policy` and `group` (opaque, at their owner scope); `principal`, `key` (personal for personal keys), `manifest`, `placement`, `scope`, `catalog`, `audience` (platform) |
 | `nexus` | registered by Nexus at start, not by core: see `libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam_admin/AGENTS.md` |
 
 Rules that cut across services and are easy to get wrong:
@@ -641,13 +681,19 @@ attachment per scope.
 
 | Policy | Allows on the scope's types | Excludes |
 |---|---|---|
-| `builtin.viewer` | every `list` and `read` action | the nexus `feature` type |
-| `builtin.member` | viewer, plus every `write` action | the `feature` type |
-| `builtin.admin` | member, plus every `admin` action, except on the `iam` `attachment` type; plus `iam:ListAttachments` on `${scope}:iam:attachment/*`, and `iam:AttachPolicy` and `iam:DetachPolicy` on `${scope}:iam:attachment/builtin.admin/*`, `…/builtin.member/*`, `…/builtin.viewer/*` | the `feature` type; anything on `attachment/builtin.owner/*`; `nexus:DeleteWorkspace`; `nexus:DeleteOrganization` |
-| `builtin.owner` | admin, plus every action on every `attachment/…` (owner included), `nexus:DeleteWorkspace` and `nexus:DeleteOrganization` | the `feature` type |
+| `builtin.viewer` | every `list` and `read` action | the nexus `feature` type; the whole `iam` catalog |
+| `builtin.member` | viewer, plus every `write` action | the `feature` type; the whole `iam` catalog |
+| `builtin.admin` | member, plus every `admin` action, except on the `iam` `attachment` type; the scope's policies and groups (`ListPolicies`, `GetPolicy`, `CreatePolicy`, `UpdatePolicy`, `DeletePolicy`, `ListGroups`, `GetGroup`, `CreateGroup`, `DeleteGroup`, `AddGroupMember`, `RemoveGroupMember` on `${scope}:iam:policy/*` and `${scope}:iam:group/*`); `iam:ListAttachments` on `${scope}:iam:attachment/*`, and `iam:AttachPolicy` and `iam:DetachPolicy` on `${scope}:iam:attachment/builtin.admin/*`, `…/builtin.member/*`, `…/builtin.viewer/*` and `…/pol_*/*` (customer policies: the scope's own and those above it, IAM refusing one owned elsewhere) | the `feature` type; anything on `attachment/builtin.owner/*` and the other managed policies; `iam:MapIdpGroup`, `iam:UnmapIdpGroup`; `nexus:DeleteWorkspace`; `nexus:DeleteOrganization` |
+| `builtin.owner` | admin, plus every action on every `attachment/…` (owner included), `nexus:DeleteWorkspace` and `nexus:DeleteOrganization` | the `feature` type; `iam:MapIdpGroup`, `iam:UnmapIdpGroup` |
 | `builtin.platform_admin` | `*` on `*` (attached without scope) | sealed resources |
 | `builtin.self` | held implicitly by every user (no attachment row, unknown users included; `explain` shows it with no attachment id) | none |
 
+- **IAM administration is the admins' and owners'.** Viewers and members hold nothing
+  of the `iam` catalog at their scope (no list, no read): every IAM administration
+  call refuses them. Owners and admins at a scope manage that scope's policies and
+  groups and attach them there; an org's owners and admins reach its workspaces'
+  through their org-wide role (`abi:<org>:*`, which Nexus mirrors). They also see,
+  in a list at their scope, what they may attach there from above (see "Service API").
 - **Owner protection.** An admin cannot attach or detach `builtin.owner`; demoting or
   removing an owner means detaching their owner attachment, so only an owner can, at
   org and workspace scope alike.
@@ -734,7 +780,8 @@ holding keys refuses the link; `identity_at(principal, issuer)` names the subjec
 user, its own or linked), `create_service_account`, `get_principal`, `list_principals`,
 `suspend_principal`, `resume_principal`, `delete_principal` (keeps the id, drops
 attachments and memberships), groups (`create_group`, `add_group_member`,
-`map_idp_group`, ...; groups cannot contain groups), policies (`create_policy`
+`map_idp_group`, ...; groups cannot contain groups; `create_group(name, scope=)`, or
+`org=` alone for `abi:<org>:-`), policies (`create_policy(name, document, scope=)`
 validated against the registered catalogs, `update_policy(expected_revision=)`;
 managed policies are IAM's alone), `attach_policy`/`detach_policy` (idempotent;
 a policy naming `${scope}` needs a scoped attachment, and only a policy whose
@@ -747,8 +794,25 @@ Allow patterns, `policy.within_scope`), placements
 None; `resolve_placement`: its org and workspace, else platform), scopes (`put_scope`, `workspace_org`), `register_catalog` (highest
 version wins; refuses dropping an action a policy names).
 
-Lists page after filtering. Names: `principal_resource`, `group_resource`,
-`policy_resource`, `attachment_resource` (at the attachment's scope; an org-wide
+Lists page after filtering. `list_policies(scope=S)` returns the policies `S` owns
+(`iam:ListPolicies` on each), plus those of the levels above (its org's, the
+platform's) that are confined to a scope and that the caller may attach at `S`
+(`iam:AttachPolicy` on `attachment/<policy>/*` there): a workspace admin is offered
+the roles below owner and the org's policies. `list_groups(scope=S)` returns the
+groups `S` owns (`iam:ListGroups`), plus, at a workspace, its org's groups for whoever
+may list that workspace's attachments to them (`iam:ListAttachments` on
+`attachment/*/<group>`); platform groups are not offered there. Without `scope`, a
+list holds every policy or group the caller may list where it is owned. Reading one
+(`get_policy`, `get_group`) is decided at its owner only.
+
+**Lifecycle.** `delete_scope(org, ws)` (Nexus, when a workspace goes) deletes the
+policies and groups the workspace owns; `delete_scope(org)` those of the org and of
+each of its workspaces: a policy with its attachments and invitations, a group
+(marked deleted, its id kept) with its attachments, members and mappings. It is part
+of `iam:DeleteScope`.
+
+Names: `principal_resource`, `group_resource(id, owner_scope)`,
+`policy_resource(id, owner_scope)`, `attachment_resource` (at the attachment's scope; an org-wide
 one in workspace `%2A`, `names.ALL_WORKSPACES`; an unscoped one is `abi:%2A:%2A:…`,
 `names.ALL_ORGS`, see "Resource names"), `placement_resource`, `scope_resource`,
 `catalog_resource`.
@@ -1099,12 +1163,14 @@ iam.list_idp_bindings(provider=None, policy_id=None)
   `iam:ListAttachments` on the same names. `iam:ClaimPendingGrants` (admin on a
   principal) is the identity service's, as the engine.
 - **A binding** gives the members of an IdP group a role at a scope: IAM finds or
-  creates the ABI group `idp:<provider>:<claim value>` (org of the scope), maps the
-  claim to it and attaches the policy to it. The caller is authorized for the
+  creates the ABI group `idp:<provider>:<claim value>` owned by the org of the scope
+  (`abi:<org>:-`; the platform for a platform or unscoped binding), maps the claim to
+  it and attaches the policy to it. Binding the same claim in another org makes
+  that org its own group, so a group never holds another org's attachments. The caller is authorized for the
   attachment alone (`attachment/<policy>/idp:<provider>:<claim value>`): creating
   the group and its mapping is part of that one operation, so a workspace admin never
-  needs `iam:CreateGroup` or `iam:MapIdpGroup`. One group serves every binding of a
-  claim value; unbinding detaches at that scope only, and only from the groups bindings
+  needs `iam:CreateGroup` or `iam:MapIdpGroup`. One group per org serves every binding of a
+  claim value there; unbinding detaches at that scope only, and only from the groups bindings
   made (named `idp:<provider>:<claim value>`): a hand-made group that maps the same claim is
   never touched, nor listed. IAM's companions of the roles
   (`builtin.platform.*` on the group) are not listed as bindings.
@@ -1230,6 +1296,7 @@ AGENTS.md there), and IAM is the only record afterwards:
 | Every other existing container (module and engine namespaces, collections, repos, graphs) | platform placements, so no workspace can claim a name inside them |
 | Remote modules sharing `NATS_JWT_SECRET` | service accounts, keys and approved manifests (`abi dev up` regenerates them; deployed systems run `abi iam module approve`) |
 | Nexus users of the old login | users of issuer `urn:abi:nexus`, linked to the built-in IdP at first sign-in (`link_user`) |
+| IAM store schema 1 (no owner scopes) | schema 2, at the store's first open: every policy and group platform-owned, except the groups IdP bindings made (named `idp:<provider>:<claim>` and mapped from that claim, with an org), which belong to their org (`abi:<org>:-`) |
 | Sessions, refresh tokens, app grants and preview tokens signed with `secret_key` | invalidated: users sign in again; workspace secrets get their own key (`secrets_encryption_key`) |
 
 ## Decisions
@@ -1298,6 +1365,26 @@ memberships only. The one legacy kept is the issuer `urn:abi:nexus` for accounts
 while they link to an identity provider.
 *Consequences.* Zero trust is visible: a known principal with no policy is denied, and a remote
 module is refused every IAM administration endpoint.
+
+**Policies and groups are owned by the platform, an org or a workspace.**
+*Decision.* Each policy and group has one owner scope, in its record and in its name
+(`abi:<org>:<ws>:iam:<type>/<id>`); the built-in roles give owners and admins at a
+scope that scope's policies and groups, and viewers and members nothing of IAM. An
+owned policy names only `${scope}:` resources, Deny included, and is attached at its
+owner's scope or below; an owned group receives attachments there and holds only
+users of its org. The platform's are named `abi:%2A:%2A:…`, which no scope reaches.
+Deleting a workspace or an org deletes what it owns. IdP mappings stay the platform
+admin's.
+*Consequences.* A workspace admin builds its own groups and policies with no platform
+right, and nothing it writes reaches or refuses beyond its workspace, whoever it
+attaches it to: a Deny outside `${scope}:` would otherwise let it lock a user, the
+platform admin included, out of everything. Platform-scope roles (`abi:-:-`) never
+edit the platform's policies, some of which are attached unscoped. Grants written
+`abi:-:-:iam:policy/*` match no policy any more: write `abi:*:*:iam:policy/*`. Members
+and viewers no longer list their scope's attachments (who holds which role is
+Nexus's members list, read as `api`). A user leaving an org leaves its groups, so a
+group never keeps granting a former member. An existing store upgrades in place
+(schema 2).
 
 ## Known limits and open questions
 

@@ -137,12 +137,15 @@ class IAMStoreMemory(IAMStore):
         *,
         limit: int = 100,
         after: str | None = None,
+        owner_scopes: Sequence[str] | None = None,
     ) -> Page:
         with self._lock:
             ids = sorted(
                 p.id
                 for p in self._principals.values()
-                if (kind is None or p.kind == kind) and (after is None or p.id > after)
+                if (kind is None or p.kind == kind)
+                and (after is None or p.id > after)
+                and (owner_scopes is None or p.owner_scope in owner_scopes)
             )
             return _page([self._principals[i] for i in ids], limit)
 
@@ -158,6 +161,7 @@ class IAMStoreMemory(IAMStore):
                 kind=current.kind,
                 issuer=current.issuer,
                 subject=current.subject,
+                owner_scope=current.owner_scope,
                 created_at=current.created_at,
                 updated_at=_now(),
             )
@@ -255,9 +259,20 @@ class IAMStoreMemory(IAMStore):
             except KeyError:
                 raise IAMNotFoundError(f"Policy {policy_id} not found") from None
 
-    def list_policies(self, *, limit: int = 100, after: str | None = None) -> Page:
+    def list_policies(
+        self,
+        *,
+        limit: int = 100,
+        after: str | None = None,
+        owner_scopes: Sequence[str] | None = None,
+    ) -> Page:
         with self._lock:
-            ids = sorted(i for i in self._policies if after is None or i > after)
+            ids = sorted(
+                i
+                for i, p in self._policies.items()
+                if (after is None or i > after)
+                and (owner_scopes is None or p.owner_scope in owner_scopes)
+            )
             return _page([self._policies[i] for i in ids], limit)
 
     def update_policy(self, policy: Policy, expected_revision: int) -> Policy:

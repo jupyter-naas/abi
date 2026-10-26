@@ -26,13 +26,16 @@ NONE = "-"
 # which no workspace id can be. Only org-wide attachments are named with it, so
 # "abi:<org>:*" patterns reach them and "abi:<org>:-:" ones never do.
 ALL_WORKSPACES = "%2A"
-# The org field of what spans every org: only unscoped attachments, named
-# abi:%2A:%2A:iam:attachment/... No ${scope} expands to it (no org id is "%2A"),
-# so attaching at any scope, the platform's abi:-:- included, never reaches
-# them: only grants written for every org ("*", "abi:*:...") do.
+# The org field of what spans every org: unscoped attachments, named
+# abi:%2A:%2A:iam:attachment/..., and the platform's own policies and groups,
+# abi:%2A:%2A:iam:policy/... and iam:group/.... No ${scope} expands to it (no
+# org id is "%2A"), so a role at any scope, the platform's abi:-:- included,
+# never reaches them: only grants written for every org ("*", "abi:*:...") do.
 ALL_ORGS = "%2A"
-# The only resource type the two markers above may name.
+# The only resource type the workspace marker may name, with an org (org-wide).
 ORG_WIDE_TYPE = ("iam", "attachment")
+# The resource types the org marker may name, with the workspace marker.
+EVERY_ORG_TYPES = frozenset({ORG_WIDE_TYPE, ("iam", "policy"), ("iam", "group")})
 PREFIX = "abi:"
 PLATFORM_SCOPE = "abi:-:-"
 
@@ -177,13 +180,48 @@ def scope_fields(scope: str) -> tuple[str, str]:
     return org, workspace
 
 
+def validate_owner_scope(scope: str) -> str:
+    """Check the scope that owns a policy or a group: the platform ``abi:-:-``,
+    an org ``abi:<org>:-`` or a workspace ``abi:<org>:<ws>``, never org-wide."""
+    if scope_fields(scope)[1] == "*":
+        raise ValueError(
+            "A policy or a group is owned by the platform, an org or a workspace, "
+            f"not {scope!r}"
+        )
+    return scope
+
+
+def within_owner(owner: str, scope: str | None) -> bool:
+    """Whether an attachment at ``scope`` is at ``owner``'s level or below: an
+    org's at the org, org-wide or at any of its workspaces, a workspace's at
+    that workspace only, the platform's anywhere (unscoped included)."""
+    if owner == PLATFORM_SCOPE:
+        return True
+    if scope is None:
+        return False
+    owner_org, owner_workspace = scope_fields(owner)
+    org, workspace = scope_fields(scope)
+    return org == owner_org and owner_workspace in (NONE, workspace)
+
+
+def owner_ancestors(scope: str) -> list[str]:
+    """The owner scopes above ``scope``, nearest first: a workspace's org, then
+    the platform; an org's platform; none for the platform."""
+    org, workspace = scope_fields(validate_owner_scope(scope))
+    if org == NONE:
+        return []
+    if workspace == NONE:
+        return [PLATFORM_SCOPE]
+    return [scope_name(org), PLATFORM_SCOPE]
+
+
 def _check_org(org: str, workspace: str, service: str, type: str) -> None:
     if org == ALL_ORGS:
-        # Only unscoped attachments span every org.
-        if (service, type) != ORG_WIDE_TYPE or workspace != ALL_WORKSPACES:
+        # Only unscoped attachments and the platform's policies and groups.
+        if (service, type) not in EVERY_ORG_TYPES or workspace != ALL_WORKSPACES:
             raise ValueError(
-                f"Org {ALL_ORGS} names unscoped attachments only, "
-                f"abi:{ALL_ORGS}:{ALL_WORKSPACES}:iam:attachment/..."
+                f"Org {ALL_ORGS} names unscoped attachments and the platform's "
+                f"policies and groups only, abi:{ALL_ORGS}:{ALL_WORKSPACES}:iam:..."
             )
         return
     _check_scope_id(org, "org")
@@ -191,6 +229,8 @@ def _check_org(org: str, workspace: str, service: str, type: str) -> None:
 
 def _check_workspace(workspace: str, org: str, service: str, type: str) -> None:
     if workspace == ALL_WORKSPACES:
+        if org == ALL_ORGS:
+            return  # checked with the org
         # Only org-wide attachments span every workspace of an org.
         if (service, type) != ORG_WIDE_TYPE:
             raise ValueError(

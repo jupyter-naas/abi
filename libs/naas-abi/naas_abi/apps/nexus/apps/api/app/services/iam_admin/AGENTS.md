@@ -25,11 +25,13 @@ Nexus adds no role check of its own.
 
 `/api/iam/admin` (session only, like the rest of `/api/iam/`):
 
-- `GET /access?scope=` the actions the caller may do (platform, or attachments at `scope`); `GET /catalogs`
-- `GET|POST /policies`, `GET|PUT|DELETE /policies/{id}`, `POST /policies/validate` (`document` or YAML/JSON `text`)
+- `GET /access?scope=` the actions the caller may do (platform, or attachments and that level's policies and groups
+  at `scope`); `GET /catalogs?scope=`
+- `GET|POST /policies` (`?scope=`; the body's `scope` is the owner), `GET|PUT|DELETE /policies/{id}`,
+  `POST /policies/validate?scope=` (`document` or YAML/JSON `text`)
 - `GET|POST|DELETE /attachments` (`?scope=`, `?principal_id=`, `?policy_id=`), `GET /attachable-policies?scope=`
 - `GET /principals`, `GET /principals/{id}`, `POST /principals/{id}/suspend|resume`
-- `GET|POST /groups`, `GET|DELETE /groups/{id}`, `PUT|DELETE /groups/{id}/members/{member}`,
+- `GET|POST /groups` (`?scope=`; the body's `scope`, or `org` alone, is the owner), `GET|DELETE /groups/{id}`, `PUT|DELETE /groups/{id}/members/{member}`,
   `PUT|DELETE /groups/{id}/idp-mappings`
 - `GET|POST /service-accounts`, `DELETE /service-accounts/{id}`, `GET|POST /service-accounts/{id}/keys`,
   `DELETE …/keys/{key}`, `POST …/keys/{key}/rotate`
@@ -57,14 +59,19 @@ Nexus adds no role check of its own.
   page and button; Nexus adds no role check and no list of "who is an admin". `GET /access` asks IAM which actions
   the caller holds, so the pages show only what will answer. `api` keeps its enumerated statements: acting as the
   user is what keeps `api` out of IAM's administration.
-- **Two places, one API.** Attachments are the one IAM type placed in an org and workspace, so an org admin holds
-  `iam:ListAttachments`, `AttachPolicy` and `DetachPolicy` at their scope and nothing else of IAM. Org settings,
-  Access, manages attachments at the org and its workspaces (the policies offered are the ones the caller may
-  attach there: `GET /attachable-policies`). Everything else (policies, groups, service accounts and keys,
-  approvals, simulator, audit) is platform-level and lives in the System app's Access tab, available to whoever
-  holds the matching actions. Both use the same routes; the scope is a parameter. The tab is reached through the
-  System app, which still requires `nexus:ReadSystem`: a delegated IAM admin without it has the API and the CLI
-  but not the tab.
+- **Two places, one API.** Attachments, policies and groups are the IAM types placed in an org and workspace
+  (attachments at their scope, policies and groups at the scope that owns them: core `services/iam/AGENTS.md`,
+  "Owner scopes"), so an org or workspace admin holds, at their scope, the attachment actions and that level's
+  policies and groups, and nothing else of IAM; members and viewers hold none of it. Org settings, Access,
+  manages attachments at the org and its workspaces (the policies offered are the ones the caller may attach
+  there: `GET /attachable-policies`, which leaves out a policy owned by another org or workspace). Service
+  accounts and keys, approvals, simulator and audit are platform-level and live in the System app's Access tab,
+  available to whoever holds the matching actions. Every route takes the scope as a parameter: `POST /policies`
+  and `POST /groups` create at the body's `scope`, `GET /policies?scope=` and `GET /groups?scope=` list that
+  level's own plus what the caller may attach there from above (IAM's `list_policies` / `list_groups`), and
+  `GET /access?scope=` and `/catalogs?scope=` answer for that level (an org-wide scope answers for its org). The
+  tab is reached through the System app, which still requires `nexus:ReadSystem`: a delegated IAM admin without
+  it has the API and the CLI but not the tab.
 - **Every change is audited, fail-closed.** The System app's `run_audited` and `audit_logs` table are reused: a
   `requested` record is written first and nothing changes if it cannot be (503); `succeeded` or `failed` (the
   exception type only) follows. IAM's records are the rows `iam.<operation>` (`SqlAdminAuditLog` takes the action
@@ -95,4 +102,7 @@ uv run pytest libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam_admin 
 ```
 
 The route tests run a real IAM on the memory store (`team` fixture: `owner`, `admin`, `member`, `viewer`,
-`stranger`; plus `root`, a platform admin, and `lister`, who holds only `iam:ListPolicies`).
+`stranger`; plus `root`, a platform admin, and `lister`, who holds only `iam:ListPolicies` on
+`abi:*:*:iam:policy/*`, every policy wherever it is owned). The `ws2` fixture adds `ws-2` of `org-1` with
+`ws2admin` and `colleague`, and `outsider` in another org: a workspace admin's and an org admin's policies
+and groups.

@@ -147,9 +147,11 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
 
     # -- groups -------------------------------------------------------------------------
 
-    def create_group(self, name: str, *, org: str | None = None) -> PrincipalRecord:
+    def create_group(
+        self, name: str, *, org: str | None = None, scope: str | None = None
+    ) -> PrincipalRecord:
         return codec.principal_from_pb(
-            self._request("create_group", name=name, org=org).group
+            self._request("create_group", name=name, org=org, scope=scope).group
         )
 
     def get_group(self, group_id: str) -> PrincipalRecord:
@@ -157,8 +159,10 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
             self._request("get_group", group_id=group_id).group
         )
 
-    def list_groups(self, *, limit: int = 100, after: str | None = None) -> Page:
-        response = self._request("list_groups", limit=limit, after=after)
+    def list_groups(
+        self, *, limit: int = 100, after: str | None = None, scope: str | None = None
+    ) -> Page:
+        response = self._request("list_groups", limit=limit, after=after, scope=scope)
         return Page(
             [codec.principal_from_pb(g) for g in response.groups],
             response.next_after if response.HasField("next_after") else None,
@@ -206,13 +210,19 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
     # -- policies and attachments -----------------------------------------------------
 
     def create_policy(
-        self, name: str, document: Any, *, description: str = ""
+        self,
+        name: str,
+        document: Any,
+        *,
+        description: str = "",
+        scope: str | None = None,
     ) -> Policy:
         response = self._request(
             "create_policy",
             name=name,
             document_json=_document_text(document),
             description=description,
+            scope=scope,
         )
         return codec.policy_from_pb(response.policy)
 
@@ -221,8 +231,10 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
             self._request("get_policy", policy_id=policy_id).policy
         )
 
-    def list_policies(self, *, limit: int = 100, after: str | None = None) -> Page:
-        response = self._request("list_policies", limit=limit, after=after)
+    def list_policies(
+        self, *, limit: int = 100, after: str | None = None, scope: str | None = None
+    ) -> Page:
+        response = self._request("list_policies", limit=limit, after=after, scope=scope)
         return Page(
             [codec.policy_from_pb(p) for p in response.policies],
             response.next_after if response.HasField("next_after") else None,

@@ -126,6 +126,17 @@ class PolicyDocument:
             for pattern in statement.resources
         )
 
+    @property
+    def wholly_within_scope(self) -> bool:
+        """Whether every resource pattern, a Deny's included, starts with
+        ``${scope}:``: what a policy owned by an org or a workspace is, so that,
+        attached to anyone, it neither grants nor refuses beyond its scope."""
+        return all(
+            pattern.startswith(SCOPE_PREFIX)
+            for statement in self.statements
+            for pattern in statement.resources
+        )
+
 
 def within_scope(statement: Statement) -> Statement | None:
     """``statement`` as a scoped attachment may grant it (None: it grants nothing).

@@ -67,6 +67,8 @@ export type PolicyView = {
   /** Built-in and module policies: IAM writes them, they are read-only here. */
   managed: boolean;
   revision: number;
+  /** Who owns it: `abi:-:-` (the platform), `abi:<org>:-` or `abi:<org>:<ws>`. */
+  owner_scope?: string;
   document: PolicyDocument;
   created_at: string | null;
   updated_at: string | null;
@@ -108,6 +110,8 @@ export type PrincipalView = {
   provider: string | null;
   org: string | null;
   owner_id: string | null;
+  /** Groups: who owns them, `abi:-:-` (the platform), `abi:<org>:-` or `abi:<org>:<ws>`. */
+  owner_scope?: string;
   created_at: string | null;
 };
 
@@ -167,7 +171,13 @@ export type AttachmentCreate = {
 
 /** A policy the caller may attach at a scope (IAM's rules: only a policy whose
  *  every Allow starts with `${scope}:` goes at a scope). */
-export type AttachablePolicy = { id: string; name: string; description: string; managed: boolean };
+export type AttachablePolicy = {
+  id: string;
+  name: string;
+  description: string;
+  managed: boolean;
+  owner_scope?: string;
+};
 
 // -- module permission approvals --------------------------------------------------------
 

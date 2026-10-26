@@ -176,3 +176,38 @@ def test_every_org_is_a_name_for_unscoped_attachments_only():
     ):
         with pytest.raises(ValueError):
             resource_name("iam", type_, "x", org=org, workspace=workspace)
+
+
+def test_every_org_names_the_platforms_policies_and_groups():
+    from naas_abi_core.services.iam.names import ALL_ORGS, ALL_WORKSPACES
+
+    for type_ in ("policy", "group"):
+        name = resource_name("iam", type_, "x", org=ALL_ORGS, workspace=ALL_WORKSPACES)
+        assert parse_resource_name(name).org == ALL_ORGS
+        for scope in ("abi:-:-", "abi:acme:-", "abi:acme:*", "abi:acme:ws1"):
+            assert not matches(f"{scope}:iam:{type_}/*", name)
+        assert matches("abi:*:*:iam:" + type_ + "/*", name)
+        # Never an org's every workspace: a policy or group is owned by one level.
+        with pytest.raises(ValueError):
+            resource_name("iam", type_, "x", org="acme", workspace=ALL_WORKSPACES)
+
+
+def test_owner_scopes():
+    from naas_abi_core.services.iam.names import (
+        owner_ancestors,
+        validate_owner_scope,
+        within_owner,
+    )
+
+    assert owner_ancestors("abi:acme:ws1") == ["abi:acme:-", "abi:-:-"]
+    assert owner_ancestors("abi:acme:-") == ["abi:-:-"]
+    assert owner_ancestors("abi:-:-") == []
+    with pytest.raises(ValueError):
+        validate_owner_scope("abi:acme:*")
+    assert within_owner("abi:-:-", None)
+    assert within_owner("abi:acme:-", "abi:acme:*")
+    assert within_owner("abi:acme:-", "abi:acme:ws1")
+    assert not within_owner("abi:acme:-", None)
+    assert not within_owner("abi:acme:ws1", "abi:acme:ws2")
+    assert not within_owner("abi:acme:ws1", "abi:acme:-")
+    assert not within_owner("abi:acme:-", "abi:other:ws1")

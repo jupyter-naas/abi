@@ -26,6 +26,7 @@ from typing import Any, Literal
 from naas_abi_core.engine.call_context import CallContext
 from naas_abi_core.engine.nats_auth import IssuedToken
 from naas_abi_core.services.iam.catalog import ActionCatalog, CatalogRegistry
+from naas_abi_core.services.iam.names import PLATFORM_SCOPE
 from naas_abi_core.services.iam.policy import PolicyDocument, Statement
 
 PrincipalKind = Literal["user", "group", "service_account"]
@@ -133,12 +134,17 @@ class PrincipalRecord:
     email: str | None = None
     email_verified: bool = False
     display_name: str | None = None
-    # Groups: the org they belong to, None for a platform group.
+    # Groups: the org of their owner scope, None for a platform group. A group
+    # made before owner scopes may name an org while platform-owned.
     org: str | None = None
     # Service accounts: the user who created them, for scripts and CI.
     owner_id: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    # Groups: the platform (``abi:-:-``), an org (``abi:<org>:-``) or a
+    # workspace (``abi:<org>:<ws>``) that owns them and names them. Users and
+    # service accounts are the platform's.
+    owner_scope: str = PLATFORM_SCOPE
 
     @property
     def active(self) -> bool:
@@ -164,6 +170,10 @@ class Policy:
     revision: int = 1
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    # The platform (``abi:-:-``), an org (``abi:<org>:-``) or a workspace
+    # (``abi:<org>:<ws>``): it names the policy and bounds where it is attached.
+    # Managed policies are the platform's.
+    owner_scope: str = PLATFORM_SCOPE
 
 
 @dataclass(frozen=True)
@@ -433,8 +443,10 @@ class IAMStore(ABC):
         *,
         limit: int = 100,
         after: str | None = None,
+        owner_scopes: Sequence[str] | None = None,
     ) -> Page:
-        """Principals by ascending id, strictly after ``after``."""
+        """Principals by ascending id, strictly after ``after``; with
+        ``owner_scopes``, only those owned by one of them."""
 
     @abstractmethod
     def update_principal(self, record: PrincipalRecord) -> PrincipalRecord:
@@ -486,11 +498,20 @@ class IAMStore(ABC):
     def get_policy(self, policy_id: str) -> Policy: ...
 
     @abstractmethod
-    def list_policies(self, *, limit: int = 100, after: str | None = None) -> Page: ...
+    def list_policies(
+        self,
+        *,
+        limit: int = 100,
+        after: str | None = None,
+        owner_scopes: Sequence[str] | None = None,
+    ) -> Page:
+        """Policies by ascending id, strictly after ``after``; with
+        ``owner_scopes``, only those owned by one of them."""
 
     @abstractmethod
     def update_policy(self, policy: Policy, expected_revision: int) -> Policy:
-        """Replace name, description and document; the revision goes up by one.
+        """Replace name, description and document (never the owner scope);
+        the revision goes up by one.
 
         ``RevisionConflictError`` when the stored revision is not
         ``expected_revision``.
@@ -934,13 +955,22 @@ class IIAMService(ABC):
     # -- groups -----------------------------------------------------------------
 
     @abstractmethod
-    def create_group(self, name: str, *, org: str | None = None) -> PrincipalRecord: ...
+    def create_group(
+        self, name: str, *, org: str | None = None, scope: str | None = None
+    ) -> PrincipalRecord:
+        """A group owned by ``scope`` (``abi:<org>:-`` when only ``org`` is
+        given, else the platform)."""
 
     @abstractmethod
     def get_group(self, group_id: str) -> PrincipalRecord: ...
 
     @abstractmethod
-    def list_groups(self, *, limit: int = 100, after: str | None = None) -> Page: ...
+    def list_groups(
+        self, *, limit: int = 100, after: str | None = None, scope: str | None = None
+    ) -> Page:
+        """The groups the caller may list; with ``scope``, those it owns, plus
+        its org's groups at a workspace for whoever lists that workspace's
+        attachments."""
 
     @abstractmethod
     def delete_group(self, group_id: str) -> PrincipalRecord: ...
@@ -971,14 +1001,24 @@ class IIAMService(ABC):
 
     @abstractmethod
     def create_policy(
-        self, name: str, document: Any, *, description: str = ""
-    ) -> Policy: ...
+        self,
+        name: str,
+        document: Any,
+        *,
+        description: str = "",
+        scope: str | None = None,
+    ) -> Policy:
+        """A customer policy owned by ``scope`` (the platform when None)."""
 
     @abstractmethod
     def get_policy(self, policy_id: str) -> Policy: ...
 
     @abstractmethod
-    def list_policies(self, *, limit: int = 100, after: str | None = None) -> Page: ...
+    def list_policies(
+        self, *, limit: int = 100, after: str | None = None, scope: str | None = None
+    ) -> Page:
+        """The policies the caller may list; with ``scope``, those it owns, plus
+        those of the levels above that the caller may attach there."""
 
     @abstractmethod
     def update_policy(

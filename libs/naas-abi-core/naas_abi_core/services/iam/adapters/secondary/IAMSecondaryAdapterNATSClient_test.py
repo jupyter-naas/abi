@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 from naas_abi_core.engine import nats_runtime
 from naas_abi_core.engine.call_context import CallContext, Principal, use_call_context
+from naas_abi_core.engine.nats_auth import RenewingTokenSource
 from naas_abi_core.engine.nats_rpc_integration_test import (  # noqa: F401 - pytest fixture
     SECRET,
     broker,
@@ -30,6 +32,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     RevisionConflictError,
 )
 from naas_abi_core.services.iam.IAMService import IAMService
+from naas_abi_core.services.iam.tests import owned_scope_contract as owned
 from naas_abi_core.services.iam.tests.iam_harness import (
     TRIPLE_STORE,
     document,
@@ -127,7 +130,7 @@ def test_administration_round_trip(iam_host):
     assert bob.created_at is not None
     assert engine.get_principal(bob.id) == bob
 
-    sales = engine.create_group("sales", org="org-1")
+    sales = engine.create_group("sales")
     engine.add_group_member(sales.id, bob.id)
     assert engine.list_group_members(sales.id) == [bob.id]
     mapping = engine.map_idp_group("acme", "Sales", sales.id)
@@ -425,3 +428,24 @@ def test_malformed_requests_never_reach_the_service():
         service.authorize.assert_not_called()
     finally:
         primary._dispatch.close()
+
+
+@BROKER
+@pytest.mark.parametrize("scenario", owned.SCENARIOS, ids=lambda s: s.__name__)
+def test_owned_scenarios_over_nats(iam_host, scenario):
+    """The same policies and groups of an org or a workspace, each call made over
+    NATS as the user (a user's own token, as Nexus acts as its signed-in user)."""
+
+    @contextmanager
+    def as_user(record):
+        source = RenewingTokenSource(
+            record.id,
+            lambda: TEST_TOKENS.issue(record.id, subject=record.id, kind="user"),
+        )
+        client = IAMSecondaryAdapterNATSClient(iam_host.url, source)
+        try:
+            yield client
+        finally:
+            client.close()
+
+    scenario(iam_host.service, as_user)

@@ -89,6 +89,8 @@ class PolicySourceBody(BaseModel):
 class PolicyCreateBody(PolicySourceBody):
     name: str = Field(min_length=1, max_length=128)
     description: str = Field(default="", max_length=1000)
+    # The owner: abi:-:- (the default), abi:<org>:- or abi:<org>:<ws>.
+    scope: str | None = None
 
 
 class PolicyUpdateBody(PolicySourceBody):
@@ -106,6 +108,8 @@ class AttachBody(BaseModel):
 class GroupCreateBody(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     org: str | None = None
+    # The owner: abi:-:- (the default), abi:<org>:- or abi:<org>:<ws>.
+    scope: str | None = None
 
 
 class IdpMappingBody(BaseModel):
@@ -150,8 +154,10 @@ async def access(
 
 
 @router.get("/catalogs", dependencies=[declares("iam:ListPolicies")])
-async def catalogs(user: User = Signed, service: IamAdminService = Service) -> dict[str, Any]:
-    return await _call(service.catalogs(user))
+async def catalogs(
+    scope: str | None = None, user: User = Signed, service: IamAdminService = Service
+) -> dict[str, Any]:
+    return await _call(service.catalogs(user, scope))
 
 
 # -- policies -----------------------------------------------------------------------------
@@ -159,16 +165,22 @@ async def catalogs(user: User = Signed, service: IamAdminService = Service) -> d
 
 @router.post("/policies/validate", dependencies=[declares("iam:CreatePolicy")])
 async def validate_policy(
-    body: PolicySourceBody, user: User = Signed, service: IamAdminService = Service
+    body: PolicySourceBody,
+    scope: str | None = None,
+    user: User = Signed,
+    service: IamAdminService = Service,
 ) -> dict[str, Any]:
-    return await _call(service.validate_policy(user, body.source()))
+    return await _call(service.validate_policy(user, body.source(), scope))
 
 
 @router.get("/policies", dependencies=[declares("iam:ListPolicies")])
 async def list_policies(
-    after: str | None = None, user: User = Signed, service: IamAdminService = Service
+    after: str | None = None,
+    scope: str | None = None,
+    user: User = Signed,
+    service: IamAdminService = Service,
 ) -> dict[str, Any]:
-    return await _call(service.list_policies(user, after))
+    return await _call(service.list_policies(user, after, scope))
 
 
 @router.get("/policies/{policy_id}", dependencies=[declares("iam:GetPolicy")])
@@ -182,7 +194,9 @@ async def get_policy(
 async def create_policy(
     body: PolicyCreateBody, user: User = Signed, service: IamAdminService = Service
 ) -> dict[str, Any]:
-    return await _call(service.create_policy(user, body.name, body.source(), body.description))
+    return await _call(
+        service.create_policy(user, body.name, body.source(), body.description, body.scope)
+    )
 
 
 @router.put("/policies/{policy_id}", dependencies=[declares("iam:UpdatePolicy")])
@@ -298,8 +312,10 @@ async def resume_principal(
 
 
 @router.get("/groups", dependencies=[declares("iam:ListGroups")])
-async def list_groups(user: User = Signed, service: IamAdminService = Service) -> dict[str, Any]:
-    return await _call(service.list_groups(user))
+async def list_groups(
+    scope: str | None = None, user: User = Signed, service: IamAdminService = Service
+) -> dict[str, Any]:
+    return await _call(service.list_groups(user, scope))
 
 
 @router.get("/groups/{group_id}", dependencies=[declares("iam:GetGroup")])
@@ -313,7 +329,7 @@ async def get_group(
 async def create_group(
     body: GroupCreateBody, user: User = Signed, service: IamAdminService = Service
 ) -> dict[str, Any]:
-    return await _call(service.create_group(user, body.name, body.org))
+    return await _call(service.create_group(user, body.name, body.org, body.scope))
 
 
 @router.delete("/groups/{group_id}", status_code=204, dependencies=[declares("iam:DeleteGroup")])

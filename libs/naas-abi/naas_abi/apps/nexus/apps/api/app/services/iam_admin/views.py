@@ -44,6 +44,7 @@ def principal_view(record: PrincipalRecord) -> dict[str, Any]:
         "provider": record.provider,
         "org": record.org,
         "owner_id": record.owner_id,
+        "owner_scope": record.owner_scope,
         "created_at": iso(record.created_at),
     }
 
@@ -68,6 +69,7 @@ def policy_view(policy: Policy) -> dict[str, Any]:
         "description": policy.description,
         "managed": policy.managed,
         "revision": policy.revision,
+        "owner_scope": policy.owner_scope,
         "document": policy.document.to_dict(),
         "created_at": iso(policy.created_at),
         "updated_at": iso(policy.updated_at),

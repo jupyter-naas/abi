@@ -46,5 +46,7 @@ class IAMStorePostgreSQL(IAMStoreSQL):
         )
         with engine.begin() as conn:
             conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
-        super().__init__(engine.execution_options(schema_translate_map={None: schema}))
+        super().__init__(
+            engine.execution_options(schema_translate_map={None: schema}), schema=schema
+        )
         self.schema = schema

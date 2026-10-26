@@ -1,8 +1,10 @@
 """IAM's own catalog and the seals.
 
 IAM authorizes its own operations with these actions, like any other service.
-Every resource type is platform-level except ``attachment``, which is named at
-its attachment's scope, so a workspace admin can manage that workspace's roles.
+Three resource types are named in an org or a workspace: ``attachment``, at its
+attachment's scope, and ``policy`` and ``group``, at the scope that owns them,
+so the admins of a workspace or an org manage that level's roles, policies and
+groups. Every other type is platform-level.
 """
 
 from __future__ import annotations
@@ -39,11 +41,22 @@ CATALOG = ActionCatalog(
     # 3: RevokeTokens, and the exchange of tokens.
     # 4: ClaimPendingGrants, and the subjects of pending grants and IdP group
     # bindings.
-    version=4,
+    # 5: policies and groups are placed at the scope that owns them.
+    version=5,
     resource_types=(
         ResourceType("principal", id="opaque", placement="platform"),
-        ResourceType("group", id="opaque", placement="platform"),
-        ResourceType("policy", id="opaque", placement="platform"),
+        ResourceType(
+            "group",
+            id="opaque",
+            placement="placed",
+            description="group/<group id>, at the scope that owns it.",
+        ),
+        ResourceType(
+            "policy",
+            id="opaque",
+            placement="placed",
+            description="policy/<policy id>, at the scope that owns it.",
+        ),
         ResourceType(
             "attachment",
             id="path",

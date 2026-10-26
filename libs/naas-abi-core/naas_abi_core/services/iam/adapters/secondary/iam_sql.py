@@ -34,6 +34,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     ScopeRecord,
     SigningKeyRecord,
 )
+from naas_abi_core.services.iam.names import PLATFORM_SCOPE
 from naas_abi_core.services.iam.policy import PolicyDocument
 from sqlalchemy import (
     BigInteger,
@@ -49,15 +50,20 @@ from sqlalchemy import (
     UniqueConstraint,
     and_,
     delete,
+    exists,
     func,
     insert,
+    inspect,
+    literal,
     select,
+    text,
     update,
 )
 from sqlalchemy.engine import Connection, Engine, Row
 from sqlalchemy.exc import IntegrityError
 
-SCHEMA_VERSION = 1
+# 2: the owner scope of policies and groups (``owner_scope``).
+SCHEMA_VERSION = 2
 
 metadata = MetaData()
 
@@ -80,6 +86,7 @@ principals = Table(
     Column("owner_id", String(64)),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
+    Column("owner_scope", Text, nullable=False, default=PLATFORM_SCOPE),
     UniqueConstraint("issuer", "subject", name="iam_principals_user_identity"),
 )
 
@@ -139,6 +146,7 @@ policies = Table(
     Column("revision", Integer, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
+    Column("owner_scope", Text, nullable=False, default=PLATFORM_SCOPE),
 )
 
 attachments = Table(
@@ -299,6 +307,7 @@ def _principal(row: Row) -> PrincipalRecord:
         owner_id=row.owner_id,
         created_at=_aware(row.created_at),
         updated_at=_aware(row.updated_at),
+        owner_scope=row.owner_scope,
     )
 
 
@@ -328,6 +337,7 @@ def _policy(row: Row) -> Policy:
         revision=row.revision,
         created_at=_aware(row.created_at),
         updated_at=_aware(row.updated_at),
+        owner_scope=row.owner_scope,
     )
 
 
@@ -406,8 +416,9 @@ class IAMStoreSQL(IAMStore):
 
     _write_options: dict[str, Any] = {}
 
-    def __init__(self, engine: Engine) -> None:
+    def __init__(self, engine: Engine, *, schema: str | None = None) -> None:
         self._engine = engine
+        self._schema = schema
         self._closed = False
         metadata.create_all(engine)
         with self._write() as conn:
@@ -420,6 +431,54 @@ class IAMStoreSQL(IAMStore):
                         schema_version=SCHEMA_VERSION,
                     )
                 )
+            else:
+                self._migrate(conn)
+
+    # -- migrations ---------------------------------------------------------------
+
+    def _migrate(self, conn: Connection) -> None:
+        """Bring a store of an earlier schema version up to ``SCHEMA_VERSION``."""
+        version = int(conn.execute(select(state.c.schema_version)).scalar() or 1)
+        if version < 2:
+            self._migrate_owner_scopes(conn)
+        if version < SCHEMA_VERSION:
+            conn.execute(update(state).values(schema_version=SCHEMA_VERSION))
+
+    def _migrate_owner_scopes(self, conn: Connection) -> None:
+        """2: every policy and group is owned by the platform, except the groups
+        IdP bindings made (``idp:<provider>:<claim value>``, mapped from that
+        claim), which belong to the org they were made for."""
+        for table in (principals, policies):
+            columns = {
+                c["name"]
+                for c in inspect(conn).get_columns(table.name, schema=self._schema)
+            }
+            if "owner_scope" in columns:
+                continue
+            name = f'"{self._schema}".{table.name}' if self._schema else table.name
+            conn.execute(
+                text(
+                    f"ALTER TABLE {name} ADD COLUMN owner_scope TEXT NOT NULL "
+                    f"DEFAULT '{PLATFORM_SCOPE}'"
+                )
+            )
+        made_by_binding = exists().where(
+            group_mappings.c.group_id == principals.c.id,
+            literal("idp:")
+            + group_mappings.c.provider
+            + literal(":")
+            + group_mappings.c.claim_value
+            == principals.c.name,
+        )
+        conn.execute(
+            update(principals)
+            .where(
+                principals.c.kind == "group",
+                principals.c.org.is_not(None),
+                made_by_binding,
+            )
+            .values(owner_scope=literal("abi:") + principals.c.org + literal(":-"))
+        )
 
     # -- transactions -------------------------------------------------------------
 
@@ -463,6 +522,7 @@ class IAMStoreSQL(IAMStore):
                     kind=record.kind,
                     issuer=record.issuer,
                     subject=record.subject,
+                    owner_scope=record.owner_scope,
                     created_at=now,
                     updated_at=now,
                     **_principal_values(record),
@@ -547,11 +607,14 @@ class IAMStoreSQL(IAMStore):
         *,
         limit: int = 100,
         after: str | None = None,
+        owner_scopes: Sequence[str] | None = None,
     ) -> Page:
         _check_limit(limit)
         query = select(principals).order_by(principals.c.id).limit(limit + 1)
         if kind is not None:
             query = query.where(principals.c.kind == kind)
+        if owner_scopes is not None:
+            query = query.where(principals.c.owner_scope.in_(list(owner_scopes)))
         if after is not None:
             query = query.where(principals.c.id > after)
         with self._read() as conn:
@@ -701,6 +764,7 @@ class IAMStoreSQL(IAMStore):
                     document=policy.document.to_json(),
                     managed=policy.managed,
                     revision=1,
+                    owner_scope=policy.owner_scope,
                     created_at=now,
                     updated_at=now,
                 )
@@ -716,9 +780,17 @@ class IAMStoreSQL(IAMStore):
             raise IAMNotFoundError(f"Policy {policy_id} not found")
         return _policy(row)
 
-    def list_policies(self, *, limit: int = 100, after: str | None = None) -> Page:
+    def list_policies(
+        self,
+        *,
+        limit: int = 100,
+        after: str | None = None,
+        owner_scopes: Sequence[str] | None = None,
+    ) -> Page:
         _check_limit(limit)
         query = select(policies).order_by(policies.c.id).limit(limit + 1)
+        if owner_scopes is not None:
+            query = query.where(policies.c.owner_scope.in_(list(owner_scopes)))
         if after is not None:
             query = query.where(policies.c.id > after)
         with self._read() as conn:
@@ -776,6 +848,7 @@ class IAMStoreSQL(IAMStore):
                         document=document,
                         managed=True,
                         revision=1,
+                        owner_scope=policy.owner_scope,
                         created_at=now,
                         updated_at=now,
                     )

@@ -94,6 +94,11 @@ a catalog, run the route matrix.
   catalogs by level (core's `roles.py`) and attached at a scope: `builtin.viewer` at `abi:<org>:<ws>` is the
   read-only policy on that workspace's resources. `builtin.platform_admin` (`*` on `*`, no scope, never
   over sealed resources) is `users.is_superadmin`. `builtin.self` is held by every user.
+- **IAM administration by level.** Owners and admins of an org or a workspace manage that level's own policies
+  and groups (`services/iam_admin`); members and viewers hold nothing of the `iam` catalog, not even the list of
+  their scope's attachments (Nexus reads members as `api`). Deleting a workspace or an org
+  (`Memberships.drop_scope`, then IAM's `delete_scope`) deletes the policies and groups it owns, with their
+  attachments.
 - **Features.** `UseFeature` is granted only by feature policies, `builtin.features.<role>`,
   `builtin.features.<org>.<role>` and `builtin.features.<org>.<workspace>.<role>`, which IAM attaches beside
   each workspace role and detaches with it. `bootstrap.feature_plan` computes them from

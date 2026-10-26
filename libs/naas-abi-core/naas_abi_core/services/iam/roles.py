@@ -62,6 +62,11 @@ _FEATURE_TYPE = ("nexus", "feature")
 # Kept from admins: they are the owner's.
 _OWNER_ONLY_ACTIONS = frozenset({"nexus:DeleteWorkspace", "nexus:DeleteOrganization"})
 _ATTACHMENT_TYPE = ("iam", "attachment")
+# IAM administration (policies, groups, attachments at the scope) is the
+# admins' and owners': viewers and members get nothing of the iam catalog.
+_ADMIN_ONLY_SERVICES = frozenset({"iam"})
+# IdP group mappings stay the platform admin's: no role maps a claim.
+_PLATFORM_ONLY_ACTIONS = frozenset({"iam:MapIdpGroup", "iam:UnmapIdpGroup"})
 _MAX_ACTIONS = 100
 
 
@@ -242,6 +247,8 @@ def _chunks(actions: Sequence[str]) -> list[tuple[str, ...]]:
 def _role_statements(role: str, catalog: ActionCatalog) -> list[Statement]:
     """One statement per (catalog, kind of resource) for ``role``'s levels."""
     levels = ROLE_LEVELS[role]
+    if catalog.service in _ADMIN_ONLY_SERVICES and role in (VIEWER, MEMBER):
+        return []
     placed = [
         t
         for t in catalog.resource_types
@@ -265,6 +272,8 @@ def _role_statements(role: str, catalog: ActionCatalog) -> list[Statement]:
             ):
                 continue
             qualified = catalog.qualified(action.name)
+            if qualified in _PLATFORM_ONLY_ACTIONS:
+                continue
             if role != OWNER and action.level == "admin":
                 if (catalog.service, resource_type.name) == _ATTACHMENT_TYPE:
                     continue
@@ -294,7 +303,9 @@ def _role_statements(role: str, catalog: ActionCatalog) -> list[Statement]:
 
 
 def _admin_attachment_statements(registry: CatalogRegistry) -> list[Statement]:
-    """Admins grant and revoke the roles below owner, never owner."""
+    """Admins grant and revoke the roles below owner, never owner, and the
+    customer policies (``pol_…``) they may attach there: their scope's own, and
+    those of the levels above (IAM refuses a policy owned elsewhere)."""
     if registry.get("iam") is None:
         return []
     return [
@@ -306,7 +317,13 @@ def _admin_attachment_statements(registry: CatalogRegistry) -> list[Statement]:
                 for role in (ADMIN, MEMBER, VIEWER)
             ),
             sid="AdminGrantsRolesBelowOwner",
-        )
+        ),
+        Statement(
+            effect="Allow",
+            actions=("iam:AttachPolicy", "iam:DetachPolicy"),
+            resources=("${scope}:iam:attachment/pol_*/*",),
+            sid="AdminAttachesCustomerPolicies",
+        ),
     ]
 
 

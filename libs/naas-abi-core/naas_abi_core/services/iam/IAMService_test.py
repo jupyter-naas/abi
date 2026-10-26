@@ -106,7 +106,10 @@ def test_iam_operations_need_iam_actions(h):
     h.grant(
         bob.id,
         statement(
-            "Allow", ["iam:CreatePolicy", "iam:GetPolicy"], ["abi:-:-:iam:policy/*"]
+            # The platform's policies are named for every org, abi:%2A:%2A.
+            "Allow",
+            ["iam:CreatePolicy", "iam:GetPolicy"],
+            ["abi:*:*:iam:policy/*"],
         ),
     )
     with h.as_(bob):
@@ -756,7 +759,11 @@ def _api_for(user_id: str):
 def test_api_never_reaches_what_it_does_not_name(h):
     """api holds enumerated statements, not ``*``: whoever it acts for, it keeps
     out of IAM's administration and of the seals."""
-    h.iam._register_catalog(__import__("naas_abi_core.services.secret.iam_catalog", fromlist=["CATALOG"]).CATALOG)
+    h.iam._register_catalog(
+        __import__(
+            "naas_abi_core.services.secret.iam_catalog", fromlist=["CATALOG"]
+        ).CATALOG
+    )
     user = _member(h, "user-aaaaaaaaaaaa", "owner")
     h.attach(roles.PLATFORM_ADMIN, user.id)
     with _api_for("user-aaaaaaaaaaaa"):
@@ -1331,9 +1338,9 @@ def test_a_retired_managed_policy_and_its_attachments_go_at_boot(h):
     h.iam.store.put_managed_policy(old)
     record = h.admin("ensure_user", LEGACY_NEXUS_ISSUER, "user-0123456789ab")
     h.iam.store.attach(
-        __import__("naas_abi_core.services.iam.IAMPorts", fromlist=["Attachment"]).Attachment(
-            "att_x", old.id, record.id
-        )
+        __import__(
+            "naas_abi_core.services.iam.IAMPorts", fromlist=["Attachment"]
+        ).Attachment("att_x", old.id, record.id)
     )
     with _nexus_call("user-0123456789ab"):
         assert h.iam.authorize(QUERY, graph("a")).allowed

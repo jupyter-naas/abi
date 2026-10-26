@@ -43,6 +43,9 @@ message Principal {
   optional string owner_id = 12;
   google.protobuf.Timestamp created_at = 13;
   google.protobuf.Timestamp updated_at = 14;
+  // Groups: the scope that owns them and names them, abi:-:- (the platform),
+  // abi:<org>:- or abi:<org>:<ws>. Empty from an older engine: the platform.
+  string owner_scope = 15;
 }
 
 // A stored policy; the document is the JSON policy document.
@@ -55,6 +58,9 @@ message Policy {
   int32 revision = 6;
   google.protobuf.Timestamp created_at = 7;
   google.protobuf.Timestamp updated_at = 8;
+  // The scope that owns the policy and names it, abi:-:- (the platform),
+  // abi:<org>:- or abi:<org>:<ws>. Empty from an older engine: the platform.
+  string owner_scope = 9;
 }
 
 message Attachment {
@@ -322,7 +328,10 @@ message DeletePrincipalResponse {
 message CreateGroupRequest {
   abi.common.v1.CallContext context = 1;
   string name = 2;
+  // Alone: the group belongs to the org, abi:<org>:-.
   optional string org = 3;
+  // The owner: abi:-:- (the default), abi:<org>:- or abi:<org>:<ws>.
+  optional string scope = 4;
 }
 message CreateGroupResponse {
   abi.common.v1.CallError error = 1;
@@ -342,6 +351,9 @@ message ListGroupsRequest {
   abi.common.v1.CallContext context = 1;
   int32 limit = 2;
   optional string after = 3;
+  // The groups this scope owns (and, at a workspace, its org's the caller
+  // attaches to there); absent: every group the caller may list.
+  optional string scope = 4;
 }
 message ListGroupsResponse {
   abi.common.v1.CallError error = 1;
@@ -425,6 +437,8 @@ message CreatePolicyRequest {
   // A policy document as JSON (or YAML) text.
   string document_json = 3;
   string description = 4;
+  // The owner: abi:-:- (the default), abi:<org>:- or abi:<org>:<ws>.
+  optional string scope = 5;
 }
 message CreatePolicyResponse {
   abi.common.v1.CallError error = 1;
@@ -444,6 +458,9 @@ message ListPoliciesRequest {
   abi.common.v1.CallContext context = 1;
   int32 limit = 2;
   optional string after = 3;
+  // The policies this scope owns, and those above it the caller may attach
+  // there; absent: every policy the caller may list.
+  optional string scope = 4;
 }
 message ListPoliciesResponse {
   abi.common.v1.CallError error = 1;

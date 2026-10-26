@@ -11,7 +11,7 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class Principal(_message.Message):
-    __slots__ = ("id", "kind", "status", "name", "issuer", "subject", "provider", "email", "email_verified", "display_name", "org", "owner_id", "created_at", "updated_at")
+    __slots__ = ("id", "kind", "status", "name", "issuer", "subject", "provider", "email", "email_verified", "display_name", "org", "owner_id", "created_at", "updated_at", "owner_scope")
     ID_FIELD_NUMBER: _ClassVar[int]
     KIND_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
@@ -26,6 +26,7 @@ class Principal(_message.Message):
     OWNER_ID_FIELD_NUMBER: _ClassVar[int]
     CREATED_AT_FIELD_NUMBER: _ClassVar[int]
     UPDATED_AT_FIELD_NUMBER: _ClassVar[int]
+    OWNER_SCOPE_FIELD_NUMBER: _ClassVar[int]
     id: str
     kind: str
     status: str
@@ -40,10 +41,11 @@ class Principal(_message.Message):
     owner_id: str
     created_at: _timestamp_pb2.Timestamp
     updated_at: _timestamp_pb2.Timestamp
-    def __init__(self, id: _Optional[str] = ..., kind: _Optional[str] = ..., status: _Optional[str] = ..., name: _Optional[str] = ..., issuer: _Optional[str] = ..., subject: _Optional[str] = ..., provider: _Optional[str] = ..., email: _Optional[str] = ..., email_verified: bool = ..., display_name: _Optional[str] = ..., org: _Optional[str] = ..., owner_id: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    owner_scope: str
+    def __init__(self, id: _Optional[str] = ..., kind: _Optional[str] = ..., status: _Optional[str] = ..., name: _Optional[str] = ..., issuer: _Optional[str] = ..., subject: _Optional[str] = ..., provider: _Optional[str] = ..., email: _Optional[str] = ..., email_verified: bool = ..., display_name: _Optional[str] = ..., org: _Optional[str] = ..., owner_id: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., owner_scope: _Optional[str] = ...) -> None: ...
 
 class Policy(_message.Message):
-    __slots__ = ("id", "name", "description", "document_json", "managed", "revision", "created_at", "updated_at")
+    __slots__ = ("id", "name", "description", "document_json", "managed", "revision", "created_at", "updated_at", "owner_scope")
     ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
@@ -52,6 +54,7 @@ class Policy(_message.Message):
     REVISION_FIELD_NUMBER: _ClassVar[int]
     CREATED_AT_FIELD_NUMBER: _ClassVar[int]
     UPDATED_AT_FIELD_NUMBER: _ClassVar[int]
+    OWNER_SCOPE_FIELD_NUMBER: _ClassVar[int]
     id: str
     name: str
     description: str
@@ -60,7 +63,8 @@ class Policy(_message.Message):
     revision: int
     created_at: _timestamp_pb2.Timestamp
     updated_at: _timestamp_pb2.Timestamp
-    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., description: _Optional[str] = ..., document_json: _Optional[str] = ..., managed: bool = ..., revision: _Optional[int] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    owner_scope: str
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., description: _Optional[str] = ..., document_json: _Optional[str] = ..., managed: bool = ..., revision: _Optional[int] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., owner_scope: _Optional[str] = ...) -> None: ...
 
 class Attachment(_message.Message):
     __slots__ = ("id", "policy_id", "principal_id", "scope", "created_at")
@@ -475,14 +479,16 @@ class DeletePrincipalResponse(_message.Message):
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., principal: _Optional[_Union[Principal, _Mapping]] = ...) -> None: ...
 
 class CreateGroupRequest(_message.Message):
-    __slots__ = ("context", "name", "org")
+    __slots__ = ("context", "name", "org", "scope")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     ORG_FIELD_NUMBER: _ClassVar[int]
+    SCOPE_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     name: str
     org: str
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., name: _Optional[str] = ..., org: _Optional[str] = ...) -> None: ...
+    scope: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., name: _Optional[str] = ..., org: _Optional[str] = ..., scope: _Optional[str] = ...) -> None: ...
 
 class CreateGroupResponse(_message.Message):
     __slots__ = ("error", "group")
@@ -509,14 +515,16 @@ class GetGroupResponse(_message.Message):
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., group: _Optional[_Union[Principal, _Mapping]] = ...) -> None: ...
 
 class ListGroupsRequest(_message.Message):
-    __slots__ = ("context", "limit", "after")
+    __slots__ = ("context", "limit", "after", "scope")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     LIMIT_FIELD_NUMBER: _ClassVar[int]
     AFTER_FIELD_NUMBER: _ClassVar[int]
+    SCOPE_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     limit: int
     after: str
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., limit: _Optional[int] = ..., after: _Optional[str] = ...) -> None: ...
+    scope: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., limit: _Optional[int] = ..., after: _Optional[str] = ..., scope: _Optional[str] = ...) -> None: ...
 
 class ListGroupsResponse(_message.Message):
     __slots__ = ("error", "groups", "next_after")
@@ -651,16 +659,18 @@ class ListIdpGroupMappingsResponse(_message.Message):
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., mappings: _Optional[_Iterable[_Union[GroupMapping, _Mapping]]] = ...) -> None: ...
 
 class CreatePolicyRequest(_message.Message):
-    __slots__ = ("context", "name", "document_json", "description")
+    __slots__ = ("context", "name", "document_json", "description", "scope")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     DOCUMENT_JSON_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    SCOPE_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     name: str
     document_json: str
     description: str
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., name: _Optional[str] = ..., document_json: _Optional[str] = ..., description: _Optional[str] = ...) -> None: ...
+    scope: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., name: _Optional[str] = ..., document_json: _Optional[str] = ..., description: _Optional[str] = ..., scope: _Optional[str] = ...) -> None: ...
 
 class CreatePolicyResponse(_message.Message):
     __slots__ = ("error", "policy")
@@ -687,14 +697,16 @@ class GetPolicyResponse(_message.Message):
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., policy: _Optional[_Union[Policy, _Mapping]] = ...) -> None: ...
 
 class ListPoliciesRequest(_message.Message):
-    __slots__ = ("context", "limit", "after")
+    __slots__ = ("context", "limit", "after", "scope")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     LIMIT_FIELD_NUMBER: _ClassVar[int]
     AFTER_FIELD_NUMBER: _ClassVar[int]
+    SCOPE_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     limit: int
     after: str
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., limit: _Optional[int] = ..., after: _Optional[str] = ...) -> None: ...
+    scope: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., limit: _Optional[int] = ..., after: _Optional[str] = ..., scope: _Optional[str] = ...) -> None: ...
 
 class ListPoliciesResponse(_message.Message):
     __slots__ = ("error", "policies", "next_after")

@@ -65,6 +65,22 @@ def test_tables_live_in_their_schema(schema):
     assert found == 1
 
 
+@pytest.mark.integration
+def test_a_version_1_store_upgrades(schema):
+    from naas_abi_core.services.iam.tests.iam_store_upgrade import check_upgrade
+    from sqlalchemy import create_engine, text
+
+    dsn, name = schema
+
+    def execute(statement: str) -> None:
+        engine = create_engine(sqlalchemy_url(dsn))
+        with engine.begin() as conn:
+            conn.execute(text(statement.format(schema=f'"{name}".')))
+        engine.dispose()
+
+    check_upgrade(lambda: IAMStorePostgreSQL(dsn, name), execute)
+
+
 def test_dsn_and_schema_are_checked():
     assert sqlalchemy_url("postgresql://u:p@h/db") == "postgresql+psycopg://u:p@h/db"
     assert sqlalchemy_url("postgres://h/db") == "postgresql+psycopg://h/db"

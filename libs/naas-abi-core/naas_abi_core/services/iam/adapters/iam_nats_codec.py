@@ -36,6 +36,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     RevisionConflictError,
     ScopeRecord,
 )
+from naas_abi_core.services.iam.names import PLATFORM_SCOPE
 from naas_abi_core.services.iam.policy import PolicyDocument
 from naas_abi_proto.iam.v1 import iam_pb2 as pb
 
@@ -192,6 +193,7 @@ def principal_to_pb(record: PrincipalRecord) -> pb.Principal:
         display_name=record.display_name,
         org=record.org,
         owner_id=record.owner_id,
+        owner_scope=record.owner_scope,
     )
     return _stamped(message, created_at=record.created_at, updated_at=record.updated_at)
 
@@ -212,6 +214,7 @@ def principal_from_pb(message: pb.Principal) -> PrincipalRecord:
         owner_id=_optional(message, "owner_id"),
         created_at=_datetime(message, "created_at"),
         updated_at=_datetime(message, "updated_at"),
+        owner_scope=message.owner_scope or PLATFORM_SCOPE,
     )
 
 
@@ -223,6 +226,7 @@ def policy_to_pb(policy: Policy) -> pb.Policy:
         document_json=policy.document.to_json(),
         managed=policy.managed,
         revision=policy.revision,
+        owner_scope=policy.owner_scope,
     )
     return _stamped(message, created_at=policy.created_at, updated_at=policy.updated_at)
 
@@ -237,6 +241,7 @@ def policy_from_pb(message: pb.Policy) -> Policy:
         revision=message.revision,
         created_at=_datetime(message, "created_at"),
         updated_at=_datetime(message, "updated_at"),
+        owner_scope=message.owner_scope or PLATFORM_SCOPE,
     )
 
 
