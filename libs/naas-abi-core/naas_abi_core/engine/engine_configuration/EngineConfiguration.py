@@ -378,6 +378,21 @@ class NATSJobsConfiguration(BaseModel):
     )
 
 
+class NATSWorkflowsConfiguration(BaseModel):
+    """Durable workflows of engine modules (docs/adr/20261025_durable-workflows-on-nats.md).
+
+    ``bridge`` publishes every ``Workflow`` and ``Pipeline`` instance of an engine
+    module that has a live typed ``run()`` (the ones that get a ``POST /workflows|/pipelines``
+    route) as a one-step durable workflow named ``workflow.<slug>`` or
+    ``pipeline.<slug>``, so it can be launched, watched and awaited like any
+    workflow. The classes themselves are unchanged: agent tools and REST routes
+    keep calling ``run()`` in-process. ``bridge: false`` declares none of them.
+    Workflows run on the jobs runtime, so they follow ``jobs.enabled``.
+    """
+
+    bridge: bool = True
+
+
 class NATSEngineConfiguration(BaseModel):
     """Which engine serves the kernel services (docs/adr/20261006_single-serving-engine.md).
 
@@ -481,6 +496,9 @@ class NATSConfiguration(BaseModel):
         default_factory=NATSRPCOverflowConfiguration
     )
     jobs: NATSJobsConfiguration = Field(default_factory=NATSJobsConfiguration)
+    workflows: NATSWorkflowsConfiguration = Field(
+        default_factory=NATSWorkflowsConfiguration
+    )
     engine: NATSEngineConfiguration = Field(default_factory=NATSEngineConfiguration)
     # The broker's HTTP monitoring endpoint (``nats-server -m 8222``), read by the
     # Nexus SysAdmin app (/varz, /connz, /jsz). It has no auth: keep it private.

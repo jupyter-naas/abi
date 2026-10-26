@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Literal
 from uuid import uuid4
 
 from fastapi import Depends, HTTPException, status
@@ -18,6 +20,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthUserRecord
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService, decode_token
 from naas_abi.apps.nexus.apps.api.app.services.registry import ServiceRegistry
 from naas_abi.apps.nexus.apps.api.app.services.workspaces import WorkspacePermissionError
+from naas_abi_core.apps.api.abi_api_key_auth import is_abi_api_token_valid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token", auto_error=False)
@@ -166,6 +169,48 @@ async def require_superadmin(
     return current_user
 
 
+@dataclass(frozen=True)
+class PlatformCaller:
+    """Who called a route open to super admins and to scripts with ``ABI_API_KEY``.
+
+    ``via`` is how they authenticated; an API key has no user."""
+
+    via: Literal["user", "api_key"]
+    user: User | None = None
+
+    @property
+    def user_id(self) -> str:
+        return self.user.id if self.user else ""
+
+
+async def require_superadmin_or_api_key(
+    token: str | None = Depends(oauth2_scheme),
+    current_user: User | None = Depends(get_current_user),
+) -> PlatformCaller:
+    """Authorize platform-level admin access for a super admin or a script.
+
+    ``Authorization: Bearer <ABI_API_KEY>`` is the instance's shared key and
+    stands for the operator: it reaches everything a super admin does on the
+    routes that use this dependency (never a query parameter or a cookie, which
+    would put the key in logs). Otherwise it is ``require_superadmin``: 401
+    without a session, 403 for a user who is not a super admin.
+    """
+    if is_abi_api_token_valid(token):
+        return PlatformCaller("api_key")
+    if current_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not current_user.is_superadmin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Platform superadmin role required",
+        )
+    return PlatformCaller("user", current_user)
+
+
 async def require_workspace_admin(user_id: str, workspace_id: str) -> None:
     """Authorize access to admin-only workspace capabilities.
 
@@ -216,6 +261,8 @@ __all__ = [
     "get_current_user_required",
     "get_workspace_role",
     "oauth2_scheme",
+    "PlatformCaller",
+    "require_superadmin_or_api_key",
     "require_workspace_access",
     "require_workspace_admin",
     "require_workspace_platform_drive",

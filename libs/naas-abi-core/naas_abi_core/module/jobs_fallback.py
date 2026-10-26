@@ -24,11 +24,13 @@ class JobsNotHosted(RuntimeError):
 class Cron:
     expression: str
     time_zone: str = ""
+    input: dict[str, Any] | None = field(default=None, hash=False)
 
 
 @dataclass(frozen=True)
 class Every:
     interval: str | timedelta
+    input: dict[str, Any] | None = field(default=None, hash=False)
 
 
 @dataclass(frozen=True)
@@ -47,6 +49,9 @@ class JobDescriptor:
     timeout: timedelta | None = None
     max_attempts: int = 1
     contract_major: int = 1
+    kind: str = "job"
+    input_schema: str = ""
+    output_schema: str = ""
 
 
 @dataclass
@@ -125,8 +130,30 @@ class JobsMixin:
     def missing_job_handlers(self) -> set[str]:
         return {j.name for j in self.jobs} - set(self._job_handlers)
 
+    def declare_job(self, descriptor: Any, handler: Callable[..., Any]) -> None:
+        self.__dict__["jobs"] = (*self.jobs, descriptor)
+        self._job_handlers[descriptor.name] = handler
+
+    def declare_workflow(
+        self, name: str, handler: Callable[..., Any], **kwargs: Any
+    ) -> Any:
+        descriptor = JobDescriptor(
+            name=name,
+            description=kwargs.get("description", ""),
+            triggers=tuple(kwargs.get("triggers", ())),
+            max_concurrency=kwargs.get("max_concurrency", 1),
+            timeout=kwargs.get("timeout"),
+            max_attempts=kwargs.get("max_attempts", 1),
+            kind="workflow",
+        )
+        self.declare_job(descriptor, handler)
+        return descriptor
+
     def _bind_job_host(self, host: Any, loop: Any) -> None:
         return None
+
+    def get_workflow(self, name: str) -> Any:
+        raise JobsNotHosted("Workflows run in NATS mode, which needs naas-abi-sdk")
 
     def trigger_job(self, name: str, payload: Any = None, **kwargs: Any) -> Any:
         raise JobsNotHosted("Jobs run in NATS mode, which needs naas-abi-sdk")

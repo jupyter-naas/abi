@@ -1,5 +1,12 @@
 # X Orchestrations
 
+> **Legacy (Dagster, `--without-nats`).** With NATS, which is the default, the same flow runs as durable workflows
+> and jobs and no Dagster process is needed: `search_recent_tweets`, `map_tweet_envelope`,
+> `reprocess_tweet_envelopes`, `count_recent_tweets`, `build_app` and `compact_dataset`, in System → Jobs. They are
+> described in [`../AGENTS.md`](../AGENTS.md), with the config mapping (the event and files entries have no NATS
+> counterpart: the search run maps the envelopes it saved, and `reprocess_tweet_envelopes` is launched by hand).
+> Both engines call the same bodies in `../flows/`. These files are kept until Dagster is removed.
+
 Dagster orchestrations for the X (Twitter) application. They split the
 "recent tweet search → knowledge graph" flow into three independent,
 event-decoupled pieces. Each orchestration file exposes an `Orchestrations`
@@ -63,6 +70,10 @@ need a full re-ingest.
    API, no re-ingest). The hourly schedule starts **RUNNING by default**.
 
 ## Shared helpers (`utils/`)
+
+What the orchestrations do with the graph, the envelopes and the app lives in `../flows/common.py` (no Dagster
+import, shared with the NATS workflows) and is re-exported by `utils/`; `utils/_common.py` itself only defines
+what needs Dagster (run statuses, `has_in_progress_run`, `count_in_progress_runs`, `report_jobs_in_progress`).
 
 - `safe_name` — sanitise a filter name into a Dagster-safe job/op/sensor id.
 - `launchpad_override` — prefer a launchpad-supplied op value, else the ABI

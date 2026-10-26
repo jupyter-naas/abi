@@ -567,6 +567,7 @@ The optional catch-all `[[...slug]]/page.tsx` re-exports the thread module so al
 
 `/workspace/[id]/admin/system` (dock entry "System", visible when `is_superadmin`). Tabs: Overview, Services, Data, Jobs, Modules, NATS, Live traffic, Traces; the tab is the `?tab=` query. Live traffic is an SSE stream read with raw `fetch` and `getAuthHeader()` (like chat), started and stopped by the user.
 
+- Workflows REST: `apps/api/app/services/workflows/` (see its `AGENTS.md`), mounted at `/api/workflows`, for super admins and for scripts with `ABI_API_KEY` (`require_superadmin_or_api_key`).
 - API: `apps/api/app/services/sysadmin/` (hexagonal, see its `AGENTS.md`), mounted at `/api/admin/system/*` behind `require_superadmin` on the router. `main_public_routes_test.py` fails if a route there loses it.
 - Web: `apps/web/src/app/workspace/[workspaceId]/admin/system/`, the three-file route convention plus colocated modules (`system-api.ts`, `system-model.ts`, one component per tab) and jsdom render tests. Views poll every 10 s while visible; the footer Refresh reloads the active tab.
 - Data tab: `admin/system/data/`, a three-pane explorer (service rail, browser, inspector) over `/api/admin/system/resources`.
@@ -577,9 +578,11 @@ The optional catch-all `[[...slug]]/page.tsx` re-exports the thread module so al
   - Tests: `data/*.test.ts` (shell flows with an in-memory API), `data/viewers/*.test.ts`, `data/services/*.test.ts(x)`.
 - Jobs tab: `admin/system/jobs/` over `/api/admin/system/jobs`, a Dagster-like view of module jobs (engine and remote).
   - Jobs list: failing and running first, schedules in plain words with a live next tick, a strip of the last 20 runs, and queue depth.
-  - Job page: triggers, health (success rate, average duration), queue, settings, its runs.
+  - Job page: triggers (with a schedule's input), health (success rate, average duration), queue, settings, its runs; a workflow's input and output schemas.
+  - Workflows (`kind: "workflow"`) show a "workflow" badge and, once any exists, an All / Jobs / Workflows filter (`?kind=`). Plain jobs render as before.
+  - Run now and Re-run on a workflow open a form generated from its input schema (`schema-form.ts` builds the fields and validates, `schema-fields.tsx` renders): strings, numbers, integers, booleans, enums, lists of those and nested objects, with `$ref` to the schema's `$defs` and pydantic's optional wrappers followed. A schema with anything else (unions, lists of objects, free-form objects) gets the JSON editor only; the editor is also a tab beside the form. The input is checked in the browser before sending, and the API's own 422 faults show under their fields.
   - Run feed with status filters.
-  - Run inspector: a trigger → start → finish timeline with the wait before start, the error, logs (`ctx.log`), payload, result, and the run's trace (the Traces waterfall, embedded).
+  - Run inspector: a trigger → start → finish timeline with the wait before start, the error, logs (`ctx.log`), payload, result, and the run's trace (the Traces waterfall, embedded). A workflow run opens on a **Steps** tab (`run-steps.tsx`): each step's status, attempt, start offset and duration on one time axis, its error, and a link to the child run a `call` step started. A result the API cut for display says so.
   - Run now, Re-run and Cancel are audited by the API. It reuses the Data tab's atoms, viewers, modal and toasts (`../data/`) and polls only while visible: 5 s, or 1.5 s for a live run.
 - Traces tab: `admin/system/traces/` over `/api/admin/system/traces`, so nobody needs the Jaeger UI. The API reads the tracing backend's query API (Jaeger `/api/v3`, `telemetry.query_url`, else `telemetry.ui_url`); the browser never talks to Jaeger.
   - Search by service, operation, time window, minimum duration and errors only, or jump to a trace id. Results are a duration-over-time scatter plus a list.

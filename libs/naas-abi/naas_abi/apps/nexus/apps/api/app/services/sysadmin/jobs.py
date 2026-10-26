@@ -1,6 +1,8 @@
 """Module jobs as a platform super admin sees them: definitions, schedules and runs.
 
-Definitions come from engine modules and NATS discovery (``JobCatalog``). Runs are
+Definitions come from engine modules and NATS discovery (``JobCatalog``). A
+workflow is a job with ``kind="workflow"``, JSON Schemas for its input and output
+and a journal of steps (``StepStore``) that a run's detail carries. Runs are
 the records job hosts write to the Document Service (``JobRunStore``): one per
 trigger message, updated on retries. Triggering and cancelling go through
 ``JobControl`` (NATS) and are audited by ``JobsAdminService`` before they happen.
@@ -26,8 +28,8 @@ LISTED_STATUSES = ("QUEUED", *ACTIVE_STATUSES, "SUCCEEDED", "FAILED", "TIMED_OUT
 
 
 class JobNotFound(Exception):
-    def __init__(self, module_id: str, job: str) -> None:
-        super().__init__(f"No job {job!r} in module {module_id!r}")
+    def __init__(self, module_id: str, job: str, noun: str = "job") -> None:
+        super().__init__(f"No {noun} {job!r} in module {module_id!r}")
         self.module_id = module_id
         self.job = job
 
@@ -37,6 +39,27 @@ class RunNotFound(Exception):
         super().__init__(f"No run {run_id!r} in module {module_id!r}")
         self.module_id = module_id
         self.run_id = run_id
+
+
+class WorkflowNotFound(JobNotFound):
+    """The job exists under another kind, or not at all."""
+
+    def __init__(self, module_id: str, name: str) -> None:
+        super().__init__(module_id, name, "workflow")
+
+
+@dataclass(frozen=True)
+class SchemaIssue:
+    """One way an input does not match its schema: where (a JSON pointer) and why."""
+
+    path: str
+    message: str
+
+
+class InvalidInput(Exception):
+    def __init__(self, issues: Sequence[SchemaIssue]) -> None:
+        super().__init__("The input does not match the workflow's input schema")
+        self.issues = tuple(issues)
 
 
 class RunNotCancellable(Exception):
@@ -53,6 +76,8 @@ class TriggerSpec:
     kind: str  # cron | every | event
     spec: str
     time_zone: str = ""
+    # Cron and Every: the JSON object each tick carries as the run's payload.
+    input: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -67,10 +92,18 @@ class JobDefinition:
     timeout_seconds: float | None = None
     # Remote jobs: how many live instances declare it.
     instances: int = 1
+    kind: str = "job"  # job | workflow
+    # Workflows: JSON Schema objects, None when the module did not declare one.
+    input_schema: dict[str, Any] | None = None
+    output_schema: dict[str, Any] | None = None
 
     @property
     def key(self) -> str:
         return f"{self.module_id}/{self.name}"
+
+    @property
+    def is_workflow(self) -> bool:
+        return self.kind == "workflow"
 
 
 @dataclass(frozen=True)
@@ -117,6 +150,45 @@ class JobRun:
         return max(0, round((finished - started).total_seconds() * 1000))
 
 
+@dataclass(frozen=True)
+class ChildRun:
+    """The run of another workflow a ``call`` step started: its run record is
+    ``module_id``'s under ``run_id``."""
+
+    module_id: str
+    workflow: str
+    run_id: str
+
+    @property
+    def key(self) -> str:
+        return f"{self.module_id}/{self.run_id}"
+
+
+@dataclass(frozen=True)
+class RunStep:
+    """One checkpointed step of a workflow run (its result is never loaded)."""
+
+    key: str
+    kind: str  # step | call
+    status: str  # RUNNING | SUCCEEDED | FAILED | CANCELLED
+    attempt: int = 1
+    started_at: str | None = None
+    finished_at: str | None = None
+    duration_ms: int | None = None
+    error: str = ""
+    child: ChildRun | None = None
+    result_bytes: int | None = None
+
+
+@dataclass(frozen=True)
+class WorkflowDetail:
+    """What a workflow run adds to a job run: its steps in start order, and
+    whether more steps exist than were read."""
+
+    steps: tuple[RunStep, ...] = ()
+    truncated: bool = False
+
+
 class JobCatalog(Protocol):
     """Job definitions from one source (``source`` names it in ``sources``)."""
 
@@ -152,9 +224,34 @@ class JobRunStore(Protocol):
         ...
 
 
+class StepStore(Protocol):
+    async def journal(
+        self, module_id: str, run_id: str, fired_at: str | None = None
+    ) -> WorkflowDetail:
+        """A run's steps in start order; none for a run without a journal. With
+        ``fired_at`` (the run's), steps written for another trigger that reused
+        the run id are left out. Raises SourceUnavailable."""
+        ...
+
+
+class InputValidator(Protocol):
+    def validate(self, schema: dict[str, Any], payload: Any) -> list[SchemaIssue]:
+        """Why ``payload`` does not match ``schema`` (empty: it does). A schema the
+        validator cannot use accepts everything."""
+        ...
+
+
 class JobControl(Protocol):
-    async def trigger(self, module_id: str, job: str, payload: dict[str, Any]) -> str:
-        """Publish a manual trigger; the run id the host will record. Raises SourceUnavailable."""
+    async def trigger(
+        self,
+        module_id: str,
+        job: str,
+        payload: dict[str, Any],
+        idempotency_key: str | None = None,
+    ) -> str:
+        """Publish a manual trigger; the run id the host will record. A repeated
+        ``idempotency_key`` within the broker's duplicate window gives the first
+        trigger's run id. Raises SourceUnavailable."""
         ...
 
     async def cancel(self, module_id: str, job: str, run_id: str) -> None:
@@ -197,6 +294,15 @@ class JobsOverview:
     project: str
     jobs: tuple[JobView, ...]
     sources: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class RunView:
+    """A run with its trace link and, for a workflow, its steps."""
+
+    run: JobRun
+    trace_url: str | None = None
+    workflow: WorkflowDetail | None = None
 
 
 @dataclass(frozen=True)

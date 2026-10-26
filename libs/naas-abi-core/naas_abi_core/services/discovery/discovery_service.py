@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
+import json
 import math
 import re
 import secrets
@@ -77,6 +78,26 @@ def _depends_on_itself(
 
 
 JOB_TRIGGER_KINDS = ("cron", "every", "event")
+# A descriptor written before workflows existed has no kind: it is a job. The
+# bounds are the SDK's (jobs.MAX_SCHEMA_BYTES and friends): descriptors travel in
+# the registry snapshot, which holds every module.
+JOB_KINDS = ("", "job", "workflow")
+MAX_SCHEMA_BYTES = 16 * 1024
+MAX_TRIGGER_INPUT_BYTES = 4 * 1024
+MAX_JOB_DESCRIPTOR_BYTES = 64 * 1024
+
+
+def _json_object(value: str, max_bytes: int) -> bool:
+    """Empty (none), or a JSON object of at most ``max_bytes`` bytes."""
+    if not value:
+        return True
+    if len(value.encode()) > max_bytes:
+        return False
+    try:
+        return isinstance(json.loads(value), dict)
+    except ValueError:
+        return False
+
 
 # Service identities allowed to evict registrations: the Nexus API (System app)
 # and the engine. Stage 1 tokens name first-party processes (see nats_auth).
@@ -97,8 +118,13 @@ def _valid_job(job: pb.JobDescriptor) -> bool:
             t.kind in JOB_TRIGGER_KINDS
             and 0 < len(t.spec) <= 256
             and len(t.time_zone) <= 64
+            and _json_object(t.input, MAX_TRIGGER_INPUT_BYTES)
             for t in job.triggers
         )
+        and job.kind in JOB_KINDS
+        and _json_object(job.input_schema, MAX_SCHEMA_BYTES)
+        and _json_object(job.output_schema, MAX_SCHEMA_BYTES)
+        and job.ByteSize() <= MAX_JOB_DESCRIPTOR_BYTES
     )
 
 

@@ -445,6 +445,11 @@ async def run_module(
         try:
             await _invoke(module.on_load)
             if registration:
+                # Jobs and workflows declared at runtime (declare_job, declare_workflow
+                # in on_load) are part of what discovery shows.
+                registration.descriptor = module_descriptor(
+                    module, identity, dependencies.modules
+                )
                 await registration.start()
                 await module.engine.modules.wait_ready(discovery)
             await _invoke(module.on_initialized)
@@ -498,6 +503,14 @@ async def run_module(
                 raise ValueError(
                     "Every declared job must have a handler before module readiness"
                 )
+            if registration is not None and list(registration.descriptor.jobs) != [
+                j.to_pb() for j in module.jobs
+            ]:
+                raise ValueError(
+                    "Jobs were declared after the module registered: declare them "
+                    "in the class or in on_load (declare_job, declare_workflow)"
+                )
+            module._seal_jobs()
             if module._job_handlers:
                 if registration is None or "document" not in dependencies.services:
                     raise ValueError(

@@ -98,6 +98,7 @@ uv run pytest {{module_name_snake}}/pipelines/<Name>Pipeline_test.py -v
 1. Declare `TripleStoreService` in `ABIModule.dependencies.services`.
 2. Expose `pipeline.as_tools()` from an agent in `../agents/`, or invoke the pipeline from an orchestration that batches runs and persists results.
 3. HTTP: the kernel calls `as_api` and mounts live pipelines under `/pipelines`. A stub with a typed `run(parameters)` gets a default POST. A stub without `run()` stays unpublished.
+4. Durable run (NATS mode): the same pipelines are published as one-step durable workflows named `pipeline.<slug>` (the slug of the REST route), unless `nats.workflows.bridge: false`. The result is the graph's Turtle with a triple count (`{"format": "text/turtle", "triples": n, "data": "..."}`), and `data` is left out when it is too large for a run record: insert into the triple store from `run()` as usual. `max_attempts` is 1, so a failure is not repeated, and `max_concurrency` is 1, so durable runs of one pipeline do not overlap (a REST call or an agent tool can still run it at the same time).
 
 ## See also
 

@@ -95,7 +95,9 @@ uv run pytest {{module_name_snake}}/workflows/<Name>Workflow_test.py -v
 
 - **Expose to an agent**: in `../agents/<Name>Agent.py`, instantiate the workflow and add `workflow.as_tools()` to the agent's `tools=[]`.
 - **Expose over HTTP**: the kernel mounts live workflows under `/workflows`. Inherit the Expose default (`POST /{slug}` calls `run()`) or override `as_api`. An empty stub is unpublished unless `run(parameters)` is a real typed override.
-- **Schedule a recurring run**: wrap it in an `../orchestrations/<Name>Orchestration.py` Dagster job.
+- **Run it durably (NATS mode)**: a workflow with a live typed `run(parameters)` is published automatically as a one-step durable workflow named `workflow.<slug>` (the slug of its REST route), unless `nats.workflows.bridge: false`. Launch it, await it and watch its run with `self.get_workflow("workflow.<slug>")` (from another module: `self.engine.get_workflow(module_id, ...)`, for a declared dependency), or from Nexus. The class does not change: agent tools and `/workflows` still call `run()` in-process. `max_attempts` is 1, because a retry would repeat what `run()` already did.
+- **Several steps, retries, fan-out**: write a durable `@workflow` method on the module instead (`from naas_abi_core.module.workflows import workflow`): each `ctx.step` is checkpointed, so a retry after a crash skips the finished steps. See the module's [AGENTS.md](../AGENTS.md).
+- **Schedule a recurring run**: a `@workflow` or `@job` with a `Cron`/`Every` trigger on the module (NATS mode), or, in the legacy engine without NATS, an `../orchestrations/<Name>Orchestration.py` Dagster job.
 
 ## See also
 

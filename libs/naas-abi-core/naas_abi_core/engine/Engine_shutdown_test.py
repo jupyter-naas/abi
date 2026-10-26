@@ -26,6 +26,7 @@ def _bare_engine(primaries: list) -> Engine:
     engine._Engine__job_loader = None  # type: ignore[attr-defined]
     engine._Engine__ownership = None  # type: ignore[attr-defined]
     engine._Engine__serving_lock = threading.RLock()  # type: ignore[attr-defined]
+    engine._Engine__job_loader_lock = threading.Lock()  # type: ignore[attr-defined]
     return engine
 
 

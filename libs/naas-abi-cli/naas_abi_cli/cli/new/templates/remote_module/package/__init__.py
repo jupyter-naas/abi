@@ -20,7 +20,8 @@ from naas_abi_sdk import (
     ModuleConfiguration,
     ModuleDependencies,
 )
-from naas_abi_sdk.jobs import Every, JobContext, job
+from naas_abi_sdk.jobs import Cron, Every, JobContext, job
+from naas_abi_sdk.workflows import FlowContext, workflow
 
 from {{module_name_snake}} import jobs
 from {{module_name_snake}}.agents.{{module_name_pascal}}Agent import (
@@ -68,8 +69,19 @@ class ABIModule(BaseModule[{{module_name_pascal}}Configuration]):
         """Hourly example job: JetStream schedules it, this process runs it."""
         return await jobs.heartbeat(self, ctx)
 
+    @workflow(
+        triggers=(Cron("0 0 6 * * *", time_zone="UTC", input={"topic": "news"}),),
+        timeout=timedelta(minutes=10),
+        max_attempts=2,
+    )
+    async def digest(
+        self, ctx: FlowContext, inp: jobs.DigestInput
+    ) -> jobs.DigestOutput:
+        """Daily example workflow: journaled steps with a typed input and output."""
+        return await jobs.digest(self, ctx, inp)
+
     async def run(self) -> None:
-        # Agents and jobs are served in the background; stay up until stopped.
+        # Agents, jobs and workflows are served in the background; stay up until stopped.
         # SIGTERM drains the module: it finishes running work and unregisters.
         loop = asyncio.get_running_loop()
         started = loop.time()

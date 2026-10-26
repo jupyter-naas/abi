@@ -24,10 +24,12 @@ import {
   encodeJobsLocation,
   filterJobs,
   isActive,
+  isWorkflow,
   splitKey,
   type JobsLocation,
+  type KindFilter,
 } from './jobs-model';
-import type { JobFailures, JobView, JobsOverview, RunDetail, RunSummary } from './jobs-types';
+import type { JobFailures, JobView, JobsOverview, JsonSchema, RunDetail, RunSummary } from './jobs-types';
 import { JobDetail } from './job-detail';
 import { JobsTable } from './jobs-table';
 import { CancelDialog, TriggerDialog } from './run-dialogs';
@@ -59,7 +61,16 @@ interface TriggerRequest {
   moduleId: string;
   payload: unknown;
   rerun: boolean;
+  /** The workflow's input schema (a form is generated from it). */
+  schema: JsonSchema | null;
+  workflow: boolean;
 }
+
+const KIND_FILTERS: { id: KindFilter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'job', label: 'Jobs' },
+  { id: 'workflow', label: 'Workflows' },
+];
 
 /** Runs that failed since the admin last looked: the tab's notification. */
 function FailuresBanner({
@@ -247,7 +258,27 @@ export function JobsTab({
     go({ run: run.key });
   };
 
-  const startTrigger = (j: JobView) => setTriggering({ job: j.name, moduleId: j.module_id, payload: {}, rerun: false });
+  const startTrigger = (j: JobView) =>
+    setTriggering({
+      job: j.name,
+      moduleId: j.module_id,
+      payload: {},
+      rerun: false,
+      schema: isWorkflow(j) ? j.input_schema : null,
+      workflow: isWorkflow(j),
+    });
+
+  const rerun = (run: RunSummary, payload: unknown) => {
+    const found = overview?.jobs.find((j) => j.key === `${run.module_id}/${run.job}`);
+    setTriggering({
+      job: run.job,
+      moduleId: run.module_id,
+      payload,
+      rerun: true,
+      schema: found && isWorkflow(found) ? found.input_schema : null,
+      workflow: Boolean(found && isWorkflow(found)),
+    });
+  };
 
   const submitTrigger = async (payload: Record<string, unknown>) => {
     if (!triggering) return null;
@@ -287,6 +318,9 @@ export function JobsTab({
   });
 
   const jobs = overview?.jobs ?? [];
+  const workflows = jobs.filter(isWorkflow).length;
+  // The kind filter shows only while workflows exist: without any, it would hide every job.
+  const kind: KindFilter = workflows ? location.kind : 'all';
   const running = jobs.reduce((n, j) => n + j.running, 0);
   const failing = jobs.filter((j) => j.last_run && FAILED.includes(j.last_run.status)).length;
   const down = Object.entries(overview?.sources ?? {}).filter(([, s]) => !s.available);
@@ -304,7 +338,7 @@ export function JobsTab({
               </div>
               <p className="data-service-description">
                 {overview
-                  ? `${plural(jobs.length, 'job', 'jobs')} · ${running} running${failing ? ` · ${failing} failing` : ''}`
+                  ? `${plural(jobs.length, 'job', 'jobs')}${workflows ? ` (${workflows} workflows)` : ''} · ${running} running${failing ? ` · ${failing} failing` : ''}`
                   : 'Schedules, triggers and every run of module jobs.'}
               </p>
             </div>
@@ -355,6 +389,22 @@ export function JobsTab({
             </nav>
             {location.view === 'runs' && !location.job && (
               <StatusFilter value={location.statuses} onChange={(statuses) => go({ statuses })} />
+            )}
+            {location.view === 'jobs' && !location.job && workflows > 0 && (
+              <div className="data-segmented" role="tablist" aria-label="Kind">
+                {KIND_FILTERS.map((k) => (
+                  <button
+                    key={k.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={kind === k.id}
+                    className={kind === k.id ? 'data-segment data-segment-active' : 'data-segment'}
+                    onClick={() => go({ kind: k.id })}
+                  >
+                    {k.label}
+                  </button>
+                ))}
+              </div>
             )}
             {location.view === 'jobs' && !location.job && (
               <label className="data-search">
@@ -412,7 +462,8 @@ export function JobsTab({
               </>
             ) : overview ? (
               <JobsTable
-                jobs={filterJobs(jobs, search)}
+                jobs={filterJobs(jobs, search, kind)}
+                filtered={Boolean(search.trim()) || kind !== 'all'}
                 selected={null}
                 onSelect={(j) => go({ job: j.key, statuses: [] })}
                 onRun={startTrigger}
@@ -431,8 +482,12 @@ export function JobsTab({
             failure={runFailure}
             onClose={() => go({ run: null })}
             onCancel={setCancelling}
-            onRerun={(run, payload) => setTriggering({ job: run.job, moduleId: run.module_id, payload, rerun: true })}
+            onRerun={rerun}
             onOpenJob={(run) => go({ job: `${run.module_id}/${run.job}` })}
+            onOpenChild={(key) => {
+              setPending(null);
+              go({ run: key });
+            }}
             tracesApi={tracesApi}
             onOpenTrace={(traceId) => router.push(`${pathname}?tab=traces&trace=${encodeURIComponent(traceId)}`)}
           />
@@ -443,6 +498,8 @@ export function JobsTab({
             moduleId={triggering.moduleId}
             initialPayload={triggering.payload}
             rerun={triggering.rerun}
+            schema={triggering.schema}
+            workflow={triggering.workflow}
             onSubmit={submitTrigger}
             onClose={() => setTriggering(null)}
           />

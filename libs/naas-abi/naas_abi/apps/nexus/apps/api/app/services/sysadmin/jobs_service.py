@@ -9,7 +9,10 @@ cannot be written, then ``succeeded`` or ``failed``.
 from __future__ import annotations
 
 import asyncio
+import json
+import time
 from collections.abc import Callable, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -19,6 +22,8 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs import (
     LISTED_STATUSES,
     SKIPPED,
     Failures,
+    InputValidator,
+    InvalidInput,
     JobCatalog,
     JobControl,
     JobDefinition,
@@ -29,8 +34,13 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs import (
     JobsOverview,
     JobView,
     RunNotCancellable,
+    RunNotFound,
     RunsPage,
+    RunView,
+    StepStore,
     TriggerView,
+    WorkflowDetail,
+    WorkflowNotFound,
 )
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs_schedule import (
     describe,
@@ -50,6 +60,12 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources_service import
 )
 
 RECENT_RUNS = 20
+# A workflow run's result as the Jobs tab shows it: above this many bytes of JSON
+# it is cut to a text preview (the run record keeps all of it).
+RESULT_PREVIEW_BYTES = 16 * 1024
+# How long a job's kind is remembered: an open run is read every second or so, and
+# each read would list every catalog again.
+KIND_TTL_SECONDS = 30.0
 # Failures read for the notification badge, and how far back by default.
 MAX_FAILURES = 200
 FAILURES_WINDOW = timedelta(days=1)
@@ -81,6 +97,8 @@ class JobsAdminService:
         project: str,
         trace_ui_url: str | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        steps: StepStore | SourceUnavailable | None = None,
+        validator: InputValidator | None = None,
     ) -> None:
         self._catalogs = list(catalogs)
         self._runs = runs
@@ -90,6 +108,9 @@ class JobsAdminService:
         self.project = project
         self._trace_ui_url = trace_ui_url.rstrip("/") if trace_ui_url else None
         self._clock = clock
+        self._steps = steps
+        self._validator = validator
+        self._kinds: dict[tuple[str, str], tuple[bool, float]] = {}
 
     # --- definitions ---------------------------------------------------------------------
 
@@ -107,11 +128,26 @@ class JobsAdminService:
         unique = {d.key: d for d in found}
         return sorted(unique.values(), key=lambda d: (d.module_id, d.name))
 
+    async def definitions(self) -> tuple[list[JobDefinition], dict[str, SourceStatus]]:
+        """Every job and workflow, and how each source answered."""
+        sources: dict[str, SourceStatus] = {}
+        return await self._definitions(sources), sources
+
     async def _find(self, module_id: str, job: str) -> JobDefinition:
         for definition in await self._definitions({}):
             if definition.module_id == module_id and definition.name == job:
                 return definition
         raise JobNotFound(module_id, job)
+
+    async def find_workflow(self, module_id: str, name: str) -> JobDefinition:
+        """The workflow ``name`` of ``module_id``; WorkflowNotFound for a plain job."""
+        try:
+            definition = await self._find(module_id, name)
+        except JobNotFound:
+            raise WorkflowNotFound(module_id, name) from None
+        if not definition.is_workflow:
+            raise WorkflowNotFound(module_id, name)
+        return definition
 
     # --- overview ------------------------------------------------------------------------
 
@@ -271,14 +307,43 @@ class JobsAdminService:
         capped = len(found) == MAX_FAILURES and len(recent) == len(found)
         return Failures(_iso(start) or "", recent, more=capped)
 
-    async def run(self, module_id: str, run_id: str) -> tuple[JobRun, str | None]:
+    async def journal(self, run: JobRun) -> WorkflowDetail:
+        """The steps of ``run``'s journal; none when the journal cannot be read
+        (the run's own record still answers)."""
+        if self._steps is None or isinstance(self._steps, SourceUnavailable):
+            return WorkflowDetail()
+        try:
+            return await self._steps.journal(run.module_id, run.run_id, run.fired_at)
+        except SourceUnavailable:
+            return WorkflowDetail()
+
+    async def is_workflow_run(self, run: JobRun) -> bool:
+        """Whether ``run`` is a workflow's: by its job's definition, else (the module
+        is not registered right now) by having a journal."""
+        key = (run.module_id, run.job)
+        known = self._kinds.get(key)
+        if known and known[1] > time.monotonic():
+            return known[0]
+        for definition in await self._definitions({}):
+            if definition.module_id == run.module_id and definition.name == run.job:
+                self._kinds[key] = (definition.is_workflow, time.monotonic() + KIND_TTL_SECONDS)
+                return definition.is_workflow
+        return bool((await self.journal(run)).steps)
+
+    async def run(self, module_id: str, run_id: str, *, preview: bool = True) -> RunView:
+        """One run with its trace link and, for a workflow, its steps. With
+        ``preview`` a workflow's result over ``RESULT_PREVIEW_BYTES`` is cut."""
         found = await self._store().get_run(module_id, run_id)
         trace_url = (
             f"{self._trace_ui_url}/trace/{found.trace_id}"
             if self._trace_ui_url and found.trace_id
             else None
         )
-        return found, trace_url
+        if not await self.is_workflow_run(found):
+            return RunView(found, trace_url)
+        if preview:
+            found = replace(found, result=preview_result(found.result))
+        return RunView(found, trace_url, await self.journal(found))
 
     # --- actions (audited) ----------------------------------------------------------------
 
@@ -288,19 +353,69 @@ class JobsAdminService:
         return self._control
 
     async def trigger(
-        self, actor_id: str, module_id: str, job: str, payload: dict[str, Any]
+        self,
+        actor_id: str,
+        module_id: str,
+        job: str,
+        payload: dict[str, Any],
+        *,
+        via: str = "user",
+        idempotency_key: str | None = None,
+        workflow_only: bool = False,
     ) -> str:
-        await self._find(module_id, job)
+        """Start a run. ``actor_id`` is a user id, empty for ``via="api_key"``. A
+        workflow's payload is checked against its input schema first (InvalidInput,
+        nothing audited, nothing sent); ``workflow_only`` refuses a plain job."""
+        definition = (
+            await self.find_workflow(module_id, job)
+            if workflow_only
+            else await self._find(module_id, job)
+        )
+        if definition.is_workflow and definition.input_schema and self._validator:
+            # Off the event loop: a schema's pattern can take long to check.
+            issues = await asyncio.to_thread(
+                self._validator.validate, definition.input_schema, payload
+            )
+            if issues:
+                raise InvalidInput(issues)
         control = self._controller()
-        action = AdminAction(actor_id, "jobs", "trigger", f"{module_id}/{job}")
+        action = AdminAction(actor_id, "jobs", "trigger", f"{module_id}/{job}", via)
         return await run_audited(
-            self._audit, action, lambda: control.trigger(module_id, job, payload)
+            self._audit,
+            action,
+            lambda: control.trigger(module_id, job, payload, idempotency_key),
         )
 
-    async def cancel(self, actor_id: str, module_id: str, run_id: str) -> None:
+    async def cancel(
+        self,
+        actor_id: str,
+        module_id: str,
+        run_id: str,
+        *,
+        via: str = "user",
+        workflow_only: bool = False,
+    ) -> None:
         found = await self._store().get_run(module_id, run_id)
+        if workflow_only and not await self.is_workflow_run(found):
+            raise RunNotFound(module_id, run_id)
         if found.status not in ACTIVE_STATUSES:
             raise RunNotCancellable(run_id, found.status)
         control = self._controller()
-        action = AdminAction(actor_id, "jobs", "cancel", f"{module_id}/{run_id}")
+        action = AdminAction(actor_id, "jobs", "cancel", f"{module_id}/{run_id}", via)
         await run_audited(self._audit, action, lambda: control.cancel(module_id, found.job, run_id))
+
+
+def preview_result(result: Any) -> Any:
+    """``result``, or for a large one ``{"truncated": true, "bytes", "preview"}``."""
+    if result is None:
+        return None
+    try:
+        text = json.dumps(result, default=str, ensure_ascii=False)
+    except (TypeError, ValueError):
+        text = str(result)
+    encoded = text.encode()
+    if len(encoded) <= RESULT_PREVIEW_BYTES:
+        return result
+    # Cut the bytes the limit counts, not characters; a split character is dropped.
+    preview = encoded[:RESULT_PREVIEW_BYTES].decode(errors="ignore")
+    return {"truncated": True, "bytes": len(encoded), "preview": preview}
