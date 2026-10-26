@@ -23,8 +23,9 @@
 #   4. `abi dev up -d`, then waits for the API's /docs, the remote module READY
 #      in discovery with its workflows, the agents and apps in Nexus, its ontologies in
 #      the engine's schema graph, and the Nexus web app; calls the module's
-#      workflow and pipeline by name as durable workflows, with the module's own
-#      token, and reads a run's record (scripts/cli_smoke_processes.py);
+#      workflow and pipeline by name as durable workflows, as the module itself
+#      (a key of its own account), and reads a run's record
+#      (scripts/cli_smoke_processes.py);
 #   5. `abi dev down`.
 # On failure it prints `abi dev status` and `abi dev logs` and exits non-zero.
 #
