@@ -609,14 +609,15 @@ class ABIModule(BaseModule):
             not in (await self.call(domain, "list_graphs")).graph_names.graph_names
         )
         # A module's ontology: stored once, nothing written for the same content, and
-        # refused under another module's id or when it is not Turtle.
+        # refused under another module's id (its manifest asks LoadSchema on its own
+        # sources only, so another's does not exist for it) or when it is not Turtle.
         source = f"module/{TOKEN_IDENTITY}/demo.ttl"
         ontology = b"<urn:demo:Thing> a <http://www.w3.org/2002/07/owl#Class> .\n"
         load = {"source": source, "content_ttl": ontology}
         assert (await self.call(domain, "load_schema", **load)).changed
         assert not (await self.call(domain, "load_schema", **load)).changed
         for refused, code, content in (
-            ("module/another-module/demo.ttl", "PERMISSION_DENIED", ontology),
+            ("module/another-module/demo.ttl", "NOT_FOUND", ontology),
             (source, "INVALID_ARGUMENT", b"this is not turtle"),
         ):
             try:
