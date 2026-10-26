@@ -845,3 +845,17 @@ def test_as_tools_return_nested_models_and_common_scalars_as_json():
     assert asyncio.run(scenario()) == {
         "items": [{"at": "2026-01-02T00:00:00Z", "price": "3", "id": str(UUID(int=2))}]
     }
+
+
+def test_the_manifest_names_the_workflow_of_each_class(package):
+    """Behind the broker's auth callout a module hosts only the jobs its manifest
+    names: each class's durable workflow is one, known before the module starts."""
+    from naas_abi_sdk.permissions import module_manifest
+
+    module_type = package({"workflows/greet.py": GREET})
+
+    statements = {s["sid"]: s for s in module_manifest(module_type)["statements"]}
+    assert (
+        "abi:-:-:discovery:job/${module.project}/${module.id}/workflow.greet_workflow"
+        in statements["OwnJobs"]["resources"]
+    )

@@ -39,7 +39,9 @@ answers there only, ``naas_abi_sdk.messages.reply_allowed``).
   the engine publishes for it on those modules' jobs only (``job_triggers``,
   ``job_cancels``), and their triggers' claim checks. A module's own named jobs
   are hosted: fetching from and acknowledging its consumers, its cancel
-  subject, reading its triggers' claim checks. A module writes nothing into
+  subject, reading its triggers' claim checks, and publishing their runs'
+  completion notices (``abi.jobdone.*``, core NATS). ``GetJobRun`` on a
+  module's runs subscribes to their notices. A module writes nothing into
   the jobs stream: its schedules make the server allow rollups there.
 * **Bus topics** named ``abi:-:-:bus:topic/<topic>`` (a concrete topic, none
   under a reserved root), by action: ``bus:Publish`` publishes on the topic
@@ -286,6 +288,13 @@ def job_hash(module_id: str, job: str) -> str:
     return _hash(module_id, job)[:32]
 
 
+def job_done_subject(project: str, module_id: str, job: str = "*") -> str:
+    """The core-NATS completion notices of a job's runs (``*``: every job of the
+    module). A notice only wakes a waiter, which reads the run record again."""
+    jh = "*" if job == "*" else job_hash(module_id, job)
+    return f"abi.jobdone.{project}.{module_hash(module_id)}.{jh}"
+
+
 def job_consumer(module_id: str, job: str) -> str:
     return f"job-{module_hash(module_id)[:16]}-{job_hash(module_id, job)[:16]}"
 
@@ -445,6 +454,7 @@ def derive(
                         reach = _job_subjects(action, resources, module)
                         add(job_triggers, reach.triggers)
                         add(job_cancels, reach.cancels)
+                        add(subscribe, reach.notices)
                         add(publish, reach.claim_writes)
                         if reach.claim_writes:
                             claim_checks = True
@@ -479,6 +489,8 @@ def derive(
             mh, jh = module_hash(module[1]), job_hash(module[1], job)
             add(job_triggers, (f"abi.jobs.{project}.trigger.{mh}.{jh}",))
             add(job_cancels, (f"abi.jobs.{project}.cancel.{mh}",))
+            # It tells waiters when a run of its own ends.
+            add(publish, (job_done_subject(project, module[1], job),))
             add(publish, _claim_check_api(job_claim_subjects(project, module[1])))
             claim_checks = True
     return BrokerPermissions(
@@ -648,6 +660,8 @@ class _JobReach:
     cancels: list[str] = field(default_factory=list)
     claim_writes: list[str] = field(default_factory=list)
     hosted: set[tuple[str, str]] = field(default_factory=set)
+    # Completion notices of the runs it may read (GetJobRun).
+    notices: list[str] = field(default_factory=list)
 
 
 def _job_subjects(
@@ -686,6 +700,12 @@ def _job_subjects(
                 reach.hosted.add((project, job))
         if "CancelJobRun" in actions:
             reach.cancels.append(f"abi.jobs.{project}.cancel.{mh}")
+        if "GetJobRun" in actions and type_ == "job_run":
+            run_job = parts[2] if len(parts) > 3 else "*"
+            concrete = run_job and "*" not in run_job and "?" not in run_job
+            reach.notices.append(
+                job_done_subject(project, module_id, run_job if concrete else "*")
+            )
     return reach
 
 

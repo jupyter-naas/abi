@@ -294,11 +294,31 @@ def test_a_module_hosts_the_jobs_its_policy_names():
     assert permissions.hosted_jobs == (("acme", "nightly"),)
 
 
+def test_a_host_announces_its_runs_and_a_reader_of_runs_hears_them():
+    permissions = derive(OWN_JOBS)
+    mh = broker.module_hash("people")
+    jh = broker.job_hash("people", "nightly")
+    # Its own job's notices out; those of every run it may read (GetJobRun) in.
+    assert f"abi.jobdone.acme.{mh}.{jh}" in permissions.publish
+    assert f"abi.jobdone.acme.{mh}.*" in permissions.subscribe
+    reader = derive(
+        allow(["discovery:GetJobRun"], ["abi:-:-:discovery:job_run/acme/billing/*"]),
+        module=None,
+    )
+    assert reader.subscribe[-1] == broker.job_done_subject("acme", "billing")
+    assert not any(s.startswith("abi.jobdone.") for s in reader.publish)
+    # Triggering a job is not reading its runs.
+    trigger_only = derive(
+        allow(["discovery:TriggerJob"], ["abi:-:-:discovery:job/acme/billing/*"])
+    )
+    assert not any(".jobdone." in s for s in trigger_only.subscribe)
+
+
 def test_job_subjects_stay_within_the_modules_own():
     permissions = derive(OWN_JOBS)
     mh = broker.module_hash("people")
     for subject in permissions.publish + permissions.subscribe:
-        if subject.startswith("abi.jobs.") or "ABI_JOBS_" in subject:
+        if subject.startswith(("abi.jobs.", "abi.jobdone.")) or "ABI_JOBS_" in subject:
             # Consumer names carry the first 16 characters of the module hash.
             own = mh[:16] in subject
             assert own or subject.startswith("$JS.API.STREAM.INFO."), subject
@@ -339,6 +359,7 @@ def test_names_match_the_sdk():
     assert broker.module_hash("people") == subjects.module_hash
     assert broker.job_hash("people", "nightly") == subjects.job_hash
     assert broker.job_consumer("people", "nightly") == subjects.consumer
+    assert broker.job_done_subject("acme", "people", "nightly") == subjects.done
     assert broker.jobs_stream("acme") == stream_name("acme")
     assert broker.bus_stream("x.y") == BusClient.stream_name("x.y")
     assert broker.CLAIM_CHECK_STREAM == claim_check.STREAM
@@ -352,7 +373,11 @@ def test_names_match_the_sdk():
 
 def test_an_account_that_is_not_a_modules_hosts_nothing():
     permissions = derive(OWN_JOBS, module=None)
-    assert permissions.subscribe == (f"_INBOX.{KEY}.>",)
+    # Its inbox, and the notices of the runs it may read: no cancels to host.
+    assert permissions.subscribe == (
+        f"_INBOX.{KEY}.>",
+        broker.job_done_subject("acme", "people"),
+    )
     assert not any("CONSUMER" in s for s in js_api(permissions))
 
 

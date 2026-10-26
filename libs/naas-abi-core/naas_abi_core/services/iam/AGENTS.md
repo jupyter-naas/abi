@@ -1002,7 +1002,8 @@ short:
 | Source | Publish | Subscribe |
 |---|---|---|
 | Always | IAM's read-only and self-service operations (`broker.IAM_ALWAYS`: `token`, `exchange_token`, `jwks`, `submit_manifest`, `get_manifest`, `find_service_account`, `authorize`, `filter`; never `abi.iam.v1.changed`), the engine's broker control `abi.broker.v1.*`, `_INBOX.>`, `abi.rpc.overflow.>` | its own inbox prefix `_INBOX.<key id>` |
-| Hosting | none (replies go to inboxes) | `abi.agent.<project>.<sa>.>`, `abi.mod.<project>.<sa>.>`; its jobs' consumers |
+| Hosting | the completion notices of its own jobs' runs (`abi.jobdone.<project>.<module hash>.<job hash>`) | `abi.agent.<project>.<sa>.>`, `abi.mod.<project>.<sa>.>`; its jobs' consumers |
+| `discovery:GetJobRun` on `job_run/<project>/<module>/...` | none | that module's (or job's) completion notices: a notice only wakes a waiter, which reads the run record again |
 | Each action with an Allow (any resource) and no Deny on every resource | that action's catalog `subjects` (a stream action adds the service's transfer subjects); a service without a registered catalog grants its whole `abi.svc.<service>.v1.>` | none |
 | `discovery:InvokeAgent`, `GetAgentRun`, `CancelAgentRun`, `ChatModel`, `OpenApp`, `TriggerJob`, `ScheduleJob`, `CancelJobRun` | the hosting subjects of the modules the resources name | none |
 | `bus:Publish` / `bus:Consume`, `event:*` | the topic and its claim checks / `evt.>` by action (`event:Append` publishes, `Query`, `QueryStream`, `QueryForConsumer` subscribe) | the topic, its queue consumers |

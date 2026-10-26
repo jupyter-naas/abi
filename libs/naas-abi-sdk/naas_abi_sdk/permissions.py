@@ -19,8 +19,11 @@ code; otherwise it defaults from ``ModuleDependencies``:
 * any other service it declares: every action of that service;
 * the modules it depends on: their agents, models and apps, and the runs it
   starts (never the built-in identity provider's ``admin`` app);
-* its own jobs, when it declares some, each by name: the broker gives the
-  module the consumers of the jobs its manifest names, and only those.
+* its own jobs, when it declares some, each by name (``@job`` and ``@workflow``
+  methods, and the ``workflow.<slug>`` / ``pipeline.<slug>`` of each
+  ``Workflow`` and ``Pipeline`` class): the broker gives the module the
+  consumers of the jobs its manifest names, and only those. A job declared in
+  ``on_load`` is not known here: a module declaring one writes its manifest.
 
 ``${module.id}`` and ``${module.project}`` are bound when the manifest is
 approved. Bus topics have no default: a module using the bus declares them,
@@ -204,7 +207,24 @@ def module_manifest(module_type: type[BaseModule]) -> dict[str, Any]:
     if found is not None:
         return _document(_load_yaml(found), str(found))
     jobs = [job.name for job in getattr(module_type, "jobs", ())]  # @job included
+    jobs += _process_workflows(module_type)
     return default_manifest(module_type.get_dependencies(), jobs=jobs)
+
+
+def _process_workflows(module_type: type[BaseModule]) -> list[str]:
+    """The durable workflow of each ``Workflow`` and ``Pipeline`` class, which
+    the module declares when it starts (``workflow.<slug>``, ``pipeline.<slug>``).
+    A job declared in ``on_load`` is known only at run time: name it in a
+    manifest of the module's own."""
+    from naas_abi_sdk.jobs import process_workflow_name
+
+    found = []
+    for kind, classes in (
+        ("workflow", getattr(module_type, "get_workflow_classes", dict)()),
+        ("pipeline", getattr(module_type, "get_pipeline_classes", dict)()),
+    ):
+        found += [process_workflow_name(kind, name) for name in sorted(classes)]
+    return found
 
 
 def _manifest_file(module_type: type) -> Path | None:
