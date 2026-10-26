@@ -1217,32 +1217,44 @@ class JobHost:
         descriptor: JobDescriptor,
         trigger: dict[str, str],
         error: Exception,
+        *,
+        retried: bool = False,
     ) -> str:
         """A trigger whose caller may not trigger the job: recorded as failed,
-        never run, never redelivered."""
+        never run, never redelivered, and waiters told. Refused on a retry (a
+        right revoked since the first attempt), the run keeps what its earlier
+        attempts recorded: it only ends FAILED."""
         logger.warning("Job trigger %s refused: %s", run_id, error)
+        refused = f"Trigger refused: {getattr(error, 'code', '') or error}"
         try:
-            await self._save(
-                run_id,
-                {
-                    "job": descriptor.name,
-                    "run_id": run_id,
-                    "module_id": self.module_id,
-                    "status": "FAILED",
-                    "attempt": 0,
-                    "max_attempts": descriptor.max_attempts,
-                    "trigger": trigger,
-                    "instance": self.instance_id,
-                    "sequence": msg.metadata.sequence.stream,
-                    "fired_at": _fired_at(msg),
-                    "finished_at": _now(),
-                    "error": f"Trigger refused: {getattr(error, 'code', '') or error}",
-                },
-                replace=True,
-            )
+            if retried:
+                await self._save(
+                    run_id,
+                    {"status": "FAILED", "finished_at": _now(), "error": refused},
+                )
+            else:
+                await self._save(
+                    run_id,
+                    {
+                        "job": descriptor.name,
+                        "run_id": run_id,
+                        "module_id": self.module_id,
+                        "status": "FAILED",
+                        "attempt": 0,
+                        "max_attempts": descriptor.max_attempts,
+                        "trigger": trigger,
+                        "instance": self.instance_id,
+                        "sequence": msg.metadata.sequence.stream,
+                        "fired_at": _fired_at(msg),
+                        "finished_at": _now(),
+                        "error": refused,
+                    },
+                    replace=True,
+                )
         except Exception as exc:  # noqa: BLE001 - logged and redelivered by _defer
             return await self._defer(msg, run_id, msg.metadata.num_delivered, exc)
         await msg.term()
+        await self._notify(descriptor, run_id, "FAILED")
         return "FAILED"
 
     async def _handle_delivery(
@@ -1325,7 +1337,9 @@ class JobHost:
             except Exception as exc:  # noqa: BLE001 - refused, or retried below
                 if getattr(exc, "code", "") not in REFUSALS:
                     return await self._defer(msg, run_id, delivery, exc)
-                return await self._refuse(msg, run_id, descriptor, trigger, exc)
+                return await self._refuse(
+                    msg, run_id, descriptor, trigger, exc, retried=attempt > 1
+                )
         fired_at = _fired_at(msg)
         try:
             payload = await self._payload(msg)

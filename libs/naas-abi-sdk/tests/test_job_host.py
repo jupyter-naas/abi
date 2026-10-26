@@ -1925,6 +1925,40 @@ def test_a_trigger_stored_for_a_user_runs_for_them_on_every_attempt():
     assert current_call_context().user is None
 
 
+def test_a_trigger_refused_on_a_retry_keeps_its_history_and_tells_waiters():
+    from naas_abi_sdk.transport import RPCError
+
+    docs, authorize = Documents(), _Authorizer()
+
+    async def handler(ctx):
+        ctx.log("tried once")
+        raise RuntimeError("upstream 503")
+
+    host, descriptor = (
+        _host(docs, authorize=authorize),
+        JobDescriptor("ingest", max_attempts=3),
+    )
+    _run(host, descriptor, handler, Msg(attempt=1, payload={"since": "monday"}))
+    first = dict(docs.run("ingest:7"))
+    assert first["status"] == "RETRYING"
+
+    # The right is revoked before the retry.
+    authorize.error = RPCError("PERMISSION_DENIED", "no longer")
+    msg = Msg(attempt=2, payload={"since": "monday"})
+    _run(host, descriptor, handler, msg)
+
+    run = docs.run("ingest:7")
+    assert run["status"] == "FAILED" and "PERMISSION_DENIED" in run["error"]
+    assert run["finished_at"]
+    # What attempt 1 recorded stays.
+    for kept in ("attempt", "payload", "started_at", "logs", "retry_at"):
+        assert run[kept] == first[kept], kept
+    assert msg.calls == [("term",)]
+    subject, body = host.transport.connection.published[-1]
+    assert subject == job_subjects(PROJECT, MODULE, "ingest").done
+    assert json.loads(body) == {"run_id": "ingest:7", "status": "FAILED"}
+
+
 def test_scheduled_triggers_are_the_hosts_own():
     authorize = _Authorizer(AssertionError("not asked"))
     docs = Documents()
