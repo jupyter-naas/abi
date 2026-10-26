@@ -744,7 +744,7 @@ class Session:
     def __init__(self, client, descriptor, rollout_id="", rollout_modules=()):
         self.descriptor, self.rollout_id = descriptor, rollout_id
         self.instance_id, self.status, self.initialized = "i", "READY", False
-        self.drain_requested = asyncio.Event()
+        self.drain_requested, self.task = asyncio.Event(), None
 
     async def start(self):
         pass
