@@ -240,39 +240,6 @@ def declared_resource(
     )
 
 
-def require_declared(
-    iam: Any,
-    catalog: ActionCatalog,
-    action: str,
-    type_name: str,
-    parts: str | Sequence[str],
-    *,
-    workspace: str | None = None,
-) -> None:
-    """Enforce one of ``catalog``'s actions for the caller's own context.
-
-    The resource is placed in ``workspace``, by default the call's
-    (``CallContext.workspace_id``), in its organization; with none it is
-    platform-level, where only a platform-wide grant reaches it. Raises
-    ``PermissionDeniedError`` (or ``ResourceNotFoundError`` for a caller who
-    sees nothing of it) like every IAM check.
-    """
-    from naas_abi_core.engine.call_context import current_call_context
-
-    if catalog.action(action) is None:
-        raise ValueError(f"{catalog.service} declares no action {action!r}")
-    where = workspace if workspace is not None else current_call_context().workspace_id
-    org = iam.workspace_org(where) if where else None
-    resource = declared_resource(
-        catalog,
-        type_name,
-        parts,
-        org=org or NONE,
-        workspace=where if org else NONE,
-    )
-    iam.require(catalog.qualified(action), resource)
-
-
 def register_module_catalogs(iam: Any, modules: Iterable[Any]) -> list[str]:
     """Register the catalog each engine module declares (``BaseModule.iam_catalog``),
     as the caller (the engine, while it loads); the services registered."""

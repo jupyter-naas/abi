@@ -13,6 +13,13 @@ class IamClient:
             "abi.iam.v1.authorize", request, pb.AuthorizeResponse
         )
 
+    async def authorize_declared(
+        self, request: pb.AuthorizeDeclaredRequest
+    ) -> pb.AuthorizeDeclaredResponse:
+        return await self._transport.call(
+            "abi.iam.v1.authorize_declared", request, pb.AuthorizeDeclaredResponse
+        )
+
     async def filter(self, request: pb.FilterRequest) -> pb.FilterResponse:
         return await self._transport.call(
             "abi.iam.v1.filter", request, pb.FilterResponse

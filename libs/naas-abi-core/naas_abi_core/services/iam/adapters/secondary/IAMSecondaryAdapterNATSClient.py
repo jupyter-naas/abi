@@ -76,6 +76,23 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
         response = self._request("authorize", action=action, resource=resource)
         return codec.decision_from_pb(response.decision)
 
+    def authorize_declared(
+        self,
+        action: str,
+        resource_type: str,
+        parts: Sequence[str],
+        *,
+        workspace: str | None = None,
+    ) -> tuple[Decision, str]:
+        response = self._request(
+            "authorize_declared",
+            action=action,
+            resource_type=resource_type,
+            parts=list(parts),
+            workspace_id=workspace or "",
+        )
+        return codec.decision_from_pb(response.decision), response.resource
+
     def filter(self, action: str, resources: Iterable[str]) -> FilterResult:
         response = self._request("filter", action=action, resources=list(resources))
         return FilterResult(list(response.allowed), list(response.prefix_hints))

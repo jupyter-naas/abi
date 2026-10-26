@@ -51,6 +51,7 @@ SERVICE_VERSION = "1.0.0"
 # Operation (subject suffix) -> message name, one per Request/Response pair.
 OPERATIONS = {
     "authorize": "Authorize",
+    "authorize_declared": "AuthorizeDeclared",
     "filter": "Filter",
     "explain": "Explain",
     "grantable": "Grantable",

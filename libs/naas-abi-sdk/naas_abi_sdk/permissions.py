@@ -28,12 +28,21 @@ code; otherwise it defaults from ``ModuleDependencies``:
 ``${module.id}`` and ``${module.project}`` are bound when the manifest is
 approved. Bus topics have no default: a module using the bus declares them,
 ``bus:*`` on ``abi:-:-:bus:topic/<topic>``.
+
+A module may also declare actions of its own (``BaseModule.iam_catalog``, or
+``iam_catalog.yaml`` beside the module): a catalog of resource types and
+actions under the module's own service name (``catalog_service``). It travels
+with the manifest under ``catalog``, is part of what the admin approves, and is
+registered by the approval. The module enforces its actions with
+``BaseModule.require_action``; users get them through policies, never through
+the viewer and member roles.
 """
 
 from __future__ import annotations
 
 import inspect
 import json
+import re
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -43,6 +52,8 @@ if TYPE_CHECKING:
 
 POLICY_VERSION = "2026-10-13"
 MANIFEST_FILE = "permissions.yaml"
+CATALOG_FILE = "iam_catalog.yaml"
+_NOT_SERVICE = re.compile(r"[^a-z0-9_]+")
 _ALIASES = {"kv": "keyvalue", "events": "event"}
 _OWN_NAMESPACES = {
     "document": (
@@ -199,7 +210,15 @@ def default_manifest(
 
 
 def module_manifest(module_type: type[BaseModule]) -> dict[str, Any]:
-    """The manifest ``module_type`` submits for approval."""
+    """The manifest ``module_type`` submits for approval, with its catalog."""
+    manifest = _policy_manifest(module_type)
+    catalog = module_catalog(module_type)
+    if catalog is not None:
+        manifest["catalog"] = catalog
+    return manifest
+
+
+def _policy_manifest(module_type: type[BaseModule]) -> dict[str, Any]:
     declared = getattr(module_type, "permissions", None)
     if declared is not None:
         return _document(declared, f"{module_type.__name__}.permissions")
@@ -209,6 +228,39 @@ def module_manifest(module_type: type[BaseModule]) -> dict[str, Any]:
     jobs = [job.name for job in getattr(module_type, "jobs", ())]  # @job included
     jobs += _process_workflows(module_type)
     return default_manifest(module_type.get_dependencies(), jobs=jobs)
+
+
+def catalog_service(module_id: str) -> str:
+    """The service name of a module's own catalog: its id in lower case, every
+    other character an underscore (``acme.people`` is ``acme_people``). The
+    engine's rule (core ``services/iam/module_scopes.module_service``)."""
+    service = _NOT_SERVICE.sub("_", module_id.lower()).strip("_")
+    if not service:
+        raise ValueError(f"Module {module_id!r} has no usable catalog name")
+    return service if service[0].isalpha() else f"m_{service}"
+
+
+def module_catalog(module_type: type[BaseModule]) -> dict[str, Any] | None:
+    """The catalog ``module_type`` declares: ``iam_catalog``, else
+    ``iam_catalog.yaml`` beside the module, else None. Its ``service`` is the
+    module's own (filled in); IAM checks the rest when the manifest is sent."""
+    declared = getattr(module_type, "iam_catalog", None)
+    if declared is None:
+        found = _beside(module_type, CATALOG_FILE)
+        declared = _load_yaml(found) if found is not None else None
+    if declared is None:
+        return None
+    if not isinstance(declared, Mapping):
+        raise TypeError(f"{module_type.__name__}: a catalog is a mapping")
+    catalog = dict(declared)
+    catalog.setdefault("service", catalog_service(module_identity(module_type)))
+    catalog.setdefault("version", 1)
+    return catalog
+
+
+def module_identity(module_type: type) -> str:
+    """The module id a module runs as: ``module_id``, else its Python module."""
+    return getattr(module_type, "module_id", None) or module_type.__module__
 
 
 def _process_workflows(module_type: type[BaseModule]) -> list[str]:
@@ -228,11 +280,15 @@ def _process_workflows(module_type: type[BaseModule]) -> list[str]:
 
 
 def _manifest_file(module_type: type) -> Path | None:
+    return _beside(module_type, MANIFEST_FILE)
+
+
+def _beside(module_type: type, name: str) -> Path | None:
     try:
         source = inspect.getfile(module_type)
     except (TypeError, OSError):
         return None
-    candidate = Path(source).resolve().parent / MANIFEST_FILE
+    candidate = Path(source).resolve().parent / name
     return candidate if candidate.is_file() else None
 
 

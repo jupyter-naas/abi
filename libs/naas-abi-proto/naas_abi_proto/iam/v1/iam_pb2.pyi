@@ -312,6 +312,30 @@ class AuthorizeResponse(_message.Message):
     decision: Decision
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., decision: _Optional[_Union[Decision, _Mapping]] = ...) -> None: ...
 
+class AuthorizeDeclaredRequest(_message.Message):
+    __slots__ = ("context", "action", "resource_type", "parts", "workspace_id")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    ACTION_FIELD_NUMBER: _ClassVar[int]
+    RESOURCE_TYPE_FIELD_NUMBER: _ClassVar[int]
+    PARTS_FIELD_NUMBER: _ClassVar[int]
+    WORKSPACE_ID_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    action: str
+    resource_type: str
+    parts: _containers.RepeatedScalarFieldContainer[str]
+    workspace_id: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., action: _Optional[str] = ..., resource_type: _Optional[str] = ..., parts: _Optional[_Iterable[str]] = ..., workspace_id: _Optional[str] = ...) -> None: ...
+
+class AuthorizeDeclaredResponse(_message.Message):
+    __slots__ = ("error", "decision", "resource")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    DECISION_FIELD_NUMBER: _ClassVar[int]
+    RESOURCE_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    decision: Decision
+    resource: str
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., decision: _Optional[_Union[Decision, _Mapping]] = ..., resource: _Optional[str] = ...) -> None: ...
+
 class FilterRequest(_message.Message):
     __slots__ = ("context", "action", "resources")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]

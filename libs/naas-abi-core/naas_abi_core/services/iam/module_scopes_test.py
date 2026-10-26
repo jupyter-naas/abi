@@ -247,9 +247,7 @@ def test_an_engine_module_s_catalog_is_registered_at_load_and_enforced(
     def export(workspace="ws-1"):
         ctx = replace(h.context(bob), workspace_id=workspace)
         with use_call_context(ctx):
-            module_scopes.require_declared(
-                iam, catalog, "ExportReport", "report", ["q3"]
-            )
+            iam.require_declared("acme_reports:ExportReport", "report", ["q3"])
 
     with pytest.raises(refused):
         export()

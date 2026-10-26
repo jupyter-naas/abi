@@ -764,17 +764,18 @@ class ABIModule(BaseModule):
             "iam", "filter", action="document:Find", resources=[other, own]
         )
         assert list(filtered.allowed) == [own]
-        # What it may grant: what it holds, its own collections among it.
-        grantable = await self.call("iam", "grantable", scope="abi:-:-")
-        held = {
-            r
-            for c in grantable.catalogs
-            if c.service == "document"
-            for a in c.actions
-            if a.action == "document:Find"
-            for r in a.resources
-        }
-        assert any(r.startswith("${scope}:document:collection/") for r in held), held
+        # An action another module declares (discovery_demo's provider, approved
+        # before this worker runs): IAM names the brief and refuses it to a
+        # module its manifest does not grant.
+        declared = await self.call(
+            "iam",
+            "authorize_declared",
+            action="demo_research:ExportBrief",
+            resource_type="brief",
+            parts=["q3"],
+        )
+        assert not declared.decision.allowed
+        assert declared.resource == "abi:-:-:demo_research:brief/q3"
         # The broker offers a module IAM's self-service and read-only questions
         # (token, jwks, manifest, authorize, filter, grantable) and no more: the lists and
         # every change are refused before they reach IAM, whoever's token the

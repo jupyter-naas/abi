@@ -200,16 +200,12 @@ class BaseModule(JobsMixin, Generic[TConfig]):
         ``workspace`` names one. Raises ``PermissionDeniedError`` when IAM
         refuses it.
         """
-        from naas_abi_core.services.iam.module_scopes import require_declared
-
         if self.__iam_catalog is None:
             raise ValueError(f"Module {self.module_key} declares no catalog")
-        require_declared(
-            self._engine.services.iam,
-            self.__iam_catalog,
-            action,
+        self._engine.services.iam.require_declared(
+            self.__iam_catalog.qualified(action),
             type_name,
-            parts,
+            [parts] if isinstance(parts, str) else list(parts),
             workspace=workspace,
         )
 

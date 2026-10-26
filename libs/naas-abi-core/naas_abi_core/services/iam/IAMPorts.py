@@ -932,6 +932,39 @@ class IIAMService(ABC):
         raise not_found() if not_found is not None else ResourceNotFoundError(resource)
 
     @abstractmethod
+    def authorize_declared(
+        self,
+        action: str,
+        resource_type: str,
+        parts: Sequence[str],
+        *,
+        workspace: str | None = None,
+    ) -> tuple[Decision, str]:
+        """The decision on an action a module declares (``module_scopes.py``),
+        and the resource IAM named for it: ``<type>/<parts>`` of the action's
+        catalog, in ``workspace`` or else the call's (``CallContext.workspace_id``),
+        platform-level without one. ``IAMNotFoundError`` when no module declares
+        the action or the type."""
+
+    def require_declared(
+        self,
+        action: str,
+        resource_type: str,
+        parts: Sequence[str],
+        *,
+        workspace: str | None = None,
+    ) -> None:
+        """``require`` for an action a module declares."""
+        decision, resource = self.authorize_declared(
+            action, resource_type, parts, workspace=workspace
+        )
+        if decision.allowed:
+            return
+        if decision.visible:
+            raise PermissionDeniedError(action, resource)
+        raise ResourceNotFoundError(resource)
+
+    @abstractmethod
     def filter(self, action: str, resources: Iterable[str]) -> FilterResult: ...
 
     def allows_every(self, action: str, service: str, resource_type: str) -> bool:

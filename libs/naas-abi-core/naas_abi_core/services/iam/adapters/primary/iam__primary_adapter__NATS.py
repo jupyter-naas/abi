@@ -156,6 +156,19 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
         decision = self._iam.authorize(req.action, req.resource)
         return pb.AuthorizeResponse(decision=codec.decision_to_pb(decision))
 
+    def _call_authorize_declared(
+        self, req: pb.AuthorizeDeclaredRequest
+    ) -> pb.AuthorizeDeclaredResponse:
+        decision, resource = self._iam.authorize_declared(
+            req.action,
+            req.resource_type,
+            list(req.parts),
+            workspace=req.workspace_id or None,
+        )
+        return pb.AuthorizeDeclaredResponse(
+            decision=codec.decision_to_pb(decision), resource=resource
+        )
+
     def _call_filter(self, req: pb.FilterRequest) -> pb.FilterResponse:
         result = self._iam.filter(req.action, list(req.resources))
         return pb.FilterResponse(

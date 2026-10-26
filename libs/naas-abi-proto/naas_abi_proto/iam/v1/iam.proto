@@ -233,6 +233,22 @@ message AuthorizeResponse {
   Decision decision = 2;
 }
 
+// A decision on an action a module declares (services/iam/module_scopes.py):
+// IAM names the resource, <type>/<parts> of the action's catalog, in
+// workspace_id or else the call's workspace, platform-level without one.
+message AuthorizeDeclaredRequest {
+  abi.common.v1.CallContext context = 1;
+  string action = 2;
+  string resource_type = 3;
+  repeated string parts = 4;
+  string workspace_id = 5;
+}
+message AuthorizeDeclaredResponse {
+  abi.common.v1.CallError error = 1;
+  Decision decision = 2;
+  string resource = 3;
+}
+
 message FilterRequest {
   abi.common.v1.CallContext context = 1;
   string action = 2;

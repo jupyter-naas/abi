@@ -355,6 +355,36 @@ class IAMService(IIAMService, PolicySource):
         """Whether the current caller may perform ``action`` on ``resource``."""
         return self.authorizer.check(current_call_context(), action, resource)
 
+    def authorize_declared(
+        self,
+        action: str,
+        resource_type: str,
+        parts: Sequence[str],
+        *,
+        workspace: str | None = None,
+    ) -> tuple[Decision, str]:
+        service, _, name = action.partition(":")
+        catalog = self._registry.get(service)
+        if (
+            catalog is None
+            or not catalog.module
+            or catalog.action(name) is None
+            or catalog.resource_type(resource_type) is None
+        ):
+            raise IAMNotFoundError(
+                f"No module declares {action} on {service}:{resource_type}"
+            )
+        where = workspace or current_call_context().workspace_id or ""
+        org = self.workspace_org(where) if where else None
+        resource = module_scopes.declared_resource(
+            catalog,
+            resource_type,
+            list(parts),
+            org=org or NONE,
+            workspace=where if org else NONE,
+        )
+        return self.authorize(action, resource), resource
+
     def filter(self, action: str, resources: Iterable[str]) -> FilterResult:
         """The resources the current caller may perform ``action`` on, in order,
         plus prefix hints a store can push down."""

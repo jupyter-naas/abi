@@ -69,6 +69,51 @@ class IAMService(ServiceProxy):
             not_found() if not_found else NotFound("NOT_FOUND", f"{resource} not found")
         )
 
+    async def authorize_declared(
+        self,
+        action: str,
+        resource_type: str,
+        parts: Iterable[str],
+        *,
+        workspace: str | None = None,
+    ) -> tuple[Decision, str]:
+        """The decision on an action a module declares, and the resource IAM
+        named for it: ``<type>/<parts>`` of the action's catalog, in
+        ``workspace`` or else the workspace of the call, platform-level with
+        none. The module never builds the name."""
+        found = await self._request(
+            "authorize_declared",
+            action=action,
+            resource_type=resource_type,
+            parts=list(parts),
+            workspace_id=workspace or "",
+        )
+        decision = found["decision"]
+        return (
+            Decision(decision["allowed"], decision["visible"], decision["reason"]),
+            found["resource"],
+        )
+
+    async def require_declared(
+        self,
+        action: str,
+        resource_type: str,
+        parts: Iterable[str],
+        *,
+        workspace: str | None = None,
+    ) -> None:
+        """``require`` for an action a module declares."""
+        decision, resource = await self.authorize_declared(
+            action, resource_type, parts, workspace=workspace
+        )
+        if decision.allowed:
+            return
+        if decision.visible:
+            raise PermissionDenied(
+                "PERMISSION_DENIED", f"{action} is not allowed on {resource}"
+            )
+        raise NotFound("NOT_FOUND", f"{resource} not found")
+
     async def filter(self, action: str, resources: Iterable[str]) -> FilterResult:
         result = await self._request("filter", action=action, resources=list(resources))
         return FilterResult(list(result["allowed"]), list(result["prefix_hints"]))

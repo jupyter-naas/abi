@@ -17,7 +17,7 @@ from naas_abi_core.engine.nats_rpc_integration_test import (  # noqa: F401 - pyt
     broker,
 )
 from naas_abi_core.engine.nats_test_tokens import OTHER_TOKENS, TEST_TOKENS
-from naas_abi_core.services.iam import roles
+from naas_abi_core.services.iam import module_scopes, roles
 from naas_abi_core.services.iam.adapters.primary.iam__primary_adapter__NATS import (
     IAMPrimaryAdapterNATS,
 )
@@ -259,6 +259,46 @@ def test_api_calls_on_behalf_of_the_current_user(iam_host):
                 graph("b", workspace="ws-2"),
                 not_found=GraphNotFound,
             )
+
+
+@BROKER
+def test_a_declared_action_is_named_by_iam_in_the_workspace_of_the_call(iam_host):
+    iam_host.service._register_catalog(module_scopes.CATALOG)
+    iam_host.service._register_catalog(
+        module_scopes.module_catalog(
+            {
+                "version": 1,
+                "resource_types": [{"name": "report", "id": "path"}],
+                "actions": [
+                    {"name": "Export", "level": "read", "resource_types": ["report"]}
+                ],
+            },
+            "acme.reports",
+        )
+    )
+    engine = iam_host.client("engine")
+    engine.put_scope("org-1")
+    engine.put_scope("org-1", "ws-1")
+    bob = engine.ensure_user("https://idp.example", "bob")
+    engine.attach_policy(roles.ADMIN, bob.id, "abi:org-1:ws-1")
+    api = iam_host.client("api")
+    on_behalf = CallContext(
+        principal=Principal(id="api", kind="service_account", name="api"),
+        on_behalf_of=Principal(id=bob.id, kind="user"),
+        workspace_id="ws-1",
+    )
+    with use_call_context(on_behalf):
+        decision, resource = api.authorize_declared(
+            "acme_reports:Export", "report", ["q3"]
+        )
+        assert decision.allowed
+        assert resource == "abi:org-1:ws-1:acme_reports:report/q3"
+        refused, elsewhere = api.authorize_declared(
+            "acme_reports:Export", "report", ["q3"], workspace="ws-2"
+        )
+        assert not refused.allowed and elsewhere.startswith("abi:-:-:")
+        with pytest.raises(IAMNotFoundError):
+            api.authorize_declared("triple_store:Query", "graph", ["a"])
 
 
 @BROKER

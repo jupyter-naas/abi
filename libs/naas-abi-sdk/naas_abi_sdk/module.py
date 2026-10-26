@@ -10,7 +10,7 @@ import math
 import os
 import signal
 import socket
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Iterable
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -202,6 +202,10 @@ class BaseModule(JobsMixin, Generic[Config]):
     # a policy document. None: permissions.yaml beside the module, else the
     # defaults of ``dependencies``.
     permissions: dict[str, Any] | None = None
+    # Actions of its own (naas_abi_sdk.permissions.module_catalog): a catalog of
+    # resource types and actions, sent with the manifest and registered when it
+    # is approved. None: iam_catalog.yaml beside the module, else none.
+    iam_catalog: dict[str, Any] | None = None
     # The .ttl files it sends to the engine's schema graph once the instance serves
     # (naas_abi_sdk.ontologies). None: every ontologies/**/*.ttl next to the module's
     # package, except under "sandbox". A tuple names the files, relative to ontologies/
@@ -267,6 +271,34 @@ class BaseModule(JobsMixin, Generic[Config]):
         if not inspect.iscoroutinefunction(handler.invoke):
             raise TypeError("Model handler.invoke must be async")
         self._model_handlers[name] = handler
+
+    async def require_action(
+        self,
+        action: str,
+        resource_type: str,
+        parts: str | Iterable[str],
+        *,
+        workspace: str | None = None,
+    ) -> None:
+        """Enforce one of this module's declared actions for the call it serves.
+
+        IAM decides for the current context: during a run for a user (an agent
+        invocation or a job carrying a delegation) the user's policies and the
+        module's approved manifest must both allow it. The resource is
+        ``<type>/<parts>`` in ``workspace``, else the workspace of the call.
+        Raises ``PermissionDenied`` (or ``NotFound`` for a caller who sees
+        nothing of it)."""
+        from naas_abi_sdk.permissions import module_catalog
+
+        catalog = module_catalog(type(self))
+        if catalog is None:
+            raise ValueError(f"{type(self).__name__} declares no catalog")
+        await self.engine.services.iam.require_declared(
+            f"{catalog['service']}:{action}",
+            resource_type,
+            [parts] if isinstance(parts, str) else list(parts),
+            workspace=workspace,
+        )
 
     @classmethod
     def get_apps(cls) -> tuple[AppDescriptor, ...]:

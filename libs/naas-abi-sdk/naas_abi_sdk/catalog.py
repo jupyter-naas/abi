@@ -61,6 +61,7 @@ OPERATIONS = {
     ],
     "iam": [
         "authorize",
+        "authorize_declared",
         "filter",
         "explain",
         "grantable",
