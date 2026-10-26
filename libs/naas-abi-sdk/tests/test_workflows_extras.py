@@ -1,11 +1,13 @@
 """Component names, and the workflow base classes without their extras.
 
-No pydantic, rdflib or LangChain is needed to run these: the extras are blocked in
-a subprocess, so they pass (and mean the same) whatever is installed.
+The extras are blocked in a subprocess, so these mean the same whatever is
+installed. A test that blocks rdflib or LangChain imports a workflow class, which
+needs pydantic: it skips where the `workflows` extra is not installed.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import sys
@@ -37,6 +39,11 @@ def test_a_class_name_that_is_not_a_subject_token_is_refused(name):
 
 # --- the extras ----------------------------------------------------------------
 
+# Importing Workflow or Pipeline at all needs the `workflows` extra (pydantic).
+needs_pydantic = pytest.mark.skipif(
+    importlib.util.find_spec("pydantic") is None,
+    reason="needs the naas-abi-sdk[workflows] extra",
+)
 _BLOCK = "import sys\nfor name in {blocked!r}:\n    sys.modules[name] = None\n"
 
 
@@ -76,12 +83,14 @@ def test_a_missing_pydantic_names_the_workflows_extra():
     assert "naas-abi-sdk[workflows]" in result.stderr
 
 
+@needs_pydantic
 def test_a_missing_rdflib_names_the_rdf_extra_but_workflows_still_import():
     result = python("from naas_abi_sdk import Pipeline", "rdflib")
     assert result.returncode != 0 and "naas-abi-sdk[workflows,rdf]" in result.stderr
     assert python("from naas_abi_sdk import Workflow", "rdflib").returncode == 0
 
 
+@needs_pydantic
 def test_a_missing_langchain_names_the_agents_extra_only_when_as_tools_is_called():
     result = python(
         """

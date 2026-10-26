@@ -550,9 +550,8 @@ def _records(docs, workflow_name):
 
 
 def test_a_scheduled_pipeline_class_runs_in_its_module_and_records_its_graph(broker):
+    docs, module = MemoryDocuments(), _process_module()  # skips without the extras
     from rdflib import Graph
-
-    docs, module = MemoryDocuments(), _process_module()
 
     def succeeded():
         return [
