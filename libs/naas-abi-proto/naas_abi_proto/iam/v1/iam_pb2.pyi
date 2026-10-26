@@ -145,20 +145,22 @@ class Scope(_message.Message):
     def __init__(self, org: _Optional[str] = ..., workspace: _Optional[str] = ...) -> None: ...
 
 class ResourceType(_message.Message):
-    __slots__ = ("name", "id", "placement", "container", "personal", "description")
+    __slots__ = ("name", "id", "placement", "container", "personal", "description", "module_scope")
     NAME_FIELD_NUMBER: _ClassVar[int]
     ID_FIELD_NUMBER: _ClassVar[int]
     PLACEMENT_FIELD_NUMBER: _ClassVar[int]
     CONTAINER_FIELD_NUMBER: _ClassVar[int]
     PERSONAL_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    MODULE_SCOPE_FIELD_NUMBER: _ClassVar[int]
     name: str
     id: str
     placement: str
     container: bool
     personal: bool
     description: str
-    def __init__(self, name: _Optional[str] = ..., id: _Optional[str] = ..., placement: _Optional[str] = ..., container: bool = ..., personal: bool = ..., description: _Optional[str] = ...) -> None: ...
+    module_scope: bool
+    def __init__(self, name: _Optional[str] = ..., id: _Optional[str] = ..., placement: _Optional[str] = ..., container: bool = ..., personal: bool = ..., description: _Optional[str] = ..., module_scope: bool = ...) -> None: ...
 
 class ActionSpec(_message.Message):
     __slots__ = ("name", "level", "resource_types", "creates", "subjects", "description")
@@ -177,16 +179,18 @@ class ActionSpec(_message.Message):
     def __init__(self, name: _Optional[str] = ..., level: _Optional[str] = ..., resource_types: _Optional[_Iterable[str]] = ..., creates: bool = ..., subjects: _Optional[_Iterable[str]] = ..., description: _Optional[str] = ...) -> None: ...
 
 class ActionCatalog(_message.Message):
-    __slots__ = ("service", "version", "resource_types", "actions")
+    __slots__ = ("service", "version", "resource_types", "actions", "module")
     SERVICE_FIELD_NUMBER: _ClassVar[int]
     VERSION_FIELD_NUMBER: _ClassVar[int]
     RESOURCE_TYPES_FIELD_NUMBER: _ClassVar[int]
     ACTIONS_FIELD_NUMBER: _ClassVar[int]
+    MODULE_FIELD_NUMBER: _ClassVar[int]
     service: str
     version: int
     resource_types: _containers.RepeatedCompositeFieldContainer[ResourceType]
     actions: _containers.RepeatedCompositeFieldContainer[ActionSpec]
-    def __init__(self, service: _Optional[str] = ..., version: _Optional[int] = ..., resource_types: _Optional[_Iterable[_Union[ResourceType, _Mapping]]] = ..., actions: _Optional[_Iterable[_Union[ActionSpec, _Mapping]]] = ...) -> None: ...
+    module: str
+    def __init__(self, service: _Optional[str] = ..., version: _Optional[int] = ..., resource_types: _Optional[_Iterable[_Union[ResourceType, _Mapping]]] = ..., actions: _Optional[_Iterable[_Union[ActionSpec, _Mapping]]] = ..., module: _Optional[str] = ...) -> None: ...
 
 class Decision(_message.Message):
     __slots__ = ("allowed", "visible", "reason")

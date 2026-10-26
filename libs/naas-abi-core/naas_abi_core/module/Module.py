@@ -19,6 +19,7 @@ from naas_abi_core.module.ModuleUtils import find_class_module_root_path
 from naas_abi_core.module.ModuleWorkflowLoader import ModuleWorkflowLoader
 from naas_abi_core.orchestrations.Orchestrations import Orchestrations
 from naas_abi_core.pipeline.pipeline import Pipeline
+from naas_abi_core.services.iam.catalog import ActionCatalog
 from naas_abi_core.utils.Expose import Expose
 from naas_abi_core.workflow.workflow import Workflow
 from pydantic import BaseModel, ConfigDict
@@ -111,6 +112,7 @@ class BaseModule(JobsMixin, Generic[TConfig]):
         self.__pipeline_classes = []
         self.__tool_classes = []
         self.__processes_loaded = False
+        self.__iam_catalog: ActionCatalog | None = None
 
         assert hasattr(self.__class__, "Configuration"), (
             "BaseModule must have a Configuration class"
@@ -170,9 +172,53 @@ class BaseModule(JobsMixin, Generic[TConfig]):
     def orchestrations(self) -> list[type[Orchestrations]]:
         return self.__orchestrations
 
+    @property
+    def module_key(self) -> str:
+        """The module's stable identifier: its configured path (``naas_abi``,
+        ``naas_abi_marketplace.ai.claude``), the same in every install. Its
+        agents, apps, workflows and pipelines are module scopes under it."""
+        return self.__class__.__module__
+
+    @property
+    def iam_catalog(self) -> ActionCatalog | None:
+        """The actions this module declares (``iam_catalog.yaml`` beside its
+        module class), registered by the engine once the module is loaded."""
+        return self.__iam_catalog
+
+    def require_action(
+        self,
+        action: str,
+        type_name: str,
+        parts: str | list[str] | tuple[str, ...],
+        *,
+        workspace: str | None = None,
+    ) -> None:
+        """Enforce one of this module's declared actions for the caller.
+
+        The resource is ``abi:<org>:<ws>:<service>:<type>/<id>`` in the
+        workspace of the call (``CallContext.workspace_id``), unless
+        ``workspace`` names one. Raises ``PermissionDeniedError`` when IAM
+        refuses it.
+        """
+        from naas_abi_core.services.iam.module_scopes import require_declared
+
+        if self.__iam_catalog is None:
+            raise ValueError(f"Module {self.module_key} declares no catalog")
+        require_declared(
+            self._engine.services.iam,
+            self.__iam_catalog,
+            action,
+            type_name,
+            parts,
+            workspace=workspace,
+        )
+
     def on_load(self):
         logger.debug(f"on_load for module {self.__module__.split('.')[0]}")
         self.__load_ontologies()
+        from naas_abi_core.services.iam.module_scopes import load_module_catalog
+
+        self.__iam_catalog = load_module_catalog(self.module_root_path, self.module_key)
 
         self.__agents = ModuleAgentLoader.load_agents(self.__class__)
         self.__orchestrations = ModuleOrchestrationLoader.load_orchestrations(

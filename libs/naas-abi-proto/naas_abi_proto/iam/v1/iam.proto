@@ -127,6 +127,9 @@ message ResourceType {
   bool container = 4;
   bool personal = 5;
   string description = 6;
+  // A module scope: what a module exposes, never reached by the viewer and
+  // member roles (services/iam/module_scopes.py).
+  bool module_scope = 7;
 }
 
 message ActionSpec {
@@ -144,6 +147,8 @@ message ActionCatalog {
   int32 version = 2;
   repeated ResourceType resource_types = 3;
   repeated ActionSpec actions = 4;
+  // The module that declared this catalog; empty for a kernel service's.
+  string module = 5;
 }
 
 // reason: allow | explicit_deny | implicit_deny | suspended | sealed.

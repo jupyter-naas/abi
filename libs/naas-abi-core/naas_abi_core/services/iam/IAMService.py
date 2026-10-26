@@ -45,7 +45,7 @@ from naas_abi_core.engine.nats_auth import (
     host_audience,
     issuable_audience,
 )
-from naas_abi_core.services.iam import broker, grants, keys, modules, roles
+from naas_abi_core.services.iam import broker, keys, module_scopes, modules, roles
 from naas_abi_core.services.iam.adapters.secondary.authorizer__policy import (
     PolicyAuthorizer,
 )
@@ -699,6 +699,15 @@ class IAMService(IIAMService, PolicySource):
 
     def _register_catalog(self, catalog: ActionCatalog) -> bool:
         current = self._registry.get(catalog.service)
+        if catalog.module:
+            # A module's own catalog: checked again whoever registers it.
+            module_scopes.module_catalog(catalog, catalog.module)
+        if current is not None and current.module != catalog.module:
+            raise IAMConflictError(
+                f"Catalog {catalog.service} is "
+                + (f"module {current.module!r}'s" if current.module else "reserved")
+                + (f", not module {catalog.module!r}'s" if catalog.module else "")
+            )
         if current is not None and current.version > catalog.version:
             return False
         if current is not None:
@@ -2625,9 +2634,11 @@ class IAMService(IIAMService, PolicySource):
             manifest_resource(account.id),
             not_found=lambda: IAMNotFoundError(f"Manifest of {account.id} not found"),
         )
-        parsed = parse_policy_document(document)
-        _refuse_reserved_topics(modules.bind(parsed, project, module_id))
-        raw = parsed.to_dict()
+        policy, declared = modules.split_manifest(document)
+        parsed = parse_policy_document(policy)
+        _refuse_reserved_topics(parsed)
+        catalog = self._manifest_catalog(declared, module_id)
+        raw = modules.manifest_document(parsed, catalog)
         sha256 = modules.manifest_sha256(raw)
         try:
             existing: ManifestRecord | None = self.store.get_manifest(
@@ -2671,6 +2682,22 @@ class IAMService(IIAMService, PolicySource):
         approved = self._approve(record, parsed, decided_by="auto_approve")
         return ManifestSubmission(approved, approved_now=True, in_force=True)
 
+    def _manifest_catalog(
+        self, declared: Mapping[str, Any] | None, module_id: str
+    ) -> ActionCatalog | None:
+        """The catalog a manifest declares, checked as the module's own: refused
+        when it names a reserved service or one another module registered."""
+        if declared is None:
+            return None
+        catalog = module_scopes.module_catalog(declared, module_id)
+        current = self._registry.get(catalog.service)
+        if current is not None and current.module != catalog.module:
+            raise IAMConflictError(
+                f"Catalog {catalog.service} is "
+                + (f"module {current.module!r}'s" if current.module else "reserved")
+            )
+        return catalog
+
     def get_manifest(
         self, principal_id: str, sha256: str | None = None
     ) -> ManifestRecord:
@@ -2712,8 +2739,10 @@ class IAMService(IIAMService, PolicySource):
             "iam:ApproveManifest", manifest_resource(principal_id), not_found=missing
         )
         record = self._manifest(principal_id, sha256, missing, pending_only=True)
+        # A narrowing names the policy alone: the catalog is the record's.
+        submitted, _catalog = modules.split_manifest(record.document)
         parsed = parse_policy_document(
-            document if document is not None else record.document
+            modules.split_manifest(document)[0] if document is not None else submitted
         )
         self._require_held(
             modules.bind(parsed, record.project, record.module_id),
@@ -2814,6 +2843,16 @@ class IAMService(IIAMService, PolicySource):
         bound = modules.bind(document, record.project, record.module_id)
         _refuse_reserved_topics(bound)
         self._refuse_nested_topics(account.id, bound)
+        # The module's own catalog is part of what is approved: registered with
+        # it, and the module's side of its declared actions joins its policy.
+        declared = modules.split_manifest(record.document)[1]
+        catalog = self._manifest_catalog(declared, record.module_id)
+        if catalog is not None:
+            self._register_catalog(catalog)
+            bound = replace(
+                bound,
+                statements=(*bound.statements, modules.own_catalog_statement(catalog)),
+            )
         policy_id = modules.policy_id(record.project, record.module_id)
         self.store.put_managed_policy(
             Policy(
@@ -2908,6 +2947,8 @@ class IAMService(IIAMService, PolicySource):
                 effective.policy_id == roles.MODULE_BOOTSTRAP
                 and effective.statement.sid in roles.DELEGATION_SIDS
             )
+            # A module's declared actions are checked in process: no subject.
+            and effective.statement.sid != modules.OWN_CATALOG
         ]
         return broker.derive(
             principal_id=principal.id,
@@ -2997,6 +3038,9 @@ class IAMService(IIAMService, PolicySource):
             return False
         self._seen_revision = revision
         self.invalidate()
+        # Catalogs another process registered (a module's, at its approval).
+        for catalog in self.store.list_catalogs():
+            self._registry.register(catalog)
         return True
 
     def _changed(self) -> None:

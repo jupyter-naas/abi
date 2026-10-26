@@ -367,6 +367,7 @@ def catalog_to_pb(catalog: ActionCatalog) -> pb.ActionCatalog:
                 container=t.container,
                 personal=t.personal,
                 description=t.description,
+                module_scope=t.module_scope,
             )
             for t in catalog.resource_types
         ],
@@ -381,6 +382,7 @@ def catalog_to_pb(catalog: ActionCatalog) -> pb.ActionCatalog:
             )
             for a in catalog.actions
         ],
+        module=catalog.module,
     )
 
 
@@ -396,6 +398,7 @@ def catalog_from_pb(message: pb.ActionCatalog) -> ActionCatalog:
                 container=t.container,
                 personal=t.personal,
                 description=t.description,
+                module_scope=t.module_scope,
             )
             for t in message.resource_types
         ),
@@ -410,6 +413,7 @@ def catalog_from_pb(message: pb.ActionCatalog) -> ActionCatalog:
             )
             for a in message.actions
         ),
+        module=message.module,
     )
 
 

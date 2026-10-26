@@ -196,6 +196,7 @@ class Engine(IEngine):
         logger.debug("Loading engine modules")
         self.__modules = self.__engine_module_loader.load_modules(self, module_names)
         logger.debug("Engine modules loaded")
+        self.__register_module_catalogs()
 
         if self.__services.model_registry_available():
             # Modules registered their models during on_load; now hard-fail if
@@ -687,6 +688,17 @@ class Engine(IEngine):
     def on_initialized(self):
         for module in self.__modules.values():
             module.on_initialized()
+
+    def __register_module_catalogs(self) -> None:
+        """The actions engine modules declare (``iam_catalog.yaml``), registered
+        with IAM as the engine once the modules are loaded: in process on the
+        serving engine, over NATS on a client one."""
+        if self.__services.iam_available():
+            from naas_abi_core.services.iam.module_scopes import (
+                register_module_catalogs,
+            )
+
+            register_module_catalogs(self.__services.iam, self.__modules.values())
 
     def shutdown(self) -> None:
         """Gracefully tear down everything ``load()`` started over NATS.
