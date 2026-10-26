@@ -50,7 +50,15 @@ describe('middleware auth redirects', () => {
   it('serves Platform Settings instead of redirecting it to a workspace', () => {
     process.env.NODE_ENV = 'production';
 
-    for (const path of ['/settings', '/settings/users', '/settings/workspace_members']) {
+    for (const path of [
+      '/settings',
+      '/settings/tables',
+      '/settings/tables/users',
+      '/settings/tables/users/user-1',
+      '/settings/system',
+      '/settings/system/events',
+      '/settings/roles',
+    ]) {
       const response = middleware(requestFor(path, { 'nexus-auth-flag': 'true' }));
       expect(response.headers.get('location')).toBeNull();
     }
@@ -59,8 +67,37 @@ describe('middleware auth redirects', () => {
   it('requires sign-in for Platform Settings', () => {
     process.env.NODE_ENV = 'production';
 
-    const response = middleware(requestFor('/settings/users'));
+    const response = middleware(requestFor('/settings/tables/users'));
     expect(response.headers.get('location')).toContain('/auth/login');
+  });
+
+  it('redirects an old table page to Nexus tables', () => {
+    process.env.NODE_ENV = 'production';
+
+    const cookies = { 'nexus-auth-flag': 'true' };
+    const users = middleware(requestFor('/settings/users', cookies));
+    expect(users.status).toBe(307);
+    expect(users.headers.get('location')).toBe('https://nexus.example.com/settings/tables/users');
+    const secrets = middleware(requestFor('/settings/secrets_table/s-1', cookies));
+    expect(secrets.headers.get('location')).toBe(
+      'https://nexus.example.com/settings/tables/secrets/s-1',
+    );
+  });
+
+  it('redirects the old System and Events pages into Platform Settings', () => {
+    process.env.NODE_ENV = 'production';
+
+    const cookies = { 'nexus-auth-flag': 'true' };
+    const traces = middleware(
+      requestFor('/workspace/ws-1/admin/system?tab=traces&trace=abc', cookies),
+    );
+    expect(traces.headers.get('location')).toBe(
+      'https://nexus.example.com/settings/system/traces?trace=abc',
+    );
+    const access = middleware(requestFor('/org/acme/workspace/ws-1/admin/system?tab=access', cookies));
+    expect(access.headers.get('location')).toBe('https://nexus.example.com/settings/roles');
+    const events = middleware(requestFor('/workspace/ws-1/admin/events', cookies));
+    expect(events.headers.get('location')).toBe('https://nexus.example.com/settings/system/events');
   });
 
   it('keeps redirecting legacy workspace settings links', () => {

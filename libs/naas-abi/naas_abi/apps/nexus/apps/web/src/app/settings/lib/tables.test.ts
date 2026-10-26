@@ -1,74 +1,62 @@
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { SETTINGS_GROUPS } from '@/components/shell/settings-nav';
 import {
-  isPlatformTable,
   LEGACY_WORKSPACE_SETTINGS_SLUGS,
-  PLATFORM_TABLE_SECTIONS,
-  PLATFORM_TABLE_SLUGS,
-  PLATFORM_TABLES,
-  platformTableFromSlug,
-  platformTableLabel,
-  platformTableSection,
-  platformTableSlug,
+  PLATFORM_TABLES_PATH,
   platformRowId,
   platformRowPath,
+  platformTablePath,
+  tableFromLegacySlug,
 } from './tables';
 
-describe('platform tables', () => {
-  it('lists the tables the API serves', () => {
-    // Keep in sync with PLATFORM_TABLES in api/app/core/platform_tables.py.
-    expect(PLATFORM_TABLES).toHaveLength(38);
-    expect(PLATFORM_TABLE_SECTIONS.map((section) => [section.label, section.tables.length])).toEqual([
-      ['People & access', 7],
-      ['Sign-in & security', 9],
-      ['Chat, agents & models', 8],
-      ['Apps', 1],
-      ['Code', 1],
-      ['Maps', 5],
-      ['Graph', 3],
-      ['Ontology', 2],
-      ['Search', 2],
-    ]);
-    expect(new Set(PLATFORM_TABLES).size).toBe(PLATFORM_TABLES.length);
-  });
+const SETTINGS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-  it('labels and sections tables, and falls back for unknown names', () => {
-    expect(isPlatformTable('workspaces')).toBe(true);
-    expect(isPlatformTable('members')).toBe(false);
-    expect(platformTableLabel('organization_members')).toBe('Organization members');
-    expect(platformTableLabel('other')).toBe('other');
-    expect(platformTableSection('users')).toBe('People & access');
-    expect(platformTableSection('search_topics')).toBe('Search');
-    expect(platformTableSection('coding_environments')).toBe('Code');
-    expect(platformTableSection('ontology_icons')).toBe('Ontology');
-    expect(platformTableSection('other')).toBeNull();
+function sources(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) return sources(path);
+    return /\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name) ? [path] : [];
+  });
+}
+
+describe('the table list', () => {
+  it('comes from the API: Platform Settings keeps no copy of it', () => {
+    // The registry is core/platform_tables.py, served by GET /api/admin/tables.
+    const page = readFileSync(join(SETTINGS_DIR, 'tables', 'page.tsx'), 'utf8');
+    expect(page).toContain("authFetch('/api/admin/tables')");
+    // No table name is spelled out in the settings code.
+    for (const file of sources(SETTINGS_DIR)) {
+      const text = readFileSync(file, 'utf8');
+      for (const table of ['organization_members', 'workspace_resource_policies', 'auth_sessions']) {
+        expect(text.includes(`'${table}'`), `${file} names ${table}`).toBe(false);
+      }
+    }
   });
 });
 
-describe('table page slugs', () => {
+describe('table paths', () => {
+  it('puts every table under /settings/tables', () => {
+    expect(PLATFORM_TABLES_PATH).toBe('/settings/tables');
+    expect(platformTablePath('users')).toBe('/settings/tables/users');
+    expect(platformTablePath('secrets')).toBe('/settings/tables/secrets');
+  });
+
+  it('turns an old table slug back into its table', () => {
+    expect(tableFromLegacySlug('users')).toBe('users');
+    expect(tableFromLegacySlug('secrets_table')).toBe('secrets');
+    expect(tableFromLegacySlug('ontologies_table')).toBe('ontologies');
+    // Only a legacy workspace path took the suffix.
+    expect(tableFromLegacySlug('users_table')).toBe('users_table');
+  });
+
   it('knows every legacy workspace settings path', () => {
     const workspaceSlugs = SETTINGS_GROUPS.flatMap((group) => group.items).map((item) =>
       item.href.replace(/^\/settings\//, '')
     );
-    expect([...LEGACY_WORKSPACE_SETTINGS_SLUGS].sort()).toEqual([...workspaceSlugs].sort());
-  });
-
-  it('never gives a table page a legacy workspace settings path', () => {
-    for (const slug of PLATFORM_TABLE_SLUGS) {
-      expect(LEGACY_WORKSPACE_SETTINGS_SLUGS).not.toContain(slug);
-    }
-    expect(platformTableSlug('secrets')).toBe('secrets_table');
-    expect(platformTableSlug('ontologies')).toBe('ontologies_table');
-    expect(platformTableSlug('workspace_members')).toBe('workspace_members');
-    // The two tables named like a legacy path get the suffix.
-    expect(PLATFORM_TABLE_SLUGS).toContain('secrets_table');
-    expect(PLATFORM_TABLE_SLUGS).toContain('ontologies_table');
-  });
-
-  it('maps slugs back to tables', () => {
-    expect(platformTableFromSlug('users')).toBe('users');
-    expect(platformTableFromSlug('members')).toBeNull();
-    expect(platformTableFromSlug('nope')).toBeNull();
+    for (const slug of workspaceSlugs) expect(LEGACY_WORKSPACE_SETTINGS_SLUGS).toContain(slug);
   });
 });
 
@@ -83,8 +71,10 @@ describe('row pages', () => {
     expect(platformRowId({ id: 'x' }, [])).toBeNull();
   });
 
-  it('builds row paths under the table slug', () => {
-    expect(platformRowPath('users', 'user-48f0f9a98e27')).toBe('/settings/users/user-48f0f9a98e27');
-    expect(platformRowPath('secrets', 'a/b')).toBe('/settings/secrets_table/a%2Fb');
+  it('builds row paths under the table', () => {
+    expect(platformRowPath('users', 'user-48f0f9a98e27')).toBe(
+      '/settings/tables/users/user-48f0f9a98e27'
+    );
+    expect(platformRowPath('secrets', 'a/b')).toBe('/settings/tables/secrets/a%2Fb');
   });
 });

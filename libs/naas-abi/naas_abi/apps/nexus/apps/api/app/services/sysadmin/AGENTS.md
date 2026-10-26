@@ -2,6 +2,8 @@
 
 Views of a running deployment for platform super admins: kernel services (configuration plus NATS micro-service stats), engine modules, remote modules in NATS discovery, the broker (server, connections, JetStream), and live NATS traffic. Super admins can also browse and change the data kernel services hold (Data tab).
 
+The web pages are Platform Settings › System (`/settings/system[/<view>]`, `apps/web/src/app/settings/system/`), one sidebar item per view; this document still calls each view a tab.
+
 ## Layout
 
 - `port.py`: domain values and ports (`ServiceConfigurationSource`, `EngineModuleSource`, `MicroServiceMonitor`, `ModuleRegistry`, `NatsServerMonitor`). Adapters raise `SourceUnavailable(source, reason)`; nothing else crosses a port.
@@ -71,7 +73,7 @@ Views of a running deployment for platform super admins: kernel services (config
 - The overview carries `kind`, `input_schema`, `output_schema` and each trigger's `input` for every job; a run's detail carries `workflow` (`{steps, truncated}`, null for a plain job's run). Scripts use [`/api/workflows`](../workflows/AGENTS.md) instead.
 - `AdminAuditLog` records name their user; one who called with their personal API key has `details.via` = `api_key`. Records an older release wrote for the deployment's `ABI_API_KEY` have no user (`audit_logs.user_id` NULL): history shows that actor as "ABI API key".
 - Job hosts record `fired_at` (when JetStream stored the trigger) and `trace_id` (the run's CONSUMER span) on every run.
-- `GET /failures?since=` lists runs FAILED or TIMED_OUT since a time (default: the last day; at most `MAX_FAILURES` read, `more` when capped): the web polls it every minute for a badge on the Jobs tab and a banner in it, counted since the admin last marked them seen (kept per browser).
+- `GET /failures?since=` lists runs FAILED or TIMED_OUT since a time (default: the last day; at most `MAX_FAILURES` read, `more` when capped): the Platform Settings shell polls it every minute for a badge on the Jobs item of its sidebar and a banner in the page, counted since the admin last marked them seen (kept per browser).
 
 ## Agent runs (Agents tab)
 

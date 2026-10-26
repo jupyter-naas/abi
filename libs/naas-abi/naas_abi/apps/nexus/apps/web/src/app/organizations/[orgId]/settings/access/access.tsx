@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { createIamAdminApi } from '@/lib/iam-admin/api';
 import { useIamAccess } from '@/lib/iam-admin/use-access';
-import { AttachmentsPanel } from '@/app/workspace/[workspaceId]/admin/system/access/attachments/attachments-panel';
+import { AttachmentsPanel } from '@/app/settings/system/access/attachments/attachments-panel';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
 import { OrgSettingsSectionCard } from '../components/org-settings-section-card';
 import '../components/org-settings-components.css';

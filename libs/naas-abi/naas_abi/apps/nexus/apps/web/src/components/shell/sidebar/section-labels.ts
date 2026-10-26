@@ -22,7 +22,6 @@ export const SECTION_LABELS: Record<SidebarSection, string> = {
   apps: 'Apps',
   marketplace: 'Marketplace',
   settings: 'Settings',
-  events: 'Events',
   infrastructure: 'Infrastructure',
 };
 

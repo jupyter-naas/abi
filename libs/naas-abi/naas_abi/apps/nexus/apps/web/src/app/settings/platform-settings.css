@@ -276,3 +276,67 @@
   align-items: center;
   gap: var(--space-3);
 }
+
+/* System and Roles & permissions pages lay out their own panes edge to edge:
+   no padding, no content cap, the page's body scrolls, not the shell. */
+.org-settings-layout-main.platform-settings-main-framed {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.org-settings-layout-content.platform-settings-content-framed {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  max-width: none;
+  min-height: 0;
+  margin: 0;
+}
+
+.platform-settings-content-framed > .system-page {
+  flex: 1;
+}
+
+/* Table page: Export and close sit together in the header's top-right corner. */
+.platform-table-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.platform-table-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border-hex);
+  background-color: var(--card-hex);
+  color: var(--muted-foreground-hex);
+}
+
+.platform-table-close:hover {
+  color: var(--foreground-hex);
+  background-color: var(--surface-subtle-hex);
+}
+
+/* Nexus tables: the arrow before a table's name shows its schema under the row. */
+.platform-dashboard-schema-toggle {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--muted-foreground-hex);
+  cursor: pointer;
+}
+
+.platform-dashboard-schema-toggle:hover {
+  color: var(--foreground-hex);
+}

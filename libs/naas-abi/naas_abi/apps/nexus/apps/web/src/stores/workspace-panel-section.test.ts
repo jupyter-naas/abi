@@ -13,13 +13,13 @@ describe('workspaces panel return section', () => {
 
   it('closing Workspaces restores the column it covered', () => {
     const { setActivePanelSection } = useWorkspaceStore.getState();
-    setActivePanelSection('events');
+    setActivePanelSection('maps');
     setActivePanelSection('workspaces');
     expect(useWorkspaceStore.getState().activePanelSection).toBe('workspaces');
 
     useWorkspaceStore.getState().closeWorkspacesPanel();
 
-    expect(useWorkspaceStore.getState().activePanelSection).toBe('events');
+    expect(useWorkspaceStore.getState().activePanelSection).toBe('maps');
   });
 
   it('closing Workspaces opened over no column closes the column', () => {

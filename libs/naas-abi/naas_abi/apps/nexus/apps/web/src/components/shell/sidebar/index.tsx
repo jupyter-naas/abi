@@ -3,11 +3,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Files, Database, Code, Presentation, FileText, Table2, LayoutGrid, Store, Settings, Activity, Home, Blocks, MoreHorizontal, Server,
+  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Files, Database, Code, Presentation, FileText, Table2, LayoutGrid, Store, Settings, Home, Blocks, MoreHorizontal,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { useAuthStore } from '@/stores/auth';
 import { useFeature } from '@/hooks/use-feature';
 import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { useFilesStore } from '@/stores/files';
@@ -144,7 +143,6 @@ export function Sidebar() {
   const canDocuments = useFeature('documents');
   const canSheets = useFeature('sheets');
   const canSettingsWorkspace = useFeature('settings.workspace');
-  const isSuperadmin = useAuthStore((s) => !!s.user?.is_superadmin);
 
   useEffect(() => {
     setMounted(true);
@@ -230,10 +228,8 @@ export function Sidebar() {
       return;
     }
     if (!urlSection) {
-      // Events is an admin route with its own feed panel; the rest of /admin/
-      // is full-bleed.
-      if (pathname.includes('/admin/events')) applyPanelFromRoute('events');
-      else if (pathname.includes('/admin/')) applyPanelFromRoute(null);
+      // /admin/ is full-bleed.
+      if (pathname.includes('/admin/')) applyPanelFromRoute(null);
       return;
     }
     // Home is a desk, not a column. A mark-opened Workspaces panel may stay open.
@@ -324,7 +320,6 @@ export function Sidebar() {
       case 'infrastructure': return getWorkspacePath(currentWorkspaceId, '/settings/infrastructure');
       case 'settings':     return getWorkspacePath(currentWorkspaceId, '/settings');
       case 'workspaces':   return getWorkspacePath(currentWorkspaceId, '/home');
-      case 'events':       return getWorkspacePath(currentWorkspaceId, '/admin/events');
     }
   }, [currentWorkspaceId]);
 
@@ -767,8 +762,6 @@ export function Sidebar() {
         )}
       >
         {[
-          { key: 'admin-events', href: '/admin/events', label: 'Events', description: 'Recent platform activity', icon: <Activity size={18} />, section: 'events' as SidebarSection, visible: isSuperadmin },
-          { key: 'admin-system', href: '/admin/system', label: 'System', description: 'Kernel services, modules and the NATS network', icon: <Server size={18} />, section: null as SidebarSection | null, visible: isSuperadmin },
           { key: 'infrastructure', href: '/settings/infrastructure', label: 'Infrastructure', description: 'Explore ABI layers, components and dependencies', icon: <Blocks size={18} />, section: 'infrastructure' as SidebarSection, visible: canSettingsWorkspace },
         ].filter((item) => item.visible).map((item) => {
           const base = getWorkspacePath(currentWorkspaceId, item.href);
@@ -778,8 +771,7 @@ export function Sidebar() {
               key={item.key}
               onClick={() => { showPanel(item.section); router.push(base); }}
               onPointerEnter={(e) => {
-                // System has no section panel to prefetch.
-                if (item.section) prefetchSectionPanel(item.section);
+                prefetchSectionPanel(item.section);
                 router.prefetch(base);
                 showHoverTip({ id: item.key, ...item }, e.currentTarget);
               }}

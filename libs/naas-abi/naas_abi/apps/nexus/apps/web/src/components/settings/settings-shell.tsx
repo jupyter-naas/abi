@@ -76,12 +76,17 @@ export function SettingsNavItem({
   icon: Icon,
   active,
   chevron = false,
+  badge,
+  badgeTitle,
 }: {
   href: string;
   label: string;
   icon: LucideIcon;
   active: boolean;
   chevron?: boolean;
+  /** A count that wants attention (failed runs), after the label. */
+  badge?: string | null;
+  badgeTitle?: string;
 }) {
   return (
     <li>
@@ -92,6 +97,11 @@ export function SettingsNavItem({
       >
         <Icon size={18} />
         <span className="org-settings-nav-item-label">{label}</span>
+        {badge && (
+          <span className="settings-nav-item-badge" title={badgeTitle}>
+            {badge}
+          </span>
+        )}
         {chevron && <ChevronRight size={18} className="org-settings-nav-item-chevron" />}
       </Link>
     </li>

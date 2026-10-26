@@ -155,6 +155,9 @@ def test_access_says_what_the_caller_may_do(world):
     lister = get(world, "/access", "lister").json()["actions"]
     assert lister["iam:ListPolicies"]
     assert not lister["iam:CreatePolicy"] and not lister["iam:ListGroups"]
+    # A delegated IAM admin: Platform settings shows them Roles & permissions and nothing of
+    # System or the tables, which need nexus:ReadSystem.
+    assert root["nexus:ReadSystem"] and not lister["nexus:ReadSystem"]
     assert not any(get(world, "/access", "stranger").json()["actions"].values())
 
 

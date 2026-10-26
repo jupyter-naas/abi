@@ -66,14 +66,15 @@ Nexus adds no role check of its own.
   manages attachments at the org and its workspaces (the policies offered are the ones the caller may attach
   there: `GET /attachable-policies`, which leaves out a policy owned by another org or workspace, and, at a
   scope, a platform policy with a Deny outside `${scope}:` for anyone but the platform admin, as IAM refuses it). Service
-  accounts and keys, approvals, simulator and audit are platform-level and live in the System app's Access tab,
-  available to whoever holds the matching actions. Every route takes the scope as a parameter: `POST /policies`
+  accounts and keys, approvals, simulator and audit are platform-level and live in Platform Settings › Roles &
+  permissions (`/settings/roles`), available to whoever holds the matching actions. Every route takes the scope as a parameter: `POST /policies`
   and `POST /groups` create at the body's `scope`, `GET /policies?scope=` and `GET /groups?scope=` list that
   level's own plus what the caller may attach there from above (IAM's `list_policies` / `list_groups`), and
   `GET /access?scope=`, `/catalogs?scope=` and `/policies/validate?scope=` answer for that level (an org-wide
   scope, in these and in the lists, answers for its org). The
-  tab is reached through the System app, which still requires `nexus:ReadSystem`: a delegated IAM admin without
-  it has the API and the CLI but not the tab.
+  Platform Settings sidebar shows Roles & permissions for any platform-level `iam:` action `GET /access` grants,
+  and the tables and System only with `nexus:ReadSystem`: a delegated IAM admin without it sees Roles &
+  permissions alone, a stranger a 403. The shared Roles & permissions UI of every level replaces this page.
 - **Every change is audited, fail-closed.** The System app's `run_audited` and `audit_logs` table are reused: a
   `requested` record is written first and nothing changes if it cannot be (503); `succeeded` or `failed` (the
   exception type only) follows. IAM's records are the rows `iam.<operation>` (`SqlAdminAuditLog` takes the action

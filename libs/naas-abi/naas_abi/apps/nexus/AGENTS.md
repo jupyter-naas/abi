@@ -605,20 +605,35 @@ The optional catch-all `[[...slug]]/page.tsx` re-exports the thread module so al
 
 - Migrate `chat-interface.tsx` to semantic CSS
 
-## System app (platform super admins)
+## Platform Settings
 
-`/workspace/[id]/admin/system` (dock entry "System", visible when `is_superadmin`). Tabs: Overview, Services, Data, Jobs, Agents, Modules, Access, NATS, Live traffic, Traces; the tab is the `?tab=` query. Live traffic is an SSE stream read with raw `fetch` and `getAuthHeader()` (like chat), started and stopped by the user.
+`/settings` (account menu → Platform Settings), outside any organization or workspace: `apps/web/src/app/settings/`, on the shared settings shell (`components/settings/`).
+
+- **Sidebar** (`lib/nav.ts`): Nexus tables; a System group (Overview, Services, Data, Jobs, Agents, Modules, NATS, Live traffic, Traces, Events); Roles & permissions. Each item declares what it needs: `nexus:ReadSystem` for the tables and System, any platform-level `iam:` action for Roles & permissions. The shell reads the caller's actions from `GET /api/iam/admin/access` (`hooks/use-platform-settings-access.ts`), shows the items they hold and a 403 page when there are none or for a page they do not hold. The account menu shows Platform Settings whenever an item is available. The API checks every call itself (`require_superadmin`: `ReadSystem` to read, `ManageSystem` to change; IAM's own `iam:*` checks).
+- **Nexus tables** (`tables/`): the table of tables (sections, counts, search, facets, inline schema, Export all as JSON or xlsx), then `/settings/tables/<name>` (grid, Export CSV/xlsx, a close button beside it that returns to Nexus tables as it was left: `lib/tables-view.ts`), then `/settings/tables/<name>/<row id>` (back link; on `users`, the superadmin toggle for whoever holds `ManageSystem`). The list, labels and sections come from the API (`GET /api/admin/tables`, the registry `api/app/core/platform_tables.py`); the web app keeps no copy.
+- **Old links** redirect in `middleware.ts` (`lib/redirects.ts`): `/settings/<table>[/<row>]` (and `<name>_table`) to `/settings/tables/...`, `/workspace/<id>/admin/system?tab=<tab>` to the System page (Access to `/settings/roles`, other query parameters kept), `/workspace/<id>/admin/events` to `/settings/system/events`. The legacy workspace links (`/settings/members`, ...) still go to the workspace.
+- **Phone**: `/settings` lists the items, an item opens full screen with back to the list; a table's back (and close) goes to Nexus tables, a row's to its table.
+
+Decisions:
+
+- **One table list, the API's.** Decision: Platform Settings reads the tables from `GET /api/admin/tables`; `core/platform_tables.py` holds each table's label, section and description, and `EXCLUDED_TABLES` every table it never serves, with the reason. Consequences: adding a table to nexus.db fails `platform_tables_test.py` until it is listed or excluded; the web app needs no change for a new table. Credential columns are masked by name (`SECRET_COLUMN`, `REDACTED_COLUMNS`), a test lists every column that looks like one and has it masked or named as harmless, and a table keyed by a credential has no row pages.
+- **The sidebar follows permissions, not a role.** Decision: each item names the action it needs and the shell asks IAM (`GET /api/iam/admin/access`) once per visit. Consequences: a delegated IAM admin without `nexus:ReadSystem` sees Roles & permissions alone; a stranger gets the 403 page; Nexus adds no role check, and hiding an item never replaces the API's.
+- **System lives in Platform Settings.** Decision: the System app's views are Platform Settings pages, and the dock and mobile More sheet no longer offer System or Events. Consequences: its code moved from `app/workspace/[workspaceId]/admin/system/` to `app/settings/system/` (Events to `system/events/`, with its feed beside the graph instead of in the workspace's second sidebar); its Access tab is Roles & permissions (`/settings/roles`) until the shared Roles & permissions UI replaces it.
+
+## System (platform super admins)
+
+Platform Settings › System: `/settings/system` (Overview) and `/settings/system/<view>` (Services, Data, Jobs, Agents, Modules, NATS, Live traffic, Traces, Events), shown to whoever holds `nexus:ReadSystem`. Live traffic is an SSE stream read with raw `fetch` and `getAuthHeader()` (like chat), started and stopped by the user.
 
 - Workflows REST: `apps/api/app/services/workflows/` (see its `AGENTS.md`), mounted at `/api/workflows`, for platform admins, signed in or with their personal API key (`require_superadmin`, decided by IAM).
 - API: `apps/api/app/services/sysadmin/` (hexagonal, see its `AGENTS.md`), mounted at `/api/admin/system/*` behind `require_superadmin` on the router. `main_public_routes_test.py` fails if a route there loses it.
-- Web: `apps/web/src/app/workspace/[workspaceId]/admin/system/`, the three-file route convention plus colocated modules (`system-api.ts`, `system-model.ts`, one component per tab) and jsdom render tests. Views poll every 10 s while visible; the footer Refresh reloads the active tab.
-- Data tab: `admin/system/data/`, a three-pane explorer (service rail, browser, inspector) over `/api/admin/system/resources`.
+- Web: `apps/web/src/app/settings/system/`: one `page.tsx` per view rendering `SystemPage` (`system.tsx`: the page title, Refresh, the view), colocated modules (`system-api.ts`, `system-model.ts`, `system-tabs.ts` for the views and their paths, one component per view) and jsdom render tests. Views poll every 10 s while visible; Refresh reloads the open view.
+- Data: `settings/system/data/`, a three-pane explorer (service rail, browser, inspector) over `/api/admin/system/resources`.
   - The shell owns layout, state (`use-explorer.ts`), URL deep links (`?service=&in=&item=`), keyboard shortcuts (`?` lists them), dialogs (typed-confirmation delete, Monaco editor, custom create), toasts, history and recent changes. Do not fork it per service.
   - Each service is one `ServiceView` in `data/services/<service>.tsx` (contract in `services/types.ts`, registered in `services/registry.ts`). It sets per-depth columns or cards, icons, nouns, badges, summaries, facts, a custom preview, an editor spec or a custom create form, and the delete copy. Its styles live in `services/<service>.css` (`data-<service>-*`).
   - Shared renderers live in `data/viewers/`: JSON tree, Monaco code, data grid, RDF triples, vector, email, message, status, binary (hex dump and images), and LangGraph checkpoints (`checkpoint-view.tsx`: transcript with tool calls, models and tokens; state, pending writes, metadata; "The step before" opens the parent through `PreviewContext.open`). In Documents, the saver collections list as "Step N · source" rows grouped by thread (`title` hook on `ServiceView` for entries whose name is an opaque id). Adapters send a structured `view` (shapes in the API's `resources.py`) and the generic preview picks the renderer.
   - Secrets stay masked until Reveal (shown for a while, then hidden again). Replace and Delete need the id typed back. The API audits every change and reveal before it runs. Never use browser `confirm()` dialogs here.
   - Tests: `data/*.test.ts` (shell flows with an in-memory API), `data/viewers/*.test.ts`, `data/services/*.test.ts(x)`.
-- Jobs tab: `admin/system/jobs/` over `/api/admin/system/jobs`, a Dagster-like view of module jobs (engine and remote).
+- Jobs: `settings/system/jobs/` over `/api/admin/system/jobs`, a Dagster-like view of module jobs (engine and remote).
   - Jobs list: failing and running first, schedules in plain words with a live next tick, a strip of the last 20 runs, and queue depth.
   - Job page: triggers (with a schedule's input), health (success rate, average duration), queue, settings, its runs; a workflow's input and output schemas.
   - Workflows (`kind: "workflow"`) show a "workflow" badge and, once any exists, an All / Jobs / Workflows filter (`?kind=`). Plain jobs render as before.
@@ -626,17 +641,17 @@ The optional catch-all `[[...slug]]/page.tsx` re-exports the thread module so al
   - Run feed with status filters.
   - Run inspector: a trigger → start → finish timeline with the wait before start, the error, logs (`ctx.log`), payload, result, and the run's trace (the Traces waterfall, embedded). A workflow run opens on a **Steps** tab (`run-steps.tsx`): each step's status, attempt, start offset and duration on one time axis, its error, and a link to the child run a `call` step started. A result the API cut for display says so.
   - Run now, Re-run and Cancel are audited by the API. It reuses the Data tab's atoms, viewers, modal and toasts (`../data/`) and polls only while visible: 5 s, or 1.5 s for a live run.
-- Access tab: `admin/system/access/` over `/api/iam/admin` (API: `apps/api/app/services/iam_admin/`, see its `AGENTS.md`), the platform's permissions as IAM decides them for the signed-in user.
+- Roles & permissions (`/settings/roles`, the former Access tab): `settings/system/access/` over `/api/iam/admin` (API: `apps/api/app/services/iam_admin/`, see its `AGENTS.md`), the platform's permissions as IAM decides them for the signed-in user.
   - Sub-views, shown only when `GET /access` says the caller may list them: Policies (list; visual statement editor with action and resource autocomplete from the catalogs; YAML/JSON view; IAM's validation errors as the user types), Attachments, Groups (members, IdP group-claim mapping), Service accounts (keys created, revoked and rotated; a key's value is shown once, in component state only), Module approvals (approve as submitted, narrow or reject: `approvals/narrow-model.ts`), Simulator (`iam:Explain`, names the deciding statement) and Audit.
   - The client is `src/lib/iam-admin/` (`types.ts` is the contract, `api.ts` one function per route, `use-access.ts`). Each view takes `AccessViewProps` (`api`, `can`, `nonce`); gate buttons with `can('iam:...')`, never with a role name.
-  - Org scope: Organization settings → Access (`organizations/[orgId]/settings/access/`) reuses `AttachmentsPanel` at the org and each workspace scope.
+  - Org scope: Organization settings → Access (`organizations/[orgId]/settings/access/`) reuses `AttachmentsPanel` (`settings/system/access/attachments/`) at the org and each workspace scope.
   - Tests: jsdom render tests beside each view (`system-render.ts` helpers) and pure model tests.
-- Traces tab: `admin/system/traces/` over `/api/admin/system/traces`, so nobody needs the Jaeger UI. The API reads the tracing backend's query API (Jaeger `/api/v3`, `telemetry.query_url`, else `telemetry.ui_url`); the browser never talks to Jaeger.
+- Traces: `settings/system/traces/` over `/api/admin/system/traces`, so nobody needs the Jaeger UI. The API reads the tracing backend's query API (Jaeger `/api/v3`, `telemetry.query_url`, else `telemetry.ui_url`); the browser never talks to Jaeger.
   - Search by service, operation, time window, minimum duration and errors only, or jump to a trace id. Results are a duration-over-time scatter plus a list.
   - Trace: a waterfall (`waterfall.tsx`) in span-tree order with service colors, self time, events as ticks, a minimap to drag-zoom (double-click a span to zoom to it), a span filter that keeps ancestors, collapse and expand, and ↑/↓/←/→. Above 300 visible rows it renders only the rows on screen.
   - Repeated calls fold: 5 or more siblings with the same service and operation (polling, saves) become one row with the count, total time, cadence (`every …`) and a tick per call, placed where the first starts. Unfolding lists one collapsed row per call. A toolbar toggle shows every call; filtering always lists matches flat; a selected or linked span opens the groups and spans above it (`layoutRows`, `pathTo` in `traces-model.ts`).
   - Span detail: timing, parent and children, attributes grouped by namespace (`abi.`, `messaging.`, `rpc.`, `http.`…), events, resource and links to other traces.
-  - Deep links: `?tab=traces&trace=<id>&span=<id>`. Live traffic trace ids and the Jobs run inspector open here (`TraceView` is embeddable with `compact`); Jaeger stays a secondary link when `ui_url` is set.
+  - Deep links: `/settings/system/traces?trace=<id>&span=<id>` (`systemTracePath`). Live traffic trace ids and the Jobs run inspector open here (`TraceView` is embeddable with `compact`); Jaeger stays a secondary link when `ui_url` is set.
   - Pure helpers (tree, self time, ticks, placement, filters) live in `traces-model.ts`; tests in `traces/*.test.ts` with `traces-fixtures.ts`.
 - A source that is down (NATS mode off, discovery not configured, `nats.monitoring_url` unset or unreachable) never fails a whole view: the API returns the others plus a reason, or a 503 `{source, reason}` for NATS-only views, and the page shows that reason.
 
@@ -665,6 +680,7 @@ Several NEXUS surfaces use the same mobile UX: a **list screen first**, then a *
 | Account | `/account` | `/account/{section}` | Settings nav (`lib/nav.ts`) | Section page |
 | Files | `/workspace/{id}/files` | `/workspace/{id}/files/browse` | `FilesSection` (drives, starred) | File browser page |
 | Org settings | `/organizations/{orgId}/settings` | `/organizations/{orgId}/settings/{section}` | Settings nav (`lib/nav.ts`) | Section page |
+| Platform settings | `/settings` | `/settings/{tables,system,roles}/...` | Settings nav (`settings/lib/nav.ts`), the items the caller holds | Item page; a table closes to Nexus tables |
 
 **URL is the source of truth.** Each module exposes a small route parser:
 

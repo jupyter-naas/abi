@@ -67,10 +67,6 @@ const SettingsSection = dynamic(() => import('./settings-section').then((m) => m
   ssr: false,
   loading: sectionLoading,
 });
-const EventsSection = dynamic(() => import('./events-section').then((m) => m.EventsSection), {
-  ssr: false,
-  loading: sectionLoading,
-});
 const WorkspacesSection = dynamic(
   () => import('./workspaces-section').then((m) => m.WorkspacesSection),
   { ssr: false, loading: sectionLoading },
@@ -93,7 +89,6 @@ const SECTION_CHUNK: Partial<Record<SidebarSection, () => Promise<unknown>>> = {
   apps: () => import('./apps-section'),
   infrastructure: () => import('@/app/workspace/[workspaceId]/settings/infrastructure/infrastructure-section'),
   settings: () => import('./settings-section'),
-  events: () => import('./events-section'),
   workspaces: () => import('./workspaces-section'),
 };
 
@@ -131,8 +126,6 @@ function SectionContent({ section }: { section: SidebarSection }) {
   if (section === 'marketplace' && canMarketplace) return <MarketplaceSection collapsed={false} detailOnly />;
   if (section === 'infrastructure' && canSettings) return <InfrastructureSection />;
   if (section === 'settings') return <SettingsSection collapsed={false} detailOnly />;
-  // Superadmin-only route; the dock only offers it to superadmins.
-  if (section === 'events') return <EventsSection collapsed={false} detailOnly />;
   // Opened by the workspace mark (workspace-switcher.tsx).
   if (section === 'workspaces') return <WorkspacesSection />;
   return null;

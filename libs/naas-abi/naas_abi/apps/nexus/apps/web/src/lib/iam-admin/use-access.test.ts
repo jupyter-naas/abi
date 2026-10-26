@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { createElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mount, type Mounted } from '@/app/workspace/[workspaceId]/admin/system/system-render';
+import { mount, type Mounted } from '@/app/settings/system/system-render';
 import type { IamAdminApi } from './api';
 import { useIamAccess } from './use-access';
 
