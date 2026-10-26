@@ -110,7 +110,8 @@ class JobsAdminService:
         self._clock = clock
         self._steps = steps
         self._validator = validator
-        self._kinds: dict[tuple[str, str], tuple[bool, float]] = {}
+        # (module, job) -> (is a workflow, or None: no catalog lists it; expiry)
+        self._kinds: dict[tuple[str, str], tuple[bool | None, float]] = {}
 
     # --- definitions ---------------------------------------------------------------------
 
@@ -323,12 +324,24 @@ class JobsAdminService:
         key = (run.module_id, run.job)
         known = self._kinds.get(key)
         if known and known[1] > time.monotonic():
-            return known[0]
-        for definition in await self._definitions({}):
-            if definition.module_id == run.module_id and definition.name == run.job:
-                self._kinds[key] = (definition.is_workflow, time.monotonic() + KIND_TTL_SECONDS)
-                return definition.is_workflow
-        return bool((await self.journal(run)).steps)
+            if known[0] is not None:
+                return known[0]
+        else:
+            for definition in await self._definitions({}):
+                if definition.module_id == run.module_id and definition.name == run.job:
+                    self._kinds[key] = (
+                        definition.is_workflow,
+                        time.monotonic() + KIND_TTL_SECONDS,
+                    )
+                    return definition.is_workflow
+        # No catalog lists the job: following such a run does not list them all again
+        # on every poll. Its journal decides; a workflow run with no step yet reads as
+        # a plain job's until it has one, so only a journal with steps is kept.
+        if (await self.journal(run)).steps:
+            self._kinds[key] = (True, time.monotonic() + KIND_TTL_SECONDS)
+            return True
+        self._kinds[key] = (None, time.monotonic() + KIND_TTL_SECONDS)
+        return False
 
     async def run(self, module_id: str, run_id: str, *, preview: bool = True) -> RunView:
         """One run with its trace link and, for a workflow, its steps. With

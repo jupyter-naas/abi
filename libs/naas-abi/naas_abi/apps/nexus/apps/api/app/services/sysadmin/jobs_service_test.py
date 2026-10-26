@@ -505,3 +505,20 @@ def test_a_run_of_a_module_nobody_registers_is_a_workflow_run_when_it_has_a_jour
 
     assert run(service.run("acme.flows", "ingest:5")).workflow is not None
     assert run(service.run("acme.jobs", "nightly:3")).workflow is None
+
+
+def test_following_a_run_of_an_unregistered_module_lists_the_catalogs_once():
+    class Counting(InMemoryJobCatalog):
+        listed = 0
+
+        async def list_jobs(self):
+            Counting.listed += 1
+            return await super().list_jobs()
+
+    service = _flows(catalogs=[Counting([])])
+
+    for _ in range(3):  # a run panel polling the run
+        assert run(service.run("acme.jobs", "nightly:3")).workflow is None
+        assert run(service.run("acme.flows", "ingest:5")).workflow is not None
+
+    assert Counting.listed == 2  # once per (module, job), not once per poll
