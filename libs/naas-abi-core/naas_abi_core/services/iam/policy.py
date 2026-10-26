@@ -19,6 +19,7 @@ import yaml
 
 from naas_abi_core.services.iam.catalog import CatalogRegistry
 from naas_abi_core.services.iam.names import (
+    PLATFORM_SCOPE,
     PREFIX,
     has_wildcard,
     split_action,
@@ -136,6 +137,30 @@ class PolicyDocument:
             for statement in self.statements
             for pattern in statement.resources
         )
+
+
+def check_owned_document(document: PolicyDocument, owner: str) -> None:
+    """A policy owned by an org or a workspace (``owner``) is written for its
+    scope: its Allow and Deny patterns all start with ``${scope}:``, so it is
+    always attached at a scope and reaches nothing beyond it, whoever holds it.
+    ``PolicyValidationError`` names each pattern that does not."""
+    if owner == PLATFORM_SCOPE or document.wholly_within_scope:
+        return
+    outside = sorted(
+        {
+            pattern
+            for statement in document.statements
+            for pattern in statement.resources
+            if not pattern.startswith(SCOPE_PREFIX)
+        }
+    )
+    raise PolicyValidationError(
+        [
+            f"A policy of {owner} names only resources under ${{scope}}: "
+            f"{pattern!r} is not"
+            for pattern in outside
+        ]
+    )
 
 
 def within_scope(statement: Statement) -> Statement | None:

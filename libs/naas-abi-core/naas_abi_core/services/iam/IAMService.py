@@ -109,6 +109,7 @@ from naas_abi_core.services.iam.policy import (
     PolicyDocument,
     PolicyValidationError,
     bind_variables,
+    check_owned_document,
     parse_policy_document,
     within_scope,
 )
@@ -632,12 +633,41 @@ class IAMService(IIAMService, PolicySource):
         return scope
 
     def delete_scope(self, org: str, workspace: str = NONE) -> bool:
+        """Forget a deleted workspace, or an org (``workspace`` ``-``) with its
+        workspaces: what it owns (``_drop_owned``), then every attachment left
+        at it. A user left with no attachment in the org leaves its groups."""
         self.require("iam:DeleteScope", scope_resource(org, workspace))
-        self._drop_owned(org, workspace)
+        changed = self._drop_owned(org, workspace)
+        detached = self._detach_scope(org, workspace)
         deleted = self.store.delete_scope(org, workspace)
-        if deleted:
+        for principal_id in detached:
+            self._leave_groups_of(principal_id, org)
+        if deleted or detached or changed:
             self._changed()
         return deleted
+
+    def _detach_scope(self, org: str, workspace: str) -> set[str]:
+        """Detach every attachment at a deleted workspace, or anywhere in a
+        deleted org; the principals that held one."""
+
+        def at(scope: str | None) -> bool:
+            if scope is None:
+                return False
+            scope_org, scope_workspace = scope_fields(scope)
+            return scope_org == org and workspace in (NONE, scope_workspace)
+
+        held: set[str] = set()
+        for attachment in self.store.list_attachments():
+            if not at(attachment.scope):
+                continue
+            if self.store.detach(
+                attachment.policy_id, attachment.principal_id, attachment.scope
+            ):
+                held.add(attachment.principal_id)
+                if attachment.policy_id in roles.ROLES:
+                    self._sync_platform_roles(attachment.principal_id)
+                    self._sync_feature_policies(attachment.principal_id)
+        return held
 
     def workspace_org(self, workspace: str) -> str | None:
         """The org a workspace was registered in (``iam:PutScope``). ``-`` and ``*``
@@ -1033,6 +1063,7 @@ class IAMService(IIAMService, PolicySource):
                 "group", limit=size, after=cursor, owner_scopes=[scope, *above]
             ),
             keep,
+            ("iam:ListGroups", "iam:ListAttachments"),
             limit,
             after,
         )
@@ -1205,7 +1236,7 @@ class IAMService(IIAMService, PolicySource):
         policy_id = new_id("pol")
         self.require("iam:CreatePolicy", policy_resource(policy_id, owner))
         self._check_owner_known(owner)
-        _check_owned_document(parsed, owner)
+        check_owned_document(parsed, owner)
         policy = self.store.create_policy(
             Policy(
                 id=policy_id,
@@ -1257,6 +1288,7 @@ class IAMService(IIAMService, PolicySource):
                 limit=size, after=cursor, owner_scopes=[scope, *owner_ancestors(scope)]
             ),
             keep,
+            ("iam:ListPolicies", "iam:AttachPolicy"),
             limit,
             after,
         )
@@ -1283,7 +1315,7 @@ class IAMService(IIAMService, PolicySource):
             if document is not None
             else current.document,
         )
-        _check_owned_document(updated.document, current.owner_scope)
+        check_owned_document(updated.document, current.owner_scope)
         if not updated.document.confined_to_scope and any(
             a.scope is not None
             for a in self.store.list_attachments(policy_id=policy_id)
@@ -1326,22 +1358,21 @@ class IAMService(IIAMService, PolicySource):
             raise IAMNotFoundError(f"Policy {policy_id} not found")
         return policy
 
-    def _drop_owned(self, org: str, workspace: str) -> None:
+    def _drop_owned(self, org: str, workspace: str) -> bool:
         """Delete what a deleted workspace owns, or, for an org (``workspace``
         ``-``), what the org and each of its workspaces own: policies with their
         attachments and invitations, and groups with their attachments,
-        members and mappings."""
-
-        def owned(owner: str) -> bool:
-            if owner == PLATFORM_SCOPE:
-                return False
-            owner_org, owner_workspace = scope_fields(owner)
-            return owner_org == org and workspace in (NONE, owner_workspace)
-
+        members and mappings. Whether anything went."""
+        if workspace != NONE:
+            owners = [scope_name(org, workspace)]
+        else:
+            owners = [scope_name(org)] + [
+                scope_name(org, s.workspace)
+                for s in self.store.list_scopes(org)
+                if s.workspace != NONE
+            ]
         changed = False
-        for policy in self._all_policies():
-            if not owned(policy.owner_scope):
-                continue
+        for policy in self._all_policies(owners):
             for attachment in self.store.list_attachments(policy_id=policy.id):
                 self.store.detach(policy.id, attachment.principal_id, attachment.scope)
             for grant in self.store.list_pending_grants(policy_id=policy.id):
@@ -1350,22 +1381,24 @@ class IAMService(IIAMService, PolicySource):
             changed = True
         after: str | None = None
         while True:
-            page = self.store.list_principals("group", limit=500, after=after)
+            page = self.store.list_principals(
+                "group", limit=500, after=after, owner_scopes=owners
+            )
             for group in page.items:
-                if group.status != "deleted" and owned(group.owner_scope):
+                if group.status != "deleted":
                     self._delete_group(group)
                     changed = True
             if page.next_after is None:
-                break
+                return changed
             after = page.next_after
-        if changed:
-            self._changed()
 
-    def _all_policies(self) -> list[Policy]:
+    def _all_policies(self, owner_scopes: Sequence[str] | None = None) -> list[Policy]:
         found: list[Policy] = []
         after: str | None = None
         while True:
-            page = self.store.list_policies(limit=1000, after=after)
+            page = self.store.list_policies(
+                limit=1000, after=after, owner_scopes=owner_scopes
+            )
             found += page.items
             if page.next_after is None:
                 return found
@@ -2781,37 +2814,28 @@ class IAMService(IIAMService, PolicySource):
         after: str | None,
     ) -> Page:
         """A page of allowed items; paging applies after filtering."""
-        if not 1 <= limit <= 1000:
-            raise ValueError("limit must be between 1 and 1000")
-        if not self.filter(action, ()).prefix_hints:
-            # No Allow of the caller's can admit an item: nothing to scan for.
-            return Page([], None)
-        items: list[Any] = []
-        cursor = after
-        while True:
-            page = fetch(limit, cursor)
-            allowed = set(self.filter(action, (name(i) for i in page.items)).allowed)
-            for item in page.items:
-                if name(item) in allowed:
-                    items.append(item)
-                    if len(items) == limit:
-                        more = item is not page.items[-1] or page.next_after is not None
-                        return Page(items, item.id if more else None)
-            if page.next_after is None:
-                return Page(items, None)
-            cursor = page.next_after
+
+        def keep(items: list[Any]) -> set[str]:
+            allowed = set(self.filter(action, (name(i) for i in items)).allowed)
+            return {i.id for i in items if name(i) in allowed}
+
+        return self._kept_page(fetch, keep, (action,), limit, after)
 
     def _kept_page(
         self,
         fetch: Callable[[int, str | None], Page],
         keep: Callable[[list[Any]], set[str]],
+        actions: Sequence[str],
         limit: int,
         after: str | None,
     ) -> Page:
-        """A page of the items ``keep`` admits (it returns their ids); paging
-        applies after it."""
+        """A page of the items ``keep`` admits (it returns their ids), which it
+        decides with ``actions``; paging applies after it."""
         if not 1 <= limit <= 1000:
             raise ValueError("limit must be between 1 and 1000")
+        if not any(self.filter(action, ()).prefix_hints for action in actions):
+            # No Allow of the caller's can admit an item: nothing to scan for.
+            return Page([], None)
         items: list[Any] = []
         cursor = after
         while True:
@@ -2840,29 +2864,6 @@ def _owner_scope(scope: str | None, org: str | None) -> str:
     if org is not None and scope_fields(scope)[0] != org:
         raise ValueError(f"Scope {scope} is not in org {org}")
     return scope
-
-
-def _check_owned_document(document: PolicyDocument, owner: str) -> None:
-    """A policy owned by an org or a workspace is written for its scope: its
-    Allow and Deny patterns all start with ``${scope}:``, so it is always
-    attached at a scope and reaches nothing beyond it, whoever holds it."""
-    if owner == PLATFORM_SCOPE or document.wholly_within_scope:
-        return
-    outside = sorted(
-        {
-            pattern
-            for statement in document.statements
-            for pattern in statement.resources
-            if not pattern.startswith("${scope}:")
-        }
-    )
-    raise PolicyValidationError(
-        [
-            f"A policy of {owner} names only resources under ${{scope}}: "
-            f"{pattern!r} is not"
-            for pattern in outside
-        ]
-    )
 
 
 def _is_feature_policy(policy_id: str) -> bool:

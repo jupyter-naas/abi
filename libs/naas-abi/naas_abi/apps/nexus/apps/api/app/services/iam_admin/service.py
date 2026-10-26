@@ -64,6 +64,7 @@ from naas_abi_core.services.iam.names import (
 from naas_abi_core.services.iam.policy import (
     PolicyDocument,
     PolicyValidationError,
+    check_owned_document,
     parse_policy_document,
 )
 from starlette.concurrency import run_in_threadpool
@@ -218,7 +219,9 @@ class IamAdminService:
     async def validate_policy(
         self, user: Any, source: Mapping[str, Any], scope: str | None = None
     ) -> dict[str, Any]:
-        """What IAM says of a document (its object or its YAML/JSON text), saving nothing."""
+        """What IAM says of a document (its object or its YAML/JSON text), saving
+        nothing; at an org or a workspace, as a policy that level owns
+        (``check_owned_document``), so what passes here ``create_policy`` takes."""
         owner = _owner_of(scope)
 
         def check(session: IIAMService) -> dict[str, Any]:
@@ -229,6 +232,7 @@ class IamAdminService:
             )
             try:
                 document = self._parse(source)
+                check_owned_document(document, owner)
             except PolicyValidationError as exc:
                 return {"valid": False, "errors": list(exc.errors), "document": None}
             except ValueError as exc:
@@ -249,13 +253,13 @@ class IamAdminService:
         self, user: Any, after: str | None = None, scope: str | None = None
     ) -> dict[str, Any]:
         """The policies the caller may list; with ``scope``, that level's own and
-        those above it the caller may attach there (IAM's ``list_policies``)."""
-        if scope is not None:
-            validate_owner_scope(scope)
+        those above it the caller may attach there (IAM's ``list_policies``). An
+        org-wide scope lists its org's."""
+        owner = validate_owner_scope(_owner_of(scope)) if scope is not None else None
 
         def read(session: IIAMService) -> dict[str, Any]:
-            page = session.list_policies(after=after, scope=scope)
-            self._listing(session, "iam:ListPolicies", self._wildcard("policy", _owner_of(scope)))(
+            page = session.list_policies(after=after, scope=owner)
+            self._listing(session, "iam:ListPolicies", self._wildcard("policy", _owner_of(owner)))(
                 page.items
             )
             return {
@@ -470,13 +474,13 @@ class IamAdminService:
 
     async def list_groups(self, user: Any, scope: str | None = None) -> dict[str, Any]:
         """The groups the caller may list; with ``scope``, that level's own (and,
-        at a workspace, its org's the caller attaches to there)."""
-        if scope is not None:
-            validate_owner_scope(scope)
+        at a workspace, its org's the caller attaches to there). An org-wide scope
+        lists its org's."""
+        owner = validate_owner_scope(_owner_of(scope)) if scope is not None else None
 
         def read(session: IIAMService) -> dict[str, Any]:
-            page = session.list_groups(scope=scope)
-            self._listing(session, "iam:ListGroups", self._wildcard("group", _owner_of(scope)))(
+            page = session.list_groups(scope=owner)
+            self._listing(session, "iam:ListGroups", self._wildcard("group", _owner_of(owner)))(
                 page.items
             )
             return {"items": [views.principal_view(g) for g in page.items if g.status != "deleted"]}

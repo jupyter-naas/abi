@@ -14,6 +14,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Any
 
+from naas_abi_core import logger
 from naas_abi_core.services.iam.catalog import ActionCatalog
 from naas_abi_core.services.iam.IAMPorts import (
     Attachment,
@@ -34,7 +35,14 @@ from naas_abi_core.services.iam.IAMPorts import (
     ScopeRecord,
     SigningKeyRecord,
 )
-from naas_abi_core.services.iam.names import PLATFORM_SCOPE
+from naas_abi_core.services.iam.names import (
+    ALL_ORGS,
+    ALL_WORKSPACES,
+    PLATFORM_SCOPE,
+    matches,
+    resource_name,
+    scope_fields,
+)
 from naas_abi_core.services.iam.policy import PolicyDocument
 from sqlalchemy import (
     BigInteger,
@@ -447,18 +455,28 @@ class IAMStoreSQL(IAMStore):
     def _migrate_owner_scopes(self, conn: Connection) -> None:
         """2: every policy and group is owned by the platform, except the groups
         IdP bindings made (``idp:<provider>:<claim value>``, mapped from that
-        claim), which belong to the org they were made for."""
+        claim) whose attachments are all in the org they were made for, which
+        belong to that org. A binding group also bound elsewhere (another org,
+        the platform, unscoped) stays the platform's: an org's admins could
+        otherwise hand those grants to their users."""
+        postgres = conn.dialect.name == "postgresql"
         for table in (principals, policies):
-            columns = {
-                c["name"]
-                for c in inspect(conn).get_columns(table.name, schema=self._schema)
-            }
-            if "owner_scope" in columns:
-                continue
             name = f'"{self._schema}".{table.name}' if self._schema else table.name
+            if postgres:
+                # Two processes opening a version 1 store together: the second
+                # finds the column the first added.
+                add = "ADD COLUMN IF NOT EXISTS"
+            else:
+                columns = {
+                    c["name"]
+                    for c in inspect(conn).get_columns(table.name, schema=self._schema)
+                }
+                if "owner_scope" in columns:
+                    continue
+                add = "ADD COLUMN"
             conn.execute(
                 text(
-                    f"ALTER TABLE {name} ADD COLUMN owner_scope TEXT NOT NULL "
+                    f"ALTER TABLE {name} {add} owner_scope TEXT NOT NULL "
                     f"DEFAULT '{PLATFORM_SCOPE}'"
                 )
             )
@@ -470,15 +488,75 @@ class IAMStoreSQL(IAMStore):
             + group_mappings.c.claim_value
             == principals.c.name,
         )
+        in_org = literal("abi:") + principals.c.org + literal(":")
+        held_elsewhere = exists().where(
+            attachments.c.principal_id == principals.c.id,
+            func.substr(attachments.c.scope, 1, func.length(in_org)) != in_org,
+        )
         conn.execute(
             update(principals)
             .where(
                 principals.c.kind == "group",
                 principals.c.org.is_not(None),
                 made_by_binding,
+                ~held_elsewhere,
             )
             .values(owner_scope=literal("abi:") + principals.c.org + literal(":-"))
         )
+        self._warn_old_platform_names(conn)
+
+    def _warn_old_platform_names(self, conn: Connection) -> None:
+        """Schema 2 names the platform's policies and groups
+        ``abi:%2A:%2A:iam:<type>/<id>``: a stored customer policy that reached
+        them as ``abi:-:-:iam:…`` (or ``${scope}:iam:…`` attached at
+        ``abi:-:-``) matches nothing of them any more."""
+
+        def names(type_name: str, item_id: str, owner: str) -> tuple[str, str]:
+            org, workspace = scope_fields(owner)
+            if owner == PLATFORM_SCOPE:
+                org, workspace = ALL_ORGS, ALL_WORKSPACES
+            return (
+                resource_name("iam", type_name, item_id),
+                resource_name("iam", type_name, item_id, org=org, workspace=workspace),
+            )
+
+        renamed = [
+            names("policy", row.id, row.owner_scope)
+            for row in conn.execute(select(policies.c.id, policies.c.owner_scope))
+        ] + [
+            names("group", row.id, row.owner_scope)
+            for row in conn.execute(
+                select(principals.c.id, principals.c.owner_scope).where(
+                    principals.c.kind == "group"
+                )
+            )
+        ]
+        for row in conn.execute(
+            select(policies.c.id, policies.c.document).where(
+                policies.c.managed.is_(False)
+            )
+        ):
+            document = PolicyDocument.from_dict(json.loads(row.document))
+            stale = sorted(
+                {
+                    pattern
+                    for statement in document.statements
+                    for pattern in statement.resources
+                    if any(
+                        matches(probe, old) and not matches(probe, new)
+                        for probe in [pattern.replace("${scope}", PLATFORM_SCOPE)]
+                        for old, new in renamed
+                    )
+                }
+            )
+            if stale:
+                logger.warning(
+                    f"IAM policy {row.id} names the platform's policies or groups "
+                    f"as {', '.join(stale)}: the platform's are named "
+                    "abi:%2A:%2A:iam:<type>/<id> now (an org's or a workspace's "
+                    "abi:<org>:<ws>:iam:...), so these patterns no longer match "
+                    "them. Write abi:*:*:iam:policy/... or ...:iam:group/..."
+                )
 
     # -- transactions -------------------------------------------------------------
 

@@ -145,6 +145,31 @@ def test_deleting_a_workspace_deletes_what_it_owns(h):
         assert h.iam.get_group(t.ws2_group).status == "deleted"
 
 
+def test_deleting_a_workspace_takes_its_members_out_of_the_orgs_groups(h):
+    """Bob is in the org through ws-1 only: when ws-1 goes, he leaves the
+    org's groups and what they grant at ws-2, though a policy of the org was
+    still attached to him at ws-1 (nothing but IAM detaches that)."""
+    t = contract.team(h.iam)
+    ws2_graph = f"{WS2}:triple_store:graph/g"
+    with h.as_(t.org_admin):
+        readers = h.iam.create_policy("readers", contract.reader(), scope=ORG_SCOPE)
+        group = h.iam.create_group("analysts", scope=ORG_SCOPE)
+        h.iam.attach_policy(readers.id, group.id, WS2)
+        h.iam.add_group_member(group.id, t.member.id)
+        h.iam.add_group_member(group.id, t.colleague.id)
+        h.iam.attach_policy(readers.id, t.member.id, WS1)
+    with h.as_(t.member):
+        assert h.iam.authorize("triple_store:Query", ws2_graph).allowed
+    with as_service_account("engine"):
+        h.iam.delete_scope("org-1", "ws-1")
+        assert h.iam.list_group_members(group.id) == [t.colleague.id]
+        assert not any(
+            a.scope == WS1 for a in h.iam.list_attachments(principal_id=t.member.id)
+        )
+    with h.as_(t.member):
+        assert not h.iam.authorize("triple_store:Query", ws2_graph).allowed
+
+
 def test_a_binding_group_belongs_to_the_org_of_its_scope(h):
     contract.team(h.iam)
     with as_service_account("engine"):

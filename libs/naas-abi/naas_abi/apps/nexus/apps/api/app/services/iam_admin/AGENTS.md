@@ -69,7 +69,8 @@ Nexus adds no role check of its own.
   available to whoever holds the matching actions. Every route takes the scope as a parameter: `POST /policies`
   and `POST /groups` create at the body's `scope`, `GET /policies?scope=` and `GET /groups?scope=` list that
   level's own plus what the caller may attach there from above (IAM's `list_policies` / `list_groups`), and
-  `GET /access?scope=` and `/catalogs?scope=` answer for that level (an org-wide scope answers for its org). The
+  `GET /access?scope=`, `/catalogs?scope=` and `/policies/validate?scope=` answer for that level (an org-wide
+  scope, in these and in the lists, answers for its org). The
   tab is reached through the System app, which still requires `nexus:ReadSystem`: a delegated IAM admin without
   it has the API and the CLI but not the tab.
 - **Every change is audited, fail-closed.** The System app's `run_audited` and `audit_logs` table are reused: a
@@ -81,7 +82,9 @@ Nexus adds no role check of its own.
 - **Policies are edited visually or as text, and IAM validates both.** The editor autocompletes actions from the
   registered catalogs and resources from the name grammar; the text view takes YAML or JSON. `POST
   /policies/validate` returns every error IAM lists (and the normalized document), so the editor shows them as the
-  user types and a save refused for them says the same.
+  user types and a save refused for them says the same. With `?scope=` at an org or a workspace it also applies the
+  rule of a policy that level owns (core's `check_owned_document`: every pattern under `${scope}:`), so a document
+  it calls valid there is one `POST /policies` with that `scope` takes.
 - **Keys are shown once.** Creating or rotating a service account's key returns its value in that one answer
   (`Cache-Control: no-store`); IAM keeps a hash, the audit and every list never carry it, and the page holds it in
   component state until dismissed.

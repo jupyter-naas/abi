@@ -4,12 +4,21 @@ tests run on a store they downgrade by hand."""
 from __future__ import annotations
 
 from collections.abc import Callable
+from unittest.mock import patch
 
+from naas_abi_core.services.iam.adapters.secondary import iam_sql
 from naas_abi_core.services.iam.adapters.secondary.iam_sql import (
     SCHEMA_VERSION,
     IAMStoreSQL,
 )
-from naas_abi_core.services.iam.IAMPorts import GroupMapping, PrincipalRecord, new_id
+from naas_abi_core.services.iam.IAMPorts import (
+    Attachment,
+    GroupMapping,
+    Policy,
+    PrincipalRecord,
+    new_id,
+)
+from naas_abi_core.services.iam.policy import PolicyDocument, Statement
 from naas_abi_core.services.iam.tests.iam__secondary_adapter__generic_test import (
     group,
     policy,
@@ -35,6 +44,30 @@ def check_upgrade(
         )
     )
     store.map_idp_group(GroupMapping("acme", "Sales", bound.id))
+    store.attach(Attachment(new_id("att"), shared.id, bound.id, "abi:org-1:ws-1"))
+    store.attach(Attachment(new_id("att"), shared.id, bound.id, "abi:org-1:*"))
+    # Bound in org-1 first, then in org-2 and unscoped: one group held them all.
+    everywhere = store.create_principal(
+        PrincipalRecord(
+            id=new_id("grp"), kind="group", name="idp:acme:Ops", org="org-1"
+        )
+    )
+    store.map_idp_group(GroupMapping("acme", "Ops", everywhere.id))
+    for scope in ("abi:org-1:ws-1", "abi:org-2:ws-9", None):
+        store.attach(Attachment(new_id("att"), shared.id, everywhere.id, scope))
+    old_platform = store.create_policy(
+        Policy(
+            id=new_id("pol"),
+            name="policy editor",
+            document=PolicyDocument(
+                statements=(
+                    Statement("Allow", ("iam:GetPolicy",), ("abi:-:-:iam:policy/*",)),
+                    Statement("Allow", ("iam:GetGroup",), ("${scope}:iam:group/*",)),
+                    Statement("Deny", ("*",), ("*",)),
+                )
+            ),
+        )
+    )
     unbound = store.create_principal(
         PrincipalRecord(id=new_id("grp"), kind="group", name="idp:acme:All", org=None)
     )
@@ -43,13 +76,22 @@ def check_upgrade(
     for statement in DOWNGRADE:
         execute(statement)
 
-    upgraded = open_store()
+    with patch.object(iam_sql, "logger") as log:
+        upgraded = open_store()
+    # A stored policy that named the platform's policies or groups as abi:-:-
+    # is reported; `*` still reaches them, so it is not.
+    warned = [str(c.args[0]) for c in log.warning.call_args_list]
+    assert len(warned) == 1 and old_platform.id in warned[0]
+    assert "abi:-:-:iam:policy/*" in warned[0]
+    assert "${scope}:iam:group/*" in warned[0] and "'*'" not in warned[0]
     try:
         assert upgraded.get_policy(shared.id).owner_scope == "abi:-:-"
         assert upgraded.get_principal(hand_made.id).owner_scope == "abi:-:-"
         # A group an IdP binding made belongs to the org it was made for.
         assert upgraded.get_principal(bound.id).owner_scope == "abi:org-1:-"
         assert upgraded.get_principal(unbound.id).owner_scope == "abi:-:-"
+        # Held at org-2 and unscoped too: org-1's admins must not own it.
+        assert upgraded.get_principal(everywhere.id).owner_scope == "abi:-:-"
         assert upgraded.create_policy(policy()).owner_scope == "abi:-:-"
     finally:
         upgraded.close()

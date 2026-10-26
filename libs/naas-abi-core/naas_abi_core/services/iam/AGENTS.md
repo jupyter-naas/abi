@@ -162,7 +162,8 @@ attachments `att_`). Ids never change and are never reused.
   of their own under `abi:<org>:…` (a role at the org, org-wide or at one of its
   workspaces). Service accounts never join one: a module's account is approved by
   its manifest. A user whose last attachment under the org is detached
-  (`detach_policy`) leaves the org's groups and its workspaces' groups. Platform
+  (`detach_policy`, or `delete_scope` of the workspace or org it was at) leaves the
+  org's groups and its workspaces' groups. Platform
   groups take any user or service account.
 - **Where it is attached.** A group owned by an org or a workspace receives
   attachments only at its owner's scope or below (an org's at the org, org-wide or
@@ -253,7 +254,8 @@ rest) there manages it. An org or a workspace owns something only once Nexus
 registered it (`iam:PutScope`). A policy owned by an org or a workspace:
 
 - is written for its scope: **every** resource pattern, a Deny's included, starts
-  with `${scope}:` (refused at create and update with `PolicyValidationError`), so
+  with `${scope}:` (refused at create and update with `PolicyValidationError`;
+  `policy.check_owned_document`, which Nexus's validate route calls too), so
   attached to anyone it neither grants nor refuses anything beyond its scope;
 - is attached only at its owner's scope or below, always at a scope: an org's at the
   org, org-wide or at any of its workspaces, a workspace's at that workspace
@@ -808,8 +810,11 @@ list holds every policy or group the caller may list where it is owned. Reading 
 **Lifecycle.** `delete_scope(org, ws)` (Nexus, when a workspace goes) deletes the
 policies and groups the workspace owns; `delete_scope(org)` those of the org and of
 each of its workspaces: a policy with its attachments and invitations, a group
-(marked deleted, its id kept) with its attachments, members and mappings. It is part
-of `iam:DeleteScope`.
+(marked deleted, its id kept) with its attachments, members and mappings. Then it
+detaches every attachment left at the deleted workspace (or anywhere in the deleted
+org), whatever its policy, so nothing grants at a scope that is gone or comes back
+under the same id; a user left with no attachment in the org leaves its groups. It
+is part of `iam:DeleteScope`.
 
 Names: `principal_resource`, `group_resource(id, owner_scope)`,
 `policy_resource(id, owner_scope)`, `attachment_resource` (at the attachment's scope; an org-wide
@@ -1296,7 +1301,7 @@ AGENTS.md there), and IAM is the only record afterwards:
 | Every other existing container (module and engine namespaces, collections, repos, graphs) | platform placements, so no workspace can claim a name inside them |
 | Remote modules sharing `NATS_JWT_SECRET` | service accounts, keys and approved manifests (`abi dev up` regenerates them; deployed systems run `abi iam module approve`) |
 | Nexus users of the old login | users of issuer `urn:abi:nexus`, linked to the built-in IdP at first sign-in (`link_user`) |
-| IAM store schema 1 (no owner scopes) | schema 2, at the store's first open: every policy and group platform-owned, except the groups IdP bindings made (named `idp:<provider>:<claim>` and mapped from that claim, with an org), which belong to their org (`abi:<org>:-`) |
+| IAM store schema 1 (no owner scopes) | schema 2, at the store's first open: every policy and group platform-owned, except the groups IdP bindings made (named `idp:<provider>:<claim>` and mapped from that claim, with an org) whose attachments are all under `abi:<org>:`, which belong to that org (`abi:<org>:-`). A binding group schema 1 shared with other orgs, the platform or an unscoped binding stays the platform's: owned by one org, its admins could add their users to what it holds elsewhere. Two processes may open the store at once (PostgreSQL adds the columns `IF NOT EXISTS`; SQLite serializes writes). The upgrade logs a warning for each stored customer policy whose patterns reached the platform's policies or groups as `abi:-:-:iam:…` (or `${scope}:iam:…` at `abi:-:-`) and no longer match them: rewrite them `abi:*:*:iam:policy/…`, `…:iam:group/…` |
 | Sessions, refresh tokens, app grants and preview tokens signed with `secret_key` | invalidated: users sign in again; workspace secrets get their own key (`secrets_encryption_key`) |
 
 ## Decisions
@@ -1380,7 +1385,8 @@ right, and nothing it writes reaches or refuses beyond its workspace, whoever it
 attaches it to: a Deny outside `${scope}:` would otherwise let it lock a user, the
 platform admin included, out of everything. Platform-scope roles (`abi:-:-`) never
 edit the platform's policies, some of which are attached unscoped. Grants written
-`abi:-:-:iam:policy/*` match no policy any more: write `abi:*:*:iam:policy/*`. Members
+`abi:-:-:iam:policy/*` match no policy any more (the upgrade logs each stored policy
+that has one): write `abi:*:*:iam:policy/*`. Members
 and viewers no longer list their scope's attachments (who holds which role is
 Nexus's members list, read as `api`). A user leaving an org leaves its groups, so a
 group never keeps granting a former member. An existing store upgrades in place

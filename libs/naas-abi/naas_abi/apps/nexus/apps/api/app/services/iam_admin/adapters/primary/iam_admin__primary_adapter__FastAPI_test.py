@@ -855,3 +855,40 @@ def test_members_and_viewers_see_nothing_of_iam_administration(world):
         ).status_code in (403, 404)
         assert post(world, "/groups", user, name="x", scope=ws1).status_code in (403, 404)
         assert not any(get(world, f"/access?scope={ws1}", user).json()["actions"].values())
+
+
+def test_validating_at_a_scope_checks_what_creating_there_does(world, ws2):
+    def statement(effect, resource):
+        return {
+            "version": "2026-10-13",
+            "statements": [
+                {"effect": effect, "actions": ["triple_store:Query"], "resources": [resource]}
+            ],
+        }
+
+    at_ws2 = f"/policies/validate?scope={ws2}"
+    for document in (statement("Deny", "*"), statement("Allow", f"{ws2}:triple_store:graph/*")):
+        checked = post(world, at_ws2, "ws2admin", document=document).json()
+        assert checked["valid"] is False and "${scope}" in checked["errors"][0], checked
+        refused = post(world, "/policies", "ws2admin", name="x", document=document, scope=ws2)
+        assert refused.status_code == 422, refused.text
+    assert post(world, at_ws2, "ws2admin", document=SCOPED_READER).json()["valid"] is True
+    # The platform's policies name what they like.
+    assert post(world, "/policies/validate", document=statement("Deny", "*")).json()["valid"]
+
+
+def test_an_org_wide_scope_lists_its_orgs_policies_and_groups(world, ws2):
+    org = org_scope("org-1")
+    policy = post(world, "/policies", "admin", name="org", document=SCOPED_READER, scope=org)
+    group = post(world, "/groups", "admin", name="org team", scope=org)
+    assert policy.status_code == 201 and group.status_code == 201
+    wide = "abi:org-1:*"
+    policies = get(world, f"/policies?scope={wide}", "admin")
+    groups = get(world, f"/groups?scope={wide}", "admin")
+    assert policies.status_code == 200 and groups.status_code == 200, policies.text
+    assert policy.json()["id"] in {p["id"] for p in policies.json()["items"]}
+    assert group.json()["id"] in {g["id"] for g in groups.json()["items"]}
+    # Answered as for the org: a workspace's admin holds nothing there.
+    for path in ("/policies", "/groups"):
+        assert get(world, f"{path}?scope={wide}", "ws2admin").status_code == 403
+        assert get(world, f"{path}?scope={org}", "ws2admin").status_code == 403
