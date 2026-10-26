@@ -450,6 +450,94 @@ def test_a_workflow_run_sees_a_flow_context_and_notifies_waiters():
     assert json.loads(body) == {"run_id": run_id, "status": "SUCCEEDED"}
 
 
+class _ModuleOnlyDocuments(MemoryDocuments):
+    """The module's own namespace: the user a run executes for holds no right
+    on it, as an ordinary user has none on a module's approved namespace."""
+
+    def _check(self):
+        from naas_abi_sdk.call_context import current_call_context
+
+        user = current_call_context().user
+        if user is not None:
+            raise PermissionError(
+                f"PERMISSION_DENIED: {user.id} on the module's documents"
+            )
+
+    async def get(self, collection, id):
+        self._check()
+        return await super().get(collection, id)
+
+    async def put(self, collection, id, data, *, if_version=None):
+        self._check()
+        return await super().put(collection, id, data, if_version=if_version)
+
+    async def find(self, collection, **kwargs):
+        self._check()
+        return await super().find(collection, **kwargs)
+
+
+def _for(user_id):
+    from naas_abi_sdk.call_context import CallContext, service_account, user
+
+    return CallContext(
+        principal=service_account("sa_module"), on_behalf_of=user(user_id)
+    )
+
+
+def test_a_run_for_a_user_runs_its_code_for_them_and_journals_as_the_module():
+    from naas_abi_sdk.call_context import current_call_context
+
+    docs, seen = _ModuleOnlyDocuments(), []
+
+    def fetch():
+        seen.append(("step", current_call_context().user))
+        return 2
+
+    async def handler(ctx):
+        seen.append(("handler", current_call_context().user))
+        return {"n": await ctx.step("fetch", fetch)}
+
+    async def authorize(operation, job, run_id, headers, stored_at):
+        return _for("bob") if operation == "trigger" else None
+
+    descriptor = JobDescriptor("w", kind="workflow")
+    host = _host(docs, [(descriptor, handler)], authorize=authorize)
+    asyncio.run(host.handle(descriptor, handler, _Msg(sequence=3)))
+
+    record = docs.data[(runs_collection(PROJECT), "w:3")].data
+    assert (record["status"], record["result"]) == ("SUCCEEDED", {"n": 2}), record
+    assert docs.steps("w:3")["fetch"]["status"] == "SUCCEEDED"
+    assert [(where, u.id) for where, u in seen] == [("handler", "bob"), ("step", "bob")]
+
+
+def test_a_child_is_started_and_cancelled_as_the_module_not_the_user():
+    from naas_abi_sdk.call_context import current_call_context, use_call_context
+
+    users = []
+
+    class Proxy(_FakeProxy):
+        async def trigger(self, payload=None, *, idempotency_key=None):
+            users.append(current_call_context().user)
+            return await super().trigger(payload, idempotency_key=idempotency_key)
+
+    docs, outcomes = _ModuleOnlyDocuments(), _Outcomes()
+    ctx = _context(docs, outcomes=outcomes, host_context=current_call_context())
+
+    async def scenario():
+        with use_call_context(_for("bob")):
+            child = asyncio.ensure_future(ctx.call("acme.other", "child", {"n": 1}))
+            while not _FakeProxy.triggers:
+                await asyncio.sleep(0.005)
+            outcomes.records["child:100"] = {"status": "SUCCEEDED", "result": {"ok": 1}}
+            return await child
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(workflows, "JobProxy", Proxy)
+        assert asyncio.run(scenario()) == {"ok": 1}
+    assert users == [None]
+    assert docs.steps("flow:1")["call:acme.other.child#1"]["status"] == "SUCCEEDED"
+
+
 def test_retention_deletes_a_pruned_runs_journal():
     docs = MemoryDocuments()
 
@@ -848,7 +936,15 @@ def _fresh_proxy(monkeypatch):
     monkeypatch.setattr(workflows, "JobProxy", _FakeProxy)
 
 
-def _context(docs, *, run_id="flow:1", fired_at="t1", payload=None, outcomes=None):
+def _context(
+    docs,
+    *,
+    run_id="flow:1",
+    fired_at="t1",
+    payload=None,
+    outcomes=None,
+    host_context=None,
+):
     runtime = FlowRuntime(
         _Transport(),
         docs,
@@ -865,6 +961,7 @@ def _context(docs, *, run_id="flow:1", fired_at="t1", payload=None, outcomes=Non
         payload or {},
         runtime=runtime,
         fired_at=fired_at,
+        host_context=host_context,
     )
     if outcomes is not None:
         outcomes.docs = docs

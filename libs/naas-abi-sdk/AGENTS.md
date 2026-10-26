@@ -189,10 +189,12 @@ Who a run runs as: every attempt of a manual trigger is authorized
 (`discovery_job_authorizer`, `discovery:TriggerJob`), and the authorizer returns the
 context the run executes in. A trigger Nexus or the engine stored for a user carries the
 engine's delegation (`DELEGATION_HEADER`, sealed): the run is the module acting for that
-user (`call_context.delegation_context`, as an agent run), its kernel calls and the
-triggers of its child workflows carry the delegation, renewed through the module's key up
-to 8 hours after the trigger. Without one (a module's trigger, a schedule, an event) the
-run is the module's own.
+user (`call_context.delegation_context`, as an agent run). The handler and its steps'
+functions run under it, so their kernel calls carry the delegation, renewed through the
+module's key up to 8 hours after the trigger. The run's bookkeeping stays the module's own
+(`FlowContext.host_context`): its journal and results, the triggers, records and cancels of
+its child runs (a module hands no user to another). Without a delegation (a module's
+trigger, a schedule, an event) the run is the module's own.
 
 Workflows (`workflows.py`, Decision (2026-10-25) below) are jobs
 with `kind="workflow"`, JSON Schemas on the descriptor and a step journal. Same rules

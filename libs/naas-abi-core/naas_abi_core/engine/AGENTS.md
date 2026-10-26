@@ -219,9 +219,12 @@ login, and `auth`, the callout responder's. There is no shared `abi` or `module`
 - **Who a run runs as.** A manual trigger `api` or `engine` stores for a user who may trigger the
   job also carries `Abi-Job-Delegation` (sealed): an `abi:delegated:agent` token for that user with
   the job's module as the actor and the caller's scope, minted by the engine (`_delegation`). The
-  module's host runs the handler under it once discovery allowed the trigger and named that user,
-  and renews it through its key, up to 8 hours after the trigger. An engine module's job has no
-  module account: its authorizer runs it as `job/<module_id>` for the user from the host token. A
+  module's host runs the handler and its steps' functions under it once discovery allowed the
+  trigger and named that user, and renews it through its key, up to 8 hours after the trigger; the
+  run's journal, results and child runs stay the module's own. An engine module's job has no module
+  account: its authorizer runs it as `job/<module_id>` for the user from the host token, in
+  process (its calls over NATS carry the engine's delegation for the user, so there they are
+  bounded by the engine and the user). A
   module's own trigger, a schedule or an event runs as the module alone: a module never hands a user
   to another, as with agents. A schedule's input is the schedule's body, validated (a JSON object of
   4 KiB at most) and sealed by the engine.

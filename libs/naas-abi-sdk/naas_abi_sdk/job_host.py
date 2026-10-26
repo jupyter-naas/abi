@@ -26,7 +26,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from naas_abi_sdk.call_context import use_call_context
+from naas_abi_sdk.call_context import current_call_context, use_call_context
 from naas_abi_sdk.jobs import (
     INPUT_HASH_HEADER,
     MAX_TRIGGER_INPUT_BYTES,
@@ -1363,6 +1363,8 @@ class JobHost:
                 payload,
                 runtime=self._flow_runtime,
                 fired_at=fired_at,
+                # Its journal, children and notices stay the module's own.
+                host_context=current_call_context(),
             )
         else:
             context = JobContext(run_id, descriptor.name, attempt, trigger, payload)
