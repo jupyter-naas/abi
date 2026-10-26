@@ -262,7 +262,7 @@ def test_values_the_rest_route_can_send_do_not_fail_the_step():
     result = {
         "when": datetime.datetime(2026, 10, 25, 10, 0, tzinfo=datetime.UTC),
         "day": datetime.date(2026, 10, 25),
-        "path": pathlib.Path("/tmp/x"),
+        "path": pathlib.Path("/srv/x"),
         "price": decimal.Decimal("1.50"),
         "tags": {"b"},
         "color": Color.RED,
@@ -275,7 +275,7 @@ def test_values_the_rest_route_can_send_do_not_fail_the_step():
 
     json.dumps(encoded, allow_nan=False)  # what the step journal requires
     assert encoded["when"].startswith("2026-10-25T10:00:00")
-    assert encoded["day"] == "2026-10-25" and encoded["path"] == "/tmp/x"
+    assert encoded["day"] == "2026-10-25" and encoded["path"] == "/srv/x"
     assert (
         encoded["price"] == 1.5
         and encoded["tags"] == ["b"]
