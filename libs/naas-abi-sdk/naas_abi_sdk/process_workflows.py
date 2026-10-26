@@ -10,8 +10,8 @@ and scripts start it by name; it has a run record and appears in the Jobs tab.
 The workflow's one step, ``run``, awaits the built instance's ``run`` and journals the
 encoded result, so a retried run does not run a finished ``run`` again. ``job =
 JobSettings(...)`` on the class gives the workflow triggers and limits; without it the
-workflow has no trigger, one attempt and one run at a time. See
-docs/adr/20261025_remote-module-workflows-pipelines-ontologies.md.
+workflow has no trigger, one attempt and one run at a time. The decision is in the
+package's AGENTS.md.
 
 Needs the ``workflows`` extra (``naas_abi_sdk.processes``).
 """

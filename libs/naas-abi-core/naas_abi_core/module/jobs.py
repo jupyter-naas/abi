@@ -4,8 +4,7 @@ Engine modules may also use sync handlers; the engine runs them in a worker
 thread. Workflows (``naas_abi_core.module.workflows``) are jobs too, with sync
 handlers allowed the same way. Without ``naas-abi-sdk`` (core installed without
 ``[nats]``), inert stand-ins keep modules importable; jobs need NATS mode to run
-anyway. See docs/adr/20261001_nats-jobs.md and
-docs/adr/20261025_durable-workflows-on-nats.md.
+anyway. See ``module/AGENTS.md`` (Jobs, Workflows and their decision).
 """
 
 from __future__ import annotations

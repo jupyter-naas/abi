@@ -68,7 +68,7 @@ does not fail the run) → `dataset` (`sync_x_dataset_paths_batched`) → `publi
 - **Spend guard.** `budget` asks the workflow's ledger (`XSearchRecentTweetsWorkflow.budget_exhausted_reason`); a spent
   daily or monthly cap ends the run SKIPPED with the reason, no X call. `fetch` checks again inside the workflow.
 - **Retry.** `fetch` is journaled: a run that dies after it and retries does **not** call the X API again, and the
-  mapping re-attaches to the child runs it started (the ADR's "child runs"). A run that dies *inside* `fetch` fetches
+  mapping re-attaches to the child runs it started (child runs, in the SDK's AGENTS.md decision). A run that dies *inside* `fetch` fetches
   again from the `since_id` cursor, as a Dagster re-run did. The mapping is idempotent, so is everything after.
 - **Children.** `map_tweet_envelope` ends SKIPPED when the envelope is gone or already in the graph **and** the
   dataset; when only the graph has it, it does not run the pipeline (`status: dataset_only`) and the parent's
@@ -156,4 +156,4 @@ import in `XIntegration_test.py`); they are unrelated.
    same on every attempt. Keep a large list out of a step result (store it, return a reference).
 3. A new workflow is a method on `ABIModule` with `@workflow`, its models in `flows/models.py`, its body in `flows/`,
    and a test with `FakeFlowContext`. Document it in the table above.
-4. See `docs/adr/20261025_durable-workflows-on-nats.md` for the runtime, and `libs/naas-abi-core/naas_abi_core/module/AGENTS.md`.
+4. See `libs/naas-abi-core/naas_abi_core/module/AGENTS.md` (Workflows, and its Decision (2026-10-25)) for the runtime.

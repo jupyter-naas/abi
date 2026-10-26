@@ -756,7 +756,7 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
     def _call_load_schema(
         self, identity: str, req: triple_store_pb2.LoadSchemaRequest
     ) -> triple_store_pb2.LoadSchemaResponse:
-        """Load a module's ontology into the schema graph (docs/adr/20261014_module-identities.md).
+        """Load a module's ontology into the schema graph (decision in ``triple_store/AGENTS.md``).
 
         A module loads only under its own id; a first-party identity (api, engine,
         dagster) may load under any. Nothing is written for a refused call.

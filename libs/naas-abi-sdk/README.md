@@ -208,7 +208,7 @@ class ABIModule(BaseModule):
 ### Workflows
 
 A workflow is a job with a typed input and output whose handler checkpoints its
-steps (docs/adr/20261025_durable-workflows-on-nats.md): when a run is retried, the
+steps (the decision is in `AGENTS.md`): when a run is retried, the
 steps that finished return their stored results and only the rest run.
 
 ```python
@@ -596,7 +596,7 @@ only. They run in the module's process, for its own agents, and each workflow or
 pipeline class is also a durable workflow other modules start by name (see "Calling
 another module's workflows and pipelines").
 The decisions, with what stays out of scope, are in
-`docs/adr/20261025_remote-module-workflows-pipelines-ontologies.md`.
+`AGENTS.md`, Decision (2026-10-26).
 
 ```python
 # <package>/workflows/GreetWorkflow.py   (pip install 'naas-abi-sdk[workflows]')

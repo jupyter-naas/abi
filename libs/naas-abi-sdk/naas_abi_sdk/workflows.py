@@ -14,7 +14,7 @@ steps that finished and runs the rest::
             return TweetsOutput(count=len(files))
 
 Callers: ``ABIClient.get_workflow(module, name).run(input)``, ``ModuleProxy.get_workflow``,
-``self.get_workflow(name)``. See docs/adr/20261025_durable-workflows-on-nats.md.
+``self.get_workflow(name)``. The decision is in the package's AGENTS.md.
 
 Importable without ``nats`` (stdlib and proto only; the NATS client loads when a
 run is waited for or triggered), and without pydantic: input and output types are

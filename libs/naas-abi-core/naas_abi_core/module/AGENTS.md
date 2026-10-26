@@ -37,7 +37,7 @@ Declare `jobs` or decorate methods with `@job(triggers=(Cron(...),))` from `naas
 
 ## Workflows
 
-A workflow is a job with a typed input and output whose handler checkpoints its steps (`docs/adr/20261025_durable-workflows-on-nats.md`, SDK side in `libs/naas-abi-sdk/AGENTS.md`). It runs on the jobs runtime, so everything under Jobs holds: NATS mode only, one host per module, delivery at-least-once, `max_attempts` retries the whole run, and an undeclared handler fails `Engine.load`.
+A workflow is a job with a typed input and output whose handler checkpoints its steps (Decision (2026-10-25) below, SDK side in `libs/naas-abi-sdk/AGENTS.md`). It runs on the jobs runtime, so everything under Jobs holds: NATS mode only, one host per module, delivery at-least-once, `max_attempts` retries the whole run, and an undeclared handler fails `Engine.load`.
 
 ```python
 from naas_abi_core.module.workflows import SyncFlowContext, workflow
@@ -52,7 +52,7 @@ class ABIModule(BaseModule):
 
 - **Sync handlers** (`def`) run in a worker thread and get a `SyncFlowContext`: `step`, `map`, `call`, `map_call` and `steps` block while the journal and child runs are handled on the job host's loop. A `step` function runs in the handler's own thread, so the `JobInterrupted` grace behaviour reaches it and a timed-out run keeps its slot until the function returns. `map` runs its items on `concurrency` threads of its own, which `JobInterrupted` does not reach: check `ctx.cancelled` (an `asyncio.Event`: `is_set()`) in long item functions. `payload`, `attempt`, `log`, `skip`, `cancelled` are the `FlowContext`'s.
 - **Async handlers** (`async def`) are the SDK's: `ctx` is a `FlowContext` used as is.
-- **Step keys must be deterministic** and unique within a run; keys name journal entries (see the ADR). A step result is JSON, at most 256 KiB; a run record keeps 64 KiB of output.
+- **Step keys must be deterministic** and unique within a run; keys name journal entries (see Decision (2026-10-25) below). A step result is JSON, at most 256 KiB; a run record keeps 64 KiB of output.
 - **Declare at runtime** with `declare_workflow(name, handler, input_type=, output_type=, ...)` (sync or async handler), before the module's jobs go to the host (`JobsSealed` afterwards). The engine does this for the bridge below.
 - **Calling** (NATS mode, after the host starts; `JobsNotHosted` otherwise). `self.get_workflow(name)` is one of the module's own workflows, typed by its declared input and output. `engine.modules[m].get_workflow(name)` is the same call on another engine module. `self.engine.get_workflow(module_id, name)` reaches any module, engine or remote, by id on the engine's connection; the module must be a declared dependency (a remote one with the `#soft` suffix). `.start(input, idempotency_key=None)` returns a `WorkflowRun` (`status`, `wait`, `result`, `steps`, `cancel`), `.run(input, timeout=)` its output. They are coroutines, awaitable from any loop; from sync code use `asyncio.run(proxy.run(...))`.
 - **Inside a workflow**, `ctx.call(module_id, name, input)` and `ctx.map_call(...)` start durable child runs on any replica of any module; a workflow that calls itself is refused (`SelfCall`).
@@ -74,3 +74,33 @@ uv run pytest libs/naas-abi-core/naas_abi_core/module/workflows_test.py -v
 uv run pytest libs/naas-abi-core/naas_abi_core/engine/engine_loaders/EngineProcessBridge_test.py -v
 uv run pytest libs/naas-abi-core/naas_abi_core/engine/engine_loaders/EngineWorkflow_integration_test.py -v  # needs nats-server
 ```
+
+## Decision (2026-10-25): durable workflows for engine modules, and the bridge
+
+**Decision.** Engine modules run the SDK's durable workflows (`naas_abi_sdk.workflows`,
+decision in `libs/naas-abi-sdk/AGENTS.md`): async handlers are the SDK's, a sync handler runs
+in a worker thread with a `SyncFlowContext` (core's handler wrapper, passed to the SDK's
+`declare_workflow(wrap=)` and `method_workflow`, so the descriptor is built in one place).
+In NATS mode, with `nats.workflows.bridge` on (the default), `EngineProcessBridge` publishes
+every `Workflow`/`Pipeline` instance with a live typed `run()` as a one-step workflow,
+`workflow.<slug>` / `pipeline.<slug>`, with the result encoding and output schemas of
+`naas_abi_sdk.process_workflows` (the same as a remote module's classes). The classes, their
+agent tools and their REST routes do not change.
+
+**Consequences.**
+- A bridged class gets limits it never had: `max_concurrency=1` and `max_attempts=1` (a
+  pipeline that wrote to the triple store would write twice on a retry). In-process callers
+  (agent tools, REST) are not limited, and a REST call and a durable run of one class are not
+  serialized against each other.
+- A result over 60 KiB does not come back whole: a graph comes without its Turtle (the
+  triple count and a note), anything else as the `omitted` marker, and the run still
+  succeeds. NaN and infinity are null; a value that cannot be encoded is its text.
+- The bridge runs once per engine start, from the instances `on_initialized` built; a class
+  that could not be instantiated has no workflow, and a changed parameters model changes the
+  input schema on the next start (no schema version).
+- `ABI_API_KEY` reaches Nexus' `/api/workflows`: a script holding it can start and cancel
+  workflow runs as an operator (audited as `via: api_key`).
+- A sync step blocks the handler's thread, not the host's loop, and cannot be interrupted in
+  the middle of a blocking C call, as for sync jobs.
+- Without NATS nothing is published; the classes keep working in process.
+

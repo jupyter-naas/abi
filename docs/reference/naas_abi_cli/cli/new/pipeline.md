@@ -16,7 +16,7 @@
 
 - Click command: `naas-abi-cli new pipeline PIPELINE_NAME [PIPELINE_NAME_PATH]`
   - `_new_pipeline` detects the target with `is_remote_module(target_dir(pipeline_path))` and calls `new_pipeline(..., remote=remote)`.
-  - In a remote module it prints what to do next: the module builds the pipeline after `on_initialized` under its snake-case class name; it needs the `naas-abi-sdk[workflows,rdf]` extras.
+  - In a remote module it prints what to do next: the module builds the pipeline after `on_initialized` under its snake-case class name, other modules start it as the durable workflow `pipeline.<name>`, and an agent needs `await self.build_processes()` before `self.get_pipeline_instance(name).as_tools()`; it needs the `naas-abi-sdk[workflows,rdf]` extras.
   - It does not refuse in a remote module (only `abi new orchestration` does).
 
 ## Configuration/Dependencies

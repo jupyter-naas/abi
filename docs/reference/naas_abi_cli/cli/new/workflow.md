@@ -16,7 +16,7 @@
 
 - Click command: `naas-abi-cli new workflow WORKFLOW_NAME [WORKFLOW_NAME_PATH]`
   - `_new_workflow` detects the target with `is_remote_module(target_dir(workflow_path))` and calls `new_workflow(..., remote=remote)`.
-  - In a remote module it prints what to do next: the module builds the workflow after `on_initialized` under its snake-case class name, and an agent needs `await self.build_processes()` before `self.get_workflow(name).as_tools()`; it needs the `naas-abi-sdk[workflows]` extra.
+  - In a remote module it prints what to do next: the module builds the workflow after `on_initialized` under its snake-case class name, other modules start it as the durable workflow `workflow.<name>` (the module declares the `document` service), and an agent needs `await self.build_processes()` before `self.get_workflow_instance(name).as_tools()`; it needs the `naas-abi-sdk[workflows]` extra.
   - It does not refuse in a remote module (only `abi new orchestration` does).
 
 ## Configuration/Dependencies

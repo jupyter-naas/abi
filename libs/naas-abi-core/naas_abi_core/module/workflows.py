@@ -2,7 +2,7 @@
 plus sync handlers.
 
 A workflow is a job with a typed input and output whose handler checkpoints its
-steps (``naas_abi_sdk.workflows``, docs/adr/20261025_durable-workflows-on-nats.md).
+steps (``naas_abi_sdk.workflows``; decision in ``module/AGENTS.md``).
 Engine modules write them like SDK modules, with async handlers that use the
 SDK's ``FlowContext`` as is, or with sync handlers, which the engine runs in a
 worker thread (``SyncJobRunner``) and hands a ``SyncFlowContext``::

@@ -1,4 +1,5 @@
-"""Ontologies a module sends to the engine's schema graph (docs/adr/20261014_module-identities.md).
+"""Ontologies a module sends to the engine's schema graph (decision in core's
+``services/triple_store/AGENTS.md``).
 
 A module ships its ontologies as ``.ttl`` files in an ``ontologies/`` folder next to its
 package, as in-engine modules do. Once the instance serves, ``run_module`` sends each file to

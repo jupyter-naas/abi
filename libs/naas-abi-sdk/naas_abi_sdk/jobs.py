@@ -16,7 +16,7 @@ payload, idempotency_key=...)`` from sync code, ``await self.atrigger_job(...)``
 from async code.
 
 A workflow is a job with a typed input and output whose handler checkpoints its
-steps (``naas_abi_sdk.workflows``, docs/adr/20261025_durable-workflows-on-nats.md):
+steps (``naas_abi_sdk.workflows``; decision in the package's AGENTS.md):
 its descriptor has ``kind="workflow"`` and JSON Schemas. ``Cron``/``Every`` can carry
 an ``input``, the schedule message body, delivered as the run's payload.
 

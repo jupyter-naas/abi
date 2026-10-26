@@ -198,7 +198,7 @@ that needs the domain service (`NOT_SUPPORTED` over a bare port). The primary ad
 - The caller identity (the token's `sub`, `_caller_identity`) is `<module_id>`, or a
   first-party identity (`api`, `engine`, `dagster`), which may load any `module/` source.
   Else `PERMISSION_DENIED`, before anything is parsed. Module keys cannot assert a
-  first-party identity (docs/adr/20261014_module-identities.md), so a module never loads
+  first-party identity (Decision (2026-10-25) below), so a module never loads
   under another id. Other operations still have no identity scoping.
 - Content that is not UTF-8 or not Turtle: `INVALID_ARGUMENT`, nothing written.
 - A file above the broker limit travels through RPC overflow like any request (the
@@ -219,3 +219,25 @@ caller iterates, and falls back to the unary call against an older engine.
 Run the colocated NATS tests with `--import-mode=importlib`; shared regressions
 are in `engine/nats_rpc_test.py` and `engine/nats_rpc_integration_test.py`.
 The latter uses a local `nats-server` executable without Docker.
+
+## Decision (2026-10-25): remote modules load their ontologies
+
+**Decision.** A remote module's `ontologies/**/*.ttl` reaches the shared schema graph through
+`load_schema(source, content_ttl)`, content-based since the engine cannot read the module's
+disk, and scoped to the caller's identity: a module loads only under `module/<its id>/`
+(`PERMISSION_DENIED` otherwise), the first-party identities (`api`, `engine`, `dagster`) any
+`module/` source. Module keys cannot assert a first-party identity. Content may not use the
+`http://triple-store.internal` vocabulary, which would let a module forge another source's
+`internal:Schema`. The SDK sends the files once its instance is `READY` or `DEGRADED`,
+retrying in the background.
+
+**Consequences.**
+- Loading is additive: a file a module later removes or renames stays in the schema graph,
+  as in-engine; `load_schema` has no unload.
+- The schema graph is shared, so a source removes a triple (its changed content no longer
+  asserts it, or the source is removed) only when no other stored schema asserts it
+  (`_asserted_elsewhere`): a module cannot delete a core class by repeating it and dropping
+  it again. When another stored schema cannot be read, nothing is removed.
+- Other triple-store operations have no identity scoping: a module with the `triple_store`
+  dependency reads and writes the engine's triples, as before.
+

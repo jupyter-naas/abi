@@ -174,7 +174,7 @@ RUNNING/RETRYING with attempts left whose trigger left the stream).
 trigger is published; `event_filter.py` mirrors core's `EventFilter.matches`,
 change them together.
 
-Workflows (`workflows.py`, ADR docs/adr/20261025_durable-workflows-on-nats.md) are jobs
+Workflows (`workflows.py`, Decision (2026-10-25) below) are jobs
 with `kind="workflow"`, JSON Schemas on the descriptor and a step journal. Same rules
 as jobs.py: stdlib and proto only at import (nats and `services.errors` load lazily),
 no pydantic import (models are duck-typed: `model_json_schema`, `model_validate`,
@@ -252,8 +252,8 @@ Integrations are a pattern, never discovered. Tests:
 `tests/test_process_classes.py` (extras: `--extra workflows --extra rdf --extra agents`,
 a CI step) and `tests/test_workflows_extras.py` (no extras needed).
 
-Workflow and Pipeline classes are durable workflows (`process_workflows.py`, ADR
-docs/adr/20261025_remote-module-workflows-pipelines-ontologies.md), published as core's
+Workflow and Pipeline classes are durable workflows (`process_workflows.py`, Decision
+(2026-10-26) below), published as core's
 `EngineProcessBridge` publishes an engine module's classes: change them together. Each
 class is `workflow.<slug>`/`pipeline.<slug>` (`process_workflow_name` in `jobs.py`), input
 schema the parameters model's, output schema from the `run` annotation (`output_schema`),
@@ -281,3 +281,59 @@ package, and the CI `packages` job runs them alone on Python 3.10 to 3.12. Add a
 module's tests to its `tests/test_<module>.py`. `tests/conftest.py` fails a test
 skipped for want of `nats-server` when `ABI_REQUIRE_NATS_SERVER=1` (set in CI);
 it mirrors core's `engine/nats_test_server.py` hook, so change them together.
+
+## Decision (2026-10-25): durable workflows on NATS
+
+**Decision.** A workflow is a job with a schema and a journal (`workflows.py`): the jobs
+runtime unchanged (consumer, run record, attempts, cancel, retention, Jobs tab), plus
+`kind="workflow"` and JSON Schemas on `JobDescriptor`, a step journal in the module's
+document namespace, child runs (`call`/`map_call`) journaled before the parent waits, and
+completion notices on `JobSubjects.done`. `Cron`/`Every` may carry an `input`. Callers start
+a workflow by name (`get_workflow(name)`: `start`/`run`). Engine modules get the same
+runtime; see core's `naas_abi_core/module/AGENTS.md`.
+
+**Consequences.**
+- Runs are asynchronous and durable: a caller waits as long as it chooses, a run outlives
+  its caller. A step result is at most 256 KiB, a run record keeps 64 KiB of output.
+- Children are at least once: deduplication covers only the 2 minute JetStream window
+  before the child run id is journaled. Child workflows should be idempotent.
+- Step keys must be deterministic, and `map`/`map_call` items come in the same order on
+  every attempt, or a replay runs steps again.
+- A parent holds its slot while it waits: size `max_concurrency` for the parents that wait
+  at once; a cycle through two workflows can deadlock (only a direct self-call is refused).
+- A parent that ends for good (cancelled, timed out, failed with no attempt left) cancels
+  the children it still waits for; one the host retries leaves them to its next attempt.
+- Long waits (`sleep`, waiting for an event or an approval) are not supported.
+- Not hosted without NATS, like jobs.
+
+## Decision (2026-10-26): Workflow and Pipeline classes of a remote module
+
+**Decision.** A remote module authors workflows, pipelines and integrations like an
+in-engine module, on `naas_abi_sdk` only (`workflow.py`, `pipeline.py`, `integration.py`),
+with an async `run`. Every `Workflow` and `Pipeline` class is published as a one-step
+durable workflow, `workflow.<slug>` / `pipeline.<slug>`, exactly as core's
+`EngineProcessBridge` publishes an engine module's classes: same names, input and output
+schemas, and one result encoding (`process_workflows.py`, which core imports). There is one
+way to run a workflow over NATS. An earlier draft served these classes over a request/reply
+protocol of their own (per-caller authorization through discovery, a synchronous call
+bounded by 300 s); it was dropped, and no proto message is added for them. `job =
+JobSettings(...)` on a class gives its workflow triggers and limits. The module's own
+agents use the built instances in process (`get_workflow_instance(name).as_tools()`).
+
+**Consequences.**
+- An SDK class, an engine class and a `@workflow` are started, listed, recorded and
+  cancelled the same way, and callers name a class's workflow the same way wherever the
+  module runs.
+- No per-caller authorization: like any job, a workflow is started by publishing its
+  trigger, so any module of the project may start one.
+- Calls are durable runs, not synchronous calls. Every class gets one attempt and one run
+  at a time unless its `job` says otherwise (a pipeline that wrote to the graph would write
+  twice); in-process calls are not limited.
+- A result over 60 KiB does not come back whole (a graph without its Turtle, anything else
+  the `omitted` marker): a pipeline that must hand over more writes it to the triple store
+  or object storage.
+- Each class adds one workflow with its two schemas to the module's descriptor, which is
+  capped at 64 KiB (each schema at 16 KiB): a module with many classes, or large parameter
+  models, can be refused at registration, which names the limit.
+- A module with these classes needs discovery and the `document` service.
+- The kernel REST API does not mount remote workflows; use an in-engine module for that.

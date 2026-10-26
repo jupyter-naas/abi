@@ -379,7 +379,7 @@ class NATSJobsConfiguration(BaseModel):
 
 
 class NATSWorkflowsConfiguration(BaseModel):
-    """Durable workflows of engine modules (docs/adr/20261025_durable-workflows-on-nats.md).
+    """Durable workflows of engine modules (decision in ``module/AGENTS.md``).
 
     ``bridge`` publishes every ``Workflow`` and ``Pipeline`` instance of an engine
     module that has a live typed ``run()`` (the ones that get a ``POST /workflows|/pipelines``
