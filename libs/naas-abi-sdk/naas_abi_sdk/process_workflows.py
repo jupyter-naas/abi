@@ -67,7 +67,7 @@ ANY_OUTPUT_SCHEMA: dict[str, Any] = {
 }
 
 
-def job_settings(cls: type) -> JobSettings:
+def job_settings(cls: Any) -> JobSettings:
     """What ``cls`` declares in ``job``, else the defaults (no trigger)."""
     settings = getattr(cls, "job", None)
     if settings is None:
@@ -128,7 +128,7 @@ def encode_process_result(result: Any, max_bytes: int = MAX_RESULT_BYTES) -> Any
     return value
 
 
-def output_schema(cls: type) -> dict[str, Any]:
+def output_schema(cls: Any) -> dict[str, Any]:
     """The JSON Schema of what ``cls.run`` returns, when its annotation says;
     else a permissive one."""
     try:
@@ -145,7 +145,7 @@ def output_schema(cls: type) -> dict[str, Any]:
     return ANY_OUTPUT_SCHEMA
 
 
-def parameters(cls: type, payload: Any) -> BaseModel:
+def parameters(cls: Any, payload: Any) -> BaseModel:
     """``payload`` as ``cls``'s parameters model; ``InvalidWorkflowInput`` (no
     retry) naming the fields when it does not fit."""
     model = cls.parameters_type()
@@ -162,7 +162,7 @@ def parameters(cls: type, payload: Any) -> BaseModel:
 
 
 def check_classes(
-    classes_by_kind: Mapping[str, Mapping[str, type]], taken: Iterable[str] = ()
+    classes_by_kind: Mapping[str, Mapping[str, Any]], taken: Iterable[str] = ()
 ) -> None:
     """Refuse, before the module connects, a workflow name in ``taken`` (the
     module's own jobs and workflows), a ``job`` that is not a ``JobSettings``,
@@ -181,7 +181,7 @@ def check_classes(
                 if trigger.kind not in ("cron", "every"):
                     continue
                 try:
-                    parameters(cls, trigger.input or {})
+                    parameters(cls, getattr(trigger, "input", None) or {})
                 except InvalidWorkflowInput as exc:
                     raise ValueError(
                         f"The {kind} {name!r} has a {type(trigger).__name__} trigger "
@@ -190,9 +190,7 @@ def check_classes(
                     ) from None
 
 
-def process_handler(
-    cls: type, instance: Callable[[], Any]
-) -> Callable[[Any, Any], Any]:
+def process_handler(cls: Any, instance: Callable[[], Any]) -> Callable[[Any, Any], Any]:
     """The workflow handler of a class: ``run`` of the built instance as the one
     step. ``instance()`` returns it; a run only starts once it is built. An
     ``OnEvent`` run takes the event's ``data`` as its parameters."""
@@ -215,9 +213,14 @@ def process_handler(
     return handler
 
 
+def _lookup(bound: Mapping[str, Any], name: str) -> Callable[[], Any]:
+    """The instance bound under ``name``, looked up when a run starts."""
+    return lambda: bound[name]
+
+
 def declare_process_workflows(
     module: Any,
-    classes_by_kind: Mapping[str, Mapping[str, type]],
+    classes_by_kind: Mapping[str, Mapping[str, Any]],
     bound_by_kind: Mapping[str, Mapping[str, Any]],
 ) -> list[str]:
     """Declare each class (``{"workflow": {name: class}}``) on ``module`` as a
@@ -235,10 +238,9 @@ def declare_process_workflows(
                     f"itself, and its {kind} {cls.__name__} is published under that "
                     "name: rename the explicit job or workflow"
                 )
-            bound = bound_by_kind[kind]
             module.declare_workflow(
                 workflow_name,
-                process_handler(cls, lambda bound=bound, name=name: bound[name]),
+                process_handler(cls, _lookup(bound_by_kind[kind], name)),
                 input_schema=cls.parameters_type().model_json_schema(),
                 output_schema=output_schema(cls),
                 description=_cut(cls.description(), MAX_DESCRIPTION_BYTES),
