@@ -165,9 +165,8 @@ class BrokerControl:
             return await self._verify(fields)
         trusted = caller.kind == "service_account" and caller.name in TRUSTED
         request = _Request(
-            self, caller, None if trusted else await self._grants_of(caller)
+            self, context, None if trusted else await self._grants_of(caller)
         )
-        request.context = context
         # The verified credentials the job's host authorizes a trigger or a
         # cancel with (discovery:TriggerJob, CancelJobRun), as of when stored.
         # The caller's own token never goes into the stream: the job's host
@@ -588,13 +587,14 @@ class _Request:
     def __init__(
         self,
         control: BrokerControl,
-        caller: Principal,
+        context: CallContext,
         grants: broker.BrokerPermissions | None,
     ) -> None:
-        self.control, self.caller, self.grants = control, caller, grants
+        """``context``: the verified call, with the user it acts for and its
+        credential's scope; its principal is the caller."""
+        self.control, self.context, self.grants = control, context, grants
+        self.caller: Principal = context.principal
         self.credentials: dict[str, str] = {}
-        # The verified call, with the user it acts for and its credential's scope.
-        self.context = CallContext(principal=caller)
 
     @property
     def trusted(self) -> bool:

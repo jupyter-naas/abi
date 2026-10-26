@@ -23,7 +23,6 @@ from naas_abi_sdk import overflow
 from naas_abi_sdk.agent import TERMINAL, agent_subject
 from naas_abi_sdk.broker_flush import flush_to_broker
 from naas_abi_sdk.call_context import (
-    CallContext,
     delegation_context,
     use_call_context,
 )
@@ -46,13 +45,6 @@ INLINE_UPDATE_BYTES = 32 * 1024
 # always asks discovery, which checks this provider is READY.
 AUTHORIZATION_SECONDS = 5.0
 MAX_AUTHORIZATIONS = 1024
-
-
-def _delegation(token: str, caller: str, own: str = "") -> CallContext | None:
-    """The context a run executes in, from the delegation its submitter handed
-    over, or None (the run calls as the module itself): see
-    ``call_context.delegation_context``."""
-    return delegation_context(token, caller, own)
 
 
 @dataclass
@@ -603,7 +595,7 @@ class AgentHost:
                 run.watchers.add(req.updates_inbox)
             run.progress_at = asyncio.get_running_loop().time()
             self.runs[key] = run
-            delegation = _delegation(
+            delegation = delegation_context(
                 req.delegated_token, caller, self.session.service_account
             )
             if delegation is None:

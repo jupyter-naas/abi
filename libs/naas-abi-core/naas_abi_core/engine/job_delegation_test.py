@@ -60,10 +60,7 @@ def _api(record) -> Principal:
 
 def _delegation(iam, context, *, trusted=True, module_id="people"):
     control = BrokerControl(iam, iam.verifier(), "nats://unused")
-    request = _Request(
-        control, context.principal, None if trusted else SimpleNamespace()
-    )
-    request.context = context
+    request = _Request(control, context, None if trusted else SimpleNamespace())
     return control._delegation(request, "acme", module_id, "nightly")
 
 

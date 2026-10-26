@@ -388,6 +388,7 @@ class EngineJobLoader:
         assert self._loop is not None and self.configuration is not None
         transport = self._ensure_transport()
         handlers = module._job_handlers
+        identity = job_identity(self.iam, module_id)
         host = self.host_factory(
             transport,
             self.module_documents(module_id),
@@ -401,7 +402,7 @@ class EngineJobLoader:
                             handlers[j.name],
                             interrupt_grace_seconds=self.configuration.jobs.interrupt_grace_seconds,
                         ),
-                        job_identity(self.iam, module_id),
+                        identity,
                     ),
                 )
                 for j in module.jobs
@@ -417,7 +418,7 @@ class EngineJobLoader:
                         self._verifier(),
                         self.project,
                         module_id,
-                        job_identity(self.iam, module_id),
+                        identity,
                     )
                 }
             ),
