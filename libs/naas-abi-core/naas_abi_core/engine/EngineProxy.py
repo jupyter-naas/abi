@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from threading import Lock
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     ApiConfiguration,
@@ -304,6 +304,33 @@ class EngineProxy:
     @property
     def services(self) -> ServicesProxy:
         return self.__services_proxy
+
+    def get_workflow(
+        self,
+        module_id: str,
+        name: str,
+        *,
+        input_type: Any = None,
+        output_type: Any = None,
+    ) -> Any:
+        """The workflow ``name`` of another module, engine or remote, in NATS mode:
+        ``start(input)`` returns a run (``status``, ``wait``, ``result``, ``steps``,
+        ``cancel``) and ``run(input)`` its output; both are awaitable from any loop.
+
+        The module must be one of this module's declared dependencies (a remote
+        module is declared with the ``#soft`` suffix, which the engine does not
+        require to be enabled here). For an engine module, ``engine.modules[id]
+        .get_workflow(name)`` is the same call through the module itself.
+        """
+        declared = {m.replace("#soft", "") for m in self.__module_dependencies.modules}
+        if not self.__unlocked and module_id not in declared:
+            raise PermissionError(
+                f"Module {self.__module_name} did not declare module dependency: "
+                f"{module_id}"
+            )
+        return self.__engine.workflow(
+            module_id, name, input_type=input_type, output_type=output_type
+        )
 
     def job_owners(self) -> dict[str, object]:
         """``Engine.job_owners``: the modules and the kernel job owners, for the

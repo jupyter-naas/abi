@@ -273,3 +273,21 @@ class GraphNames(_message.Message):
     GRAPH_NAMES_FIELD_NUMBER: _ClassVar[int]
     graph_names: _containers.RepeatedScalarFieldContainer[str]
     def __init__(self, graph_names: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class LoadSchemaRequest(_message.Message):
+    __slots__ = ("context", "source", "content_ttl")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    SOURCE_FIELD_NUMBER: _ClassVar[int]
+    CONTENT_TTL_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    source: str
+    content_ttl: bytes
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., source: _Optional[str] = ..., content_ttl: _Optional[bytes] = ...) -> None: ...
+
+class LoadSchemaResponse(_message.Message):
+    __slots__ = ("error", "changed")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    CHANGED_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    changed: bool
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., changed: bool = ...) -> None: ...

@@ -1,9 +1,9 @@
 'use client';
 
 /** Every job across engine and remote modules, the ones needing attention first. */
-import { Play, Server, Workflow } from 'lucide-react';
+import { ListTree, Play, Server, Workflow } from 'lucide-react';
 import { Badge, EmptyState, Hint, RelativeTime } from '../data/data-ui';
-import { moduleLabel, sortJobs } from './jobs-model';
+import { isWorkflow, moduleLabel, sortJobs } from './jobs-model';
 import type { JobView, RunSummary } from './jobs-types';
 import { Countdown, RunDuration, RunStatus, RunStrip } from './jobs-ui';
 
@@ -36,11 +36,14 @@ function LastRun({ run }: { run: RunSummary | null }) {
 export function JobsTable({
   jobs,
   selected,
+  filtered = false,
   onSelect,
   onRun,
   onOpenRun,
 }: {
   jobs: JobView[];
+  /** The list is what a filter left: an empty one is no match, not no jobs. */
+  filtered?: boolean;
   selected: string | null;
   onSelect: (job: JobView) => void;
   onRun: (job: JobView) => void;
@@ -48,8 +51,10 @@ export function JobsTable({
 }) {
   if (!jobs.length) {
     return (
-      <EmptyState icon={Workflow} title="No jobs yet">
-        Modules declare jobs with JobDescriptor or the @job decorator; they show up here with their schedules and runs.
+      <EmptyState icon={Workflow} title={filtered ? 'No job matches' : 'No jobs yet'}>
+        {filtered
+          ? 'Nothing matches the filter.'
+          : 'Modules declare jobs with JobDescriptor or the @job decorator, and workflows with @workflow; they show up here with their schedules and runs.'}
       </EmptyState>
     );
   }
@@ -75,11 +80,16 @@ export function JobsTable({
         >
           <span className="jobs-name">
             <span className="jobs-name-icon" aria-hidden="true">
-              {job.location === 'remote' ? <Server size={15} /> : <Workflow size={15} />}
+              {isWorkflow(job) ? <ListTree size={15} /> : job.location === 'remote' ? <Server size={15} /> : <Workflow size={15} />}
             </span>
             <span className="jobs-name-text">
               <span className="jobs-name-title">
                 {job.name}
+                {isWorkflow(job) && (
+                  <Badge tone="success" title="A durable workflow: typed input, checkpointed steps">
+                    workflow
+                  </Badge>
+                )}
                 {job.location === 'remote' && (
                   <Badge tone="info" title={`${job.instances} live instance(s)`}>
                     remote{job.instances > 1 ? ` ×${job.instances}` : ''}

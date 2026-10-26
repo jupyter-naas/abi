@@ -19,7 +19,8 @@ over its own login:
 * ``ensure_job`` (``discovery:ListJobs``), ``set_schedules``
   (``discovery:ScheduleJob``): one of the jobs the module hosts (named in its
   policy), the jobs stream, the job's pull consumer, its schedules (always
-  aimed at its own trigger);
+  aimed at its own trigger, each with its input, a JSON object of 4 KiB at
+  most, as the body the seal covers);
 * ``trigger`` (``discovery:TriggerJob``), ``cancel``
   (``discovery:CancelJobRun``): a trigger or a cancel of a named module's job.
   The engine sets the trigger's kind (``event`` for the job's own module only,
@@ -349,9 +350,11 @@ class BrokerControl:
     ) -> None:
         from naas_abi_sdk.job_host import (
             SCHEDULE_FIELDS,
+            SCHEDULE_INPUT,
             consumer_config,
             ensure_consumer,
             ensure_stream,
+            schedule_input,
             set_schedules,
         )
         from naas_abi_sdk.jobs import MAX_TRIGGERS, job_subjects
@@ -375,25 +378,42 @@ class BrokerControl:
                     "INVALID_ARGUMENT", f"schedules is a list of {MAX_TRIGGERS} at most"
                 )
             for schedule in schedules:
+                headers = (
+                    {k: v for k, v in schedule.items() if k != SCHEDULE_INPUT}
+                    if isinstance(schedule, dict)
+                    else None
+                )
                 if (
-                    not isinstance(schedule, dict)
-                    or not schedule.get("Nats-Schedule")
-                    or set(schedule) - set(SCHEDULE_FIELDS)
+                    headers is None
+                    or not headers.get("Nats-Schedule")
+                    or set(headers) - set(SCHEDULE_FIELDS)
                     or any(
                         not isinstance(v, str)
                         or len(v) > 128
                         or any(c in v for c in "\r\n")
-                        for v in schedule.values()
+                        for v in headers.values()
                     )
                 ):
                     raise Refused(
-                        "INVALID_ARGUMENT", f"a schedule has {SCHEDULE_FIELDS} only"
+                        "INVALID_ARGUMENT",
+                        f"a schedule has {SCHEDULE_FIELDS} and an input only",
                     )
-            # A fired schedule copies its headers onto the trigger: seal it so.
+                try:
+                    schedule_input(schedule.get(SCHEDULE_INPUT))
+                except ValueError as exc:
+                    raise Refused("INVALID_ARGUMENT", str(exc)) from None
+            # A fired schedule copies its headers and its body (the input) onto
+            # the trigger: seal each so.
             trigger = job_subjects(project, module_id, job).trigger
-            seal = self._seal(trigger, "schedule", b"{}", {})
             await ensure_stream(js, project)
-            await set_schedules(js, project, module_id, job, schedules, seal=seal)
+            await set_schedules(
+                js,
+                project,
+                module_id,
+                job,
+                schedules,
+                seal=lambda body: self._seal(trigger, "schedule", body, {}),
+            )
             return
         concurrency = fields.get("max_concurrency")
         ack_wait = fields.get("ack_wait_seconds")

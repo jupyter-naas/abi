@@ -1,8 +1,10 @@
 """Host the jobs of engine modules in this process (NATS mode only).
 
-Engine modules declare jobs exactly like SDK modules (``naas_abi_core.module.jobs``).
-Each module with jobs gets one SDK ``JobHost``: same stream, subjects, consumers
-and run records as a standalone module, so callers cannot tell them apart.
+Engine modules declare jobs exactly like SDK modules (``naas_abi_core.module.jobs``),
+and workflows too (``naas_abi_core.module.workflows``, including the ones the
+Workflow/Pipeline bridge declares). Each module with jobs gets one SDK ``JobHost``:
+same stream, subjects, consumers and run records as a standalone module, so
+callers cannot tell them apart.
 
 Hosts run on a dedicated event loop thread, never on ``nats_runtime``'s loop:
 a slow job must not stall the engine's NATS service endpoints. Sync handlers
@@ -34,12 +36,22 @@ def as_async_handler(
     handler: Callable[..., Any], *, interrupt_grace_seconds: float | None = 5.0
 ) -> Callable[..., Any]:
     """Async handlers are used as is; sync ones run in their own thread and are
-    interrupted on timeout or cancel (see ``SyncJobRunner``)."""
+    interrupted on timeout or cancel (see ``SyncJobRunner``). A sync workflow gets a
+    ``SyncFlowContext`` whose steps block on the host's loop."""
     from naas_abi_sdk.jobs import is_async_callable
 
     if is_async_callable(handler):
         return handler
-    return SyncJobRunner(handler, interrupt_grace_seconds=interrupt_grace_seconds)
+    context_factory = None
+    if getattr(handler, "__abi_sync_flow__", False):
+        from naas_abi_core.module.workflows import SyncFlowContext
+
+        context_factory = SyncFlowContext
+    return SyncJobRunner(
+        handler,
+        interrupt_grace_seconds=interrupt_grace_seconds,
+        context_factory=context_factory,
+    )
 
 
 def as_engine(
@@ -54,6 +66,7 @@ def as_engine(
         with as_service_account(identity):
             return await handler(ctx)
 
+    run.__wrapped__ = handler  # type: ignore[attr-defined]
     return run
 
 
@@ -96,6 +109,10 @@ class LoopThread:
         self.thread.join(timeout=5.0)
         if not self.thread.is_alive():
             self.loop.close()
+
+
+def _is_workflow(descriptor: Any) -> bool:
+    return getattr(descriptor, "kind", "job") == "workflow"
 
 
 def _default_documents(transport: Any, module_id: str) -> Any:
@@ -209,6 +226,12 @@ class EngineJobLoader:
         self._bound: list[Any] = []
         self._loop: LoopThread | None = None
         self._transport: Any = None
+        # Documents of each module's namespace, shared by the hosts that read
+        # the runs of other modules (a workflow's children).
+        self._documents: dict[str, Any] = {}
+        # The loop, the transport and the documents are made on first use, from any
+        # thread (start, a request thread calling workflow(), a host's loop).
+        self._lock = threading.RLock()
 
     @property
     def project(self) -> str:
@@ -222,12 +245,14 @@ class EngineJobLoader:
             return
         if self.configuration is None:
             logger.warning(
-                f"Engine jobs need NATS mode; not hosting the jobs of {sorted(with_jobs)}"
+                "Engine jobs and workflows need NATS mode; not hosting those of "
+                f"{sorted(with_jobs)}"
             )
             return
         if not self.configuration.jobs.enabled:
             logger.info(
-                f"Engine jobs disabled; not hosting the jobs of {sorted(with_jobs)}"
+                "Engine jobs disabled; not hosting the jobs and workflows of "
+                f"{sorted(with_jobs)}"
             )
             return
         for module_id, module in with_jobs.items():
@@ -243,39 +268,97 @@ class EngineJobLoader:
 
         if self.iam is None:
             self.iam = _module_iam(modules)
-        self._loop = LoopThread()
+        self._ensure_loop()
         try:
             for module_id, module in with_jobs.items():
                 self._start_host(module_id, module)
         except BaseException:
             self.stop()
             raise
+        workflows = sum(
+            1 for m in with_jobs.values() for j in m.jobs if _is_workflow(j)
+        )
         logger.info(
             f"Engine jobs: hosting {sum(len(m.jobs) for m in with_jobs.values())} job(s) "
-            f"of {sorted(with_jobs)} in project {self.project!r}"
+            f"({workflows} workflow(s)) of {sorted(with_jobs)} in project {self.project!r}"
+        )
+
+    def _ensure_loop(self) -> LoopThread:
+        with self._lock:
+            if self._loop is None:
+                self._loop = LoopThread()
+            return self._loop
+
+    def _ensure_transport(self) -> Any:
+        assert self.configuration is not None
+        with self._lock:
+            if self._transport is None:
+                from naas_abi_core.engine.nats_naming import connection_name
+                from naas_abi_sdk.transport import Transport
+
+                if self.credentials is None:
+                    raise RuntimeError("Engine jobs need the engine's credentials")
+                self._transport = Transport(
+                    self.configuration.nats_url,
+                    self.credentials.token,
+                    name=connection_name("abi-engine:jobs"),
+                    # Kernel calls carry the user a job runs for in a delegation, as
+                    # the engine identity does (a job host runs for no user unless
+                    # its trigger named one).
+                    delegate=self.credentials.token_for,
+                )
+            return self._transport
+
+    def module_documents(self, module_id: str) -> Any:
+        """The documents of ``module_id``'s namespace: where its run records and
+        journals are, for a workflow reading the runs of its children."""
+        with self._lock:
+            documents = self._documents.get(module_id)
+            if documents is None:
+                documents = self.documents_factory(self._ensure_transport(), module_id)
+                self._documents[module_id] = documents
+            return documents
+
+    def workflow(
+        self,
+        module_id: str,
+        name: str,
+        *,
+        input_type: Any = None,
+        output_type: Any = None,
+    ) -> Any:
+        """A ``WorkflowProxy`` for the workflow ``name`` of any module (engine or
+        remote), on this engine's connection: ``start(input)`` or ``run(input)``.
+        Its methods are awaitable from any loop. Nothing is checked until a start:
+        an unknown workflow's runs stay QUEUED. The proxy uses this loader's loop and
+        connection, which ``stop()`` closes: do not keep it past the engine's
+        shutdown (a later call would hang or fail with "Event loop is closed")."""
+        from naas_abi_core.module.jobs import JobsNotHosted
+
+        if self.configuration is None:
+            raise JobsNotHosted("Workflows run in NATS mode")
+        from naas_abi_sdk.jobs import JobDescriptor
+        from naas_abi_sdk.workflows import WorkflowProxy
+
+        loop = self._ensure_loop()
+        return WorkflowProxy(
+            self._ensure_transport(),
+            self.project,
+            module_id,
+            JobDescriptor(name, kind="workflow"),
+            self.module_documents(module_id),
+            input_type=input_type,
+            output_type=output_type,
+            loop=loop.loop,
         )
 
     def _start_host(self, module_id: str, module: Any) -> None:
         assert self._loop is not None and self.configuration is not None
-        if self._transport is None:
-            from naas_abi_core.engine.nats_naming import connection_name
-            from naas_abi_sdk.transport import Transport
-
-            if self.credentials is None:
-                raise RuntimeError("Engine jobs need the engine's credentials")
-            self._transport = Transport(
-                self.configuration.nats_url,
-                self.credentials.token,
-                name=connection_name("abi-engine:jobs"),
-                # Kernel calls carry the user a job runs for in a delegation, as
-                # the engine identity does (a job host runs for no user unless
-                # its trigger named one).
-                delegate=self.credentials.token_for,
-            )
+        transport = self._ensure_transport()
         handlers = module._job_handlers
         host = self.host_factory(
-            self._transport,
-            self.documents_factory(self._transport, module_id),
+            transport,
+            self.module_documents(module_id),
             module_id,
             self.project,
             {
@@ -292,6 +375,7 @@ class EngineJobLoader:
                 for j in module.jobs
             },
             instance_id=f"engine-{uuid.uuid4().hex[:12]}",
+            module_documents=self.module_documents,
             **(
                 {}
                 if self.iam is None
@@ -327,9 +411,11 @@ class EngineJobLoader:
 
     def stop(self) -> None:
         """Stop every host (running jobs get their grace period), then the loop."""
-        loop, self._loop = self._loop, None
-        hosts, self.hosts = self.hosts, []
-        bound, self._bound = self._bound, []
+        with self._lock:
+            loop, self._loop = self._loop, None
+            hosts, self.hosts = self.hosts, []
+            bound, self._bound = self._bound, []
+            self._documents = {}
         for module in bound:
             module._bind_job_host(None, None)
         if loop is None:
@@ -342,7 +428,8 @@ class EngineJobLoader:
                 loop.run(host.close(), grace + 5)
             except Exception as exc:  # noqa: BLE001 - stop every host on the way out
                 logger.warning(f"Engine jobs: error stopping a job host: {exc}")
-        transport, self._transport = self._transport, None
+        with self._lock:
+            transport, self._transport = self._transport, None
         if transport is not None:
             try:
                 loop.run(transport.close(), 5)

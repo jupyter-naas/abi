@@ -96,10 +96,12 @@ REVIEWED = {
         ),
     ),
     "naas-abi-sdk/naas_abi_sdk/job_host.py": (
-        2,
+        3,
         (
-            "schedule messages carry b'{}'; the event bridge's trigger goes through "
-            "claim_check.prepare with trigger_reserve"
+            "schedule messages carry b'{}' or their trigger input (at most 4 KiB, "
+            "Cron/Every); the event bridge's trigger goes through "
+            "claim_check.prepare with trigger_reserve; completion notices are a run "
+            "id and a status"
         ),
     ),
     "naas-abi-sdk/naas_abi_sdk/broker_control.py": (

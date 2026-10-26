@@ -73,7 +73,13 @@ class TestSqlAdminAuditLog(AdminAuditLogContract):
                 operation = action.removeprefix("sysadmin.")
                 records.append(
                     AuditRecord(
-                        AdminAction(user_id, service, operation, resource_id),
+                        AdminAction(
+                            user_id or "",
+                            service,
+                            operation,
+                            resource_id,
+                            via=info.get("via", "user"),
+                        ),
                         info["phase"],
                         info.get("error", ""),
                     )
@@ -105,6 +111,21 @@ def test_rows_use_the_shared_audit_vocabulary(engine):
     assert action_name == "sysadmin.delete"
     assert not success
     assert json.loads(details) == {"phase": "failed", "error": "RuntimeError"}
+
+
+def test_a_personal_key_record_names_its_user_and_says_how_they_signed_in(engine):
+    audit = SqlAdminAuditLog(lambda: engine)
+    action = AdminAction("u1", "jobs", "cancel", "acme.flows/ingest:4", via="api_key")
+
+    asyncio.run(audit.record(AuditRecord(action, "requested")))
+
+    async def row():
+        async with engine.connect() as conn:
+            return (await conn.execute(text("SELECT user_id, details FROM audit_logs"))).one()
+
+    user_id, details = asyncio.run(row())
+    assert user_id == "u1"
+    assert json.loads(details) == {"phase": "requested", "via": "api_key"}
 
 
 def test_history_names_the_actor_and_parses_timestamps(engine):

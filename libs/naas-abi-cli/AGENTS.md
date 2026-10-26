@@ -176,11 +176,16 @@ uv run pytest libs/naas-abi-cli/naas_abi_cli/cli/new/project_test.py -v
 `scripts/cli_smoke.sh` runs the CLI for real, as a user would. CI runs it on every
 PR into `main` (`.github/workflows/cli_e2e.yml`, one job per variant). In a temp dir
 it installs the CLI from the checkout, runs `abi new project --abi-source <checkout>`,
-adds a remote module, an in-engine one, an agent and apps, runs their scaffolded
-tests, starts the project with `abi dev up -d` and waits for the API's `/docs`, the
-remote module READY in discovery, the agents and apps in Nexus, and Nexus web, then
-`abi dev down`. The `without-nats` variant does the same for a legacy project with
-one in-engine module.
+adds a remote module, an in-engine one, an agent and apps, and in the remote module a
+workflow (with job settings), a pipeline, an integration and a second ontology, runs
+their scaffolded tests, starts the project with `abi dev up -d` and waits for the API's
+`/docs`, the remote module READY in discovery with the workflow's job, the agents and
+apps in Nexus, the remote ontologies in the engine's schema graph (a SPARQL query on the
+dev Oxigraph), and Nexus web. `scripts/cli_smoke_processes.py` (run with the project's
+Python, since it needs `naas_abi_sdk`) then calls the workflow and the pipeline over NATS
+with a token for the module's own id, checks an undeclared process is refused, and runs
+the workflow as a job, then `abi dev down`. The `without-nats` variant does the same
+for a legacy project with one in-engine module.
 
 ```bash
 scripts/cli_smoke.sh                  # both variants, 5-10 minutes each
@@ -198,7 +203,9 @@ ABI_SMOKE_DIR=~/abi-smoke ABI_SMOKE_KEEP=1 scripts/cli_smoke.sh nats   # keep it
 - On failure it prints `abi dev status` and `abi dev logs` for every service and
   keeps the work dir; the logs are in `$ABI_SMOKE_DIR/logs/<variant>/` (CI uploads
   them as the `cli-smoke-logs-<variant>` artifact).
-- The checks live in `scripts/cli_smoke_checks.py` (standard library only). A new
+- The checks live in `scripts/cli_smoke_checks.py` (standard library only; it also takes
+  `--remote-jobs`, `--oxigraph`, `--ontologies` and `--ontology-class`) and
+  `scripts/cli_smoke_processes.py` (the SDK). A new
   user-facing step of the quickstart belongs in the script, and a bug it finds gets
   a unit test beside the code it fixes.
 
@@ -206,6 +213,16 @@ ABI_SMOKE_DIR=~/abi-smoke ABI_SMOKE_KEEP=1 scripts/cli_smoke.sh nats   # keep it
 
 - A template change gets a render test (`config_template_test.py`,
   `pyproject_template_test.py`, ...). Rendered TOML/YAML is parsed in the test.
+- Inside a remote module (`is_remote_module`), `abi new agent|workflow|pipeline|integration`
+  write SDK scaffolds from `templates/remote_*` (imports `naas_abi_sdk` only, a
+  `<Name>_test.py` beside each, the target folder made a package). The default path
+  is the package's `workflows/`, `pipelines/` or `integrations/` folder
+  (`component_destination`), the only folders discovery scans; an explicit path
+  elsewhere warns and prints no "builds it" promise. Elsewhere the
+  in-engine templates are unchanged. `abi new orchestration` still refuses
+  (`_REMOTE_ALTERNATIVES`). The SDK's rules for these classes (names, building,
+  `expose_workflow`) are in `libs/naas-abi-sdk/AGENTS.md`; the module template's
+  `workflows/`, `pipelines/` and `integrations/` folders each carry an `AGENTS.md`.
 - Messages tell the user the next command to run; failures raise
   `click.ClickException` with what to do, never a traceback.
 - Generated projects need Python 3.12+. A NATS project resolves the framework from

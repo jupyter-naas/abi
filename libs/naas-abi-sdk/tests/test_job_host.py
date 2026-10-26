@@ -82,15 +82,24 @@ class _Connection:
 
     max_payload = 1024 * 1024
 
+    def __init__(self):
+        self.published = []
+
+    async def publish(self, subject, data=b"", **kwargs):
+        self.published.append((subject, data))
+
 
 class _Transport:
     timeout = 1.0
+
+    def __init__(self):
+        self.connection = _Connection()
 
     async def access_token(self):
         return "token"
 
     async def connect(self):
-        return _Connection()
+        return self.connection
 
 
 def _host(documents=None, **kwargs):

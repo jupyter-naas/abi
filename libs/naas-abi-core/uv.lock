@@ -2274,7 +2274,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi-core"
-version = "3.0.1"
+version = "3.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -2456,7 +2456,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-proto"
-version = "0.1.1"
+version = "0.2.0"
 source = { editable = "../naas-abi-proto" }
 dependencies = [
     { name = "protobuf" },
@@ -2473,7 +2473,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-sdk"
-version = "0.1.1"
+version = "0.2.0"
 source = { editable = "../naas-abi-sdk" }
 dependencies = [
     { name = "naas-abi-proto" },
@@ -2503,9 +2503,10 @@ requires-dist = [
     { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.27,<2" },
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'otel'", specifier = ">=1.27,<2" },
     { name = "opentelemetry-sdk", marker = "extra == 'otel'", specifier = ">=1.27,<2" },
+    { name = "pydantic", marker = "extra == 'workflows'", specifier = ">=2,<3" },
     { name = "rdflib", marker = "extra == 'rdf'", specifier = ">=7,<8" },
 ]
-provides-extras = ["models", "agents", "rdf", "langgraph", "agent", "otel"]
+provides-extras = ["models", "agents", "rdf", "workflows", "langgraph", "agent", "otel"]
 
 [package.metadata.requires-dev]
 dev = [

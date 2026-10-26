@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogService
 from naas_abi_core.services.bus.BusService import BusService
@@ -318,6 +318,17 @@ class IEngine:
     @property
     def modules(self) -> dict[str, BaseModule]:
         return self.__modules
+
+    def workflow(
+        self,
+        module_id: str,
+        name: str,
+        *,
+        input_type: Any = None,
+        output_type: Any = None,
+    ) -> Any:
+        """A proxy for the workflow ``name`` of any module (``Engine`` implements it)."""
+        raise NotImplementedError("This engine does not run workflows")
 
     def job_owners(self) -> dict[str, object]:
         """What this engine hosts jobs for, keyed by owner id: its modules here;

@@ -37,6 +37,7 @@ constructed directly over a raw ``ITripleStorePort`` (e.g. in tests).
 
 from __future__ import annotations
 
+import re
 from collections.abc import AsyncIterator, Callable
 from functools import partial
 from typing import TypeVar
@@ -98,6 +99,40 @@ __all__ = [
 
 _RequestT = TypeVar("_RequestT", bound=Message)
 _ResponseT = TypeVar("_ResponseT", bound=Message)
+
+
+class _InvalidArgumentError(Exception):
+    """A request that is well-formed protobuf but not an acceptable call."""
+
+
+# ``module/<module_id>/<relative path>.ttl``: the key a remote module's ontology is stored
+# under in the schema graph (internal:filePath). A module id is discovery's name pattern
+# (it may hold ``.`` and ``:``, never ``/``); a path segment is plain file-name characters.
+MAX_SCHEMA_SOURCE_LENGTH = 512
+_SCHEMA_SOURCE = re.compile(
+    r"module/(?P<module_id>[A-Za-z0-9_][A-Za-z0-9_.:-]{0,255})"
+    r"/(?P<path>[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*\.ttl)"
+)
+
+
+def parse_schema_source(source: str) -> tuple[str, str]:
+    """Split a schema ``source`` into (module id, relative path).
+
+    Raises ``ValueError`` unless it is ``module/<module_id>/<relative path ending in
+    .ttl>``: bounded length, no empty, ``.`` or ``..`` segment.
+    """
+    if len(source) > MAX_SCHEMA_SOURCE_LENGTH:
+        raise ValueError(
+            f"schema source is longer than {MAX_SCHEMA_SOURCE_LENGTH} characters"
+        )
+    match = _SCHEMA_SOURCE.fullmatch(source)
+    if match is None or any(
+        segment in (".", "..") for segment in match["path"].split("/")
+    ):
+        raise ValueError(
+            "schema source must be module/<module_id>/<relative path ending in .ttl>"
+        )
+    return match["module_id"], match["path"]
 
 
 class _OperationNotSupportedError(Exception):
@@ -304,6 +339,11 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
             subject=f"{SUBJECT_PREFIX}.list_graphs",
             handler=self._handle_list_graphs,
         )
+        await service.add_endpoint(
+            name="load_schema",
+            subject=f"{SUBJECT_PREFIX}.load_schema",
+            handler=self._handle_load_schema,
+        )
         self._service = service
         await self._transfer.start(nc)
 
@@ -364,7 +404,7 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
         request: Request,
         request_cls: type[_RequestT],
         response_cls: Callable[..., _ResponseT],
-        call: Callable[[_RequestT], _ResponseT],
+        call: Callable[..., _ResponseT],
     ) -> None:
         caller = await authenticate_request(request, self._verifier, response_cls)
         if caller is None:
@@ -403,6 +443,16 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
                 authorization_error_code(exc) or "PERMISSION_DENIED",
                 str(exc),
                 retryable=False,
+            )
+            return
+        except _InvalidArgumentError as exc:
+            await self._respond_error(
+                request, response_cls, "INVALID_ARGUMENT", str(exc), retryable=False
+            )
+            return
+        except Exceptions.InvalidSchemaError as exc:
+            await self._respond_error(
+                request, response_cls, "INVALID_ARGUMENT", str(exc), retryable=False
             )
             return
         except Exceptions.SubjectNotFoundError as exc:
@@ -680,4 +730,36 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
             graph_names=triple_store_pb2.GraphNames(
                 graph_names=[str(g) for g in graph_names]
             )
+        )
+
+    async def _handle_load_schema(self, request: Request) -> None:
+        await self._handle(
+            request,
+            triple_store_pb2.LoadSchemaRequest,
+            triple_store_pb2.LoadSchemaResponse,
+            self._call_load_schema,
+        )
+
+    def _call_load_schema(
+        self, req: triple_store_pb2.LoadSchemaRequest
+    ) -> triple_store_pb2.LoadSchemaResponse:
+        """Load a module's ontology into the schema graph (decision in
+        ``triple_store/AGENTS.md``). The domain service authorizes the caller on
+        the source; nothing is written for a refused call."""
+        try:
+            parse_schema_source(req.source)
+        except ValueError as exc:
+            raise _InvalidArgumentError(str(exc)) from exc
+        load = getattr(self._adapter, "load_schema_content", None)
+        if load is None:
+            raise _OperationNotSupportedError(
+                "load_schema is only available when this primary adapter wraps the "
+                "triple store domain service (ITripleStoreService)."
+            )
+        try:
+            content = req.content_ttl.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise _InvalidArgumentError("schema content is not UTF-8") from exc
+        return triple_store_pb2.LoadSchemaResponse(
+            changed=bool(load(req.source, content))
         )

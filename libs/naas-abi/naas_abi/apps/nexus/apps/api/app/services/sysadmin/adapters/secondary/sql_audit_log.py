@@ -3,8 +3,9 @@
 Unlike ``services/audit.log_audit_event``, which swallows errors, a failed
 insert raises ``AuditUnavailable``: the domain then refuses the change.
 Rows: ``action`` = ``sysadmin.<operation>``, ``resource_type`` = the service,
-``details`` = ``{"phase": ..., "error": ..., "detail": ...}`` (the last two when
-there are any), ``success`` false when failed. The IAM admin keeps its own rows
+``details`` = ``{"phase": ..., "via": ..., "error": ..., "detail": ...}`` (all but
+the phase only when there are any; ``via`` is ``api_key`` for a user who called
+with their personal API key), ``success`` false when failed. The IAM admin keeps its own rows
 in the same table under ``iam.`` (``prefix``): one fail-closed log, two
 histories.
 """
@@ -25,6 +26,9 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import (
 from sqlalchemy import text
 
 ACTION_PREFIX = "sysadmin."
+# What history shows as the actor of a record an older release wrote for the
+# deployment's ABI_API_KEY, which had no user. Every record now names its user.
+API_KEY_ACTOR = "ABI API key"
 
 INSERT = text(
     """
@@ -66,6 +70,8 @@ class SqlAdminAuditLog:
 
     async def record(self, record: AuditRecord) -> None:
         details: dict[str, str] = {"phase": record.phase}
+        if record.action.via != "user":
+            details["via"] = record.action.via
         if record.error:
             details["error"] = record.error
         if record.action.detail:
@@ -114,7 +120,7 @@ class SqlAdminAuditLog:
                 AuditEntry(
                     at=_iso(created_at),
                     actor_id=user_id or "",
-                    actor=actor or "",
+                    actor=actor or (API_KEY_ACTOR if info.get("via") == "api_key" else ""),
                     service=service_name or "",
                     operation=action.removeprefix(self._prefix),
                     resource_id=rid or "",

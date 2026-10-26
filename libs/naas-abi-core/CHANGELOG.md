@@ -2,6 +2,64 @@
 
 <!-- version list -->
 
+## v3.1.0 (2026-10-26)
+
+### Bug Fixes
+
+- Review findings of the durable workflows task
+  ([`f2d12d8`](https://github.com/jupyter-naas/abi/commit/f2d12d8a8e61352e4f06eea466a48ac643a24a3c))
+
+- **core**: Bridge results, lazy loader creation and sync flow cancellation
+  ([`3bf7f14`](https://github.com/jupyter-naas/abi/commit/3bf7f146989c275e77cc251fc94b57ac22c8ce3c))
+
+- **remote-modules**: Close review findings on processes and ontologies
+  ([`b5312b0`](https://github.com/jupyter-naas/abi/commit/b5312b0ea30719c8a1075c499b98f0ed3efe0548))
+
+- **sdk**: Bound a process's deadline, and answer every describe and cancellation
+  ([`e42d345`](https://github.com/jupyter-naas/abi/commit/e42d345f74e3b6b8ca8a206cd9a84f256f46c1b4))
+
+- **triple-store**: A schema source never removes a triple another one asserts
+  ([`a75fe2f`](https://github.com/jupyter-naas/abi/commit/a75fe2f93be0a5e3500468e33504d375c5d0c669))
+
+- **triple-store**: Type the shared-triple check and the schema tests for mypy
+  ([`691f81d`](https://github.com/jupyter-naas/abi/commit/691f81d6cdb4fba31c90b4ab4719d6d93170a34a))
+
+- **workflows**: One result encoding for engine and SDK classes
+  ([`118b159`](https://github.com/jupyter-naas/abi/commit/118b1590f7936312f80b7c550a8769c3e4566ffc))
+
+### Documentation
+
+- Decisions in AGENTS.md instead of the removed ADR tree
+  ([`07369f6`](https://github.com/jupyter-naas/abi/commit/07369f6ade0083273ef6101c832e1b58bafb600f))
+
+### Features
+
+- **core**: Durable workflows for engine modules and the Workflow/Pipeline bridge
+  ([`605fc99`](https://github.com/jupyter-naas/abi/commit/605fc99c2a777d6af291c23aef2e4e22705d62da))
+
+- **discovery**: Declare and authorize remote workflows and pipelines
+  ([`c695729`](https://github.com/jupyter-naas/abi/commit/c695729215aa1bc644c4d30bbeff687e796fbb17))
+
+- **sdk**: Durable workflows on the jobs runtime
+  ([`479b06b`](https://github.com/jupyter-naas/abi/commit/479b06b483a909124154e5a563592e8466bc3a80))
+
+- **triple-store**: Load remote module ontologies into the schema graph
+  ([`90b1795`](https://github.com/jupyter-naas/abi/commit/90b179511f642035796cc36a4aea3ef16bcc6466))
+
+### Refactoring
+
+- **workflows**: Core's sync workflows reuse the SDK's declaration
+  ([`dcfd468`](https://github.com/jupyter-naas/abi/commit/dcfd4684a3e12ce6fa03c6b75973ae04410d2be7))
+
+- **workspace-features**: Update agent feature access and registry
+  ([`c898df7`](https://github.com/jupyter-naas/abi/commit/c898df7846fe43200d34aa8f8fb910f46df2092d))
+
+### Testing
+
+- **core**: The bridge encoding test uses no hard-coded tmp path
+  ([`82a7c1a`](https://github.com/jupyter-naas/abi/commit/82a7c1a2398c3a78d0c1b57d7ca1a35bce9e2cb4))
+
+
 ## v3.0.1 (2026-10-21)
 
 ### Bug Fixes

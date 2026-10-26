@@ -5,8 +5,9 @@ import type { TracesApi } from '../traces/traces-api';
 import { TRACE_ID, trace } from '../traces/traces-fixtures';
 import { mount, type Mounted } from '../system-render';
 import type { JobsApi } from './jobs-api';
-import { job, run } from './jobs-fixtures';
-import type { JobsOverview, RunDetail } from './jobs-types';
+import { INGEST_SCHEMA, job, run, step, workflowJob } from './jobs-fixtures';
+import type { Failure } from '../data/data-api';
+import type { JobsOverview, JobView, RunDetail, RunStep } from './jobs-types';
 import { JobsTab } from './jobs';
 
 let search = 'tab=jobs';
@@ -39,6 +40,7 @@ function fakeApi() {
       result: null,
       logs: ['fetching', 'boom'],
       trace_url: `http://jaeger/trace/${TRACE_ID}`,
+      workflow: null,
     },
   };
   const api: JobsApi = {
@@ -149,6 +151,7 @@ describe('JobsTab', () => {
       result: null,
       logs: [],
       trace_url: null,
+      workflow: null,
     };
     await new Promise((r) => setTimeout(r, 1700));
     await mounted!.flush();
@@ -214,5 +217,293 @@ describe('JobsTab failure notification', () => {
     await mounted.flush();
 
     expect(document.querySelector('[data-failures]')).toBeNull();
+  });
+});
+
+
+// --- workflows -------------------------------------------------------------------------
+
+const FLOW_RUN = run({ key: 'ops.flows/ingest:5', module_id: 'ops.flows', job: 'ingest', run_id: 'ingest:5' });
+
+function flowsApi(options: { jobs?: JobView[]; steps?: RunStep[]; result?: unknown; refuse?: Failure } = {}) {
+  const jobs = options.jobs ?? [job(), workflowJob()];
+  const steps = options.steps ?? [
+    step({ key: 'fetch', attempt: 2 }),
+    step({
+      key: 'map[0]',
+      kind: 'call',
+      child: { module_id: 'ops.flows', workflow: 'map_item', run_id: 'map_item:1', key: 'ops.flows/map_item:1' },
+    }),
+    step({ key: 'map[1]', kind: 'call', status: 'FAILED', error: 'ChildRunFailed: map_item:2 FAILED', child: null }),
+  ];
+  const details: Record<string, RunDetail> = {
+    [FLOW_RUN.key]: {
+      ...FLOW_RUN,
+      payload: { filter: 'news' },
+      result: options.result ?? { count: 2 },
+      logs: [],
+      trace_url: null,
+      workflow: { steps, truncated: false },
+    },
+    'ops.flows/map_item:1': {
+      ...run({ key: 'ops.flows/map_item:1', module_id: 'ops.flows', job: 'map_item', run_id: 'map_item:1' }),
+      payload: {},
+      result: { ok: true },
+      logs: [],
+      trace_url: null,
+      workflow: { steps: [], truncated: false },
+    },
+  };
+  const overview: JobsOverview = { project: 'zen', jobs, sources: {} };
+  const api: JobsApi = {
+    overview: vi.fn(() => ok(overview)),
+    runs: vi.fn(() => ok({ runs: [FLOW_RUN], next: null })),
+    run: vi.fn((moduleId: string, runId: string) => {
+      const found = details[`${moduleId}/${runId}`];
+      return found ? ok(found) : Promise.resolve({ ok: false as const, status: 404, reason: 'not found' });
+    }),
+    trigger: vi.fn((moduleId: string, name: string) =>
+      options.refuse ? Promise.resolve(options.refuse) : ok({ run_id: `${name}:9`, key: `${moduleId}/${name}:9` }),
+    ),
+    cancel: vi.fn(() => ok({ ok: true })),
+    failures: vi.fn(() => ok({ since: '', count: 0, more: false, runs: [] })),
+  };
+  return { api, details };
+}
+
+const dialog = () => q('[role="dialog"]') as HTMLElement;
+const field = (label: string) => dialog().querySelector(`[aria-label="${label}"]`);
+
+describe('JobsTab workflows', () => {
+  it('badges workflows and filters the table by kind', async () => {
+    const { api } = flowsApi();
+    await open(api);
+
+    const rows = () => [...document.querySelectorAll('[data-job]')].map((r) => r.getAttribute('data-job'));
+    expect(rows()).toEqual(expect.arrayContaining(['ops.flows/ingest', 'ops.reports/digest']));
+    expect(q('[data-job="ops.flows/ingest"]')?.textContent).toContain('workflow');
+    expect(q('[data-job="ops.reports/digest"]')?.textContent).not.toContain('workflow');
+    expect(text()).toContain('2 jobs (1 workflows)');
+
+    await mounted!.click(button('Workflows', q('[aria-label="Kind"]') as HTMLElement));
+    expect(rows()).toEqual(['ops.flows/ingest']);
+    expect(replace).toHaveBeenLastCalledWith(expect.stringContaining('kind=workflow'), expect.anything());
+
+    await mounted!.click(button('Jobs', q('[aria-label="Kind"]') as HTMLElement));
+    expect(rows()).toEqual(['ops.reports/digest']);
+    await mounted!.click(button('All', q('[aria-label="Kind"]') as HTMLElement));
+    expect(rows()).toHaveLength(2);
+  });
+
+  it('shows plain jobs as before when there is no workflow: no badge, no kind filter', async () => {
+    const { api } = flowsApi({ jobs: [job()] });
+    await open(api);
+
+    expect(q('[aria-label="Kind"]')).toBeNull();
+    expect(q('[data-job="ops.reports/digest"]')?.textContent).not.toContain('workflow');
+    expect(text()).toContain('1 job ·');
+  });
+
+  it('launches a workflow from a form made of its input schema', async () => {
+    const { api } = flowsApi();
+    await open(api);
+
+    await mounted!.click(q('[aria-label="Run ingest now"]'));
+    expect(dialog().textContent).toContain('durable run');
+    // Defaults come from the schema; the required field is marked.
+    expect((field('Limit') as HTMLInputElement).value).toBe('10');
+    expect((field('Dry run') as HTMLInputElement).checked).toBe(false);
+    expect((field('Mode') as HTMLSelectElement).value).toBe('fast');
+    expect(dialog().textContent).toContain('Keyword to search for');
+    expect(dialog().querySelector('[data-field="/filter"]')?.textContent).toContain('*');
+
+    await mounted!.type(field('Filter'), 'news');
+    await mounted!.type(field('Limit'), '25');
+    await mounted!.click(field('Dry run'));
+    await mounted!.click(button('Add tags', dialog()));
+    await mounted!.type(field('Tags 1'), 'news');
+    await mounted!.type(field('Days'), '7');
+    await mounted!.click(button('Run', dialog()));
+    await mounted!.flush();
+
+    expect(api.trigger).toHaveBeenCalledWith('ops.flows', 'ingest', {
+      filter: 'news',
+      limit: 25,
+      dry_run: true,
+      mode: 'fast',
+      tags: ['news'],
+      window: { days: 7 },
+    });
+    expect(q('[aria-label="Selected run"]')?.textContent).toContain('Queued');
+  });
+
+  it('checks the input before sending and shows what to fix', async () => {
+    const { api } = flowsApi();
+    await open(api);
+    await mounted!.click(q('[aria-label="Run ingest now"]'));
+
+    // Nothing is shown before an attempt.
+    expect(dialog().querySelector('.data-field-error')).toBeNull();
+    await mounted!.type(field('Limit'), '0');
+    await mounted!.click(button('Run', dialog()));
+    await mounted!.flush();
+
+    expect(api.trigger).not.toHaveBeenCalled();
+    expect(dialog().querySelector('[data-field="/filter"]')?.textContent).toContain('Required.');
+    expect(dialog().querySelector('[data-field="/limit"]')?.textContent).toContain('At least 1.');
+
+    await mounted!.type(field('Limit'), '2.5x');
+    expect(dialog().querySelector('[data-field="/limit"]')?.textContent).toContain('Enter a number.');
+    await mounted!.type(field('Limit'), '3');
+    await mounted!.type(field('Filter'), 'news');
+    expect(dialog().querySelector('.data-field-error')).toBeNull();
+    await mounted!.click(button('Run', dialog()));
+    await mounted!.flush();
+    expect(api.trigger).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the faults the API refused the input for, under their fields', async () => {
+    const refuse: Failure = {
+      ok: false,
+      status: 422,
+      reason: "The input does not match the workflow's input schema",
+      errors: [{ path: '/filter', message: "'x' is not allowed here" }],
+    };
+    const { api } = flowsApi({ refuse });
+    await open(api);
+    await mounted!.click(q('[aria-label="Run ingest now"]'));
+    await mounted!.type(field('Filter'), 'x');
+
+    await mounted!.click(button('Run', dialog()));
+    await mounted!.flush();
+
+    expect(api.trigger).toHaveBeenCalledTimes(1);
+    expect(dialog().textContent).toContain("The input does not match the workflow's input schema");
+    expect(dialog().querySelector('[data-field="/filter"]')?.textContent).toContain("'x' is not allowed here");
+
+    await mounted!.type(field('Filter'), 'xy'); // an edit clears the refusal
+    expect(dialog().textContent).not.toContain("is not allowed here");
+  });
+
+  it('goes between the form and the JSON it stands for', async () => {
+    const { api } = flowsApi();
+    await open(api);
+    await mounted!.click(q('[aria-label="Run ingest now"]'));
+    await mounted!.type(field('Filter'), 'news');
+
+    await mounted!.click(button('JSON', dialog()));
+    expect(dialog().querySelector('.sf')).toBeNull();
+    expect(button('Form', dialog())?.getAttribute('aria-selected')).toBe('false');
+
+    await mounted!.click(button('Form', dialog()));
+    expect((field('Filter') as HTMLInputElement).value).toBe('news');
+  });
+
+  it('falls back to the JSON editor when the schema has no form, and still checks it', async () => {
+    const union = workflowJob({
+      key: 'ops.flows/union',
+      name: 'union',
+      input_schema: {
+        type: 'object',
+        properties: { target: { anyOf: [{ type: 'string' }, { type: 'integer' }] } },
+        required: ['target'],
+      },
+    });
+    const { api } = flowsApi({ jobs: [union] });
+    await open(api);
+
+    await mounted!.click(q('[aria-label="Run union now"]'));
+
+    expect(dialog().textContent).toContain('no generated form');
+    expect(dialog().querySelector('[aria-label="Input editor"]')).toBeNull();
+    expect(dialog().querySelector('.sf')).toBeNull();
+    await mounted!.click(button('Run', dialog())); // the default {} lacks the required target
+    await mounted!.flush();
+    expect(api.trigger).not.toHaveBeenCalled();
+    expect(dialog().querySelector('[aria-label="Problems with the input"]')?.textContent).toContain('target');
+  });
+
+  it('keeps the plain trigger dialog for a job: payload editor, no form', async () => {
+    const { api } = flowsApi();
+    await open(api);
+
+    await mounted!.click(q('[aria-label="Run digest now"]'));
+
+    expect(dialog().textContent).toContain('ctx.payload');
+    expect(dialog().querySelector('[aria-label="Input editor"]')).toBeNull();
+    await mounted!.click(button('Run', dialog()));
+    await mounted!.flush();
+    expect(api.trigger).toHaveBeenCalledWith('ops.reports', 'digest', {});
+  });
+
+  it('re-runs a workflow with the earlier input in the form', async () => {
+    const { api } = flowsApi();
+    search = 'tab=jobs&run=ops.flows%2Fingest%3A5';
+    await open(api);
+
+    await mounted!.click(button('Re-run', q('[aria-label="Selected run"]') as HTMLElement));
+
+    expect(dialog().textContent).toContain('Run ingest again');
+    expect((field('Filter') as HTMLInputElement).value).toBe('news');
+  });
+
+  it('shows a workflow run as a step timeline with attempts, errors and links to child runs', async () => {
+    const { api } = flowsApi();
+    search = 'tab=jobs&run=ops.flows%2Fingest%3A5';
+    await open(api);
+
+    const panel = () => q('[aria-label="Selected run"]') as HTMLElement;
+    expect([...panel().querySelectorAll('[data-step]')].map((r) => r.getAttribute('data-step'))).toEqual([
+      'fetch',
+      'map[0]',
+      'map[1]',
+    ]);
+    expect(button('Steps3', panel())).not.toBeNull();
+    expect(panel().querySelector('[data-step="fetch"]')?.textContent).toContain('attempt 2');
+    expect(panel().querySelector('[data-step="fetch"]')?.textContent).toContain('+0 ms · 1.0 s');
+    expect(panel().querySelector('[data-step="map[0]"]')?.textContent).toContain('call');
+    expect(panel().querySelector('[data-step="map[1]"]')?.textContent).toContain('ChildRunFailed: map_item:2 FAILED');
+    expect(panel().querySelector('[data-step="map[1]"]')?.textContent).toContain('Failed');
+    expect(button('Payload', panel())).toBeNull(); // a workflow's payload is its input
+    expect(button('Input', panel())).not.toBeNull();
+
+    // A child link opens the child run.
+    const link = [...panel().querySelectorAll('[data-step="map[0]"] button')].find((b) => b.textContent?.includes('map_item'));
+    await mounted!.click(link ?? null);
+    await mounted!.flush();
+    expect(api.run).toHaveBeenCalledWith('ops.flows', 'map_item:1');
+    expect(replace).toHaveBeenLastCalledWith(expect.stringContaining('run=ops.flows%2Fmap_item%3A1'), expect.anything());
+  });
+
+  it('says so when a workflow run has no steps yet', async () => {
+    const { api } = flowsApi({ steps: [] });
+    search = 'tab=jobs&run=ops.flows%2Fingest%3A5';
+    await open(api);
+
+    expect(q('[aria-label="Selected run"]')?.textContent).toContain('No steps yet');
+  });
+
+  it('shows the start of a result the API cut, and what to do about it', async () => {
+    const { api } = flowsApi({ result: { truncated: true, bytes: 40_000, preview: '{"rows": ["aaa' } });
+    search = 'tab=jobs&run=ops.flows%2Fingest%3A5';
+    await open(api);
+
+    const panel = () => q('[aria-label="Selected run"]') as HTMLElement;
+    await mounted!.click(button('Result', panel()));
+
+    expect(panel().textContent).toContain('The result is 39 KB');
+    expect(panel().textContent).toContain('object storage');
+    expect(panel().textContent).toContain('{"rows": ["aaa');
+  });
+
+  it('gives a plain job run no steps tab', async () => {
+    const { api, details } = fakeApi();
+    details['ops.billing/sync:4'] = { ...details['ops.billing/sync:4'], workflow: null };
+    search = 'tab=jobs&run=ops.billing%2Fsync%3A4';
+    await open(api);
+
+    const panel = q('[aria-label="Selected run"]') as HTMLElement;
+    expect([...panel.querySelectorAll('[role="tab"]')].map((t) => t.textContent)).toEqual(['Logs2', 'Payload', 'Output', 'Trace']);
+    expect(panel.textContent).toContain('boom'); // the logs, as before
   });
 });

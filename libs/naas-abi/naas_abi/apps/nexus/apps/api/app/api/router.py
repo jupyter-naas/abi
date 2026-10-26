@@ -76,6 +76,9 @@ from naas_abi.apps.nexus.apps.api.app.services.sheets.handlers import router as 
 from naas_abi.apps.nexus.apps.api.app.services.skills.handlers import router as skills_router
 from naas_abi.apps.nexus.apps.api.app.services.slides.handlers import router as slides_router
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.handlers import router as sysadmin_router
+from naas_abi.apps.nexus.apps.api.app.services.workflows.handlers import (
+    router as workflows_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.handlers import (
     router as workspaces_router,
 )
@@ -136,3 +139,4 @@ api_router.include_router(speech.router, prefix="/speech", tags=["speech"])
 api_router.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(sysadmin_router, prefix="/admin/system", tags=["sysadmin"])
+api_router.include_router(workflows_router, prefix="/workflows", tags=["workflows"])

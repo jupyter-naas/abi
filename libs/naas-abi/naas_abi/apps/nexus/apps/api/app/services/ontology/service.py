@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import shutil
@@ -14,6 +15,7 @@ from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
     ontology_matches_seed,
 )
 from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import (
+    OntologyExportData,
     OntologyFileItemData,
     OntologyItemData,
     OntologyOverviewAggregateStatsData,
@@ -32,6 +34,15 @@ from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import 
 from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology_imports import (
     clear_catalog_import_caches,
     load_catalog_import_graph,
+)
+from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology_source import (
+    RemoteOntologyReader,
+    content_version,
+    install_reader,
+    is_remote_id,
+    load_remote_graph,
+    parse_remote_graph,
+    parse_remote_id,
 )
 from naas_abi_core import logger
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
@@ -76,6 +87,9 @@ def clear_graph_caches() -> None:
 
 
 def _load_ontology_graph(ontology_path: str, add_imports: bool = False) -> Graph:
+    if is_remote_id(ontology_path):
+        # A remote id is a key of the schema graph, never a file to open.
+        return load_remote_graph(ontology_path)
     extension = Path(ontology_path).suffix.lower()
     parse_format = {
         ".ttl": "turtle",
@@ -723,6 +737,13 @@ class OntologyService:
         self._abi_module_getter = abi_module_getter
         # In-memory storage (replace with persistence later)
         self._ontology_items: list[OntologyItemData] = []
+        # Remote modules' ontologies live in the schema graph of the engine's
+        # triple store; the module-level graph loaders read them through this.
+        self._remote = RemoteOntologyReader(self._get_triple_store)
+        install_reader(self._remote)
+        # The listing row of each remote file, by id, for the content it was
+        # built from: a file nobody changed is not parsed again.
+        self._remote_items: dict[str, tuple[tuple[int, int], OntologyFileItemData | None]] = {}
 
     # ── Internal ──────────────────────────────────────────────────────────────
 
@@ -762,6 +783,8 @@ class OntologyService:
 
     async def clear_cache(self, catalog_refs: list[str] | None = None) -> None:
         """Workspace refresh only invalidates permission-keyed graph snapshots."""
+        self._remote.clear()
+        self._remote_items = {}
         if catalog_refs is not None:
             clear_catalog_import_caches()
         else:
@@ -837,6 +860,9 @@ class OntologyService:
         """
         files = await self.list_ontology_files(catalog_refs=catalog_refs)
         if path not in {file.path for file in files}:
+            return []
+        if is_remote_id(path):
+            # The slice files of a remote module stay in the module.
             return []
         try:
             content = Path(path).read_text(encoding="utf-8")
@@ -1000,6 +1026,83 @@ class OntologyService:
                 )
         return sorted(by_iri.values(), key=lambda item: item.name.lower())
 
+    @staticmethod
+    def _file_item(graph: Graph, path: str, module_name: str) -> OntologyFileItemData | None:
+        """The catalog row of an ontology graph, or None without an ``owl:Ontology``."""
+        ontology_uri = next(graph.subjects(RDF.type, OWL.Ontology), None)
+        if ontology_uri is None:
+            return None
+        subject = URIRef(str(ontology_uri))
+        title = graph.value(subject, DCTERMS.title)
+        label = graph.value(subject, RDFS.label)
+        description = graph.value(subject, DCTERMS.description)
+        license_val = graph.value(subject, DCTERMS.license)
+        contributors = list(graph.objects(subject, DCTERMS.contributor))
+        date = graph.value(subject, DCTERMS.date)
+        imports = list(graph.objects(subject, OWL.imports))
+        return OntologyFileItemData(
+            name=str(title) if title else str(label),
+            description=str(description) if description else None,
+            license=str(license_val) if license_val else None,
+            contributors=[str(c) for c in contributors],
+            date=str(date) if date else None,
+            path=path,
+            module_name=module_name,
+            submodule_name=None,
+            imports=[str(i) for i in imports],
+        )
+
+    def _list_remote_ontology_files(
+        self, catalog_refs: list[str] | None
+    ) -> list[OntologyFileItemData]:
+        """Ontologies remote modules pushed to the engine's schema graph.
+
+        Same filters as the in-engine files: an ``owl:Ontology`` is required and
+        ``sandbox`` and ``processes`` slices are skipped. ``module_name`` is the
+        remote module id. The schema graph being unreachable never hides the
+        in-engine ontologies.
+        """
+        try:
+            files = self._remote.files()
+        except Exception as exc:
+            logger.warning(f"Could not list remote module ontologies: {exc}")
+            return []
+        known = self._remote_items
+        current: dict[str, tuple[tuple[int, int], OntologyFileItemData | None]] = {}
+        items: list[OntologyFileItemData] = []
+        for source, text in files:
+            parsed = parse_remote_id(source)
+            if parsed is None:
+                continue
+            module_id, relative = parsed
+            folders = {part.lower() for part in relative.split("/")}
+            if "sandbox" in relative.lower() or "processes" in folders:
+                continue
+            if catalog_refs is not None and not ontology_matches_seed(
+                source, module_id, catalog_refs
+            ):
+                continue
+            version = content_version(text)
+            cached = known.get(source)
+            if cached is not None and cached[0] == version:
+                item = cached[1]
+            else:
+                try:
+                    item = self._file_item(parse_remote_graph(source, text), source, module_id)
+                except Exception as exc:
+                    logger.warning(f"Skipping unreadable remote ontology {source}: {exc}")
+                    continue
+            current[source] = (version, item)
+            if item is not None:
+                items.append(item)
+        # Rows a seed filter skipped this time stay; those of removed files go.
+        present = {source for source, _ in files}
+        self._remote_items = {
+            **{source: row for source, row in known.items() if source in present},
+            **current,
+        }
+        return items
+
     async def list_ontology_files(
         self, catalog_refs: list[str] | None = None
     ) -> list[OntologyFileItemData]:
@@ -1019,6 +1122,11 @@ class OntologyService:
                 if ontology in seen:
                     continue
                 seen.add(ontology)
+
+                # An in-engine path is a file. What looks like a remote id is
+                # never opened as one: remote files are listed below.
+                if is_remote_id(ontology):
+                    continue
 
                 # Only ontologies are listed: any ontologies/**/*.ttl declaring
                 # owl:Ontology (checked below), except process slices. Slices are
@@ -1052,34 +1160,14 @@ class OntologyService:
                     logger.warning(f"Skipping unreadable ontology file {ontology}: {exc}")
                     continue
 
-                ontology_uri = next(ontology_graph.subjects(RDF.type, OWL.Ontology), None)
-                if ontology_uri is None:
-                    continue
+                item = self._file_item(ontology_graph, ontology, module_name.replace("_", " "))
+                if item is not None:
+                    ontology_files.append(item)
 
-                title = ontology_graph.value(URIRef(str(ontology_uri)), DCTERMS.title)
-                label = ontology_graph.value(URIRef(str(ontology_uri)), RDFS.label)
-                description = ontology_graph.value(URIRef(str(ontology_uri)), DCTERMS.description)
-                license_val = ontology_graph.value(URIRef(str(ontology_uri)), DCTERMS.license)
-                contributors = list(
-                    ontology_graph.objects(URIRef(str(ontology_uri)), DCTERMS.contributor)
-                )
-                date = ontology_graph.value(URIRef(str(ontology_uri)), DCTERMS.date)
-                imports = list(ontology_graph.objects(URIRef(str(ontology_uri)), OWL.imports))
-
-                ontology_files.append(
-                    OntologyFileItemData(
-                        name=str(title) if title else str(label),
-                        description=str(description) if description else None,
-                        license=str(license_val) if license_val else None,
-                        contributors=[str(c) for c in contributors],
-                        date=str(date) if date else None,
-                        path=ontology,
-                        module_name=module_name.replace("_", " "),
-                        submodule_name=None,
-                        imports=[str(i) for i in imports],
-                    )
-                )
-
+            # Blocking triple store reads and Turtle parsing: off the event loop.
+            ontology_files.extend(
+                await asyncio.to_thread(self._list_remote_ontology_files, catalog_refs)
+            )
             ontology_files.sort(key=lambda item: (item.module_name.lower(), item.name.lower()))
             return filter_ontology_catalog(ontology_files, catalog_refs)
         except OntologyServiceUnavailableError:
@@ -1908,11 +1996,25 @@ class OntologyService:
             raise OntologyParseError("Failed to parse ontology file") from exc
 
     async def export_ontology_file(self, ontology_path: str) -> Path:
+        """The file of an in-engine ontology. A remote id is not a file."""
         path = Path(ontology_path)
-        if not path.exists() or not path.is_file():
+        if is_remote_id(ontology_path) or not path.exists() or not path.is_file():
             from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import (
                 OntologyFileNotFoundError,
             )
 
             raise OntologyFileNotFoundError("Ontology file does not exist")
         return path
+
+    async def export_ontology(self, ontology_path: str) -> OntologyExportData:
+        """An ontology to download, whichever kind: a file, or a remote text."""
+        if not is_remote_id(ontology_path):
+            path = await self.export_ontology_file(ontology_path)
+            return OntologyExportData(filename=path.name, path=path)
+        try:
+            text = self._remote.read(ontology_path)
+        except OntologyPathNotFoundError:
+            raise
+        except Exception as exc:
+            raise OntologyServiceUnavailableError("Failed to read the remote ontology") from exc
+        return OntologyExportData(filename=Path(ontology_path).name, content=text.encode("utf-8"))

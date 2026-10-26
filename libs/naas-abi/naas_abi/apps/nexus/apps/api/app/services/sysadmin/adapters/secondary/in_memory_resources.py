@@ -120,7 +120,10 @@ class InMemoryAuditLog:
             AuditEntry(
                 at=at,
                 actor_id=r.action.actor_id,
-                actor=self.actors.get(r.action.actor_id, r.action.actor_id),
+                actor=self.actors.get(
+                    r.action.actor_id,
+                    r.action.actor_id or ("ABI API key" if r.action.via == "api_key" else ""),
+                ),
                 service=r.action.service,
                 operation=r.action.operation,
                 resource_id=r.action.resource_id,

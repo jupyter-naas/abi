@@ -65,17 +65,9 @@ def _default_run_config() -> dict:
 
 def _run_media_batch() -> dict:
     from naas_abi_marketplace.applications.x import ABIModule
-    from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.media_worker import (
-        process_pending_media_batch,
-    )
+    from naas_abi_marketplace.applications.x.flows.maintenance import run_media_batch
 
-    module = ABIModule.get_instance()
-    app_cfg = getattr(module.configuration, "app", None)
-    dataset_cfg = getattr(app_cfg, "dataset", None) if app_cfg else None
-    batch = int(getattr(dataset_cfg, "media_batch_size", 4) or 4)
-    result = process_pending_media_batch(module, limit=batch)
-    logger.info(f"XBuildAppOrchestration: media batch — {result}")
-    return result
+    return run_media_batch(ABIModule.get_instance())
 
 
 class XBuildAppOrchestration(DagsterOrchestration):

@@ -116,9 +116,9 @@ def find_project(start: Path) -> Project | None:
 _NON_PACKAGE_LEVELS = 3
 
 
-def is_remote_module(path: Path) -> bool:
-    """Whether ``path`` lies in a remote module: a package whose ``__init__.py``
-    (it, or a parent package's) builds on ``naas_abi_sdk``."""
+def module_package_root(path: Path) -> Path | None:
+    """The package of the remote module ``path`` lies in: the nearest folder, from
+    ``path`` up, whose ``__init__.py`` builds on ``naas_abi_sdk``."""
     folder = path
     while not folder.exists() and folder != folder.parent:
         folder = folder.parent
@@ -128,19 +128,20 @@ def is_remote_module(path: Path) -> bool:
         folder = folder.parent
     while (folder / "__init__.py").is_file():
         if "naas_abi_sdk" in (folder / "__init__.py").read_text(encoding="utf-8"):
-            return True
+            return folder
         folder = folder.parent
-    return False
+    return None
 
 
-# What a remote module does instead of the in-engine scaffolds (naas_abi_core).
+def is_remote_module(path: Path) -> bool:
+    """Whether ``path`` lies in a remote module: a package whose ``__init__.py``
+    (it, or a parent package's) builds on ``naas_abi_sdk``."""
+    return module_package_root(path) is not None
+
+
+# What a remote module does instead of the in-engine scaffolds that stay
+# refused (naas_abi_core). Workflows, pipelines and integrations have SDK ones.
 _REMOTE_ALTERNATIVES = {
-    "workflow": "put the logic in a plain async function and call it from an "
-    "agent tool or a @job on ABIModule",
-    "pipeline": "put the logic in a plain async function, write through "
-    "self.engine.services.triple_store, and run it from a @job on ABIModule",
-    "integration": "call the third-party API from plain Python (httpx, "
-    "requests) in the module, with its credentials from self.engine.services.secret",
     "orchestration": "declare a @job on ABIModule with Every/Cron/OnEvent "
     "triggers: remote modules schedule work on JetStream, not Dagster",
 }
@@ -159,6 +160,45 @@ def refuse_in_remote_module(scaffold: str, path: str) -> None:
             f"`abi new {scaffold}` scaffolds naas_abi_core code it cannot "
             f"import. Instead, {_REMOTE_ALTERNATIVES[scaffold]}. Or create an "
             "in-engine module: `abi new module <name> --in-engine`."
+        )
+
+
+def component_destination(path: str, folder: str, noun: str) -> tuple[str, bool]:
+    """Where ``abi new <noun>`` writes in a remote module, and whether discovery
+    finds it there.
+
+    The module serves what is under ``<package>/<folder>/`` only. The default
+    path (``.``) therefore means that folder, unless the working directory is in
+    it already. An explicit path elsewhere is kept, with a warning.
+    """
+    target = target_dir(path)
+    root = module_package_root(target)
+    if root is None:
+        return path, False
+    inside = root.resolve() / folder
+    resolved = target.resolve()
+    if resolved == inside or inside in resolved.parents:
+        return path, True
+    if path == ".":
+        return str(inside), True
+    click.echo(
+        f"Warning: {resolved} is not under {folder}/ of the module package "
+        f"({inside}), the only place the module looks for {noun}s: it will not be "
+        f"built or served there. Move it into {folder}/.",
+        err=True,
+    )
+    return path, False
+
+
+def ensure_package(folder: Path) -> None:
+    """Make ``folder`` a package: a scaffold's test imports its component
+    relatively, and discovery imports the component by its dotted name."""
+    folder.mkdir(parents=True, exist_ok=True)
+    init = folder / "__init__.py"
+    if not init.exists():
+        # Path(".") has no name: write an empty marker then.
+        init.write_text(
+            f'"""{folder.name}"""\n' if folder.name else "", encoding="utf-8"
         )
 
 

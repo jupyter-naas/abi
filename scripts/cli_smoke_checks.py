@@ -7,7 +7,10 @@ does not pass in time fails the run with what it saw last.
     python3 scripts/cli_smoke_checks.py --api http://localhost:10437 \
         --web http://localhost:12558 --mail-dir storage/email \
         --remote-module smoke.research:Research --agents Research,Analyst \
-        --apps remote/smoke.research:board,legacy:reports
+        --apps remote/smoke.research:board,legacy:reports \
+        --remote-jobs workflow.digest_workflow \
+        --oxigraph http://localhost:7878 \
+        --ontologies module/smoke.research/modules/ResearchOntology.ttl
 """
 
 from __future__ import annotations
@@ -28,6 +31,8 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
+SCHEMA_GRAPH = "http://ontology.naas.ai/graph/schema"
+INTERNAL = "http://triple-store.internal#"
 ADMIN_EMAIL = "admin@example.com"
 CSRF_HEADER = "X-CSRF-Token"
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
@@ -200,6 +205,26 @@ def wait(name: str, deadline: float, check: Callable[[], str]) -> None:
         time.sleep(3)
 
 
+def sparql(endpoint: str, query: str) -> dict[str, Any]:
+    """Run ``query`` on a SPARQL endpoint (the dev Oxigraph) and parse its JSON."""
+    req = urllib.request.Request(
+        f"{endpoint.rstrip('/')}/query",
+        data=query.encode(),
+        method="POST",
+        headers={
+            "Content-Type": "application/sparql-query",
+            "Accept": "application/sparql-results+json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as response:
+            return json.loads(response.read())
+    except urllib.error.HTTPError as exc:
+        raise NotYet(f"{endpoint}: HTTP {exc.code} {exc.read()[:300]!r}") from exc
+    except (urllib.error.URLError, OSError) as exc:
+        raise NotYet(f"{endpoint}: {exc}") from exc
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--api", required=True, help="API base URL")
@@ -214,6 +239,25 @@ def main() -> None:
         "--remote-module",
         default="",
         help="<module_id>:<agent> that discovery must list READY",
+    )
+    parser.add_argument(
+        "--remote-jobs",
+        default="",
+        help="comma-separated job names the remote module must list",
+    )
+    parser.add_argument(
+        "--oxigraph", default="", help="the triple store's SPARQL base URL"
+    )
+    parser.add_argument(
+        "--ontologies",
+        default="",
+        help="comma-separated schema sources (module/<id>/<path>) the engine's "
+        "schema graph must hold, with their triples",
+    )
+    parser.add_argument(
+        "--ontology-class",
+        default="",
+        help="an IRI that the sent ontologies declare as an owl:Class",
     )
     parser.add_argument("--agents", default="", help="comma-separated agent names")
     parser.add_argument("--apps", default="", help="comma-separated app ids")
@@ -264,6 +308,7 @@ def main() -> None:
 
     if args.remote_module:
         module_id, _, agent = args.remote_module.partition(":")
+        remote_jobs = [job for job in args.remote_jobs.split(",") if job]
 
         def discovered() -> str:
             modules = get_json(f"{api}/api/admin/system/modules", session=session)
@@ -273,9 +318,49 @@ def main() -> None:
                 raise NotYet(f"discovery lists {seen or 'no remote module'}")
             if agent not in module.get("agents", []):
                 raise NotYet(f"{module_id} serves {module.get('agents')}")
-            return f"{module_id} READY, serving {agent}"
+            jobs = {job["name"] for job in module.get("jobs", [])}
+            missing = [job for job in remote_jobs if job not in jobs]
+            if missing:
+                raise NotYet(
+                    f"{module_id} lists the jobs {sorted(jobs)}, not {missing}"
+                )
+            return f"{module_id} READY, serving {agent}" + (
+                f", jobs {', '.join(remote_jobs)}" if remote_jobs else ""
+            )
 
         wait("remote module in discovery", deadline, discovered)
+
+    sources = [source for source in args.ontologies.split(",") if source]
+    if sources:
+        if not args.oxigraph:
+            sys.exit("FAIL  --ontologies needs --oxigraph")
+
+        def schema_graph() -> str:
+            # What the engine's triple store holds, not what Nexus lists: the
+            # catalog shows a workspace only the ontologies it enables.
+            found = sparql(
+                args.oxigraph,
+                f"SELECT ?path WHERE {{ GRAPH <{SCHEMA_GRAPH}> {{ "
+                f"?s a <{INTERNAL}Schema> ; <{INTERNAL}filePath> ?path }} }}",
+            )
+            paths = {row["path"]["value"] for row in found["results"]["bindings"]}
+            missing = [source for source in sources if source not in paths]
+            if missing:
+                raise NotYet(
+                    f"missing {missing} among "
+                    f"{sorted(p for p in paths if p.startswith('module/'))}"
+                )
+            if args.ontology_class:
+                declared = sparql(
+                    args.oxigraph,
+                    f"ASK {{ GRAPH <{SCHEMA_GRAPH}> {{ <{args.ontology_class}> a "
+                    "<http://www.w3.org/2002/07/owl#Class> } }",
+                )
+                if not declared.get("boolean"):
+                    raise NotYet(f"the schema graph has no class {args.ontology_class}")
+            return ", ".join(sources)
+
+        wait("remote ontologies in the schema graph", deadline, schema_graph)
 
     agents = [name for name in args.agents.split(",") if name]
     if agents:

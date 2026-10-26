@@ -29,6 +29,10 @@ DEPENDENCIES = ModuleDependencies(services=(*OPERATIONS, "bus"))
 # Bus topics have no default: the manifest names the ones this module uses.
 BUS_TOPICS = ("demo.inbox", "demo.reply", "demo.jobs", "demo.outbox")
 
+# The identity the demo engine issues the worker's token for (engine_host): a module
+# loads schemas only under module/<its own identity>/.
+TOKEN_IDENTITY = "standalone-demo"
+
 
 class ABIModule(BaseModule):
     module_id = "standalone-demo"
@@ -604,6 +608,25 @@ class ABIModule(BaseModule):
             graph
             not in (await self.call(domain, "list_graphs")).graph_names.graph_names
         )
+        # A module's ontology: stored once, nothing written for the same content, and
+        # refused under another module's id or when it is not Turtle.
+        source = f"module/{TOKEN_IDENTITY}/demo.ttl"
+        ontology = b"<urn:demo:Thing> a <http://www.w3.org/2002/07/owl#Class> .\n"
+        load = {"source": source, "content_ttl": ontology}
+        assert (await self.call(domain, "load_schema", **load)).changed
+        assert not (await self.call(domain, "load_schema", **load)).changed
+        for refused, code, content in (
+            ("module/another-module/demo.ttl", "PERMISSION_DENIED", ontology),
+            (source, "INVALID_ARGUMENT", b"this is not turtle"),
+        ):
+            try:
+                await self.call(
+                    domain, "load_schema", source=refused, content_ttl=content
+                )
+            except RPCError as exc:
+                assert exc.code == code, exc
+            else:
+                raise AssertionError(f"load_schema of {refused} was not refused")
 
     async def bus(self):
         # Prove both directions against the engine, not a worker-only loopback.

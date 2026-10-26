@@ -609,6 +609,7 @@ The optional catch-all `[[...slug]]/page.tsx` re-exports the thread module so al
 
 `/workspace/[id]/admin/system` (dock entry "System", visible when `is_superadmin`). Tabs: Overview, Services, Data, Jobs, Agents, Modules, Access, NATS, Live traffic, Traces; the tab is the `?tab=` query. Live traffic is an SSE stream read with raw `fetch` and `getAuthHeader()` (like chat), started and stopped by the user.
 
+- Workflows REST: `apps/api/app/services/workflows/` (see its `AGENTS.md`), mounted at `/api/workflows`, for platform admins, signed in or with their personal API key (`require_superadmin`, decided by IAM).
 - API: `apps/api/app/services/sysadmin/` (hexagonal, see its `AGENTS.md`), mounted at `/api/admin/system/*` behind `require_superadmin` on the router. `main_public_routes_test.py` fails if a route there loses it.
 - Web: `apps/web/src/app/workspace/[workspaceId]/admin/system/`, the three-file route convention plus colocated modules (`system-api.ts`, `system-model.ts`, one component per tab) and jsdom render tests. Views poll every 10 s while visible; the footer Refresh reloads the active tab.
 - Data tab: `admin/system/data/`, a three-pane explorer (service rail, browser, inspector) over `/api/admin/system/resources`.
@@ -619,9 +620,11 @@ The optional catch-all `[[...slug]]/page.tsx` re-exports the thread module so al
   - Tests: `data/*.test.ts` (shell flows with an in-memory API), `data/viewers/*.test.ts`, `data/services/*.test.ts(x)`.
 - Jobs tab: `admin/system/jobs/` over `/api/admin/system/jobs`, a Dagster-like view of module jobs (engine and remote).
   - Jobs list: failing and running first, schedules in plain words with a live next tick, a strip of the last 20 runs, and queue depth.
-  - Job page: triggers, health (success rate, average duration), queue, settings, its runs.
+  - Job page: triggers (with a schedule's input), health (success rate, average duration), queue, settings, its runs; a workflow's input and output schemas.
+  - Workflows (`kind: "workflow"`) show a "workflow" badge and, once any exists, an All / Jobs / Workflows filter (`?kind=`). Plain jobs render as before.
+  - Run now and Re-run on a workflow open a form generated from its input schema (`schema-form.ts` builds the fields and validates, `schema-fields.tsx` renders): strings, numbers, integers, booleans, enums, lists of those and nested objects, with `$ref` to the schema's `$defs` and pydantic's optional wrappers followed. A schema with anything else (unions, lists of objects, free-form objects) gets the JSON editor only; the editor is also a tab beside the form. The input is checked in the browser before sending, and the API's own 422 faults show under their fields.
   - Run feed with status filters.
-  - Run inspector: a trigger → start → finish timeline with the wait before start, the error, logs (`ctx.log`), payload, result, and the run's trace (the Traces waterfall, embedded).
+  - Run inspector: a trigger → start → finish timeline with the wait before start, the error, logs (`ctx.log`), payload, result, and the run's trace (the Traces waterfall, embedded). A workflow run opens on a **Steps** tab (`run-steps.tsx`): each step's status, attempt, start offset and duration on one time axis, its error, and a link to the child run a `call` step started. A result the API cut for display says so.
   - Run now, Re-run and Cancel are audited by the API. It reuses the Data tab's atoms, viewers, modal and toasts (`../data/`) and polls only while visible: 5 s, or 1.5 s for a live run.
 - Access tab: `admin/system/access/` over `/api/iam/admin` (API: `apps/api/app/services/iam_admin/`, see its `AGENTS.md`), the platform's permissions as IAM decides them for the signed-in user.
   - Sub-views, shown only when `GET /access` says the caller may list them: Policies (list; visual statement editor with action and resource autocomplete from the catalogs; YAML/JSON view; IAM's validation errors as the user types), Attachments, Groups (members, IdP group-claim mapping), Service accounts (keys created, revoked and rotated; a key's value is shown once, in component state only), Module approvals (approve as submitted, narrow or reject: `approvals/narrow-model.ts`), Simulator (`iam:Explain`, names the deciding statement) and Audit.
@@ -636,6 +639,16 @@ The optional catch-all `[[...slug]]/page.tsx` re-exports the thread module so al
   - Deep links: `?tab=traces&trace=<id>&span=<id>`. Live traffic trace ids and the Jobs run inspector open here (`TraceView` is embeddable with `compact`); Jaeger stays a secondary link when `ui_url` is set.
   - Pure helpers (tree, self time, ticks, placement, filters) live in `traces-model.ts`; tests in `traces/*.test.ts` with `traces-fixtures.ts`.
 - A source that is down (NATS mode off, discovery not configured, `nats.monitoring_url` unset or unreachable) never fails a whole view: the API returns the others plus a reason, or a 503 `{source, reason}` for NATS-only views, and the page shows that reason.
+
+## Ontology catalog: in-engine and remote ontologies
+
+`apps/api/app/services/ontology/` lists an ontology by its `path`, one opaque string the web app passes back on every call. It is either a file on disk (in-engine modules, from `module.ontologies`) or a **remote id** `module/<module_id>/<path relative to ontologies/>`, the key a remote module's file has in the engine's schema graph (`http://ontology.naas.ai/graph/schema`, an `internal:Schema` with base64 `internal:content`).
+
+- `ontology_source.py` owns the remote side: `parse_remote_id` (rejects `..`, `.`, empty segments, backslashes, control characters), `RemoteOntologyReader` (reads the schema graph through the engine's triple store service; `files()` reads every remote text in one query for the listing, and each text is cached 30 s, at most 64 texts) and `load_remote_graph`. `_load_ontology_graph` and the import resolver (`ontology_imports.py`) dispatch on it: a `module/` path is **never opened as a file**, so a remote id cannot read the disk. An in-engine path that starts with `module/` is skipped.
+- `list_ontology_files` adds the remote files with the in-engine filters (`owl:Ontology` required, `sandbox` and `processes` skipped); `module_name` is the remote module id, so a catalog ref `acme.reports:ReportsOntology.ttl` matches. A remote id matches a workspace allowlist only by its full id or `<module_id>:<file>` (`ontology_catalog_aliases`): never by the bare file name or a path suffix, which any module could reproduce and so enter a workspace that enabled another module's file. The listing runs off the event loop (`asyncio.to_thread`) and keeps each file's row per content version, so an unchanged file is not parsed again. An unreachable schema graph never hides the in-engine files.
+- Export: `export_ontology` returns a file (in-engine) or the stored text (remote); the `/export` route answers either as an attachment. `process_slices` is empty for a remote file (its slice files stay in the module).
+- A change a module pushes shows within the cache TTL (or at once after `POST /cache/clear`). Files a module later removes stay listed: nothing unloads them.
+- Tests: `ontology_remote_test.py` (fake schema graph, listing, stats, export, traversal, cache bounds).
 
 ## Mobile list-detail pattern
 
