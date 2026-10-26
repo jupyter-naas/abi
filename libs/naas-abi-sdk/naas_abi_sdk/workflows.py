@@ -29,6 +29,7 @@ import contextlib
 import inspect
 import json
 import logging
+import re
 import time
 import typing
 from collections.abc import Awaitable, Callable, Iterable
@@ -1309,6 +1310,51 @@ class WorkflowProxy:
         """``start``, wait, and return the output; ``timeout`` bounds the wait
         (``asyncio.TimeoutError``; the run goes on)."""
         return await (await self.start(input)).result(timeout=timeout)
+
+    def as_tools(self) -> list[Any]:
+        """One LangChain tool that runs this workflow and returns its output (as
+        JSON): named after it (``workflow.greet_workflow`` is ``greet_workflow``),
+        described by its descriptor, its arguments the input schema. Create it
+        inside the running module, as ``agent_tools`` does: a sync call runs on
+        the loop the tool was created on. Needs ``naas-abi-sdk[agents]``."""
+        try:
+            from langchain_core.tools import StructuredTool
+        except ImportError as exc:
+            raise ImportError(
+                "WorkflowProxy.as_tools needs LangChain: pip install 'naas-abi-sdk[agents]'"
+            ) from exc
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        async def call(**arguments: Any) -> Any:
+            return _dump(await self.run(arguments))
+
+        def call_from_thread(**arguments: Any) -> Any:
+            if loop is None or not loop.is_running():
+                raise RuntimeError(
+                    "Create workflow tools inside the running module; use ainvoke "
+                    "for async callers"
+                )
+            try:
+                current = asyncio.get_running_loop()
+            except RuntimeError:
+                current = None
+            if current is loop:
+                raise RuntimeError("Use tool.ainvoke on the module event loop")
+            return asyncio.run_coroutine_threadsafe(call(**arguments), loop).result()
+
+        name = re.sub(r"[^A-Za-z0-9_-]", "_", self.name.rsplit(".", 1)[-1])[:64]
+        return [
+            StructuredTool.from_function(
+                func=call_from_thread,
+                coroutine=call,
+                name=name,
+                description=self.descriptor.description or self.name,
+                args_schema=self.input_schema or {"type": "object", "properties": {}},
+            )
+        ]
 
 
 def host_workflow(

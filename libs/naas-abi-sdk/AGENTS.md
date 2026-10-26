@@ -121,6 +121,26 @@ agent with `expose_agent(name, agent.as_handler())` and checkpoint it with
 `document_memory(engine.services.document, agent_memory_id(module_id, name))`.
 v1 has no local sub-agents; remote agents (AgentProxy) are passed as tools.
 
+Ontologies (`ontologies.py`): a module sends the `.ttl` files of `ontologies/` (next to
+its package, found like `apps/`) to the engine's schema graph with
+`engine.services.triple_store.load_schema(source, content)` (the endpoint's rules are in
+core's `services/triple_store/AGENTS.md`). `BaseModule.ontologies` is `None` (discover
+`ontologies/**/*.ttl`, skipping a path under `ontologies/` with `sandbox` in it, any
+case), a tuple of files relative to `ontologies/`, or `()`. Each is sent as
+`module/<module_id>/<path relative to ontologies/>`; `schema_source` checks the names
+the engine would refuse, and `run_module` raises before it connects, also when a module
+has ontologies but does not declare `triple_store`. `OntologyLoader` runs as a background
+task once the instance is `READY` or `DEGRADED` (never `STAGED`, and not at all when it is
+asked to drain first; a module without discovery sends at start). A failed load is logged
+at error level (`naas_abi_sdk.ontologies`) and retried, after 1 s and doubling to 60 s,
+reading the file again each time; it never changes readiness or ends the module. A
+refusal no retry changes (`TERMINAL_CODES`: `INVALID_ARGUMENT`, `PERMISSION_DENIED`) is
+logged once, the file moves to `OntologyLoader.refused` and is not sent again until the
+process restarts.
+A timeout can hide a completed load: the retry reports no change. Loading is
+additive: a file removed later stays in the schema graph, and nothing here unloads it.
+Keep `MAX_SOURCE_LENGTH` and the name rules equal to core's `parse_schema_source`.
+
 Jobs (`jobs.py`, `job_host.py`, ADR docs/adr/20261001_nats-jobs.md) replace Dagster
 schedules. Declare `JobDescriptor`s in `jobs` or use `@job` on async methods; bind
 others with `expose_job`. `JobsMixin` is shared with core modules (sync handlers
@@ -199,6 +219,58 @@ or stop; current only around the handler). Keep it stdlib plus optional
 OpenTelemetry API, and a no-op without a provider. Modules
 export spans when `OTEL_EXPORTER_OTLP_ENDPOINT` is set (`[otel]` extra). See
 docs/adr/20261002_observability.md.
+
+`integration.py`, `workflow.py`, `pipeline.py` (with `processes.py`: the shared
+`Process` base, `as_tools`, construction) and `components.py` (names, discovery,
+stdlib only) are the in-engine bases without core. Keep them importable without
+extras: `components.py`, `integration.py` and `module.py` import neither pydantic,
+rdflib nor LangChain (pydantic is imported by `processes.py`, rdflib by
+`pipeline.py`, each raising an `ImportError` that names the extra; LangChain only
+inside `as_tools`). The package `__init__` stays lazy. A component's name is
+`component_slug(class name)`, mirroring core's `process_route_slug`: change them
+together. `BaseModule` finds `Workflow`/`Pipeline` classes under `workflows/` and
+`pipelines/` at class level (`get_workflow_classes`, `get_pipeline_classes`; names
+unique per kind, one NATS subject token), and `run_module` validates them before
+connecting. After `on_initialized` it builds each one (`New(module)`, else an empty
+`<Name>Configuration`) unless `expose_workflow`/`expose_pipeline` bound it. An
+agent takes its tools at construction, inside `on_initialized`, so
+`build_processes()` is public and idempotent (locked): modules call it before
+creating their agents, and `run_module`'s own call skips what is built; an
+unbuildable, unbound class fails startup (its workflow is published, so callers
+expect it). The in-process accessors are `get_workflow_instance`/`get_pipeline_instance`
+(`get_workflow(name)` is the durable-workflow accessor).
+The package is `module.__package__` (so `python -m pkg` works); a module in a top-level
+script (`python worker.py`) has none, and its `workflows/` etc. are top-level packages
+next to it (the folder is appended to `sys.path`). `serialize_result` is pydantic's
+`to_jsonable_python`: models, dataclasses, datetimes, UUIDs and decimals nested in a
+result are converted, an rdflib graph is `{"format": "text/turtle", "triples": n,
+"data": ...}`.
+Integrations are a pattern, never discovered. Tests:
+`tests/test_process_classes.py` (extras: `--extra workflows --extra rdf --extra agents`,
+a CI step) and `tests/test_workflows_extras.py` (no extras needed).
+
+Workflow and Pipeline classes are durable workflows (`process_workflows.py`, ADR
+docs/adr/20261025_remote-module-workflows-pipelines-ontologies.md), published as core's
+`EngineProcessBridge` publishes an engine module's classes: change them together. Each
+class is `workflow.<slug>`/`pipeline.<slug>` (`process_workflow_name` in `jobs.py`), input
+schema the parameters model's, output schema from the `run` annotation (`output_schema`),
+description the docstring cut to 512 UTF-8 bytes, one step `run`. `encode_process_result`
+journals the result: pydantic's JSON, a graph as `text/turtle` (`data` dropped with a
+`note` above `MAX_RESULT_BYTES`, 60 KiB), anything else above it the `omitted` marker.
+`job_settings` reads `Process.job` (a `JobSettings`: triggers and limits, default one
+attempt and one run at a time; no `job` is no trigger). `check_classes`, run by
+`run_module` before connecting, refuses a name already in `module_type.jobs` (an explicit
+`@job`/`@workflow`/`jobs` entry), a `job` that is not a `JobSettings`, and a `Cron`/`Every`
+input (default `{}`) the parameters model refuses; `run_module` also refuses a module with
+classes but no discovery or no `document` service. `BaseModule.declare_process_workflows()`
+declares them before `on_load`. The handler looks the bound instance up at run time, so a
+run only starts once `build_processes` built it; an `OnEvent` run takes the event's `data`;
+a refused input is `InvalidWorkflowInput` (no retry, field names only). Callers use
+`get_workflow("workflow.<slug>")`; `WorkflowProxy.as_tools()` makes one LangChain tool of
+any workflow. Tests: `tests/test_process_workflows.py` (no broker),
+`tests/test_process_classes.py`, and the last two tests of
+`tests/test_workflows_integration.py` (`nats-server`: a scheduled pipeline, a workflow
+started from another module).
 
 Test layout is a deliberate exception to the monorepo rule of a `_test.py` beside
 each file: SDK tests live in `tests/test_<module>.py`, outside the published

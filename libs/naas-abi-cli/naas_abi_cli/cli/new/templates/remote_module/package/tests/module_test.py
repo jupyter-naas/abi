@@ -22,7 +22,11 @@ def test_the_module_declares_its_agent_services_job_and_workflow() -> None:
     assert ABIModule.module_id == MODULE_ID
     assert [agent.name for agent in ABIModule.agents] == [NAME]
     assert "agent.invoke.v1" in ABIModule.agents[0].capabilities
-    assert set(ABIModule.dependencies.services) == {"model_registry", "document"}
+    assert set(ABIModule.dependencies.services) == {
+        "model_registry",
+        "document",
+        "triple_store",
+    }
     heartbeat, digest = ABIModule.jobs
     assert heartbeat.name == "heartbeat" and heartbeat.kind == "job"
     assert [trigger.spec for trigger in heartbeat.triggers] == ["1h"]
@@ -79,6 +83,16 @@ def test_the_digest_workflow_validates_its_input_and_runs_its_steps() -> None:
     assert jobs.measure("abcd") == 4
 
 
+def test_the_module_sends_its_ontologies_to_the_engine() -> None:
+    """ontologies/**/*.ttl reaches the schema graph as module/<id>/<path>."""
+    # Other files may sit next to it: pick this module's own by the source it is sent as.
+    source = f"module/{MODULE_ID}/modules/{{module_name_pascal}}Ontology.ttl"
+    (ontology,) = [o for o in ABIModule.get_ontologies() if o.source(MODULE_ID) == source]
+    assert "triple_store" in ABIModule.dependencies.services
+    # rdflib is an optional SDK extra, not a dependency of the module: no parsing here.
+    assert "owl:Ontology" in ontology.path.read_text(encoding="utf-8")
+
+
 def test_the_configuration_comes_from_the_environment() -> None:
     assert configuration_from({}).chat_model == ""
     assert (
@@ -86,10 +100,23 @@ def test_the_configuration_comes_from_the_environment() -> None:
     )
 
 
+def test_the_workflows_and_pipelines_are_found_and_named() -> None:
+    """Importing every file under workflows/ and pipelines/ is what finds them: a
+    broken import, or two classes with one name, fails here, offline."""
+    for found in (ABIModule.get_workflow_classes(), ABIModule.get_pipeline_classes()):
+        assert all(name == cls.slug() for name, cls in found.items())
+
+
 def test_the_module_never_imports_abi_core() -> None:
     """A remote module reaches the engine only through NATS."""
     code = (
-        "import sys, {{module_name_snake}}, {{module_name_snake}}.__main__; "
+        "import importlib, pkgutil, sys, {{module_name_snake}}, {{module_name_snake}}.__main__, "
+        "{{module_name_snake}}.integrations; "
+        "{{module_name_snake}}.ABIModule.get_workflow_classes(); "
+        "{{module_name_snake}}.ABIModule.get_pipeline_classes(); "
+        "[importlib.import_module(m.name) for m in pkgutil.walk_packages("
+        "{{module_name_snake}}.integrations.__path__, '{{module_name_snake}}.integrations.') "
+        "if not m.name.endswith('_test')]; "
         "core = [m for m in sys.modules if m.split('.')[0] == 'naas_abi_core']; "
         "sys.exit(f'imports {core[0]}' if core else 0)"
     )

@@ -401,6 +401,47 @@ class JobDescriptor:
         )
 
 
+def process_workflow_name(kind: str, name: str) -> str:
+    """The durable workflow of a ``Workflow`` or ``Pipeline`` class:
+    ``workflow.greet``, ``pipeline.ingest``, as core names its bridged classes.
+
+    Derived, so it is stable across restarts and replicas; a slug is lowercase
+    ASCII, digits and ``_`` (no ``:``, which run ids use as their separator).
+    """
+    return f"{kind}.{name}"
+
+
+@dataclass(frozen=True)
+class JobSettings:
+    """How the durable workflow of a ``Workflow`` or ``Pipeline`` class runs
+    (``Process.job``).
+
+    Every such class is a workflow that callers start by name; declaring
+    ``job`` adds schedules or events (``triggers``) and sets its limits.
+    Defaults are ``@workflow``'s.
+    """
+
+    triggers: tuple[Trigger, ...] = ()
+    timeout: timedelta | None = None
+    max_attempts: int = 1
+    max_concurrency: int = 1
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "triggers", tuple(self.triggers))
+        # The descriptor's own checks (ranges, trigger count), at declaration.
+        self.descriptor("check")
+
+    def descriptor(self, name: str, description: str = "") -> JobDescriptor:
+        return JobDescriptor(
+            name=name,
+            description=description,
+            triggers=self.triggers,
+            max_concurrency=self.max_concurrency,
+            timeout=self.timeout,
+            max_attempts=self.max_attempts,
+        )
+
+
 JobHandler = Callable[["JobContext"], Awaitable[Any]]
 
 

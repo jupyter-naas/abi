@@ -480,3 +480,126 @@ def test_a_changed_trigger_input_republishes_only_that_schedule(broker):
     )  # a restart leaves every schedule (and its interval) alone
     assert changed[0][0] > first[0][0] and changed[0][1] == b'{"n":2}'
     assert changed[1] == first[1] and changed[2] == first[2]
+
+
+# --- Workflow and Pipeline classes of a remote module (extras: workflows, rdf) ---------
+
+PROCESSES = "acme.process"
+
+
+def _process_module():
+    """A module whose pipeline runs every second, and whose workflow runs when started."""
+    pytest.importorskip("pydantic")
+    pytest.importorskip("rdflib")
+    from unittest.mock import MagicMock
+
+    from rdflib import Graph, Literal, URIRef
+
+    from naas_abi_sdk.jobs import JobSettings
+    from naas_abi_sdk.module import BaseModule
+    from naas_abi_sdk.pipeline import Pipeline, PipelineParameters
+    from naas_abi_sdk.workflow import Workflow, WorkflowParameters
+
+    class TickParameters(PipelineParameters):
+        count: int = 2
+
+    class TickPipeline(Pipeline[TickParameters]):
+        """Writes a few triples."""
+
+        job = JobSettings(triggers=(Every("1s"),))
+
+        async def run(self, parameters: TickParameters) -> Graph:
+            graph = Graph()
+            for index in range(parameters.count):
+                graph.add(
+                    (
+                        URIRef(f"http://example.org/s{index}"),
+                        URIRef("http://example.org/p"),
+                        Literal(f"v{index}"),
+                    )
+                )
+            return graph
+
+    class AddParameters(WorkflowParameters):
+        a: int
+        b: int
+
+    class AddWorkflow(Workflow[AddParameters]):
+        """Adds two numbers."""
+
+        async def run(self, parameters: AddParameters):
+            return {"sum": parameters.a + parameters.b}
+
+    class ABIModule(BaseModule):
+        module_id = PROCESSES
+        workflows = (AddWorkflow,)
+        pipelines = (TickPipeline,)
+
+    module = ABIModule(MagicMock(), ABIModule.Configuration())
+    module.declare_process_workflows()
+    asyncio.run(module.build_processes())
+    return module
+
+
+def _records(docs, workflow_name):
+    return [
+        doc.data
+        for (collection, _), doc in docs.data.items()
+        if collection == _runs_collection() and doc.data.get("job") == workflow_name
+    ]
+
+
+def test_a_scheduled_pipeline_class_runs_in_its_module_and_records_its_graph(broker):
+    from rdflib import Graph
+
+    docs, module = MemoryDocuments(), _process_module()
+
+    def succeeded():
+        return [
+            r
+            for r in _records(docs, "pipeline.tick_pipeline")
+            if r["status"] == "SUCCEEDED"
+        ]
+
+    async def scenario():
+        async with _running(_host(broker, docs, module, PROCESSES)):
+            await _until(succeeded, timeout=15)
+
+    asyncio.run(scenario())
+
+    (done, *_) = succeeded()
+    assert done["trigger"]["kind"] == "schedule"
+    assert done["result"]["format"] == "text/turtle" and done["result"]["triples"] == 2
+    assert len(Graph().parse(data=done["result"]["data"], format="turtle")) == 2
+    assert (
+        _records(docs, "workflow.add_workflow") == []
+    )  # no trigger: only when started
+
+
+def test_another_module_starts_a_workflow_class_and_reads_its_output(broker):
+    docs, module = MemoryDocuments(), _process_module()
+    (descriptor,) = [j for j in module.jobs if j.name == "workflow.add_workflow"]
+
+    async def scenario():
+        async with _running(_host(broker, docs, module, PROCESSES)):
+            proxy = WorkflowProxy(
+                Transport(broker, "t"), PROJECT, PROCESSES, descriptor, docs
+            )
+            try:
+                output = await proxy.run({"a": 2, "b": 3}, timeout=30)
+                run = await proxy.start({"a": 1, "b": 1}, idempotency_key="sum-1")
+                again = await proxy.start({"a": 1, "b": 1}, idempotency_key="sum-1")
+                await run.wait(timeout=30)
+                refused = await (await proxy.start({"a": "x"})).wait(timeout=30)
+                return output, run, again, await run.steps(), refused
+            finally:
+                await proxy.transport.close()
+
+    output, run, again, steps, refused = asyncio.run(scenario())
+
+    assert output == {"sum": 5}
+    assert again.run_id == run.run_id and again.duplicate
+    assert [s["key"] for s in steps] == ["run"]
+    # Parameters the model refuses fail the run at once, naming the fields.
+    assert refused["status"] == "FAILED" and refused["attempt"] == 1
+    assert "a" in refused["error"] and "b" in refused["error"]

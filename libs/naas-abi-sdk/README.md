@@ -5,7 +5,8 @@ of remote modules: modules that run in their own process and reach the engine
 only through NATS. Guide: [Build a Remote Module](https://docs.naas.ai/user-guide/build/sdk/build-a-remote-module);
 architecture: [Remote Modules and Jobs](https://docs.naas.ai/developer-guide/architecture/remote-modules). Runtime dependencies:
 `naas-abi-proto`, `protobuf` (transitive), and `nats-py`. No ABI core, LangChain,
-Dagster, RDF library, database drivers, or HTTP framework.
+Dagster, RDF library, database drivers, or HTTP framework (workflows and
+pipelines bring pydantic and rdflib through the `[workflows]` and `[rdf]` extras).
 
 ```python
 from dataclasses import dataclass
@@ -68,7 +69,8 @@ chunked transfer contract described below. Agent invocation
 uses the separate contract described below. Cache v1 addresses
 the engine's cold adapter by default; `cache.tier(index)` selects an explicit tier. Decorators remain local. Event v1 is the durable
 log port; live messages use the bus. The engine's triple-store service rejects
-`handle_view_event`, an adapter-internal callback, with `NOT_SUPPORTED`.
+`handle_view_event`, an adapter-internal callback, with `NOT_SUPPORTED`. Its `load_schema`
+takes the content of a Turtle file, for ontologies (see Ontologies).
 
 See `../../examples/standalone_module/README.md` for the executable full-surface
 module and wheel-only dependency isolation check. Run `make deps test lint build`
@@ -138,7 +140,7 @@ module only under a token for its own module id. `ModuleToken(module_id, key)`
 signs and refreshes the token; `token_from_env(os.environ, module_id)` reads
 `ABI_MODULE_KEY`, else `ABI_SERVICE_TOKEN`.
 
-A call to another module (its agents, models, apps) carries a token bound to the
+A call to another module (its agents, models, apps, workflows, pipelines) carries a token bound to the
 instance called, for five minutes and sent with at least 4.5 of them left:
 `Transport` asks the token source for it (`ModuleToken.for_audience`), bound to
 the instance id the caller passes (`call(..., instance_id=...)`), so that module
@@ -587,6 +589,153 @@ launches it in a separate environment containing LangChain, SDK and proto, with
 no ABI core installed. The base worker still verifies its four-package install.
 
 
+## Workflows, pipelines and integrations
+
+A module holds them like an in-engine module does, written on `naas_abi_sdk`
+only. They run in the module's process, for its own agents, and each workflow or
+pipeline class is also a durable workflow other modules start by name (see "Calling
+another module's workflows and pipelines").
+The decisions, with what stays out of scope, are in
+`docs/adr/20261025_remote-module-workflows-pipelines-ontologies.md`.
+
+```python
+# <package>/workflows/GreetWorkflow.py   (pip install 'naas-abi-sdk[workflows]')
+from naas_abi_sdk.workflow import Workflow, WorkflowConfiguration, WorkflowParameters
+
+
+class GreetWorkflowParameters(WorkflowParameters):
+    name: str
+
+
+class GreetWorkflow(Workflow[GreetWorkflowParameters]):
+    """Greets someone: an agent reads this to decide when to call it."""
+
+    async def run(self, parameters: GreetWorkflowParameters) -> dict:
+        return {"message": f"Hello, {parameters.name}!"}
+```
+
+- `Workflow[P]` and `Pipeline[P]` (`naas_abi_sdk.pipeline`, needs `[workflows,rdf]`)
+  have `async def run(self, parameters: P)`; parameters are a pydantic model
+  (`WorkflowParameters`, `PipelineParameters`). A workflow returns a
+  JSON-serializable value or a pydantic model, a pipeline an rdflib `Graph`.
+  Each has a `<Name>Configuration` dataclass. `Integration`,
+  `IntegrationConfiguration` and `IntegrationConnectionError`
+  (`naas_abi_sdk.integration`) are standard library only: a code pattern, as in
+  engine modules. The module neither finds nor serves integrations.
+- `BaseModule` finds the `Workflow` and `Pipeline` subclasses defined under the
+  package's `workflows/` and `pipelines/` (recursively; `*_test.py`, `test_*.py`,
+  `tests/`, abstract classes and classes that are only imported are skipped). Set
+  `workflows = (...)` or `pipelines = (...)` on the class to declare them instead.
+  `ABIModule.get_workflow_classes()` and `get_pipeline_classes()` return them by
+  name at class level, before the module registers. The name is the class name
+  in snake case (`GreetWorkflow` is `greet_workflow`), one NATS subject token,
+  unique per kind; its durable workflow is `workflow.greet_workflow`.
+- After `on_initialized` the module builds each one: `New(module)` (a
+  classmethod, sync or async) if the class defines it, else the class with an
+  empty `<Name>Configuration`. A class that needs arguments is bound in
+  `on_initialized` with `self.expose_workflow(name, instance)` or
+  `self.expose_pipeline(name, instance)`. A discovered class that is neither
+  buildable nor bound stops the module from starting, with a message naming it.
+- An agent takes its tools when it is built, and agents are built in
+  `on_initialized`, before that build. Call `await self.build_processes()` there
+  first (bind the classes that need arguments with `expose_*` before it); it builds
+  what is not bound yet, and is idempotent, so the build after `on_initialized`
+  leaves those instances alone:
+
+  ```python
+  async def on_initialized(self):
+      await self.build_processes()
+      tools = self.get_workflow_instance("greet_workflow").as_tools()
+      agent = IntentAgent(..., tools=tools)
+      self.expose_agent("greeter", agent.as_handler())
+  ```
+- `self.get_workflow_instance(name)`, `self.get_pipeline_instance(name)`,
+  `self.get_workflows()` and `self.get_pipelines()` return the built instances.
+  `self.get_workflow(name)` is the module's durable workflow (see "Workflows").
+- `instance.as_tools()` returns a LangChain `StructuredTool` (extra `[agents]` or
+  `[agent]`): named by the slug, described by the class docstring, taking the
+  parameters model, and running `run` on the module's loop (call it from
+  `on_initialized` after `build_processes()`, or later, on that loop). A pydantic result comes back as JSON
+  data and a graph as `{"format": "text/turtle", "triples": n, "data": ...}`.
+- `import naas_abi_sdk` needs none of pydantic, rdflib or LangChain. Importing
+  `Workflow` without pydantic, `Pipeline` without rdflib, or calling `as_tools()`
+  without LangChain raises an `ImportError` that names the extra.
+- `abi new workflow|pipeline|integration <Name> <folder>` inside a remote module
+  writes these classes and a test beside them.
+- A module with workflows or pipelines publishes them as durable workflows:
+  `run_module` needs `discovery=` and the `document` service in
+  `dependencies.services` (it raises before connecting without them).
+
+### Calling another module's workflows and pipelines
+
+Each `Workflow` and `Pipeline` class is published as a one-step durable workflow
+(see "Workflows"), as the engine publishes an in-engine module's classes:
+`workflow.<slug>` or `pipeline.<slug>`, the parameters model as input schema, the
+class docstring (cut to 512 UTF-8 bytes) as description, the `run` return
+annotation as output schema. Declare the module in `dependencies.modules`, then:
+
+```python
+a = self.engine.modules["a"]
+greet = await a.get_workflow("workflow.greet_workflow")
+result = await greet.run({"name": "Ada"})                  # a JSON value
+run = await greet.start({"name": "Ada"}, idempotency_key="ada")
+tools = greet.as_tools()                                   # one LangChain tool, "greet_workflow"
+
+out = await (await a.get_workflow("pipeline.load_pipeline")).run({"count": 3})
+graph = Graph().parse(data=out["data"], format="turtle")   # out["triples"] is the count
+```
+
+- A run is a job run: a run record, the System app's Jobs tab (with a launch form),
+  `run.cancel()` (which cancels `run`). Its one step, `run`, is journaled: a retried
+  run does not run a finished `run` again.
+- The result is JSON as pydantic dumps it (nested models, dataclasses, datetimes,
+  UUIDs, decimals). A graph is `{"format": "text/turtle", "triples": n, "data":
+  "<turtle>"}`, `data` left out with a `note` above 60 KiB; any other result above
+  60 KiB is `{"omitted": true, "bytes": n, "limit": 61440, "note": ...}`. Write a
+  large graph to the triple store from the pipeline itself.
+- The input is validated into the parameters model before `run`: an input it refuses
+  fails the run without a retry (`InvalidWorkflowInput`), naming the fields, not
+  their values.
+- `WorkflowProxy.as_tools()` (extra `[agents]`) returns one tool named after the
+  last segment of the workflow name, described by its descriptor, taking its input
+  schema.
+- Like any job, a workflow is started by publishing its trigger: any module of the
+  project may start it. There is no per-caller authorization.
+- The kernel REST API does not mount remote workflows and pipelines.
+
+### Workflows and pipelines on a schedule
+
+`job` on the class sets its workflow's triggers and limits:
+
+```python
+from datetime import timedelta
+from naas_abi_sdk.jobs import Cron, JobSettings
+
+
+class IngestPipeline(Pipeline[IngestParameters]):
+    """Loads the nightly export."""
+
+    job = JobSettings(
+        triggers=(Cron("0 0 2 * * *", input={"source": "export"}),),
+        timeout=timedelta(minutes=10),
+        max_attempts=3,
+    )
+
+    async def run(self, parameters: IngestParameters) -> Graph: ...
+```
+
+- `job` is a `JobSettings(triggers=(), timeout=None, max_attempts=1, max_concurrency=1)`
+  (`naas_abi_sdk.jobs`). A class without `job` has no trigger and these defaults:
+  one attempt and one run at a time. Callers start it by name either way.
+- A `Cron` or `Every` trigger's `input` (default `{}`) is the run's parameters. An
+  `OnEvent` run takes the event's `data`.
+- Startup fails (`run_module` raises before it connects) when a `Cron`/`Every`
+  input does not validate against the parameters model, when `job` is not a
+  `JobSettings`, or when `workflow.<slug>` is also an explicit `jobs`, `@job` or
+  `@workflow` name.
+- Delivery is at least once and `max_attempts` may retry: `run` must be safe to
+  repeat. `timeout` cancels `run` and ends the run `TIMED_OUT`.
+
 ## Apps
 
 A module serves web apps through Nexus without a port, hostname or route of its
@@ -666,6 +815,39 @@ included, is a 502 for the browser. Multipart forms
 work, but FastAPI's `UploadFile` spools each file (to disk above 1 MB): send a
 very large file as the raw body instead. No WebSockets yet. Declare `apps = (AppDescriptor(...),)` on the class instead
 of the folder for an app without files.
+
+## Ontologies
+
+A module sends its ontologies to the engine's schema graph, as an in-engine module does.
+Put `.ttl` files under `ontologies/` next to the package (for example
+`ontologies/modules/FooOntology.ttl`) and declare the `triple_store` service:
+
+```python
+class ABIModule(BaseModule):
+    module_id = "acme.foo"
+    dependencies = ModuleDependencies(services=("triple_store",))
+    # ontologies = None   # the default: every ontologies/**/*.ttl, except under "sandbox"
+    # ontologies = ("modules/FooOntology.ttl",)   # or name the files; () sends none
+```
+
+Once the instance is `READY` or `DEGRADED`, `run_module` sends each file as
+`module/<module_id>/<path relative to ontologies/>` (`module/acme.foo/modules/FooOntology.ttl`):
+the schema graph then holds an `internal:Schema` with that `filePath` and the file's triples.
+A restart with the same file writes nothing; a changed file applies the difference. A module
+can load only under its own id (`PERMISSION_DENIED` otherwise), and the engine refuses content
+that is not Turtle (`INVALID_ARGUMENT`).
+
+- A `STAGED` generation (behind a live one, in a rollout) sends nothing until it takes over,
+  and a process asked to drain first sends nothing at all.
+- Sending is in the background. A failure (the engine down, a timeout, invalid Turtle) is
+  logged as an error by `naas_abi_sdk.ontologies` and retried after 1 s, then twice as long
+  up to a minute; it never changes readiness or stops the module.
+- Loading is additive, as for in-engine modules: a file you remove or rename later stays in
+  the schema graph.
+- A module with ontologies that does not declare `triple_store`, or has a file name the engine
+  would refuse (letters, digits, `_`, `.`, `-`, ending in `.ttl`), stops at start with a message.
+- `await engine.services.triple_store.load_schema(source, content)` sends one ontology built at
+  runtime; it returns whether the graph was written.
 
 ## Object streams and transfer configuration
 

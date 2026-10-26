@@ -12,12 +12,14 @@ import socket
 from collections.abc import Awaitable
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from naas_abi_sdk import lifeline, telemetry
 from naas_abi_sdk.apps import AppDescriptor, discover_apps
 from naas_abi_sdk.catalog import OPERATIONS
 from naas_abi_sdk.client import ABIClient
+from naas_abi_sdk.components import by_name, discover_components
 from naas_abi_sdk.discovery import (
     AgentDescriptor,
     DiscoveryClient,
@@ -30,6 +32,13 @@ from naas_abi_sdk.discovery import (
 )
 from naas_abi_sdk.health import HealthServer
 from naas_abi_sdk.jobs import JobsMixin
+from naas_abi_sdk.ontologies import (
+    OntologyFile,
+    OntologyLoader,
+    declared_ontologies,
+    discover_ontologies,
+    module_ontology_files,
+)
 from naas_abi_sdk.services import service_proxy
 from naas_abi_sdk.transport import MODULE_INBOX_PREFIX
 
@@ -173,6 +182,17 @@ class BaseModule(JobsMixin, Generic[Config]):
     # Web apps it serves over NATS. None: one per apps/<name>/manifest.json
     # next to the module's package (naas_abi_sdk.apps.discover_apps).
     apps: tuple[AppDescriptor, ...] | None = None
+    # The .ttl files it sends to the engine's schema graph once the instance serves
+    # (naas_abi_sdk.ontologies). None: every ontologies/**/*.ttl next to the module's
+    # package, except under "sandbox". A tuple names the files, relative to ontologies/
+    # (() sends none). A module with ontologies declares the triple_store service.
+    ontologies: tuple[str | Path, ...] | None = None
+    # Workflow and Pipeline classes (naas_abi_sdk.workflow, .pipeline). None:
+    # every subclass found under the package's workflows/ and pipelines/
+    # (recursively, tests and merely imported classes left out), like in-engine
+    # modules. Their names (the class slug) are known before registration.
+    workflows: tuple[type, ...] | None = None
+    pipelines: tuple[type, ...] | None = None
 
     def __init__(self, engine: EngineProxy, configuration: Config):
         if not isinstance(configuration, self.Configuration):
@@ -185,6 +205,9 @@ class BaseModule(JobsMixin, Generic[Config]):
         self._agent_handlers = {}
         self._model_handlers = {}
         self._app_handlers: dict[str, Any] = {}
+        self._workflows: dict[str, Any] = {}
+        self._pipelines: dict[str, Any] = {}
+        self._build_lock = asyncio.Lock()
         self._health_port: int | None = None
 
     @property
@@ -234,6 +257,17 @@ class BaseModule(JobsMixin, Generic[Config]):
             cls._discovered_apps = discover_apps(cls)
         return cls._discovered_apps
 
+    @classmethod
+    def get_ontologies(cls) -> tuple[OntologyFile, ...]:
+        """The ontology files to send, as ``ontologies`` declares or discovery finds."""
+        if "_ontology_files" not in cls.__dict__:
+            cls._ontology_files = (
+                discover_ontologies(cls)
+                if cls.ontologies is None
+                else declared_ontologies(cls, tuple(cls.ontologies))
+            )
+        return cls._ontology_files
+
     def expose_app(self, name: str, asgi_app) -> None:
         """Bind an ASGI application (FastAPI, Starlette) to a declared app during
         on_initialized. It answers the requests no file of the app's folder
@@ -245,6 +279,160 @@ class BaseModule(JobsMixin, Generic[Config]):
         if not callable(asgi_app):
             raise TypeError("expose_app needs an ASGI application")
         self._app_handlers[name] = asgi_app
+
+    @classmethod
+    def get_workflow_classes(cls) -> dict[str, type]:
+        """The declared workflows by name, else those found under workflows/."""
+        return cls._component_classes("workflow", "workflows")
+
+    @classmethod
+    def get_pipeline_classes(cls) -> dict[str, type]:
+        """The declared pipelines by name, else those found under pipelines/."""
+        return cls._component_classes("pipeline", "pipelines")
+
+    @classmethod
+    def _component_classes(cls, kind: str, folder: str) -> dict[str, type]:
+        def load_base() -> type:
+            if kind == "workflow":
+                from naas_abi_sdk.workflow import Workflow
+
+                return Workflow
+            from naas_abi_sdk.pipeline import Pipeline
+
+            return Pipeline
+
+        declared = getattr(cls, folder)
+        if declared is not None:
+            if declared:
+                base = load_base()
+                for item in declared:
+                    if not (isinstance(item, type) and issubclass(item, base)):
+                        raise TypeError(
+                            f"{folder} must hold {base.__name__} subclasses"
+                        )
+            return by_name(kind, declared)
+        key = f"_discovered_{folder}"
+        if key not in cls.__dict__:
+            setattr(
+                cls, key, by_name(kind, discover_components(cls, folder, load_base))
+            )
+        return dict(cls.__dict__[key])
+
+    def expose_workflow(self, name: str, workflow) -> None:
+        """Bind a workflow instance during on_initialized, for a class
+        that needs arguments to be built (no ``New``, no empty configuration)."""
+        self._expose(
+            "workflow", self.get_workflow_classes(), self._workflows, name, workflow
+        )
+
+    def expose_pipeline(self, name: str, pipeline) -> None:
+        """Bind a pipeline instance during on_initialized, like expose_workflow."""
+        self._expose(
+            "pipeline", self.get_pipeline_classes(), self._pipelines, name, pipeline
+        )
+
+    @staticmethod
+    def _expose(
+        kind: str, declared: dict[str, type], bound: dict[str, Any], name: str, instance
+    ) -> None:
+        if name not in declared:
+            raise ValueError(
+                f"Declare the {kind} first: a {kind.capitalize()} subclass named "
+                f"{name!r} under {kind}s/ (known: {sorted(declared)})"
+            )
+        if name in bound:
+            raise ValueError(f"{kind.capitalize()} already registered: {name}")
+        if not isinstance(instance, declared[name]):
+            raise TypeError(
+                f"{name!r} is a {declared[name].__name__}, not {type(instance)}"
+            )
+        bound[name] = instance
+
+    def get_workflow_instance(self, name: str):
+        """The built workflow named ``name`` (the slug of its class name), to call
+        in process. ``get_workflow("workflow.<name>")`` starts its durable workflow."""
+        return self._bound("workflow", self._workflows, name)
+
+    def get_pipeline_instance(self, name: str):
+        """The built pipeline named ``name`` (the slug of its class name)."""
+        return self._bound("pipeline", self._pipelines, name)
+
+    def get_workflows(self) -> dict[str, Any]:
+        """Every built workflow by name; empty until on_initialized has run."""
+        return dict(self._workflows)
+
+    def get_pipelines(self) -> dict[str, Any]:
+        """Every built pipeline by name; empty until on_initialized has run."""
+        return dict(self._pipelines)
+
+    @staticmethod
+    def _bound(kind: str, bound: dict[str, Any], name: str):
+        try:
+            return bound[name]
+        except KeyError:
+            raise ValueError(
+                f"No {kind} named {name!r} is built (known: {sorted(bound)}); "
+                "they are built after on_initialized, or by an earlier "
+                "`await self.build_processes()`"
+            ) from None
+
+    async def build_processes(self) -> None:
+        """Build every declared workflow and pipeline not yet bound.
+
+        ``run_module`` calls it after ``on_initialized``. Call it yourself in
+        ``on_initialized`` when an agent created there needs their tools::
+
+            self.expose_workflow("needs_args_workflow", instance)  # first
+            await self.build_processes()
+            tools = self.get_workflow_instance("greet_workflow").as_tools()
+
+        Idempotent: a class already bound or built is left alone, so bind the
+        ones that need arguments with ``expose_*`` before calling it. A class
+        that is neither buildable nor bound fails startup: the module publishes
+        its workflow, so callers expect it.
+        """
+        async with self._build_lock:
+            for kind, declared, bound in (
+                ("workflow", self.get_workflow_classes(), self._workflows),
+                ("pipeline", self.get_pipeline_classes(), self._pipelines),
+            ):
+                for name, cls in declared.items():
+                    if name not in bound:
+                        bound[name] = await self._build(kind, name, cls)
+
+    def declare_process_workflows(self) -> list[str]:
+        """Declare each ``Workflow`` and ``Pipeline`` class as a one-step durable
+        workflow, ``workflow.<name>`` or ``pipeline.<name>``, run by the instance
+        ``build_processes`` builds (``naas_abi_sdk.process_workflows``). ``run_module``
+        calls it before ``on_load``. Returns the workflow names."""
+        classes = {
+            "workflow": self.get_workflow_classes(),
+            "pipeline": self.get_pipeline_classes(),
+        }
+        if not any(classes.values()):
+            return []
+        from naas_abi_sdk.process_workflows import declare_process_workflows
+
+        return declare_process_workflows(
+            self, classes, {"workflow": self._workflows, "pipeline": self._pipelines}
+        )
+
+    async def _build(self, kind: str, name: str, cls: type) -> Any:
+        try:
+            instance, reason = await cls.build(self)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Building {kind} {cls.__name__} ({name!r}) failed: {exc!r}"
+            ) from exc
+        if instance is None:
+            raise ValueError(
+                f"The {kind} {cls.__name__} ({name!r}) cannot be built: "
+                f"{reason}. Give it a classmethod New(module), or bind an "
+                f"instance in on_initialized with self.expose_{kind}({name!r}, instance)."
+            )
+        if not isinstance(instance, cls):
+            raise TypeError(f"{cls.__name__}.New(module) must return a {cls.__name__}")
+        return instance
 
     @property
     def discovery_status(self) -> str:
@@ -399,6 +587,29 @@ async def run_module(
         raise ValueError("Drain timeout must be finite and positive")
     probe = _health_bind(health_port, health_host)
     identity = module_type.module_id or module_type.__module__
+    # Before any connection: a file the engine would refuse, or ontologies without the
+    # triple_store dependency, stop the module here, not in a background task.
+    ontology_files = module_ontology_files(module_type, identity)
+    # Names are known (and a bad folder fails) before anything connects.
+    processes = {
+        "workflow": module_type.get_workflow_classes(),
+        "pipeline": module_type.get_pipeline_classes(),
+    }
+    if any(processes.values()):
+        from naas_abi_sdk.process_workflows import check_classes
+
+        # A name clash, a bad `job` or a schedule whose input cannot run stops it here.
+        check_classes(processes, (j.name for j in module_type.jobs))
+        # Each one is a durable workflow: a job, hosted like the module's own.
+        if (
+            discovery is None
+            or "document" not in module_type.get_dependencies().services
+        ):
+            raise ValueError(
+                "Workflows and pipelines run as durable workflows: pass "
+                "discovery=DiscoveryConfiguration(...) to run_module and declare "
+                "the document service"
+            )
     # Spans export when OTEL_EXPORTER_OTLP_ENDPOINT is set (needs naas-abi-sdk[otel]).
     telemetry.configure_from_env(identity)
     # Named after the module so the broker's /connz shows which module is which.
@@ -441,8 +652,10 @@ async def run_module(
         app_host = None
         job_host = None
         jobs_after_cutover: asyncio.Task | None = None
+        ontologies_task: asyncio.Task | None = None
         health_server = None
         try:
+            module.declare_process_workflows()
             await _invoke(module.on_load)
             if registration:
                 # Jobs and workflows declared at runtime (declare_job, declare_workflow
@@ -453,6 +666,7 @@ async def run_module(
                 await registration.start()
                 await module.engine.modules.wait_ready(discovery)
             await _invoke(module.on_initialized)
+            await module.build_processes()
             declared = {
                 a.name for a in module.agents if "agent.invoke.v1" in a.capabilities
             }
@@ -549,6 +763,28 @@ async def run_module(
                     )
                 else:
                     await _host_jobs(job_host, module)
+            if ontology_files:
+                # Once this instance serves (READY or DEGRADED, never while STAGED), in
+                # the background: a failed load is logged and retried, and does not
+                # change readiness. It is not watched: it never ends the module.
+                ontologies_task = asyncio.create_task(
+                    OntologyLoader(
+                        module.engine.services.triple_store,
+                        identity,
+                        ontology_files,
+                        serving=(
+                            (lambda: registration.status in ("READY", "DEGRADED"))
+                            if registration is not None
+                            else (lambda: True)
+                        ),
+                        stopping=(
+                            registration.drain_requested.is_set
+                            if registration is not None
+                            else (lambda: False)
+                        ),
+                        poll_seconds=discovery.refresh_seconds if discovery else 2.0,
+                    ).run()
+                )
             if probe is not None:
                 health_server = HealthServer(
                     lambda: module.discovery_status, probe[0], probe[1]
@@ -600,6 +836,7 @@ async def run_module(
                                 "Could not mark module draining", exc_info=True
                             )
                     await _cancel(jobs_after_cutover)
+                    await _cancel(ontologies_task)
                     await _drain_hosts(
                         agent_host,
                         job_host,
@@ -621,6 +858,7 @@ async def run_module(
         finally:
             try:
                 await _cancel(jobs_after_cutover)
+                await _cancel(ontologies_task)
                 if health_server is not None:
                     await health_server.close()
                 if work:

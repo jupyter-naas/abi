@@ -20,6 +20,20 @@ the engine's.
 - Every agent is declared in `ABIModule.agents` (an `AgentDescriptor` with the
   `agent.invoke.v1` capability) **and** bound in `on_initialized` with
   `self.expose_agent(name, agent.as_handler())`, before the module is READY.
+- Workflows (`workflows/`), pipelines (`pipelines/`) and integrations
+  (`integrations/`) are written like in-engine ones, on `naas_abi_sdk` only
+  (`naas_abi_sdk.workflow`, `.pipeline`, `.integration`). `ABIModule` finds every
+  workflow and pipeline class under its folder and builds it after
+  `on_initialized`: with `New(module)` if the class has one, else with an empty
+  `<Name>Configuration`. One that needs arguments is bound in `on_initialized`
+  with `self.expose_workflow(name, instance)` / `self.expose_pipeline(...)`, or
+  the module does not start. The name is the class name in snake case. Each class
+  is also a one-step durable workflow, `workflow.<name>` or `pipeline.<name>`,
+  that other modules start by name (`job = JobSettings(...)` on the class adds
+  triggers and limits); it needs the `document` service. An agent takes its
+  tools when it is built, in `on_initialized`: call
+  `await self.build_processes()` there first (idempotent; bind the classes that
+  need arguments before it), then `self.get_workflow_instance(name).as_tools()`.
 - Scheduled or event-driven work is a `@job(...)` method (`Every`, `Cron`,
   `OnEvent` triggers from `naas_abi_sdk.jobs`). Delivery is at least once.
 - Multi-step work is a `@workflow(...)` method
@@ -32,6 +46,10 @@ the engine's.
   step result is JSON, at most 256 KiB (store large data in object storage
   and return a reference). `Cron(..., input={...})` and `Every(..., input={...})`
   give a schedule its input. `digest` in `jobs.py` is the example.
+- Ontologies are the `.ttl` files of `ontologies/`: sent to the engine's schema
+  graph once the module is READY, additively, and retried in the background if
+  a load fails. A module with ontologies declares `triple_store`. See
+  `ontologies/AGENTS.md`.
 - Keep `MODULE_ID` stable: discovery, job subjects and agent memory use it.
 
 ## Files
@@ -41,8 +59,12 @@ the engine's.
 | `__init__.py` | `ABIModule`: id, configuration, dependencies, agents, jobs, lifecycle |
 | `__main__.py` | `python -m {{module_name_snake}}`: `run_module` with discovery, signals |
 | `agents/` | SDK `IntentAgent`s on the engine's models, memory in the Document Service |
+| `workflows/` | `Workflow`s (`async run(parameters)`), found and built by `ABIModule`, published as durable workflows `workflow.<slug>` |
+| `pipelines/` | `Pipeline`s (`async run(parameters)` returning an rdflib `Graph`), likewise as `pipeline.<slug>` |
+| `integrations/` | `Integration`s: how to reach a third-party tool (not served; built by workflows, pipelines, agents) |
 | `jobs.py` | job and workflow bodies, testable without a broker |
 | `apps/` | web apps, served through Nexus at `/app-html/remote/{{module_id}}/<app>/` |
+| `ontologies/` | `.ttl` files sent to the engine's schema graph as `module/{{module_id}}/<path>` |
 | `tests/` | offline tests (`uv run pytest`) |
 
 ## Run it
@@ -60,7 +82,18 @@ It is up when it logs `READY`. `ABI_HEALTH_PORT=8080` opens `/health` and
 
 - An agent: `abi new agent <Name> agents` from this folder, then declare and
   expose it in `ABIModule`.
+- A workflow: `abi new workflow <Name> workflows` from this folder. Its agents
+  use it with `await self.build_processes()` then
+  `self.get_workflow("<name>").as_tools()` in `on_initialized`, before creating
+  the agent, passed as `create_agent(..., tools=tools)` (the name is printed).
+  Reads credentials with `await module.engine.services.secret.get("KEY")` in
+  `New(module)`.
+- A pipeline: `abi new pipeline <Name> pipelines`; it returns an rdflib `Graph`
+  the module can write with `self.engine.services.triple_store`.
+- An integration: `abi new integration <Name> integrations`.
 - A service: add it to `dependencies`, call `self.engine.services.<name>`.
+- An ontology: add a `.ttl` file under `ontologies/` (see `ontologies/AGENTS.md`);
+  the module sends it at its next start.
 - Another module's agent: add its id to `ModuleDependencies(modules=(...))`,
   then `await self.engine.modules["<id>"].get_agent("<Name>")`.
 - An app: `abi new app <name> apps` from this folder. Nexus lists it on its

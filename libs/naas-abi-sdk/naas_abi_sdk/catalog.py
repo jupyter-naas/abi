@@ -129,6 +129,7 @@ OPERATIONS = {
         "clear_graph",
         "drop_graph",
         "list_graphs",
+        "load_schema",
     ],
     "vector_store": [
         "initialize",
