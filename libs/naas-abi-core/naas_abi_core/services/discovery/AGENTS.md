@@ -58,7 +58,12 @@ platform-level: `module/<project>/<module_id>`, `agent|model|app|job/<project>/<
   recorded FAILED and the message terminated) or honours a cancel. Engine-hosted
   jobs have no lease: `EngineJobLoader.job_authorizer` runs the same check
   (`require_job`) in process. Scheduled and event triggers are the host's own and
-  are not asked about: the host drops any trigger the engine did not seal.
+  are not asked about: the host drops any trigger the engine did not seal. A
+  workflow is a job (`kind`): starting one is `TriggerJob`, its runs are job runs.
+  Every attempt of a manual trigger is asked about, and a trigger `api` or
+  `engine` stored for a user runs as the module for that user (engine
+  `AGENTS.md`, "Who a run runs as"): `caller_identity` names the user the
+  stored delegation must be for.
 
 ## Eviction (platform administration)
 `evict` removes a registration whatever its lease: `discovery:Evict` on its

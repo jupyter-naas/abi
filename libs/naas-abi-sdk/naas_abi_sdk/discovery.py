@@ -543,7 +543,11 @@ def module_descriptor(
 
 def discovery_job_authorizer(session: DiscoverySession):
     """A job host's authorizer through discovery (``authorize_job``): the host's
-    lease, then the caller's policy, its token checked as of ``stored_at``."""
+    lease, then the caller's policy, its token checked as of ``stored_at``.
+
+    For an allowed trigger it returns the context the run executes in: the
+    delegation the engine stored with it (``DELEGATION_HEADER``) when it is for
+    the user discovery names and for this module, else None (as itself)."""
 
     async def authorize(
         operation: str,
@@ -551,8 +555,11 @@ def discovery_job_authorizer(session: DiscoverySession):
         run_id: str,
         headers: Mapping[str, str],
         stored_at: datetime | None,
-    ) -> None:
-        await session.client._call(
+    ) -> Any:
+        from naas_abi_sdk.call_context import delegation_context
+        from naas_abi_sdk.jobs import DELEGATION_HEADER
+
+        answer = await session.client._call(
             "authorize_job",
             pb.AuthorizeJobRequest(
                 instance_id=session.instance_id,
@@ -564,6 +571,13 @@ def discovery_job_authorizer(session: DiscoverySession):
                 stored_at=stored_at.timestamp() if stored_at is not None else 0.0,
             ),
             pb.AuthorizeJobResponse,
+        )
+        if operation != "trigger":
+            return None
+        return delegation_context(
+            headers.get(DELEGATION_HEADER, ""),
+            getattr(answer, "caller_identity", ""),
+            session.service_account,
         )
 
     return authorize

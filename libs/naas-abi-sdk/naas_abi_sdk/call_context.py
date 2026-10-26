@@ -22,6 +22,9 @@ calls of an invocation with the delegation it was handed
 
 from __future__ import annotations
 
+import base64
+import json
+import re
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
@@ -130,3 +133,48 @@ def set_call_context(context: CallContext) -> Token[CallContext]:
 
 def reset_call_context(token: Token[CallContext]) -> None:
     _call_context.reset(token)
+
+
+# An account's subject token when it is the account's own ULID (``sa_<ULID>``);
+# anything else cannot be turned back into an account id here.
+_OWN_ACCOUNT = re.compile(r"[0-9A-Za-z]{26}")
+
+
+def delegation_context(token: str, user: str, own: str = "") -> CallContext | None:
+    """The context a module's run executes in, from the delegation the engine
+    or a first-party service handed it, or None (the run calls as the module
+    itself).
+
+    The engine verifies every token it is sent; the host only checks that this
+    one is a delegation (``abi:delegated:agent``) for the run's user (``user``:
+    the one discovery named, so a submitter cannot make the host call as
+    someone else), and that it names this host's own account as the actor
+    (``own``: the account's subject token, from its discovery record; a
+    delegation for another module is not this host's to carry). Anything else
+    is dropped, never an error: the run is the module's own."""
+    from naas_abi_sdk.credentials import AGENT_AUDIENCE
+
+    if not token:
+        return None
+    try:
+        payload = token.split(".")[1]
+        claims = json.loads(
+            base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4))
+        )
+        actor = claims["act"]["sub"]
+    except (IndexError, ValueError, KeyError, TypeError):
+        return None
+    if (
+        claims.get("aud") != AGENT_AUDIENCE
+        or not user
+        or claims.get("sub") != user
+        or not isinstance(actor, str)
+        or not actor
+        or (_OWN_ACCOUNT.fullmatch(own or "") and actor != f"sa_{own}")
+    ):
+        return None
+    return CallContext(
+        principal=Principal(id=actor, kind="service_account"),
+        on_behalf_of=Principal(id=user, kind="user"),
+        delegated_token=token,
+    )

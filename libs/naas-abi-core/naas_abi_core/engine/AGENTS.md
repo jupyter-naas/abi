@@ -216,8 +216,18 @@ login, and `auth`, the callout responder's. There is no shared `abi` or `module`
   the trigger, so the job host authorizes the run against the caller as of when it was stored
   (`authorize_job`), never against a header the module wrote. Without an engine answering (a broker
   without the callout) the SDK does it itself and remembers for a minute that none did.
+- **Who a run runs as.** A manual trigger `api` or `engine` stores for a user who may trigger the
+  job also carries `Abi-Job-Delegation` (sealed): an `abi:delegated:agent` token for that user with
+  the job's module as the actor and the caller's scope, minted by the engine (`_delegation`). The
+  module's host runs the handler under it once discovery allowed the trigger and named that user,
+  and renews it through its key, up to 8 hours after the trigger. An engine module's job has no
+  module account: its authorizer runs it as `job/<module_id>` for the user from the host token. A
+  module's own trigger, a schedule or an event runs as the module alone: a module never hands a user
+  to another, as with agents. A schedule's input is the schedule's body, validated (a JSON object of
+  4 KiB at most) and sealed by the engine.
 - **Sealed triggers.** Every trigger, schedule and cancel the engine writes carries a seal
-  (`Abi-Job-Seal`, an HMAC over where it is delivered, its kind, its body and its claim-check headers,
+  (`Abi-Job-Seal`, an HMAC over where it is delivered, its kind, its body, its claim-check headers
+  and its delegation,
   with a key in `IAMSecrets`, `iam/job-trigger-seal`); a fired schedule copies its schedule's seal. A
   module's job host takes no trigger or cancel the engine did not seal: it asks `verify_trigger`
   and drops the rest, and fails closed (a trigger is redelivered, never run, when no engine answers;

@@ -759,11 +759,16 @@ TRIGGER_SENDER_HEADERS = (
 # other (``verify_trigger``): the server answers JetStream requests on the reply
 # subject the requester chose, and the jobs stream would store a forged one.
 SEAL_HEADER = "Abi-Job-Seal"
+# A manual trigger a first-party service (Nexus, the engine) stored for a user:
+# the delegation the run executes with (``abi:delegated:agent``, ``act`` the
+# job's module, ``sub`` the user). The engine writes it, never a sender.
+DELEGATION_HEADER = "Abi-Job-Delegation"
 SEALED_HEADERS = (
     "Abi-Claim-Check",
     "Abi-Claim-Check-Size",
     "Abi-Claim-Check-Chunks",
     "Abi-Claim-Check-Sha256",
+    DELEGATION_HEADER,
 )
 
 

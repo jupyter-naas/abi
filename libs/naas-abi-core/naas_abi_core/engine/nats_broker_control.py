@@ -25,7 +25,9 @@ over its own login:
   (``discovery:CancelJobRun``): a trigger or a cancel of a named module's job.
   The engine sets the trigger's kind (``event`` for the job's own module only,
   else ``manual``) and TTL, scopes its id (``Nats-Msg-Id``) to the caller and
-  the job, and passes through the trace and claim-check headers only;
+  the job, and passes through the trace and claim-check headers only. A
+  manual trigger ``api`` or ``engine`` stores for a user also carries the
+  delegation its run executes with (``Abi-Job-Delegation``, sealed);
 * ``ensure_claim_checks``, ``read_claim_check``: the ``ABI_CLAIM_CHECKS``
   stream, and one chunk of a claim check under a scope the caller may read
   (a topic it may consume, the triggers of a job it hosts), answered raw;
@@ -53,6 +55,7 @@ from naas_abi_core import logger
 from naas_abi_core.engine.call_context import (
     CallContext,
     Principal,
+    as_service_account,
     use_call_context,
 )
 from naas_abi_core.engine.nats_auth import InvalidServiceTokenError, TokenVerifier
@@ -164,6 +167,7 @@ class BrokerControl:
         request = _Request(
             self, caller, None if trusted else await self._grants_of(caller)
         )
+        request.context = context
         # The verified credentials the job's host authorizes a trigger or a
         # cancel with (discovery:TriggerJob, CancelJobRun), as of when stored.
         # The caller's own token never goes into the stream: the job's host
@@ -264,6 +268,7 @@ class BrokerControl:
         from naas_abi_sdk import claim_check
         from naas_abi_sdk.job_host import ensure_stream
         from naas_abi_sdk.jobs import (
+            DELEGATION_HEADER,
             SEAL_HEADER,
             TRIGGER_HEADER,
             TRIGGER_SENDER_HEADERS,
@@ -304,6 +309,12 @@ class BrokerControl:
                 ).encode()
             ).hexdigest()
         headers.update(request.credentials)
+        if kind == "manual":
+            delegation = await asyncio.to_thread(
+                self._delegation, request, project, module_id, job
+            )
+            if delegation is not None:
+                headers[DELEGATION_HEADER] = delegation
         headers.update({TRIGGER_HEADER: kind, "Nats-TTL": TRIGGER_TTLS[kind]})
         headers[SEAL_HEADER] = self._seal(subjects.trigger, kind, body, headers)
         stream = stream_name(project)
@@ -321,6 +332,53 @@ class BrokerControl:
                 subjects.trigger, body, headers=headers, stream=stream
             )
         return {"seq": ack.seq, "duplicate": bool(ack.duplicate)}
+
+    def _delegation(
+        self, request: _Request, project: str, module_id: str, job: str
+    ) -> str | None:
+        """What the run of a trigger stored for a user executes with: a
+        delegation (``abi:delegated:agent``, ``act`` the job's module, ``sub``
+        the user, the caller's scope kept), when a first-party service (``api``,
+        ``engine``) triggers for a user who may trigger the job. None for a
+        module's trigger (a module never hands a user to another, as with
+        agents), for no user, or for an engine module's job (the engine runs it
+        for the user itself, from the host token)."""
+        from naas_abi_core.services.iam.IAMPorts import (
+            TOKEN_TYPE_SESSION,
+            TokenExchange,
+        )
+        from naas_abi_core.services.iam.modules import account_name
+        from naas_abi_sdk.credentials import AGENT_AUDIENCE
+
+        context = request.context
+        user = context.on_behalf_of
+        if user is None or not request.trusted:
+            return None
+        if (
+            self.iam.store.find_service_account(account_name(project, module_id))
+            is None
+        ):
+            return None
+        resource = _job_resource(project, module_id, job)
+        with use_call_context(context):
+            if not self.iam.authorize("discovery:TriggerJob", resource).allowed:
+                # The host refuses it: nothing to run, nothing to hand over.
+                return None
+        try:
+            with as_service_account("engine"):
+                issued = self.iam.exchange_token(
+                    TokenExchange(
+                        subject_token=user.id,
+                        subject_token_type=TOKEN_TYPE_SESSION,
+                        audience=AGENT_AUDIENCE,
+                        resource=resource,
+                        scope=context.scope,
+                        groups=tuple(user.groups),
+                    )
+                )
+        except (IAMError, ValueError) as exc:
+            raise Refused("PERMISSION_DENIED", f"no delegation: {exc}") from None
+        return issued.token
 
     async def _cancel(self, fields: dict, request: _Request) -> None:
         from naas_abi_sdk.jobs import SEAL_HEADER, job_subjects
@@ -535,6 +593,8 @@ class _Request:
     ) -> None:
         self.control, self.caller, self.grants = control, caller, grants
         self.credentials: dict[str, str] = {}
+        # The verified call, with the user it acts for and its credential's scope.
+        self.context = CallContext(principal=caller)
 
     @property
     def trusted(self) -> bool:

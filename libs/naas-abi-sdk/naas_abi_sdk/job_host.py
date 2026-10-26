@@ -26,6 +26,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from naas_abi_sdk.call_context import use_call_context
 from naas_abi_sdk.jobs import (
     INPUT_HASH_HEADER,
     MAX_TRIGGER_INPUT_BYTES,
@@ -208,11 +209,13 @@ async def ensure_stream(js: Any, project: str) -> None:
 
 
 # (operation "trigger" | "cancel", job, run id, headers, stored at or None):
-# raises RPCError when the caller may not. Scheduled ("cron", "every") and
-# "event" triggers are the host's own and are not asked about: the host drops
+# raises RPCError when the caller may not. For an allowed trigger it returns the
+# CallContext the run executes in (the module acting for the user the trigger was
+# stored for), or None: the run is the module's own. Scheduled ("cron", "every")
+# and "event" triggers are the host's own and are not asked about: the host drops
 # any trigger the engine did not seal.
 JobAuthorizer = Callable[
-    [str, str, str, Mapping[str, str], "datetime | None"], Awaitable[None]
+    [str, str, str, Mapping[str, str], "datetime | None"], Awaitable[Any]
 ]
 # Codes that refuse a trigger for good; anything else is retried later.
 REFUSALS = frozenset(
@@ -290,7 +293,7 @@ def schedule_input(value: Any) -> str:
     except ValueError:
         raise ValueError("an input is JSON") from None
     if not isinstance(parsed, dict):
-        raise ValueError("an input is a JSON object")
+        raise ValueError("an input is a JSON object")  # noqa: TRY004 - payload validation
     # As ``Cron.input_json`` writes it: the same input is the same bytes.
     return (
         json.dumps(parsed, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
@@ -1311,9 +1314,12 @@ class JobHost:
             trigger["scheduler"] = headers["Nats-Scheduler"]
         elif trigger["kind"] == "schedule":
             trigger["kind"] = "manual"  # only the server fires a schedule
-        if attempt == 1 and trigger["kind"] == "manual" and self.authorize is not None:
+        # Every attempt of a manual trigger is asked about: a retry runs for the
+        # same user, and a right revoked since stops it.
+        run_as = None
+        if trigger["kind"] == "manual" and self.authorize is not None:
             try:
-                await self.authorize(
+                run_as = await self.authorize(
                     "trigger", descriptor.name, run_id, headers, _stored_at(msg)
                 )
             except Exception as exc:  # noqa: BLE001 - refused, or retried below
@@ -1363,7 +1369,13 @@ class JobHost:
         self._running[run_id] = context
         heartbeat = asyncio.create_task(self._heartbeat(msg))
         progress = asyncio.create_task(self._persist_progress(context))
-        work = asyncio.create_task(handler(context))
+        if run_as is None:
+            work = asyncio.create_task(handler(context))
+        else:
+            # The run's calls are the module's, for the user: the task copies
+            # this context, and the transport sends the delegation it holds.
+            with use_call_context(run_as):
+                work = asyncio.create_task(handler(context))
         self._work[run_id] = work
         timeout = descriptor.timeout.total_seconds() if descriptor.timeout else None
         result: Any = None

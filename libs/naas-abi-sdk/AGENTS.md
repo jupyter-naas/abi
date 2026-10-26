@@ -185,6 +185,15 @@ RUNNING/RETRYING with attempts left whose trigger left the stream).
 trigger is published; `event_filter.py` mirrors core's `EventFilter.matches`,
 change them together.
 
+Who a run runs as: every attempt of a manual trigger is authorized
+(`discovery_job_authorizer`, `discovery:TriggerJob`), and the authorizer returns the
+context the run executes in. A trigger Nexus or the engine stored for a user carries the
+engine's delegation (`DELEGATION_HEADER`, sealed): the run is the module acting for that
+user (`call_context.delegation_context`, as an agent run), its kernel calls and the
+triggers of its child workflows carry the delegation, renewed through the module's key up
+to 8 hours after the trigger. Without one (a module's trigger, a schedule, an event) the
+run is the module's own.
+
 Workflows (`workflows.py`, Decision (2026-10-25) below) are jobs
 with `kind="workflow"`, JSON Schemas on the descriptor and a step journal. Same rules
 as jobs.py: stdlib and proto only at import (nats and `services.errors` load lazily),

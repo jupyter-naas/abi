@@ -59,10 +59,18 @@ def as_engine(
 ) -> Callable[..., Any]:
     """``handler``, run as a service account of the engine's own (``identity``,
     by default the engine itself): a job runs for no caller
-    (``naas_abi_core.engine.call_context.as_service_account``)."""
-    from naas_abi_core.engine.call_context import as_service_account
+    (``naas_abi_core.engine.call_context.as_service_account``), unless its
+    trigger was stored for a user: then the host runs it as ``identity`` for
+    that user (``job_authorizer``), and that context is kept."""
+    from naas_abi_core.engine.call_context import (
+        as_service_account,
+        current_call_context,
+    )
 
     async def run(ctx: Any) -> Any:
+        current = current_call_context()
+        if current.on_behalf_of is not None and current.principal.name == identity:
+            return await handler(ctx)
         with as_service_account(identity):
             return await handler(ctx)
 
@@ -122,7 +130,13 @@ def _default_documents(transport: Any, module_id: str) -> Any:
     return DocumentService(DocumentClient(transport).for_namespace(module_id))
 
 
-def job_authorizer(iam: Any, verifier: Any, project: str, module_id: str) -> Any:
+def job_authorizer(
+    iam: Any,
+    verifier: Any,
+    project: str,
+    module_id: str,
+    identity: str = ENGINE_IDENTITY,
+) -> Any:
     """An engine job host's authorizer: the check discovery runs for a module's
     host (``discovery_service.require_job``), in process.
 
@@ -130,9 +144,16 @@ def job_authorizer(iam: Any, verifier: Any, project: str, module_id: str) -> Any
     when the trigger was stored, with the user it acts for when it names one),
     verified against the engine's JWKS (``verifier``). A refusal is an ``RPCError`` the host records; IAM is asked
     off the jobs loop.
+
+    An allowed trigger that ``api`` or ``engine`` stored for a user runs as the
+    module's job account (``identity``) for that user, with the caller's scope;
+    any other runs as the account alone (a module never hands a user to
+    another, as with agents).
     """
     from naas_abi_core.engine.call_context import (
+        CallContext,
         as_service_account,
+        service_account,
         use_call_context,
     )
     from naas_abi_core.engine.nats_auth import (
@@ -162,7 +183,7 @@ def job_authorizer(iam: Any, verifier: Any, project: str, module_id: str) -> Any
             recipient.append(subject_token(account.id))
         return host_audience(recipient[0])
 
-    def check(operation, job, run_id, headers, stored_at) -> None:
+    def check(operation, job, run_id, headers, stored_at) -> CallContext | None:
         try:
             caller = caller_of(
                 headers.get("Nats-Auth-Token", ""),
@@ -178,9 +199,20 @@ def job_authorizer(iam: Any, verifier: Any, project: str, module_id: str) -> Any
                 require_job(guard, project, module_id, job, operation, run_id)
         except PermissionDeniedError as exc:
             raise RPCError("PERMISSION_DENIED", str(exc)) from exc
+        first_party = caller.principal.name in (ENGINE_IDENTITY, "api")
+        if operation != "trigger" or caller.on_behalf_of is None or not first_party:
+            return None
+        return CallContext(
+            principal=service_account(identity),
+            on_behalf_of=caller.on_behalf_of,
+            scope=caller.scope,
+            trace_id=caller.trace_id,
+        )
 
-    async def authorize(operation, job, run_id, headers, stored_at) -> None:
-        await asyncio.to_thread(check, operation, job, run_id, headers, stored_at)
+    async def authorize(operation, job, run_id, headers, stored_at) -> Any:
+        return await asyncio.to_thread(
+            check, operation, job, run_id, headers, stored_at
+        )
 
     return authorize
 
@@ -385,6 +417,7 @@ class EngineJobLoader:
                         self._verifier(),
                         self.project,
                         module_id,
+                        job_identity(self.iam, module_id),
                     )
                 }
             ),

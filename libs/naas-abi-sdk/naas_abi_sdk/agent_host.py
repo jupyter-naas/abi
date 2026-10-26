@@ -22,9 +22,12 @@ from naas_abi_proto.discovery.v1 import discovery_pb2 as discovery_pb
 from naas_abi_sdk import overflow
 from naas_abi_sdk.agent import TERMINAL, agent_subject
 from naas_abi_sdk.broker_flush import flush_to_broker
-from naas_abi_sdk.call_context import CallContext, Principal, use_call_context
+from naas_abi_sdk.call_context import (
+    CallContext,
+    delegation_context,
+    use_call_context,
+)
 from naas_abi_sdk.concurrency import DEFAULT_LIMIT, ConcurrentCalls
-from naas_abi_sdk.credentials import AGENT_AUDIENCE
 from naas_abi_sdk.messages import reply
 from naas_abi_sdk.services.errors import DocumentNotFound, VersionConflict
 from naas_abi_sdk.services.models import CollectionSpec
@@ -45,45 +48,11 @@ AUTHORIZATION_SECONDS = 5.0
 MAX_AUTHORIZATIONS = 1024
 
 
-# An account's subject token when it is the account's own ULID (``sa_<ULID>``);
-# anything else cannot be turned back into an account id here.
-_OWN_ACCOUNT = re.compile(r"[0-9A-Za-z]{26}")
-
-
 def _delegation(token: str, caller: str, own: str = "") -> CallContext | None:
     """The context a run executes in, from the delegation its submitter handed
-    over, or None (the run calls as the module itself).
-
-    The engine verifies every token it is sent; the host only checks that this
-    one is a delegation for the run's owner (``caller``: the user discovery
-    named), so a submitter cannot make the host call as someone else, and that
-    it names this host's own account as the actor (``own``: the account's
-    subject token, from its discovery record; a delegation for another module
-    is not this host's to carry). Anything else is dropped, never an error: the
-    run is the module's own."""
-    if not token:
-        return None
-    try:
-        payload = token.split(".")[1]
-        claims = json.loads(
-            base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4))
-        )
-        actor = claims["act"]["sub"]
-    except (IndexError, ValueError, KeyError, TypeError):
-        return None
-    if (
-        claims.get("aud") != AGENT_AUDIENCE
-        or claims.get("sub") != caller
-        or not isinstance(actor, str)
-        or not actor
-        or (_OWN_ACCOUNT.fullmatch(own or "") and actor != f"sa_{own}")
-    ):
-        return None
-    return CallContext(
-        principal=Principal(id=actor, kind="service_account"),
-        on_behalf_of=Principal(id=caller, kind="user"),
-        delegated_token=token,
-    )
+    over, or None (the run calls as the module itself): see
+    ``call_context.delegation_context``."""
+    return delegation_context(token, caller, own)
 
 
 @dataclass

@@ -944,7 +944,10 @@ iam.broker_permissions(principal, key)  # records from authenticate_key; never c
   likewise for the engine; the overflow host accepts both. `exchange_key(key,
   audience)` and `issue_service_token(name, audience=...)` mint them
   (`nats_auth.host_audience(sa)`), `issue_host_token(principal, sa)` is what the
-  broker control stores in a trigger (the job's host, else the engine).
+  broker control stores in a trigger (the job's host, else the engine). For a
+  user `api` or `engine` acts for, it also stores the delegation the run
+  executes with: a vouched exchange to `abi:delegated:agent` whose `resource` is
+  the job, so the job's module is the actor (engine `AGENTS.md`, "Who a run runs as").
 - **Module accounts** are `module/<project>/<module_id>` and start with
   `builtin.module_bootstrap` only: discovery `Register`, `Renew`, `Unregister`, `GetModule`
   on their own `module/<project>/<module_id>` and `iam:SubmitManifest` / `GetManifest` on
