@@ -1295,7 +1295,7 @@ def test_cancelling_a_parent_cancels_its_running_children():
     assert ctx._children == {}
 
 
-def test_a_shutdown_or_timeout_does_not_cancel_the_children():
+def test_a_parent_that_will_be_retried_leaves_its_children_running():
     docs, outcomes = MemoryDocuments(), _Outcomes()
 
     async def scenario():
@@ -1306,13 +1306,41 @@ def test_a_shutdown_or_timeout_does_not_cancel_the_children():
         ctx.cancelled.set()
         with pytest.raises(WorkflowCancelled):
             await task
-        await ctx.finish("FAILED")  # interrupted by shutdown: retried, re-attaches
+        # Interrupted by a shutdown or timed out, with attempts left: the host
+        # records RETRYING, and the next attempt re-attaches to the child.
+        await ctx.finish("RETRYING")
         return run
 
     run = asyncio.run(scenario())
 
     assert run.cancelled == []
     assert docs.steps("flow:1")["c"]["status"] == "RUNNING"
+
+
+@pytest.mark.parametrize("status", ["TIMED_OUT", "FAILED"])
+def test_a_parent_that_ends_for_good_cancels_the_children_it_waited_for(status):
+    docs, outcomes = MemoryDocuments(), _Outcomes()
+
+    async def scenario():
+        ctx = _context(docs, outcomes=outcomes)
+        task = asyncio.create_task(
+            ctx.map_call("fan", "acme.child", "child", [{}, {}], concurrency=2)
+        )
+        await asyncio.sleep(0.05)
+        runs = list(ctx._children.values())
+        ctx.cancelled.set()  # the host's timeout, or a failure on the last attempt
+        with pytest.raises(WorkflowCancelled):
+            await task
+        await ctx.finish(status)
+        return ctx, runs
+
+    ctx, runs = asyncio.run(scenario())
+
+    assert len(runs) == 2 and all(run.cancelled == ["cancel"] for run in runs)
+    steps = docs.steps("flow:1")
+    assert {steps[f"fan[{i}]"]["status"] for i in range(2)} == {"CANCELLED"}
+    assert status in steps["fan[0]"]["error"]
+    assert ctx._children == {}
 
 
 # --- completion notices ----------------------------------------------------------------

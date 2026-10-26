@@ -188,9 +188,12 @@ the module namespace, ids `<run id>#<step key>`, results written before the summ
 `FlowContext.step` returns the JSON a replay returns; step keys are unique per run and
 deterministic; results are capped at 256 KiB. `call`/`map_call` journal the child run id
 before waiting, with the idempotency key `<run>/<key>/<attempt>`; a failed child fails the
-step and the next attempt starts a new one. A parent holds its slot; only a run that ends
-CANCELLED cancels its waited-for children (`FlowContext.finish`, called by the host), not a
-shutdown or a timeout. `NonRetryable` exceptions fail a run without retry. A typed workflow that called
+step and the next attempt starts a new one. A parent holds its slot. A run that ends for
+good without its output (CANCELLED, TIMED_OUT, or FAILED with no attempt left:
+`STOPPED_PARENT_STATUSES`) cancels the children it still waited for, a fan-out's in-flight
+siblings included, so they free their slots (`FlowContext.finish`, called by the host with
+the final status); a run the host records RETRYING leaves them running, and its next
+attempt re-attaches. `NonRetryable` exceptions fail a run without retry. A typed workflow that called
 `ctx.skip()` returns `None` and ends SKIPPED; `WorkflowRun.result()` and a parent's `call`
 then give `None`. Step keys reject control characters; a failed attempt's child is never
 carried into the next attempt of a `call`. Retention deletes a run's journal before its record. Hosts publish

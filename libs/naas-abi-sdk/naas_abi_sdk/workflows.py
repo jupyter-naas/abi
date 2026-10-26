@@ -61,6 +61,8 @@ MAX_FAN_OUT = 10_000
 DEFAULT_FAN_OUT_CONCURRENCY = 8
 # Core NATS is at-most-once: a waiter polls at this pace besides listening for notices.
 NOTICE_FALLBACK_POLL_SECONDS = 5.0
+# A parent that ends with one of these is not retried: it cancels its children.
+STOPPED_PARENT_STATUSES = frozenset({"CANCELLED", "TIMED_OUT", "FAILED"})
 # A host's own result cap for a run (job_host.MAX_RESULT_BYTES), as its marker shows.
 _TRUNCATED = {"truncated", "preview"}
 
@@ -1084,16 +1086,22 @@ class FlowContext(JobContext):
     # --- the host's side -------------------------------------------------------------
 
     async def finish(self, status: str) -> None:
-        """Called by the host once the handler ended with ``status``: a cancelled
-        run cancels its running children."""
-        if status != "CANCELLED":
+        """Called by the host once the handler ended with ``status``, the run's
+        final one (``RETRYING`` when another attempt follows). A run that ends for
+        good without its output (cancelled, timed out, failed) cancels the children
+        it still waited for, so they free their slots; a run that will be retried
+        leaves them running, and its next attempt re-attaches to them."""
+        if status not in STOPPED_PARENT_STATUSES:
             return
+        error = (
+            "The parent run was cancelled"
+            if status == "CANCELLED"
+            else f"The parent run ended {status}"
+        )
         for key, run in list(self._children.items()):
             try:
                 await run.cancel()
-                await self._journal.finish(
-                    key, "CANCELLED", error="The parent run was cancelled"
-                )
+                await self._journal.finish(key, "CANCELLED", error=error)
             except Exception:
                 logger.warning(
                     "Could not cancel child run %s", run.run_id, exc_info=True
