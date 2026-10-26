@@ -407,8 +407,10 @@ def test_a_caller_who_may_get_a_module_sees_its_instances():
         assert list(instance.descriptor.agents) == []  # no ListAgents
         # Without GetModule the module is not found.
         eve = h.user("eve")
-        with h.as_(actor="api", on_behalf_of=eve):
-            with pytest.raises(DiscoveryError, match="MODULE_NOT_FOUND"):
-                await service.get_module(get)
+        with (
+            h.as_(actor="api", on_behalf_of=eve),
+            pytest.raises(DiscoveryError, match="MODULE_NOT_FOUND"),
+        ):
+            await service.get_module(get)
 
     asyncio.run(scenario())
