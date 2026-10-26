@@ -31,7 +31,6 @@ from typing import Any
 
 try:
     from naas_abi_sdk.jobs import (
-        JobDescriptor,
         NonRetryable,
         Trigger,
         is_async_callable,
@@ -51,8 +50,8 @@ try:
         WorkflowProxy,
         WorkflowRun,
         WorkflowRunFailed,
-        derive_spec,
         dump_output,
+        method_workflow,
         validate_input,
     )
     from naas_abi_sdk.workflows import workflow as _sdk_workflow
@@ -362,26 +361,18 @@ if WORKFLOWS_AVAILABLE:
         def decorate(method: Callable[..., Any]) -> Callable[..., Any]:
             if is_async_callable(method):
                 return decorate_async(method)
-            spec, in_schema, out_schema = derive_spec(
+            descriptor, spec = method_workflow(
                 method,
-                positional=3,
-                input_schema=input_schema,
-                output_schema=output_schema,
-            )
-            doc = inspect.getdoc(method) or ""
-            # The descriptor of naas_abi_sdk.workflows.workflow, for a sync method: keep
-            # the two in step.
-            method.__abi_job__ = JobDescriptor(  # type: ignore[attr-defined]
-                name=name or method.__name__,
-                description=description or (doc.splitlines()[0] if doc else ""),
-                triggers=tuple(triggers),
+                name=name,
+                description=description,
+                triggers=triggers,
                 max_concurrency=max_concurrency,
                 timeout=timeout,
                 max_attempts=max_attempts,
-                kind="workflow",
-                input_schema=in_schema,
-                output_schema=out_schema,
+                input_schema=input_schema,
+                output_schema=output_schema,
             )
+            method.__abi_job__ = descriptor  # type: ignore[attr-defined]
             # Not __abi_workflow__: the SDK mixin would wrap it as an async handler.
             method.__abi_sync_workflow__ = spec  # type: ignore[attr-defined]
             return method

@@ -129,6 +129,10 @@ class WorkflowSpec:
     output_type: Any = None
 
 
+# Makes a workflow's job handler of its handler and spec (``declare_workflow(wrap=)``).
+HandlerWrap = Callable[[Callable[..., Any], WorkflowSpec], Callable[..., Any]]
+
+
 def is_model_type(value: Any) -> bool:
     """A pydantic v2 model class, by its methods: pydantic stays optional."""
     return (
@@ -303,28 +307,57 @@ def workflow(
     def decorate(method: Callable[..., Any]) -> Callable[..., Any]:
         if not is_async_callable(method):
             raise TypeError(f"@workflow methods must be async: {method.__qualname__}")
-        spec, in_schema, out_schema = derive_spec(
+        descriptor, spec = method_workflow(
             method,
-            positional=3,
-            input_schema=input_schema,
-            output_schema=output_schema,
-        )
-        doc = inspect.getdoc(method) or ""
-        method.__abi_job__ = JobDescriptor(  # type: ignore[attr-defined]
-            name=name or method.__name__,
-            description=description or (doc.splitlines()[0] if doc else ""),
-            triggers=tuple(triggers),
+            name=name,
+            description=description,
+            triggers=triggers,
             max_concurrency=max_concurrency,
             timeout=timeout,
             max_attempts=max_attempts,
-            kind="workflow",
-            input_schema=in_schema,
-            output_schema=out_schema,
+            input_schema=input_schema,
+            output_schema=output_schema,
         )
+        method.__abi_job__ = descriptor  # type: ignore[attr-defined]
         method.__abi_workflow__ = spec  # type: ignore[attr-defined]
         return method
 
     return decorate
+
+
+def method_workflow(
+    method: Callable[..., Any],
+    *,
+    name: str | None = None,
+    description: str = "",
+    triggers: tuple[Trigger, ...] = (),
+    max_concurrency: int = 1,
+    timeout: timedelta | None = None,
+    max_attempts: int = 1,
+    input_schema: dict[str, Any] | str | None = None,
+    output_schema: dict[str, Any] | str | None = None,
+) -> tuple[JobDescriptor, WorkflowSpec]:
+    """The descriptor and spec of a workflow method ``(self, ctx, inp) -> out``, as
+    ``@workflow`` declares it; core's sync ``@workflow`` uses it for sync methods."""
+    spec, in_schema, out_schema = derive_spec(
+        method,
+        positional=3,
+        input_schema=input_schema,
+        output_schema=output_schema,
+    )
+    doc = inspect.getdoc(method) or ""
+    descriptor = JobDescriptor(
+        name=name or method.__name__,
+        description=description or (doc.splitlines()[0] if doc else ""),
+        triggers=tuple(triggers),
+        max_concurrency=max_concurrency,
+        timeout=timeout,
+        max_attempts=max_attempts,
+        kind="workflow",
+        input_schema=in_schema,
+        output_schema=out_schema,
+    )
+    return descriptor, spec
 
 
 def declare_workflow(
@@ -341,10 +374,15 @@ def declare_workflow(
     max_concurrency: int = 1,
     timeout: timedelta | None = None,
     max_attempts: int = 1,
+    wrap: HandlerWrap | None = None,
 ) -> JobDescriptor:
-    """``JobsMixin.declare_workflow``."""
-    if not is_async_callable(handler):
-        raise TypeError("A workflow handler must be an async callable (ctx, inp)")
+    """``JobsMixin.declare_workflow``. ``wrap(handler, spec)`` makes the job handler
+    (default ``workflow_handler``, for an async ``handler``); core passes its own to
+    run a sync handler in a worker thread."""
+    if wrap is None:
+        if not is_async_callable(handler):
+            raise TypeError("A workflow handler must be an async callable (ctx, inp)")
+        wrap = workflow_handler
     spec, in_schema, out_schema = derive_spec(
         handler,
         positional=2,
@@ -364,7 +402,7 @@ def declare_workflow(
         input_schema=in_schema,
         output_schema=out_schema,
     )
-    module.declare_job(descriptor, workflow_handler(handler, spec))
+    module.declare_job(descriptor, wrap(handler, spec))
     module.__dict__.setdefault("_abi_workflow_specs", {})[name] = spec
     return descriptor
 

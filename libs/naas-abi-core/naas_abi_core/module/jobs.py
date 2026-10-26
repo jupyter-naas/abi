@@ -94,32 +94,12 @@ try:
             if is_async_callable(handler):
                 return super().declare_workflow(name, handler, **options)
             from naas_abi_core.module.workflows import sync_workflow_handler
-            from naas_abi_sdk.workflows import derive_spec
+            from naas_abi_sdk.workflows import declare_workflow
 
-            # What naas_abi_sdk.workflows.declare_workflow does for an async handler,
-            # with a sync one: keep the two in step.
-            spec, in_schema, out_schema = derive_spec(
-                handler,
-                positional=2,
-                input_type=input_type,
-                output_type=output_type,
-                input_schema=input_schema,
-                output_schema=output_schema,
+            # The SDK's declaration, with core's handler for a sync one.
+            return declare_workflow(
+                self, name, handler, wrap=sync_workflow_handler, **options
             )
-            descriptor = JobDescriptor(
-                name=name,
-                description=description,
-                triggers=tuple(triggers),
-                max_concurrency=max_concurrency,
-                timeout=timeout,
-                max_attempts=max_attempts,
-                kind="workflow",
-                input_schema=in_schema,
-                output_schema=out_schema,
-            )
-            self.declare_job(descriptor, sync_workflow_handler(handler, spec))
-            self.__dict__.setdefault("_abi_workflow_specs", {})[name] = spec
-            return descriptor
 
 except ImportError:  # core without [nats]
     from naas_abi_core.module.jobs_fallback import (  # type: ignore[assignment]
