@@ -2,6 +2,56 @@
 
 <!-- version list -->
 
+## v3.4.0 (2026-10-26)
+
+### Bug Fixes
+
+- Review findings of the durable workflows task
+  ([`f2d12d8`](https://github.com/jupyter-naas/abi/commit/f2d12d8a8e61352e4f06eea466a48ac643a24a3c))
+
+- **nexus**: A start never answers with an old run under a reused id
+  ([`f631c62`](https://github.com/jupyter-naas/abi/commit/f631c62080c432597077a0bf8f93eff122006a19))
+
+- **nexus**: Following a run of an unregistered module lists the catalogs once
+  ([`06a22e0`](https://github.com/jupyter-naas/abi/commit/06a22e0d8102e6698c70e67a06e8cae563bb703b))
+
+- **nexus**: Jsonschema>=4.18, steps and previews robust to bad data
+  ([`d0636ac`](https://github.com/jupyter-naas/abi/commit/d0636acc38f8a10a0d641110d3d54267c6362996))
+
+- **nexus**: Required inputs first in the launch form, a repeated start answers with its run's state
+  ([`2ffeb52`](https://github.com/jupyter-naas/abi/commit/2ffeb5205c6608744c72f3c5dcfa27dcb68cd91d))
+
+- **nexus**: The schema validator resolves references inside the schema only
+  ([`e2a430b`](https://github.com/jupyter-naas/abi/commit/e2a430b2fdd410d10f823de1112774c34ee0e2a1))
+
+- **remote-modules**: Close review findings on processes and ontologies
+  ([`b5312b0`](https://github.com/jupyter-naas/abi/commit/b5312b0ea30719c8a1075c499b98f0ed3efe0548))
+
+### Documentation
+
+- **nexus**: Workflows in the Jobs tab and /api/workflows
+  ([`229306b`](https://github.com/jupyter-naas/abi/commit/229306bf986c022fd1921054ec63fa02c562f0b6))
+
+### Features
+
+- **nexus**: List remote module ontologies in the ontology catalog
+  ([`c9510da`](https://github.com/jupyter-naas/abi/commit/c9510da5cb00f668e8b382ebb6d14077da0370f5))
+
+- **nexus**: Workflows in System → Jobs
+  ([`a730c27`](https://github.com/jupyter-naas/abi/commit/a730c27e8279d0d34d4d8fe0726c92469b95ace4))
+
+- **nexus**: Workflows in the jobs backend and /api/workflows
+  ([`60dd717`](https://github.com/jupyter-naas/abi/commit/60dd717b5885774bc2bf2a41b0d642f09d3ac226))
+
+- **sdk**: Run remote workflows and pipelines as jobs
+  ([`290dc66`](https://github.com/jupyter-naas/abi/commit/290dc66602b1f303c5cd3fc051f04b9572235d29))
+
+### Testing
+
+- **nexus**: Workflows wired over the jobs adapters by the factory
+  ([`cbf714e`](https://github.com/jupyter-naas/abi/commit/cbf714e8c591c78f82c152fa1c7cd94baf82a2ca))
+
+
 ## v3.3.0 (2026-10-23)
 
 ### Features
