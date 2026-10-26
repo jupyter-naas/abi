@@ -9,8 +9,6 @@ import contextlib
 import itertools
 import json
 import shutil
-import socket
-import subprocess
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -96,39 +94,8 @@ class Documents:
 
 @pytest.fixture(params=broker_users.KINDS)
 def broker(request, tmp_path):
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        port = s.getsockname()[1]
-    config = tmp_path / "nats.conf"
-    config.write_text(broker_users.config(request.param))
-    process = subprocess.Popen(
-        [
-            "nats-server",
-            "-a",
-            "127.0.0.1",
-            "-p",
-            str(port),
-            "-c",
-            str(config),
-            "-js",
-            "-sd",
-            str(tmp_path / "js"),
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    deadline = time.time() + 5
-    while time.time() < deadline:
-        try:
-            socket.create_connection(("127.0.0.1", port), timeout=0.2).close()
-            break
-        except OSError:
-            time.sleep(0.05)
-    url = broker_users.login(f"nats://127.0.0.1:{port}", request.param)
-    broker_users.prepare(url, request.param, PROJECT)
-    yield url
-    process.terminate()
-    process.wait(timeout=5)
+    with broker_users.running_broker(request.param, tmp_path, PROJECT) as url:
+        yield url
 
 
 def _host(url, documents, jobs, **kwargs):
@@ -975,7 +942,9 @@ def test_a_module_that_may_not_create_the_jobs_stream_says_so(broker):
     async def scenario():
         nc = await broker_users.connect(broker)
         try:
-            with pytest.raises(StreamNotCreated, match="may not create or update streams"):
+            with pytest.raises(
+                StreamNotCreated, match="may not create or update streams"
+            ):
                 await ensure_stream(nc.jetstream(timeout=1), "unprepared")
         finally:
             await nc.close()

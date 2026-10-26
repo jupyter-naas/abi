@@ -26,6 +26,10 @@ class Exceptions:
     class GraphNotFoundError(Exception):
         pass
 
+    class InvalidSchemaError(Exception):
+        """Schema content that cannot be loaded: not parseable, or it writes the
+        service's own ``internal:`` vocabulary."""
+
     class GraphAlreadyExistsError(Exception):
         pass
 
@@ -465,6 +469,27 @@ class ITripleStoreService(ABC):
 
         Example:
             >>> store.load_schema("path/to/schema.ttl")
+        """
+
+    @abstractmethod
+    def load_schema_content(
+        self,
+        source: str,
+        content: str,
+        file_last_update_time: float | None = None,
+    ) -> bool:
+        """Load Turtle ``content`` into the schema graph, keyed by ``source``.
+
+        Same bookkeeping as ``load_schema``, for a schema that is not a file of
+        this process (a remote module's ontology, ``module/<id>/<path>``).
+
+        Returns:
+            bool: True when the schema graph was written, False when ``source``
+                already held this content.
+
+        Raises:
+            Exceptions.InvalidSchemaError: Content that is not Turtle (nothing
+                is written), or that uses the service's ``internal:`` vocabulary.
         """
 
     @abstractmethod

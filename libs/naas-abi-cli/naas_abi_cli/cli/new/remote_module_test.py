@@ -101,6 +101,8 @@ def test_a_new_module_is_a_remote_module_in_the_project_src(tmp_path: Path) -> N
         "tests/module_test.py",
         "Dockerfile",
         "apps/research/manifest.json",
+        "ontologies/AGENTS.md",
+        "ontologies/modules/ResearchOntology.ttl",
         "AGENTS.md",
     ):
         assert (package / name).is_file(), name
@@ -120,7 +122,7 @@ def test_a_remote_module_never_imports_abi_core(tmp_path: Path) -> None:
         assert not _CORE_IMPORT.search(path.read_text(encoding="utf-8")), path
     dockerfile = (root / "src" / "research" / "Dockerfile").read_text()
     assert "find_spec('naas_abi_core')" in dockerfile
-    assert "naas-abi-sdk[agent,otel]" in dockerfile
+    assert "naas-abi-sdk[agent,otel,workflows,rdf]" in dockerfile
 
 
 @pytest.mark.skipif(
@@ -368,7 +370,7 @@ def test_standalone_creates_a_repository_of_its_own(tmp_path: Path) -> None:
             "#subdirectory=libs/naas-abi-proto"
         ),
         (
-            "naas-abi-sdk[agent,otel] @ git+https://github.com/jupyter-naas/abi.git@v9"
+            "naas-abi-sdk[agent,otel,workflows,rdf] @ git+https://github.com/jupyter-naas/abi.git@v9"
             "#subdirectory=libs/naas-abi-sdk"
         ),
     ]
@@ -443,6 +445,15 @@ def test_new_agent_in_a_remote_module_is_an_sdk_agent(tmp_path: Path) -> None:
     code = (agents / "CriticAgent.py").read_text()
     assert "naas_abi_sdk.agents" in code and not _CORE_IMPORT.search(code)
     assert "expose_agent" in result.output
+    # The agent can take the module's workflow and pipeline tools.
+    import ast
+
+    (create,) = [
+        node
+        for node in ast.parse(code).body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "create_agent"
+    ]
+    assert "tools" in [arg.arg for arg in create.args.kwonlyargs]
 
 
 def test_new_app_in_a_remote_module_says_how_nexus_serves_it(tmp_path: Path) -> None:
@@ -500,26 +511,335 @@ def test_new_agent_in_an_in_engine_module_is_a_core_agent(tmp_path: Path) -> Non
     assert _CORE_IMPORT.search((agents / "CriticAgent.py").read_text())
 
 
-@pytest.mark.parametrize(
-    "scaffold", ["workflow", "pipeline", "integration", "orchestration"]
-)
-def test_core_scaffolds_are_refused_in_a_remote_module(
-    tmp_path: Path, scaffold
-) -> None:
-    import importlib
+def test_orchestration_is_refused_in_a_remote_module(tmp_path: Path) -> None:
+    from naas_abi_cli.cli.new.orchestration import _new_orchestration
 
-    command = getattr(
-        importlib.import_module(f"naas_abi_cli.cli.new.{scaffold}"), f"_new_{scaffold}"
-    )
     root = _project(tmp_path)
     _invoke(_new_module, root, "research")
     package = root / "src" / "research"
 
-    result = _invoke(command, package, "Thing")
+    result = _invoke(_new_orchestration, package, "Thing")
 
     assert result.exit_code != 0
-    assert "--in-engine" in result.output
+    assert "--in-engine" in result.output and "@job" in result.output
     assert not list(package.glob("Thing*.py"))
+
+
+_SCAFFOLDS = [
+    ("workflow", "_new_workflow", "workflows", "ThingWorkflow", "thing_workflow"),
+    ("pipeline", "_new_pipeline", "pipelines", "ThingPipeline", "thing_pipeline"),
+    ("integration", "_new_integration", "integrations", "ThingIntegration", None),
+]
+
+
+def _scaffold(kind: str, package: Path, folder: str, name: str = "Thing"):
+    import importlib
+
+    command = getattr(
+        importlib.import_module(f"naas_abi_cli.cli.new.{kind}"), f"_new_{kind}"
+    )
+    return _invoke(command, package, name, folder)
+
+
+def test_a_remote_module_has_folders_for_its_components(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    _invoke(_new_module, root, "research")
+    package = root / "src" / "research"
+
+    for folder in ("workflows", "pipelines", "integrations"):
+        assert (package / folder / "__init__.py").is_file(), folder
+        notes = (package / folder / "AGENTS.md").read_text()
+        assert "naas_abi_sdk" in notes and "naas_abi_core" in notes
+        assert f"abi new {folder.removesuffix('s')}" in notes
+        assert f"`{folder}/`" in (package / "AGENTS.md").read_text()
+    guide = (package / "AGENTS.md").read_text()
+    assert "expose_workflow" in guide and "expose_pipeline" in guide
+
+
+@pytest.mark.parametrize(("kind", "_command", "folder", "cls", "slug"), _SCAFFOLDS)
+def test_a_remote_scaffold_is_sdk_code_with_its_test(
+    tmp_path: Path, kind, _command, folder, cls, slug
+) -> None:
+    import ast
+
+    root = _project(tmp_path)
+    _invoke(_new_module, root, "research")
+    package = root / "src" / "research"
+
+    result = _scaffold(kind, package, folder)
+
+    assert result.exit_code == 0, result.output
+    assert "naas_abi_sdk" in result.output
+    if slug:
+        assert f"'{slug}'" in result.output
+        # An agent built in on_initialized needs the instances built first.
+        assert "build_processes()" in result.output
+        assert "build_processes()" in (package / folder / f"{cls}.py").read_text()
+    for written in (
+        package / folder / f"{cls}.py",
+        package / folder / f"{cls}_test.py",
+    ):
+        code = written.read_text()
+        ast.parse(code)
+        assert not _CORE_IMPORT.search(code), written
+        assert "naas_abi_core" not in code.replace("naas_abi_core)", "")
+        assert "{{" not in code and "your_module_name" not in code
+    assert f"naas_abi_sdk.{kind}" in (package / folder / f"{cls}.py").read_text()
+
+
+def test_a_scaffold_in_a_subfolder_makes_it_a_package(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    _invoke(_new_module, root, "research")
+    package = root / "src" / "research"
+
+    result = _scaffold("workflow", package, "workflows/crm")
+
+    assert result.exit_code == 0, result.output
+    assert (package / "workflows" / "crm" / "__init__.py").is_file()
+    assert (package / "workflows" / "crm" / "ThingWorkflow.py").is_file()
+
+
+def _scaffold_at(kind: str, cwd: Path, *args: str):
+    import importlib
+
+    command = getattr(
+        importlib.import_module(f"naas_abi_cli.cli.new.{kind}"), f"_new_{kind}"
+    )
+    return _invoke(command, cwd, "Thing", *args)
+
+
+@pytest.mark.parametrize(("kind", "_command", "folder", "cls", "_slug"), _SCAFFOLDS)
+def test_a_scaffold_with_the_default_path_lands_where_discovery_looks(
+    tmp_path: Path, kind, _command, folder, cls, _slug
+) -> None:
+    root = _project(tmp_path)
+    _invoke(_new_module, root, "research")
+    package = root / "src" / "research"
+
+    result = _scaffold_at(kind, package)
+
+    assert result.exit_code == 0, result.output
+    assert (package / folder / f"{cls}.py").is_file()
+    assert not (package / f"{cls}.py").exists()
+    assert f"Created {cls}.py (naas_abi_sdk)" in result.output
+
+
+def test_a_scaffold_run_inside_its_folder_stays_there(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    _invoke(_new_module, root, "research")
+    package = root / "src" / "research"
+    (package / "workflows" / "crm").mkdir()
+
+    result = _scaffold_at("workflow", package / "workflows" / "crm")
+
+    assert result.exit_code == 0, result.output
+    assert (package / "workflows" / "crm" / "ThingWorkflow.py").is_file()
+    assert not (package / "workflows" / "workflows").exists()
+
+
+def test_a_scaffold_outside_its_folder_warns_and_does_not_promise_a_build(
+    tmp_path: Path,
+) -> None:
+    root = _project(tmp_path)
+    _invoke(_new_module, root, "research")
+    package = root / "src" / "research"
+
+    result = _scaffold_at("workflow", package, "agents")
+
+    assert result.exit_code == 0, result.output
+    assert "Warning" in result.output and "workflows/" in result.output
+    assert "builds it after on_initialized" not in result.output
+    assert (package / "agents" / "ThingWorkflow.py").is_file()
+
+
+def test_a_scaffold_keeps_an_existing_package_marker(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    _invoke(_new_module, root, "research")
+    package = root / "src" / "research"
+    (package / "workflows" / "__init__.py").write_text("# mine\n")
+
+    _scaffold("workflow", package, "workflows")
+
+    assert (package / "workflows" / "__init__.py").read_text() == "# mine\n"
+
+
+def test_scaffolds_in_a_standalone_module_are_sdk_code_too(tmp_path: Path) -> None:
+    repository = tmp_path / "research"
+    result = _invoke(_new_module, tmp_path, "research", "--standalone")
+    assert result.exit_code == 0, result.output
+    package = repository / "src" / "research"
+
+    assert _scaffold("workflow", package, "workflows").exit_code == 0
+    assert _scaffold("pipeline", package, "pipelines").exit_code == 0
+
+    for path in _python_files(package):
+        assert not _CORE_IMPORT.search(path.read_text(encoding="utf-8")), path
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 12),
+    reason="generated modules need Python 3.12 (projects and their images do)",
+)
+def test_a_module_with_every_scaffold_passes_its_own_tests_and_builds_them(
+    tmp_path: Path,
+) -> None:
+    """The acceptance path: a new module, then each scaffold, then its tests (the
+    module's own, which load no naas_abi_core, and the scaffolds'), then the module
+    finds and builds the workflow and the pipeline, and an agent can call them."""
+    root = _project(tmp_path)
+    _invoke(_new_module, root, "research")
+    package = root / "src" / "research"
+    for kind, _command, folder, _cls, _slug in _SCAFFOLDS:
+        assert _scaffold(kind, package, folder, "Foo").exit_code == 0
+    assert _scaffold("workflow", package, "workflows/crm", "Baz").exit_code == 0
+    path = [
+        str(root / "src"),
+        str(_LIBS / "naas-abi-sdk"),
+        str(_LIBS / "naas-abi-proto"),
+    ]
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join([*path, *sys.path])}
+
+    tests = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "-o",
+            "addopts=",
+            str(package),
+        ],
+        cwd=root,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,
+    )
+    assert tests.returncode == 0, tests.stdout + tests.stderr
+    assert "passed" in tests.stdout and "FooWorkflow_test" not in tests.stderr
+
+    code = """
+import asyncio
+from unittest.mock import AsyncMock, MagicMock
+
+import research
+from naas_abi_sdk import job_host, module as sdk_module
+from naas_abi_sdk.discovery import DiscoveryConfiguration
+
+module_type = research.ABIModule
+assert list(module_type.get_workflow_classes()) == ["baz_workflow", "foo_workflow"]
+assert list(module_type.get_pipeline_classes()) == ["foo_pipeline"]
+
+client = MagicMock()
+client.__aenter__ = AsyncMock(return_value=client)
+client.__aexit__ = AsyncMock(return_value=False)
+sdk_module.ABIClient = lambda *a, **k: client
+
+
+class Session:
+    # A registration that is READY at once: no broker, no discovery service.
+    def __init__(self, client, descriptor, rollout_id="", rollout_modules=()):
+        self.descriptor, self.rollout_id = descriptor, rollout_id
+        self.instance_id, self.status, self.initialized = "i", "READY", False
+        self.drain_requested, self.task = asyncio.Event(), None
+
+    async def start(self):
+        pass
+
+    async def renew(self):
+        pass
+
+    async def close(self):
+        pass
+
+
+hosted = []
+
+
+class JobHost:
+    # Each workflow and pipeline is a durable workflow: a job of the module.
+    def __init__(self, transport, documents, module_id, project, jobs, **kwargs):
+        hosted.extend(sorted(jobs))
+
+    async def start(self):
+        pass
+
+    async def drain(self, timeout):
+        pass
+
+    async def close(self):
+        pass
+
+
+sdk_module.DiscoverySession = Session
+job_host.JobHost = JobHost
+
+
+class Agent:
+    # An agent takes its tools when it is built, in on_initialized.
+    def __init__(self, tools):
+        self.tools = {tool.name: tool for tool in tools}
+
+
+agents = []
+
+
+async def on_initialized(self):
+    await self.build_processes()
+    agents.append(
+        Agent(
+            [
+                *self.get_workflow_instance("foo_workflow").as_tools(),
+                *self.get_pipeline_instance("foo_pipeline").as_tools(),
+            ]
+        )
+    )
+
+
+async def run(self):
+    tools = agents[0].tools
+    answer = await tools["foo_workflow"].ainvoke({"message": "hi"})
+    graph = await tools["foo_pipeline"].ainvoke({"iri": "urn:a", "label": "A"})
+    return sorted(tools), answer, graph["format"], hosted
+
+
+# Without discovery or the engine's models, the template's agent, app and job
+# cannot be hosted: this run keeps what the test is about.
+module_type.agents = ()
+module_type.apps = ()
+module_type.jobs = ()
+module_type._decorated_jobs = {}
+module_type.on_initialized = on_initialized
+module_type.run = run
+print(
+    asyncio.run(
+        sdk_module.run_module(
+            module_type,
+            url="nats://unused",
+            token="t",
+            discovery=DiscoveryConfiguration(),
+        )
+    )
+)
+"""
+    built = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=root,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert built.returncode == 0, built.stderr
+    assert (
+        built.stdout.strip()
+        == "(['foo_pipeline', 'foo_workflow'], {'message': 'hi'}, 'text/turtle', "
+        "['pipeline.foo_pipeline', 'workflow.baz_workflow', 'workflow.foo_workflow'])"
+    )
 
 
 def test_core_scaffolds_still_work_in_an_in_engine_module(tmp_path: Path) -> None:
@@ -531,6 +851,23 @@ def test_core_scaffolds_still_work_in_an_in_engine_module(tmp_path: Path) -> Non
 
     assert result.exit_code == 0, result.output
     assert (workflows / "ThingWorkflow.py").is_file()
+    assert _CORE_IMPORT.search((workflows / "ThingWorkflow.py").read_text())
+
+
+def test_the_in_engine_pipeline_and_integration_stay_core_code(tmp_path: Path) -> None:
+    root = _project(tmp_path)
+    _invoke(_new_module, root, "legacy", "--in-engine")
+    package = root / "src" / "legacy"
+
+    for kind, folder, cls in (
+        ("pipeline", "pipelines", "ThingPipeline"),
+        ("integration", "integrations", "ThingIntegration"),
+    ):
+        result = _scaffold(kind, package, folder)
+        assert result.exit_code == 0, result.output
+        code = (package / folder / f"{cls}.py").read_text()
+        assert _CORE_IMPORT.search(code) and "naas_abi_sdk" not in code
+        assert not (package / folder / f"{cls}_test.py").exists()
 
 
 # =============================================================================

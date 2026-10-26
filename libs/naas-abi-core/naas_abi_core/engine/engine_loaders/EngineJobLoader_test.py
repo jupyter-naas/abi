@@ -1,5 +1,6 @@
 import asyncio
 import threading
+from types import SimpleNamespace
 
 import pytest
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
@@ -149,8 +150,6 @@ def test_project_defaults_without_discovery():
 
 
 def test_engine_adds_dataset_maintenance_as_a_kernel_job_owner_in_nats_mode():
-    from types import SimpleNamespace
-
     from naas_abi_core.engine.Engine import Engine
     from naas_abi_core.services.dataset.DatasetMaintenanceJobs import (
         DATASET_JOBS_OWNER,
@@ -246,3 +245,160 @@ def test_retention_defaults_keep_a_week_and_skipped_runs_an_hour():
 
     assert (retention.max_age.days, retention.max_runs_per_job) == (7, 1000)
     assert retention.skipped_max_age.total_seconds() == 3600
+
+
+def test_hosts_read_the_runs_of_other_modules_through_the_engines_documents():
+    hosts: list[_Host] = []
+    loader = _loader(_config(), hosts)
+
+    loader.start({"acme.jobs": _Jobs()}, document_available=True)
+    try:
+        resolver = hosts[0].kwargs["module_documents"]
+        assert resolver("acme.jobs") == "docs:acme.jobs"
+        assert resolver("acme.other") == "docs:acme.other"
+        assert resolver("acme.other") is resolver("acme.other")
+    finally:
+        loader.stop()
+
+
+def test_a_sync_workflow_is_hosted_with_a_flow_context_that_blocks_on_the_host_loop():
+    from naas_abi_core.engine.engine_loaders.SyncJobRunner import SyncJobRunner
+    from naas_abi_core.module.workflows import SyncFlowContext, workflow
+
+    class Flows(JobsMixin):
+        _sync_jobs = True
+
+        @workflow()
+        def report(self, ctx: SyncFlowContext, inp: dict) -> dict:
+            return {}
+
+    hosts: list[_Host] = []
+    loader = _loader(_config(), hosts)
+
+    loader.start({"acme.flows": Flows()}, document_available=True)
+    try:
+        descriptor, handler = hosts[0].handlers["report"]
+    finally:
+        loader.stop()
+
+    assert descriptor.kind == "workflow"
+    assert isinstance(handler, SyncJobRunner)
+    assert handler.context_factory is SyncFlowContext
+
+
+def test_a_declared_workflow_without_a_handler_fails_the_load():
+    class Unbound(JobsMixin):
+        _sync_jobs = True
+        jobs = (JobDescriptor("flow", kind="workflow"),)
+
+    loader = _loader(_config(), [])
+
+    with pytest.raises(ValueError, match="flow"):
+        loader.start({"acme.unbound": Unbound()}, document_available=True)
+    loader.stop()
+
+
+def test_workflows_of_any_module_are_reachable_without_hosting_any_job():
+    from naas_abi_sdk.workflows import WorkflowProxy
+
+    hosts: list[_Host] = []
+    loader = _loader(_config(), hosts)
+
+    loader.start({"acme.quiet": _NoJobs()}, document_available=True)
+    proxy = loader.workflow("acme.remote", "report")
+    try:
+        assert isinstance(proxy, WorkflowProxy)
+        assert proxy.module_id == "acme.remote" and proxy.project == "zen"
+        assert proxy.descriptor.kind == "workflow" and proxy.name == "report"
+        assert hosts == []
+    finally:
+        loader.stop()
+
+
+def test_workflows_need_nats_mode():
+    from naas_abi_core.module.jobs import JobsNotHosted
+
+    with pytest.raises(JobsNotHosted):
+        _loader(None, []).workflow("acme.remote", "report")
+
+
+def test_engines_hand_out_workflows_and_modules_ask_for_declared_dependencies():
+    from naas_abi_core.engine.Engine import Engine
+    from naas_abi_core.engine.EngineProxy import EngineProxy
+    from naas_abi_core.module.jobs import JobsNotHosted
+    from naas_abi_core.module.Module import ModuleDependencies
+
+    def engine(nats):
+        e = Engine.__new__(Engine)
+        e._Engine__configuration = SimpleNamespace(nats=nats)  # type: ignore[attr-defined]
+        e._Engine__job_loader = None  # type: ignore[attr-defined]
+        e._Engine__job_loader_lock = threading.Lock()  # type: ignore[attr-defined]
+        return e
+
+    nats = engine(_config())
+    try:
+        proxy = EngineProxy(
+            nats,
+            "acme.caller",
+            ModuleDependencies(modules=["acme.remote#soft", "acme.other"], services=[]),
+        )
+        for module_id in ("acme.remote", "acme.other"):
+            assert proxy.get_workflow(module_id, "report").module_id == module_id
+        with pytest.raises(PermissionError, match="acme.stranger"):
+            proxy.get_workflow("acme.stranger", "report")
+        unlocked = EngineProxy(
+            nats, "acme.platform", ModuleDependencies([], []), unlocked=True
+        )
+        assert unlocked.get_workflow("acme.stranger", "report").name == "report"
+    finally:
+        nats._Engine__job_loader.stop()  # type: ignore[attr-defined]
+
+    legacy = EngineProxy(
+        engine(None), "acme.caller", ModuleDependencies(["acme.other"], [])
+    )
+    with pytest.raises(JobsNotHosted):
+        legacy.get_workflow("acme.other", "report")
+
+
+def test_an_engine_makes_its_loader_on_the_first_workflow_call():
+    from naas_abi_core.engine.Engine import Engine
+
+    e = Engine.__new__(Engine)
+    e._Engine__configuration = SimpleNamespace(nats=_config())  # type: ignore[attr-defined]
+    e._Engine__job_loader = None  # type: ignore[attr-defined]
+    e._Engine__job_loader_lock = threading.Lock()  # type: ignore[attr-defined]
+    try:
+        e.workflow("acme.remote", "report")
+        made = e._Engine__job_loader  # type: ignore[attr-defined]
+        assert made is not None
+    finally:
+        made.stop()
+
+
+def test_threads_asking_at_once_share_one_loader_one_loop_and_one_connection():
+    from naas_abi_core.engine.Engine import Engine
+
+    e = Engine.__new__(Engine)
+    e._Engine__configuration = SimpleNamespace(nats=_config())  # type: ignore[attr-defined]
+    e._Engine__job_loader = None  # type: ignore[attr-defined]
+    e._Engine__job_loader_lock = threading.Lock()  # type: ignore[attr-defined]
+    start, proxies = threading.Barrier(8), []
+
+    def ask(i):
+        start.wait()
+        proxies.append(e.workflow(f"acme.m{i % 2}", "report"))
+
+    threads = [threading.Thread(target=ask, args=(i,)) for i in range(8)]
+    try:
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(10)
+        loader = e._Engine__job_loader  # type: ignore[attr-defined]
+        assert len(proxies) == 8
+        assert len({id(p.transport) for p in proxies}) == 1
+        assert len({id(p._loop) for p in proxies}) == 1
+        assert len({id(p._documents) for p in proxies if p.module_id == "acme.m0"}) == 1
+    finally:
+        e._Engine__job_loader.stop()  # type: ignore[attr-defined]
+    assert loader._loop is None and loader._transport is None

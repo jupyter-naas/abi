@@ -3,11 +3,14 @@ import hashlib
 import inspect
 import io
 import os
+import threading
+import time
 import uuid
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
+from pathlib import Path
 
 import rdflib
 from naas_abi_core import logger
@@ -30,7 +33,8 @@ from naas_abi_core.services.triple_store.TripleStorePorts import (
     QueryStream,
     Triple,
 )
-from rdflib import Graph, URIRef
+from rdflib import RDF, Graph, Literal, URIRef
+from rdflib.util import guess_format
 
 
 @dataclass(frozen=True)
@@ -38,6 +42,7 @@ class _SchemaIndexEntry:
     subject: URIRef
     hash: str
     file_last_update_time: str
+
 
 SCHEMA_TTL = """
 @prefix internal: <http://triple-store.internal#> .
@@ -77,6 +82,13 @@ internal:content a owl:DatatypeProperty ;
 GRAPH_CLASS = URIRef("http://ontology.naas.ai/abi/Graph")
 _SCHEMA_GRAPH = URIRef("http://ontology.naas.ai/graph/schema")
 _SCHEMA_CLASS = URIRef("http://triple-store.internal#Schema")
+_INTERNAL_NAMESPACE = "http://triple-store.internal"
+_SCHEMA_HASH = URIRef("http://triple-store.internal#hash")
+_SCHEMA_UPDATE_TIME = URIRef("http://triple-store.internal#fileLastUpdateTime")
+_SCHEMA_FILE_PATH = URIRef("http://triple-store.internal#filePath")
+_SCHEMA_CONTENT = URIRef("http://triple-store.internal#content")
+
+
 _OWL_CLASS = URIRef("http://www.w3.org/2002/07/owl#Class")
 _SCHEMA_BOOTSTRAP_ASK = f"""
 ASK WHERE {{
@@ -85,6 +97,16 @@ ASK WHERE {{
   }}
 }}
 """
+
+
+def _sparql_string(value: str) -> str:
+    """``value`` as the inside of a double-quoted SPARQL string literal."""
+    return (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+    )
 
 
 class TripleStoreService(ServiceBase, ITripleStoreService):
@@ -113,6 +135,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         super().__init__()
         self.__triple_store_adapter = triple_store_adapter
         self.__schema_graph = _SCHEMA_GRAPH
+        self._schema_content_lock = threading.Lock()
 
         self._bootstrap_schema_graph()
 
@@ -514,7 +537,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         state. Python dicts are safe to read concurrently.
         """
         filter_clause = (
-            f'FILTER(STR(?filePath) = "{filepath_filter}") .'
+            f'FILTER(STR(?filePath) = "{_sparql_string(filepath_filter)}") .'
             if filepath_filter is not None
             else ""
         )
@@ -630,126 +653,260 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         entries = self._build_schema_index(filepath_filter=filepath).get(filepath, [])
         self._apply_schema_for_file_with_event(filepath, entries)
 
+    def load_schema_content(
+        self,
+        source: str,
+        content: str,
+        file_last_update_time: float | None = None,
+    ) -> bool:
+        """Load Turtle ``content`` into the schema graph under the key ``source``.
+
+        The same bookkeeping as ``load_schema`` (``internal:Schema`` with its
+        hash and content, the diff applied when the content changed), for a
+        source that is not a file of this process, such as a remote module's
+        ontology. Returns True when the schema graph was written, False when
+        ``source`` already held this very content.
+
+        Unlike ``load_schema``, a failure raises: ``Exceptions.InvalidSchemaError``
+        for content that is not Turtle (nothing is written) or that writes the
+        service's own ``internal:`` vocabulary, which the bookkeeping owns.
+        """
+        try:
+            # One writer per service: two loads of a source (two replicas of a
+            # module starting together) would each find no entry and add one.
+            with self._schema_content_lock:
+                entries = self._build_schema_index(filepath_filter=source).get(
+                    source, []
+                )
+                changed = self._apply_schema_content(
+                    source,
+                    content,
+                    time.time()
+                    if file_last_update_time is None
+                    else file_last_update_time,
+                    entries,
+                    "turtle",
+                    self._source_base(source),
+                    validate=self._refuse_internal_vocabulary,
+                )
+        except Exception as exc:
+            self.__publish_event(
+                TripleStoreError(
+                    operation="load_schema",
+                    filepath=source,
+                    message=self._error_message(exc),
+                )
+            )
+            raise
+        self.__publish_event(SchemaLoaded(filepath=source))
+        return changed
+
+    @staticmethod
+    def _refuse_internal_vocabulary(graph: Graph) -> None:
+        if any(
+            str(term).startswith(_INTERNAL_NAMESPACE)
+            for triple in graph
+            for term in triple
+        ):
+            raise Exceptions.InvalidSchemaError(
+                f"schema content may not use the {_INTERNAL_NAMESPACE} vocabulary"
+            )
+
+    @staticmethod
+    def _source_base(source: str) -> str:
+        """The base IRI of a schema that is not a file: relative IRIs in its
+        content resolve against it, not against the process's working directory."""
+        return f"http://ontology.naas.ai/{source}"
+
+    @staticmethod
+    def _parse_schema(content: str, rdf_format: str, base: str) -> Graph:
+        try:
+            return Graph().parse(io.StringIO(content), format=rdf_format, publicID=base)
+        except Exception as exc:  # rdflib raises many parser exception types
+            raise Exceptions.InvalidSchemaError(
+                f"invalid {rdf_format} schema content: {exc}"
+            ) from exc
+
+    @staticmethod
+    def _schema_metadata(
+        subject: URIRef, content_hash: str, update_time: str, content: str
+    ) -> Graph:
+        metadata = Graph()
+        metadata.add((subject, _SCHEMA_HASH, Literal(content_hash)))
+        metadata.add((subject, _SCHEMA_UPDATE_TIME, Literal(update_time)))
+        metadata.add((subject, _SCHEMA_CONTENT, Literal(content)))
+        return metadata
+
     def _apply_schema_for_file(
         self, filepath: str, entries: list[_SchemaIndexEntry]
     ) -> None:
         try:
-            if not entries:
-                self._insert_new_schema(filepath)
-                return
-
             with open(filepath, "r") as file:
-                new_content = file.read()
-            new_content_hash = hashlib.sha256(
-                new_content.encode("utf-8")
-            ).hexdigest()
-
-            matching = next(
-                (e for e in entries if e.hash == new_content_hash), None
+                content = file.read()
+            self._apply_schema_content(
+                filepath,
+                content,
+                os.path.getmtime(filepath),
+                entries,
+                guess_format(filepath) or "turtle",
+                Path(filepath).absolute().as_uri(),
             )
-            primary = matching if matching is not None else entries[0]
-            duplicate_subjects = [
-                e.subject for e in entries if e.subject != primary.subject
-            ]
-
-            if primary.hash == new_content_hash:
-                if duplicate_subjects:
-                    logger.debug(
-                        f"Cleaning up {len(duplicate_subjects)} duplicate schema "
-                        f"metadata entries for {filepath}."
-                    )
-                    for duplicate_subject in duplicate_subjects:
-                        self._remove_schema_subject(duplicate_subject)
-                return
-
-            logger.debug(f"Loading schema: '{filepath}'")
-
-            old_content_b64 = self._fetch_schema_content(primary.subject)
-            if old_content_b64 is None:
-                raise ValueError(
-                    f"Schema metadata for '{filepath}' is missing stored content."
-                )
-            old_content = base64.b64decode(old_content_b64).decode("utf-8")
-
-            old_schema = Graph().parse(io.StringIO(old_content), format="turtle")
-            new_schema = Graph().parse(io.StringIO(new_content), format="turtle")
-
-            addition_triples = new_schema - old_schema
-            deletion_triples = old_schema - new_schema
-            self.insert(addition_triples, graph_name=self.__schema_graph)
-            self.remove(deletion_triples, graph_name=self.__schema_graph)
-
-            file_last_update_time = os.path.getmtime(filepath)
-
-            self.remove(
-                Graph().parse(
-                    io.StringIO(f'''
-                @prefix internal: <http://triple-store.internal#> .
-
-                <{primary.subject}> internal:hash "{primary.hash}" ;
-                    internal:fileLastUpdateTime "{primary.file_last_update_time}" ;
-                    internal:content "{old_content_b64}" .
-            '''),
-                    format="turtle",
-                ),
-                graph_name=self.__schema_graph,
-            )
-            self.insert(
-                Graph().parse(
-                    io.StringIO(f'''
-                @prefix internal: <http://triple-store.internal#> .
-
-                <{primary.subject}> internal:hash "{new_content_hash}" ;
-                    internal:fileLastUpdateTime "{file_last_update_time}" ;
-                    internal:content "{base64.b64encode(new_content.encode("utf-8")).decode("utf-8")}" .
-            '''),
-                    format="turtle",
-                ),
-                graph_name=self.__schema_graph,
-            )
-
-            if duplicate_subjects:
-                logger.debug(
-                    f"Cleaning up {len(duplicate_subjects)} duplicate schema "
-                    f"metadata entries for {filepath}."
-                )
-                for duplicate_subject in duplicate_subjects:
-                    self._remove_schema_subject(duplicate_subject)
         except Exception as e:  # noqa: BLE001
             import traceback
 
             logger.error(f"Error loading schema ({filepath}): {e!s}")
             traceback.print_exc()
 
-    def _insert_new_schema(self, filepath: str) -> None:
-        logger.debug("Loading schema in graph as it doesn't exist in store.")
+    def _apply_schema_content(
+        self,
+        source: str,
+        content: str,
+        file_last_update_time: float,
+        entries: list[_SchemaIndexEntry],
+        rdf_format: str,
+        base: str,
+        validate: Callable[[Graph], None] | None = None,
+    ) -> bool:
+        """Apply ``content`` as the schema of ``source``, given its stored
+        ``entries``. Shared by files and content loads; raises on failure.
+        ``validate`` checks the parsed content (it raises to refuse it) and runs
+        only when the content differs from what is stored: it is parsed once, here.
+        Returns True when the schema graph was written."""
+        new_content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
 
-        with open(filepath, "r") as file:
-            content = file.read()
+        # An unchanged schema is a hash comparison: no parse, no store write.
+        matching = next((e for e in entries if e.hash == new_content_hash), None)
+        if matching is None:
+            new_schema = self._parse_schema(content, rdf_format, base)
+            if validate is not None:
+                validate(new_schema)
+            new_content_b64 = base64.b64encode(content.encode("utf-8")).decode("utf-8")
 
-        base64_content = base64.b64encode(content.encode("utf-8")).decode("utf-8")
-        content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        if not entries:
+            logger.debug("Loading schema in graph as it doesn't exist in store.")
+            self.insert(new_schema, graph_name=self.__schema_graph)
+            subject = URIRef(f"http://triple-store.internal/{uuid.uuid4()}")
+            metadata = self._schema_metadata(
+                subject,
+                new_content_hash,
+                str(file_last_update_time),
+                new_content_b64,
+            )
+            metadata.add((subject, RDF.type, _SCHEMA_CLASS))
+            metadata.add((subject, _SCHEMA_FILE_PATH, Literal(source)))
+            self.insert(metadata, graph_name=self.__schema_graph)
+            return True
 
-        g = Graph().parse(filepath)
-        self.insert(g, graph_name=self.__schema_graph)
+        primary = matching if matching is not None else entries[0]
+        duplicate_subjects = [
+            e.subject for e in entries if e.subject != primary.subject
+        ]
 
-        file_last_update_time = os.path.getmtime(filepath)
+        if primary.hash == new_content_hash:
+            if duplicate_subjects:
+                logger.debug(
+                    f"Cleaning up {len(duplicate_subjects)} duplicate schema "
+                    f"metadata entries for {source}."
+                )
+                for duplicate_subject in duplicate_subjects:
+                    self._remove_schema_subject(duplicate_subject)
+            return False
 
-        self.insert(
-            Graph().parse(
-                io.StringIO(f'''
-            @prefix internal: <http://triple-store.internal#> .
+        logger.debug(f"Loading schema: '{source}'")
 
-            <http://triple-store.internal/{uuid.uuid4()}> a internal:Schema ;
-                internal:hash "{content_hash}" ;
-                internal:filePath "{filepath}" ;
-                internal:fileLastUpdateTime "{file_last_update_time}" ;
-                internal:content "{base64_content}" .
-        '''),
-                format="turtle",
+        old_content_b64 = self._fetch_schema_content(primary.subject)
+        if old_content_b64 is None:
+            raise ValueError(
+                f"Schema metadata for '{source}' is missing stored content."
+            )
+        old_content = base64.b64decode(old_content_b64).decode("utf-8")
+
+        old_schema = self._parse_schema(old_content, rdf_format, base)
+
+        addition_triples = new_schema - old_schema
+        deletion_triples = old_schema - new_schema
+        self.insert(addition_triples, graph_name=self.__schema_graph)
+        # The schema graph is shared: a triple this source no longer asserts stays
+        # while another source still does (a module may repeat a core class).
+        self.remove(
+            deletion_triples
+            - self._asserted_elsewhere(deletion_triples, {e.subject for e in entries}),
+            graph_name=self.__schema_graph,
+        )
+
+        self.remove(
+            self._schema_metadata(
+                primary.subject,
+                primary.hash,
+                primary.file_last_update_time,
+                old_content_b64,
             ),
             graph_name=self.__schema_graph,
         )
+        self.insert(
+            self._schema_metadata(
+                primary.subject,
+                new_content_hash,
+                str(file_last_update_time),
+                new_content_b64,
+            ),
+            graph_name=self.__schema_graph,
+        )
+
+        if duplicate_subjects:
+            logger.debug(
+                f"Cleaning up {len(duplicate_subjects)} duplicate schema "
+                f"metadata entries for {source}."
+            )
+            for duplicate_subject in duplicate_subjects:
+                self._remove_schema_subject(duplicate_subject)
+        return True
+
+    def _asserted_elsewhere(self, triples: Graph, own: set[URIRef]) -> Graph:
+        """The triples of ``triples`` that a stored schema other than the
+        ``internal:Schema`` subjects ``own`` asserts too, read from each one's stored
+        content. When a stored schema cannot be read, every triple is kept: a stale
+        triple is better than one deleted from under another source."""
+        kept = Graph()
+        if len(triples) == 0:
+            return kept
+        rows = self.query(
+            f"""
+            PREFIX internal: <http://triple-store.internal#>
+            SELECT ?s ?path ?content
+            WHERE {{
+                GRAPH <{self.__schema_graph!s}> {{
+                    ?s a internal:Schema ;
+                       internal:filePath ?path ;
+                       internal:content ?content .
+                }}
+            }}
+            """
+        )
+        for row in rows:
+            assert isinstance(row, rdflib.query.ResultRow)
+            subject, path, content = row
+            if subject in own:
+                continue
+            source = str(path)
+            try:
+                other = self._parse_schema(
+                    base64.b64decode(str(content)).decode("utf-8"),
+                    guess_format(source) or "turtle",
+                    Path(source).absolute().as_uri()
+                    if Path(source).exists()
+                    else self._source_base(source),
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    f"Schema {source} could not be read to check shared triples: "
+                    f"{exc!s}; no triple is removed"
+                )
+                return triples
+            for triple in triples:
+                if triple in other:
+                    kept.add(triple)
+        return kept
 
     def remove_schema(self, filepath: str):
         logger.debug(f"Removing schema: {filepath}")
@@ -822,7 +979,11 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
                     metadata_triples.add((subject, predicate, obj))
 
             if len(schema_triples) > 0:
-                self.remove(schema_triples, graph_name=self.__schema_graph)
+                own = {URIRef(str(row[0])) for row in rows}  # type: ignore[index]
+                self.remove(
+                    schema_triples - self._asserted_elsewhere(schema_triples, own),
+                    graph_name=self.__schema_graph,
+                )
 
             if len(metadata_triples) > 0:
                 self.remove(metadata_triples, graph_name=self.__schema_graph)

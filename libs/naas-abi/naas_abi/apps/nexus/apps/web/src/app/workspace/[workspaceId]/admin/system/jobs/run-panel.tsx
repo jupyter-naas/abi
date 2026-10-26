@@ -9,11 +9,12 @@ import { Badge, CopyButton, EmptyState, Hint, Notice, RelativeTime, SkeletonRows
 import { JsonTree } from '../data/viewers/json-tree';
 import type { TracesApi } from '../traces/traces-api';
 import { TraceView } from '../traces/trace-view';
-import { formatMs, isActive, moduleLabel, startDelay } from './jobs-model';
+import { formatMs, isActive, moduleLabel, startDelay, truncatedResult, type TruncatedResult } from './jobs-model';
 import type { RunDetail, RunSummary } from './jobs-types';
+import { StepTimeline } from './run-steps';
 import { RunDuration, RunStatus, TriggerTag } from './jobs-ui';
 
-type Tab = 'logs' | 'payload' | 'result' | 'trace';
+type Tab = 'steps' | 'logs' | 'payload' | 'result' | 'trace';
 
 function isEmpty(value: unknown): boolean {
   if (value === null || value === undefined || value === '') return true;
@@ -108,6 +109,24 @@ function Logs({ lines }: { lines: string[] }) {
   );
 }
 
+/** A workflow's large result, cut by the API: its start, and what to do about it. */
+function TruncatedResultView({ bytes, preview }: TruncatedResult) {
+  return (
+    <div className="run-result-cut">
+      <Notice tone="warn">
+        <span>
+          {bytes === undefined ? 'The result is too large to keep' : `The result is ${formatBytes(bytes)}`}: the first{' '}
+          {formatBytes(preview.length)} are shown. A workflow should store large data in object storage and return a
+          reference to it.
+        </span>
+      </Notice>
+      <pre className="data-text">{preview}</pre>
+    </div>
+  );
+}
+
+const formatBytes = (n: number) => (n >= 1024 ? `${(n / 1024).toFixed(n >= 10240 ? 0 : 1)} KB` : `${n} bytes`);
+
 export function RunPanel({
   summary,
   detail,
@@ -117,6 +136,7 @@ export function RunPanel({
   onCancel,
   onRerun,
   onOpenJob,
+  onOpenChild,
   tracesApi,
   onOpenTrace,
 }: {
@@ -129,12 +149,17 @@ export function RunPanel({
   onCancel: (run: RunSummary) => void;
   onRerun: (run: RunSummary, payload: unknown) => void;
   onOpenJob: (run: RunSummary) => void;
+  /** Open a child run of a workflow step (its ``<module>/<run id>`` key). */
+  onOpenChild: (key: string) => void;
   tracesApi: TracesApi;
   onOpenTrace: (traceId: string) => void;
 }) {
   const run = detail ?? summary;
-  const [tab, setTab] = useState<Tab>('logs');
-  useEffect(() => setTab('logs'), [run?.key]);
+  // The tab the person picked; until then a workflow shows its steps and a job its logs.
+  const [picked, setTab] = useState<Tab | null>(null);
+  useEffect(() => setTab(null), [run?.key]);
+  const workflow = detail?.workflow ?? null;
+  const tab: Tab = picked ?? (workflow ? 'steps' : 'logs');
 
   if (pending && !run) {
     return (
@@ -164,8 +189,9 @@ export function RunPanel({
   }
 
   const tabs: { id: Tab; label: string; count?: number }[] = [
+    ...(workflow ? [{ id: 'steps' as const, label: 'Steps', count: workflow.steps.length }] : []),
     { id: 'logs', label: 'Logs', count: detail?.logs.length },
-    { id: 'payload', label: 'Payload' },
+    { id: 'payload', label: workflow ? 'Input' : 'Payload' },
     { id: 'result', label: run.status === 'SUCCEEDED' ? 'Result' : 'Output' },
     { id: 'trace', label: 'Trace' },
   ];
@@ -241,12 +267,14 @@ export function RunPanel({
       <div className="data-inspector-body">
         {!detail ? (
           <SkeletonRows rows={4} />
+        ) : tab === 'steps' && workflow ? (
+          <StepTimeline run={run} workflow={workflow} onOpenChild={onOpenChild} />
         ) : tab === 'logs' ? (
           <Logs lines={detail.logs} />
         ) : tab === 'payload' ? (
           isEmpty(detail.payload) ? (
-            <EmptyState icon={ScrollText} title="Empty payload">
-              Schedules send none; Run now and events may.
+            <EmptyState icon={ScrollText} title={workflow ? 'Empty input' : 'Empty payload'}>
+              {workflow ? 'This run was started with no input.' : 'Schedules send none; Run now and events may.'}
             </EmptyState>
           ) : (
             <JsonTree value={detail.payload} />
@@ -258,6 +286,8 @@ export function RunPanel({
                 ? 'The handler returned nothing (or None).'
                 : 'Only successful runs record what the handler returned.'}
             </EmptyState>
+          ) : truncatedResult(detail.result) ? (
+            <TruncatedResultView {...(truncatedResult(detail.result) as TruncatedResult)} />
           ) : typeof detail.result === 'object' ? (
             <JsonTree value={detail.result} />
           ) : (

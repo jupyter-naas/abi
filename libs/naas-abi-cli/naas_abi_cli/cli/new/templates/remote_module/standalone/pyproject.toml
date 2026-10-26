@@ -10,7 +10,7 @@ requires-python = ">=3.12"
 # release you target is on PyPI.
 dependencies = [
     "naas-abi-proto @ git+{{abi_git_url}}@{{abi_git_ref}}#subdirectory=libs/naas-abi-proto",
-    "naas-abi-sdk[agent,otel] @ git+{{abi_git_url}}@{{abi_git_ref}}#subdirectory=libs/naas-abi-sdk",
+    "naas-abi-sdk[agent,otel,workflows,rdf] @ git+{{abi_git_url}}@{{abi_git_ref}}#subdirectory=libs/naas-abi-sdk",
 ]
 
 [dependency-groups]

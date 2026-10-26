@@ -239,6 +239,144 @@ def job_runs():
     ]
 
 
+INGEST_INPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "filter": {"type": "string"},
+        "limit": {"type": "integer", "minimum": 1},
+        "dry_run": {"type": "boolean", "default": False},
+    },
+    "required": ["filter"],
+}
+INGEST_OUTPUT_SCHEMA = {"type": "object", "properties": {"count": {"type": "integer"}}}
+
+
+def workflow_definitions():
+    """Two workflows of ``acme.flows`` (a remote module): ``ingest``, with a daily cron
+    carrying an input and typed input and output, calls ``map_item``, which declares no
+    schema."""
+    from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs import (
+        JobDefinition,
+        TriggerSpec,
+    )
+
+    return [
+        JobDefinition(
+            "acme.flows",
+            "ingest",
+            "Fetches and maps items.",
+            "remote",
+            (TriggerSpec("cron", "0 0 6 * * *", "UTC", {"filter": "news"}),),
+            max_attempts=2,
+            kind="workflow",
+            input_schema=INGEST_INPUT_SCHEMA,
+            output_schema=INGEST_OUTPUT_SCHEMA,
+        ),
+        JobDefinition("acme.flows", "map_item", "", "remote", kind="workflow"),
+    ]
+
+
+def workflow_runs():
+    """Newest first: ingest:6 (running), ingest:5 (succeeded, called map_item:1 and
+    map_item:2), map_item:2 (failed), map_item:1 (succeeded)."""
+    from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs import JobRun, RunTrigger
+
+    def run(job, seq, status, started, finished="", **extra):
+        return JobRun(
+            "acme.flows",
+            job,
+            f"{job}:{seq}",
+            status,
+            trigger=RunTrigger("manual"),
+            fired_at=started,
+            started_at=started,
+            finished_at=finished or None,
+            instance="f-1",
+            payload={},
+            **extra,
+        )
+
+    return [
+        run("ingest", 6, "RUNNING", "2026-10-02T12:00:00+00:00"),
+        run(
+            "ingest",
+            5,
+            "SUCCEEDED",
+            "2026-10-02T11:00:00+00:00",
+            "2026-10-02T11:00:09+00:00",
+            result={"count": 2},
+        ),
+        run(
+            "map_item",
+            2,
+            "FAILED",
+            "2026-10-02T11:00:04+00:00",
+            "2026-10-02T11:00:05+00:00",
+            error="ValueError: bad item",
+        ),
+        run(
+            "map_item",
+            1,
+            "SUCCEEDED",
+            "2026-10-02T11:00:03+00:00",
+            "2026-10-02T11:00:04+00:00",
+            result={"ok": True},
+        ),
+    ]
+
+
+def workflow_steps():
+    """Journals by (module, run id): ingest:5 fetched, then called map_item twice
+    (one child failed); ingest:6 is still in its first step."""
+    from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs import (
+        ChildRun,
+        RunStep,
+        WorkflowDetail,
+    )
+
+    return {
+        ("acme.flows", "ingest:5"): WorkflowDetail(
+            (
+                RunStep(
+                    "fetch",
+                    "step",
+                    "SUCCEEDED",
+                    2,
+                    "2026-10-02T11:00:01+00:00",
+                    "2026-10-02T11:00:03+00:00",
+                    2000,
+                    result_bytes=64,
+                ),
+                RunStep(
+                    "map[0]",
+                    "call",
+                    "SUCCEEDED",
+                    1,
+                    "2026-10-02T11:00:03+00:00",
+                    "2026-10-02T11:00:04+00:00",
+                    1000,
+                    child=ChildRun("acme.flows", "map_item", "map_item:1"),
+                    result_bytes=11,
+                ),
+                RunStep(
+                    "map[1]",
+                    "call",
+                    "FAILED",
+                    1,
+                    "2026-10-02T11:00:04+00:00",
+                    "2026-10-02T11:00:05+00:00",
+                    1000,
+                    error="ChildRunFailed: map_item:2 FAILED: ValueError: bad item",
+                    child=ChildRun("acme.flows", "map_item", "map_item:2"),
+                ),
+            )
+        ),
+        ("acme.flows", "ingest:6"): WorkflowDetail(
+            (RunStep("fetch", "step", "RUNNING", 1, "2026-10-02T12:00:01+00:00"),)
+        ),
+    }
+
+
 # --- traces (traces.py) ----------------------------------------------------------------
 
 TRACE_A = "0af7651916cd43dd8448eb211c80319c"

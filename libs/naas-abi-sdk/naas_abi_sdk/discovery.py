@@ -267,6 +267,34 @@ class ModuleProxy:
             self.client.transport, self.client.project, self.module_id, descriptor
         )
 
+    async def get_workflow(
+        self, name: str, *, input_type: Any = None, output_type: Any = None
+    ):
+        """A workflow of this module, by name: ``start(input)`` or ``run(input)``.
+
+        ``input_type``/``output_type`` (pydantic models, duck-typed) check the
+        input before it is sent and give the output back as a model."""
+        from naas_abi_sdk.workflows import WorkflowProxy
+
+        descriptor = next(
+            (
+                j
+                for j in (await self.ready_instances())[0].jobs
+                if j.name == name and j.is_workflow
+            ),
+            None,
+        )
+        if descriptor is None:
+            raise RPCError("WORKFLOW_NOT_FOUND", name)
+        return WorkflowProxy(
+            self.client.transport,
+            self.client.project,
+            self.module_id,
+            descriptor,
+            input_type=input_type,
+            output_type=output_type,
+        )
+
     async def list_agents(self) -> tuple[AgentDescriptor, ...]:
         return (await self.ready_instances())[0].agents
 

@@ -206,6 +206,17 @@ def _run_parameters_type(instance: Any) -> type[BaseModel] | None:
     return None
 
 
+def process_parameters_type(instance: Any) -> type[BaseModel] | None:
+    """The parameters model of an instance with a live typed ``run()``, or None.
+
+    The condition for ``register_run_route`` to mount ``POST /<slug>``; the NATS
+    workflow bridge publishes the same instances.
+    """
+    if not _run_is_live(instance):
+        return None
+    return _run_parameters_type(instance)
+
+
 def serialize_process_result(result: Any) -> Any:
     try:
         from rdflib import Graph

@@ -3,7 +3,8 @@
 /** One job: its schedule and next ticks, health, queue, settings, and its runs. */
 import { AlertTriangle, Clock, Hand, Play, Radio, type LucideIcon } from 'lucide-react';
 import { Badge, Notice, RelativeTime } from '../data/data-ui';
-import { FAILED, formatMs, health, statusLabel } from './jobs-model';
+import { JsonTree } from '../data/viewers/json-tree';
+import { FAILED, formatMs, health, isWorkflow, statusLabel } from './jobs-model';
 import type { JobView, RunSummary } from './jobs-types';
 import { Countdown, RunStrip } from './jobs-ui';
 import { RunsList, StatusFilter } from './runs-list';
@@ -43,6 +44,7 @@ export function JobDetail({
         <div className="job-detail-heading">
           <div className="job-detail-title-row">
             <h2 className="job-detail-title">{job.name}</h2>
+            {isWorkflow(job) && <Badge tone="success">workflow</Badge>}
             <Badge tone={job.location === 'remote' ? 'info' : 'neutral'}>
               {job.location === 'remote' ? `remote · ${job.instances} instance${job.instances === 1 ? '' : 's'}` : 'engine'}
             </Badge>
@@ -92,6 +94,12 @@ export function JobDetail({
                         <code className="data-mono">{t.spec}</code>
                         {t.time_zone && <span className="data-muted"> · {t.time_zone}</span>}
                       </p>
+                      {t.input && (
+                        <p className="job-trigger-input" title="Each tick starts the run with this input">
+                          <span className="data-muted">input </span>
+                          <code className="data-mono">{JSON.stringify(t.input)}</code>
+                        </p>
+                      )}
                     </div>
                     {t.kind !== 'event' && (
                       <span className="job-trigger-next">
@@ -163,6 +171,25 @@ export function JobDetail({
           </dl>
         </Card>
       </div>
+
+      {isWorkflow(job) && (
+        <div className="job-cards job-schemas">
+          <Card title="Input schema">
+            {job.input_schema ? (
+              <JsonTree value={job.input_schema} depth={1} toolbar={false} />
+            ) : (
+              <p className="job-card-empty">Declares none: the input is any JSON object.</p>
+            )}
+          </Card>
+          <Card title="Output schema">
+            {job.output_schema ? (
+              <JsonTree value={job.output_schema} depth={1} toolbar={false} />
+            ) : (
+              <p className="job-card-empty">Declares none.</p>
+            )}
+          </Card>
+        </div>
+      )}
 
       <section className="job-runs">
         <div className="job-runs-head">
