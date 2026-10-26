@@ -565,7 +565,7 @@ operations map):
 | `keyvalue`, `secret` | `key` / `secret` (opaque) |
 | `cache` | `key` (opaque), `service` (singleton, platform) |
 | `vector_store` | `collection` (container), `vector` (path), `service` (singleton, platform) |
-| `triple_store` | `graph` (opaque), `view` (opaque, platform) |
+| `triple_store` | `graph` (opaque), `view` (opaque, platform), `schema` (path, platform: a schema of the schema graph by its source) |
 | `dataset` | `namespace` (container), `dataset` (path), `catalog` (singleton, platform) |
 | `event` | `event_type` (opaque), `cursor` (path) |
 | `activity_log` | `actor` (opaque, personal, platform), `service` (singleton, platform) |
@@ -958,7 +958,9 @@ iam.broker_permissions(principal, key)  # records from authenticate_key; never c
   beside its `BaseModule` (a policy document) or by defaulting them from
   `ModuleDependencies` (each declared service maps to its catalog's actions on the
   module's own namespaces; `secret` is `secret/<module id>/...` only, `email` is `Send`
-  alone, `dataset` denies `QueryUnchecked`, `source_control` denies `AddCollaborator`: no
+  alone, `triple_store` is graphs and views plus `LoadSchema` on its own ontologies
+  (`schema/module/<module id>/...`), `dataset` denies `QueryUnchecked`, `source_control`
+  denies `AddCollaborator`: no
   default grants an admin action, and a Deny is not overridden by an Allow of the same
   policy, so a module needing one writes its own manifest).
   1. Deploy tooling creates the account and a key (`abi dev up`, `abi deploy`, or

@@ -2,7 +2,9 @@
 
 ``graph/<iri>`` is a named graph, by IRI, opaque and placed; ``graph/default``
 is the default graph (an encoded IRI always holds ``%3A``, so the two never
-collide). ``view/<name>`` is a platform-level view.
+collide). ``view/<name>`` is a platform-level view. ``schema/<source>`` is a
+schema the schema graph holds, by the source it is stored under (a module's
+ontology: ``module/<module id>/<path>``), platform-level.
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ SUBJECT_PREFIX = "abi.svc.triple_store.v1"
 STREAM = stream_subjects(f"{SUBJECT_PREFIX}.transfer")
 GRAPH = "graph"
 VIEW = "view"
+SCHEMA = "schema"
 DEFAULT_GRAPH = "default"
 
 
@@ -28,7 +31,7 @@ def _subject(name: str) -> str:
 
 CATALOG = ActionCatalog(
     service=SERVICE,
-    version=1,
+    version=2,
     resource_types=(
         ResourceType(
             GRAPH,
@@ -36,6 +39,15 @@ CATALOG = ActionCatalog(
             description="A named graph, by IRI. `default` is the default graph.",
         ),
         ResourceType(VIEW, id="opaque", placement="platform", description="A view."),
+        ResourceType(
+            SCHEMA,
+            id="path",
+            placement="platform",
+            description=(
+                "A schema of the schema graph, by its source: "
+                "`module/<module id>/<path>` for a module's ontology."
+            ),
+        ),
     ),
     actions=(
         service_action("ListGraphs", "list", (GRAPH,), _subject("list_graphs")),
@@ -63,6 +75,14 @@ CATALOG = ActionCatalog(
         service_action("DropGraph", "admin", (GRAPH,), _subject("drop_graph")),
         service_action(
             "HandleViewEvent", "admin", (VIEW,), _subject("handle_view_event")
+        ),
+        # Writes the shared schema graph, but only what this source asserts.
+        service_action(
+            "LoadSchema",
+            "write",
+            (SCHEMA,),
+            _subject("load_schema"),
+            description="Load an ontology into the schema graph under its source.",
         ),
     ),
 )

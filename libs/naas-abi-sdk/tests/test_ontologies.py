@@ -448,7 +448,7 @@ def test_the_loader_retries_with_a_doubling_delay_up_to_a_cap(monkeypatch, tmp_p
     assert delays == [1.0, 2.0, 4.0, 4.0, 4.0]
 
 
-@pytest.mark.parametrize("code", ["INVALID_ARGUMENT", "PERMISSION_DENIED"])
+@pytest.mark.parametrize("code", ["INVALID_ARGUMENT", "PERMISSION_DENIED", "NOT_FOUND"])
 def test_a_refusal_that_cannot_change_is_logged_once_and_not_retried(
     tmp_path, caplog, code
 ):

@@ -494,3 +494,115 @@ def test_a_subscription_is_a_read_of_the_graph_it_names(tmp_path):
     with internal_call():
         owner.subscribe(anything, lambda _data: None)
     assert bus.subscriptions[-1].startswith("ts.*.g.*.")
+
+
+# --- a module's ontology into the schema graph (LoadSchema) ---------------------
+
+SCHEMA_GRAPH = URIRef("http://ontology.naas.ai/graph/schema")
+MODULE_ACCOUNT = "module/acme/foo"
+
+
+def _ontology(name: str) -> str:
+    return f"@prefix ex: <http://example.org/> .\nex:{name} a ex:Class .\n"
+
+
+def _schema_owner(tmp_path):
+    """A wired store, a module account allowed its own ontologies (as its
+    default manifest asks) and an account allowed nothing."""
+    from naas_abi_core.engine.IEngine import IEngine
+    from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import (
+        IAMStoreMemory,
+    )
+    from naas_abi_core.services.iam.enforcement import internal_call
+    from naas_abi_core.services.iam.IAMService import IAMService
+    from naas_abi_core.services.iam.tests.iam_harness import document, statement
+
+    iam = IAMService(IAMStoreMemory())
+    iam.bootstrap()
+    with internal_call():
+        iam.register_catalog(CATALOG)
+        module = iam.create_service_account(MODULE_ACCOUNT)
+        own = iam.create_policy(
+            "foo-ontologies",
+            document(
+                statement(
+                    "Allow",
+                    ["triple_store:LoadSchema"],
+                    ["abi:-:-:triple_store:schema/module/foo/*"],
+                )
+            ),
+        )
+        iam.attach_policy(own.id, module.id)
+        iam.create_service_account("nobody")
+    owner = TripleStoreService(OxigraphEmbedded(str(tmp_path / "schema-store")))
+    owner.set_services(IEngine.Services(iam=iam, bus=_Bus()))
+    return owner
+
+
+def _schema_classes(owner) -> set[str]:
+    from naas_abi_core.services.iam.enforcement import internal_call
+
+    with internal_call():
+        rows = owner.query(
+            f"SELECT ?s WHERE {{ GRAPH <{SCHEMA_GRAPH}> "
+            "{ ?s a <http://example.org/Class> } }"
+        )
+        return {str(row[0]).removeprefix("http://example.org/") for row in rows}
+
+
+def test_a_module_loads_its_own_ontologies_and_no_one_elses(tmp_path):
+    from naas_abi_core.engine.call_context import as_service_account, use_call_context
+    from naas_abi_core.services.iam.IAMPorts import ResourceNotFoundError
+    from naas_abi_core.services.iam.tests.data_service_contract import caller
+
+    owner = _schema_owner(tmp_path)
+    with use_call_context(caller(MODULE_ACCOUNT)):
+        # The bookkeeping writes the shared schema graph, which the module was
+        # not granted: its LoadSchema on the source is what it needs.
+        assert owner.load_schema_content("module/foo/A.ttl", _ontology("Own")) is True
+        assert owner.load_schema_content("module/foo/A.ttl", _ontology("Own")) is False
+        # Another module's source does not exist for it: nothing is written.
+        with pytest.raises(ResourceNotFoundError):
+            owner.load_schema_content("module/bar/B.ttl", _ontology("Stolen"))
+    with use_call_context(caller("nobody")), pytest.raises(ResourceNotFoundError):
+        owner.load_schema_content("module/foo/A.ttl", _ontology("Nobody"))
+    # The engine loads any source.
+    with as_service_account("engine"):
+        assert owner.load_schema_content("module/bar/B.ttl", _ontology("Bar")) is True
+    assert _schema_classes(owner) == {"Own", "Bar"}
+
+
+def test_over_nats_the_caller_of_a_load_is_the_verified_token(tmp_path):
+    import asyncio
+
+    from naas_abi_core.proto.triple_store.v1 import triple_store_pb2
+
+    owner = _schema_owner(tmp_path)
+    primary = TripleStorePrimaryAdapterNATS(owner, SECRET)
+
+    class Request:
+        def __init__(self, token: str, source: str, text: str) -> None:
+            self.subject = "abi.svc.triple_store.v1.load_schema"
+            self.headers = {"Nats-Auth-Token": token}
+            self.data = triple_store_pb2.LoadSchemaRequest(
+                source=source, content_ttl=text.encode()
+            ).SerializeToString()
+            self.responses: list[bytes] = []
+
+        async def respond(self, data: bytes = b"", headers=None) -> None:
+            self.responses.append(data)
+
+    def load(identity: str, source: str, text: str):
+        request = Request(TEST_TOKENS.token(identity), source, text)
+        asyncio.run(primary._handle_load_schema(request))  # type: ignore[arg-type]
+        response = triple_store_pb2.LoadSchemaResponse()
+        response.ParseFromString(request.responses[0])
+        return response
+
+    assert load(MODULE_ACCOUNT, "module/foo/A.ttl", _ontology("Own")).changed is True
+    refused = load(MODULE_ACCOUNT, "module/bar/B.ttl", _ontology("Stolen"))
+    assert (refused.error.code, refused.changed) == ("NOT_FOUND", False)
+    assert load("nobody", "module/foo/A.ttl", _ontology("Nobody")).error.code == (
+        "NOT_FOUND"
+    )
+    assert _schema_classes(owner) == {"Own"}

@@ -117,12 +117,22 @@ that parse: unchanged content is neither parsed nor checked. `source` is the `fi
 ## Factory (`TripleStoreFactory.py`)
 
 ```python
-TripleStoreFactory.TripleStoreServiceNaas(naas_api_key, workspace_id, storage_name, base_prefix="ontologies")
+TripleStoreFactory.TripleStoreServiceNaas(
+    naas_api_key, workspace_id, storage_name, base_prefix="ontologies"
+)
 TripleStoreFactory.TripleStoreServiceFilesystem(path)
-TripleStoreFactory.TripleStoreServiceAWSNeptuneSSHTunnel(...)   # all args optional, reads env if None
-TripleStoreFactory.TripleStoreServiceOxigraph(oxigraph_url=None)        # local abi dev oxigraph URL
-TripleStoreFactory.TripleStoreServiceApacheJenaTDB2(jena_tdb2_url=None) # JENA_TDB2_URL or http://localhost:3030/ds
-TripleStoreFactory.TripleStoreServiceOxigraphEmbedded(store_path, graph_base_iri="http://ontology.naas.ai/graph/default")
+TripleStoreFactory.TripleStoreServiceAWSNeptuneSSHTunnel(
+    ...
+)  # all args optional, reads env if None
+TripleStoreFactory.TripleStoreServiceOxigraph(
+    oxigraph_url=None
+)  # local abi dev oxigraph URL
+TripleStoreFactory.TripleStoreServiceApacheJenaTDB2(
+    jena_tdb2_url=None
+)  # JENA_TDB2_URL or http://localhost:3030/ds
+TripleStoreFactory.TripleStoreServiceOxigraphEmbedded(
+    store_path, graph_base_iri="http://ontology.naas.ai/graph/default"
+)
 ```
 
 ## `oxigraph_server.py`
@@ -159,7 +169,12 @@ principals, in process and over NATS.
 
 * `graph/<iri>` is a named graph (`opaque` id, placed); the store's default
   graph is `graph/default` (an encoded IRI always holds `%3A`, so the two never
-  collide). `view/<name>` is a platform-level view.
+  collide). `view/<name>` is a platform-level view. `schema/<source>` (`path`
+  id, platform-level) is a schema of the schema graph by its source.
+* `LoadSchema` covers the bookkeeping too: the caller needs no right on the
+  schema graph itself. The service checks the source, then reads and writes the
+  graph as the engine, and a source removes only triples no other stored schema
+  asserts.
 * Actions (subject is the operation under `abi.svc.triple_store.v1.`):
 
 | Action | Level | Resource | Subject |
@@ -178,6 +193,7 @@ principals, in process and over NATS.
 | `ClearGraph` | admin | `graph/<iri>` | `clear_graph` |
 | `DropGraph` | admin | `graph/<iri>` | `drop_graph` |
 | `HandleViewEvent` | admin | `view/<name>` | `handle_view_event` |
+| `LoadSchema` | write | `schema/<source>` (platform-level): a module's ontology is `schema/module/<module id>/<path>` | `load_schema` |
 
 ### Names are validated before the check
 
@@ -355,20 +371,20 @@ that needs the domain service (`NOT_SUPPORTED` over a bare port). The primary ad
   at most 512 characters; module id as discovery names a module (letters, digits, `_`,
   `.`, `:`, `-`); path segments of letters, digits, `_`, `.`, `-`, none empty, `.` or `..`.
   Else `INVALID_ARGUMENT`. This also keeps quotes and newlines out of the stored key.
-- The caller identity (the token's `sub`, `_caller_identity`) is `<module_id>`, or a
-  first-party identity (`api`, `engine`, `dagster`), which may load any `module/` source.
-  Else `PERMISSION_DENIED`, before anything is parsed. Module keys cannot assert a
-  first-party identity (Decision (2026-10-25) below), so a module never loads
-  under another id. Other operations still have no identity scoping.
+- The call runs as the verified caller (`authenticate_request`), and the domain service
+  decides: `triple_store:LoadSchema` on `schema/<source>` (Authorization above), before
+  anything is parsed. A refusal is `PERMISSION_DENIED`, or `NOT_FOUND` for a caller that
+  may load no such source at all.
 - Content that is not UTF-8 or not Turtle: `INVALID_ARGUMENT`, nothing written.
 - A file above the broker limit travels through RPC overflow like any request (the
   SDK facade `load_schema(source, content)`, run by `run_module` for a module's
   `ontologies/`, see `libs/naas-abi-sdk/AGENTS.md`).
 
-Tests: `adapters/primary/triple_store__primary_adapter__NATS_test.py` (authorization and
-validation, no broker) and `..._NATS_integration_test.py` (an SDK module against a real
-`nats-server`: load, restart writes nothing, changed file applies the diff, another
-module's id refused, upload above the broker limit).
+Tests: `adapters/primary/triple_store__primary_adapter__NATS_test.py` (validation, no
+broker), `..._NATS_integration_test.py` (an SDK module against a real `nats-server`: load,
+restart writes nothing, changed file applies the diff, upload above the broker limit) and
+`TripleStoreService_authorization_test.py` (a module loads its own sources, not another
+module's, in process and through the primary).
 
 Streamed reads go through `transfer/v1` sessions on
 `abi.svc.triple_store.v1.transfer` (operations `query` and `export`, frames in
@@ -384,9 +400,10 @@ The latter uses a local `nats-server` executable without Docker.
 
 **Decision.** A remote module's `ontologies/**/*.ttl` reaches the shared schema graph through
 `load_schema(source, content_ttl)`, content-based since the engine cannot read the module's
-disk, and scoped to the caller's identity: a module loads only under `module/<its id>/`
-(`PERMISSION_DENIED` otherwise), the first-party identities (`api`, `engine`, `dagster`) any
-`module/` source. Module keys cannot assert a first-party identity. Content may not use the
+disk, and authorized with IAM like every operation: `triple_store:LoadSchema` on
+`schema/<source>`, which a module's default manifest asks for on its own sources only
+(`schema/module/${module.id}/*`); the engine and the platform admin load any. Content may
+not use the
 `http://triple-store.internal` vocabulary, which would let a module forge another source's
 `internal:Schema`. The SDK sends the files once its instance is `READY` or `DEGRADED`,
 retrying in the background.

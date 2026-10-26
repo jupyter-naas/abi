@@ -9,6 +9,8 @@ code; otherwise it defaults from ``ModuleDependencies``:
 * ``secret``: the secrets named ``<module id>/...``; never every secret;
 * ``dataset``: the namespace ``default`` the SDK's facade writes to, and the
   catalog, without unchecked SQL (``dataset:QueryUnchecked`` is denied);
+* ``triple_store``: every action on graphs and views, and its own ontologies
+  only (``LoadSchema`` on ``schema/module/<module id>/...``);
 * ``email``: sending only. The platform keeps a copy of the mail it sends,
   sign-in codes included, so listing, reading and deleting kept messages is
   asked for by name;
@@ -54,6 +56,21 @@ _OWN_NAMESPACES = {
         "abi:-:-:dataset:dataset/default/*",
         "abi:-:-:dataset:catalog/-",
     ),
+    # Graphs and views; the schemas it loads are its own (``OwnOntologies``).
+    "triple_store": (
+        "abi:*:*:triple_store:graph/*",
+        "abi:*:*:triple_store:view/*",
+    ),
+}
+# What a service grants besides its default statement: (sid, actions, resources).
+_ALSO = {
+    "triple_store": (
+        (
+            "OwnOntologies",
+            ("triple_store:LoadSchema",),
+            ("abi:-:-:triple_store:schema/module/${module.id}/*",),
+        ),
+    ),
 }
 
 
@@ -94,6 +111,8 @@ def default_manifest(
                 list(resources),
             )
         )
+        for sid, actions, resources in _ALSO.get(service, ()):
+            statements.append(_statement(sid, list(actions), list(resources)))
         if service in _NEVER:
             statements.append(
                 {

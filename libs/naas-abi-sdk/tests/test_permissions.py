@@ -32,7 +32,15 @@ def test_defaults_reach_the_modules_own_namespaces_and_declared_services():
         "abi:-:-:secret:secret/${module.id}%2F*"
     ]
     assert statements["UseKeyvalue"]["actions"] == ["keyvalue:*"]
-    assert statements["UseTripleStore"]["resources"] == ["abi:*:*:triple_store:*"]
+    assert statements["UseTripleStore"]["resources"] == [
+        "abi:*:*:triple_store:graph/*",
+        "abi:*:*:triple_store:view/*",
+    ]
+    # Its own ontologies only: a source names the module that loads it.
+    assert statements["OwnOntologies"]["actions"] == ["triple_store:LoadSchema"]
+    assert statements["OwnOntologies"]["resources"] == [
+        "abi:-:-:triple_store:schema/module/${module.id}/*"
+    ]
     # Bus topics are declared, never defaulted.
     assert not any("bus:" in a for s in manifest["statements"] for a in s["actions"])
 

@@ -138,12 +138,14 @@ core's `services/triple_store/AGENTS.md`). `BaseModule.ontologies` is `None` (di
 case), a tuple of files relative to `ontologies/`, or `()`. Each is sent as
 `module/<module_id>/<path relative to ontologies/>`; `schema_source` checks the names
 the engine would refuse, and `run_module` raises before it connects, also when a module
-has ontologies but does not declare `triple_store`. `OntologyLoader` runs as a background
+has ontologies but does not declare `triple_store`. The engine loads a source for a caller
+holding `triple_store:LoadSchema` on `schema/<source>`: the default manifest asks for the
+module's own (`OwnOntologies`, `schema/module/${module.id}/*`). `OntologyLoader` runs as a background
 task once the instance is `READY` or `DEGRADED` (never `STAGED`, and not at all when it is
 asked to drain first; a module without discovery sends at start). A failed load is logged
 at error level (`naas_abi_sdk.ontologies`) and retried, after 1 s and doubling to 60 s,
 reading the file again each time; it never changes readiness or ends the module. A
-refusal no retry changes (`TERMINAL_CODES`: `INVALID_ARGUMENT`, `PERMISSION_DENIED`) is
+refusal no retry changes (`TERMINAL_CODES`: `INVALID_ARGUMENT`, `PERMISSION_DENIED`, `NOT_FOUND`) is
 logged once, the file moves to `OntologyLoader.refused` and is not sent again until the
 process restarts.
 A timeout can hide a completed load: the retry reports no change. Loading is

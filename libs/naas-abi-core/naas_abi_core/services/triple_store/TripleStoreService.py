@@ -15,11 +15,18 @@ from typing import Any
 
 import rdflib
 from naas_abi_core import logger
+from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.enforcement import ResourceGuard
 from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
+from naas_abi_core.services.iam.names import path_parts
 from naas_abi_core.services.ServiceBase import ServiceBase
 from naas_abi_core.services.triple_store import sparql_access as sparql
-from naas_abi_core.services.triple_store.iam_catalog import CATALOG, GRAPH, VIEW
+from naas_abi_core.services.triple_store.iam_catalog import (
+    CATALOG,
+    GRAPH,
+    SCHEMA,
+    VIEW,
+)
 from naas_abi_core.services.triple_store.ontologies.modules.TripleStoreEventOntology import (
     GraphCleared,
     GraphCreated,
@@ -920,11 +927,17 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         Unlike ``load_schema``, a failure raises: ``Exceptions.InvalidSchemaError``
         for content that is not Turtle (nothing is written) or that writes the
         service's own ``internal:`` vocabulary, which the bookkeeping owns.
+
+        The caller needs ``triple_store:LoadSchema`` on ``schema/<source>``.
         """
+        # The caller may load this source (a module its own, by its manifest).
+        self._guard.require("LoadSchema", SCHEMA, path_parts(source) or [source])
         try:
             # One writer per service: two loads of a source (two replicas of a
             # module starting together) would each find no entry and add one.
-            with self._schema_content_lock:
+            # The bookkeeping reads and writes the shared schema graph, which
+            # the caller was not granted: it runs as the engine.
+            with self._schema_content_lock, as_service_account("engine"):
                 entries = self._build_schema_index(filepath_filter=source).get(
                     source, []
                 )
