@@ -28,9 +28,12 @@ platform-level: `module/<project>/<module_id>`, `agent|model|app|job/<project>/<
   principal cannot register it while live instances of it exist (so nobody can
   join a running module and take its requests). A module account
   (`module/<project>/<module_id>`) registers only its own module.
-- **Listing**: `list_modules` and `get_module` show the modules the caller may
-  list (`ListModules`, `GetModule`, not found otherwise), each with only the
-  agents, apps and jobs it may list (`ListAgents`, `ListApps`, `ListJobs`).
+- **Listing**: `list_modules` shows the modules the caller may list
+  (`ListModules`); `get_module` needs `GetModule` on the module it names (not
+  found otherwise) and shows its instances, so a module looking itself up (its
+  bootstrap allows `GetModule`, not `ListModules`) sees them. Each instance shows
+  only the agents, apps and jobs the caller may list (`ListAgents`, `ListApps`,
+  `ListJobs`).
 - **Use**: `authorize_agent`, `authorize_model`, `authorize_app` and
   `authorize_job` are a lease check by the hosting module and the check of its
   **caller**. The host forwards the token it received (`caller_token`; the

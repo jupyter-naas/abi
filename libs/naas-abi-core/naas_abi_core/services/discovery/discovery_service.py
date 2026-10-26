@@ -253,16 +253,17 @@ class DiscoveryService:
         await asyncio.to_thread(check)
 
     async def _filter_instances(
-        self, instances: list[pb.Instance]
+        self, instances: list[pb.Instance], module_action: str = "ListModules"
     ) -> list[pb.Instance]:
-        """The instances of the modules the caller may list, each showing only
-        the agents, apps and jobs it may list."""
+        """The instances of the modules the caller may list (``module_action``:
+        ``GetModule`` for the one module ``get_module`` names), each showing
+        only the agents, apps and jobs it may list."""
         if not self.guard.enforcing or not instances:
             return instances
 
         def visible() -> list[pb.Instance]:
             kept = self.guard.filter(
-                "ListModules",
+                module_action,
                 "module",
                 instances,
                 lambda i: self._parts(i.descriptor.module_id),
@@ -933,7 +934,11 @@ class DiscoveryService:
         ]
         _require(bool(matches), "INCOMPATIBLE_MODULE", req.module_id)
         ordered: list[pb.Instance] = sorted(matches, key=lambda r: r.instance_id)
-        return pb.GetModuleResponse(instances=await self._filter_instances(ordered))
+        # GetModule was required above: a caller who may read the module sees its
+        # instances (a module looking itself up holds GetModule, not ListModules).
+        return pb.GetModuleResponse(
+            instances=await self._filter_instances(ordered, "GetModule")
+        )
 
     async def list_modules(self, req: pb.ListModulesRequest) -> pb.ListModulesResponse:
         _require(1 <= req.limit <= 100, "INVALID_ARGUMENT", "Page size must be 1..100")

@@ -378,3 +378,37 @@ def test_listing_shows_only_the_modules_and_agents_the_caller_may_list():
         assert [a.name for a in instance.descriptor.agents] == ["Researcher"]
 
     asyncio.run(scenario())
+
+
+def test_a_caller_who_may_get_a_module_sees_its_instances():
+    """GetModule is what reading one module needs: a module looking itself up
+    (its bootstrap allows GetModule on its own module, not ListModules) sees
+    its instances, each still showing only what it may list."""
+
+    async def scenario():
+        iam = contract_iam()
+        h = IAMHarness(iam)
+        service = DiscoveryService(MemoryRegistry(), iam=iam)
+        await _ready(service)
+        bob = h.user()
+        get = pb.GetModuleRequest(module_id="research", contract_major=1)
+        h.grant(
+            bob.id,
+            statement(
+                "Allow",
+                ["discovery:GetModule", "discovery:ListJobs"],
+                [f"{MODULE}module/default/research", f"{MODULE}job/default/research/*"],
+            ),
+        )
+        with h.as_(actor="api", on_behalf_of=bob):
+            (instance,) = (await service.get_module(get)).instances
+        assert instance.descriptor.module_id == "research"
+        assert [j.name for j in instance.descriptor.jobs] == ["ingest"]
+        assert list(instance.descriptor.agents) == []  # no ListAgents
+        # Without GetModule the module is not found.
+        eve = h.user("eve")
+        with h.as_(actor="api", on_behalf_of=eve):
+            with pytest.raises(DiscoveryError, match="MODULE_NOT_FOUND"):
+                await service.get_module(get)
+
+    asyncio.run(scenario())
