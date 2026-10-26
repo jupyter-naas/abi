@@ -3,7 +3,9 @@
 Reads: the overview (jobs, schedules, next ticks, recent runs, queue depth), run
 pages across jobs, one run with its logs and trace link, and the runs that failed
 since a time (the Jobs tab's notification). Actions: trigger a
-job and cancel a running run, both audited before they happen.
+job and cancel a running run, both audited before they happen. Workflows are jobs
+with ``kind``, schemas and, in a run's detail, their steps; a trigger whose
+payload does not match a workflow's input schema is a 422.
 """
 
 from __future__ import annotations
@@ -21,11 +23,17 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
 )
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.factory import get_jobs_admin
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs import (
+    InvalidInput,
+    JobDefinition,
     JobNotFound,
     JobRun,
     JobView,
     RunNotCancellable,
     RunNotFound,
+    RunStep,
+    RunView,
+    TriggerView,
+    WorkflowDetail,
 )
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs_service import JobsAdminService
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.port import SourceUnavailable
@@ -45,11 +53,24 @@ def _error(status: int, source: str, reason: str) -> HTTPException:
     return HTTPException(status, detail={"source": source, "reason": reason})
 
 
+def invalid_input(exc: InvalidInput, source: str = "jobs") -> HTTPException:
+    return HTTPException(
+        422,
+        detail={
+            "source": source,
+            "reason": str(exc),
+            "errors": [{"path": i.path, "message": i.message} for i in exc.issues],
+        },
+    )
+
+
 async def _call(call: Awaitable[T]) -> T:
     try:
         return await call
     except (JobNotFound, RunNotFound) as exc:
         raise _error(404, "jobs", str(exc)) from exc
+    except InvalidInput as exc:
+        raise invalid_input(exc) from exc
     except RunNotCancellable as exc:
         raise _error(409, "jobs", str(exc)) from exc
     except AuditUnavailable as exc:
@@ -79,18 +100,52 @@ def run_summary(run: JobRun) -> dict[str, Any]:
     }
 
 
-def run_detail(run: JobRun, trace_url: str | None) -> dict[str, Any]:
+def step_view(step: RunStep) -> dict[str, Any]:
+    return {
+        "key": step.key,
+        "kind": step.kind,
+        "status": step.status,
+        "attempt": step.attempt,
+        "started_at": step.started_at,
+        "finished_at": step.finished_at,
+        "duration_ms": step.duration_ms,
+        "error": step.error,
+        # A call step's child run: ``key`` opens it like any run ("<module>/<run id>").
+        "child": (
+            {
+                "module_id": step.child.module_id,
+                "workflow": step.child.workflow,
+                "run_id": step.child.run_id,
+                "key": step.child.key,
+            }
+            if step.child
+            else None
+        ),
+        "result_bytes": step.result_bytes,
+    }
+
+
+def workflow_view(detail: WorkflowDetail | None) -> dict[str, Any] | None:
+    if detail is None:
+        return None
+    return {"steps": [step_view(s) for s in detail.steps], "truncated": detail.truncated}
+
+
+def run_detail(view: RunView) -> dict[str, Any]:
+    run = view.run
     return {
         **run_summary(run),
         "payload": run.payload,
         "result": run.result,
         "logs": list(run.logs),
-        "trace_url": trace_url,
+        "trace_url": view.trace_url,
+        # Only a workflow's run has one: its steps in start order.
+        "workflow": workflow_view(view.workflow),
     }
 
 
-def job_view(view: JobView) -> dict[str, Any]:
-    d = view.definition
+def definition_view(d: JobDefinition) -> dict[str, Any]:
+    """The fields a job and a workflow share, and a workflow's schemas."""
     return {
         "key": d.key,
         "module_id": d.module_id,
@@ -98,20 +153,32 @@ def job_view(view: JobView) -> dict[str, Any]:
         "description": d.description,
         "location": d.location,
         "instances": d.instances,
-        "triggers": [
-            {
-                "kind": t.trigger.kind,
-                "spec": t.trigger.spec,
-                "time_zone": t.trigger.time_zone,
-                "summary": t.summary,
-                "next_at": t.next_at,
-            }
-            for t in view.triggers
-        ],
-        "next_at": view.next_at,
+        "kind": d.kind,
+        "input_schema": d.input_schema,
+        "output_schema": d.output_schema,
         "max_concurrency": d.max_concurrency,
         "max_attempts": d.max_attempts,
         "timeout_seconds": d.timeout_seconds,
+    }
+
+
+def trigger_view(t: TriggerView) -> dict[str, Any]:
+    return {
+        "kind": t.trigger.kind,
+        "spec": t.trigger.spec,
+        "time_zone": t.trigger.time_zone,
+        "input": t.trigger.input,
+        "summary": t.summary,
+        "next_at": t.next_at,
+    }
+
+
+def job_view(view: JobView) -> dict[str, Any]:
+    d = view.definition
+    return {
+        **definition_view(d),
+        "triggers": [trigger_view(t) for t in view.triggers],
+        "next_at": view.next_at,
         "queued": view.queued,
         "in_flight": view.in_flight,
         "running": view.running,
@@ -181,8 +248,7 @@ async def failures(
 async def run_detail_route(
     module_id: str, run_id: str, admin: JobsAdminService = Depends(get_jobs_admin)
 ) -> Any:
-    found, trace_url = await _call(admin.run(module_id, run_id))
-    return run_detail(found, trace_url)
+    return run_detail(await _call(admin.run(module_id, run_id)))
 
 
 @jobs_router.post("/runs/{module_id}/{run_id}/cancel", status_code=202)

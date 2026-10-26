@@ -694,3 +694,210 @@ button.jobs-strip-cell:hover {
   font-size: var(--font-size-xs);
   color: var(--muted-foreground-hex);
 }
+
+/* workflows: launch form (schema-form.tsx) */
+.sf {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 420px;
+  padding: 2px 2px 2px 0;
+  overflow: auto;
+}
+
+.sf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sf-field-inline {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.sf-field-inline .sf-help,
+.sf-field-inline .data-field-error {
+  flex-basis: 100%;
+}
+
+.sf-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground-hex);
+}
+
+.sf-required {
+  color: var(--destructive-hex);
+}
+
+.sf-help {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground-hex);
+}
+
+.sf-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-primary);
+}
+
+.sf-object {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+}
+
+.sf-object > legend {
+  padding: 0 6px;
+}
+
+.sf-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sf-list-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.sf-list-control {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sf-add {
+  align-self: flex-start;
+}
+
+.sf-issues {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* workflows: step timeline (run-steps.tsx) */
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.steps-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-hex);
+}
+
+.step-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+}
+
+.step-row + .step-row {
+  border-top: 1px solid var(--border-hex);
+}
+
+.step-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.step-key {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.step-time {
+  margin-left: auto;
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground-hex);
+  white-space: nowrap;
+}
+
+.step-bar {
+  position: relative;
+  height: 4px;
+  background-color: var(--muted-bg-hex);
+}
+
+.step-bar-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background-color: var(--jobs-succeeded);
+}
+
+.step-bar-running {
+  background-color: var(--jobs-running);
+}
+
+.step-bar-failed {
+  background-color: var(--jobs-failed);
+}
+
+.step-bar-cancelled {
+  background-color: var(--jobs-cancelled);
+}
+
+.step-child {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+}
+
+.step-error {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--font-size-xs);
+  color: var(--destructive-hex);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.job-trigger-input {
+  margin: 2px 0 0;
+  overflow: hidden;
+  font-size: var(--font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-schemas {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.run-result-cut {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

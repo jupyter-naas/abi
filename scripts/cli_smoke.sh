@@ -17,9 +17,14 @@
 #      submodule is a clone of this checkout's HEAD, so the framework comes
 #      from the code under test (proto and the SDK come from it too);
 #   3. adds a remote module and an in-engine one, an agent and an app, enables
-#      the in-engine module the way `abi new module` says, runs their tests;
+#      the in-engine module the way `abi new module` says, runs their tests; in
+#      the remote module also a workflow, a pipeline, an
+#      integration and a second ontology, scaffolded the way a user would;
 #   4. `abi dev up -d`, then waits for the API's /docs, the remote module READY
-#      in discovery, the agents and apps in Nexus, and the Nexus web app;
+#      in discovery with its workflows, the agents and apps in Nexus, its ontologies in
+#      the engine's schema graph, and the Nexus web app; calls the module's
+#      workflow and pipeline by name as durable workflows, with the module's own
+#      token, and reads a run's record (scripts/cli_smoke_processes.py);
 #   5. `abi dev down`.
 # On failure it prints `abi dev status` and `abi dev logs` and exits non-zero.
 #
@@ -79,6 +84,8 @@ export PATH="$WORK/bin:$PATH"
 
 PROJECT=""        # the project `abi dev` runs in, while it runs
 VARIANT=""
+PROCESS_CHECKS=() # cli_smoke_processes.py's arguments, when the variant has any
+PROCESS_MODULE_ID=""  # the module id they name (its key is derived from it)
 
 dump_logs() {
     local logs="$WORK/logs/$VARIANT"
@@ -136,6 +143,26 @@ port() {
     abi dev ports 2>/dev/null | awk -v name="$1" '$1 == name {print $2}'
 }
 
+# A second ontology file, next to the one the module template ships.
+write_ontology() {
+    mkdir -p "$(dirname "$1")"
+    cat >"$1" <<'TTL'
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<http://ontology.naas.ai/nats_smoke/ReviewOntology> a owl:Ontology ;
+    rdfs:label "Review ontology"@en .
+
+<http://ontology.naas.ai/nats_smoke/Review> a owl:Class ;
+    rdfs:label "Review"@en .
+TTL
+}
+
+# Reads KEY from the project's .env (the broker user `module`'s password).
+env_value() {
+    sed -n "s/^$1=//p" .env | head -n 1 | tr -d "'\""
+}
+
 start_and_check() {
     step "abi dev up -d"
     abi dev up -d
@@ -144,7 +171,18 @@ start_and_check() {
     python3 -u "$REPO/scripts/cli_smoke_checks.py" \
         --api "http://localhost:$(port api)" \
         --web "http://localhost:$(port nexus-web)" \
+        --oxigraph "http://localhost:$(port oxigraph)" \
         --env-file .env --timeout "$TIMEOUT" "$@"
+    if [[ ${#PROCESS_CHECKS[@]} -gt 0 ]]; then
+        step "the remote module's workflow and pipeline over NATS"
+        # Signed as the module itself, with its key: a module acts only as itself.
+        # The broker login and the key go through the environment, not argv.
+        ABI_NATS_URL="nats://module:$(env_value NATS_MODULE_PASSWORD)@127.0.0.1:$(port nats)" \
+            ABI_MODULE_KEY="$(abi module key "$PROCESS_MODULE_ID")" \
+            uv run python "$REPO/scripts/cli_smoke_processes.py" \
+            --timeout "$TIMEOUT" "${PROCESS_CHECKS[@]}"
+        PROCESS_CHECKS=()
+    fi
     abi dev status
     mkdir -p "$WORK/logs/$VARIANT"
     cp -r .abi/dev/logs/. "$WORK/logs/$VARIANT/"
@@ -169,13 +207,35 @@ smoke_nats() {
     (cd src/legacy && abi new agent analyst agents && abi new app reports apps)
     (cd src/research && abi new app board apps)
 
-    step "uv run pytest (the modules' scaffolded tests)"
-    uv run pytest -q
+    step "abi new workflow, pipeline and integration, and an ontology, in the remote module"
+    (
+        cd src/research
+        abi new workflow digest workflows
+        abi new pipeline catalog pipelines
+        abi new integration crm integrations
+    )
+    write_ontology src/research/ontologies/domain/ReviewOntology.ttl
 
+    step "uv run pytest (the modules' scaffolded tests, the new processes' too)"
+    uv run pytest -q
+    # The run above collects the scaffolds' tests: make sure they exist.
+    test -f src/research/workflows/DigestWorkflow_test.py \
+        -a -f src/research/pipelines/CatalogPipeline_test.py \
+        -a -f src/research/integrations/CrmIntegration_test.py \
+        || fail "a scaffold did not write its test"
+
+    PROCESS_MODULE_ID=nats_smoke.research
+    PROCESS_CHECKS=(
+        --module-id "$PROCESS_MODULE_ID" --project nats_smoke
+        --workflow digest_workflow --pipeline catalog_pipeline
+    )
     start_and_check \
         --remote-module "nats_smoke.research:Research" \
+        --remote-jobs "workflow.digest_workflow,pipeline.catalog_pipeline" \
         --agents "Research,Legacy,Analyst" \
-        --apps "remote/nats_smoke.research:board,legacy:reports"
+        --apps "remote/nats_smoke.research:board,legacy:reports" \
+        --ontologies "module/nats_smoke.research/modules/ResearchOntology.ttl,module/nats_smoke.research/domain/ReviewOntology.ttl" \
+        --ontology-class "http://ontology.naas.ai/nats_smoke/Review"
 }
 
 smoke_without_nats() {

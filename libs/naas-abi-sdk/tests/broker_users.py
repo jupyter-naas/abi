@@ -8,6 +8,13 @@ ABI core for that definition, so the SDK's isolated runs skip it.
 
 from __future__ import annotations
 
+import contextlib
+import socket
+import subprocess
+import time
+from collections.abc import Iterator
+from pathlib import Path
+
 import pytest
 
 KINDS = ("open", "module-user")
@@ -68,3 +75,44 @@ async def connect(url: str):
 
     options = {"inbox_prefix": MODULE_INBOX_PREFIX} if "nats://module:" in url else {}
     return await nats.connect(url, **options)
+
+
+@contextlib.contextmanager
+def running_broker(kind: str, tmp_path: Path, project: str) -> Iterator[str]:
+    """A ``nats-server`` with JetStream, as ``kind`` is deployed, prepared for
+    ``project``; yields the URL the suite connects with."""
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    conf = tmp_path / "nats.conf"
+    conf.write_text(config(kind))
+    process = subprocess.Popen(
+        [
+            "nats-server",
+            "-a",
+            "127.0.0.1",
+            "-p",
+            str(port),
+            "-c",
+            str(conf),
+            "-js",
+            "-sd",
+            str(tmp_path / "js"),
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            try:
+                socket.create_connection(("127.0.0.1", port), timeout=0.2).close()
+                break
+            except OSError:
+                time.sleep(0.05)
+        url = login(f"nats://127.0.0.1:{port}", kind)
+        prepare(url, kind, project)
+        yield url
+    finally:
+        process.terminate()
+        process.wait(timeout=5)

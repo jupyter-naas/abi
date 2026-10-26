@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 
 # ── Domain exceptions ─────────────────────────────────────────────────────────
 
@@ -77,6 +78,15 @@ class OntologyFileItemData:
     contributors: list[str] = field(default_factory=list)
     date: str | None = None
     imports: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class OntologyExportData:
+    """An ontology to download: a file on disk, or the text of a remote one."""
+
+    filename: str
+    path: Path | None = None
+    content: bytes | None = None
 
 
 @dataclass(frozen=True)

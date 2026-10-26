@@ -33,7 +33,10 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ("GET", "/api/auth/avatar/user/{user_id}"): "account pictures (personal drive) in <img> tags",
     ("GET", "/api/auth/avatar/user/{user_id}/org"): "organization member pictures (personal drive)",
     ("GET", "/api/auth/avatar/user/{user_id}/org/{org_id}"): "per-org member pictures",
-    ("GET", "/api/workspaces/{workspace_id}/logo"): "workspace logos (workspace drive) in <img> tags",
+    (
+        "GET",
+        "/api/workspaces/{workspace_id}/logo",
+    ): "workspace logos (workspace drive) in <img> tags",
     ("GET", "/app-preview/{token}"): "capability URL (signed preview token)",
     ("GET", "/app-preview/{token}/{path:path}"): "capability URL (signed preview token)",
     **{
@@ -80,11 +83,18 @@ def _auth_guards() -> set:
     from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
         get_current_user_released,
         get_current_user_required,
+        require_superadmin_or_api_key,
     )
     from naas_abi_core.apps.api.abi_api_key_auth import require_abi_api_token
 
-    # get_current_user_released checks the same token on its own session.
-    return {get_current_user_required, get_current_user_released, require_abi_api_token}
+    # get_current_user_released checks the same token on its own session;
+    # require_superadmin_or_api_key accepts a super admin's session or the API key.
+    return {
+        get_current_user_required,
+        get_current_user_released,
+        require_abi_api_token,
+        require_superadmin_or_api_key,
+    }
 
 
 def test_every_route_requires_a_signed_in_caller_unless_listed(routes) -> None:
@@ -118,6 +128,22 @@ def test_sysadmin_routes_are_superadmin_only(routes) -> None:
     assert sysadmin, "the SysAdmin router is not mounted"
     for key in sysadmin:
         assert require_superadmin in routes[key], key
+
+
+def test_workflow_routes_are_superadmin_or_api_key_only(routes) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
+        require_superadmin_or_api_key,
+    )
+
+    workflows = [key for key in routes if key[1].startswith("/api/workflows")]
+    assert sorted(workflows) == [
+        ("GET", "/api/workflows"),
+        ("GET", "/api/workflows/{module_id}/runs/{run_id}"),
+        ("POST", "/api/workflows/{module_id}/runs/{run_id}/cancel"),
+        ("POST", "/api/workflows/{module_id}/{name}/runs"),
+    ]
+    for key in workflows:
+        assert require_superadmin_or_api_key in routes[key], key
 
 
 def test_the_trace_viewer_is_mounted_under_sysadmin(routes) -> None:

@@ -31,6 +31,14 @@ stopping a module means stopping its process. Registering an instance id whose
 record expired or was evicted is a new registration (STARTING until its next
 initialized renewal).
 
+## Job descriptors
+A job's `kind` is `job` or `workflow` (empty, from a module written before
+workflows, is a job). Its `input_schema` and `output_schema` are JSON objects of
+at most 16 KiB each, a trigger's `input` a JSON object of at most 4 KiB, and a
+whole job descriptor at most 64 KiB (`INVALID_ARGUMENT` otherwise): descriptors
+travel in the registry snapshot, which holds every module. These are the SDK's
+bounds (`naas_abi_sdk.jobs`). Replica equality covers the new fields.
+
 ## Generations
 Replicas of one generation (the same rollout id, or none on both) must declare
 identical dependencies, agents, jobs and models for a contract major, or the

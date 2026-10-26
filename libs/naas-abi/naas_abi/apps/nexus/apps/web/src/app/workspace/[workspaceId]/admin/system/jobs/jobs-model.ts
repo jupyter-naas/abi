@@ -1,6 +1,6 @@
 /** Pure helpers for the Jobs tab. */
 import type { Tone } from '../data/data-ui';
-import type { JobView, RunSummary } from './jobs-types';
+import type { JobView, RunStep, RunSummary } from './jobs-types';
 
 export const ACTIVE = ['RUNNING', 'RETRYING'];
 export const FAILED = ['FAILED', 'TIMED_OUT'];
@@ -105,14 +105,19 @@ export function sortJobs(jobs: JobView[]): JobView[] {
   });
 }
 
-export function filterJobs(jobs: JobView[], text: string): JobView[] {
+export type KindFilter = 'all' | 'job' | 'workflow';
+
+export const isWorkflow = (job: Pick<JobView, 'kind'>) => job.kind === 'workflow';
+
+export function filterJobs(jobs: JobView[], text: string, kind: KindFilter = 'all'): JobView[] {
   const needle = text.trim().toLowerCase();
-  if (!needle) return jobs;
   return jobs.filter(
     (j) =>
-      j.name.toLowerCase().includes(needle) ||
-      j.module_id.toLowerCase().includes(needle) ||
-      j.description.toLowerCase().includes(needle),
+      (kind === 'all' || (j.kind ?? 'job') === kind) &&
+      (!needle ||
+        j.name.toLowerCase().includes(needle) ||
+        j.module_id.toLowerCase().includes(needle) ||
+        j.description.toLowerCase().includes(needle)),
   );
 }
 
@@ -129,12 +134,14 @@ export interface JobsLocation {
   job: string | null;
   run: string | null;
   statuses: string[];
+  kind: KindFilter;
 }
 
 export function encodeJobsLocation(location: JobsLocation, params: URLSearchParams): URLSearchParams {
   const next = new URLSearchParams(params.toString());
-  for (const key of ['view', 'job', 'run', 'status']) next.delete(key);
+  for (const key of ['view', 'job', 'run', 'status', 'kind']) next.delete(key);
   if (location.view !== 'jobs') next.set('view', location.view);
+  if (location.kind !== 'all') next.set('kind', location.kind);
   if (location.job) next.set('job', location.job);
   if (location.run) next.set('run', location.run);
   if (location.statuses.length) next.set('status', location.statuses.join(','));
@@ -144,11 +151,63 @@ export function encodeJobsLocation(location: JobsLocation, params: URLSearchPara
 export function decodeJobsLocation(params: URLSearchParams): JobsLocation {
   const view = params.get('view') === 'runs' ? 'runs' : 'jobs';
   const statuses = (params.get('status') ?? '').split(',').filter(Boolean);
-  return { view, job: params.get('job'), run: params.get('run'), statuses };
+  const kind = params.get('kind') === 'workflow' || params.get('kind') === 'job' ? (params.get('kind') as KindFilter) : 'all';
+  return { view, job: params.get('job'), run: params.get('run'), statuses, kind };
 }
 
 /** "<module_id>/<rest>" split on the first "/" (module ids have no "/"). */
 export function splitKey(key: string): [string, string] {
   const at = key.indexOf('/');
   return at < 0 ? [key, ''] : [key.slice(0, at), key.slice(at + 1)];
+}
+
+export interface StepBar {
+  step: RunStep;
+  /** Milliseconds from the first step's start; null before it has a start time. */
+  offsetMs: number | null;
+  /** Its duration, or how long it has been running. */
+  durationMs: number | null;
+  /** Position and width within the whole timeline, in percent (for the bar). */
+  left: number;
+  width: number;
+}
+
+/** The steps laid out on one time axis: where each starts and how long it takes. */
+export function stepBars(steps: RunStep[], now: number = Date.now()): StepBar[] {
+  const starts = steps.map((s) => ms(s.started_at)).filter((t) => !Number.isNaN(t));
+  const origin = starts.length ? Math.min(...starts) : NaN;
+  const measured = steps.map((step) => {
+    const start = ms(step.started_at);
+    const end = step.finished_at ? ms(step.finished_at) : step.status === 'RUNNING' ? now : NaN;
+    const duration =
+      step.duration_ms !== null && step.duration_ms !== undefined
+        ? step.duration_ms
+        : Number.isNaN(start) || Number.isNaN(end)
+          ? null
+          : Math.max(0, end - start);
+    return { step, offset: Number.isNaN(start) || Number.isNaN(origin) ? null : start - origin, duration };
+  });
+  const total = Math.max(1, ...measured.map((m) => (m.offset ?? 0) + (m.duration ?? 0)));
+  return measured.map(({ step, offset, duration }) => ({
+    step,
+    offsetMs: offset,
+    durationMs: duration,
+    left: offset === null ? 0 : (offset / total) * 100,
+    // Never invisible: a step shorter than a pixel still shows as a mark.
+    width: Math.max(0.8, duration === null ? 0 : (duration / total) * 100),
+  }));
+}
+
+export type TruncatedResult = { bytes?: number; preview: string };
+
+/**
+ * A result cut for display: the API's ``{truncated: true, bytes, preview}``, or the
+ * job host's own marker for a result over what a run record keeps,
+ * ``{truncated: true, preview}`` (no byte count).
+ */
+export function truncatedResult(value: unknown): TruncatedResult | null {
+  if (!value || typeof value !== 'object') return null;
+  const v = value as Record<string, unknown>;
+  if (v.truncated !== true || typeof v.preview !== 'string') return null;
+  return typeof v.bytes === 'number' ? { bytes: v.bytes, preview: v.preview } : { preview: v.preview };
 }

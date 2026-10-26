@@ -72,3 +72,8 @@ class TripleStoreClient:
         return await self._transport.call(
             "abi.svc.triple_store.v1.list_graphs", request, pb.ListGraphsResponse
         )
+
+    async def load_schema(self, request: pb.LoadSchemaRequest) -> pb.LoadSchemaResponse:
+        return await self._transport.call(
+            "abi.svc.triple_store.v1.load_schema", request, pb.LoadSchemaResponse
+        )
