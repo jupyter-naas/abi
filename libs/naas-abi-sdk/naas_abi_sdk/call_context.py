@@ -138,6 +138,9 @@ def reset_call_context(token: Token[CallContext]) -> None:
 # An account's subject token when it is the account's own ULID (``sa_<ULID>``);
 # anything else cannot be turned back into an account id here.
 _OWN_ACCOUNT = re.compile(r"[0-9A-Za-z]{26}")
+# ``credentials.AGENT_AUDIENCE``, named here so this file needs nothing else of
+# the SDK: core keeps a verbatim copy for installs without it.
+AGENT_AUDIENCE = "abi:delegated:agent"
 
 
 def delegation_context(token: str, user: str, own: str = "") -> CallContext | None:
@@ -152,8 +155,6 @@ def delegation_context(token: str, user: str, own: str = "") -> CallContext | No
     (``own``: the account's subject token, from its discovery record; a
     delegation for another module is not this host's to carry). Anything else
     is dropped, never an error: the run is the module's own."""
-    from naas_abi_sdk.credentials import AGENT_AUDIENCE
-
     if not token:
         return None
     try:

@@ -91,3 +91,9 @@ def test_principals_are_values():
     assert user("usr-ada").name is None
     with pytest.raises(AttributeError):
         NEXUS.principal.id = "engine"  # type: ignore[misc]
+
+
+def test_the_delegation_audience_is_the_credentials_one():
+    from naas_abi_sdk import call_context, credentials
+
+    assert call_context.AGENT_AUDIENCE == credentials.AGENT_AUDIENCE
