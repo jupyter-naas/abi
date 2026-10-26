@@ -1557,7 +1557,7 @@ def test_outside_a_dev_project_nothing_changes(monkeypatch) -> None:
 
 def test_a_project_without_nats_has_no_built_in_identity_provider(monkeypatch) -> None:
     # The IdP is a module over NATS: the legacy project neither runs nor lists it.
-    monkeypatch.setattr(dev, "load_dev_modules", lambda: {})
+    monkeypatch.setattr(dev, "load_dev_modules", dict)
     monkeypatch.setattr(dev, "_project_identity", lambda: None)
 
     monkeypatch.setattr(dev, "_project_declares_nats", lambda: True)
