@@ -117,7 +117,13 @@ OPERATIONS = {
         "list_workflow_runs",
         "mint_git_token",
     ],
-    "tool_registry": ["list_tools", "get_tool", "search_tools", "invoke_tool"],
+    "tool_registry": [
+        "list_tools",
+        "get_tool",
+        "search_tools",
+        "invoke_tool",
+        "cancel_tool",
+    ],
     "triple_store": [
         "insert",
         "remove",

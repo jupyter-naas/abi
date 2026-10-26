@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from naas_abi_proto.common.v1 import common_pb2 as naas__abi__proto_dot_common_dot_v1_dot_common__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n!naas_abi_proto/tool/v1/tool.proto\x12\x0b\x61\x62i.tool.v1\x1a%naas_abi_proto/common/v1/common.proto\"\x8c\x01\n\x11InvokeToolRequest\x12+\n\x07\x63ontext\x18\x01 \x01(\x0b\x32\x1a.abi.common.v1.CallContext\x12\x0c\n\x04tool\x18\x02 \x01(\t\x12\x0f\n\x07version\x18\x03 \x01(\t\x12\x16\n\x0e\x61rguments_json\x18\x04 \x01(\x0c\x12\x13\n\x0b\x63onfig_json\x18\x05 \x01(\x0c\"R\n\x12InvokeToolResponse\x12\x13\n\x0bresult_json\x18\x01 \x01(\x0c\x12\'\n\x05\x65rror\x18\x0f \x01(\x0b\x32\x18.abi.common.v1.CallErrorb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n!naas_abi_proto/tool/v1/tool.proto\x12\x0b\x61\x62i.tool.v1\x1a%naas_abi_proto/common/v1/common.proto\"\xa3\x01\n\x11InvokeToolRequest\x12+\n\x07\x63ontext\x18\x01 \x01(\x0b\x32\x1a.abi.common.v1.CallContext\x12\x0c\n\x04tool\x18\x02 \x01(\t\x12\x0f\n\x07version\x18\x03 \x01(\t\x12\x16\n\x0e\x61rguments_json\x18\x04 \x01(\x0c\x12\x13\n\x0b\x63onfig_json\x18\x05 \x01(\x0c\x12\x0f\n\x07\x63\x61ll_id\x18\x07 \x01(\tJ\x04\x08\x06\x10\x07\"R\n\x12InvokeToolResponse\x12\x13\n\x0bresult_json\x18\x01 \x01(\x0c\x12\'\n\x05\x65rror\x18\x0f \x01(\x0b\x32\x18.abi.common.v1.CallError\"Q\n\x11\x43\x61ncelToolRequest\x12+\n\x07\x63ontext\x18\x01 \x01(\x0b\x32\x1a.abi.common.v1.CallContext\x12\x0f\n\x07\x63\x61ll_id\x18\x02 \x01(\t\"P\n\x12\x43\x61ncelToolResponse\x12\x11\n\tcancelled\x18\x01 \x01(\x08\x12\'\n\x05\x65rror\x18\x0f \x01(\x0b\x32\x18.abi.common.v1.CallErrorb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -33,7 +33,11 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'naas_abi_proto.tool.v1.tool
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
   _globals['_INVOKETOOLREQUEST']._serialized_start=90
-  _globals['_INVOKETOOLREQUEST']._serialized_end=230
-  _globals['_INVOKETOOLRESPONSE']._serialized_start=232
-  _globals['_INVOKETOOLRESPONSE']._serialized_end=314
+  _globals['_INVOKETOOLREQUEST']._serialized_end=253
+  _globals['_INVOKETOOLRESPONSE']._serialized_start=255
+  _globals['_INVOKETOOLRESPONSE']._serialized_end=337
+  _globals['_CANCELTOOLREQUEST']._serialized_start=339
+  _globals['_CANCELTOOLREQUEST']._serialized_end=420
+  _globals['_CANCELTOOLRESPONSE']._serialized_start=422
+  _globals['_CANCELTOOLRESPONSE']._serialized_end=502
 # @@protoc_insertion_point(module_scope)

@@ -22,6 +22,14 @@ in this order:
    call. Only the checks of 1 run on the shared event loop, which serves every
    other service of the connection.
 
+A call may carry a ``call_id``: the caller that gives up (or whose deadline passes)
+asks the engine to cancel it (``cancel``), as the same identity, and the tool is
+stopped on this side: one with a coroutine is cancelled at its next ``await`` (its
+``finally`` blocks run), a synchronous one is told through
+``naas_abi_sdk.cancellation.current_cancellation()`` and cannot be interrupted (its
+thread, and so its slot, last until it returns). The deadline stops the tool the same
+way. The caller is answered ``CANCELLED``.
+
 The result and any message of the tool are scrubbed of the values of the secrets the
 call used (a defence in depth: a tool should not echo a credential, but one that does
 must not hand it to another process). Only a ``ToolException``'s message, written
@@ -48,7 +56,15 @@ from typing import Any
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
 from langchain_core.messages import ToolMessage
-from langchain_core.tools import BaseTool, ToolException
+from langchain_core.tools import BaseTool, StructuredTool, ToolException
+from naas_abi_sdk.cancellation import (
+    ActiveCalls,
+    CallIdInUse,
+    ToolCancellation,
+    ToolCancelled,
+    bind_cancellation,
+    valid_call_id,
+)
 from naas_abi_sdk.tools import (
     DEFAULT_DEADLINE_SECONDS,
     MAX_ARGUMENTS_BYTES,
@@ -91,6 +107,8 @@ REDACTED = "[redacted]"
 # Validators kept ready (one per published input schema): checking a schema is
 # not free, and a call should not pay for it again.
 MAX_CACHED_VALIDATORS = 256
+# How long a cancelled coroutine tool may take to unwind before the caller is answered.
+CANCEL_GRACE_SECONDS = 5.0
 
 _SECRET_NAME = re.compile(SECRET_NAME)
 ACTIVITY_ACTOR_PREFIX = "service:"
@@ -136,6 +154,7 @@ class ToolInvocation:
     workspace_id: str = ""
     timeout_ms: int = 0
     trace_id: str = ""
+    call_id: str = ""
 
 
 def _json_object(raw: bytes, what: str, limit: int) -> dict[str, Any]:
@@ -194,6 +213,29 @@ def scrub(value: Any, secrets: list[str]) -> Any:
     return walk(value)
 
 
+class _Running:
+    """The slot of one call: held until its task and its threads have all ended."""
+
+    def __init__(self, release: Callable[[], None]) -> None:
+        self._held = 1  # the task
+        self._release = release
+
+    def hold(self) -> None:
+        self._held += 1
+
+    def release(self, _done: Any = None) -> None:
+        self._held -= 1
+        if self._held == 0:
+            self._release()
+
+
+def _has_coroutine(tool: BaseTool) -> bool:
+    """A tool the loop can run and cancel: one with a coroutine of its own."""
+    if isinstance(tool, StructuredTool):
+        return tool.coroutine is not None
+    return type(tool)._arun is not BaseTool._arun
+
+
 class EngineToolInvoker:
     def __init__(
         self,
@@ -220,6 +262,8 @@ class EngineToolInvoker:
         # republished tool has a new schema object, so the entry is rebuilt.
         self._validators: OrderedDict[str, tuple[dict[str, Any], Any]] = OrderedDict()
         self._validators_lock = threading.Lock()
+        # Calls with a call_id, by (identity, id): the loop's own, like everything here.
+        self._active = ActiveCalls()
 
     @property
     def in_flight(self) -> int:
@@ -229,6 +273,15 @@ class EngineToolInvoker:
         pool, self._pool = self._pool, None
         if pool is not None:
             pool.shutdown(wait=False, cancel_futures=True)
+
+    def cancel(self, identity: str, call_id: str) -> bool:
+        """Stop the call ``call_id`` that ``identity`` started: ``True`` when it was
+        running. Another identity's call, an unknown id and a finished call are all
+        ``False`` (a cancel that comes before its call is kept briefly). Call it on
+        the event loop."""
+        if not valid_call_id(call_id):
+            return False
+        return self._active.cancel(identity, call_id)
 
     # ------------------------------------------------------------------ entry
     async def invoke(self, caller: InvokeCaller, invocation: ToolInvocation) -> bytes:
@@ -264,7 +317,13 @@ class EngineToolInvoker:
             return
         attributes: dict[str, Any] = {
             "tool": tool,
-            "outcome": "ok" if code is None else "error",
+            "outcome": (
+                "ok"
+                if code is None
+                else "cancelled"
+                if code == "CANCELLED"
+                else "error"
+            ),
             "duration_ms": millis,
         }
         if code is not None:
@@ -301,6 +360,10 @@ class EngineToolInvoker:
             raise ToolInvokeError(
                 "PAYLOAD_TOO_LARGE",
                 f"Tool configuration exceeds {MAX_CONFIG_BYTES // 1024} KiB",
+            )
+        if invocation.call_id and not valid_call_id(invocation.call_id):
+            raise ToolInvokeError(
+                "INVALID_ARGUMENT", "call_id is 1..128 letters, digits, _ or -"
             )
         if (invocation.user_id or invocation.workspace_id) and not caller.may_name_user:
             # Only the engine's own processes authenticate users and workspaces.
@@ -482,48 +545,130 @@ class EngineToolInvoker:
                 "The engine is running as many tool calls as it accepts: retry later",
                 retryable=True,
             )
+        registration = None
+        if invocation.call_id:
+            try:
+                registration = self._active.register(
+                    caller.identity, invocation.call_id
+                )
+            except CallIdInUse:
+                raise ToolInvokeError(
+                    "INVALID_ARGUMENT", "A call with this call_id is already running"
+                ) from None
         if self._pool is None:
             self._pool = ThreadPoolExecutor(
                 max_workers=self._max_concurrent, thread_name_prefix="nats-tool-invoke"
             )
         self._in_flight += 1
-        loop = asyncio.get_running_loop()
-        work = contextvars.copy_context()
-        future = loop.run_in_executor(
-            self._pool, work.run, self._prepare_and_execute, caller, invocation
+        cancellation = ToolCancellation()
+        running = _Running(self._release)
+        # The call is a task of its own, so that its deadline, a cancel from its caller
+        # and the caller going away can each stop it. It holds its slot until the task
+        # and every thread it started have ended: a synchronous tool that ignores the
+        # cancellation keeps running, and keeps its slot.
+        task = asyncio.ensure_future(
+            self._pipeline(caller, invocation, cancellation, running)
         )
-
-        def finished(done: asyncio.Future) -> None:
-            # A call past its deadline holds its slot until the tool returns.
-            self._in_flight -= 1
-            if not done.cancelled():
-                done.exception()
-
-        future.add_done_callback(finished)
+        task.add_done_callback(lambda done: running.release(done))
+        if registration is not None:
+            registration.on_cancel(lambda: self._stop(task, cancellation))
         try:
-            return await asyncio.wait_for(asyncio.shield(future), seconds)
+            return await asyncio.wait_for(asyncio.shield(task), seconds)
         except asyncio.TimeoutError:  # noqa: UP041 - not the builtin one on Python 3.10
+            self._stop(task, cancellation)
+            await self._unwound(task)
             raise ToolInvokeError(
                 "DEADLINE_EXCEEDED", f"Tool exceeded its {seconds:g}s deadline"
             ) from None
+        except asyncio.CancelledError:
+            # Its caller cancelled it (the task is cancelled), or this call is being
+            # cancelled (the connection or the engine closes): stop the tool either way.
+            self._stop(task, cancellation)
+            if registration is not None and registration.cancelled:
+                await self._unwound(task)
+                raise ToolInvokeError("CANCELLED", "The call was cancelled") from None
+            raise
+        finally:
+            if registration is not None:
+                registration.release()
 
-    def _prepare_and_execute(
-        self, caller: InvokeCaller, invocation: ToolInvocation
+    def _release(self) -> None:
+        self._in_flight -= 1
+
+    @staticmethod
+    def _stop(task: asyncio.Future[Any], cancellation: ToolCancellation) -> None:
+        cancellation.cancel()
+        task.cancel()
+
+    @staticmethod
+    async def _unwound(task: asyncio.Future[Any]) -> None:
+        """Let a cancelled coroutine tool run its ``finally`` blocks before answering."""
+        await asyncio.wait({task}, timeout=CANCEL_GRACE_SECONDS)
+        if task.done() and not task.cancelled():
+            task.exception()  # retrieved: never "exception was never retrieved"
+
+    async def _pipeline(
+        self,
+        caller: InvokeCaller,
+        invocation: ToolInvocation,
+        cancellation: ToolCancellation,
+        running: _Running,
     ) -> bytes:
+        # The task's own context: a tool, on this loop or on a thread (which runs in a
+        # copy of it), reads its cancellation with ``current_cancellation()``.
+        bind_cancellation(cancellation)
+        context = contextvars.copy_context()
+        definition, tool, arguments, hidden = await self._in_thread(
+            running, context, self._prepare_and_build, caller, invocation
+        )
+        if _has_coroutine(tool):
+            try:
+                result = await tool.ainvoke(arguments)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - translated, never returned raw
+                raise self._failure(definition, exc, hidden) from None
+            return await self._in_thread(running, context, self._encode, result, hidden)
+        return await self._in_thread(
+            running, context, self._call_tool, definition, tool, arguments, hidden
+        )
+
+    async def _in_thread(
+        self, running: _Running, context: contextvars.Context, fn: Any, *args: Any
+    ) -> Any:
+        assert self._pool is not None
+        loop = asyncio.get_running_loop()
+        running.hold()
+        future = self._pool.submit(context.run, fn, *args)
+
+        def finished(done: Any) -> None:
+            if not done.cancelled():
+                done.exception()  # retrieved: a stopped call never reads it
+            try:
+                loop.call_soon_threadsafe(running.release)
+            except RuntimeError:  # the loop closed while the thread ran on
+                pass
+
+        future.add_done_callback(finished)
+        return await asyncio.wrap_future(future)
+
+    def _prepare_and_build(
+        self, caller: InvokeCaller, invocation: ToolInvocation
+    ) -> tuple[ToolDefinition, Any, dict[str, Any], list[str]]:
+        """On a worker thread: the checks, the secrets' resolution and the tool."""
         definition, context, arguments, literal, references = self._prepare(
             caller, invocation
         )
-        return self._execute(definition, context, arguments, literal, references)
+        tool, hidden = self._build(definition, context, literal, references)
+        return definition, tool, arguments, hidden
 
-    def _execute(
+    def _build(
         self,
         definition: ToolDefinition,
         context: ToolContext,
-        arguments: dict[str, Any],
         literal: dict[str, Any],
         references: dict[str, str],
-    ) -> bytes:
-        """On a worker thread: resolve secrets, build the tool, call it."""
+    ) -> tuple[Any, list[str]]:
         hidden: list[str] = []
         config = dict(literal)
         for key, name in references.items():
@@ -556,27 +701,48 @@ class EngineToolInvoker:
             raise ToolInvokeError("TOOL_ERROR", "The tool could not be built") from None
         if not isinstance(tool, BaseTool):
             raise ToolInvokeError("TOOL_ERROR", "The tool cannot be run remotely")
+        return tool, hidden
+
+    def _call_tool(
+        self,
+        definition: ToolDefinition,
+        tool: BaseTool,
+        arguments: dict[str, Any],
+        hidden: list[str],
+    ) -> bytes:
+        """On a worker thread: run a synchronous tool."""
         try:
             result = tool.invoke(arguments)
-        except ToolException as exc:
-            raise ToolInvokeError(
+        except Exception as exc:  # noqa: BLE001 - translated, never returned raw
+            raise self._failure(definition, exc, hidden) from None
+        return self._encode(result, hidden)
+
+    @staticmethod
+    def _failure(
+        definition: ToolDefinition, exc: Exception, hidden: list[str]
+    ) -> ToolInvokeError:
+        """What a tool's failure is to its caller: only a ``ToolException``'s message
+        (written for the caller) and the arguments' validation message, scrubbed."""
+        if isinstance(exc, ToolCancelled):
+            return ToolInvokeError("CANCELLED", "The call was cancelled")
+        if isinstance(exc, ToolException):
+            return ToolInvokeError(
                 "TOOL_ERROR", scrub(str(exc), hidden)[:MAX_ERROR_CHARACTERS]
-            ) from None
-        except ValidationError as exc:
+            )
+        if isinstance(exc, ValidationError):
             first = exc.errors(include_input=False, include_url=False)[0]
             where = "/".join(str(part) for part in first.get("loc", ()))
-            raise ToolInvokeError(
+            return ToolInvokeError(
                 "INVALID_ARGUMENT",
                 scrub(f"{where or 'arguments'}: {first.get('msg', 'invalid')}", hidden)[
                     :200
                 ],
-            ) from None
-        except Exception as exc:  # noqa: BLE001 - its message may hold a credential
-            logger.warning(
-                f"tool_registry invoke: '{definition.id}' failed: {type(exc).__name__}"
             )
-            raise ToolInvokeError("TOOL_ERROR", "Tool execution failed") from None
-        return self._encode(result, hidden)
+        # Its message may hold a credential: log the type only.
+        logger.warning(
+            f"tool_registry invoke: '{definition.id}' failed: {type(exc).__name__}"
+        )
+        return ToolInvokeError("TOOL_ERROR", "Tool execution failed")
 
     @staticmethod
     def _encode(result: Any, hidden: list[str]) -> bytes:

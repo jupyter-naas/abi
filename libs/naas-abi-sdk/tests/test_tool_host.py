@@ -10,6 +10,7 @@ pytest.importorskip("jsonschema")
 from jsonschema.exceptions import SchemaError
 from naas_abi_proto.tool.v1 import tool_pb2 as pb
 
+from naas_abi_sdk.cancellation import current_cancellation
 from naas_abi_sdk.discovery import ModuleInstance, ModuleProxy, module_descriptor
 from naas_abi_sdk.module import BaseModule
 from naas_abi_sdk.tool_host import ToolHost
@@ -599,5 +600,473 @@ def test_the_transports_per_call_timeout_is_the_deadline_sent_and_waited():
                 instance_id="i-1",
                 timeout=0,
             )
+
+    asyncio.run(scenario())
+
+
+# --------------------------------------------------------------- cancellation
+def cancel_request(call_id="c1"):
+    return pb.CancelToolRequest(call_id=call_id).SerializeToString()
+
+
+def cancel(tool_host, call_id="c1", token="token"):
+    return tool_host.respond_cancel(
+        "lookup", cancel_request(call_id), {"Nats-Auth-Token": token}
+    )
+
+
+async def until(condition, seconds=5.0):
+    deadline = asyncio.get_running_loop().time() + seconds
+    while not condition():
+        assert asyncio.get_running_loop().time() < deadline, "timed out"
+        await asyncio.sleep(0.005)
+
+
+def test_a_cancelled_async_handler_is_really_cancelled_at_its_await():
+    state = {"finished": False, "cleaned": False}
+
+    async def scenario():
+        started = asyncio.Event()
+
+        async def slow(arguments, call):
+            started.set()
+            try:
+                await asyncio.sleep(30)
+                state["finished"] = True
+            finally:
+                state["cleaned"] = True
+
+        tool_host, _ = host(slow)
+        running = asyncio.ensure_future(
+            tool_host.respond(
+                "lookup",
+                request(call_id="c1").SerializeToString(),
+                {"Nats-Auth-Token": "token"},
+            )
+        )
+        await started.wait()
+        answer = await cancel(tool_host)
+        assert answer.cancelled and not answer.error.code
+        response = await asyncio.wait_for(running, 5)
+        assert response.error.code == "CANCELLED"
+        assert state["cleaned"] and not state["finished"]
+
+    asyncio.run(scenario())
+
+
+def test_a_cancelled_synchronous_handler_is_told_and_the_wait_ends():
+    state = {"seen": None}
+
+    async def scenario():
+        started, done = threading.Event(), threading.Event()
+
+        def slow(arguments, call):
+            started.set()
+            # Both ways of reading it name the same token.
+            state["seen"] = call.cancellation.wait(30)
+            state["same"] = call.cancellation is current_cancellation()
+            done.set()
+
+        tool_host, _ = host(slow)
+        running = asyncio.ensure_future(
+            tool_host.respond(
+                "lookup",
+                request(call_id="c1").SerializeToString(),
+                {"Nats-Auth-Token": "token"},
+            )
+        )
+        await until(started.is_set)
+        started_at = asyncio.get_running_loop().time()
+        assert (await cancel(tool_host)).cancelled
+        response = await asyncio.wait_for(running, 5)
+        assert response.error.code == "CANCELLED"
+        assert await asyncio.to_thread(done.wait, 5)
+        assert asyncio.get_running_loop().time() - started_at < 5
+        assert state["seen"] is True and state["same"] is True
+
+    asyncio.run(scenario())
+
+
+def test_a_synchronous_handler_that_raises_toolcancelled_is_cancelled_not_failed():
+    async def scenario():
+        started = threading.Event()
+
+        def slow(arguments, call):
+            started.set()
+            call.cancellation.wait(30)
+            call.cancellation.raise_if_cancelled()  # raises ToolCancelled
+
+        tool_host, _ = host(slow)
+        running = asyncio.ensure_future(
+            tool_host.respond(
+                "lookup",
+                request(call_id="c1").SerializeToString(),
+                {"Nats-Auth-Token": "token"},
+            )
+        )
+        await until(started.is_set)
+        await cancel(tool_host)
+        assert (await asyncio.wait_for(running, 5)).error.code == "CANCELLED"
+
+    asyncio.run(scenario())
+
+
+def test_only_the_identity_that_started_a_call_can_cancel_it():
+    async def scenario():
+        started, release = asyncio.Event(), asyncio.Event()
+
+        async def slow(arguments, call):
+            started.set()
+            await release.wait()
+            return "done"
+
+        session = Session("engine")
+        tool_host, _ = host(slow, session=session)
+        running = asyncio.ensure_future(
+            tool_host.respond(
+                "lookup",
+                request(call_id="c1").SerializeToString(),
+                {"Nats-Auth-Token": "token"},
+            )
+        )
+        await started.wait()
+        session.identity = "partner"
+        stranger = await cancel(tool_host)
+        assert not stranger.cancelled and not stranger.error.code
+        assert not running.done()
+        session.identity = "engine"
+        release.set()
+        assert json.loads((await running).result_json) == "done"
+
+    asyncio.run(scenario())
+
+
+def test_cancelling_an_unknown_or_finished_call_answers_false():
+    async def scenario():
+        tool_host, _ = host()
+        assert not (await cancel(tool_host, "nothing")).cancelled
+        response = await tool_host.respond(
+            "lookup",
+            request(call_id="c2").SerializeToString(),
+            {"Nats-Auth-Token": "token"},
+        )
+        assert not response.error.code
+        assert not (await cancel(tool_host, "c2")).cancelled
+
+    asyncio.run(scenario())
+
+
+def test_a_cancel_that_arrives_before_its_call_cancels_it_when_it_does():
+    async def scenario():
+        tool_host, calls = host()
+        assert not (await cancel(tool_host, "early")).cancelled
+        response = await tool_host.respond(
+            "lookup",
+            request(call_id="early").SerializeToString(),
+            {"Nats-Auth-Token": "token"},
+        )
+        assert response.error.code == "CANCELLED"
+        assert calls == []  # the handler never ran
+
+    asyncio.run(scenario())
+
+
+def test_a_call_id_running_twice_is_refused_and_a_bad_one_too():
+    async def scenario():
+        started, release = asyncio.Event(), asyncio.Event()
+
+        async def slow(arguments, call):
+            started.set()
+            await release.wait()
+            return 1
+
+        tool_host, _ = host(slow)
+        first = asyncio.ensure_future(
+            tool_host.respond(
+                "lookup",
+                request(call_id="same").SerializeToString(),
+                {"Nats-Auth-Token": "token"},
+            )
+        )
+        await started.wait()
+        second = await tool_host.respond(
+            "lookup",
+            request(call_id="same").SerializeToString(),
+            {"Nats-Auth-Token": "token"},
+        )
+        assert second.error.code == "INVALID_ARGUMENT"
+        bad = await tool_host.respond(
+            "lookup",
+            request(call_id="no spaces").SerializeToString(),
+            {"Nats-Auth-Token": "token"},
+        )
+        assert bad.error.code == "INVALID_ARGUMENT"
+        release.set()
+        assert not (await first).error.code
+        # The id is free again.
+        again = await tool_host.respond(
+            "lookup",
+            request(call_id="same").SerializeToString(),
+            {"Nats-Auth-Token": "token"},
+        )
+        assert not again.error.code
+
+    asyncio.run(scenario())
+
+
+def test_a_cancel_is_authenticated_like_a_call():
+    async def scenario():
+        tool_host, _ = host(session=Session(refuse="UNAUTHENTICATED"))
+        answer = await cancel(tool_host)
+        assert answer.error.code == "UNAUTHENTICATED" and not answer.cancelled
+        malformed = await host()[0].respond_cancel("lookup", b"\xff\xff", {})
+        assert malformed.error.code == "INVALID_ARGUMENT"
+        bad_id = await host()[0].respond_cancel(
+            "lookup", cancel_request("not valid!"), {"Nats-Auth-Token": "t"}
+        )
+        assert bad_id.error.code == "INVALID_ARGUMENT"
+
+    asyncio.run(scenario())
+
+
+def test_the_deadline_stops_the_handler_too():
+    state = {"cleaned": False, "told": None}
+
+    async def scenario():
+        async def slow(arguments, call):
+            try:
+                await asyncio.sleep(30)
+            finally:
+                state["cleaned"] = True
+
+        tool_host, _ = host(slow)
+        value = request(call_id="d1")
+        value.context.timeout_ms = 50
+        response = await tool_host.respond(
+            "lookup", value.SerializeToString(), {"Nats-Auth-Token": "token"}
+        )
+        assert response.error.code == "DEADLINE_EXCEEDED"
+        assert state["cleaned"]
+
+        told = threading.Event()
+
+        def blocking(arguments, call):
+            state["told"] = call.cancellation.wait(30)
+            told.set()
+
+        tool_host, _ = host(blocking)
+        response = await tool_host.respond(
+            "lookup", value.SerializeToString(), {"Nats-Auth-Token": "token"}
+        )
+        assert response.error.code == "DEADLINE_EXCEEDED"
+        assert await asyncio.to_thread(told.wait, 5) and state["told"] is True
+
+    asyncio.run(scenario())
+
+
+def test_a_call_without_an_id_runs_as_before():
+    async def scenario():
+        tool_host, _ = host()
+        response = await tool_host.respond(
+            "lookup", request().SerializeToString(), {"Nats-Auth-Token": "token"}
+        )
+        assert not response.error.code
+        # An empty id names nothing: a cancel for it is a malformed request.
+        assert (await cancel(tool_host, "")).error.code == "INVALID_ARGUMENT"
+
+    asyncio.run(scenario())
+
+
+def test_closing_the_host_cancels_the_handlers_it_runs():
+    state = {"cleaned": False}
+
+    async def scenario():
+        started = asyncio.Event()
+
+        async def slow(arguments, call):
+            started.set()
+            try:
+                await asyncio.sleep(30)
+            finally:
+                state["cleaned"] = True
+
+        tool_host, _ = host(slow)
+        running = asyncio.ensure_future(
+            tool_host.respond(
+                "lookup",
+                request(call_id="c1").SerializeToString(),
+                {"Nats-Auth-Token": "token"},
+            )
+        )
+        await started.wait()
+        running.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await running
+        assert state["cleaned"]
+
+    asyncio.run(scenario())
+
+
+def test_start_subscribes_each_tool_to_its_cancel_subject_outside_the_call_limit():
+    async def scenario():
+        tool_host, _ = host(max_concurrency=1)
+        subscribed = {}
+
+        class Subscription:
+            async def unsubscribe(self):
+                return None
+
+        class Connection:
+            max_payload = 1 << 20
+
+            async def subscribe(self, subject, cb):
+                subscribed[subject] = cb
+                return Subscription()
+
+        async def connect():
+            return Connection()
+
+        tool_host.session.client.transport = SimpleNamespace(connect=connect)
+
+        async def flushed(nc):
+            return None
+
+        import naas_abi_sdk.tool_host as module
+
+        saved, module.flush_to_broker = module.flush_to_broker, flushed
+        try:
+            await tool_host.start()
+        finally:
+            module.flush_to_broker = saved
+        assert set(subscribed) == {
+            "abi.mod.acme.instance-1.tool.lookup.invoke",
+            "abi.mod.acme.instance-1.tool.lookup.cancel",
+        }
+        # The cancel's callback is not the call callback: it does not wait for a slot.
+        assert (
+            subscribed["abi.mod.acme.instance-1.tool.lookup.cancel"]
+            is not subscribed["abi.mod.acme.instance-1.tool.lookup.invoke"]
+        )
+
+    asyncio.run(scenario())
+
+
+# ------------------------------------------------- the caller that gives up
+class RecordingTransport:
+    """What ModuleToolClient sees of the broker: calls recorded, one behaviour."""
+
+    def __init__(self, behaviour):
+        self.behaviour, self.calls = behaviour, []
+
+    async def call(self, subject, request, response_type, **kwargs):
+        self.calls.append((subject, request, response_type, kwargs))
+        if subject.endswith(".cancel"):
+            return pb.CancelToolResponse(cancelled=True)
+        return await self.behaviour()
+
+
+def _client(behaviour):
+    from naas_abi_sdk.tools import ModuleToolClient
+
+    transport = RecordingTransport(behaviour)
+    return (
+        ModuleToolClient(
+            transport, tool_subject("acme", "instance-1", "lookup"), "instance-1"
+        ),
+        transport,
+    )
+
+
+def test_a_client_names_its_call_and_leaves_the_callers_request_alone():
+    async def done():
+        return pb.InvokeToolResponse(result_json=b"1")
+
+    async def scenario():
+        client, transport = _client(done)
+        original = request()
+        await client.invoke(original)
+        ((_, sent, _, _),) = transport.calls
+        assert sent.call_id and not original.call_id
+        # A caller's own id is kept.
+        await client.invoke(request(call_id="mine"))
+        assert transport.calls[1][1].call_id == "mine"
+        assert len(transport.calls) == 2  # no cancel after a call that answered
+
+    asyncio.run(scenario())
+
+
+def test_a_caller_that_is_cancelled_cancels_the_call_on_the_module():
+    async def forever():
+        await asyncio.sleep(30)
+
+    async def scenario():
+        client, transport = _client(forever)
+        running = asyncio.ensure_future(client.invoke(request()))
+        await until(lambda: transport.calls)
+        running.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await running
+        (_, sent, _, _), (subject, cancelled, response_type, kwargs) = transport.calls
+        assert subject == "abi.mod.acme.instance-1.tool.lookup.cancel"
+        assert cancelled.call_id == sent.call_id
+        assert response_type is pb.CancelToolResponse
+        assert kwargs["instance_id"] == "instance-1"
+
+    asyncio.run(scenario())
+
+
+def test_a_caller_whose_wait_ran_out_cancels_the_call_too():
+    async def slow():
+        raise asyncio.TimeoutError()
+
+    async def scenario():
+        client, transport = _client(slow)
+        with pytest.raises(asyncio.TimeoutError):
+            await client.invoke(request())
+        assert transport.calls[1][0].endswith(".tool.lookup.cancel")
+
+    asyncio.run(scenario())
+
+
+def test_an_error_the_module_answered_is_not_followed_by_a_cancel():
+    async def refused():
+        raise RPCError("PERMISSION_DENIED", "no")
+
+    async def scenario():
+        client, transport = _client(refused)
+        with pytest.raises(RPCError):
+            await client.invoke(request())
+        assert len(transport.calls) == 1
+
+    asyncio.run(scenario())
+
+
+def test_a_cancel_that_cannot_be_sent_never_hides_the_callers_exit():
+    async def scenario():
+        from naas_abi_sdk.tools import ModuleToolClient
+
+        gate = asyncio.Event()
+
+        class Broken:
+            def __init__(self):
+                self.calls = 0
+
+            async def call(self, subject, request, response_type, **kwargs):
+                self.calls += 1
+                if subject.endswith(".cancel"):
+                    raise ConnectionError("gone")
+                gate.set()
+                await asyncio.sleep(30)
+
+        transport = Broken()
+        client = ModuleToolClient(
+            transport, tool_subject("acme", "instance-1", "lookup"), "instance-1"
+        )
+        running = asyncio.ensure_future(client.invoke(request()))
+        await gate.wait()
+        running.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await running
+        assert transport.calls == 2
 
     asyncio.run(scenario())

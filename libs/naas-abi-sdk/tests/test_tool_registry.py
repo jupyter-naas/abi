@@ -44,6 +44,7 @@ def test_the_catalog_lists_the_service_and_a_module_may_depend_on_it():
         "get_tool",
         "search_tools",
         "invoke_tool",
+        "cancel_tool",
     ]
     assert FACTORIES["tool_registry"] is ToolRegistryService
     client = SimpleNamespace(tool_registry=AsyncMock(), bus=object())

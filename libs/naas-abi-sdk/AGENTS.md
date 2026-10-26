@@ -82,7 +82,7 @@ its config and secrets and enforces access from the module's verified identity
 (`nats.tool_registry.module_scopes`, `invoke.modules.<id>.secrets` / `unscoped_tools`, all denied by
 default), never from the request. `invoke` sends plain `config` and `secrets` as *names* of engine
 secrets (never values: an inline credential is refused), arguments as JSON, and `timeout` as the
-deadline (the call waits `INVOKE_GRACE_SECONDS` longer so the engine's `DEADLINE_EXCEEDED` arrives; a lost reply is a `ServiceError` `DEADLINE_EXCEEDED` too); it never retries. `as_tool` / `engine_tools.py` wrap a definition as a LangChain tool (extra
+deadline (the call waits `INVOKE_GRACE_SECONDS` longer so the engine's `DEADLINE_EXCEEDED` arrives; a lost reply is a `ServiceError` `DEADLINE_EXCEEDED` too); it never retries. Cancelling the awaiting task, or a wait that ran out, sends `cancel_tool` so the engine stops the tool (a coroutine tool at its await; a synchronous one is told). `as_tool` / `engine_tools.py` wrap a definition as a LangChain tool (extra
 `engine-tools`, imported only when requested) that an SDK `Agent` binds; refuse `remote` definitions
 there (those are called on their module). Keep its DTOs aligned with `tool_registry/v1`. Tests:
 `tests/test_engine_tools.py`; the real-broker suite is core's
@@ -102,11 +102,17 @@ descriptor as the portable `ToolDefinition` (canonical JSON, so replicas compare
 discovery's `authorize_tool` (token bound to this instance), the module's `authorize_tool` hook
 (default: the engine's own processes only; it replaces the default), arguments validated against the
 input schema and configuration against the descriptor, then the handler under the caller's deadline.
-Only `api` and `engine` may name an end user. A handler's exception never travels (generic
+Only `api` and `engine` may name an end user. A call may carry a `call_id`; the caller that gives up
+sends `CancelToolRequest` on `...tool.<name>.cancel` (`ModuleToolClient` and `ToolRegistryService.invoke` do it
+for their own cancelled or timed-out calls), and only the identity that started the call can cancel it
+(`cancellation.py`: `ActiveCalls`, `ToolCancellation`; ADR docs/adr/20261026_tool-call-cancellation.md). An
+async handler is cancelled at its next await; a synchronous one polls `call.cancellation` or
+`current_cancellation()` and cannot be interrupted. A handler's exception never travels (generic
 `TOOL_ERROR`); only `ToolError` carries its message. No secret in a descriptor or a call: engine
 secrets never reach a module, which holds its own. Serving needs the `tools` extra (`jsonschema`);
-`tools.py` stays stdlib and proto only. Tests: `tests/test_tool_host.py`; the real-broker
-suite is core's `engine/Engine_remote_tools_nats_integration_test.py`.
+`tools.py` stays stdlib and proto only. Tests: `tests/test_tool_host.py`, `tests/test_cancellation.py`; the
+real-broker suites are core's `engine/Engine_remote_tools_nats_integration_test.py` and
+`engine/Engine_cancel_remote_tools_nats_integration_test.py`.
 
 A module can serve a chat model (`ModelDescriptor`, `expose_model`, `ModelHost`).
 Another module calls `engine.modules[id].get_chat_model(name)`. The call is unary,

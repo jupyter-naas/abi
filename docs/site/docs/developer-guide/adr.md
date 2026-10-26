@@ -7,7 +7,7 @@ title: "Architecture decision records"
 
 # Architecture decision records
 
-An ADR records a decision about a boundary, an ownership, cross-cutting configuration or a major trade-off: its context, the decision and its consequences. They live in [`docs/adr/`](https://github.com/jupyter-naas/abi/tree/main/docs/adr), one file each, named `YYYYMMDD_topic.md`; add one when a change makes such a decision (see [Contribute to ABI](/developer-guide/contributing/overview#conventions)). 56 are listed here, oldest first within a group.
+An ADR records a decision about a boundary, an ownership, cross-cutting configuration or a major trade-off: its context, the decision and its consequences. They live in [`docs/adr/`](https://github.com/jupyter-naas/abi/tree/main/docs/adr), one file each, named `YYYYMMDD_topic.md`; add one when a change makes such a decision (see [Contribute to ABI](/developer-guide/contributing/overview#conventions)). 57 are listed here, oldest first within a group.
 
 ## Deployment, releases and documentation
 
@@ -79,3 +79,4 @@ An ADR records a decision about a boundary, an ownership, cross-cutting configur
 ## Other
 
 - [A shared tool registry for composing agents from records and discovering tools at runtime](https://github.com/jupyter-naas/abi/blob/main/docs/adr/20260923_tool-registry-and-agent-composition.md) (2026-09-23)
+- [Tool calls are cancelled on both sides](https://github.com/jupyter-naas/abi/blob/main/docs/adr/20261026_tool-call-cancellation.md) (2026-10-26)

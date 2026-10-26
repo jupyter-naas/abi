@@ -9,6 +9,7 @@
   - Checks every declared schema at construction (a bad schema fails before the module is ready).
   - `async start()`, `async drain(timeout)` (no new call, the calls received finish), `async close()`.
   - `async respond(name, data, headers, *, uploaded=False) -> InvokeToolResponse`: one call as its reply; never raises.
+  - `async respond_cancel(name, data, headers) -> CancelToolResponse`: stop the call named by `call_id`; never raises. Subscribed on `abi.mod.<project>.<instance>.tool.<name>.cancel`, outside the call limit.
 
 ## What a call goes through
 1. Size limits (request 512 KiB; an overflow upload is refused).
@@ -16,7 +17,7 @@
 3. The module's `authorize_tool(name, caller)` hook. Default: the engine's own processes (`api`, `engine`, `dagster`) only. It replaces the default; only `True` allows.
 4. A named end user (`context.principal_id`) or workspace (`context.workspace_id`) is honoured only from the callers in `user_callers` (`api` and `engine`). Any other caller that sets either, `dagster` included, gets `PERMISSION_DENIED`.
 5. The arguments are validated against the tool's input schema and the configuration against its descriptor (unknown or missing required key): `INVALID_ARGUMENT`, before the handler runs.
-6. The handler runs under the caller's deadline (`context.timeout_ms`, at most 300 s, 60 s when unset). A synchronous handler runs on a thread; its deadline stops the wait, not the thread.
+6. The handler runs under the caller's deadline (`context.timeout_ms`, at most 300 s, 60 s when unset). An async handler is cancelled at its deadline, when its caller cancels the call (`call_id`), or when the host closes: it stops at its next `await` and its `finally` blocks run. A synchronous handler runs on a thread and cannot be interrupted: it is told through `call.cancellation` (`cancelled`, `wait(seconds)` in place of `time.sleep`, `raise_if_cancelled()`; also `current_cancellation()`), and the reply goes out at once.
 7. The result must be JSON (finite numbers), at most 512 KiB, and match the output schema if declared.
 
-Errors are a stable code and a message with no detail of the handler's failure: `UNAUTHENTICATED`, `PERMISSION_DENIED`, `TOOL_NOT_FOUND`, `MODULE_UNAVAILABLE`, `INVALID_ARGUMENT`, `PAYLOAD_TOO_LARGE`, `DEADLINE_EXCEEDED`, `TOOL_ERROR`.
+Errors are a stable code and a message with no detail of the handler's failure: `UNAUTHENTICATED`, `PERMISSION_DENIED`, `TOOL_NOT_FOUND`, `MODULE_UNAVAILABLE`, `INVALID_ARGUMENT`, `PAYLOAD_TOO_LARGE`, `DEADLINE_EXCEEDED`, `CANCELLED`, `TOOL_ERROR`.

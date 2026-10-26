@@ -36,6 +36,9 @@ UNGRANTED = "stranger"
 TRUSTED = "trusted_partner"
 
 ENGINE_MODULE = """
+import asyncio
+import threading
+
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.tools import StructuredTool
 from naas_abi_core.models.Model import ChatModel
@@ -48,9 +51,27 @@ from naas_abi_core.services.tool_registry.ToolRegistryPort import ConfigRequirem
 from naas_abi_core.services.tool_registry.tests.concept_embeddings import (
     concept_embedding_model,
 )
+from naas_abi_sdk.cancellation import current_cancellation
 
 PLATFORM_TOKEN = "__PLATFORM_TOKEN__"
 CALLS = []
+# What the two tools that wait until they are cancelled saw (the test reads it).
+PROBE = {"started": threading.Event(), "cleaned": threading.Event(), "told": None}
+
+
+async def wait_async(**arguments):
+    PROBE["started"].set()
+    try:
+        await asyncio.sleep(60)
+    finally:
+        PROBE["cleaned"].set()
+
+
+def wait_sync(**arguments):
+    PROBE["started"].set()
+    PROBE["told"] = current_cancellation().wait(60)
+    PROBE["cleaned"].set()
+    return "stopped"
 
 
 def make(name, description, properties, required, token, body):
@@ -107,6 +128,18 @@ def tools(config):
             token,
             lambda t, a: ["abi", "naas"],
         ),
+        StructuredTool(
+            name="wait_async",
+            description="Wait without end, as a coroutine, until the call is cancelled.",
+            args_schema={"type": "object", "properties": {}},
+            coroutine=wait_async,
+        ),
+        StructuredTool(
+            name="wait_sync",
+            description="Wait without end, on a thread, until the call is cancelled.",
+            args_schema={"type": "object", "properties": {}},
+            func=wait_sync,
+        ),
     ]
 
 
@@ -130,7 +163,7 @@ class ABIModule(BaseModule):
         requirement = [ConfigRequirement(key="access_token", secret=True)]
         defaults = {"access_token": PLATFORM_TOKEN}
         for scopes, include in (
-            (("github:write",), ["create_issue"]),
+            (("github:write",), ["create_issue", "wait_async", "wait_sync"]),
             (("github:read",), ["show_token"]),
             (("github:admin",), ["delete_repo"]),
             ((), ["list_repos"]),
@@ -811,3 +844,101 @@ def test_no_python_object_crosses_the_wire(serving, broker, calls):
     for payload in (request, response):
         assert b"\x80\x04" not in payload  # a pickle protocol marker
         assert b"pickle" not in payload and b"__reduce__" not in payload
+
+
+# ------------------------------------------------------------------- cancelling
+@pytest.fixture
+def probe(serving):
+    import sys
+
+    probe = sys.modules[NAMESPACE].PROBE
+    probe["started"].clear()
+    probe["cleaned"].clear()
+    probe["told"] = None
+    return probe
+
+
+@pytest.mark.parametrize("tool", ["wait_async", "wait_sync"])
+def test_a_module_that_gives_up_cancels_the_engine_tool(serving, partner, probe, tool):
+    """The module's task is cancelled; the engine stops the tool it runs for it: the
+    coroutine at its await (its ``finally`` runs), the synchronous one through its
+    cancellation."""
+
+    async def scenario(module):
+        registry = module.engine.services.tool_registry
+        running = asyncio.ensure_future(registry.invoke(f"{NAMESPACE}/{tool}", {}))
+        assert await asyncio.to_thread(probe["started"].wait, 15)
+        running.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await running
+        return await asyncio.to_thread(probe["cleaned"].wait, 15)
+
+    assert partner.run(scenario) is True
+    if tool == "wait_sync":
+        assert probe["told"] is True
+
+
+@pytest.mark.parametrize("tool", ["wait_async", "wait_sync"])
+def test_the_deadline_stops_the_engine_tool_too(serving, partner, probe, tool):
+    from naas_abi_sdk.services.errors import ServiceError
+
+    async def scenario(module):
+        registry = module.engine.services.tool_registry
+        with pytest.raises(ServiceError) as raised:
+            await registry.invoke(f"{NAMESPACE}/{tool}", {}, timeout=1)
+        cleaned = await asyncio.to_thread(probe["cleaned"].wait, 15)
+        return raised.value.code, cleaned
+
+    code, cleaned = partner.run(scenario)
+    assert code == "DEADLINE_EXCEEDED" and cleaned
+    if tool == "wait_sync":
+        assert probe["told"] is True
+
+
+def test_a_module_cannot_cancel_a_call_it_did_not_start(
+    serving, partner, probe, broker, monkeypatch
+):
+    """Another module's cancel, with the call's real id, tells nothing and stops
+    nothing; the owner's own cancel does."""
+    from naas_abi_proto.tool_registry.v1 import tool_registry_pb2 as pb
+    from naas_abi_sdk.tool_registry import ToolRegistryClient
+
+    ids: list[str] = []
+    original = ToolRegistryClient.invoke_tool
+
+    async def noting(self, request, **kwargs):
+        ids.append(request.call_id)
+        return await original(self, request, **kwargs)
+
+    monkeypatch.setattr(ToolRegistryClient, "invoke_tool", noting)
+
+    async def start(module):
+        registry = module.engine.services.tool_registry
+        running = asyncio.ensure_future(
+            registry.invoke(f"{NAMESPACE}/wait_async", {}, timeout=30)
+        )
+        assert await asyncio.to_thread(probe["started"].wait, 15)
+        return running
+
+    async def stranger(registry, client):
+        answer = await client.tool_registry.cancel_tool(
+            pb.CancelToolRequest(call_id=ids[0])
+        )
+        return answer.cancelled, answer.HasField("error")
+
+    running = partner.run(start)
+    assert ids and ids[0]
+    assert as_module(broker, UNGRANTED, stranger) == (False, False)
+    time.sleep(0.3)
+    assert not probe["cleaned"].is_set() and not running.done()
+
+    async def owner(registry, client):
+        answer = await client.tool_registry.cancel_tool(
+            pb.CancelToolRequest(call_id=ids[0])
+        )
+        return answer.cancelled
+
+    # The owner is the module that started it: the same identity, a new connection.
+    assert as_module(broker, GRANTED, owner) is True
+    assert probe["cleaned"].wait(15)
+    partner.loop.call_soon_threadsafe(running.cancel)

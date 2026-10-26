@@ -31,4 +31,4 @@ agent = Agent("support", "Opens issues", chat_model, tools=proxies)
 
 ## Caveats
 - Create the tool inside the running module: a synchronous `tool.invoke` is handed to the module's event loop and fails on that loop itself (use `ainvoke` there).
-- A call is one attempt: a tool may have side effects, so nothing is retried. The deadline (`timeout`, at most 300 s) releases the caller; a synchronous engine tool keeps running to its end.
+- A call is one attempt: a tool may have side effects, so nothing is retried. The deadline (`timeout`, at most 300 s) releases the caller and stops the tool on the engine: a coroutine tool is cancelled at its next `await`, a synchronous one is told and keeps running unless it polls its cancellation. Cancelling the task that awaits `invoke` (or the model-facing tool) does the same (`cancel_tool`, by `call_id`).

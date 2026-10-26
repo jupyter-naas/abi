@@ -41,7 +41,7 @@ def test_a_module_may_serve_and_call_a_tool_subject():
 def test_a_module_may_call_the_engines_tool_operations_but_not_serve_them():
     """Running an engine tool is a call to ``abi.svc.tool_registry.v1.invoke_tool``: a
     module publishes there (the engine checks its token), and could not answer it."""
-    for operation in ("search_tools", "invoke_tool"):
+    for operation in ("search_tools", "invoke_tool", "cancel_tool"):
         subject = f"abi.svc.tool_registry.v1.{operation}"
         assert not denied("publish", subject)
         assert denied("subscribe", subject)
@@ -54,6 +54,7 @@ def test_a_module_may_call_the_engines_tool_operations_but_not_serve_them():
         "abi.svc.tool_registry.v1.get_tool",
         "abi.svc.tool_registry.v1.search_tools",
         "abi.svc.tool_registry.v1.invoke_tool",
+        "abi.svc.tool_registry.v1.cancel_tool",
         "abi.discovery.acme.v1.authorize_tool",
         "abi.discovery.acme.v1.register",
         "abi.rpc.overflow.open",

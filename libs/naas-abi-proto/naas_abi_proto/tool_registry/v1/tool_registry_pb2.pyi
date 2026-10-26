@@ -152,7 +152,7 @@ class SearchToolsResponse(_message.Message):
     def __init__(self, matches: _Optional[_Iterable[_Union[ToolMatch, _Mapping]]] = ..., truncated: bool = ..., error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ...) -> None: ...
 
 class InvokeToolRequest(_message.Message):
-    __slots__ = ("context", "tool", "version", "arguments_json", "config_json", "secret_refs")
+    __slots__ = ("context", "tool", "version", "arguments_json", "config_json", "secret_refs", "call_id")
     class SecretRefsEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -166,13 +166,15 @@ class InvokeToolRequest(_message.Message):
     ARGUMENTS_JSON_FIELD_NUMBER: _ClassVar[int]
     CONFIG_JSON_FIELD_NUMBER: _ClassVar[int]
     SECRET_REFS_FIELD_NUMBER: _ClassVar[int]
+    CALL_ID_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     tool: str
     version: str
     arguments_json: bytes
     config_json: bytes
     secret_refs: _containers.ScalarMap[str, str]
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., tool: _Optional[str] = ..., version: _Optional[str] = ..., arguments_json: _Optional[bytes] = ..., config_json: _Optional[bytes] = ..., secret_refs: _Optional[_Mapping[str, str]] = ...) -> None: ...
+    call_id: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., tool: _Optional[str] = ..., version: _Optional[str] = ..., arguments_json: _Optional[bytes] = ..., config_json: _Optional[bytes] = ..., secret_refs: _Optional[_Mapping[str, str]] = ..., call_id: _Optional[str] = ...) -> None: ...
 
 class InvokeToolResponse(_message.Message):
     __slots__ = ("result_json", "error")
@@ -181,3 +183,19 @@ class InvokeToolResponse(_message.Message):
     result_json: bytes
     error: _common_pb2.CallError
     def __init__(self, result_json: _Optional[bytes] = ..., error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ...) -> None: ...
+
+class CancelToolRequest(_message.Message):
+    __slots__ = ("context", "call_id")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    CALL_ID_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    call_id: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., call_id: _Optional[str] = ...) -> None: ...
+
+class CancelToolResponse(_message.Message):
+    __slots__ = ("cancelled", "error")
+    CANCELLED_FIELD_NUMBER: _ClassVar[int]
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    cancelled: bool
+    error: _common_pb2.CallError
+    def __init__(self, cancelled: bool = ..., error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ...) -> None: ...

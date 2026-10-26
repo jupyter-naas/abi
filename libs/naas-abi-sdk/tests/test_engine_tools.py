@@ -354,3 +354,86 @@ def test_arguments_the_engine_could_not_take_reach_the_model_too():
     assert "256 KiB" in too_big
     assert "JSON" in not_json
     client.invoke_tool.assert_not_called()
+
+
+# ----------------------------------------------------------- cancelling a call
+def test_every_call_is_named_so_it_can_be_cancelled():
+    service, client = registry()
+    asyncio.run(service.invoke("acme.github/open_issue", {"title": "x"}))
+    asyncio.run(service.invoke("acme.github/open_issue", {"title": "x"}))
+    first, second = (c.args[0].call_id for c in client.invoke_tool.call_args_list)
+    assert first and second and first != second
+    client.cancel_tool.assert_not_called()
+
+
+def test_a_caller_that_is_cancelled_cancels_the_call_on_the_engine():
+    client = AsyncMock()
+
+    async def forever(request, **kwargs):
+        await asyncio.sleep(30)
+
+    client.invoke_tool.side_effect = forever
+    client.cancel_tool.return_value = pb.CancelToolResponse(cancelled=True)
+    service = ToolRegistryService(client)
+
+    async def scenario():
+        running = asyncio.ensure_future(
+            service.invoke("acme.github/open_issue", {"title": "x"})
+        )
+        while not client.invoke_tool.called:
+            await asyncio.sleep(0.005)
+        running.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await running
+
+    asyncio.run(scenario())
+    sent = client.invoke_tool.call_args.args[0]
+    (asked,) = (c.args[0] for c in client.cancel_tool.call_args_list)
+    assert asked.call_id == sent.call_id and asked.call_id
+
+
+def test_a_reply_that_never_came_cancels_the_call_before_reporting_the_deadline():
+    service, client = registry(error=asyncio.TimeoutError())
+    client.cancel_tool.return_value = pb.CancelToolResponse(cancelled=True)
+    with pytest.raises(Exception, match="DEADLINE_EXCEEDED"):
+        asyncio.run(service.invoke("acme.github/open_issue", {"title": "x"}))
+    sent = client.invoke_tool.call_args.args[0]
+    assert client.cancel_tool.call_args.args[0].call_id == sent.call_id
+
+
+def test_an_error_the_engine_answered_is_not_followed_by_a_cancel():
+    service, client = registry(error=RPCError("TOOL_ERROR", "bad"))
+    with pytest.raises(ToolExecutionError):
+        asyncio.run(service.invoke("acme.github/open_issue", {"title": "x"}))
+    client.cancel_tool.assert_not_called()
+
+
+def test_a_cancel_that_cannot_be_sent_never_hides_the_deadline():
+    service, client = registry(error=asyncio.TimeoutError())
+    client.cancel_tool.side_effect = ConnectionError("gone")
+    with pytest.raises(Exception, match="DEADLINE_EXCEEDED"):
+        asyncio.run(service.invoke("acme.github/open_issue", {"title": "x"}))
+
+
+def test_cancelling_the_model_facing_tool_cancels_the_engine_call():
+    service, client = registry()
+
+    async def forever(request, **kwargs):
+        await asyncio.sleep(30)
+
+    client.invoke_tool.side_effect = forever
+    client.cancel_tool.return_value = pb.CancelToolResponse(cancelled=True)
+
+    async def scenario():
+        tool = await service.as_tool("acme.github/open_issue")
+        running = asyncio.ensure_future(tool.ainvoke({"title": "bug"}))
+        while not client.invoke_tool.called:
+            await asyncio.sleep(0.005)
+        running.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await running
+
+    asyncio.run(scenario())
+    assert client.cancel_tool.call_args.args[0].call_id == (
+        client.invoke_tool.call_args.args[0].call_id
+    )

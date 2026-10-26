@@ -236,7 +236,16 @@ Only JSON crosses the wire; no binding, callable or secret value.
 - **Limits.** 512 KiB request, 256 KiB arguments, 64 KiB config, 16 refs, 512 KiB result;
   `nats.tool_registry.invoke: {enabled, max_concurrent (16, lowered with a warning to half of nats.max_concurrent_requests), default_timeout_seconds (lowered to max_timeout_seconds when above it),
   max_timeout_seconds, modules}`. Over the limit: `RESOURCE_EXHAUSTED` (retryable), never queued; a slot is
-  held until the tool returns (a synchronous tool cannot be cancelled).
+  held until the tool and its threads return.
+- **Cancelling** (`docs/adr/20261026_tool-call-cancellation.md`). A call may carry a `call_id`; `cancel_tool`
+  (`EngineToolInvoker.cancel(identity, call_id)`) stops it, only for the identity that started it (another
+  identity's, an unknown and a finished id all answer `cancelled=false`; a cancel before its call is kept 30 s).
+  Each call is a task: a **coroutine tool** (a `StructuredTool` with `coroutine`, or a `BaseTool` overriding
+  `_arun`) is cancelled at its next `await` and the caller answered `CANCELLED` once it has unwound (5 s at
+  most); a **synchronous tool** is told through `naas_abi_sdk.cancellation.current_cancellation()` (`cancelled`,
+  `wait(seconds)`, `raise_if_cancelled()`) and cannot be interrupted, so it keeps its slot until it returns.
+  The deadline does the same. Write tools that call out as coroutines. A caller whose process dies sends
+  nothing: the deadline (300 s) bounds it.
 - **Not here:** a client engine's `resolve` of a tool it has not loaded still raises. The composer resolves
   `{secret: NAME}` against the client's own secrets, so a proxy would send credential values; the ADR says
   what it needs instead. SDK side: `ToolRegistryService.invoke` / `as_tool` (`naas_abi_sdk.engine_tools`).
@@ -268,7 +277,10 @@ before the handler, sanitized errors, deadline, size caps).
 - **Out.** `resolve` builds a `StructuredTool` whose schema is the module's JSON Schema; a
   call looks up a READY instance in discovery and sends one `InvokeToolRequest` as the
   `engine` identity with the caller's user and workspace (`ToolContext`). A module error is the
-  tool's output (`ToolException`: the model can recover); nothing is retried.
+  tool's output (`ToolException`: the model can recover); nothing is retried. Every call is named
+  (`call_id`): when its caller is cancelled or its wait runs out, `ModuleToolClient` sends the
+  module a cancel on `...tool.<name>.cancel` (best effort, 3 s) and the module stops the handler
+  (`docs/adr/20261026_tool-call-cancellation.md`).
 - **Credentials.** No engine secret reaches a module: discovery refuses a secret
   requirement, a remote binding's `default_config` is empty and it refuses undeclared
   configuration keys, and the composer rejects `{secret: NAME}` on a `remote` definition
@@ -278,7 +290,8 @@ before the handler, sanitized errors, deadline, size caps).
   `nats.tool_registry.remote_modules: {enabled, refresh_seconds, call_timeout_seconds}`
   (needs `nats.discovery`). Tests: `RemoteToolSynchronizer_test.py`,
   `adapters/primary/RemoteToolBinding_test.py`, and on a real broker
-  `engine/Engine_remote_tools_nats_integration_test.py`.
+  `engine/Engine_remote_tools_nats_integration_test.py` (cancelling:
+  `engine/Engine_cancel_remote_tools_nats_integration_test.py`).
 
 **Several processes on one vector store** (the sqlite_vec dev default shares a
 file between `api` and `dagster`): an engine without NATS writes the shared

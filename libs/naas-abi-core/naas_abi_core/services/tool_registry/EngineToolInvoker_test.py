@@ -12,6 +12,7 @@ import time
 import pytest
 from langchain_core.tools import StructuredTool, ToolException
 from loguru import logger
+from naas_abi_sdk.cancellation import current_cancellation
 
 from naas_abi_core.services.activity_log.ActivityLogPort import ActivityEvent
 from naas_abi_core.services.tool_registry import EngineToolInvoker as invoker_module
@@ -97,12 +98,21 @@ class Binding:
         )
 
 
-def definition(name, *, scopes=(), secret=True, remote=False, schema=None, **extra):
+def definition(
+    name,
+    *,
+    scopes=(),
+    secret=True,
+    remote=False,
+    schema=None,
+    namespace=GITHUB,
+    **extra,
+):
     return ToolDefinition(
-        namespace=GITHUB,
+        namespace=namespace,
         name=name,
         description=f"{name} on GitHub",
-        module=GITHUB,
+        module=namespace,
         input_schema=schema
         or {
             "type": "object",
@@ -798,6 +808,329 @@ def test_a_republished_tool_has_its_new_schema_checked(registry, invoker):
     with pytest.raises(ToolInvokeError) as raised:
         asyncio.run(call(b'{"repo": "r"}'))
     assert raised.value.code == "INVALID_ARGUMENT"
+
+
+# ------------------------------------------------------------- cancellation
+class Cancellable:
+    """Tools that wait until they are cancelled, and record how it ended."""
+
+    def __init__(self):
+        self.started = threading.Event()
+        self.thread_done = threading.Event()
+        self.async_started = None
+        self.cleaned = threading.Event()
+        self.finished = False
+        self.told = None
+
+
+class AsyncBinding:
+    default_config = {"access_token": DEFAULT_TOKEN}
+
+    def __init__(self, events):
+        self.events = events
+
+    def create(self, context, config):
+        events = self.events
+
+        async def run(**arguments):
+            events.started.set()
+            try:
+                await asyncio.sleep(30)
+                events.finished = True
+            finally:
+                events.cleaned.set()
+
+        return StructuredTool.from_function(
+            coroutine=run,
+            name="tool",
+            description="A coroutine tool.",
+            args_schema={"type": "object", "properties": {"repo": {"type": "string"}}},
+        )
+
+
+class WaitingBinding:
+    """A synchronous tool that waits on its cancellation, as it should."""
+
+    default_config = {"access_token": DEFAULT_TOKEN}
+
+    def __init__(self, events, *, polite=True):
+        self.events, self.polite = events, polite
+
+    def create(self, context, config):
+        events, polite = self.events, self.polite
+
+        def run(**arguments):
+            events.started.set()
+            try:
+                if polite:
+                    events.told = current_cancellation().wait(30)
+                else:
+                    time.sleep(0.5)
+            finally:
+                events.thread_done.set()
+            return "done"
+
+        return StructuredTool.from_function(
+            func=run,
+            name="tool",
+            description="A synchronous tool.",
+            args_schema={"type": "object", "properties": {"repo": {"type": "string"}}},
+        )
+
+
+@pytest.fixture
+def probe():
+    return Cancellable()
+
+
+@pytest.fixture
+def cancellable(registry, probe):
+    registry.publish(
+        "acme.cancel",
+        [
+            PublishedTool(
+                definition("async_tool", namespace="acme.cancel", secret=False),
+                AsyncBinding(probe),
+            ),
+            PublishedTool(
+                definition("sync_tool", namespace="acme.cancel", secret=False),
+                WaitingBinding(probe),
+            ),
+            PublishedTool(
+                definition("rude_tool", namespace="acme.cancel", secret=False),
+                WaitingBinding(probe, polite=False),
+            ),
+        ],
+    )
+    return probe
+
+
+def named(name, call_id="call-1", **fields):
+    return ToolInvocation(
+        tool=f"acme.cancel/{name}",
+        arguments=b'{"repo": "r"}',
+        call_id=call_id,
+        **fields,
+    )
+
+
+async def eventually(condition, seconds=5.0):
+    deadline = asyncio.get_running_loop().time() + seconds
+    while not condition():
+        assert asyncio.get_running_loop().time() < deadline, "timed out"
+        await asyncio.sleep(0.005)
+
+
+def test_cancelling_a_coroutine_tool_cancels_it_at_its_await(invoker, cancellable):
+    async def scenario():
+        running = asyncio.ensure_future(invoker.invoke(TRUSTED, named("async_tool")))
+        await eventually(cancellable.started.is_set)
+        assert invoker.cancel("api", "call-1")
+        with pytest.raises(ToolInvokeError) as raised:
+            await asyncio.wait_for(running, 5)
+        assert raised.value.code == "CANCELLED"
+        assert cancellable.cleaned.is_set() and not cancellable.finished
+        # Really stopped: nothing is left running, the slot is free.
+        await eventually(lambda: invoker.in_flight == 0)
+
+    asyncio.run(scenario())
+
+
+def test_cancelling_a_synchronous_tool_tells_it_and_ends_the_wait(invoker, cancellable):
+    async def scenario():
+        running = asyncio.ensure_future(invoker.invoke(TRUSTED, named("sync_tool")))
+        await eventually(cancellable.started.is_set)
+        assert invoker.cancel("api", "call-1")
+        with pytest.raises(ToolInvokeError) as raised:
+            await asyncio.wait_for(running, 5)
+        assert raised.value.code == "CANCELLED"
+        assert await asyncio.to_thread(cancellable.thread_done.wait, 5)
+        assert cancellable.told is True
+        await eventually(lambda: invoker.in_flight == 0)
+
+    asyncio.run(scenario())
+
+
+def test_a_synchronous_tool_that_ignores_it_keeps_its_slot_until_it_returns(
+    invoker, cancellable
+):
+    async def scenario():
+        running = asyncio.ensure_future(invoker.invoke(TRUSTED, named("rude_tool")))
+        await eventually(cancellable.started.is_set)
+        invoker.cancel("api", "call-1")
+        with pytest.raises(ToolInvokeError):
+            await asyncio.wait_for(running, 5)
+        # The caller is answered; the thread is not interruptible and still counts.
+        assert invoker.in_flight == 1
+        await eventually(lambda: invoker.in_flight == 0)
+        assert cancellable.thread_done.is_set()
+
+    asyncio.run(scenario())
+
+
+def test_only_the_identity_that_started_a_call_can_cancel_it(invoker, cancellable):
+    async def scenario():
+        running = asyncio.ensure_future(invoker.invoke(TRUSTED, named("async_tool")))
+        await eventually(cancellable.started.is_set)
+        assert not invoker.cancel("partner", "call-1")
+        assert not invoker.cancel("api", "another-call")
+        await asyncio.sleep(0.05)
+        assert not running.done()
+        assert invoker.cancel("api", "call-1")
+        with pytest.raises(ToolInvokeError):
+            await running
+
+    asyncio.run(scenario())
+
+
+def test_a_cancel_that_arrives_first_stops_the_call_before_the_tool_runs(
+    invoker, cancellable
+):
+    async def scenario():
+        assert not invoker.cancel("api", "early")
+        with pytest.raises(ToolInvokeError) as raised:
+            await invoker.invoke(TRUSTED, named("async_tool", "early"))
+        assert raised.value.code == "CANCELLED"
+        assert not cancellable.started.is_set()
+        await eventually(lambda: invoker.in_flight == 0)
+
+    asyncio.run(scenario())
+
+
+def test_the_deadline_stops_the_tool_too(invoker, cancellable):
+    async def scenario():
+        with pytest.raises(ToolInvokeError) as raised:
+            await invoker.invoke(TRUSTED, named("async_tool", timeout_ms=100))
+        assert raised.value.code == "DEADLINE_EXCEEDED"
+        assert cancellable.cleaned.is_set() and not cancellable.finished
+        cancellable.started.clear()
+        with pytest.raises(ToolInvokeError) as raised:
+            await invoker.invoke(TRUSTED, named("sync_tool", "call-2", timeout_ms=100))
+        assert raised.value.code == "DEADLINE_EXCEEDED"
+        assert await asyncio.to_thread(cancellable.thread_done.wait, 5)
+        assert cancellable.told is True
+
+    asyncio.run(scenario())
+
+
+def test_a_caller_that_is_cancelled_stops_the_tool(invoker, cancellable):
+    async def scenario():
+        running = asyncio.ensure_future(invoker.invoke(TRUSTED, named("async_tool")))
+        await eventually(cancellable.started.is_set)
+        running.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await running
+        await eventually(cancellable.cleaned.is_set)
+        await eventually(lambda: invoker.in_flight == 0)
+
+    asyncio.run(scenario())
+
+
+def test_a_call_id_is_checked_and_unique_per_identity(invoker, cancellable):
+    async def scenario():
+        with pytest.raises(ToolInvokeError) as raised:
+            await invoker.invoke(TRUSTED, named("async_tool", "not valid!"))
+        assert raised.value.code == "INVALID_ARGUMENT"
+        running = asyncio.ensure_future(
+            invoker.invoke(TRUSTED, named("async_tool", "same"))
+        )
+        await eventually(cancellable.started.is_set)
+        with pytest.raises(ToolInvokeError) as raised:
+            await invoker.invoke(TRUSTED, named("async_tool", "same"))
+        assert raised.value.code == "INVALID_ARGUMENT"
+        assert invoker.cancel("api", "same")
+        with pytest.raises(ToolInvokeError):
+            await running
+        # Free again once it ended.
+        cancellable.started.clear()
+        again = asyncio.ensure_future(
+            invoker.invoke(TRUSTED, named("async_tool", "same"))
+        )
+        await eventually(cancellable.started.is_set)
+        invoker.cancel("api", "same")
+        with pytest.raises(ToolInvokeError):
+            await again
+
+    asyncio.run(scenario())
+
+
+def test_a_call_without_an_id_cannot_be_cancelled_and_runs_as_before(
+    invoker, cancellable
+):
+    async def scenario():
+        assert not invoker.cancel("api", "")
+        result = await invoker.invoke(
+            TRUSTED,
+            ToolInvocation(tool=f"{GITHUB}/echo_token", arguments=b'{"repo": "r"}'),
+        )
+        assert result
+
+    asyncio.run(scenario())
+
+
+def test_a_cancelled_call_is_recorded_as_cancelled_with_nothing_of_it(
+    invoker, cancellable, events
+):
+    async def scenario():
+        running = asyncio.ensure_future(
+            invoker.invoke(
+                InvokeCaller(
+                    "api", secrets=None, unscoped_tools=None, may_name_user=True
+                ),
+                named("async_tool", user_id="u-1"),
+            )
+        )
+        await eventually(cancellable.started.is_set)
+        invoker.cancel("api", "call-1")
+        with pytest.raises(ToolInvokeError):
+            await running
+
+    asyncio.run(scenario())
+    (event,) = events
+    assert event.attributes["outcome"] == "cancelled"
+    assert event.attributes["code"] == "CANCELLED"
+    assert "call-1" not in repr(event.attributes)
+
+
+def test_the_result_of_a_coroutine_tool_is_scrubbed_like_any_other(registry, secrets):
+    class Echo:
+        default_config: dict = {}
+
+        def create(self, context, config):
+            token = config["access_token"]
+
+            async def run(**arguments):
+                return f"token={token}"
+
+            return StructuredTool.from_function(
+                coroutine=run,
+                name="tool",
+                description="Echo.",
+                args_schema={
+                    "type": "object",
+                    "properties": {"repo": {"type": "string"}},
+                },
+            )
+
+    registry.publish(
+        "acme.async",
+        [PublishedTool(definition("echo", namespace="acme.async"), Echo())],
+    )
+    invoker = EngineToolInvoker(registry, secrets)
+
+    async def scenario():
+        return await invoker.invoke(
+            TRUSTED,
+            ToolInvocation(
+                tool="acme.async/echo",
+                arguments=b'{"repo": "r"}',
+                secret_refs={"access_token": "GITHUB_TOKEN"},
+            ),
+        )
+
+    result = asyncio.run(scenario())
+    invoker.close()
+    assert CREDENTIAL.encode() not in result and b"[redacted]" in result
 
 
 def test_the_deadline_is_clamped(registry, secrets):

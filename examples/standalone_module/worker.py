@@ -768,6 +768,17 @@ class ABIModule(BaseModule):
                 assert exc.code == code, (tool, exc.code)
             else:
                 raise AssertionError(f"{tool} {refs} must be refused")
+        # Cancelling: only a call this identity started and that still runs can be
+        # cancelled (none does here), and an id is checked before it is looked up.
+        # The cancel on a running call has its own tests (a tool that waits).
+        idle = await call("cancel_tool", call_id="demo-not-running")
+        assert idle.cancelled is False
+        try:
+            await call("cancel_tool", call_id="not a valid id!")
+        except RPCError as exc:
+            assert exc.code == "INVALID_ARGUMENT", exc.code
+        else:
+            raise AssertionError("a malformed call_id must be refused")
 
     async def run(self):
         for domain in OPERATIONS:

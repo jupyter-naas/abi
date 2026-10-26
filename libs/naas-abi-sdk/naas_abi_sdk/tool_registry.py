@@ -40,3 +40,8 @@ class ToolRegistryClient:
             grace=grace,
             **kwargs,
         )
+
+    async def cancel_tool(self, request: pb.CancelToolRequest) -> pb.CancelToolResponse:
+        return await self._transport.call(
+            "abi.svc.tool_registry.v1.cancel_tool", request, pb.CancelToolResponse
+        )

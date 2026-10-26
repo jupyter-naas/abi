@@ -88,6 +88,7 @@ from naas_abi_core.services.tool_registry.ToolRegistryService import (
 )
 from naas_abi_proto.common.v1 import common_pb2
 from naas_abi_proto.tool_registry.v1 import tool_registry_pb2 as pb
+from naas_abi_sdk.cancellation import valid_call_id
 from naas_abi_sdk.tools import MAX_REQUEST_BYTES, USER_CALLERS
 
 __all__ = ["SUBJECT_PREFIX", "ToolRegistryPrimaryAdapterNATS"]
@@ -100,6 +101,7 @@ _MESSAGES = {
     "get_tool": "GetTool",
     "search_tools": "SearchTools",
     "invoke_tool": "InvokeTool",
+    "cancel_tool": "CancelTool",
 }
 
 
@@ -220,6 +222,8 @@ class ToolRegistryPrimaryAdapterNATS(ServicePrimary):
             parsed = getattr(pb, _MESSAGES[operation] + "Request").FromString(payload)
             if operation == "invoke_tool":
                 result = await self._invoke(identity, parsed)
+            elif operation == "cancel_tool":
+                result = self._cancel(identity, parsed)
             else:
                 budget = (broker_limit(request) or DEFAULT_BROKER_LIMIT) // REPLY_SHARE
                 result = await self._dispatch.call(
@@ -295,9 +299,24 @@ class ToolRegistryPrimaryAdapterNATS(ServicePrimary):
                 workspace_id=request.context.workspace_id,
                 timeout_ms=request.context.timeout_ms,
                 trace_id=request.context.trace_id,
+                call_id=request.call_id,
             ),
         )
         return pb.InvokeToolResponse(result_json=result)
+
+    def _cancel(self, identity: str, request: pb.CancelToolRequest):
+        """Stop a call of ``identity``'s own (the verified token decides, never the
+        request). Another identity's id and an unknown id answer the same ``False``."""
+        if self._invoker is None:
+            raise ToolInvokeError(
+                "PERMISSION_DENIED",
+                "This engine does not run tools for other processes",
+            )
+        if not valid_call_id(request.call_id):
+            raise ToolInvokeError("INVALID_ARGUMENT", "A cancel names a valid call_id")
+        return pb.CancelToolResponse(
+            cancelled=self._invoker.cancel(identity, request.call_id)
+        )
 
     def _call(self, operation: str, identity: str, budget: int, request: Any):
         context = self.caller_context(identity)

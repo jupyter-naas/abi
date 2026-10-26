@@ -13,7 +13,9 @@ descriptor names, and the module holds its own credentials.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -21,6 +23,13 @@ from typing import Any
 
 from naas_abi_proto.tool.v1 import tool_pb2 as pb
 from naas_abi_proto.tool_registry.v1 import tool_registry_pb2 as definition_pb
+
+from naas_abi_sdk.cancellation import ToolCancellation, new_call_id
+
+logger = logging.getLogger(__name__)
+
+# How long a caller that gives up waits for the module to take its cancel.
+CANCEL_WAIT_SECONDS = 3.0
 
 # Where the engine's own processes may call tools from, and which of them speak for
 # an end user (the same rule as apps: docs/adr/20261014_module-identities.md).
@@ -47,6 +56,10 @@ _KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 def tool_subject(project: str, instance_id: str, name: str) -> str:
     return f"abi.mod.{project}.{instance_id}.tool.{name}.invoke"
+
+
+def tool_cancel_subject(project: str, instance_id: str, name: str) -> str:
+    return f"abi.mod.{project}.{instance_id}.tool.{name}.cancel"
 
 
 class ToolError(Exception):
@@ -171,12 +184,20 @@ class ToolCaller:
 @dataclass(frozen=True)
 class ToolCall:
     """What a handler may ask for besides the arguments: declare ``call`` (or
-    ``**kwargs``) in its signature."""
+    ``**kwargs``) in its signature.
+
+    ``cancellation`` is set when the caller cancels the call or its deadline passes.
+    An async handler is cancelled at its next ``await`` (``asyncio.CancelledError``:
+    clean up in ``finally`` and let it propagate). A synchronous handler cannot be
+    interrupted: it polls ``call.cancellation`` (``cancelled``, ``raise_if_cancelled()``)
+    and waits with ``call.cancellation.wait(seconds)`` instead of ``time.sleep``, or the
+    thread runs on after the caller has been answered."""
 
     tool: str
     caller: ToolCaller
     config: Mapping[str, Any]
     trace_id: str = ""
+    cancellation: ToolCancellation = field(default_factory=ToolCancellation)
 
 
 class ModuleToolClient:
@@ -193,12 +214,46 @@ class ModuleToolClient:
         self, request: pb.InvokeToolRequest, *, timeout: float | None = None
     ) -> pb.InvokeToolResponse:
         """``timeout``: how long to wait, and the handler's deadline (the host reads
-        it from ``context.timeout_ms``); default the transport's."""
+        it from ``context.timeout_ms``); default the transport's.
+
+        The call is named (``call_id``, the caller's own if the request has one). If
+        the caller gives up (it is cancelled, or its wait runs out) the module is told
+        to stop the handler, best effort, before the exception goes on."""
         kwargs = {} if timeout is None else {"timeout": timeout}
-        return await self._transport.call(
-            self.subject,
+        named = pb.InvokeToolRequest()
+        named.CopyFrom(request)
+        if not named.call_id:
+            named.call_id = new_call_id()
+        try:
+            return await self._transport.call(
+                self.subject,
+                named,
+                pb.InvokeToolResponse,
+                instance_id=self.instance_id,
+                **kwargs,
+            )
+        except (asyncio.CancelledError, asyncio.TimeoutError, TimeoutError):
+            await self._cancel_quietly(named.call_id)
+            raise
+
+    async def _cancel_quietly(self, call_id: str) -> None:
+        # Shielded: the caller's own cancellation must not stop the cancel it sends.
+        try:
+            await asyncio.shield(self.cancel(call_id, timeout=CANCEL_WAIT_SECONDS))
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:  # noqa: BLE001 - the caller's exit comes first
+            logger.debug("Tool cancel not delivered: %s", type(exc).__name__)
+
+    async def cancel(self, call_id: str, *, timeout: float = 5.0) -> bool:
+        """Ask the instance to stop the call named ``call_id`` (the one this client
+        started: only its own identity can). ``True`` when it was still running."""
+        request = pb.CancelToolRequest(call_id=call_id)
+        response = await self._transport.call(
+            self.subject.removesuffix(".invoke") + ".cancel",
             request,
-            pb.InvokeToolResponse,
+            pb.CancelToolResponse,
             instance_id=self.instance_id,
-            **kwargs,
+            timeout=timeout,
         )
+        return response.cancelled

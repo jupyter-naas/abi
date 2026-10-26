@@ -258,3 +258,156 @@ def test_first_party_callers_hold_every_scope_and_secret_modules_only_their_gran
     nobody = primary.invoke_caller("stranger")
     assert nobody.secrets == frozenset() and nobody.scopes == frozenset()
     assert nobody.unscoped_tools == ()
+
+
+# ------------------------------------------------------------- cancel_tool
+class SlowBinding:
+    """A coroutine tool that runs until it is cancelled."""
+
+    default_config: dict = {}
+
+    def __init__(self):
+        self.started = asyncio.Event()
+        self.cleaned = False
+
+    def create(self, context, config):
+        binding = self
+
+        async def run(**arguments):
+            binding.started.set()
+            try:
+                await asyncio.sleep(30)
+            finally:
+                binding.cleaned = True
+
+        return StructuredTool.from_function(
+            coroutine=run,
+            name="slow",
+            description="Runs until cancelled.",
+            args_schema={"type": "object", "properties": {}},
+        )
+
+
+def _request(identity, message, *, auth=True):
+    return SimpleNamespace(
+        data=message.SerializeToString(),
+        headers={"Nats-Auth-Token": token(identity)} if auth else {},
+        respond=AsyncMock(),
+        _msg=SimpleNamespace(_client=None),
+    )
+
+
+@pytest.fixture
+def slow_primary():
+    registry = ToolRegistryService()
+    slow = SlowBinding()
+    registry.publish(
+        "acme.slow",
+        [
+            PublishedTool(
+                ToolDefinition(
+                    namespace="acme.slow",
+                    name="slow",
+                    description="slow on GitHub",
+                    module="acme.slow",
+                    input_schema={"type": "object", "properties": {}},
+                    required_scopes=("slow:run",),
+                ),
+                slow,
+            )
+        ],
+    )
+    invoker = EngineToolInvoker(registry, Secrets(), max_concurrent=2)
+    primary = ToolRegistryPrimaryAdapterNATS(
+        registry,
+        SECRET,
+        module_scopes={"partner": ["slow:run"], "other_partner": ["slow:run"]},
+        invoker=invoker,
+    )
+    yield primary, slow
+    invoker.close()
+    primary._dispatch.close()
+
+
+async def _cancel(primary, identity, call_id, *, auth=True):
+    request = _request(identity, pb.CancelToolRequest(call_id=call_id), auth=auth)
+    await primary._handle(request, operation="cancel_tool")
+    return pb.CancelToolResponse.FromString(request.respond.call_args.args[0])
+
+
+def test_a_caller_cancels_its_own_running_tool(slow_primary):
+    primary, slow = slow_primary
+
+    async def scenario():
+        request = _request(
+            "partner", pb.InvokeToolRequest(tool="acme.slow/slow", call_id="c-1")
+        )
+        running = asyncio.ensure_future(
+            primary._handle(request, operation="invoke_tool")
+        )
+        await asyncio.wait_for(slow.started.wait(), 5)
+        answer = await _cancel(primary, "partner", "c-1")
+        await asyncio.wait_for(running, 5)
+        return answer, pb.InvokeToolResponse.FromString(
+            request.respond.call_args.args[0]
+        )
+
+    answer, response = asyncio.run(scenario())
+    assert answer.cancelled and not answer.HasField("error")
+    assert response.error.code == "CANCELLED"
+    assert slow.cleaned
+
+
+def test_another_identity_cannot_cancel_a_call_it_did_not_start(slow_primary):
+    primary, slow = slow_primary
+
+    async def scenario():
+        request = _request(
+            "partner", pb.InvokeToolRequest(tool="acme.slow/slow", call_id="c-1")
+        )
+        running = asyncio.ensure_future(
+            primary._handle(request, operation="invoke_tool")
+        )
+        await asyncio.wait_for(slow.started.wait(), 5)
+        stranger = await _cancel(primary, "other_partner", "c-1")
+        # Even the engine's processes cancel only their own calls.
+        engine = await _cancel(primary, "engine", "c-1")
+        await asyncio.sleep(0.05)
+        still_running = not running.done()
+        owner = await _cancel(primary, "partner", "c-1")
+        await asyncio.wait_for(running, 5)
+        return stranger, engine, still_running, owner
+
+    stranger, engine, still_running, owner = asyncio.run(scenario())
+    assert not stranger.cancelled and not engine.cancelled and still_running
+    assert owner.cancelled
+    assert not stranger.HasField("error")  # nothing tells whether the id exists
+
+
+def test_a_cancel_needs_a_valid_token_and_a_valid_id(slow_primary):
+    primary, _ = slow_primary
+
+    async def scenario():
+        return (
+            await _cancel(primary, "partner", "c-1", auth=False),
+            await _cancel(primary, "partner", "not valid!"),
+            await _cancel(primary, "partner", ""),
+        )
+
+    unauthenticated, bad, empty = asyncio.run(scenario())
+    assert unauthenticated.error.code == "UNAUTHENTICATED"
+    assert bad.error.code == "INVALID_ARGUMENT"
+    assert empty.error.code == "INVALID_ARGUMENT"
+
+
+def test_an_engine_that_runs_no_tools_runs_no_cancel_either():
+    registry = ToolRegistryService()
+    primary = ToolRegistryPrimaryAdapterNATS(registry, SECRET)
+
+    async def scenario():
+        return await _cancel(primary, "partner", "c-1")
+
+    try:
+        assert asyncio.run(scenario()).error.code == "PERMISSION_DENIED"
+    finally:
+        primary._dispatch.close()

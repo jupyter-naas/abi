@@ -21,10 +21,21 @@ import "naas_abi_proto/common/v1/common.proto";
 // when it is zero. An error carries a stable code and a message that holds no
 // detail of the handler's failure:
 //   UNAUTHENTICATED, PERMISSION_DENIED, TOOL_NOT_FOUND, MODULE_UNAVAILABLE,
-//   INVALID_ARGUMENT, PAYLOAD_TOO_LARGE, DEADLINE_EXCEEDED, TOOL_ERROR.
+//   INVALID_ARGUMENT, PAYLOAD_TOO_LARGE, DEADLINE_EXCEEDED, CANCELLED, TOOL_ERROR.
 // abi.tool_registry.v1.InvokeToolRequest repeats these fields, with the same numbers,
 // for running a tool the engine holds, and adds `secret_refs`. Here there is none: no
 // secret reaches a module.
+// Cancelling: a request may carry a `call_id` (1..128 characters of letters, digits,
+// `_` and `-`, chosen by the caller and unique among its running calls). The caller
+// that gives up (its own caller went away, or its wait ran out) sends a CancelToolRequest
+// with that id to the same instance, on abi.mod.<project>.<instance>.tool.<name>.cancel,
+// with a token like the call's. Only the identity that started a call can cancel it: an
+// unknown id, an id of another identity and a finished call all answer `cancelled =
+// false`, which tells nothing about other callers' calls. The module stops the handler
+// (an async handler is cancelled at its next await; a synchronous one is told through
+// `ToolCall.cancellation` and cannot be interrupted) and answers the call itself with
+// CANCELLED. Without a `call_id` a call runs to its deadline. A cancel that arrives
+// before its call is registered is kept for 30 seconds and applied when the call is.
 // `context.principal_id` names the end user the call is for: a module honors it
 // only from the engine's own processes (api, engine) and refuses it from any
 // other caller.
@@ -38,9 +49,23 @@ message InvokeToolRequest {
   bytes arguments_json = 4;
   // A JSON object of non-secret configuration values; empty: none.
   bytes config_json = 5;
+  reserved 6;
+  // Names this call for CancelToolRequest; empty: the call cannot be cancelled.
+  string call_id = 7;
 }
 message InvokeToolResponse {
   // Any JSON value (UTF-8, finite numbers); empty when the call failed.
   bytes result_json = 1;
+  abi.common.v1.CallError error = 15;
+}
+
+// Stop a running call. Errors: UNAUTHENTICATED, INVALID_ARGUMENT (a malformed call_id).
+message CancelToolRequest {
+  abi.common.v1.CallContext context = 1;
+  string call_id = 2;
+}
+message CancelToolResponse {
+  // A call of the caller's with that id was running and has been told to stop.
+  bool cancelled = 1;
   abi.common.v1.CallError error = 15;
 }

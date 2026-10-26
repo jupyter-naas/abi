@@ -37,7 +37,7 @@ def ready(instance_id: str = "i-1") -> ModuleInstance:
     )
 
 
-def adapter(*, instances=None, discovery_error=None, call=None):
+def adapter(*, instances=None, discovery_error=None, call=None, send=None):
     """An adapter whose discovery and transport are scripted."""
     result = RemoteToolsSecondaryAdapterNATS("nats://x", "secret", "acme")
 
@@ -46,10 +46,12 @@ def adapter(*, instances=None, discovery_error=None, call=None):
             raise discovery_error
         return tuple(instances if instances is not None else [ready()])
 
-    async def send(*args: Any, **kwargs: Any):
+    async def default_send(*args: Any, **kwargs: Any):
         if isinstance(call, Exception):
             raise call
         return call if call is not None else pb.InvokeToolResponse(result_json=b"1")
+
+    send = send or default_send
 
     discovery = SimpleNamespace(get_module=get_module)
     result._clients = lambda: (discovery, SimpleNamespace(call=send))  # type: ignore[method-assign]
@@ -139,3 +141,45 @@ def test_the_request_carries_the_callers_user_and_workspace_only():
     )
     assert request.tool == "lookup" and request.version == "1"
     assert b"scopes" not in request.SerializeToString()
+
+
+def test_a_caller_that_is_cancelled_cancels_the_call_on_the_instance_it_chose():
+    sent: list[tuple[str, str, dict]] = []
+
+    async def send(subject, request, response_type, **kwargs):
+        sent.append((subject, request.call_id, kwargs))
+        if subject.endswith(".cancel"):
+            return pb.CancelToolResponse(cancelled=True)
+        await asyncio.sleep(30)
+
+    target = adapter(instances=[ready("i-7")], send=send)
+
+    async def scenario():
+        request = target._request(DEFINITION, {"email": "a@b.c"}, {}, ToolContext())
+        running = asyncio.ensure_future(target._call(DEFINITION, 1, request))
+        while not sent:
+            await asyncio.sleep(0.005)
+        running.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await running
+
+    asyncio.run(scenario())
+    (invoke_subject, call_id, _), (cancel_subject, cancelled_id, kwargs) = sent
+    assert invoke_subject == "abi.mod.acme.i-7.tool.lookup.invoke"
+    assert cancel_subject == "abi.mod.acme.i-7.tool.lookup.cancel"
+    assert call_id and cancelled_id == call_id
+    assert kwargs["instance_id"] == "i-7"
+
+
+def test_a_call_whose_wait_ran_out_is_cancelled_on_the_module_too():
+    sent: list[str] = []
+
+    async def send(subject, request, response_type, **kwargs):
+        sent.append(subject)
+        if subject.endswith(".cancel"):
+            return pb.CancelToolResponse(cancelled=True)
+        raise TimeoutError()
+
+    with pytest.raises(RemoteToolError, match="may still have run"):
+        run(adapter(send=send))
+    assert sent[-1].endswith(".tool.lookup.cancel")

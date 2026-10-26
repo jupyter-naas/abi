@@ -6,7 +6,7 @@ import "naas_abi_proto/common/v1/common.proto";
 // resolve a binding or return a configuration value), and invoke_tool, which runs
 // a tool the engine holds.
 //
-// Subjects: abi.svc.tool_registry.v1.{list_tools,get_tool,search_tools,invoke_tool}.
+// Subjects: abi.svc.tool_registry.v1.{list_tools,get_tool,search_tools,invoke_tool,cancel_tool}.
 //
 // Who is asking is the verified service identity, never the request: the scopes
 // that decide what a caller may discover and run come from the engine's
@@ -157,7 +157,7 @@ message SearchToolsResponse {
 // Errors carry a stable code and a message that holds no secret and none of the
 // tool's internals:
 //   UNAUTHENTICATED, PERMISSION_DENIED, TOOL_NOT_FOUND, INVALID_ARGUMENT,
-//   PAYLOAD_TOO_LARGE, RESOURCE_EXHAUSTED, DEADLINE_EXCEEDED, TOOL_ERROR.
+//   PAYLOAD_TOO_LARGE, RESOURCE_EXHAUSTED, DEADLINE_EXCEEDED, CANCELLED, TOOL_ERROR.
 // A tool's own failure is TOOL_ERROR; only a message it wrote for its caller (a
 // ToolException) is returned, scrubbed of the secrets of the call.
 message InvokeToolRequest {
@@ -167,9 +167,28 @@ message InvokeToolRequest {
   bytes arguments_json = 4;
   bytes config_json = 5;
   map<string, string> secret_refs = 6;
+  // Names this call for CancelToolRequest (the same rules as abi.tool.v1: 1..128
+  // characters of letters, digits, `_` and `-`, unique among the caller's running
+  // calls); empty: the call cannot be cancelled and runs to its deadline.
+  string call_id = 7;
 }
 message InvokeToolResponse {
   // Any JSON value (UTF-8, finite numbers); empty when the call failed.
   bytes result_json = 1;
+  abi.common.v1.CallError error = 15;
+}
+
+// Stop a call that invoke_tool is running, as the caller that started it (the verified
+// identity decides: another identity's id, an unknown id and a finished call all answer
+// `cancelled = false`). The engine cancels a tool that has a coroutine at its next
+// await and answers the call with CANCELLED; a synchronous tool is told through
+// `naas_abi_sdk.cancellation.current_cancellation()` and cannot be interrupted. A cancel
+// that arrives before its call is registered is kept for 30 seconds.
+message CancelToolRequest {
+  abi.common.v1.CallContext context = 1;
+  string call_id = 2;
+}
+message CancelToolResponse {
+  bool cancelled = 1;
   abi.common.v1.CallError error = 15;
 }

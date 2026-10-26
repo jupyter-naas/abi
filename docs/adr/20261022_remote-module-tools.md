@@ -64,7 +64,7 @@ is a JSON result or a `CallError`. No pickle, no callable, no binding value, no 
 Module-side limits (no Protovalidate, as for the other services): request 512 KiB as
 sent (an overflow upload is refused), arguments 256 KiB, configuration 64 KiB, result
 512 KiB. The handler's deadline is the caller's wait, at most 300 s (60 s when unset);
-a synchronous handler runs on a thread, whose deadline stops the wait, not the thread.
+a synchronous handler runs on a thread, whose deadline stops the wait, not the thread (it can poll `call.cancellation`; an async handler is cancelled: `docs/adr/20261026_tool-call-cancellation.md`).
 
 Authorization is discovery's `authorize_tool` (like `authorize_model`): it checks the
 provider's lease, that the instance declares the tool and is READY, and that the
@@ -184,7 +184,7 @@ the next step.
   should group them or expose a general one.
 - A caller waits at most `call_timeout_seconds` (120 s, at most 300 s); a longer job
   belongs to a module job or an agent.
-- A synchronous handler cannot be cancelled: a deadline releases the caller, not the thread.
+- A synchronous handler cannot be interrupted: a deadline or a cancel releases the caller and tells the handler (`call.cancellation`), not the thread. An async handler is cancelled at its next await (`docs/adr/20261026_tool-call-cancellation.md`).
 - Every call costs two discovery reads (the engine's `get_module`, the module's
   `authorize_tool`), and each engine process lists the instances every
   `refresh_seconds`.

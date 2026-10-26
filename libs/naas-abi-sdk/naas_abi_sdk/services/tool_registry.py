@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -25,6 +26,7 @@ from typing import Any
 
 from naas_abi_proto.tool_registry.v1 import tool_registry_pb2 as pb
 
+from naas_abi_sdk.cancellation import new_call_id
 from naas_abi_sdk.tools import (
     DEFAULT_DEADLINE_SECONDS,
     MAX_ARGUMENTS_BYTES,
@@ -40,7 +42,11 @@ from naas_abi_sdk.services.errors import (
 from naas_abi_sdk.tool_registry import ToolRegistryClient
 from naas_abi_sdk.transport import RPCError
 
+logger = logging.getLogger(__name__)
+
 MAX_LIST_PAGES = 100
+# How long a caller that gives up waits for the engine to take its cancel.
+CANCEL_WAIT_SECONDS = 3.0
 # What the engine accepts of a call is `naas_abi_sdk.tools`' (one place for the contract).
 DEFAULT_INVOKE_TIMEOUT = DEFAULT_DEADLINE_SECONDS
 MAX_INVOKE_TIMEOUT = MAX_DEADLINE_SECONDS
@@ -243,6 +249,11 @@ class ToolRegistryService:
         ``DEADLINE_EXCEEDED`` is what a slow tool gives; a reply lost past that wait is
         a ``DEADLINE_EXCEEDED`` too (the tool may still have run).
         Nothing is retried: a tool may have side effects.
+
+        Cancelling the task that awaits ``invoke`` (or a wait that runs out) tells the
+        engine to stop the tool: a tool with a coroutine is cancelled at its next
+        ``await``, a synchronous one is told and cannot be interrupted. The engine
+        answers a cancelled call ``CANCELLED``; nobody reads it here.
         """
         if not isinstance(ref, str) or not ref:
             raise ValueError("ref is a tool reference")
@@ -275,12 +286,18 @@ class ToolRegistryService:
             arguments_json=encoded_arguments,
             config_json=encoded_config,
             secret_refs=secrets,
+            call_id=new_call_id(),
         )
         try:
             response = await self._client.invoke_tool(
                 request, timeout=timeout, grace=INVOKE_GRACE_SECONDS
             )
+        except asyncio.CancelledError:
+            # The caller gave up: the engine stops the tool it is running for it.
+            await self._cancel_quietly(request.call_id)
+            raise
         except asyncio.TimeoutError as exc:  # noqa: UP041 - not the builtin on Python 3.10
+            await self._cancel_quietly(request.call_id)
             raise domain_error(
                 RPCError(
                     "DEADLINE_EXCEEDED",
@@ -321,6 +338,20 @@ class ToolRegistryService:
         return engine_tool(
             self, tool, config=config, secrets=secrets, timeout=timeout, name=name
         )
+
+    async def _cancel_quietly(self, call_id: str) -> None:
+        # Shielded: the caller's own cancellation must not stop the cancel it sends.
+        try:
+            await asyncio.shield(
+                asyncio.wait_for(
+                    self._client.cancel_tool(pb.CancelToolRequest(call_id=call_id)),
+                    CANCEL_WAIT_SECONDS,
+                )
+            )
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:  # noqa: BLE001 - the caller's exit comes first
+            logger.debug("Engine tool cancel not delivered: %s", type(exc).__name__)
 
     @staticmethod
     async def _call(call):

@@ -237,7 +237,7 @@ tools its own process loads or a module serves.
   endpoint) lets a granted caller point the credential at a server of its own; scrubbing cannot help once
   the engine has sent it. The engine cannot tell such keys apart: do not grant a module a tool that mixes
   them, or have the tool validate the value. The GitHub tools take only the token.
-- A synchronous tool past its deadline keeps running; its slot stays taken until it returns.
+- A synchronous tool past its deadline, or cancelled by its caller, keeps running unless it polls its cancellation; its slot stays taken until it returns. A coroutine tool is cancelled (`docs/adr/20261026_tool-call-cancellation.md`).
 - `api`, `engine` and `dagster` are not separated from each other in `module_scopes`, as
   in the catalog.
 - Out of scope: per-module broker users, streaming results, client engines' `resolve` proxy

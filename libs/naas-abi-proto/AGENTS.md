@@ -5,7 +5,7 @@ Transport DTOs are protobuf messages. Do not introduce engine domain objects.
 Generated artifacts are checked in; regenerate with `make generate` in the proto package.
 Use UV. `make deps`, `make test`, `make lint`, and `make build` are the local gates.
 Tests live under tests/. Update the standalone module demonstration when adding endpoints.
-`tool_registry/v1` is the serving engine's tool catalog (list, get, search: read only) and `invoke_tool`, which runs an engine tool on the engine (its request repeats `tool/v1.InvokeToolRequest`'s fields and numbers and adds `secret_refs`: config key -> engine secret *name*; keep the two in step). Its
+`tool_registry/v1` is the serving engine's tool catalog (list, get, search: read only) and `invoke_tool`, which runs an engine tool on the engine (its request repeats `tool/v1.InvokeToolRequest`'s fields and numbers and adds `secret_refs`: config key -> engine secret *name*; keep the two in step: `call_id` is 7 in both, `tool/v1` reserves 6) and `cancel_tool`, which stops a call by its `call_id`, only for the identity that started it. Its
 `ToolDefinition` is the portable form of a tool definition, to be reused by the messages for
 tools published by modules and for remote execution: add to it, never carry a binding value or a
 credential in it (a requirement names a key; `secret` marks it). Limits are enforced by the
