@@ -100,7 +100,12 @@ def _service(control, audit, **overrides):
     }
     parts.update(overrides)
     clock = NoWait()
-    return WorkflowsService(JobsAdminService(**parts), sleep=clock.sleep, monotonic=clock.monotonic)
+    return WorkflowsService(
+        JobsAdminService(**parts),
+        sleep=clock.sleep,
+        monotonic=clock.monotonic,
+        clock=lambda: NOW,
+    )
 
 
 def _client(service, user="admin"):
@@ -272,7 +277,12 @@ def test_the_idempotency_key_makes_a_repeated_start_the_same_run(client, control
 
 
 def test_repeating_a_start_whose_run_is_over_answers_200_with_its_result(control, audit):
-    done = replace(fixtures.workflow_runs()[1], run_id="ingest:101", result={"count": 9})
+    done = replace(
+        fixtures.workflow_runs()[1],
+        run_id="ingest:101",
+        result={"count": 9},
+        fired_at=NOW.isoformat(),
+    )
     client = _client(
         _service(control, audit, runs=InMemoryJobRunStore(fixtures.workflow_runs() + [done]))
     )
@@ -305,7 +315,12 @@ def test_starting_something_that_is_not_a_workflow_is_a_404(client, control):
 
 
 def test_wait_returns_the_result_with_200_when_the_run_ends_in_time(control, audit):
-    done = replace(fixtures.workflow_runs()[1], run_id="ingest:101", result={"count": 7})
+    done = replace(
+        fixtures.workflow_runs()[1],
+        run_id="ingest:101",
+        result={"count": 7},
+        fired_at=NOW.isoformat(),
+    )
     service = _service(control, audit, runs=InMemoryJobRunStore(fixtures.workflow_runs() + [done]))
 
     response = _client(service).post(
@@ -319,7 +334,9 @@ def test_wait_returns_the_result_with_200_when_the_run_ends_in_time(control, aud
 
 
 def test_wait_returns_a_failed_run_with_its_error(control, audit):
-    failed = replace(fixtures.workflow_runs()[2], job="ingest", run_id="ingest:101")
+    failed = replace(
+        fixtures.workflow_runs()[2], job="ingest", run_id="ingest:101", fired_at=NOW.isoformat()
+    )
     service = _service(
         control, audit, runs=InMemoryJobRunStore(fixtures.workflow_runs() + [failed])
     )

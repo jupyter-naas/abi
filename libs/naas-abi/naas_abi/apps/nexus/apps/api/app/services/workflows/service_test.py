@@ -82,7 +82,10 @@ def parts(**overrides):
 def service(clock=None, **overrides):
     clock = clock or Clock()
     return WorkflowsService(
-        JobsAdminService(**parts(**overrides)), sleep=clock.sleep, monotonic=clock.monotonic
+        JobsAdminService(**parts(**overrides)),
+        sleep=clock.sleep,
+        monotonic=clock.monotonic,
+        clock=lambda: NOW,
     )
 
 
@@ -175,7 +178,12 @@ def test_the_broker_being_down_is_an_unavailable_source_and_the_failure_is_audit
 
 def test_a_repeated_start_answers_with_the_first_runs_state_even_without_wait():
     control = InMemoryJobControl()
-    done = replace(fixtures.workflow_runs()[1], run_id="ingest:101", result={"count": 2})
+    done = replace(
+        fixtures.workflow_runs()[1],
+        run_id="ingest:101",
+        result={"count": 2},
+        fired_at=NOW.isoformat(),
+    )
     flows = service(control=control, runs=InMemoryJobRunStore(fixtures.workflow_runs() + [done]))
 
     first = run(flows.start(KEY, "acme.flows", "ingest", {"filter": "news"}, idempotency_key="k"))
@@ -193,6 +201,7 @@ def test_waiting_returns_the_run_as_soon_as_it_ends():
         run_id="ingest:101",
         result={"count": 2},
         status="SUCCEEDED",
+        fired_at=NOW.isoformat(),
     )
 
     def appear(sleeps):
@@ -207,6 +216,41 @@ def test_waiting_returns_the_run_as_soon_as_it_ends():
     assert started.view.finished and started.view.run.result == {"count": 2}
     assert len(clock.sleeps) == 2
     assert clock.sleeps[0] < clock.sleeps[1] <= 1.0  # backs off, never past a second
+
+
+def test_an_old_run_under_a_reused_id_is_not_the_run_just_started():
+    """After the jobs stream is recreated, sequences restart: a start can get the id
+    of a run whose record is still stored, fired long before."""
+    clock = Clock()
+    old = replace(
+        fixtures.workflow_runs()[1],
+        run_id="ingest:101",
+        result={"count": 2},
+        fired_at="2026-10-01T09:00:00+00:00",
+    )
+    runs = InMemoryJobRunStore(fixtures.workflow_runs() + [old])
+
+    peeked = run(service(runs=runs).start(KEY, "acme.flows", "ingest", {"filter": "x"}))
+    waited = run(
+        service(clock, runs=runs).start(KEY, "acme.flows", "ingest", {"filter": "x"}, wait=3)
+    )
+
+    assert peeked.view.run.status == "QUEUED" and not peeked.view.finished
+    assert waited.view.run.status == "QUEUED" and waited.view.run.result is None
+
+
+def test_a_repeated_key_still_answers_with_a_run_fired_inside_the_duplicate_window():
+    first = replace(
+        fixtures.workflow_runs()[1],
+        run_id="ingest:101",
+        result={"count": 2},
+        fired_at="2026-10-02T12:58:30+00:00",  # 90 s before NOW
+    )
+    flows = service(runs=InMemoryJobRunStore(fixtures.workflow_runs() + [first]))
+
+    keyed = run(flows.start(KEY, "acme.flows", "ingest", {"filter": "x"}, idempotency_key="k"))
+
+    assert keyed.view.finished and keyed.view.run.result == {"count": 2}
 
 
 def test_waiting_gives_up_at_the_deadline_with_the_run_as_it_stands():
@@ -239,7 +283,14 @@ def test_a_run_store_failing_while_waiting_does_not_hide_the_started_run():
 
 def test_a_failed_run_is_a_finished_run():
     runs = InMemoryJobRunStore(
-        [replace(fixtures.workflow_runs()[2], job="ingest", run_id="ingest:101")]
+        [
+            replace(
+                fixtures.workflow_runs()[2],
+                job="ingest",
+                run_id="ingest:101",
+                fired_at=NOW.isoformat(),
+            )
+        ]
     )
 
     started = run(service(runs=runs).start(KEY, "acme.flows", "ingest", {"filter": "news"}, wait=1))
