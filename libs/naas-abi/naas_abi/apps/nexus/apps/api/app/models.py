@@ -12,6 +12,7 @@ from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from sqlalchemy import (
     Boolean,
     Column,
+    Date,
     DateTime,
     ForeignKey,
     Integer,
@@ -740,9 +741,7 @@ class OrganizationRoleFeaturesModel(Base):
         primary_key=True,
     )
     role_baseline = Column(Text, nullable=False)  # JSON object
-    updated_by = Column(
-        String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
-    )
+    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 
@@ -935,3 +934,96 @@ class MapsSettingsModel(Base):
     settings = Column(Text, nullable=False)  # JSON MapsWorkspaceSettings
     updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+
+# ============================================
+# Tasks
+# ============================================
+
+
+class TaskIterationModel(Base):
+    """A run of whole weeks of a workspace's tasks, keyed by its first day."""
+
+    __tablename__ = "task_iterations"
+    __table_args__ = (UniqueConstraint("workspace_id", "start_date"),)
+
+    id = Column(String(48), primary_key=True)
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    start_date = Column(Date, nullable=False)
+    # Last day, inclusive; NULL for iterations made before settings (one week).
+    end_date = Column(Date, nullable=True)
+    goal = Column(String(200), nullable=False, default="")
+    created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+
+
+class TasksSettingsModel(Base):
+    """A workspace's tasks configuration (iterations, stages, priorities, labels)."""
+
+    __tablename__ = "task_settings"
+
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
+    data = Column(Text, nullable=False, default="{}")  # JSON
+    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+
+
+class TaskModel(Base):
+    """A workspace task. No iteration means it sits in the backlog."""
+
+    __tablename__ = "tasks"
+
+    id = Column(String(48), primary_key=True)
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    iteration_id = Column(
+        String(48), ForeignKey("task_iterations.id", ondelete="SET NULL"), nullable=True
+    )
+    title = Column(String(300), nullable=False)
+    content = Column(Text, nullable=False, default="")
+    stage = Column(String(32), nullable=False, default="inbox")
+    priority = Column(String(16), nullable=True)
+    due_date = Column(Date, nullable=True)
+    labels = Column(Text, nullable=False, default="[]")  # JSON list
+    # https://github.com/<owner>/<repo>/issues/<number>, or empty.
+    github_issue_url = Column(String(500), nullable=False, default="")
+    assignee_ids = Column(Text, nullable=False, default="[]")  # JSON list
+    archived_at = Column(DateTime(timezone=False), nullable=True)
+    created_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+
+
+class TaskCommentModel(Base):
+    __tablename__ = "task_comments"
+
+    id = Column(String(48), primary_key=True)
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    task_id = Column(String(48), ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    author_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # The comment this one replies to; replies go with it.
+    parent_id = Column(
+        String(48), ForeignKey("task_comments.id", ondelete="CASCADE"), nullable=True
+    )
+    body = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+
+
+class TaskActivityModel(Base):
+    """A task event: a change, a comment, its deletion. Outlives the task (feed history)."""
+
+    __tablename__ = "task_activity"
+
+    id = Column(String(48), primary_key=True)
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    # No foreign key: a deleted task's events stay in the workspace feed.
+    task_id = Column(String(48), nullable=False)
+    # The task's title when the event happened.
+    task_title = Column(String(300), nullable=False, default="")
+    actor_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    field = Column(String(32), nullable=False)
+    old_value = Column(Text, nullable=True)  # JSON
+    new_value = Column(Text, nullable=True)  # JSON
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)

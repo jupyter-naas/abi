@@ -202,6 +202,8 @@ FeatureKey = Literal[
     "documents",
     # Business sheets (Forgejo HTML workbook + XLSX export).
     "sheets",
+    # Workspace tasks (weekly iterations, board view). Owners and admins by default.
+    "tasks",
 ]
 
 # Default catalog (excludes opt-in features like "code").
@@ -221,6 +223,7 @@ _ALL_FEATURES: list[FeatureKey] = [
     "slides",
     "documents",
     "sheets",
+    "tasks",
 ]
 
 

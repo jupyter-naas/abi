@@ -14,6 +14,7 @@ domains core knows nothing about:
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import time
@@ -56,6 +57,9 @@ DEFAULT_SKIP_BODY_PATH_PREFIXES: tuple[str, ...] = (
     "/api/auth/",
     "/api/admin/system/resources/",
 )
+# Liveness probes (container healthcheck, proxy) hit these every few seconds;
+# recording them would fill the anonymous log with noise.
+DEFAULT_SKIP_RECORD_PATHS: frozenset[str] = frozenset({"/", "/health"})
 
 
 def _redact(value: Any) -> Any:
@@ -143,14 +147,16 @@ class HttpActivityLogMiddleware:
         max_body_bytes: int = DEFAULT_MAX_BODY_BYTES,
         skip_body_path_prefixes: tuple[str, ...] = DEFAULT_SKIP_BODY_PATH_PREFIXES,
         capture_request_body: bool = True,
+        skip_record_paths: frozenset[str] = DEFAULT_SKIP_RECORD_PATHS,
     ) -> None:
         self.app = app
+        self.skip_record_paths = frozenset(skip_record_paths)
         self.max_body_bytes = max_body_bytes
         self.skip_body_path_prefixes = tuple(skip_body_path_prefixes)
         self.capture_request_body = capture_request_body
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http":
+        if scope["type"] != "http" or scope.get("path", "") in self.skip_record_paths:
             await self.app(scope, receive, send)
             return
 
@@ -226,13 +232,16 @@ class HttpActivityLogMiddleware:
                     if exc is not None:
                         attrs["error"] = type(exc).__name__
 
-                    service.record(
+                    # record() is a blocking call (it may cross the bus): keep it
+                    # off the event loop so a slow log cannot stall every request.
+                    await asyncio.to_thread(
+                        service.record,
                         ActivityEvent(
                             actor_id=actor_id,
                             event_type="http.request",
                             correlation_id=headers.get("x-request-id"),
                             attributes=attrs,
-                        )
+                        ),
                     )
             except Exception:
                 # Activity logging must never break the request path.
