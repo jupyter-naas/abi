@@ -115,11 +115,10 @@ class IActivityLogAdapter(ABC):
     def query_stream(
         self, actor_id: str, query: ActivityLogQuery | None = None
     ) -> Iterator[Iterator[ActivityEvent]]:
-        """``query``, read as the caller iterates, inside the block
-        (docs/adr/20261003_nats-streamed-results.md). Events recorded after
-        the block opened are not included, so the stream always ends. This
-        default reads ``STREAM_PAGE`` events at a time by keyset on ``seq``,
-        holding no lock between pages."""
+        """``query``, read as the caller iterates, inside the block. Events
+        recorded after the block opened are not included, so the stream always
+        ends. This default reads ``STREAM_PAGE`` events at a time by keyset on
+        ``seq``, holding no lock between pages."""
         yield paged_events(self.query, actor_id, query)
 
     @abstractmethod

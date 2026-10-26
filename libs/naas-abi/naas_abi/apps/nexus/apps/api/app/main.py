@@ -292,7 +292,7 @@ async def _prefetch_agent_class_registry() -> None:
 
 
 async def _move_secrets_to_the_secrets_key(app: FastAPI) -> None:
-    """Move what the old ``secret_key`` encrypted under the secrets key (RFC §13):
+    """Move what the old ``secret_key`` encrypted under the secrets key:
     workspace secrets and the provider tokens of sessions. Idempotent, and cheap
     once nothing is left under an old key."""
     from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal

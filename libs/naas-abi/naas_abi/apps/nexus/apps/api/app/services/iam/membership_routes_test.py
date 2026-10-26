@@ -77,6 +77,10 @@ async def api(team, nexus_db, monkeypatch):
     async def no_mail(*_args, **_kwargs) -> bool:
         return False
 
+    async def no_seeding(**_kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(workspaces_module, "seed_workspace_agents", no_seeding)
     for module in (workspaces_module, organizations_module):
         monkeypatch.setattr(module, "check_rate_limit", no_limit)
         monkeypatch.setattr(module, "send_added_notice", no_mail)
@@ -92,6 +96,9 @@ async def api(team, nexus_db, monkeypatch):
             await db.commit()
 
     app.dependency_overrides[get_db] = session
+    app.dependency_overrides[workspaces_module.get_service_registry] = lambda: SimpleNamespace(
+        agents=None
+    )
     # The drive profile sync (best effort) has no object storage here.
     app.dependency_overrides[organizations_module._get_object_storage] = lambda: object()
     app.dependency_overrides[get_current_user_required] = lambda: SimpleNamespace(
@@ -164,7 +171,9 @@ async def test_members_and_admins_hold_their_own_level(api) -> None:
         assert (await http.get("/api/workspaces/ws-1/members")).status_code == 200
         assert (await http.patch("/api/workspaces/ws-1", json={"name": "x"})).status_code == 403
     async with api("admin") as http:
-        assert (await http.patch("/api/workspaces/ws-1", json={"name": "Renamed"})).status_code == 200
+        assert (
+            await http.patch("/api/workspaces/ws-1", json={"name": "Renamed"})
+        ).status_code == 200
         assert (await http.get("/api/workspaces/ws-1/servers")).status_code == 200
         assert (await http.delete("/api/workspaces/ws-1")).status_code == 403  # the owner's
     async with api("owner") as http:
@@ -172,7 +181,7 @@ async def test_members_and_admins_hold_their_own_level(api) -> None:
         assert await role("owner", WS) is None  # the scope's roles went with it
 
 
-# -- bug (d): creating a workspace needs the right on the organization -------------------
+# -- creating a workspace needs the right on the organization -------------------
 
 
 @pytest.mark.asyncio
@@ -211,14 +220,15 @@ async def test_a_workspace_without_an_organization_is_the_callers_own(api) -> No
         assert (await http.get(f"/api/workspaces/{workspace}")).status_code == 403
 
 
-# -- bug (c): the owner's role is the owner's ---------------------------------------------
+# -- the owner's role is the owner's ---------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_an_admin_cannot_grant_demote_or_remove_a_workspace_owner(api) -> None:
     async with api("admin") as http:
         grant = await http.post(
-            "/api/workspaces/ws-1/members/invite", json={"email": "bob@example.com", "role": "owner"}
+            "/api/workspaces/ws-1/members/invite",
+            json={"email": "bob@example.com", "role": "owner"},
         )
         assert grant.status_code == 403
         assert "owners" in grant.json()["detail"]
@@ -259,7 +269,9 @@ async def test_owners_manage_owners_but_the_last_one_stays(api) -> None:
         # Cannot remove or demote yourself, and the only owner is never demoted.
         assert (await http.delete("/api/workspaces/ws-1/members/owner")).status_code == 400
     async with api("admin") as http:
-        assert (await http.patch("/api/workspaces/ws-1/members/owner", json={"role": "member"})).status_code == 403
+        assert (
+            await http.patch("/api/workspaces/ws-1/members/owner", json={"role": "member"})
+        ).status_code == 403
 
 
 def _users_in_iam(team) -> int:
@@ -303,9 +315,7 @@ async def test_roles_are_never_attached_to_a_service_account(team, monkeypatch) 
         await MEMBERSHIPS.grant("somebody-not-in-nexus", "member", WS)
     assert await MEMBERSHIPS.roles_of(account.id) == {}
     with as_service_account("engine"):
-        assert not [
-            a for a in team.iam.list_attachments(principal_id=account.id) if a.scope == WS
-        ]
+        assert not [a for a in team.iam.list_attachments(principal_id=account.id) if a.scope == WS]
 
 
 # -- a failed create takes back what it did -----------------------------------------------
@@ -373,7 +383,8 @@ async def test_the_org_directory_is_for_owners_and_admins(api) -> None:
 async def test_an_org_admin_cannot_make_demote_or_remove_an_org_owner(api) -> None:
     async with api("admin") as http:
         invited = await http.post(
-            "/api/organizations/org-1/members/invite", json={"email": "bob@example.com", "role": "owner"}
+            "/api/organizations/org-1/members/invite",
+            json={"email": "bob@example.com", "role": "owner"},
         )
         assert invited.status_code == 403
         assert await role("bob", ORG) is None

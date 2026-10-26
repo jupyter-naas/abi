@@ -11,7 +11,7 @@ the same subject too: a change written to the store by another process (the
 ``abi iam`` CLI) drops this process's cache at once.
 
 ``abi.iam.v1.token`` and ``abi.iam.v1.jwks`` need no credentials: the key is
-one, and the JWKS is public (RFC §8.2, §9.1).
+one, and the JWKS is public.
 """
 
 from __future__ import annotations

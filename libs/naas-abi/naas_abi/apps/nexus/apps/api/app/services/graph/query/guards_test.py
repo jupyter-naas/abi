@@ -64,7 +64,10 @@ def test_oversized_in_set_rejected() -> None:
 
 
 def test_wide_filter_tree_rejected() -> None:
-    children = tuple(FilterCondition(FilterColumnTarget("text"), "eq", str(i)) for i in range(QueryGuards.MAX_FILTER_NODES + 1))
+    children = tuple(
+        FilterCondition(FilterColumnTarget("text"), "eq", str(i))
+        for i in range(QueryGuards.MAX_FILTER_NODES + 1)
+    )
     with pytest.raises(GraphQuerySpecError):
         validate_spec(_list(filters=FilterGroup("and", children)))
 

@@ -37,8 +37,8 @@ def publish_chat_ingestion_job(payload: dict[str, Any]) -> None:
 
 async def _as_uploader(payload: dict[str, Any]) -> None:
     """Run a queued job as the request that queued it ran: ``api`` on behalf
-    of the user who uploaded the file, so the user bounds every kernel call
-    (RFC §5.3). The queue's consumer thread has no caller of its own.
+    of the user who uploaded the file, so the user bounds every kernel call.
+    The queue's consumer thread has no caller of its own.
 
     A job that names no user runs as nobody, never as ``api`` alone: its
     kernel calls are denied, and the job records its failure as any other."""

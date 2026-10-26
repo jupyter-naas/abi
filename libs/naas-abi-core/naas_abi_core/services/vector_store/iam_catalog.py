@@ -1,4 +1,4 @@
-"""vector_store's action catalog (RFC §6.4, "vector_store").
+"""vector_store's action catalog.
 
 ``collection/<name>`` is a placed container; its vectors are
 ``vector/<collection>/<id>``. ``service/-`` is the service itself.

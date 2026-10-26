@@ -461,9 +461,7 @@ class DatasetSecondaryAdapterContract(ABC):
             "additions": 1,
             "deletions": 0,
         }
-        adapter.write(
-            "github_commits", [row], namespace="acme", timeout_seconds=60.0
-        )
+        adapter.write("github_commits", [row], namespace="acme", timeout_seconds=60.0)
         adapter.write_stream(
             "github_commits",
             iter([row]),
@@ -480,7 +478,7 @@ class DatasetSecondaryAdapterContract(ABC):
 
         assert result.rows == [{"sha": "a"}]
 
-    # --- streamed reads (docs/adr/20261003_nats-streamed-results.md)
+    # --- streamed reads
 
     def test_query_stream_reads_the_rows_query_returns(self, adapter: IDatasetPort):
         adapter.create(self._spec())

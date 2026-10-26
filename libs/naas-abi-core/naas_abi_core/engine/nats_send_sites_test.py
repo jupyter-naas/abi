@@ -8,7 +8,7 @@ RPC overflow (nats_rpc.py, sdk transport.py), transfer streams, claim checks
 
 A new raw send fails this test: route it through one of those helpers, or add
 it here with the reason it can never exceed the limit.
-(docs/adr/20261003_nats-rpc-overflow.md, docs/adr/20261003_nats-claim-check.md)
+
 """
 
 import re

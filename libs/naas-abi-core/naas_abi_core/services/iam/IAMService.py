@@ -5,7 +5,7 @@ current ``CallContext`` (never from a request field). IAM authorizes its own
 operations with its own ``iam:*`` catalog, like any other service.
 
 Effective policies are cached per principal for at most ``cache_ttl_seconds``
-(60 by default, RFC §5.6) and dropped on every change made through this
+(60 by default) and dropped on every change made through this
 service. Change listeners (the NATS primary) hear each new store revision.
 """
 
@@ -216,7 +216,7 @@ def catalog_resource(service: str) -> str:
     return resource_name("iam", "catalog", service)
 
 
-# The engine's own service key, for its client-role engines (RFC §8.2): they
+# The engine's own service key, for its client-role engines: they
 # exchange it like any other key. Sealed to engine, like every iam/ secret.
 ENGINE_KEY_SECRET = "iam/service-keys/engine"
 # The key the engine seals the job triggers it stores with (HMAC-SHA256).
@@ -335,7 +335,7 @@ class IAMService(IIAMService, PolicySource):
 
     def filter(self, action: str, resources: Iterable[str]) -> FilterResult:
         """The resources the current caller may perform ``action`` on, in order,
-        plus prefix hints a store can push down (RFC §5.5)."""
+        plus prefix hints a store can push down."""
         return self.authorizer.filter(current_call_context(), action, resources)
 
     def allows_every(self, action: str, service: str, resource_type: str) -> bool:
@@ -530,7 +530,7 @@ class IAMService(IIAMService, PolicySource):
         return record
 
     # =========================================================================
-    # Placements (RFC §4.4)
+    # Placements
     # =========================================================================
 
     def placement_of(self, service: str, canonical_id: str) -> Placement | None:
@@ -756,7 +756,7 @@ class IAMService(IIAMService, PolicySource):
         display_name: str | None = None,
     ) -> PrincipalRecord:
         """Make ``(issuer, subject)`` one more identity of the user of the
-        built-in login ``principal_id`` (RFC §13): its roles, groups and keys
+        built-in login ``principal_id``: its roles, groups and keys
         stay, and the user is found by the identity from now on.
 
         Only a user of the built-in login (issuer ``urn:abi:nexus``) is linked,
@@ -845,7 +845,7 @@ class IAMService(IIAMService, PolicySource):
             )
         )
         if modules.parse_account(name) is not None:
-            # A module's account always holds its bootstrap (RFC §8.3).
+            # A module's account always holds its bootstrap.
             self.store.attach(
                 Attachment(new_id("att"), roles.MODULE_BOOTSTRAP, record.id)
             )
@@ -982,7 +982,7 @@ class IAMService(IIAMService, PolicySource):
         return record
 
     def add_group_member(self, group_id: str, member_id: str) -> None:
-        """Static membership. Groups cannot contain groups (RFC §2)."""
+        """Static membership. Groups cannot contain groups."""
         self._require_group("iam:AddGroupMember", group_id)
         group = self._group(group_id)
         member = self._get_principal(member_id)
@@ -1156,7 +1156,7 @@ class IAMService(IIAMService, PolicySource):
         """Attach a policy to a principal, optionally at a scope. Idempotent.
 
         Attaching a workspace role keeps the principal's platform companion
-        (``builtin.platform.member`` or ``.viewer``) in step (RFC §7).
+        (``builtin.platform.member`` or ``.viewer``) in step.
         """
         if scope is not None:
             validate_scope(scope)
@@ -1259,7 +1259,7 @@ class IAMService(IIAMService, PolicySource):
     def _sync_platform_roles(self, principal_id: str) -> None:
         """Hold ``builtin.platform.member`` while a member, admin or owner role is
         attached at a workspace or org-wide scope; ``.viewer`` with only viewer
-        roles there. Org-level roles (``abi:<org>:-``) bring neither (RFC §7)."""
+        roles there. Org-level roles (``abi:<org>:-``) bring neither."""
         held: set[str] = set()
         for attachment in self.store.list_attachments(principal_id=principal_id):
             if attachment.policy_id not in roles.ROLES or attachment.scope is None:
@@ -1282,7 +1282,7 @@ class IAMService(IIAMService, PolicySource):
                 self.store.detach(companion, principal_id, None)
 
     # =========================================================================
-    # Feature policies (RFC §7 "Features"): UseFeature comes only from them.
+    # Feature policies: UseFeature comes only from them.
     # =========================================================================
 
     def put_feature_policies(self, grants: Mapping[str, Sequence[str]]) -> None:
@@ -1365,7 +1365,7 @@ class IAMService(IIAMService, PolicySource):
             self.store.detach(policy_id, principal_id, scope)
 
     # =========================================================================
-    # Invitations and IdP group bindings (RFC §12.2)
+    # Invitations and IdP group bindings
     # =========================================================================
 
     def create_pending_grant(
@@ -1642,7 +1642,7 @@ class IAMService(IIAMService, PolicySource):
         ]
 
     # =========================================================================
-    # Tokens (RFC §9.1): the engine signs, everyone verifies with the JWKS.
+    # Tokens: the engine signs, everyone verifies with the JWKS.
     # =========================================================================
 
     def jwks(self) -> dict[str, Any]:
@@ -1723,7 +1723,7 @@ class IAMService(IIAMService, PolicySource):
         )
 
     def exchange_key(self, value: str, audience: str = NATS_AUDIENCE) -> IssuedToken:
-        """A service account's key for an access token (RFC §8.2): ``abi:nats``
+        """A service account's key for an access token: ``abi:nats``
         for the kernel services, or ``abi:host:<recipient>`` for one module
         host it calls (the host forwards it to discovery, which accepts it from
         that host only, and no kernel service accepts it).
@@ -1816,7 +1816,7 @@ class IAMService(IIAMService, PolicySource):
         return record, principal
 
     # =========================================================================
-    # Token exchange (RFC §9.4) and revocation
+    # Token exchange and revocation
     # =========================================================================
 
     def exchange_token(self, request: TokenExchange) -> IssuedToken:
@@ -1879,7 +1879,7 @@ class IAMService(IIAMService, PolicySource):
         raise IAMNotFoundError(f"Principal {principal_id} not found")
 
     # =========================================================================
-    # Job trigger seals (RFC §8.4)
+    # Job trigger seals
     # =========================================================================
 
     def seal_trigger(self, fields: Sequence[Any]) -> str:
@@ -1925,7 +1925,7 @@ class IAMService(IIAMService, PolicySource):
 
     def engine_service_key(self) -> str:
         """The engine's own key, kept in ``IAMSecrets`` for client-role engines
-        of this deployment (RFC §8.2), created on first use. In process only."""
+        of this deployment, created on first use. In process only."""
         stored = self.secrets.get(ENGINE_KEY_SECRET)
         if stored:
             try:
@@ -1947,7 +1947,7 @@ class IAMService(IIAMService, PolicySource):
         return created.value
 
     # =========================================================================
-    # Keys (RFC §8.1)
+    # Keys
     # =========================================================================
 
     def create_key(
@@ -2104,7 +2104,7 @@ class IAMService(IIAMService, PolicySource):
         return revoked
 
     # =========================================================================
-    # Module permission manifests (RFC §8.3)
+    # Module permission manifests
     # =========================================================================
 
     def submit_manifest(
@@ -2365,7 +2365,7 @@ class IAMService(IIAMService, PolicySource):
             raise PolicyValidationError(problems)
 
     # =========================================================================
-    # Broker permissions (RFC §8.4)
+    # Broker permissions
     # =========================================================================
 
     def broker_permissions(
@@ -2519,7 +2519,7 @@ class IAMService(IIAMService, PolicySource):
         limit: int,
         after: str | None,
     ) -> Page:
-        """A page of allowed items; paging applies after filtering (RFC §5.5)."""
+        """A page of allowed items; paging applies after filtering."""
         if not 1 <= limit <= 1000:
             raise ValueError("limit must be between 1 and 1000")
         if not self.filter(action, ()).prefix_hints:
@@ -2579,7 +2579,7 @@ class _KeySpec:
         self, now: datetime, requested: datetime | None, name: str | None
     ) -> datetime | None:
         """When the key expires: what was asked for within the kind's limit,
-        else the kind's default (RFC §8.1)."""
+        else the kind's default."""
         if requested is not None and requested <= now:
             raise ValueError("A key cannot expire in the past")
         if self.kind == "service":

@@ -1,4 +1,4 @@
-"""Invitations and IdP group bindings (RFC §12.2).
+"""Invitations and IdP group bindings.
 
 ``/api/invitations``
 

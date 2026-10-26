@@ -199,7 +199,7 @@ keys = Table(
     Column("key_id", String(32), primary_key=True),
     Column("principal_id", String(64), ForeignKey("iam_principals.id"), nullable=False),
     Column("kind", String(16), nullable=False),
-    # sha256(secret), hex: the secret has 256 bits of entropy (RFC §8.1).
+    # sha256(secret), hex: the secret has 256 bits of entropy.
     Column("secret_hash", String(64), nullable=False),
     Column("description", Text, nullable=False, default=""),
     Column("created_at", DateTime(timezone=True), nullable=False),
@@ -208,7 +208,7 @@ keys = Table(
     Column("revoked_at", DateTime(timezone=True)),
 )
 
-# What narrows a personal or grant key (RFC §9.3, §9.4). A table of its own, so
+# What narrows a personal or grant key. A table of its own, so
 # an install that already has ``iam_keys`` needs no migration.
 key_narrowing = Table(
     "iam_key_narrowing",
@@ -251,7 +251,7 @@ manifests = Table(
     Column("reason", Text, nullable=False, default=""),
 )
 
-# Metadata only: the private keys live in the secret service (RFC §9.1).
+# Metadata only: the private keys live in the secret service.
 signing_keys = Table(
     "iam_signing_keys",
     metadata,

@@ -3,8 +3,7 @@
 One ``OverflowHost`` per process, on ``abi.rpc.overflow``, started with the NATS
 primaries. ``respond_protobuf`` parks a reply that does not fit (``park``);
 ``request_payload`` reads a request the client uploaded first (``fetch``). The
-client side and the headers are in ``naas_abi_sdk.overflow``. See
-docs/adr/20261003_nats-rpc-overflow.md.
+client side and the headers are in ``naas_abi_sdk.overflow``.
 """
 
 from __future__ import annotations

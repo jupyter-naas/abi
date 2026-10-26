@@ -83,6 +83,7 @@ def _world(flags: FeatureFlagsConfig | None, monkeypatch):
 
     monkeypatch.setattr(adapter, "_scan_apps_catalog", lambda: catalog)
     monkeypatch.setattr(adapter, "_workspace_slug", no_slug)
+    monkeypatch.setattr(adapter, "_workspace_catalog_seed", no_slug)
     monkeypatch.setattr(adapter, "_remote_apps_catalog", no_remote)
 
     async def enabled_in_the_workspace(user_id, app_id, workspace_id):

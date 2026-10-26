@@ -1,7 +1,6 @@
 // NATS-RPC contract for the coding_environment kernel domain.
 // Mirrors naas_abi_core/services/coding_environment/CodingEnvironmentPorts.py
-// ::ICodingEnvironmentAdapter 1:1. See
-// docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md.
+// ::ICodingEnvironmentAdapter 1:1.
 //
 // Scope of this v1 contract, deliberately: only the 11
 // ICodingEnvironmentAdapter methods below are exposed. The following are
@@ -33,7 +32,7 @@
 // forcing a caller to distinguish "no params" from "empty params" (the
 // adapters never do either).
 //
-// Subjects (see "Protobuf contract shapes" in the RFC):
+// Subjects:
 //   abi.svc.coding_environment.v1.ensure_user
 //   abi.svc.coding_environment.v1.list_templates
 //   abi.svc.coding_environment.v1.provision

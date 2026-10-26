@@ -1,4 +1,4 @@
-"""A module's permission manifest: what it asks an admin to approve (RFC §8.3).
+"""A module's permission manifest: what it asks an admin to approve.
 
 The manifest is a policy document (``version`` and ``statements`` of
 ``effect``, ``actions`` and ``resources``). A module declares it as
@@ -144,7 +144,7 @@ def default_manifest(
                 "FollowOwnRuns",
                 ["discovery:GetAgentRun", "discovery:CancelAgentRun"],
                 # Its own runs, and those of the user it acts for: a run started
-                # for a user is that user's (RFC §6.4).
+                # for a user is that user's.
                 [
                     "abi:-:-:discovery:run/${principal.id}/*",
                     "abi:-:-:discovery:run/${user.id}/*",

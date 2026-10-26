@@ -44,6 +44,12 @@ agent_user_name: ContextVar[str | None] = ContextVar("agent_user_name", default=
 agent_user_email: ContextVar[str | None] = ContextVar("agent_user_email", default=None)
 agent_chat_id: ContextVar[str | None] = ContextVar("agent_chat_id", default=None)
 agent_workspace_id: CallContextField = event_actor_workspace_id
+# Enabled agent registry keys (``module/Class``) for the current chat turn after
+# workspace roster and per-caller feature gating. Abi uses this to attach only
+# the office sub-agents the user may reach.
+agent_workspace_enabled_class_names: ContextVar[frozenset[str] | None] = ContextVar(
+    "agent_workspace_enabled_class_names", default=None
+)
 
 # Coding-workspace bridge: base URL + bearer secret of the exec sidecar running
 # inside the caller's Coder coding workspace. Set at the request boundary (the
@@ -182,9 +188,7 @@ def documents_step_limit_message() -> str:
     queries = documents_research_queries.get() or []
     finished: list[str] = []
     if queries:
-        finished.append(
-            f"{len(queries)} web search{'es' if len(queries) != 1 else ''}"
-        )
+        finished.append(f"{len(queries)} web search{'es' if len(queries) != 1 else ''}")
     if writes:
         finished.append("wrote " + ", ".join(writes))
     done = (
@@ -276,9 +280,7 @@ def slides_step_limit_message() -> str:
     queries = slides_research_queries.get() or []
     finished: list[str] = []
     if queries:
-        finished.append(
-            f"{len(queries)} web search{'es' if len(queries) != 1 else ''}"
-        )
+        finished.append(f"{len(queries)} web search{'es' if len(queries) != 1 else ''}")
     if writes:
         finished.append("wrote " + ", ".join(writes))
     done = (

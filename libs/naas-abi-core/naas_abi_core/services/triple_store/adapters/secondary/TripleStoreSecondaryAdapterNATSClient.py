@@ -293,8 +293,8 @@ class TripleStoreSecondaryAdapterNATSClient(NatsRPCClient, ITripleStorePort):
         return _pb_to_query_result(response.success)
 
     # ------------------------------------------------------------------
-    # Streamed reads over transfer frames (triple_store_stream_codec.py,
-    # docs/adr/20261003_nats-streamed-results.md). Frames are fetched as the
+    # Streamed reads over transfer frames (triple_store_stream_codec.py).
+    # Frames are fetched as the
     # caller iterates; leaving the ``with`` closes the session.
     # ------------------------------------------------------------------
 

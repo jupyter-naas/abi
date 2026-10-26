@@ -175,9 +175,7 @@ class FilesService:
         if sort_key == "name":
             entries.sort(key=lambda entry: entry.split("/")[-1].lower(), reverse=reverse)
             page = entries[start : start + limit] if limit is not None else entries[start:]
-            files = [
-                info for entry in page if (info := self._build_file_info(entry)) is not None
-            ]
+            files = [info for entry in page if (info := self._build_file_info(entry)) is not None]
         else:
             infos = [
                 info for entry in entries if (info := self._build_file_info(entry)) is not None
@@ -349,19 +347,28 @@ class FilesService:
         )
 
     # Office-style formats LibreOffice can render to PDF for preview.
-    PDF_PREVIEW_EXTENSIONS: frozenset[str] = frozenset({
-        ".ppt", ".pptx", ".odp",
-        ".doc", ".docx", ".odt", ".rtf",
-        ".xls", ".xlsx", ".xlsm", ".xlsb", ".ods",
-    })
+    PDF_PREVIEW_EXTENSIONS: frozenset[str] = frozenset(
+        {
+            ".ppt",
+            ".pptx",
+            ".odp",
+            ".doc",
+            ".docx",
+            ".odt",
+            ".rtf",
+            ".xls",
+            ".xlsx",
+            ".xlsm",
+            ".xlsb",
+            ".ods",
+        }
+    )
 
     def preview_file_as_pdf(self, path: str) -> PdfPreviewData:
         normalized_path = self.normalize_relative_path(path)
         ext = PurePosixPath(normalized_path).suffix.lower()
         if ext not in self.PDF_PREVIEW_EXTENSIONS:
-            raise UnsupportedPreviewError(
-                "PDF preview is not supported for this file type"
-            )
+            raise UnsupportedPreviewError("PDF preview is not supported for this file type")
         if self._is_directory(normalized_path):
             raise IsDirectoryError("Cannot preview a directory")
 
@@ -447,9 +454,7 @@ class FilesService:
 
         files, _dirs = self._collect_directory_tree(normalized_path)
         if len(files) > self.max_archive_files:
-            raise ArchiveTooLargeError(
-                file_count=len(files), max_files=self.max_archive_files
-            )
+            raise ArchiveTooLargeError(file_count=len(files), max_files=self.max_archive_files)
 
         folder_name = normalized_path.rsplit("/", 1)[-1] if normalized_path else "files"
         archive_filename = f"{folder_name}.zip"
@@ -615,9 +620,7 @@ class FilesService:
         full = f"{destination}/{relative}"
         dest_prefix = f"{destination}/"
         if full != destination and not full.startswith(dest_prefix):
-            raise InvalidArchiveError(
-                f"Archive member escapes destination: {member_name}"
-            )
+            raise InvalidArchiveError(f"Archive member escapes destination: {member_name}")
         return full
 
     @staticmethod
@@ -661,10 +664,7 @@ class FilesService:
                 file_count += 1
                 if file_count > self.max_extract_files:
                     raise ExtractTooLargeError(
-                        reason=(
-                            f"Archive has too many files "
-                            f"(limit {self.max_extract_files})"
-                        )
+                        reason=(f"Archive has too many files (limit {self.max_extract_files})")
                     )
 
                 size = info.file_size
@@ -687,9 +687,7 @@ class FilesService:
                 try:
                     data = zf.read(info)
                 except Exception as exc:
-                    raise InvalidArchiveError(
-                        f"Failed to read archive member: {name}"
-                    ) from exc
+                    raise InvalidArchiveError(f"Failed to read archive member: {name}") from exc
 
                 if len(data) > self.max_extract_member_bytes:
                     raise ExtractTooLargeError(
@@ -746,10 +744,7 @@ class FilesService:
                 file_count += 1
                 if file_count > self.max_extract_files:
                     raise ExtractTooLargeError(
-                        reason=(
-                            f"Archive has too many files "
-                            f"(limit {self.max_extract_files})"
-                        )
+                        reason=(f"Archive has too many files (limit {self.max_extract_files})")
                     )
 
                 size = member.size

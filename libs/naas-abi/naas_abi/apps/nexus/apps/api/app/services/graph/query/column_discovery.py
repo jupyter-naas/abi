@@ -47,8 +47,18 @@ def _xsd_to_datatype(range_uri: str | None) -> str | None:
     if not range_uri:
         return None
     frag = _fragment(range_uri)
-    if frag in ("integer", "int", "long", "short", "decimal", "float", "double",
-                "nonNegativeInteger", "positiveInteger", "byte"):
+    if frag in (
+        "integer",
+        "int",
+        "long",
+        "short",
+        "decimal",
+        "float",
+        "double",
+        "nonNegativeInteger",
+        "positiveInteger",
+        "byte",
+    ):
         return "number"
     if frag in ("date", "dateTime", "time", "gYear", "gYearMonth"):
         return "date"
@@ -192,7 +202,9 @@ def discover_columns(
         tg = r.get("tgraph")
         targets.setdefault(p, []).append(
             TargetClassData(
-                uri=tc.value, label=_fragment(tc.value), instance_count=_int(r, "subjects"),
+                uri=tc.value,
+                label=_fragment(tc.value),
+                instance_count=_int(r, "subjects"),
                 graph=tg.value if tg is not None else "",
             )
         )
@@ -207,7 +219,9 @@ def discover_columns(
         sg = r.get("sgraph")
         in_targets.setdefault(p, []).append(
             TargetClassData(
-                uri=sc.value, label=_fragment(sc.value), instance_count=_int(r, "objects"),
+                uri=sc.value,
+                label=_fragment(sc.value),
+                instance_count=_int(r, "objects"),
                 graph=sg.value if sg is not None else "",
             )
         )
@@ -231,7 +245,11 @@ def discover_columns(
     for r in dt_rows:
         p = r["p"].value
         seen.add(p)
-        subjects, objs, distinct_objs = _int(r, "subjects"), _int(r, "objs"), _int(r, "distinct_objs")
+        subjects, objs, distinct_objs = (
+            _int(r, "subjects"),
+            _int(r, "objs"),
+            _int(r, "distinct_objs"),
+        )
         dt_uri = r["dt"].value if r.get("dt") else None
         datatype = _xsd_to_datatype(dt_uri) or "string"
         ont_range_dt = _xsd_to_datatype(ont.get(p, {}).get("range")) if p in ont else None
@@ -239,39 +257,70 @@ def discover_columns(
             datatype, dt_source = ont_range_dt, "ontology-range"
         else:
             dt_source = "sampled"
-        high_card = datatype == "string" and subjects > 0 and (distinct_objs / subjects) > _HIGH_CARDINALITY_RATIO
-        columns.append(DiscoveredColumn(
-            id=_slug(p), predicate_uri=p, label=_fragment(p), kind="property", direction="out",
-            datatype=datatype, datatype_source=dt_source,
-            source="both" if p in ont else "data", instance_count=subjects,
-            is_functional=(objs == subjects and subjects > 0), facetable=not high_card,
-        ))
+        high_card = (
+            datatype == "string"
+            and subjects > 0
+            and (distinct_objs / subjects) > _HIGH_CARDINALITY_RATIO
+        )
+        columns.append(
+            DiscoveredColumn(
+                id=_slug(p),
+                predicate_uri=p,
+                label=_fragment(p),
+                kind="property",
+                direction="out",
+                datatype=datatype,
+                datatype_source=dt_source,
+                source="both" if p in ont else "data",
+                instance_count=subjects,
+                is_functional=(objs == subjects and subjects > 0),
+                facetable=not high_card,
+            )
+        )
 
     # data-side relations
     for r in rel_rows:
         p = r["p"].value
         seen.add(p)
         subjects, objs = _int(r, "subjects"), _int(r, "objs")
-        columns.append(DiscoveredColumn(
-            id=_slug(p), predicate_uri=p, label=_fragment(p), kind="relation", direction="out",
-            datatype="iri", datatype_source="ontology-range" if p in ont else "default",
-            source="both" if p in ont else "data", instance_count=subjects,
-            is_functional=(objs == subjects and subjects > 0), facetable=True,
-            target_classes=tuple(targets.get(p, ())),
-        ))
+        columns.append(
+            DiscoveredColumn(
+                id=_slug(p),
+                predicate_uri=p,
+                label=_fragment(p),
+                kind="relation",
+                direction="out",
+                datatype="iri",
+                datatype_source="ontology-range" if p in ont else "default",
+                source="both" if p in ont else "data",
+                instance_count=subjects,
+                is_functional=(objs == subjects and subjects > 0),
+                facetable=True,
+                target_classes=tuple(targets.get(p, ())),
+            )
+        )
 
     # data-side INCOMING relations (grain is the OBJECT: ?s ?p ?grain) — direction "in".
     # Slugged "<frag>__in" so they never collide with an outgoing relation of the same
     # predicate; label is arrow-prefixed so it's clear the relation points AT the grain.
     for r in in_rel_rows:
         p = r["p"].value
-        columns.append(DiscoveredColumn(
-            id=_slug(p, "in"), predicate_uri=p, label=f"← {_fragment(p)}", kind="relation", direction="in",
-            datatype="iri", datatype_source="default",
-            source="data", instance_count=_int(r, "objects"),
-            is_functional=False, facetable=True,
-            target_classes=tuple(in_targets.get(p, ())),
-        ))
+        columns.append(
+            DiscoveredColumn(
+                id=_slug(p, "in"),
+                predicate_uri=p,
+                label=f"← {_fragment(p)}",
+                kind="relation",
+                direction="in",
+                datatype="iri",
+                datatype_source="default",
+                source="data",
+                instance_count=_int(r, "objects"),
+                is_functional=False,
+                facetable=True,
+                target_classes=tuple(in_targets.get(p, ())),
+            )
+        )
 
     # ontology-only declarations (valid-but-empty → instance_count 0, source "ontology")
     for p, info in ont.items():
@@ -279,13 +328,23 @@ def discover_columns(
             continue
         is_relation = info["is_object"]
         datatype = "iri" if is_relation else (_xsd_to_datatype(info["range"]) or "string")
-        columns.append(DiscoveredColumn(
-            id=_slug(p), predicate_uri=p, label=_fragment(p),
-            kind="relation" if is_relation else "property", direction="out",
-            datatype=datatype,
-            datatype_source="ontology-range" if (is_relation or _xsd_to_datatype(info["range"])) else "default",
-            source="ontology", instance_count=0, is_functional=False, facetable=True,
-        ))
+        columns.append(
+            DiscoveredColumn(
+                id=_slug(p),
+                predicate_uri=p,
+                label=_fragment(p),
+                kind="relation" if is_relation else "property",
+                direction="out",
+                datatype=datatype,
+                datatype_source="ontology-range"
+                if (is_relation or _xsd_to_datatype(info["range"]))
+                else "default",
+                source="ontology",
+                instance_count=0,
+                is_functional=False,
+                facetable=True,
+            )
+        )
 
     columns.sort(key=lambda c: (c.kind != "property", -c.instance_count, c.label.lower()))
     return tuple(columns)

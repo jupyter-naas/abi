@@ -104,8 +104,9 @@ VectorStoreFactory.reset()                                # clear singleton
 
 ## Authorization
 
-Every operation is checked in the domain service against IAM (RFC
-[§5, §6.4](../../../../../docs/specs/rfcs/20261013_identity-and-authorization.md)),
+Every operation is checked in the domain service against IAM
+(`ResourceGuard`, see "Enforcing in a data service" in
+[`../iam/AGENTS.md`](../iam/AGENTS.md)),
 for the caller of the current `CallContext`, so in process and over NATS answer
 the same. The catalog is `iam_catalog.py`, registered by the serving engine at
 boot. A caller who cannot see a resource gets `CollectionNotFoundError` (`COLLECTION_NOT_FOUND`; `get_document` returns None); one who can see it but not
@@ -114,16 +115,38 @@ an engine with IAM (a library use, a NATS facade whose server checks) does not
 check. The contract test is `VectorStoreService_authorization_test.py`: no policy, granted and denied
 principals, in process and over NATS.
 
-* `collection/<name>` is a placed container, created through
-  `CreateCollection` (§4.4: a new collection is placed in the call's target
-  workspace, or on the platform; the placement is dropped with the
-  collection). Vectors are `vector/<collection>/<id>`, a batch checked with one
-  filter; one denial fails it.
+Resource types: `collection/<name>` (`path`, placed container),
+`vector/<collection>/<id>` (`path`) and `service/-` (singleton, platform).
+
+| Action | Level | Resource | Subject (`abi.svc.vector_store.v1.`) |
+|---|---|---|---|
+| `ListCollections` | list | each `collection/<name>` | `list_collections` |
+| `GetCollectionInfo` | read | `collection/<name>` | `get_collection_info` |
+| `CreateCollection` | write | `collection/<name>` (creates) | `create_collection` |
+| `DeleteCollection` | admin | `collection/<name>` | `delete_collection` |
+| `ListVectors` | list | each `vector/<c>/<id>`; the collection is checked first | `list_vectors` |
+| `ListVectorsStream` | list | as `ListVectors` | transfer subjects, operation `list_vectors` |
+| `Search` | read | `collection/<name>` (hits are not item-filtered) | `search` |
+| `CountVectors` | read | `collection/<name>` | `count_vectors` |
+| `GetVector` | read | `vector/<c>/<id>` | `get_vector` |
+| `StoreVectors` | write | `vector/<c>/<id>` for each document | `store_vectors` |
+| `UpdateVector` | write | `vector/<c>/<id>` | `update_vector` |
+| `DeleteVectors` | write | `vector/<c>/<id>` for each id | `delete_vectors` |
+| `Initialize` | admin | `service/-` | `initialize` |
+| `Close` | admin | `service/-` | `close` |
+
+* A new collection is placed in the call's target workspace, or on the
+  platform (the create rule of "Enforcing in a data service" in
+  [`../iam/AGENTS.md`](../iam/AGENTS.md)); the placement is dropped with the
+  collection. A call naming several vectors (`StoreVectors`, `DeleteVectors`)
+  needs the action on each, checked with one filter; one denial fails the whole
+  call.
 * `list_vectors` and the stream first need the collection to be visible, then
   keep the vectors the caller may list: a page can be shorter than `limit`
   while `next_cursor` continues.
 * `search` and `count` are checked once, on the collection: hits are not
-  filtered.
+  filtered per item. A Deny on one vector id still lets a search return it
+  while `get_vector` refuses it: Deny the collection to hide it.
 * `initialize` of a store not yet initialized and `close` are administration
   of `service/-`.
 
@@ -169,13 +192,13 @@ delegated token (`abi:delegated:agent`, `act` the acting service, `sub` the user
 made by IAM's token exchange, never a header (the old `Abi-On-Behalf-Of` header is
 refused); trace and target workspace come from the request's `context`. Never read identity from request fields
 (`principal_id` and `tenant_id` are reserved). Clients of `api` and `engine` send a
-delegation for the current call's user, and the call's trace and workspace. Nothing authorizes on it yet.
+delegation for the current call's user, and the call's trace and workspace. The domain service authorizes the call on that context (see "Authorization").
 
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception
 mapping in the adapter. Primaries use `respond_protobuf` for bounded replies.
 Requests and replies above the broker limit (8 MiB, or lower) overflow as
-transfer frames up to 256 MiB (docs/adr/20261003_nats-rpc-overflow.md); above
+transfer frames up to 256 MiB (`naas_abi_core/engine/nats_rpc.py`); above
 that, at the overflow host's capacity, or with an older peer, the call fails
 with non-retryable `PAYLOAD_TOO_LARGE`. Micro-service error headers raise
 instead of becoming an empty success. Overflowed values are held whole in

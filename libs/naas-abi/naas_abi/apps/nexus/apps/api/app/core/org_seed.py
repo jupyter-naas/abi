@@ -114,7 +114,7 @@ async def _get_user_by_id(session: AsyncSession, user_id: str) -> UserModel | No
 
 
 # What this seeding run declares, applied to IAM once the rows are committed:
-# role attachments are the only record of memberships (RFC §13).
+# role attachments are the only record of memberships.
 _declared_roles: ContextVar[list[tuple[str, str, str]] | None] = ContextVar(
     "nexus_seed_roles", default=None
 )

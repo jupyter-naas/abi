@@ -13,7 +13,7 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.remote.adapters.in_memory 
 from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import RemoteAgentDirectory
 
 # Nexus calls remote agents and apps for the signed-in user with a delegation
-# that names the module behind the host as the actor and the user (RFC §9.4):
+# that names the module behind the host as the actor and the user:
 # discovery checks the user's policy and the module's (discovery:InvokeAgent,
 # OpenApp) and makes the user the owner of the runs it starts, so any API worker
 # can follow them. The host holds a token that is good for that module acting

@@ -1,4 +1,4 @@
-"""What narrowing a module's manifest means (RFC §8.3).
+"""What narrowing a module's manifest means.
 
 An admin approves what a module asked for, or less. Allow statements may lose
 actions and resources; none may gain any or appear; Deny statements stay exactly

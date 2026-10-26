@@ -3,7 +3,7 @@
 Transfers, model streams and parked overflow replies live in one process. Their
 subjects carry an owner id, so their later messages reach that process only.
 In an engine that id is the engine's instance id, the one its lease is held
-under (docs/adr/20261006_single-serving-engine.md): hosts built inside
+under: hosts built inside
 ``owned_by(instance_id)`` take it.
 
 At a handover the engine ends its shared (queue-grouped) subscriptions first

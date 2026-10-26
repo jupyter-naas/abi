@@ -1,7 +1,7 @@
 """Engines on a real broker: the serving engine's instance id, its sessions at
 shutdown, and a client engine that opens nothing on its host.
 
-See docs/adr/20261006_single-serving-engine.md.
+See ``engine/ownership/AGENTS.md``.
 """
 
 import asyncio

@@ -154,6 +154,7 @@ class ResourceAccessTests(unittest.IsolatedAsyncioTestCase):
             from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.graph_grants import (
                 GraphGrants,
             )
+
             grants = GraphGrants()
             async with self.sessions() as db:
                 before_config = WorkspaceGraphPolicyConfig.model_validate(

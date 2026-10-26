@@ -1,4 +1,4 @@
-"""Every Nexus authorization decision, asked of IAM (RFC §6.5, §10.2).
+"""Every Nexus authorization decision, asked of IAM.
 
 A route asks ``authz.require("UpdateWorkspace", user=current_user,
 workspace=workspace_id)``: the action of the ``nexus`` catalog, on the resource
@@ -278,7 +278,7 @@ class Authz:
         user: Any = None,
         resource_of: Callable[[_T], str],
     ) -> list[_T]:
-        """The items the user may perform ``action`` on, in order (RFC §5.5).
+        """The items the user may perform ``action`` on, in order.
 
         ``resource_of`` names each item (``authz.name`` is async, so build names
         with ``nexus_resource`` where the org is known).

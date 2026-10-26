@@ -29,7 +29,7 @@ def agent_subject(
     project: str, service_account: str, instance_id: str, name: str, operation: str
 ) -> str:
     """``service_account``: the instance's, from its discovery record. The
-    broker lets a module subscribe to its own only (RFC §8.4)."""
+    broker lets a module subscribe to its own only."""
     digest = hashlib.sha256(name.encode()).hexdigest()
     sa = service_account or "-"
     return f"abi.agent.{project}.{sa}.{instance_id}.{digest}.v1.{operation}"
@@ -298,7 +298,7 @@ class AgentProxy:
         if operation == "submit":
             # The delegation for the run's own calls: the token this call
             # carries to the host when it carries the current call's user
-            # (RFC §9.4), handed over again so the run outlives the call.
+            # handed over again so the run outlives the call.
             held = await transport.delegated_token(host=host_recipient(subject))
             if held:
                 request.delegated_token = held

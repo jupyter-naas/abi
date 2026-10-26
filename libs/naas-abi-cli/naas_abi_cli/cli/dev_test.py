@@ -470,7 +470,7 @@ def test_custom_browser_host_is_allowed_by_cors(monkeypatch) -> None:
 
 
 # =============================================================================
-# nats — added by NATS mode, the default (docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md)
+# nats — added by NATS mode, the default
 #
 # Unlike oxigraph (embedded via pyoxigraph), nats-server is a real external
 # binary this shells out to. It is not in ALL_SERVICES: NATS mode adds it
@@ -1553,3 +1553,15 @@ def test_outside_a_dev_project_nothing_changes(monkeypatch) -> None:
     dev.use_running_dev_overlay(["chat"])
 
     assert not dev.os.environ.get("ABI_CONFIG_OVERLAY")
+
+
+def test_a_project_without_nats_has_no_built_in_identity_provider(monkeypatch) -> None:
+    # The IdP is a module over NATS: the legacy project neither runs nor lists it.
+    monkeypatch.setattr(dev, "load_dev_modules", lambda: {})
+    monkeypatch.setattr(dev, "_project_identity", lambda: None)
+
+    monkeypatch.setattr(dev, "_project_declares_nats", lambda: True)
+    assert "idp" in dev._dev_modules()
+
+    monkeypatch.setattr(dev, "_project_declares_nats", lambda: False)
+    assert dev._dev_modules() == {}

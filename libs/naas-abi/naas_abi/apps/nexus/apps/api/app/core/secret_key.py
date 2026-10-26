@@ -1,6 +1,6 @@
 """The key that encrypts workspace secrets (and the provider tokens of sessions).
 
-Nexus signs no token (RFC §13): ``secret_key`` used to sign them and to encrypt the
+Nexus signs no token: ``secret_key`` used to sign them and to encrypt the
 secrets, and now it does neither. Encryption has a key of its own,
 ``secrets_encryption_key``; when none is configured one is generated and persisted
 through the engine secret store (``.env`` with the dotenv adapter) so it survives

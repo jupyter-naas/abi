@@ -223,7 +223,7 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
         self._verifier = verifier
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
         self._service: TracedService | None = None
-        # Streamed reads (docs/adr/20261003_nats-streamed-results.md).
+        # Streamed reads.
         self._transfer = TransferHost(
             TRANSFER_PREFIX,
             verifier,
@@ -396,7 +396,7 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
             # process, plus nats-py's own PING/PONG handling.
             response = await self._dispatch.call(call, parsed_request, caller)
         except (PermissionDeniedError, ResourceNotFoundError) as exc:
-            # The caller's authorization outcome (RFC §5.4), decided by the domain.
+            # The caller's authorization outcome, decided by the domain.
             await self._respond_error(
                 request,
                 response_cls,
@@ -439,7 +439,7 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
             )
             return
         except Exceptions.InvalidRequest as exc:
-            # A SPARQL request the authorization cannot classify (RFC §6.4).
+            # A SPARQL request the authorization cannot classify.
             await self._respond_error(
                 request, response_cls, "INVALID_ARGUMENT", str(exc), retryable=False
             )

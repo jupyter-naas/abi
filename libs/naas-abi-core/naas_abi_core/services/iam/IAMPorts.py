@@ -10,7 +10,7 @@
   token signing keys and the engine's own service key (the secret service,
   under ``iam/``, sealed to ``engine``).
 
-See docs/specs/rfcs/20261013_identity-and-authorization.md, §2, §3, §5 and §11.
+The specification is ``services/iam/AGENTS.md``.
 """
 
 from __future__ import annotations
@@ -78,7 +78,7 @@ class RevisionConflictError(IAMError):
 
 
 class PermissionDeniedError(IAMError, PermissionError):
-    """The caller can see the resource but may not perform this action (RFC §5.4).
+    """The caller can see the resource but may not perform this action.
 
     Wire code ``PERMISSION_DENIED``. A caller who cannot see the resource at
     all gets the service's own not-found error instead.
@@ -147,7 +147,7 @@ class PrincipalRecord:
 
 @dataclass(frozen=True)
 class GroupMapping:
-    """An IdP group claim value mapped to an ABI group (RFC §2)."""
+    """An IdP group claim value mapped to an ABI group."""
 
     provider: str
     claim_value: str
@@ -168,7 +168,7 @@ class Policy:
 
 @dataclass(frozen=True)
 class Attachment:
-    """A policy bound to a principal, optionally at a scope (RFC §3.4)."""
+    """A policy bound to a principal, optionally at a scope."""
 
     id: str
     policy_id: str
@@ -180,7 +180,7 @@ class Attachment:
 @dataclass(frozen=True)
 class PendingGrant:
     """A policy attached at a scope to someone who has not signed in yet: the
-    person an invitation names, by email, on one identity provider (RFC §12.2).
+    person an invitation names, by email, on one identity provider.
 
     It becomes an ``Attachment`` of the user's principal when that user first
     signs in through ``provider`` with this email verified; on no other
@@ -235,7 +235,7 @@ class Page:
 
 KeyKind = Literal["service", "personal", "grant"]
 
-# RFC 8693 token exchange (RFC §9.4): the kinds of subject token.
+# RFC 8693 token exchange: the kinds of subject token.
 GRANT_TYPE_TOKEN_EXCHANGE = "urn:ietf:params:oauth:grant-type:token-exchange"
 TOKEN_TYPE_JWT = "urn:ietf:params:oauth:token-type:jwt"  # an engine token
 TOKEN_TYPE_ID_TOKEN = "urn:ietf:params:oauth:token-type:id_token"  # an IdP's
@@ -255,7 +255,7 @@ SUBJECT_TOKEN_TYPES = (
 
 @dataclass(frozen=True)
 class TokenExchange:
-    """A token exchange request (RFC §9.4).
+    """A token exchange request.
 
     ``resource``: the discovery resource a token for ``abi:delegated:agent`` is
     for (a module, one of its agents, apps or models); IAM reads the acting
@@ -290,7 +290,7 @@ class IdentityAuthenticator(ABC):
 
 @dataclass(frozen=True)
 class KeyRecord:
-    """A key (RFC §8.1): only ``sha256(secret)`` is stored; the key is shown once.
+    """A key: only ``sha256(secret)`` is stored; the key is shown once.
 
     ``kind``: ``service`` (``abi_sk_``, a service account's), ``personal``
     (``abi_pk_``, a user's) or ``grant`` (``abi_gk_``, the link of an app or a
@@ -326,7 +326,7 @@ ManifestStatus = Literal["pending", "approved", "rejected", "superseded"]
 
 @dataclass(frozen=True)
 class ManifestRecord:
-    """A module's permission manifest, one per submitted version (RFC §8.3).
+    """A module's permission manifest, one per submitted version.
 
     ``document`` is the submitted policy document (JSON form), variables
     unsubstituted. An approved version is also the managed policy
@@ -371,7 +371,7 @@ class ManifestSubmission:
 
 @dataclass(frozen=True)
 class SigningKeyRecord:
-    """The public half and the schedule of a token signing key (RFC §9.1).
+    """The public half and the schedule of a token signing key.
 
     It is published from ``created_at``, signs from ``activates_at``, and
     stays published until ``retires_at`` (set when a newer key takes over).
@@ -673,7 +673,7 @@ class IAMStore(ABC):
 
 class IAMSecrets(ABC):
     """IAM's secrets outside its store: names under ``iam/`` in the secret
-    service, which seals them to ``engine`` (RFC §11.3)."""
+    service, which seals them to ``engine``."""
 
     @abstractmethod
     def get(self, name: str) -> str | None: ...
@@ -739,7 +739,7 @@ class Decision:
 @dataclass(frozen=True)
 class FilterResult:
     """The allowed items, in input order, and the literal prefixes every allowed
-    item starts with (RFC §5.5). ``[""]`` means no prefix can narrow the scan."""
+    item starts with. ``[""]`` means no prefix can narrow the scan."""
 
     allowed: list[str]
     prefix_hints: list[str] = field(default_factory=list)
@@ -776,7 +776,7 @@ class Seal:
 
 class IAuthorizer(ABC):
     """Shaped like OpenFGA's API, so a relationship-based adapter can replace
-    the policy one without touching callers (RFC §11.2)."""
+    the policy one without touching callers."""
 
     name: str
 
@@ -1009,7 +1009,7 @@ class IIAMService(ABC):
         self, *, principal_id: str | None = None, policy_id: str | None = None
     ) -> list[Attachment]: ...
 
-    # -- invitations and IdP group bindings (RFC §12.2) --------------------------
+    # -- invitations and IdP group bindings --------------------------
 
     @abstractmethod
     def create_pending_grant(
@@ -1076,7 +1076,7 @@ class IIAMService(ABC):
         """The placement covering a resource (exact key, else the longest
         prefix), or None when none does: a new top-level name or container.
 
-        Read by the service owning the resource, in process, to apply RFC §4.4;
+        Read by the service owning the resource, in process, to apply the placement rules (``AGENTS.md``, "Placements");
         it is not an authorization decision and needs no action.
         """
 
@@ -1104,11 +1104,11 @@ class IIAMService(ABC):
         raise NotImplementedError("Platform grants are set on the serving engine")
 
     def put_feature_policies(self, grants: Mapping[str, Sequence[str]]) -> None:
-        """Replace the feature policies (``UseFeature`` grants, RFC §7). The
+        """Replace the feature policies (``UseFeature`` grants). The
         serving engine's IAM only: Nexus runs there."""
         raise NotImplementedError("Feature policies are set on the serving engine")
 
-    # -- service accounts, keys and manifests (RFC §8) ----------------------------------
+    # -- service accounts, keys and manifests ----------------------------------
 
     @abstractmethod
     def find_service_account(self, name: str) -> PrincipalRecord: ...

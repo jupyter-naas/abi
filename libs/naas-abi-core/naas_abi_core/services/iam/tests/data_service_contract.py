@@ -1,4 +1,4 @@
-"""The authorization contract of the data services (RFC §5, §6.4).
+"""The authorization contract of the data services.
 
 A data service subclasses ``DataServiceContract`` beside its domain service
 (``<Service>_authorization_test.py``) and provides

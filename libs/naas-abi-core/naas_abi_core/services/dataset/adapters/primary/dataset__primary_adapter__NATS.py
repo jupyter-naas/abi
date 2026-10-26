@@ -195,7 +195,7 @@ DOMAIN_ERRORS = (
     DatasetSnapshotNotFoundError,
     DatasetSnapshotConflictError,
     DatasetSchemaError,
-    # The caller's authorization outcome (RFC §5.4), and a request it refuses.
+    # The caller's authorization outcome, and a request it refuses.
     PermissionDeniedError,
     ResourceNotFoundError,
     *REFUSALS,
@@ -232,7 +232,7 @@ class DatasetPrimaryAdapterNATS(ServiceWithTransfers):
         self._verifier = verifier
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
         self._service: TracedService | None = None
-        # Streamed reads (docs/adr/20261003_nats-streamed-results.md).
+        # Streamed reads.
         self._transfer = TransferHost(
             TRANSFER_PREFIX,
             verifier,

@@ -41,11 +41,7 @@ class ResourcePolicyPostgres:
         )
         row = (await self.db.execute(query)).scalar_one_or_none()
         if row is None:
-            insert = (
-                sqlite_insert
-                if self.db.get_bind().dialect.name == "sqlite"
-                else pg_insert
-            )
+            insert = sqlite_insert if self.db.get_bind().dialect.name == "sqlite" else pg_insert
             await self.db.execute(
                 insert(WorkspaceResourcePolicyModel)
                 .values(
@@ -55,9 +51,7 @@ class ResourcePolicyPostgres:
                     revision=1,
                     updated_at=_utcnow(),
                 )
-                .on_conflict_do_nothing(
-                    index_elements=["workspace_id", "resource_kind"]
-                )
+                .on_conflict_do_nothing(index_elements=["workspace_id", "resource_kind"])
             )
             await self.db.commit()
             row = (await self.db.execute(query)).scalar_one()
@@ -87,9 +81,7 @@ class ResourcePolicyPostgres:
         )
         if result.rowcount != 1:
             await self.db.rollback()
-            raise PolicyConflictError(
-                "Assignments changed. Reload before saving again."
-            )
+            raise PolicyConflictError("Assignments changed. Reload before saving again.")
         await self.db.commit()
         return ResourcePolicy(data, revision + 1, user_id)
 
@@ -135,9 +127,7 @@ async def load_resource_policy(
         if kind == "graphs"
         else {"enabled": list(getattr(seed, "ontologies", None) or [])}
     )
-    return await ResourceAccessService(ResourcePolicyPostgres(db)).load(
-        workspace_id, kind, data
-    )
+    return await ResourceAccessService(ResourcePolicyPostgres(db)).load(workspace_id, kind, data)
 
 
 async def effective_graph_policies(
@@ -159,13 +149,11 @@ async def effective_graph_policies(
             WorkspaceModel,
             WorkspaceResourcePolicyModel.workspace_id == WorkspaceModel.id,
         )
-        .outerjoin(
-            OrganizationModel, WorkspaceModel.organization_id == OrganizationModel.id
-        )
+        .outerjoin(OrganizationModel, WorkspaceModel.organization_id == OrganizationModel.id)
         .where(WorkspaceResourcePolicyModel.resource_kind == "graphs")
     )
     for data, workspace, organization in rows:
-        policies[f"{organization}/{workspace}"] = (
-            WorkspaceGraphPolicyConfig.model_validate_json(data)
+        policies[f"{organization}/{workspace}"] = WorkspaceGraphPolicyConfig.model_validate_json(
+            data
         )
     return policies

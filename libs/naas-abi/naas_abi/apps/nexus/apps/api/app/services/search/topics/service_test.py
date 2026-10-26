@@ -172,9 +172,7 @@ class TestExecution:
             "Director": None,
             "Partner": "Audits energy groups such as EDF.",
         }
-        rows = {
-            item.title: {row.label: row.value for row in item.rows} for item in results.items
-        }
+        rows = {item.title: {row.label: row.value for row in item.rows} for item in results.items}
         assert rows["Director"] == {
             "Organization": "EDF R&D",
             "LinkedIn": "https://www.linkedin.com/in/director",

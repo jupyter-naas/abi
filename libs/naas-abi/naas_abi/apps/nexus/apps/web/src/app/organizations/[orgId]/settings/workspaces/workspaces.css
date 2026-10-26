@@ -5,6 +5,13 @@
   white-space: nowrap;
 }
 
+/* Create workspace: buttons, focus rings and pickers use org branding from SettingsLayoutRoot, not the workspace colour draft below. */
+.org-create-workspace.workspace-general .account-profile-field-input:focus,
+.org-create-workspace.workspace-general .account-profile-field-textarea:focus {
+  border-color: var(--workspace-accent, var(--color-primary));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--workspace-accent, var(--color-primary)) 30%, transparent);
+}
+
 /* Create workspace page. */
 .org-create-workspace-hint {
   margin-top: var(--space-1);

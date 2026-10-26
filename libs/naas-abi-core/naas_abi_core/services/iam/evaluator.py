@@ -1,4 +1,4 @@
-"""The evaluation algorithm of RFC §5.3, over a ``PolicySource``.
+"""The evaluation algorithm (``AGENTS.md``, "Evaluation"), over a ``PolicySource``.
 
     decide(ctx, action, resource):
       1. the actor or the OBO user is not active        -> DENY (suspended)

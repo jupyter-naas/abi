@@ -801,7 +801,7 @@ def test_allows_every_is_a_safe_shortcut(h):
         assert not h.iam.allows_every("document:Get", "document", "document")
 
 
-# -- service accounts, keys and the exchange (RFC §8.1, §8.2) -------------------------
+# -- service accounts, keys and the exchange -------------------------
 
 
 def _module(h, name: str = "module/acme/people"):
@@ -1019,7 +1019,7 @@ def test_in_process_tokens_for_the_engine_and_api(iam):
         assert claims.name == name and claims.subject.startswith("sa_")
 
 
-# -- manifests (RFC §8.3) ---------------------------------------------------------------
+# -- manifests ---------------------------------------------------------------
 
 MANIFEST = document(
     statement(
@@ -1169,7 +1169,7 @@ def test_unapproved_modules_reach_nothing_but_their_bootstrap(h):
     assert not h.allowed(QUERY, "abi:-:-:triple_store:graph/people-a", account)
 
 
-# -- broker permissions (RFC §8.4) -------------------------------------------------------
+# -- broker permissions -------------------------------------------------------
 
 
 def test_broker_permissions_follow_the_approved_policy(h, iam):

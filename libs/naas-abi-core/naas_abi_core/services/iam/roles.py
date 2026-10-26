@@ -1,4 +1,4 @@
-"""Built-in managed policies (RFC §7), generated from the registered catalogs.
+"""Built-in managed policies, generated from the registered catalogs.
 
 Roles are attached at a scope: "viewer on workspace W" is ``builtin.viewer``
 attached with scope ``abi:<org>:W``. They are cumulative (viewer ⊆ member ⊆
@@ -6,12 +6,12 @@ admin ⊆ owner) and stored with explicit action lists, so ``explain`` shows rea
 statements. IAM regenerates them whenever a catalog changes.
 
 Also here: ``builtin.engine`` and ``builtin.api``, the two first-party service
-accounts, as enumerated statements with a ``sid`` that says what needs each
-(RFC §13). Every caller holds only what its policies allow: no principal
-has implicit full access.
+accounts, as enumerated statements with a ``sid`` that says what needs each.
+Every caller holds only what its policies allow: no principal has implicit
+full access.
 
 ``builtin.module_bootstrap`` is what every module's service account holds,
-approved or not (RFC §8.3): its own discovery record and its own manifest.
+approved or not: its own discovery record and its own manifest.
 """
 
 from __future__ import annotations
@@ -67,7 +67,7 @@ _MAX_ACTIONS = 100
 
 @dataclass(frozen=True)
 class _PlatformRow:
-    """A row of RFC §7 "Platform types": who reaches a platform-level type."""
+    """A row of the platform types table (``AGENTS.md``, "Built-in policies"): who reaches a platform-level type."""
 
     service: str
     resources: tuple[str, ...]
@@ -165,7 +165,7 @@ PLATFORM_TYPES: tuple[_PlatformRow, ...] = (
 
 def feature_policy_id(key: str) -> str:
     """``builtin.features.<key>``, with ``<key>`` one of ``<role>``,
-    ``<org>.<role>`` or ``<org>.<workspace>.<role>`` (RFC §7 "Features")."""
+    ``<org>.<role>`` or ``<org>.<workspace>.<role>``."""
     return f"{FEATURES_PREFIX}{key}"
 
 
@@ -294,7 +294,7 @@ def _role_statements(role: str, catalog: ActionCatalog) -> list[Statement]:
 
 
 def _admin_attachment_statements(registry: CatalogRegistry) -> list[Statement]:
-    """Admins grant and revoke the roles below owner, never owner (RFC §7)."""
+    """Admins grant and revoke the roles below owner, never owner."""
     if registry.get("iam") is None:
         return []
     return [
@@ -425,8 +425,7 @@ def _managed(
     )
 
 
-# What the first-party service accounts hold (RFC §7, "Built-in service
-# accounts"): enumerated statements, each with a ``sid`` that says what needs it.
+# What the first-party service accounts hold: enumerated statements, each with a ``sid`` that says what needs it.
 # Neither holds ``*``: a service Nexus or the engine does not use is reached by
 # neither, and the user a Nexus call acts for still bounds every call.
 _API_FOR_USERS = (
@@ -636,7 +635,7 @@ def job_policy() -> Policy:
 
 
 def idp_policy() -> Policy:
-    """The built-in IdP's own namespace, secrets and sender (RFC §12.3)."""
+    """The built-in IdP's own namespace, secrets and sender."""
     return _managed(
         IDP,
         "Built-in IdP",
@@ -676,7 +675,7 @@ DELEGATION_SIDS = ("OwnHosted", "OwnRuns")
 
 
 def module_bootstrap_policy() -> Policy:
-    """Held by every module's service account, approved or not (RFC §8.3).
+    """Held by every module's service account, approved or not.
 
     ``${module.project}`` and ``${module.id}`` come from the account's name,
     ``module/<project>/<module_id>``: the module reaches its own discovery
@@ -712,7 +711,7 @@ def module_bootstrap_policy() -> Policy:
                 sid="OwnManifest",
             ),
             # Nexus calls a module's agent, app or model with a delegation that
-            # names the module as the actor and the user it acts for (RFC §9.3):
+            # names the module as the actor and the user it acts for:
             # the call is allowed only if the module's own side allows it too,
             # so a module may serve what it hosts. Never another module's, and
             # nothing a user could not do: the user's policy decides as well.

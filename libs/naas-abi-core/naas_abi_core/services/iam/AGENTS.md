@@ -4,19 +4,22 @@
 
 Who may do what, for every kernel service: principals (users, groups, service
 accounts), AWS-style policies, attachments, built-in roles, placements, scopes,
-action catalogs, and the evaluator that decides. It is the authorization half of
-the identity and authorization RFC
-([`docs/specs/rfcs/20261013_identity-and-authorization.md`](../../../../../docs/specs/rfcs/20261013_identity-and-authorization.md),
-§2 to §11). It also authenticates service accounts: their keys, the engine's
-ES256 tokens and JWKS, module permission manifests and the broker permissions
-derived from them (§8, §9.1). User login stays with the identity providers.
+action catalogs, and the evaluator that decides. It also authenticates service
+accounts: their keys, the engine's ES256 tokens and JWKS, module permission
+manifests and the broker permissions derived from them. User login stays with
+the identity providers (`services/identity`). This file is the canonical
+specification of the policy engine: grammar, names and evaluation rules are
+defined here, and a change to one of them changes this file in the same pull
+request.
 
 - **Deny by default.** Nothing is allowed without a matching Allow, for every
-  principal, `engine` and `api` included. An explicit Deny always wins.
+  principal, `engine` and `api` included. An explicit Deny always wins. There is
+  no superuser bypass in code: `engine`, `api` and the platform admin hold
+  attached policies like anyone else.
 - **One check for every caller.** Domain services call `iam.require` and
   `iam.filter`; both read the caller from the current `CallContext`
-  (`engine/call_context.py`), set by primary adapters from verified credentials.
-  Never take identity from a request field.
+  (`engine/call_context.py`), set by primary adapters from verified credentials
+  (see `engine/AGENTS.md`). Never take identity from a request field.
 - **IAM authorizes itself** with its own `iam:*` catalog (`iam_catalog.py`).
 
 Every kernel service enforces. The data services (object storage, document,
@@ -25,24 +28,45 @@ model_registry, discovery, source_control, coding_environment) use
 `guard.py`. Each has its catalog in `services/<name>/iam_catalog.py` (see
 "Enforcing in a domain service" and "Enforcing in a data service").
 
+## Contents
+
+- [Files](#files), [Ports](#ports)
+- The model: [Vocabulary](#vocabulary), [Principals](#principals),
+  [Policy language](#policy-language), [Resource names](#resource-names),
+  [Placements](#placements), [Evaluation](#evaluation),
+  [Action catalogs](#action-catalogs), [Sealed resources](#sealed-resources),
+  [Built-in policies](#built-in-policies)
+- Using it: [Service API](#service-api),
+  [Enforcing in a domain service](#enforcing-in-a-domain-service-guardpy),
+  [Enforcing in a data service](#enforcing-in-a-data-service-enforcementpy)
+- Credentials: [Tokens](#tokens),
+  [Token exchange, personal keys and links](#token-exchange-personal-keys-and-links),
+  [Service accounts, keys, tokens and manifests](#service-accounts-keys-tokens-and-manifests),
+  [Broker permissions](#broker-permissions)
+- [Invitations and IdP group bindings](#invitations-and-idp-group-bindings)
+- [Adapters and configuration](#adapters-and-configuration), [NATS and SDK](#nats-and-sdk)
+- [Migrating an existing install](#migrating-an-existing-install), [Decisions](#decisions),
+  [Known limits and open questions](#known-limits-and-open-questions)
+- [Tests](#tests), [Adding a new adapter](#adding-a-new-adapter)
+
 ## Files
 
 | File | Role |
 |---|---|
 | `names.py` | Canonical names `abi:<org>:<ws>:<service>:<type>/<id>`, id encoding, `*`/`?` matching, variables |
-| `catalog.py` | `ActionCatalog`, `ResourceType`, `ActionSpec`, `CatalogRegistry` (RFC §6.2 format) |
+| `catalog.py` | `ActionCatalog`, `ResourceType`, `ActionSpec`, `CatalogRegistry` (catalog format) |
 | `policy.py` | Policy documents: schema, validation (every error listed), `Statement` |
-| `evaluator.py` | The algorithm of RFC §5.3: `check`, `filter`, `explain` over a `PolicySource` |
+| `evaluator.py` | The evaluation algorithm: `check`, `filter`, `explain` over a `PolicySource` |
 | `roles.py` | Built-in managed policies generated from the catalogs, and the enumerated ones of `engine`, `api` and engine jobs |
-| `iam_catalog.py` | IAM's own `iam:*` catalog and the code-declared seals (§11.3) |
+| `iam_catalog.py` | IAM's own `iam:*` catalog and the code-declared seals |
 | `guard.py` | `ServiceGuard`: how a runtime service checks (names, require, filter, create rule, placements) and the shared wire codes |
 | `enforcement.py` | `ResourceGuard`, what a data service enforces with; `scan_allowed`, `own_storage`, `internal_call`, wire codes |
 | `kernel_catalogs.py` | The kernel services' catalogs (`services/<name>/iam_catalog.py`), registered at boot |
 | `keys.py` | Keys `abi_sk_` (service accounts), `abi_pk_` (personal), `abi_gk_` (link grants): generation, parsing, hashing |
-| `exchange.py` | `TokenExchanger`: RFC 8693 token exchange (§9.4): subjects, audiences, actors, scopes, renewal |
+| `exchange.py` | `TokenExchanger`: RFC 8693 token exchange: subjects, audiences, actors, scopes, renewal |
 | `tokens.py` | `TokenIssuer`: ES256 signing keys, their rotation, the JWKS and the tokens it signs |
 | `modules.py` | Module accounts `module/<project>/<module_id>`, manifest hashing, variable binding, namespace placements |
-| `broker.py` | `BrokerPermissions` of an account, derived from its effective policy (§8.4) |
+| `broker.py` | `BrokerPermissions` of an account, derived from its effective policy |
 | `IAMPorts.py` | Records, errors, `IAMStore`, `IAuthorizer`, `PolicySource`, `IIAMService` |
 | `IAMService.py` | The domain service: decisions, cached effective policies, self-authorized CRUD, bootstrap |
 | `IAMFactory.py` | Composition: store + authorizer + bootstrap; SQLite/PostgreSQL/memory helpers |
@@ -75,37 +99,612 @@ the Document Service: IAM authorizes that.
 `Explanation` naming the deciding statement (side, policy, statement index or
 `sid`, attachment, scope, group). The `policy` adapter reads a `PolicySource`
 (implemented by `IAMService`); a relationship-based adapter can replace it
-without touching callers.
+without touching callers. `allow_all` is an explicit opt-out that warns at boot.
 
 **`IAMSecrets`** (secondary): IAM's own secrets, `get`/`put`/`delete` under
-`iam/`: signing keys' private halves (`iam/signing-keys/<kid>`) and the engine
-account's key for client-role engines (`iam/service-keys/engine`). The engine
+`iam/`: signing keys' private halves (`iam/signing-keys/<kid>`), the engine
+account's key for client-role engines (`iam/service-keys/engine`) and the job
+trigger seal key (`iam/job-trigger-seal`). The engine
 passes the secret service built from its local adapters, never `nats_rpc`.
 
 **`IIAMService`**: what callers use, implemented in process by `IAMService` and
 over NATS by `IAMSecondaryAdapterNATSClient`. `require` is defined once, on the
 port, from `authorize`.
 
+## Vocabulary
+
+| Term | Meaning |
+|---|---|
+| **Principal** | Who acts. A user, a group or a service account. |
+| **Actor** | The principal that holds the credential on a call. |
+| **On behalf of (OBO)** | The user an actor acts for. Optional. |
+| **Action** | `<service>:<Action>`, one per operation, for example `triple_store:Query`. |
+| **Resource name** | `abi:<org>:<workspace>:<service>:<type>/<id>`. |
+| **Policy** | A versioned document of statements. Attached to principals. |
+| **Attachment** | (principal, policy, optional scope). |
+| **Placement** | The org and workspace that own a kernel resource. Recorded by IAM. |
+| **Catalog** | A service's list of actions and resource types, registered at load time. |
+| **Sealed resource** | A resource only one named principal can ever be allowed on. |
+
+Authorization is identity-based only. There are no resource-based policies: a
+resource never carries a policy of its own. Sharing is a statement attached to
+the receiving principal.
+
+## Principals
+
+Three kinds. Ids are a kind prefix plus a lowercase ULID, for example
+`usr_01jabcdefghjkmnpqrstvwxyz0` (`usr_`, `grp_`, `sa_`; policies are `pol_`,
+attachments `att_`). Ids never change and are never reused.
+
+**Users**
+
+- A user is the pair `(issuer, sub)` from a verified IdP token, never an email.
+  IAM creates the user on first sign-in (`ensure_user`, `iam:CreateUser`; the
+  token exchange and the identity service do it as `engine`). It holds no password.
+- It stores `issuer`, `sub`, the provider `name`, and the last seen `email`,
+  `email_verified` and display name. Those fields are informational, except that
+  a pending grant is claimed through the provider and the verified email (see
+  "Invitations and IdP group bindings").
+- `(issuer, sub)` is unique. Accounts are never linked automatically across
+  providers: the same person through two IdPs is two principals unless an admin
+  links them (`iam:LinkUser`).
+
+**Groups**
+
+- A group has a `name` and an optional `org` (null: a platform group). Groups
+  cannot contain groups.
+- **Static members** are users or service accounts, kept in IAM.
+- **Mapped members** come from IdP group claims: a mapping `(provider name,
+  claim value) -> group id` is set with `iam:MapIdpGroup`. At a token exchange
+  IAM reads the provider's `groups_claim`, maps each value and writes the group ids
+  into the engine token's `grp` claim. Mapped membership lasts as long as the
+  token, ten minutes at most.
+- A user's effective groups are their static groups plus the token's `grp`. A
+  service account has static groups only.
+
+**Service accounts**
+
+A service account has a unique `name` and an optional owner (the user who
+created it, for scripts and CI).
+
+| Form | Example | Used by |
+|---|---|---|
+| `engine` | | Built-in, the engine process |
+| `api` | | Built-in, Nexus |
+| `idp` | | Built-in, the built-in IdP (when it does not run as a module) |
+| `module/<project>/<module_id>` | `module/acme/people` | One per remote module |
+| `ci/<name>` | `ci/nightly-export` | Scripts and CI |
+| `job/<module_id>` | | The jobs of an engine module (`builtin.job`) |
+
+Keys and manifests: "Service accounts, keys, tokens and manifests".
+
+**Status.** Every principal is `active`, `suspended` or `deleted`. Suspending
+takes effect at once: every check for that principal, as actor or as OBO user,
+is denied; token exchange refuses it; the NATS auth callout refuses its
+connections. `deleted` keeps the id so audit records stay readable; nothing can
+be attached to it.
+
+**On behalf of.** A call carries an actor and, optionally, a user it acts for
+(Nexus serving a signed-in user; an agent module serving the user who chats).
+Both must be allowed. OBO never unlocks a sealed resource.
+
+## Policy language
+
+The same schema in YAML and JSON (`policy.py`):
+
+```yaml
+version: "2026-10-13"
+statements:
+  - sid: ReadSalesGraph            # optional
+    effect: Allow                  # Allow | Deny
+    actions:
+      - triple_store:Query
+      - triple_store:ListGraphs
+    resources:
+      - "abi:org-1a2b3c4d5e6f:ws-0f1e2d3c4b5a:triple_store:graph/http%3A%2F%2Fontology.naas.ai%2Fgraph%2Fsales-*"
+  - effect: Deny
+    actions: ["triple_store:DropGraph", "triple_store:ClearGraph"]
+    resources: ["*"]
+```
+
+Validation rejects the whole document on any failure and lists every error:
+
+| Field | Rule |
+|---|---|
+| `version` | Required. `"2026-10-13"` is the only version. |
+| `statements` | Required, 1 to 100 items. |
+| `sid` | Optional. `^[A-Za-z0-9]{1,64}$`, unique within the document. |
+| `effect` | Required. Exactly `Allow` or `Deny`. |
+| `actions` | Required, 1 to 100 action patterns. A pattern without a wildcard must name a registered action; one with a wildcard must match at least one registered action. |
+| `resources` | Required, 1 to 100 resource patterns. Each is `*` or starts with `abi:`. |
+| `conditions` | Reserved: rejected in this version. |
+| anything else | Rejected. |
+
+The serialized document is at most 32 KiB. Managed policies are generated by IAM
+and validated without catalogs, since they may name services that register later.
+
+**Stored policies**: `id` (`pol_<ulid>`, or `builtin.<name>` / `module.<project>.<module_id>`
+for managed ones), `name`, `description`, `document`, `managed` (only IAM rewrites
+it) and `revision` (increments on every change; `update_policy(expected_revision=)`
+is optimistic concurrency).
+
+**Action patterns.** An action is `<service>:<Action>`: `service` is the catalog
+name `^[a-z][a-z0-9_]*$`, `Action` is PascalCase `^[A-Z][A-Za-z0-9]*$`. Patterns
+use `*` (any characters, including none) and `?` (exactly one); matching is
+case-sensitive. Examples: `triple_store:*`, `triple_store:List*`, `*`.
+
+**Attachments and scope.** An attachment binds a policy to a principal (user,
+group or service account) with an optional `scope`:
+
+| `scope` | Meaning | `${scope}` expands to |
+|---|---|---|
+| `abi:<org>:<workspace>` | One workspace | `abi:<org>:<workspace>` |
+| `abi:<org>:-` | The org's own resources only (members, domains, billing) | `abi:<org>:-` |
+| `abi:<org>:*` | The org and every workspace in it | `abi:<org>:*` |
+| `abi:-:-` | Platform resources | `abi:-:-` |
+| none | The policy uses no `${scope}` | none |
+
+A policy attached at a scope must start every Allow resource pattern with
+`${scope}:` (a Deny only narrows, so it may name anything): the scope only fills
+`${scope}`, so any other pattern would let whoever may attach at that scope
+grant beyond it. IAM refuses such an attachment, refuses to update a policy
+attached at a scope beyond it, and enforces the rule when it evaluates: a
+statement reached through a scoped attachment keeps only its `${scope}:` Allow
+patterns, whatever the policy says (`policy.within_scope`).
+
+**Variables** are substituted into resource patterns before matching, against
+the principal whose policies are being evaluated (`X` in `principal_decision(X)`
+below): the actor when computing the actor's decision, the OBO user when
+computing the user's.
+
+| Variable | Value |
+|---|---|
+| `${scope}` | The attachment's scope. Invalid in a policy attached without one. |
+| `${principal.id}` | `X`'s principal id. A policy reached through a group resolves to the member being evaluated, never to the group; percent-encoded as one segment. |
+| `${user.id}` | The call's user: the OBO user if the call is on behalf of one, else the actor if it is a user, else unresolved. The same on both sides, so an actor's policy can name the user it serves. |
+| `${module.id}`, `${module.project}` | Manifest-only: bound when a module's manifest is approved; they match nothing for any other principal. |
+
+A statement with an unresolved variable matches nothing. Variables are not
+allowed in actions. On a Nexus call the actor is `api` and the user is the
+signed-in one: `builtin.self` is attached to the user, so in the user's decision
+its `${principal.id}` is the user; `api`'s policies never see the user as
+`${principal.id}`.
+
+## Resource names
+
+```abnf
+resource-name = "abi:" org ":" workspace ":" service ":" type "/" id
+org           = scope-id / "-" / "%2A"                    ; %2A: every org, unscoped attachments only
+workspace     = scope-id / "-" / "%2A"                    ; %2A: every workspace, org-wide attachments only
+scope-id      = 1*64( %x61-7A / DIGIT / "-" / "_" )       ; lowercase id, never exactly "-"
+service       = %x61-7A *( %x61-7A / DIGIT / "_" )        ; catalog name
+type          = %x61-7A *( %x61-7A / DIGIT / "_" )        ; declared in the service catalog
+id            = "-" / segment *( "/" segment )
+segment       = *( unreserved / pct-encoded )             ; RFC 3986; empty only inside path ids
+unreserved    = ALPHA / DIGIT / "-" / "." / "_" / "~"
+pct-encoded   = "%" 2HEXDIG                               ; uppercase hex
+```
+
+- `org` and `workspace` are the stable Nexus ids (`org-<12 hex>`, `ws-<12 hex>`),
+  never slugs: renames change no names. `-` means "none".
+- **Levels**: workspace `abi:<org>:<ws>:…`; org `abi:<org>:-:…` (the org's own
+  resources: members, domains, billing); platform `abi:-:-:…` (models, discovery,
+  IAM itself); a workspace in no org `abi:-:<ws>:…` (legacy workspaces with a null
+  `organization_id`).
+- `%2A` as the workspace names what spans every workspace of an org, and `%2A` as
+  both org and workspace what spans every org: only `iam:attachment` resources
+  are named with them (`abi:<org>:%2A:iam:attachment/…` for an org-wide
+  attachment, which an `abi:<org>:*` grant reaches and an org-level `abi:<org>:-`
+  one does not, so an org admin cannot attach itself to every workspace;
+  `abi:%2A:%2A:iam:attachment/…` for an unscoped one, which no `${scope}` expands
+  to, the platform scope `abi:-:-` included: only grants written for every org, `*` and
+  `abi:*:…`, the platform admin's, reach it). No other resource may use `%2A`.
+- `-` as the whole `id` names a singleton (`service/-`).
+
+**Encoding ids.** The id is percent-encoded UTF-8: every octet outside
+`unreserved` is encoded, including `:`, `/`, `*`, `?`, `%` and spaces. Each
+resource type declares its id kind in its catalog:
+
+- **`opaque`**: one segment, the whole value encoded (a `/` becomes `%2F`): graph
+  IRIs, key-value, cache and secret keys, event types, model ids.
+  `http://ontology.naas.ai/graph/x` becomes `http%3A%2F%2Fontology.naas.ai%2Fgraph%2Fx`.
+- **`path`**: a hierarchy; each part is encoded on its own and the parts joined with
+  a raw `/`: object paths, document namespace/collection/id, dataset
+  namespace/name, vector collection/id. Object storage joins `prefix` and `key`
+  with one `/` after stripping leading and trailing `/` from the prefix: prefix
+  `workspaces/ws-1/files`, key `q3 report.pdf` is `object/workspaces/ws-1/files/q3%20report.pdf`.
+- **`singleton`**: `-`, for service-wide resources.
+
+Canonical names are built and parsed only by `names.resource_name(...)` and
+`names.parse_resource_name(...)`, never by string formatting in callers
+(SDK modules do not build names: the engine's services do).
+
+**Wildcards.** A resource pattern is matched against the whole canonical name.
+`*` matches any sequence of characters, including none and including `:` and `/`
+(it crosses segments); `?` matches exactly one character of the encoded form
+(so it can match one character of `%2F`); everything else is literal. There is no
+escaping and there are no regular expressions: canonical names never contain a raw
+`*` or `?` (they are `%2A`, `%3F`), so a wildcard is never confused with a
+literal. `*` alone matches every resource. End a field before the wildcard:
+`abi:org-1:*` matches org `org-1` only, `abi:org-1*` also matches `org-10`.
+
+| Pattern | Matches |
+|---|---|
+| `abi:org-1:ws-2:*` | everything in workspace `ws-2` |
+| `abi:org-1:*` | the org's own resources and all its workspaces |
+| `abi:*:*:triple_store:graph/*` | every graph |
+| `abi:-:-:document:namespace/people`, `…:collection/people/*`, `…:document/people/*` | the `people` document namespace, its collections and documents. Not `document:*/people*`: that also matches another namespace's collection named `people`. |
+
+## Placements
+
+A kernel service builds `<service>:<type>/<id>` from the request. It cannot take
+the org and workspace from the request (anyone could claim a workspace they
+belong to while addressing another workspace's data), and data ids rarely encode
+a workspace (Nexus graph IRIs are `…/graph/<slug>-<uuid>`). So IAM keeps
+**placements**: `(service, id-key) -> (org, workspace)`.
+
+- Both may be `-`. `id-key` is an exact canonical id, or a prefix ending in `*`
+  (plain string prefix matching on the canonical id, covering every type of that
+  service whose id starts that way: a document placement on `nexus-ws-1` plus
+  `nexus-ws-1/*` covers the namespace, its collections and its documents).
+- **Resolution** (`IAMService.placement_of`): an exact key beats a prefix, a longer
+  prefix beats a shorter one; no match means the resource is platform-level,
+  `abi:-:-:…`. A resource type a catalog declares `placement: platform`
+  (model_registry models, discovery modules) always resolves to platform.
+- **Containers.** A resource type marked `container: true` holds children whose
+  ids extend its own (`<container id>/<rest>`): document `namespace` and
+  `collection`, vector_store `collection`, source_control `repo`, dataset
+  `namespace`. A placement on a container is written as a pair, the exact id and
+  the prefix `<id>/*`, so its children resolve to the container's placement,
+  platform included.
+- **Every existing container has a placement.** Containers created through a
+  service record one at creation; approving a module's manifest records platform
+  placements for the module's own `<module_id>` document and dataset namespaces
+  unless already placed (`modules.py`); Nexus places its per-workspace prefixes
+  and namespaces when it creates a workspace. "No placement covers this name"
+  therefore means a new top-level resource or a new container.
+
+**Writing placements**
+
+1. **On creation.** A create operation is marked `creates: true` in the catalog.
+   Before it runs, the service resolves the placement of the would-be name
+   (`ServiceGuard.create`, `ResourceGuard.create`). The create always needs its
+   action allowed on the name *as placed*.
+   - A child of an existing container, or any name an existing placement covers,
+     takes that placement. `CallContext.workspace_id` must be empty or equal to its
+     workspace (for a platform container: empty); on a mismatch the call is denied
+     with the "not found or permission denied" outcome computed on the name as
+     placed. Nothing new is recorded. So a member of ws-A cannot claim a name inside
+     ws-B's namespace or a module's platform namespace by passing `workspace_id=ws-A`.
+   - `workspace_id` decides only for a name no placement covers. With it set the
+     name is placed in that workspace (IAM maps the workspace to its org with the
+     scope registry that Nexus fills with `iam:PutScope`; a workspace IAM has no
+     scope for places the resource on the platform, where no workspace role reaches
+     it, so the create is denied). With it empty the name is platform-level. On
+     success `Creation.record()` writes the placement: exact for a top-level
+     resource (none when platform-level), exact plus `<id>/*` for a container,
+     platform included.
+   - **Implicit containers**: a create whose name sits in a container that does not
+     exist yet (the first `dataset:Create` in a new namespace) first places that
+     container by the rule above, then creates the child inside it.
+2. **Explicitly**, with `iam:PutPlacement`, mainly for prefixes.
+3. **On delete.** Deleting a container or placed resource drops the placements the
+   create recorded (`forget`).
+
+`workspace_id` never renames an existing resource or overrides a placement: for
+an operation on an existing resource it is ignored. Placements are cached like
+policies. Placements are written as `engine` (`PLACEMENT_WRITER`), so a caller
+never needs `iam:PutPlacement` to create.
+
 ## Evaluation
 
+**Inputs**: the context (the actor `P`, the optional OBO user `U`, the effective
+groups of each, the token's narrowing statements `T`), an action and a canonical
+resource name. A statement matches when at least one action pattern matches the
+action and at least one resource pattern (after substitution) matches the
+resource.
+
+```text
+decide(ctx, action, resource):
+  1. if P.status != active, or U set and U.status != active:  DENY (suspended)
+  2. if resource is sealed and its owner != P:                DENY (sealed)
+  3. d_P = principal_decision(P)
+     d_U = principal_decision(U) if U set else ALLOW
+  4. if d_P == EXPLICIT_DENY or d_U == EXPLICIT_DENY:         DENY (explicit_deny)
+  5. if d_P != ALLOW or d_U != ALLOW:                         DENY (implicit_deny)
+  6. if T set and no statement of T matches:                  DENY (implicit_deny)
+  7. ALLOW
+
+principal_decision(X):
+  S = statements of every policy attached to X and to each of X's effective groups
+  if any Deny statement in S matches:   EXPLICIT_DENY
+  if any Allow statement in S matches:  ALLOW
+  otherwise:                            IMPLICIT_DENY
+```
+
+- An explicit Deny wins over any number of Allows, including Allows reached
+  through another group.
+- **OBO is an intersection**: an agent module that may write graph G, acting for
+  a user who may only read G, cannot write G.
+- **Token narrowing (`T`) only narrows.** It holds Allow statements only (a
+  Deny is rejected when the token is issued; a statement's `actions` and
+  `resources` must be lists of strings, anything else matches nothing).
 - Reasons: `allow`, `explicit_deny`, `implicit_deny`, `suspended`, `sealed`.
+  `explain` returns the outcome, the reason and the deciding statement (side,
+  policy id, statement index or `sid`, attachment, scope, group).
 - An inactive actor or OBO user (`suspended`, `deleted`) is denied everything.
 - A sealed resource opens to its owner only (the actor, never through OBO).
 - The built-in IdP's admin app (`discovery:app/*/idp/admin`) is denied `OpenApp` by `builtin.platform.viewer`,
   `builtin.platform.member` and `builtin.module_bootstrap` (`roles._no_idp_admin_app`): whoever holds a workspace role
   reaches the platform's apps, never the one that edits who a `sub` is. Only the engine opens it.
-- On behalf of a user both sides must be allowed; a token's `abi_scope`
-  (`CallContext.scope`, Allow statements whose `actions` and `resources` are
-  lists of strings; anything else matches nothing) narrows further.
 - Variables: `${scope}` (the attachment's), `${principal.id}` (the principal
   being evaluated, never a group, percent-encoded as one segment), `${user.id}`
   (the call's user). An unresolved variable makes its pattern match nothing.
-- `require` raises `PermissionDeniedError` when the caller can see the resource
-  (some action of its service on its type is allowed), otherwise the caller's
-  `not_found()` (the service's own not-found error), else `ResourceNotFoundError`.
-- `filter` keeps input order; `prefix_hints` are literal prefixes every allowed
-  item starts with (`[""]` means no push-down, `[]` means nothing is allowed).
-  Denies apply after the push-down.
+
+**Not found or permission denied.** When `decide` denies, the service computes
+`visible(ctx, resource)`: true when some action of the same service whose catalog
+lists the resource's type is allowed on it.
+
+- `require` raises `PermissionDeniedError` (wire code `PERMISSION_DENIED`) when the
+  caller can see the resource, otherwise the caller's `not_found()` (the service's
+  own not-found error and wire code, with the same message shape: `GRAPH_NOT_FOUND`,
+  `DatasetNotFoundError`, `KV_NOT_FOUND`, ...), else `ResourceNotFoundError`
+  (`NOT_FOUND`).
+- **Order.** The check runs before the backend is touched; a denied call never
+  reveals existence through timing, side effects or error text.
+- **Create.** A create on a name that does not exist yet uses the same rule on the
+  name as placed: a caller who can see that name gets `PERMISSION_DENIED`, anyone
+  else the not-found of the type being created (`GRAPH_NOT_FOUND` for `CreateGraph`),
+  or the generic `NOT_FOUND`. The error never says whether the name, its container
+  or its workspace is the missing part.
+- **Credentials.** Missing, invalid or expired credentials are `UNAUTHENTICATED`:
+  authentication, not authorization.
+
+**Lists.** A list action is checked against each item, with the list action
+itself (`triple_store:ListGraphs` on each `graph/…`).
+
+- A list returns the items an Allow covers and no Deny excludes, and nothing
+  else, counts derived from hidden items included. `filter` keeps input order.
+  `limit` and cursors apply after filtering (adapters over-fetch or push down).
+- Container-scoped lists (`ListObjects(prefix)`, `ListVectors(collection)`,
+  `ListKeys(prefix)`, `document:Collections(namespace)`): when the container is
+  itself a resource (a vector or document collection) it first gets the visibility
+  rule above (not found if invisible), then its items are filtered.
+- Engine-wide lists (`ListGraphs`, `ListCollections`, secret `List`) never fail for
+  authorization: they return the allowed subset, possibly empty.
+- Container-level reads (`document:Find`, `document:Count`, `vector_store:Search`,
+  `vector_store:CountVectors`, `dataset:InlinedRowCount`) are checked once, on their
+  container, and their results are not item-filtered: grant them only where the
+  whole container may be read.
+- **Push-down.** `filter` also returns `prefix_hints`, the literal prefixes of the
+  matching Allow patterns, so storage can push them down (a SPARQL `VALUES` list, a
+  key-prefix scan, a SQL `LIKE` on ids): `[""]` means no push-down, `[]` means
+  nothing is allowed. Denies apply after the push-down.
+
+**Freshness.** Policy, attachment, group, placement and status changes take effect
+at the next check after IAM's change event reaches the checking process: at once
+in process, within the event's delivery over NATS. Cached state also expires after
+60 seconds, so a missed event cannot keep stale grants for long. Group membership
+carried in a token's `grp` lasts until the token expires (ten minutes at most).
+
+## Action catalogs
+
+**Access levels.** Every action has a level; the built-in roles are defined by
+level, so it is part of the contract:
+
+| Level | Meaning |
+|---|---|
+| `list` | Enumerate resources or their names. |
+| `read` | Read content or metadata, run read-only queries, invoke a model. |
+| `write` | Create resources, change or delete data inside a container, invoke an agent or job. |
+| `admin` | Drop or clear containers, maintenance, service lifecycle, permission changes, cross-user views. |
+
+**Format.** Each service declares its catalog next to its domain code
+(`services/<name>/iam_catalog.py` in core, `iam_catalog.yaml` in a module package)
+and registers it when it loads: in process with `iam.register_catalog(catalog)`
+during engine boot, before the service serves; over NATS with
+`abi.iam.v1.register_catalog`, from a module whose approved policy allows
+`iam:RegisterCatalog` on `abi:-:-:iam:catalog/<service>`.
+
+```yaml
+service: triple_store
+version: 1                      # bumped on every change; IAM keeps the highest
+resource_types:
+  - name: graph
+    id: opaque                  # opaque | path | singleton
+    placement: placed           # placed | platform
+    container: false            # true: children's ids extend this id
+    personal: false             # true: the id starts with the owner's principal id
+    description: A named graph, by IRI. `default` is the default graph.
+actions:
+  - name: Query
+    level: read
+    resource_types: [graph]
+    subjects: ["abi.svc.triple_store.v1.query"]
+    description: Run a SPARQL query over the graphs the caller may query.
+  - name: CreateGraph
+    level: write
+    resource_types: [graph]
+    creates: true               # records a placement from CallContext.workspace_id
+    subjects: ["abi.svc.triple_store.v1.create_graph"]
+```
+
+`iam/v1/iam.proto` defines `ActionCatalog`, `ResourceType` and `ActionSpec` with the
+same fields. Rules: action names are unique within a service; a new version may only
+add actions or resource types, and removing one is refused while a policy still names
+it explicitly; `subjects` drives broker permissions (stream actions list their
+service's transfer subjects, in-process-only actions list none).
+
+**Request-to-resource rules shared by every service**
+
+- **Ids are canonical**; the org and workspace come from placement, never from the
+  request.
+- **"All" calls.** An operation that takes an optional container and means "all" when
+  it is empty (`event:Query` with no type, `triple_store:Get`) is filtered per item.
+- **Several resources.** An operation naming several resources
+  (`vector_store:DeleteVectors`, SQL touching several tables) requires the action on
+  each: one denial fails the whole call, with the outcome of the first denied
+  resource.
+- **Personal resources.** A type with `personal: true` has an id whose first segment
+  is its owner's principal id: the owner id alone (`actor/<owner>`,
+  `forge_user/<owner>`, `coder_user/<owner>`) or `<owner>/<rest>`
+  (`conversation/<owner>/<id>`, `environment/<owner>/<id>`, `run/<owner>/<project>/<invocation>`,
+  `key/<owner>/<key id>`). Services read the owner from their own records, never from
+  the request. A role reaches a personal type only through its owner, with both forms:
+  `<type>/${principal.id}` and `<type>/${principal.id}/*`.
+
+**Kernel catalogs** (`services/<name>/iam_catalog.py`, registered by
+`kernel_catalogs.register_kernel_catalogs`; the action list and its resources are
+the catalog file, each service's AGENTS.md "Authorization" section says how its
+operations map):
+
+| Service | Resource types (id kind; `placed` unless noted) |
+|---|---|
+| `object_storage` | `object` (path) |
+| `document` | `namespace`, `collection` (containers), `document` (path) |
+| `keyvalue`, `secret` | `key` / `secret` (opaque) |
+| `cache` | `key` (opaque), `service` (singleton, platform) |
+| `vector_store` | `collection` (container), `vector` (path), `service` (singleton, platform) |
+| `triple_store` | `graph` (opaque), `view` (opaque, platform) |
+| `dataset` | `namespace` (container), `dataset` (path), `catalog` (singleton, platform) |
+| `event` | `event_type` (opaque), `cursor` (path) |
+| `activity_log` | `actor` (opaque, personal, platform), `service` (singleton, platform) |
+| `email` | `sender` (opaque, platform), `message` (opaque, placed on send) |
+| `model_registry` | `model` (opaque, platform) |
+| `discovery` | `module`, `agent`, `model`, `app`, `job`, `job_run` (path, platform), `run` (path, personal, platform) |
+| `source_control` | `repo` (container), `branch`, `proposal` (path), `forge_user` (personal, platform) |
+| `coding_environment` | `environment` (path, personal, placed), `template` (platform), `coder_user` (personal, platform) |
+| `identity` | `provider` (opaque, platform) |
+| `iam` | `principal`, `group`, `policy`, `attachment`, `key` (personal for personal keys), `manifest`, `placement`, `scope`, `catalog`, `audience`: platform unless scoped |
+| `nexus` | registered by Nexus at start, not by core: see `libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam_admin/AGENTS.md` |
+
+Rules that cut across services and are easy to get wrong:
+
+- **Triple store.** `Query`, `QueryStream` and `QueryView` run over a dataset
+  restricted to the graphs the caller may `Query`: a graph named in `FROM`,
+  `FROM NAMED` or `GRAPH <iri>` must be allowed (an invisible one is
+  `GRAPH_NOT_FOUND`), `GRAPH ?g` ranges over the allowed graphs, and the default
+  graph is `graph/default` limited to the allowed ones. SPARQL Update through
+  `query` needs the matching action on each target graph (`INSERT DATA` `Insert`,
+  `DELETE DATA` `Remove`, `CLEAR` `ClearGraph`, `DROP` `DropGraph`, `CREATE`
+  `CreateGraph`, `ADD`/`MOVE`/`COPY` `Query` on the source and `Insert` on the target,
+  `DropGraph` on the source for `MOVE`); `DEFAULT`, `NAMED` and `ALL` need it on every
+  graph they cover; a request the parser cannot classify is refused
+  (`INVALID_ARGUMENT`). Adapters that cannot confine a dataset (filesystem, object
+  storage, Neptune) refuse a confined caller. See `services/triple_store/AGENTS.md`.
+- **Dataset.** `Query` takes its table references from DuckDB's parser and needs
+  `dataset:Query` on each; unresolvable tables, file-reading table functions and
+  `ATTACH` are refused (`INVALID_ARGUMENT`). `dataset:QueryUnchecked` (admin, on
+  `catalog/-`) skips the per-dataset check for the engine's own catalog maintenance;
+  `builtin.api` and every default module manifest deny it. See
+  `services/dataset/AGENTS.md`.
+- **Discovery.** `AuthorizeAgent`, `AuthorizeModel` and `AuthorizeApp` are lease
+  checks only: the hosting module asks IAM `check` with the caller's context.
+  `Register` can be held only by the module's own service account.
+- **Source control.** `AddCollaborator` is an admin action that grants write on any
+  repository: no default manifest allows it. A `repo_id` of another workspace has
+  another placement, so the caller gets `REPO_NOT_FOUND`. Nexus grants a member write
+  on a workspace repo by checking `source_control:UpsertFile` for the user, then calling
+  `AddCollaborator` as `api`.
+- **Coding environment, source control.** The owner and the user are read from
+  `CallContext` and the service's own records, never `request.user_id`.
+- **Secrets.** `secret/iam%2F*` is sealed to `engine` and `secret/idp%2F*` to `idp`.
+
+## Sealed resources
+
+A sealed resource is a resource pattern bound to one principal. No other principal
+is ever allowed on it, whatever its policies say, `engine`, `api` and the platform
+admin included, and acting on behalf of a user never opens one. Seals are declared
+in code by the service that owns them (`iam_catalog.py`, next to each service's
+catalog) and loaded at boot; no API changes them, so editing policies cannot open
+them. The seals: the built-in IdP's document namespace `idp` (namespace, collections
+and documents) and secrets `idp%2F*`, sealed to `idp` (and to the module id `idp`,
+`Seal.module_id`); `secret/iam%2F*`, sealed to `engine`. Seals match at any placement
+(`abi:*:*:…`). An operator who needs the IdP's data back uses the IdP's own admin API
+or the database directly, outside ABI's authorization by design.
+
+## Built-in policies
+
+Built-in policies are managed: IAM generates their documents from the registered
+catalogs (so a new service's actions join the roles automatically), stores them with
+explicit action lists (so `explain` shows real statements), and regenerates them when
+a catalog version changes (`roles.py`). Roles are attached at a scope: "viewer on
+workspace W" is `builtin.viewer` attached with scope `abi:<org>:W`.
+
+For each catalog resource type that can be placed in a workspace, the role's
+statement covers `${scope}:<service>:<type>/*`; a personal type covers
+`${scope}:<service>:<type>/${principal.id}` and `…/${principal.id}/*` instead
+(`${principal.id}` is the member being evaluated, so on a Nexus call it is the user,
+not `api`). **The roles are cumulative**: `viewer` ⊆ `member` ⊆ `admin` ⊆ `owner`;
+each holds every statement of the role below it, so a principal needs one role
+attachment per scope.
+
+| Policy | Allows on the scope's types | Excludes |
+|---|---|---|
+| `builtin.viewer` | every `list` and `read` action | the nexus `feature` type |
+| `builtin.member` | viewer, plus every `write` action | the `feature` type |
+| `builtin.admin` | member, plus every `admin` action, except on the `iam` `attachment` type; plus `iam:ListAttachments` on `${scope}:iam:attachment/*`, and `iam:AttachPolicy` and `iam:DetachPolicy` on `${scope}:iam:attachment/builtin.admin/*`, `…/builtin.member/*`, `…/builtin.viewer/*` | the `feature` type; anything on `attachment/builtin.owner/*`; `nexus:DeleteWorkspace`; `nexus:DeleteOrganization` |
+| `builtin.owner` | admin, plus every action on every `attachment/…` (owner included), `nexus:DeleteWorkspace` and `nexus:DeleteOrganization` | the `feature` type |
+| `builtin.platform_admin` | `*` on `*` (attached without scope) | sealed resources |
+| `builtin.self` | held implicitly by every user (no attachment row, unknown users included; `explain` shows it with no attachment id) | none |
+
+- **Owner protection.** An admin cannot attach or detach `builtin.owner`; demoting or
+  removing an owner means detaching their owner attachment, so only an owner can, at
+  org and workspace scope alike.
+- **Org roles.** Org roles (owner, admin, member) are attached with scope
+  `abi:<org>:-`, the org's own resources: org membership never grants workspace
+  access. Org-wide roles (`abi:<org>:*`) exist but are never created by default.
+- **Platform types.** A workspace-scoped role never reaches a platform-level
+  resource (`abi:-:-:…`). Two more managed policies, kept in step with role
+  attachments by IAM, carry what members need there (`roles.PLATFORM_TYPES` is the
+  table: models, discovery modules/agents/apps/runs, views, coding templates, the
+  user's own forge/coder/activity/key/principal resources, provider models, drives):
+  `builtin.platform.member` while the principal has a `member`, `admin` or `owner`
+  attachment at a workspace scope or an org-wide scope, `builtin.platform.viewer`
+  while it has only `viewer` attachments there. Org-level attachments (`abi:<org>:-`)
+  bring neither. Because Nexus calls as `api` on behalf of the user, the user must
+  hold these, not only `api`. Not reached by any role (platform admin, built-in
+  accounts and explicit policies only): jobs and job runs, email senders and messages,
+  `dataset:catalog`, `cache:service`, `vector_store:service`, `activity_log:service`,
+  and unplaced data until placed or granted.
+- **Features.** `nexus:UseFeature` comes only from feature policies
+  `builtin.features.<role>` (`<role>`, `<org>.<role>` or `<org>.<ws>.<role>`), set as
+  a whole by `iam.put_feature_policies({key: [feature, ...]})` (needs
+  `iam:RegisterCatalog` on `nexus`; Nexus computes them from its `feature_flags`).
+  Each allows `UseFeature` on `${scope}:nexus:feature/<key>` for the role's features
+  that are also enabled: a feature outside `enabled_features` is reachable by no role,
+  only by the platform admin's `*`. A role attached at a workspace scope brings the
+  most specific policy that exists, attached at the same scope (detached with the
+  role); org-level roles bring none. No role reaches `UseFeature` through its scope
+  pattern.
+- **First-party accounts.** `builtin.engine`, `builtin.api` and `builtin.job` are
+  enumerated: one statement per service, each with a `sid` saying what needs it. The
+  engine holds IAM's administration and the kernel services; `api` holds `nexus:*`, the
+  kernel services it calls for its users (each user bounds the call), the sign-in identity
+  actions, `iam:ExchangeToken` and the IAM actions that keep memberships, scopes and
+  placements, and denies `dataset:QueryUnchecked`; `builtin.job` is what the account
+  `job/<module_id>` of an engine module's jobs holds. Nobody holds `*` but the platform
+  admin. A retired policy (`roles.RETIRED_POLICIES`: the old `builtin.transitional.*`) is
+  dropped, with what was attached to it, at boot.
+- **`builtin.idp`**: the built-in IdP's own namespace, secrets and sender, for the
+  built-in account `idp`. By default the IdP (`libs/naas-abi-idp`) runs as the
+  module account `module/<project>/idp` with its approved manifest instead; the
+  seals and the secret endpoint (`secret_nats_contract.is_idp`)
+  name both, so the module id `idp` is reserved: an admin creates its account,
+  nothing else does.
+- **`builtin.platform.viewer` / `.member`**: attached and detached by IAM in step
+  with workspace and org-wide role attachments (above).
+- **`builtin.module_bootstrap`**: a module account before approval (see "Service accounts,
+  keys, tokens and manifests").
+- **`LEGACY_NEXUS_ISSUER`** (`urn:abi:nexus`): a Nexus user named on a call by its Nexus id resolves to IAM's user of
+  that issuer. Nexus has no login of its own: such a user keeps that naming (its Nexus id is what every
+  row and call names) and is *linked* to the built-in provider's identity at its first sign-in (`link_user`, which
+  only the built-in provider's verified email triggers, in Nexus's `OidcSignInService`); a person who never
+  signed in stays legacy. Users of an identity provider are IAM users named by their principal id
+  (`services/identity`). Nexus holds no implicit grant for either: a user reaches what its role attachments
+  reach (`services/iam/memberships` in Nexus). `api` holds `iam:LinkUser` (the sign-in rule decides when).
+- Nexus seeding turns `users[].is_superadmin` into a `builtin.platform_admin`
+  attachment (`org_seed.sync_platform_admins`).
 
 ## Service API
 
@@ -150,13 +749,72 @@ version wins; refuses dropping an action a policy names).
 
 Lists page after filtering. Names: `principal_resource`, `group_resource`,
 `policy_resource`, `attachment_resource` (at the attachment's scope; an org-wide
-one in workspace `%2A`, `names.ALL_WORKSPACES`, which `abi:<org>:*` grants reach
-and org-level `abi:<org>:-` ones do not; an unscoped one is `abi:%2A:%2A:…`,
-`names.ALL_ORGS`, which no `${scope}` expands to, `abi:-:-` included, so only
-the platform admin's grants reach it; no other resource may use `%2A`), `placement_resource`, `scope_resource`,
+one in workspace `%2A`, `names.ALL_WORKSPACES`; an unscoped one is `abi:%2A:%2A:…`,
+`names.ALL_ORGS`, see "Resource names"), `placement_resource`, `scope_resource`,
 `catalog_resource`.
 
-## Token exchange, personal keys and links (§9.3, §9.4)
+## Tokens
+
+The engine (IAM) signs every engine token with **ES256** (P-256), `services/iam/tokens.py`;
+verification is `engine/nats_auth.py` (see `engine/AGENTS.md`). Modules never hold a
+signing key. HS256 and `NATS_JWT_SECRET` are gone, with no dual mode.
+
+- **Signing keys.** `kid` `<yyyymmdd>-<8 hex>`; private halves in the secret service
+  at `iam/signing-keys/<kid>` (sealed to `engine`), public halves and schedule in the
+  store. They rotate every `tokens.key_rotation_days` (30), checked whenever a token
+  is issued or the JWKS read. The next key is published at least 15 minutes before it
+  signs. A key retires 20 minutes after the next one signs, but its public half stays
+  in the JWKS 169 hours more (`abi_retired_at`), so job triggers stored meanwhile still
+  verify as of their stored time; a retired key is never accepted for a token presented
+  later. Its private half is deleted at retirement.
+- **JWKS.** `abi.iam.v1.jwks` (request/reply, RFC 7517, no token needed); Nexus also
+  serves it at `/.well-known/abi-jwks.json`. Verifiers cache it five minutes and refetch
+  on an unknown `kid`, at most once every 30 seconds. The issuer is
+  `urn:abi:engine:<install id>` (the install id is generated at first boot and stored
+  in IAM).
+- **Claims.**
+
+  | Claim | Meaning |
+  |---|---|
+  | `iss` | The engine issuer. |
+  | `sub` | Principal id. For a delegated token, the user. |
+  | `act` | RFC 8693 actor: `{"sub": "<sa id>", "name": "<account name>"}`. Present when someone acts for `sub`. |
+  | `aud` | Exactly one audience. |
+  | `kind` | `user` or `service_account`: the kind of `sub`. |
+  | `grp` | Mapped IdP group ids (users only), only ids of active groups (`active_groups`): the id of a user or an account never lends its policies. |
+  | `abi_scope` | Optional narrowing: a list of Allow statements. |
+  | `idp` | `{"iss", "sub"}` of the source IdP identity (users only), for audit. |
+  | `sid` | The Nexus session id, so a logout ends its exchanged tokens. |
+  | `abi_since`, `abi_res` | Delegation start; the target resource of a delegation. |
+  | `iat`, `nbf`, `exp`, `jti` | `exp - iat <= 600`: verifiers refuse anything longer and allow 30 seconds of clock skew. |
+
+  **No access token lives longer than ten minutes**, and the engine issues no refresh
+  tokens: service accounts exchange their key again; Nexus sessions refresh at the IdP
+  with the refresh token Nexus holds server-side, then exchange again.
+- **Audiences.**
+
+  | Audience | Issued for | Accepted by |
+  |---|---|---|
+  | `abi:session` | A Nexus session: a user, after the IdP sign-in | Every Nexus REST route and the WebSocket. Nothing else. |
+  | `abi:nats` | Service accounts (key exchange); `api` and `engine` | Every kernel NATS endpoint |
+  | `abi:host:<sa>` | A caller's identity addressed to one module host (below) | Discovery, as the caller a host forwards; the engine's job loader; the overflow host. Never a kernel service. |
+  | `abi:delegated:agent` | A module acting for a user (`act` = the module's account); also what `api` and `engine` send the kernel for the user they serve | Kernel endpoints and module hosts, as actor plus OBO user |
+  | `abi:delegated:app` | Opening a remote app or app-html link | Only the app routes, `discovery:OpenApp` on the app named in `abi_scope` |
+  | `abi:delegated:preview` | App-project preview links | Only `/app-preview/…` for that project |
+  | `abi:delegated:coding` | A coding environment's agent, for the user who owns the environment | Nexus's OpenAI gateway only, narrowed to the environment's workspace and repo |
+  | `abi:delegated:api-key` | A personal API key | Nexus REST routes not marked session-only |
+
+  Delegated tokens are never a session: session-only routes (account, IAM
+  administration, API-key management, logout) require `abi:session` exactly.
+- **Revocation.** `revoke_tokens(principal)` sets a floor (`iam_token_floors`): every
+  token of that principal issued at or before it is refused, by the verifier
+  (`iam.verifier()`, `token_revoked`) and by the authorizer (a context whose
+  `token_issued_at` is at or before it is `suspended`), and the principal's grants
+  and coding keys are revoked (their personal API keys too with `include_keys`).
+  A token made after it carries `iat` past the floor (`issue_after_floor`). Suspension
+  and deletion deny a principal's tokens at once. `iam:RevokeTokens` is in `builtin.self`.
+
+## Token exchange, personal keys and links
 
 ```python
 issued = iam.exchange_token(
@@ -167,55 +825,81 @@ iam.create_key(user_id, audience=..., resource=..., scope=..., kind=...)  # pers
 iam.identity_authenticator = ...  # engine wiring: IdP tokens (`IdentityAuthenticator`, services/identity/token_authenticator.py)
 ```
 
+Token exchange (RFC 8693) is the one way a narrow credential is made: in process,
+over NATS (`abi.iam.v1.exchange_token`) and, for scripts, through Nexus
+`POST /api/iam/token`. The result is a token of at most ten minutes with one
+audience, derived from an identity that was already verified; an exchange can never
+add a permission.
+
 - **Requester.** The caller needs `iam:ExchangeToken` on `abi:-:-:iam:audience/<audience>`
-  (only `api` and `engine` hold it, through their broad policies); the user it acts
+  (only `api` and `engine` hold it, through their enumerated policies); the user it acts
   for, when there is one, does not decide. A module renewing the delegation it
   holds needs nothing: it only keeps what it was given.
 - **Subjects** (`subject_token_type`): `id_token` / `access_token` (an IdP's, only
-  for `abi:session`, via `identity_authenticator`); `…:jwt` (an engine token);
-  `urn:abi:params:oauth:token-type:api_key` (`abi_pk_` or `abi_gk_`);
+  for `abi:session`, via `identity_authenticator`: `iss` matches a provider, the
+  signature checks against its JWKS, `aud` is its `client_id`, `exp`/`nbf` hold; then
+  IAM resolves or creates the principal, maps groups and refuses a suspended one);
+  `…:jwt` (an engine token);
+  `urn:abi:params:oauth:token-type:api_key` (`abi_pk_` or `abi_gk_`: IAM checks the
+  hash, expiry, revocation and the owner's status; the token's `sub` is the key's owner
+  and `abi_scope` the key's own narrowing);
   `urn:abi:params:oauth:token-type:session`: a signed-in user a **first-party**
   (`api`, `engine`) vouches for, the subject token being the user's principal id,
   plus `groups` and `session_id`. Nexus names its users this way, because its
-  sessions are not engine tokens.
+  sessions are not engine tokens. Service-account keys (`abi_sk_`) are not exchanged
+  here: they use `abi.iam.v1.token`.
 - **Audiences.** `abi:session` and `abi:delegated:{agent,app,preview,coding,api-key}`
   (`nats_auth.EXCHANGE_AUDIENCES`). Never back to `abi:session` (an IdP's token
   only); never from one delegated audience to another; an `abi:session` token goes
-  to every delegated one; a key goes to its own audience only. Key exchange
+  to every delegated one; a key goes to its own audience only (a personal key to
+  `api-key`, a coding-environment key to `coding`). Key exchange
   (`exchange_key`, `abi.iam.v1.token`) still issues `abi:nats` and host tokens
-  only.
+  only. A key may be exchanged with no audience (`audience=""`): the token is the one
+  of the key's own audience; the requester then needs `iam:ExchangeToken` on every
+  audience (`api` and `engine` do).
 - **Agent tokens** (`abi:delegated:agent`): `sub` the user, `act` the actor with
   its account name, `abi_res` the target. The actor is the module that owns
   `resource` (a discovery module, agent, app, model or job, or the module's account
-  `abi:-:-:iam:principal/<sa id>`), else the requester; never a request field. Kernel
+  `abi:-:-:iam:principal/<sa id>`), else the requester; never a request field. App,
+  preview, coding and API-key tokens have no actor. Kernel
   endpoints accept `abi:nats` and this audience (`nats_auth.KERNEL_AUDIENCES`), and
   evaluate it as the module for the user: both sides must allow. The module's side
   of what it hosts is `builtin.module_bootstrap`'s `OwnHosted` / `OwnRuns`
   (`roles.DELEGATION_SIDS`), which `_derive` keeps out of its broker permissions.
   A module renews its delegation with its own token (same audience, `abi.iam.v1.exchange_token`
   is in `broker.IAM_ALWAYS`), an expired one too, until `abi_since` + 8 hours
-  (`MAX_DELEGATION_SECONDS`); then it is refused.
+  (`MAX_DELEGATION_SECONDS`); then it is refused. A delegation for a suspended user is
+  refused at issue, and one already issued is denied at the next check.
 - **Scope** (`abi_scope`, `tokens.normalize_scope`): a list of Allow statements (at most
   32, 64 patterns each). An exchange only narrows: the subject's own scope is kept,
-  and a scope is not narrowed twice (a statement list has no intersection).
+  and a scope is not narrowed twice (a statement list has no intersection). The scope
+  of the credential a call runs under travels with every delegation, so a key reaches
+  no further over NATS than in process.
 - **Personal keys** (`kind=personal`, user principals): `audience` `abi:delegated:api-key`
   (default; five active, a year at most, a year by default) or `abi:delegated:coding`
-  with its environment as `resource` (fifty active). **Grants** (`kind=grant`,
-  `abi_gk_`): `audience` app or preview, always expiring in 8 hours at most
-  (a thousand active): the links of apps and previews. A key may carry `scope`.
-  `iam.list_keys(owner)` lists every kind; callers filter. Users manage their own
-  keys (`builtin.self`: `iam:CreateKey`, `ListKeys`, `RevokeKey` on `key/${principal.id}/*`),
-  a user of the built-in login named by its Nexus id included (recorded on demand).
-- **Revocation.** `revoke_tokens(principal)` sets a floor (`iam_token_floors`): every
-  token of that principal issued at or before it is refused, by the verifier
-  (`iam.verifier()`, `token_revoked`) and by the authorizer (a context whose
-  `token_issued_at` is at or before it is `suspended`), and the principal's grants
-  and coding keys are revoked (their personal API keys too with `include_keys`).
-  A token made after it carries `iat` past the floor (`issue_after_floor`). Suspension
-  and deletion deny a principal's tokens at once as before. `iam:RevokeTokens` is in
-  `builtin.self`.
-- **Groups in a token** (`grp`) are only ids of active groups (`active_groups`,
-  `_is_group`): an id of a user or an account never lends its policies.
+  with its environment as `resource` (fifty active; made for one environment, narrowed to
+  its workspace and repo, revoked with the environment). A personal key is a credential of the person who made it: it can never
+  do more than they can, its own `scope` (full access, read only, or custom statements)
+  narrows further, and it carries no IdP groups (a role held only through a mapped group
+  claim does not reach the owner's keys until it is a stored membership). **Grants**
+  (`kind=grant`, `abi_gk_`): `audience` app or preview, always expiring in 8 hours at most
+  (a thousand live; `LinkLimitReached` beyond): the links of apps and previews, bound to
+  what they open (`resource`) and narrowed to what opening needs (`scope`:
+  `discovery:OpenApp` on that app, or nothing). Each request that presents one asks IAM
+  again, so revocation is immediate; making one forgets the user's links expired or
+  revoked more than a day ago. `iam.list_keys(owner)` lists every kind; callers filter.
+  Users manage their own keys (`builtin.self`: `iam:CreateKey`, `ListKeys`, `RevokeKey` on
+  `key/${principal.id}/*`), a user of the built-in login named by its Nexus id included
+  (recorded on demand).
+- **Where a key may be used** (Nexus side in Nexus's AGENTS.md): a personal key is accepted on
+  Nexus `/api/*` but not on the account (`/api/auth/`) or key management (`/api/iam/`)
+  routes, so a key can neither make another key nor widen itself, and not on the WebSocket;
+  a coding key only at the OpenAI gateway. The engine's own HTTP routes (`/agents`,
+  `/pipelines`, `/workflows`, `/tools`) take the deployment's `ABI_API_KEY` only: they make
+  no IAM decision of their own, so a key's limit would not bound them. A service key
+  serves its account over NATS only.
+- **Revocation**: see "Tokens". A password change or `revoke_all_user_tokens` revokes
+  sessions, links and coding keys; API keys stay unless `include_keys`.
 
 ## Service accounts, keys, tokens and manifests
 
@@ -236,13 +920,20 @@ iam.reject_manifest(account_id, reason="...")
 iam.broker_permissions(principal, key)  # records from authenticate_key; never cached
 ```
 
-- **Keys.** At most five active per account; `ci/*` keys expire in 90 days by
-  default. Only `sha256(secret)` is stored. Revocation takes effect at the next
+- **Keys.** `abi_sk_<key id>_<secret>` (service accounts) and `abi_pk_<key id>_<secret>`
+  (personal): `key id` 16 lowercase base32 characters, `secret` 32 random bytes
+  (base64url, no padding). Only `sha256(secret)` is stored (a fast hash suffices for 256
+  bits of entropy), compared in constant time; the key is shown once. The value reaches
+  a module as `ABI_SERVICE_KEY`. At most five active per account; `ci/*` keys expire in 90
+  days by default, module keys never, personal keys within a year. Revocation takes effect at the next
   exchange and the next broker connection, which is within five minutes: the
   callout's user JWT lasts that long (ten at most) and the SDK reconnects every
   two minutes. `rotate_key` gives the new key a fresh default life and, at the
   limit of five, revokes the old key first. `last_used_at` is written at most
-  once a minute.
+  once a minute. SDK and core clients renew a token at half its life.
+- **Exchange.** A service account exchanges its key over NATS at `abi.iam.v1.token`
+  (request `{key}`, response an `abi:nats` token of at most ten minutes); scripts use
+  Nexus `POST /api/iam/token` (`grant_type=client_credentials`, the key as `client_secret`).
 - **Host tokens** (`abi:host:<sa>`). A call to a module host carries the
   caller's identity under the audience of that host, never its `abi:nats`
   token: a host reads the token of every request and `api` may do everything,
@@ -254,27 +945,76 @@ iam.broker_permissions(principal, key)  # records from authenticate_key; never c
   audience)` and `issue_service_token(name, audience=...)` mint them
   (`nats_auth.host_audience(sa)`), `issue_host_token(principal, sa)` is what the
   broker control stores in a trigger (the job's host, else the engine).
-- **Signing keys** retire 20 minutes after the next one signs, but their public
-  half stays in the JWKS 169 hours more (`abi_retired_at`), so job triggers
-  stored meanwhile still verify `at` their stored time; a retired key is never
-  accepted for a token presented later. Its private half is deleted.
 - **Module accounts** are `module/<project>/<module_id>` and start with
-  `builtin.module_bootstrap` only: their own discovery record and their own
-  manifest. Approval writes the managed policy `module.<project>.<module_id>`
-  (`${module.id}`, `${module.project}` bound), attaches it, and places the
-  module's document and dataset namespaces at platform level. A changed manifest
-  is a new pending version while the approved one stays in force.
-  `modules.auto_approve` approves on submission (the `abi dev` overlay only).
-- **Signing keys** rotate every `tokens.key_rotation_days`, checked whenever a
-  token is issued or the JWKS read. The JWKS names the issuer
-  `urn:abi:engine:<install id>`.
+  `builtin.module_bootstrap` only: discovery `Register`, `Renew`, `Unregister`, `GetModule`
+  on their own `module/<project>/<module_id>` and `iam:SubmitManifest` / `GetManifest` on
+  their own manifest; `iam:RegisterCatalog` is refused. Approval writes the managed policy
+  `module.<project>.<module_id>` (`${module.id}`, `${module.project}` bound), attaches it,
+  and places the module's document and dataset namespaces at platform level. A changed
+  manifest is a new pending version while the approved one stays in force; approving or
+  rejecting without a version decides the pending one only; a superseded version submitted
+  again (a rollback) is pending again.
+- **The manifest flow.** A module declares its permissions either in `permissions.yaml`
+  beside its `BaseModule` (a policy document) or by defaulting them from
+  `ModuleDependencies` (each declared service maps to its catalog's actions on the
+  module's own namespaces; `secret` is `secret/<module id>/...` only, `email` is `Send`
+  alone, `dataset` denies `QueryUnchecked`, `source_control` denies `AddCollaborator`: no
+  default grants an admin action, and a Deny is not overridden by an Allow of the same
+  policy, so a module needing one writes its own manifest).
+  1. Deploy tooling creates the account and a key (`abi dev up`, `abi deploy`, or
+     `abi iam service-account create module/<project>/<id> --key`).
+  2. At start the SDK calls `abi.iam.v1.submit_manifest` and waits for approval before it
+     registers: an unapproved module does not show in discovery, and every other call
+     fails with `PERMISSION_DENIED`.
+  3. An admin approves as is, narrows (edits) or rejects: `iam:ApproveManifest` /
+     `RejectManifest` on `manifest/<sa>`, from `abi iam module approve|reject` or the
+     IAM admin UI.
+  4. Discovery refuses a registration whose `module_id` and project differ from the
+     caller's account name, which binds the logical module name to its principal.
+  `modules.auto_approve` approves on submission (the `abi dev` overlay only; fresh
+  configs and the Docker templates keep `false`). A manifest whose bus topics sit under a
+  reserved root or nested in another approved topic is refused at submission and approval.
 - **Engine key.** `engine_service_key()` returns the key client-role engines
-  exchange, kept in `IAMSecrets`; a lost one is replaced, not added to.
+  exchange, kept in `IAMSecrets`; a lost one is replaced, not added to. The serving engine
+  signs its own tokens and verifies against its own keys, with no NATS hop.
+- **Logs hold no key.** `PresentedKey`, `NewKey` and `CreatedKey` keep the key out of
+  their `repr`, and failing decisions are logged by exception type.
 
 **Caching.** Effective statements per principal, policies and placements are
 cached for at most `cache_ttl_seconds` (60) and dropped on every change made
 through the service. Listeners (`add_change_listener`) hear each new revision;
-the NATS primary publishes it on `abi.iam.v1.changed` (`ChangeEvent`).
+the NATS primary publishes it on `abi.iam.v1.changed` (`ChangeEvent`, a core NATS
+fan-out with a monotonically increasing revision). An engine treats a change notice as a
+hint: it reads the store's revision and drops its caches when that differs from the last it
+saw, whatever the notice says (a forged or huge revision stops nothing; a restored store
+counts too); a process that sees a revision gap drops its whole cache.
+
+## Broker permissions
+
+The NATS auth callout (`engine/nats_auth_callout.py`, see `engine/AGENTS.md`) gives each
+module connection the subjects `broker.py` derives from the account's approved policy
+plus its bootstrap; the broker grants at the operation level, resource-level decisions
+stay in the domain services. The module docstring of `broker.py` is the exact list. In
+short:
+
+| Source | Publish | Subscribe |
+|---|---|---|
+| Always | IAM's read-only and self-service operations (`broker.IAM_ALWAYS`: `token`, `exchange_token`, `jwks`, `submit_manifest`, `get_manifest`, `find_service_account`, `authorize`, `filter`; never `abi.iam.v1.changed`), the engine's broker control `abi.broker.v1.*`, `_INBOX.>`, `abi.rpc.overflow.>` | its own inbox prefix `_INBOX.<key id>` |
+| Hosting | none (replies go to inboxes) | `abi.agent.<project>.<sa>.>`, `abi.mod.<project>.<sa>.>`; its jobs' consumers |
+| Each action with an Allow (any resource) and no Deny on every resource | that action's catalog `subjects` (a stream action adds the service's transfer subjects); a service without a registered catalog grants its whole `abi.svc.<service>.v1.>` | none |
+| `discovery:InvokeAgent`, `GetAgentRun`, `CancelAgentRun`, `ChatModel`, `OpenApp`, `TriggerJob`, `ScheduleJob`, `CancelJobRun` | the hosting subjects of the modules the resources name | none |
+| `bus:Publish` / `bus:Consume`, `event:*` | the topic and its claim checks / `evt.>` by action (`event:Append` publishes, `Query`, `QueryStream`, `QueryForConsumer` subscribe) | the topic, its queue consumers |
+| Everything else | denied, `$SYS.>` and other `$JS.API.>` included | denied |
+
+`<sa>` is the ULID part of the account's id: hosting subjects carry it as a whole token,
+because NATS wildcards cannot match part of a token. A permission ending in `*` also
+matches a client's literal `>` or `*`, so every grant keeps the account's own tokens before
+its first wildcard. There are no response permissions: a module answers on `_INBOX.>`.
+`_derive` keeps `roles.DELEGATION_SIDS` out of the derivation: the module's side of a
+delegation opens no broker subject. Broker permissions lag policy by at most the callout
+user's life (five minutes, ten at most); services enforce every change at once, so the
+broker only narrows further. `broker_permissions` reads policies from the store, never the
+cache.
 
 ## Enforcing in a domain service (`guard.py`)
 
@@ -301,7 +1041,7 @@ class MyService(ServiceBase):
   types are never looked up).
 - `require` before the backend is touched; `allowed` without raising;
   `filter(action, type, items, parts)` for lists (limit after filtering).
-- `create(action, type, parts)`: the §4.4 rule. A name an existing placement
+- `create(action, type, parts)`: the create rule of "Placements". A name an existing placement
   covers keeps it, and the call's `workspace_id` must be empty or match;
   otherwise `workspace_id` places it (`workspace_org` maps it to its org; an
   unknown workspace is "not found"). Call `.record()` once the create succeeded:
@@ -317,7 +1057,7 @@ class MyService(ServiceBase):
 - Boot (`Engine.load`) runs as `engine`. Code that runs for no caller uses
   `as_service_account`; anything else with no context is anonymous, and denied.
 
-## Invitations and IdP group bindings (RFC §12.2)
+## Invitations and IdP group bindings
 
 ```python
 grant = iam.create_pending_grant(
@@ -370,41 +1110,6 @@ iam.list_idp_bindings(provider=None, policy_id=None)
   `bind_idp_group`, `unbind_idp_group`, `list_idp_bindings`; the broker offers each
   with the action it needs (`AttachPolicy`, `ListAttachments`, ...).
 
-## Built-in policies (`roles.py`)
-
-- `builtin.viewer` ⊆ `member` ⊆ `admin` ⊆ `owner`, generated by access level for
-  every placed resource type of every registered catalog, at `${scope}`; personal
-  types through `${principal.id}`; never the `nexus` `feature` type. Admins
-  attach and detach every role but owner. Regenerated when a catalog changes.
-- `builtin.platform_admin`: `*` on `*` (seals still hold).
-- `builtin.self`: held implicitly by every user (RFC §7 "Self" column).
-- `builtin.platform.viewer` / `.member`: attached and detached by IAM in step
-  with workspace and org-wide role attachments.
-- `builtin.idp`: the built-in IdP's own namespace, secrets and sender, for the
-  built-in account `idp`. By default the IdP (`libs/naas-abi-idp`) runs as the
-  module account `module/<project>/idp` with its approved manifest instead; the
-  seals (`Seal.module_id`) and the secret endpoint (`secret_nats_contract.is_idp`)
-  name both, so the module id `idp` is reserved: an admin creates its account,
-  nothing else does.
-- Feature policies `builtin.features.<key>` (`<role>`, `<org>.<role>` or `<org>.<ws>.<role>`): the
-  `nexus:UseFeature` grants of a role, set as a whole by `iam.put_feature_policies({key: [feature, ...]})`
-  (needs `iam:RegisterCatalog` on `nexus`; Nexus computes them from its `feature_flags`). A role attached at a
-  workspace scope brings the most specific policy that exists, attached at the same scope; org-level roles bring none.
-- `builtin.engine`, `builtin.api` and `builtin.job` are enumerated: one statement per service, each with a `sid`
-  saying what needs it. The engine holds IAM's administration and the kernel services; `api` holds `nexus:*`, the
-  kernel services it calls for its users (each user bounds the call), the sign-in identity actions and the IAM actions
-  that keep memberships, scopes and placements, and denies `dataset:QueryUnchecked`; `builtin.job` is what the
-  account `job/<module_id>` of an engine module's jobs holds. Nobody holds `*`, but the platform admin.
-- `builtin.module_bootstrap`: a module account before approval (above).
-- Acting on behalf of a user never opens a sealed resource, whoever the actor is.
-- `LEGACY_NEXUS_ISSUER` (`urn:abi:nexus`): a Nexus user named on a call by its Nexus id resolves to IAM's user of
-  that issuer. Nexus has no login of its own: such a user keeps that naming (its Nexus id is what every
-  row and call names) and is *linked* to the built-in provider's identity at its first sign-in (`link_user`, which
-  only the built-in provider's verified email triggers, in Nexus's `OidcSignInService`); a person who never
-  signed in stays legacy. Users of an identity provider are IAM users named by their principal id
-  (`services/identity`). Nexus holds no implicit grant for either: a user reaches what its role attachments
-  reach (`services/iam/memberships` in Nexus). `api` holds `iam:LinkUser` (the sign-in rule decides when).
-
 ## Enforcing in a data service (`enforcement.py`)
 
 The data services use `ResourceGuard`, kept close to `ServiceGuard` above. A
@@ -420,7 +1125,7 @@ facade whose server checks). Then:
   and `scan_allowed(...)` push the caller's prefixes down to a key scan and page
   after filtering; `guard.require_visible` checks a container before listing it.
 - `guard.create(action, type, parts, container=..., exists=...,
-  container_exists=...)` applies the create rule of §4.4 and returns `commit()`,
+  container_exists=...)` applies the create rule of "Placements" and returns `commit()`,
   which records the placement once the backend created the resource;
   `guard.forget` drops it on drop.
 - A service's own storage in another service (the cache's entries, the activity
@@ -462,9 +1167,11 @@ services:
 - SQLite: WAL, a busy timeout, `BEGIN IMMEDIATE` for writes. The default for
   `abi dev`.
 - PostgreSQL: SQLAlchemy on psycopg 3, tables in their own schema, created at
-  boot. The Docker templates reuse the deployment's `POSTGRES_*` secrets.
+  boot. The Docker templates reuse the deployment's `POSTGRES_*` secrets
+  (schema `abi_iam`); `services.iam.store.dsn` points elsewhere.
 - Memory: tests.
 - `allow_all` is selected only by writing it; `AllowAllAuthorizer` warns when built.
+  Fresh installs enforce policies.
 
 The engine loads IAM before every other service and bootstraps it
 (`IAMService.bootstrap`: catalog, managed policies, the `engine`, `api` and `idp`
@@ -472,8 +1179,6 @@ service accounts and their policies), then registers every kernel catalog
 (`kernel_catalogs.register_kernel_catalogs`). A serving engine gives its modules the IAM
 owner itself, never a NATS facade: a check reads the caller's `CallContext` in
 this process. A client-role engine gets `IAMSecondaryAdapterNATSClient`.
-Nexus seeding turns `users[].is_superadmin` into a `builtin.platform_admin`
-attachment (`org_seed.sync_platform_admins`).
 
 ## NATS and SDK
 
@@ -489,8 +1194,7 @@ and writes the jobs stream for them, checked against `broker_grants`:
 modules never create or change a stream or a consumer. `broker.py` documents what each grant
 reaches; a bus topic under `abi`, `evt`, `_INBOX`, `triple_store`, `$` or `_` is
 refused at submission and approval. A module's connection is offered `broker.IAM_ALWAYS`
-only (`token`, `jwks`, `submit_manifest`, `get_manifest`,
-`find_service_account`, `authorize`, `filter`); the other IAM operations need
+only; the other IAM operations (every mutation, every list) need
 the matching `iam:` action. Bus and event grants follow the action
 (`bus:Publish` vs `bus:Consume`; `event:Append` publishes, the read actions
 subscribe) and a Deny of an action on a topic is honoured. The secrets IAM keeps
@@ -500,6 +1204,121 @@ endpoint. Wire codes: `PERMISSION_DENIED`, `NOT_FOUND`,
 refused key). The SDK facade is
 `engine.services.iam` (`naas_abi_sdk/services/iam.py`), reachable without a
 dependency declaration; records are dictionaries.
+
+## Migrating an existing install
+
+Fresh installs enforce from the start; `authorizer: allow_all` is the only opt-out and must be written down.
+For an install that predates IAM, Nexus moves what it kept itself once, at start
+(`libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam/bootstrap.py`, `migrate_role_data`; see the
+AGENTS.md there), and IAM is the only record afterwards:
+
+| Before | In IAM |
+|---|---|
+| `workspace_members.role`, the `workspaces.owner_id` fallback | `builtin.<role>` attachments at `abi:<org>:<ws>` (the fallback becomes an explicit owner attachment) |
+| `organization_members.role`, `organizations.owner_id` | `builtin.<role>` at `abi:<org>:-` |
+| `users.is_superadmin`, `users[].is_superadmin` | `builtin.platform_admin` |
+| `organization_role_features` | `builtin.features.<org>.<role>` |
+| Workspace graph policies and per-workspace prefixes and namespaces (object storage, documents, vectors, datasets) | placements (`iam:PutPlacement`), plus Allow statements in a workspace policy for shared graphs |
+| Every other existing container (module and engine namespaces, collections, repos, graphs) | platform placements, so no workspace can claim a name inside them |
+| Remote modules sharing `NATS_JWT_SECRET` | service accounts, keys and approved manifests (`abi dev up` regenerates them; deployed systems run `abi iam module approve`) |
+| Nexus users of the old login | users of issuer `urn:abi:nexus`, linked to the built-in IdP at first sign-in (`link_user`) |
+| Sessions, refresh tokens, app grants and preview tokens signed with `secret_key` | invalidated: users sign in again; workspace secrets get their own key (`secrets_encryption_key`) |
+
+## Decisions
+
+**Authorization is identity-based policies, denied by default.**
+*Decision.* AWS-style policy documents (`Allow`/`Deny`, actions, resource patterns)
+attached to users, groups and service accounts at an optional scope; no resource-based
+policies; an explicit Deny wins; on behalf of a user both sides must allow; narrowed
+tokens only narrow; actions are `<service>:<Action>` with an access level; resource names
+are `abi:<org>:<ws>:<service>:<type>/<id>` with percent-encoded ids and `*`/`?` patterns,
+never regular expressions; the org and workspace of a kernel resource come from placements,
+never from a request field; every service registers a catalog and policies are validated
+against them; roles are cumulative managed policies generated from the catalogs; a few
+resources are sealed in code; the authorizer port is shaped like OpenFGA.
+*Consequences.* The check runs in the domain service, so Nexus REST, SDK modules over NATS
+and in-process callers are authorized identically (the event, vector_store and cache NATS
+adapters go through their services). Every operation needs a catalog entry before it ships.
+Graph access needs the query dataset restricted by the triple-store adapters. Encoded ids are
+hard to read by hand: use `names.py` (never string formatting) and the admin UI, which decodes them.
+Per-object sharing beyond personal resources is only expressible by naming the object in a
+statement.
+
+**IAM is a kernel service with its own SQL store.**
+*Decision.* `services/iam` in core, reachable in process, over NATS (`abi.iam.v1.*`), through
+the SDK and through the auth-callout responder. The store is SQL behind `IAMStore` (SQLite
+default, PostgreSQL, memory), not the Document Service: IAM authorizes the Document Service
+(reading a policy would need a policy), needs unique constraints, joins and atomic approval
+of a manifest with its policy, and sits on the hot path of every call. Private signing keys
+stay in the secret service.
+*Consequences.* Every kernel service depends on IAM at boot (IAM loads first, services register
+catalogs before serving). The engine stores one more database (backups and Docker templates
+include it). Suspensions and grants apply at once in process and within the change event over
+NATS, bounded by the 60-second cache. An OpenFGA adapter can be added behind `IAuthorizer`.
+
+**Engine-signed tokens, service accounts and broker confinement.**
+*Decision.* ES256 tokens with a JWKS, one audience each, ten minutes at most; every module,
+script and CI job is a service account with a hashed, revocable, rotatable key exchanged for
+tokens; a module declares a permission manifest that an admin approves; the broker confines each
+connection through the NATS auth callout; `CallContext` is filled only from verified credentials.
+*Consequences.* No module can impersonate `api`, `engine` or another module; a leaked module key
+exposes only its approved permissions, and revoking it ends access within the callout user's life
+(suspension is immediate). Each deployment creates one account and key per module (`abi dev up`
+does it) and approves manifests with `abi iam module approve` or the IAM UI. Hosting subjects carry
+the account token. Remote modules must run the SDK of the engine's version: an older one reads
+stream info, creates streams and publishes into the jobs stream (all refused), and sends its own token
+to hosts, which discovery refuses.
+
+**Delegated tokens replace the on-behalf-of header.**
+*Decision.* One mechanism, RFC 8693 exchange in IAM, for every narrow credential (sessions of Nexus,
+agent delegations, app and preview links, coding and API keys). A caller acting for a user sends an
+`abi:delegated:agent` token; the `Abi-On-Behalf-Of` header is refused. The actor of a call to a
+module is the module. A run outlives its token by renewing it through the module's key, up to eight
+hours. Links are revocable IAM grants.
+*Consequences.* Nothing that is not a session can be a session. A key's scope narrows every
+IAM decision made for its owner, in process and over NATS. `api` and `engine` must keep
+`iam:ExchangeToken`. The deployment's `ABI_API_KEY` stays the one credential of the engine's
+invocation routes until they enforce IAM. A delegation cache holds a token per user, scope and recipient for half its
+life (2048 at most); a delegation that cannot be renewed fails the call rather than calling as the
+account alone.
+
+**First-party grants are enumerated; no transitional grant exists.**
+*Decision.* `builtin.engine`, `builtin.api` and `builtin.job` are statement lists with a `sid` each.
+The transitional policies of earlier stages are retired (`RETIRED_POLICIES`). A remote module holds
+`builtin.module_bootstrap` then its approved manifest; a Nexus user holds the roles of its
+memberships only. The one legacy kept is the issuer `urn:abi:nexus` for accounts of the old login
+while they link to an identity provider.
+*Consequences.* Zero trust is visible: a known principal with no policy is denied, and a remote
+module is refused every IAM administration endpoint.
+
+## Known limits and open questions
+
+- **JetStream answers with fixed content where a module asks.** The server answers a module's
+  JetStream requests on the reply subject the module chose, with no permission check, and a stream
+  captures what lands on its subjects. With direct gets taken away, what a module can still aim that
+  way has content it does not choose (a pub ack, an empty acknowledgement, a fetch from its own
+  consumer): another topic's queue can still store a pub ack or an empty message, and bus messages
+  are not authenticated. The JetStream API ignores such deliveries; a job host drops a trigger or
+  cancel that is not sealed (`engine/AGENTS.md`). Proposed, not built: NATS accounts for modules.
+- **Quotas.** `ABI_CLAIM_CHECKS` has no size limit beyond its seven-day age, and the overflow host's
+  64 sessions and 1 GiB have no per-caller share: one module can fill either for everyone.
+- **The `engine` broker login** may use every subject but `$SYS.>`: the API, Nexus and jobs run on it.
+  It is not narrowed to the kernel subjects.
+- **Per-object sharing** of single conversations or files beyond personal resources is the
+  relationship-based (OpenFGA) question: placement and identity policies cover workspace-level
+  access; sharing one object means a statement naming it.
+- **Policy conditions** (`conditions`, reserved): IP ranges, time windows, MFA claims. Not needed yet.
+- **Federation.** Every ABI server trusting the same IdP issuer is enough for login; cross-server
+  service accounts are not designed.
+- **No SCIM, no token introspection**: access tokens live ten minutes at most and suspension is
+  immediate.
+- Alternatives rejected: roles only (cannot say "an IdP group reads one graph and writes another",
+  nor confine a module); OpenFGA now (heavier to run without Docker, a new model per service);
+  resource-based policies (two evaluation paths, "what can X do" becomes expensive); the workspace
+  from `CallContext.workspace_id` (any member could address another workspace); encoding the
+  workspace in every data id (migrates all data); raw ids in names; regular expressions in patterns;
+  HS256 with per-module secrets (each verifier would need every secret); IAM on the Document Service
+  (circular).
 
 ## Tests
 

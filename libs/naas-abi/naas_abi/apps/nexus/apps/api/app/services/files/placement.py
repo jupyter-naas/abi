@@ -1,4 +1,4 @@
-"""The object storage a workspace owns, placed in it (RFC §4.4).
+"""The object storage a workspace owns, placed in it.
 
 A workspace owns one tree of the object storage: its drive,
 ``naas_abi/workspace-drive/<workspace_id>/``. IAM places that key (and everything

@@ -21,7 +21,7 @@ async def _nothing() -> AsyncIterator[Any]:
 
 @dataclass
 class QueryStream:
-    """A SPARQL result read as it arrives (docs/adr/20261003_nats-streamed-results.md).
+    """A SPARQL result read as it arrives.
 
     ``rows`` (SELECT: variable name -> rdflib term, unbound variables absent) and
     ``triples`` (CONSTRUCT/DESCRIBE) are single-use async iterators, valid inside
@@ -137,7 +137,7 @@ class TripleStoreService:
             (await self._call("query_view", view=view, query=query)).success
         )
 
-    # Streamed reads over transfer frames (docs/adr/20261003_nats-streamed-results.md).
+    # Streamed reads over transfer frames.
 
     @asynccontextmanager
     async def query_stream(self, query: str) -> AsyncIterator[QueryStream]:

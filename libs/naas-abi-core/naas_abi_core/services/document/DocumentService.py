@@ -60,7 +60,7 @@ class DocumentService(ServiceBase):
 
     Wired into an engine, every operation is authorized on
     ``namespace/<ns>``, ``collection/<ns>/<c>`` or ``document/<ns>/<c>/<id>``
-    (RFC §6.4), for whoever calls, in process or over NATS: the namespace a
+    for whoever calls, in process or over NATS: the namespace a
     view is bound to is a name like any other, which the caller's policies
     must cover. A collection the caller may not see is ``CollectionNotFound``,
     a document ``DocumentNotFound``. Namespace administration (``Namespaces``,
@@ -139,7 +139,7 @@ class DocumentService(ServiceBase):
         )
 
     def ensure_collection(self, spec: CollectionSpec) -> None:
-        """Declare a collection; a create (RFC §4.4): a new namespace is
+        """Declare a collection; a create: a new namespace is
         placed in the call's target workspace, or on the platform."""
         namespace = self.namespace
         name = validate_name(spec.name)
@@ -164,7 +164,7 @@ class DocumentService(ServiceBase):
 
     def collections(self) -> list[str]:
         """The namespace's collections the caller may list; none when it may
-        not see the namespace (RFC §5.5)."""
+        not see the namespace."""
         namespace = self.namespace
         try:
             self._guard.require_visible(
@@ -243,7 +243,7 @@ class DocumentService(ServiceBase):
         (see ``IDocumentAdapter.find``); follow ``cursor`` until it is None."""
         where = validate_query(where, order_by, limit)
         validate_max_bytes(max_bytes)
-        # Checked once, on the collection: results are not filtered (RFC §5.5).
+        # Checked once, on the collection: results are not filtered.
         self.__collection("Find", validate_name(collection))
         return self.__adapter.find(
             self.namespace,

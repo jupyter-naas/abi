@@ -1,7 +1,7 @@
 """Serves a module's web apps on instance-addressed NATS subjects.
 
 Nexus forwards each browser request as an ``abi.app.v1.HttpRequest`` and
-returns the ``HttpResponse`` (docs/adr/20261012_remote-module-apps.md). This
+returns the ``HttpResponse``. This
 host authorizes the caller through discovery, then answers with a file of the
 app's folder or, for any other path, the app's ASGI application, called in
 process: no HTTP server, no port.

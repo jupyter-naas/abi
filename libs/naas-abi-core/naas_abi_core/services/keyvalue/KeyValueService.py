@@ -24,7 +24,7 @@ from naas_abi_core.services.ServiceBase import ServiceBase
 
 class KeyValueService(ServiceBase):
     """Bytes by key. Wired into an engine, every operation is authorized on
-    ``key/<key>`` (RFC §6.4): a key the caller may not see is missing
+    ``key/<key>``: a key the caller may not see is missing
     (``KVNotFoundError``, ``exists`` False), and ``list_keys`` returns only the
     keys the caller may list."""
 
@@ -135,7 +135,7 @@ class KeyValueService(ServiceBase):
     ) -> KVKeyPage:
         """A page of live keys, ascending; pass ``page.next_after`` as ``after``.
 
-        Only the keys the caller may list, paged after filtering (RFC §5.5).
+        Only the keys the caller may list, paged after filtering.
         """
         check_page_limit(limit)
         if self._guard.iam is None or self._guard.allows_every("ListKeys", KEY):

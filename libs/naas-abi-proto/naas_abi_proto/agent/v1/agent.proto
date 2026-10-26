@@ -35,7 +35,7 @@ message SubmitRequest {
   // there, so the submitter need not poll Status. Empty: no updates.
   string updates_inbox = 8;
   // The delegation for the run's own calls: an abi:delegated:agent token naming
-  // this agent's module as the actor and the user the run is for (RFC §9.4).
+  // this agent's module as the actor and the user the run is for.
   // The host uses it, in place of its own token, for the kernel calls the run
   // makes for that user, and drops it unless it names the run's owner. Never
   // stored. Empty: the run calls as the module itself.

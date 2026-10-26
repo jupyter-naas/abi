@@ -128,7 +128,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         >>> results = store.query("SELECT ?s WHERE { ?s a owl:Class }")
 
     Wired into an engine, every operation is authorized per graph,
-    ``graph/<iri>`` (``graph/default`` for the default graph), RFC §6.4:
+    ``graph/<iri>`` (``graph/default`` for the default graph):
 
     * a SPARQL query (``query``, ``query_stream``, ``query_view``) by a caller
       who may not read every graph names only graphs it may read (``FROM``,
@@ -229,7 +229,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
             return exc.detail()
         return str(exc)
 
-    # -- authorization (RFC §6.4) ------------------------------------------------
+    # -- authorization ------------------------------------------------
 
     def __graph(
         self, action: str, graph: URIRef | str, *, parsed: bool = False
@@ -681,7 +681,7 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         self.__publish_event(GraphDropped(graph_name=str(graph_name)))
 
     def list_graphs(self) -> list[URIRef]:
-        """The graphs the caller may list (RFC §5.5); never fails for that."""
+        """The graphs the caller may list; never fails for that."""
         return self._guard.filter(
             "ListGraphs",
             GRAPH,

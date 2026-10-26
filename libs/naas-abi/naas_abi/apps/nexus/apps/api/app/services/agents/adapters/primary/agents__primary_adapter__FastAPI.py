@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 import threading
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import replace
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
@@ -21,7 +22,6 @@ from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
 from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
     resolve_agent_ref,
     resolve_agent_refs,
-    workspace_seed_for_slug,
 )
 from naas_abi.apps.nexus.apps.api.app.services.agents import (
     AgentCreateInput,
@@ -172,6 +172,19 @@ async def _visible_to_caller(
     return filter_feature_agents(agents, flags)
 
 
+async def _workspace_catalog_seed(workspace_id: str) -> dict | None:
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import parse_catalog_seed
+    from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(WorkspaceModel.catalog_seed).where(WorkspaceModel.id == workspace_id)
+        )
+        raw = result.scalar_one_or_none()
+    return parse_catalog_seed(raw)
+
+
 def _get_engine_default_agent_class_name() -> str | None:
     """Resolve engine ``default_agent`` (e.g. ``myapp MyAgent``) to a registry key.
 
@@ -206,6 +219,16 @@ def _get_engine_default_agent_class_name() -> str | None:
     except Exception:
         logger.debug("Could not resolve engine default_agent", exc_info=True)
     return None
+
+
+def _resolve_workspace_default_class_name(
+    known_class_names: Mapping[str, Any],
+) -> str | None:
+    """Workspace chat default: engine ``default_agent``, then naas_abi Abi."""
+    resolved = _get_engine_default_agent_class_name()
+    if resolved:
+        return resolved
+    return _nexus_abi_class_name(known_class_names)
 
 
 def pick_workspace_chat_agent_id(
@@ -724,16 +747,24 @@ async def _reconcile_workspace_agents(
     # Workspace refs ("module Agent") resolve against in-process and remote agents.
     known_class_names = {**class_name_to_agent_class, **dict.fromkeys(remote_by_class_name)}
 
-    seed = workspace_seed_for_slug(await _workspace_slug(workspace_id))
-    seeded_class_names: set[str] | None = None
-    if seed is not None and seed.agents is not None:
-        seeded_class_names = resolve_agent_refs(seed.agents, known_class_names)
+    slug = await _workspace_slug(workspace_id)
+    catalog_seed = await _workspace_catalog_seed(workspace_id)
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import (
+        effective_seed_agents,
+        effective_seed_default_agent,
+    )
 
-    default_class_name: str | None = None
-    if seed is not None and seed.default_agent:
-        default_class_name = resolve_agent_ref(seed.default_agent, known_class_names)
-    if default_class_name is None:
-        default_class_name = _get_engine_default_agent_class_name()
+    agent_refs = effective_seed_agents(slug, catalog_seed)
+    seeded_class_names: set[str] | None = None
+    if agent_refs is not None:
+        seeded_class_names = resolve_agent_refs(agent_refs, known_class_names)
+
+    default_class_name = _resolve_workspace_default_class_name(known_class_names)
+    seed_default_ref = effective_seed_default_agent(slug, catalog_seed)
+    if seed_default_ref:
+        seed_default = resolve_agent_ref(seed_default_ref, known_class_names)
+        if seed_default:
+            default_class_name = seed_default
 
     # An empty roster from a missing seed plus a failed default resolve must
     # not disable every row. That is how a workspace that exists in the DB
@@ -742,6 +773,18 @@ async def _reconcile_workspace_agents(
     roster, align_enabled_to_roster = _roster_alignment(
         seeded_class_names, default_class_name, class_name_to_agent_class
     )
+
+    from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
+        feature_office_class_names_for_flags,
+        workspace_union_feature_flags,
+    )
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as db:
+        workspace_flags = await workspace_union_feature_flags(db, workspace_id)
+    roster.update(feature_office_class_names_for_flags(workspace_flags, known_class_names))
+    if roster:
+        align_enabled_to_roster = True
 
     # Persist any newly discovered agent classes to the database.
     for class_name, agent_cls in class_name_to_agent_class.items():
@@ -910,38 +953,92 @@ async def _reconcile_workspace_agents(
     return reconciled
 
 
+async def _enriched_workspace_agents(
+    *,
+    workspace_id: str,
+    current_user: User,
+    agent_service: AgentService,
+    may_sync: bool,
+    always_reconcile: bool,
+) -> list[AgentRecord]:
+    """Load workspace agents, optionally reconcile, enrich, and apply feature scoping.
+
+    ``may_sync`` is the caller's right to change the roster: without it the
+    listing is returned as stored, whatever ``always_reconcile`` says.
+    """
+    class_name_to_agent_class = _get_agent_class_registry()
+
+    async with _workspace_sync_lock(workspace_id):
+        agent_list = await agent_service.list_workspace_agents(workspace_id=workspace_id)
+        if may_sync and (always_reconcile or not agent_list):
+            if not agent_list:
+                logger.info(
+                    "Auto-reconciling empty agent roster for workspace=%s",
+                    workspace_id,
+                )
+            agent_list = await _reconcile_workspace_agents(
+                agent_service=agent_service,
+                workspace_id=workspace_id,
+                agent_list=agent_list,
+                class_name_to_agent_class=class_name_to_agent_class,
+                remote_agents=await _discovered_remote_agents(),
+            )
+
+    return [
+        _enrich_agent(agent, class_name_to_agent_class)
+        for agent in await _visible_to_caller(agent_list, current_user, workspace_id)
+    ]
+
+
+async def seed_workspace_agents(
+    *,
+    workspace_id: str,
+    current_user: User,
+    agent_service: AgentService,
+) -> None:
+    """Populate ``agent_configs`` when a workspace is first created.
+
+    The caller just created the workspace (``CreateWorkspace`` was decided), so
+    the roster is theirs to seed.
+    """
+    await _enriched_workspace_agents(
+        workspace_id=workspace_id,
+        current_user=current_user,
+        agent_service=agent_service,
+        may_sync=True,
+        always_reconcile=True,
+    )
+
+
 @router.get("/", dependencies=[declares("ListAgents")])
 async def list_agents(
     workspace_id: str | None = None,
     current_user: User = Depends(get_current_user_required),
     agent_service: AgentService = Depends(get_agent_service),
 ) -> list[AgentRecord]:
-    """Read-only listing of a workspace's persisted agents, enriched for display.
+    """List a workspace's persisted agents, enriched for display.
 
     Scoped to the caller: the naas_abi office agents of a feature this user
     cannot open are left out (see ``core.agent_feature_access``), so two
     members of one workspace can get different rosters.
 
-    Does not create, delete or otherwise mutate agent records; call
-    ``POST /sync`` to reconcile the database with the code class registry.
+    When the workspace has no persisted agent rows yet, reconciles once with
+    the code class registry (same work as ``POST /sync``) before returning,
+    if the caller may sync agents.
+    Use ``POST /sync`` when config rosters change and rows already exist.
     """
     if not workspace_id:
         return []
 
     await authz.require("ListAgents", user=current_user, workspace=workspace_id, id="-")
-
-    # Retrieve agent records from the database (fast)
-    agent_list = await agent_service.list_workspace_agents(workspace_id=workspace_id)
-
-    # Retrieve the cached class registry, expensive only on the very first call
-    # (triggers dynamic Python imports for all agent modules).  Subsequent calls
-    # return instantly from the process-level cache.
-    class_name_to_agent_class = _get_agent_class_registry()
-
-    return [
-        _enrich_agent(agent, class_name_to_agent_class)
-        for agent in await _visible_to_caller(agent_list, current_user, workspace_id)
-    ]
+    may_sync = await authz.allowed("SyncAgents", user=current_user, workspace=workspace_id, id="-")
+    return await _enriched_workspace_agents(
+        workspace_id=workspace_id,
+        current_user=current_user,
+        agent_service=agent_service,
+        may_sync=may_sync,
+        always_reconcile=False,
+    )
 
 
 @router.post("/sync", dependencies=[declares("SyncAgents"), declares("ListAgents")])
@@ -970,25 +1067,13 @@ async def sync_agents(
 
     await authz.require("ListAgents", user=current_user, workspace=workspace_id, id="-")
     may_sync = await authz.allowed("SyncAgents", user=current_user, workspace=workspace_id, id="-")
-
-    class_name_to_agent_class = _get_agent_class_registry()
-
-    async with _workspace_sync_lock(workspace_id):
-        agent_list = await agent_service.list_workspace_agents(workspace_id=workspace_id)
-
-        if may_sync:
-            agent_list = await _reconcile_workspace_agents(
-                agent_service=agent_service,
-                workspace_id=workspace_id,
-                agent_list=agent_list,
-                class_name_to_agent_class=class_name_to_agent_class,
-                remote_agents=await _discovered_remote_agents(),
-            )
-
-    return [
-        _enrich_agent(agent, class_name_to_agent_class)
-        for agent in await _visible_to_caller(agent_list, current_user, workspace_id)
-    ]
+    return await _enriched_workspace_agents(
+        workspace_id=workspace_id,
+        current_user=current_user,
+        agent_service=agent_service,
+        may_sync=may_sync,
+        always_reconcile=True,
+    )
 
 
 @router.post("/", dependencies=[declares("CreateAgent")])

@@ -1,6 +1,6 @@
 """IAM: principals, policies and the authorization every kernel service asks.
 
-See ``AGENTS.md`` here and docs/specs/rfcs/20261013_identity-and-authorization.md.
+See ``AGENTS.md`` here.
 """
 
 from naas_abi_core.services.iam.IAMPorts import (

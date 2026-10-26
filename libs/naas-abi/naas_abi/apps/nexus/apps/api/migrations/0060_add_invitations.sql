@@ -1,4 +1,4 @@
--- Invitations (RFC §12): an email invited to an organization and/or a
+-- Invitations: an email invited to an organization and/or a
 -- workspace through one identity provider, before the person has an account.
 -- IAM holds the roles as pending grants (grant_ids) until they sign in with the
 -- address verified; this table is who invited whom, where, and as what.

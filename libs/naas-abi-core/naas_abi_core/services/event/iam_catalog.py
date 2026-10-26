@@ -1,7 +1,7 @@
-"""The ``event`` action catalog (RFC §6.4, "event").
+"""The ``event`` action catalog.
 
 Event types are placed by prefix (``iam:PutPlacement``); an unplaced type is
-platform-level. A query with no type is filtered per event type (§6.3).
+platform-level. A query with no type is filtered per event type.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from naas_abi_core.services.iam.catalog import ActionCatalog, ActionSpec, Resour
 SERVICE = "event"
 SUBJECT_PREFIX = "abi.svc.event.v1"
 
-# A streamed query's transfer subjects (docs/adr/20261003_nats-streamed-results.md).
+# A streamed query's transfer subjects.
 STREAM = tuple(
     f"{SUBJECT_PREFIX}.transfer.{operation}"
     for operation in ("open", "*.write", "*.start", "*.read", "*.close")

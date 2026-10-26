@@ -1,4 +1,4 @@
-"""Memberships are IAM's role attachments (RFC §7, §13): the only record of who
+"""Memberships are IAM's role attachments: the only record of who
 holds which role in an organization or a workspace.
 
 A role is ``builtin.<role>`` attached to the user's principal at the scope of
@@ -45,7 +45,7 @@ _PRINCIPAL_ID = re.compile(r"^usr_[0-9a-z]{26}$")
 
 ROLE_NAMES = ("owner", "admin", "member", "viewer")
 # Organization owners and admins reach every workspace of their organization
-# (ADR 20261014_nexus-platform-managed-users): the org role is also held
+# (``services/iam/AGENTS.md``, "Org owners and admins reach every workspace"): the org role is also held
 # organization-wide (``abi:<org>:*``), which IAM reaches into every workspace.
 # Members and viewers of an organization inherit nothing.
 INHERITING_ROLES = ("owner", "admin")
@@ -371,9 +371,7 @@ class Memberships:
             except (PermissionDeniedError, ResourceNotFoundError) as exc:
                 raise MembershipDenied(role) from exc
 
-    async def check(
-        self, user_id: str, role: str | None, scope: str, *, by: Any = None
-    ) -> None:
+    async def check(self, user_id: str, role: str | None, scope: str, *, by: Any = None) -> None:
         """Raise ``MembershipDenied`` unless ``by`` may give the user ``role`` at
         ``scope`` (``None``: take their roles away), changing nothing. Callers
         with rules of their own (an owner must remain) ask this first, so the

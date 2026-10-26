@@ -1,4 +1,4 @@
-"""Moving what ``secret_key`` encrypted under the secrets key (RFC §13).
+"""Moving what ``secret_key`` encrypted under the secrets key.
 
 Before, one key signed Nexus's tokens and encrypted the workspace secrets. It signs
 nothing now and the encryption has a key of its own (``core/secret_key.py``): at

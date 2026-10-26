@@ -172,8 +172,12 @@ def test_insert_emits_triples_inserted() -> None:
 
     graph_name = URIRef("http://example.org/g/foo")
     triples = Graph()
-    triples.add((URIRef("http://example.org/s1"), URIRef("http://example.org/p"), Literal("o1")))
-    triples.add((URIRef("http://example.org/s2"), URIRef("http://example.org/p"), Literal("o2")))
+    triples.add(
+        (URIRef("http://example.org/s1"), URIRef("http://example.org/p"), Literal("o1"))
+    )
+    triples.add(
+        (URIRef("http://example.org/s2"), URIRef("http://example.org/p"), Literal("o2"))
+    )
 
     service.insert(triples, graph_name=graph_name)
 
@@ -455,7 +459,7 @@ def test_publisher_exception_does_not_break_mutation() -> None:
     )
 
 
-# --- streamed reads (docs/adr/20261003_nats-streamed-results.md)
+# --- streamed reads
 
 
 def _graph_with(*triples) -> Graph:

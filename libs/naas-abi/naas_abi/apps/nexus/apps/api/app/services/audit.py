@@ -73,9 +73,13 @@ async def log_audit_event(
         print(f"Audit log failed: {e}")
 
 
-async def log_login(user_id: str | None, success: bool, request: Request | None = None, details: dict | None = None) -> None:
+async def log_login(
+    user_id: str | None, success: bool, request: Request | None = None, details: dict | None = None
+) -> None:
     """Log a login attempt."""
-    await log_audit_event("login", user_id=user_id, success=success, request=request, details=details)
+    await log_audit_event(
+        "login", user_id=user_id, success=success, request=request, details=details
+    )
 
 
 async def log_logout(user_id: str, request: Request | None = None) -> None:
@@ -85,4 +89,6 @@ async def log_logout(user_id: str, request: Request | None = None) -> None:
 
 async def log_token_revocation(user_id: str, reason: str, request: Request | None = None) -> None:
     """Log a token revocation."""
-    await log_audit_event("token_revocation", user_id=user_id, request=request, details={"reason": reason})
+    await log_audit_event(
+        "token_revocation", user_id=user_id, request=request, details={"reason": reason}
+    )

@@ -1,4 +1,4 @@
-"""The ``nexus`` action catalog (RFC §6.5), registered with IAM at startup.
+"""The ``nexus`` action catalog, registered with IAM at startup.
 
 Every Nexus authorization decision is an action of this catalog on a resource
 ``abi:<org>:<workspace>:nexus:<type>/<id>``. The built-in roles are generated
@@ -50,12 +50,8 @@ _MODULES = (
     realtime,
 )
 
-RESOURCE_TYPES: tuple[ResourceType, ...] = tuple(
-    t for module in _MODULES for t in module.TYPES
-)
-NEXUS_ACTIONS: tuple[NexusAction, ...] = tuple(
-    a for module in _MODULES for a in module.ACTIONS
-)
+RESOURCE_TYPES: tuple[ResourceType, ...] = tuple(t for module in _MODULES for t in module.TYPES)
+NEXUS_ACTIONS: tuple[NexusAction, ...] = tuple(a for module in _MODULES for a in module.ACTIONS)
 
 NEXUS_CATALOG = ActionCatalog(
     service=SERVICE,

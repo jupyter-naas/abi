@@ -38,10 +38,10 @@ class {cls}:
         return await self._transport.call("abi.svc.{domain}.v1.{method}", request, pb.{name}Response)
 """
     if domain == "iam":
-        # IAM is not a data service: its subjects are abi.iam.v1.* (RFC §11.1).
+        # IAM is not a data service: its subjects are abi.iam.v1.*.
         text = text.replace('"abi.svc.iam.v1.', '"abi.iam.v1.')
     if domain == "identity":
-        # Identity is a kernel service like IAM: abi.identity.v1.* (RFC §12.1).
+        # Identity is a kernel service like IAM: abi.identity.v1.*.
         text = text.replace('"abi.svc.identity.v1.', '"abi.identity.v1.')
     if domain == "model_registry":
         text = text.replace(

@@ -1,4 +1,4 @@
-"""Object storage passes the authorization contract (RFC §6.4, "object_storage")."""
+"""Object storage passes the authorization contract."""
 
 from __future__ import annotations
 

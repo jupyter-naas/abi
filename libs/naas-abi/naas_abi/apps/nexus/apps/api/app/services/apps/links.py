@@ -1,4 +1,4 @@
-"""Links to an app: grants IAM stores, revocable, at most eight hours (RFC §9.3).
+"""Links to an app: grants IAM stores, revocable, at most eight hours.
 
 A link sits in a URL or a cookie, where the page's own JavaScript can read it.
 It is never a session, and no secret of Nexus signs it: it is a *grant* of the

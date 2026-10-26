@@ -1,10 +1,10 @@
 // NATS-RPC contract for the vector_store kernel domain.
 // Mirrors naas_abi_core/services/vector_store/IVectorStorePort.py::IVectorStorePort 1:1, no
-// exclusions. See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md.
+// exclusions.
 // Its one streamed member, `list_vectors_stream`, needs no extra message: it travels as
 // transfer/v1 sessions on abi.svc.vector_store.v1.transfer (operation `list_vectors`), the
 // metadata a ListVectorsRequest (`limit` and `cursor` unused), each frame a VectorPage holding
-// documents only, about 256 KiB each (docs/adr/20261003_nats-streamed-results.md).
+// documents only, about 256 KiB each.
 //
 // `create_collection`'s `**kwargs` is deliberately NOT part of this wire contract. It is an
 // opaque passthrough straight into the concrete client library (QdrantAdapter and
@@ -38,7 +38,7 @@
 // proto3 cannot mark a bare `repeated` field `optional` -- so both wrap it in `VectorData`,
 // an `optional`-message field, to distinguish "no vector" from "an empty vector".
 //
-// Subjects (see "Protobuf contract shapes" in the RFC):
+// Subjects:
 //   abi.svc.vector_store.v1.initialize
 //   abi.svc.vector_store.v1.create_collection
 //   abi.svc.vector_store.v1.delete_collection

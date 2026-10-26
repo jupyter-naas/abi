@@ -1,4 +1,4 @@
-"""Who a request is, from the credential it presents (RFC §9.3).
+"""Who a request is, from the credential it presents.
 
 Every credential has a *kind*, its audience, and the Nexus API honours a kind
 only where it belongs:
@@ -15,7 +15,7 @@ Everything else is refused here: an app-html link, a preview link, a remote app
 grant (they open their own routes, ``apps/links.py``), an agent delegation (it
 is for the kernel and the module hosts). None of them is a session: the browser
 or an app's JavaScript can read them, a coding agent runs in a container.
-Nexus signs no token itself: it has no login (RFC §13), and ``secret_key`` signs
+Nexus signs no token itself: it has no login, and ``secret_key`` signs
 nothing.
 
 A session-only route is one that must never be reached with a key: the account

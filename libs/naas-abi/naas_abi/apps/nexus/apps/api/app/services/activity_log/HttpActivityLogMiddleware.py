@@ -69,8 +69,7 @@ DEFAULT_SKIP_BODY_PATH_PREFIXES: tuple[str, ...] = (
 def _redact(value: Any) -> Any:
     if isinstance(value, dict):
         return {
-            k: (REDACTED if k.lower() in SENSITIVE_KEYS else _redact(v))
-            for k, v in value.items()
+            k: (REDACTED if k.lower() in SENSITIVE_KEYS else _redact(v)) for k, v in value.items()
         }
     if isinstance(value, list):
         return [_redact(v) for v in value]
@@ -218,9 +217,7 @@ class HttpActivityLogMiddleware:
                 pass
 
     @staticmethod
-    def _record(
-        service: ActivityLogService, headers: Headers, attrs: dict[str, Any]
-    ) -> None:
+    def _record(service: ActivityLogService, headers: Headers, attrs: dict[str, Any]) -> None:
         def record() -> None:
             # The service names the actor from the call; this is its fallback
             # for a log not wired with IAM.
@@ -293,9 +290,7 @@ class HttpActivityLogMiddleware:
 
         if body_skipped_reason is not None:
             try:
-                size_hint = (
-                    int(content_length_header) if content_length_header else None
-                )
+                size_hint = int(content_length_header) if content_length_header else None
             except ValueError:
                 size_hint = None
             attrs["request_body"] = (

@@ -93,8 +93,9 @@ CacheFactory.CacheObjectStorage(object_storage, cache_prefix="cache") -> CacheSe
 
 ## Authorization
 
-Every operation is checked in the domain service against IAM (RFC
-[§5, §6.4](../../../../../docs/specs/rfcs/20261013_identity-and-authorization.md)),
+Every operation is checked in the domain service against IAM
+(`ResourceGuard`, see "Enforcing in a data service" in
+[`../iam/AGENTS.md`](../iam/AGENTS.md)),
 for the caller of the current `CallContext`, so in process and over NATS answer
 the same. The catalog is `iam_catalog.py`, registered by the serving engine at
 boot. A caller who cannot see a resource gets `CacheNotFoundError` (`CACHE_NOT_FOUND`; `exists` is False); one who can see it but not
@@ -103,15 +104,33 @@ an engine with IAM (a library use, a NATS facade whose server checks) does not
 check. The contract test is `CacheService_authorization_test.py`: no policy, granted and denied
 principals, in process and over NATS.
 
-* Each key is `key/<key>` (opaque); `Describe` is administration of
-  `service/-`.
+Resource types: `key/<key>` (`opaque`, placed by prefix) and `service/-`
+(singleton, platform).
+
+| Action | Level | Resource | Subject (`abi.svc.cache.v1.`) |
+|---|---|---|---|
+| `ListKeys` | list | each listed `key/<key>` | `list_keys`, `tier.<i>.list_keys` |
+| `Get` | read | `key/<key>` | `get`, `tier.<i>.get` |
+| `Exists` | read | `key/<key>` | `exists`, `tier.<i>.exists` |
+| `Set` | write | `key/<key>` | `set`, `tier.<i>.set` |
+| `SetIfAbsent` | write | `key/<key>` | `set_if_absent`, `tier.<i>.set_if_absent` |
+| `Delete` | write | `key/<key>` | `delete`, `tier.<i>.delete` |
+| `Describe` | admin | `service/-` | `describe` |
+
+The per-tier subjects are the engine's own: the broker grants them to `engine`
+only.
+
 * The checks run in the tier views (`hot`, `cold`, `tier_at`, which the NATS
   tier endpoints serve) and in the multi-tier service. `delete` of a key the
   caller may not see is a no-op, as for a missing one.
 * The decorator computes the result for a caller who may not read the key, and
   caches nothing for one who may not write it.
 * The cache's own entries in the key-value or object storage service are used
-  as the engine (`own_storage`): the caller was authorized on the cache key.
+  as the engine (`own_storage`, from `CacheKeyValueAdapter` and
+  `CacheObjectStorageAdapter`): the caller was authorized on the cache key, not
+  on the backing store. `own_storage` wraps only the single call of the
+  service's own storage, never code a caller steers (see `internal_call` in
+  [`../iam/AGENTS.md`](../iam/AGENTS.md)).
 
 ## Tests
 
@@ -141,13 +160,13 @@ delegated token (`abi:delegated:agent`, `act` the acting service, `sub` the user
 made by IAM's token exchange, never a header (the old `Abi-On-Behalf-Of` header is
 refused); trace and target workspace come from the request's `context`. Never read identity from request fields
 (`principal_id` and `tenant_id` are reserved). Clients of `api` and `engine` send a
-delegation for the current call's user, and the call's trace and workspace. Nothing authorizes on it yet.
+delegation for the current call's user, and the call's trace and workspace. The domain service authorizes the call on that context (see "Authorization").
 
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception
 mapping in the adapter. Primaries use `respond_protobuf` for bounded replies.
 Requests and replies above the broker limit (8 MiB, or lower) overflow as
-transfer frames up to 256 MiB (docs/adr/20261003_nats-rpc-overflow.md); above
+transfer frames up to 256 MiB (`naas_abi_core/engine/nats_rpc.py`); above
 that, at the overflow host's capacity, or with an older peer, the call fails
 with non-retryable `PAYLOAD_TOO_LARGE`. Micro-service error headers raise
 instead of becoming an empty success. Overflowed values are held whole in

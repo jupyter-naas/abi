@@ -1,4 +1,4 @@
-"""Nexus as an OIDC client of the engine's identity providers (RFC §12.1).
+"""Nexus as an OIDC client of the engine's identity providers.
 
 * **Sign-in** is authorization code with PKCE (S256). Nexus keeps the state,
   the nonce and the code verifier server-side, bound to the browser by a
@@ -7,7 +7,7 @@
 * **A user** is one Nexus row per ``(issuer, sub)``, whose id is its IAM
   principal id. Nothing is linked across providers: a verified email another
   account holds refuses the sign-in. The one exception is the move of the old
-  built-in login's users (RFC §13): at the *built-in* provider, which proves an
+  built-in login's users: at the *built-in* provider, which proves an
   address by mailing it a code, the verified email of a row no provider signs in
   yet links the identity to that row and to its IAM user, which keeps its roles,
   groups and data (``_link_legacy_user``).

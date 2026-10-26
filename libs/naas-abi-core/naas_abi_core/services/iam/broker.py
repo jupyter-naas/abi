@@ -1,4 +1,4 @@
-"""Broker permissions of a service account, from its policy (RFC §8.4).
+"""Broker permissions of a service account, from its policy.
 
 The NATS auth callout gives each module connection the subjects this module
 derives. The broker grants at the operation level: a service the account may

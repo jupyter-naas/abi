@@ -1,5 +1,4 @@
-"""Moving the users of the old built-in login to the built-in identity provider
-(RFC §13).
+"""Moving the users of the old built-in login to the built-in identity provider.
 
 The command (``abi user migrate``) makes each such person exist at the provider:
 the same email, a new ``sub``. Nothing else changes yet: the account is linked at

@@ -40,8 +40,7 @@ class SourceControlAdapterNATSConfiguration(BaseModel):
     """Source control adapter NATS RPC client configuration.
 
     Talks to a remote ``SourceControlPrimaryAdapterNATS`` over NATS
-    request/reply -- see docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
-    (Stage 1) and naas_abi_core/proto/source_control/v1/source_control.proto.
+    request/reply -- see naas_abi_core/proto/source_control/v1/source_control.proto.
 
     source_control_adapter:
       adapter: "nats_rpc"

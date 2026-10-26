@@ -883,7 +883,7 @@ def _run_coroutine_sync(coro: Any) -> Any:
         except Exception as e:  # noqa: BLE001
             container["error"] = e
 
-    # The caller's context (who is calling, RFC §10.2) goes with the coroutine:
+    # The caller's context (who is calling) goes with the coroutine:
     # a raw Thread starts with an empty one.
     thread = Thread(target=contextvars.copy_context().run, args=(_runner,), daemon=True)
     thread.start()

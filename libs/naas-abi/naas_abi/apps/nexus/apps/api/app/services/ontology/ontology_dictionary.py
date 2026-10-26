@@ -35,9 +35,13 @@ def build_workspace_dictionary(
 
     def links(iri: URIRef, predicate: URIRef) -> list[dict[str, Any]]:
         return [
-            {"id": str(value), "name": label(value), "sources": [
-                source for source, graph in sources if (iri, predicate, value) in graph
-            ]}
+            {
+                "id": str(value),
+                "name": label(value),
+                "sources": [
+                    source for source, graph in sources if (iri, predicate, value) in graph
+                ],
+            }
             for value in sorted(set(combined.objects(iri, predicate)), key=str)
             if isinstance(value, URIRef)
         ]
@@ -60,31 +64,44 @@ def build_workspace_dictionary(
             predicate = URIRef(namespace + "ledger" + bucket)
             entries = []
             for value in literals(combined, iri, predicate):
-                provenance = [source for source, graph in sources
-                              if value in literals(graph, iri, predicate)]
+                provenance = [
+                    source for source, graph in sources if value in literals(graph, iri, predicate)
+                ]
                 entries.append({"value": value, "sources": provenance})
             buckets[bucket] = entries
         if not any(buckets.values()):
             return None
-        return {"code": next(iter(literals(combined, iri, URIRef(namespace + "ledgerCode"))), None),
-                "buckets": buckets,
-                "status": literals(combined, iri, URIRef(namespace + "modelingStatus"))}
+        return {
+            "code": next(iter(literals(combined, iri, URIRef(namespace + "ledgerCode"))), None),
+            "buckets": buckets,
+            "status": literals(combined, iri, URIRef(namespace + "modelingStatus")),
+        }
 
     def metadata(iri: URIRef) -> dict[str, list[str]]:
         # Keep exact predicates and provenance: display-name/comment fallbacks
         # must never inflate metadata coverage, including after file filtering.
         return {
-            name: sorted({source["path"] for source, graph in sources
-                          if any(value.strip() for value in literals(graph, iri, predicate))})
-            for name, predicate in (("label", RDFS.label),
-                                    ("definition", SKOS.definition),
-                                    ("example", SKOS.example))
+            name: sorted(
+                {
+                    source["path"]
+                    for source, graph in sources
+                    if any(value.strip() for value in literals(graph, iri, predicate))
+                }
+            )
+            for name, predicate in (
+                ("label", RDFS.label),
+                ("definition", SKOS.definition),
+                ("example", SKOS.example),
+            )
         }
 
     kinds = {
-        OWL.Class: "entity", RDFS.Class: "entity",
-        OWL.ObjectProperty: "relationship", OWL.DatatypeProperty: "attribute",
-        OWL.AnnotationProperty: "annotation", OWL.NamedIndividual: "individual",
+        OWL.Class: "entity",
+        RDFS.Class: "entity",
+        OWL.ObjectProperty: "relationship",
+        OWL.DatatypeProperty: "attribute",
+        OWL.AnnotationProperty: "annotation",
+        OWL.NamedIndividual: "individual",
     }
     if include_ontologies:
         kinds[OWL.Ontology] = "ontology"
@@ -96,33 +113,72 @@ def build_workspace_dictionary(
                     continue
                 key = (kind, str(subject))
                 if key not in terms:
-                    parent_predicate = RDF.type if kind == "individual" else RDFS.subClassOf if kind == "entity" else RDFS.subPropertyOf
-                    parents = [parent for parent in links(subject, parent_predicate) if parent["id"] != str(OWL.NamedIndividual)]
-                    definitions = literals(combined, subject, SKOS.definition) or literals(combined, subject, RDFS.comment)
+                    parent_predicate = (
+                        RDF.type
+                        if kind == "individual"
+                        else RDFS.subClassOf
+                        if kind == "entity"
+                        else RDFS.subPropertyOf
+                    )
+                    parents = [
+                        parent
+                        for parent in links(subject, parent_predicate)
+                        if parent["id"] != str(OWL.NamedIndividual)
+                    ]
+                    definitions = literals(combined, subject, SKOS.definition) or literals(
+                        combined, subject, RDFS.comment
+                    )
                     terms[key] = {
-                        "id": str(subject), "name": label(subject), "type": kind,
+                        "id": str(subject),
+                        "name": label(subject),
+                        "type": kind,
                         "metadata": metadata(subject),
                         "description": definitions[0] if definitions else None,
-                        "definitions": [], "sources": [], "parents": parents,
+                        "definitions": [],
+                        "sources": [],
+                        "parents": parents,
                         "parent_id": parents[0]["id"] if parents else None,
                         "parent_name": parents[0]["name"] if parents else None,
                         "domain": links(subject, RDFS.domain),
                         "range": links(subject, RDFS.range),
                         "inverse": links(subject, OWL.inverseOf),
-                        "equivalents": links(subject, OWL.equivalentClass) if kind == "entity" else [],
-                        "systemViewKind": next(iter(literals(combined, subject, URIRef("http://ontology.naas.ai/abi/systemViewKind"))), None) if kind == "entity" else None,
-                        "systemViewParents": links(subject, URIRef("http://ontology.naas.ai/abi/systemViewParent")) if kind == "entity" else [],
+                        "equivalents": links(subject, OWL.equivalentClass)
+                        if kind == "entity"
+                        else [],
+                        "systemViewKind": next(
+                            iter(
+                                literals(
+                                    combined,
+                                    subject,
+                                    URIRef("http://ontology.naas.ai/abi/systemViewKind"),
+                                )
+                            ),
+                            None,
+                        )
+                        if kind == "entity"
+                        else None,
+                        "systemViewParents": links(
+                            subject, URIRef("http://ontology.naas.ai/abi/systemViewParent")
+                        )
+                        if kind == "entity"
+                        else [],
                         "processLedger": process_ledger(subject) if kind == "entity" else None,
-                        "sourceValues": literals(combined, subject, URIRef("http://ontology.naas.ai/abi/sourceValue")),
+                        "sourceValues": literals(
+                            combined, subject, URIRef("http://ontology.naas.ai/abi/sourceValue")
+                        ),
                         "examples": literals(combined, subject, SKOS.example),
                         "aliases": literals(combined, subject, SKOS.altLabel),
-                        "contributors": annotation_values(subject, DCTERMS.contributor, DC.contributor),
+                        "contributors": annotation_values(
+                            subject, DCTERMS.contributor, DC.contributor
+                        ),
                         "contacts": annotation_values(subject, DCAT.contactPoint),
                     }
                 term = terms[key]
                 if source not in term["sources"]:
                     term["sources"].append(source)
-                definitions = literals(graph, subject, SKOS.definition) or literals(graph, subject, RDFS.comment)
+                definitions = literals(graph, subject, SKOS.definition) or literals(
+                    graph, subject, RDFS.comment
+                )
                 for value in definitions:
                     definition = {"value": value, "source_path": source["path"]}
                     if definition not in term["definitions"]:
@@ -152,7 +208,9 @@ def build_workspace_dictionary(
                     _relations[key] = {
                         "property": {"id": str(prop), "name": label(prop)},
                         "target": {"id": str(target), "name": label(target)},
-                        "kind": kind, "constraint": constraint, "sources": [],
+                        "kind": kind,
+                        "constraint": constraint,
+                        "sources": [],
                     }
                 if _source not in _relations[key]["sources"]:
                     _relations[key]["sources"].append(_source)
@@ -161,18 +219,31 @@ def build_workspace_dictionary(
                 if prop in object_properties and isinstance(target, URIRef):
                     add_relation(prop, target, "assertion")
             for restriction in graph.objects(subject, RDFS.subClassOf):
-                if not isinstance(restriction, BNode) or (restriction, RDF.type, OWL.Restriction) not in graph:
+                if (
+                    not isinstance(restriction, BNode)
+                    or (restriction, RDF.type, OWL.Restriction) not in graph
+                ):
                     continue
                 prop = graph.value(restriction, OWL.onProperty)
                 if not isinstance(prop, URIRef):
                     continue
-                for predicate, constraint in ((OWL.someValuesFrom, "some"), (OWL.allValuesFrom, "only"), (OWL.hasValue, "value")):
+                for predicate, constraint in (
+                    (OWL.someValuesFrom, "some"),
+                    (OWL.allValuesFrom, "only"),
+                    (OWL.hasValue, "value"),
+                ):
                     for target in graph.objects(restriction, predicate):
                         if isinstance(target, URIRef):
                             add_relation(prop, target, "restriction", constraint)
     for term in terms.values():
         term["relations"] = sorted(
             relations_by_subject.get(term["id"], {}).values(),
-            key=lambda relation: (relation["property"]["id"], relation["target"]["id"], relation["constraint"]),
+            key=lambda relation: (
+                relation["property"]["id"],
+                relation["target"]["id"],
+                relation["constraint"],
+            ),
         )
-    return sorted(terms.values(), key=lambda term: (term["name"].casefold(), term["id"], term["type"]))
+    return sorted(
+        terms.values(), key=lambda term: (term["name"].casefold(), term["id"], term["type"])
+    )

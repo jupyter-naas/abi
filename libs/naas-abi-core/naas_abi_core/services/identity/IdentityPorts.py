@@ -1,4 +1,4 @@
-"""Identity: users from OIDC identity providers (RFC 20261013 §12.1).
+"""Identity: users from OIDC identity providers.
 
 The engine is not an identity provider. It trusts the providers configured
 under ``identity.providers``, verifies their tokens against each issuer's
@@ -165,7 +165,7 @@ class SignIn:
     user: AuthenticatedUser
     tokens: TokenSet = field(repr=False)
     # When the relying party must refresh at the latest: the ID token's
-    # expiry, never more than ten minutes after it was verified (RFC §12.1).
+    # expiry, never more than ten minutes after it was verified.
     refresh_at: int = 0
 
 
@@ -287,7 +287,7 @@ class OIDCHttpPort(ABC):
 
 class ProvisioningPort(ABC):
     """How ABI makes sure a person exists at an identity provider (secondary):
-    one adapter per ``provisioning`` setting (RFC §12.2).
+    one adapter per ``provisioning`` setting.
 
     ``builtin`` calls the built-in IdP's admin app over NATS, ``zitadel`` and
     ``keycloak`` their admin APIs; ``none`` raises ``NotImplementedError``,

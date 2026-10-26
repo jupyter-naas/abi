@@ -285,9 +285,7 @@ def _credentialed(tmp_path):
 
 
 def _as(client, credential: str):
-    return client.get(
-        "/api/agents/", headers={"X-Test-Credential": credential, CACHE_HEADER: "1"}
-    )
+    return client.get("/api/agents/", headers={"X-Test-Credential": credential, CACHE_HEADER: "1"})
 
 
 def test_a_limited_key_never_reads_or_fills_the_sessions_entry(tmp_path) -> None:
@@ -323,9 +321,7 @@ def test_any_credential_still_refreshes_and_invalidates_its_user(tmp_path) -> No
     assert _as(client, "session").headers[CACHE_HEADER] == "MISS"
     assert _as(client, "session").headers[CACHE_HEADER] == "HIT"
 
-    refreshed = client.post(
-        "/api/settings-cache/refresh", headers={"X-Test-Credential": "api-key"}
-    )
+    refreshed = client.post("/api/settings-cache/refresh", headers={"X-Test-Credential": "api-key"})
 
     assert refreshed.status_code == 204
     assert _as(client, "session").headers[CACHE_HEADER] == "MISS"

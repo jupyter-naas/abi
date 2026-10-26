@@ -186,7 +186,7 @@ class QueryResult(BaseModel):
 
 @dataclass
 class RowStream:
-    """A query result read incrementally (docs/adr/20261003_nats-streamed-results.md).
+    """A query result read incrementally.
 
     ``rows`` is a single-use iterator, valid inside the ``query_stream`` block,
     holding the values of DatasetValues.py.
@@ -243,7 +243,7 @@ class IDatasetPort(ABC):
         timeout_seconds: float | None = None,
     ) -> DatasetInfo:
         """``write`` for rows read from an iterator once, committed in one
-        snapshot: all of them or none (docs/adr/20261003_nats-streamed-results.md).
+        snapshot: all of them or none.
         ``timeout_seconds`` bounds the whole upload and commit.
 
         This default collects the rows and calls ``write``; adapters that can

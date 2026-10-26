@@ -1,4 +1,4 @@
-"""Authorization declared on the route (RFC §6.5, §10.2).
+"""Authorization declared on the route.
 
 A route names the action it performs, once, in its decorator::
 

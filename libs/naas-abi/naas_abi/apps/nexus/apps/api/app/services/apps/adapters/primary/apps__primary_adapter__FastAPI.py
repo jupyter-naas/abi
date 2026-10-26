@@ -43,7 +43,6 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
 from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
 from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
     resolve_app_enabled,
-    workspace_seed_for_slug,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps import links
 from naas_abi.apps.nexus.apps.api.app.services.apps.app_html_access import (
@@ -108,6 +107,18 @@ async def _workspace_slug(workspace_id: str) -> str | None:
             select(WorkspaceModel.slug).where(WorkspaceModel.id == workspace_id)
         )
         return result.scalar_one_or_none()
+
+
+async def _workspace_catalog_seed(workspace_id: str) -> dict | None:
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import parse_catalog_seed
+    from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(WorkspaceModel.catalog_seed).where(WorkspaceModel.id == workspace_id)
+        )
+        return parse_catalog_seed(result.scalar_one_or_none())
 
 
 def _fallback_name(dir_name: str) -> str:
@@ -670,9 +681,12 @@ async def list_apps(
 
     enabled_by_app_id = await apps_service.get_enabled_states(workspace_id)
     seed_apps: set[str] = set()
-    seed = workspace_seed_for_slug(workspace_slug)
-    if seed is not None and seed.apps:
-        seed_apps = {str(app_id).strip() for app_id in seed.apps if str(app_id).strip()}
+    if workspace_id:
+        from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import (
+            effective_seed_apps,
+        )
+
+        seed_apps = effective_seed_apps(workspace_slug, await _workspace_catalog_seed(workspace_id))
 
     results: list[AppInfo] = []
     for app in catalog:

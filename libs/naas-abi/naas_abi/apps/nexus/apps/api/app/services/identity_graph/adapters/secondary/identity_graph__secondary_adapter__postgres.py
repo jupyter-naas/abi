@@ -107,9 +107,7 @@ class IdentitySourceSecondaryAdapterPostgres(IdentitySourcePort):
                 workspace_scope(workspace.organization_id, workspace.id)
             )
         ]
-        platform_admins = {
-            u.id for u in users if await AUTHZ.allowed("ManageSystem", user=u.id)
-        }
+        platform_admins = {u.id for u in users if await AUTHZ.allowed("ManageSystem", user=u.id)}
 
         overlays: dict[str, dict[str, list[str]]] = {}
         for row in role_features:

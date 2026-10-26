@@ -15,7 +15,7 @@ TYPES = (
     rtype("icon"),
     rtype("layout"),
     rtype("layer"),
-    # The Maps catalog (ADR 20261012_nexus-maps-catalog-and-access): a feed is a
+    # The Maps catalog (``services/maps/AGENTS.md``): a feed is a
     # ``layout``; its layers, the basemaps, what the catalog read returns and who
     # may share what across workspaces are named here.
     rtype("feed_layer"),

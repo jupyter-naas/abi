@@ -1,4 +1,4 @@
-"""Policy documents: schema and validation (RFC §3.1).
+"""Policy documents: schema and validation.
 
 A document is ``{"version": "2026-10-13", "statements": [...]}``; each statement
 has an optional ``sid``, an ``effect`` (``Allow`` or ``Deny``), ``actions`` and
@@ -32,9 +32,9 @@ MAX_PATTERNS = 100
 
 Effect = Literal["Allow", "Deny"]
 
-# Variables a stored policy may use in its resources (RFC §3.4). The module
-# ones resolve for a module's service account, ``module/<project>/<id>``
-# (RFC §8.3); for any other principal they match nothing.
+# Variables a stored policy may use in its resources. The module ones resolve
+# for a module's service account, ``module/<project>/<id>``, and are bound when
+# its manifest is approved; for any other principal they match nothing.
 MODULE_VARIABLES = frozenset({"module.id", "module.project"})
 POLICY_VARIABLES = frozenset({"scope", "principal.id", "user.id"}) | MODULE_VARIABLES
 # What a policy attached at a scope must start each resource pattern with.

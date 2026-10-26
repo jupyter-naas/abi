@@ -141,7 +141,9 @@ class TestNoEmailInTheLog:
 
     def test_the_email_comes_back_from_the_user_directory(self, adapter, storage):
         adapter.save_event(event())
-        storage.json["ref-users.json"] = [{"user_id": "u-alice", "user_email": "alice.new@example.com"}]
+        storage.json["ref-users.json"] = [
+            {"user_id": "u-alice", "user_email": "alice.new@example.com"}
+        ]
         assert adapter.list_events()[0]["user_email"] == "alice.new@example.com"
 
     def test_an_unknown_user_comes_back_without_an_email(self, adapter, storage):

@@ -87,7 +87,7 @@ class SourceControlService(ServiceBase):
     port. The operation is always the source of truth — event publishing is
     fail-safe and must never break a (potentially expensive) forge call.
 
-    Every operation is authorized (``source_control:*``, RFC §6.4) once the
+    Every operation is authorized (``source_control:*``) once the
     service is wired with IAM: a repository is a placed container
     (``repo/<owner>%2F<name>``) holding its branches and proposals; a forge user
     is personal (``forge_user/<principal id>``). The principal an operation
@@ -156,7 +156,7 @@ class SourceControlService(ServiceBase):
 
     def _visible_repo(self, repo_id: str) -> None:
         """A repository's items are listed only once the repository itself is
-        visible: not found otherwise (RFC §5.5)."""
+        visible: not found otherwise."""
         self._known_repo_id(repo_id)
         iam = self._guard.iam
         if iam is None:
@@ -212,7 +212,7 @@ class SourceControlService(ServiceBase):
     def ensure_repo(
         self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
     ) -> Repo:
-        """Create the repository, placed in the call's target workspace (RFC §4.4).
+        """Create the repository, placed in the call's target workspace.
 
         Re-ensuring a repository that exists is not a create: it needs
         ``EnsureRepo`` on the repository as placed. One with no placement

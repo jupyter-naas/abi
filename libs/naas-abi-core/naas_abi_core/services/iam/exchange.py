@@ -1,4 +1,4 @@
-"""Token exchange (RFC 8693, RFC §9.4): the one way a narrow credential is made.
+"""Token exchange (RFC 8693): the one way a narrow credential is made.
 
 A subject that was already verified is exchanged for an engine-signed token with
 its own audience, a short life and, optionally, a narrower ``abi_scope``:
@@ -18,7 +18,7 @@ has its own exchange (``IAMService.exchange_key``).
 
 An exchange never adds a permission: the token carries the user, and the user's
 policy still decides; the actor of an agent token is a second policy that must
-allow too (RFC §5.3); a scope narrows further.
+allow too; a scope narrows further.
 """
 
 from __future__ import annotations

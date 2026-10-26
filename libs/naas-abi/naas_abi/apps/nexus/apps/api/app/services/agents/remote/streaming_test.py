@@ -169,9 +169,7 @@ def test_the_stream_reads_on_to_the_runs_end_after_done():
             finished.append(True)
 
     chunks = _run(
-        _Draining(
-            [{"event": "ai_message", "data": "hi"}, {"event": "done", "data": "[DONE]"}]
-        )
+        _Draining([{"event": "ai_message", "data": "hi"}, {"event": "done", "data": "[DONE]"}])
     )
 
     assert chunks == ["hi"]

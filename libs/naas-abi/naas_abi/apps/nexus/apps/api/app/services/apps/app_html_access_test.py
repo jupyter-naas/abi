@@ -50,9 +50,7 @@ def test_a_session_opens_no_app_html_page(iam: IAMService) -> None:
     with as_service_account("engine"):
         ada = iam.ensure_user("https://idp.example", "ada")
     with as_service_account("api"):
-        session = iam.exchange_token(
-            TokenExchange(ada.id, TOKEN_TYPE_SESSION, "abi:session")
-        ).token
+        session = iam.exchange_token(TokenExchange(ada.id, TOKEN_TYPE_SESSION, "abi:session")).token
     old = jwt.encode(
         {
             "sub": "user-1",

@@ -676,7 +676,7 @@ def _nats_server_config(passwords: dict[str, str], issuer: str) -> str:
     """Body of the nats.conf handed to nats-server with -c. Ports, bind
     address and JetStream stay on the command line (flags override the file),
     so this only carries what has no flag: max_payload, and the broker's
-    authorization, as in the Docker stack (RFC §8.4):
+    authorization, as in the Docker stack:
 
     * `engine` (the engine's processes) may use everything but `$SYS`;
     * `auth` answers the auth callout and nothing else;
@@ -1161,8 +1161,10 @@ def _dev_modules(strict: bool = True) -> dict:
         raise click.ClickException(
             f"Invalid `dev.modules` in the project config: {exc}"
         ) from exc
-    # The built-in IdP, unless the project declares it or has providers of its own.
-    modules = with_builtin_idp(modules, _project_identity())
+    # The built-in IdP, unless the project declares it or has providers of its
+    # own. It is a module over NATS: a project without NATS has none.
+    if _project_declares_nats():
+        modules = with_builtin_idp(modules, _project_identity())
     clashes = sorted(set(modules) & set(KNOWN_SERVICES))
     if clashes:
         raise click.ClickException(

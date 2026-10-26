@@ -37,9 +37,7 @@ async def test_list_conversations_by_workspace_maps_rows() -> None:
     db.execute = AsyncMock(return_value=_scalar_result(many=[row]))
 
     adapter = ChatSecondaryAdapterPostgres(db=db)
-    conversations = await adapter.list_conversations_by_workspace(
-        "ws-1", "user-1", 10, 0
-    )
+    conversations = await adapter.list_conversations_by_workspace("ws-1", "user-1", 10, 0)
 
     assert len(conversations) == 1
     assert conversations[0].id == "conv-1"

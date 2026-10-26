@@ -119,7 +119,9 @@ class RelationshipCreate(BaseModel):
 
 
 class ImportRequest(BaseModel):
-    content: str = Field(..., min_length=1, max_length=5_000_000, description="File content (text, max ~5MB)")
+    content: str = Field(
+        ..., min_length=1, max_length=5_000_000, description="File content (text, max ~5MB)"
+    )
     filename: str = Field(
         ...,
         min_length=1,

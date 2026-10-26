@@ -1,4 +1,4 @@
-"""Token exchange (RFC §9.4): narrow, engine-signed tokens, each with its own
+"""Token exchange: narrow, engine-signed tokens, each with its own
 audience, derived from an identity that was already verified."""
 
 from __future__ import annotations

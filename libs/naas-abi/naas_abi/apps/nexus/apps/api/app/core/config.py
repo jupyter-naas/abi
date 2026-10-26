@@ -422,6 +422,8 @@ class WorkspaceSeedConfig(BaseModel):
     # Group in the workspace lists ("Others" when empty). Bootstrap only: applied
     # when the workspace has no group yet, so a group changed in the UI stays.
     group: str | None = Field(default=None, max_length=100)
+    # Client/module workspace default (``external.acme AcmeAgent``). When unset,
+    # sync uses engine ``default_agent`` (typically naas_abi AbiAgent).
     default_agent: str | None = None
     agents: list[str] | None = None
     apps: list[str] | None = None
@@ -556,7 +558,7 @@ class Settings(BaseSettings):
     # own key, never ``secret_key``: empty, it is generated and kept in the engine's
     # secret store as ``NEXUS_SECRETS_KEY`` (``core/secret_key.py``).
     secrets_encryption_key: str = ""
-    # Before RFC §13 this key signed Nexus's tokens and encrypted the secrets. It
+    # This key used to sign Nexus's tokens and encrypt the secrets. It
     # signs nothing now, and is read at start only to move what it encrypted under
     # ``secrets_encryption_key``; unset it once Nexus logged that it had.
     secret_key: str = ""

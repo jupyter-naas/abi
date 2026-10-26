@@ -4,9 +4,9 @@ import "naas_abi_proto/common/v1/common.proto";
 
 // An HTTP request Nexus forwards to a remote module's app, on
 // abi.mod.<project>.<instance_id>.app.<name>.http
-// (docs/adr/20261012_remote-module-apps.md). A small body travels inline. A
-// larger one follows: the module pulls it from body_inbox with BodyPull, one
-// chunk at a time, so it is never read faster than the app consumes it.
+// A small body travels inline. A larger one follows: the module pulls it from
+// body_inbox with BodyPull, one chunk at a time, so it is never read faster than
+// the app consumes it.
 message Header { string name = 1; string value = 2; }
 message HttpRequest {
   abi.common.v1.CallContext context = 1;

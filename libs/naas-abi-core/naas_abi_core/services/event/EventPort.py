@@ -94,8 +94,7 @@ class IEventAdapter(ABC):
         newest_first: bool = False,
         search: str | None = None,
     ) -> Iterator[Iterator[StoredEvent]]:
-        """``query``, read as the caller iterates, inside the block
-        (docs/adr/20261003_nats-streamed-results.md).
+        """``query``, read as the caller iterates, inside the block.
 
         Same filters and order as ``query``. The highest ``seq`` is pinned
         when the block opens: events appended while it is read are not

@@ -5,11 +5,11 @@
 The built-in OIDC identity provider of ABI: the default provider of `abi dev up`
 and of small installs, where nobody runs Okta or Zitadel. It keeps the flow
 Nexus had: **register with just an email, sign in with a code** emailed to it.
-Specification: RFC
-[`docs/specs/rfcs/20261013_identity-and-authorization.md`](../../docs/specs/rfcs/20261013_identity-and-authorization.md)
-§12; decision: ADR
-[`20261013_identity-providers-and-builtin-idp`](../../docs/adr/20261013_identity-providers-and-builtin-idp.md)
-and its "As built" section.
+The engine's side of the same flow (verifying its ID tokens, mapping `(issuer, sub)` to IAM users, the
+provisioning port that calls this provider's admin app) is
+[`libs/naas-abi-core/.../services/identity/AGENTS.md`](../naas-abi-core/naas_abi_core/services/identity/AGENTS.md);
+Nexus's side, the relying party, is
+[`libs/naas-abi/.../services/oidc/AGENTS.md`](../naas-abi/naas_abi/apps/nexus/apps/api/app/services/oidc/AGENTS.md).
 
 It is an **SDK module** (`naas_abi_sdk.BaseModule`), `module_id = "idp"`, and
 **core-free**: it depends on `naas-abi-sdk`, `naas-abi-proto`, `authlib`,
@@ -146,6 +146,48 @@ identity service (`ProvisioningBuiltinIdP`).
   identity service), never over HTTP; the discovery document may name only
   endpoints below the issuer.
 
+## Decisions
+
+- **The engine and Nexus are not identity providers.** They verify the tokens of OIDC providers configured
+  engine-wide under `identity.providers`; Nexus is an OIDC client (authorization code + PKCE, a server-held
+  session cookie, nothing in `localStorage`). Providers are not per organization; `organization_domains.provider`
+  routes the logins of a verified email domain to one, else the default provider is used. A user is
+  `(issuer, sub)`, never an email; accounts are never linked across providers.
+- **This provider is a core-free SDK module** (this package), running over NATS, so that `abi dev up` and a
+  small install need no Okta, Zitadel or Docker: register with an email, sign in with a code. SAML, brokering
+  other IdPs and MFA policies are out of scope. It is the one provider whose verified email may take over an
+  account of the old Nexus login, because it proves an address by mailing a code (`provisioning: builtin`).
+- **It runs as a module account** `module/<project>/idp` like every remote module: it submits its permission
+  manifest (the default one for `document`, `secret` and `email`), an admin approves it (`abi dev up` does), the
+  broker confines it, and discovery binds the module id to that account. The built-in account `idp`
+  (policy `builtin.idp`, covering only its own namespace, secrets and sender) stays for a deployment that prefers
+  it. **Module id `idp` is reserved**: the seals of its namespace (`document`) and secrets (`secret`, `idp/`) name
+  the account `idp` **and** the module id (`Seal.module_id`), and the secret endpoint's allow-list treats a module
+  account of that id as the IdP (`secret_nats_contract.is_idp`); only an admin creates its account.
+- **Its data and keys are private**: its own Document Service namespace `idp` and its secrets under `idp/`, sealed
+  to its principal (not even `api` or `engine` reads them). It never uses Nexus's `secret_key`, and Nexus never
+  reads its data.
+- **It gets a dedicated trusted route** (`/idp` on Nexus's host, forwarded over `abi.app.v1`), because the
+  sandboxed `/app-remote/<grant>/` path of remote apps forbids what a login page needs: access before sign-in,
+  cookies and form posts. Only the module running as `module/<project>/idp` may answer there, and the route is
+  configured, never discovered.
+- **The admin RPCs are a second app** (`admin`, JSON over `abi.app.v1`), never on the public route. Discovery's
+  `OpenApp` is read-level and any service account holding a workspace role has it, so the app refuses any caller
+  but `api` and `engine` acting for nobody. A module that depends on `idp` has the admin app denied in its default
+  manifest, and the platform viewer/member policies Deny it too.
+- **Revocation.** Access tokens live 10 minutes at most (`configuration.MAX_TOKEN_SECONDS`), and an IAM
+  suspension takes effect at once. There is no SCIM and no token introspection.
+- **No external IdP is bundled.** Okta, Entra, Zitadel and Keycloak are documented at https://docs.naas.ai.
+  Zitadel, a single pinned native binary the test helper downloads (as `nats-server`), is the external reference
+  provider of the generic identity suite in core (`services/identity/tests/identity_contract.py`), which runs the
+  same tests against this provider.
+
+**Consequences.** A person whose email already belongs to a Nexus account of the old login cannot sign in until
+the accounts are linked (`abi user migrate`). A deployment outside Docker or `abi dev` creates the
+`module/<project>/idp` account and key itself (`abi iam service-account create ... --key`, `abi iam module
+approve`). Group changes and offboarding reach ABI within ten minutes through token expiry, or at once through an
+IAM suspension.
+
 ## Configuration
 
 `IdPConfiguration` (JSON file via `ABI_IDP_CONFIG`, or the environment):
@@ -173,7 +215,7 @@ Module id `idp` is reserved to this module: the seals and the secret endpoint
 treat any account `module/<project>/idp` as the IdP, and only an admin creates
 accounts.
 
-**Accounts of the old Nexus login** move here (ADR `20261019_login-moves-out-of-nexus.md`):
+**Accounts of the old Nexus login** move here (`abi user migrate`; the Nexus side is in `services/oidc/AGENTS.md`, "Accounts of the old login"):
 `abi user migrate --apply` makes each of them exist as an IdP user with the same email
 (`ProvisioningBuiltinIdP`), and at their first sign-in, with the address verified by the
 code mailed to it, Nexus links the identity to the existing account and IAM user

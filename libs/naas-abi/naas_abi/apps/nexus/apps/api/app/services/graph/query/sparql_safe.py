@@ -39,9 +39,7 @@ _ILLEGAL_IRI_CHARS = frozenset('<>"{}|^`\\')
 
 # A canonical xsd:date / xsd:dateTime lexical form (date, or date with a time + optional
 # fractional seconds + optional timezone). Strict — anything else is rejected.
-_DT_RE = re.compile(
-    r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?)?$"
-)
+_DT_RE = re.compile(r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?)?$")
 # A plain decimal lexical form: optional sign, digits, optional fraction. No exponent.
 _DECIMAL_RE = re.compile(r"^-?\d+(\.\d+)?$")
 

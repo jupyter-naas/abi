@@ -104,68 +104,47 @@ Everything below `organizations` is scoped to `workspace_id`: agents, conversati
 
 Do not add a role check at the endpoint: declare the action (`guard`, `declares`) and let IAM decide.
 
+Where each part of the permission system lives (read the one you touch):
+
+| Scope | AGENTS.md |
+|---|---|
+| Nexus authorization on IAM: the `nexus` catalog, roles, features, memberships, placements | `apps/api/app/services/iam/AGENTS.md` |
+| Sign-in, sessions, CSRF, credential kinds, API keys, links, the old login's accounts | `apps/api/app/services/oidc/AGENTS.md` |
+| The IAM admin pages (policies, attachments, groups, service accounts, approvals, simulator, audit) | `apps/api/app/services/iam_admin/AGENTS.md` |
+| Invitations and IdP group bindings | `apps/api/app/services/invites/AGENTS.md` |
+| Graph access (placements and shared graphs as IAM policies) | `apps/api/app/services/graph/AGENTS.md` |
+| The built-in identity provider and its trusted `/idp` route | `libs/naas-abi-idp/AGENTS.md` |
+
 ### Sign-in through identity providers
 
-Nexus has **no login of its own** (ADR `docs/adr/20261019_login-moves-out-of-nexus.md`): no password, magic link,
-one-time code, reset, signup or refresh token, and no token signed with `secret_key`. `services/auth/` keeps the
-signed-in user's account (`/api/auth/me`, the avatar) and `credentials.py`. `services/oidc/` makes Nexus an OIDC
-client of the engine's providers (`identity.providers`, guide `docs/identity-providers.md`, ADR
-`docs/adr/20261015_nexus-oidc-sessions.md`):
+Nexus has **no login of its own**: no password, magic link, one-time code, reset, signup or refresh
+token, and no token signed with `secret_key`. People sign in at an OIDC identity provider the engine
+trusts (`identity.providers`; the built-in one, `libs/naas-abi-idp`, is the default), and Nexus is its
+relying party. Read `apps/api/app/services/oidc/AGENTS.md` before touching it: sign-in (PKCE, the
+engine redeems the code), one Nexus `users` row per `(issuer, sub)` whose id is the IAM principal id,
+the `nexus_session` cookie and its CSRF token, what a cookie never authenticates (pages, frames), the
+link of the old login's accounts at their first sign-in (`abi user migrate`), and the key of workspace
+secrets (`secrets_encryption_key`, `NEXUS_SECRETS_KEY`).
 
-- `/api/auth/oidc/{providers,route,login,callback,session,logout}`. The engine redeems the code: Nexus never
-  holds a client secret.
-- One `users` row per `(issuer, sub)`, whose id is the IAM principal id (`principal_id`, `idp_issuer`,
-  `idp_subject`). The rows of the old login keep their id and are **linked at their first sign-in** through the
-  built-in provider, by its verified email, and nowhere else (`OidcSignInService._link_legacy_user`,
-  `iam.link_user`): they keep their roles, groups, keys and data. `abi user migrate [--apply]` makes those people
-  exist at the built-in provider first (`services/oidc/migration.py`). An email no verified domain maps goes to
-  the default provider (`route`).
-- The session is the `nexus_session` httpOnly cookie, stored in `auth_sessions` and resolved by
-  `RequestIdentityMiddleware`, which leaves it on `request.state.nexus_session`. `get_current_user` reads it
-  when there is no bearer token.
-- The cookie authenticates no page or frame (`Sec-Fetch-Dest` document, iframe, embed, object, or
-  `Sec-Fetch-Mode: navigate`): a link to an API URL is anonymous. A route that serves user bytes sends
-  `user_content_headers` (`core/user_content.py`): sandbox CSP, `nosniff`, and `attachment` for active
-  types; the security-headers middleware does the same for any `/api` response of an active type.
-- A cookie request that changes state needs `X-CSRF-Token` (from `GET /api/auth/oidc/session`); without it
-  `get_current_user_required` answers 403.
+- `services/auth/` keeps the signed-in user's account (`GET|PATCH /api/auth/me`, the avatar) and
+  `credentials.py`; `services/oidc/` is the sign-in and the session.
 - The web app holds the cookie session only and keeps no token (`stores/auth.ts`): use `authFetch`, or
   `withAuth` / `getAuthHeader(method)` + `authCredentials()` for a raw `fetch`, and `selectSession` /
   `hasSession` to know whether someone is signed in.
-- **Keys**: workspace secrets and the provider tokens of sessions are encrypted under `secrets_encryption_key`
-  (`core/secret_key.py`, generated as `NEXUS_SECRETS_KEY`); `services/secrets/migration.py` moves what is still
-  under the old `secret_key` at start. `secret_key` signs nothing and encrypts nothing
-  (`credentials_test.py::test_the_secret_key_signs_and_reads_no_token` scans for a signer).
+- A route that serves user bytes sends `user_content_headers` (`core/user_content.py`): user content
+  never runs on the API origin, which holds the cookie.
 
 ### Credentials: which kind goes where
 
-Every credential has a kind, its audience, and Nexus honours it only where it belongs
-(`services/auth/credentials.py`, ADR `docs/adr/20261019_delegated-tokens-and-api-keys.md`):
-
-| Kind | Credential | Accepted by |
-|---|---|---|
-| `session` | the cookie of an identity-provider login, a session token the engine issued (`abi:session`) | every route, and the WebSocket |
-| `api-key` | a personal API key (`abi_pk_…`, or the `abi:delegated:api-key` token it buys at `POST /api/iam/token`) | `/api/*` except the session-only prefixes `/api/auth/` and `/api/iam/` |
-| `coding` | a coding environment's key (`abi_pk_…`, audience `abi:delegated:coding`) | the OpenAI gateway, `/api/v1/*`, which finds the workspace's exec sidecar from the key's `resource` (`coding_environments` row) |
-
-- `RequestIdentityMiddleware` resolves the credential and leaves it on `request.state.nexus_credential`;
-  `accepted_kinds(path)` decides. A real credential of a kind the route does not take is refused with a 403
-  that names it (`nexus_credential_refused`), never read as a session. Never decode a bearer token by hand:
-  `bearer_credential` verifies it against the engine's IAM (keys and `abi:session` tokens the engine issued),
-  and a token signed by Nexus does not exist.
-- Links are IAM grants (`services/apps/links.py`): `/app-html/` links, `/app-preview/` tokens and `/app-remote/`
-  grants are `abi_gk_…` keys of the user, audience `abi:delegated:app` or `preview`, bound to what they open,
-  eight hours at most, revocable, checked again at every request. No secret of Nexus signs one.
-- A coding environment's agent holds a personal key made for it (`services/coding_environment/agent_credentials.py`):
-  bound to its sidecar, narrowed to its workspace, revoked with the environment. There is no thirty-day session
-  token any more.
-- API keys: `services/api_keys/` (`GET/POST /api/iam/api-keys`, `DELETE /api/iam/api-keys/{id}`, session-only;
-  the page is `app/account/api-keys`). IAM keeps them hashed; a key narrows to *read only* or to statements of
-  the owner's writing and never exceeds the owner's policies. `revoke_all_user_tokens` also revokes what the
-  engine issued for the user (`revoke_user_credentials`), keeping their API keys.
-- Calls Nexus makes over NATS for the signed-in user carry a delegation (`engine_credentials.api_delegate`):
-  IAM signs it in process, naming `api`, or for a module host that module, and the user. There is no
-  `Abi-On-Behalf-Of` header.
+Every credential has a kind (its audience) and Nexus honours it only where it belongs
+(`services/auth/credentials.py`, `accepted_kinds(path)`): a **session** (the cookie, or an `abi:session`
+token the engine issued) everywhere and on the WebSocket; a **personal API key** (`abi_pk_...`) on `/api/*`
+except the session-only prefixes `/api/auth/` and `/api/iam/`; a **coding environment's key** at the OpenAI
+gateway (`/api/v1/*`) alone. App links, previews and remote-app grants are IAM grants (`abi_gk_...`, eight
+hours, revocable) that open their own routes and are never sessions. The table, the key rules and the
+delegations Nexus makes over NATS for the signed-in user are in
+`apps/api/app/services/oidc/AGENTS.md` ("Credentials: which kind goes where"). Personal API keys:
+`services/api_keys/` (`/api/iam/api-keys`, session-only; the page is `app/account/api-keys`).
 
 ### Business workspace vs Code workspace
 
@@ -449,7 +428,7 @@ The Maps sidebar mirrors Search sources: collapsible **Public / Private / Custom
 
 Every environment-registered layer renders through `MapsCustomFeed` and fetches through the authed proxy at `/api/maps/custom/[datasetId]`, which requires a Bearer token plus `workspace_id` and is never cached. `endpoint` must be a **path on the Nexus API**: the proxy forwards the caller's token, so absolute and protocol-relative URLs are rejected at parse time, as are ids that are not route-safe and ids that shadow a built-in dataset.
 
-**Runtime graph layers.** Modules may instead call `register_map_layer(app, GraphMapLayer(...))` from their FastAPI hook. `GET /api/maps/layers?workspace_id=...` discovers only layers whose declared graph is readable. `/api/maps/layers/{id}` checks authentication, workspace membership and graph grants, then supplies a scoped store to the module projection. The browser loads these Custom layers through `MapsGraphFeed` without deployment-specific frontend configuration. Optional pin metadata (`entityUri`, `graphUri`, `country`, `precision`, `observedAt`, `sources`, `relationships`, `address`, `photoUrl`, `streetViewUrl`, `imageSearchUrl`) enables search, country filtering, the KG inspector, cited photos and constructed Street View / image-search links. The pin inspector is a place card: photo strip, title, action chips, then address. Cited `foaf:depiction` HTTPS URLs are included when present. `/api/maps/place` returns Google Place Photos and Details when `GOOGLE_PLACES_API_KEY` or `GOOGLE_MAPS_API_KEY` is set on nexus-web. Without a key, the first photo is Street View Static via `/api/maps/streetview` (OSM preview if that API is also keyless). Do not scrape Google Images or ship keys as `NEXT_PUBLIC_*` or `VITE_*`. Street View and Directions use lat/lng via the Google Maps URLs API; do not hardcode Place FIDs. Never substitute a local ledger when the live graph is empty. See `services/maps/AGENTS.md` and ADR `20260921_module_graph_map_layers.md`.
+**Runtime graph layers.** Modules may instead call `register_map_layer(app, GraphMapLayer(...))` from their FastAPI hook. `GET /api/maps/layers?workspace_id=...` discovers only layers whose declared graph is readable. `/api/maps/layers/{id}` checks authentication, workspace membership and graph grants, then supplies a scoped store to the module projection. The browser loads these Custom layers through `MapsGraphFeed` without deployment-specific frontend configuration. Optional pin metadata (`entityUri`, `graphUri`, `country`, `precision`, `observedAt`, `sources`, `relationships`, `address`, `photoUrl`, `streetViewUrl`, `imageSearchUrl`) enables search, country filtering, the KG inspector, cited photos and constructed Street View / image-search links. The pin inspector is a place card: photo strip, title, action chips, then address. Cited `foaf:depiction` HTTPS URLs are included when present. `/api/maps/place` returns Google Place Photos and Details when `GOOGLE_PLACES_API_KEY` or `GOOGLE_MAPS_API_KEY` is set on nexus-web. Without a key, the first photo is Street View Static via `/api/maps/streetview` (OSM preview if that API is also keyless). Do not scrape Google Images or ship keys as `NEXT_PUBLIC_*` or `VITE_*`. Street View and Directions use lat/lng via the Google Maps URLs API; do not hardcode Place FIDs. Never substitute a local ledger when the live graph is empty. See `services/maps/AGENTS.md`.
 
 A graph feed can supply optional `coverage: {pins: [...]}` alongside address `pins`. Coverage pins carry the same evidence metadata plus `memberIds` referencing address IDs in the same feed. This enables an Addresses / City coverage switch on the same Leaflet map. Natural Earth provides geographic boundaries only; city counts, country presence and drill-down membership come from the authorized module projection. Country fills support mouse and keyboard selection. Boundary-fetch failures leave city markers usable. No product-specific country lists or graph queries belong in ABI.
 

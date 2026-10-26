@@ -16,8 +16,7 @@ payload, idempotency_key=...)`` from sync code, ``await self.atrigger_job(...)``
 from async code.
 
 JetStream message schedules (NATS >= 2.12, time zones >= 2.14) produce the
-triggers; one durable consumer per job hands each trigger to one replica. See
-docs/adr/20261001_nats-jobs.md.
+triggers; one durable consumer per job hands each trigger to one replica.
 """
 
 from __future__ import annotations

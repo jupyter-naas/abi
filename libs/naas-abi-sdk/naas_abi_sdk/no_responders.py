@@ -3,8 +3,7 @@
 One engine serves the kernel services and discovery, on queue groups. While it
 hands over to the next one during a deploy, or restarts, a request can briefly
 find nobody subscribed. The broker then answers "no responders" without
-delivering it, so sending it again is always safe. See ABI's
-docs/adr/20261006_single-serving-engine.md.
+delivering it, so sending it again is always safe.
 
 Subjects of one instance (presence, agents, transfer sessions) are not retried:
 nobody answering there means the instance is gone. A transfer's open is the

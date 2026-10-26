@@ -1,6 +1,4 @@
 // Shared envelope types for NATS-RPC-exposed kernel domain services.
-// See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
-// ("Protobuf contract shapes", "Decisions locked in").
 //
 // Every kernel-domain RPC (object_storage, and whatever follows it) embeds a
 // CallContext in its request and reports errors via CallError, so callers
@@ -13,10 +11,9 @@ package abi.common.v1;
 // Carried on every kernel-domain RPC call. Request data, never identity.
 //
 // Who calls is not read from here: a server takes the caller from the
-// verified Nats-Auth-Token header, and the user it acts for from the
-// Abi-On-Behalf-Of header (honoured from trusted identities only), into the
-// engine's CallContext variable (naas_abi_core.engine.call_context; see
-// docs/specs/rfcs/20261013_identity-and-authorization.md, §10). Anything in a
+// verified Nats-Auth-Token header (an abi:delegated:agent token names the user
+// the caller acts for), into the engine's CallContext variable
+// (naas_abi_core.engine.call_context, naas_abi_sdk.call_context). Anything in a
 // request body is the caller's own claim, so it is untrusted.
 message CallContext {
   string trace_id = 1;

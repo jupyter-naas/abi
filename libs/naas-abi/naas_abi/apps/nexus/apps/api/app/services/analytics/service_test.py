@@ -644,7 +644,9 @@ class TestUnchangedAggregatesAreNotRewritten:
 def _user_directory(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
         {"user_id": e["user_id"], "user_email": e["user_email"]}
-        for e in {e["user_id"]: e for e in events if e.get("user_id") and e.get("user_email")}.values()
+        for e in {
+            e["user_id"]: e for e in events if e.get("user_id") and e.get("user_email")
+        }.values()
     ]
 
 

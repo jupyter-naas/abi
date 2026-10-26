@@ -479,7 +479,9 @@ def test_an_update_without_an_answer_raises_a_request_error(failure):
     adapter._session.post.side_effect = failure
 
     graph = Graph()
-    graph.add((URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C")))
+    graph.add(
+        (URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C"))
+    )
 
     with pytest.raises(Exceptions.RequestError) as exc_info:
         adapter.insert(graph, URIRef("http://example.org/g"))
@@ -821,7 +823,7 @@ def test_test_connection_does_not_retry_non_retryable_status(mock_sleep):
     mock_sleep.assert_not_called()
 
 
-# --- streamed reads (docs/adr/20261003_nats-streamed-results.md)
+# --- streamed reads
 
 
 def _streaming_response(content_type: str, lines: list[str], status: int = 200) -> Mock:
@@ -906,7 +908,7 @@ def test_export_streams_a_graph_as_n_triples_without_query():
 
 
 def test_a_confined_query_sends_its_dataset_as_protocol_parameters():
-    # RFC §6.4: the parameters take precedence over the query's own FROM; the
+    # The parameters take precedence over the query's own FROM; the
     # union default graph is limited to the readable graphs, and Jena's name
     # for its own default graph joins it when that is readable too.
     from naas_abi_core.services.triple_store.TripleStorePorts import (

@@ -327,7 +327,7 @@ def test_closed_client_cannot_reconnect():
     asyncio.run(close())
 
 
-# --- overflow: payloads above the broker limit (docs/adr/20261003_nats-rpc-overflow.md)
+# --- overflow: payloads above the broker limit
 
 
 class OverflowBroker:

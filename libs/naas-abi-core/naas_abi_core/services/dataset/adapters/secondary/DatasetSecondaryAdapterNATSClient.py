@@ -291,7 +291,7 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
         timeout_seconds: float | None = None,
     ) -> DatasetInfo:
         """Upload the rows as they are read, one JSON object per line, over a
-        transfer stream (docs/adr/20261003_nats-streamed-results.md); the
+        transfer stream; the
         engine commits them once. An error while reading ``rows`` discards the
         upload: nothing is written. ``timeout_seconds`` bounds the upload and
         the wait for the commit (``None``: no bound; each exchange of the
@@ -360,9 +360,9 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
         namespace: str = "default",
         snapshot_id: int | None = None,
     ) -> Iterator[RowStream]:
-        """Rows fetched as the caller iterates, over a transfer stream
-        (docs/adr/20261003_nats-streamed-results.md); the unary ``query`` on an
-        engine without it. Leaving the block closes the session."""
+        """Rows fetched as the caller iterates, over a transfer stream; the
+        unary ``query`` on an engine without it. Leaving the block closes the
+        session."""
         request = dataset_pb2.QueryRequest(sql=sql, namespace=namespace)
         if snapshot_id is not None:
             request.snapshot_id = snapshot_id

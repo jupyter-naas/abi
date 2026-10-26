@@ -794,9 +794,7 @@ async def complete_with_abi(
         )
         import asyncio
 
-        agent = await asyncio.to_thread(
-            _duplicate_inprocess_agent, template_agent, thread_id
-        )
+        agent = await asyncio.to_thread(_duplicate_inprocess_agent, template_agent, thread_id)
         if llm_model:
             _retarget_inprocess_chat_model(agent, llm_model)
 
@@ -1371,9 +1369,7 @@ def _normalize_inprocess_llm_model(model_id: str | None) -> str | None:
     return _INPROCESS_LLM_MODEL_ALIASES.get(mid, mid)
 
 
-_INPROCESS_LLM_MODEL_RESOLVERS: list[
-    Callable[[str, str | None], str | None]
-] = []
+_INPROCESS_LLM_MODEL_RESOLVERS: list[Callable[[str, str | None], str | None]] = []
 
 
 def register_inprocess_llm_model_resolver(
@@ -1395,9 +1391,7 @@ def _ensure_inprocess_llm_resolvers_loaded() -> None:
         pass
 
 
-def resolve_inprocess_llm_model_for_turn(
-    agent_name: str, config_llm: str | None
-) -> str | None:
+def resolve_inprocess_llm_model_for_turn(agent_name: str, config_llm: str | None) -> str | None:
     """Resolve the chat model id for an in-process ABI agent turn."""
     _ensure_inprocess_llm_resolvers_loaded()
     normalized = _normalize_inprocess_llm_model(config_llm)
@@ -1459,6 +1453,51 @@ def _retarget_inprocess_chat_model(agent: Any, model_id: str) -> None:
     _apply_to_node(agent)
     for sub_agent in getattr(agent, "_agents", None) or []:
         _retarget_inprocess_chat_model(sub_agent, model_id)
+
+
+def _inprocess_agent_class_name(agent: Any) -> str:
+    cls = type(agent)
+    return f"{cls.__module__}/{cls.__name__}"
+
+
+def _prune_inprocess_subagents_for_roster(agent: Any, allowed: frozenset[str]) -> None:
+    """Drop sub-agents absent from the caller's enabled workspace roster."""
+    from naas_abi.agents.feature.registry import spec_for_class_name
+
+    subagents = getattr(agent, "_agents", None) or []
+    if not subagents:
+        return
+
+    def keep(sub: Any) -> bool:
+        class_name = _inprocess_agent_class_name(sub)
+        if spec_for_class_name(class_name) is None:
+            return class_name in allowed
+        return class_name in allowed
+
+    pruned = [sub for sub in subagents if keep(sub)]
+    if len(pruned) == len(subagents):
+        return
+
+    agent._agents = pruned
+    for sub in pruned:
+        _prune_inprocess_subagents_for_roster(sub, allowed)
+
+    if type(agent).__name__ == "AbiAgent":
+        from naas_abi.agents.AbiAgent import AbiAgent
+
+        agent._intents = AbiAgent.get_intents(agents=pruned)
+        configuration = getattr(agent, "configuration", None)
+        agents_section = "\n".join(f"- {sub.name}: {sub.description}" for sub in pruned) or ""
+        if configuration is not None and hasattr(configuration, "system_prompt"):
+            import re
+
+            configuration.system_prompt = re.sub(
+                r"(<agents>)(.*?)(</agents>)",
+                rf"\1\n{agents_section}\n\3",
+                configuration.system_prompt,
+                count=1,
+                flags=re.DOTALL,
+            )
 
 
 def _duplicate_inprocess_agent(template: Any, thread_id: str | None) -> Any:
@@ -1647,9 +1686,12 @@ async def stream_with_abi_inprocess(
     # (the previous behaviour) caused cross-conversation response leakage when
     # two requests overlapped — see jupyter-naas/abi#991.
     assert thread_id is not None, "thread_id is required"
-    agent = await asyncio.to_thread(
-        _duplicate_inprocess_agent, template_agent, thread_id
-    )
+    agent = await asyncio.to_thread(_duplicate_inprocess_agent, template_agent, thread_id)
+    from naas_abi_core.services.agent.context import agent_workspace_enabled_class_names
+
+    allowed = agent_workspace_enabled_class_names.get()
+    if allowed:
+        _prune_inprocess_subagents_for_roster(agent, allowed)
     if llm_model:
         try:
             _retarget_inprocess_chat_model(agent, llm_model)
@@ -1734,9 +1776,7 @@ async def stream_with_abi_inprocess(
             if event_name == "message" and text.strip():
                 final_replay.append(text.strip())
                 continue
-            chunk = agent_event_chunk(
-                event_name, text, chat_source=event.get("chat_source")
-            )
+            chunk = agent_event_chunk(event_name, text, chat_source=event.get("chat_source"))
             if chunk is not None:
                 emitted = emitted or isinstance(chunk, str)
                 yield chunk

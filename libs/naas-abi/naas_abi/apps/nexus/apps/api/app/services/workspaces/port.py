@@ -24,6 +24,7 @@ class WorkspaceRecord:
     workspace_group: str | None = None
     # Saved in Organization Settings > Workspaces; None = config overrides apply.
     feature_overrides: dict[str, bool] | None = None
+    catalog_seed: dict[str, object] | None = None
     platform_drive_enabled: bool = False
     system_drive_enabled: bool = False
     created_at: datetime | None = None
@@ -48,6 +49,7 @@ class WorkspaceCreateInput:
     font_family: str | None = None
     description: str | None = None
     workspace_group: str | None = None
+    catalog_seed: dict[str, object] | None = None
 
 
 @dataclass
@@ -63,6 +65,7 @@ class WorkspaceUpdateInput:
     font_family: str | None = None
     description: str | None = None
     workspace_group: str | None = None
+    owner_id: str | None = None
     platform_drive_enabled: bool | None = None
     system_drive_enabled: bool | None = None
 

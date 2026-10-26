@@ -1,5 +1,5 @@
 """``IAMSecrets`` in the secret service: IAM's signing keys and the engine's
-own service key, under ``iam/`` (sealed to ``engine``, RFC §11.3).
+own service key, under ``iam/`` (sealed to ``engine``).
 
 Give it the secret service built from this engine's local adapters (dotenv,
 naas, ...), never a ``nats_rpc`` one: an engine reads its signing keys before

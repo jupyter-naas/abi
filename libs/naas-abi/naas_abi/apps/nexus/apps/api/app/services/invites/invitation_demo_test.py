@@ -1,4 +1,4 @@
-"""The RFC's demo, end to end, with the built-in IdP and the local email adapter.
+"""The invitation demo, end to end, with the built-in IdP and the local email adapter.
 
 1. An admin invites ``bob@example.com`` as a member of workspace W.
 2. The built-in IdP creates Bob (the provisioning port, through its admin app).

@@ -74,8 +74,7 @@ class VectorStoreAdapterNATSConfiguration(BaseModel):
     """Vector store adapter NATS RPC client configuration.
 
     Talks to a remote ``VectorStorePrimaryAdapterNATS`` over NATS
-    request/reply -- see docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
-    (Stage 1) and naas_abi_core/proto/vector_store/v1/vector_store.proto.
+    request/reply -- see naas_abi_core/proto/vector_store/v1/vector_store.proto.
 
     vector_store_adapter:
       adapter: "nats_rpc"

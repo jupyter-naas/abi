@@ -1,5 +1,6 @@
 // NATS-RPC contract for IAM, the kernel service every other one asks.
-// See docs/specs/rfcs/20261013_identity-and-authorization.md, §5, §6.4 and §11.
+// Authorization, policies, tokens, service accounts and module manifests:
+// core's services/iam/AGENTS.md.
 //
 // Subjects: abi.iam.v1.<operation>, one per Request/Response pair below
 // (abi.iam.v1.authorize, abi.iam.v1.create_policy, ...).
@@ -7,7 +8,7 @@
 //
 // Token and Jwks need no credentials: a service key is exchanged at
 // abi.iam.v1.token for an abi:nats access token, and abi.iam.v1.jwks returns
-// the engine's public signing keys (RFC §8.2, §9.1).
+// the engine's public signing keys.
 //
 // Decisions (Authorize, Filter, Explain without principal_id) are about the
 // caller the server verifies from the request's credentials, never about a
@@ -44,7 +45,7 @@ message Principal {
   google.protobuf.Timestamp updated_at = 14;
 }
 
-// A stored policy; the document is the JSON form of RFC §3.1.
+// A stored policy; the document is the JSON policy document.
 message Policy {
   string id = 1;
   string name = 2;
@@ -66,7 +67,7 @@ message Attachment {
 }
 
 // A policy attached at a scope to someone who has not signed in yet: claimed at
-// the first sign-in through `provider` with `email` verified (RFC 12.2).
+// the first sign-in through `provider` with `email` verified.
 message PendingGrant {
   string id = 1;
   string provider = 2;
@@ -108,7 +109,7 @@ message Scope {
   string workspace = 2;
 }
 
-// The catalog format of RFC §6.2.
+// The catalog format of a service's actions (services/iam/AGENTS.md).
 message ResourceType {
   string name = 1;
   // opaque | path | singleton
@@ -169,7 +170,7 @@ message Explanation {
 // A key's record; the key itself is only ever in CreateKeyResponse.value.
 // kind: service (abi_sk_) | personal (abi_pk_) | grant (abi_gk_, a link).
 // audience, resource and scope_json: what narrows a personal key or a grant
-// (RFC §9.3): the one audience it is exchanged for, the environment or link
+// the one audience it is exchanged for, the environment or link
 // target it is bound to, and the token's abi_scope as a JSON list of Allow
 // statements (absent: no narrowing).
 message Key {
@@ -186,7 +187,7 @@ message Key {
   optional string scope_json = 11;
 }
 
-// A module's permission manifest version (RFC §8.3); document_json is the
+// A module's permission manifest version; document_json is the
 // policy document as submitted. status: pending | approved | rejected | superseded.
 message Manifest {
   string principal_id = 1;
@@ -563,7 +564,7 @@ message RegisterCatalogResponse {
   bool registered = 2;
 }
 
-// -- tokens (RFC §8.2, §9.1) -----------------------------------------------------
+// -- tokens -----------------------------------------------------------------------
 
 // abi.iam.v1.token: a service account's key for an access token. No
 // credentials: the key is one. Errors: UNAUTHENTICATED ("invalid key").
@@ -596,9 +597,9 @@ message JwksResponse {
   string jwks_json = 2;
 }
 
-// abi.iam.v1.exchange_token: RFC 8693 token exchange (RFC §9.4). The requester
+// abi.iam.v1.exchange_token: RFC 8693 token exchange. The requester
 // is the caller (the Nats-Auth-Token); it needs iam:ExchangeToken on the
-// audience. subject_token_type: the RFC's id_token, access_token or jwt, or
+// audience. subject_token_type: RFC 8693's id_token, access_token or jwt types, or
 // urn:abi:params:oauth:token-type:api_key (an abi_pk_ or abi_gk_ key) or
 // urn:abi:params:oauth:token-type:session (a signed-in user a first-party
 // service vouches for: the subject token is the user's principal id, groups and
@@ -643,7 +644,7 @@ message RevokeTokensResponse {
   abi.common.v1.CallError error = 1;
 }
 
-// -- service accounts and keys (RFC §8.1) ---------------------------------------------
+// -- service accounts and keys ------------------------------------------------------
 
 message FindServiceAccountRequest {
   abi.common.v1.CallContext context = 1;
@@ -659,7 +660,7 @@ message CreateKeyRequest {
   string principal_id = 2;
   string description = 3;
   google.protobuf.Timestamp expires_at = 4;
-  // A user's keys (RFC §9.3): kind personal (default) or grant, the audience,
+  // A user's keys: kind personal (default) or grant, the audience,
   // the resource it is bound to and its scope. A service account's: none.
   string kind = 5;
   string audience = 6;
@@ -692,7 +693,7 @@ message RevokeKeyResponse {
   Key key = 2;
 }
 
-// -- module manifests (RFC §8.3) -------------------------------------------------------
+// -- module manifests ---------------------------------------------------------------
 
 // The calling module's own manifest: the caller must be the service account
 // module/<project>/<module_id>. approved_now: this call approved it (auto

@@ -1,5 +1,5 @@
-"""Source control authorizes every operation, in process and over NATS alike
-(RFC §6.4); the forge user is always the call's, never a request field."""
+"""Source control authorizes every operation, in process and over NATS alike;
+the forge user is always the call's, never a request field."""
 
 from __future__ import annotations
 

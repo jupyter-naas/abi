@@ -418,7 +418,7 @@ services:
       - DAGSTER_PG_DB=${POSTGRES_DB}
       - ABI_CONFIG_OVERLAY=${ABI_STACK_CONFIG_OVERLAY:-}
       # Next to an engine on NATS, a client of it: a second serving engine would
-      # fail on the ownership lease (docs/adr/20261006_single-serving-engine.md).
+      # fail on the ownership lease.
       # Without NATS (`--legacy`) the role is ignored.
       - ABI_ENGINE_ROLE=client
     command:

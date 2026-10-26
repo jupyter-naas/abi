@@ -210,10 +210,9 @@ class EventSecondaryAdapterNATSClient(NatsRPCClient, IEventAdapter):
         newest_first: bool = False,
         search: str | None = None,
     ) -> Iterator[Iterator[StoredEvent]]:
-        """Events fetched as the caller iterates, over a transfer stream
-        (docs/adr/20261003_nats-streamed-results.md). The highest ``seq`` is
-        pinned here, before the stream opens, so an event appended after the
-        block opened is never included. Leaving the block closes the session."""
+        """Events fetched as the caller iterates, over a transfer stream. The
+        highest ``seq`` is pinned here, before the stream opens, so an event
+        appended after the block opened is never included. Leaving the block closes the session."""
         upper = self.max_seq(event_type=event_type)
         if until_seq is not None:
             upper = min(upper, until_seq)

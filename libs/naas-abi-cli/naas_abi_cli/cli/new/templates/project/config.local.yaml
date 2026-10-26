@@ -211,7 +211,7 @@ services:
         access_key_id: "{{ secret.MINIO_ROOT_USER }}"
         secret_access_key: "{{ secret.MINIO_ROOT_PASSWORD }}"
         endpoint_url: "http://minio:9000"
-  # Who may do what (identity and authorization RFC 20261013). Policies are
+  # Who may do what. Policies are
   # enforced: "authorizer: allow_all" is an explicit opt-out that warns at boot.
   # Reuse the existing database, with a dedicated IAM schema.
   iam:

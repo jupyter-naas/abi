@@ -1,4 +1,4 @@
-"""triple_store's action catalog (RFC §6.4, "triple_store").
+"""triple_store's action catalog.
 
 ``graph/<iri>`` is a named graph, by IRI, opaque and placed; ``graph/default``
 is the default graph (an encoded IRI always holds ``%3A``, so the two never

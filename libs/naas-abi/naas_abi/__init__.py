@@ -416,7 +416,7 @@ class OrganizationSeedConfig(BaseModel):
     default_theme: str | None = None
 
 
-# Settings of the login Nexus had before RFC §13: password, magic link, one-time
+# Settings of the login Nexus used to have: password, magic link, one-time
 # code and refresh tokens. Accepted and ignored so an older configuration loads.
 NEXUS_REMOVED_LOGIN_SETTINGS = frozenset(
     {
@@ -450,7 +450,7 @@ class NexusConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _accept_the_login_settings_nexus_dropped(cls, data: Any) -> Any:
-        """A project that configured the login Nexus no longer has (RFC §13) still
+        """A project that configured the login Nexus used to have still
         loads: those keys are ignored, with a note saying why; ``secret_key`` and
         two renamed settings keep their value."""
         if not isinstance(data, dict):

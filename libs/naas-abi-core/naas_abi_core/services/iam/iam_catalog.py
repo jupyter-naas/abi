@@ -1,4 +1,4 @@
-"""IAM's own catalog (RFC §6.4, "iam") and the seals of RFC §11.3.
+"""IAM's own catalog and the seals.
 
 IAM authorizes its own operations with these actions, like any other service.
 Every resource type is platform-level except ``attachment``, which is named at
@@ -141,6 +141,6 @@ CATALOG = ActionCatalog(
     ),
 )
 
-# Sealed in code (RFC §11.3), each next to its service: no policy, no API and
+# Sealed in code, each next to its service: no policy, no API and
 # no OBO user opens them.
 SEALS: tuple[Seal, ...] = (*DOCUMENT_SEALS, *SECRET_SEALS)

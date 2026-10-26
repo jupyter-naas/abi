@@ -9,7 +9,7 @@ Lifecycle:
 3. After all modules have loaded, the engine calls ``validate_defaults()`` —
    hard-fails if the configured defaults can't be resolved.
 
-Authorization (``model_registry:*``, RFC §6.4): wired with IAM, resolving a
+Authorization (``model_registry:*``): wired with IAM, resolving a
 model needs ``Resolve`` and listing filters by ``ListModels``. Every chat
 invocation of a model this registry hands out needs ``Chat`` in the context of
 the call that invokes it: a callback on the model checks it. The NATS endpoint

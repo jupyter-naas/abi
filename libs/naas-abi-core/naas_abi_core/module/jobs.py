@@ -2,8 +2,7 @@
 
 Engine modules may also use sync handlers; the engine runs them in a worker
 thread. Without ``naas-abi-sdk`` (core installed without ``[nats]``), inert
-stand-ins keep modules importable; jobs need NATS mode to run anyway. See
-docs/adr/20261001_nats-jobs.md.
+stand-ins keep modules importable; jobs need NATS mode to run anyway.
 """
 
 try:

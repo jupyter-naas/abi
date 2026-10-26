@@ -384,7 +384,7 @@ class TransferHost(SessionHost):
             return "UNAUTHENTICATED", refusal(exc, "Invalid service token")
         if isinstance(exc, asyncio.TimeoutError):
             return "DEADLINE_EXCEEDED", "Configured operation deadline exceeded"
-        # The caller's authorization outcome (RFC §5.4), decided by the domain.
+        # The caller's authorization outcome, decided by the domain.
         code = authorization_error_code(exc)
         if code is not None:
             return code, str(exc)

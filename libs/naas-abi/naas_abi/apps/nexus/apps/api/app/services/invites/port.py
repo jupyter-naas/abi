@@ -1,4 +1,4 @@
-"""Ports of Nexus's invitations (RFC §12.2): who was invited where, the identity
+"""Ports of Nexus's invitations: who was invited where, the identity
 provider that makes the person exist, and the IAM grants that wait for them."""
 
 from __future__ import annotations

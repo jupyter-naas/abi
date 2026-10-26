@@ -1,4 +1,4 @@
-"""The ``policy`` authorizer, the default: RFC §5 over IAM's own state."""
+"""The ``policy`` authorizer, the default: the evaluation of ``AGENTS.md`` over IAM's own state."""
 
 from __future__ import annotations
 

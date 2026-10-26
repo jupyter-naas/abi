@@ -108,7 +108,7 @@ class Engine(IEngine):
 
     def load(self, module_names: list[str] | None = None):
         try:
-            # Boot is the engine's own work, for no caller (RFC §10.1): loading
+            # Boot is the engine's own work, for no caller: loading
             # modules resolves models, records events and seeds data, each an
             # authorized operation. Callers served later bring their own context.
             with as_service_account("engine"):
@@ -255,7 +255,7 @@ class Engine(IEngine):
         """NATS mode: whether this engine serves now, stands by, or (None) is a client.
 
         Raises ``EngineAlreadyServing`` when another engine serves and this one
-        may not take over (docs/adr/20261006_single-serving-engine.md).
+        may not take over.
         """
         if self.__configuration.nats is None:
             return None
@@ -453,7 +453,7 @@ class Engine(IEngine):
         )
 
     def __engine_credentials(self, client: bool = False) -> Any:
-        """The engine's own tokens (RFC §8.2): signed in this process when it
+        """The engine's own tokens: signed in this process when it
         holds IAM; for a client-role engine, exchanged from the engine's key
         (``nats.service_key``, else the one the serving engine keeps in the
         secret service)."""

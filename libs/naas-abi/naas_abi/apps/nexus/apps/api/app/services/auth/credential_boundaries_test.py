@@ -130,7 +130,7 @@ def _engine_token(iam, record, audience, **fields) -> str:
 
 
 # What an older Nexus signed with its ``secret_key``: sessions, links, coding agents.
-# Nexus signs nothing now (RFC §13), and none of it is read.
+# Nexus signs nothing now, and none of it is read.
 OLD_SECRET = "the-key-nexus-used-to-sign-with"
 
 

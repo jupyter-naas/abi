@@ -1,7 +1,7 @@
 // NATS-RPC contract for the event kernel domain.
 // Mirrors naas_abi_core/services/event/EventPort.py::IEventAdapter 1:1 -- the
 // SECONDARY port only (the durable event log), NOT the domain-level
-// IEventService. See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md.
+// IEventService.
 //
 // Scope of this v1 contract, deliberately: only the IEventAdapter methods
 // below are covered -- `append`, `query`, `max_seq`, `get_cursor`,
@@ -28,7 +28,7 @@
 // EVENT_NOT_FOUND/INVALID_EVENT error codes are still reserved below,
 // defensively, in case a future IEventAdapter implementation raises them.
 //
-// Subjects (see "Protobuf contract shapes" in the RFC):
+// Subjects:
 //   abi.svc.event.v1.append
 //   abi.svc.event.v1.query
 //   abi.svc.event.v1.max_seq

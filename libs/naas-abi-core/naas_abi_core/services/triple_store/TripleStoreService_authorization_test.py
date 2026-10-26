@@ -1,4 +1,4 @@
-"""The triple store passes the authorization contract (RFC §6.4, "triple_store").
+"""The triple store passes the authorization contract.
 
 A caller cannot read a graph it may not read through ``FROM``, ``FROM NAMED``,
 ``GRAPH <iri>``, ``GRAPH ?g``, the default graph, a stream or an export, in

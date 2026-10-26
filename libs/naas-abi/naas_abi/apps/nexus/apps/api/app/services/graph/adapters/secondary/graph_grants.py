@@ -1,4 +1,4 @@
-"""A workspace's graph assignments as IAM policies (RFC §13).
+"""A workspace's graph assignments as IAM policies.
 
 ``workspace_resource_policies`` stays the document administrators edit (what
 a workspace reads, writes, may create); IAM enforces it. A workspace's own

@@ -101,7 +101,7 @@ OPERATIONS = {
     "approve_manifest": "ApproveManifest",
     "reject_manifest": "RejectManifest",
 }
-# Need no credentials: the key is one; the JWKS is public (RFC §8.2, §9.1).
+# Need no credentials: the key is one; the JWKS is public.
 PUBLIC_OPERATIONS = frozenset({"token", "jwks"})
 
 # Wire code -> exception. INVALID_ARGUMENT covers policy validation: its

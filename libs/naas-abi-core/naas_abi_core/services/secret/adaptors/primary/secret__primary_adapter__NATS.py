@@ -8,7 +8,7 @@ there). This is the server side; the matching client is
 ``SecretSecondaryAdapterNATSClient``.
 
 Authorization: each call runs as the verified caller, and the ``Secret``
-domain service authorizes it per key against IAM (RFC §6.4): a key the caller
+domain service authorizes it per key against IAM: a key the caller
 may not see reads as missing, a refused write answers ``PERMISSION_DENIED`` or
 ``NOT_FOUND``, and ``list`` returns only the keys the caller may list.
 So an endpoint with two layers: the allowlist below (a caller other than ``engine``
@@ -221,7 +221,7 @@ class SecretPrimaryAdapterNATS(ServicePrimary):
             )
             return
         except (PermissionDeniedError, ResourceNotFoundError) as exc:
-            # The caller's authorization outcome (RFC §5.4), checked by the domain.
+            # The caller's authorization outcome, checked by the domain.
             await self._respond_error(
                 request,
                 response_cls,

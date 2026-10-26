@@ -1,6 +1,6 @@
 """Where each service's data lives, for deploys without downtime.
 
-docs/adr/20261006_single-serving-engine.md: an engine handing over to another
+An engine handing over to another (``engine/ownership/AGENTS.md``)
 must not keep data on its own host.
 """
 

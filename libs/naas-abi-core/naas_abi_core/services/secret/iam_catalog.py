@@ -1,4 +1,4 @@
-"""secret's action catalog (RFC §6.4, "secret") and its seals (§11.3).
+"""secret's action catalog and its seals.
 
 One ``secret/<key>`` per key, opaque, placed by key prefix. ``idp/`` keys are
 the built-in IdP's and ``iam/`` keys the engine's, sealed in code: no policy

@@ -412,7 +412,7 @@ async def _await_approval(
     Only for a module running on a service key of a module account
     (``module/<project>/<module_id>``). An approval that lands after this
     connection opened reconnects it: the broker computes the new
-    connection's subjects from the approved policy (RFC §8.4).
+    connection's subjects from the approved policy.
     """
     from naas_abi_proto.iam.v1 import iam_pb2
 

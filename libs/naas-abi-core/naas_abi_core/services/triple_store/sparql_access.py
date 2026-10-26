@@ -1,4 +1,4 @@
-"""What a SPARQL request reads and writes, for its authorization (RFC §6.4).
+"""What a SPARQL request reads and writes, for its authorization.
 
 ``read_shape`` reports a query's own dataset (``FROM``, ``FROM NAMED``), the
 graphs it names in ``GRAPH <iri>``, and whether it calls ``SERVICE``; the

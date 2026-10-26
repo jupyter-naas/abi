@@ -1,6 +1,6 @@
 """Apps served by remote modules over NATS (abi.app.v1).
 
-docs/adr/20261012_remote-module-apps.md: Nexus lists them next to the apps of
+Nexus lists them next to the apps of
 loaded modules and forwards their requests under
 ``/app-html/remote/<module_id>/<app>/``. The module answers; Nexus is the only
 HTTP entry point.

@@ -3,7 +3,7 @@
 Nexus signs nobody in: a person's identity provider does (``services/oidc``), and
 a session is the cookie that sign-in sets, or an API key (``credentials.py``). No
 password, no one-time code, no token signed here: the code of those logins, and the
-tables they used, were removed (RFC §13).
+tables they used, were removed.
 
 Who is a platform administrator is IAM's (``builtin.platform_admin``): the stored
 ``is_superadmin`` flag is only what the account list shows, read from IAM.

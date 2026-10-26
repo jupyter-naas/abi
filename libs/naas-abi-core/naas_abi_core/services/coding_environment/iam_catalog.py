@@ -1,4 +1,4 @@
-"""The ``coding_environment`` action catalog (RFC §6.4, "coding_environment").
+"""The ``coding_environment`` action catalog.
 
 An environment is personal: ``environment/<owner principal id>/<id>``, placed
 in the call's target workspace when it is provisioned. The owner and the user

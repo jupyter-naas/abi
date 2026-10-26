@@ -2,7 +2,6 @@
 
 Shared by every protobuf RPC client (the SDK ``Transport`` and core's
 ``NatsRPCClient``); the engine side is ``naas_abi_core.engine.nats_overflow``.
-See docs/adr/20261003_nats-rpc-overflow.md.
 
 - A client that can read an overflowed reply sends ``ACCEPT_HEADER: 1``. The
   service then parks a reply that does not fit and answers with an empty body,

@@ -1,4 +1,4 @@
-"""The broker's auth callout, answered by the serving engine (RFC §8.4).
+"""The broker's auth callout, answered by the serving engine.
 
 ``nats.conf`` declares two static users, ``engine`` and ``auth``, exempt from
 the callout, and ``auth_callout { issuer: <account public key> }``. Every other

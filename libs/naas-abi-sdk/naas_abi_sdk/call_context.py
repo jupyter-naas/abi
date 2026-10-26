@@ -1,9 +1,8 @@
 """Who is calling: the caller identity of the call being served.
 
-See docs/specs/rfcs/20261013_identity-and-authorization.md, §10. The variable
-lives here, in the core-free SDK, and ``naas_abi_core.engine.call_context``
-re-exports it: an engine and the SDK clients it runs read the same value. A
-core installed without the SDK (no ``nats`` extra) runs a verbatim copy of
+The variable lives here, in the core-free SDK, and
+``naas_abi_core.engine.call_context`` re-exports it: an engine and the SDK clients it runs read the same value.
+A core installed without the SDK (no ``nats`` extra) runs a verbatim copy of
 this file, ``naas_abi_core/engine/call_context_types.py``; keep them equal.
 
 Primary adapters set it, and only from verified credentials (a NATS request's
@@ -13,8 +12,8 @@ ignored. Code called in process inherits its caller's context. ``asyncio``
 tasks and ``asyncio.to_thread`` copy it; raw threads and executor submissions
 need ``contextvars.copy_context().run``.
 
-The user a call acts for travels in a delegated token (``abi:delegated:agent``,
-RFC §9.4) that names the user and the service acting for them, never in a
+The user a call acts for travels in a delegated token (``abi:delegated:agent``)
+that names the user and the service acting for them, never in a
 header: core's RPC client and the SDK ``Transport`` of ``api`` and ``engine``
 send one for the call's user (``CallContext.user``); a module host runs the
 calls of an invocation with the delegation it was handed

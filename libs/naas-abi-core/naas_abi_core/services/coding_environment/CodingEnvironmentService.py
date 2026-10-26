@@ -50,7 +50,7 @@ class CodingEnvironmentService(ServiceBase):
     The operation is always the source of truth — event publishing is
     fail-safe and must never break a (long, expensive) provision.
 
-    Every operation is authorized (``coding_environment:*``, RFC §6.4) once the
+    Every operation is authorized (``coding_environment:*``) once the
     service is wired with IAM. An environment is personal:
     ``environment/<owner principal id>/<environment id>``, placed in the call's
     target workspace when it is provisioned. The principal an operation

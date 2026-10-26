@@ -1,10 +1,9 @@
 """Copy the per-actor SQLite activity logs into the Document Service.
 
 The activity log's default moved from one SQLite file per actor
-(``ActivityLogSqliteAdapter``, ``storage/activity_log``) to the Document Service
-(docs/adr/20261006_shared-event-and-activity-log-storage.md). An installation
-that needs its history runs ``activity_log_migrate`` from the Nexus System app
-(Jobs tab, Run now): a dry run first, then with ``"apply": true``. Payload:
+(``ActivityLogSqliteAdapter``, ``storage/activity_log``) to the Document
+Service. An installation that needs its history runs ``activity_log_migrate``
+from the Nexus System app (Jobs tab, Run now): a dry run first, then with ``"apply": true``. Payload:
 ``{"data_dir": "storage/activity_log", "apply": false}``; ``data_dir`` is
 relative to the engine's working directory, as in ``config.yaml``, and must be
 inside its ``storage`` directory. ``ActivityLogDocumentAdapter.job_owners``

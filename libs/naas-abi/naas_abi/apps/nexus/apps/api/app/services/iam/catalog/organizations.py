@@ -1,4 +1,4 @@
-"""Organizations (RFC §6.5). Org-level resources: ``abi:<org>:-:nexus:...``.
+"""Organizations. Org-level resources: ``abi:<org>:-:nexus:...``.
 
 The org directory (members, domains, their verification tokens) and billing are
 the owners' and admins' to read (#1346), so their list and get actions are

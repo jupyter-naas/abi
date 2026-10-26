@@ -1,4 +1,4 @@
-"""Which workspace owns the kernel resources Nexus keeps for it (RFC §4.4, §13).
+"""Which workspace owns the kernel resources Nexus keeps for it.
 
 A kernel service names a resource inside the org and workspace IAM *placed* it
 in. Nexus places what it creates for a workspace (its files' prefix, its

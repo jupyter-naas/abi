@@ -14,9 +14,7 @@ from naas_abi.apps.nexus.apps.api.app.services.datasets.sql_safe import (
 
 def test_allows_select_and_with() -> None:
     assert assert_read_only_sql("SELECT * FROM time_entries") == "SELECT * FROM time_entries"
-    assert assert_read_only_sql(
-        "WITH x AS (SELECT 1 AS n) SELECT n FROM x"
-    ).startswith("WITH")
+    assert assert_read_only_sql("WITH x AS (SELECT 1 AS n) SELECT n FROM x").startswith("WITH")
 
 
 def test_strips_trailing_semicolon() -> None:

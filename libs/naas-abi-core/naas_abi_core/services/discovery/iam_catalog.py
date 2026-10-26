@@ -1,4 +1,4 @@
-"""The ``discovery`` action catalog (RFC §6.4, "discovery").
+"""The ``discovery`` action catalog.
 
 Every resource is platform-level. A module registers only under its own
 service account. Invoking an agent, chatting with a module's model, opening an

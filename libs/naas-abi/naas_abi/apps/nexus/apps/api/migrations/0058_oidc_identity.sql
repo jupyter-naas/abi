@@ -1,4 +1,4 @@
--- Sign-in through the engine's OIDC identity providers (RFC §12).
+-- Sign-in through the engine's OIDC identity providers.
 -- A user signed in through a provider is one row per (issuer, sub): its id is
 -- its IAM principal id, which principal_id names too. Rows of the built-in
 -- login keep both empty until they move to the built-in IdP (migration 0061).

@@ -101,8 +101,7 @@ class ObjectStorageAdapterNATSConfiguration(BaseModel):
     """Object storage adapter NATS RPC client configuration.
 
     Talks to a remote ``ObjectStoragePrimaryAdapterNATS`` over NATS
-    request/reply -- see docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
-    (Stage 1) and naas_abi_core/proto/object_storage/v1/object_storage.proto.
+    request/reply -- see naas_abi_core/proto/object_storage/v1/object_storage.proto.
 
     object_storage_adapter:
       adapter: "nats_rpc"

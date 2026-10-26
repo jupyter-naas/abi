@@ -1,7 +1,7 @@
 """Authenticated document RPCs, authorized by the document service.
 
 Every caller passes the namespace it addresses, and the domain service checks
-the verified caller on it like on any other name (RFC §6.4): a module's own
+the verified caller on it like on any other name: a module's own
 namespace is what its policy names. Listing namespaces is ``Namespaces`` on
 each one, so a caller sees only the namespaces its policies cover; no identity
 is an administrator by name.

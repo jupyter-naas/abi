@@ -127,10 +127,9 @@ class ActivityLogSecondaryAdapterNATSClient(NatsRPCClient, IActivityLogAdapter):
     def query_stream(
         self, actor_id: str, query: ActivityLogQuery | None = None
     ) -> Iterator[Iterator[ActivityEvent]]:
-        """Events fetched as the caller iterates, over a transfer stream
-        (docs/adr/20261003_nats-streamed-results.md). The snapshot is pinned
-        here, before the stream opens, so an event recorded after the block
-        opened is never included. Leaving the block closes the session."""
+        """Events fetched as the caller iterates, over a transfer stream. The
+        snapshot is pinned here, before the stream opens, so an event recorded
+        after the block opened is never included. Leaving the block closes the session."""
         pinned = pin_snapshot(self.query, actor_id, query)
         if pinned is None:
             yield iter(())

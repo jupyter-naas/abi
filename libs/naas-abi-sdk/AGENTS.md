@@ -13,24 +13,8 @@ LangGraph support lives in langgraph.py and is opt-in via [langgraph]; never imp
 it from package __init__ or make it a base dependency. Only async graph execution
 is supported. Keep checkpoint schema versions and pending-write semantics explicit.
 Document module namespaces are a programming boundary, not authorization.
-`call_context.py` holds the caller identity of the call being served (`CallContext`,
-one ContextVar that core's `engine/call_context.py` re-exports; core keeps a verbatim
-copy, `engine/call_context_types.py`, for installs without the SDK, so keep them equal).
-`Transport.call` puts the call's trace and workspace in the request's `context`.
-The call's user travels in a delegated token (`abi:delegated:agent`, RFC §9.4),
-never in a header (the kernel refuses `Abi-On-Behalf-Of`): a transport of `api` or
-`engine` is built with `delegate(user, recipient, scope)`, which returns the token
-to send for the user the call acts for (for a call to a module host, one naming
-that module as the actor); without a delegate a transport calls as itself, and a
-delegation that fails fails the call, never calling as the transport alone. A
-module host runs an invocation with the delegation it was handed
-(`SubmitRequest.delegated_token`, kept only if it names the run's owner:
-`CallContext.delegated_token`), which `Transport.delegated_token` sends for its kernel
-calls and renews through the service key (`ServiceKey.renew_delegation`, up to eight
-hours). Identity never goes in request fields.
-`engine.services.iam` (`services/iam.py`) needs no dependency declaration: IAM
-answers for the module's own verified identity and authorizes its own operations
-(`abi.iam.v1.*`; core's `services/iam/AGENTS.md`).
+Identity, credentials and the permission manifest: see "Identity, credentials and
+permissions" at the end of this file.
 The document schema is in langgraph_documents.py, shared with core's synchronous
 engine saver and the Nexus viewer: collections, ids, write plans (schema 2 stores
 increments: content-addressed blobs, list elements and chunks, parts above
@@ -84,7 +68,7 @@ process: new agent submits, job fetches, model chats and app requests stop,
 accepted runs, jobs and app requests finish, then the process unregisters. A
 streamed app response may finish too, unless it is server-sent events or idle
 for a second: those end with an error, and their readers reconnect elsewhere. A live run keeps its claim until it
-finishes. See the discovery ADR, section "Rollouts and draining (2026-10-05)".
+finishes. Discovery's side of rollouts: core's `services/discovery/AGENTS.md`, "Generations".
 
 `ABI_HEALTH_PORT` (or `run_module(..., health_port=)`) opens a standard-library
 HTTP probe on `ABI_HEALTH_HOST` (default `0.0.0.0`). Unset means no port.
@@ -110,7 +94,7 @@ sequence-checked handles; never retry inference or cursor reads automatically.
 `reply()` answers without echoing the request's headers; use it instead of
 `Msg.respond`. `claim_check.py` carries published, queued and job-trigger
 messages above the broker limit through the stream `ABI_CLAIM_CHECKS`, under
-the scope of their topic or job (docs/adr/20261003_nats-claim-check.md);
+the scope of their topic or job (chunks under a SHA-256 in the reference);
 `BusClient` subscriptions resolve them in place. Behind the broker's auth
 callout a module creates no stream or consumer and writes nothing into the
 jobs stream: `broker_control.py` asks the engine (`abi.broker.v1.<operation>`)
@@ -121,7 +105,7 @@ when no engine answers. Every responder answers only
 `_INBOX.` reply subjects (`messages.reply_allowed`). Every raw NATS send is listed in core's
 `engine/nats_send_sites_test.py`: a new one must go through these helpers.
 `overflow.py` is the client side of RPC overflow (payloads above the broker
-limit as transfer/v1 frames, docs/adr/20261003_nats-rpc-overflow.md), used by
+limit as transfer/v1 frames), used by
 `Transport` and core's `NatsRPCClient`. A call says `Abi-Overflow: 1` before an
 engine may park its reply; never drop that header or download without the
 announced size. `transfer.py` owns shared chunk framing and session cleanup. Object facades stream
@@ -146,7 +130,7 @@ agent with `expose_agent(name, agent.as_handler())` and checkpoint it with
 `document_memory(engine.services.document, agent_memory_id(module_id, name))`.
 v1 has no local sub-agents; remote agents (AgentProxy) are passed as tools.
 
-Jobs (`jobs.py`, `job_host.py`, ADR docs/adr/20261001_nats-jobs.md) replace Dagster
+Jobs (`jobs.py`, `job_host.py`) replace Dagster
 schedules. Declare `JobDescriptor`s in `jobs` or use `@job` on async methods; bind
 others with `expose_job`. `JobsMixin` is shared with core modules (sync handlers
 allowed there): keep `jobs.py` importable without `nats` (stdlib and proto only),
@@ -180,8 +164,7 @@ trigger is published; `event_filter.py` mirrors core's `EventFilter.matches`,
 change them together.
 
 `lifeline.py` stops a process whose NATS connection closed for good (nats-py
-gave up reconnecting), so its supervisor restarts it (ADR
-docs/adr/20261008_stop-on-nats-loss.md). Every long-lived connection passes a
+gave up reconnecting), so its supervisor restarts it. Every long-lived connection passes a
 `Lifeline`'s `closed` as `closed_cb` and closes on purpose through
 `Lifeline.close(nc)`: `Transport` here, and in core the shared engine
 connection, the lease and the bus. `run_module` opts in for its run
@@ -195,8 +178,160 @@ runs, spans for agent submits and runs, `record_error` on error replies, and the
 owner's SERVER span per transfer session (`serve_transfer`: open to close, expiry
 or stop; current only around the handler). Keep it stdlib plus optional
 OpenTelemetry API, and a no-op without a provider. Modules
-export spans when `OTEL_EXPORTER_OTLP_ENDPOINT` is set (`[otel]` extra). See
-docs/adr/20261002_observability.md.
+export spans when `OTEL_EXPORTER_OTLP_ENDPOINT` is set (`[otel]` extra).
+
+## Identity, credentials and permissions
+
+The engine side (policy language, evaluation, token issue and exchange, service
+accounts, broker permissions, approval) is core's `services/iam/AGENTS.md`; this is
+what the SDK does with it. The SDK holds no signing key and no crypto library:
+it carries credentials the engine issued and never verifies one itself (a trigger's
+seal is checked by asking the engine, `broker_control.py`).
+
+### A module's credential (`credentials.py`)
+
+- **`ABI_SERVICE_KEY`** is the module's service key, `abi_sk_<key id>_<secret>`
+  (`ServiceKey`: a 16 character key id, then the secret). It replaces the old shared
+  `NATS_JWT_SECRET` and `ABI_SERVICE_TOKEN`; a module can no longer sign a token as
+  `api`, `engine` or another module. `module_runner.py` reads it, `Transport` accepts
+  a key or a `ServiceKey` as its `token`, and `run_module(token=...)` passes it on.
+  A process of the engine passes bare tokens (a string or a callable) instead.
+- **The key does two things.** It logs in to the broker (user `sa`, the key as
+  password, inbox prefix `_INBOX.<key id>`, which only this key's connections can
+  read), and the broker's auth callout gives the connection the subjects its
+  approved policy allows. It is also exchanged at `abi.iam.v1.token` for an access
+  token of the audience `abi:nats` (ten minutes at most, exchanged again at half its
+  life; an expired token is kept while the engine cannot be reached). Every call
+  carries it in `Nats-Auth-Token`.
+- **Host tokens.** A call to a module host (subjects `abi.agent.<project>.<sa>...`
+  and `abi.mod.<project>.<sa>...`, `transport.host_recipient`) never carries the
+  module's `abi:nats` token: the host reads every token it serves and `api`'s would
+  be good everywhere. The key buys one token per host, audience `abi:host:<sa>`
+  (`host_audience`, cached per audience, at most 256), which the kernel services
+  refuse and discovery accepts only from that host. A transport given bare tokens
+  takes a `host_token` (a token, or a function of `<sa>`) and raises
+  `NoHostTokenError` rather than call a host without one.
+- **Renewing the connection.** The broker expires a callout user in five minutes
+  (ten at most) and nats-py closes an expired connection instead of reconnecting
+  it, so a transport logged in with a key reconnects itself every 120 seconds
+  (`renew_seconds`): the callout then computes the subjects again from the policy as
+  it is. A call in flight during the few milliseconds of a renewal is lost, as in any
+  reconnect; a call starting then waits for it. `Transport.reconnect()` is the
+  same on demand (after an approval). Revoking a key ends the next exchange and
+  the next connection; tokens already issued expire within ten minutes.
+- **No broker permission to create anything.** Behind the callout a module cannot
+  create a stream or a consumer nor write the jobs stream, and replies only on
+  `_INBOX.` subjects; see `broker_control.py` for the operations the engine does for it
+  (`abi.broker.v1.<operation>`).
+- **Local key.** `abi dev up`, `abi deploy` and `abi iam service-account create`
+  make the account `module/<project>/<module_id>` and its key
+  (`abi iam key create|rotate|revoke`); `module_account(name)` splits the name.
+
+### The permission manifest (`permissions.py`, `module._await_approval`)
+
+A module asks for what it needs as a policy document (the language of core's
+`services/iam/AGENTS.md`):
+
+1. `BaseModule.permissions` (a dict), else
+2. `permissions.yaml` beside the module's code (JSON also reads without PyYAML), else
+3. a default derived from `ModuleDependencies` (`default_manifest`): `document` is the
+   module's own namespace (`${module.id}`); `secret` the names `<module id>/...`;
+   `dataset` the namespace `default` and the catalog, with `dataset:QueryUnchecked`
+   denied; `email` sending only (the platform keeps a copy of what is sent, sign-in
+   codes included, so reading it is named in a manifest); `source_control` all but
+   `AddCollaborator`; any other declared service every action of it; the dependency
+   modules' agents, models and apps (never the identity provider's `admin` app) and
+   the runs the module starts, for it and for the user it acts for; its own jobs, each
+   by name. `bus` has no default: a module using it declares `bus:*` on
+   `abi:-:-:bus:topic/<topic>`. Default grants contain no admin action.
+
+`${module.id}` and `${module.project}` are bound when the manifest is approved.
+
+At start, `run_module` calls `_await_approval` before anything else (an unapproved
+module can call nothing but IAM):
+
+- It applies to a service key of a module account only (`module/<project>/<module_id>`);
+  a script's or CI account, or a process of the engine, skips it. The module id must
+  equal the key's, else the start fails.
+- It submits the manifest (`abi.iam.v1.submit_manifest`; `iam:SubmitManifest` is in the
+  module's bootstrap policy) and asks again every five seconds, logging the command
+  an administrator runs (`abi iam module approve <account>`). `rejected` fails the
+  start with the reason. An unapproved module is not in discovery.
+- When a manifest changes, the new one is pending and the previous approved one stays
+  in force: the module starts on it and logs a warning.
+- When the approval lands after the connection opened (or on submission, in
+  `abi dev up`, which approves automatically), the transport reconnects so the broker
+  grants the new subjects.
+
+### Tokens the SDK meets
+
+Engine tokens are ES256 JWTs with one audience and at most ten minutes of life. An
+SDK module deals with three audiences: `abi:nats` (its own, for the kernel services),
+`abi:host:<sa>` (above) and `abi:delegated:agent` (below). `sub` is the principal;
+`act.sub` the actor when someone acts for `sub`. `AgentHost` reads `aud`, `sub` and
+`act` of a delegation without verifying (the engine does at every use); the others
+(`abi:session`, `abi:delegated:{app,preview,coding,api-key}`) never reach a module
+host.
+
+### CallContext (`call_context.py`)
+
+One ContextVar, `CallContext`, holds the caller of the call being served: `principal`
+(the actor), `on_behalf_of` (the user, when acting for one), `audience`, `token_id`,
+`token_issued_at`, `scope` (the token's `abi_scope`), `workspace_id` (the target
+workspace of a create: a request input, not identity), `trace_id`, `triggered_via` and
+`delegated_token`. `CallContext.user` is `on_behalf_of`, else the principal when it is a
+user: services use it wherever an operation concerns "the user". The default is
+`ANONYMOUS`, which every check denies.
+
+- Core's `engine/call_context.py` re-exports it, so the engine and the SDK clients it
+  runs read one value; `engine/call_context_types.py` is a verbatim copy for installs
+  without the SDK (`nats` extra), so keep them equal (a test checks it).
+- It is set only from verified credentials: a NATS request's `Nats-Auth-Token`, a Nexus
+  session, or inheritance. Never from request fields: `principal_id` and `tenant_id`
+  of the proto `CallContext` are reserved and ignored, and `user_id` fields and `X-User-*`
+  headers are not identity. A module learns who calls only from the delegation's
+  verified claims: credentials never reach module code (Nexus forwards to a remote app
+  only content-negotiation, conditional and range headers, `User-Agent` and `x-*` headers
+  but `x-forwarded-*`, `x-real-ip` and `x-api-key`; never `Authorization`, and of the
+  browser's cookies only the app's own, which it set itself, never the Nexus session).
+- Tasks and `asyncio.to_thread` copy it; a raw thread or executor submission needs
+  `contextvars.copy_context().run`.
+- Helpers: `use_call_context(ctx)`, `current_call_context()`, `set_call_context` /
+  `reset_call_context` (for code that cannot wrap a block), `service_account(name)`,
+  `user(id)`. `as_service_account` is core's, in process only; remote code has no
+  equivalent: it holds only its token.
+- `Transport.call` puts the call's trace and workspace in the request's `context`.
+
+### Acting for a user (delegation)
+
+The user a call acts for travels in an `abi:delegated:agent` token (`sub` the user,
+`act` the acting service), never in a header: the kernel refuses `Abi-On-Behalf-Of`
+(`on-behalf-of refused: ...`).
+
+- A transport of `api` or `engine` is built with `delegate(user, recipient, scope)`,
+  which returns the token for the user the call acts for (for a call to a module host,
+  one naming that module as the actor, so the host holds a token good for that
+  module for that user and nowhere else). Without a delegate a transport calls as
+  itself; with one that fails, the call fails: it never calls as the transport alone,
+  which would drop the user.
+- A module host runs an invocation with the delegation it was handed
+  (`SubmitRequest.delegated_token`, kept only if it names the run's owner and this
+  host's own account as the actor: `agent_host.py`, otherwise the run is the module's
+  own): `CallContext.delegated_token`. `Transport.delegated_token` sends it, in place
+  of the module's token, on the kernel calls the run makes for that user, and renews
+  it through the service key (`ServiceKey.renew_delegation`: IAM exchanges it again
+  for the same audience, up to eight hours after it began). A module's own side of the
+  check is `builtin.module_bootstrap` (`OwnHosted`, `OwnRuns`).
+- A scope (`abi_scope`) travels with every delegation, so a personal key reaches no
+  further over NATS than in process.
+- `engine.services.iam` (`services/iam.py`) needs no dependency declaration: IAM
+  answers for the module's own verified identity and authorizes its own operations
+  (`abi.iam.v1.*`).
+
+The claims `AgentHost` reads from a delegation itself are unverified and only decide
+which delegation it keeps; the engine verifies the token at every kernel call.
+
+## Tests
 
 Test layout is a deliberate exception to the monorepo rule of a `_test.py` beside
 each file: SDK tests live in `tests/test_<module>.py`, outside the published
@@ -204,3 +339,7 @@ package, and the CI `packages` job runs them alone on Python 3.10 to 3.12. Add a
 module's tests to its `tests/test_<module>.py`. `tests/conftest.py` fails a test
 skipped for want of `nats-server` when `ABI_REQUIRE_NATS_SERVER=1` (set in CI);
 it mirrors core's `engine/nats_test_server.py` hook, so change them together.
+Identity is covered by `tests/test_credentials.py` (key, exchange, host tokens),
+`test_permissions.py` (the manifest and its defaults), `test_call_context.py`,
+`test_transport.py` (delegation, host tokens, reconnects) and `test_agent_host.py`
+(the delegation a run executes with).

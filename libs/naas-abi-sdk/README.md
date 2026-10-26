@@ -193,7 +193,7 @@ v1 cold endpoint. Tier contracts use the same protobuf messages, with subjects
 ## Jobs
 
 A module declares jobs and runs them in its own process; JetStream schedules
-and delivers the triggers (docs/adr/20261001_nats-jobs.md). One replica takes
+and delivers the triggers. One replica takes
 each trigger, and delivery is at least once.
 
 ```python
@@ -269,7 +269,7 @@ paging history; full snapshots remain subject to RPC payload limits.
 
 Existing core agents keep their current PostgreSQL/memory selection. This optional
 saver does not migrate old checkpoints, launch remote agents, or provide discovery.
-See the document-checkpoint ADR and remote-agent invocation RFC for those boundaries.
+Those are outside the saver's scope.
 
 ## Facade compatibility boundaries
 
@@ -586,7 +586,7 @@ no ABI core installed. The base worker still verifies its four-package install.
 ## Apps
 
 A module serves web apps through Nexus without a port, hostname or route of its
-own (docs/adr/20261012_remote-module-apps.md). Each `apps/<name>/manifest.json`
+own. Each `apps/<name>/manifest.json`
 next to the module's package is an app: discovery announces it, Nexus lists it
 and forwards its requests under `/app-remote/<grant>/<module_id>/<name>/` over
 NATS, and the module answers. Files of the folder (HTML, scripts, styles,

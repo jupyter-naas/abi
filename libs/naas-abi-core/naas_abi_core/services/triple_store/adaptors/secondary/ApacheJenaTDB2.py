@@ -798,7 +798,7 @@ class ApacheJenaTDB2(ITripleStorePort):
     @contextmanager
     def query_stream(self, query: str) -> Generator[QueryStream, None, None]:
         """Read a query's result as Fuseki writes it: TSV rows or N-Triples,
-        parsed line by line (docs/adr/20261003_nats-streamed-results.md).
+        parsed line by line.
 
         Fuseki can answer 200 and abort mid-response; the iterator then raises
         ``Exceptions.RequestError`` after the rows it already yielded.

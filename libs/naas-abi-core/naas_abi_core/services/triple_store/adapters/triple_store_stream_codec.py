@@ -1,4 +1,4 @@
-"""Frames of a streamed triple store read (docs/adr/20261003_nats-streamed-results.md).
+"""Frames of a streamed triple store read.
 
 Shared by the NATS primary and client; no new protobuf messages. A ``query``
 stream starts with a header (``QueryResult`` without rows or triples), then

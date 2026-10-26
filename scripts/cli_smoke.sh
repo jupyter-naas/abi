@@ -191,7 +191,8 @@ smoke_without_nats() {
     enable_module tools
     (cd src/tools && abi new agent helper agents)
 
-    start_and_check --agents "Tools,Helper"
+    # No built-in identity provider without NATS: no sign-in, so no roster to read.
+    start_and_check --no-sign-in
 }
 
 step "uv tool install the CLI from $REPO/libs/naas-abi-cli (in $WORK)"

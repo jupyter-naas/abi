@@ -604,7 +604,7 @@ LEGACY_ISSUER = "urn:abi:nexus"
 class NexusFirstSignInContract(NexusHarness):
     """A user of the old built-in login signs in for the first time through the
     built-in provider: matched by the verified email, linked to the principal
-    that holds its roles, nothing else (RFC §13)."""
+    that holds its roles, nothing else."""
 
     provisioning = "builtin"
 

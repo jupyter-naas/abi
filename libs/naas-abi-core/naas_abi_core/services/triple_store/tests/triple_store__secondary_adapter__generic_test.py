@@ -161,7 +161,7 @@ class GenericTripleStoreSecondaryAdapterTest(ABC):
         listed_graphs_after_drop = adapter.list_graphs()
         assert graph_name not in listed_graphs_after_drop
 
-    # --- streamed reads (docs/adr/20261003_nats-streamed-results.md)
+    # --- streamed reads
 
     def _streamed_graph(self, adapter):
         marker = uuid.uuid4().hex
@@ -218,7 +218,7 @@ class GenericTripleStoreSecondaryAdapterTest(ABC):
 
 
 class ConfinedQueryContract:
-    """``query_dataset`` / ``query_stream_dataset`` (RFC §6.4): an adapter that
+    """``query_dataset`` / ``query_stream_dataset``: an adapter that
     confines queries reads only the graphs of the dataset it is given, whatever
     the query names. Mixed into an adapter's generic test."""
 

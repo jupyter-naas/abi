@@ -1,4 +1,4 @@
-"""What a SPARQL request reads and an update needs, for authorization (RFC §6.4)."""
+"""What a SPARQL request reads and an update needs, for authorization."""
 
 from __future__ import annotations
 

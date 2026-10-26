@@ -1,4 +1,4 @@
-"""Who may read or write which graph is IAM's (RFC §13), proven on a real kernel.
+"""Who may read or write which graph is IAM's, proven on a real kernel.
 
 A real IAM, the real triple store (embedded Oxigraph) wired to it and the real
 graph service: graphs a workspace creates are placed in it, the workspace's

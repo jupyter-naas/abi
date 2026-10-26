@@ -1,4 +1,4 @@
-"""An IdP's token, exchanged for a session through IAM (RFC §9.4)."""
+"""An IdP's token, exchanged for a session through IAM."""
 
 from __future__ import annotations
 

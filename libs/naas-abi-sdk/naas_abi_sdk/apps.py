@@ -1,4 +1,4 @@
-"""Web apps a module serves over NATS (docs/adr/20261012_remote-module-apps.md).
+"""Web apps a module serves over NATS.
 
 A module ships an app as a folder next to its package, as in-engine modules do:
 ``apps/<name>/manifest.json`` plus its HTML, scripts and styles. Discovery

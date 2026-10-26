@@ -4,8 +4,7 @@
 In NATS mode, exactly one engine per NATS account serves the kernel services. It
 holds a lease that it renews. A second engine fails at start, unless it belongs
 to another deploy (`ABI_ROLLOUT_ID`): then it stands by and takes over when the
-serving engine stops. Decision and rationale:
-`docs/adr/20261006_single-serving-engine.md`.
+serving engine stops.
 
 No NATS import outside `adapters/secondary/lease_jetstream.py` and
 `ownership_factory.py`.
@@ -45,6 +44,24 @@ Around the lease, in the engine:
   `EngineNATSDependencies.build_clients`: NATS clients only, no owner, no
   subscription, no ontology loading. Only the model registry stays local, in
   memory.
+
+## Decisions
+**One serving engine per NATS account, handed over by lease.**
+*Decision.* Kernel subjects carry no project, so two engines on one account would split requests between two copies of
+each service (diverging in-process state, file locks on embedded stores) even with different configs. Exactly one engine
+serves, proven by the lease; the engine claims before it opens any backend, so a refused engine has no side effects.
+Roles (`nats.engine.role` or `ABI_ENGINE_ROLE`, which wins): `serve` (default) takes the lease and hosts the jobs; `client`
+never takes it and is NATS clients only (scripts, notebooks next to the serving engine); `auto` serves when nobody does and
+is a client otherwise, never standing by (CLI commands such as `abi chat` use it). A held lease with no rollout id or the
+holder's: watch the key for one `lease_seconds`, fail if the holder renews (the error names its host, pid, version, rollout and
+start time), take over if not (a crash restart works after at most one lease period). A different rollout id
+(`ABI_ROLLOUT_ID`): stand by, load services and modules so the process reports ready, serve once the lease is taken, stop the
+process after `standby_timeout_seconds` so a deploy that never stops the old engine is visible.
+*Consequences.* Handover has no downtime: the old engine stops its jobs, releases, ends its shared subscriptions, answers the
+calls it has received and keeps its sessions until `drain_seconds`; the standby subscribes while it drains, so both serve for a
+moment (an overlap, not a gap), which shared backends make safe. A deploy refuses to start when a service it owns keeps its data
+on this host (`require_shared_backends`). Clocks are never compared across hosts. Kernel services are single-serving: a second
+engine, Dagster next to the API, or a stray `Engine().load()` fails instead of silently splitting traffic.
 
 ## Port
 `EngineLeasePort` holds one record, written only by compare-and-swap. Revisions

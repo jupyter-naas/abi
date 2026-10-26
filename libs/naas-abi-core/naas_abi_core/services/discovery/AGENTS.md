@@ -16,7 +16,7 @@ caller identity plus a lease token. Each handler runs under the caller's
 `discovery_factory.py` composes the service. Engine exposure is explicit opt-in;
 replicas use a project queue group and share the same JetStream CAS snapshot. No silent in-memory fallback.
 
-## Authorization (`iam_catalog.py`, RFC §6.4)
+## Authorization (`iam_catalog.py`)
 `start_discovery(..., iam=)` wires IAM (the serving engine passes its own); every
 operation is then checked in the domain service with the `discovery` catalog.
 Without IAM (unit tests of the registry) nothing is authorized. Names are
@@ -42,7 +42,7 @@ platform-level: `module/<project>/<module_id>`, `agent|model|app|job/<project>/<
   host whose account it names (`DiscoveryNATS._is_for_host`), so a module that read
   one from a request replays it nowhere, not even at another host. The caller of
   the checks below is then the module acting for the user, and both sides must
-  allow (RFC §5.3): the module's own side is `builtin.module_bootstrap`'s
+  allow (`services/iam/AGENTS.md`, "Evaluation"): the module's own side is `builtin.module_bootstrap`'s
   `OwnHosted` and `OwnRuns` statements (what it hosts, and the runs of the user it
   acts for), which open no broker subject. Then: `InvokeAgent` on
   the agent for a submit, `GetAgentRun` / `CancelAgentRun` on the run for a poll
@@ -83,7 +83,7 @@ last write (stored statuses), even if its rollout became incomplete; else the
 oldest. A completing rollout drains older rollouts of its modules, complete or
 not. The cycle check reads edges per generation (own cohort, then the serving
 or one other live generation for the rest) and refuses only cycles through the
-registering module. See the ADR, "Serving generation and dependency cycles".
+registering module.
 
 ## Agent authorization
 `authorize_agent` with `new_invocation` false (status, event and cancel polls)
@@ -102,6 +102,18 @@ once at a time, each write taking every mutation waiting, applied in order on
 its own copy of the registry, in one compare-and-swap. Run side by side, the
 compare-and-swaps on the one registry document would exhaust their five retries
 (`REGISTRY_BUSY`). Reads do not wait for writes.
+
+## Decisions
+**Authorization lives in the registry's domain service, and a module id is bound to its account.**
+*Decision.* Every operation is checked with the `discovery` catalog (platform-level names only), by the registry for
+registration and listing and by the hosting module for use: the host forwards the caller's token and asks discovery
+(`authorize_*`), which verifies it and checks the caller. A module account (`module/<project>/<module_id>`) registers
+only its own module, and a module id is held by one principal at a time. Hosting subjects carry the account's token, and
+a call to a host carries a host token (`abi:host:<sa>`) that discovery accepts only from that host.
+*Consequences.* No module can join a running module's requests, evict another's registration (`discovery:Evict` is a
+policy, not a hard-coded identity), or replay a delegation at another host. An unapproved module is not listed until its
+manifest is approved (`services/iam/AGENTS.md`, "Service accounts, keys, tokens and manifests"). Callers never build
+hosting subjects: they read them from the discovery record.
 
 ## Tests
 Use `uv run pytest .../services/discovery --import-mode=importlib`. Unit tests inject

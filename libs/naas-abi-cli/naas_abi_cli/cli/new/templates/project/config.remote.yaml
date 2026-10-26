@@ -114,7 +114,7 @@ default_agent: "{{ project_name_snake }} {{ project_name_pascal }}Agent"
 
 {% raw %}
 services:
-  # Who may do what (identity and authorization RFC 20261013). Policies are
+  # Who may do what. Policies are
   # enforced: "authorizer: allow_all" is an explicit opt-out that warns at boot.
   # Reuse the existing database, with a dedicated IAM schema.
   iam:

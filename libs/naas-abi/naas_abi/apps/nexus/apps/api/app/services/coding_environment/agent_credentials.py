@@ -1,4 +1,4 @@
-"""The credential a coding environment's agent holds (RFC §9.3, bug (a)).
+"""The credential a coding environment's agent holds.
 
 The agent in a workspace (the Continue extension) talks to the OpenAI gateway as
 the user who owns the environment. It holds a *personal key* of that user

@@ -91,8 +91,7 @@ class DatasetAdapterNATSConfiguration(BaseModel):
     """Dataset adapter NATS RPC client configuration.
 
     Talks to a remote ``DatasetPrimaryAdapterNATS`` over NATS request/reply --
-    see docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md (Stage 1)
-    and naas_abi_core/proto/dataset/v1/dataset.proto.
+    see naas_abi_core/proto/dataset/v1/dataset.proto.
 
     dataset_adapter:
       adapter: "nats_rpc"

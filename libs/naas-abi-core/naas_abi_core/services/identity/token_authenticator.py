@@ -1,4 +1,4 @@
-"""What IAM asks of the identity service to exchange an IdP's token (RFC §9.4).
+"""What IAM asks of the identity service to exchange an IdP's token.
 
 A relying party that holds an IdP's ID token exchanges it for an ``abi:session``
 token (``IAMService.exchange_token``). IAM holds no reference to the identity

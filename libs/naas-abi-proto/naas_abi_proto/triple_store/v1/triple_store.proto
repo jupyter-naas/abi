@@ -3,9 +3,8 @@
 // the adapter-level secondary port (11 methods). It deliberately does NOT cover the richer
 // ITripleStoreService (subscribe/load_schema/get_schema_graph): those are domain-only,
 // never crossed by a secondary adapter, and stay 100% local.
-// See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md.
 //
-// Wire-encoding decisions, deliberate, do not relitigate without re-reading the RFC:
+// Wire-encoding decisions, deliberate, change them only with the clients in mind:
 //
 //  * Graph <-> bytes: N-Triples specifically (`graph.serialize(format="nt",
 //    encoding="utf-8")` / `Graph().parse(data=..., format="nt")`) -- unambiguous, no
@@ -37,7 +36,7 @@
 //    alongside `abi.common.v1.CallError` on every response that can raise it, so a client
 //    reconstructs the exact exception rather than losing those fields into free text.
 //
-// Subjects (see "Protobuf contract shapes" in the RFC):
+// Subjects:
 //   abi.svc.triple_store.v1.insert
 //   abi.svc.triple_store.v1.remove
 //   abi.svc.triple_store.v1.get

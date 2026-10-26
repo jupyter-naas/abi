@@ -26,6 +26,12 @@ def _team(team):
     return team
 
 
+@pytest.fixture(autouse=True)
+def _no_agent_seeding(monkeypatch):
+    """The roster of a new workspace is the agents service's own tests'."""
+    monkeypatch.setattr(ws_api, "seed_workspace_agents", AsyncMock())
+
+
 def _client(*, user: str = "admin", storage=None, org_role: str | None = "admin"):
     service = AsyncMock()
     service.get_workspace.return_value = SimpleNamespace(id="ws-1", logo_url=None)
@@ -39,6 +45,7 @@ def _client(*, user: str = "admin", storage=None, org_role: str | None = "admin"
         id=user, email="me@example.com", name="Me"
     )
     app.dependency_overrides[ws_api.get_workspace_service] = lambda: service
+    app.dependency_overrides[ws_api.get_service_registry] = lambda: SimpleNamespace(agents=None)
     app.dependency_overrides[ws_api.get_organization_service] = lambda: org_service
     app.dependency_overrides[ws_api._get_object_storage] = lambda: storage or MemoryStorage()
     return TestClient(app, raise_server_exceptions=False), service

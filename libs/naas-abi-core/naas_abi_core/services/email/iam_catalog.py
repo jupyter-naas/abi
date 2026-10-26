@@ -1,4 +1,4 @@
-"""The ``email`` action catalog (RFC §6.4, "email").
+"""The ``email`` action catalog.
 
 Mail is sent from a sender (``sender/<from address>``, platform-level); a kept
 copy is a message placed in the call's target workspace when it is sent.

@@ -1,4 +1,4 @@
-"""keyvalue's action catalog (RFC §6.4, "keyvalue"): one ``key/<key>`` per key,
+"""keyvalue's action catalog: one ``key/<key>`` per key,
 opaque, placed by key prefix."""
 
 from __future__ import annotations

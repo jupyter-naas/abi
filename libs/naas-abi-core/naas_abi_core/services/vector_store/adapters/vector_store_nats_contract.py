@@ -18,8 +18,7 @@ wire contract this pairs with.
 SERVICE_NAME = "vector_store"
 SERVICE_VERSION = "1.0.0"
 SUBJECT_PREFIX = "abi.svc.vector_store.v1"
-# transfer/v1 sessions for streamed listings (operation ``list_vectors``;
-# docs/adr/20261003_nats-streamed-results.md).
+# transfer/v1 sessions for streamed listings (operation ``list_vectors``).
 TRANSFER_PREFIX = f"{SUBJECT_PREFIX}.transfer"
 
 # Header carrying the caller's engine token (see naas_abi_core.engine.nats_auth).

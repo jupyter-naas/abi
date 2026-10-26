@@ -1,6 +1,6 @@
 """Engine-issued ES256 tokens, their JWKS verification and token sources.
 
-See docs/specs/rfcs/20261013_identity-and-authorization.md, §9.1 and §9.2.
+Claims, audiences and rotation: ``services/iam/AGENTS.md``, "Tokens".
 
 * Only the engine signs, with an ES256 key named by its ``kid``; IAM holds the
   keys (``services/iam/tokens.py``) and publishes their public halves as a JWKS
@@ -122,7 +122,7 @@ class InvalidServiceTokenError(Exception):
 
 @dataclass(frozen=True)
 class TokenClaims:
-    """What an engine token says (RFC §9.2).
+    """What an engine token says.
 
     ``name`` (claim ``abi_name``) is a service account's name (``engine``,
     ``module/acme/people``), set by IAM. ``actor`` is ``act.sub`` and
@@ -356,7 +356,7 @@ class TokenVerifier(ABC):
 
 
 class JWKSVerifier(TokenVerifier):
-    """Verifies against the engine's JWKS (RFC §9.1).
+    """Verifies against the engine's JWKS.
 
     ``fetch`` returns the key set: ``{"issuer": ..., "keys": [...]}``. The
     issuer travels with the keys, so a verifier needs no configuration of its
@@ -726,7 +726,7 @@ class StaticTokenSource(TokenSource):
 
 
 # ---------------------------------------------------------------------------
-# Service keys (RFC §8.1): abi_sk_<key id>_<secret>
+# Service keys: abi_sk_<key id>_<secret>
 # ---------------------------------------------------------------------------
 
 SERVICE_KEY_PREFIX = "abi_sk_"

@@ -1,7 +1,7 @@
 """Activity events stored in the Document Service.
 
 Shared by every engine when the Document Service is (PostgreSQL), so deploys can
-hand over without downtime (docs/adr/20261006_single-serving-engine.md).
+hand over without downtime.
 
 Collections in the ``naas_abi_core.services.activity_log`` namespace:
 

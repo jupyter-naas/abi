@@ -86,6 +86,17 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/bus/adapters/secondary/P
 uv run pytest libs/naas-abi-core/naas_abi_core/services/bus/adapters/secondary/RabbitMQAdapter_test.py
 ```
 
+## Caller identity
+
+The bus has no IAM catalog: it carries messages, and what a consumer does with
+one is checked by the service it then calls. A consumer runs as whoever started
+it: every adapter starts its consume loop on a thread that runs in a copy of the
+subscribing call's `CallContext` (`contextvars.copy_context().run`). A consumer
+started with no context (a thread that did not copy it) is anonymous, and every
+kernel service denies it. Subscribe from code that runs as the identity the
+handler needs (`as_service_account(...)` for work of the platform's own); a new
+adapter must keep this when it starts threads.
+
 ## Adding a new adapter
 
 1. Implement `IBusAdapter` in `adapters/secondary/<Name>Adapter.py`. All four methods.
@@ -105,8 +116,7 @@ Consumer acknowledgements/redelivery remain separate: callbacks must tolerate
 at-least-once delivery. The port has no stable idempotency-key contract yet.
 
 Payloads above the broker's `max_payload` (header block counted, JetStream's own
-header reserved) travel as claim checks (`naas_abi_sdk.claim_check`,
-docs/adr/20261003_nats-claim-check.md): stored in the `ABI_CLAIM_CHECKS` stream
+header reserved) travel as claim checks (`naas_abi_sdk.claim_check`): stored in the `ABI_CLAIM_CHECKS` stream
 under the topic's scope and replaced by a reference that subscriber and worker callbacks resolve
 before they run, wire-compatible with the SDK `BusClient`. Up to 256 MiB; stored
 values expire after 7 days, so a queued item must be consumed within that time.

@@ -1,5 +1,4 @@
-"""Browser requests to a remote module's app, forwarded over NATS
-(docs/adr/20261012_remote-module-apps.md).
+"""Browser requests to a remote module's app, forwarded over NATS.
 
 * ``/app-remote/<grant>/<module_id>/<app>/<path>`` serves the app. The page
   runs sandboxed in an opaque origin (``SANDBOX``), away from the Nexus session,
@@ -12,8 +11,8 @@
 
 A grant names the workspace the app opens in (``access.py``). The request is
 forwarded for the grant's user, narrowed to opening that app (the grant's
-scope): the host receives a delegation naming its module and the user (RFC
-§9.4), never the user's credential and never a header. The module gets the
+scope): the host receives a delegation naming its module and the user,
+never the user's credential and never a header. The module gets the
 user's id and the workspace. Headers pass on allow-lists both ways. The
 module's cookies stay on its own path, under names of their own, and only those
 come back to it.

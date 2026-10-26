@@ -49,8 +49,7 @@ class KeyValueAdapterNATSConfiguration(BaseModel):
     """KeyValue adapter NATS RPC client configuration.
 
     Talks to a remote ``KeyValuePrimaryAdapterNATS`` over NATS
-    request/reply -- see docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
-    (Stage 1) and naas_abi_core/proto/keyvalue/v1/keyvalue.proto.
+    request/reply -- see naas_abi_core/proto/keyvalue/v1/keyvalue.proto.
 
     KV_adapter:
       adapter: "nats_rpc"

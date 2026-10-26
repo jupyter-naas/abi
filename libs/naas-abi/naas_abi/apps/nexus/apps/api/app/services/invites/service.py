@@ -15,7 +15,7 @@ The invited person may not exist yet, so nothing is attached to an account:
    resend and revoke it, and marks it accepted once the person signs in (``claim``).
 
 The service never decides whether the inviting person may invite: the route
-did, before it called (RFC §6.5), and IAM's checks of the grants it writes run
+did, before it called, and IAM's checks of the grants it writes run
 as ``api`` for nobody (``GrantsGateway``).
 """
 

@@ -2,7 +2,7 @@
 
 A real ``nats-server`` with ``auth_callout``, the engine's responder and IAM in
 this process, and modules logging in with their service keys through the SDK
-transport (docs/specs/rfcs/20261013_identity-and-authorization.md, §8.4).
+transport.
 """
 
 from __future__ import annotations

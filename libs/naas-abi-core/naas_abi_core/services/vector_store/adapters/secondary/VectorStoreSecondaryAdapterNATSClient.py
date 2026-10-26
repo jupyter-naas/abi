@@ -87,7 +87,7 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
     wire code, matching what an in-process adapter failure would look like
     to ``VectorStoreService`` (a bare exception it republishes as a
     ``VectorStoreError`` event and reraises). The exceptions are the outcomes
-    of authorization (RFC §5.4) and a missing collection.
+    of authorization and a missing collection.
     """
     raise_authorization_error(error.code, error.message)
     if error.code == "COLLECTION_NOT_FOUND":
@@ -318,9 +318,8 @@ class VectorStoreSecondaryAdapterNATSClient(NatsRPCClient, IVectorStorePort):
     def list_vectors_stream(
         self, collection_name: str, *, include_vectors: bool = False
     ) -> Iterator[Iterator[VectorDocument]]:
-        """Documents fetched as the caller iterates, over a transfer stream
-        (docs/adr/20261003_nats-streamed-results.md). Leaving the block closes
-        the session."""
+        """Documents fetched as the caller iterates, over a transfer stream.
+        Leaving the block closes the session."""
         request = vector_store_pb2.ListVectorsRequest(
             collection_name=collection_name, include_vectors=include_vectors
         )

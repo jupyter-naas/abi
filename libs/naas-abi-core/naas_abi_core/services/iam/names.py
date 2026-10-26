@@ -1,13 +1,13 @@
 """Canonical resource names, action names and their wildcard patterns.
 
-See docs/specs/rfcs/20261013_identity-and-authorization.md, §3.3 and §4:
+Grammar and encoding: ``AGENTS.md``, "Resource names":
 
     abi:<org>:<workspace>:<service>:<type>/<id>
 
 Ids are percent-encoded UTF-8 (every octet outside RFC 3986 ``unreserved``),
 so a canonical name never holds a raw ``*`` or ``?`` and a wildcard can never
 be read as a literal. Callers build and parse names here, never by string
-formatting. ``naas_abi_sdk.iam_names`` mirrors this module for SDK modules.
+formatting.
 """
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ def encode_segment(value: str) -> str:
 
 
 def encode_id(parts: str | Sequence[str], kind: IdKind = "opaque") -> str:
-    """The canonical id of a resource (RFC §4.3).
+    """The canonical id of a resource.
 
     * ``opaque``: one value, wholly encoded (a ``/`` inside becomes ``%2F``);
     * ``path``: each part encoded on its own, joined with a raw ``/``;
@@ -155,7 +155,7 @@ def scope_name(org: str = NONE, workspace: str = NONE) -> str:
 
 
 def validate_scope(scope: str) -> str:
-    """Check an attachment scope (RFC §3.4): ``abi:<org>:<ws>``, ``abi:<org>:-``,
+    """Check an attachment scope: ``abi:<org>:<ws>``, ``abi:<org>:-``,
     ``abi:<org>:*`` or ``abi:-:-``."""
     if not scope.startswith(PREFIX):
         raise ValueError(f"A scope starts with 'abi:': {scope!r}")
@@ -191,7 +191,7 @@ def _check_org(org: str, workspace: str, service: str, type: str) -> None:
 
 def _check_workspace(workspace: str, org: str, service: str, type: str) -> None:
     if workspace == ALL_WORKSPACES:
-        # Only org-wide attachments span every workspace of an org (RFC §6.4).
+        # Only org-wide attachments span every workspace of an org.
         if (service, type) != ORG_WIDE_TYPE:
             raise ValueError(
                 f"Workspace {ALL_WORKSPACES} names org-wide attachments only, "
@@ -239,7 +239,7 @@ def is_valid_action_name(name: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Wildcard patterns (RFC §3.3, §4.5): "*" any run, "?" one character.
+# Wildcard patterns: "*" any run, "?" one character.
 # ---------------------------------------------------------------------------
 
 
@@ -281,8 +281,7 @@ def variables(pattern: str) -> list[str]:
 def substitute(pattern: str, values: dict[str, str | None]) -> str | None:
     """``pattern`` with its variables replaced; None when one is unresolved.
 
-    A statement whose resource holds an unresolved variable matches nothing
-    (RFC §3.4).
+    A statement whose resource holds an unresolved variable matches nothing.
     """
     unresolved = False
 

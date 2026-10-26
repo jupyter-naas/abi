@@ -1,4 +1,4 @@
-"""Provisioning and invitations at sign-in (RFC §12.2): who may provision, what
+"""Provisioning and invitations at sign-in: who may provision, what
 each adapter does, and what a first sign-in claims."""
 
 from __future__ import annotations

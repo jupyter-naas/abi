@@ -43,7 +43,7 @@ class ITripleStorePort:
     def export(graph_name: URIRef | None = None) -> ContextManager[Iterator[Triple]]
 ```
 
-Streamed reads (docs/adr/20261003_nats-streamed-results.md): `QueryStream` has
+Streamed reads: `QueryStream` has
 `result_type`, `vars`, `ask_answer`, and lazy `rows` (dicts, unbound variables
 absent) or `triples`. Read them once, inside the `with`. Adapters that can
 stream override the defaults: Oxigraph and ApacheJenaTDB2 (TSV and N-Triples
@@ -115,43 +115,148 @@ generic contract against it in-process.
 
 ## Authorization
 
-Every operation is checked in the domain service against IAM (RFC
-[§5, §6.4](../../../../../docs/specs/rfcs/20261013_identity-and-authorization.md)),
-for the caller of the current `CallContext`, so in process and over NATS answer
-the same. The catalog is `iam_catalog.py`, registered by the serving engine at
-boot. A caller who cannot see a resource gets `Exceptions.GraphNotFoundError` (`GRAPH_NOT_FOUND`); one who can see it but not
-act gets `PermissionDeniedError` (`PERMISSION_DENIED`). A service not wired into
-an engine with IAM (a library use, a NATS facade whose server checks) does not
-check. The contract test is `TripleStoreService_authorization_test.py`: no policy, granted and denied
+Every operation is checked in the domain service against IAM, for the caller of
+the current `CallContext`, so in process and over NATS answer the same. The
+cross-cutting pattern (`ResourceGuard`, errors, the create rule, who owns the
+check) is in [services/iam/AGENTS.md](../iam/AGENTS.md), "Enforcing in a data
+service". The catalog is `iam_catalog.py`, registered by the serving engine at
+boot. A caller who cannot see a resource gets `Exceptions.GraphNotFoundError`
+(`GRAPH_NOT_FOUND`); one who can see it but not act gets `PermissionDeniedError`
+(`PERMISSION_DENIED`). A service not wired into an engine with IAM (a library
+use, a NATS facade whose server checks) does not check. The contract test is
+`TripleStoreService_authorization_test.py`: no policy, granted and denied
 principals, in process and over NATS.
 
-* Each graph is `graph/<iri>` (opaque); the store's default graph is
-  `graph/default`. Views are `view/<name>`, platform-level.
-* SPARQL (`query`, `query_stream`, `query_view`; `sparql_access.py`): for a
-  caller who may not read every graph, every graph the query names (`FROM`,
-  `FROM NAMED`, `GRAPH <iri>`, in `EXISTS` too) must be readable, and the query
-  runs over a `QueryDataset` of the graphs it may read: `GRAPH ?g` and the
-  default graph see nothing else. `SERVICE` needs every graph. An unparsable
-  request is `ValueError` (`INVALID_ARGUMENT`), and so is an update sent to
-  `query_view`, for every caller.
-* The adapter gets the dataset through `query_dataset` /
-  `query_stream_dataset`: SPARQL Protocol `default-graph-uri` and
-  `named-graph-uri` (Oxigraph, ABI's `oxigraph_server`, Fuseki, which declares
-  `union_default_graph`) or pyoxigraph options (embedded). An adapter that
-  cannot confine a query (filesystem, object storage, Neptune) refuses it with
-  `PermissionDeniedError`; callers allowed every graph are unaffected.
-* SPARQL Update needs the matching action on each graph it touches (`INSERT
-  DATA` → `Insert`, `DROP` → `DropGraph`, ...); `DEFAULT`/`NAMED`/`ALL` and
-  graph variables need it on every graph, and so do a `SERVICE` anywhere in
-  `WHERE` (with `USING` too), `LOAD` (`Query` on every graph: its source may be
-  one of the store's graphs) and, on a union-default store, a read of the
-  default graph.
-* Each request is parsed once (`sparql_access.analyze`), under a lock of its
-  own: rdflib's grammar (pyparsing) is not thread-safe. Other rdflib parsing in
-  the process does not take it.
+### Resources and actions
+
+* `graph/<iri>` is a named graph (`opaque` id, placed); the store's default
+  graph is `graph/default` (an encoded IRI always holds `%3A`, so the two never
+  collide). `view/<name>` is a platform-level view.
+* Actions (subject is the operation under `abi.svc.triple_store.v1.`):
+
+| Action | Level | Resource | Subject |
+|---|---|---|---|
+| `ListGraphs` | list | each `graph/<iri>` | `list_graphs` |
+| `Get` | read | each graph in the dump; the result holds only readable graphs | `get` |
+| `GetSubjectGraph` | read | `graph/<iri>` when a graph is named, else filtered over all graphs | `get_subject_graph` |
+| `Query` | read | the query's dataset (below) | `query` |
+| `QueryStream` | read | as `Query` | transfer, operation `query` |
+| `QueryView` | read | `view/<name>`, plus the `Query` rules on the graphs it reads | `query_view` |
+| `Export` | read | `graph/<iri>`, or filtered over all graphs when none is given | transfer, operation `export` |
+| `Subscribe` | read | `graph/<iri>`, or every graph for `*` | in process only |
+| `Insert` | write | `graph/<iri>` (`default` with no graph) | `insert` |
+| `Remove` | write | `graph/<iri>` | `remove` |
+| `CreateGraph` | write | `graph/<iri>` (creates) | `create_graph` |
+| `ClearGraph` | admin | `graph/<iri>` | `clear_graph` |
+| `DropGraph` | admin | `graph/<iri>` | `drop_graph` |
+| `HandleViewEvent` | admin | `view/<name>` | `handle_view_event` |
+
+### Names are validated before the check
+
+IAM percent-encodes an id, so any string matches a prefix pattern whatever
+follows it; a store that interpolates the raw string would run something else.
+So graph names and subjects are absolute IRIs (`checked_iri`) in `insert`,
+`remove`, `create_graph`, `clear_graph`, `drop_graph`, `export`, `subscribe` and
+`get_subject_graph` (the subject too), before any check and with no
+denied/not-found oracle: `Exceptions.InvalidRequest` (`INVALID_ARGUMENT`).
+Adapters that build SPARQL from strings write graph names with `iri_n3`, which
+validates again. Graphs the SPARQL parser finds in a request are validated too,
+all of them before any check: rdflib keeps the backslash of an escaped prefixed
+name (`g:\/private`) that the SPARQL grammar and the stores drop, so IAM would
+check `http://g\/private` while the store drops `http://g/private`, a graph a
+Deny names. Only the literals `default` and `*` are taken as they are.
+
+### SPARQL queries (`query`, `query_stream`, `query_view`; `sparql_access.py`)
+
+For a caller who may not read every graph:
+
+* every graph the query names (`FROM`, `FROM NAMED`, `GRAPH <iri>`, in `EXISTS`
+  too) must be readable: one that is not is `GraphNotFoundError` or
+  `PermissionDeniedError` by the usual rule;
+* the query runs over a `QueryDataset` of the graphs the caller may read:
+  `GRAPH ?g` ranges over the readable named graphs and the default graph is the
+  readable graphs only, whatever union-default setting the backend has;
+* a `SERVICE` anywhere needs every graph;
+* an unparsable request is `Exceptions.InvalidRequest` (`INVALID_ARGUMENT`), and
+  so is an update sent to `query_view`, for every caller (a view is queried,
+  never updated; a view query is always parsed for this).
+
+How an adapter confines the query: it gets the dataset through `query_dataset` /
+`query_stream_dataset`. HTTP stores (Oxigraph, ABI's `oxigraph_server`, Fuseki)
+receive SPARQL Protocol `default-graph-uri` and `named-graph-uri`, which take
+precedence over the query's own clauses; embedded Oxigraph receives
+`default_graph` and `named_graphs`. "No graph" is the sentinel IRI
+`urn:abi:iam:no-graph`, since the protocol has no other way to say it. A store
+whose default graph is the union of its named graphs (Fuseki as deployed)
+declares `union_default_graph`: a confined default graph is then the union of the
+readable graphs. An adapter that cannot confine a query (the rdflib-backed
+filesystem and object-storage stores, which keep no graph names, and Neptune)
+refuses a confined caller with `PermissionDeniedError`: on those stores a user
+with narrow rights cannot query at all. Callers allowed every graph skip the
+parse and the restriction (`IIAMService.allows_every`, a conservative shortcut).
+`get`, `export()` and `get_subject_graph(s)` read the confined dataset too.
+
+### SPARQL Update (through `query`)
+
+Checked, not confined: each operation needs its action on each graph it
+touches.
+
+| Operation | Action needed |
+|---|---|
+| `INSERT DATA` | `Insert` |
+| `DELETE DATA` | `Remove` |
+| `DELETE/INSERT ... WHERE` | `Insert` and/or `Remove` on the targets, `Query` on the graphs `WHERE` reads |
+| `LOAD` | `Insert`, and `Query` on every graph: the store dereferences the source itself and it may be one of its own graphs |
+| `CLEAR` / `DROP` / `CREATE` | `ClearGraph` / `DropGraph` / `CreateGraph` |
+| `ADD` | `Query` on the source, `Insert` on the target |
+| `COPY`, `MOVE` | as `ADD`, plus `ClearGraph` on the target (they replace it), and `DropGraph` on the source for `MOVE` |
+
+`DEFAULT`, `NAMED`, `ALL` and graph variables need the action on every graph
+(in practice `graph/*`); a `SERVICE` anywhere in `WHERE` needs every graph,
+`USING` or not; on a union-default store a read of the default graph is a read
+of every graph. A request the parser cannot classify is refused
+(`INVALID_ARGUMENT`).
+
+Each request is parsed once (`sparql_access.analyze`), under a lock of its own:
+rdflib's grammar (pyparsing) is not thread-safe. Other rdflib parsing in the
+process does not take it. A confined query therefore costs the graph list, a
+filter and one parse; broad callers pay none of it, except on a view, which is
+always parsed to refuse an update.
+
+### Other rules
+
 * `list_graphs`, `get`, `export()` and `get_subject_graph(s)` without a graph
-  hold only readable graphs. `create_graph` places a new graph in the call's
-  target workspace (§4.4); `drop_graph` drops its placement.
+  hold only readable graphs.
+* A subscription is a read (`Subscribe`, in process only): its messages are one
+  graph's triples, so a graph needs `Subscribe` on it and `*` needs every
+  graph. It is checked when made; a policy changed afterwards does not cancel it.
+* Over NATS the primary maps to `INVALID_ARGUMENT` only the service's own
+  refusals (`Exceptions.InvalidRequest`: an IRI that is not absolute, SPARQL the
+  analysis cannot classify). Any other error comes from a backend (rdflib, a
+  store), may name paths or connection strings, and is an internal error:
+  logged, never sent.
+
+### Graph placement and assignments
+
+Which workspace a graph belongs to is an IAM placement, never a triple in the
+graph store:
+
+* `create_graph` applies the create rule (`ResourceGuard.create`): a graph
+  created while the call names a target workspace is placed in it
+  (`iam.workspace_org`), otherwise on the platform; a name an existing placement
+  covers keeps it, and a mismatching target workspace is refused.
+  `drop_graph` drops the placement. An `Insert` into a graph nobody placed is
+  checked against the platform's name for it.
+* A workspace's roles reach exactly the graphs placed in it. That is the whole
+  ownership model: the kernel keeps no per-workspace graph list of its own.
+* Sharing a graph with another workspace is an Allow statement naming the graph
+  wherever it is placed (`abi:*:*:triple_store:graph/<iri>`). A policy attached
+  at a scope may only allow `${scope}:` resources, so such a grant is attached
+  without scope. `ClearGraph` and `DropGraph` are never shared: lifecycle stays
+  with the owning workspace.
+* The Nexus graph service owns the editable assignments (what a workspace reads,
+  writes and may create) and projects them into these statements; see
+  [the Nexus graph service](../../../../naas-abi/naas_abi/apps/nexus/apps/api/app/services/graph/AGENTS.md).
 
 ## Tests
 
@@ -197,13 +302,14 @@ delegated token (`abi:delegated:agent`, `act` the acting service, `sub` the user
 made by IAM's token exchange, never a header (the old `Abi-On-Behalf-Of` header is
 refused); trace and target workspace come from the request's `context`. Never read identity from request fields
 (`principal_id` and `tenant_id` are reserved). Clients of `api` and `engine` send a
-delegation for the current call's user, and the call's trace and workspace. Nothing authorizes on it yet.
+delegation for the current call's user, and the call's trace and workspace; the domain service authorizes on that
+context (Authorization above).
 
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception
 mapping in the adapter. Primaries use `respond_protobuf` for bounded replies.
 Requests and replies above the broker limit (8 MiB, or lower) overflow as
-transfer frames up to 256 MiB (docs/adr/20261003_nats-rpc-overflow.md); above
+transfer frames up to 256 MiB; above
 that, at the overflow host's capacity, or with an older peer, the call fails
 with non-retryable `PAYLOAD_TOO_LARGE`. Micro-service error headers raise
 instead of becoming an empty success. Overflowed values are held whole in

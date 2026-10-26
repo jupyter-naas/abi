@@ -61,6 +61,7 @@ def client_for(tmp_path, monkeypatch, team):
             adapter=ObjectStorageSecondaryAdapterFS(base_path=str(tmp_path))
         )
     )
+
     def make(role: str) -> tuple[TestClient, _FakeWorkspaces]:
         # The user holds ``role`` in ws-1 through IAM (the ``team`` fixture).
         workspaces = _FakeWorkspaces(role)

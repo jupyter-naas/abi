@@ -92,8 +92,7 @@ class RequestPayloadError(Exception):
 async def request_payload(request: Request) -> bytes:
     """The request's protobuf body, read from its overflow upload when it has one.
 
-    Primaries call this instead of reading ``request.data`` (see
-    docs/adr/20261003_nats-rpc-overflow.md).
+    Primaries call this instead of reading ``request.data``.
     """
     headers = request.headers or {}
     transfer_id = headers.get(overflow.REQUEST_HEADER)
@@ -608,7 +607,7 @@ class NatsRPCClient:
 
     # ------------------------------------------------------------------
     # Overflow: payloads above the broker limit travel as transfer frames
-    # (naas_abi_sdk.overflow, docs/adr/20261003_nats-rpc-overflow.md).
+    # (naas_abi_sdk.overflow).
     # ------------------------------------------------------------------
 
     def _chunk_envelope(self, request: Message) -> common_pb2.CallContext:
@@ -693,7 +692,7 @@ class NatsRPCClient:
 
     # ------------------------------------------------------------------
     # Streamed reads: a domain's transfer/v1 stream, read as the caller
-    # iterates (docs/adr/20261003_nats-streamed-results.md).
+    # iterates.
     # ------------------------------------------------------------------
 
     @contextmanager

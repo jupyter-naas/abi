@@ -1,4 +1,4 @@
-"""What ``secret_key`` encrypted moves under the secrets key (RFC §13)."""
+"""What ``secret_key`` encrypted moves under the secrets key."""
 
 from __future__ import annotations
 
@@ -46,9 +46,7 @@ async def rows(nexus_db):
             ("s-new", "GITHUB_TOKEN", sealed(NEW, "gh-new")),
             ("s-lost", "LOST", LOST),
         ):
-            db.add(
-                SecretModel(id=ident, workspace_id="w1", key=key, encrypted_value=value)
-            )
+            db.add(SecretModel(id=ident, workspace_id="w1", key=key, encrypted_value=value))
         db.add(
             AuthSessionModel(
                 id="sess-1",
@@ -86,14 +84,18 @@ async def test_secrets_and_session_tokens_move_to_the_secrets_key(rows, monkeypa
 
     assert (moved.secrets, moved.session_tokens, moved.unreadable) == (2, 2, 1)
     async with rows() as db:
-        secrets = {s.id: s.encrypted_value for s in (await db.execute(select(SecretModel))).scalars()}
+        secrets = {
+            s.id: s.encrypted_value for s in (await db.execute(select(SecretModel))).scalars()
+        }
         for ident, plain in (("s-old", "sk-old"), ("s-default", "sk-default"), ("s-new", "gh-new")):
             assert secrets_crypto.decrypt_secret_value(secrets[ident]) == plain
         # What no known key opens is left as it was, never lost.
         assert secrets_crypto.try_decrypt_secret_value(secrets["s-lost"]) is None
         assert secrets["s-lost"] == LOST
         sessions = {s.id: s for s in (await db.execute(select(AuthSessionModel))).scalars()}
-        assert secrets_crypto.decrypt_secret_value(sessions["sess-1"].refresh_token_enc) == "refresh-1"
+        assert (
+            secrets_crypto.decrypt_secret_value(sessions["sess-1"].refresh_token_enc) == "refresh-1"
+        )
         assert secrets_crypto.decrypt_secret_value(sessions["sess-1"].id_token_enc) == "id-1"
         assert sessions["sess-2"].refresh_token_enc is None
 
@@ -130,7 +132,9 @@ async def test_the_signing_key_decrypts_nothing_after_the_move(rows, monkeypatch
         await db.commit()
     use(monkeypatch, OLD)
     async with rows() as db:
-        for row in (await db.execute(select(SecretModel).where(SecretModel.id == "s-old"))).scalars():
+        for row in (
+            await db.execute(select(SecretModel).where(SecretModel.id == "s-old"))
+        ).scalars():
             assert secrets_crypto.try_decrypt_secret_value(row.encrypted_value) is None
 
 

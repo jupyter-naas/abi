@@ -217,6 +217,12 @@ def main() -> None:
     )
     parser.add_argument("--agents", default="", help="comma-separated agent names")
     parser.add_argument("--apps", default="", help="comma-separated app ids")
+    parser.add_argument(
+        "--no-sign-in",
+        action="store_true",
+        help="a project with no identity provider (legacy, --without-nats): check "
+        "the API and the web app only",
+    )
     parser.add_argument("--timeout", type=float, default=900.0)
     args = parser.parse_args()
     deadline = time.monotonic() + args.timeout
@@ -229,6 +235,19 @@ def main() -> None:
         return "HTTP 200"
 
     wait("API /docs", deadline, docs)
+
+    def web() -> str:
+        # The first request compiles the page (`next dev`): give it time.
+        status, _ = request(f"{args.web.rstrip('/')}/")
+        if status != 200:
+            raise NotYet(f"Nexus web: HTTP {status}")
+        return "HTTP 200"
+
+    if args.no_sign_in:
+        # The built-in identity provider is a module over NATS: a legacy project
+        # has none, so nobody can sign in unless it names a provider of its own.
+        wait("Nexus web", deadline, web)
+        return
 
     state: dict[str, Any] = {}
 
@@ -291,13 +310,6 @@ def main() -> None:
             return ", ".join(apps)
 
         wait("apps listed in Nexus", deadline, catalog)
-
-    def web() -> str:
-        # The first request compiles the page (`next dev`): give it time.
-        status, _ = request(f"{args.web.rstrip('/')}/")
-        if status != 200:
-            raise NotYet(f"Nexus web: HTTP {status}")
-        return "HTTP 200"
 
     wait("Nexus web", deadline, web)
 

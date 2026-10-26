@@ -59,9 +59,7 @@ class NatsAgentControl:
         request = pb.CancelRequest(invocation_id=run.invocation_id, output_format=2)
         try:
             await asyncio.wait_for(
-                self._transport().call(
-                    subject, request, pb.CancelResponse, instance_id=run.owner
-                ),
+                self._transport().call(subject, request, pb.CancelResponse, instance_id=run.owner),
                 self._timeout,
             )
         except NoRespondersError as exc:

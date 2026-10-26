@@ -50,8 +50,7 @@ class BusAdapterPythonQueueConfiguration(BaseModel):
 class BusAdapterNATSConfiguration(BaseModel):
     """NATS JetStream bus adapter configuration.
 
-    Opt-in alongside "rabbitmq"/"python_queue", not a replacement yet — see
-    docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md (Stage 1).
+    Opt-in alongside "rabbitmq"/"python_queue", not a replacement yet.
 
     bus_adapter:
       adapter: "nats_jetstream"

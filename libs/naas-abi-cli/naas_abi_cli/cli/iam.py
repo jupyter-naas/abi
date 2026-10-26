@@ -1,10 +1,9 @@
 """``abi iam``: service accounts, their keys, and module permission manifests.
 
-docs/specs/rfcs/20261013_identity-and-authorization.md, §8. The commands open
-the project's IAM store from its config (``services.iam``), as the operator
-who holds that config, and act as the engine's own service account. After a
-change they tell a running engine (``abi.iam.v1.changed``) so it drops its
-cache at once instead of within a minute.
+The commands open the project's IAM store from its config (``services.iam``),
+as the operator who holds that config, and act as the engine's own service
+account. After a change they tell a running engine (``abi.iam.v1.changed``) so
+it drops its cache at once instead of within a minute.
 
     abi iam service-account create ci/nightly --key
     abi iam service-account list
@@ -23,7 +22,7 @@ cache at once instead of within a minute.
     abi iam group unbind acme "Data readers" --workspace W --org O --role viewer
     abi iam group list
 
-``invite`` and ``group`` act through the engine's services (RFC §12.2), like
+``invite`` and ``group`` act through the engine's services, like
 ``abi chat``: the running engine when there is one, as its own account. They
 work with IAM's own names, an org id and a workspace id (the ones Nexus shows),
 and never send mail: the Nexus invite (``abi user invite``) sends the

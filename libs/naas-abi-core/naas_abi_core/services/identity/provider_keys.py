@@ -1,4 +1,4 @@
-"""A provider's discovery document and signing keys, cached (RFC §9.1, §12.1).
+"""A provider's discovery document and signing keys, cached.
 
 * The discovery document is read from ``<issuer>/.well-known/openid-configuration``
   and must name exactly the configured issuer (OIDC Discovery §4.3).

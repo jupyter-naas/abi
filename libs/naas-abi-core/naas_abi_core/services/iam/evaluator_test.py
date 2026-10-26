@@ -1,4 +1,4 @@
-"""The evaluation rules of RFC §5, through ``IAMService`` and the policy authorizer."""
+"""The evaluation rules, through ``IAMService`` and the policy authorizer."""
 
 from __future__ import annotations
 
@@ -146,7 +146,7 @@ def test_static_group_attachments_reach_members(h):
 
 
 def test_idp_groups_reach_the_user_through_the_token(h):
-    """An IdP group claim maps to a group; the token's grp carries it (RFC §2)."""
+    """An IdP group claim maps to a group; the token's grp carries it."""
     bob = h.user()
     readers = h.group("graph-readers")
     writers = h.group("graph-writers")

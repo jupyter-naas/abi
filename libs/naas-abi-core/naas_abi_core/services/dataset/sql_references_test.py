@@ -1,4 +1,4 @@
-"""What a dataset query reads, as its authorization sees it (RFC §6.4)."""
+"""What a dataset query reads, as its authorization sees it."""
 
 from __future__ import annotations
 

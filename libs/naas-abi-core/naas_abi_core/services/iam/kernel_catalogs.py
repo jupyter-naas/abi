@@ -1,7 +1,7 @@
 """The kernel services' action catalogs, registered with IAM at engine boot.
 
-Each catalog lives next to its domain code (``services/<name>/iam_catalog.py``,
-RFC §6.2). They are registered whether or not the service is loaded, so a
+Each catalog lives next to its domain code (``services/<name>/iam_catalog.py``).
+They are registered whether or not the service is loaded, so a
 policy can name any kernel action and the built-in roles cover every kernel
 resource type.
 """

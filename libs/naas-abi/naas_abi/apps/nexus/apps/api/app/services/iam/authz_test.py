@@ -297,7 +297,7 @@ async def test_only_owners_delete_a_workspace(world) -> None:
     assert not await AUTHZ.allowed("DeleteWorkspace", user="admin", workspace="ws-1")
 
 
-# -- memberships: bug (c) -----------------------------------------------------------
+# -- memberships: the owner's role is the owner's -----------------------------------------------------------
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,4 @@
-"""``identity``: the OIDC identity providers the engine trusts (RFC §12.1).
+"""``identity``: the OIDC identity providers the engine trusts.
 
 ```yaml
 identity:

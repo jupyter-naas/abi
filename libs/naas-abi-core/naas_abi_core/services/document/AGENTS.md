@@ -272,8 +272,9 @@ database backup/restore. Switching adapter configuration does not migrate data.
 
 ## Authorization
 
-Every operation is checked in the domain service against IAM (RFC
-[§5, §6.4](../../../../../docs/specs/rfcs/20261013_identity-and-authorization.md)),
+Every operation is checked in the domain service against IAM
+(`ResourceGuard`, see "Enforcing in a data service" in
+[`../iam/AGENTS.md`](../iam/AGENTS.md)),
 for the caller of the current `CallContext`, so in process and over NATS answer
 the same. The catalog is `iam_catalog.py`, registered by the serving engine at
 boot. A caller who cannot see a resource gets `CollectionNotFound` / `DocumentNotFound`; one who can see it but not
@@ -282,22 +283,50 @@ an engine with IAM (a library use, a NATS facade whose server checks) does not
 check. The contract test is `DocumentService_authorization_test.py`: no policy, granted and denied
 principals, in process and over NATS.
 
-* Names are `namespace/<ns>` and `collection/<ns>/<c>` (placed containers) and
-  `document/<ns>/<c>/<id>`. The namespace a view is bound to, or a NATS request
-  names, is authorized like any other name: a remote module reaches its own
-  namespace, its `module_id` (`${module.id}` in its approved manifest), and
-  no other module's.
+Resource types (`path`): `namespace/<ns>` and `collection/<ns>/<c>` (placed
+containers) and `document/<ns>/<c>/<id>`.
+
+| Action | Level | Resource | Subject (`abi.svc.document.v1.`) |
+|---|---|---|---|
+| `Namespaces` | list | each `namespace/<ns>` | `namespaces` |
+| `Collections` | list | each `collection/<ns>/<c>` | `collections` |
+| `CollectionSpec` | read | `collection/<ns>/<c>` | `collection_spec` |
+| `EnsureCollection` | admin | `collection/<ns>/<c>` (creates) | `ensure_collection` |
+| `DropCollection` | admin | `collection/<ns>/<c>` | `drop_collection` |
+| `Get` | read | `document/<ns>/<c>/<id>` | `get` |
+| `Find` | read | `collection/<ns>/<c>`, checked once | `find` |
+| `Count` | read | `collection/<ns>/<c>` | `count` |
+| `Put` | write | `document/<ns>/<c>/<id>` | `put` |
+| `Delete` | write | `document/<ns>/<c>/<id>` | `delete` |
+
+* The namespace a view is bound to (`for_namespace`, the SDK's module binding)
+  or a NATS request names is authorized like any other name; the request's
+  namespace is never trusted. A remote module reaches its own namespace, its
+  `module_id`, and no other module's, through its approved manifest, which
+  names each type so a policy on `collection/<module_id>/*` cannot match
+  another namespace's collection of the same name:
+
+  ```yaml
+  resources:
+    - "abi:-:-:document:namespace/<module_id>"
+    - "abi:-:-:document:collection/<module_id>/*"
+    - "abi:-:-:document:document/<module_id>/*"
+  ```
 * Namespace administration is `Namespaces`, `EnsureCollection` and
-  `DropCollection`, granted by policy. No identity holds it by name: the
-  hard-coded `api`/`engine` admin identities are gone, and the unlocked proxy's
-  `document_admin` no longer bypasses IAM.
-* `ensure_collection` is a create (§4.4): the first collection of a new
+  `DropCollection`, granted by policy. No identity holds it by name (there is no
+  `api`/`engine` admin identity, and the unlocked proxy's `document_admin`
+  only hands out the root: IAM authorizes each call for its caller).
+* `ensure_collection` is a create (the create rule of "Enforcing in a data
+  service" in [`../iam/AGENTS.md`](../iam/AGENTS.md)): the first collection of a new
   namespace places the namespace (exact and `<ns>/*`) in the call's target
   workspace, or on the platform; an existing namespace nothing placed is the
   platform's.
 * `namespaces()` and `collections()` list only what the caller may list;
-  `collections()` of a namespace it cannot see is empty. `find` and `count`
-  are checked once, on the collection.
+  `collections()` of a namespace it cannot see is empty. `find`, `iterate`
+  and `count` are checked once, on the collection (`Find`, `Count`); results
+  are not filtered per item. A Deny on `document/ns/c/secret-*` still
+  lets a query return those documents while `get` refuses them: Deny the
+  collection to hide it from queries.
 * Seals (`SEALS`): the built-in IdP's namespace `idp` is its own, wherever a
   placement puts it; `api` and `engine` cannot read it either.
 * The activity log and the engine's agent memory use their own namespaces as

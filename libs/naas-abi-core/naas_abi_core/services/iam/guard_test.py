@@ -1,4 +1,4 @@
-"""ServiceGuard: names placed by IAM, the create rule of RFC §4.4, placements."""
+"""ServiceGuard: names placed by IAM, the create rule, placements."""
 
 from __future__ import annotations
 

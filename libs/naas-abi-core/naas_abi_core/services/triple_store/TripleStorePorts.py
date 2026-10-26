@@ -93,7 +93,7 @@ class OntologyEvent(Enum):
 
 @dataclass
 class QueryStream:
-    """A SPARQL result read incrementally (docs/adr/20261003_nats-streamed-results.md).
+    """A SPARQL result read incrementally.
 
     ``result_type`` is rdflib's: SELECT, ASK, CONSTRUCT or DESCRIBE. ``rows``
     (SELECT: variable name -> term, unbound variables absent) and ``triples``
@@ -140,7 +140,7 @@ NO_GRAPH = URIRef("urn:abi:iam:no-graph")
 @dataclass(frozen=True)
 class QueryDataset:
     """The RDF dataset a query may read, for a caller who may not read every
-    graph (RFC §6.4). It replaces the query's own dataset clauses.
+    graph. It replaces the query's own dataset clauses.
 
     * ``default_graph``: the store's own default graph is part of the query's
       default graph;
@@ -274,7 +274,7 @@ class ITripleStorePort(ABC):
     def list_graphs(self) -> list[URIRef]:
         pass
 
-    # Streaming reads (docs/adr/20261003_nats-streamed-results.md). These
+    # Streaming reads. These
     # defaults read the materialized result; adapters that can stream from
     # their backend override them.
 
@@ -283,7 +283,7 @@ class ITripleStorePort(ABC):
         """Run a SPARQL query and read its result incrementally, inside the block."""
         yield QueryStream.from_result(self.query(query))
 
-    # Confined reads (RFC §6.4): a query over the graphs its caller may read.
+    # Confined reads: a query over the graphs its caller may read.
     # A store that cannot confine a query keeps these defaults, and such a
     # caller's queries are refused.
 
@@ -472,9 +472,7 @@ class ITripleStoreService(ABC):
         """
 
     @abstractmethod
-    def create_graph(
-        self, graph_name: URIRef, *, timeout_seconds: float | None = None
-    ):
+    def create_graph(self, graph_name: URIRef, *, timeout_seconds: float | None = None):
         """Create an empty named graph in the underlying store.
 
         Args:
@@ -489,9 +487,7 @@ class ITripleStoreService(ABC):
         """
 
     @abstractmethod
-    def clear_graph(
-        self, graph_name: URIRef, *, timeout_seconds: float | None = None
-    ):
+    def clear_graph(self, graph_name: URIRef, *, timeout_seconds: float | None = None):
         """Clear triples from a graph.
 
         Args:
@@ -506,9 +502,7 @@ class ITripleStoreService(ABC):
         """
 
     @abstractmethod
-    def drop_graph(
-        self, graph_name: URIRef, *, timeout_seconds: float | None = None
-    ):
+    def drop_graph(self, graph_name: URIRef, *, timeout_seconds: float | None = None):
         """Drop a named graph and all its triples.
 
         Args:
@@ -535,7 +529,7 @@ class ITripleStoreService(ABC):
         """Run a SPARQL query and read its result incrementally.
 
         Constant memory where the backend streams; read ``rows`` or ``triples``
-        inside the ``with`` block (docs/adr/20261003_nats-streamed-results.md).
+        inside the ``with`` block.
         """
 
     @abstractmethod

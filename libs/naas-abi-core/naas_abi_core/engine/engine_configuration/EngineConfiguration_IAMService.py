@@ -1,4 +1,4 @@
-"""``services.iam``: IAM's store, its authorizer, modules and tokens (RFC §11.1).
+"""``services.iam``: IAM's store, its authorizer, modules and tokens.
 
 ```yaml
 services:
@@ -9,10 +9,10 @@ services:
       # dsn: "{{ secret.IAM_POSTGRES_DSN }}"
     authorizer: policy             # policy (default) | allow_all (explicit opt-out; warns at boot)
     modules:
-      auto_approve: false          # true only in the abi dev overlay (RFC §8.3)
+      auto_approve: false          # true only in the abi dev overlay
     tokens:
       access_ttl_seconds: 600      # capped at 600
-      key_rotation_days: 30        # signing key rotation (RFC §9.1)
+      key_rotation_days: 30        # signing key rotation
 ```
 
 The signing keys' private halves and the engine's own service key live in
@@ -87,7 +87,7 @@ class IAMStoreConfiguration(BaseModel):
 
 
 class IAMModulesConfiguration(BaseModel):
-    """Module permission manifests (RFC §8.3)."""
+    """Module permission manifests."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -97,7 +97,7 @@ class IAMModulesConfiguration(BaseModel):
 
 
 class IAMTokensConfiguration(BaseModel):
-    """The engine's token issuer (RFC §9.1)."""
+    """The engine's token issuer."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -112,7 +112,7 @@ class IAMServiceConfiguration(BaseModel):
     authorizer: Literal["policy", "allow_all"] = "policy"
     modules: IAMModulesConfiguration = Field(default_factory=IAMModulesConfiguration)
     tokens: IAMTokensConfiguration = Field(default_factory=IAMTokensConfiguration)
-    # Effective policies are cached at most this long (RFC §5.6: 60 seconds).
+    # Effective policies are cached at most this long (60 seconds).
     cache_ttl_seconds: float = Field(default=60.0, gt=0, le=60)
 
     def load(self, secrets: IAMSecrets | None = None) -> IAMService:

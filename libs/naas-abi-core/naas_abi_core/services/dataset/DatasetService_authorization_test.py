@@ -1,4 +1,4 @@
-"""Datasets pass the authorization contract (RFC §6.4, "dataset").
+"""Datasets pass the authorization contract.
 
 A query needs ``Query`` on every dataset its SQL reads, through joins,
 subqueries and CTEs, and a query the check cannot vouch for is refused.
@@ -82,7 +82,9 @@ class TestDatasetAuthorization(DataServiceContract):
         return DatasetPrimaryAdapterNATS(owner, SECRET)
 
     def build_remote(self, url, identity):
-        return DatasetService(DatasetSecondaryAdapterNATSClient(url, TEST_TOKENS.source(identity)))
+        return DatasetService(
+            DatasetSecondaryAdapterNATSClient(url, TEST_TOKENS.source(identity))
+        )
 
     def close_remote(self, remote):
         remote.adapter.close()

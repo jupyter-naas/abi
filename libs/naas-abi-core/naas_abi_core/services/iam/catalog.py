@@ -1,4 +1,4 @@
-"""Action catalogs: what each service lets a policy name (RFC §6).
+"""Action catalogs: what each service lets a policy name.
 
 Every service declares one next to its domain code (``iam_catalog.py`` in core,
 ``iam_catalog.yaml`` in a module package) and registers it while it loads.
@@ -104,7 +104,7 @@ class ActionCatalog:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> ActionCatalog:
-        """The catalog format of RFC §6.2, as loaded from YAML or JSON."""
+        """The catalog format (``AGENTS.md``, "Action catalogs"), as loaded from YAML or JSON."""
         try:
             return cls(
                 service=str(data["service"]),
@@ -212,7 +212,7 @@ class CatalogRegistry:
     def actions_on(self, service: str, resource_type: str) -> list[str]:
         """The actions of ``service`` whose catalog lists ``resource_type``.
 
-        They decide whether a resource is visible to a caller (RFC §5.4).
+        They decide whether a resource is visible to a caller.
         """
         catalog = self.get(service)
         if catalog is None:

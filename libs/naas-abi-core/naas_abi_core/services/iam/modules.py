@@ -1,4 +1,4 @@
-"""Remote modules as service accounts, and their permission manifests (RFC §8.3).
+"""Remote modules as service accounts, and their permission manifests.
 
 * A module runs as the service account ``module/<project>/<module_id>``.
 * Its manifest is a policy document. ``${module.id}`` and ``${module.project}``
@@ -54,7 +54,7 @@ def parse_account(name: str | None) -> tuple[str, str] | None:
 
 
 def subject_token(principal_id: str) -> str:
-    """A principal as one NATS subject token, for hosting subjects (RFC §8.4):
+    """A principal as one NATS subject token, for hosting subjects:
     an ``sa_`` id's ULID part; anything else (test identities) hashed."""
     kind, _, rest = principal_id.partition("_")
     if kind == "sa" and rest.isalnum() and len(rest) == 26:
@@ -95,7 +95,7 @@ def bind(document: PolicyDocument, project: str, module_id: str) -> PolicyDocume
     return PolicyDocument(statements=tuple(statements), version=document.version)
 
 
-# Placements an approval records (RFC §4.4): the module's own namespaces, on
+# Placements an approval records: the module's own namespaces, on
 # the platform, so no workspace can claim a name inside them.
 NAMESPACE_SERVICES = ("document", "dataset")
 

@@ -1,4 +1,4 @@
-"""Pending grants and IdP group bindings (RFC §12.2): who may make them, and
+"""Pending grants and IdP group bindings: who may make them, and
 what they reach."""
 
 from __future__ import annotations

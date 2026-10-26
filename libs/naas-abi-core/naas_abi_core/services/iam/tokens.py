@@ -1,6 +1,6 @@
 """The engine's token issuer: ES256 signing keys, their rotation and the JWKS.
 
-RFC §9.1:
+See ``AGENTS.md``, "Tokens":
 
 * a key is named ``<yyyymmdd>-<8 hex>``; its public half and its schedule are
   in the store (``SigningKeyRecord``), its private half in ``IAMSecrets`` at

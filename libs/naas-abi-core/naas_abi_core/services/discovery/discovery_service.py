@@ -91,7 +91,7 @@ JOB_TRIGGER_KINDS = ("cron", "every", "event")
 # With IAM it is discovery:Evict.
 DEFAULT_ADMIN_IDENTITIES = ("api", "engine")
 
-# The service-account name form of a module (RFC §2): a module account registers
+# The service-account name form of a module: a module account registers
 # only under its own name.
 MODULE_ACCOUNT_PREFIX = "module/"
 AGENT_OPERATIONS = ("submit", "status", "event", "cancel")
@@ -121,7 +121,7 @@ def _valid_job(job: pb.JobDescriptor) -> bool:
     )
 
 
-# Apps a module serves over NATS (docs/adr/20261012_remote-module-apps.md): few
+# Apps a module serves over NATS: few
 # and small, so they stay a minor part of the bounded registry snapshot.
 MAX_APPS = 16
 MAX_APP_BYTES = 4096
@@ -230,7 +230,7 @@ class DiscoveryService:
         self, instances: list[pb.Instance]
     ) -> list[pb.Instance]:
         """The instances of the modules the caller may list, each showing only
-        the agents, apps and jobs it may list (RFC §6.4)."""
+        the agents, apps and jobs it may list."""
         if not self.guard.enforcing or not instances:
             return instances
 
@@ -268,7 +268,7 @@ class DiscoveryService:
     def _bind_module(
         self, req: pb.RegisterRequest, owner: str, state: pb.RegistryState
     ) -> None:
-        """A module id is held by one principal at a time (RFC §6.4, Register).
+        """A module id is held by one principal at a time (``Register``).
 
         A module account (``module/<project>/<module_id>``, recorded by IAM)
         registers only its own module. Any other principal may name a module
@@ -937,7 +937,7 @@ class DiscoveryService:
         owner: str,
         caller: CallContext | None = None,
     ) -> pb.AuthorizeAgentResponse:
-        """The provider's lease, then the caller's policy (RFC §6.4).
+        """The provider's lease, then the caller's policy.
 
         ``caller``: the provider's caller, verified from the token and the
         on-behalf-of user it forwarded. A submit needs ``InvokeAgent`` on the
@@ -1212,7 +1212,7 @@ def require_job(
     run_id: str = "",
 ) -> None:
     """Whether the current caller may trigger a module's job, or cancel one of
-    its runs (RFC §6.4); the job's or the run's not-found when it cannot see it.
+    its runs; the job's or the run's not-found when it cannot see it.
     Discovery asks it for a module's job host, the engine for its own."""
     if operation == "trigger":
         guard.require(

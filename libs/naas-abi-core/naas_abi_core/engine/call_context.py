@@ -2,8 +2,7 @@
 
 The types and the context variable are ``naas_abi_sdk.call_context``, re-exported
 here so the engine and the SDK clients it runs share one variable; a core
-installed without the SDK uses ``call_context_types``, a verbatim copy. See
-docs/specs/rfcs/20261013_identity-and-authorization.md, §10.
+installed without the SDK uses ``call_context_types``, a verbatim copy. See ``engine/AGENTS.md``, "The call context".
 
 Who sets it:
 
@@ -69,12 +68,12 @@ def as_service_account(name: str) -> Iterator[CallContext]:
         yield context
 
 
-# The first-party accounts whose word about their user is trusted (RFC §10.2).
+# The first-party accounts whose word about their user is trusted.
 FIRST_PARTY_ACCOUNTS = ("api", "engine")
 
 
 def call_subject(context: CallContext | None = None) -> str | None:
-    """Whom a call concerns: its user (RFC §10.1), else its calling principal;
+    """Whom a call concerns: its user, else its calling principal;
     None for an anonymous call.
 
     The one rule for the owner of what a call creates (an agent run, an

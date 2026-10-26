@@ -1,4 +1,4 @@
-"""object_storage's action catalog (RFC §6.4, "object_storage").
+"""object_storage's action catalog.
 
 An object is ``object/<path>``: the prefix and the key joined with one ``/``
 (leading and trailing ``/`` stripped from the prefix), each part encoded on
@@ -56,7 +56,7 @@ CATALOG = ActionCatalog(
 
 
 def object_parts(prefix: str, key: str = "") -> list[str]:
-    """The path id parts of ``prefix`` joined with ``key`` (RFC §4.3)."""
+    """The path id parts of ``prefix`` joined with ``key``."""
     stripped = prefix.strip("/")
     if not key:
         return path_parts(stripped)

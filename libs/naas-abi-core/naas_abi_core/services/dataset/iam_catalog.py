@@ -1,4 +1,4 @@
-"""dataset's action catalog (RFC §6.4, "dataset").
+"""dataset's action catalog.
 
 ``namespace/<ns>`` is a placed container holding ``dataset/<ns>/<name>``;
 ``catalog/-`` is the platform-level catalog of snapshots.

@@ -117,9 +117,7 @@ def test_ollama_endpoint_allows_host_docker_internal() -> None:
         model="qwen2.5:3b",
     )
 
-    assert (
-        validated_provider_endpoint(config) == "http://host.docker.internal:11434"
-    )
+    assert validated_provider_endpoint(config) == "http://host.docker.internal:11434"
 
 
 def test_ollama_endpoint_still_rejects_cloud_metadata_ip() -> None:

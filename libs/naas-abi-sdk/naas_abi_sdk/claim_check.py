@@ -4,8 +4,7 @@ A message that does not fit the connection's ``max_payload`` (header block
 counted) is stored in the JetStream stream ``ABI_CLAIM_CHECKS`` and replaced by
 an empty body and a reference header; ``resolve`` reads it back on the
 receiving side. RPC calls use overflow instead (``overflow.py``): a published
-message may have many readers, an overflow session has one. See
-docs/adr/20261003_nats-claim-check.md.
+message may have many readers, an overflow session has one.
 
 A stored payload lives under the subjects of its **scope**, the thing it
 travels with: ``abi.cc.<scope>.<id>.<chunk>``.

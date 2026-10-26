@@ -57,7 +57,7 @@ class Secret(ServiceBase, ISecretService):
     def __init__(self, adapters: list[ISecretAdapter]):
         super().__init__()
         self.__adapters = adapters
-        # Wired into an engine, every operation is authorized per key (RFC §6.4).
+        # Wired into an engine, every operation is authorized per key.
         self._guard = ResourceGuard.of(CATALOG, self)
 
     @property

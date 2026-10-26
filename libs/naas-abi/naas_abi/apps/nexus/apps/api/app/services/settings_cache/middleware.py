@@ -138,7 +138,10 @@ def default_entry_variant(scope: Scope) -> str | None:
     credential = (scope.get("state") or {}).get("nexus_credential")
     if credential is None:
         return ""  # no credential in the scope: the resolver of the user speaks alone
-    if getattr(credential, "kind", None) != "session" or getattr(credential, "scope", None) is not None:
+    if (
+        getattr(credential, "kind", None) != "session"
+        or getattr(credential, "scope", None) is not None
+    ):
         return None
     groups = "\n".join(sorted(str(g) for g in getattr(credential, "groups", ()) or ()))
     return hashlib.sha256(groups.encode()).hexdigest()[:16]

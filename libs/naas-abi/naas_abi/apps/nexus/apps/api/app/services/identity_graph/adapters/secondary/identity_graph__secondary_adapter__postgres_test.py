@@ -52,9 +52,7 @@ async def test_load_snapshot_reads_every_identity_table(tmp_path, nexus_iam) -> 
                 is_superadmin=True,
                 created_at=T0,
             ),
-            UserModel(
-                id="usr-2", email="bob@example.com", name="Bob", created_at=T1
-            ),
+            UserModel(id="usr-2", email="bob@example.com", name="Bob", created_at=T1),
             OrganizationModel(
                 id="org-1",
                 name="Acme Group",

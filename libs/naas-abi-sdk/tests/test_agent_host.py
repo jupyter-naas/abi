@@ -866,7 +866,7 @@ def test_calls_run_side_by_side_and_close_answers_them_first():
     asyncio.run(scenario())
 
 
-# -- the delegation a run executes with (RFC §9.4) ----------------------------------------
+# -- the delegation a run executes with ----------------------------------------
 
 
 def _delegation_token(sub="caller", act="sa_module", aud="abi:delegated:agent"):

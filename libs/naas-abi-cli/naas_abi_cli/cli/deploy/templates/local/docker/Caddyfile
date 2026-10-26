@@ -1,7 +1,7 @@
 {$PUBLIC_WEB_HOST:localhost} {
     # A remote module's app link goes through nexus-web: the API redirects it
     # to the app's grant URL, which nexus-web points at the API host. A remote
-    # app never runs on this host (docs/adr/20261012_remote-module-apps.md).
+    # app never runs on this host.
     handle /app-html/remote/* {
         reverse_proxy nexus-web:3000 {
             header_up X-Forwarded-Proto {scheme}

@@ -158,8 +158,7 @@ class TripleStoreAdapterNATSConfiguration(BaseModel):
     """Triple store adapter NATS RPC client configuration.
 
     Talks to a remote ``TripleStorePrimaryAdapterNATS`` over NATS
-    request/reply -- see docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
-    (Stage 1) and naas_abi_core/proto/triple_store/v1/triple_store.proto.
+    request/reply -- see naas_abi_core/proto/triple_store/v1/triple_store.proto.
 
     triple_store_adapter:
       adapter: "nats_rpc"

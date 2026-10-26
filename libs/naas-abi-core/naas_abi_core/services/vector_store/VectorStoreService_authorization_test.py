@@ -1,4 +1,4 @@
-"""The vector store passes the authorization contract (RFC §6.4, "vector_store")."""
+"""The vector store passes the authorization contract."""
 
 from __future__ import annotations
 

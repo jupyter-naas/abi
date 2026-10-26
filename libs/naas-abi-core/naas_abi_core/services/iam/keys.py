@@ -1,4 +1,4 @@
-"""Service-account and personal keys (RFC §8.1).
+"""Service-account and personal keys.
 
 ``abi_sk_<key id>_<secret>`` (service accounts), ``abi_pk_<key id>_<secret>``
 (personal API keys) and ``abi_gk_<key id>_<secret>`` (the link grants of apps and
@@ -30,7 +30,7 @@ PREFIXES: dict[KeyKind, str] = {
     "grant": GRANT_KEY_PREFIX,
 }
 _KIND_OF_PREFIX: dict[str, KeyKind] = {v: k for k, v in PREFIXES.items()}
-# Active keys a principal may hold at once (RFC §8.1): enough to rotate.
+# Active keys a principal may hold at once: enough to rotate.
 MAX_ACTIVE_KEYS = 5
 
 

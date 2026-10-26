@@ -1,4 +1,4 @@
-"""Workspaces (RFC §6.5). Resources: ``abi:<org>:<ws>:nexus:...``."""
+"""Workspaces. Resources: ``abi:<org>:<ws>:nexus:...``."""
 
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog.dsl import action, rtype
 

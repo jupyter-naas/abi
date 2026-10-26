@@ -532,7 +532,7 @@ def test_handle_view_event_round_trips_over_the_wire(nats_url):
         server.stop()
 
 
-# --- streamed reads over transfer frames (docs/adr/20261003_nats-streamed-results.md)
+# --- streamed reads over transfer frames
 
 
 class _StreamingPort(_InMemoryTripleStorePort):

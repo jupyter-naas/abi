@@ -1,4 +1,4 @@
-"""The streaming defaults every ITripleStorePort inherits (docs/adr/20261003_nats-streamed-results.md)."""
+"""The streaming defaults every ITripleStorePort inherits."""
 
 import pytest
 import rdflib

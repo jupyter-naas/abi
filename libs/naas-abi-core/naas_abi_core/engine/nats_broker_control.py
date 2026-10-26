@@ -1,4 +1,4 @@
-"""The streams, consumers and job messages modules use, written by the engine (RFC §8.4).
+"""The streams, consumers and job messages modules use, written by the engine.
 
 Behind the broker's auth callout a module may not create or change a stream
 or a consumer: their subjects, filters and delivery subjects travel in the

@@ -46,7 +46,7 @@ class DatasetService(ServiceBase, IDatasetPort):
     modules depend on one type (`DatasetService`) like object storage.
 
     Wired into an engine, every operation is authorized on
-    ``dataset/<namespace>/<name>`` (RFC §6.4): a dataset the caller may not
+    ``dataset/<namespace>/<name>``: a dataset the caller may not
     see is ``DatasetNotFoundError``, a query needs ``Query`` on every dataset
     its SQL reads, and ``list`` returns only what the caller may list.
     """
@@ -117,7 +117,7 @@ class DatasetService(ServiceBase, IDatasetPort):
         return self.__adapter
 
     def create(self, spec: DatasetSpec) -> DatasetInfo:
-        """A create (RFC §4.4): a new namespace is placed in the call's target
+        """A create: a new namespace is placed in the call's target
         workspace, or on the platform."""
         commit = self._guard.create(
             "Create",
@@ -146,7 +146,7 @@ class DatasetService(ServiceBase, IDatasetPort):
         return self.__adapter.describe(name, namespace=namespace)
 
     def list(self, *, namespace: str | None = None) -> list[DatasetInfo]:
-        """The datasets the caller may list (RFC §5.5); never fails for that."""
+        """The datasets the caller may list; never fails for that."""
         return self._guard.filter(
             "List",
             DATASET,

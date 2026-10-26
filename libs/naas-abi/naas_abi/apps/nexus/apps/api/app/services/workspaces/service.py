@@ -180,8 +180,21 @@ class WorkspaceService:
         return deleted
 
     async def update_workspace(
-        self, workspace_id: str, updates: WorkspaceUpdateInput
+        self, workspace_id: str, updates: WorkspaceUpdateInput, *, by: Any = None
     ) -> WorkspaceRecord | None:
+        """Update the workspace. A new ``owner_id`` becomes its owner in IAM and the
+        previous owner an admin: ``by`` is checked for both (``MembershipDenied``
+        when IAM refuses, owners alone make owners)."""
+        if updates.owner_id is not None:
+            record = await self.adapter.get_workspace_by_id(workspace_id=workspace_id)
+            scope = await self._scope(workspace_id)
+            if record is not None and scope is not None and updates.owner_id != record.owner_id:
+                await self.memberships.grant(updates.owner_id, "owner", scope, by=by)
+                if (
+                    record.owner_id
+                    and await self.memberships.role_at(record.owner_id, scope) == "owner"
+                ):
+                    await self.memberships.grant(record.owner_id, "admin", scope, by=by)
         return await self.adapter.update_workspace(workspace_id=workspace_id, updates=updates)
 
     async def set_workspace_feature_overrides(

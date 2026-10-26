@@ -510,7 +510,7 @@ async def create_repo(
 
     def create() -> Repo:
         # Created in the workspace's own call context, so the kernel places the
-        # new repository there (the create rule, RFC §4.4) and checks the user's
+        # new repository there (the kernel's create rule) and checks the user's
         # role on it: a workspace role reaches it, the platform's ``EnsureRepo``
         # is not needed. ``create_repo`` never returns a repository that existed,
         # in any letter case, so nothing that existed is ever placed here or

@@ -43,45 +43,84 @@ ACCOUNT_ROUTES: dict[tuple[str, str], str] = {
     ("POST", "/api/auth/upload-avatar"): "the signed-in user's own avatar",
     ("DELETE", "/api/auth/avatar"): "the signed-in user's own avatar",
     ("GET", "/api/admin/me"): "whether the caller is a platform admin; answers false, never 403",
-    ("GET", "/api/ollama/status"): "reachability of the local model runtime, for any signed-in user",
+    (
+        "GET",
+        "/api/ollama/status",
+    ): "reachability of the local model runtime, for any signed-in user",
     ("POST", "/api/search/"): "an empty stub that reads nothing of any workspace",
     ("POST", "/api/search/web"): "public web engines (Wikipedia, DuckDuckGo): no tenant data",
     ("GET", "/api/search/suggestions"): "Wikipedia suggestions: no tenant data",
     ("GET", "/api/search/topics/contract"): "the static placeholders of the topic query roles",
-    ("GET", "/api/invitations/providers"): "the identity providers an invitation can go through: no tenant data",
+    (
+        "GET",
+        "/api/invitations/providers",
+    ): "the identity providers an invitation can go through: no tenant data",
     ("GET", "/api/platform/cli"): "the abi-platform CLI script, the same text for everyone",
     ("GET", "/api/iam/admin/access"): "what the caller may do, decided by IAM for the caller only",
-    ("GET", "/api/websocket/websocket/presence/user/{user_id}"): "the caller's own presence; another user's is refused",
+    (
+        "GET",
+        "/api/websocket/websocket/presence/user/{user_id}",
+    ): "the caller's own presence; another user's is refused",
 }
 
 # Reads that travel as POST (a query body): a viewer may send them.
 READS_BY_POST: dict[tuple[str, str], str] = {
-    ("POST", "/api/graph/explorer/catalog"): "reads graphs: the body names the workspace and graphs",
-    ("POST", "/api/graph/explorer/overview"): "reads graphs: the body names the workspace and graphs",
-    ("POST", "/api/graph/explorer/instances"): "reads graphs: the body names the workspace and graphs",
-    ("POST", "/api/graph/explorer/network"): "reads graphs: the body names the workspace and graphs",
-    ("POST", "/api/graph/analyze"): "counts the triples of an uploaded file in memory; stores nothing",
+    (
+        "POST",
+        "/api/graph/explorer/catalog",
+    ): "reads graphs: the body names the workspace and graphs",
+    (
+        "POST",
+        "/api/graph/explorer/overview",
+    ): "reads graphs: the body names the workspace and graphs",
+    (
+        "POST",
+        "/api/graph/explorer/instances",
+    ): "reads graphs: the body names the workspace and graphs",
+    (
+        "POST",
+        "/api/graph/explorer/network",
+    ): "reads graphs: the body names the workspace and graphs",
+    (
+        "POST",
+        "/api/graph/analyze",
+    ): "counts the triples of an uploaded file in memory; stores nothing",
     ("POST", "/api/graph/discovery/relation-targets"): "reads graphs: the body names the filters",
     ("POST", "/api/graph/discovery/properties"): "reads graphs: the body names the filters",
     ("POST", "/api/graph/discovery/instances"): "reads graphs: the body names the filters",
     ("POST", "/api/graph/discovery/instance-detail"): "reads graphs: the body names the individual",
     ("POST", "/api/graph/discovery/relation-types"): "reads graphs: the body names the filters",
     ("POST", "/api/graph/discovery/relations"): "reads graphs: the body names the filters",
-    ("POST", "/api/graph/discovery/triples-export"): "serializes the triples the body carries; reads nothing",
+    (
+        "POST",
+        "/api/graph/discovery/triples-export",
+    ): "serializes the triples the body carries; reads nothing",
     ("POST", "/api/graph/network/node-properties"): "reads graphs: the body names the node",
     ("POST", "/api/graph/network/node-instances"): "reads graphs: the body names the node",
     ("POST", "/api/graph/query"): "read-only query over graphs: the body carries the spec",
     ("POST", "/api/graph/query/facets"): "read-only query over graphs: the body carries the spec",
-    ("POST", "/api/view/filters/preview"): "previews triples of graphs: the body carries the filters",
+    (
+        "POST",
+        "/api/view/filters/preview",
+    ): "previews triples of graphs: the body carries the filters",
     ("POST", "/api/datasets/{namespace}/query"): "read-only SQL: the body carries the query",
-    ("POST", "/api/search/private"): "a search of the workspace's sources: the body carries the query",
+    (
+        "POST",
+        "/api/search/private",
+    ): "a search of the workspace's sources: the body carries the query",
     ("POST", "/api/iam/admin/simulate"): "explains a decision (iam:Explain): changes nothing",
     ("POST", "/api/apps/access-token"): "mints a link to an app the caller may use",
     ("POST", "/api/apps/remote-grant"): "mints a link to an app the caller may use",
     ("POST", "/api/apps/sso-token"): "mints a sign-in token for a portal the caller may use",
     ("POST", "/api/app-projects/{slug}/preview-token"): "mints a link to view a draft",
-    ("POST", "/api/chat/conversations/{conversation_id}/export"): "downloads a conversation the caller owns",
-    ("POST", "/api/v1/chat/completions"): "runs an agent for the caller (UseAgent); the gateway stores nothing",
+    (
+        "POST",
+        "/api/chat/conversations/{conversation_id}/export",
+    ): "downloads a conversation the caller owns",
+    (
+        "POST",
+        "/api/v1/chat/completions",
+    ): "runs an agent for the caller (UseAgent); the gateway stores nothing",
     ("POST", "/api/speech"): "synthesizes speech for the caller; stores nothing",
     ("POST", "/api/speech/"): "synthesizes speech for the caller; stores nothing",
     ("POST", "/api/transcribe"): "transcribes audio for the caller; stores nothing",
@@ -214,12 +253,7 @@ def world():
 
 def _guards(table) -> list[tuple[tuple[str, str], Guard]]:
     return sorted(
-        (
-            (key, call)
-            for key, calls in table.items()
-            for call in calls
-            if isinstance(call, Guard)
-        ),
+        ((key, call) for key, calls in table.items() for call in calls if isinstance(call, Guard)),
         key=lambda pair: (pair[0], pair[1].action),
     )
 

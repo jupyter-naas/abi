@@ -1,12 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Brush, Camera, Check, Palette, Save, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { SettingsField, SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
-import { OTHERS_GROUP } from '@/lib/workspace-picker';
 import { authFetch } from '@/stores/auth';
 import { DEFAULT_THEME, PRESET_COLORS } from '@/stores/workspace';
 import { AccountPageHeader } from '@/app/account/components/account-page-header';
@@ -19,6 +18,14 @@ import {
   type FeatureChoice,
   type WorkspaceFeatureCatalog,
 } from '../workspace-features-table';
+import { WorkspaceGroupSelect } from '../workspace-group-select';
+import { WorkspaceOwnerSelect } from '../workspace-owner-select';
+import {
+  catalogSeedPayload,
+  WorkspaceInstancesSection,
+  type CatalogSeedDraft,
+} from '../workspace-instances-section';
+import { useAuthStore } from '@/stores/auth';
 import { slugify, WORKSPACE_SLUG } from './slug';
 import '@/app/account/profile/profile.css';
 import '@/app/workspace/[workspaceId]/settings/general/general.css';
@@ -28,9 +35,6 @@ const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/
 const LOGO_MAX_BYTES = 5 * 1024 * 1024;
 /** Same limit as the API (WorkspaceCreate.description). */
 const DESCRIPTION_MAX_LENGTH = 200;
-/** Group dropdown value that switches to typing a new group. */
-const NEW_GROUP = '__new__';
-
 async function readApiError(response: Response, fallback: string): Promise<string> {
   try {
     const data = await response.json();
@@ -59,10 +63,10 @@ export default function OrgCreateWorkspacePage() {
   const router = useRouter();
   const orgId = params.orgId as string;
   const listHref = orgSettingsSectionPath(orgId, 'workspaces');
+  const currentUserId = useAuthStore((state) => state.user?.id);
 
   const [name, setName] = useState('');
   const [group, setGroup] = useState('');
-  const [newGroup, setNewGroup] = useState(false);
   const [existingGroups, setExistingGroups] = useState<string[]>([]);
   const [slug, setSlug] = useState('');
   const [slugEdited, setSlugEdited] = useState(false);
@@ -74,6 +78,8 @@ export default function OrgCreateWorkspacePage() {
   const [featureCatalog, setFeatureCatalog] = useState<WorkspaceFeatureCatalog | null>(null);
   const [featureChoices, setFeatureChoices] = useState<Record<string, FeatureChoice>>({});
   const [featureCatalogFailed, setFeatureCatalogFailed] = useState(false);
+  const [ownerId, setOwnerId] = useState('');
+  const [catalogSeedDraft, setCatalogSeedDraft] = useState<CatalogSeedDraft>({});
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -98,6 +104,39 @@ export default function OrgCreateWorkspacePage() {
       cancelled = true;
     };
   }, [orgId]);
+
+  // Default workspace colours from organization branding (UI chrome stays on org colours via SettingsLayoutRoot).
+  useEffect(() => {
+    if (!orgId) return;
+    let cancelled = false;
+    void authFetch(`/api/organizations/${orgId}`)
+      .then(async (res) => {
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        const orgPrimary = (data.primary_color ?? data.primaryColor) as string | undefined;
+        const orgAccent = (data.accent_color ?? data.accentColor) as string | undefined;
+        setPrimaryColor((current) =>
+          current === DEFAULT_THEME.primaryColor && orgPrimary ? orgPrimary : current
+        );
+        setAccentColor((current) => {
+          const defaultAccent = DEFAULT_THEME.accentColor ?? '';
+          if (current !== defaultAccent) return current;
+          if (orgAccent) return orgAccent;
+          if (orgPrimary) return orgPrimary;
+          return current;
+        });
+      })
+      .catch(() => {
+        // Keep platform defaults for the new workspace payload.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [orgId]);
+
+  useEffect(() => {
+    if (currentUserId && !ownerId) setOwnerId(currentUserId);
+  }, [currentUserId, ownerId]);
 
   // Feature catalog and role defaults, for the Features section.
   useEffect(() => {
@@ -161,6 +200,7 @@ export default function OrgCreateWorkspacePage() {
       featureChoices,
       configurableFeatures(featureCatalog)
     );
+    const catalog_seed = catalogSeedPayload(catalogSeedDraft);
     try {
       const res = await authFetch('/api/workspaces', {
         method: 'POST',
@@ -169,12 +209,14 @@ export default function OrgCreateWorkspacePage() {
           name: trimmedName,
           slug: effectiveSlug,
           organization_id: orgId,
+          owner_id: ownerId || currentUserId || undefined,
           workspace_group: group.trim() || null,
           description: description.trim() || null,
           primary_color: primaryColor,
           accent_color: accentColor || null,
           // Nothing changed: keep following the role defaults and the config.
           feature_overrides: Object.keys(featureOverrides).length ? featureOverrides : null,
+          catalog_seed,
         }),
       });
       if (!res.ok) {
@@ -208,14 +250,10 @@ export default function OrgCreateWorkspacePage() {
   const isCustomColor = !PRESET_COLORS.some((c) => c.value === primaryColor);
 
   return (
-    <div
-      className="workspace-general space-y-6"
-      // Focus rings and Save follow the colour picked below.
-      style={{ '--workspace-accent': primaryColor } as CSSProperties}
-    >
+    <div className="workspace-general org-create-workspace space-y-6">
       <AccountPageHeader
         title="Create workspace"
-        subtitle="Add a workspace to this organization. You become its owner; org owners and admins reach it too."
+        subtitle="Add a workspace to this organization. Pick an owner, features, and optional instances; org owners and admins reach every workspace."
         actions={
           <div className="org-create-workspace-actions">
             <button
@@ -320,42 +358,22 @@ export default function OrgCreateWorkspacePage() {
             <label className="account-profile-field-label" htmlFor="create-workspace-group">
               Group
             </label>
-            <select
+            <WorkspaceGroupSelect
               id="create-workspace-group"
-              value={newGroup ? NEW_GROUP : group}
-              onChange={(event) => {
-                if (event.target.value === NEW_GROUP) {
-                  setNewGroup(true);
-                  setGroup('');
-                  return;
-                }
-                setNewGroup(false);
-                setGroup(event.target.value);
-              }}
+              value={group}
+              onChange={setGroup}
+              existingGroups={existingGroups}
               disabled={creating}
-              className="account-profile-field-input"
-            >
-              <option value="">{OTHERS_GROUP} (no group)</option>
-              {existingGroups.map((existing) => (
-                <option key={existing} value={existing}>
-                  {existing}
-                </option>
-              ))}
-              <option value={NEW_GROUP}>+ New group…</option>
-            </select>
-            {newGroup && (
-              <input
-                type="text"
-                value={group}
-                onChange={(event) => setGroup(event.target.value)}
-                placeholder="New group name"
-                aria-label="New group name"
-                maxLength={100}
-                disabled={creating}
-                className="account-profile-field-input org-create-workspace-new-group"
-                autoFocus
-              />
-            )}
+            />
+          </div>
+          <div className="account-profile-field">
+            <label className="account-profile-field-label">Owner</label>
+            <WorkspaceOwnerSelect
+              orgId={orgId}
+              value={ownerId}
+              onChange={setOwnerId}
+              disabled={creating}
+            />
           </div>
           <div className="account-profile-field">
             <label className="account-profile-field-label" htmlFor="create-workspace-slug">
@@ -431,6 +449,15 @@ export default function OrgCreateWorkspacePage() {
           <p className="text-sm text-muted-foreground">Loading features...</p>
         )}
       </SettingsSection>
+
+      <WorkspaceInstancesSection
+        orgId={orgId}
+        featureCatalog={featureCatalog}
+        featureChoices={featureChoices}
+        draft={catalogSeedDraft}
+        onDraftChange={setCatalogSeedDraft}
+        disabled={creating}
+      />
 
       <SettingsSection
         title={

@@ -339,10 +339,10 @@ class IAMService(ServiceProxy):
         return await self._request("delete_scope", org=org, workspace=workspace)
 
     async def register_catalog(self, catalog: Mapping[str, Any]) -> bool:
-        """Register a service's action catalog (RFC §6.2 format, as a mapping)."""
+        """Register a service's action catalog (a catalog document, as a mapping)."""
         return await self._request("register_catalog", catalog=dict(catalog))
 
-    # -- tokens, service accounts, keys and manifests (RFC §8, §9) ---------------------
+    # -- tokens, service accounts, keys and manifests ---------------------
 
     async def token(self, key: str) -> dict[str, Any]:
         """A service key for an access token. Transports exchange their own key
@@ -364,10 +364,10 @@ class IAMService(ServiceProxy):
         groups: list[str] | None = None,
         session_id: str = "",
     ) -> dict[str, Any]:
-        """RFC 8693 token exchange (RFC §9.4): the caller needs
+        """RFC 8693 token exchange: the caller needs
         ``iam:ExchangeToken`` on ``audience``. ``{"access_token": ...,
         "expires_in": ..., ...}``. A module renews the delegation it holds with
-        its own token: ``subject_token_type`` the RFC's ``jwt`` and ``audience``
+        its own token: ``subject_token_type`` the ``jwt`` type and ``audience``
         ``abi:delegated:agent``."""
         return await self._request(
             "exchange_token",

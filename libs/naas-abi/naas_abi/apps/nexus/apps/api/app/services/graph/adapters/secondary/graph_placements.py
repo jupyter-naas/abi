@@ -1,4 +1,4 @@
-"""Which workspace owns each knowledge graph: IAM placements (RFC §4.4, §13).
+"""Which workspace owns each knowledge graph: IAM placements.
 
 A graph a workspace creates is placed in it by the kernel's create rule. The
 ones that already exist carry a ``graphWorkspaceId`` triple in Nexus's

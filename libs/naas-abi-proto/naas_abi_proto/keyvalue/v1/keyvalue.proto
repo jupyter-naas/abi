@@ -1,8 +1,7 @@
 // NATS-RPC contract for the keyvalue kernel domain.
 // Mirrors naas_abi_core/services/keyvalue/KeyValuePorts.py::IKeyValueAdapter 1:1.
-// See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md.
 //
-// Subjects (see "Protobuf contract shapes" in the RFC):
+// Subjects:
 //   abi.svc.keyvalue.v1.get
 //   abi.svc.keyvalue.v1.set
 //   abi.svc.keyvalue.v1.set_if_not_exists
