@@ -19,10 +19,16 @@ Needs the ``workflows`` extra (``naas_abi_sdk.processes``).
 from __future__ import annotations
 
 import asyncio
+import dataclasses
+import datetime
 import json
 import typing
 from collections.abc import Callable, Iterable, Mapping
+from decimal import Decimal
+from enum import Enum
+from pathlib import PurePath
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel, ValidationError
 from pydantic_core import to_jsonable_python
@@ -91,14 +97,73 @@ def _cut(text: str, limit: int) -> str:
     return kept.rstrip() + ellipsis
 
 
+def _leaf(value: Any) -> Any:
+    """One value that is not a container, as JSON types: the conversions FastAPI's
+    ``jsonable_encoder`` makes (what core's REST route sends), else pydantic's."""
+    if isinstance(value, Enum):
+        return _plain(value.value)
+    if isinstance(value, Decimal):
+        return int(value) if value.as_tuple().exponent >= 0 else float(value)  # type: ignore[operator]
+    if isinstance(value, (datetime.datetime, datetime.date, datetime.time)):
+        return value.isoformat()
+    if isinstance(value, datetime.timedelta):
+        return value.total_seconds()
+    if isinstance(value, (PurePath, UUID)):
+        return str(value)
+    if isinstance(value, (bytes, bytearray)):
+        return bytes(value).decode("utf-8", errors="replace")
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        return _plain(dataclasses.asdict(value))
+    if _is_graph(value):
+        return _graph_to_json(value)
+    return to_jsonable_python(value)
+
+
+def _plain(value: Any) -> Any:
+    """``value`` as JSON types. Containers are walked, so that one value that cannot
+    be encoded does not spoil the others; a leaf that cannot be encoded is its text."""
+    if value is None or isinstance(value, (str, bool, int, float)):
+        return value
+    if isinstance(value, dict):
+        return {
+            (
+                k if isinstance(k, (str, int, float, bool)) or k is None else str(k)
+            ): _plain(v)
+            for k, v in value.items()
+        }
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return [_plain(v) for v in value]
+    if isinstance(value, BaseModel):
+        return _plain(value.model_dump())
+    try:
+        return _leaf(value)
+    except Exception:  # noqa: BLE001 - not encodable: its text is the best we have
+        return str(value)
+
+
+def _json_value(result: Any) -> Any:
+    """``result`` as plain JSON, with NaN and infinity as null: the step journal
+    accepts nothing else (``allow_nan=False``), and a ``run()`` that returns such a
+    value must not fail after it has done its work."""
+    try:
+        return json.loads(
+            json.dumps(_plain(result)), parse_constant=lambda _constant: None
+        )
+    except (TypeError, ValueError, RecursionError):  # a structure that holds itself
+        return {"repr": repr(result)[:1000]}
+
+
 def encode_process_result(result: Any, max_bytes: int = MAX_RESULT_BYTES) -> Any:
     """A ``run()`` result as the JSON its step journals, at most ``max_bytes`` of it.
+    Core's bridge (``EngineProcessBridge``) uses this one too.
 
     An rdflib ``Graph`` becomes ``{"format": "text/turtle", "triples": n, "data":
-    "<turtle>"}``, ``data`` left out (with a ``note``) above ``max_bytes``. Anything
-    else is dumped as pydantic does (``serialize_result``), and a value over
-    ``max_bytes`` becomes ``{"omitted": true, "bytes": n, "limit": max_bytes, ...}``:
-    ``run`` has done its work, so failing the run would only make a re-launch repeat it.
+    "<turtle>"}``, ``data`` left out (with a ``note``) above ``max_bytes``. Bytes are
+    ``{"data": "<text>"}``. Anything else is made plain JSON (``_plain``: a model is
+    dumped, ``dict``, ``list`` and ``str`` keep their shape, NaN is null, a value that
+    cannot be encoded is its text). Encoding never raises: ``run`` has done its work,
+    and failing the run would make a re-launch repeat it. A value over ``max_bytes``
+    becomes ``{"omitted": true, "bytes": n, "limit": max_bytes, ...}``.
     """
     if _is_graph(result):
         data = result.serialize(format="turtle")
@@ -112,7 +177,9 @@ def encode_process_result(result: Any, max_bytes: int = MAX_RESULT_BYTES) -> Any
                 "record keeps of an output"
             )
         return encoded
-    value = to_jsonable_python(result, fallback=_graph_to_json)
+    if isinstance(result, (bytes, bytearray)):
+        result = {"data": bytes(result).decode("utf-8", errors="replace")}
+    value = _json_value(result)
     size = len(json.dumps(value).encode())
     if size > max_bytes:
         return {
@@ -128,17 +195,27 @@ def encode_process_result(result: Any, max_bytes: int = MAX_RESULT_BYTES) -> Any
     return value
 
 
+def _is_graph_type(returned: type) -> bool:
+    return any(
+        c.__name__ == "Graph" and c.__module__.startswith("rdflib")
+        for c in returned.__mro__
+    )
+
+
 def output_schema(cls: Any) -> dict[str, Any]:
     """The JSON Schema of what ``cls.run`` returns, when its annotation says;
-    else a permissive one."""
+    else a permissive one. (Left out, the runtime would derive ``{"type":
+    "object"}`` from the handler's own ``-> Any``, wrong for a list or a string.)
+    Core's bridge uses this one too."""
     try:
         returned = typing.get_type_hints(cls.run).get("return")
     except Exception:  # noqa: BLE001 - an unresolvable annotation has no schema
         return ANY_OUTPUT_SCHEMA
     if isinstance(returned, type):
-        if returned.__name__ == "Graph" and returned.__module__.startswith("rdflib"):
+        if _is_graph_type(returned):
             return GRAPH_OUTPUT_SCHEMA  # its own note covers a large graph
         if issubclass(returned, BaseModel):
+            # Or the marker of a result too large for a run record.
             return {"anyOf": [returned.model_json_schema(), OMITTED_OUTPUT_SCHEMA]}
         if issubclass(returned, dict):
             return {"type": "object"}  # the marker is an object too
@@ -225,19 +302,14 @@ def declare_process_workflows(
 ) -> list[str]:
     """Declare each class (``{"workflow": {name: class}}``) on ``module`` as a
     workflow whose handler runs the instance ``bound_by_kind[kind][name]``.
-    Returns the workflow names, in kind then name order. Raises when a name is
-    already a job's: rename the explicit ``@job`` or ``@workflow``."""
+    Returns the workflow names, in kind then name order. A name that is already a
+    job's raises in ``declare_job``; ``run_module`` names that clash before it
+    connects (``check_classes``)."""
     declared = []
     for kind in sorted(classes_by_kind):
         for name, cls in sorted(classes_by_kind[kind].items()):
             settings = job_settings(cls)
             workflow_name = process_workflow_name(kind, name)
-            if any(j.name == workflow_name for j in module.jobs):
-                raise ValueError(
-                    f"{type(module).__name__} declares the job {workflow_name!r} "
-                    f"itself, and its {kind} {cls.__name__} is published under that "
-                    "name: rename the explicit job or workflow"
-                )
             module.declare_workflow(
                 workflow_name,
                 process_handler(cls, _lookup(bound_by_kind[kind], name)),

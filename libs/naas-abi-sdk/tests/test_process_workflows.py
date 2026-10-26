@@ -301,7 +301,9 @@ def test_a_name_an_explicit_job_has_fails():
         workflows=(PlainWorkflow,), jobs=(JobDescriptor("workflow.plain_workflow"),)
     )
 
-    with pytest.raises(ValueError, match=r"workflow\.plain_workflow.*rename"):
+    with pytest.raises(
+        ValueError, match=r"Duplicate job names.*workflow\.plain_workflow"
+    ):
         declared(module_type, build=False)
 
 
@@ -482,7 +484,7 @@ def test_the_processs_own_error_reaches_the_run_unchanged():
         run_handler(declared(module_of(workflows=(Broken,))), "workflow.broken", {})
 
 
-def test_results_are_json_as_pydantic_dumps_them_and_too_large_ones_are_omitted():
+def test_results_are_json_as_core_encodes_them_and_too_large_ones_are_omitted():
     from datetime import datetime, timezone
     from decimal import Decimal
     from uuid import UUID
@@ -497,9 +499,10 @@ def test_results_are_json_as_pydantic_dumps_them_and_too_large_ones_are_omitted(
         id=UUID(int=1),
         price=Decimal("2.5"),
     )
+    # The REST route's conversions (FastAPI's jsonable_encoder), as core's bridge.
     assert encode_process_result({"items": [item]}) == {
         "items": [
-            {"at": "2026-01-02T00:00:00Z", "id": str(UUID(int=1)), "price": "2.5"}
+            {"at": "2026-01-02T00:00:00+00:00", "id": str(UUID(int=1)), "price": 2.5}
         ]
     }
     omitted = encode_process_result({"blob": "x" * 100}, max_bytes=50)
@@ -507,6 +510,42 @@ def test_results_are_json_as_pydantic_dumps_them_and_too_large_ones_are_omitted(
     graph = IngestPipeline(None)
     big = encode_process_result(asyncio.run(graph.run(IngestParameters(count=50))), 100)
     assert big["triples"] == 50 and "data" not in big and "note" in big
+
+
+def test_nan_and_infinity_are_null_so_the_step_journal_takes_them():
+    encoded = encode_process_result({"s": float("nan"), "t": [float("inf")], "u": 1.5})
+
+    assert encoded == {"s": None, "t": [None], "u": 1.5}
+    json.dumps(encoded, allow_nan=False)  # what the step journal requires
+
+
+def test_a_result_that_cannot_be_encoded_never_fails_after_run_did_its_work():
+    class Opaque:
+        def __repr__(self):
+            return "<opaque>"
+
+    encoded = encode_process_result(
+        {"leaf": Opaque(), "raw": b"\xff\xfe ok", "kind": object}
+    )
+    assert encoded["leaf"] == "<opaque>" and encoded["raw"].endswith(" ok")
+    assert isinstance(encoded["kind"], str)
+    assert encode_process_result(b"\xffdata") == {"data": "\ufffddata"}
+    loop: list = []
+    loop.append(loop)
+    assert encode_process_result(loop)["repr"].startswith("[")
+    json.dumps(encoded, allow_nan=False)
+
+
+def test_a_pipeline_returning_nan_succeeds_through_its_handler():
+    class Scored(Workflow[WorkflowParameters]):
+        async def run(self, parameters):
+            return {"score": float("nan")}
+
+    output, _ = run_handler(
+        declared(module_of(workflows=(Scored,))), "workflow.scored", {}
+    )
+
+    assert output == {"score": None}
 
 
 # --- calling it from another module ---------------------------------------------------

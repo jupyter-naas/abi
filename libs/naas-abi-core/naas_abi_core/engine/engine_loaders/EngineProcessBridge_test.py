@@ -8,10 +8,8 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
 )
 from naas_abi_core.engine.engine_loaders.EngineJobLoader import as_async_handler
 from naas_abi_core.engine.engine_loaders.EngineProcessBridge import (
-    GRAPH_OUTPUT_SCHEMA,
     bridge_processes,
     declare_process_workflow,
-    encode_process_result,
     process_workflow_name,
 )
 from naas_abi_core.module.jobs import JobsMixin
@@ -26,6 +24,9 @@ from naas_abi_core.workflow.workflow import (
     WorkflowConfiguration,
     WorkflowParameters,
 )
+
+# The encoding is the SDK's, shared with remote modules' classes.
+from naas_abi_sdk.process_workflows import GRAPH_OUTPUT_SCHEMA, encode_process_result
 from pydantic import BaseModel
 from rdflib import RDF, Graph, Literal, URIRef
 
