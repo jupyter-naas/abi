@@ -211,6 +211,14 @@ export type AttachablePolicy = {
 
 export type ManifestStatus = 'pending' | 'approved' | 'rejected' | 'superseded';
 
+/** A module's own catalog, as its manifest declares it. */
+export type DeclaredCatalog = {
+  service: string;
+  version: number;
+  resource_types: { name: string; id?: string; description?: string }[];
+  actions: { name: string; level: string; resource_types: string[]; description?: string }[];
+};
+
 export type ManifestView = {
   principal_id: string;
   account_name: string | null;
@@ -220,6 +228,8 @@ export type ManifestView = {
   status: ManifestStatus;
   /** What the module asked for (variables unsubstituted). */
   document: PolicyDocument;
+  /** The actions the module declares under its own service, approved as submitted. */
+  catalog: DeclaredCatalog | null;
   submitted_at: string | null;
   decided_at: string | null;
   decided_by: string | null;

@@ -49,6 +49,7 @@ from naas_abi_core.services.iam.IAMService import (
     manifest_resource,
     policy_resource,
 )
+from naas_abi_core.services.iam.modules import split_manifest
 from naas_abi_core.services.iam.names import (
     NONE,
     PLATFORM_SCOPE,
@@ -695,10 +696,18 @@ class IamAdminService:
         def approve(session: IIAMService) -> dict[str, Any]:
             narrowed = None
             if document is not None:
-                submitted = parse_policy_document(
+                # The policy is what an admin narrows; the catalog the module
+                # declares is approved as submitted (``views.manifest_view``).
+                submitted_policy, catalog = split_manifest(
                     session.get_manifest(principal_id, sha256).document
                 )
-                candidate = parse_policy_document(document)
+                candidate_policy, echoed = split_manifest(document)
+                if echoed is not None and dict(echoed) != dict(catalog or {}):
+                    raise PolicyValidationError(
+                        ["catalog: a module's declared catalog is approved as submitted"]
+                    )
+                submitted = parse_policy_document(submitted_policy)
+                candidate = parse_policy_document(candidate_policy)
                 problems = narrowing_errors(submitted, candidate)
                 if problems:
                     raise PolicyValidationError(problems)

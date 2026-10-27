@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { IamAdminError } from '@/lib/iam-admin/api';
-import type { ManifestStatus, ManifestView, PolicyDocument } from '@/lib/iam-admin/types';
+import type { DeclaredCatalog, ManifestStatus, ManifestView, PolicyDocument } from '@/lib/iam-admin/types';
 import type { AccessViewProps } from '../access-props';
 import {
   initialChoice,
@@ -108,6 +108,7 @@ function ManifestCard({
       </header>
       {error && <p className="system-source-note" role="alert">{error}</p>}
       <Statements document={manifest.document} choice={mode === 'narrow' ? choice : null} onAction={(i, a) => setChoice(toggleAction(choice, i, a))} onResource={(i, r) => setChoice(toggleResource(choice, i, r))} />
+      {manifest.catalog && <DeclaredActions catalog={manifest.catalog} />}
       {pending && mode === 'view' && (
         <div className="access-approval-actions">
           {can('iam:ApproveManifest') && (
@@ -243,5 +244,28 @@ function ItemList({
         ))}
       </ul>
     </div>
+  );
+}
+
+/** The actions a module declares under its own service: registered when the manifest is
+ *  approved, as submitted (narrowing applies to the permissions above, not to these). */
+function DeclaredActions({ catalog }: { catalog: DeclaredCatalog }) {
+  return (
+    <section className="access-approval-catalog" aria-label="Declared actions">
+      <h4>
+        Declares <span className="system-mono">{catalog.service}</span> (version {catalog.version}), approved as
+        submitted
+      </h4>
+      <ul>
+        {catalog.actions.map((action) => (
+          <li key={action.name}>
+            <span className="system-mono">
+              {catalog.service}:{action.name}
+            </span>{' '}
+            ({action.level}, on {action.resource_types.join(', ')}){action.description ? `: ${action.description}` : ''}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

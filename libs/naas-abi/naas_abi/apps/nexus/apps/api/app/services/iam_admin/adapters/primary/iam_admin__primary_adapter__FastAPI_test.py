@@ -536,6 +536,60 @@ def test_widening_or_dropping_a_deny_is_refused(world, pending):
     assert world.audit.phases("approve_manifest") == ["requested", "failed", "requested", "failed"]
 
 
+CATALOG = {
+    "version": 1,
+    "resource_types": [{"name": "report", "id": "path"}],
+    "actions": [{"name": "ExportReport", "level": "read", "resource_types": ["report"]}],
+}
+
+
+@pytest.fixture
+def declaring(world):
+    """A module whose manifest declares a catalog of its own."""
+    from naas_abi_core.services.iam import module_scopes
+
+    world.nexus.iam._register_catalog(module_scopes.CATALOG)
+    with as_service_account("engine"):
+        account = world.nexus.iam.create_service_account("module/acme/reports")
+    context = CallContext(
+        principal=Principal(id=account.id, kind="service_account", name=account.name)
+    )
+    with use_call_context(context):
+        submitted = world.nexus.iam.submit_manifest(
+            "reports", "acme", {**MANIFEST, "catalog": CATALOG}
+        )
+    return SimpleNamespace(account=account, sha=submitted.manifest.sha256)
+
+
+def test_a_manifest_declaring_a_catalog_is_shown_split_and_narrowed(world, declaring):
+    (listed,) = [
+        m
+        for m in get(world, "/manifests?status=pending").json()["items"]
+        if m["module_id"] == "reports"
+    ]
+    assert "catalog" not in listed["document"]
+    assert listed["catalog"]["service"] == "reports"
+    assert listed["catalog"]["actions"][0]["name"] == "ExportReport"
+
+    path = f"/manifests/{declaring.account.id}/{declaring.sha}/approve"
+    # The UI may echo the catalog back; a changed one is refused.
+    changed = {**MANIFEST, "catalog": {**CATALOG, "actions": []}}
+    refused = post(world, path, document=changed)
+    assert refused.status_code == 422
+    assert "approved as submitted" in " ".join(refused.json()["detail"]["errors"])
+
+    narrowed = {
+        "version": MANIFEST["version"],
+        "statements": [
+            {**MANIFEST["statements"][0], "actions": MANIFEST["statements"][0]["actions"][:1]},
+            MANIFEST["statements"][1],
+        ],
+    }
+    ok = post(world, path, document={**narrowed, "catalog": listed["catalog"]})
+    assert ok.status_code == 200, ok.text
+    assert world.nexus.iam.catalogs.get("reports").module == "reports"
+
+
 def test_a_manifest_can_be_rejected_with_a_reason(world, pending):
     rejected = post(
         world, f"/manifests/{pending.account.id}/{pending.sha}/reject", reason="too broad"

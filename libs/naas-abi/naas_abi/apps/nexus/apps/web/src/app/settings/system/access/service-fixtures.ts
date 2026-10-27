@@ -69,6 +69,7 @@ export const manifest = (over: Partial<ManifestView> = {}): ManifestView => ({
       { effect: 'Deny', actions: ['triple_store:DropGraph'], resources: ['*'] },
     ],
   },
+  catalog: null,
   submitted_at: '2026-10-02T10:00:00Z',
   decided_at: null,
   decided_by: null,

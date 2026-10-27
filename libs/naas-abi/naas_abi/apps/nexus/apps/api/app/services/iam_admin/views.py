@@ -6,6 +6,7 @@ the answer that made it (``created_key``).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -21,6 +22,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalRecord,
 )
 from naas_abi_core.services.iam.keys import PREFIXES
+from naas_abi_core.services.iam.modules import split_manifest
 from naas_abi_core.services.iam.policy import POLICY_VARIABLES, Statement
 
 # The service accounts the engine itself holds (``roles.SERVICE_ACCOUNTS``) and the
@@ -120,6 +122,9 @@ def created_key(created: CreatedKey) -> dict[str, Any]:
 
 
 def manifest_view(record: ManifestRecord, account_name: str | None) -> dict[str, Any]:
+    """A manifest version: its policy ``document`` (what an admin may narrow) and
+    the ``catalog`` it declares (approved as submitted, or None)."""
+    policy, catalog = split_manifest(record.document)
     return {
         "principal_id": record.principal_id,
         "account_name": account_name,
@@ -127,7 +132,8 @@ def manifest_view(record: ManifestRecord, account_name: str | None) -> dict[str,
         "module_id": record.module_id,
         "project": record.project,
         "status": record.status,
-        "document": record.document,
+        "document": dict(policy) if isinstance(policy, Mapping) else policy.to_dict(),
+        "catalog": dict(catalog) if catalog is not None else None,
         "submitted_at": iso(record.submitted_at),
         "decided_at": iso(record.decided_at),
         "decided_by": record.decided_by,

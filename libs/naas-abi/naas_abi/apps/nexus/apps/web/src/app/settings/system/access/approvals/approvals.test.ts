@@ -33,6 +33,24 @@ describe('ApprovalsView', () => {
     expect(card?.textContent).toContain('aaaaaaaaaaaa');
   });
 
+  it('shows the actions a module declares, read-only', async () => {
+    const declaring = manifest({
+      catalog: {
+        service: 'acme_reports',
+        version: 1,
+        resource_types: [{ name: 'report', id: 'path' }],
+        actions: [{ name: 'ExportReport', level: 'read', resource_types: ['report'], description: 'Export one.' }],
+      },
+    });
+    const api = fakeApi({ listManifests: vi.fn(() => Promise.resolve({ items: [declaring] })) });
+    mounted = await mount(ApprovalsView, { api, can: allowAll });
+    await mounted.flush();
+    const declared = document.querySelector('[aria-label="Declared actions"]');
+    expect(declared?.textContent).toContain('acme_reports:ExportReport');
+    expect(declared?.textContent).toContain('approved as');
+    expect(declared?.querySelector('input')).toBeNull();
+  });
+
   it('approves as submitted without a document', async () => {
     const api = setup();
     mounted = await mount(ApprovalsView, { api, can: allowAll });

@@ -82,3 +82,18 @@
   font-size: var(--font-size-sm);
   color: var(--color-destructive, #b00020);
 }
+
+.access-approval-catalog {
+  font-size: var(--font-size-sm);
+}
+
+.access-approval-catalog h4 {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.access-approval-catalog ul {
+  margin: 0;
+  padding-left: var(--space-4);
+}
