@@ -124,12 +124,6 @@ def scope_resource(
     )
 
 
-def module_pattern(type_name: str, module: str, *, scope: str = "${scope}") -> str:
-    """Every ``type_name`` of ``module`` at a scope (a policy's resource pattern)."""
-    prefix = scope_resource(type_name, module, "x").rsplit("/", 1)[0]
-    return f"{scope}:{prefix.split(':', 3)[3]}/*"
-
-
 # -- declared catalogs ------------------------------------------------------------
 
 _NOT_SERVICE = re.compile(r"[^a-z0-9_]+")

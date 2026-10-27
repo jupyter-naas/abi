@@ -288,13 +288,17 @@ class BaseModule(JobsMixin, Generic[Config]):
         ``<type>/<parts>`` in ``workspace``, else the workspace of the call.
         Raises ``PermissionDenied`` (or ``NotFound`` for a caller who sees
         nothing of it)."""
-        from naas_abi_sdk.permissions import module_catalog
+        service = self.__dict__.get("_declared_service")
+        if service is None:
+            # Read once: the catalog is the one the manifest sent at start.
+            from naas_abi_sdk.permissions import module_catalog
 
-        catalog = module_catalog(type(self))
-        if catalog is None:
-            raise ValueError(f"{type(self).__name__} declares no catalog")
+            catalog = module_catalog(type(self))
+            if catalog is None:
+                raise ValueError(f"{type(self).__name__} declares no catalog")
+            service = self.__dict__["_declared_service"] = str(catalog["service"])
         await self.engine.services.iam.require_declared(
-            f"{catalog['service']}:{action}",
+            f"{service}:{action}",
             resource_type,
             [parts] if isinstance(parts, str) else list(parts),
             workspace=workspace,

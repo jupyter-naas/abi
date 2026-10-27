@@ -14,6 +14,7 @@ and IAM, each source on its own: one that fails leaves its part out.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -248,12 +249,15 @@ async def gather() -> list[dict[str, Any]]:
             _log.warning("Module scopes: %s unavailable", name, exc_info=True)
             return []
 
-    for name, source in (
-        ("engine agents", engine_agents),
-        ("remote agents", remote_agents),
-        ("apps", apps),
-        ("workflows", workflows),
-    ):
-        exposed.extend(await collect(name, source))
-    catalogs = await collect("declared catalogs", declared_catalogs)
+    # The engine's sources read in process; discovery and the jobs are NATS calls,
+    # which run at once.
+    *parts, catalogs = await asyncio.gather(
+        collect("engine agents", engine_agents),
+        collect("remote agents", remote_agents),
+        collect("apps", apps),
+        collect("workflows", workflows),
+        collect("declared catalogs", declared_catalogs),
+    )
+    for part in parts:
+        exposed.extend(part)
     return build(exposed, catalogs, engine_modules())

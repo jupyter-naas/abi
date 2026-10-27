@@ -229,13 +229,14 @@ def _model_scopes() -> dict[str, ModuleScope]:
     return found
 
 
-async def _chat_workspaces(user: User, workspace: str | None) -> list[str]:
-    """The workspaces whose chat the caller holds: the one it names, else its own.
-    ``AuthzDenied`` when there is none."""
+async def _chat_workspaces(user: User, workspace: str | None) -> list[tuple[str, str]]:
+    """The workspaces, as ``(org, workspace)``, whose chat the caller may hold: the
+    one it names, else its own. ``AuthzDenied`` when there is none."""
     await require_in_any_workspace("UseFeature", user=user, workspace=workspace, id="chat")
     if workspace:
-        return [workspace]
-    return [ws for _org, ws in await MEMBERSHIPS.workspaces_of(user.id)]
+        org = await AUTHZ.org_of(workspace)
+        return [(org, workspace)] if org is not None else []
+    return list(await MEMBERSHIPS.workspaces_of(user.id))
 
 
 async def _usable_classes(user: User, workspace: str) -> frozenset[str]:
@@ -383,7 +384,7 @@ async def list_models(
     workspaces = await _chat_workspaces(current_user, request.query_params.get("workspace_id"))
     scopes = await run_in_threadpool(_model_scopes)
     usable: set[str] = set()
-    for workspace in workspaces:
+    for _org, workspace in workspaces:
         if not await AUTHZ.allowed("UseFeature", user=current_user, workspace=workspace, id="chat"):
             continue
         usable.update(
@@ -431,7 +432,7 @@ async def chat_completions(
         where = await AUTHZ.scope_allowed_in_any(
             scope,
             user=current_user,
-            workspaces=[(await AUTHZ.org_of(ws) or "", ws) for ws in workspaces],
+            workspaces=workspaces,
             feature="chat",
         )
     if where is None:
