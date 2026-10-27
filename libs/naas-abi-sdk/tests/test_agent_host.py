@@ -974,6 +974,58 @@ def test_the_hosts_own_records_are_never_the_users(mode):
     asyncio.run(scenario())
 
 
+def test_a_streaming_handler_keeps_one_context_across_its_steps():
+    """What a handler sets before a yield is there after it, and every step
+    (its first included) runs for the user; the host's writes never do."""
+    import contextvars
+
+    marker = contextvars.ContextVar("marker", default="unset")
+
+    class Stateful(Seen):
+        async def stream_invoke(self, prompt, context):
+            marker.set("set before the first yield")
+            self.contexts.append(self.current())
+            yield {"event": "message", "data": "one"}
+            self.contexts.append(self.current())
+            self.after = marker.get()
+            yield {"event": "done", "data": "[DONE]"}
+
+    async def scenario():
+        seen, docs = Stateful(), OwnDocuments()
+        owner = host(docs, seen)
+        token = _delegation_token()
+        submit = _delegated_request(token)
+        submit.mode = "stream"
+        await owner._submit("agent", "key", "caller", submit)
+        await owner.runs["key"].task
+        assert seen.after == "set before the first yield"
+        assert [c.delegated_token for c in seen.contexts] == [token, token]
+        assert docs.delegated == []
+        stored = await docs.get(owner.runs_collection, "key")
+        assert stored.data["status"] == "SUCCEEDED"
+
+    asyncio.run(scenario())
+
+
+def test_a_streaming_handler_that_raises_fails_the_run():
+    class Broken:
+        async def stream_invoke(self, prompt, context):
+            yield {"event": "message", "data": "one"}
+            raise RuntimeError("boom")
+
+    async def scenario():
+        docs = Documents()
+        owner = host(docs, Broken())
+        submit = request()
+        submit.mode = "stream"
+        await owner._submit("agent", "key", "caller", submit)
+        await owner.runs["key"].task
+        stored = await docs.get(owner.runs_collection, "key")
+        assert stored.data["status"] == "FAILED"
+
+    asyncio.run(scenario())
+
+
 def test_a_delegated_run_is_in_the_workspace_of_its_submit():
     async def scenario():
         seen = Seen()

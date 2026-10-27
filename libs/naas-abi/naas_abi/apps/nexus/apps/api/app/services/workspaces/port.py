@@ -172,6 +172,11 @@ class WorkspacePermissionPort(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def rollback(self) -> None:
+        """Discard what this unit of work wrote and has not committed."""
+        raise NotImplementedError
+
+    @abstractmethod
     async def update_workspace(
         self, workspace_id: str, updates: WorkspaceUpdateInput
     ) -> WorkspaceRecord | None:

@@ -85,6 +85,63 @@ class _Run:
         return use_call_context(self.delegation) if self.delegation else nullcontext()
 
 
+class _UserStream:
+    """A streaming handler's events, its whole stream consumed by one task made
+    in the run's user context (``_Run.for_user``): the handler keeps one context
+    from its first step to its last, what it sets across a ``yield`` included,
+    while the host stores each event as the module. One event at a time: the
+    handler resumes only once the host took the last."""
+
+    def __init__(self, run: _Run, stream_invoke: Any, prompt: Any) -> None:
+        self._queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=1)
+
+        async def produce() -> None:
+            stream = stream_invoke(prompt, run.context)
+            try:
+                async for event in stream:
+                    await self._queue.put(event)
+            finally:
+                if hasattr(stream, "aclose"):
+                    await stream.aclose()
+
+        with run.for_user():
+            self._producer = asyncio.create_task(produce())
+
+    async def next(self) -> dict | None:
+        """The next event; None once the stream ended. Raises the handler's error."""
+        if not self._queue.empty():
+            return self._queue.get_nowait()
+        getter = asyncio.ensure_future(self._queue.get())
+        try:
+            await asyncio.wait(
+                {getter, self._producer}, return_when=asyncio.FIRST_COMPLETED
+            )
+        except BaseException:
+            getter.cancel()
+            raise
+        if getter.done():
+            return getter.result()
+        getter.cancel()
+        if not self._queue.empty():
+            return self._queue.get_nowait()
+        self._producer.result()  # the handler's error, if it raised
+        return None
+
+    async def close(self) -> None:
+        """Stop the handler if it still runs (the run failed or was cancelled)."""
+        if not self._producer.done():
+            self._producer.cancel()
+        try:
+            await self._producer
+        except asyncio.CancelledError:
+            if not self._producer.cancelled():
+                raise
+        except Exception:  # next() raised it already, or the run failed
+            logging.getLogger(__name__).debug(
+                "Agent stream ended with an error", exc_info=True
+            )
+
+
 def _hash(*values: str) -> str:
     return hashlib.sha256(json.dumps(values, ensure_ascii=True).encode()).hexdigest()
 
@@ -752,16 +809,9 @@ class AgentHost:
             if req.mode == "stream" and hasattr(handler, "stream_invoke"):
                 messages = []
                 done = False
-                with run.for_user():
-                    stream = handler.stream_invoke(req.prompt, run.context)
-                events = stream.__aiter__()
+                feed = _UserStream(run, handler.stream_invoke, req.prompt)
                 try:
-                    while True:
-                        with run.for_user():
-                            try:
-                                event = await events.__anext__()
-                            except StopAsyncIteration:
-                                break
+                    while (event := await feed.next()) is not None:
                         if done:
                             raise _error("INVALID_STREAM", "Agent emitted after done")
                         await self._event(run, event)
@@ -769,9 +819,7 @@ class AgentHost:
                             messages.append(event["data"])
                         done = event["event"] == "done"
                 finally:
-                    if hasattr(stream, "aclose"):
-                        with run.for_user():
-                            await stream.aclose()
+                    await feed.close()
                 result = "\n".join(messages)
                 if not done:
                     await self._event(run, {"event": "done", "data": "[DONE]"})

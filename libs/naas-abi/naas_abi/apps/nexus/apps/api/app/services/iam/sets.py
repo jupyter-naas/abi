@@ -7,7 +7,8 @@ IAM keeps the sets and bounds every user's decision with them. Nexus
   ``effective_features``), and lists only what is in it (``within_set``: the
   agents, apps, workflows and pipelines a workspace lists, for everyone, the
   platform admin included);
-* records the set of a workspace it creates (``seed_workspace``): its org's,
+* records the set of a workspace it creates, decided before the workspace
+  exists (``plan_workspace_set``, then ``record_workspace_set``): its org's,
   narrowed by the features and the catalog seed chosen on the create form;
 * moves the per-workspace feature overrides of earlier versions into IAM once
   (``migrate_feature_overrides``).
@@ -331,21 +332,6 @@ async def record_workspace_set(workspace_id: str, planned: ScopeSet) -> ScopeSet
     return await run_in_threadpool(work)
 
 
-async def seed_workspace(
-    org_id: str | None,
-    workspace_id: str,
-    *,
-    features: Collection[str] | None = None,
-    catalog_seed: Mapping[str, Any] | None = None,
-) -> ScopeSet | None:
-    """``plan_workspace_set`` and ``record_workspace_set`` at once, for a
-    workspace that exists already."""
-    planned = await plan_workspace_set(org_id, features=features, catalog_seed=catalog_seed)
-    if planned is None:
-        return None
-    return await record_workspace_set(workspace_id, planned)
-
-
 # -- the migration of the feature overrides ------------------------------------------------
 
 
@@ -581,7 +567,6 @@ __all__ = [
     "put_features",
     "record_workspace_set",
     "seed_items",
-    "seed_workspace",
     "user_feature_flags",
     "within_set",
     "workspace_set",

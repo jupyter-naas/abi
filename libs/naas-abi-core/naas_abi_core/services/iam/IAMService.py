@@ -2167,10 +2167,10 @@ class IAMService(IIAMService, PolicySource):
             if attachment is None:
                 continue  # another sign-in of this user claimed it first
             claimed.append(attachment)
-            if grant.policy_id in roles.ROLES:
-                # The role's companions, as for an attached one.
-                self._sync_platform_roles(principal_id)
-                self._sync_feature_policies(principal_id)
+        if any(a.policy_id in roles.ROLES for a in claimed):
+            # The roles' companions, as for attached ones: once for them all.
+            self._sync_platform_roles(principal_id)
+            self._sync_feature_policies(principal_id)
         if claimed:
             self._changed()
         return claimed

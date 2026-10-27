@@ -344,7 +344,7 @@ async def resolve_provider(
             account_id=resolved.account_id,
             model=resolved.model,
             llm_model=resolved.llm_model,
-        )
+        ).placed_in(resolved.run_workspace_id)
 
 
 async def get_or_create_conversation(

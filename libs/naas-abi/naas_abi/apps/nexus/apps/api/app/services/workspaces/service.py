@@ -172,6 +172,16 @@ class WorkspaceService:
             raise
         return record
 
+    async def abandon_workspace(self, record: WorkspaceRecord) -> None:
+        """Undo a creation that failed after its row and IAM scope existed, in a
+        unit of work whose flush may itself have failed: the uncommitted row goes
+        with the rollback, the scope (the owner's grant, the set) is dropped
+        here, never through a delete that the failed session would refuse."""
+        try:
+            await self.adapter.rollback()
+        finally:
+            await self.memberships.drop_scope(record.organization_id or NO_ORG, record.id)
+
     async def delete_workspace(self, workspace_id: str) -> bool:
         record = await self.adapter.get_workspace_by_id(workspace_id=workspace_id)
         deleted = await self.adapter.delete_workspace(workspace_id=workspace_id)

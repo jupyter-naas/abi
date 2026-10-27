@@ -567,6 +567,64 @@ async def test_complete_chat_request_forwards_injection_preamble_for_abi(monkeyp
     assert "Acme Corp" in preamble
 
 
+@pytest.mark.asyncio
+async def test_complete_chat_request_runs_a_remote_agent_in_its_own_workspace(monkeypatch) -> None:
+    """The run is placed where its agent was cleared (the resolved provider's
+    workspace), whatever workspace the request names, or none."""
+    now = datetime.now()
+    adapter = SimpleNamespace(
+        get_conversation_by_id_for_user=AsyncMock(return_value=_conversation(now)),
+        create_message=AsyncMock(),
+        touch_conversation=AsyncMock(),
+    )
+    service = ChatService(adapter=adapter, auth_adapter=SimpleNamespace())
+    service.get_or_create_conversation = AsyncMock(return_value="conv-1")
+    service.build_remote_agent_preamble = AsyncMock(return_value=None)
+    service.resolve_provider = AsyncMock(
+        return_value=ResolvedProvider(
+            id="remote-a-9",
+            name="Remote (acme.research)",
+            type="remote",
+            enabled=True,
+            endpoint=None,
+            api_key=None,
+            account_id=None,
+            model="acme.research/Researcher",
+            run_workspace_id="ws-1",
+        )
+    )
+    service.build_provider_messages_with_agents = AsyncMock(
+        return_value=[ChatInputMessage(role="user", content="hello")]
+    )
+    placed: list = []
+
+    async def _fake_complete_chat(
+        messages, config, system_prompt, thread_id=None, injection_preamble=None, workspace_id=None
+    ):
+        placed.append(workspace_id)
+        return "remote answer"
+
+    monkeypatch.setattr(
+        "naas_abi.apps.nexus.apps.api.app.services.chat.service.complete_with_provider",
+        _fake_complete_chat,
+    )
+
+    for named in ("ws-2", None):
+        await service.complete_chat_request(
+            request=CompleteChatInput(
+                message="hello",
+                agent="a-9",
+                workspace_id=named,
+                conversation_id="conv-1",
+                messages=[ChatInputMessage(role="user", content="hello")],
+            ),
+            user_id="user-1",
+            now=now,
+        )
+
+    assert placed == ["ws-1", "ws-1"]
+
+
 _WEAK_SLIDES_MODEL = "gpt-4.1-mini"
 _SLIDES_CONTEXT_VARS = (
     slides_active_slug,

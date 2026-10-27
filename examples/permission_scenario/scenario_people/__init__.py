@@ -64,13 +64,20 @@ class EchoAgent:
                 return f"{self.name}: export of report {report} refused ({exc})"
             return f"{self.name}: report {report} exported"
         if self.name == "Recruiter" and request.lower().startswith("policy "):
-            _, scope, item = request.split(maxsplit=2)
+            parts = request.split()
+            kind = parts[2].split("/")[0] if len(parts) == 3 else ""
+            if kind not in USE:
+                return (
+                    f"{self.name}: say policy <scope> <type>/<module>/<name>, "
+                    f"<type> one of {', '.join(USE)}"
+                )
+            _, scope, item = parts
             document = {
                 "version": "2026-10-13",
                 "statements": [
                     {
                         "effect": "Allow",
-                        "actions": [f"module:{USE[item.split('/')[0]]}"],
+                        "actions": [f"module:{USE[kind]}"],
                         "resources": [f"${{scope}}:module:{item}"],
                     }
                 ],

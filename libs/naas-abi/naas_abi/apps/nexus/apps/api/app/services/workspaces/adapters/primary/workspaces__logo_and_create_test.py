@@ -167,7 +167,7 @@ def test_create_is_undone_when_the_orgs_set_narrowed_meanwhile(monkeypatch, team
     assert resp.status_code == 409
     assert "chat" in resp.json()["detail"]
     forget.assert_awaited_once_with("ws-1")
-    service.delete_workspace.assert_awaited_once_with(workspace_id="ws-1")
+    service.abandon_workspace.assert_awaited_once_with(_record())
 
 
 def test_create_is_undone_when_placing_fails(monkeypatch, team) -> None:
@@ -181,7 +181,7 @@ def test_create_is_undone_when_placing_fails(monkeypatch, team) -> None:
 
     assert _create_with_features(client).status_code == 500
     forget.assert_awaited_once_with("ws-1")
-    service.delete_workspace.assert_awaited_once_with(workspace_id="ws-1")
+    service.abandon_workspace.assert_awaited_once_with(_record())
     assert _workspace_set(team).recorded is False
 
 

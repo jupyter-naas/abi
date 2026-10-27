@@ -840,7 +840,7 @@ async def stream_chat_response(
                         thread_id=conversation_id,
                         user_context_preamble=user_context_preamble,
                         invocation_id=assistant_msg_id,
-                        workspace_id=request.workspace_id,
+                        workspace_id=provider.run_workspace_id,
                     )
                 ):
                     yield output

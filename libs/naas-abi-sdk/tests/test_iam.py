@@ -240,3 +240,7 @@ def test_what_may_be_granted_and_its_refusal():
         run(IAMService(client).attach_policy("builtin.owner", "usr_x", "abi:o:w"))
     assert isinstance(refused.value, PermissionDenied)
     assert "do not hold" in str(refused.value)
+    # The code is said once.
+    assert str(refused.value) == (
+        "GRANT_NOT_HELD: You cannot grant what you do not hold: ..."
+    )

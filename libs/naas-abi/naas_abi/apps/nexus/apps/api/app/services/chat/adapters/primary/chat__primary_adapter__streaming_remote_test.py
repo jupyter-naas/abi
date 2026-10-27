@@ -31,7 +31,9 @@ def _install_fakes(monkeypatch, calls: list[dict[str, Any]]) -> None:
     )
 
     async def fake_resolve_provider(*_args, **_kwargs):
-        return provider
+        # The agent row's workspace, which the turn (a conversation id only)
+        # does not name.
+        return SimpleNamespace(**vars(provider), run_workspace_id="ws-agent")
 
     @asynccontextmanager
     async def fake_session():
@@ -121,8 +123,8 @@ def test_remote_turn_streams_through_the_remote_agent(monkeypatch) -> None:
     assert calls == [
         {
             "model": "acme.research/Researcher",
-            # The request's workspace is the run's (none named here).
-            "workspace_id": None,
+            # The agent's workspace, not the request's (none named here).
+            "workspace_id": "ws-agent",
             "thread_id": "conv-1",
             "invocation_id": "assistant-msg-1",
             "preamble": "USER PROFILE",

@@ -122,8 +122,9 @@ ERRORS = {
 
 
 def domain_error(error: RPCError) -> ServiceError:
+    """The domain class of ``error``, saying its code once."""
     if error.code.startswith("TOKEN_"):
-        return TokenRejected(error.code, str(error), response=error.response)
+        return TokenRejected(error.code, error.message, response=error.response)
     return ERRORS.get(error.code, ServiceError)(
-        error.code, str(error), response=error.response
+        error.code, error.message, response=error.response
     )

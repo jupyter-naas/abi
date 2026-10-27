@@ -27,9 +27,12 @@ the workspace built is `nexus:UseAgent` and the roles.
   (a module's agent by its scope's visibility, `AgentsVisibility`: off when none of its rows is on, as the roster
   shows it; one the workspace built by its row), `/v1`, and as a sub-agent (the in-process runtime runs only the
   enabled roster, `core/agent_feature_access.bind_usable_agents`).
-- **A remote agent runs in the turn's workspace.** `RemoteAgentDirectory.stream(..., workspace_id=)` submits under it
-  (`SubmitRequest.context.workspace_id`), and the module's host runs the handler for the user there: an action the
-  module declares is decided in that workspace (`require_action`), where the user's grants are.
+- **A remote agent runs in its own workspace.** The run is placed in its agent row's workspace, the one
+  `authorize_agent_use` cleared it in (`ResolvedProvider.run_workspace_id`), never the workspace a request names: a
+  turn with only a conversation id, or naming another workspace, changes nothing.
+  `RemoteAgentDirectory.stream(..., workspace_id=)` submits under it (`SubmitRequest.context.workspace_id`), and the
+  module's host runs the handler for the user there: an action the module declares is decided in that workspace
+  (`require_action`), within its set and visibility.
 
 ## Tests
 

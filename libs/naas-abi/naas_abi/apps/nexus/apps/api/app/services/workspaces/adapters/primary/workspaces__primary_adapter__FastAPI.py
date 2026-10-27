@@ -427,17 +427,17 @@ async def get_workspace_by_slug(
     )
 
 
-async def _undo_create(service: WorkspaceService, workspace_id: str) -> None:
+async def _undo_create(service: WorkspaceService, record: WorkspaceRecord) -> None:
     """Remove a workspace whose creation failed half-way: its placements, then
-    the workspace with its scope (and so its set and attachments)."""
+    its uncommitted row and its IAM scope (and so its set and attachments)."""
     try:
-        await placements.forget_workspace(workspace_id)
+        await placements.forget_workspace(record.id)
     except Exception:  # noqa: BLE001 - the original failure is what is raised
-        logger.exception(f"Could not forget the placements of workspace {workspace_id}")
+        logger.exception(f"Could not forget the placements of workspace {record.id}")
     try:
-        await service.delete_workspace(workspace_id=workspace_id)
+        await service.abandon_workspace(record)
     except Exception:  # noqa: BLE001 - the original failure is what is raised
-        logger.exception(f"Could not remove workspace {workspace_id} after a failed create")
+        logger.exception(f"Could not remove workspace {record.id} after a failed create")
 
 
 @router.post("", dependencies=[declares("CreateWorkspace")])
@@ -529,7 +529,7 @@ async def create_workspace(
         if planned is not None:
             await scope_sets.record_workspace_set(record.id, planned)
     except Exception as exc:
-        await _undo_create(service, record.id)
+        await _undo_create(service, record)
         if isinstance(exc, SetValidationError):
             # The organization's set narrowed since the set was planned.
             raise HTTPException(status_code=409, detail=str(exc)) from exc

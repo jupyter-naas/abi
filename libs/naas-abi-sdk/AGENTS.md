@@ -423,7 +423,8 @@ The user a call acts for travels in an `abi:delegated:agent` token (`sub` the us
   own): `CallContext.delegated_token`, with the workspace of the submit
   (`SubmitRequest.context.workspace_id`, the turn's: Nexus sends it), so IAM places what
   the run does for the user there (`require_action`). Only the handler runs under it
-  (`_Run.for_user`): the host's own records (the run, its events and output, the
+  (`_Run.for_user`; a streaming handler is consumed whole by one task made in that
+  context, `_UserStream`, so what it sets across a `yield` stays): the host's own records (the run, its events and output, the
   conversation claim) are the module's, as a workflow's bookkeeping is, since no user
   holds the module's documents. `Transport.delegated_token` sends it, in place
   of the module's token, on the kernel calls the run makes for that user, and renews

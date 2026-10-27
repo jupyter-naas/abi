@@ -61,6 +61,7 @@ class RPCError(RuntimeError):
         self, code: str, message: str, *, response: Message | None = None
     ) -> None:
         self.code = code
+        self.message = message
         self.response = response
         super().__init__(f"{code}: {message}")
 

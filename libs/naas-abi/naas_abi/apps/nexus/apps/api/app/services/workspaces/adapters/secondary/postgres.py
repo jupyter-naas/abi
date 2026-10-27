@@ -182,6 +182,9 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
         await self.db.flush()
         return self._to_workspace_record(workspace_model)
 
+    async def rollback(self) -> None:
+        await self.db.rollback()
+
     async def delete_workspace(self, workspace_id: str) -> bool:
         result = await self.db.execute(
             select(WorkspaceModel).where(WorkspaceModel.id == workspace_id)

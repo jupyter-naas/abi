@@ -161,7 +161,7 @@ async def test_a_new_workspace_follows_its_org_unless_something_narrows(team):
     with as_service_account("engine"):
         team.iam.put_set("org-1", modules=["people"], features=["chat"])
 
-    assert await sets.seed_workspace("org-1", "ws-1") is None
+    assert await sets.plan_workspace_set("org-1") is None
     with as_service_account("engine"):
         team.iam.put_set("org-1", modules=["people", "market"], features=["chat", "maps"])
         effective = team.iam.effective_set("org-1", "ws-1")
@@ -169,7 +169,9 @@ async def test_a_new_workspace_follows_its_org_unless_something_narrows(team):
     assert effective.features == ("chat", "maps")
 
     # Features chosen: that part alone is recorded, the modules still follow.
-    recorded = await sets.seed_workspace("org-1", "ws-1", features=["chat", "files"])
+    planned = await sets.plan_workspace_set("org-1", features=["chat", "files"])
+    assert planned is not None
+    recorded = await sets.record_workspace_set("ws-1", planned)
     assert recorded is not None
     assert (recorded.modules, recorded.features) == (None, ("chat",))
 
