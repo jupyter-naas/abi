@@ -72,6 +72,7 @@ from naas_abi_core.services.agent.context import (
     documents_turn_active,
     slides_step_limit_message,
     slides_turn_active,
+    tool_scope_refused,
 )
 from naas_abi_core.services.agent.ontologies.modules.AgentEventOntology import (
     AgentAIMessageEmitted,
@@ -2266,6 +2267,26 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                     )
                     continue
                 args = {"state": state, "tool_call": {**tool_call, "role": "tool_call"}}
+
+            # A module's workflow or pipeline the caller may not run here.
+            refused = tool_scope_refused(tool_)
+            if refused is not None:
+                kind, module, name = refused
+                had_tool_error = True
+                results.append(
+                    Command(
+                        update={
+                            "messages": [
+                                ToolMessage(
+                                    content=f"You may not run the {kind} {name} of {module} here.",
+                                    name=tool_name,
+                                    tool_call_id=tool_call["id"],
+                                )
+                            ]
+                        },
+                    )
+                )
+                continue
 
             # Try to invoke the tool.
             try:

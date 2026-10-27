@@ -24,6 +24,7 @@ handles the thread copy.
 
 from __future__ import annotations
 
+import weakref
 from contextvars import ContextVar
 
 from naas_abi_core.services.event.context import (
@@ -50,6 +51,47 @@ agent_workspace_id: CallContextField = event_actor_workspace_id
 agent_workspace_enabled_class_names: ContextVar[frozenset[str] | None] = ContextVar(
     "agent_workspace_enabled_class_names", default=None
 )
+# The module scopes (``(type, module, name)``, IAM ``module_scopes``) of the
+# workflows and pipelines the caller may run where the turn runs. An agent's tool
+# that one of them exposes answers a refusal for any other (``tool_scope_refused``).
+# None: the turn is not bound (a caller outside Nexus's routes).
+agent_usable_module_scopes: ContextVar[frozenset[tuple[str, str, str]] | None] = (
+    ContextVar("agent_usable_module_scopes", default=None)
+)
+# A tool's metadata key naming the object that exposed it (``Expose.as_tools``):
+# a string, so tracing serializes it; ``exposer`` finds the object.
+EXPOSED_BY = "abi_exposed_by"
+# The attribute an engine sets on a module's workflow or pipeline instance: its
+# module scope, ``(type, module, name)``.
+MODULE_SCOPE_ATTRIBUTE = "_abi_module_scope"
+_exposers: weakref.WeakValueDictionary[str, object] = weakref.WeakValueDictionary()
+
+
+def remember_exposer(owner: object) -> str | None:
+    """The key a tool of ``owner`` carries in its metadata; None for an object
+    that cannot be referenced weakly."""
+    key = f"{type(owner).__qualname__}:{id(owner)}"
+    try:
+        _exposers[key] = owner
+    except TypeError:
+        return None
+    return key
+
+
+def tool_scope_refused(tool: object) -> tuple[str, str, str] | None:
+    """The module scope of a workflow or pipeline ``tool`` exposes, when the turn
+    is bound and the caller may not run it there; else None."""
+    usable = agent_usable_module_scopes.get()
+    if usable is None:
+        return None
+    metadata = getattr(tool, "metadata", None) or {}
+    key = metadata.get(EXPOSED_BY)
+    owner = _exposers.get(key) if isinstance(key, str) else None
+    scope = getattr(owner, MODULE_SCOPE_ATTRIBUTE, None)
+    if scope is None or tuple(scope) in usable:
+        return None
+    return tuple(scope)
+
 
 # Coding-workspace bridge: base URL + bearer secret of the exec sidecar running
 # inside the caller's Coder coding workspace. Set at the request boundary (the

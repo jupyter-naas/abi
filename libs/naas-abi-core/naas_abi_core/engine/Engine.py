@@ -31,7 +31,10 @@ from naas_abi_core.engine.engine_loaders.EngineModuleLoader import EngineModuleL
 from naas_abi_core.engine.engine_loaders.EngineOntologyLoader import (
     EngineOntologyLoader,
 )
-from naas_abi_core.engine.engine_loaders.EngineProcessBridge import bridge_processes
+from naas_abi_core.engine.engine_loaders.EngineProcessBridge import (
+    bridge_processes,
+    tag_process_scopes,
+)
 from naas_abi_core.engine.engine_loaders.EngineServiceLoader import EngineServiceLoader
 from naas_abi_core.engine.IEngine import IEngine
 from naas_abi_core.engine.ownership.ownership_service import Claim
@@ -240,6 +243,7 @@ class Engine(IEngine):
 
         # Workflow/Pipeline instances exist now; their jobs go to a host below. Done
         # in every NATS engine, hosting or not, so job_owners() lists the same jobs.
+        tag_process_scopes(self.__modules)
         bridge_processes(self.__modules, self.__configuration.nats)
 
         # Module jobs start last: their handlers may use anything initialized above.
