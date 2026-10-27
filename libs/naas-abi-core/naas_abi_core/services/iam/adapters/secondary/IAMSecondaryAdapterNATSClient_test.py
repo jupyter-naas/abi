@@ -513,3 +513,68 @@ def test_grant_scenarios_over_nats(iam_host, scenario):
             client.close()
 
     scenario(iam_host.service, as_user)
+
+
+@BROKER
+def test_sets_over_nats_narrow_at_once(iam_host):
+    """A set recorded over NATS bounds the next decision for a user, on the
+    serving engine and in another process that hears the change event."""
+    import nats
+    from naas_abi_core.services.iam.IAMPorts import ScopeSet
+
+    iam_host.service._register_catalog(module_scopes.CATALOG)
+    engine = iam_host.client("engine")
+    engine.put_scope("org-1")
+    engine.put_scope("org-1", "ws-1")
+    bob = engine.ensure_user("https://idp.example", "bob")
+    engine.attach_policy(roles.ADMIN, bob.id, "abi:org-1:ws-1")
+    agent = module_scopes.scope_resource(
+        "agent", "people", "A", org="org-1", workspace="ws-1"
+    )
+    api = iam_host.client("api")
+    for_bob = CallContext(
+        principal=Principal(id="api", kind="service_account", name="api"),
+        on_behalf_of=Principal(id=bob.id, kind="user"),
+    )
+    # Another process on the same store, which hears the change event.
+    other = IAMService(iam_host.service.store)
+    heard = threading.Event()
+
+    async def listen():
+        nc = await nats.connect(iam_host.url)
+
+        async def on_change(_msg):
+            other.refresh_if_changed()
+            heard.set()
+
+        await nc.subscribe("abi.iam.v1.changed", cb=on_change)
+        await nc.flush()
+        return nc
+
+    nc = nats_runtime.run_coro(listen())
+    try:
+        with use_call_context(for_bob):
+            assert api.authorize("module:UseAgent", agent).allowed
+            assert other.authorize("module:UseAgent", agent).allowed
+        heard.clear()
+        recorded = engine.put_set("org-1", modules=["market"], features=["chat"])
+        assert recorded == ScopeSet("org-1", modules=("market",), features=("chat",))
+        assert heard.wait(5)
+        with use_call_context(for_bob):
+            decision = api.authorize("module:UseAgent", agent)
+            assert (decision.allowed, decision.reason) == (False, "outside_set")
+            assert not other.authorize("module:UseAgent", agent).allowed
+        assert engine.get_set("org-1") == recorded
+        assert engine.effective_set("org-1", "ws-1").modules == ("market",)
+        assert engine.list_sets() == [recorded]
+        with pytest.raises(ValueError) as refused:
+            engine.put_set("org-1", "ws-1", modules=["people"])
+        assert "people" in str(refused.value)
+        # A module granted nothing may not record one.
+        with pytest.raises(PermissionDeniedError):
+            iam_host.client("module").put_set("org-1", modules=[])
+        # Everything again: no part recorded.
+        assert engine.put_set("org-1") == ScopeSet("org-1")
+        assert engine.list_sets() == []
+    finally:
+        nats_runtime.run_coro(nc.close())

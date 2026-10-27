@@ -476,6 +476,29 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
         deleted = self._iam.delete_scope(req.org, req.workspace or "-")
         return pb.DeleteScopeResponse(deleted=deleted)
 
+    def _call_get_set(self, req: pb.GetSetRequest) -> pb.GetSetResponse:
+        found = self._iam.get_set(req.org, req.workspace or "-")
+        return pb.GetSetResponse(scope_set=codec.scope_set_to_pb(found))
+
+    def _call_effective_set(
+        self, req: pb.EffectiveSetRequest
+    ) -> pb.EffectiveSetResponse:
+        found = self._iam.effective_set(req.org, req.workspace or "-")
+        return pb.EffectiveSetResponse(scope_set=codec.scope_set_to_pb(found))
+
+    def _call_list_sets(self, req: pb.ListSetsRequest) -> pb.ListSetsResponse:
+        found = self._iam.list_sets(_opt(req, "org"))
+        return pb.ListSetsResponse(sets=[codec.scope_set_to_pb(s) for s in found])
+
+    def _call_put_set(self, req: pb.PutSetRequest) -> pb.PutSetResponse:
+        recorded = self._iam.put_set(
+            req.org,
+            req.workspace or "-",
+            modules=codec.set_items_from_pb(req, "modules"),
+            features=codec.set_items_from_pb(req, "features"),
+        )
+        return pb.PutSetResponse(scope_set=codec.scope_set_to_pb(recorded))
+
     def _call_register_catalog(
         self, req: pb.RegisterCatalogRequest
     ) -> pb.RegisterCatalogResponse:

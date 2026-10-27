@@ -1,10 +1,11 @@
 """IAM's own catalog and the seals.
 
 IAM authorizes its own operations with these actions, like any other service.
-Three resource types are named in an org or a workspace: ``attachment``, at its
-attachment's scope, and ``policy`` and ``group``, at the scope that owns them,
-so the admins of a workspace or an org manage that level's roles, policies and
-groups. Every other type is platform-level.
+Four resource types are named in an org or a workspace: ``attachment``, at its
+attachment's scope, ``policy`` and ``group``, at the scope that owns them, so
+the admins of a workspace or an org manage that level's roles, policies and
+groups, and ``set``, read at its own scope and written at the level above
+(``sets.py``). Every other type is platform-level.
 """
 
 from __future__ import annotations
@@ -42,7 +43,8 @@ CATALOG = ActionCatalog(
     # 4: ClaimPendingGrants, and the subjects of pending grants and IdP group
     # bindings.
     # 5: policies and groups are placed at the scope that owns them.
-    version=5,
+    # 6: organisation and workspace sets (GetSet, PutSet).
+    version=6,
     resource_types=(
         ResourceType("principal", id="opaque", placement="platform"),
         ResourceType(
@@ -62,6 +64,16 @@ CATALOG = ActionCatalog(
             id="path",
             placement="placed",
             description="attachment/<policy id>/<principal id>, at its scope.",
+        ),
+        ResourceType(
+            "set",
+            id="opaque",
+            placement="placed",
+            description=(
+                "set/<org or workspace id>: what an org or a workspace may use, "
+                "read at its own scope, written at the level above "
+                "(abi:%2A:%2A:iam:set/<org>, abi:<org>:%2A:iam:set/<ws>)."
+            ),
         ),
         ResourceType("key", id="path", placement="platform", personal=True),
         ResourceType("manifest", id="opaque", placement="platform"),
@@ -151,6 +163,8 @@ CATALOG = ActionCatalog(
         _action("PutScope", "admin", ("scope",), "put_scope"),
         _action("DeleteScope", "admin", ("scope",), "delete_scope"),
         _action("RegisterCatalog", "admin", ("catalog",), "register_catalog"),
+        _action("GetSet", "read", ("set",), "get_set", "effective_set", "list_sets"),
+        _action("PutSet", "admin", ("set",), "put_set"),
     ),
 )
 

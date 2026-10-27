@@ -402,6 +402,39 @@ class IAMService(ServiceProxy):
     async def delete_scope(self, org: str, workspace: str = "-") -> bool:
         return await self._request("delete_scope", org=org, workspace=workspace)
 
+    # -- sets: what an org or a workspace may use ----------------------------
+    # A set is {"org", "workspace", "modules", "features"}; a part that is None
+    # is everything (nothing recorded), a list the items.
+
+    async def get_set(self, org: str, workspace: str = "-") -> dict[str, Any]:
+        return await self._request("get_set", org=org, workspace=workspace)
+
+    async def effective_set(self, org: str, workspace: str = "-") -> dict[str, Any]:
+        """A workspace's set within its org's (an org's own for ``-``)."""
+        return await self._request("effective_set", org=org, workspace=workspace)
+
+    async def list_sets(self, org: str | None = None) -> list[dict[str, Any]]:
+        return await self._request("list_sets", org=org)
+
+    async def put_set(
+        self,
+        org: str,
+        workspace: str = "-",
+        *,
+        modules: Iterable[str] | None = None,
+        features: Iterable[str] | None = None,
+    ) -> dict[str, Any]:
+        """Record a set: an org's needs the platform admin, a workspace's the
+        org's owners or admins; a workspace's set wider than its org's is
+        refused (``InvalidArgument``) naming the extra items."""
+        return await self._request(
+            "put_set",
+            org=org,
+            workspace=workspace,
+            modules=None if modules is None else {"items": list(modules)},
+            features=None if features is None else {"items": list(features)},
+        )
+
     async def register_catalog(self, catalog: Mapping[str, Any]) -> bool:
         """Register a service's action catalog (a catalog document, as a mapping)."""
         return await self._request("register_catalog", catalog=dict(catalog))

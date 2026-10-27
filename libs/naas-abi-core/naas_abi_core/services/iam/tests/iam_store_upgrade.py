@@ -16,6 +16,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     GroupMapping,
     Policy,
     PrincipalRecord,
+    ScopeSet,
     new_id,
 )
 from naas_abi_core.services.iam.policy import PolicyDocument, Statement
@@ -24,11 +25,16 @@ from naas_abi_core.services.iam.tests.iam__secondary_adapter__generic_test impor
     policy,
 )
 
-# What version 1 had: no owner scopes.
+# What version 1 had: no owner scopes, and no sets (version 2 had no sets).
 DOWNGRADE = (
     "ALTER TABLE {schema}iam_policies DROP COLUMN owner_scope",
     "ALTER TABLE {schema}iam_principals DROP COLUMN owner_scope",
+    "DROP TABLE {schema}iam_scope_sets",
     "UPDATE {schema}iam_state SET schema_version = 1",
+)
+DOWNGRADE_TO_2 = (
+    "DROP TABLE {schema}iam_scope_sets",
+    "UPDATE {schema}iam_state SET schema_version = 2",
 )
 
 
@@ -99,6 +105,29 @@ def check_upgrade(
     again = open_store()
     try:
         assert again.get_principal(bound.id).owner_scope == "abi:org-1:-"
-        assert SCHEMA_VERSION == 2
+        assert SCHEMA_VERSION == 3
+        again.put_scope_set(ScopeSet("org-1", modules=("acme.people",)))
+        assert again.list_scope_sets() == [ScopeSet("org-1", modules=("acme.people",))]
     finally:
         again.close()
+
+
+def check_upgrade_from_2(
+    open_store: Callable[[], IAMStoreSQL], execute: Callable[[str], None]
+) -> None:
+    """A store of version 2 (no sets) opens with every org and workspace's set
+    unrecorded, everything, and records sets from then on."""
+    store = open_store()
+    kept = store.create_policy(policy())
+    store.close()
+    for statement in DOWNGRADE_TO_2:
+        execute(statement)
+    upgraded = open_store()
+    try:
+        assert upgraded.get_policy(kept.id).id == kept.id
+        assert upgraded.list_scope_sets() == []
+        workspace = ScopeSet("org-1", "ws-1", modules=(), features=("chat",))
+        upgraded.put_scope_set(workspace)
+        assert upgraded.list_scope_sets() == [workspace]
+    finally:
+        upgraded.close()

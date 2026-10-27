@@ -41,6 +41,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalKind,
     PrincipalRecord,
     ScopeRecord,
+    ScopeSet,
     TokenExchange,
 )
 from naas_abi_core.services.iam.policy import PolicyDocument
@@ -407,6 +408,37 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
 
     def delete_scope(self, org: str, workspace: str = "-") -> bool:
         return self._request("delete_scope", org=org, workspace=workspace).deleted
+
+    def get_set(self, org: str, workspace: str = "-") -> ScopeSet:
+        response = self._request("get_set", org=org, workspace=workspace)
+        return codec.scope_set_from_pb(response.scope_set)
+
+    def effective_set(self, org: str, workspace: str = "-") -> ScopeSet:
+        response = self._request("effective_set", org=org, workspace=workspace)
+        return codec.scope_set_from_pb(response.scope_set)
+
+    def list_sets(self, org: str | None = None) -> list[ScopeSet]:
+        response = self._request("list_sets", org=org)
+        return [codec.scope_set_from_pb(s) for s in response.sets]
+
+    def put_set(
+        self,
+        org: str,
+        workspace: str = "-",
+        *,
+        modules: Iterable[str] | None = None,
+        features: Iterable[str] | None = None,
+    ) -> ScopeSet:
+        response = self._request(
+            "put_set",
+            org=org,
+            workspace=workspace,
+            modules=codec.set_items_to_pb(None if modules is None else list(modules)),
+            features=codec.set_items_to_pb(
+                None if features is None else list(features)
+            ),
+        )
+        return codec.scope_set_from_pb(response.scope_set)
 
     def register_catalog(self, catalog: Any) -> bool:
         if not isinstance(catalog, ActionCatalog):

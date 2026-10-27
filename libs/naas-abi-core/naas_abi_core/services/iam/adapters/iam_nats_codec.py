@@ -6,6 +6,7 @@ Shared by the NATS primary and the NATS client, so neither imports the other.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
@@ -38,6 +39,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalRecord,
     RevisionConflictError,
     ScopeRecord,
+    ScopeSet,
 )
 from naas_abi_core.services.iam.names import PLATFORM_SCOPE
 from naas_abi_core.services.iam.policy import PolicyDocument
@@ -92,6 +94,10 @@ OPERATIONS = {
     "list_placements": "ListPlacements",
     "put_scope": "PutScope",
     "delete_scope": "DeleteScope",
+    "get_set": "GetSet",
+    "effective_set": "EffectiveSet",
+    "list_sets": "ListSets",
+    "put_set": "PutSet",
     "register_catalog": "RegisterCatalog",
     "token": "Token",
     "jwks": "Jwks",
@@ -354,6 +360,33 @@ def scope_to_pb(scope: ScopeRecord) -> pb.Scope:
 
 def scope_from_pb(message: pb.Scope) -> ScopeRecord:
     return ScopeRecord(message.org, message.workspace or "-")
+
+
+def set_items_to_pb(items: Sequence[str] | None) -> pb.SetItems | None:
+    """A part of a set: no message is everything, an empty list nothing."""
+    return pb.SetItems(items=list(items)) if items is not None else None
+
+
+def set_items_from_pb(message: Any, field: str) -> tuple[str, ...] | None:
+    return tuple(getattr(message, field).items) if message.HasField(field) else None
+
+
+def scope_set_to_pb(scope_set: ScopeSet) -> pb.ScopeSet:
+    return pb.ScopeSet(
+        org=scope_set.org,
+        workspace=scope_set.workspace,
+        modules=set_items_to_pb(scope_set.modules),
+        features=set_items_to_pb(scope_set.features),
+    )
+
+
+def scope_set_from_pb(message: pb.ScopeSet) -> ScopeSet:
+    return ScopeSet(
+        message.org,
+        message.workspace or "-",
+        set_items_from_pb(message, "modules"),
+        set_items_from_pb(message, "features"),
+    )
 
 
 def catalog_to_pb(catalog: ActionCatalog) -> pb.ActionCatalog:

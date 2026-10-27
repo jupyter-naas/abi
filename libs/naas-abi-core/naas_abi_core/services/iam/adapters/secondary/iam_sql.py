@@ -33,6 +33,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalRecord,
     RevisionConflictError,
     ScopeRecord,
+    ScopeSet,
     SigningKeyRecord,
 )
 from naas_abi_core.services.iam.names import (
@@ -71,7 +72,8 @@ from sqlalchemy.engine import Connection, Engine, Row
 from sqlalchemy.exc import IntegrityError
 
 # 2: the owner scope of policies and groups (``owner_scope``).
-SCHEMA_VERSION = 2
+# 3: the sets of orgs and workspaces (``iam_scope_sets``, made by create_all).
+SCHEMA_VERSION = 3
 
 metadata = MetaData()
 
@@ -199,6 +201,16 @@ scopes = Table(
     metadata,
     Column("org", String(64), primary_key=True),
     Column("workspace", String(64), primary_key=True),
+)
+
+# A set's parts are JSON lists; NULL is "nothing recorded", everything.
+scope_sets = Table(
+    "iam_scope_sets",
+    metadata,
+    Column("org", String(64), primary_key=True),
+    Column("workspace", String(64), primary_key=True),
+    Column("modules", Text, nullable=True),
+    Column("features", Text, nullable=True),
 )
 
 catalogs = Table(
@@ -414,6 +426,16 @@ def _signing_key(row: Row) -> SigningKeyRecord:
     )
 
 
+def _json_list(items: tuple[str, ...] | None) -> str | None:
+    return json.dumps(list(items)) if items is not None else None
+
+
+def _list_json(raw: str | None) -> tuple[str, ...] | None:
+    if raw is None:
+        return None
+    return tuple(str(item) for item in json.loads(raw))
+
+
 def _check_limit(limit: int) -> None:
     if not 1 <= limit <= 1000:
         raise ValueError("limit must be between 1 and 1000")
@@ -428,7 +450,15 @@ class IAMStoreSQL(IAMStore):
         self._engine = engine
         self._schema = schema
         self._closed = False
-        metadata.create_all(engine)
+        with engine.begin() as conn:
+            if conn.dialect.name == "postgresql":
+                # Two processes opening one store (the engine and the API): the
+                # second waits here while the first creates a missing table.
+                conn.execute(
+                    text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+                    {"key": f"abi_iam_schema:{schema or ''}"},
+                )
+            metadata.create_all(conn)
         with self._write() as conn:
             if conn.execute(select(state.c.id)).first() is None:
                 conn.execute(
@@ -1193,6 +1223,46 @@ class IAMStoreSQL(IAMStore):
             query = query.where(scopes.c.org == org)
         with self._read() as conn:
             return [ScopeRecord(row.org, row.workspace) for row in conn.execute(query)]
+
+    # -- sets -------------------------------------------------------------------
+
+    def put_scope_set(self, scope_set: ScopeSet) -> None:
+        key = (
+            scope_sets.c.org == scope_set.org,
+            scope_sets.c.workspace == scope_set.workspace,
+        )
+        with self._change() as conn:
+            conn.execute(delete(scope_sets).where(*key))
+            if scope_set.recorded:
+                conn.execute(
+                    insert(scope_sets).values(
+                        org=scope_set.org,
+                        workspace=scope_set.workspace,
+                        modules=_json_list(scope_set.modules),
+                        features=_json_list(scope_set.features),
+                    )
+                )
+
+    def delete_scope_sets(self, org: str, workspace: str = "-") -> bool:
+        query = delete(scope_sets).where(scope_sets.c.org == org)
+        if workspace != "-":
+            query = query.where(scope_sets.c.workspace == workspace)
+        return self._delete(query)
+
+    def list_scope_sets(self, org: str | None = None) -> list[ScopeSet]:
+        query = select(scope_sets).order_by(scope_sets.c.org, scope_sets.c.workspace)
+        if org is not None:
+            query = query.where(scope_sets.c.org == org)
+        with self._read() as conn:
+            return [
+                ScopeSet(
+                    row.org,
+                    row.workspace,
+                    _list_json(row.modules),
+                    _list_json(row.features),
+                )
+                for row in conn.execute(query)
+            ]
 
     # -- catalogs -----------------------------------------------------------------
 

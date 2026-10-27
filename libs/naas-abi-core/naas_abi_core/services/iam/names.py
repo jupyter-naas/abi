@@ -34,8 +34,15 @@ ALL_WORKSPACES = "%2A"
 ALL_ORGS = "%2A"
 # The only resource type the workspace marker may name, with an org (org-wide).
 ORG_WIDE_TYPE = ("iam", "attachment")
+# Sets are written where only the level above reaches (``sets.write_resource``):
+# an org's at abi:%2A:%2A:iam:set/<org>, a workspace's at abi:<org>:%2A:iam:set/<ws>.
+SET_TYPE = ("iam", "set")
+# The resource types the workspace marker may name, with an org.
+ORG_WIDE_TYPES = frozenset({ORG_WIDE_TYPE, SET_TYPE})
 # The resource types the org marker may name, with the workspace marker.
-EVERY_ORG_TYPES = frozenset({ORG_WIDE_TYPE, ("iam", "policy"), ("iam", "group")})
+EVERY_ORG_TYPES = frozenset(
+    {ORG_WIDE_TYPE, ("iam", "policy"), ("iam", "group"), SET_TYPE}
+)
 PREFIX = "abi:"
 PLATFORM_SCOPE = "abi:-:-"
 
@@ -220,8 +227,8 @@ def _check_org(org: str, workspace: str, service: str, type: str) -> None:
         # Only unscoped attachments and the platform's policies and groups.
         if (service, type) not in EVERY_ORG_TYPES or workspace != ALL_WORKSPACES:
             raise ValueError(
-                f"Org {ALL_ORGS} names unscoped attachments and the platform's "
-                f"policies and groups only, abi:{ALL_ORGS}:{ALL_WORKSPACES}:iam:..."
+                f"Org {ALL_ORGS} names unscoped attachments, the platform's "
+                f"policies and groups, and the orgs' sets only, abi:{ALL_ORGS}:{ALL_WORKSPACES}:iam:..."
             )
         return
     _check_scope_id(org, "org")
@@ -231,10 +238,11 @@ def _check_workspace(workspace: str, org: str, service: str, type: str) -> None:
     if workspace == ALL_WORKSPACES:
         if org == ALL_ORGS:
             return  # checked with the org
-        # Only org-wide attachments span every workspace of an org.
-        if (service, type) != ORG_WIDE_TYPE:
+        # Only org-wide attachments and workspace sets span every workspace.
+        if (service, type) not in ORG_WIDE_TYPES:
             raise ValueError(
-                f"Workspace {ALL_WORKSPACES} names org-wide attachments only, "
+                f"Workspace {ALL_WORKSPACES} names org-wide attachments and "
+                f"workspace sets only, "
                 f"not {service}:{type}"
             )
         if org == NONE:

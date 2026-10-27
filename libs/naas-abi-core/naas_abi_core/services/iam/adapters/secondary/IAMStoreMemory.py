@@ -26,6 +26,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalRecord,
     RevisionConflictError,
     ScopeRecord,
+    ScopeSet,
     SigningKeyRecord,
 )
 
@@ -46,6 +47,7 @@ class IAMStoreMemory(IAMStore):
         self._pending: dict[str, PendingGrant] = {}
         self._placements: dict[tuple[str, str], Placement] = {}
         self._scopes: dict[tuple[str, str], ScopeRecord] = {}
+        self._sets: dict[tuple[str, str], ScopeSet] = {}
         self._catalogs: dict[str, ActionCatalog] = {}
         self._keys: dict[str, KeyRecord] = {}
         self._token_floors: dict[str, datetime] = {}
@@ -514,6 +516,36 @@ class IAMStoreMemory(IAMStore):
                 key=lambda s: (s.org, s.workspace),
             )
 
+    # -- sets -------------------------------------------------------------------
+
+    def put_scope_set(self, scope_set: ScopeSet) -> None:
+        with self._lock:
+            self._write()
+            key = (scope_set.org, scope_set.workspace)
+            if scope_set.recorded:
+                self._sets[key] = scope_set
+            else:
+                self._sets.pop(key, None)
+
+    def delete_scope_sets(self, org: str, workspace: str = "-") -> bool:
+        with self._lock:
+            keys = [
+                key for key in self._sets if key[0] == org and workspace in ("-", key[1])
+            ]
+            if not keys:
+                return False
+            self._write()
+            for key in keys:
+                del self._sets[key]
+            return True
+
+    def list_scope_sets(self, org: str | None = None) -> list[ScopeSet]:
+        with self._lock:
+            return [
+                self._sets[key]
+                for key in sorted(self._sets)
+                if org is None or key[0] == org
+            ]
     # -- catalogs -----------------------------------------------------------------
 
     def put_catalog(self, catalog: ActionCatalog) -> None:
