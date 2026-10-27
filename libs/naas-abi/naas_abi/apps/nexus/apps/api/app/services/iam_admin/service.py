@@ -113,6 +113,19 @@ _WILDCARD_TYPE = {
 }
 _ATTACHMENT_ACTIONS = ("iam:ListAttachments", "iam:AttachPolicy", "iam:DetachPolicy")
 _KEY_ACTIONS = ("iam:ListKeys", "iam:CreateKey", "iam:RevokeKey")
+# Administered at platform level only: service accounts and their keys, module approvals,
+# the simulator and IdP mappings. ``access`` at a scope answers them False, as it does
+# ``nexus:ReadSystem`` (the audit), so an org's or a workspace's page never offers them.
+_PLATFORM_ONLY = frozenset(
+    {
+        *(action for action, kind in _WILDCARD_TYPE.items() if kind in ("principal", "manifest")),
+        "iam:MapIdpGroup",
+        "iam:UnmapIdpGroup",
+        *_KEY_ACTIONS,
+    }
+)
+# The built-in roles' feature defaults of an organization (Nexus `organization_role_features`).
+_ROLE_FEATURE_ACTIONS = ("GetRoleFeatures", "UpdateRoleFeatures")
 ACCESS_ACTIONS: tuple[str, ...] = (*_WILDCARD_TYPE, *_ATTACHMENT_ACTIONS, *_KEY_ACTIONS)
 
 
@@ -178,7 +191,10 @@ class IamAdminService:
     async def access(self, user: Any, scope: str | None = None) -> dict[str, Any]:
         """Which actions the caller may perform: on the platform, or (the attachment
         actions, and the policies and groups of that level) at ``scope``. Decided by
-        IAM, as for any call; ``nexus:ReadSystem`` for the audit."""
+        IAM, as for any call; ``nexus:ReadSystem`` for the audit. What is administered at
+        platform level only is False at a scope; at an org (or org-wide) scope,
+        ``nexus:GetRoleFeatures`` and ``nexus:UpdateRoleFeatures`` say who reads and edits
+        its built-in roles' feature defaults."""
         if scope is not None:
             validate_scope(scope)
         owner = _owner_of(scope)
@@ -195,10 +211,15 @@ class IamAdminService:
                 )
             for action in _KEY_ACTIONS:
                 result[action] = session.authorize(action, key_resource("*", "*")).allowed
+            if scope is not None:
+                result.update(dict.fromkeys(_PLATFORM_ONLY, False))
             return result
 
         actions = await self._read(user, decide)
-        actions["nexus:ReadSystem"] = await self._reads_system(user)
+        actions["nexus:ReadSystem"] = scope is None and await self._reads_system(user)
+        org = _organization_of(scope)
+        for action in _ROLE_FEATURE_ACTIONS:
+            actions[f"nexus:{action}"] = org is not None and await self._may(user, action, org)
         return {"actions": actions}
 
     async def grantable(self, user: Any, scope: str) -> dict[str, Any]:
@@ -213,6 +234,12 @@ class IamAdminService:
         from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 
         return await AUTHZ.allowed("ReadSystem", user=user)
+
+    async def _may(self, user: Any, action: str, org: str) -> bool:
+        """A Nexus action on an organization, as its route decides it."""
+        from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+
+        return await AUTHZ.allowed(action, user=user, org=org)
 
     # -- catalogs and validation ------------------------------------------------------
 
@@ -951,6 +978,14 @@ def _owner_of(scope: str | None) -> str:
     if workspace == "*":
         return scope_name(org, NONE)
     return scope
+
+
+def _organization_of(scope: str | None) -> str | None:
+    """The organization an org-level scope (``abi:<org>:-`` or ``abi:<org>:*``) names."""
+    if scope is None:
+        return None
+    org, workspace = scope_fields(scope)
+    return org if workspace in (NONE, "*") and org not in (NONE, "*") else None
 
 
 def _actor_id(user: Any) -> str:

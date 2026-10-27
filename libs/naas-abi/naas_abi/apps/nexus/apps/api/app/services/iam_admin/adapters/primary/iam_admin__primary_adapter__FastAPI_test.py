@@ -170,6 +170,45 @@ def test_access_at_a_scope_follows_the_attachment_rules(world):
     assert get(world, "/access?scope=nonsense", "admin").status_code == 422
 
 
+PLATFORM_ONLY = (
+    "iam:ListPrincipals",
+    "iam:CreateServiceAccount",
+    "iam:Explain",
+    "iam:ListManifests",
+    "iam:ApproveManifest",
+    "iam:MapIdpGroup",
+    "iam:UnmapIdpGroup",
+    "iam:ListKeys",
+    "iam:CreateKey",
+    "nexus:ReadSystem",
+)
+
+
+def test_access_at_a_scope_answers_for_that_level_alone(world):
+    """Service accounts, keys, approvals, the simulator, IdP mappings and the audit are the
+    platform's: the Roles & permissions page of an org or a workspace never offers them,
+    not even to the platform admin."""
+    platform = get(world, "/access").json()["actions"]
+    assert all(platform[action] for action in PLATFORM_ONLY)
+    for scope in (org_scope("org-1"), "abi:org-1:*", workspace_scope("org-1", "ws-1")):
+        root = get(world, f"/access?scope={scope}").json()["actions"]
+        assert not any(root[action] for action in PLATFORM_ONLY), scope
+        assert root["iam:ListPolicies"] and root["iam:CreateGroup"] and root["iam:AttachPolicy"]
+
+
+def test_access_at_an_org_says_who_edits_its_roles_feature_defaults(world):
+    scope = org_scope("org-1")
+    for user in ("owner", "admin"):
+        actions = get(world, f"/access?scope={scope}", user).json()["actions"]
+        assert actions["nexus:GetRoleFeatures"] and actions["nexus:UpdateRoleFeatures"], user
+    member = get(world, f"/access?scope={scope}", "member").json()["actions"]
+    assert not member["nexus:GetRoleFeatures"] and not member["nexus:UpdateRoleFeatures"]
+    # They are the organization's: neither a workspace nor the platform has them.
+    workspace = get(world, f"/access?scope={workspace_scope('org-1', 'ws-1')}", "admin").json()
+    assert not workspace["actions"]["nexus:GetRoleFeatures"]
+    assert not get(world, "/access").json()["actions"]["nexus:GetRoleFeatures"]
+
+
 # -- policies --------------------------------------------------------------------------------
 
 
