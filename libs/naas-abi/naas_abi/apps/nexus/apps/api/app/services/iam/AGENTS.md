@@ -71,7 +71,7 @@ workspace the request names, after the user's membership there. One source of tr
 
 | What | Scope (helper) | Where Nexus checks it |
 |---|---|---|
-| An agent of a module, engine (naas_abi's own, Abi included) or remote | `agent/<module>/<name>`, `module:UseAgent` (`services/agents/scopes.py`) | the roster and pickers (`GET /agents`, filtered), chat (`authorize_agent_use`), `/v1` models and completions, every in-process turn: the runtime runs no other agent and prunes sub-agents to the usable ones (`provider_runtime._bound_to_caller`) |
+| An agent of a module, engine (naas_abi's own, Abi included) or remote | `agent/<module>/<name>`, `module:UseAgent` (`services/agents/scopes.py`) | the roster and pickers (`GET /agents`, filtered), chat (`authorize_agent_use`), `/v1` models and completions, every in-process turn: the runtime runs no other agent and builds its copy without the others, at every depth: no handoff tool, graph node or intent leads to them (`provider_runtime._turn_copy`, `Agent.duplicate(keep=)`) |
 | An app | `app/<module>/<name>`, `module:OpenApp` (`services/apps/scopes.py`) | `GET /apps` and the workspace's app configs (filtered), one config, `access-token` (a link names one app), `remote-grant`, the workspace a remote app opens in (`remote/access.py`) |
 | A workflow or pipeline | `workflow/<module>/<name>` or `pipeline/...`, `RunWorkflow`/`RunPipeline`, `Read*Runs` (`services/workflows/scopes.py`) | `/api/workspaces/{ws}/workflows`: listing, start, the caller's own runs; an agent's tools from an engine module's workflows (`agent_usable_module_scopes`, bound per turn by `bind_usable_agents`) |
 

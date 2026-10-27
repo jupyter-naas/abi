@@ -859,7 +859,10 @@ the broker-side check (`builtin.platform.member`: `InvokeAgent`, `OpenApp`,
 resource in a workspace without it. An in-process agent's sub-agents and the
 workflows and pipelines it reaches as tools are bounded by the user's scopes:
 Nexus binds them per turn (`agent_workspace_enabled_class_names`,
-`agent_usable_module_scopes`), and the agent refuses a tool of a workflow outside
+`agent_usable_module_scopes`), and the turn's copy of the agent is built without
+the sub-agents the user may not use (`Agent.duplicate(keep=)`: no handoff tool,
+bound tool, graph node or intent route to them; `call_tools` refuses a handoff to
+an agent that is no sub-agent, `IntentAgent` an intent to one), and the agent refuses a tool of a workflow outside
 them (`services/agent/context.tool_scope_refused`; the engine marks each process
 instance, `EngineProcessBridge.tag_process_scopes`).
 

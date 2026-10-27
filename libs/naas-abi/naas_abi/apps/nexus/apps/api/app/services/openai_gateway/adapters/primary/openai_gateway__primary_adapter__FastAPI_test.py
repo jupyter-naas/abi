@@ -46,6 +46,10 @@ def _client(monkeypatch: pytest.MonkeyPatch, user_id: str = "admin") -> TestClie
 
     STREAMED.clear()
     PROCESSES.clear()
+    # This engine has no module workflows (the class registry is process-wide).
+    from naas_abi.apps.nexus.apps.api.app.services.agents import scopes as agent_scopes
+
+    monkeypatch.setattr(agent_scopes, "engine_process_scopes", lambda: [])
     aia = type("AiaAgent", (), {"name": "Aia"})
     monkeypatch.setattr(shim, "_stream_agent_text", _fake_stream)
     monkeypatch.setattr(shim, "_list_agent_model_ids", lambda: ["aia", "support"])

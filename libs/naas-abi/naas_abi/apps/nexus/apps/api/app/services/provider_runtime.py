@@ -4,6 +4,7 @@ Supports: Anthropic (Claude), OpenAI, Ollama, Cloudflare Workers AI, and custom 
 """
 
 import importlib
+import inspect
 import logging
 import pkgutil
 import threading
@@ -794,8 +795,8 @@ async def complete_with_abi(
         )
         import asyncio
 
-        agent = await asyncio.to_thread(_duplicate_inprocess_agent, template_agent, thread_id)
-        if not _bound_to_caller(template_agent, agent):
+        agent = await asyncio.to_thread(_turn_copy, template_agent, thread_id)
+        if agent is None:
             raise PermissionError(f"You may not use the agent {config.model} here")
         if llm_model:
             _retarget_inprocess_chat_model(agent, llm_model)
@@ -1462,23 +1463,31 @@ def _inprocess_agent_class_name(agent: Any) -> str:
     return f"{cls.__module__}/{cls.__name__}"
 
 
-def _bound_to_caller(template_agent: Any, agent: Any) -> bool:
-    """Whether the caller may run ``template_agent``, and ``agent`` (its copy for
-    this turn) pruned to the sub-agents the caller may use.
+def _turn_copy(template_agent: Any, thread_id: str | None) -> Any | None:
+    """This turn's copy of ``template_agent``, with only the sub-agents the
+    caller may use; None when the caller may not run it.
 
     A route sets the agents the caller may use where the turn runs (the roster,
     the features and the module scopes it holds: ``agent_workspace_enabled_class_names``):
-    no other agent answers, whatever name the request gave. Unset (a caller
-    outside Nexus's routes), nothing is narrowed."""
+    no other agent answers, whatever name the request gave. The others are left
+    out before the copy is built (``Agent.duplicate(keep=)``): no handoff tool,
+    graph node or intent leads to them. Pruning after the copy stays as a
+    backstop for a sub-agent whose ``duplicate`` takes no ``keep``. Unset (a
+    caller outside Nexus's routes), nothing is narrowed."""
     from naas_abi_core.services.agent.context import agent_workspace_enabled_class_names
 
     allowed = agent_workspace_enabled_class_names.get()
     if allowed is None:
-        return True
+        return _duplicate_inprocess_agent(template_agent, thread_id)
     if _inprocess_agent_class_name(template_agent) not in allowed:
-        return False
+        return None
+    agent = _duplicate_inprocess_agent(
+        template_agent,
+        thread_id,
+        keep=lambda sub: _inprocess_agent_class_name(sub) in allowed,
+    )
     _prune_inprocess_subagents_for_roster(agent, allowed)
-    return True
+    return agent
 
 
 def _prune_inprocess_subagents_for_roster(agent: Any, allowed: frozenset[str]) -> None:
@@ -1521,7 +1530,9 @@ def _prune_inprocess_subagents_for_roster(agent: Any, allowed: frozenset[str]) -
             )
 
 
-def _duplicate_inprocess_agent(template: Any, thread_id: str | None) -> Any:
+def _duplicate_inprocess_agent(
+    template: Any, thread_id: str | None, keep: Callable[[Any], bool] | None = None
+) -> Any:
     """Return a per-request copy of the cached template agent.
 
     The resolver caches a single shared instance per factory. Running requests
@@ -1550,6 +1561,8 @@ def _duplicate_inprocess_agent(template: Any, thread_id: str | None) -> Any:
         # current_active_agent=current_active_agent,
     )
     fresh_queue: Queue = Queue()
+    if keep is not None and "keep" in inspect.signature(template.duplicate).parameters:
+        return template.duplicate(queue=fresh_queue, agent_shared_state=fresh_state, keep=keep)
     return template.duplicate(queue=fresh_queue, agent_shared_state=fresh_state)
 
 
@@ -1707,8 +1720,8 @@ async def stream_with_abi_inprocess(
     # (the previous behaviour) caused cross-conversation response leakage when
     # two requests overlapped — see jupyter-naas/abi#991.
     assert thread_id is not None, "thread_id is required"
-    agent = await asyncio.to_thread(_duplicate_inprocess_agent, template_agent, thread_id)
-    if not _bound_to_caller(template_agent, agent):
+    agent = await asyncio.to_thread(_turn_copy, template_agent, thread_id)
+    if agent is None:
         yield f"\n\n**Error:** You may not use the agent {agent_name} here."
         return
     if llm_model:
