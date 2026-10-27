@@ -326,6 +326,46 @@ module can call nothing but IAM):
   `abi dev up`, which approves automatically), the transport reconnects so the broker
   grants the new subjects.
 
+### Declared actions and module scopes
+
+Every agent, app and workflow of a module is a **module scope** a workspace grants one
+item at a time (`module:<type>/<module_id>/<name>`, core `services/iam/AGENTS.md`,
+"Module scopes"): Nexus checks it before a user reaches it, and workspace viewers and
+members hold none by default. A module has nothing to do for those.
+
+A module may also declare **actions of its own**: a catalog of resource types and
+actions under its own service name, `catalog_service(module_id)` (`acme.people` is
+`acme_people`). It is `Module.iam_catalog` (a dict), else `iam_catalog.yaml` beside the
+module's code (`permissions.module_catalog`); `service` and `version` may be left out.
+The catalog travels with the manifest (its `catalog` key, hashed with it), and IAM
+registers it when an administrator approves the manifest: a changed catalog is a new
+pending version. A catalog naming a kernel service, `iam`, `nexus`, `module` or another
+module's service is refused at submission.
+
+```yaml
+# iam_catalog.yaml, beside the module
+resource_types:
+  - {name: brief, id: path, description: "A research brief."}
+actions:
+  - {name: ExportBrief, level: read, resource_types: [brief]}
+```
+
+The module enforces one for the call it serves, on the caller's context (during a run
+for a user, both the user's grants and its own approved manifest must allow it):
+
+```python
+await self.require_action("ExportBrief", "brief", ["q3"])  # PermissionDenied / NotFound
+decision, resource = await engine.services.iam.authorize_declared(
+    "demo_research:ExportBrief", "brief", ["q3"]
+)
+```
+
+IAM names the resource in the workspace of the call (`workspace=` to name another):
+`abi:<org>:<ws>:demo_research:brief/q3`. A user needs a grant such as
+`demo_research:ExportBrief` on `${scope}:demo_research:brief/*`, attached at the
+workspace. The standalone demo (`examples/standalone_module/discovery_demo.py`) declares
+and enforces one (`make demo-sdk`).
+
 ### Tokens the SDK meets
 
 Engine tokens are ES256 JWTs with one audience and at most ten minutes of life. An

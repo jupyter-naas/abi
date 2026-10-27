@@ -175,7 +175,7 @@ class BaseModule(JobsMixin, Generic[TConfig]):
     @property
     def module_key(self) -> str:
         """The module's stable identifier: its configured path (``naas_abi``,
-        ``naas_abi_marketplace.ai.claude``), the same in every install. Its
+        ``naas_abi_marketplace.applications.github``), the same in every install. Its
         agents, apps, workflows and pipelines are module scopes under it."""
         return self.__class__.__module__
 

@@ -1,5 +1,27 @@
 # CHANGELOG
 
+## Upgrade notes (next release): module scopes
+
+- **Workspace members and viewers need a grant to use what modules expose.** Every
+  agent, app, workflow and pipeline of a module, naas_abi's own included (Abi too), is
+  now a module scope, `module:<type>/<module>/<name>`, granted per workspace. The
+  built-in `viewer` and `member` roles hold none, and the upgrade adds no grant: after
+  it, members and viewers see no module agent in the pickers, no app on the Apps page
+  and no workflow, and chat, `/v1` and app links refuse them, until a policy allows
+  them in their workspace. Admins and owners keep everything. Give access in
+  Nexus (IAM, Policies; the editor suggests the ids) with a policy such as
+  `module:UseAgent` on `${scope}:module:agent/naas_abi/*` (every naas_abi agent) or
+  `module:OpenApp` on `${scope}:module:app/<module>/<app>`, attached to the people or
+  group at the workspace. To keep the old behaviour for a workspace, attach a policy
+  allowing `module:*` on `${scope}:module:*` to its members.
+- The `apps` feature now governs only the apps settings and app projects; opening an
+  app is its module scope.
+- Workspace users start workflows and read their own runs at
+  `/api/workspaces/{ws}/workflows`; Nexus migration `0063` adds `workflow_run_owners`.
+- A module may declare actions of its own (`iam_catalog.yaml` beside an engine
+  module, the manifest's `catalog` for a remote one); see core
+  `services/iam/AGENTS.md`, "Module scopes".
+
 <!-- version list -->
 
 ## v3.1.0 (2026-10-26)

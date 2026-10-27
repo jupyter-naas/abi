@@ -41,9 +41,15 @@ EXPOSED = [
 
 
 def test_a_listing_groups_each_module_s_scopes_with_their_display_data() -> None:
-    listed = build(EXPOSED, [DECLARED], modules=["naas_abi", "naas_abi_marketplace.ai.claude"])
+    listed = build(
+        EXPOSED, [DECLARED], modules=["naas_abi", "naas_abi_marketplace.applications.github"]
+    )
     by_module = {m["module"]: m for m in listed}
-    assert list(by_module) == ["acme.people", "naas_abi", "naas_abi_marketplace.ai.claude"]
+    assert list(by_module) == [
+        "acme.people",
+        "naas_abi",
+        "naas_abi_marketplace.applications.github",
+    ]
 
     people = by_module["acme.people"]
     assert people["agents"] == [
@@ -73,7 +79,7 @@ def test_a_listing_groups_each_module_s_scopes_with_their_display_data() -> None
 
     # naas_abi's own agents are module scopes too; a module with nothing is listed.
     assert [a["name"] for a in by_module["naas_abi"]["agents"]] == ["Abi"]
-    empty = by_module["naas_abi_marketplace.ai.claude"]
+    empty = by_module["naas_abi_marketplace.applications.github"]
     assert empty["agents"] == [] and empty["declared"] is None
 
 

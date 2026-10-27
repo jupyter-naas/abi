@@ -14,7 +14,7 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 | File | Role |
 |---|---|
 | `catalog/` | The `nexus` action catalog: one module per router family (`dsl.py` builds types and actions with a **level**), aggregated by `__init__.py` into `NEXUS_CATALOG`, `FEATURE_OF`, `TYPE_OF`, `LEVEL_OF` |
-| `authz.py` | `AUTHZ.require / allowed / decide / filter / name`: builds the resource name, checks `UseFeature` first, maps a refusal to `AuthzDenied` (an `HTTPException`: 403, or 404 for another user's personal resource) |
+| `authz.py` | `AUTHZ.require / allowed / decide / filter / name`: builds the resource name, checks `UseFeature` first, maps a refusal to `AuthzDenied` (an `HTTPException`: 403, or 404 for another user's personal resource). `ModuleScope` and `require_scope / allowed_scope / decide_scope / filter_scopes / scope_allowed_in_any` decide module scopes |
 | `guards.py` | `guard(action, ...)`, a route dependency that decides before the body is read; `declares(action)` for routes that authorize inline. The matrix test reads both |
 | `memberships.py` | `MEMBERSHIPS`: roles are `builtin.<role>` attachments at `abi:<org>:-` (org) and `abi:<org>:<ws>` (workspace); reads as `api`, changes as `api` on behalf of the caller |
 | `names.py` | Scopes and resource names; `NO_ORG` (`_none`) is the org of a workspace that has none |
@@ -62,6 +62,31 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 - **Work as `api` for no user** only after the route authorized its caller, and only around the one call that needs it
   (`as_service_account("api")`). Never around user data.
 
+## Module scopes
+
+What modules expose is decided with core's `module` catalog, not `nexus` (core `services/iam/AGENTS.md`,
+"Module scopes"): `ModuleScope(type, module, name)` is `abi:<org>:<ws>:module:<type>/<module>/<name>` in the
+workspace the request names, after the user's membership there. One source of truth: the old `nexus:UseAgent` and
+`UseApp` checks on a module's agents and apps are these.
+
+| What | Scope (helper) | Where Nexus checks it |
+|---|---|---|
+| An agent of a module, engine (naas_abi's own, Abi included) or remote | `agent/<module>/<name>`, `module:UseAgent` (`services/agents/scopes.py`) | the roster and pickers (`GET /agents`, filtered), chat (`authorize_agent_use`), `/v1` models and completions, every in-process turn: the runtime runs no other agent and prunes sub-agents to the usable ones (`provider_runtime._bound_to_caller`) |
+| An app | `app/<module>/<name>`, `module:OpenApp` (`services/apps/scopes.py`) | `GET /apps` and the workspace's app configs (filtered), one config, `access-token` (a link names one app), `remote-grant`, the workspace a remote app opens in (`remote/access.py`) |
+| A workflow or pipeline | `workflow/<module>/<name>` or `pipeline/...`, `RunWorkflow`/`RunPipeline`, `Read*Runs` (`services/workflows/scopes.py`) | `/api/workspaces/{ws}/workflows`: listing, start, the caller's own runs; an agent's tools from an engine module's workflows (`agent_usable_module_scopes`, bound per turn by `bind_usable_agents`) |
+
+- **Agents a workspace builds itself** (a model and a prompt, no module class) have no module scope: `nexus:UseAgent`
+  and the roles decide (`agent_scope` answers None, and `filter_scopes` keeps what has none).
+- **The `apps` and `agents` features** no longer gate using a module's apps and agents: they are the settings
+  sections (`InstallApp`, `UpdateApp`, `UninstallApp`, agent edits) and the app projects. `nexus:UseApp` is left for a
+  link that is no module's app (a Pages portal's sign-in).
+- **The listing** `GET /api/modules/scopes?workspace_id=|organization_id=` (`nexus:ListModuleScopes`, admin) is every
+  module with its agents, apps, workflows, pipelines and declared catalog, with display data and the `resource` and
+  `actions` a policy names (`services/modules/scopes.py`). The policy editor suggests ids from it.
+- **Discovery's grants** stay the broker-side check (a member holds `InvokeAgent`, `OpenApp`, `TriggerJob`
+  platform-wide); the module scope is checked here first, and a turn that names no workspace runs no module agent
+  or workflow.
+
 ## The `nexus` catalog
 
 Nexus registers the `nexus` action catalog with IAM at startup (`catalog/__init__.py`, `VERSION`: raise it
@@ -75,7 +100,7 @@ the caller's own id. One module per router family:
 | `organizations.py` | `organization`, `member`, `domain`, `billing`, `role_features` (org level); `CreateWorkspace` is an org action |
 | `workspaces.py` | `workspace`, `member`, `server`, `resource_access` |
 | `features.py` | `feature/<key>` (`UseFeature`) |
-| `chat.py`, `agents.py`, `apps.py` | `conversation`; `agent`, `skill`; `app`, `app_project`, `module` |
+| `chat.py`, `agents.py`, `apps.py` | `conversation`; `agent`, `skill`; `app`, `app_project`, `module` (`ListModuleScopes`) |
 | `files.py`, `datasets.py`, `office.py` | `file` (drive + path), `my_file`, `user_storage`, `root_storage`; `dataset`; `project` (slides, documents, sheets) |
 | `knowledge.py`, `search.py` | `view`, `graph_cache`, `ontology`, `icon`, `layout`, `layer`, `feed_layer`, `basemap`, `maps_catalog`, `maps_access`; `search`, `topic`, `search_scope` |
 | `code.py`, `settings.py`, `platform.py`, `realtime.py` | `code`, `code_settings`; `secret`, `provider_model`, `abi_server`; `analytics`, `system`; `presence`, `speech` |
@@ -116,8 +141,8 @@ a catalog, run the route matrix.
   may open or invoke (`discovery`), views, templates, its own runs, its own keys and so on. Org-level
   attachments (`abi:<org>:-`) bring neither: an org member who belongs to no workspace cannot chat with
   models or open apps. Because Nexus calls as `api` on behalf of the user, the user must hold these too.
-  Which agents and apps a workspace may use stays a Nexus decision (`nexus:UseAgent`, `UseApp`,
-  `UseFeature`, checked before the kernel call).
+  Which agents, apps and workflows a user may use in a workspace is the module scope, checked by Nexus
+  before the kernel call ("Module scopes").
 
 ## Decisions
 
@@ -173,6 +198,15 @@ a catalog, run the route matrix.
   workspace (speech, the OpenAI gateway) ask IAM once for all the caller's workspaces. A new personal
   workspace (public signup) is registered with IAM, owned by its user and placed at once. The feature
   agents' tools and the admin tools decide through IAM like the routes do.
+- **Module scopes, zero trust.** Viewers and members hold no module scope, on upgrade too (no migration
+  grant): after the upgrade they use no module's agent (Abi included), app, workflow or pipeline until a policy
+  grants it in their workspace; admins and owners hold them all. Nexus adds no role check of its own: IAM decides
+  `module:*` like any action, as `api` for the user (`builtin.api` holds `module:*` and every module's declared
+  catalog).
+- **A workflow run's owner is Nexus's record.** Job runs carry no owner, so a start from a workspace is recorded
+  (`workflow_run_owners`: run, user, workspace, time) and a user reads only the runs they started there, with
+  `Read*Runs`. An idempotency key is the caller's own in the workspace (hashed with both), so another user's same
+  key is another run. A run started elsewhere (the System tab, a schedule, an agent) has no owner here.
 - **Known limits.** Under the default feature baseline members and viewers get 403 on the graph,
   ontology, search and settings sections (what the flags said, now enforced). `read_all` shares the graphs
   that exist when applied (`services/graph/AGENTS.md`). Per-object sharing beyond personal resources is an

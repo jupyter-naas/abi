@@ -67,6 +67,16 @@ platform-level: `module/<project>/<module_id>`, `agent|model|app|job/<project>/<
   `engine` stored for a user runs as the module for that user (engine
   `AGENTS.md`, "Who a run runs as"): `caller_identity` names the user the
   stored delegation must be for.
+- **Module scopes.** Discovery's grants are the broker-side check of using a
+  module's agent, app or job, platform-wide: `builtin.platform.member` holds
+  `InvokeAgent` on `agent/*`, `OpenApp` on `app/*` and `TriggerJob` on `job/*`
+  (a viewer `ListJobs`). Which agent, app, workflow or pipeline a user uses in a
+  workspace is its module scope (`module:<type>/<module>/<name>`, core
+  `services/iam/AGENTS.md`, "Module scopes"), which viewers and members do not
+  hold by default. Nexus checks it first, in the workspace of the request, so no
+  user reaches a module's resource in a workspace without it; discovery does not
+  check it (it has no workspace). A remote module's identifier in a scope is its
+  `module_id`, the same as in these names, without the project.
 
 ## Eviction (platform administration)
 `evict` removes a registration whatever its lease: `discovery:Evict` on its

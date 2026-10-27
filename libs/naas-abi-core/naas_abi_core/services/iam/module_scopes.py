@@ -7,7 +7,7 @@ viewer and member roles never reach them (``roles.py``) and the UI finds them:
   engine or remote, is a resource of the ``module`` catalog below:
   ``abi:<org>:<ws>:module:<type>/<module>/<name>``. ``<module>`` is the
   module's stable identifier (``module_key``): an engine module's configured
-  path (``naas_abi``, ``naas_abi_marketplace.ai.claude``), the same in every
+  path (``naas_abi``, ``naas_abi_marketplace.applications.github``), the same in every
   install; a remote module's id (``acme.people``), the same across restarts.
 * **Declared.** A module may ship a catalog of its own (``iam_catalog.yaml``
   beside its module class): resource types and actions under the module's own

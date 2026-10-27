@@ -51,12 +51,12 @@ def test_a_scope_names_the_workspace_module_and_item():
     assert (
         scope_resource(
             "workflow",
-            "naas_abi_marketplace.ai.claude",
+            "naas_abi_marketplace.applications.github",
             "workflow.sync",
             org="o",
             workspace="w",
         )
-        == "abi:o:w:module:workflow/naas_abi_marketplace.ai.claude/workflow.sync"
+        == "abi:o:w:module:workflow/naas_abi_marketplace.applications.github/workflow.sync"
     )
 
 
