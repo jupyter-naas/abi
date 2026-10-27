@@ -796,7 +796,12 @@ caller, on every resource it matches. Its actions (`Holdings._actions`):
   catalog, yet the broker turns `bus:*`, `*` or `*:Publish` into publishing and consuming a
   topic: a wildcard matching `bus:Publish` or `bus:Consume` is checked for them, on the
   bus's topics (`abi:-:-:bus:topic/<t>`, `grants.UNCATALOGUED`), like the names themselves.
-  A topic is never at a scope, so a scoped grant reaches none. A policy names the bus only
+  A topic is never at a scope, so a scoped grant reaches none. A concrete topic is compared
+  in the spelling the broker grants (`grants.canonical_topic`: decoded, then encoded as a
+  canonical name), in the grant and in what the caller holds: `topic/pay:ments` is
+  `topic/pay%3Aments` and needs cover, `topic/pay%6Dents` is `topic/payments`. A Deny of the
+  caller is matched in its written and its canonical spelling. A topic pattern is kept as
+  written: the broker grants none, and the evaluator compares it with canonical names. A policy names the bus only
   by such a wildcard (validation refuses `bus:Publish` as unregistered), so only a caller
   holding one on the topics (the platform admin) gives it.
 - **A wildcard of one named service with no catalog** (`acme:*`) is taken as written: only

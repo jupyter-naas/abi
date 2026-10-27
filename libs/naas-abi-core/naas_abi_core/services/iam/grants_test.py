@@ -539,3 +539,47 @@ def test_a_wildcard_of_a_service_with_no_catalog_is_taken_as_written():
     assert (
         held.first_uncovered([_grant(["acme:*"], ["abi:-:-:acme:x/1"])], None) is None
     )
+
+
+@pytest.mark.parametrize(
+    "pattern, canonical",
+    [
+        ("abi:-:-:bus:topic/payments", "abi:-:-:bus:topic/payments"),
+        ("abi:-:-:bus:topic/pay%6Dents", "abi:-:-:bus:topic/payments"),
+        ("abi:-:-:bus:topic/pay:ments", "abi:-:-:bus:topic/pay%3Aments"),
+        ("abi:-:-:bus:topic/pay%3aments", "abi:-:-:bus:topic/pay%3Aments"),
+        ("abi:-:-:bus:topic/orders.eu", "abi:-:-:bus:topic/orders.eu"),
+        # Patterns and variables stay as written; other names too.
+        ("abi:-:-:bus:topic/pay:*", "abi:-:-:bus:topic/pay:*"),
+        ("abi:-:-:bus:topic/${module.id}.x", "abi:-:-:bus:topic/${module.id}.x"),
+        ("abi:o:w:bus:topic/pay:ments", "abi:o:w:bus:topic/pay:ments"),
+    ],
+)
+def test_a_concrete_topic_is_compared_as_the_broker_grants_it(pattern, canonical):
+    assert grants.canonical_topic(pattern) == canonical
+
+
+def test_any_spelling_of_a_topic_needs_cover_and_meets_the_giver_s_deny():
+    holdings = Holdings([_side(READER)], _registry())
+    for topic in ("pay:ments", "pay%3Aments", "pay%6Dents"):
+        found = holdings.first_uncovered(
+            [_grant(["bus:Publish"], [f"abi:-:-:bus:topic/{topic}"])], None
+        )
+        assert found is not None, topic
+    deny = grants.held_statement(
+        _grant(["*"], ["abi:-:-:bus:topic/pay%6Dents"], effect="Deny"),
+        None,
+        principal_id="usr_me",
+        user_id="usr_me",
+        policy_id="pol_guard",
+    )
+    giver = Holdings([_side(_allow(["*"], ["abi:-:-:bus:topic/*"]), deny)], _registry())
+    for topic in ("payments", "pay%6Dents", "p%61yments"):
+        found = giver.first_uncovered(
+            [_grant(["bus:*"], [f"abi:-:-:bus:topic/{topic}"])], None
+        )
+        assert found is not None and "pol_guard" in found.reason, topic
+    assert (
+        giver.first_uncovered([_grant(["bus:*"], ["abi:-:-:bus:topic/orders"])], None)
+        is None
+    )

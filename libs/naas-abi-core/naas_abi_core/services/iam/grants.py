@@ -35,6 +35,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import unquote
 
 from naas_abi_core.services.iam.broker import BUS_ACTIONS, TOPIC_PREFIX
 from naas_abi_core.services.iam.catalog import CatalogRegistry
@@ -107,8 +108,10 @@ def _spend() -> None:
             raise Exhausted
 
 
-def held_form(pattern: str, scope: str | None) -> str | None:
-    """``pattern`` with ``${scope}`` filled and the other variables as marks.
+def held_form(pattern: str, scope: str | None, *, canonical: bool = True) -> str | None:
+    """``pattern`` with ``${scope}`` filled and the other variables as marks,
+    a concrete bus topic in its canonical spelling (``canonical_topic``) unless
+    not ``canonical``.
 
     None when it names ``${scope}`` and there is no scope: it matches nothing.
     """
@@ -116,9 +119,25 @@ def held_form(pattern: str, scope: str | None) -> str | None:
         if scope is None:
             return None
         pattern = pattern.replace("${scope}", scope)
+    if canonical:
+        pattern = canonical_topic(pattern)
     for name, mark in MARKS.items():
         pattern = pattern.replace("${" + name + "}", mark)
     return pattern
+
+
+def canonical_topic(pattern: str) -> str:
+    """A concrete bus topic (``abi:-:-:bus:topic/<t>``) as the broker grants it:
+    decoded, then encoded as a canonical name is (``pay%6Dents`` is
+    ``payments``, ``pay:ments`` is ``pay%3Aments``). A topic pattern, or one
+    naming a variable, is kept as written: the broker grants no pattern, and
+    the evaluator compares it with canonical names as it stands."""
+    if not pattern.startswith(TOPIC_PREFIX):
+        return pattern
+    topic = pattern[len(TOPIC_PREFIX) :]
+    if any(c in topic for c in "*?") or "${" in topic:
+        return pattern
+    return TOPIC_PREFIX + encode_segment(unquote(topic))
 
 
 def shown(pattern: str) -> str:
@@ -348,7 +367,8 @@ def held_statement(
     With no user (``user_id`` None), a pattern naming ``${user.id}`` matches
     nothing, as the evaluator reads it, so it is left out. A Deny also refuses
     what its variables name for the giver: each pattern is kept bound to the
-    giver's ids too, so it overlaps a grant of the giver's own literal id."""
+    giver's ids too, so it overlaps a grant of the giver's own literal id; and
+    a bus topic in its spelling as written as well as its canonical one."""
     values: dict[str, str | None] = {
         "scope": scope,
         "principal.id": encode_segment(principal_id),
@@ -362,8 +382,14 @@ def held_statement(
         if held is None:
             continue
         resources[held] = None
-        if statement.effect == "Deny" and (bound := substitute(pattern, values)):
-            resources[bound] = None
+        if statement.effect == "Deny":
+            for spelling in (
+                held_form(pattern, scope, canonical=False),
+                substitute(pattern, values),
+            ):
+                if spelling:
+                    resources[spelling] = None
+                    resources[canonical_topic(spelling)] = None
     return HeldStatement(
         statement.effect, statement.actions, tuple(resources), policy_id
     )
