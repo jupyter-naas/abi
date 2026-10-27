@@ -814,6 +814,14 @@ types (`ResourceType.module_scope`), so the UI and the sets find them:
   `abi:*:*:<service>:*`) to the module's managed policy: the module's side of its own
   actions, for the users it acts for (it grants the broker nothing).
 
+  An engine module's catalog that cannot be used (an unreadable file, a refused
+  catalog, another module's service) is logged and left out (`declared_catalog`,
+  `register_module_catalogs`): one module never stops the engine, and its own checks
+  of the actions it declares are refused (fail closed). The service comes from the
+  module id alone, so one module id declares a catalog in one project: a manifest of
+  another project's module of that id declaring one is refused (`IAMConflictError`)
+  while the first project's approved manifest declares it.
+
 The module enforces a declared action on the caller's context:
 `iam.require_declared("<service>:<Action>", "<type>", [parts])` in an engine module
 (`BaseModule.require_action(action, type, parts)`), `await
