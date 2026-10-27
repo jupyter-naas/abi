@@ -161,6 +161,29 @@ CONTAINMENT = [
         EVERYTHING,
         False,
     ),
+    # A variable is a whole id: a "?" is one character, not it.
+    (
+        f"abi:o:w:activity_log:note/{P}",
+        ["abi:o:w:activity_log:note/?"],
+        universe("activity_log", "note"),
+        False,
+    ),
+    (
+        f"abi:o:w:activity_log:note/{P}",
+        ["abi:o:w:activity_log:note/?*"],
+        universe("activity_log", "note"),
+        False,
+    ),
+    (
+        f"abi:o:w:activity_log:note/{P}",
+        ["abi:o:w:activity_log:note/*"],
+        universe("activity_log", "note"),
+        True,
+    ),
+    # Nothing held, a grant naming graphs: not covered.
+    ("abi:o:w:triple_store:graph/*", [], GRAPHS, False),
+    # A grant naming no graph grants nothing on graphs: nothing to cover.
+    ("abi:o:w:triple_store:view/*", [], GRAPHS, True),
 ]
 
 
@@ -211,15 +234,50 @@ def test_held_form_fills_the_scope_and_marks_the_variables():
     assert grants.shown(f"abi:o:w:x:y/{P}") == "abi:o:w:x:y/${principal.id}"
 
 
+def test_an_undecidable_containment_with_nothing_held_is_refused():
+    # Nothing prefix-compatible is held: the search still runs past its budget.
+    grants._covered.cache_clear()
+    assert not covered("abi:o:w:triple_store:graph/*a?????????????????????", [], GRAPHS)
+
+
 def test_an_undecidable_containment_is_refused(monkeypatch):
+    # Covered by the union only: no one pattern shows it, so the search decides.
     monkeypatch.setattr(grants, "STATE_BUDGET", 3)
     grants._covered.cache_clear()
     try:
         assert not covered(
-            "abi:o:w:triple_store:graph/*a*b*",
-            ["abi:o:w:triple_store:graph/*a*", "abi:o:w:triple_store:graph/*b*"],
+            "abi:o:w:triple_store:graph/*",
+            ["abi:o:w:triple_store:graph/a*", "abi:o:w:triple_store:graph/?*"],
             GRAPHS,
         )
+    finally:
+        grants._covered.cache_clear()
+
+
+def test_a_grant_one_held_pattern_embeds_takes_no_search(monkeypatch):
+    """An org-wide role covers a workspace's grant without a search: a ``*``
+    under a ``*``, the rest character for character."""
+    monkeypatch.setattr(grants, "CALL_BUDGET", 0)
+    grants._covered.cache_clear()
+    try:
+        with grants.budget():
+            assert covered(
+                "abi:org-1:ws-2:nexus:module/*",
+                ["abi:org-1:*:nexus:module/*", "abi:org-1:ws-1:nexus:module/*"],
+                universe("nexus", "module"),
+            )
+            assert covered(
+                f"abi:o:w:activity_log:note/{P}/?",
+                [f"abi:o:*:activity_log:note/{P}/*"],
+                universe("activity_log", "note"),
+            )
+            # A "?" never takes in a variable, nor a "*" of the grant.
+            with pytest.raises(grants.Exhausted):
+                covered(
+                    f"abi:o:w:activity_log:note/{P}",
+                    ["abi:o:*:activity_log:note/?"],
+                    universe("activity_log", "note"),
+                )
     finally:
         grants._covered.cache_clear()
 
@@ -361,7 +419,8 @@ def test_grantable_lists_what_is_held_at_the_scope_minus_denies():
     }
     query = found["triple_store"]["triple_store:Query"]
     assert query.resources == ("${scope}:triple_store:graph/*",)
-    assert query.excluded == ("abi:*:*:triple_store:graph/hr*",)
+    # Written as the resources are, at the scope.
+    assert query.excluded == ("${scope}:triple_store:graph/hr*",)
     assert "triple_store:Insert" not in found["triple_store"]  # another workspace's
     assert "triple_store:DropGraph" not in found["triple_store"]  # all denied
     assert found["activity_log"]["activity_log:ReadNote"].resources == (
@@ -373,3 +432,80 @@ def test_grantable_of_everything():
     holdings = Holdings([_side(_allow(["*"], ["*"]))], _registry())
     found = {c.service: c for c in holdings.grantable("abi:o:w")}
     assert {a.resources for a in found["triple_store"].actions} == {("${scope}:*",)}
+
+
+def test_the_searches_of_one_check_share_a_budget(monkeypatch):
+    """Many costly statements do not each get a budget: past the check's, what
+    is left is refused, and nothing is cached for it."""
+    monkeypatch.setattr(grants, "CALL_BUDGET", 2_000)
+    grants._covered.cache_clear()
+    # Covered within graphs only (an id is never empty): each needs a search.
+    held = _side(_allow(["triple_store:Query"], ["abi:o:w:triple_store:graph/?*"]))
+    holdings = Holdings([held], _registry())
+    statements = [
+        _grant(
+            ["triple_store:Query"],
+            [f"${{scope}}:triple_store:graph/*b{'?' * n}*"],
+        )
+        for n in range(1, 40)
+    ]
+    try:
+        found = holdings.first_uncovered(statements, "abi:o:w")
+        assert found is not None and found.reason == grants.TOO_COSTLY
+        assert found.statement < len(statements) - 1  # stopped early
+        # A check of its own, with its own budget: each one alone is held.
+        monkeypatch.setattr(grants, "CALL_BUDGET", 20_000)
+        assert (
+            holdings.first_uncovered(statements[found.statement :][:1], "abi:o:w")
+            is None
+        )
+    finally:
+        grants._covered.cache_clear()
+
+
+def test_with_no_user_a_user_variable_is_held_by_no_one():
+    statement = _grant(
+        ["triple_store:Query"],
+        ["${scope}:triple_store:graph/${user.id}/*", "${scope}:triple_store:graph/a"],
+    )
+    for_nobody = grants.held_statement(
+        statement, "abi:o:w", principal_id="sva_ci", user_id=None
+    )
+    assert for_nobody.resources == ("abi:o:w:triple_store:graph/a",)
+    for_bob = grants.held_statement(
+        statement, "abi:o:w", principal_id="sva_ci", user_id="usr_bob"
+    )
+    assert for_bob.resources == (
+        f"abi:o:w:triple_store:graph/{U}/*",
+        "abi:o:w:triple_store:graph/a",
+    )
+
+
+def test_a_deny_of_the_giver_s_variable_refuses_their_own_literal_id():
+    deny = grants.held_statement(
+        _grant(
+            ["activity_log:ReadNote"],
+            ["${scope}:activity_log:note/${principal.id}/*"],
+            effect="Deny",
+        ),
+        "abi:o:w",
+        principal_id="usr_me",
+        user_id="usr_me",
+        policy_id="pol_guard",
+    )
+    holdings = Holdings(
+        [_side(_allow(["activity_log:ReadNote"], ["abi:o:w:activity_log:*"]), deny)],
+        _registry(),
+    )
+    found = holdings.first_uncovered(
+        [_grant(["activity_log:ReadNote"], ["${scope}:activity_log:note/usr_me/*"])],
+        "abi:o:w",
+    )
+    assert found is not None and "pol_guard" in found.reason
+    assert (
+        holdings.first_uncovered(
+            [_grant(["activity_log:ReadNote"], ["${scope}:activity_log:note/usr_b/*"])],
+            "abi:o:w",
+        )
+        is None
+    )

@@ -14,19 +14,24 @@ Resource patterns are compared as languages: ``*`` is any run (``:`` and
 Only names of the action's resource types count
 (``abi:<org>:<ws>:<service>:<type>/<id>``, each field free of ``:``), so
 ``${scope}:triple_store:*`` is no wider than ``${scope}:triple_store:graph/*``
-for an action on graphs only. Containment is decided on the product of the
-patterns' automata; when that takes more than ``STATE_BUDGET`` states, it is not
-proven, and the grant is refused.
+for an action on graphs only. A grant one held pattern embeds is covered at
+once (``_embeds``); otherwise containment is decided on the product of the
+patterns' automata; when one search takes more than ``STATE_BUDGET`` states, or
+the searches of one check more than ``CALL_BUDGET`` together, it is not proven,
+and the grant is refused.
 
 Variables keep their form: ``${principal.id}`` and ``${user.id}`` in a grant
-are covered by the giver holding the same variable at that place (or a
-wildcard), never by a literal id; the module variables likewise.
+are covered by the giver holding the same variable at that place (or a ``*``),
+never by a literal id or a ``?``: a variable stands for a whole id. The module
+variables likewise.
 """
 
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Literal
@@ -34,10 +39,12 @@ from typing import Literal
 from naas_abi_core.services.iam.catalog import CatalogRegistry
 from naas_abi_core.services.iam.IAMPorts import GrantableAction, GrantableCatalog
 from naas_abi_core.services.iam.names import (
+    encode_segment,
     literal_prefix,
     matches,
     scope_fields,
     split_action,
+    substitute,
 )
 from naas_abi_core.services.iam.policy import Statement, within_scope
 
@@ -50,7 +57,10 @@ MARKS = {
     "module.project": "\x04",
 }
 _SHOWN = {mark: "${" + name + "}" for name, mark in MARKS.items()}
-STATE_BUDGET = 20_000
+_MARK_CHARS = frozenset(MARKS.values())
+# About 1 s of searching each: the built-in roles take a few hundred states.
+STATE_BUDGET = 20_000  # one search
+CALL_BUDGET = 20_000  # every search of one check, together
 
 # Pattern tokens: a literal character, "?" (one), "*" (a run), and, in the
 # names of a type only, one character or a run of characters that are not ":".
@@ -61,6 +71,39 @@ Tokens = tuple[Token, ...]
 
 class Unproven(Exception):
     """Containment took more than ``STATE_BUDGET`` states to decide."""
+
+
+class Exhausted(Exception):
+    """The searches of one check took more than ``CALL_BUDGET`` states.
+
+    Unlike ``Unproven``, it says nothing of the patterns searched, so no result
+    is cached for it."""
+
+
+# The states the current check may still spend (``budget()``), None outside one.
+_LEFT: ContextVar[list[int] | None] = ContextVar("grants_budget", default=None)
+
+
+@contextmanager
+def budget() -> Iterator[None]:
+    """Bound the searches of one check, together, to ``CALL_BUDGET`` states; a
+    search past it raises ``Exhausted``. Within a check, it is that check's."""
+    if _LEFT.get() is not None:
+        yield
+        return
+    token = _LEFT.set([CALL_BUDGET])
+    try:
+        yield
+    finally:
+        _LEFT.reset(token)
+
+
+def _spend() -> None:
+    left = _LEFT.get()
+    if left is not None:
+        left[0] -= 1
+        if left[0] < 0:
+            raise Exhausted
 
 
 def held_form(pattern: str, scope: str | None) -> str | None:
@@ -132,7 +175,8 @@ def _step(tokens: Tokens, states: frozenset[int], char: str) -> frozenset[int]:
             if char == literal:
                 after.append(state + 1)
         elif kind == _ONE:
-            after.append(state + 1)
+            if char not in _MARK_CHARS:  # a variable is a whole id, not one character
+                after.append(state + 1)
         elif kind == _RUN:
             after.append(state)
         elif char != ":":
@@ -153,9 +197,12 @@ def _alphabet(*token_lists: Tokens) -> list[str]:
     return sorted(literals) + [other]
 
 
+_prefix = lru_cache(maxsize=16384)(literal_prefix)
+
+
 def _compatible(a: str, b: str) -> bool:
     """Whether some name could match both: one literal prefix extends the other."""
-    pa, pb = literal_prefix(a), literal_prefix(b)
+    pa, pb = _prefix(a), _prefix(b)
     return pa.startswith(pb) or pb.startswith(pa)
 
 
@@ -195,9 +242,37 @@ def _search(
             if nxt not in seen:
                 if len(seen) >= STATE_BUDGET:
                     raise Unproven(grant)
+                _spend()
                 seen.add(nxt)
                 queue.append(nxt)
     return False
+
+
+@lru_cache(maxsize=16384)
+def _embeds(grant: str, held: str) -> bool:
+    """Whether ``held`` matches every name ``grant`` does, shown without a
+    search: each ``*`` of ``grant`` falls within a ``*`` of ``held``, each
+    ``?`` within a ``?`` or a ``*``, each character within the same one or a
+    wildcard (a variable's mark within the same mark or a ``*``). Sufficient,
+    not necessary: what it does not show, the search decides."""
+    g, h = _glob(grant), _glob(held)
+    # within[j]: whether grant[i:] embeds in held[j:], for i from the end.
+    within = [all(kind == _RUN for kind, _ in h[j:]) for j in range(len(h) + 1)]
+    for i in range(len(g) - 1, -1, -1):
+        kind, char = g[i]
+        row = [False] * (len(h) + 1)
+        for j in range(len(h) - 1, -1, -1):
+            held_kind, held_char = h[j]
+            if held_kind == _RUN:
+                row[j] = row[j + 1] or within[j]
+            elif held_kind == _ONE:
+                row[j] = (
+                    kind == _ONE or (kind == _LIT and char not in _MARK_CHARS)
+                ) and within[j + 1]
+            else:
+                row[j] = kind == _LIT and char == held_char and within[j + 1]
+        within = row
+    return within[0]
 
 
 @lru_cache(maxsize=16384)
@@ -205,8 +280,8 @@ def _covered(grant: str, held: tuple[str, ...], within: Tokens) -> bool:
     if grant in held or "*" in held:
         return True
     held = tuple(h for h in held if _compatible(grant, h))
-    if not held:
-        return not _search(grant, (), within, "uncovered")
+    if any(_embeds(grant, h) for h in held):
+        return True
     try:
         return not _search(grant, held, within, "uncovered")
     except Unproven:
@@ -226,13 +301,14 @@ def _overlaps(grant: str, others: tuple[str, ...], within: Tokens) -> bool:
 
 def covered(grant: str, held: Iterable[str], within: Tokens = EVERYTHING) -> bool:
     """Whether every name of ``within`` that ``grant`` matches is matched by
-    one of ``held``. False when that is not proven."""
+    one of ``held`` (so True when it matches none). False when that is not
+    proven; ``Exhausted`` past the budget of the check (``budget()``)."""
     return _covered(grant, tuple(sorted(set(held))), within)
 
 
 def overlaps(grant: str, others: Iterable[str], within: Tokens = EVERYTHING) -> bool:
     """Whether some name of ``within`` matches ``grant`` and one of ``others``.
-    True when that is not disproven."""
+    True when that is not disproven; ``Exhausted`` past the budget of the check."""
     return _overlaps(grant, tuple(sorted(set(others))), within)
 
 
@@ -251,6 +327,40 @@ class HeldStatement:
     policy_id: str | None = None
 
 
+def held_statement(
+    statement: Statement,
+    scope: str | None,
+    *,
+    principal_id: str,
+    user_id: str | None,
+    policy_id: str | None = None,
+) -> HeldStatement:
+    """A statement of the giver, attached at ``scope``, in held form.
+
+    With no user (``user_id`` None), a pattern naming ``${user.id}`` matches
+    nothing, as the evaluator reads it, so it is left out. A Deny also refuses
+    what its variables name for the giver: each pattern is kept bound to the
+    giver's ids too, so it overlaps a grant of the giver's own literal id."""
+    values: dict[str, str | None] = {
+        "scope": scope,
+        "principal.id": encode_segment(principal_id),
+        "user.id": encode_segment(user_id) if user_id is not None else None,
+    }
+    resources: dict[str, None] = {}
+    for pattern in statement.resources:
+        if user_id is None and "${user.id}" in pattern:
+            continue
+        held = held_form(pattern, scope)
+        if held is None:
+            continue
+        resources[held] = None
+        if statement.effect == "Deny" and (bound := substitute(pattern, values)):
+            resources[bound] = None
+    return HeldStatement(
+        statement.effect, statement.actions, tuple(resources), policy_id
+    )
+
+
 @dataclass(frozen=True)
 class Side:
     """One side that decides for the giver: the user, an actor acting for them,
@@ -259,6 +369,9 @@ class Side:
     statements: tuple[HeldStatement, ...]
     lacks: str  # how a refusal says this side does not hold it
     active: bool = True
+
+
+TOO_COSTLY = "proving you hold it takes too long: name fewer, or simpler, resources"
 
 
 @dataclass(frozen=True)
@@ -349,24 +462,32 @@ class Holdings:
         self, statements: Sequence[Statement], scope: str | None
     ) -> Uncovered | None:
         """The first (statement, action, resource) of the grant of
-        ``statements`` at ``scope`` (None: unscoped) the giver does not hold."""
-        for index, raw in enumerate(statements):
-            if raw.effect != "Allow":
-                continue  # a Deny only narrows: it needs no cover
-            statement = within_scope(raw) if scope is not None else raw
-            if statement is None:
-                continue
-            grants = [
-                g
-                for g in (held_form(r, scope) for r in statement.resources)
-                if g is not None
-            ]
-            for action in self._actions(statement.actions):
-                universes = self._universes(action)
-                for grant in grants:
-                    reason = self._refusal(action, grant, universes)
-                    if reason is not None:
-                        return Uncovered(index, raw.sid, action, shown(grant), reason)
+        ``statements`` at ``scope`` (None: unscoped) the giver does not hold.
+        Its searches share one budget (``CALL_BUDGET``): past it, what is left
+        is not proven, and refused."""
+        with budget():
+            for index, raw in enumerate(statements):
+                if raw.effect != "Allow":
+                    continue  # a Deny only narrows: it needs no cover
+                statement = within_scope(raw) if scope is not None else raw
+                if statement is None:
+                    continue
+                grants = [
+                    g
+                    for g in (held_form(r, scope) for r in statement.resources)
+                    if g is not None
+                ]
+                for action in self._actions(statement.actions):
+                    universes = self._universes(action)
+                    for grant in grants:
+                        try:
+                            reason = self._refusal(action, grant, universes)
+                        except Exhausted:
+                            reason = TOO_COSTLY
+                        if reason is not None:
+                            return Uncovered(
+                                index, raw.sid, action, shown(grant), reason
+                            )
         return None
 
     def _refusal(self, action: str, grant: str, universes: list[Tokens]) -> str | None:
@@ -392,23 +513,33 @@ class Holdings:
         Deny takes back (whole patterns dropped, partial ones in ``excluded``)."""
         scope_fields(scope)
         found: list[GrantableCatalog] = []
-        for catalog in self.catalogs.all():
-            actions: list[GrantableAction] = []
-            for spec in catalog.actions:
-                action = catalog.qualified(spec.name)
-                held = self._held_at(action, scope)
-                if held:
-                    actions.append(held)
-            if actions:
-                found.append(GrantableCatalog(catalog.service, tuple(actions)))
+        with budget():
+            for catalog in self.catalogs.all():
+                actions: list[GrantableAction] = []
+                exhausted = False
+                for spec in catalog.actions:
+                    try:
+                        held = self._held_at(catalog.qualified(spec.name), scope)
+                    except Exhausted:
+                        exhausted = True
+                        break
+                    if held:
+                        actions.append(held)
+                if actions:
+                    found.append(GrantableCatalog(catalog.service, tuple(actions)))
+                if exhausted:
+                    break
         return found
 
     def _held_at(self, action: str, scope: str) -> GrantableAction | None:
         if not self.sides:
             return None
         universes = self._universes(action)
+        denies = [
+            d for i in range(len(self.sides)) for d, _policy in self._denied(i, action)
+        ]
         kept: list[str] = []
-        excluded: list[str] = []
+        excluded: set[str] = set()
         for pattern in self._allowed(0, action):
             restricted = _restrict(pattern, scope)
             if restricted is None or restricted in kept:
@@ -419,27 +550,35 @@ class Holdings:
                 for u in universes
             ):
                 continue
-            denies = [
-                d
-                for i in range(len(self.sides))
-                for d, _policy in self._denied(i, action)
-            ]
             if denies and all(covered(restricted, denies, u) for u in universes):
                 continue
             kept.append(restricted)
-            excluded += [
+            excluded.update(
                 d
                 for d in denies
                 if any(overlaps(restricted, (d,), u) for u in universes)
-            ]
+            )
         if not kept:
             return None
-        prefix = f"{scope}:"
         return GrantableAction(
             action,
-            tuple(shown("${scope}:" + k.removeprefix(prefix)) for k in kept),
-            tuple(sorted({shown(d) for d in excluded})),
+            tuple(_written_at(k, scope) for k in kept),
+            tuple(
+                sorted(
+                    {
+                        _written_at(r, scope)
+                        if (r := _restrict(d, scope))
+                        else shown(d)
+                        for d in excluded
+                    }
+                )
+            ),
         )
+
+
+def _written_at(pattern: str, scope: str) -> str:
+    """A pattern under ``scope``, in held form, as a policy writes it there."""
+    return shown("${scope}:" + pattern.removeprefix(f"{scope}:"))
 
 
 def _restrict(pattern: str, scope: str) -> str | None:

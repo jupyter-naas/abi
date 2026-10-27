@@ -15,7 +15,7 @@ import re
 import threading
 import time
 from collections import OrderedDict
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, NoReturn, TypeVar
@@ -1088,7 +1088,8 @@ class IAMService(IIAMService, PolicySource):
         org or a workspace holds only users of that org: users with an
         attachment of their own under ``abi:<org>:``. The new member gets every
         attachment of the group, so the caller holds what each grants at its
-        scope (``_require_held``; IAM's companions of the roles follow them)."""
+        scope (``_require_held``), but for the companions IAM keeps in step with
+        the group's roles (``_companions``): they follow the roles."""
         group = self._require_group("iam:AddGroupMember", group_id)
         member = self._get_principal(member_id)
         if member.kind == "group":
@@ -1109,14 +1110,17 @@ class IAMService(IIAMService, PolicySource):
                 )
         if member_id in self.store.list_group_members(group_id):
             return
+        attachments = self.store.list_attachments(principal_id=group_id)
+        companions = self._companions(attachments)
         held: dict[str, list[str | None]] = {}
-        for attachment in self.store.list_attachments(principal_id=group_id):
-            if not _is_companion(attachment):
+        for attachment in attachments:
+            if (attachment.policy_id, attachment.scope) not in companions:
                 held.setdefault(attachment.policy_id, []).append(attachment.scope)
-        for policy_id, scopes in sorted(held.items()):
-            policy = self._load_policy(policy_id)
-            if policy is not None:
-                self._require_held(policy.document, scopes, policy_id=policy_id)
+        with grants.budget():  # one budget for every attachment of the group
+            for policy_id, scopes in sorted(held.items()):
+                policy = self._load_policy(policy_id)
+                if policy is not None:
+                    self._require_held(policy.document, scopes, policy_id=policy_id)
         self.store.add_group_member(group_id, member_id)
         self._changed()
 
@@ -1626,20 +1630,9 @@ class IAMService(IIAMService, PolicySource):
         """Hold ``builtin.platform.member`` while a member, admin or owner role is
         attached at a workspace or org-wide scope; ``.viewer`` with only viewer
         roles there. Org-level roles (``abi:<org>:-``) bring neither."""
-        held: set[str] = set()
-        for attachment in self.store.list_attachments(principal_id=principal_id):
-            if attachment.policy_id not in roles.ROLES or attachment.scope is None:
-                continue
-            org, workspace = scope_fields(attachment.scope)
-            if org == NONE or workspace == NONE:
-                continue
-            held.add(attachment.policy_id)
-        if held & roles.PLATFORM_MEMBER_ROLES:
-            wanted = roles.PLATFORM_MEMBER
-        elif roles.VIEWER in held:
-            wanted = roles.PLATFORM_VIEWER
-        else:
-            wanted = None
+        wanted = _platform_companion(
+            self.store.list_attachments(principal_id=principal_id)
+        )
         for companion in (roles.PLATFORM_MEMBER, roles.PLATFORM_VIEWER):
             present = self._find_attachment(companion, principal_id, None) is not None
             if companion == wanted and not present:
@@ -1657,8 +1650,7 @@ class IAMService(IIAMService, PolicySource):
         Denies. About the caller only, like ``explain`` of oneself, it needs no
         ``iam:*`` action."""
         validate_scope(scope)
-        holdings = self._holdings(current_call_context(), writing=False)
-        return holdings.grantable(scope) if holdings is not None else []
+        return self._holdings(current_call_context()).grantable(scope)
 
     def _require_held(
         self,
@@ -1671,56 +1663,53 @@ class IAMService(IIAMService, PolicySource):
         ``document`` allows there. A write a first-party account (``engine``,
         ``api``) makes for no user is its own: the route or the boot step that
         made it authorized what it stands for."""
-        holdings = self._holdings(current_call_context())
-        if holdings is None:
+        ctx = current_call_context()
+        if ctx.on_behalf_of is None and self._first_party(ctx.principal):
             return
-        for scope in dict.fromkeys(scopes):
-            found = holdings.first_uncovered(document.statements, scope)
-            if found is not None:
-                raise GrantNotHeldError(
-                    found.action,
-                    found.resource,
-                    policy_id=policy_id,
-                    statement=found.statement,
-                    sid=found.sid,
-                    scope=scope,
-                    reason=found.reason,
-                )
+        holdings = self._holdings(ctx)
+        with grants.budget():  # one budget for every scope
+            for scope in dict.fromkeys(scopes):
+                found = holdings.first_uncovered(document.statements, scope)
+                if found is not None:
+                    raise GrantNotHeldError(
+                        found.action,
+                        found.resource,
+                        policy_id=policy_id,
+                        statement=found.statement,
+                        sid=found.sid,
+                        scope=scope,
+                        reason=found.reason,
+                    )
 
-    def _holdings(
-        self, ctx: CallContext, *, writing: bool = True
-    ) -> grants.Holdings | None:
+    def _holdings(self, ctx: CallContext) -> grants.Holdings:
         """What decides for the caller, side by side: the user a call acts for
         (never the first-party account acting, whose statements would stand in
         for the user's), an actor that is not first-party, and the credential's
-        narrowing. None for a first-party account ``writing`` for no user."""
+        narrowing."""
         actor = ctx.principal
-        first_party = self._first_party(actor)
-        if writing and first_party and ctx.on_behalf_of is None:
-            return None
+        user_id = ctx.user.id if ctx.user is not None else None
         sides: list[grants.Side] = []
         if ctx.on_behalf_of is not None:
-            sides.append(self._held_side(ctx, "user", "you do not hold it there"))
-            if not first_party:
+            sides.append(
+                self._held_side(ctx, "user", user_id, "you do not hold it there")
+            )
+            if not self._first_party(actor):
                 sides.append(
                     self._held_side(
                         ctx,
                         "actor",
+                        user_id,
                         f"{actor.name or actor.id}, acting for you, does not hold it there",
                     )
                 )
         else:
-            sides.append(self._held_side(ctx, "actor", "you do not hold it there"))
+            sides.append(
+                self._held_side(ctx, "actor", user_id, "you do not hold it there")
+            )
         if ctx.scope is not None:
             narrowing = tuple(
-                grants.HeldStatement(
-                    "Allow",
-                    statement.actions,
-                    tuple(
-                        held
-                        for pattern in statement.resources
-                        if (held := grants.held_form(pattern, None)) is not None
-                    ),
+                grants.held_statement(
+                    statement, None, principal_id=actor.id, user_id=user_id
                 )
                 for statement in token_statements(ctx)
             )
@@ -1730,23 +1719,23 @@ class IAMService(IIAMService, PolicySource):
         return grants.Holdings(sides, self._registry)
 
     def _held_side(
-        self, ctx: CallContext, side: Literal["actor", "user"], lacks: str
+        self,
+        ctx: CallContext,
+        side: Literal["actor", "user"],
+        user_id: str | None,
+        lacks: str,
     ) -> grants.Side:
         subject = self.subject(ctx, side)
         if subject is None:
             return grants.Side((), lacks, active=False)
         return grants.Side(
             tuple(
-                grants.HeldStatement(
-                    effective.statement.effect,
-                    effective.statement.actions,
-                    tuple(
-                        held
-                        for pattern in effective.statement.resources
-                        if (held := grants.held_form(pattern, effective.scope))
-                        is not None
-                    ),
-                    effective.policy_id,
+                grants.held_statement(
+                    effective.statement,
+                    effective.scope,
+                    principal_id=subject.principal_id,
+                    user_id=user_id,
+                    policy_id=effective.policy_id,
                 )
                 for effective in subject.statements
             ),
@@ -1814,6 +1803,20 @@ class IAMService(IIAMService, PolicySource):
             lambda: {p.id for p in self._all_policies() if _is_feature_policy(p.id)},
         )
 
+    def _companions(
+        self, attachments: Sequence[Attachment]
+    ) -> set[tuple[str, str | None]]:
+        """The (policy, scope) of ``attachments`` IAM's role sync keeps there:
+        the feature policies and the platform companion their roles bring. A
+        feature or platform policy attached by hand is not one of them."""
+        found: set[tuple[str, str | None]] = set(
+            _feature_companions(attachments, self._feature_policy_ids())
+        )
+        platform = _platform_companion(attachments)
+        if platform is not None:
+            found.add((platform, None))
+        return found
+
     def _sync_feature_policies(
         self, principal_id: str, *, available: set[str] | None = None
     ) -> None:
@@ -1821,18 +1824,7 @@ class IAMService(IIAMService, PolicySource):
         specific feature policy that exists for that role and scope."""
         known = available if available is not None else self._feature_policy_ids()
         attachments = self.store.list_attachments(principal_id=principal_id)
-        wanted: set[tuple[str, str]] = set()
-        for attachment in attachments:
-            if attachment.policy_id not in roles.ROLES or attachment.scope is None:
-                continue
-            org, workspace = scope_fields(attachment.scope)
-            if org == NONE or workspace == NONE:
-                continue  # org-level roles have no features: they are a workspace's
-            policy_id = roles.feature_policy_for(
-                attachment.policy_id, org, workspace, known
-            )
-            if policy_id is not None:
-                wanted.add((policy_id, attachment.scope))
+        wanted = _feature_companions(attachments, known)
         present = {
             (a.policy_id, a.scope)
             for a in attachments
@@ -2001,9 +1993,12 @@ class IAMService(IIAMService, PolicySource):
         self._require_attach(policy_id, _bound_group(provider, claim_value), scope)
         policy = self.store.get_policy(policy_id)
         self._check_attachable(policy, scope)
-        # Before the group is made: a refused binding leaves nothing behind.
-        self._require_held(policy.document, [scope], policy_id=policy_id)
-        group = self._binding_group(provider, claim_value, scope)
+        group = self._find_binding_group(provider, claim_value, scope)
+        if group is None or self._find_attachment(policy_id, group.id, scope) is None:
+            # Re-binding what is bound grants nothing new. Otherwise, before the
+            # group is made: a refused binding leaves nothing behind.
+            self._require_held(policy.document, [scope], policy_id=policy_id)
+            group = self._binding_group(provider, claim_value, scope)
         attachment = self._attach(policy_id, group.id, scope, held=True)
         return IdpBinding(
             provider, claim_value, group.id, policy_id, scope, attachment.id
@@ -2013,15 +2008,14 @@ class IAMService(IIAMService, PolicySource):
         self, provider: str, claim_value: str, scope: str | None
     ) -> PrincipalRecord:
         """The group of a claim value for the org of ``scope`` (the platform's
-        for a platform or unscoped binding): it belongs to that org, so it holds
-        that org's attachments only."""
-        name = _bound_group(provider, claim_value)
+        for a platform or unscoped binding), made when there is none: it
+        belongs to that org, so it holds that org's attachments only."""
+        found = self._find_binding_group(provider, claim_value, scope)
+        if found is not None:
+            return found
         org = scope_fields(scope)[0] if scope is not None else NONE
         owner = scope_name(org) if org != NONE else PLATFORM_SCOPE
-        for group_id in self._binding_groups(provider, claim_value):
-            record = self.store.get_principal(group_id)
-            if record.owner_scope == owner:
-                return record
+        name = _bound_group(provider, claim_value)
         group = self.store.create_principal(
             PrincipalRecord(
                 id=new_id("grp"),
@@ -2034,6 +2028,17 @@ class IAMService(IIAMService, PolicySource):
         self.store.map_idp_group(GroupMapping(provider, claim_value, group.id))
         self._changed()
         return group
+
+    def _find_binding_group(
+        self, provider: str, claim_value: str, scope: str | None
+    ) -> PrincipalRecord | None:
+        org = scope_fields(scope)[0] if scope is not None else NONE
+        owner = scope_name(org) if org != NONE else PLATFORM_SCOPE
+        for group_id in self._binding_groups(provider, claim_value):
+            record = self.store.get_principal(group_id)
+            if record.owner_scope == owner:
+                return record
+        return None
 
     def unbind_idp_group(
         self, provider: str, claim_value: str, policy_id: str, scope: str | None = None
@@ -3082,13 +3087,43 @@ def _written_for(owner: str) -> list[str | None]:
     return [owner] if owner != PLATFORM_SCOPE else [None, _ANY_SCOPE]
 
 
-def _is_companion(attachment: Attachment) -> bool:
-    """An attachment IAM keeps in step with a role (a feature policy, a
-    platform companion): it follows the role, which was held when attached."""
-    return _is_feature_policy(attachment.policy_id) or (
-        attachment.scope is None
-        and attachment.policy_id in (roles.PLATFORM_MEMBER, roles.PLATFORM_VIEWER)
-    )
+def _workspace_roles(
+    attachments: Iterable[Attachment],
+) -> Iterator[tuple[str, str]]:
+    """The (role, scope) attached at a workspace or org-wide scope
+    (``abi:<org>:<ws>``, neither ``-``): org-level roles bring no companion."""
+    for attachment in attachments:
+        if attachment.policy_id not in roles.ROLES or attachment.scope is None:
+            continue
+        org, workspace = scope_fields(attachment.scope)
+        if org != NONE and workspace != NONE:
+            yield attachment.policy_id, attachment.scope
+
+
+def _platform_companion(attachments: Iterable[Attachment]) -> str | None:
+    """``builtin.platform.member`` while a member, admin or owner role is
+    attached at a workspace or org-wide scope; ``.viewer`` with only viewer
+    roles there."""
+    held = {role for role, _scope in _workspace_roles(attachments)}
+    if held & roles.PLATFORM_MEMBER_ROLES:
+        return roles.PLATFORM_MEMBER
+    if roles.VIEWER in held:
+        return roles.PLATFORM_VIEWER
+    return None
+
+
+def _feature_companions(
+    attachments: Iterable[Attachment], known: set[str]
+) -> set[tuple[str, str]]:
+    """At each workspace scope a role is attached at, the most specific feature
+    policy of ``known`` for that role and scope."""
+    wanted: set[tuple[str, str]] = set()
+    for role, scope in _workspace_roles(attachments):
+        org, workspace = scope_fields(scope)
+        policy_id = roles.feature_policy_for(role, org, workspace, known)
+        if policy_id is not None:
+            wanted.add((policy_id, scope))
+    return wanted
 
 
 def _is_feature_policy(policy_id: str) -> bool:

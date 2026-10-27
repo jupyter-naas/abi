@@ -780,13 +780,13 @@ through the SDK, the CLI and Nexus alike.
 | `create_policy` | the document | its owner's (an org's or a workspace's); a platform policy as written unscoped and with `${scope}` as `abi:*:*` |
 | `update_policy` with a new document | the new document | as `create_policy`, plus every scope it is attached or invited at |
 | `attach_policy` (user, group, service account) | the policy | the attachment's |
-| `add_group_member` | every attachment of the group, but IAM's companions of its roles (feature policies, `builtin.platform.*` unscoped), which follow them | each attachment's |
+| `add_group_member` | every attachment of the group, but IAM's companions of its roles, which follow them: the feature policies and the unscoped `builtin.platform.*` its role sync wants for the group's roles (`IAMService._companions`). A feature or platform policy attached to the group by hand is checked like any other | each attachment's |
 | `create_pending_grant` | the policy | the invitation's |
-| `bind_idp_group` | the policy, before the group is made | the binding's |
+| `bind_idp_group` | the policy, before the group is made, unless the binding is there already | the binding's |
 | `approve_manifest`, narrowed or not | the approved document, its module variables bound | unscoped (the module's policy is attached unscoped) |
 
-Attaching what is attached already, inviting again or adding a member a group holds grants
-nothing new and is not checked.
+Attaching what is attached already, inviting again, binding again or adding a member a
+group holds grants nothing new and is not checked.
 
 **The rule.** Take each Allow statement of the grant at the scope (`${scope}` filled; at a
 scope, `policy.within_scope` applied first). Every action it matches, wildcards expanded
@@ -797,19 +797,32 @@ allowed to the caller, on every resource it matches:
   of the three of `%2F`). Only names of the action's resource types count,
   `abi:<org>:<ws>:<service>:<type>/<id>` with no raw `:` in a field, so
   `${scope}:triple_store:*` is no wider than `${scope}:triple_store:graph/*` for an action on
-  graphs. A grant is covered by the union of what the caller holds, not one pattern of it.
+  graphs. A grant is covered by the union of what the caller holds, not one pattern of it. A
+  resource that names no name of the action's types grants nothing for that action, so it
+  needs no cover there (`${scope}:triple_store:graph/*` under `triple_store:*` for an action
+  on views): refusing it would refuse every statement that lists several types.
 - **Variables keep their form.** A `${principal.id}` or `${user.id}` of the grant is covered
   by the caller holding the same variable there (an admin holds `…/${principal.id}/*` of a
-  personal type as the member role grants it), or a wildcard, never a literal id. A module
-  variable is covered only by a wildcard, except in an approved manifest, where it is bound.
-- **No Deny of the caller may overlap it.** A Deny statement of the grant never needs cover:
-  it only narrows.
+  personal type as the member role grants it), or a `*`, never a literal id nor a `?`: a
+  variable is a whole id. A module variable is covered only by a `*`, except in an approved
+  manifest, where it is bound. With no user (an account acting for nobody), the caller's
+  patterns naming `${user.id}` match nothing, as the evaluator reads them, so they hold
+  nothing.
+- **No Deny of the caller may overlap it.** A Deny's variables are also taken bound to the
+  caller's ids, so a Deny on `…/${principal.id}/*` refuses a grant of the caller's own literal
+  id. A Deny statement of the grant never needs cover: it only narrows.
 - **Every side decides.** The caller is the call's user when there is one (`api` or `engine`
   acting for a user: their own statements never stand in for the user's), plus an actor
   that is not first-party (a module acting for a user is bounded by its own policy too),
   plus the credential's narrowing (`abi_scope`): a read-only personal key grants no write.
-- **Unproven is refused.** Containment is decided on the product of the patterns' automata;
-  past `grants.STATE_BUDGET` states it is not proven, and the change is refused.
+- **Unproven is refused.** A grant one held pattern embeds (each `*` of it within a `*`,
+  each `?` within a `?` or a `*`, the rest character for character) is covered without a
+  search: the built-in roles, at a workspace or through an org-wide role, mostly are. The
+  rest is decided on the product of the patterns' automata. One search past `grants.STATE_BUDGET` states is not proven, and refused as not held; the
+  searches of one change together past `grants.CALL_BUDGET` (every statement, action, scope
+  and, for `add_group_member`, every attachment: `grants.budget()`) leave the rest unproven,
+  and the change is refused as too costly to prove. Each is about a second of work; a
+  built-in role takes a few hundred states at most.
 
 **The refusal** is `GrantNotHeldError` (a `PermissionDeniedError`, wire code
 `GRANT_NOT_HELD`, the SDK's `GrantNotHeld`). Its message names the first uncovered statement
@@ -828,8 +841,9 @@ caller's feature policy, and so outside `enabled_features`, is not theirs to giv
 scope, per catalog (a kernel service or a module), the actions they hold there and the
 resource patterns they hold them on, written `${scope}:…` (`GrantableCatalog`,
 `GrantableAction`), minus their Denies: a pattern a Deny covers whole is left out, one it
-covers in part lists the Deny in `excluded`. It may say less than the caller reaches there,
-never more. Like `explain` of oneself it is about the caller only, so it needs no `iam:*`
+covers in part lists the Deny in `excluded`, written as the resources are (`${scope}:…` for
+the part of it under the scope, as stored when none can be told). It may say less than the
+caller reaches there, never more, and it stops listing past `grants.CALL_BUDGET`. Like `explain` of oneself it is about the caller only, so it needs no `iam:*`
 action, and a module's connection may always ask (`broker.IAM_ALWAYS`).
 
 **Writes made for no user.** A first-party account (`engine`, `api`) writing for no user is
@@ -1510,8 +1524,8 @@ or boot step that authorized what it stands for (the table there).
 nor an owner give a feature it does not hold. Wildcards are expanded against the catalogs
 registered when the grant is made: an action a catalog adds later reaches an existing
 wildcard grant (as it reaches the generated roles) without its granter's being checked. A
-grant whose containment takes more than `grants.STATE_BUDGET` states is refused even if it
-is covered. Revoking a granter's role leaves what they gave: take it back explicitly.
+grant whose containment takes more than `grants.STATE_BUDGET` states, or a change whose
+searches take more than `grants.CALL_BUDGET` together, is refused even if it is covered. Revoking a granter's role leaves what they gave: take it back explicitly.
 Invitations and bindings from Nexus now need the inviting person to hold the role's grants.
 `grantable` may under-report a holding whose pattern straddles the scope's fields.
 

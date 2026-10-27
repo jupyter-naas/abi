@@ -74,6 +74,33 @@ def test_a_module_acting_for_a_user_is_bounded_by_both(h):
     assert "module/acme/people, acting for you" in str(refused.value)
 
 
+def test_an_actor_for_no_user_holds_no_user_variable(h):
+    """``${user.id}`` names no one for an account acting for no user: what it
+    names there is not the account's to grant."""
+    t = contract.team(h.iam)
+    account = h.service_account("ci/grants")
+    h.grant(
+        account.id,
+        statement("Allow", ["iam:AttachPolicy"], ["abi:*:*:iam:attachment/*"]),
+        statement(
+            "Allow",
+            ["triple_store:Query"],
+            [f"{WS1}:triple_store:graph/${{user.id}}/*"],
+        ),
+    )
+    with as_service_account("engine"):
+        mine = h.iam.create_policy(
+            "mine",
+            contract.reader(resources=["${scope}:triple_store:graph/${user.id}/*"]),
+        )
+    with h.as_(account), pytest.raises(GrantNotHeldError) as refused:
+        h.iam.attach_policy(mine.id, t.member.id, WS1)
+    assert "${user.id}" in str(refused.value)
+    # Acting for a user, it binds to them: the account holds it for them.
+    with h.as_(account, on_behalf_of=t.admin):
+        h.iam.attach_policy(mine.id, t.member.id, WS1)
+
+
 def test_first_party_writes_for_no_user_stay_allowed(h):
     """The org-wide mirror, seeding and the owner of what was just made are
     ``api``'s for no user; boot and feature policies the engine's."""

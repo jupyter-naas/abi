@@ -251,6 +251,34 @@ def run_group_member_exceeds_adder(iam: IAMService, as_user: AsUser) -> None:
         session.add_group_member(owners.id, t.admin.id)
 
 
+def run_hand_attached_feature_policy_is_checked(
+    iam: IAMService, as_user: AsUser
+) -> None:
+    """A feature policy follows a role only where IAM's sync put it: attached to
+    a group by hand, it is checked like any other attachment."""
+    t = team(iam)
+    with as_service_account("engine"):
+        iam.register_catalog(NEXUS)
+        iam.put_feature_policies(
+            {"owner": ["chat", "billing"], "admin": ["chat"], "member": ["chat"]}
+        )
+        synced = iam.create_group("synced", scope=WS1)
+        iam.attach_policy(roles.MEMBER, synced.id, WS1)  # brings features.member
+        by_hand = iam.create_group("by hand", scope=WS1)
+        iam.attach_policy(roles.MEMBER, by_hand.id, WS1)
+    with as_user(t.owner) as session:
+        session.attach_policy(roles.feature_policy_id("owner"), by_hand.id, WS1)
+    with as_user(t.admin) as session:
+        session.add_group_member(synced.id, t.member.id)
+        refused(
+            lambda: session.add_group_member(by_hand.id, t.member.id),
+            roles.feature_policy_id("owner"),
+            "abi:org-1:ws-1:nexus:feature/billing",
+        )
+    with as_user(t.owner) as session:
+        session.add_group_member(by_hand.id, t.member.id)
+
+
 def _inviter(iam: IAMService):
     """May attach member at ws-1, holds a viewer's reach."""
     return custom(
@@ -297,7 +325,11 @@ def run_idp_binding(iam: IAMService, as_user: AsUser) -> None:
         assert iam.list_idp_bindings() == []
         assert iam.resolve_idp_groups("acme", ["Sales"]) == []
     with as_user(t.admin) as session:
-        session.bind_idp_group("acme", "Sales", roles.MEMBER, WS1)
+        binding = session.bind_idp_group("acme", "Sales", roles.MEMBER, WS1)
+    with as_user(inviter) as session:
+        # Bound already: binding it again grants nothing, so nothing to hold.
+        again = session.bind_idp_group("acme", "Sales", roles.MEMBER, WS1)
+        assert again.attachment_id == binding.attachment_id
 
 
 def run_delegated_approver(iam: IAMService, as_user: AsUser) -> None:
@@ -403,6 +435,7 @@ SCENARIOS = (
     run_owner_grants_a_feature_it_lacks,
     run_narrowed_key_grants_no_write,
     run_group_member_exceeds_adder,
+    run_hand_attached_feature_policy_is_checked,
     run_invitation_to_a_role_the_inviter_lacks,
     run_idp_binding,
     run_delegated_approver,

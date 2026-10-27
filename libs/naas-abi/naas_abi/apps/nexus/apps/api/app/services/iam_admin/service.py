@@ -193,8 +193,7 @@ class IamAdminService:
         """What the caller may grant at ``scope``, for the policy builder: per catalog
         (a kernel service or a module), the actions they hold there and the resource
         patterns (``${scope}:...``) they hold them on, minus their Denies. IAM's
-        ``grantable``, about the caller only, like ``access``."""
-        validate_scope(scope)
+        ``grantable``, about the caller only, like ``access``: IAM validates the scope."""
         found = await self._read(user, lambda session: session.grantable(scope))
         return {"scope": scope, "catalogs": [views.grantable_view(c) for c in found]}
 

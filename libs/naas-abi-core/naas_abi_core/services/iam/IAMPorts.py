@@ -882,7 +882,8 @@ class PolicySource(ABC):
 @dataclass(frozen=True)
 class GrantableAction:
     """An action the caller may grant at a scope, on these resource patterns
-    (``${scope}:…``); ``excluded`` are the patterns a Deny of theirs takes back."""
+    (``${scope}:…``); ``excluded`` are the patterns a Deny of theirs takes back,
+    written as the resources are where they fall under the scope."""
 
     action: str
     resources: tuple[str, ...]

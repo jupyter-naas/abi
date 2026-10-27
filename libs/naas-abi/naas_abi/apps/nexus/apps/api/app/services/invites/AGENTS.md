@@ -132,3 +132,6 @@ uv run pytest libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/invites --
 `invitation_demo_test.py` is the demo end to end (invite Bob, the IdP creates him, he signs in with a code, he is a member of the workspace): Nexus's migrations on SQLite, its
 middleware and routers, the engine's identity service and IAM, the built-in IdP over real HTTP
 and the filesystem email adapter. `service_test.py` drives the service with fakes.
+`adapters/secondary/engine_test.py` and `adapters/primary/invites__primary_adapter__FastAPI_test.py`
+check, on a real IAM, that an invitation or a binding to a role the inviting person does not
+hold is refused: at the gateway, and through the routes as a 403 naming what they lack.

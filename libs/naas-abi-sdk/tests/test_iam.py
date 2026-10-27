@@ -154,7 +154,7 @@ def test_what_may_be_granted_and_its_refusal():
                     pb.GrantableAction(
                         action="triple_store:Query",
                         resources=["${scope}:triple_store:graph/*"],
-                        excluded=["abi:*:*:triple_store:graph/hr*"],
+                        excluded=["${scope}:triple_store:graph/hr*"],
                     )
                 ],
             )
@@ -168,7 +168,7 @@ def test_what_may_be_granted_and_its_refusal():
                 {
                     "action": "triple_store:Query",
                     "resources": ["${scope}:triple_store:graph/*"],
-                    "excluded": ["abi:*:*:triple_store:graph/hr*"],
+                    "excluded": ["${scope}:triple_store:graph/hr*"],
                 }
             ],
         }
