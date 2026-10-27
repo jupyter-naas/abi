@@ -471,3 +471,14 @@ def test_a_deny_of_a_topic_holds_whatever_the_allow_spells_it():
     assert permissions.bus_consume == ()
     assert permissions.bus_publish == ("orders",)
     assert not any(s.startswith("orders") for s in permissions.subscribe)
+
+
+@pytest.mark.parametrize(
+    "topic", ["x.${principal.id}", "${user.id}", "pay%24%7Bprincipal.id%7D"]
+)
+def test_a_topic_naming_a_variable_grants_nothing(topic):
+    """Nothing substitutes a variable here: the topic would be granted as written."""
+    permissions = derive(allow(["bus:*"], [f"abi:-:-:bus:topic/{topic}"]))
+    assert permissions.bus_topics == ()
+    assert permissions.bus_publish == ()
+    assert broker.reserved_topic_problems([f"abi:-:-:bus:topic/{topic}"])

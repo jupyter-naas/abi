@@ -28,6 +28,7 @@ variables likewise.
 
 from __future__ import annotations
 
+import re
 from collections import deque
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
@@ -108,10 +109,16 @@ def _spend() -> None:
             raise Exhausted
 
 
-def held_form(pattern: str, scope: str | None, *, canonical: bool = True) -> str | None:
+def held_form(
+    pattern: str,
+    scope: str | None,
+    *,
+    canonical: bool = True,
+    variables: bool = False,
+) -> str | None:
     """``pattern`` with ``${scope}`` filled and the other variables as marks,
-    a concrete bus topic in its canonical spelling (``canonical_topic``) unless
-    not ``canonical``.
+    a bus topic in its canonical spelling (``canonical_topic``, ``variables``
+    passed on) unless not ``canonical``.
 
     None when it names ``${scope}`` and there is no scope: it matches nothing.
     """
@@ -120,24 +127,36 @@ def held_form(pattern: str, scope: str | None, *, canonical: bool = True) -> str
             return None
         pattern = pattern.replace("${scope}", scope)
     if canonical:
-        pattern = canonical_topic(pattern)
+        pattern = canonical_topic(pattern, variables=variables)
     for name, mark in MARKS.items():
         pattern = pattern.replace("${" + name + "}", mark)
     return pattern
 
 
-def canonical_topic(pattern: str) -> str:
-    """A concrete bus topic (``abi:-:-:bus:topic/<t>``) as the broker grants it:
-    decoded, then encoded as a canonical name is (``pay%6Dents`` is
-    ``payments``, ``pay:ments`` is ``pay%3Aments``). A topic pattern, or one
-    naming a variable, is kept as written: the broker grants no pattern, and
-    the evaluator compares it with canonical names as it stands."""
+_VARIABLE = re.compile(r"(\$\{[^}]*\})")
+
+
+def canonical_topic(pattern: str, *, variables: bool = False) -> str:
+    """A bus topic (``abi:-:-:bus:topic/<t>``) as the broker grants it: each
+    run of it decoded, then encoded as a canonical name is (``pay%6Dents`` is
+    ``payments``, ``pay:ments`` is ``pay%3Aments``).
+
+    A topic pattern (a ``*`` or ``?``) is kept as written: the broker grants
+    none, and the evaluator compares it with canonical names as it stands. With
+    ``variables``, the runs around a variable are canonical too, the variable
+    kept (what a grant may name; the broker grants no topic naming one,
+    ``broker.topic_problem``); without, a topic naming one is kept as written
+    (what a caller holds: it reaches nothing more than so)."""
     if not pattern.startswith(TOPIC_PREFIX):
         return pattern
     topic = pattern[len(TOPIC_PREFIX) :]
-    if any(c in topic for c in "*?") or "${" in topic:
+    if any(c in topic for c in "*?") or ("${" in topic and not variables):
         return pattern
-    return TOPIC_PREFIX + encode_segment(unquote(topic))
+    return TOPIC_PREFIX + "".join(
+        run if _VARIABLE.fullmatch(run) else encode_segment(unquote(run))
+        for run in _VARIABLE.split(topic)
+        if run
+    )
 
 
 def shown(pattern: str) -> str:
@@ -174,9 +193,10 @@ EVERYTHING: Tokens = ((_RUN, ""),)
 
 # Actions the broker grants with no catalog to expand a wildcard against: the
 # bus's, on its topics, which are never at a scope (``abi:-:-:bus:topic/<t>``).
-# A wildcard reaching them is checked for them, like their names.
+# A wildcard reaching them is checked for them, like their names. Any run after
+# the prefix is a topic, a raw ":" included: every topic resource needs cover.
 UNCATALOGUED: dict[str, tuple[tuple[str, ...], Tokens]] = {
-    "bus": (BUS_ACTIONS, (*_glob(TOPIC_PREFIX), (_FIELD_ONE, ""), (_FIELD_RUN, ""))),
+    "bus": (BUS_ACTIONS, (*_glob(TOPIC_PREFIX), (_RUN, ""))),
 }
 
 
@@ -367,8 +387,9 @@ def held_statement(
     With no user (``user_id`` None), a pattern naming ``${user.id}`` matches
     nothing, as the evaluator reads it, so it is left out. A Deny also refuses
     what its variables name for the giver: each pattern is kept bound to the
-    giver's ids too, so it overlaps a grant of the giver's own literal id; and
-    a bus topic in its spelling as written as well as its canonical one."""
+    giver's ids too, so it overlaps a grant of the giver's own literal id; a
+    bus topic in its spelling as written as well as its canonical one, and its
+    sub-topics (``<t>.*``) with it, as the broker grants a topic's."""
     values: dict[str, str | None] = {
         "scope": scope,
         "principal.id": encode_segment(principal_id),
@@ -383,13 +404,20 @@ def held_statement(
             continue
         resources[held] = None
         if statement.effect == "Deny":
+            bound = substitute(pattern, values)
             for spelling in (
                 held_form(pattern, scope, canonical=False),
-                substitute(pattern, values),
+                held_form(pattern, scope, variables=True),
+                bound,
+                canonical_topic(bound) if bound else None,
             ):
-                if spelling:
-                    resources[spelling] = None
-                    resources[canonical_topic(spelling)] = None
+                if not spelling:
+                    continue
+                resources[spelling] = None
+                topic = spelling.removeprefix(TOPIC_PREFIX)
+                if topic != spelling and not any(c in topic for c in "*?"):
+                    # A topic's stream holds its sub-topics (``<t>.>``).
+                    resources[f"{spelling}.*"] = None
     return HeldStatement(
         statement.effect, statement.actions, tuple(resources), policy_id
     )
@@ -530,7 +558,9 @@ class Holdings:
                     continue
                 grants = [
                     g
-                    for g in (held_form(r, scope) for r in statement.resources)
+                    for g in (
+                        held_form(r, scope, variables=True) for r in statement.resources
+                    )
                     if g is not None
                 ]
                 for action in self._actions(statement.actions):

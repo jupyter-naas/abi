@@ -796,13 +796,22 @@ caller, on every resource it matches. Its actions (`Holdings._actions`):
   catalog, yet the broker turns `bus:*`, `*` or `*:Publish` into publishing and consuming a
   topic: a wildcard matching `bus:Publish` or `bus:Consume` is checked for them, on the
   bus's topics (`abi:-:-:bus:topic/<t>`, `grants.UNCATALOGUED`), like the names themselves.
-  A topic is never at a scope, so a scoped grant reaches none. A concrete topic is compared
-  in the spelling the broker grants (`grants.canonical_topic`: decoded, then encoded as a
-  canonical name), in the grant and in what the caller holds: `topic/pay:ments` is
-  `topic/pay%3Aments` and needs cover, `topic/pay%6Dents` is `topic/payments`. A Deny of the
-  caller is matched in its written and its canonical spelling. A topic pattern is kept as
-  written: the broker grants none, and the evaluator compares it with canonical names. A policy names the bus only
-  by such a wildcard (validation refuses `bus:Publish` as unregistered), so only a caller
+  A topic is never at a scope, so a scoped grant reaches none. Any run after
+  `abi:-:-:bus:topic/` is a topic, a raw `:` included, so every topic resource needs cover.
+  Topics are compared in the spelling the broker grants (`grants.canonical_topic`: each
+  literal run decoded, then encoded as a canonical name): `topic/pay:ments` is
+  `topic/pay%3Aments`, `topic/pay%6Dents` is `topic/payments`, and in a grant the runs
+  around a variable too (`topic/pay%6Dents.${principal.id}` is
+  `topic/payments.${principal.id}`). What the caller holds is made canonical when concrete.
+  A Deny of the caller is matched in its written and its canonical spellings, and refuses
+  the topic's sub-topics with it (`topic/payments` refuses `topic/payments.eu`): the broker
+  grants a topic with `<topic>.>`, and its queue stream holds them. A topic pattern (a `*`
+  or `?`) is kept as written: the broker grants none, and the evaluator compares it with
+  canonical names. The broker substitutes no variable, so a topic naming one is granted no
+  subject (`broker.topic_problem`) and a manifest naming one is refused, its module
+  variables bound first (`topic/${module.id}.events` is fine). A stored policy names the bus
+  only by a wildcard of every service (validation refuses `bus:Publish` and `bus:*` as
+  unregistered), so only a caller
   holding one on the topics (the platform admin) gives it.
 - **A wildcard of one named service with no catalog** (`acme:*`) is taken as written: only
   a caller whose actions match that pattern itself gives it. A concrete name no catalog

@@ -44,7 +44,8 @@ answers there only, ``naas_abi_sdk.messages.reply_allowed``).
   module's runs subscribes to their notices. A module writes nothing into
   the jobs stream: its schedules make the server allow rollups there.
 * **Bus topics** named ``abi:-:-:bus:topic/<topic>`` (a concrete topic, none
-  under a reserved root), by action: ``bus:Publish`` publishes on the topic
+  under a reserved root, naming no variable: nothing here substitutes one), by
+  action: ``bus:Publish`` publishes on the topic
   and writes its claim checks; ``bus:Consume`` subscribes to it and fetches
   from and acknowledges the consumers of its queue stream. A Deny of an
   action on a topic keeps that topic from it.
@@ -318,6 +319,9 @@ def topic_problem(topic: str) -> str | None:
         return "a bus topic is not empty"
     if any(c in topic for c in "*>? \t\r\n"):
         return f"bus topic {topic!r} has a wildcard or a space"
+    if "${" in topic:
+        # Nothing substitutes it here: the topic would be granted as written.
+        return f"bus topic {topic!r} names a variable, which no topic is filled with"
     tokens = topic.split(".")
     if any(not t for t in tokens):
         return f"bus topic {topic!r} has an empty token"

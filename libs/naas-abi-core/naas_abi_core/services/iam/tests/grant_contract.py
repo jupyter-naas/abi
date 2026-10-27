@@ -476,10 +476,73 @@ def run_bus_topics_are_compared_as_the_broker_grants_them(
     with as_user(approver) as session:
         for actions in (["bus:Publish", "bus:Consume"], ["bus:*"], ["*"]):
             refused(approve(session, actions, "a:b"), "bus:", "topic/a%3Ab")
+        # A variable no module fills, a raw ":" around it: still a topic.
+        refused(
+            approve(session, ["bus:Publish"], "payments.x:${principal.id}"),
+            "bus:Publish",
+            "topic/payments.x%3A${principal.id}",
+        )
     with as_user(guarded) as session:
         refused(approve(session, ["*"], "pay%6Dents"), "bus:", "Deny")
         refused(approve(session, ["*"], "payments"), "bus:", "Deny")
+        # A topic's stream holds its sub-topics: a Deny of it refuses them.
+        refused(approve(session, ["*"], "payments.eu"), "bus:", "Deny")
+    hierarchy = custom(
+        iam,
+        "hierarchy",
+        statement("Allow", approvals, ["abi:-:-:iam:manifest/*"]),
+        statement("Allow", ["*"], ["abi:-:-:bus:topic/*"]),
+        statement("Deny", ["*"], ["abi:-:-:bus:topic/payments*"]),
+        scope=None,
+    )
+    with as_user(hierarchy) as session:
+        refused(approve(session, ["*"], "pay%6Dents.${principal.id}"), "bus:", "Deny")
+    with as_user(guarded) as session:
         assert approve(session, ["*"], "orders")().status == "approved"
+
+
+def run_a_topic_names_only_module_variables(iam: IAMService, as_user: AsUser) -> None:
+    """The broker substitutes nothing: a manifest's topic may name its module
+    (bound when approved), never a variable left as written."""
+    team(iam)
+    approver = custom(
+        iam,
+        "approver",
+        statement(
+            "Allow",
+            ["iam:ApproveManifest", "iam:GetManifest", "iam:ListManifests"],
+            ["abi:-:-:iam:manifest/*"],
+        ),
+        statement("Allow", ["*"], ["abi:-:-:bus:topic/*"]),
+        scope=None,
+    )
+    with as_service_account("engine"):
+        account = iam.create_service_account("module/acme/feeds")
+    module = CallContext(
+        principal=Principal(id=account.id, kind="service_account", name=account.name)
+    )
+    with use_call_context(module), pytest.raises(ValueError, match="names a variable"):
+        iam.submit_manifest(
+            "feeds",
+            "acme",
+            document(
+                statement("Allow", ["*"], ["abi:-:-:bus:topic/x.${principal.id}"])
+            ),
+        )
+    with use_call_context(module):
+        iam.submit_manifest(
+            "feeds",
+            "acme",
+            document(
+                statement("Allow", ["*"], ["abi:-:-:bus:topic/${module.id}.events"])
+            ),
+        )
+    with as_user(approver) as session:
+        assert session.approve_manifest(account.id).status == "approved"
+    with as_service_account("engine"):
+        topics = iam.broker_grants(account.id).bus_topics
+    assert len(topics) == 1 and topics[0].endswith(".events"), topics
+    assert "${" not in topics[0]
 
 
 def run_built_in_roles_keep_working(iam: IAMService, as_user: AsUser) -> None:
@@ -546,6 +609,7 @@ SCENARIOS = (
     run_delegated_approver,
     run_bus_wildcards_are_checked,
     run_bus_topics_are_compared_as_the_broker_grants_them,
+    run_a_topic_names_only_module_variables,
     run_built_in_roles_keep_working,
     run_grantable,
 )

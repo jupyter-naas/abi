@@ -583,3 +583,55 @@ def test_any_spelling_of_a_topic_needs_cover_and_meets_the_giver_s_deny():
         giver.first_uncovered([_grant(["bus:*"], ["abi:-:-:bus:topic/orders"])], None)
         is None
     )
+
+
+@pytest.mark.parametrize(
+    "pattern, canonical",
+    [
+        (
+            "abi:-:-:bus:topic/pay%6Dents.${principal.id}",
+            "abi:-:-:bus:topic/payments.${principal.id}",
+        ),
+        (
+            "abi:-:-:bus:topic/payments.x:${principal.id}",
+            "abi:-:-:bus:topic/payments.x%3A${principal.id}",
+        ),
+        ("abi:-:-:bus:topic/${user.id}", "abi:-:-:bus:topic/${user.id}"),
+        ("abi:-:-:bus:topic/a:${user.id}:b", "abi:-:-:bus:topic/a%3A${user.id}%3Ab"),
+        ("abi:-:-:bus:topic/pay:*", "abi:-:-:bus:topic/pay:*"),
+    ],
+)
+def test_a_granted_topic_is_canonical_around_its_variables(pattern, canonical):
+    assert grants.canonical_topic(pattern, variables=True) == canonical
+
+
+def test_every_topic_resource_needs_cover():
+    """Any run after the prefix is a topic: a raw ":", a variable alone."""
+    holdings = Holdings([_side(READER)], _registry())
+    for topic in ("a:b:c", "${principal.id}", "x:${principal.id}", "pay:*"):
+        found = holdings.first_uncovered(
+            [_grant(["bus:Publish"], [f"abi:-:-:bus:topic/{topic}"])], None
+        )
+        assert found is not None, topic
+
+
+def test_a_deny_of_a_topic_refuses_its_sub_topics():
+    deny = grants.held_statement(
+        _grant(["*"], ["abi:-:-:bus:topic/payments"], effect="Deny"),
+        None,
+        principal_id="usr_me",
+        user_id="usr_me",
+        policy_id="pol_guard",
+    )
+    giver = Holdings([_side(_allow(["*"], ["abi:-:-:bus:topic/*"]), deny)], _registry())
+    for topic in ("payments.eu", "pay%6Dents.eu.x", "payments.${principal.id}"):
+        found = giver.first_uncovered(
+            [_grant(["bus:*"], [f"abi:-:-:bus:topic/{topic}"])], None
+        )
+        assert found is not None and "pol_guard" in found.reason, topic
+    assert (
+        giver.first_uncovered(
+            [_grant(["bus:*"], ["abi:-:-:bus:topic/paymentsx"])], None
+        )
+        is None
+    )

@@ -2626,7 +2626,7 @@ class IAMService(IIAMService, PolicySource):
             not_found=lambda: IAMNotFoundError(f"Manifest of {account.id} not found"),
         )
         parsed = parse_policy_document(document)
-        _refuse_reserved_topics(parsed)
+        _refuse_reserved_topics(modules.bind(parsed, project, module_id))
         raw = parsed.to_dict()
         sha256 = modules.manifest_sha256(raw)
         try:
@@ -2810,9 +2810,9 @@ class IAMService(IIAMService, PolicySource):
     def _approve_now(
         self, record: ManifestRecord, document: PolicyDocument, *, decided_by: str
     ) -> ManifestRecord:
-        _refuse_reserved_topics(document)
         account = self._get_principal(record.principal_id)
         bound = modules.bind(document, record.project, record.module_id)
+        _refuse_reserved_topics(bound)
         self._refuse_nested_topics(account.id, bound)
         policy_id = modules.policy_id(record.project, record.module_id)
         self.store.put_managed_policy(
@@ -3256,7 +3256,9 @@ def _check_placement(placement: Placement) -> None:
 
 def _refuse_reserved_topics(document: PolicyDocument) -> None:
     """A manifest naming a bus topic under a platform root (``abi``, ``evt``,
-    ``_INBOX``, ``$...``) would reach those subjects through the broker."""
+    ``_INBOX``, ``$...``) would reach those subjects through the broker; one
+    naming a variable its module variables do not fill (``${principal.id}``)
+    would be granted it as written. ``document`` has its module variables bound."""
     errors = [
         f"statement {index}: {problem}"
         for index, statement in enumerate(document.statements)
