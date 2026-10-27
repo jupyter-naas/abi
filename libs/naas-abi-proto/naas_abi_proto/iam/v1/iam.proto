@@ -14,6 +14,8 @@
 // caller the server verifies from the request's credentials, never about a
 // request field. Every other operation is authorized with IAM's own iam:*
 // catalog. Errors: PERMISSION_DENIED (the caller can see the resource),
+// GRANT_NOT_HELD (a change would give more than the caller holds; the message
+// names the statement, action and resource),
 // NOT_FOUND (it cannot, or the record does not exist), CONFLICT (a taken
 // identity or name, an attached policy, a managed one), REVISION_CONFLICT,
 // INVALID_ARGUMENT (a policy's message lists every error).
@@ -247,6 +249,28 @@ message ExplainRequest {
 message ExplainResponse {
   abi.common.v1.CallError error = 1;
   Explanation explanation = 2;
+}
+
+// What the caller may grant at a scope: per catalog, the actions they hold
+// there and the resource patterns (${scope}:...) they hold them on, minus
+// their Denies. About the caller, so it needs no iam: action.
+message GrantableAction {
+  string action = 1;
+  repeated string resources = 2;
+  // What a Deny of the caller takes back from resources.
+  repeated string excluded = 3;
+}
+message GrantableCatalog {
+  string service = 1;
+  repeated GrantableAction actions = 2;
+}
+message GrantableRequest {
+  abi.common.v1.CallContext context = 1;
+  string scope = 2;
+}
+message GrantableResponse {
+  abi.common.v1.CallError error = 1;
+  repeated GrantableCatalog catalogs = 2;
 }
 
 // -- principals ------------------------------------------------------------------

@@ -35,7 +35,7 @@ model_registry, discovery, source_control, coding_environment) use
   [Policy language](#policy-language), [Resource names](#resource-names),
   [Placements](#placements), [Evaluation](#evaluation),
   [Action catalogs](#action-catalogs), [Sealed resources](#sealed-resources),
-  [Built-in policies](#built-in-policies)
+  [Built-in policies](#built-in-policies), [Grant only what you hold](#grant-only-what-you-hold)
 - Using it: [Service API](#service-api),
   [Enforcing in a domain service](#enforcing-in-a-domain-service-guardpy),
   [Enforcing in a data service](#enforcing-in-a-data-service-enforcementpy)
@@ -57,6 +57,7 @@ model_registry, discovery, source_control, coding_environment) use
 | `catalog.py` | `ActionCatalog`, `ResourceType`, `ActionSpec`, `CatalogRegistry` (catalog format) |
 | `policy.py` | Policy documents: schema, validation (every error listed), `Statement` |
 | `evaluator.py` | The evaluation algorithm: `check`, `filter`, `explain` over a `PolicySource` |
+| `grants.py` | Grant only what you hold: glob containment of resource patterns, `Holdings` (what a caller holds, side by side), `grantable` |
 | `roles.py` | Built-in managed policies generated from the catalogs, and the enumerated ones of `engine`, `api` and engine jobs |
 | `iam_catalog.py` | IAM's own `iam:*` catalog and the code-declared seals |
 | `guard.py` | `ServiceGuard`: how a runtime service checks (names, require, filter, create rule, placements) and the shared wire codes |
@@ -81,6 +82,7 @@ model_registry, discovery, source_control, coding_environment) use
 | `tests/iam_harness.py`, `conftest.py` | A bootstrapped service on the memory store, and helpers |
 | `tests/authorization_contract.py` | The contract every runtime service passes per operation: no policy, granted, denied, in process and over NATS |
 | `tests/data_service_contract.py` | The data services' contract: a table of cases for no policy, granted and denied principals, list filtering, in process and over NATS |
+| `tests/grant_contract.py` | Grant only what you hold: the refusals and what keeps working, in process and over NATS |
 
 ## Ports
 
@@ -733,7 +735,8 @@ attachment per scope.
   only by the platform admin's `*`. A role attached at a workspace scope brings the
   most specific policy that exists, attached at the same scope (detached with the
   role); org-level roles bring none. No role reaches `UseFeature` through its scope
-  pattern.
+  pattern, and no one grants a feature they do not hold (see "Grant only what you hold"),
+  so a custom policy cannot bring back one the deployment turned off.
 - **First-party accounts.** `builtin.engine`, `builtin.api` and `builtin.job` are
   enumerated: one statement per service, each with a `sid` saying what needs it. The
   engine holds IAM's administration and the kernel services; `api` holds `nexus:*`, the
@@ -763,6 +766,92 @@ attachment per scope.
 - Nexus seeding turns `users[].is_superadmin` into a `builtin.platform_admin`
   attachment (`org_seed.sync_platform_admins`).
 
+## Grant only what you hold
+
+No one gives anyone more than they hold. IAM refuses a change whose result would let a
+principal do something, at a scope, that the caller cannot do there (`grants.py`,
+`IAMService._require_held`). The check runs in `IAMService`, so in process, over NATS,
+through the SDK, the CLI and Nexus alike.
+
+**What is checked**, and at which scopes:
+
+| Operation | The grant | Scopes |
+|---|---|---|
+| `create_policy` | the document | its owner's (an org's or a workspace's); a platform policy as written unscoped and with `${scope}` as `abi:*:*` |
+| `update_policy` with a new document | the new document | as `create_policy`, plus every scope it is attached or invited at |
+| `attach_policy` (user, group, service account) | the policy | the attachment's |
+| `add_group_member` | every attachment of the group, but IAM's companions of its roles (feature policies, `builtin.platform.*` unscoped), which follow them | each attachment's |
+| `create_pending_grant` | the policy | the invitation's |
+| `bind_idp_group` | the policy, before the group is made | the binding's |
+| `approve_manifest`, narrowed or not | the approved document, its module variables bound | unscoped (the module's policy is attached unscoped) |
+
+Attaching what is attached already, inviting again or adding a member a group holds grants
+nothing new and is not checked.
+
+**The rule.** Take each Allow statement of the grant at the scope (`${scope}` filled; at a
+scope, `policy.within_scope` applied first). Every action it matches, wildcards expanded
+against the registered catalogs (a name no catalog registers is taken as written), must be
+allowed to the caller, on every resource it matches:
+
+- **Resources are languages.** `*` is any run, `:` and `/` included; `?` one character (one
+  of the three of `%2F`). Only names of the action's resource types count,
+  `abi:<org>:<ws>:<service>:<type>/<id>` with no raw `:` in a field, so
+  `${scope}:triple_store:*` is no wider than `${scope}:triple_store:graph/*` for an action on
+  graphs. A grant is covered by the union of what the caller holds, not one pattern of it.
+- **Variables keep their form.** A `${principal.id}` or `${user.id}` of the grant is covered
+  by the caller holding the same variable there (an admin holds `…/${principal.id}/*` of a
+  personal type as the member role grants it), or a wildcard, never a literal id. A module
+  variable is covered only by a wildcard, except in an approved manifest, where it is bound.
+- **No Deny of the caller may overlap it.** A Deny statement of the grant never needs cover:
+  it only narrows.
+- **Every side decides.** The caller is the call's user when there is one (`api` or `engine`
+  acting for a user: their own statements never stand in for the user's), plus an actor
+  that is not first-party (a module acting for a user is bounded by its own policy too),
+  plus the credential's narrowing (`abi_scope`): a read-only personal key grants no write.
+- **Unproven is refused.** Containment is decided on the product of the patterns' automata;
+  past `grants.STATE_BUDGET` states it is not proven, and the change is refused.
+
+**The refusal** is `GrantNotHeldError` (a `PermissionDeniedError`, wire code
+`GRANT_NOT_HELD`, the SDK's `GrantNotHeld`). Its message names the first uncovered statement
+(index, `sid`, policy), action, resource and scope, and why: not held there, a Deny of a
+named policy, or the credential's scope. Nexus answers it with a 403 carrying the message
+(`services/exceptions.py`, and `_call` in `iam_admin`); `abi iam` prints it.
+
+**Built-in roles still work.** The roles are cumulative, so an admin attaches member and
+viewer, an owner owner, and an org's owners and admins assign roles in its workspaces through
+their org-wide role (`abi:<org>:*`). The owner's way to `nexus:UseFeature` beyond its feature
+policy (a custom policy on `${scope}:nexus:feature/*`) is closed: a feature outside the
+caller's feature policy, and so outside `enabled_features`, is not theirs to give.
+
+**What may I grant.** `iam.grantable(scope)` (`abi.iam.v1.grantable`, the SDK's
+`iam.grantable`, Nexus `GET /api/iam/admin/grantable?scope=`) lists, for the caller at that
+scope, per catalog (a kernel service or a module), the actions they hold there and the
+resource patterns they hold them on, written `${scope}:…` (`GrantableCatalog`,
+`GrantableAction`), minus their Denies: a pattern a Deny covers whole is left out, one it
+covers in part lists the Deny in `excluded`. It may say less than the caller reaches there,
+never more. Like `explain` of oneself it is about the caller only, so it needs no `iam:*`
+action, and a module's connection may always ask (`broker.IAM_ALWAYS`).
+
+**Writes made for no user.** A first-party account (`engine`, `api`) writing for no user is
+not checked: each such write sits behind a route or a boot step that authorized what it
+stands for. They are:
+
+| Path | Why it may |
+|---|---|
+| Boot: `IAMService.bootstrap`, `register_kernel_catalogs`, Nexus `register_catalog` | The root of trust: the managed policies and the built-in accounts. |
+| Feature policies: `put_feature_policies` (Nexus as `engine`, from `feature_flags`) | The deployment's and the orgs' feature settings, edited behind their own routes; `enabled_features` bounds every key. It needs `iam:RegisterCatalog` on `nexus`. |
+| Companions: `builtin.platform.*` and feature policies kept in step with roles, `claim_pending_grants` | They follow a role that was held when it was attached or invited. |
+| The org-wide mirror (`Memberships.mirror_org_wide`, `sync_org_wide_roles`) | It mirrors an org role the route just granted, checked as the user at the org's own scope, or the seeding below. |
+| Seeding: `Memberships.seed`, `org_seed.sync_platform_admins`, the owner of a new org or workspace (`grant(by=None)`) | The configuration's `users:`, the migration of old memberships, and the creator of what `nexus:CreateOrganization` / `CreateWorkspace` let them create. |
+| Placements (`put_placement`, `PLACEMENT_WRITER`) | They place resources; they grant nothing. |
+| Shared graph grants (`graph_grants.py`, `workspace.<ws>.graphs.*`) | Behind `nexus:UpdateResourceAccess` on the workspace, which offers only graphs the workspace holds, gives writing only to whoever may drop the graph, and sharing every graph only to platform administrators (`resource_access.py`). |
+| `abi iam` | The operator holding the project's IAM store and config. |
+| `modules.auto_approve` | The `abi dev` overlay only: a module's manifest approved on submission. |
+
+Invitations and IdP group bindings made from Nexus are written as `api` **on behalf of the
+inviting person** (`invites/adapters/secondary/engine.py`), so they are checked like any
+grant; their reads and withdrawals stay `api`'s own.
+
 ## Service API
 
 ```python
@@ -773,6 +862,7 @@ allowed = iam.filter("triple_store:ListGraphs", names).allowed
 iam.authorize(action, resource)  # Decision
 iam.allows_every(action, "triple_store", "graph")  # a safe shortcut: False when unsure
 iam.explain(action, resource, principal_id=...)  # needs iam:Explain on the principal
+iam.grantable(scope)  # what the caller may grant there (needs no permission)
 iam.placement_of(
     service, canonical_id
 )  # the covering placement, or None (serving engine)
@@ -1084,7 +1174,7 @@ short:
 
 | Source | Publish | Subscribe |
 |---|---|---|
-| Always | IAM's read-only and self-service operations (`broker.IAM_ALWAYS`: `token`, `exchange_token`, `jwks`, `submit_manifest`, `get_manifest`, `find_service_account`, `authorize`, `filter`; never `abi.iam.v1.changed`), the engine's broker control `abi.broker.v1.*`, `_INBOX.>`, `abi.rpc.overflow.>` | its own inbox prefix `_INBOX.<key id>` |
+| Always | IAM's read-only and self-service operations (`broker.IAM_ALWAYS`: `token`, `exchange_token`, `jwks`, `submit_manifest`, `get_manifest`, `find_service_account`, `authorize`, `filter`, `grantable`; never `abi.iam.v1.changed`), the engine's broker control `abi.broker.v1.*`, `_INBOX.>`, `abi.rpc.overflow.>` | its own inbox prefix `_INBOX.<key id>` |
 | Hosting | the completion notices of its own jobs' runs (`abi.jobdone.<project>.<module hash>.<job hash>`) | `abi.agent.<project>.<sa>.>`, `abi.mod.<project>.<sa>.>`; its jobs' consumers |
 | `discovery:GetJobRun` on `job_run/<project>/<module>/...` | none | that module's (or job's) completion notices: a notice only wakes a waiter, which reads the run record again |
 | Each action with an Allow (any resource) and no Deny on every resource | that action's catalog `subjects` (a stream action adds the service's transfer subjects); a service without a registered catalog grants its whole `abi.svc.<service>.v1.>` | none |
@@ -1173,7 +1263,8 @@ iam.list_idp_bindings(provider=None, policy_id=None)
   `abi:<org>:<ws>:iam:attachment/<policy>/pending:<provider>:<email>`, so a
   workspace admin invites to that workspace and no further, nobody makes an owner
   they could not attach, and the rules of `attach_policy` (a `${scope}` policy needs
-  a scope, a scoped policy stays within it) hold. Listing is filtered by
+  a scope, a scoped policy stays within it) hold. The inviting person holds what the policy
+  grants there (see "Grant only what you hold"), as for a binding. Listing is filtered by
   `iam:ListAttachments` on the same names. `iam:ClaimPendingGrants` (admin on a
   principal) is the identity service's, as the engine.
 - **A binding** gives the members of an IdP group a role at a scope: IAM finds or
@@ -1287,7 +1378,8 @@ the matching `iam:` action. Bus and event grants follow the action
 (`bus:Publish` vs `bus:Consume`; `event:Append` publishes, the read actions
 subscribe) and a Deny of an action on a topic is honoured. The secrets IAM keeps
 (`iam/...`) are readable only by `engine` over the secret service's NATS
-endpoint. Wire codes: `PERMISSION_DENIED`, `NOT_FOUND`,
+endpoint. Wire codes: `PERMISSION_DENIED`, `GRANT_NOT_HELD` (a
+change would give more than the caller holds), `NOT_FOUND`,
 `CONFLICT`, `REVISION_CONFLICT`, `INVALID_ARGUMENT`, `UNAUTHENTICATED` (a
 refused key). The SDK facade is
 `engine.services.iam` (`naas_abi_sdk/services/iam.py`), reachable without a
@@ -1403,6 +1495,25 @@ and viewers no longer list their scope's attachments (who holds which role is
 Nexus's members list, read as `api`). A user leaving an org leaves its groups, so a
 group never keeps granting a former member. An existing store upgrades in place
 (schema 2).
+
+**Grant only what you hold; existing grants are not checked again.**
+*Decision.* IAM refuses creating or editing a policy, attaching one, adding a group member,
+an invitation, an IdP binding and a manifest approval when the result would give, at a
+scope, more than the caller holds there (see "Grant only what you hold"). The caller is the
+call's user, never the first-party account acting for them; a narrowed credential narrows
+what it may grant; Denies need no cover; what cannot be proven is refused. A grant already
+made is not checked again when its granter later loses a permission: the organisation and
+workspace sets (a later stage of the permission work) bound every grant when IAM decides,
+whoever made it. `engine` and `api` writing for no user are not checked, each behind a route
+or boot step that authorized what it stands for (the table there).
+*Consequences.* A scope's admin can no longer make itself owner through a policy or a group,
+nor an owner give a feature it does not hold. Wildcards are expanded against the catalogs
+registered when the grant is made: an action a catalog adds later reaches an existing
+wildcard grant (as it reaches the generated roles) without its granter's being checked. A
+grant whose containment takes more than `grants.STATE_BUDGET` states is refused even if it
+is covered. Revoking a granter's role leaves what they gave: take it back explicitly.
+Invitations and bindings from Nexus now need the inviting person to hold the role's grants.
+`grantable` may under-report a holding whose pattern straddles the scope's fields.
 
 ## Known limits and open questions
 

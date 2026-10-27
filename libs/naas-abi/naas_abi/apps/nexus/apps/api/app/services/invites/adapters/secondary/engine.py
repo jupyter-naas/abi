@@ -1,8 +1,10 @@
 """The engine's identity and IAM services, as Nexus calls them for invitations.
 
-Nexus decided whether the inviting person may invite (the route did), so these
-calls are Nexus's own: ``api`` acting for nobody. The services are blocking:
-each call runs in a worker thread.
+Nexus decided whether the inviting person may invite (the route did). What gives
+access (a pending grant, an IdP group binding) is written as ``api`` on behalf of
+that person, so IAM also checks that they hold what it grants ("Grant only what
+you hold"); reads and withdrawals are Nexus's own, ``api`` acting for nobody. The
+services are blocking: each call runs in a worker thread.
 """
 
 from __future__ import annotations
@@ -115,12 +117,19 @@ class EngineGrantsGateway(GrantsGateway):
         return service
 
     async def grant(
-        self, provider: str, email: str, policy_id: str, scope: str | None
+        self,
+        provider: str,
+        email: str,
+        policy_id: str,
+        scope: str | None,
+        *,
+        by: str | None = None,
     ) -> GrantMade:
         iam = self._service()
-
-        def make() -> GrantMade:
-            held = next(
+        # The whole truth, not what the inviting person may list: a grant another
+        # invitation made is not this call's to take back.
+        held = await _as_api(
+            lambda: next(
                 (
                     g
                     for g in iam.list_pending_grants(
@@ -130,20 +139,27 @@ class EngineGrantsGateway(GrantsGateway):
                 ),
                 None,
             )
-            grant = iam.create_pending_grant(provider, email, policy_id, scope)
-            return GrantMade(id=str(grant.id), created=held is None)
-
-        return await _as_api(make)
+        )
+        grant = await _as_api(
+            lambda: iam.create_pending_grant(provider, email, policy_id, scope), by=by
+        )
+        return GrantMade(id=str(grant.id), created=held is None)
 
     async def revoke(self, grant_id: str) -> None:
         iam = self._service()
         await _as_api(lambda: iam.revoke_pending_grant(grant_id))
 
     async def bind(
-        self, provider: str, claim_value: str, policy_id: str, scope: str | None
+        self,
+        provider: str,
+        claim_value: str,
+        policy_id: str,
+        scope: str | None,
+        *,
+        by: str | None = None,
     ) -> None:
         iam = self._service()
-        await _as_api(lambda: iam.bind_idp_group(provider, claim_value, policy_id, scope))
+        await _as_api(lambda: iam.bind_idp_group(provider, claim_value, policy_id, scope), by=by)
 
     async def unbind(
         self, provider: str, claim_value: str, policy_id: str, scope: str | None

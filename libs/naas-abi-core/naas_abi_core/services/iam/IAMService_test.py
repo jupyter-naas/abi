@@ -111,6 +111,8 @@ def test_iam_operations_need_iam_actions(h):
             ["iam:CreatePolicy", "iam:GetPolicy"],
             ["abi:*:*:iam:policy/*"],
         ),
+        # What the policy allows: nobody writes a grant they do not hold.
+        statement("Allow", [QUERY], ["*"]),
     )
     with h.as_(bob):
         created = h.iam.create_policy("mine", doc)

@@ -51,6 +51,11 @@ class PermissionDenied(ServiceError, PermissionError):
     """The caller can see the resource but may not perform the action (IAM §5.4)."""
 
 
+class GrantNotHeld(PermissionDenied):
+    """A change would give more than the caller holds (IAM, "Grant only what you
+    hold"); the message names the statement, action and resource."""
+
+
 class NotFound(ServiceError, LookupError):
     """Generic not-found, IAM's own records included."""
 
@@ -104,6 +109,7 @@ ERRORS = {
     "KV_NOT_FOUND": KVNotFoundError,
     "SECRET_AUTH_FAILED": SecretAuthenticationError,
     "PERMISSION_DENIED": PermissionDenied,
+    "GRANT_NOT_HELD": GrantNotHeld,
     "NOT_FOUND": NotFound,
     "CONFLICT": Conflict,
     "REVISION_CONFLICT": RevisionConflict,

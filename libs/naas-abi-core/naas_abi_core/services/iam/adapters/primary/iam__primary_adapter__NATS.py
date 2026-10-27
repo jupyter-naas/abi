@@ -168,6 +168,11 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
         )
         return pb.ExplainResponse(explanation=codec.explanation_to_pb(explanation))
 
+    def _call_grantable(self, req: pb.GrantableRequest) -> pb.GrantableResponse:
+        return pb.GrantableResponse(
+            catalogs=[codec.grantable_to_pb(c) for c in self._iam.grantable(req.scope)]
+        )
+
     # -- principals ---------------------------------------------------------------
 
     def _call_ensure_user(self, req: pb.EnsureUserRequest) -> pb.EnsureUserResponse:

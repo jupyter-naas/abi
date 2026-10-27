@@ -63,6 +63,7 @@ OPERATIONS = {
         "authorize",
         "filter",
         "explain",
+        "grantable",
         "ensure_user",
         "create_service_account",
         "get_principal",

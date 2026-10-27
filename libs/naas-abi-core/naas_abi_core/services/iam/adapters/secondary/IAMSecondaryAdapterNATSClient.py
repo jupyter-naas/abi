@@ -25,6 +25,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     Decision,
     Explanation,
     FilterResult,
+    GrantableCatalog,
     GroupMapping,
     IdpBinding,
     IIAMService,
@@ -86,6 +87,10 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
             "explain", action=action, resource=resource, principal_id=principal_id
         )
         return codec.explanation_from_pb(response.explanation)
+
+    def grantable(self, scope: str) -> list[GrantableCatalog]:
+        response = self._request("grantable", scope=scope)
+        return [codec.grantable_from_pb(c) for c in response.catalogs]
 
     # -- principals ---------------------------------------------------------------------
 

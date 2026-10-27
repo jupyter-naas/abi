@@ -153,6 +153,16 @@ async def access(
     return await _call(service.access(user, scope))
 
 
+@router.get("/grantable")
+async def grantable(
+    scope: str = Query(..., min_length=1),
+    user: User = Signed,
+    service: IamAdminService = Service,
+) -> dict[str, Any]:
+    """What the caller may grant at ``scope``: the policy builder offers only this."""
+    return await _call(service.grantable(user, scope))
+
+
 @router.get("/catalogs", dependencies=[declares("iam:ListPolicies")])
 async def catalogs(
     scope: str | None = None, user: User = Signed, service: IamAdminService = Service

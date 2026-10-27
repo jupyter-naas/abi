@@ -206,7 +206,7 @@ class Evaluator:
                 _hints(
                     (
                         EffectiveStatement(statement, "token", index)
-                        for index, statement in enumerate(_token_statements(ctx))
+                        for index, statement in enumerate(token_statements(ctx))
                     ),
                     action,
                     actor.principal_id,
@@ -334,7 +334,7 @@ def _patterns(value: object) -> tuple[str, ...]:
     return tuple(value)
 
 
-def _token_statements(ctx: CallContext) -> list[Statement]:
+def token_statements(ctx: CallContext) -> list[Statement]:
     """The token's ``abi_scope``: Allow statements only; anything else matches nothing."""
     statements: list[Statement] = []
     for raw in ctx.scope or ():
@@ -362,7 +362,7 @@ def _token_allow(
     actor: Subject,
     user_id: str | None,
 ) -> EffectiveStatement | None:
-    for index, statement in enumerate(_token_statements(ctx)):
+    for index, statement in enumerate(token_statements(ctx)):
         effective = EffectiveStatement(statement, "token", index)
         if _statement_matches(effective, action, resource, actor.principal_id, user_id):
             return effective

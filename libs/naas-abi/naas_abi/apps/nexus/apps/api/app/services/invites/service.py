@@ -175,7 +175,7 @@ class InvitationService:
         elsewhere = await self._held_elsewhere(
             email, choice.name, existing.id if existing else None
         )
-        made = await self._grant(choice.name, email, scopes)
+        made = await self._grant(choice.name, email, scopes, by=invited_by)
         grant_ids = [g.id for g in made]
         try:
             provisioned, skipped = await self._provision(
@@ -279,12 +279,21 @@ class InvitationService:
         return {g for i in others if i.id != except_id for g in i.grant_ids}
 
     async def _grant(
-        self, provider: str, email: str, scopes: list[tuple[str, str]]
+        self,
+        provider: str,
+        email: str,
+        scopes: list[tuple[str, str]],
+        *,
+        by: str | None = None,
     ) -> list[GrantMade]:
+        """As ``by``, the inviting person: IAM refuses a role they may not attach
+        or that grants more than they hold (``GrantNotHeldError``)."""
         made: list[GrantMade] = []
         try:
             for role, scope in scopes:
-                made.append(await self.grants.grant(provider, email, role_policy(role), scope))
+                made.append(
+                    await self.grants.grant(provider, email, role_policy(role), scope, by=by)
+                )
         except Exception:
             await self._revoke([g.id for g in made if g.created])
             raise
@@ -404,11 +413,14 @@ class InvitationService:
     # IdP group bindings
     # =========================================================================
 
-    async def bind_group(self, *, provider: str, group: str, role: str, scope: str) -> None:
+    async def bind_group(
+        self, *, provider: str, group: str, role: str, scope: str, by: str | None = None
+    ) -> None:
+        """As ``by``: IAM checks that they may attach the role and hold what it grants."""
         known = await self.directory.directory()
         if known.get(provider) is None:
             raise NoProviderError(f"{provider!r} is not an identity provider")
-        await self.grants.bind(provider, group.strip(), role_policy(role), scope)
+        await self.grants.bind(provider, group.strip(), role_policy(role), scope, by=by)
 
     async def unbind_group(self, *, provider: str, group: str, role: str, scope: str) -> bool:
         return await self.grants.unbind(provider, group.strip(), role_policy(role), scope)

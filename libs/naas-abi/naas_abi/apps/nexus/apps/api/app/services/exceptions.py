@@ -51,6 +51,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
     WorkspacePermissionError,
     WorkspaceSlugAlreadyExistsError,
 )
+from naas_abi_core.services.iam.IAMPorts import GrantNotHeldError
 from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError as IAMDeniedError
 
 DetailResolver = Callable[[Exception], str]
@@ -94,6 +95,8 @@ EXCEPTION_TO_HTTP: dict[type[Exception], tuple[int, DetailResolver]] = {
     OntologyServiceUnavailableError: (500, _default_detail),
     OntologyParseError: (500, lambda _: "Failed to parse ontology file"),
     OntologyFileNotFoundError: (404, lambda _: "Ontology file does not exist"),
+    # Grant only what you hold: the refusal names what the caller does not hold.
+    GrantNotHeldError: (403, _default_detail),
     # The engine's IAM said no to what a request asked of it (a key's own limit
     # included): a refusal of the caller, not a failure of the server.
     IAMDeniedError: (403, lambda _exc: "This credential is not allowed to do that"),

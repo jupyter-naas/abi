@@ -32,6 +32,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     RevisionConflictError,
 )
 from naas_abi_core.services.iam.IAMService import IAMService
+from naas_abi_core.services.iam.tests import grant_contract as grants
 from naas_abi_core.services.iam.tests import owned_scope_contract as owned
 from naas_abi_core.services.iam.tests.iam_harness import (
     TRIPLE_STORE,
@@ -441,6 +442,29 @@ def test_owned_scenarios_over_nats(iam_host, scenario):
         source = RenewingTokenSource(
             record.id,
             lambda: TEST_TOKENS.issue(record.id, subject=record.id, kind="user"),
+        )
+        client = IAMSecondaryAdapterNATSClient(iam_host.url, source)
+        try:
+            yield client
+        finally:
+            client.close()
+
+    scenario(iam_host.service, as_user)
+
+
+@BROKER
+@pytest.mark.parametrize("scenario", grants.SCENARIOS, ids=lambda s: s.__name__)
+def test_grant_scenarios_over_nats(iam_host, scenario):
+    """Grant only what you hold, each call made over NATS as the user, its
+    token narrowed when the scenario says: the same refusals, by their code."""
+
+    @contextmanager
+    def as_user(record, scope=None):
+        source = RenewingTokenSource(
+            record.id,
+            lambda: TEST_TOKENS.issue(
+                record.id, subject=record.id, kind="user", scope=scope
+            ),
         )
         client = IAMSecondaryAdapterNATSClient(iam_host.url, source)
         try:

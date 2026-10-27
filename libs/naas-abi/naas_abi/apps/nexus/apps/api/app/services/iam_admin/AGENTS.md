@@ -27,6 +27,9 @@ Nexus adds no role check of its own.
 
 - `GET /access?scope=` the actions the caller may do (platform, or attachments and that level's policies and groups
   at `scope`); `GET /catalogs?scope=`
+- `GET /grantable?scope=` what the caller may grant at `scope` (IAM's `grantable`: per catalog, the actions and
+  `${scope}:…` resource patterns they hold there, minus their Denies), for the policy builder; any caller, about
+  themselves, like `/access`
 - `GET|POST /policies` (`?scope=`; the body's `scope` is the owner), `GET|PUT|DELETE /policies/{id}`,
   `POST /policies/validate?scope=` (`document` or YAML/JSON `text`)
 - `GET|POST|DELETE /attachments` (`?scope=`, `?principal_id=`, `?policy_id=`), `GET /attachable-policies?scope=`
@@ -48,7 +51,12 @@ Nexus adds no role check of its own.
 - **Audit before the change** (`_change`): no record, no change; the record names the actor, the operation, the
   resource and a short detail, never a key's value or a policy's text. A new change operation goes through `_change`.
 - **Keys:** the value is in `created_key`'s answer only (`Cache-Control: no-store`); never log or audit it.
-- **Narrowing** is checked here (`narrowing.py`), because IAM's `approve_manifest` accepts any valid document.
+- **Narrowing** is checked here (`narrowing.py`): IAM's `approve_manifest` checks that the approver holds what the
+  approved document grants, not that it is no wider than what the module submitted.
+- **A grant beyond what the caller holds** (IAM's `GrantNotHeldError`, "Grant only what you hold" in core's
+  `services/iam/AGENTS.md`) is a 403 whose detail is IAM's message: the statement, action and resource the caller
+  does not hold. Creating or editing a policy, attaching one, adding a group member and approving a manifest all
+  answer it.
 - Names of principals and policies in a list are read as `api` (`gateway.principal`, `gateway.policy`) for ids the
   caller already sees through a list IAM let them read.
 
@@ -90,9 +98,13 @@ Nexus adds no role check of its own.
 - **Keys are shown once.** Creating or rotating a service account's key returns its value in that one answer
   (`Cache-Control: no-store`); IAM keeps a hash, the audit and every list never carry it, and the page holds it in
   component state until dismissed.
-- **A manifest is approved as submitted, narrowed or rejected, never widened.** IAM's `approve_manifest` accepts
-  any valid document, so the API checks the narrowing itself (`narrowing.py`): an Allow statement may lose actions
-  and resources, none may gain or appear, and Deny statements stay exactly as submitted (dropping one widens).
+- **A manifest is approved as submitted, narrowed or rejected, never widened.** IAM's `approve_manifest` takes any
+  valid document the approver holds, so the API checks the narrowing itself (`narrowing.py`): an Allow statement may
+  lose actions and resources, none may gain or appear, and Deny statements stay exactly as submitted (dropping one
+  widens). A delegated approver approves no more than they hold: narrow what they do not.
+- **The policy builder offers what the caller may grant.** `GET /grantable?scope=` is IAM's `grantable`, so the
+  builder and IAM's refusal agree: what it lists is what the caller holds at that scope (it may list less, never
+  more). It needs no permission: it says only what the caller holds.
 - **The simulator is `explain`.** "Can X do Y on Z" is IAM's `explain` on the principal (`iam:Explain`): the answer
   names the deciding side, policy, statement, attachment, scope and group, and shows the statement when the
   caller may read its policy.

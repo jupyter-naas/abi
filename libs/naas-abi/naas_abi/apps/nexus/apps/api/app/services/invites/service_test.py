@@ -152,8 +152,11 @@ class Grants(GrantsGateway):
         self.bound: set[tuple] = set()
         self.fail_on: int | None = None
         self.made = 0
+        self.granted_by: list[str | None] = []
+        self.bound_by: list[str | None] = []
 
-    async def grant(self, provider, email, policy_id, scope):
+    async def grant(self, provider, email, policy_id, scope, *, by=None):
+        self.granted_by.append(by)
         self.made += 1
         if self.fail_on == self.made:
             raise PermissionError("denied")
@@ -168,7 +171,8 @@ class Grants(GrantsGateway):
     async def revoke(self, grant_id):
         self.live.pop(grant_id, None)
 
-    async def bind(self, provider, claim_value, policy_id, scope):
+    async def bind(self, provider, claim_value, policy_id, scope, *, by=None):
+        self.bound_by.append(by)
         self.bound.add((provider, claim_value, policy_id, scope))
 
     async def unbind(self, provider, claim_value, policy_id, scope):

@@ -8,7 +8,7 @@ from naas_abi_proto.iam.v1 import iam_pb2 as pb
 
 from naas_abi_sdk.module import ModuleDependencies, ServicesProxy
 from naas_abi_sdk.services import IAMService
-from naas_abi_sdk.services.errors import NotFound, PermissionDenied
+from naas_abi_sdk.services.errors import GrantNotHeld, NotFound, PermissionDenied
 from naas_abi_sdk.transport import RPCError
 
 
@@ -142,3 +142,42 @@ def test_listing_mappings_and_placements_and_deleting_scopes():
     ]
     assert run(iam.list_placements("document"))[0]["id_key"] == "n/*"
     assert run(iam.delete_scope("o", "w")) is True
+
+
+def test_what_may_be_granted_and_its_refusal():
+    client = AsyncMock()
+    client.grantable.return_value = pb.GrantableResponse(
+        catalogs=[
+            pb.GrantableCatalog(
+                service="triple_store",
+                actions=[
+                    pb.GrantableAction(
+                        action="triple_store:Query",
+                        resources=["${scope}:triple_store:graph/*"],
+                        excluded=["abi:*:*:triple_store:graph/hr*"],
+                    )
+                ],
+            )
+        ]
+    )
+    found = run(IAMService(client).grantable("abi:org-1:ws-1"))
+    assert found == [
+        {
+            "service": "triple_store",
+            "actions": [
+                {
+                    "action": "triple_store:Query",
+                    "resources": ["${scope}:triple_store:graph/*"],
+                    "excluded": ["abi:*:*:triple_store:graph/hr*"],
+                }
+            ],
+        }
+    ]
+    assert client.grantable.call_args.args[0].scope == "abi:org-1:ws-1"
+    client.attach_policy.side_effect = RPCError(
+        "GRANT_NOT_HELD", "You cannot grant what you do not hold: ..."
+    )
+    with pytest.raises(GrantNotHeld) as refused:
+        run(IAMService(client).attach_policy("builtin.owner", "usr_x", "abi:o:w"))
+    assert isinstance(refused.value, PermissionDenied)
+    assert "do not hold" in str(refused.value)

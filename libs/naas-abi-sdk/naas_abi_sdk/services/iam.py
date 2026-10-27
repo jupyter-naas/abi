@@ -80,6 +80,13 @@ class IAMService(ServiceProxy):
             "explain", action=action, resource=resource, principal_id=principal_id
         )
 
+    async def grantable(self, scope: str) -> list[dict[str, Any]]:
+        """What the caller may grant at ``scope`` (about the caller: no permission
+        needed): ``[{"service", "actions": [{"action", "resources", "excluded"}]}]``,
+        resources written ``${scope}:...``. A change that gives more than the
+        caller holds raises ``GrantNotHeld``."""
+        return await self._request("grantable", scope=scope)
+
     # -- principals --------------------------------------------------------------
 
     async def ensure_user(

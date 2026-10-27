@@ -93,6 +93,42 @@ class PermissionDeniedError(IAMError, PermissionError):
         super().__init__(message or f"{action} is not allowed on {resource}")
 
 
+class GrantNotHeldError(PermissionDeniedError):
+    """A change would let someone do, at a scope, what the caller cannot do
+    there ("Grant only what you hold"). The message names the first statement,
+    action and resource the caller does not hold. Wire code ``GRANT_NOT_HELD``."""
+
+    def __init__(
+        self,
+        action: str = "",
+        resource: str = "",
+        *,
+        policy_id: str | None = None,
+        statement: int | None = None,
+        sid: str | None = None,
+        scope: str | None = None,
+        reason: str = "",
+        message: str | None = None,
+    ) -> None:
+        self.policy_id = policy_id
+        self.statement = statement
+        self.sid = sid
+        self.scope = scope
+        self.reason = reason
+        if message is None:
+            which = f"statement {statement}" if statement is not None else "a statement"
+            if sid:
+                which += f" ({sid})"
+            if policy_id:
+                which += f" of {policy_id}"
+            at = f" at {scope}" if scope is not None else ""
+            message = (
+                f"You cannot grant what you do not hold: {which} allows {action} "
+                f"on {resource}{at}, and {reason}"
+            )
+        super().__init__(action, resource, message=message)
+
+
 class KeyRefusedError(IAMError):
     """A key that cannot be exchanged or connect: unknown, wrong, revoked,
     expired, of another kind, or of an inactive principal. One message for
@@ -843,6 +879,24 @@ class PolicySource(ABC):
 # ---------------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class GrantableAction:
+    """An action the caller may grant at a scope, on these resource patterns
+    (``${scope}:…``); ``excluded`` are the patterns a Deny of theirs takes back."""
+
+    action: str
+    resources: tuple[str, ...]
+    excluded: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class GrantableCatalog:
+    """What the caller may grant of one catalog (a kernel service or a module)."""
+
+    service: str
+    actions: tuple[GrantableAction, ...]
+
+
 class IIAMService(ABC):
     """IAM as its callers see it, in process (``IAMService``) or over NATS
     (``IAMSecondaryAdapterNATSClient``, for engines in the client role).
@@ -888,6 +942,12 @@ class IIAMService(ABC):
     def explain(
         self, action: str, resource: str, *, principal_id: str | None = None
     ) -> Explanation: ...
+
+    @abstractmethod
+    def grantable(self, scope: str) -> list[GrantableCatalog]:
+        """What the caller may grant at ``scope``: per catalog, the actions they
+        hold there and the resource patterns (``${scope}:…``) they hold them on,
+        minus their Denies. About the caller only, so it needs no permission."""
 
     # -- principals -------------------------------------------------------------
 

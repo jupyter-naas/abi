@@ -14,6 +14,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     Attachment,
     CreatedKey,
     Explanation,
+    GrantableCatalog,
     KeyRecord,
     ManifestRecord,
     Policy,
@@ -146,6 +147,20 @@ def catalogs_view(catalogs: list[ActionCatalog]) -> dict[str, Any]:
     return {
         "catalogs": [catalog_view(c) for c in catalogs],
         "variables": sorted(POLICY_VARIABLES),
+    }
+
+
+def grantable_view(catalog: GrantableCatalog) -> dict[str, Any]:
+    return {
+        "service": catalog.service,
+        "actions": [
+            {
+                "action": a.action,
+                "resources": list(a.resources),
+                "excluded": list(a.excluded),
+            }
+            for a in catalog.actions
+        ],
     }
 
 

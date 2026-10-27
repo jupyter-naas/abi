@@ -21,6 +21,9 @@ from naas_abi_core.services.iam.IAMPorts import (
     DecidingStatement,
     Decision,
     Explanation,
+    GrantableAction,
+    GrantableCatalog,
+    GrantNotHeldError,
     GroupMapping,
     IAMConflictError,
     IAMNotFoundError,
@@ -50,6 +53,7 @@ OPERATIONS = {
     "authorize": "Authorize",
     "filter": "Filter",
     "explain": "Explain",
+    "grantable": "Grantable",
     "ensure_user": "EnsureUser",
     "create_service_account": "CreateServiceAccount",
     "get_principal": "GetPrincipal",
@@ -109,6 +113,7 @@ PUBLIC_OPERATIONS = frozenset({"token", "jwks"})
 # message lists every error.
 ERRORS: dict[str, type[Exception]] = {
     "PERMISSION_DENIED": PermissionDeniedError,
+    "GRANT_NOT_HELD": GrantNotHeldError,
     "NOT_FOUND": IAMNotFoundError,
     "CONFLICT": IAMConflictError,
     "REVISION_CONFLICT": RevisionConflictError,
@@ -120,6 +125,8 @@ ERRORS: dict[str, type[Exception]] = {
 def error_code(exc: BaseException) -> str:
     if isinstance(exc, (KeyRefusedError, InvalidServiceTokenError)):
         return "UNAUTHENTICATED"
+    if isinstance(exc, GrantNotHeldError):
+        return "GRANT_NOT_HELD"
     if isinstance(exc, PermissionDeniedError):
         return "PERMISSION_DENIED"
     if isinstance(exc, IAMNotFoundError):
@@ -140,6 +147,8 @@ def raise_for(error: Any, *, subject_refusal: bool = False) -> None:
     that is not the key refusal is a subject that failed verification
     (``InvalidServiceTokenError``), as in process."""
     cls = ERRORS.get(error.code)
+    if cls is GrantNotHeldError:
+        raise GrantNotHeldError(message=error.message)
     if cls is PermissionDeniedError:
         raise PermissionDeniedError(message=error.message)
     if cls is KeyRefusedError and error.message == "invalid key":
@@ -538,4 +547,26 @@ def manifest_from_pb(message: pb.Manifest) -> ManifestRecord:
         decided_at=_datetime(message, "decided_at"),
         decided_by=_optional(message, "decided_by"),
         reason=message.reason,
+    )
+
+
+def grantable_to_pb(catalog: GrantableCatalog) -> pb.GrantableCatalog:
+    return pb.GrantableCatalog(
+        service=catalog.service,
+        actions=[
+            pb.GrantableAction(
+                action=a.action, resources=list(a.resources), excluded=list(a.excluded)
+            )
+            for a in catalog.actions
+        ],
+    )
+
+
+def grantable_from_pb(message: pb.GrantableCatalog) -> GrantableCatalog:
+    return GrantableCatalog(
+        service=message.service,
+        actions=tuple(
+            GrantableAction(a.action, tuple(a.resources), tuple(a.excluded))
+            for a in message.actions
+        ),
     )

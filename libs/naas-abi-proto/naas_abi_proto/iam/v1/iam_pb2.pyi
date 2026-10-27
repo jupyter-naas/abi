@@ -348,6 +348,40 @@ class ExplainResponse(_message.Message):
     explanation: Explanation
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., explanation: _Optional[_Union[Explanation, _Mapping]] = ...) -> None: ...
 
+class GrantableAction(_message.Message):
+    __slots__ = ("action", "resources", "excluded")
+    ACTION_FIELD_NUMBER: _ClassVar[int]
+    RESOURCES_FIELD_NUMBER: _ClassVar[int]
+    EXCLUDED_FIELD_NUMBER: _ClassVar[int]
+    action: str
+    resources: _containers.RepeatedScalarFieldContainer[str]
+    excluded: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, action: _Optional[str] = ..., resources: _Optional[_Iterable[str]] = ..., excluded: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class GrantableCatalog(_message.Message):
+    __slots__ = ("service", "actions")
+    SERVICE_FIELD_NUMBER: _ClassVar[int]
+    ACTIONS_FIELD_NUMBER: _ClassVar[int]
+    service: str
+    actions: _containers.RepeatedCompositeFieldContainer[GrantableAction]
+    def __init__(self, service: _Optional[str] = ..., actions: _Optional[_Iterable[_Union[GrantableAction, _Mapping]]] = ...) -> None: ...
+
+class GrantableRequest(_message.Message):
+    __slots__ = ("context", "scope")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    SCOPE_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    scope: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., scope: _Optional[str] = ...) -> None: ...
+
+class GrantableResponse(_message.Message):
+    __slots__ = ("error", "catalogs")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    CATALOGS_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    catalogs: _containers.RepeatedCompositeFieldContainer[GrantableCatalog]
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., catalogs: _Optional[_Iterable[_Union[GrantableCatalog, _Mapping]]] = ...) -> None: ...
+
 class EnsureUserRequest(_message.Message):
     __slots__ = ("context", "issuer", "subject", "provider", "email", "email_verified", "display_name")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]

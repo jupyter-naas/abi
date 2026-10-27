@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -21,6 +22,9 @@ from naas_abi.apps.nexus.apps.api.app.models import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
     get_current_user_required,
+)
+from naas_abi.apps.nexus.apps.api.app.services.exceptions import (
+    register_service_exception_handlers,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
@@ -36,6 +40,12 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary impor
 )
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary.workspaces__primary_adapter__FastAPI import (  # noqa: E501
     router as workspaces_router,
+)
+from naas_abi_core.engine.call_context import (
+    CallContext,
+    Principal,
+    service_account,
+    use_call_context,
 )
 
 USERS = ("owner", "admin", "member", "viewer", "stranger", "bob")
@@ -86,9 +96,23 @@ async def api(team, nexus_db, monkeypatch):
         monkeypatch.setattr(module, "send_added_notice", no_mail)
 
     app = FastAPI()
+    register_service_exception_handlers(app)  # as main.py does
     app.include_router(workspaces_router, prefix="/api/workspaces")
     app.include_router(organizations_router, prefix="/api/organizations")
-    current = {"id": "member"}
+    current: dict[str, Any] = {"id": "member", "scope": None}
+
+    @app.middleware("http")
+    async def credential(request, call_next):
+        """A personal key's request: ``api`` for the user, narrowed by the key."""
+        if current["scope"] is None:
+            return await call_next(request)
+        context = CallContext(
+            principal=service_account("api"),
+            on_behalf_of=Principal(id=current["id"], kind="user"),
+            scope=current["scope"],
+        )
+        with use_call_context(context):
+            return await call_next(request)
 
     async def session():
         async with nexus_db() as db:
@@ -105,8 +129,8 @@ async def api(team, nexus_db, monkeypatch):
         id=current["id"], email=f"{current['id']}@example.com", name=current["id"].title()
     )
 
-    def as_(user: str) -> AsyncClient:
-        current["id"] = user
+    def as_(user: str, scope: Any = None) -> AsyncClient:
+        current["id"], current["scope"] = user, scope
         return AsyncClient(transport=ASGITransport(app=app), base_url="http://t")
 
     return as_
@@ -451,3 +475,36 @@ async def test_an_orgs_own_scope_is_never_a_workspace_of_the_path(api) -> None:
         assert await role("bob", ORG) is None
     assert await AUTHZ.org_of("-") is None and await AUTHZ.org_of("*") is None
     assert await AUTHZ.org_of("ws-1") == "org-1"
+
+
+# -- grant only what you hold -------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_key_that_only_reads_gives_no_role_that_writes(api) -> None:
+    """A personal key narrows what its owner may grant: an admin's read-only key
+    (that may still attach) makes no member, which writes."""
+    reads_and_attaches = [
+        {
+            "effect": "Allow",
+            "actions": [
+                "nexus:*",
+                "*:List*",
+                "*:Get*",
+                "*:Query*",
+                "*:Read*",
+                "iam:AttachPolicy",
+                "iam:DetachPolicy",
+            ],
+            "resources": ["*"],
+        }
+    ]
+    async with api("admin", scope=reads_and_attaches) as http:
+        refused = await http.patch("/api/workspaces/ws-1/members/viewer", json={"role": "member"})
+        assert refused.status_code == 403, refused.text
+        assert "the scope of your credential does not allow it" in refused.json()["detail"]
+    assert await role("viewer", WS) == "viewer"
+    async with api("admin") as http:
+        granted = await http.patch("/api/workspaces/ws-1/members/viewer", json={"role": "member"})
+        assert granted.status_code == 200, granted.text
+    assert await role("viewer", WS) == "member"
