@@ -18,7 +18,8 @@ answers there only, ``naas_abi_sdk.messages.reply_allowed``).
 
 * **Always**: IAM's read-only and self-service request subjects
   (``IAM_ALWAYS``: ``token``, ``exchange_token``, ``jwks``, ``submit_manifest``, ``get_manifest``,
-  ``find_service_account``, ``authorize``, ``authorize_declared``, ``filter``; never a mutation, never
+  ``find_service_account``, ``authorize``, ``authorize_declared``, ``filter``, ``grantable``;
+  never a mutation, never
   ``abi.iam.v1.changed``); the others only for an ``iam:`` action the policy
   allows; the engine's broker
   control (``abi.broker.v1.<operation>``: it checks each request against the

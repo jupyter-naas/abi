@@ -45,7 +45,14 @@ from naas_abi_core.engine.nats_auth import (
     host_audience,
     issuable_audience,
 )
-from naas_abi_core.services.iam import broker, keys, module_scopes, modules, roles
+from naas_abi_core.services.iam import (
+    broker,
+    grants,
+    keys,
+    module_scopes,
+    modules,
+    roles,
+)
 from naas_abi_core.services.iam.adapters.secondary.authorizer__policy import (
     PolicyAuthorizer,
 )
@@ -2666,7 +2673,7 @@ class IAMService(IIAMService, PolicySource):
         )
         policy, declared = modules.split_manifest(document)
         parsed = parse_policy_document(policy)
-        _refuse_reserved_topics(parsed)
+        _refuse_reserved_topics(modules.bind(parsed, project, module_id))
         catalog = self._manifest_catalog(declared, module_id, project)
         raw = modules.manifest_document(parsed, catalog)
         sha256 = modules.manifest_sha256(raw)

@@ -168,7 +168,11 @@ def test_a_declared_action_is_named_by_iam_and_required():
     client.authorize_declared.return_value = pb.AuthorizeDeclaredResponse(
         decision=pb.Decision(allowed=True, visible=True, reason="allow")
     )
-    run(iam.require_declared("acme_reports:ExportReport", "report", ["q3"], workspace="ws-1"))
+    run(
+        iam.require_declared(
+            "acme_reports:ExportReport", "report", ["q3"], workspace="ws-1"
+        )
+    )
     assert client.authorize_declared.call_args.args[0].workspace_id == "ws-1"
 
 
@@ -197,3 +201,42 @@ def test_a_module_requires_its_own_actions_by_name():
     iam.require_declared.assert_awaited_once_with(
         "acme_reports:ExportReport", "report", ["q3"], workspace=None
     )
+
+
+def test_what_may_be_granted_and_its_refusal():
+    client = AsyncMock()
+    client.grantable.return_value = pb.GrantableResponse(
+        catalogs=[
+            pb.GrantableCatalog(
+                service="triple_store",
+                actions=[
+                    pb.GrantableAction(
+                        action="triple_store:Query",
+                        resources=["${scope}:triple_store:graph/*"],
+                        excluded=["${scope}:triple_store:graph/hr*"],
+                    )
+                ],
+            )
+        ]
+    )
+    found = run(IAMService(client).grantable("abi:org-1:ws-1"))
+    assert found == [
+        {
+            "service": "triple_store",
+            "actions": [
+                {
+                    "action": "triple_store:Query",
+                    "resources": ["${scope}:triple_store:graph/*"],
+                    "excluded": ["${scope}:triple_store:graph/hr*"],
+                }
+            ],
+        }
+    ]
+    assert client.grantable.call_args.args[0].scope == "abi:org-1:ws-1"
+    client.attach_policy.side_effect = RPCError(
+        "GRANT_NOT_HELD", "You cannot grant what you do not hold: ..."
+    )
+    with pytest.raises(GrantNotHeld) as refused:
+        run(IAMService(client).attach_policy("builtin.owner", "usr_x", "abi:o:w"))
+    assert isinstance(refused.value, PermissionDenied)
+    assert "do not hold" in str(refused.value)

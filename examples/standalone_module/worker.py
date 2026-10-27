@@ -776,6 +776,17 @@ class ABIModule(BaseModule):
         )
         assert not declared.decision.allowed
         assert declared.resource == "abi:-:-:demo_research:brief/q3"
+        # What it may grant: what it holds, its own collections among it.
+        grantable = await self.call("iam", "grantable", scope="abi:-:-")
+        held = {
+            r
+            for c in grantable.catalogs
+            if c.service == "document"
+            for a in c.actions
+            if a.action == "document:Find"
+            for r in a.resources
+        }
+        assert any(r.startswith("${scope}:document:collection/") for r in held), held
         # The broker offers a module IAM's self-service and read-only questions
         # (token, jwks, manifest, authorize, filter, grantable) and no more: the lists and
         # every change are refused before they reach IAM, whoever's token the
