@@ -22,7 +22,13 @@ class InMemoryRemoteAgentDirectory:
         return list(self.agents)
 
     async def stream(
-        self, key: str, prompt: str, *, thread_id: str, invocation_id: str | None = None
+        self,
+        key: str,
+        prompt: str,
+        *,
+        thread_id: str,
+        invocation_id: str | None = None,
+        workspace_id: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         answer = next((fn for agent, fn in self.agents.items() if agent.key == key), None)
         if answer is None:

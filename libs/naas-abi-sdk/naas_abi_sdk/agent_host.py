@@ -10,7 +10,8 @@ import logging
 import math
 import re
 import time
-from dataclasses import dataclass, field
+from contextlib import AbstractContextManager, nullcontext
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from functools import partial
 from typing import Any, Protocol
@@ -23,6 +24,7 @@ from naas_abi_sdk import overflow
 from naas_abi_sdk.agent import TERMINAL, agent_subject
 from naas_abi_sdk.broker_flush import flush_to_broker
 from naas_abi_sdk.call_context import (
+    CallContext,
     delegation_context,
     use_call_context,
 )
@@ -75,6 +77,12 @@ class _Run:
     cancel_reason: str = ""
     started: asyncio.Event = field(default_factory=asyncio.Event)
     watchers: set[str] = field(default_factory=set)  # inboxes receiving RunUpdates
+    # The user the run is for, when it acts for one: the handler's calls carry
+    # it, the host's own records (the run, its events, its claim) never do.
+    delegation: CallContext | None = None
+
+    def for_user(self) -> AbstractContextManager[Any]:
+        return use_call_context(self.delegation) if self.delegation else nullcontext()
 
 
 def _hash(*values: str) -> str:
@@ -595,16 +603,19 @@ class AgentHost:
                 run.watchers.add(req.updates_inbox)
             run.progress_at = asyncio.get_running_loop().time()
             self.runs[key] = run
-            delegation = delegation_context(
+            # The handler's calls are the module's, for the user: inside
+            # ``run.for_user()`` its transport sends the delegation. The
+            # host's records are the module's own, which no user holds.
+            run.delegation = delegation_context(
                 req.delegated_token, caller, self.session.service_account
             )
-            if delegation is None:
-                run.task = asyncio.create_task(self._execute(name, req, run))
-            else:
-                # The run's calls are the module's, for the user: the task
-                # copies this context, and its transport sends the delegation.
-                with use_call_context(delegation):
-                    run.task = asyncio.create_task(self._execute(name, req, run))
+            if run.delegation is not None and req.context.workspace_id:
+                # The workspace of the turn: IAM places what the run does for
+                # the user there (``require_action``), as for any call made in it.
+                run.delegation = replace(
+                    run.delegation, workspace_id=req.context.workspace_id
+                )
+            run.task = asyncio.create_task(self._execute(name, req, run))
             run.task.add_done_callback(self._observe_task)
             streamed = req.mode == "stream" and hasattr(
                 self.handlers[name], "stream_invoke"
@@ -741,9 +752,16 @@ class AgentHost:
             if req.mode == "stream" and hasattr(handler, "stream_invoke"):
                 messages = []
                 done = False
-                stream = handler.stream_invoke(req.prompt, run.context)
+                with run.for_user():
+                    stream = handler.stream_invoke(req.prompt, run.context)
+                events = stream.__aiter__()
                 try:
-                    async for event in stream:
+                    while True:
+                        with run.for_user():
+                            try:
+                                event = await events.__anext__()
+                            except StopAsyncIteration:
+                                break
                         if done:
                             raise _error("INVALID_STREAM", "Agent emitted after done")
                         await self._event(run, event)
@@ -752,12 +770,14 @@ class AgentHost:
                         done = event["event"] == "done"
                 finally:
                     if hasattr(stream, "aclose"):
-                        await stream.aclose()
+                        with run.for_user():
+                            await stream.aclose()
                 result = "\n".join(messages)
                 if not done:
                     await self._event(run, {"event": "done", "data": "[DONE]"})
             else:
-                result = await handler.invoke(req.prompt, run.context)
+                with run.for_user():
+                    result = await handler.invoke(req.prompt, run.context)
                 if not isinstance(result, str):
                     raise _error("OUTPUT_LIMIT", "Agent result must be text")
                 await self._event(run, {"event": "message", "data": result})

@@ -51,7 +51,11 @@ class _Discovery:
 
 class _Handle:
     def __init__(self, proxy, prompt):
+        from naas_abi_core.engine.call_context import current_call_context
+
         self.proxy, self.prompt, self.cancelled = proxy, prompt, False
+        # The context the submit was made in (its transport sends its workspace).
+        self.workspace = current_call_context().workspace_id
 
     async def events(self, *, timeout=None):
         if self.prompt == "boom":
@@ -107,6 +111,16 @@ def test_runs_on_the_conversation_thread(directory):
     asyncio.run(run())
 
     assert _Proxy.handles[0].proxy.thread_id == "conv-7"
+
+
+def test_the_submit_carries_the_workspace_of_the_turn(directory):
+    async def run(**kwargs):
+        return [e async for e in directory.stream(RESEARCHER.key, "q", thread_id="c", **kwargs)]
+
+    asyncio.run(run(workspace_id="ws-1"))
+    asyncio.run(run())
+
+    assert [h.workspace for h in _Proxy.handles] == ["ws-1", None]
 
 
 def test_a_tool_response_keeps_its_chat_source_opt_out(directory):

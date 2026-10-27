@@ -1221,6 +1221,7 @@ class ChatService:
                     system_prompt=system_prompt,
                     thread_id=conversation_id,
                     injection_preamble=injection_preamble,
+                    workspace_id=request.workspace_id,
                 )
                 response_content = self._unwrap_json_content(response_content)
                 provider_used = f"{provider.name} ({provider.model})"

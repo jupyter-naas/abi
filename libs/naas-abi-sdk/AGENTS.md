@@ -420,7 +420,12 @@ The user a call acts for travels in an `abi:delegated:agent` token (`sub` the us
 - A module host runs an invocation with the delegation it was handed
   (`SubmitRequest.delegated_token`, kept only if it names the run's owner and this
   host's own account as the actor: `agent_host.py`, otherwise the run is the module's
-  own): `CallContext.delegated_token`. `Transport.delegated_token` sends it, in place
+  own): `CallContext.delegated_token`, with the workspace of the submit
+  (`SubmitRequest.context.workspace_id`, the turn's: Nexus sends it), so IAM places what
+  the run does for the user there (`require_action`). Only the handler runs under it
+  (`_Run.for_user`): the host's own records (the run, its events and output, the
+  conversation claim) are the module's, as a workflow's bookkeeping is, since no user
+  holds the module's documents. `Transport.delegated_token` sends it, in place
   of the module's token, on the kernel calls the run makes for that user, and renews
   it through the service key (`ServiceKey.renew_delegation`: IAM exchanges it again
   for the same audience, up to eight hours after it began). A module's own side of the

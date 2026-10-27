@@ -24,8 +24,12 @@ the workspace built is `nexus:UseAgent` and the roles.
   always its own. Turning a module's agent on, or creating a row for one, outside the set is 403.
 - **On or off for everyone.** `enabled` (with `enabled_override`, so a later sync keeps the choice) is the workspace's
   switch. One off is listed only to who holds `UpdateAgent` on that agent, and refused to everyone when used: chat
-  (`authorize_agent_use` checks the row), `/v1`, and as a sub-agent (the in-process runtime runs only the enabled
-  roster, `core/agent_feature_access.bind_usable_agents`).
+  (a module's agent by its scope's visibility, `AgentsVisibility`: off when none of its rows is on, as the roster
+  shows it; one the workspace built by its row), `/v1`, and as a sub-agent (the in-process runtime runs only the
+  enabled roster, `core/agent_feature_access.bind_usable_agents`).
+- **A remote agent runs in the turn's workspace.** `RemoteAgentDirectory.stream(..., workspace_id=)` submits under it
+  (`SubmitRequest.context.workspace_id`), and the module's host runs the handler for the user there: an action the
+  module declares is decided in that workspace (`require_action`), where the user's grants are.
 
 ## Tests
 

@@ -20,7 +20,7 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 | `names.py` | Scopes and resource names; `NO_ORG` (`_none`) is the org of a workspace that has none |
 | `placements.py` | Which workspace owns the kernel resources Nexus keeps (`placement_source`, `place`, `place_existing`) |
 | `bootstrap.py` | Startup: register the catalog, compute the feature policies, move the old membership rows into IAM once (`iam_migrations`) |
-| `sets.py` | The organisation and workspace sets from Nexus's side: what a workspace lists (`within_set`, `in_set`, `workspace_set`), effective features of a workspace, a user's feature flags from IAM (`user_feature_flags`), a new workspace's set (`seed_workspace`, narrowed by its catalog seed), the one-time move of the feature overrides (`migrate_feature_overrides`) |
+| `sets.py` | The organisation and workspace sets from Nexus's side: what a workspace lists (`within_set`, `in_set`, `workspace_set`), effective features of a workspace, a user's feature flags from IAM (`user_feature_flags`), a new workspace's set (`plan_workspace_set` then `record_workspace_set`, narrowed by its catalog seed), the one-time move of the feature overrides (`migrate_feature_overrides`) |
 | `runtime.py` | Where Nexus gets IAM (the engine's); tests install their own with `configure` |
 | `testing.py`, `../../conftest.py` | `NexusIam` (a real IAM on the memory store) and the `nexus_iam` / `team` / `nexus_db` fixtures |
 | `route_matrix_test.py` | Every route declares its action; write methods never authorize only a read; every `guard` is decided by level for viewer, member, admin, owner, stranger |
@@ -56,7 +56,10 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
   `discovery:OpenApp` on `app/*/idp/admin`. Do not widen `OpenApp` for a role without it.
 - **A create that fails after the row exists removes it** (and the IAM scope): see `OrganizationService.create_organization`
   and `WorkspaceService.create_workspace`. A new workspace places its own resources with `on_workspace_created`, never
-  `place_existing`.
+  `place_existing`. Its set is decided before anything exists (`sets.plan_workspace_set`, within its org's); placing
+  or recording it failing removes the workspace and its placements (`placements.forget_workspace`): 409 when the org's
+  set narrowed meanwhile, 503 without IAM. An import or the feature-override move records a workspace's features
+  within its org's set (`sets.put_features`).
 - **`-`, `*` and `_none` are not workspaces.** Never build a workspace scope or resource name from a path value
   without `Authz.org_of`/`name` (they refuse those ids): `abi:<org>:-` is the organization's own scope.
 - **A change that widens what a workspace holds is checked beyond the catalog** (`read_all` is a platform
@@ -171,7 +174,7 @@ with them (core `services/iam/AGENTS.md`, "Sets"). Nexus:
 - **Edits sets as the user** through `services/iam_admin` (`/api/iam/admin/sets`, audited): the modules ×
   workspaces page. `settings` is added to every feature set it records (`PINNED_FEATURES`): a set never takes
   a workspace's settings away.
-- **Records a new workspace's set** (`seed_workspace`, as `engine`, part of the creation the route authorized),
+- **Records a new workspace's set** (`plan_workspace_set` before the row exists, `record_workspace_set` after, as `engine`, part of the creation the route authorized),
   a part only where something narrows it, so the rest follows its org's set, now and after the org's set
   changes:
   - `features`, when the create form chose them, within the org's;

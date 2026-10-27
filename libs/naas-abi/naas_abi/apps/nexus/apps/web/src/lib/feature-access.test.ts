@@ -70,6 +70,10 @@ describe('getFeatureForWorkspacePath', () => {
     expect(getGatingFeatureForWorkspacePath('/workspace/ws1/apps?open=x')).toBe(null);
     expect(getGatingFeatureForWorkspacePath('/workspace/ws1/apps/p/my-app')).toBe('apps');
     expect(getGatingFeatureForWorkspacePath('/workspace/ws1/chat')).toBe('chat');
+    // Roles & permissions is IAM's to open (GET /access), not a feature's: a member
+    // holding only iam:ListPolicies there opens it without the settings feature.
+    expect(getGatingFeatureForWorkspacePath('/workspace/ws1/settings/permissions')).toBe(null);
+    expect(getGatingFeatureForWorkspacePath('/workspace/ws1/settings/general')).toBe('settings.workspace');
     expect(getFeatureForWorkspacePath('/workspace/ws1/marketplace')).toBe('marketplace');
     expect(getFeatureForWorkspacePath('/workspace/ws1/help')).toBe('settings');
   });

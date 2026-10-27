@@ -703,9 +703,11 @@ async def complete_chat(
     *,
     thread_id: str | None = None,
     injection_preamble: str | None,
+    workspace_id: str | None = None,
 ) -> str:
     """
-    Route chat completion to the appropriate provider.
+    Route chat completion to the appropriate provider. ``workspace_id``: the
+    turn's workspace, which a remote agent's run is placed in.
     """
     if not config.enabled:
         raise ValueError(f"Provider '{config.name}' is not enabled")
@@ -730,7 +732,11 @@ async def complete_chat(
         )
     elif config.type == "remote":
         return await complete_with_remote_agent(
-            messages, config, thread_id=thread_id, injection_preamble=injection_preamble
+            messages,
+            config,
+            thread_id=thread_id,
+            injection_preamble=injection_preamble,
+            workspace_id=workspace_id,
         )
     else:
         raise ValueError(f"Unknown provider type: {config.type}")
@@ -742,6 +748,7 @@ async def complete_with_remote_agent(
     *,
     thread_id: str | None,
     injection_preamble: str | None,
+    workspace_id: str | None = None,
 ) -> str:
     """The streamed answer of an agent published by a remote module, whole:
     its text chunks joined, its step events left out. Raises when the agent is
@@ -759,6 +766,7 @@ async def complete_with_remote_agent(
         thread_id,
         user_context_preamble=injection_preamble,
         invocation_id=None,
+        workspace_id=workspace_id,
     ):
         if isinstance(chunk, str):
             parts.append(chunk)

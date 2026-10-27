@@ -48,10 +48,19 @@ class RemoteAgentDirectory(Protocol):
         ...
 
     def stream(
-        self, key: str, prompt: str, *, thread_id: str, invocation_id: str | None = None
+        self,
+        key: str,
+        prompt: str,
+        *,
+        thread_id: str,
+        invocation_id: str | None = None,
+        workspace_id: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Run one turn; yields ``{"event", "data"}`` like core ``Agent.stream_invoke``,
         with ``"chat_source": False`` on a tool response whose tool opted out.
+
+        ``workspace_id``: the workspace of the turn, the run's own: what the
+        module does there for the user is decided there (a declared action).
 
         Raises RemoteAgentUnavailable when the agent cannot be reached or its run fails.
         """

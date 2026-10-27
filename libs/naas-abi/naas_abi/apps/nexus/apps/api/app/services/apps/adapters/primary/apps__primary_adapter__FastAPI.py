@@ -379,6 +379,7 @@ def _scan_apps_html_assets() -> dict[str, tuple[str, str]]:
 
 
 def _remote_app_info(app: Any) -> AppInfo:
+    """An app of a READY remote module: served, so installed."""
     return AppInfo(
         module_path=app.module_path,
         module_name=app.module_id,
@@ -389,6 +390,7 @@ def _remote_app_info(app: Any) -> AppInfo:
         description=app.description,
         url=app.url,
         icon_emoji=app.icon_emoji or None,
+        installed=True,
     )
 
 

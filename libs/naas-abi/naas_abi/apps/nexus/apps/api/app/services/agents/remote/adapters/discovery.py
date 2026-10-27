@@ -68,7 +68,13 @@ class DiscoveryRemoteAgentDirectory:
                 return sorted(found.values(), key=lambda a: a.key)
 
     async def stream(
-        self, key: str, prompt: str, *, thread_id: str, invocation_id: str | None = None
+        self,
+        key: str,
+        prompt: str,
+        *,
+        thread_id: str,
+        invocation_id: str | None = None,
+        workspace_id: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         from naas_abi_sdk.agent import AgentState, SubmissionUncertain
         from naas_abi_sdk.transport import RPCError
@@ -76,10 +82,19 @@ class DiscoveryRemoteAgentDirectory:
         module_id, name = split_key(key)
         if len(prompt.encode()) > MAX_PROMPT_BYTES:
             raise RemoteAgentUnavailable(key, "prompt exceeds 64 KiB")
+        from dataclasses import replace
+
+        from naas_abi_core.engine.call_context import current_call_context, use_call_context
+
+        current = current_call_context()
+        # The submit carries the turn's workspace (the request's context): the
+        # module's run, and IAM for what it does there, place the call there.
+        in_workspace = replace(current, workspace_id=workspace_id) if workspace_id else current
         try:
             proxy = await self._open_agent(self._client(), module_id, name)
             scoped = proxy.duplicate(agent_shared_state=AgentState(thread_id))
-            handle = await scoped.submit(prompt, invocation_id=invocation_id, stream=True)
+            with use_call_context(in_workspace):
+                handle = await scoped.submit(prompt, invocation_id=invocation_id, stream=True)
         except RPCError as exc:
             raise RemoteAgentUnavailable(key, exc.code) from exc
         except SubmissionUncertain as exc:

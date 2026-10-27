@@ -72,10 +72,13 @@ def _install_fakes(monkeypatch, calls: list[dict[str, Any]]) -> None:
     async def noop(**_kwargs) -> None:
         return None
 
-    async def fake_remote(messages, config, *, thread_id, user_context_preamble, invocation_id):
+    async def fake_remote(
+        messages, config, *, thread_id, user_context_preamble, invocation_id, workspace_id
+    ):
         calls.append(
             {
                 "model": config.model,
+                "workspace_id": workspace_id,
                 "thread_id": thread_id,
                 "invocation_id": invocation_id,
                 "preamble": user_context_preamble,
@@ -118,6 +121,8 @@ def test_remote_turn_streams_through_the_remote_agent(monkeypatch) -> None:
     assert calls == [
         {
             "model": "acme.research/Researcher",
+            # The request's workspace is the run's (none named here).
+            "workspace_id": None,
             "thread_id": "conv-1",
             "invocation_id": "assistant-msg-1",
             "preamble": "USER PROFILE",

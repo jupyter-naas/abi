@@ -194,13 +194,18 @@ export function pathNeedsGraphExport(pathname: string | null | undefined): boole
  * The feature a route needs to be opened: its section's, except the Apps page.
  * Opening an app is that app's module scope, which the API checks (the page lists
  * only the apps the caller may open); the "apps" feature is the app projects
- * (`/apps/p/<slug>`) and the settings.
+ * (`/apps/p/<slug>`) and the settings. Settings › Roles & permissions is IAM's: the
+ * page shows each section from the caller's `iam:` rights (`GET /access`), so a member
+ * an admin gave one of them opens it without the settings feature.
  */
 export function getGatingFeatureForWorkspacePath(pathname: string): FeatureKey | null {
   const feature = getFeatureForWorkspacePath(pathname);
-  if (feature !== 'apps') return feature;
   const parts = pathWithoutQuery(pathname).split('/').filter(Boolean);
   const workspaceIndex = parts.indexOf('workspace');
+  if (feature === 'settings.workspace') {
+    return parts[workspaceIndex + 3] === 'permissions' ? null : feature;
+  }
+  if (feature !== 'apps') return feature;
   return parts[workspaceIndex + 3] === 'p' ? 'apps' : null;
 }
 

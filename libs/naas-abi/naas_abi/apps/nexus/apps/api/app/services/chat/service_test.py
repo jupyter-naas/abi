@@ -471,7 +471,7 @@ async def test_complete_chat_request_with_provider_uses_completion(monkeypatch) 
     captured: dict = {}
 
     async def _fake_complete_chat(
-        messages, config, system_prompt, thread_id=None, injection_preamble=None
+        messages, config, system_prompt, thread_id=None, injection_preamble=None, workspace_id=None
     ):
         captured["injection_preamble"] = injection_preamble
         return '{"content":"assistant answer"}'
@@ -538,7 +538,7 @@ async def test_complete_chat_request_forwards_injection_preamble_for_abi(monkeyp
     captured: dict = {}
 
     async def _fake_complete_chat(
-        messages, config, system_prompt, thread_id=None, injection_preamble=None
+        messages, config, system_prompt, thread_id=None, injection_preamble=None, workspace_id=None
     ):
         captured["injection_preamble"] = injection_preamble
         return "assistant answer"
@@ -607,7 +607,7 @@ async def _complete_and_capture_llm_model(monkeypatch, message: str) -> str | No
     captured: dict = {}
 
     async def _fake_complete_chat(
-        messages, config, system_prompt, thread_id=None, injection_preamble=None
+        messages, config, system_prompt, thread_id=None, injection_preamble=None, workspace_id=None
     ):
         captured["llm_model"] = config.llm_model
         return "assistant answer"

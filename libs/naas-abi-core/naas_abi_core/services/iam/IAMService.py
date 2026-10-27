@@ -2168,7 +2168,9 @@ class IAMService(IIAMService, PolicySource):
                 continue  # another sign-in of this user claimed it first
             claimed.append(attachment)
             if grant.policy_id in roles.ROLES:
+                # The role's companions, as for an attached one.
                 self._sync_platform_roles(principal_id)
+                self._sync_feature_policies(principal_id)
         if claimed:
             self._changed()
         return claimed

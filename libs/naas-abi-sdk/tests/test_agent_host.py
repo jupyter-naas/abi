@@ -923,6 +923,71 @@ def test_a_run_executes_as_the_module_for_the_user_it_was_delegated():
     asyncio.run(scenario())
 
 
+class OwnDocuments(Documents):
+    """Documents recording whether each write carried a user's delegation."""
+
+    def __init__(self):
+        super().__init__()
+        self.delegated: list[str] = []
+
+    async def put(self, collection, id, data, if_version=None):
+        from naas_abi_sdk.call_context import current_call_context
+
+        if current_call_context().delegated_token:
+            self.delegated.append(f"{collection}/{id}")
+        return await super().put(collection, id, data, if_version=if_version)
+
+    async def delete(self, collection, id, if_version=None):
+        from naas_abi_sdk.call_context import current_call_context
+
+        if current_call_context().delegated_token:
+            self.delegated.append(f"delete {collection}/{id}")
+        return await super().delete(collection, id, if_version=if_version)
+
+
+class SeenStream(Seen):
+    async def stream_invoke(self, prompt, context):
+        self.contexts.append(self.current())
+        yield {"event": "message", "data": "one"}
+        self.contexts.append(self.current())
+        yield {"event": "done", "data": "[DONE]"}
+
+
+@pytest.mark.parametrize("mode", ["invoke", "stream"])
+def test_the_hosts_own_records_are_never_the_users(mode):
+    """The run, its events and its claim are the module's records, which a user
+    holds no right to: only the handler's calls carry the delegation."""
+
+    async def scenario():
+        seen, docs = SeenStream(), OwnDocuments()
+        owner = host(docs, seen)
+        token = _delegation_token()
+        submit = _delegated_request(token)
+        submit.mode = mode
+        await owner._submit("agent", "key", "caller", submit)
+        await owner.runs["key"].task
+        assert seen.contexts and all(c.delegated_token == token for c in seen.contexts)
+        assert docs.delegated == []
+        stored = await docs.get(owner.runs_collection, "key")
+        assert stored.data["status"] == "SUCCEEDED"
+
+    asyncio.run(scenario())
+
+
+def test_a_delegated_run_is_in_the_workspace_of_its_submit():
+    async def scenario():
+        seen = Seen()
+        owner = host(Documents(), seen)
+        submit = _delegated_request(_delegation_token())
+        submit.context.workspace_id = "ws-1"
+        await owner._submit("agent", "key", "caller", submit)
+        await owner.runs["key"].task
+        [context] = seen.contexts
+        assert context.workspace_id == "ws-1" and context.user is not None
+
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize(
     "token",
     [

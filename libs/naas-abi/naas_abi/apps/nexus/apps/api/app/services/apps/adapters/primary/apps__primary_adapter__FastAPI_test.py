@@ -61,6 +61,9 @@ def test_remote_module_apps_join_the_catalog(monkeypatch: pytest.MonkeyPatch) ->
     assert info.module_path == "remote/acme.research"
     assert info.url == "/app-html/remote/acme.research/console/index.html"
     assert (info.name, info.category, info.icon_emoji) == ("Console", "operations", "🛰")
+    # A READY module serves it: installed, as a loaded module's app is, so the
+    # Apps pages and the workspace settings list it.
+    assert info.installed is True
 
 
 def test_a_discovery_outage_still_lists_the_local_apps(monkeypatch: pytest.MonkeyPatch) -> None:

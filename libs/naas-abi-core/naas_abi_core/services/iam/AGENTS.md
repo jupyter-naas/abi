@@ -897,7 +897,7 @@ everything; for a workspace, whatever its org has).
 
 | Part | Items |
 |---|---|
-| `modules` | `<module>`: the whole module, every agent, app, workflow and pipeline (`module:<type>/<module>/*`) and every action of the catalog it declares; `<type>/<module>/<name>`: one agent, app, workflow or pipeline (`<name>` `*`: every one of that type; `<type>/*/*`: every one of that type of every module, installed now or later); `<service>:<Action>`: one action of the catalog a module declares (`<service>` is `module_service(<module>)`; `<service>:*` all of them, `*:*` every module's) |
+| `modules` | `<module>`: the whole module, every agent, app, workflow and pipeline (`module:<type>/<module>/*`) and every action of the catalog it declares (a name with no catalog name, `*`, `--`, `...`, is refused: every module is written `<type>/*/*` and `*:*`); `<type>/<module>/<name>`: one agent, app, workflow or pipeline (`<name>` `*`: every one of that type; `<type>/*/*`: every one of that type of every module, installed now or later); `<service>:<Action>`: one action of the catalog a module declares (`<service>` is `module_service(<module>)`; `<service>:*` all of them, `*:*` every module's) |
 | `features` | Nexus feature keys: `nexus:feature/<key>` |
 
 The wildcards of every module say "every module but only these agents" with no list of
@@ -1513,7 +1513,9 @@ iam.list_idp_bindings(provider=None, policy_id=None)
   never from an email the caller supplies, since `claim_pending_grants` reads the
   user's own record. The claim is one store step per grant
   (`IAMStore.claim_pending_grant`: delete the grant and attach, so racing sign-ins
-  attach it once) and keeps the platform companions of the roles in step.
+  attach it once) and keeps the companions of the roles in step, the platform ones and
+  the feature policies, as attaching the role does: an invitee gets the role's Nexus
+  features from the first sign-in.
 - **Authorized as the attachment it stands for.** Creating one needs
   `iam:AttachPolicy` and revoking one `iam:DetachPolicy` on
   `abi:<org>:<ws>:iam:attachment/<policy>/pending:<provider>:<email>`, so a
