@@ -6,6 +6,7 @@ import {
   Database,
   Gauge,
   KeyRound,
+  LayoutGrid,
   Network,
   Radio,
   Server,
@@ -14,6 +15,7 @@ import {
   Workflow,
 } from 'lucide-react';
 import {
+  MODULE_SETS_PATH,
   ROLES_PATH,
   SYSTEM_VIEWS,
   systemViewPath,
@@ -34,6 +36,7 @@ export type PlatformSettingsNeed = { action: string } | { anyOf: 'iam' };
 
 export const READ_SYSTEM: PlatformSettingsNeed = { action: 'nexus:ReadSystem' };
 export const ANY_IAM_ACTION: PlatformSettingsNeed = { anyOf: 'iam' };
+export const GET_SET: PlatformSettingsNeed = { action: 'iam:GetSet' };
 
 export type PlatformSettingsNavItem = {
   id: string;
@@ -83,6 +86,14 @@ export const ROLES_ITEM: PlatformSettingsNavItem = {
   needs: ANY_IAM_ACTION,
 };
 
+export const MODULE_SETS_ITEM: PlatformSettingsNavItem = {
+  id: 'modules',
+  label: 'Modules & features',
+  href: MODULE_SETS_PATH,
+  icon: LayoutGrid,
+  needs: GET_SET,
+};
+
 export const platformSettingsGroups: PlatformSettingsNavGroup[] = [
   { label: null, items: [NEXUS_TABLES_ITEM] },
   {
@@ -95,7 +106,7 @@ export const platformSettingsGroups: PlatformSettingsNavGroup[] = [
       needs: READ_SYSTEM,
     })),
   },
-  { label: 'Access', items: [ROLES_ITEM] },
+  { label: 'Access', items: [ROLES_ITEM, MODULE_SETS_ITEM] },
 ];
 
 export const platformSettingsNav: PlatformSettingsNavItem[] = platformSettingsGroups.flatMap(

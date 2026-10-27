@@ -19,6 +19,9 @@ export const SYSTEM_PATH = '/settings/system';
 /** Roles & permissions, which was System's Access tab. */
 export const ROLES_PATH = '/settings/roles';
 
+/** Modules & features: the sets of the organizations and their workspaces. */
+export const MODULE_SETS_PATH = '/settings/modules';
+
 export const SYSTEM_VIEWS: { id: SystemView; label: string; description: string }[] = [
   { id: 'overview', label: 'Overview', description: 'Health of the kernel services, modules and the NATS network' },
   { id: 'services', label: 'Services', description: 'Kernel services and their adapters' },

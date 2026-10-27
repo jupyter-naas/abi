@@ -26,7 +26,7 @@ describe('old table pages', () => {
   });
 
   it('leave the sections, the index and legacy workspace links alone', () => {
-    for (const path of ['/settings', '/settings/tables', '/settings/tables/users', '/settings/system', '/settings/system/jobs', '/settings/roles']) {
+    for (const path of ['/settings', '/settings/tables', '/settings/tables/users', '/settings/system', '/settings/system/jobs', '/settings/roles', '/settings/modules']) {
       expect(platformSettingsRedirect(path)).toBeNull();
     }
     expect(platformSettingsRedirect('/settings/infrastructure')).toBeNull();
@@ -72,16 +72,17 @@ describe('old System links', () => {
 
 describe('PLATFORM_SETTINGS_SECTIONS', () => {
   it('is the first segment of each section path', () => {
-    expect(PLATFORM_SETTINGS_SECTIONS).toEqual(['tables', 'system', 'roles']);
+    expect(PLATFORM_SETTINGS_SECTIONS).toEqual(['tables', 'system', 'roles', 'modules']);
   });
 });
 
 describe('isPlatformSettingsPath', () => {
-  it('is the index and the three sections', () => {
+  it('is the index and the sections', () => {
     expect(isPlatformSettingsPath('/settings')).toBe(true);
     expect(isPlatformSettingsPath('/settings/tables/users')).toBe(true);
     expect(isPlatformSettingsPath('/settings/system/events')).toBe(true);
     expect(isPlatformSettingsPath('/settings/roles')).toBe(true);
+    expect(isPlatformSettingsPath('/settings/modules')).toBe(true);
     expect(isPlatformSettingsPath('/settings/members')).toBe(false);
     expect(isPlatformSettingsPath('/settings/tablesx')).toBe(false);
   });

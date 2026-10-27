@@ -7,7 +7,7 @@ import { isPlatformSettingsPath, platformSettingsRedirect } from './app/settings
  *
  * Routing hierarchy:
  *   /account/*                        -> authed
- *   /settings, /settings/{tables,system,roles}/... -> authed, Platform Settings
+ *   /settings, /settings/{tables,system,roles,modules}/... -> authed, Platform Settings
  *   /settings/<table>, /workspace/[id]/admin/{system,events} -> redirected there (old links)
  *   /organizations/[orgId]/settings   -> authed
  *   /org/[orgSlug]/login              -> public, org-branded login

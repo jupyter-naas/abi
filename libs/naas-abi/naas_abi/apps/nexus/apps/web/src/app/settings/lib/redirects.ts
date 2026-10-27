@@ -2,7 +2,13 @@
  * Old Platform Settings and System links, and where they go now. No React here:
  * src/middleware.ts calls it before anything else.
  */
-import { ROLES_PATH, SYSTEM_PATH, legacySystemTabPath, systemViewPath } from '../system/system-tabs';
+import {
+  MODULE_SETS_PATH,
+  ROLES_PATH,
+  SYSTEM_PATH,
+  legacySystemTabPath,
+  systemViewPath,
+} from '../system/system-tabs';
 import {
   LEGACY_WORKSPACE_SETTINGS_SLUGS,
   PLATFORM_TABLES_PATH,
@@ -14,6 +20,7 @@ export const PLATFORM_SETTINGS_SECTIONS: readonly string[] = [
   PLATFORM_TABLES_PATH,
   SYSTEM_PATH,
   ROLES_PATH,
+  MODULE_SETS_PATH,
 ].map((path) => path.split('/')[2]);
 
 // `/workspace/<id>/admin/...`, also behind an org's `/org/<slug>` prefix.

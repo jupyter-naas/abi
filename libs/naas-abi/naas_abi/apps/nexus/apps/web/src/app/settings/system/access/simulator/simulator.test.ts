@@ -58,6 +58,9 @@ describe('simulator wording', () => {
   it('says each reason in a sentence', () => {
     expect(reasonText('implicit_deny')).toContain('No statement allows it');
     expect(reasonText('explicit_deny')).toContain('explicit Deny always wins');
+    expect(reasonText('outside_set')).toBe(
+      'The organisation’s or workspace’s set leaves it out: a set bounds every user’s Allow on module scopes and features.',
+    );
     expect(headline({ allowed: true })).toBe('Allowed');
   });
 

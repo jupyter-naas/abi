@@ -10,14 +10,9 @@ import { authFetch } from '@/stores/auth';
 import { DEFAULT_THEME, PRESET_COLORS } from '@/stores/workspace';
 import { AccountPageHeader } from '@/app/account/components/account-page-header';
 import { AccountSectionCard } from '@/app/account/components/account-section-card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { featureLabel } from '../../lib/feature-labels';
 import { orgSettingsSectionPath } from '../../lib/nav';
-import {
-  configurableFeatures,
-  overridesFromChoices,
-  WorkspaceFeaturesTable,
-  type FeatureChoice,
-  type WorkspaceFeatureCatalog,
-} from '../workspace-features-table';
 import { WorkspaceGroupSelect } from '../workspace-group-select';
 import { WorkspaceOwnerSelect } from '../workspace-owner-select';
 import {
@@ -26,6 +21,11 @@ import {
   type CatalogSeedDraft,
 } from '../workspace-instances-section';
 import { useAuthStore } from '@/stores/auth';
+import {
+  featureChoices,
+  featuresPayload,
+  type WorkspaceFeatureCatalog,
+} from './features';
 import { slugify, WORKSPACE_SLUG } from './slug';
 import '@/app/account/profile/profile.css';
 import '@/app/workspace/[workspaceId]/settings/general/general.css';
@@ -53,10 +53,10 @@ async function readApiError(response: Response, fallback: string): Promise<strin
  * organization's groups, or typed as a new one. The logo is uploaded right
  * after the workspace exists, into the workspace drive
  * (``.settings/logos/logo.<ext>``); the desk wallpaper is set in General
- * once the workspace exists. Features left on Default follow the role
- * defaults and the config; any On/Off choice is saved as the workspace
- * overrides, like the Features column of the workspaces list, and then
- * replaces the config overrides (``workspace_overrides``) for this slug.
+ * once the workspace exists. Features: the new workspace's feature set,
+ * picked among what the organization offers (all of it at first). Leaving
+ * every one on records nothing, so the workspace follows its organization;
+ * Modules & features changes it later.
  */
 export default function OrgCreateWorkspacePage() {
   const params = useParams();
@@ -76,7 +76,7 @@ export default function OrgCreateWorkspacePage() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState('');
   const [featureCatalog, setFeatureCatalog] = useState<WorkspaceFeatureCatalog | null>(null);
-  const [featureChoices, setFeatureChoices] = useState<Record<string, FeatureChoice>>({});
+  const [checkedFeatures, setCheckedFeatures] = useState<Set<string> | null>(null);
   const [featureCatalogFailed, setFeatureCatalogFailed] = useState(false);
   const [ownerId, setOwnerId] = useState('');
   const [catalogSeedDraft, setCatalogSeedDraft] = useState<CatalogSeedDraft>({});
@@ -138,12 +138,12 @@ export default function OrgCreateWorkspacePage() {
     if (currentUserId && !ownerId) setOwnerId(currentUserId);
   }, [currentUserId, ownerId]);
 
-  // Feature catalog and role defaults, for the Features section.
+  // The features the organization offers, for the Features section.
   useEffect(() => {
     if (!orgId) return;
     let cancelled = false;
     setFeatureCatalogFailed(false);
-    // No catalog: the workspace follows the role defaults.
+    // No catalog: the workspace gets everything its organization has.
     void authFetch(`/api/organizations/${orgId}/workspace-features`)
       .then(async (res) => {
         if (cancelled) return;
@@ -151,7 +151,10 @@ export default function OrgCreateWorkspacePage() {
           setFeatureCatalogFailed(true);
           return;
         }
-        setFeatureCatalog(await res.json());
+        const next = (await res.json()) as WorkspaceFeatureCatalog;
+        setFeatureCatalog(next);
+        // Everything the organization offers, until the user unchecks some.
+        setCheckedFeatures(new Set(featureChoices(next)));
       })
       .catch(() => {
         if (!cancelled) setFeatureCatalogFailed(true);
@@ -196,10 +199,10 @@ export default function OrgCreateWorkspacePage() {
     if (!canCreate) return;
     setError('');
     setCreating(true);
-    const featureOverrides = overridesFromChoices(
-      featureChoices,
-      configurableFeatures(featureCatalog)
-    );
+    const features =
+      featureCatalog && checkedFeatures
+        ? featuresPayload(checkedFeatures, featureChoices(featureCatalog))
+        : null;
     const catalog_seed = catalogSeedPayload(catalogSeedDraft);
     try {
       const res = await authFetch('/api/workspaces', {
@@ -214,8 +217,8 @@ export default function OrgCreateWorkspacePage() {
           description: description.trim() || null,
           primary_color: primaryColor,
           accent_color: accentColor || null,
-          // Nothing changed: keep following the role defaults and the config.
-          feature_overrides: Object.keys(featureOverrides).length ? featureOverrides : null,
+          // null: every feature offered, so the workspace follows its organization.
+          features,
           catalog_seed,
         }),
       });
@@ -429,22 +432,36 @@ export default function OrgCreateWorkspacePage() {
             Features
           </span>
         }
-        description="Default follows the role defaults. On shows a feature to every role, Off hides it. Any On or Off replaces the config overrides for this workspace. Change them later from the Features column of the workspaces list."
+        description="What the new workspace may use, among the features of its organization. Change them later in Modules & features."
       >
         {featureCatalogFailed ? (
           <p className="text-sm text-muted-foreground">
-            Features could not be loaded. The workspace will follow the role defaults; change
-            them later from the Features column of the workspaces list.
+            Features could not be loaded. The workspace will have every feature of its
+            organization; change them later in Modules & features.
           </p>
-        ) : featureCatalog ? (
-          <WorkspaceFeaturesTable
-            catalog={featureCatalog}
-            choices={featureChoices}
-            disabled={creating}
-            onChange={(feature, choice) =>
-              setFeatureChoices((current) => ({ ...current, [feature]: choice }))
-            }
-          />
+        ) : featureCatalog && checkedFeatures ? (
+          featureChoices(featureCatalog).length === 0 ? (
+            <p className="text-sm text-muted-foreground">The organization offers no feature.</p>
+          ) : (
+            <div className="org-create-workspace-features">
+              {featureChoices(featureCatalog).map((feature) => (
+                <Checkbox
+                  key={feature}
+                  label={featureLabel(feature)}
+                  checked={checkedFeatures.has(feature)}
+                  disabled={creating}
+                  onCheckedChange={(on) =>
+                    setCheckedFeatures((current) => {
+                      const next = new Set(current ?? []);
+                      if (on) next.add(feature);
+                      else next.delete(feature);
+                      return next;
+                    })
+                  }
+                />
+              ))}
+            </div>
+          )
         ) : (
           <p className="text-sm text-muted-foreground">Loading features...</p>
         )}
@@ -452,8 +469,7 @@ export default function OrgCreateWorkspacePage() {
 
       <WorkspaceInstancesSection
         orgId={orgId}
-        featureCatalog={featureCatalog}
-        featureChoices={featureChoices}
+        features={checkedFeatures}
         draft={catalogSeedDraft}
         onDraftChange={setCatalogSeedDraft}
         disabled={creating}

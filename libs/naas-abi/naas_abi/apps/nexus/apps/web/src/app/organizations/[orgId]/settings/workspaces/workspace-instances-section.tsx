@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Package, Search } from 'lucide-react';
 import { SettingsSection } from '@/components/settings/settings-ui';
 import { authFetch } from '@/stores/auth';
-import type { FeatureChoice, WorkspaceFeatureCatalog } from './workspace-features-table';
+import { featureOn } from './new/features';
 
 export type CatalogOption = { id: string; label: string; kind: string };
 
@@ -23,18 +23,6 @@ export type CatalogSeedDraft = {
   ontologies?: string[];
   maps?: { feeds?: string[]; basemaps?: { custom?: string[] } };
 };
-
-function featureEnabled(
-  feature: string,
-  choices: Record<string, FeatureChoice>,
-  catalog: WorkspaceFeatureCatalog | null
-): boolean {
-  const choice = choices[feature] ?? 'default';
-  if (choice === 'off') return false;
-  if (choice === 'on') return true;
-  if (!catalog) return true;
-  return catalog.roles.some((role) => catalog.role_baseline[role]?.includes(feature));
-}
 
 function matchesInstanceQuery(option: CatalogOption, query: string): boolean {
   const q = query.trim().toLowerCase();
@@ -131,15 +119,14 @@ function InstanceChecklist({
 
 export function WorkspaceInstancesSection({
   orgId,
-  featureCatalog,
-  featureChoices,
+  features,
   draft,
   onDraftChange,
   disabled,
 }: {
   orgId: string;
-  featureCatalog: WorkspaceFeatureCatalog | null;
-  featureChoices: Record<string, FeatureChoice>;
+  /** The new workspace's features; `null` until they are known (every one counts as on). */
+  features: ReadonlySet<string> | null;
   draft: CatalogSeedDraft;
   onDraftChange: (draft: CatalogSeedDraft) => void;
   disabled?: boolean;
@@ -167,12 +154,10 @@ export function WorkspaceInstancesSection({
     };
   }, [orgId]);
 
-  const showAgents =
-    featureEnabled('agents', featureChoices, featureCatalog) ||
-    featureEnabled('skills', featureChoices, featureCatalog);
-  const showApps = featureEnabled('apps', featureChoices, featureCatalog);
-  const showOntology = featureEnabled('ontology', featureChoices, featureCatalog);
-  const showMaps = featureEnabled('maps', featureChoices, featureCatalog);
+  const showAgents = featureOn('agents', features) || featureOn('skills', features);
+  const showApps = featureOn('apps', features);
+  const showOntology = featureOn('ontology', features);
+  const showMaps = featureOn('maps', features);
 
   const agentSet = useMemo(() => new Set(draft.agents || []), [draft.agents]);
   const appSet = useMemo(() => new Set(draft.apps || []), [draft.apps]);
@@ -304,7 +289,7 @@ export function WorkspaceInstancesSection({
               />
             </>
           )}
-          {!showAgents && !showApps && !showOntology && !showMaps && featureCatalog && (
+          {!showAgents && !showApps && !showOntology && !showMaps && features && (
             <p className="text-sm text-muted-foreground">
               Turn on Apps, Agents, Ontology or Maps under Features to pick instances.
             </p>

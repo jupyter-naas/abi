@@ -18,6 +18,7 @@ const IAM_ACTIONS = [
   'iam:ListPrincipals',
   'iam:ListManifests',
   'iam:Explain',
+  'iam:GetSet',
 ];
 const none = (): PlatformActions =>
   Object.fromEntries([...IAM_ACTIONS, 'nexus:ReadSystem'].map((action) => [action, false]));
@@ -33,7 +34,7 @@ const ids = (actions: PlatformActions | null) =>
   visiblePlatformSettingsGroups(actions).flatMap((group) => group.items.map((item) => item.id));
 
 describe('platformSettingsGroups', () => {
-  it('is Nexus tables, then System, then Roles & permissions', () => {
+  it('is Nexus tables, then System, then Roles & permissions and Modules & features', () => {
     expect(platformSettingsGroups.map((group) => group.label)).toEqual([null, 'System', 'Access']);
     expect(platformSettingsGroups[0].items.map((item) => [item.label, item.href])).toEqual([
       ['Nexus tables', '/settings/tables'],
@@ -52,6 +53,7 @@ describe('platformSettingsGroups', () => {
     ]);
     expect(platformSettingsGroups[2].items.map((item) => [item.label, item.href])).toEqual([
       ['Roles & permissions', '/settings/roles'],
+      ['Modules & features', '/settings/modules'],
     ]);
   });
 
@@ -60,12 +62,13 @@ describe('platformSettingsGroups', () => {
       expect(item.needs).toEqual({ action: 'nexus:ReadSystem' });
     }
     expect(platformSettingsGroups[2].items[0].needs).toEqual({ anyOf: 'iam' });
+    expect(platformSettingsGroups[2].items[1].needs).toEqual({ action: 'iam:GetSet' });
   });
 });
 
 describe('what the caller sees', () => {
   it('shows a platform admin everything', () => {
-    expect(ids(platformAdmin)).toHaveLength(12);
+    expect(ids(platformAdmin)).toHaveLength(13);
     expect(firstPlatformSettingsPath(platformAdmin)).toBe('/settings/tables');
   });
 
@@ -75,6 +78,11 @@ describe('what the caller sees', () => {
       'Access',
     ]);
     expect(firstPlatformSettingsPath(delegatedIamAdmin)).toBe('/settings/roles');
+  });
+
+  it('shows Modules & features to whoever may read the sets', () => {
+    expect(ids({ ...none(), 'iam:GetSet': true })).toEqual(['roles', 'modules']);
+    expect(ids(delegatedIamAdmin)).not.toContain('modules');
   });
 
   it('shows a reader of the system the tables and System, not Roles & permissions', () => {
@@ -130,6 +138,7 @@ describe('parsePlatformSettingsRoute', () => {
     expect(parsePlatformSettingsRoute('/settings/system/jobs').item?.id).toBe('system-jobs');
     expect(parsePlatformSettingsRoute('/settings/system/events').item?.id).toBe('system-events');
     expect(parsePlatformSettingsRoute('/settings/roles').item?.id).toBe('roles');
+    expect(parsePlatformSettingsRoute('/settings/modules').item?.id).toBe('modules');
     expect(parsePlatformSettingsRoute('/settings/system/jobs').table).toBeNull();
   });
 

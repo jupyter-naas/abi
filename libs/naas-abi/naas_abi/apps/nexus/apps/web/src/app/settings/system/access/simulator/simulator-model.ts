@@ -14,6 +14,8 @@ export function reasonText(reason: string): string {
       return 'The principal is suspended or deleted: it is denied everything.';
     case 'sealed':
       return 'The resource is sealed: only its owner opens it, whatever the policies say.';
+    case 'outside_set':
+      return 'The organisation’s or workspace’s set leaves it out: a set bounds every user’s Allow on module scopes and features.';
     default:
       return reason;
   }
