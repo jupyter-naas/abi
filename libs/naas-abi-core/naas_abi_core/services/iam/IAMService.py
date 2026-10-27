@@ -1279,9 +1279,21 @@ class IAMService(IIAMService, PolicySource):
                 for p in found
                 if p.owner_scope != scope and p.document.confined_to_scope
             }
+            # Not wholly within ${scope}: offered only to whoever may attach it
+            # unscoped too (``_require_attach``).
+            unscoped = {
+                p.id: attachment_resource(p.id, "*", None)
+                for p in found
+                if p.id in inherited and not p.document.wholly_within_scope
+            }
             allowed = set(self.filter("iam:ListPolicies", own.values()).allowed)
             allowed |= set(self.filter("iam:AttachPolicy", inherited.values()).allowed)
-            return {i for i, n in {**own, **inherited}.items() if n in allowed}
+            reach = set(self.filter("iam:AttachPolicy", unscoped.values()).allowed)
+            return {
+                i
+                for i, n in {**own, **inherited}.items()
+                if n in allowed and (i not in unscoped or unscoped[i] in reach)
+            }
 
         return self._kept_page(
             lambda size, cursor: self.store.list_policies(
@@ -1424,11 +1436,39 @@ class IAMService(IIAMService, PolicySource):
     def _require_attach(
         self, policy_id: str, principal_id: str, scope: str | None
     ) -> None:
+        """``iam:AttachPolicy`` on the attachment, for ``attach_policy``,
+        ``create_pending_grant`` and ``bind_idp_group``.
+
+        A policy confined to ``${scope}:`` but not wholly within it (a Deny
+        naming anything, which a scope does not narrow) is attached at a scope
+        only by whoever may attach it unscoped, the platform admin: a scope's
+        admin or owner could otherwise impose that Deny on anyone, in any org.
+        One with an Allow outside it is refused to everyone
+        (``_check_attachable``)."""
         self.require(
             "iam:AttachPolicy",
             attachment_resource(policy_id, principal_id, scope),
             not_found=lambda: IAMNotFoundError("Policy or principal not found"),
         )
+        if scope is None:
+            return
+        policy = self._find_policy(policy_id)
+        if (
+            policy is None
+            or policy.document.wholly_within_scope
+            or not policy.document.confined_to_scope
+        ):
+            return
+        unscoped = attachment_resource(policy_id, principal_id, None)
+        if not self.authorize("iam:AttachPolicy", unscoped).allowed:
+            raise PermissionDeniedError(
+                "iam:AttachPolicy",
+                unscoped,
+                message=(
+                    f"{policy_id} denies beyond ${{scope}}: only whoever may "
+                    "attach it unscoped (the platform admin) attaches it at a scope"
+                ),
+            )
 
     def _attach(
         self, policy_id: str, principal_id: str, scope: str | None

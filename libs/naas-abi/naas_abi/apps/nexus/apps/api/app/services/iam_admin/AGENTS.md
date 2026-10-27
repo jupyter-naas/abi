@@ -64,7 +64,8 @@ Nexus adds no role check of its own.
   "Owner scopes"), so an org or workspace admin holds, at their scope, the attachment actions and that level's
   policies and groups, and nothing else of IAM; members and viewers hold none of it. Org settings, Access,
   manages attachments at the org and its workspaces (the policies offered are the ones the caller may attach
-  there: `GET /attachable-policies`, which leaves out a policy owned by another org or workspace). Service
+  there: `GET /attachable-policies`, which leaves out a policy owned by another org or workspace, and, at a
+  scope, a platform policy with a Deny outside `${scope}:` for anyone but the platform admin, as IAM refuses it). Service
   accounts and keys, approvals, simulator and audit are platform-level and live in the System app's Access tab,
   available to whoever holds the matching actions. Every route takes the scope as a parameter: `POST /policies`
   and `POST /groups` create at the body's `scope`, `GET /policies?scope=` and `GET /groups?scope=` list that

@@ -892,3 +892,38 @@ def test_an_org_wide_scope_lists_its_orgs_policies_and_groups(world, ws2):
     for path in ("/policies", "/groups"):
         assert get(world, f"{path}?scope={wide}", "ws2admin").status_code == 403
         assert get(world, f"{path}?scope={org}", "ws2admin").status_code == 403
+
+
+def test_a_platform_deny_is_attached_at_a_scope_by_the_platform_admin_only(world):
+    guard = post(
+        world,
+        "/policies",
+        name="guardrail",
+        document={
+            "version": "2026-10-13",
+            "statements": [
+                {
+                    "effect": "Allow",
+                    "actions": ["triple_store:Query"],
+                    "resources": ["${scope}:triple_store:graph/*"],
+                },
+                {"effect": "Deny", "actions": ["iam:*"], "resources": ["*"]},
+            ],
+        },
+    ).json()
+    shared = post(world, "/policies", name="shared", document=SCOPED_READER).json()
+    scope = workspace_scope("org-1", "ws-1")
+    member = _principal_id(world, "member")
+    for user in ("admin", "owner"):
+        offered = {
+            p["id"] for p in get(world, f"/attachable-policies?scope={scope}", user).json()["items"]
+        }
+        assert guard["id"] not in offered and shared["id"] in offered, user
+        refused = post(
+            world, "/attachments", user, policy_id=guard["id"], principal_id=member, scope=scope
+        )
+        assert refused.status_code == 403, refused.text
+    offered = {p["id"] for p in get(world, f"/attachable-policies?scope={scope}").json()["items"]}
+    assert guard["id"] in offered
+    attached = post(world, "/attachments", policy_id=guard["id"], principal_id=member, scope=scope)
+    assert attached.status_code == 201, attached.text

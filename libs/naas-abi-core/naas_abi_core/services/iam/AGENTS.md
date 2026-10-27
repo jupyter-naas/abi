@@ -288,6 +288,15 @@ attached at a scope beyond it, and enforces the rule when it evaluates: a
 statement reached through a scoped attachment keeps only its `${scope}:` Allow
 patterns, whatever the policy says (`policy.within_scope`).
 
+A Deny is kept whole, so a policy with a Deny outside `${scope}:` refuses beyond the
+scope it is attached at. Such a policy (`confined_to_scope` but not
+`wholly_within_scope`, only ever the platform's) is attached at a scope, invited to
+(`create_pending_grant`) or bound
+(`bind_idp_group`) only by whoever may also attach it unscoped, `iam:AttachPolicy` on
+`abi:%2A:%2A:iam:attachment/<policy>/<principal>`: the platform admin. A scope's admins
+and owners are refused with `PermissionDeniedError`, and lists at a scope
+(`list_policies(scope=)`, Nexus `/attachable-policies`) do not offer it to them.
+
 **Variables** are substituted into resource patterns before matching, against
 the principal whose policies are being evaluated (`X` in `principal_decision(X)`
 below): the actor when computing the actor's decision, the OBO user when
@@ -1383,7 +1392,10 @@ admin's.
 *Consequences.* A workspace admin builds its own groups and policies with no platform
 right, and nothing it writes reaches or refuses beyond its workspace, whoever it
 attaches it to: a Deny outside `${scope}:` would otherwise let it lock a user, the
-platform admin included, out of everything. Platform-scope roles (`abi:-:-`) never
+platform admin included, out of everything. For the same reason a platform policy with
+a Deny outside `${scope}:` is attached at a scope only by the platform admin (see "Policy
+language"): a scope's admin or owner could otherwise impose its Deny on anyone, in any
+org, and the Deny would keep them from detaching it. Platform-scope roles (`abi:-:-`) never
 edit the platform's policies, some of which are attached unscoped. Grants written
 `abi:-:-:iam:policy/*` match no policy any more (the upgrade logs each stored policy
 that has one): write `abi:*:*:iam:policy/*`. Members

@@ -367,7 +367,9 @@ class IamAdminService:
         self, user: Any, scope: str | None, principal_id: str | None = None
     ) -> dict[str, Any]:
         """The policies the caller may attach at ``scope``: IAM's rule for a scope
-        (every Allow starts with ``${scope}:``) and the caller's own right to attach."""
+        (every Allow starts with ``${scope}:``) and the caller's own right to attach.
+        A policy not wholly within ``${scope}:`` (a Deny naming anything) is offered
+        at a scope only to whoever may attach it unscoped, as IAM decides."""
         if scope is not None:
             validate_scope(scope)
 
@@ -381,7 +383,15 @@ class IamAdminService:
                 )
             ]
             names = {attachment_resource(p.id, principal_id or "*", scope): p for p in candidates}
-            allowed = session.filter("iam:AttachPolicy", names).allowed
+            allowed = set(session.filter("iam:AttachPolicy", names).allowed)
+            if scope is not None:
+                unscoped = {
+                    attachment_resource(p.id, principal_id or "*", None): name
+                    for name, p in names.items()
+                    if name in allowed and not p.document.wholly_within_scope
+                }
+                reach = set(session.filter("iam:AttachPolicy", unscoped).allowed)
+                allowed -= {name for u, name in unscoped.items() if u not in reach}
             return {
                 "items": [
                     {
@@ -391,7 +401,8 @@ class IamAdminService:
                         "managed": names[name].managed,
                         "owner_scope": names[name].owner_scope,
                     }
-                    for name in allowed
+                    for name in names
+                    if name in allowed
                 ]
             }
 

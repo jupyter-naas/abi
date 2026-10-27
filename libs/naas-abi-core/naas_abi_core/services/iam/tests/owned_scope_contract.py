@@ -235,6 +235,53 @@ def run_owned_documents(iam: IAMService, as_user: AsUser) -> None:
             admin.create_policy("org-wide", reader(), scope=ORG_WIDE)
 
 
+def run_platform_denies_at_a_scope(iam: IAMService, as_user: AsUser) -> None:
+    """A platform policy with a Deny beyond ${scope}: is attached at a scope by
+    the platform admin only: a scope's admin or owner could otherwise impose
+    the Deny on anyone, in any org, the platform admin included."""
+    t = team(iam)
+    with as_service_account("engine"):
+        root = iam.ensure_user("https://idp.example", "root")
+        iam.attach_policy(roles.PLATFORM_ADMIN, root.id)
+        owner = iam.ensure_user("https://idp.example", "ws-owner")
+        iam.attach_policy(roles.OWNER, owner.id, WS1)
+    with as_user(root) as session:
+        guard = session.create_policy(
+            "guardrail",
+            document(
+                statement(
+                    "Allow", ["triple_store:Query"], ["${scope}:triple_store:graph/*"]
+                ),
+                statement("Deny", ["iam:*", "triple_store:Insert"], ["*"]),
+            ),
+        )
+        shared_reader = session.create_policy("shared reader", reader())
+    for who in (t.ws_admin, owner):
+        with as_user(who) as session:
+            offered = {p.id for p in session.list_policies(scope=WS1).items}
+            assert guard.id not in offered and shared_reader.id in offered
+            for target in (t.outsider, root, t.member):
+                with pytest.raises(REFUSED):
+                    session.attach_policy(guard.id, target.id, WS1)
+            with pytest.raises(REFUSED):
+                session.create_pending_grant(
+                    "builtin", "eve@example.com", guard.id, WS1
+                )
+            with pytest.raises(REFUSED):
+                session.bind_idp_group("acme", "Sales", guard.id, WS1)
+            # Wholly within ${scope}:, a platform policy is still theirs to attach.
+            session.attach_policy(shared_reader.id, t.member.id, WS1)
+    _assert_allowed(iam, root, "iam:CreatePolicy", "abi:%2A:%2A:iam:policy/x")
+    _assert_allowed(
+        iam, t.outsider, "triple_store:Insert", "abi:org-2:ws-9:triple_store:graph/g"
+    )
+    with as_user(root) as session:
+        assert guard.id in {p.id for p in session.list_policies(scope=WS1).items}
+        session.attach_policy(guard.id, t.member.id, WS1)
+        session.create_pending_grant("builtin", "eve@example.com", guard.id, WS1)
+        session.bind_idp_group("acme", "Sales", guard.id, WS1)
+
+
 def _assert_allowed(
     iam: IAMService, user: PrincipalRecord, action: str, name: str
 ) -> None:
@@ -256,4 +303,5 @@ SCENARIOS = (
     run_org_admin,
     run_members_and_viewers,
     run_owned_documents,
+    run_platform_denies_at_a_scope,
 )
