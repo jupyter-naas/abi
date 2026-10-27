@@ -414,3 +414,72 @@ def test_a_caller_who_may_get_a_module_sees_its_instances():
             await service.get_module(get)
 
     asyncio.run(scenario())
+
+
+def test_a_member_triggers_a_module_s_workflows_never_its_plain_jobs():
+    """Members hold ``TriggerJob`` on ``workflow/*`` (the module scope tells
+    workflows apart in Nexus), never on a plain job; a grant on ``job/…`` still
+    covers a workflow, as a module's own manifest names its jobs."""
+
+    async def scenario():
+        iam = contract_iam()
+        h = IAMHarness(iam)
+        service = DiscoveryService(MemoryRegistry(), iam=iam)
+        req = _provider()
+        req.descriptor.jobs.add(
+            name="sync",
+            contract_major=1,
+            kind="workflow",
+            max_concurrency=1,
+            max_attempts=1,
+        )
+        with as_service_account("engine"):
+            await service.register(req, PROVIDER)
+            await service.renew(
+                pb.RenewRequest(
+                    instance_id="instance",
+                    lease_token=req.lease_token,
+                    initialized=True,
+                ),
+                PROVIDER,
+            )
+
+        def trigger(job: str):
+            return pb.AuthorizeJobRequest(
+                instance_id="instance",
+                lease_token=req.lease_token,
+                job_name=job,
+                operation="trigger",
+            )
+
+        member = h.user("member")
+        h.attach("builtin.platform.member", member.id)
+        caller = CallContext(
+            principal=service_account("api"),
+            on_behalf_of=Principal(id=member.id, kind="user"),
+        )
+        await service.authorize_job(trigger("sync"), PROVIDER, caller)
+        with pytest.raises(DiscoveryError, match="JOB_NOT_FOUND"):
+            await service.authorize_job(trigger("ingest"), PROVIDER, caller)
+
+        viewer = h.user("viewer")
+        h.attach("builtin.platform.viewer", viewer.id)
+        as_viewer = CallContext(
+            principal=service_account("api"),
+            on_behalf_of=Principal(id=viewer.id, kind="user"),
+        )
+        with pytest.raises(DiscoveryError, match="JOB_NOT_FOUND"):
+            await service.authorize_job(trigger("sync"), PROVIDER, as_viewer)
+
+        module = h.service_account("caller-module")
+        h.grant(
+            module.id,
+            statement(
+                "Allow", ["discovery:TriggerJob"], [f"{MODULE}job/default/research/*"]
+            ),
+        )
+        own = CallContext(principal=service_account("caller-module"))
+        await service.authorize_job(trigger("sync"), PROVIDER, own)
+        await service.authorize_job(trigger("ingest"), PROVIDER, own)
+
+    asyncio.run(scenario())

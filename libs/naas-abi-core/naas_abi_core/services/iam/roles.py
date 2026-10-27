@@ -98,10 +98,11 @@ PLATFORM_TYPES: tuple[_PlatformRow, ...] = (
         member=("InvokeAgent",),
     ),
     _PlatformRow("discovery", ("model/*",), member=("ChatModel",)),
-    # Starting a module's workflow or pipeline, as with invoking its agent: the
-    # broker's check for a member. Which one is the module scope's
-    # (``module:RunWorkflow`` / ``RunPipeline``), which Nexus checks first.
-    _PlatformRow("discovery", ("job/*",), viewer=("ListJobs",), member=("TriggerJob",)),
+    # Starting a module's workflow or pipeline (a job of kind ``workflow``, also
+    # named ``workflow/…``), as with invoking its agent: the broker's check for a
+    # member. Which one is the module scope's (``module:RunWorkflow`` /
+    # ``RunPipeline``), which Nexus checks first. A plain job is never a role's.
+    _PlatformRow("discovery", ("workflow/*",), member=("TriggerJob",)),
     _PlatformRow(
         "discovery",
         ("run/${principal.id}/*",),

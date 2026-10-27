@@ -136,6 +136,7 @@ def job_authorizer(
     project: str,
     module_id: str,
     identity: str = ENGINE_IDENTITY,
+    workflows: frozenset[str] = frozenset(),
 ) -> Any:
     """An engine job host's authorizer: the check discovery runs for a module's
     host (``discovery_service.require_job``), in process.
@@ -196,7 +197,15 @@ def job_authorizer(
             raise RPCError("UNAUTHENTICATED", str(exc)) from exc
         try:
             with use_call_context(caller):
-                require_job(guard, project, module_id, job, operation, run_id)
+                require_job(
+                    guard,
+                    project,
+                    module_id,
+                    job,
+                    operation,
+                    run_id,
+                    workflow=job in workflows,
+                )
         except PermissionDeniedError as exc:
             raise RPCError("PERMISSION_DENIED", str(exc)) from exc
         first_party = caller.principal.name in (ENGINE_IDENTITY, "api")
@@ -419,6 +428,11 @@ class EngineJobLoader:
                         self.project,
                         module_id,
                         identity,
+                        frozenset(
+                            j.name
+                            for j in module.jobs
+                            if getattr(j, "kind", "") == "workflow"
+                        ),
                     )
                 }
             ),

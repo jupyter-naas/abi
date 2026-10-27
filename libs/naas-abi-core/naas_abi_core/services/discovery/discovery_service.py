@@ -1196,11 +1196,10 @@ class DiscoveryService:
         )
         record = await self._live_record(req.instance_id)
         self._authorize(record, req.lease_token, owner)
-        _require(
-            any(j.name == req.job_name for j in record.instance.descriptor.jobs),
-            "JOB_NOT_FOUND",
-            req.job_name,
+        declared = next(
+            (j for j in record.instance.descriptor.jobs if j.name == req.job_name), None
         )
+        _require(declared is not None, "JOB_NOT_FOUND", req.job_name)
         response = pb.AuthorizeJobResponse()
         if caller is not None:
             await self.require_job(
@@ -1209,6 +1208,7 @@ class DiscoveryService:
                 req.operation,
                 req.run_id,
                 caller,
+                workflow=declared is not None and declared.kind == "workflow",
             )
             response.caller_identity = run_owner(caller)
         return response
@@ -1220,15 +1220,24 @@ class DiscoveryService:
         operation: str,
         run_id: str,
         caller: CallContext,
+        *,
+        workflow: bool = False,
     ) -> None:
-        """``TriggerJob`` on ``job/…``, or ``CancelJobRun`` on ``job_run/…``."""
+        """``TriggerJob`` on ``job/…`` (or ``workflow/…``), or ``CancelJobRun`` on
+        ``job_run/…``."""
         if not self.guard.enforcing:
             return
 
         def check() -> None:
             with use_call_context(caller):
                 require_job(
-                    self.guard, self.project, module_id, job_name, operation, run_id
+                    self.guard,
+                    self.project,
+                    module_id,
+                    job_name,
+                    operation,
+                    run_id,
+                    workflow=workflow,
                 )
 
         await asyncio.to_thread(check)
@@ -1241,15 +1250,24 @@ def require_job(
     job_name: str,
     operation: str,
     run_id: str = "",
+    *,
+    workflow: bool = False,
 ) -> None:
     """Whether the current caller may trigger a module's job, or cancel one of
     its runs; the job's or the run's not-found when it cannot see it.
-    Discovery asks it for a module's job host, the engine for its own."""
+    Discovery asks it for a module's job host, the engine for its own.
+
+    A workflow (``kind="workflow"``) is also ``workflow/…``: ``TriggerJob`` on
+    either name starts it. Workspace members hold it on ``workflow/*`` only
+    (``roles.PLATFORM_TYPES``), never on a plain job."""
     if operation == "trigger":
+        parts = [project, module_id, job_name]
+        if workflow and guard.allowed("TriggerJob", "workflow", parts):
+            return
         guard.require(
             "TriggerJob",
             "job",
-            [project, module_id, job_name],
+            parts,
             not_found=_error("JOB_NOT_FOUND", job_name),
         )
         return

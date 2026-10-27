@@ -58,7 +58,7 @@ all.
 | `GET /{module_id}/runs/{run_id}` | A run the caller started here, as the platform route answers it; 404 for any other run (another user's, another workspace's, an old run under a reused id), 403 without `Read*Runs`. |
 
 A start runs for the caller: the request's context names them (`identity_events/middleware.py`), and the job's host
-checks `discovery:TriggerJob` for them, which members hold on every job; the module scope is what tells workflows apart.
+checks `discovery:TriggerJob` for them, which members hold on every module's workflows (`workflow/*`, never a plain job); the module scope is what tells workflows apart.
 There is no cancel here: a run is cancelled from the System tab.
 
 ## Tests

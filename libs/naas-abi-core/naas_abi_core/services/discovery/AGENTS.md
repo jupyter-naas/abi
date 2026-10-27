@@ -68,9 +68,12 @@ platform-level: `module/<project>/<module_id>`, `agent|model|app|job/<project>/<
   `AGENTS.md`, "Who a run runs as"): `caller_identity` names the user the
   stored delegation must be for.
 - **Module scopes.** Discovery's grants are the broker-side check of using a
-  module's agent, app or job, platform-wide: `builtin.platform.member` holds
-  `InvokeAgent` on `agent/*`, `OpenApp` on `app/*` and `TriggerJob` on `job/*`
-  (a viewer `ListJobs`). Which agent, app, workflow or pipeline a user uses in a
+  module's agent, app or workflow, platform-wide: `builtin.platform.member` holds
+  `InvokeAgent` on `agent/*`, `OpenApp` on `app/*` and `TriggerJob` on
+  `workflow/*`. A job of kind `workflow` has that second name
+  (`workflow/<project>/<module_id>/<name>`, `require_job(workflow=True)`): `TriggerJob`
+  on either name starts it, so a module's manifest naming its jobs still covers its
+  workflows, and no role reaches a plain job. Which agent, app, workflow or pipeline a user uses in a
   workspace is its module scope (`module:<type>/<module>/<name>`, core
   `services/iam/AGENTS.md`, "Module scopes"), which viewers and members do not
   hold by default. Nexus checks it first, in the workspace of the request, so no

@@ -728,10 +728,11 @@ attachment per scope.
   attachment at a workspace scope or an org-wide scope, `builtin.platform.viewer`
   while it has only `viewer` attachments there. Org-level attachments (`abi:<org>:-`)
   bring neither. Because Nexus calls as `api` on behalf of the user, the user must
-  hold these, not only `api`. A member holds `discovery:TriggerJob` on `job/*`
-  (a viewer `ListJobs`), as it holds `InvokeAgent` on `agent/*`: which job it
-  starts is the module scope's. Not reached by any role (platform admin, built-in
-  accounts and explicit policies only): job runs, email senders and messages,
+  hold these, not only `api`. A member holds `discovery:TriggerJob` on
+  `workflow/*`, the second name of every job of kind `workflow` (a viewer
+  nothing), as it holds `InvokeAgent` on `agent/*`: which workflow it starts is
+  the module scope's. Not reached by any role (platform admin, built-in accounts
+  and explicit policies only): plain jobs and job runs, email senders and messages,
   `dataset:catalog`, `cache:service`, `vector_store:service`, `activity_log:service`,
   and unplaced data until placed or granted.
 - **Features.** `nexus:UseFeature` comes only from feature policies
@@ -846,7 +847,7 @@ statements:
 
 attached to the member (or a group) at `abi:<org>:<ws>`. Discovery's grants stay
 the broker-side check (`builtin.platform.member`: `InvokeAgent`, `OpenApp`,
-`TriggerJob`); Nexus checks the module scope first, so no user reaches a module's
+`TriggerJob` on workflows); Nexus checks the module scope first, so no user reaches a module's
 resource in a workspace without it. An in-process agent's sub-agents and the
 workflows and pipelines it reaches as tools are bounded by the user's scopes:
 Nexus binds them per turn (`agent_workspace_enabled_class_names`,
@@ -1491,14 +1492,18 @@ built-in viewer and member roles leave every module scope type out, admin and ow
 hold them all, with no migration grant. Nexus decides a module's agents and apps with
 it (`nexus:UseAgent` stays for agents a workspace builds itself, `nexus:UseApp` for
 links that are no module's app): one source of truth. Discovery keeps its platform
-grants as the broker-side check, and members hold `TriggerJob` on module jobs as they
-hold `InvokeAgent` on agents.
+grants as the broker-side check. Members hold `TriggerJob` on module workflows only
+(`workflow/<project>/<module>/<name>`, a second name discovery checks for a job of
+kind `workflow`), as they hold `InvokeAgent` on agents: a workflow started from a
+workspace runs for the user, so the host's check needs the user to hold it; a plain
+job (maintenance, batch) is never a role's.
 *Consequences.* After the upgrade, members and viewers use no module's agent, app,
 workflow or pipeline (Abi included) until a policy grants it in their workspace. A
 grant names one item or a module's (`.../acme.people/*`). The broker alone does not
 tell items apart for a user: a client that reaches discovery directly with a member's
-token reaches every module's agents and jobs, as before; Nexus and in-process agents
-check the scope. A module identifier change (a renamed config key) is a new scope.
+token reaches every module's agents, as before, and (new) every module's workflows,
+never a plain job; Nexus and in-process agents check the scope. Bounding the broker
+too would need the workspace in the trigger, which a stored trigger does not carry. A module identifier change (a renamed config key) is a new scope.
 
 **A module declares its actions in a catalog of its own.**
 *Decision.* An engine module ships `iam_catalog.yaml` beside its class, registered at

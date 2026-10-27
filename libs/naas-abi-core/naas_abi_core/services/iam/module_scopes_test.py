@@ -261,15 +261,17 @@ def test_an_engine_module_s_catalog_is_registered_at_load_and_enforced(
         export("ws-2")
 
 
-def test_members_reach_a_module_s_jobs_at_the_broker_as_they_reach_its_agents(h, iam):
+def test_members_reach_a_module_s_workflows_at_the_broker_never_its_jobs(h, iam):
     """Which workflow a member starts is its module scope's (Nexus checks it
-    first): the broker's own check lets a member trigger, a viewer list."""
+    first): the broker's own check lets a member trigger a workflow, by its
+    ``workflow/…`` name, never a plain job; a viewer neither."""
     from naas_abi_core.services.discovery.iam_catalog import CATALOG as DISCOVERY
 
     iam._register_catalog(DISCOVERY)
+    flow = "abi:-:-:discovery:workflow/default/acme.flows/workflow.ingest"
     job = "abi:-:-:discovery:job/default/acme.flows/workflow.ingest"
     member, viewer = _role(h, "member", "m"), _role(h, "viewer", "v")
-    assert h.allowed("discovery:TriggerJob", job, member)
-    assert not h.allowed("discovery:TriggerJob", job, viewer)
-    assert h.allowed("discovery:ListJobs", job, viewer)
-    assert not h.allowed("discovery:CancelJobRun", f"{job}/1", member)
+    assert h.allowed("discovery:TriggerJob", flow, member)
+    assert not h.allowed("discovery:TriggerJob", job, member)
+    assert not h.allowed("discovery:TriggerJob", flow, viewer)
+    assert not h.allowed("discovery:ListJobs", job, viewer)
