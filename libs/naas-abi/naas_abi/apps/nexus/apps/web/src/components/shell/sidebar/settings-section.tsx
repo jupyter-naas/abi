@@ -7,12 +7,17 @@ import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
-import { SETTINGS_GROUPS } from '@/components/shell/settings-nav';
+import { visibleSettingsGroups } from '@/components/shell/settings-nav';
+import { useWorkspaceResources } from '@/hooks/use-workspace-resources';
 
 export function SettingsSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const pathname = usePathname();
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const flags = useWorkspaceStore((s) => s.getCurrentWorkspace()?.featureFlags);
+  const { resources } = useWorkspaceResources(currentWorkspaceId);
   const basePath = getWorkspacePath(currentWorkspaceId, '/settings');
+  // Only what the workspace has: its set's features and module resources.
+  const groups = visibleSettingsGroups(resources, flags);
 
   return (
     <CollapsibleSection
@@ -25,7 +30,7 @@ export function SettingsSection({ collapsed, detailOnly }: { collapsed: boolean;
       detailOnly={detailOnly}
     >
       <div className="space-y-0.5">
-        {SETTINGS_GROUPS.map((group) => (
+        {groups.map((group) => (
           <div key={group.label} className="space-y-0.5">
             <p className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               {group.label}

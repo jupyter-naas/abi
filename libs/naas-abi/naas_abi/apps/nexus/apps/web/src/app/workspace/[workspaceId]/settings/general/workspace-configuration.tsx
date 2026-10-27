@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Blocks, FileCog, SlidersHorizontal } from 'lucide-react';
+import { Blocks, FileCog, Package, SlidersHorizontal } from 'lucide-react';
 import {
   SettingsEmpty,
   SettingsNotice,
@@ -11,6 +11,8 @@ import {
 import { authFetch } from '@/stores/auth';
 import { featureLabel } from '@/app/organizations/[orgId]/settings/lib/feature-labels';
 import { orgModulesPath } from '@/app/organizations/[orgId]/settings/lib/nav';
+import { useWorkspaceResources } from '@/hooks/use-workspace-resources';
+import { describeModuleResources } from '@/lib/workspace-resources';
 
 interface SeedRow {
   kind: string;
@@ -44,14 +46,17 @@ const SEED_KIND_LABELS: Record<string, string> = {
 const byLabel = (a: string, b: string) => featureLabel(a).localeCompare(featureLabel(b));
 
 /**
- * Features and Config preseeding (Settings > General, admins). The features are the workspace's
- * effective ones, read-only here: its set is edited on the organization's Modules & features page,
- * linked when the caller may change it. The seeds are owned by
+ * Features, Modules and Config preseeding (Settings > General, admins). The features and the
+ * modules are the workspace's set (its own within its organization's), read-only here: it is
+ * edited on the organization's Modules & features page, linked when the caller may change it.
+ * Who may use what is on Roles & permissions; turning each resource on or off for everyone is
+ * on the Features pages (Agents, Apps, Workflows). The seeds are owned by
  * ``nexus_config.organizations[].workspaces[]`` in the config and follow it after an API restart.
  */
 export function WorkspaceConfiguration({ workspaceId }: { workspaceId: string }) {
   const [config, setConfig] = useState<WorkspaceConfiguration | null>(null);
   const [error, setError] = useState('');
+  const { status: resourcesStatus, resources } = useWorkspaceResources(workspaceId);
 
   useEffect(() => {
     let cancelled = false;
@@ -127,6 +132,33 @@ export function WorkspaceConfiguration({ workspaceId }: { workspaceId: string })
               ))
             )}
           </div>
+        )}
+      </SettingsSection>
+
+      <SettingsSection
+        title={
+          <span className="flex items-center gap-2">
+            <Package size={16} className="text-muted-foreground" />
+            Modules
+          </span>
+        }
+        description="The modules this workspace has, with their agents, apps, workflows and pipelines in its set."
+      >
+        {resourcesStatus === 'loading' ? (
+          <p className="text-sm text-muted-foreground">Loading modules...</p>
+        ) : !resources ? (
+          <p className="text-sm text-muted-foreground">The workspace&rsquo;s modules could not be read.</p>
+        ) : resources.modules.length === 0 ? (
+          <span className="text-sm text-muted-foreground">No modules.</span>
+        ) : (
+          <ul className="workspace-general-modules">
+            {resources.modules.map((entry) => (
+              <li key={entry.module} className="workspace-general-modules-row">
+                <span className="workspace-general-modules-name">{entry.module}</span>
+                <span className="workspace-general-modules-items">{describeModuleResources(entry)}</span>
+              </li>
+            ))}
+          </ul>
         )}
       </SettingsSection>
 

@@ -67,6 +67,7 @@ export const LEGACY_WORKSPACE_SETTINGS_SLUGS: readonly string[] = [
   'models',
   'drives',
   'infrastructure',
+  'workflows',
 ];
 
 /**

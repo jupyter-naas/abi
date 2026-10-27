@@ -63,3 +63,38 @@
 .workspace-general-modules-link:hover {
   background-color: var(--muted-bg-hex);
 }
+
+/* Modules: the workspace's set, read-only, one row per module. */
+.workspace-general-modules {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workspace-general-modules-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-4);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border-hex);
+  font-size: var(--font-size-sm);
+}
+
+.workspace-general-modules-row:first-child {
+  border-top: none;
+}
+
+.workspace-general-modules-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--foreground-hex);
+}
+
+.workspace-general-modules-items {
+  color: var(--muted-foreground-hex);
+}

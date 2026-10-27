@@ -209,7 +209,7 @@ export default function AgentsPage() {
       <SettingsPageHeader
         title="Agents"
         badge={`${enabledCount} enabled`}
-        description="Manage AI agents and their configurations"
+        description="The agents of this workspace's modules and those it builds: turn each on or off for everyone in it"
         actions={
           <Button onClick={() => setShowAddForm(true)}>
             <Plus size={16} />
