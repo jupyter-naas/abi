@@ -138,6 +138,14 @@ _ENTRIES: list[PlatformTableEntry] = [
     ),
     *_section("Apps", ("app_configs", "Apps", "Apps enabled in each workspace.")),
     *_section(
+        "Workflows",
+        (
+            "workflow_run_owners",
+            "Workflow runs",
+            "Who started each workflow or pipeline run, from which workspace.",
+        ),
+    ),
+    *_section(
         "Code",
         (
             "coding_environments",
