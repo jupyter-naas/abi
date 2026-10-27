@@ -4,7 +4,9 @@ IAM keeps the sets and bounds every user's decision with them. Nexus
 
 * reads the effective set of a workspace for what it shows that IAM does not
   decide one call at a time (the features a workspace offers its roles,
-  ``effective_features``);
+  ``effective_features``), and lists only what is in it (``within_set``: the
+  agents, apps, workflows and pipelines a workspace lists, for everyone, the
+  platform admin included);
 * records the set of a workspace it creates (``seed_workspace``): its org's,
   narrowed by the features and the catalog seed chosen on the create form;
 * moves the per-workspace feature overrides of earlier versions into IAM once
@@ -19,10 +21,10 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Collection, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, TypeVar
 
 from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import NO_ORG
@@ -36,6 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 _log = logging.getLogger(__name__)
+T = TypeVar("T")
 
 MIGRATION_NAME = "workspace_feature_sets_v1"
 KEPT_FEATURES_POLICY = "Features kept from the workspace's overrides"
@@ -80,6 +83,52 @@ async def effective_features_async(
     org_id: str | None, workspace_id: str | None = None
 ) -> tuple[str, ...] | None:
     return await run_in_threadpool(effective_features, org_id, workspace_id)
+
+
+def in_set(scope_set: ScopeSet, scope: Any) -> bool:
+    """Whether a module scope (``type``, ``module``, ``name``) is in ``scope_set``:
+    itself, its whole module, or a wildcard of its type (core ``sets.allows``)."""
+    items = scope_set.modules
+    if items is None:
+        return True
+    return (
+        scope.module in items
+        or f"{scope.type}/{scope.module}/{scope.name}" in items
+        or f"{scope.type}/{scope.module}/{core_sets.ANY}" in items
+        or f"{scope.type}/{core_sets.ANY}/{core_sets.ANY}" in items
+    )
+
+
+async def workspace_set(workspace_id: str) -> ScopeSet:
+    """The effective set of a workspace, its org found by ``AUTHZ``."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+
+    try:
+        org = await AUTHZ.org_of(workspace_id)
+    except runtime.IAMUnavailableError:
+        return ScopeSet(NO_ORG, workspace_id)  # no IAM at all: nothing narrows
+    if org is None:
+        return ScopeSet(NO_ORG, workspace_id, (), ())
+    return await run_in_threadpool(effective_set, None if org == NO_ORG else org, workspace_id)
+
+
+async def within_set(
+    items: Iterable[T], *, workspace: str, scope_of: Callable[[T], Any | None]
+) -> list[T]:
+    """The ``items`` whose module scope is in the workspace's set, in order; one
+    with no module scope (``scope_of`` answers None: an agent the workspace
+    built) is kept. What a workspace lists is its set, for everyone: IAM bounds
+    the rest of its users with it already, not the platform admin."""
+    found = list(items)
+    scopes = [scope_of(item) for item in found]
+    if not any(scopes):
+        return found
+    scope_set = await workspace_set(workspace)
+    return [
+        item
+        for item, scope in zip(found, scopes, strict=True)
+        if scope is None or in_set(scope_set, scope)
+    ]
 
 
 async def user_feature_flags(
@@ -494,10 +543,13 @@ __all__ = [
     "effective_features",
     "effective_features_async",
     "effective_set",
+    "in_set",
     "migrate_feature_overrides",
     "narrowed_by_seed",
     "plan_override_moves",
     "seed_items",
     "seed_workspace",
     "user_feature_flags",
+    "within_set",
+    "workspace_set",
 ]

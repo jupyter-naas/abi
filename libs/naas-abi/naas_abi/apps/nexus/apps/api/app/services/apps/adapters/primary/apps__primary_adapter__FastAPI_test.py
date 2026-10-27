@@ -302,6 +302,8 @@ def test_a_configured_remote_app_stays_manageable_while_its_module_is_down(
         return True
 
     monkeypatch.setattr(adapter.authz, "allowed_scope", may_open)
+    # The caller turns apps on and off (``UpdateApp``).
+    monkeypatch.setattr(adapter.authz, "allowed", may_open)
 
     def status(call) -> int:
         try:

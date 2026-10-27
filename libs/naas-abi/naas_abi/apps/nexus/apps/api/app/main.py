@@ -342,9 +342,12 @@ async def _prepare_iam() -> None:
     from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
     from naas_abi.apps.nexus.apps.api.app.services.iam import bootstrap, sets
     from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+    from naas_abi.apps.nexus.apps.api.app.services.visibility import factory as visibility
 
     log = logging.getLogger(__name__)
     MEMBERSHIPS.known_user = bootstrap.nexus_user_exists
+    # What a workspace's admins turned off is refused with every module scope.
+    visibility.install()
     try:
         async with AsyncSessionLocal() as db:
             await bootstrap.register_catalog(db, live_settings().feature_flags)

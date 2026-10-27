@@ -68,13 +68,27 @@ def apps(monkeypatch) -> dict[str, Any]:
     monkeypatch.setattr(tools_module, "_with_db", _with_db)
     monkeypatch.setattr(tools_module, "_enable_state", _enable_state)
     monkeypatch.setattr(tools_module, "_apps_service", lambda db: service)
+    refusals: dict[str, str | None] = {"refusal": None}
+
+    async def _whole_set(catalog, workspace_id):
+        return list(catalog)
+
+    async def _switch_refusal(user_id, workspace_id, app, enabled):
+        return refusals["refusal"]
+
+    monkeypatch.setattr(tools_module, "_in_set", _whole_set)
+    monkeypatch.setattr(tools_module, "_switch_refusal", _switch_refusal)
 
     tokens = [
         agent_user_id.set("user-1"),
         agent_workspace_id.set("ws-1"),
         nexus_feature_context.set(None),
     ]
-    yield {"service": service, "tools": {t.name: t for t in tools_module.apps_tools()}}
+    yield {
+        "service": service,
+        "refusals": refusals,
+        "tools": {t.name: t for t in tools_module.apps_tools()},
+    }
     agent_user_id.reset(tokens[0])
     agent_workspace_id.reset(tokens[1])
     nexus_feature_context.reset(tokens[2])
@@ -157,3 +171,35 @@ def test_membership_refusal_is_reported(apps, monkeypatch) -> None:
 
     assert "do not have access" in out["error"]
     assert apps["service"].upserts == []
+
+
+def test_set_app_enabled_follows_the_settings_rule(apps) -> None:
+    apps["refusals"]["refusal"] = "This app is not in the workspace's set."
+    out = apps["tools"]["set_app_enabled"].invoke({"enabled": True, "app_id": DOCS})
+    assert out == {"error": "This app is not in the workspace's set."}
+    assert apps["service"].upserts == []
+
+
+@pytest.mark.asyncio
+async def test_turning_an_app_on_needs_update_app_and_the_set() -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
+
+    team = NexusIam()
+    scope = team.workspace("org-1", "ws-1")
+    for role in ("admin", "member"):
+        team.grant(role, role, scope)
+    app = _app("wsr")
+    with team.installed():
+        await _refusals(team, app)
+
+
+async def _refusals(team: Any, app: AppInfo) -> None:
+    team.put_set("org-1", "ws-1", modules=["acme.other"])
+    refused = await tools_module._switch_refusal("member", "ws-1", app, True)
+    assert refused is not None and "may not" in refused
+    refused = await tools_module._switch_refusal("admin", "ws-1", app, True)
+    assert refused is not None and "not in the workspace's set" in refused
+    assert await tools_module._switch_refusal("admin", "ws-1", app, False) is None
+    assert await tools_module._in_set([app], "ws-1") == []
+    team.put_set("org-1", "ws-1", modules=["acme.module"])
+    assert await tools_module._switch_refusal("admin", "ws-1", app, True) is None

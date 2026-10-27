@@ -98,6 +98,7 @@ def test_registry_lists_every_nexus_table_by_section() -> None:
         ("Chat, agents & models", "inference_servers"),
         ("Apps", "app_configs"),
         ("Workflows", "workflow_run_owners"),
+        ("Workflows", "workflow_visibility"),
         ("Code", "coding_environments"),
         ("Maps", "maps_layouts"),
         ("Maps", "maps_feed_layers"),

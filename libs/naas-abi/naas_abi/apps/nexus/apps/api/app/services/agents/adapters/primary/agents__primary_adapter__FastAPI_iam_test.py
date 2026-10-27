@@ -261,3 +261,58 @@ async def test_a_turn_in_a_fresh_workspace_seeds_its_roster_and_runs_for_an_owne
         assert await bind_usable_agents(agents, "member", "ws-1") == frozenset()
     finally:
         agent_workspace_enabled_class_names.reset(token)
+
+
+# -- the workspace's set and what it turned off ------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_lists_only_the_module_agents_of_its_set(world) -> None:
+    world.team.platform_admin("root")
+    world.team.put_set("org-1", "ws-1", modules=["agent/acme.p/AAgent"])
+    for who in ("admin", "owner", "root"):
+        async with world.as_(who) as http:
+            ids = {a["id"] for a in (await http.get("/?workspace_id=ws-1")).json()}
+            # An agent the workspace built is its own, never a module's.
+            assert ids == {"plain", "a"}, who
+            assert (await http.get("/b")).status_code == 404, who
+
+
+@pytest.mark.asyncio
+async def test_no_module_agent_outside_the_set_is_turned_on_or_added(world) -> None:
+    world.team.put_set("org-1", "ws-1", modules=["acme.p"])
+    async with world.as_("admin") as http:
+        refused = await http.patch("/apps", json={"enabled": True})
+        assert refused.status_code == 403
+        assert "not in the workspace's set" in refused.json()["detail"]
+        added = {"workspace_id": "ws-1", "name": "n", "class_name": FILES, "provider": "abi"}
+        assert (await http.post("/", json=added)).status_code == 403
+        # Off, always; one of the set, on; one the workspace builds, added.
+        assert (await http.patch("/apps", json={"enabled": False})).status_code == 200
+        assert (await http.patch("/a", json={"enabled": True})).status_code == 200
+        assert (await http.post("/", json={"workspace_id": "ws-1", "name": "n"})).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_an_agent_turned_off_is_listed_to_who_turns_it_on_alone(world) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.agents.visibility import AgentsVisibility
+    from naas_abi.apps.nexus.apps.api.app.services.visibility.testing import (
+        visibility_installed,
+    )
+
+    world.team.allow_scope("member", _scope("acme.p", "AAgent"), WS)
+    world.agents.records["a"].enabled = False
+    world.agents.records["plain"].enabled = False
+
+    async def rows(workspace_id):
+        return await world.agents.list_workspace_agents(workspace_id)
+
+    with visibility_installed({"agent": AgentsVisibility(rows)}):
+        async with world.as_("member") as http:
+            assert (await http.get("/?workspace_id=ws-1")).json() == []
+            assert (await http.get("/a")).status_code == 404
+            assert (await http.get("/plain")).status_code == 404
+        async with world.as_("admin") as http:
+            listed = {a["id"]: a["enabled"] for a in (await http.get("/?workspace_id=ws-1")).json()}
+            assert listed["a"] is False and listed["plain"] is False
+            assert (await http.get("/a")).status_code == 200

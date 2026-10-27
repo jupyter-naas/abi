@@ -7,7 +7,7 @@ configuration over HTTP.
 
 Routes
 ------
-* ``GET    /api/apps/?workspace_id=…``         — catalog (with enable state)
+* ``GET    /api/apps/?workspace_id=…``         — catalog of the workspace's set (with enable state)
 * ``POST   /api/apps/access-token``            — scoped JWT for ``/app-html/``
 * ``POST   /api/apps/sso-token``               — HMAC handshake for a Pages portal
 * ``GET    /api/apps/{ws}``                    — list configs for workspace
@@ -72,6 +72,7 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.service import (
     AppsService,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam import sets as scope_sets
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.registry import (
@@ -479,6 +480,23 @@ def _existing_config(
     return partial(apps_service.get_app_config, workspace_id, app_id)
 
 
+async def _may_switch(current_user: User, workspace_id: str) -> bool:
+    """Whether the caller turns the workspace's apps on and off (``UpdateApp``):
+    they alone list the ones turned off, to turn them back on."""
+    return await authz.allowed("UpdateApp", user=current_user, workspace=workspace_id, id="-")
+
+
+async def _ensure_in_set(workspace_id: str, app_id: str) -> None:
+    """403 for an app outside the workspace's set: what a workspace has is chosen
+    on the organization's Modules & features page, never here."""
+    if not await scope_sets.within_set([app_id], workspace=workspace_id, scope_of=app_scope):
+        raise HTTPException(
+            status_code=403,
+            detail="This app is not in the workspace's set: its organization adds it "
+            "on the Modules & features page",
+        )
+
+
 class AppsFastAPIPrimaryAdapter:
     def __init__(self) -> None:
         self.router = router
@@ -721,11 +739,12 @@ async def list_apps(
     apps_service: AppsService = Depends(get_apps_service),
     current_user: User = Depends(get_current_user_required),
 ) -> AppsResponse:
-    """Return the apps of the loaded modules and of READY remote modules that
-    the caller may open in the workspace (``module:OpenApp``).
+    """Return the apps of the loaded modules and of READY remote modules in the
+    workspace's set that the caller may open there (``module:OpenApp``).
 
     Results carry the workspace's enable state. Apps without a stored record
-    default to ``enabled=False``.
+    default to ``enabled=False``. One turned off is refused to everyone and
+    listed only to who may turn it back on (``UpdateApp``).
     """
     try:
         from naas_abi import ABIModule
@@ -735,10 +754,15 @@ async def list_apps(
         loaded_modules = {}
 
     catalog = await authz.filter_scopes(
-        (*_scan_apps_catalog(), *await _remote_apps_catalog()),
+        await scope_sets.within_set(
+            (*_scan_apps_catalog(), *await _remote_apps_catalog()),
+            workspace=workspace_id,
+            scope_of=lambda app: app_scope(app.app_id),
+        ),
         user=current_user,
         workspace=workspace_id,
         scope_of=lambda app: app_scope(app.app_id),
+        include_hidden=await _may_switch(current_user, workspace_id),
     )
     workspace_slug = await _workspace_slug(workspace_id)
 
@@ -782,12 +806,18 @@ async def list_app_configs(
     apps_service: AppsService = Depends(get_apps_service),
     current_user: User = Depends(get_current_user_required),
 ) -> list[dict]:
-    """List the stored app configs of a workspace, for the apps the caller may open."""
+    """List the stored app configs of a workspace, for the apps of its set the
+    caller may open (those turned off, for who may turn them on)."""
     records = await authz.filter_scopes(
-        await apps_service.list_app_configs(workspace_id),
+        await scope_sets.within_set(
+            await apps_service.list_app_configs(workspace_id),
+            workspace=workspace_id,
+            scope_of=lambda record: app_scope(record.app_id),
+        ),
         user=current_user,
         workspace=workspace_id,
         scope_of=lambda record: app_scope(record.app_id),
+        include_hidden=await _may_switch(current_user, workspace_id),
     )
     return [_serialize_record(r) for r in records]
 
@@ -799,9 +829,12 @@ async def create_app_config(
     current_user: User = Depends(get_current_user_required),
     apps_service: AppsService = Depends(get_apps_service),
 ) -> dict:
-    """Create a new app config row (errors if one already exists)."""
+    """Create a new app config row (errors if one already exists), for an app of
+    the workspace's set."""
     await authz.require("InstallApp", user=current_user, workspace=workspace_id, id=body.app_id)
     await _ensure_app_exists(body.app_id)
+    if body.enabled:
+        await _ensure_in_set(workspace_id, body.app_id)
     try:
         record = await apps_service.create_app_config(
             AppConfigCreateInput(
@@ -822,10 +855,14 @@ async def get_app_config(
     apps_service: AppsService = Depends(get_apps_service),
     current_user: User = Depends(get_current_user_required),
 ) -> dict:
-    """Get a single app config row, of an app the caller may open."""
+    """Get a single app config row, of an app the caller may open (one turned
+    off, for who may turn it on)."""
     scope = app_scope(app_id)
     if scope is not None and not await authz.allowed_scope(
-        scope, user=current_user, workspace=workspace_id
+        scope,
+        user=current_user,
+        workspace=workspace_id,
+        include_hidden=await _may_switch(current_user, workspace_id),
     ):
         raise HTTPException(status_code=404, detail="App config not found")
     await _ensure_app_exists(app_id, _existing_config(apps_service, workspace_id, app_id))
@@ -846,11 +883,14 @@ async def update_app_config(
 
     Idempotent: if no row exists yet, one is created with the supplied
     values. This lets the UI toggle simply call PATCH without a prior POST.
+    Turning one on needs it in the workspace's set; off, any.
     """
     await _ensure_app_exists(
         app_id,
         None if updates.enabled else _existing_config(apps_service, workspace_id, app_id),
     )
+    if updates.enabled:
+        await _ensure_in_set(workspace_id, app_id)
 
     record = await apps_service.upsert_app_config(
         workspace_id=workspace_id,

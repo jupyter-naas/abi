@@ -29,6 +29,10 @@ def _build(tmp_path, ttl: datetime.timedelta = datetime.timedelta(hours=24)):
     def update_agent(agent_id: str):
         return {"id": agent_id}
 
+    @app.put("/api/iam/admin/sets/{org}/workspaces/{workspace}")
+    def put_set(org: str, workspace: str):
+        return {"org": org, "workspace": workspace}
+
     @app.get("/api/skills/broken")
     def broken():
         calls["skills"] += 1
@@ -124,6 +128,17 @@ def test_successful_write_invalidates_every_users_cache(tmp_path) -> None:
     client.patch("/api/agents/a1", headers={"Authorization": "Bearer bob"})
     assert _get(client, "/api/agents/", user="alice").headers[CACHE_HEADER] == "MISS"
     assert calls["agents"] == 3
+
+
+def test_a_change_of_a_workspaces_set_invalidates_every_users_cache(tmp_path) -> None:
+    # A narrower set lists less on the settings pages (Apps, Agents): read again.
+    client, calls = _build(tmp_path)
+    _get(client, "/api/agents/", user="alice")
+    client.put(
+        "/api/iam/admin/sets/org-1/workspaces/ws-1", headers={"Authorization": "Bearer root"}
+    )
+    assert _get(client, "/api/agents/", user="alice").headers[CACHE_HEADER] == "MISS"
+    assert calls["agents"] == 2
 
 
 def test_refresh_drops_only_the_callers_cache(tmp_path) -> None:

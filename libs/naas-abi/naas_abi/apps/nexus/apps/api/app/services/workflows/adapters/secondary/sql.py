@@ -1,13 +1,19 @@
-"""``RunOwnersPort`` on the Nexus database (``workflow_run_owners``), one
-session per call: the workflows routes hold none."""
+"""``RunOwnersPort`` and ``WorkflowVisibilityPort`` on the Nexus database
+(``workflow_run_owners``, ``workflow_visibility``), one session per call: the
+workflows routes hold none."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from typing import Any
 
-from naas_abi.apps.nexus.apps.api.app.models import WorkflowRunOwnerModel
-from naas_abi.apps.nexus.apps.api.app.services.workflows.port import RunOwner, RunOwnersPort
+from naas_abi.apps.nexus.apps.api.app.models import WorkflowRunOwnerModel, WorkflowVisibilityModel
+from naas_abi.apps.nexus.apps.api.app.services.workflows.port import (
+    RunOwner,
+    RunOwnersPort,
+    WorkflowSwitch,
+    WorkflowVisibilityPort,
+)
 from sqlalchemy import select
 
 
@@ -55,3 +61,41 @@ class SqlRunOwners(RunOwnersPort):
                 .limit(limit)
             )
             return [_owner(row) for row in result.scalars().all()]
+
+
+class SqlWorkflowVisibility(WorkflowVisibilityPort):
+    def __init__(self, sessions: Callable[[], Any]) -> None:
+        self._sessions = sessions
+
+    async def list_for(self, workspace_id: str) -> list[WorkflowSwitch]:
+        async with self._sessions() as db:
+            result = await db.execute(
+                select(WorkflowVisibilityModel).where(
+                    WorkflowVisibilityModel.workspace_id == workspace_id
+                )
+            )
+            return [
+                WorkflowSwitch(
+                    workspace_id=str(row.workspace_id),
+                    type=str(row.type),
+                    module_id=str(row.module_id),
+                    name=str(row.name),
+                    enabled=bool(row.enabled),
+                )
+                for row in result.scalars().all()
+            ]
+
+    async def put(self, switch: WorkflowSwitch) -> None:
+        key = (switch.workspace_id, switch.type, switch.module_id, switch.name)
+        async with self._sessions() as db:
+            row = await db.get(WorkflowVisibilityModel, key)
+            if row is None:
+                row = WorkflowVisibilityModel(
+                    workspace_id=switch.workspace_id,
+                    type=switch.type,
+                    module_id=switch.module_id,
+                    name=switch.name,
+                )
+                db.add(row)
+            row.enabled = switch.enabled
+            await db.commit()

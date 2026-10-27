@@ -20,7 +20,7 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 | `names.py` | Scopes and resource names; `NO_ORG` (`_none`) is the org of a workspace that has none |
 | `placements.py` | Which workspace owns the kernel resources Nexus keeps (`placement_source`, `place`, `place_existing`) |
 | `bootstrap.py` | Startup: register the catalog, compute the feature policies, move the old membership rows into IAM once (`iam_migrations`) |
-| `sets.py` | The organisation and workspace sets from Nexus's side: effective features of a workspace, a user's feature flags from IAM (`user_feature_flags`), a new workspace's set (`seed_workspace`, narrowed by its catalog seed), the one-time move of the feature overrides (`migrate_feature_overrides`) |
+| `sets.py` | The organisation and workspace sets from Nexus's side: what a workspace lists (`within_set`, `in_set`, `workspace_set`), effective features of a workspace, a user's feature flags from IAM (`user_feature_flags`), a new workspace's set (`seed_workspace`, narrowed by its catalog seed), the one-time move of the feature overrides (`migrate_feature_overrides`) |
 | `runtime.py` | Where Nexus gets IAM (the engine's); tests install their own with `configure` |
 | `testing.py`, `../../conftest.py` | `NexusIam` (a real IAM on the memory store) and the `nexus_iam` / `team` / `nexus_db` fixtures |
 | `route_matrix_test.py` | Every route declares its action; write methods never authorize only a read; every `guard` is decided by level for viewer, member, admin, owner, stranger |
@@ -82,12 +82,27 @@ workspace the request names, after the user's membership there. One source of tr
 - **The `apps` and `agents` features** no longer gate using a module's apps and agents: they are the settings
   sections (`InstallApp`, `UpdateApp`, `UninstallApp`, agent edits) and the app projects. `nexus:UseApp` is left for a
   link that is no module's app (a Pages portal's sign-in).
+- **Listed within the set, for everyone.** What a workspace lists of a module (`GET /apps`, its app configs, the agents
+  roster, the workflows) is in its effective set (`sets.within_set`), the platform admin included: IAM bounds the
+  others with the set already, never the platform admin, who still reaches an item outside it by name. Turning on an
+  app, a module agent or a workflow outside the set from workspace settings is refused (403).
 - **The listing** `GET /api/modules/scopes?workspace_id=|organization_id=` (`nexus:ListModuleScopes`, admin) is every
   module with its agents, apps, workflows, pipelines and declared catalog, with display data and the `resource` and
   `actions` a policy names (`services/modules/scopes.py`). The policy editor suggests ids from it.
 - **Discovery's grants** stay the broker-side check (a member holds `InvokeAgent`, `OpenApp`, `TriggerJob`
   platform-wide); the module scope is checked here first, and a turn that names no workspace runs no module agent
   or workflow.
+
+## Visibility
+
+A workspace's admins turn each agent, app, workflow and pipeline of its set on or off for everyone in it
+(`services/visibility`, workspace settings › Agents, Apps, Workflows). `authz` asks it after IAM allows a
+module scope: one turned off is refused (`decide_scope` reason `hidden`, 403 "This <type> is turned off in this
+workspace"), left out of `filter_scopes` and skipped by `scope_allowed_in_any`, for every role, the platform
+admin included. `include_hidden=True` is for who may turn it back on: the listings pass it when the caller holds
+`UpdateApp` / `UpdateAgent` (apps, agents) or `ListWorkflowSettings`. The settings actions are `nexus`'s
+(`InstallApp`, `UpdateApp`, `UninstallApp`, `UpdateAgent`; `ListWorkflowSettings` and `UpdateWorkflow`,
+`catalog/workflows.py`, admin, feature `settings`); IAM never sees the state itself.
 
 ## The `nexus` catalog
 
@@ -102,7 +117,7 @@ the caller's own id. One module per router family:
 | `organizations.py` | `organization`, `member`, `domain`, `billing`, `role_features` (org level); `CreateWorkspace` is an org action |
 | `workspaces.py` | `workspace`, `member`, `server`, `resource_access` |
 | `features.py` | `feature/<key>` (`UseFeature`) |
-| `chat.py`, `agents.py`, `apps.py` | `conversation`; `agent`, `skill`; `app`, `app_project`, `module` (`ListModuleScopes`) |
+| `chat.py`, `agents.py`, `apps.py`, `workflows.py` | `conversation`; `agent`, `skill`; `app`, `app_project`, `module` (`ListModuleScopes`); `workflow` (on or off in a workspace) |
 | `files.py`, `datasets.py`, `office.py` | `file` (drive + path), `my_file`, `user_storage`, `root_storage`; `dataset`; `project` (slides, documents, sheets) |
 | `knowledge.py`, `search.py` | `view`, `graph_cache`, `ontology`, `icon`, `layout`, `layer`, `feed_layer`, `basemap`, `maps_catalog`, `maps_access`; `search`, `topic`, `search_scope` |
 | `code.py`, `settings.py`, `platform.py`, `realtime.py` | `code`, `code_settings`; `secret`, `provider_model`, `abi_server`; `analytics`, `system`; `presence`, `speech` |

@@ -131,3 +131,21 @@ async def test_a_source_that_fails_leaves_its_part_out(monkeypatch) -> None:
     assert [(m["module"], [a["name"] for a in m["agents"]]) for m in listed] == [
         ("acme.people", ["Recruiter"])
     ]
+
+
+def test_what_a_workspace_has_is_each_module_with_its_items_in_the_set() -> None:
+    from naas_abi_core.services.iam.IAMPorts import ScopeSet
+
+    listed = build(EXPOSED, [DECLARED], modules=["naas_abi_marketplace.applications.github"])
+    counts = {"agents": 1, "apps": 1, "workflows": 1, "pipelines": 1}
+    # Nothing recorded: everything; a module with nothing is left out.
+    assert scopes.in_set(listed, ScopeSet("org-1", "ws-1")) == [
+        {"module": "acme.people", **counts},
+        {"module": "naas_abi", "agents": 1, "apps": 0, "workflows": 0, "pipelines": 0},
+    ]
+    one_app = ScopeSet("org-1", "ws-1", ("app/acme.people/directory", "agent/*/*"), None)
+    assert scopes.in_set(listed, one_app) == [
+        {"module": "acme.people", "agents": 1, "apps": 1, "workflows": 0, "pipelines": 0},
+        {"module": "naas_abi", "agents": 1, "apps": 0, "workflows": 0, "pipelines": 0},
+    ]
+    assert scopes.in_set(listed, ScopeSet("org-1", "ws-1", (), ())) == []

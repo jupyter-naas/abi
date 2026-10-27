@@ -207,3 +207,110 @@ def test_an_idempotency_key_is_the_callers_own(world) -> None:
     theirs = world.client("other").post(f"{WS}/acme.flows/ingest/runs", json={}, headers=key)
     assert first.json()["run_id"] == again.json()["run_id"] != theirs.json()["run_id"]
     assert world.owners.rows[("acme.flows", first.json()["run_id"])].user_id == "member"
+
+
+# -- the workspace's set, and on or off there ------------------------------------------
+
+
+@pytest.fixture
+def switches(world):
+    """Workflows on and off in the workspace, as its settings record them."""
+    from naas_abi.apps.nexus.apps.api.app.services.visibility.testing import (
+        visibility_installed,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.workflows.adapters.secondary.in_memory import (
+        InMemoryWorkflowVisibility,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.workflows.factory import (
+        get_workflow_visibility,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.workflows.visibility import (
+        WorkflowsVisibility,
+    )
+
+    store = InMemoryWorkflowVisibility()
+    reader = WorkflowsVisibility(store)
+    client = world.client
+
+    def with_store(user_id: str) -> TestClient:
+        made = client(user_id)
+        made.app.dependency_overrides[get_workflow_visibility] = lambda: store
+        return made
+
+    world.client = with_store
+    with visibility_installed({"workflow": reader, "pipeline": reader}):
+        yield world
+
+
+def test_a_workspace_lists_only_the_workflows_of_its_set(world) -> None:
+    world.iam.platform_admin("root")
+    world.iam.put_set("org-1", "ws-1", modules=["pipeline/acme.flows/*"])
+    for who in ("admin", "root"):
+        assert _listed(world.client(who)) == {"pipeline.daily"}, who
+    world.iam.put_set("org-1", "ws-1", modules=["acme.other"])
+    assert _listed(world.client("root")) == set()
+
+
+@pytest.mark.parametrize("role", ["viewer", "member"])
+def test_viewers_and_members_neither_list_nor_switch_workflow_settings(switches, role) -> None:
+    client = switches.client(role)
+    assert client.get(f"{WS}/settings").status_code == 403
+    off = {"type": "workflow", "module_id": "acme.flows", "name": "ingest", "enabled": False}
+    assert client.put(f"{WS}/settings", json=off).status_code == 403
+
+
+def test_admins_switch_a_workflow_off_for_everyone_and_back_on(switches) -> None:
+    switches.iam.allow_scope("member", INGEST, switches.scope)
+    switches.iam.platform_admin("root")
+    admin = switches.client("admin")
+    listed = admin.get(f"{WS}/settings").json()["workflows"]
+    assert {(w["type"], w["name"], w["enabled"]) for w in listed} == {
+        ("workflow", "ingest", True),
+        ("workflow", "map_item", True),
+        ("pipeline", "pipeline.daily", True),
+    }
+    off = {"type": "workflow", "module_id": "acme.flows", "name": "ingest", "enabled": False}
+    assert admin.put(f"{WS}/settings", json=off).status_code == 200
+    # Refused to everyone who could start it, and left out of their lists.
+    for who in ("member", "admin", "root"):
+        client = switches.client(who)
+        refused = client.post(f"{WS}/acme.flows/ingest/runs", json={})
+        assert refused.status_code == 403, who
+        assert refused.json()["detail"] == "This workflow is turned off in this workspace"
+        assert "ingest" not in _listed(client), who
+    assert switches.control.triggered == []
+    # Its admins still list it, off, in the settings.
+    listed = admin.get(f"{WS}/settings").json()["workflows"]
+    assert ("ingest", False) in {(w["name"], w["enabled"]) for w in listed}
+    assert admin.put(f"{WS}/settings", json={**off, "enabled": True}).status_code == 200
+    assert (
+        switches.client("member").post(f"{WS}/acme.flows/ingest/runs", json={}).status_code == 202
+    )
+
+
+def test_a_pipeline_switched_off_is_refused(switches) -> None:
+    switches.iam.allow_scope("member", DAILY, switches.scope)
+    off = {
+        "type": "pipeline",
+        "module_id": "acme.flows",
+        "name": "pipeline.daily",
+        "enabled": False,
+    }
+    assert switches.client("admin").put(f"{WS}/settings", json=off).status_code == 200
+    member = switches.client("member")
+    assert _listed(member) == set()
+    refused = member.post(f"{WS}/acme.flows/pipeline.daily/runs", json={})
+    assert refused.status_code == 403
+    assert refused.json()["detail"] == "This pipeline is turned off in this workspace"
+
+
+def test_workflow_settings_list_the_set_and_turn_on_nothing_outside_it(switches) -> None:
+    switches.iam.put_set("org-1", "ws-1", modules=["workflow/acme.flows/ingest"])
+    admin = switches.client("admin")
+    assert [w["name"] for w in admin.get(f"{WS}/settings").json()["workflows"]] == ["ingest"]
+    on = {"type": "pipeline", "module_id": "acme.flows", "name": "pipeline.daily", "enabled": True}
+    refused = admin.put(f"{WS}/settings", json=on)
+    assert refused.status_code == 403
+    assert "not in the workspace's set" in refused.json()["detail"]
+    # Off is always allowed.
+    assert admin.put(f"{WS}/settings", json={**on, "enabled": False}).status_code == 200

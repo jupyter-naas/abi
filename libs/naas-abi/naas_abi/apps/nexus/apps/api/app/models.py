@@ -977,3 +977,17 @@ class WorkflowRunOwnerModel(Base):
     user_id = Column(String(255), nullable=False)
     workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
     started_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+
+
+class WorkflowVisibilityModel(Base):
+    """A workflow or pipeline a workspace's admins turned on or off for everyone
+    in it (``services/workflows``, ``services/visibility``); none recorded: on."""
+
+    __tablename__ = "workflow_visibility"
+
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
+    type = Column(String(32), primary_key=True)
+    module_id = Column(String(255), primary_key=True)
+    name = Column(String(255), primary_key=True)
+    enabled = Column(Boolean, nullable=False, default=True)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)

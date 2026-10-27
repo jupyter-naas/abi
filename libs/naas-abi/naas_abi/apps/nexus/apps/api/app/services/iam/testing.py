@@ -111,6 +111,18 @@ class NexusIam:
         resource = scope.resource("o", "w").removeprefix("abi:o:w:")
         return self.allow(user_id, [scope.action()], [f"${{scope}}:{resource}"], workspace_scope)
 
+    def put_set(
+        self,
+        org: str,
+        workspace: str = "-",
+        *,
+        modules: Sequence[str] | None = None,
+        features: Sequence[str] | None = None,
+    ) -> None:
+        """Record the set of an org (or of a workspace in it), as the platform's."""
+        with as_service_account("engine"):
+            self.iam.put_set(org, workspace, modules=modules, features=features)
+
     def platform_admin(self, user_id: str) -> None:
         with as_service_account("api"):
             principal = self.iam.ensure_user(LEGACY_NEXUS_ISSUER, user_id, provider="nexus")

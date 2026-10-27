@@ -207,9 +207,10 @@ async def apps() -> list[Exposed]:
     return found
 
 
-async def workflows() -> list[Exposed]:
-    """The workflows and pipelines the jobs catalogs list, then the engine's
-    own (when the jobs are not reachable, or not hosted here)."""
+async def workflows(service: Any = None) -> list[Exposed]:
+    """The workflows and pipelines the jobs catalogs list (``service``, the
+    workflows service, the API's by default), then the engine's own (when the
+    jobs are not reachable, or not hosted here)."""
     from naas_abi.apps.nexus.apps.api.app.services.agents.scopes import engine_process_scopes
     from naas_abi.apps.nexus.apps.api.app.services.workflows.factory import (
         get_workflows_service,
@@ -218,7 +219,7 @@ async def workflows() -> list[Exposed]:
 
     found: list[Exposed] = []
     try:
-        listed = await get_workflows_service().list()
+        listed = await (service or get_workflows_service()).list()
     except Exception:  # noqa: BLE001 - no broker, no jobs: the engine's own below
         _log.debug("Jobs catalogs unavailable for module scopes", exc_info=True)
     else:
@@ -261,3 +262,25 @@ async def gather() -> list[dict[str, Any]]:
     for part in parts:
         exposed.extend(part)
     return build(exposed, catalogs, engine_modules())
+
+
+def in_set(modules: Iterable[dict[str, Any]], scope_set: Any) -> list[dict[str, Any]]:
+    """What ``gather`` lists, narrowed to a set (core ``ScopeSet``): each module
+    with something in it and how many agents, apps, workflows and pipelines,
+    for a workspace's settings (what the workspace has)."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
+    from naas_abi.apps.nexus.apps.api.app.services.iam.sets import in_set as scope_in_set
+
+    found: list[dict[str, Any]] = []
+    for entry in modules:
+        counts = {
+            plural: sum(
+                1
+                for item in entry.get(plural) or ()
+                if scope_in_set(scope_set, ModuleScope(type_name, entry["module"], item["name"]))
+            )
+            for type_name, plural in PLURAL.items()
+        }
+        if any(counts.values()):
+            found.append({"module": entry["module"], **counts})
+    return found

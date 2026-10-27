@@ -21,6 +21,10 @@ IAM and no scope list.
   workspace where it is used (``require_scope``, ``filter_scopes``): one
   source of truth for module resources, whoever hosts them. Agents a workspace
   builds itself stay ``nexus:UseAgent``.
+* **Hidden in the workspace.** One its admins turned off there
+  (``services/visibility``) is refused to everyone after IAM allows it (reason
+  ``hidden``), and left out of ``filter_scopes``; the settings pages that turn
+  it back on pass ``include_hidden``.
 """
 
 from __future__ import annotations
@@ -91,6 +95,16 @@ class Decision:
     allowed: bool
     visible: bool
     reason: str
+
+
+async def _hidden(workspace: str, scopes: Sequence[ModuleScope]) -> set[ModuleScope]:
+    """The ``scopes`` the workspace turned off (``services/visibility``)."""
+    from naas_abi.apps.nexus.apps.api.app.services.visibility import runtime as visibility
+
+    found = visibility.current()
+    if found is None or not scopes:
+        return set()
+    return await found.hidden(workspace, list(scopes))
 
 
 class Authz:
@@ -330,9 +344,11 @@ class Authz:
         workspace: str,
         action: str | None = None,
         feature: str | None = None,
+        include_hidden: bool = False,
     ) -> Decision:
         """The decision on a module scope in ``workspace`` (its use action by
-        default); ``feature`` is a Nexus section the use also needs."""
+        default); ``feature`` is a Nexus section the use also needs. One the
+        workspace turned off is refused (``hidden``) unless ``include_hidden``."""
         org = await self.org_of(workspace)
         if org is None:
             return Decision(False, False, "implicit_deny")
@@ -341,7 +357,10 @@ class Authz:
             switch = nexus_resource("feature", org=org, workspace=workspace, id=feature)
             if not (await self._decide(ctx, "nexus:UseFeature", switch)).allowed:
                 return Decision(False, False, "feature_disabled")
-        return await self._decide(ctx, scope.action(action), scope.resource(org, workspace))
+        decision = await self._decide(ctx, scope.action(action), scope.resource(org, workspace))
+        if decision.allowed and not include_hidden and await _hidden(workspace, [scope]):
+            return Decision(False, True, "hidden")
+        return decision
 
     async def allowed_scope(self, scope: ModuleScope, **target: Any) -> bool:
         return (await self.decide_scope(scope, **target)).allowed
@@ -362,6 +381,8 @@ class Authz:
         )
         if decision.allowed:
             return
+        if decision.reason == "hidden":
+            raise AuthzDenied(403, detail=f"This {scope.type} is turned off in this workspace")
         raise await self._refusal(
             scope.action(action),
             decision,
@@ -379,9 +400,11 @@ class Authz:
         workspace: str,
         scope_of: Callable[[_T], ModuleScope | None],
         action: str | None = None,
+        include_hidden: bool = False,
     ) -> list[_T]:
         """The items the user may use in ``workspace``, in order; an item with no
-        module scope (``scope_of`` answers None) is kept: another check owns it."""
+        module scope (``scope_of`` answers None) is kept: another check owns it.
+        One the workspace turned off is left out unless ``include_hidden``."""
         found = list(items)
         scopes = [scope_of(item) for item in found]
         if not any(scopes):
@@ -407,11 +430,17 @@ class Authz:
             return allowed
 
         allowed = await run_in_threadpool(run)
-        return [
-            item
+        kept = [
+            (item, scope)
             for item, scope in zip(found, scopes, strict=True)
             if scope is None or (scope.action(action), scope.resource(org, workspace)) in allowed
         ]
+        hidden = (
+            set()
+            if include_hidden
+            else await _hidden(workspace, [s for _, s in kept if s is not None])
+        )
+        return [item for item, scope in kept if scope is None or scope not in hidden]
 
     async def scope_allowed_in_any(
         self,
@@ -422,13 +451,18 @@ class Authz:
         feature: str | None = None,
     ) -> str | None:
         """The first of ``workspaces`` (``(org, workspace)`` pairs) where the user
-        may use ``scope``, else None."""
+        may use ``scope`` and it is not turned off, else None."""
         ctx = self.context(user)
+        shown: list[tuple[str, str]] = [
+            (org, workspace)
+            for org, workspace in workspaces
+            if not await _hidden(workspace, [scope])
+        ]
 
         def run() -> str | None:
             iam = runtime.iam()
             with use_call_context(ctx):
-                for org, workspace in workspaces:
+                for org, workspace in shown:
                     if (
                         feature is not None
                         and not iam.authorize(

@@ -655,6 +655,57 @@ async def get_workspace_configuration(
     }
 
 
+@router.get(
+    "/{workspace_id}/resources",
+    dependencies=[
+        guard(
+            "GetWorkspaceConfiguration",
+            denied="Only admins can view what the workspace has",
+        )
+    ],
+)
+async def get_workspace_resources(
+    workspace_id: str,
+    current_user: User = Depends(get_current_user_required),
+    service: WorkspaceService = Depends(get_workspace_service),
+) -> dict:
+    """What the workspace has: its effective set (its own within its
+    organization's, IAM's), read-only, for workspace settings (which pages it
+    shows, General).
+
+    ``features`` are the deployment's enabled features in the set; ``modules``
+    each module with something in the set, with how many of its agents, apps,
+    workflows and pipelines are; ``totals`` add them up; ``can_edit_set`` is
+    whether the caller may change the set (``iam:PutSet``), on the organization's
+    Modules & features page."""
+    from naas_abi.apps.nexus.apps.api.app.services.modules import scopes as module_scopes
+
+    record = await service.get_workspace(workspace_id=workspace_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    scope_set = await scope_sets.workspace_set(workspace_id)
+    modules = module_scopes.in_set(await module_scopes.gather(), scope_set)
+    can_edit = (
+        await get_iam_admin_service().may_edit_set(current_user, record.organization_id, record.id)
+        if record.organization_id
+        else False
+    )
+    return {
+        "organization_id": record.organization_id,
+        "can_edit_set": can_edit,
+        "features": [
+            key
+            for key in enabled_feature_catalog(settings.feature_flags)
+            if scope_set.features is None or key in scope_set.features
+        ],
+        "modules": modules,
+        "totals": {
+            plural: sum(entry[plural] for entry in modules)
+            for plural in module_scopes.PLURAL.values()
+        },
+    }
+
+
 @router.get("/{workspace_id}/stats", dependencies=[guard("GetWorkspaceStats")])
 async def get_workspace_stats(
     workspace_id: str,

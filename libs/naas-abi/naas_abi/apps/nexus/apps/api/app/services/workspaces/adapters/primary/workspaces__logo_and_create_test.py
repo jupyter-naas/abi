@@ -295,3 +295,35 @@ def test_workspace_description_is_limited_to_200_characters() -> None:
     assert ws_api.WorkspaceUpdate(description="x" * 200).description == "x" * 200
     with pytest.raises(ValidationError):
         ws_api.WorkspaceUpdate(description="x" * 201)
+
+
+def test_resources_are_what_the_workspace_has_read_only(monkeypatch, team) -> None:
+    """Its effective set: features, and each module with its items in the set
+    (Settings: which pages it shows, General)."""
+    from naas_abi.apps.nexus.apps.api.app.services.modules import scopes as module_scopes
+
+    async def gathered():
+        return module_scopes.build(
+            [
+                module_scopes.Exposed("agent", "acme.people", "A"),
+                module_scopes.Exposed("agent", "acme.people", "B"),
+                module_scopes.Exposed("app", "acme.market", "prices"),
+                module_scopes.Exposed("workflow", "acme.crm", "sync"),
+            ]
+        )
+
+    monkeypatch.setattr(module_scopes, "gather", gathered)
+    team.put_set("org-1", "ws-1", modules=["agent/acme.people/A", "acme.market"], features=["chat"])
+    client, service = _client(user="admin")
+    service.get_workspace.return_value = _record()
+
+    body = client.get("/api/workspaces/ws-1/resources").json()
+
+    assert body["features"] == ["chat"]
+    assert body["can_edit_set"] is True
+    assert body["modules"] == [
+        {"module": "acme.market", "agents": 0, "apps": 1, "workflows": 0, "pipelines": 0},
+        {"module": "acme.people", "agents": 1, "apps": 0, "workflows": 0, "pipelines": 0},
+    ]
+    assert body["totals"] == {"agents": 1, "apps": 1, "workflows": 0, "pipelines": 0}
+    assert _client(user="member")[0].get("/api/workspaces/ws-1/resources").status_code == 403

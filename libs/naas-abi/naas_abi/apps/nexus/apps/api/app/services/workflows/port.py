@@ -1,4 +1,5 @@
-"""Who started which workflow run, from which workspace.
+"""Who started which workflow run, from which workspace; which workflows and
+pipelines a workspace turned off.
 
 A job run carries no owner of its own (its record is the host's, named
 ``job_run/<project>/<module>/<job>/<run id>``): Nexus records the user and the
@@ -34,3 +35,27 @@ class RunOwnersPort(ABC):
     @abstractmethod
     async def list_for(self, user_id: str, workspace_id: str, limit: int) -> list[RunOwner]:
         """The user's starts in the workspace, newest first."""
+
+
+@dataclass(frozen=True)
+class WorkflowSwitch:
+    """A workflow or pipeline turned on or off in a workspace (``type`` is
+    ``workflow`` or ``pipeline``, as its module scope)."""
+
+    workspace_id: str
+    type: str
+    module_id: str
+    name: str
+    enabled: bool
+
+
+class WorkflowVisibilityPort(ABC):
+    """On and off per workspace; one never switched is on."""
+
+    @abstractmethod
+    async def list_for(self, workspace_id: str) -> list[WorkflowSwitch]:
+        """Every switch recorded in the workspace."""
+
+    @abstractmethod
+    async def put(self, switch: WorkflowSwitch) -> None:
+        """Record ``switch``, replacing the workspace's earlier one for that item."""

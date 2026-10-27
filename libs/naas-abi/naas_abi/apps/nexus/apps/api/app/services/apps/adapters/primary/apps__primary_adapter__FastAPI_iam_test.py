@@ -295,3 +295,91 @@ async def test_the_apps_section_does_not_gate_opening_an_app(monkeypatch) -> Non
             assert [a["app_id"] for a in listed.json()["apps"]] == [APP]
             denied = await http.patch(f"/api/apps/ws-1/{APP}", json={"enabled": True})
             assert denied.status_code == 403
+
+
+# -- the workspace's set and what it turned off ------------------------------------------
+
+
+@pytest.fixture
+def shown(world):
+    """Apps on and off as the store says (``app_configs.enabled``, else off)."""
+    from naas_abi.apps.nexus.apps.api.app.services.apps.visibility import AppsVisibility
+    from naas_abi.apps.nexus.apps.api.app.services.visibility.testing import (
+        visibility_installed,
+    )
+
+    async def states(workspace_id):
+        return await AppsService(world.store).get_enabled_states(workspace_id)
+
+    async def no_seed(workspace_id):
+        return set()
+
+    with visibility_installed({"app": AppsVisibility(states, no_seed)}):
+        yield world
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_lists_only_the_apps_of_its_set(world, monkeypatch) -> None:
+    catalog = adapter._scan_apps_catalog()
+    other = adapter._build_app_info("acme.market", Path("/modules/prices"), {"name": "Prices"})
+    monkeypatch.setattr(adapter, "_scan_apps_catalog", lambda: (*catalog, other))
+    world.iam.platform_admin("root")
+    world.iam.put_set("org-1", "ws-1", modules=["acme.market"])
+    for role in ("admin", "owner", "root"):
+        async with world.as_(role) as http:
+            listed = await http.get("/api/apps/?workspace_id=ws-1")
+            assert [a["app_id"] for a in listed.json()["apps"]] == ["acme.market:prices"], role
+    # One app of a module, not the module.
+    world.iam.put_set("org-1", "ws-1", modules=["app/acme.ops/map"])
+    async with world.as_("root") as http:
+        listed = await http.get("/api/apps/?workspace_id=ws-1")
+        assert [a["app_id"] for a in listed.json()["apps"]] == [APP]
+
+
+@pytest.mark.asyncio
+async def test_nothing_outside_the_set_is_turned_on_from_workspace_settings(world) -> None:
+    world.iam.put_set("org-1", "ws-1", modules=["acme.market"])
+    async with world.as_("admin") as http:
+        refused = await http.patch(f"/api/apps/ws-1/{APP}", json={"enabled": True})
+        assert refused.status_code == 403
+        assert "not in the workspace's set" in refused.json()["detail"]
+        assert (await http.post("/api/apps/ws-1", json={"app_id": APP})).status_code == 403
+        # Turning one off is always allowed.
+        off = await http.patch(f"/api/apps/ws-1/{APP}", json={"enabled": False})
+        assert off.status_code == 200
+    assert world.store.rows[("ws-1", APP)].enabled is False
+
+
+@pytest.mark.asyncio
+async def test_an_app_turned_off_is_refused_to_everyone_and_listed_to_its_admins(shown) -> None:
+    link = {"workspace_id": "ws-1", "app_id": APP}
+    remote = {"workspace_id": "ws-1", "module_id": "acme.ops", "app": "map"}
+    shown.iam.allow_scope("member", ModuleScope("app", "acme.ops", "map"), shown.scope)
+    shown.iam.platform_admin("root")
+    async with shown.as_("admin") as http:
+        assert (
+            await http.patch(f"/api/apps/ws-1/{APP}", json={"enabled": True})
+        ).status_code == 200
+    async with shown.as_("member") as http:
+        listed = await http.get("/api/apps/?workspace_id=ws-1")
+        assert [a["app_id"] for a in listed.json()["apps"]] == [APP]
+        assert (await http.post("/api/apps/access-token", json=link)).status_code == 200
+    async with shown.as_("admin") as http:
+        assert (
+            await http.patch(f"/api/apps/ws-1/{APP}", json={"enabled": False})
+        ).status_code == 200
+    for who in ("member", "admin", "owner", "root"):
+        async with shown.as_(who) as http:
+            opened = await http.post("/api/apps/access-token", json=link)
+            assert opened.status_code == 403, who
+            assert opened.json()["detail"] == "This app is turned off in this workspace"
+            assert (await http.post("/api/apps/remote-grant", json=remote)).status_code == 403
+    async with shown.as_("member") as http:
+        assert (await http.get("/api/apps/?workspace_id=ws-1")).json()["apps"] == []
+        assert (await http.get("/api/apps/ws-1")).json() == []
+        assert (await http.get(f"/api/apps/ws-1/{APP}")).status_code == 404
+    # Its admins still list it, off, to turn it back on.
+    async with shown.as_("admin") as http:
+        listed = (await http.get("/api/apps/?workspace_id=ws-1")).json()["apps"]
+        assert [(a["app_id"], a["enabled"]) for a in listed] == [(APP, False)]
+        assert (await http.get(f"/api/apps/ws-1/{APP}")).json()["enabled"] is False

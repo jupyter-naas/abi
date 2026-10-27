@@ -111,6 +111,7 @@ Where each part of the permission system lives (read the one you touch):
 | Nexus authorization on IAM: the `nexus` catalog, roles, features, memberships, placements | `apps/api/app/services/iam/AGENTS.md` |
 | Sign-in, sessions, CSRF, credential kinds, API keys, links, the old login's accounts | `apps/api/app/services/oidc/AGENTS.md` |
 | The IAM admin pages (policies, attachments, groups, service accounts, approvals, simulator, audit) | `apps/api/app/services/iam_admin/AGENTS.md` |
+| What a workspace turned off: agents, apps, workflows and pipelines refused to everyone in it | `apps/api/app/services/visibility/AGENTS.md` |
 | Invitations and IdP group bindings | `apps/api/app/services/invites/AGENTS.md` |
 | Graph access (placements and shared graphs as IAM policies) | `apps/api/app/services/graph/AGENTS.md` |
 | The built-in identity provider and its trusted `/idp` route | `libs/naas-abi-idp/AGENTS.md` |
@@ -308,6 +309,19 @@ Each route keeps three files:
 Route CSS holds page-specific layout and elements not covered by shared components. Shared patterns (headers, cards, toggles, action rows) belong in `components/account-components.css`.
 
 Pilot reference for a fully migrated route: `apps/web/src/app/account/api-keys/`.
+
+## Workspace settings
+
+`/workspace/<id>/settings/...` (`apps/web/src/app/workspace/[workspaceId]/settings/`): what the workspace has, and on or off for everyone in it. Nothing is added to a workspace here.
+
+- **Sidebar** (`components/shell/settings-nav.tsx`, `SETTINGS_GROUPS`): General (General, Members, Secrets, Data Export) and Features (Agents, Apps, Drives, Graphs, Maps, Models, Ontologies, Search, Skills, Workflows). A Features entry names the Nexus `feature` it manages and the module resources it lists (`kinds`); `visibleSettingsGroups` keeps those the workspace's set has (`settingsItemShown`, pure, tested in `settings-nav.test.ts`). Apps needs the `apps` feature and an app in the set, Workflows a workflow or a pipeline, Agents the `agents` feature only (agents the workspace builds need no module), Models no feature. The set comes from `GET /api/workspaces/{id}/resources` (`hooks/use-workspace-resources.ts`, one read per workspace and session; admins only): until it answers, or for a caller who may not read it, the caller's own feature flags decide the features and module resources are assumed. A page of an entry outside the set (`settingsItemFor`) shows `not-in-workspace.tsx` instead, with a link to the organization's Modules & features for who may change the set (`can_edit_set`).
+- **Agents, Apps, Workflows** list only the agents, apps, workflows and pipelines of the set (the API filters them, for everyone, the platform admin included) and turn each on or off for everyone in the workspace: today's flags, `agent_configs.enabled` (`PATCH /api/agents/{id}`), `app_configs.enabled` (`PATCH /api/apps/{ws}/{app_id}`), and `workflow_visibility` (`GET|PUT /api/workspaces/{ws}/workflows/settings`, `workflows/workflows-model.ts`, tested in `workflows.test.ts`). One turned off is refused when used, and listed only to who may turn it back on. The agents a workspace builds itself (a model and a prompt) are still created and edited in Agents.
+- **General** shows the set read-only: the features (`/configuration`) and each module with what it has in the set (`/resources`, `describeModuleResources`), with a link to Modules & features for who may edit it. Who may use what is on Roles & permissions.
+
+Decisions:
+
+- **Workspace settings show the set and manage visibility only.** Decision: the Features pages list what the workspace's set holds, and its admins turn each item on or off for the whole workspace; what the set holds is chosen on the organization's Modules & features page, and who may use each item on Roles & permissions. Consequences: no workspace settings page adds a module or a feature (the API refuses turning on an app, a module agent or a workflow outside the set, 403); a set change on Modules & features invalidates the settings pages' 24h cache (`/api/iam/admin/sets` is a settings prefix of `services/settings_cache`).
+- **Hidden means refused.** Decision: a resource turned off is refused to everyone in the workspace when used (chat, `/v1`, app links and grants, a workflow start, an agent's tools), not only left out of lists; the check is `services/visibility`, which `authz` asks after IAM allows a module scope (`services/iam/AGENTS.md`, "Visibility"). Consequences: an app link minted before the app was turned off works until it expires (eight hours at most), since a link names no workspace.
 
 ## Organization settings UI module
 

@@ -524,6 +524,47 @@ def test_a_module_agent_needs_its_module_scope(world) -> None:
     assert run("abi").status_code == 403
 
 
+def test_an_agent_turned_off_in_its_workspace_is_refused_to_everyone(world) -> None:
+    """Hidden by the workspace's admins: refused for every role, a module's agent
+    and one the workspace built alike, not only left out of the pickers."""
+    for agent_id, class_name, provider in (
+        ("remote-a", "acme.p/A", "remote"),
+        ("built", None, "openai"),
+    ):
+        world.chat.agents[agent_id] = ChatAgentRecord(
+            id=agent_id,
+            workspace_id="ws-1",
+            name=agent_id,
+            class_name=class_name,
+            model_id="gpt",
+            provider=provider,
+            enabled=False,
+        )
+    world.iam.allow_scope("member", ModuleScope("agent", "acme.p", "A"), "abi:org-1:ws-1")
+    for user in ("member", "owner"):
+        world.chat.add(user, f"conv-{user}")
+        for agent in ("remote-a", "built"):
+            refused = call(
+                world,
+                user,
+                "POST",
+                "/api/chat/complete",
+                json={"message": "hi", "conversation_id": f"conv-{user}", "agent": agent},
+            )
+            assert refused.status_code == 403, (user, agent)
+            assert refused.json()["detail"] == "This agent is turned off in this workspace"
+    assert world.chat.completed == []
+    world.chat.agents["remote-a"].enabled = True
+    on = call(
+        world,
+        "member",
+        "POST",
+        "/api/chat/complete",
+        json={"message": "hi", "conversation_id": "conv-member", "agent": "remote-a"},
+    )
+    assert on.status_code == 200
+
+
 # -- file ingestion ------------------------------------------------------------
 
 
