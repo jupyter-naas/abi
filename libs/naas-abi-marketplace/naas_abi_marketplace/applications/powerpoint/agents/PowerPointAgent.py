@@ -21,6 +21,7 @@ from naas_abi_core.services.agent.Agent import (
     Agent,
     AgentConfiguration,
     AgentSharedState,
+    duplicate_sub_agent,
 )
 from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
@@ -737,12 +738,16 @@ High
         self,
         queue: Queue | None = None,
         agent_shared_state: AgentSharedState | None = None,
+        *,
+        keep: Callable[[Agent], bool] | None = None,
     ) -> Agent:
         """Create a new instance of the agent with the same configuration.
 
         This method creates a deep copy of the agent with the same configuration
         but with its own independent state. This is useful when you need to run
         multiple instances of the same agent concurrently.
+
+        ``keep``: the sub-agents the copy may have (``Agent.duplicate``).
 
         Returns:
             PowerPointAgent: A new PowerPointAgent instance with the same configuration
@@ -755,7 +760,9 @@ High
         # We duplicated each agent and add them as tools.
         # This will be recursively done for each sub agents.
         agents: list[Agent] = [
-            agent.duplicate(queue, shared_state) for agent in self._original_agents
+            duplicate_sub_agent(agent, queue, shared_state, keep)
+            for agent in self._original_agents
+            if keep is None or keep(agent)
         ]
 
         new_agent = self.__class__(

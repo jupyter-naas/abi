@@ -3068,7 +3068,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
 
         children = [a for a in self._original_agents if keep is None or keep(a)]
         duplicated_children: list[Agent] = [
-            _duplicate_child(agent, queue, shared_state, keep) for agent in children
+            duplicate_sub_agent(agent, queue, shared_state, keep) for agent in children
         ]
 
         new_agent = self._duplicate_shell(
@@ -3315,7 +3315,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         return "Hello"
 
 
-def _duplicate_child(
+def duplicate_sub_agent(
     agent: Agent,
     queue: Queue,
     shared_state: AgentSharedState,
