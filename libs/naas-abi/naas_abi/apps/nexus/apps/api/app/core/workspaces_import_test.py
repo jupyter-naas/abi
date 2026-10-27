@@ -7,6 +7,7 @@ import pytest_asyncio
 from naas_abi.apps.nexus.apps.api.app.core.workspaces_import import (
     import_workspaces,
     load_entries,
+    record_feature_sets,
 )
 from naas_abi.apps.nexus.apps.api.app.models import (
     OrganizationModel,
@@ -14,6 +15,7 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     WorkspaceModel,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+from naas_abi_core.engine.call_context import as_service_account
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
@@ -185,3 +187,26 @@ def test_load_entries_reads_the_workspaces_list(tmp_path) -> None:
     path.write_text("workspaces:\n  - slug: axa\n    name: AXA\n")
 
     assert load_entries(path) == [{"slug": "axa", "name": "AXA"}]
+
+
+def test_feature_sets_are_recorded_within_the_orgs_set(iam) -> None:
+    """A platform admin narrowed the org before the import: each workspace's
+    feature set is recorded within it, and every workspace is recorded."""
+    iam.workspace("org-1", "ws-a")
+    iam.workspace("org-1", "ws-b")
+    with as_service_account("engine"):
+        iam.iam.put_set("org-1", modules=["acme.people"], features=["chat", "settings"])
+        iam.iam.put_set("org-1", "ws-b", modules=["agent/acme.people/A"])
+
+    recorded = record_feature_sets(
+        {
+            "ws-a": ("org-1", ["chat", "files", "settings"]),
+            "ws-b": ("org-1", ["files", "settings"]),
+        }
+    )
+
+    assert recorded == ["ws-a", "ws-b"]
+    with as_service_account("engine"):
+        assert iam.iam.get_set("org-1", "ws-a").features == ("chat", "settings")
+        found = iam.iam.get_set("org-1", "ws-b")
+    assert (found.modules, found.features) == (("agent/acme.people/A",), ("settings",))

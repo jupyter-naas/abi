@@ -195,6 +195,20 @@ def test_the_move_runs_again_without_duplicates(team):
     assert olga is not None and olga.id in holders and len(holders) == 4
 
 
+def test_the_move_keeps_within_an_org_narrowed_since(team):
+    """A migration retried after the platform admin narrowed the org: the
+    workspace's set is recorded within the org's, never refused on every boot."""
+    with as_service_account("engine"):
+        team.iam.put_set("org-1", modules=["people", "market"], features=["chat", "maps"])
+        team.iam.put_set("org-1", "ws-1", modules=["people", "market"])
+        team.iam.put_set("org-1", modules=["people"], features=["chat"])
+        sets._apply_move(
+            team.iam, sets.OverrideMove("org-1", "ws-1", ("chat", "files", "maps"), {})
+        )
+        found = team.iam.get_set("org-1", "ws-1")
+    assert (found.modules, found.features) == (("people",), ("chat",))
+
+
 @pytest.mark.asyncio
 async def test_iam_failing_shows_less_never_more_and_never_a_500(team, monkeypatch):
     class Broken:

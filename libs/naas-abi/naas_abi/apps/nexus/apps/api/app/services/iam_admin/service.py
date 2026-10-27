@@ -862,8 +862,11 @@ class IamAdminService:
         """The page's rows for ``organizations``: every column whose set the caller
         may read, what it records, what it has within its org's, and whether the
         caller may change it. Three calls whatever the size (two ``filter``, one
-        ``list_sets``); a workspace whose org's set the caller may not read has
-        its effective set asked of IAM, which bounds it by the org's."""
+        ``list_sets``), and for each org whose set the caller may not read one
+        ``effective_set``: of a workspace of it that records no set of its own,
+        which is the org's (IAM bounds it by the org's), then within it for its
+        siblings. Only a workspace of such an org whose siblings all record a set
+        of their own has its effective set asked of IAM each."""
         columns = [(o.id, NONE) for o in organizations] + [
             (o.id, w.id) for o in organizations for w in o.workspaces
         ]
@@ -873,6 +876,22 @@ class IamAdminService:
         writable = set(session.filter("iam:PutSet", list(write_of.values())).allowed)
         only = organizations[0].id if len(organizations) == 1 else None
         recorded = {(s.org, s.workspace): s for s in session.list_sets(only)}
+        # The set of an org the caller may not read, as one of its workspaces
+        # with no set of its own has it.
+        org_sets: dict[str, ScopeSet] = {}
+        for org in organizations:
+            if read_of[(org.id, NONE)] in readable:
+                continue
+            plain = next(
+                (
+                    ws.id
+                    for ws in org.workspaces
+                    if read_of[(org.id, ws.id)] in readable and (org.id, ws.id) not in recorded
+                ),
+                None,
+            )
+            if plain is not None:
+                org_sets[org.id] = session.effective_set(org.id, plain)
 
         def column(org: str, workspace: str, name: str) -> dict[str, Any] | None:
             if read_of[(org, workspace)] not in readable:
@@ -882,6 +901,8 @@ class IamAdminService:
                 effective = own
             elif read_of[(org, NONE)] in readable:
                 effective = intersect(recorded.get((org, NONE)), own)
+            elif org in org_sets:
+                effective = intersect(org_sets[org], own)
             else:
                 effective = session.effective_set(org, workspace)
             return {

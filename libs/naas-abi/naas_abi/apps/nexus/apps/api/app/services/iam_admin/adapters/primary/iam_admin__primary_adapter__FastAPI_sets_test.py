@@ -125,6 +125,34 @@ def test_a_workspace_admin_sees_its_workspaces_set_read_only(world):
     assert put(world, "/sets/org-1/workspaces/ws-1", "wanda", modules=[]).status_code == 403
 
 
+def test_an_orgs_set_the_caller_may_not_read_is_asked_once(world, monkeypatch):
+    """Wanda administers both workspaces, not the org: the org's set is learned
+    once, through the workspace that records none, and bounds the other too."""
+    world.nexus.grant("wanda", "admin", "abi:org-1:ws-2")
+    org = put(world, "/sets/org-1", "root", modules=["people"], features=["chat"])
+    assert org.status_code == 200, org.text
+    ws2 = put(world, "/sets/org-1/workspaces/ws-2", "root", modules=["agent/people/A"])
+    assert ws2.status_code == 200, ws2.text
+    calls: list[tuple[str, str]] = []
+    iam_type = type(world.nexus.iam)
+    asked = iam_type.effective_set
+
+    def counted(self, org, workspace="-"):
+        calls.append((org, workspace))
+        return asked(self, org, workspace)
+
+    monkeypatch.setattr(iam_type, "effective_set", counted)
+
+    columns = _columns(get(world, "/sets?organization_id=org-1", "wanda").json())
+
+    assert calls == [("org-1", "ws-1")]
+    assert columns["ws-1"]["effective"] == {"modules": ["people"], "features": ["chat", "settings"]}
+    assert columns["ws-2"]["effective"] == {
+        "modules": ["agent/people/A"],
+        "features": ["chat", "settings"],
+    }
+
+
 def test_who_reads_no_set_is_refused(world):
     for user in ("member", "viewer", "stranger"):
         assert get(world, "/sets?organization_id=org-1", user).status_code == 403, user

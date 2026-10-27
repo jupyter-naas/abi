@@ -86,11 +86,6 @@ def _feature_overrides(entry: dict[str, Any]) -> dict[str, bool] | None:
     return {str(k): bool(v) for k, v in raw.items() if k in KNOWN_FEATURE_KEYS}
 
 
-def feature_set_of(overrides: dict[str, bool] | None) -> list[str] | None:
-    """The feature set a snapshot's overrides stand for: ``feature_set_from_overrides``."""
-    return feature_set_from_overrides(overrides)
-
-
 async def import_workspaces(
     session: AsyncSession,
     entries: list[dict[str, Any]],
@@ -158,7 +153,7 @@ async def import_workspaces(
                 assert scope == workspace_scope(org.id, workspace.id)
             report.workspaces_created += 1
             report.created_ids.append(workspace.id)
-            features = feature_set_of(overrides)
+            features = feature_set_from_overrides(overrides)
             if features is not None:
                 report.feature_sets[workspace.id] = (org.id, features)
             continue
@@ -180,7 +175,7 @@ async def import_workspaces(
             if owner_id:
                 workspace.owner_id = owner_id
                 changed = True
-        features = feature_set_of(overrides)
+        features = feature_set_from_overrides(overrides)
         if features is not None and workspace.organization_id:
             report.feature_sets[workspace.id] = (workspace.organization_id, features)
         if changed:
@@ -210,8 +205,11 @@ async def _main(path: str, dry_run: bool) -> ImportReport:
 
 def record_feature_sets(feature_sets: dict[str, tuple[str, list[str]]]) -> list[str]:
     """Record each workspace's feature set, as the engine, where its set records
-    none yet (fill-only); the workspaces recorded."""
+    none yet (fill-only), within its org's set (``sets.put_features``): an org the
+    platform admin narrowed keeps its workspaces within it. The workspaces
+    recorded."""
     from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
+    from naas_abi.apps.nexus.apps.api.app.services.iam.sets import put_features
     from naas_abi_core.engine.call_context import as_service_account
 
     recorded: list[str] = []
@@ -221,7 +219,7 @@ def record_feature_sets(feature_sets: dict[str, tuple[str, list[str]]]) -> list[
             current = iam.get_set(org_id, workspace_id)
             if current.features is not None:
                 continue
-            iam.put_set(org_id, workspace_id, modules=current.modules, features=features)
+            put_features(iam, org_id, workspace_id, features)
             recorded.append(workspace_id)
     return recorded
 

@@ -495,12 +495,15 @@ async def _switchable(
 ) -> Callable[[Any], Awaitable[bool]]:
     """``filter_scopes``'s ``include_hidden`` for a listing: an app turned off is
     listed to who may turn that one back on (``UpdateApp`` on it), all asked in
-    one call."""
-    may = await authz.allowed_ids(
-        "UpdateApp", user=current_user, workspace=workspace_id, ids=app_ids
-    )
+    one call, made only when an app is turned off."""
+    may: set[str] | None = None
 
     async def switchable(app_id: str) -> bool:
+        nonlocal may
+        if may is None:
+            may = await authz.allowed_ids(
+                "UpdateApp", user=current_user, workspace=workspace_id, ids=app_ids
+            )
         return app_id in may
 
     return switchable

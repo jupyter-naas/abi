@@ -242,3 +242,32 @@ def test_held_patterns_of_every_module(catalogs):
     assert sets.held_patterns(found, catalogs, "acme_people:ExportReport", scope) == (
         "abi:org-1:ws-1:acme_people:report/*",
     )
+
+
+@pytest.mark.parametrize("module", ["*", "--", "...", "_"])
+def test_a_module_with_no_catalog_name_is_refused(module):
+    # ``modules: ["*"]`` reads as "everything" but names no module: it would
+    # break every set it meets (``within``, ``intersect``) instead of meaning it.
+    items = [module, f"agent/{module}/Recruiter"]
+    if module != "*":  # app/*/* is every app of every module
+        items.append(f"app/{module}/*")
+    for item in items:
+        with pytest.raises(sets.SetValidationError):
+            sets.parse_item(item)
+        with pytest.raises(sets.SetValidationError):
+            sets.normalize([item], None)
+
+
+def test_wildcards_of_every_module_meet_a_whole_module_without_error():
+    org = ScopeSet("org-1", modules=("acme.people", "naas_abi"))
+    workspace = ScopeSet("org-1", "ws-1", modules=("*:*", "agent/*/*"))
+    effective = sets.intersect(org, workspace)
+    assert effective.modules == (
+        "acme_people:*",
+        "agent/acme.people/*",
+        "agent/naas_abi/*",
+        "naas_abi:*",
+    )
+    assert sets.outside(workspace, org) == ["*:*", "agent/*/*"]
+    assert sets.within(org.modules, "acme_people:Act")
+    assert not sets.within(org.modules, "svc:Act")

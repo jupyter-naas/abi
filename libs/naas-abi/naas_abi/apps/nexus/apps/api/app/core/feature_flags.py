@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Collection, Mapping
+from collections.abc import Collection, Iterable, Mapping
 
 from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig
 
@@ -37,6 +37,14 @@ BASELINE_ROLES: tuple[str, ...] = ("owner", "admin", "member", "viewer")
 # Settings always stays reachable: a set never leaves it out (Nexus adds it to
 # every feature set it records).
 PINNED_FEATURES: tuple[str, ...] = ("settings",)
+
+
+def with_pinned(features: Iterable[str] | None) -> list[str] | None:
+    """A feature set with the features that always stay reachable; None stays None
+    (every feature)."""
+    if features is None:
+        return None
+    return sorted({*features, *PINNED_FEATURES})
 
 
 def resolve_role_baseline(

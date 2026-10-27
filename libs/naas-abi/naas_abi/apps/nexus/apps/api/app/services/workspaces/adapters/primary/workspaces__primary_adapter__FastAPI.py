@@ -20,6 +20,7 @@ from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
     PINNED_FEATURES,
     build_feature_flags,
     enabled_feature_catalog,
+    with_pinned,
     workspace_features,
 )
 from naas_abi.apps.nexus.apps.api.app.core.workspace_config_seeds import workspace_seed_rows
@@ -38,6 +39,7 @@ from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.drive_roots im
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz, placements
+from naas_abi.apps.nexus.apps.api.app.services.iam import runtime as iam_runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam import sets as scope_sets
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
@@ -104,7 +106,9 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
 from naas_abi.apps.nexus.apps.api.app.utils.public_urls import (
     resolve_stored_asset_url,
 )
+from naas_abi_core import logger
 from naas_abi_core.services.email.EmailService import EmailService
+from naas_abi_core.services.iam.sets import SetValidationError
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -300,13 +304,6 @@ async def _load_org_role_overrides(
     }
 
 
-def _with_pins(features: list[str] | None) -> list[str] | None:
-    """A feature set always has the features that stay reachable (settings)."""
-    if features is None:
-        return None
-    return sorted({*features, *PINNED_FEATURES})
-
-
 def _workspace_public_asset_url(raw: str | None) -> str | None:
     """Rewrite module asset paths (``src/external/…/assets/public/…``) to API URLs."""
     return resolve_stored_asset_url(raw)
@@ -430,6 +427,19 @@ async def get_workspace_by_slug(
     )
 
 
+async def _undo_create(service: WorkspaceService, workspace_id: str) -> None:
+    """Remove a workspace whose creation failed half-way: its placements, then
+    the workspace with its scope (and so its set and attachments)."""
+    try:
+        await placements.forget_workspace(workspace_id)
+    except Exception:  # noqa: BLE001 - the original failure is what is raised
+        logger.exception(f"Could not forget the placements of workspace {workspace_id}")
+    try:
+        await service.delete_workspace(workspace_id=workspace_id)
+    except Exception:  # noqa: BLE001 - the original failure is what is raised
+        logger.exception(f"Could not remove workspace {workspace_id} after a failed create")
+
+
 @router.post("", dependencies=[declares("CreateWorkspace")])
 async def create_workspace(
     workspace: WorkspaceCreate,
@@ -474,6 +484,18 @@ async def create_workspace(
         if workspace.catalog_seed is not None
         else None
     )
+    # Its set, decided before anything exists: its organization's, narrowed by
+    # the features and the catalog seed chosen here (``services/iam/sets.py``).
+    planned = None
+    if workspace.organization_id:
+        try:
+            planned = await scope_sets.plan_workspace_set(
+                workspace.organization_id,
+                features=with_pinned(workspace.features),
+                catalog_seed=catalog_seed,
+            )
+        except iam_runtime.IAMUnavailableError as exc:
+            raise HTTPException(status_code=503, detail="Access control is unavailable") from exc
     try:
         record = await service.create_workspace(
             WorkspaceCreateInput(
@@ -499,17 +521,21 @@ async def create_workspace(
     except UnknownUserError as exc:
         raise HTTPException(status_code=400, detail="Workspace owner is not a known user") from exc
     # What IAM derives from the new workspace: the kernel resources its roles
-    # reach (drives, caches, drafts), and its set: its organization's, narrowed
-    # by the features and the catalog seed chosen here (``services/iam/sets.py``).
-    await service.adapter.db.flush()
-    await placements.place_new_workspace(service.adapter.db, record.id)
-    if record.organization_id:
-        await scope_sets.seed_workspace(
-            record.organization_id,
-            record.id,
-            features=_with_pins(workspace.features),
-            catalog_seed=catalog_seed,
-        )
+    # reach (drives, caches, drafts), and its set. Either failing undoes the
+    # workspace: never a workspace without its set, nor placements without it.
+    try:
+        await service.adapter.db.flush()
+        await placements.place_new_workspace(service.adapter.db, record.id)
+        if planned is not None:
+            await scope_sets.record_workspace_set(record.id, planned)
+    except Exception as exc:
+        await _undo_create(service, record.id)
+        if isinstance(exc, SetValidationError):
+            # The organization's set narrowed since the set was planned.
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        if isinstance(exc, iam_runtime.IAMUnavailableError):
+            raise HTTPException(status_code=503, detail="Access control is unavailable") from exc
+        raise
     await seed_workspace_agents(
         workspace_id=record.id,
         current_user=current_user,

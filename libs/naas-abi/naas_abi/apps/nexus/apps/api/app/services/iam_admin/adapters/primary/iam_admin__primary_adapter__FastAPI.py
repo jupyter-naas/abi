@@ -20,8 +20,8 @@ from typing import Any, Literal, TypeVar
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
-    PINNED_FEATURES,
     enabled_feature_catalog,
+    with_pinned,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
     get_current_user_required,
@@ -149,9 +149,7 @@ class SetBody(BaseModel):
 
     def pinned_features(self) -> list[str] | None:
         """The features, with those that always stay reachable (settings)."""
-        if self.features is None:
-            return None
-        return sorted({*self.features, *PINNED_FEATURES})
+        return with_pinned(self.features)
 
 
 class SimulateBody(BaseModel):

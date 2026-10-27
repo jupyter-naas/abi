@@ -411,3 +411,27 @@ async def test_a_grant_to_switch_one_app_lists_that_app_while_it_is_off(shown) -
         await http.patch(f"/api/apps/ws-1/{APP}", json={"enabled": False})
     async with shown.as_("other") as http:
         assert (await http.get("/api/apps/?workspace_id=ws-1")).json()["apps"] == []
+
+
+@pytest.mark.asyncio
+async def test_who_may_turn_an_app_back_on_is_asked_only_when_one_is_off(
+    shown, monkeypatch
+) -> None:
+    asked: list[str] = []
+    allowed_ids = adapter.authz.allowed_ids
+
+    async def counted(action, **kwargs):
+        asked.append(action)
+        return await allowed_ids(action, **kwargs)
+
+    monkeypatch.setattr(adapter.authz, "allowed_ids", counted)
+    async with shown.as_("admin") as http:
+        await http.patch(f"/api/apps/ws-1/{APP}", json={"enabled": True})
+        asked.clear()
+        assert (await http.get("/api/apps/?workspace_id=ws-1")).status_code == 200
+        assert asked == []
+        await http.patch(f"/api/apps/ws-1/{APP}", json={"enabled": False})
+        asked.clear()
+        listed = (await http.get("/api/apps/?workspace_id=ws-1")).json()["apps"]
+        assert [(a["app_id"], a["enabled"]) for a in listed] == [(APP, False)]
+        assert asked == ["UpdateApp"]

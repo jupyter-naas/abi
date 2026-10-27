@@ -270,6 +270,25 @@ def test_a_workspace_set_wider_than_its_orgs_is_refused(h):
         h.admin("put_set", "org-2", WS, modules=[])
 
 
+@pytest.mark.parametrize("module", ["*", "--", "..."])
+def test_a_module_that_names_no_module_is_refused_and_breaks_nothing(h, module):
+    with pytest.raises(SetValidationError) as refused:
+        _set(h, modules=[module])
+    assert repr(module) in str(refused.value)
+    # Every module is written with wildcards, which meet whole modules.
+    _set(h, modules=["agent/*/*", "*:*"])
+    _set(h, WS, modules=["agent/people/A", "people_x:*"])
+    assert h.admin("effective_set", ORG, WS).modules == (
+        "agent/people/A",
+        "people_x:*",
+    )
+    _set(h, modules=["people"])
+    with pytest.raises(SetValidationError) as refused:
+        _set(h, WS, modules=["agent/*/*", "*:*"])
+    assert "agent/*/*" in str(refused.value)
+    assert h.admin("effective_set", ORG, WS).modules == ("agent/people/A",)
+
+
 def test_narrowing_the_org_leaves_workspace_sets_recorded_but_bounded(h):
     admin = _with_role(h, roles.ADMIN, "alice")
     _set(h, modules=["people", "market"])

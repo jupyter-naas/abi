@@ -41,7 +41,7 @@ import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
-from naas_abi_core.services.iam.catalog import CatalogRegistry
+from naas_abi_core.services.iam.catalog import CatalogError, CatalogRegistry
 from naas_abi_core.services.iam.IAMPorts import ScopeSet
 from naas_abi_core.services.iam.module_scopes import SERVICE as MODULE_SERVICE
 from naas_abi_core.services.iam.module_scopes import TYPES, module_service
@@ -95,8 +95,11 @@ def parse_item(item: str) -> Item:
             )
         return Item("action", service=declared.group(1), action=item)
     if "/" not in item:
-        if not _MODULE.match(item):
-            raise SetValidationError(f"Invalid module {item!r}")
+        if not _MODULE.match(item) or _service_of(item) is None:
+            raise SetValidationError(
+                f"Invalid module {item!r}: a module's identifier (<type>/*/* and "
+                "*:* say every module)"
+            )
         return Item("module", module=item)
     type_name, _, rest = item.partition("/")
     module, slash, name = rest.partition("/")
@@ -106,6 +109,7 @@ def parse_item(item: str) -> Item:
         or not name
         or not _MODULE.match(module)
         or (module == ANY and name != ANY)
+        or (module != ANY and _service_of(module) is None)
     ):
         raise SetValidationError(
             f"Invalid set item {item!r}: <module>, <type>/<module>/<name> with type "
@@ -113,6 +117,15 @@ def parse_item(item: str) -> Item:
             "<service>:<Action>"
         )
     return Item("scope", module=module, type=type_name, name=name)
+
+
+def _service_of(module: str) -> str | None:
+    """``module_service(module)``, None for a name that has no catalog name
+    (``*``, ``--``): no module can be called that."""
+    try:
+        return module_service(module)
+    except CatalogError:
+        return None
 
 
 def normalize(
@@ -155,9 +168,7 @@ def within(items: Sequence[str], item: str) -> bool:
     if parsed.kind == "scope":
         if parsed.module == ANY:
             return False  # only itself holds every module's items
-        if f"{parsed.type}/{ANY}/{ANY}" in items:
-            return True
-        return parsed.module in items or f"{parsed.type}/{parsed.module}/{ANY}" in items
+        return scope_within(items, parsed.type, parsed.module, parsed.name)
     if parsed.kind == "action":
         if parsed.service == ANY or f"{ANY}:{ANY}" in items:
             return f"{ANY}:{ANY}" in items
@@ -167,10 +178,22 @@ def within(items: Sequence[str], item: str) -> bool:
         ):
             return True
         return any(
-            _is_module(other) and module_service(other) == parsed.service
+            _is_module(other) and _service_of(other) == parsed.service
             for other in items
         )
     return False
+
+
+def scope_within(items: Sequence[str], type_name: str, module: str, name: str) -> bool:
+    """Whether one agent, app, workflow or pipeline of a module is in a list of
+    module items: itself, its whole module, or a wildcard of its type. The one
+    rule of IAM's decisions (``allows``) and of what a workspace lists."""
+    return (
+        module in items
+        or f"{type_name}/{module}/{name}" in items
+        or f"{type_name}/{module}/{ANY}" in items
+        or f"{type_name}/{ANY}/{ANY}" in items
+    )
 
 
 def _is_module(item: str) -> bool:
@@ -209,7 +232,9 @@ def _intersect_items(
                 if parsed.kind == "scope" and parsed.module == ANY:
                     kept.add(f"{parsed.type}/{module}/{ANY}")
                 elif parsed.kind == "action" and parsed.service == ANY:
-                    kept.add(f"{module_service(module)}:{ANY}")
+                    service = _service_of(module)
+                    if service is not None:
+                        kept.add(f"{service}:{ANY}")
     # An item its whole module also holds adds nothing.
     return tuple(
         sorted(
@@ -273,13 +298,7 @@ def allows(
         segments = name.segments
         if len(segments) < 2:
             return False
-        module, item_name = segments[0], "/".join(segments[1:])
-        return (
-            module in items
-            or f"{name.type}/{module}/{item_name}" in items
-            or f"{name.type}/{module}/{ANY}" in items
-            or f"{name.type}/{ANY}/{ANY}" in items
-        )
+        return scope_within(items, name.type, segments[0], "/".join(segments[1:]))
     catalog = catalogs.get(name.service)
     owner = catalog.module if catalog is not None else None
     if not owner:

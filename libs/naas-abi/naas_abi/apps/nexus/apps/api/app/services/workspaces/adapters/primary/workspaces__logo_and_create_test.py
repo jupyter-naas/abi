@@ -139,6 +139,79 @@ def test_create_keeps_a_new_workspace_within_its_orgs_set(monkeypatch, team) -> 
         assert team.iam.effective_set("org-1", "ws-1").modules == ("acme.people",)
 
 
+def _create_with_features(client):
+    return client.post(
+        "/api/workspaces",
+        json={"name": "Audit", "slug": "audit", "organization_id": "org-1", "features": ["chat"]},
+    )
+
+
+def test_create_is_undone_when_the_orgs_set_narrowed_meanwhile(monkeypatch, team) -> None:
+    """The set is planned before the workspace exists; the org's set narrowing
+    before it is recorded refuses the create (409) and removes what was made."""
+    from naas_abi_core.services.iam.sets import SetValidationError
+
+    forget = AsyncMock(return_value=2)
+    monkeypatch.setattr(ws_api.placements, "place_new_workspace", AsyncMock())
+    monkeypatch.setattr(ws_api.placements, "forget_workspace", forget)
+    monkeypatch.setattr(
+        ws_api.scope_sets,
+        "record_workspace_set",
+        AsyncMock(side_effect=SetValidationError("wider than organization org-1: chat")),
+    )
+    client, service = _client(user="admin")
+    service.create_workspace.return_value = _record()
+
+    resp = _create_with_features(client)
+
+    assert resp.status_code == 409
+    assert "chat" in resp.json()["detail"]
+    forget.assert_awaited_once_with("ws-1")
+    service.delete_workspace.assert_awaited_once_with(workspace_id="ws-1")
+
+
+def test_create_is_undone_when_placing_fails(monkeypatch, team) -> None:
+    forget = AsyncMock(return_value=0)
+    monkeypatch.setattr(
+        ws_api.placements, "place_new_workspace", AsyncMock(side_effect=RuntimeError("nats"))
+    )
+    monkeypatch.setattr(ws_api.placements, "forget_workspace", forget)
+    client, service = _client(user="admin")
+    service.create_workspace.return_value = _record()
+
+    assert _create_with_features(client).status_code == 500
+    forget.assert_awaited_once_with("ws-1")
+    service.delete_workspace.assert_awaited_once_with(workspace_id="ws-1")
+    assert _workspace_set(team).recorded is False
+
+
+def test_create_creates_nothing_when_iam_cannot_plan_the_set(monkeypatch) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
+
+    monkeypatch.setattr(
+        ws_api.scope_sets,
+        "plan_workspace_set",
+        AsyncMock(side_effect=runtime.IAMUnavailableError("no IAM")),
+    )
+    client, service = _client(user="admin")
+
+    assert _create_with_features(client).status_code == 503
+    service.create_workspace.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_placements_of_an_undone_workspace_are_forgotten(team) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.iam import placements
+
+    with as_service_account("engine"):
+        team.iam.put_placement("files", "drive/ws-1/*", "org-1", "ws-1")
+        team.iam.put_placement("files", "drive/ws-2/*", "org-1", "ws-2")
+
+    assert await placements.forget_workspace("ws-1") == 1
+    with as_service_account("engine"):
+        assert [p.workspace for p in team.iam.list_placements("files")] == ["ws-2"]
+
+
 def test_create_rejects_unknown_features_before_creating() -> None:
     client, service = _client(user="admin")
 

@@ -86,17 +86,12 @@ async def effective_features_async(
 
 
 def in_set(scope_set: ScopeSet, scope: Any) -> bool:
-    """Whether a module scope (``type``, ``module``, ``name``) is in ``scope_set``:
-    itself, its whole module, or a wildcard of its type (core ``sets.allows``)."""
+    """Whether a module scope (``type``, ``module``, ``name``) is in ``scope_set``,
+    by IAM's own rule (core ``sets.scope_within``)."""
     items = scope_set.modules
     if items is None:
         return True
-    return (
-        scope.module in items
-        or f"{scope.type}/{scope.module}/{scope.name}" in items
-        or f"{scope.type}/{scope.module}/{core_sets.ANY}" in items
-        or f"{scope.type}/{core_sets.ANY}/{core_sets.ANY}" in items
-    )
+    return core_sets.scope_within(items, scope.type, scope.module, scope.name)
 
 
 async def workspace_set(workspace_id: str) -> ScopeSet:
@@ -176,6 +171,27 @@ async def user_feature_flags(
 
 
 # -- a new workspace -------------------------------------------------------------------
+
+
+def features_within(features: Iterable[str], org_set: ScopeSet) -> tuple[str, ...]:
+    """``features`` its org's set has: what a workspace's feature set may record."""
+    return tuple(
+        sorted(f for f in set(features) if org_set.features is None or f in org_set.features)
+    )
+
+
+def put_features(iam: Any, org: str, workspace: str, features: Iterable[str]) -> ScopeSet:
+    """Record ``features`` as a workspace's feature set, within its org's set: the
+    modules it records stay, narrowed to its org's as IAM bounds them already
+    (a set recorded before the org's narrowed would be refused as it is). For an
+    import or a migration that may run after the platform admin narrowed the
+    org; run as the engine."""
+    org_set = iam.get_set(org)
+    current = iam.get_set(org, workspace)
+    modules = current.modules
+    if modules is not None and org_set.modules is not None:
+        modules = core_sets.intersect(org_set, current).modules
+    return iam.put_set(org, workspace, modules=modules, features=features_within(features, org_set))
 
 
 @dataclass(frozen=True)
@@ -271,18 +287,19 @@ def _seeded_agents(refs: Iterable[Any]) -> frozenset[tuple[str, str]] | None:
     return frozenset(found)
 
 
-async def seed_workspace(
+async def plan_workspace_set(
     org_id: str | None,
-    workspace_id: str,
     *,
     features: Collection[str] | None = None,
     catalog_seed: Mapping[str, Any] | None = None,
 ) -> ScopeSet | None:
-    """Record a new workspace's set, a part only where something narrows it:
+    """The set a new workspace of ``org_id`` gets, decided before it exists (its
+    ``workspace`` is ``-``): a part only where something narrows it,
     ``modules`` when its catalog seed names agents or apps (``narrowed_by_seed``
     of its org's), ``features`` when the create form chose them (within its
     org's). A part left unrecorded follows the org's, now and after the org's
-    set changes; nothing narrowing, nothing is recorded."""
+    set changes; None when nothing narrows (nothing is recorded). Raises when
+    IAM cannot answer, so nothing is created on a guess."""
     seed = seed_items(catalog_seed)
     narrows_modules = seed.agents is not None or seed.apps is not None
     if not narrows_modules and features is None:
@@ -293,22 +310,40 @@ async def seed_workspace(
         iam = runtime.iam()
         with as_service_account("engine"):
             org_set = iam.get_set(org) if org_id else ScopeSet(org)
-            modules = narrowed_by_seed(org_set.modules, seed) if narrows_modules else None
-            chosen: tuple[str, ...] | None = None
-            if features is not None:
-                chosen = tuple(
-                    sorted(
-                        f
-                        for f in set(features)
-                        if org_set.features is None or f in org_set.features
-                    )
-                )
-            wanted = ScopeSet(org, workspace_id, modules, chosen)
-            if not wanted.recorded:
-                return None
-            return iam.put_set(org, workspace_id, modules=wanted.modules, features=wanted.features)
+        modules = narrowed_by_seed(org_set.modules, seed) if narrows_modules else None
+        chosen = features_within(features, org_set) if features is not None else None
+        wanted = ScopeSet(org, "-", modules, chosen)
+        return wanted if wanted.recorded else None
 
     return await run_in_threadpool(work)
+
+
+async def record_workspace_set(workspace_id: str, planned: ScopeSet) -> ScopeSet:
+    """Record ``planned`` (``plan_workspace_set``) as the set of ``workspace_id``.
+    ``SetValidationError`` when its org's set narrowed in between."""
+
+    def work() -> ScopeSet:
+        with as_service_account("engine"):
+            return runtime.iam().put_set(
+                planned.org, workspace_id, modules=planned.modules, features=planned.features
+            )
+
+    return await run_in_threadpool(work)
+
+
+async def seed_workspace(
+    org_id: str | None,
+    workspace_id: str,
+    *,
+    features: Collection[str] | None = None,
+    catalog_seed: Mapping[str, Any] | None = None,
+) -> ScopeSet | None:
+    """``plan_workspace_set`` and ``record_workspace_set`` at once, for a
+    workspace that exists already."""
+    planned = await plan_workspace_set(org_id, features=features, catalog_seed=catalog_seed)
+    if planned is None:
+        return None
+    return await record_workspace_set(workspace_id, planned)
 
 
 # -- the migration of the feature overrides ------------------------------------------------
@@ -414,13 +449,7 @@ def _apply_move(iam: Any, move: OverrideMove) -> None:
     # Org owners and admins hold their role org-wide.
     scopes = {scope, f"abi:{move.org}:*"}
     if move.features is not None:
-        current = iam.get_set(move.org, move.workspace)
-        iam.put_set(
-            move.org,
-            move.workspace,
-            modules=current.modules,
-            features=move.features,
-        )
+        put_features(iam, move.org, move.workspace, move.features)
     holders: dict[str, set[str]] = {}
     for role, features in move.kept.items():
         for attachment in iam.list_attachments(policy_id=f"builtin.{role}"):
@@ -543,10 +572,14 @@ __all__ = [
     "effective_features",
     "effective_features_async",
     "effective_set",
+    "features_within",
     "in_set",
     "migrate_feature_overrides",
     "narrowed_by_seed",
     "plan_override_moves",
+    "plan_workspace_set",
+    "put_features",
+    "record_workspace_set",
     "seed_items",
     "seed_workspace",
     "user_feature_flags",
