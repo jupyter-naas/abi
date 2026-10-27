@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
 import { Plus, Trash2 } from 'lucide-react';
 import { IamAdminError } from '@/lib/iam-admin/api';
-import type { CatalogsView, PolicyView } from '@/lib/iam-admin/types';
+import type { CatalogsView, ModuleScopesView, PolicyView } from '@/lib/iam-admin/types';
 import type { AccessViewProps } from '../access-props';
 import { PolicyEditor } from './policy-editor';
 import './policies.css';
@@ -22,6 +23,8 @@ export function PoliciesView({ api, can, nonce = 0 }: AccessViewProps) {
   const [error, setError] = useState<string | null>(null);
   const [catalogs, setCatalogs] = useState<CatalogsView | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [modules, setModules] = useState<ModuleScopesView | null>(null);
+  const workspaceId = (useParams()?.workspaceId as string | undefined) ?? undefined;
   const [selection, setSelection] = useState<Selection>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
@@ -47,6 +50,16 @@ export function PoliciesView({ api, can, nonce = 0 }: AccessViewProps) {
       .then(setCatalogs)
       .catch((e) => setCatalogError(message(e)));
   }, [api]);
+
+  // What the modules expose, for the ids of module scopes; without it the editor
+  // suggests `*` as for any other type.
+  useEffect(() => {
+    if (!workspaceId) return;
+    api
+      .moduleScopes({ workspace_id: workspaceId })
+      .then(setModules)
+      .catch(() => setModules(null));
+  }, [api, workspaceId]);
 
   const more = async () => {
     if (!next) return;
@@ -181,6 +194,7 @@ export function PoliciesView({ api, can, nonce = 0 }: AccessViewProps) {
           api={api}
           policy={selection.kind === 'policy' ? selection.policy : null}
           catalogs={catalogs}
+          modules={modules}
           readOnly={selection.kind === 'policy' && (selection.policy.managed || !can('iam:UpdatePolicy'))}
           onSaved={(saved) => {
             setSelection({ kind: 'policy', policy: saved });

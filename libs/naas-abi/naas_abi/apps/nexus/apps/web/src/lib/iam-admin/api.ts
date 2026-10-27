@@ -19,10 +19,11 @@ import type {
   ManifestReject,
   ManifestStatus,
   ManifestView,
+  ModuleScopesView,
   Page,
   PolicyCreate,
-  PolicyUpdate,
   PolicySource,
+  PolicyUpdate,
   PolicyValidation,
   PolicyView,
   PrincipalKind,
@@ -120,6 +121,10 @@ export function createIamAdminApi(fetcher: Fetcher = authFetch) {
     access: (scope?: string) =>
       read<AccessView>(fetcher, path('access') + query({ scope }), 'Could not read your access.'),
     catalogs: () => read<CatalogsView>(fetcher, path('catalogs'), 'Could not load the action catalogs.'),
+    /** Every module with its agents, apps, workflows, pipelines and declared actions, for
+     *  the admins of the workspace or organization named. */
+    moduleScopes: (where: { workspace_id?: string; organization_id?: string }) =>
+      read<ModuleScopesView>(fetcher, '/api/modules/scopes' + query(where), 'Could not load the module scopes.'),
 
     // policies
     listPolicies: (after?: string) =>

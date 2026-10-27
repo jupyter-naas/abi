@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { IamAdminError, type IamAdminApi } from '@/lib/iam-admin/api';
-import type { CatalogsView, PolicySource, PolicyView } from '@/lib/iam-admin/types';
+import type { CatalogsView, ModuleScopesView, PolicySource, PolicyView } from '@/lib/iam-admin/types';
 import {
   POLICY_VERSION,
   fromDocument,
@@ -27,6 +27,7 @@ export function PolicyEditor({
   api,
   policy,
   catalogs,
+  modules = null,
   readOnly = false,
   onSaved,
   onCancel,
@@ -35,6 +36,7 @@ export function PolicyEditor({
   api: IamAdminApi;
   policy: PolicyView | null;
   catalogs: CatalogsView | null;
+  modules?: ModuleScopesView | null;
   readOnly?: boolean;
   onSaved: (policy: PolicyView) => void;
   onCancel: () => void;
@@ -200,7 +202,13 @@ export function PolicyEditor({
       </div>
 
       {mode === 'visual' ? (
-        <StatementEditor statements={statements} onChange={setStatements} catalogs={catalogs} readOnly={readOnly} />
+        <StatementEditor
+          statements={statements}
+          onChange={setStatements}
+          catalogs={catalogs}
+          modules={modules}
+          readOnly={readOnly}
+        />
       ) : (
         <PolicyText text={text} onChange={setText} format={format} onFormat={changeFormat} readOnly={readOnly} />
       )}

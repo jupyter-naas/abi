@@ -46,6 +46,34 @@ export type CatalogsView = {
   variables: string[];
 };
 
+/** One agent, app, workflow or pipeline of a module: a module scope (`GET /api/modules/scopes`). */
+export type ModuleScopeItem = {
+  name: string;
+  display_name: string;
+  description: string;
+  icon: string | null;
+  /** The pattern a policy names: `${scope}:module:<type>/<module>/<name>`. */
+  resource: string;
+  actions: string[];
+};
+
+export type ModuleScopesEntry = {
+  module: string;
+  agents: ModuleScopeItem[];
+  apps: ModuleScopeItem[];
+  workflows: ModuleScopeItem[];
+  pipelines: ModuleScopeItem[];
+  /** The catalog the module declares (its own service), if any. */
+  declared: {
+    service: string;
+    version: number;
+    resource_types: { name: string; description: string; resource: string }[];
+    actions: { action: string; level: string; resource_types: string[]; description: string }[];
+  } | null;
+};
+
+export type ModuleScopesView = { modules: ModuleScopesEntry[] };
+
 // -- policies -------------------------------------------------------------------------
 
 export type PolicyStatement = {

@@ -6,14 +6,7 @@
  * `abi:<org>:<workspace>:<service>:<type>/<id>` (or `${scope}:<service>:<type>/<id>`), with the
  * wildcards `*` and `?` and the variables of `CatalogsView.variables`.
  */
-import type {
-  Catalog,
-  CatalogsView,
-  Effect,
-  Level,
-  PolicyDocument,
-  PolicyStatement,
-} from '@/lib/iam-admin/types';
+import type { Catalog, CatalogsView, Effect, Level, ModuleScopesView, PolicyDocument, PolicyStatement } from '@/lib/iam-admin/types';
 
 export const POLICY_VERSION = '2026-10-13';
 
@@ -205,7 +198,37 @@ export type ResourceContext = {
   catalogs: CatalogsView | null;
   /** The statement's actions: they narrow the services and types suggested. */
   actions: string[];
+  /** What the modules expose (`GET /api/modules/scopes`): ids of the `module` service. */
+  modules?: ModuleScopesView | null;
 };
+
+const MODULE_SCOPES = 'module';
+const MODULE_SCOPE_LISTS = {
+  agent: 'agents',
+  app: 'apps',
+  workflow: 'workflows',
+  pipeline: 'pipelines',
+} as const;
+
+/** The ids of a module scope type: each module (`<module>/*`) and each of its items
+ *  (`<module>/<name>`), from the listing. */
+function moduleScopeIds(type: string, modules: ModuleScopesView): Suggestion[] {
+  const list = MODULE_SCOPE_LISTS[type as keyof typeof MODULE_SCOPE_LISTS];
+  if (!list) return [];
+  const marker = `:${MODULE_SCOPES}:${type}/`;
+  const out: Suggestion[] = [];
+  for (const entry of modules.modules) {
+    const items = entry[list];
+    if (items.length === 0) continue;
+    out.push({ value: `${entry.module}/*`, detail: `every ${type} of ${entry.module}` });
+    for (const item of items) {
+      const id = item.resource.split(marker)[1];
+      if (!id) continue;
+      out.push({ value: id, detail: item.description ? `${item.display_name}: ${item.description}` : item.display_name });
+    }
+  }
+  return out;
+}
 
 function variableSuggestion(name: string): Suggestion {
   return name === 'scope'
@@ -299,9 +322,14 @@ export function suggestResources(
           ? 'the only one'
           : 'an id';
     const idTyped = rest.join('/');
-    return '*'.startsWith(idTyped)
+    const every: Suggestion[] = '*'.startsWith(idTyped)
       ? [{ value: `${base}*`, detail: `every ${typed_type}: ${idHint}` }]
       : [];
+    if (service !== MODULE_SCOPES || !context.modules) return every;
+    const ids = moduleScopeIds(typed_type, context.modules)
+      .filter((s) => s.value.toLowerCase().startsWith(idTyped.toLowerCase()))
+      .map((s) => ({ ...s, value: base + s.value }));
+    return [...every, ...ids].slice(0, limit);
   }
   return [];
 }

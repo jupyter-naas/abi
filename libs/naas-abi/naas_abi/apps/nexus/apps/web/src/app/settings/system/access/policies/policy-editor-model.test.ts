@@ -157,3 +157,56 @@ describe('document and form', () => {
     expect(sameDocument(document, JSON.parse(toText(document, 'json')))).toBe(true);
   });
 });
+
+describe('module scope ids', () => {
+  const moduleCatalog = {
+    service: 'module',
+    version: 1,
+    actions: [{ name: 'UseAgent', level: 'write', resource_types: ['agent'], description: '' }],
+    resource_types: [{ name: 'agent', id: 'path', description: 'An agent of a module.' }],
+  };
+  const withModules = {
+    catalogs: { ...catalogsView, catalogs: [...catalogsView.catalogs, moduleCatalog] },
+    actions: ['module:UseAgent'],
+    modules: {
+      modules: [
+        {
+          module: 'acme.people',
+          agents: [
+            {
+              name: 'Recruiter',
+              display_name: 'Recruiter',
+              description: 'Finds people.',
+              icon: null,
+              resource: '${scope}:module:agent/acme.people/Recruiter',
+              actions: ['module:UseAgent'],
+            },
+          ],
+          apps: [],
+          workflows: [],
+          pipelines: [],
+          declared: null,
+        },
+      ],
+    },
+  } as Parameters<typeof suggestResources>[1];
+
+  it('suggests each module and each of its agents from the listing', () => {
+    expect(suggestResources('${scope}:module:agent/', withModules).map((s) => s.value)).toEqual([
+      '${scope}:module:agent/*',
+      '${scope}:module:agent/acme.people/*',
+      '${scope}:module:agent/acme.people/Recruiter',
+    ]);
+    const typed = suggestResources('${scope}:module:agent/acme.people/R', withModules);
+    expect(typed).toEqual([
+      { value: '${scope}:module:agent/acme.people/Recruiter', detail: 'Recruiter: Finds people.' },
+    ]);
+  });
+
+  it('suggests only `*` without the listing', () => {
+    const context = { ...withModules, modules: null };
+    expect(suggestResources('${scope}:module:agent/', context).map((s) => s.value)).toEqual([
+      '${scope}:module:agent/*',
+    ]);
+  });
+});

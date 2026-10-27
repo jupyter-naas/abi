@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, Plus, Trash2, X } from 'lucide-react';
-import type { CatalogsView, Effect } from '@/lib/iam-admin/types';
+import type { CatalogsView, Effect, ModuleScopesView } from '@/lib/iam-admin/types';
 import {
   emptyStatement,
   hasWildcard,
@@ -89,11 +89,13 @@ export function StatementEditor({
   statements,
   onChange,
   catalogs,
+  modules = null,
   readOnly,
 }: {
   statements: EditorStatement[];
   onChange: (next: EditorStatement[]) => void;
   catalogs: CatalogsView | null;
+  modules?: ModuleScopesView | null;
   readOnly?: boolean;
 }) {
   const catalogList = catalogs?.catalogs ?? [];
@@ -183,7 +185,7 @@ export function StatementEditor({
                 label={`Resources of statement ${n}`}
                 values={statement.resources}
                 onChange={(resources) => update(index, { resources })}
-                suggest={(text) => suggestResources(text, { catalogs, actions: statement.actions })}
+                suggest={(text) => suggestResources(text, { catalogs, actions: statement.actions, modules })}
                 placeholder="abi:<org>:<workspace>:<service>:<type>/<id>"
                 disabled={readOnly}
               />
