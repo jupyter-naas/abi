@@ -9,7 +9,7 @@ import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
 import { SETTINGS_GROUPS, visibleSettingsGroups, workspaceOrganization } from '@/components/shell/settings-nav';
 import { useWorkspaceResources } from '@/hooks/use-workspace-resources';
-import { holdsIamAction } from '@/components/access/access-sections';
+import { opensRolesAndPermissions } from '@/components/access/access-sections';
 import { useIamAccess } from '@/lib/iam-admin/use-access';
 
 export function SettingsSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
@@ -17,17 +17,18 @@ export function SettingsSection({ collapsed, detailOnly }: { collapsed: boolean;
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const flags = useWorkspaceStore((s) => s.getCurrentWorkspace()?.featureFlags);
   const { resources } = useWorkspaceResources(currentWorkspaceId);
-  const organizationId = useWorkspaceStore(
-    (s) => s.workspaces.find((w) => w.id === s.currentWorkspaceId)?.organizationId
-  );
+  const workspace = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === s.currentWorkspaceId));
   const basePath = getWorkspacePath(currentWorkspaceId, '/settings');
-  // Roles & permissions is shown to whoever holds an `iam:` action in the workspace.
+  // Roles & permissions is shown to whoever would see a section of it in the workspace; asked
+  // once the workspace (and so its organization) is known.
   const { access } = useIamAccess(
-    currentWorkspaceId ? `abi:${workspaceOrganization({ organizationId })}:${currentWorkspaceId}` : undefined
+    workspace ? `abi:${workspaceOrganization(workspace)}:${workspace.id}` : undefined,
+    undefined,
+    { skip: !workspace }
   );
   // Only what the workspace has (its set's features and module resources), and what the caller may open.
   const groups = visibleSettingsGroups(resources, flags, SETTINGS_GROUPS, {
-    holdsIam: !!currentWorkspaceId && holdsIamAction(access),
+    holdsIam: !!workspace && opensRolesAndPermissions(access),
   });
 
   return (

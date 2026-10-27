@@ -134,13 +134,33 @@ describe('PoliciesView at a workspace', () => {
       document: {
         version: '2026-10-13',
         statements: [
-          { sid: 'UseAgent', effect: 'Allow', actions: ['module:UseAgent'], resources: ['${scope}:module:agent/acme.people/Recruiter'] },
+          { sid: 'ModuleUseAgent', effect: 'Allow', actions: ['module:UseAgent'], resources: ['${scope}:module:agent/acme.people/Recruiter'] },
         ],
       },
       name: 'Recruiters',
       description: '',
       scope: 'abi:acme:ws-1',
     });
+  });
+
+  it('empties the policy when the start goes back to Nothing', async () => {
+    const member = {
+      ...managedPolicy,
+      id: 'builtin.member',
+      document: { version: '2026-10-13', statements: [{ effect: 'Allow' as const, actions: ['nexus:ListFiles'], resources: ['${scope}:nexus:file/*'] }] },
+    };
+    await open(() => true, { listPolicies: vi.fn().mockResolvedValue({ items: [owned, member], next_after: null }) }, wsScope);
+    await mounted!.click(button('New policy') ?? null);
+    await mounted!.flush();
+    const start = field('Start from a built-in role') as HTMLSelectElement;
+    for (const value of ['builtin.member', '']) {
+      start.value = value;
+      start.dispatchEvent(new Event('change', { bubbles: true }));
+      await mounted!.flush();
+    }
+    expect(mounted!.host.textContent).not.toContain('other statement');
+    await mounted!.click([...document.querySelectorAll('[role="tab"]')].find((t) => t.textContent === 'Statements') ?? null);
+    expect(document.querySelectorAll('[aria-label^="Add to actions of statement"]')).toHaveLength(0);
   });
 
   it('keeps what was typed when the builder arrives after the editor opened', async () => {
@@ -172,6 +192,8 @@ describe('PoliciesView at a workspace', () => {
     const item = document.querySelector('[data-builder-item="module:agent/acme.people/Coach"]');
     expect(item?.querySelector('[role="alert"]')?.textContent).toBe(refusal);
     expect(document.querySelector('[data-builder-item="module:agent/acme.people/Recruiter"] [role="alert"]')).toBeNull();
+    // Valid is not granted: no green line beside the refusal.
+    expect(mounted!.host.textContent).not.toContain('Valid policy.');
   });
 
   it('starts from a built-in role the caller’s list holds, and offers none other', async () => {

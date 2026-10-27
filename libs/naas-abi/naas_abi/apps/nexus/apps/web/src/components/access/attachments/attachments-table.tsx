@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { AttachmentView } from '@/lib/iam-admin/types';
+import { isRoleCompanion } from '../roles/role-change';
 import { principalLabel, scopeLabel } from './attachments-model';
 import './attachments.css';
 
@@ -42,7 +43,9 @@ export function AttachmentTable({
             </td>
             {showScope && <td title={a.scope ?? ''}>{scopeLabel(a.scope)}</td>}
             <td className="access-att-actions">
+              {/* What comes with a role leaves with it, never by hand. */}
               {canDetach &&
+                !isRoleCompanion(a.policy_id) &&
                 (confirming === a.id ? (
                   <span>
                     Detach?{' '}

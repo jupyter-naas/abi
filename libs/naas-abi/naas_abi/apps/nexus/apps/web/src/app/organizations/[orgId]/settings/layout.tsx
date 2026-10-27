@@ -6,7 +6,7 @@ import { ArrowLeft, Building2 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
 import { useWorkspaceStore } from '@/stores/workspace';
-import { holdsIamAction } from '@/components/access/access-sections';
+import { opensRolesAndPermissions } from '@/components/access/access-sections';
 import { useIamAccess } from '@/lib/iam-admin/use-access';
 import { SettingsLayoutNav } from '@/components/settings/settings-layout-nav';
 import {
@@ -15,7 +15,7 @@ import {
   useWorkspaceReturnPath,
 } from '@/components/settings/settings-shell';
 import {
-  isOrgAdminRole,
+  orgSectionRedirect,
   orgSettingsIndexPath,
   orgSettingsNavForRole,
   orgSettingsSectionPath,
@@ -58,9 +58,11 @@ export default function OrganizationSettingsLayout({
   const params = useParams();
   const orgId = params.orgId as string;
   const [viewerRole, setViewerRole] = useState<string | null>(null);
-  // Roles & permissions is shown to whoever holds an `iam:` action at the organization.
-  const { access } = useIamAccess(orgId ? `abi:${orgId}:-` : undefined);
-  const holdsIam = holdsIamAction(access);
+  // Roles & permissions is shown to whoever would see a section of it at the organization.
+  const { access, loading: accessLoading } = useIamAccess(orgId ? `abi:${orgId}:-` : undefined, undefined, {
+    skip: !orgId,
+  });
+  const holdsIam = opensRolesAndPermissions(access);
   const visibleNav = useMemo(() => orgSettingsNavForRole(viewerRole, { holdsIam }), [viewerRole, holdsIam]);
   const sectionHrefs = useMemo(
     () => (orgId ? visibleNav.map((item) => orgSettingsSectionPath(orgId, item.slug)) : []),
@@ -125,14 +127,15 @@ export default function OrganizationSettingsLayout({
   }, [orgId]);
 
   useEffect(() => {
-    if (!orgId || viewerRole === null || !section) return;
-    if (
-      !isOrgAdminRole(viewerRole) &&
-      !visibleNav.some((entry) => entry.slug === section)
-    ) {
-      router.replace(orgSettingsSectionPath(orgId, 'general'));
-    }
-  }, [orgId, viewerRole, section, visibleNav, router]);
+    if (!orgId) return;
+    const target = orgSectionRedirect({
+      section,
+      role: viewerRole,
+      holdsIam,
+      accessSettled: !accessLoading,
+    });
+    if (target) router.replace(orgSettingsSectionPath(orgId, target));
+  }, [orgId, viewerRole, section, holdsIam, accessLoading, router]);
 
   const workspaceHref = useWorkspaceReturnPath(
     currentWorkspaceId ? `/workspace/${currentWorkspaceId}/maps` : '/',

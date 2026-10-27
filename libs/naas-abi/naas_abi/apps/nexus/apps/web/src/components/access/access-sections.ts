@@ -44,7 +44,8 @@ export function parseAccessSection(
   return visible.find((section) => section.id === value)?.id ?? visible[0]?.id ?? null;
 }
 
-/** Whether the caller holds any `iam:` action (the settings menus show the page for it). */
-export function holdsIamAction(access: AccessView | null): boolean {
-  return Object.entries(access?.actions ?? {}).some(([action, allowed]) => allowed && action.startsWith('iam:'));
+/** Whether the page would show the caller a section: the settings menus show Roles &
+ *  permissions on exactly that, so the menu and the page never disagree. */
+export function opensRolesAndPermissions(access: AccessView | null): boolean {
+  return visibleSections(access).length > 0;
 }

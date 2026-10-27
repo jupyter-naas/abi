@@ -140,16 +140,46 @@ function allItems(groups: BuilderGroup[]): BuilderItem[] {
 
 const actionsKey = (actions: string[]) => [...actions].sort().join(',');
 
-/** The choices as statements: one Allow per set of actions, in the order they are offered. */
-export function builderStatements(groups: BuilderGroup[], selected: ReadonlySet<string>): PolicyStatement[] {
+const SID_MAX = 64;
+
+/** A statement's sid from its actions, service included (`module:UseAgent` → `ModuleUseAgent`):
+ *  IAM takes 1 to 64 letters and digits. */
+function sidOf(actions: string[]): string {
+  const words = actions.flatMap((a) => a.split(/[^A-Za-z0-9]+/)).filter(Boolean);
+  const sid = words.map((w) => w[0].toUpperCase() + w.slice(1)).join('');
+  return (sid || 'Builder').slice(0, SID_MAX);
+}
+
+/** ``base``, or ``base2``, ``base3``…, the first not in ``taken`` (IAM refuses a sid twice). */
+function uniqueSid(base: string, taken: Set<string>): string {
+  let sid = base;
+  for (let n = 2; taken.has(sid); n += 1) {
+    const suffix = String(n);
+    sid = base.slice(0, SID_MAX - suffix.length) + suffix;
+  }
+  taken.add(sid);
+  return sid;
+}
+
+/**
+ * The choices as statements: one Allow per set of actions, in the order they are offered.
+ * Each sid names its actions with their services and is unique, among these and the sids of
+ * ``kept`` (the statements the builder cannot show, which stay in the policy).
+ */
+export function builderStatements(
+  groups: BuilderGroup[],
+  selected: ReadonlySet<string>,
+  kept: PolicyStatement[] = [],
+): PolicyStatement[] {
   const statements = new Map<string, PolicyStatement>();
+  const taken = new Set(kept.flatMap((s) => (s.sid ? [s.sid] : [])));
   for (const item of allItems(groups)) {
     if (!selected.has(item.key)) continue;
     const key = actionsKey(item.actions);
     const found = statements.get(key);
     if (found) found.resources.push(item.resource);
     else {
-      const sid = item.actions.map((a) => a.split(':')[1] ?? '').join('');
+      const sid = uniqueSid(sidOf(item.actions), taken);
       statements.set(key, { sid, effect: 'Allow', actions: [...item.actions], resources: [item.resource] });
     }
   }

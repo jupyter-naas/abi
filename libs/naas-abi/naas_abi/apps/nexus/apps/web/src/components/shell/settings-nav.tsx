@@ -26,7 +26,8 @@ export type SettingsNavItem = {
   feature?: string;
   /** The module resources the page lists: shown only when the set has one of them. */
   kinds?: ResourceKind[];
-  /** `iam`: shown to whoever holds an `iam:` action in the workspace (IAM says, `GET /access`). */
+  /** `iam`: shown to whoever would see a section of Roles & permissions in the workspace
+   *  (IAM says, `GET /access`). */
   needs?: 'iam';
 };
 
@@ -115,7 +116,7 @@ export function settingsItemShown(
 
 /**
  * The groups with only the entries the workspace has, and the ones the caller may open: an
- * entry that needs `iam` only for whoever holds an `iam:` action there (`holdsIam`). An empty
+ * entry that needs `iam` only for whoever would see a section of it there (`holdsIam`). An empty
  * group is left out.
  */
 export function visibleSettingsGroups(

@@ -53,6 +53,31 @@ export function orgSettingsNavForRole(
   );
 }
 
+/**
+ * Where a section someone may not open sends them: General, or null to stay. Nothing is
+ * decided before the role is known and, for the IAM item, before the caller's access was read
+ * (``accessSettled``): an org member who holds `iam:` rights through a group is not bounced
+ * off Roles & permissions while that read is in flight.
+ */
+export function orgSectionRedirect({
+  section,
+  role,
+  holdsIam,
+  accessSettled,
+}: {
+  section: string | null;
+  role: string | null;
+  holdsIam: boolean;
+  accessSettled: boolean;
+}): string | null {
+  if (!section || role === null || isOrgAdminRole(role)) return null;
+  const item = orgSettingsNav.find((entry) => entry.slug === section);
+  if (item?.needs === 'iam' && !accessSettled) return null;
+  return orgSettingsNavForRole(role, { holdsIam }).some((entry) => entry.slug === section)
+    ? null
+    : 'general';
+}
+
 export function orgSettingsIndexPath(orgId: string): string {
   return `/organizations/${orgId}/settings`;
 }

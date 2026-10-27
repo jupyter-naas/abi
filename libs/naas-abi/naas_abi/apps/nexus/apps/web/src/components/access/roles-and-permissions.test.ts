@@ -10,6 +10,7 @@ import type { AccessView } from '@/lib/iam-admin/types';
 import { mount, type Mounted } from '@/lib/testing/mount';
 import { catalogsView, fakeApi, fakeDirectory, orgScope, wsScope } from './access-fixtures';
 import { PLATFORM_ACCESS_SCOPE, type AccessScope } from './access-scope';
+import { opensRolesAndPermissions } from './access-sections';
 import { RolesAndPermissions } from './roles-and-permissions';
 
 let mounted: Mounted | null = null;
@@ -121,6 +122,9 @@ const EXPECTED: Record<string, Record<string, string[]>> = {
   stranger: { 'the platform': [], 'an organization': [], 'a workspace': [] },
 };
 
+const WHERE: Record<Level, string> = { platform: 'the platform', org: 'an organization', ws: 'a workspace' };
+const EXPECTED_ANY = (caller: string, level: Level) => EXPECTED[caller][WHERE[level]].length > 0;
+
 describe('Roles & permissions, one UI for every level', () => {
   for (const caller of Object.keys(CALLERS)) {
     for (const [where, scope, asked] of SCOPES) {
@@ -133,6 +137,19 @@ describe('Roles & permissions, one UI for every level', () => {
       });
     }
   }
+
+  it('shows the menu item exactly when the page would show a section', () => {
+    for (const caller of Object.keys(CALLERS)) {
+      for (const level of ['platform', 'org', 'ws'] as const) {
+        const access = answer(CALLERS[caller](level));
+        expect(opensRolesAndPermissions(access), `${caller} at ${level}`).toBe(EXPECTED_ANY(caller, level));
+      }
+    }
+    // An `iam:` action no section lists (the sets page's) opens nothing; an org's role
+    // feature defaults alone open Built-in roles.
+    expect(opensRolesAndPermissions({ actions: { 'iam:GetSet': true } })).toBe(false);
+    expect(opensRolesAndPermissions({ actions: { 'nexus:GetRoleFeatures': true } })).toBe(true);
+  });
 
   it('gives a delegated lister the policies to read, and no button to change them', async () => {
     const api = await render('delegated lister', wsScope);

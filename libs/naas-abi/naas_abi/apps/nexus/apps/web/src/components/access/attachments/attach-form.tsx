@@ -3,15 +3,19 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import { IamAdminError, type IamAdminApi } from '@/lib/iam-admin/api';
 import type { AttachablePolicy, PrincipalKind } from '@/lib/iam-admin/types';
-import { roleOfPolicy } from '../roles/role-change';
+import { isRoleCompanion, principalKindOf, roleOfPolicy } from '../roles/role-change';
 import './attachments.css';
 
 export type PrincipalChoice = { id: string; label: string; kind?: PrincipalKind };
 
 /** A user's built-in role is a membership (People & roles' role column, Members), never a bare
- *  attachment; a group or a service account takes any policy. */
+ *  attachment; a group or a service account takes one. What comes with a role (its feature and
+ *  platform companions) is IAM's to attach, offered to nobody. A principal not among the known
+ *  ones is told by its id. */
 export function offeredTo(policy: AttachablePolicy, principal: PrincipalChoice | undefined): boolean {
-  return !(roleOfPolicy(policy.id) && (principal?.kind ?? 'user') === 'user');
+  if (isRoleCompanion(policy.id)) return false;
+  const kind = principal?.kind ?? (principal ? principalKindOf(principal.id) : 'user');
+  return !(roleOfPolicy(policy.id) && kind === 'user');
 }
 
 /**
@@ -40,7 +44,9 @@ export function AttachForm({
   const listId = useId();
   const target = (fixed ?? principalId).trim();
   const principal = useMemo<PrincipalChoice | undefined>(
-    () => principals.find((p) => p.id === target) ?? (fixed ? { id: fixed, label: fixed, kind: 'group' } : undefined),
+    () =>
+      principals.find((p) => p.id === target) ??
+      (target ? { id: target, label: target, kind: fixed ? 'group' : principalKindOf(target) } : undefined),
     [principals, target, fixed],
   );
 

@@ -123,6 +123,31 @@ describe('PeopleView', () => {
     expect(document.querySelector('select[aria-label^="Role of"]')).toBeNull();
   });
 
+  it('shows what comes with a role as part of it, with no detach', async () => {
+    const features = attachment({ id: 'att_f', policy_id: 'builtin.features.member', policy_name: 'Features of member', principal_id: 'usr_bob', principal: principal({ id: 'usr_bob' }), scope: 'abi:acme:ws-1' });
+    const api = peopleApi({ listAttachments: vi.fn().mockResolvedValue({ items: [recruiters, roleRow, features] }) });
+    mounted = await mount(PeopleView, { api, can: () => true, scope: wsScope, directory: fakeDirectory([bob]), changeRole: vi.fn() });
+    await mounted.flush();
+    expect(row('usr_bob')?.querySelector('[data-with-role]')?.textContent).toContain('Features of member');
+    expect(document.querySelector('[data-held="builtin.features.member"]')).toBeNull();
+    expect(field('Detach Features of member from Bob')).toBeNull();
+    expect(field('Detach Recruiters from Bob')).not.toBeNull();
+  });
+
+  it('says what it could not read, and shows the rest', async () => {
+    const api = peopleApi({ getGroup: vi.fn().mockRejectedValue(new Error('HTTP 500')) });
+    const directory = { members: () => Promise.reject(new Error('You do not have permission to do this.')) };
+    mounted = await mount(PeopleView, { api, can: () => true, scope: wsScope, directory, changeRole: vi.fn() });
+    await mounted.flush();
+    const notices = [...document.querySelectorAll('[data-people-notice]')].map((n) => n.textContent);
+    expect(notices).toEqual([
+      'The members could not be read (You do not have permission to do this.): roles are shown from what is attached here, and cannot be changed.',
+      'The members of Analysts could not be read (HTTP 500): what the group gives them is not shown.',
+    ]);
+    expect(row('usr_bob')?.textContent).toContain('Recruiters');
+    expect(row('usr_bob')?.querySelector('[data-role]')?.textContent).toBe('Member');
+  });
+
   it('shows no change to a caller who may only list', async () => {
     const api = peopleApi();
     mounted = await mount(PeopleView, { api, can: (a) => a === 'iam:ListAttachments', scope: wsScope, directory: fakeDirectory([bob]) });

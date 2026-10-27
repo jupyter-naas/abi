@@ -50,7 +50,8 @@ export function RolesAndPermissions({ scopes, nonce = 0, api, directory, roleFea
   // The sections reload on a change of scope, not on a new array of the same scopes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const scope = useMemo(() => picked, [pickedKey]);
-  const { access, loading, error, can } = useIamAccess(scope?.value ?? undefined, client);
+  // Refresh asks IAM again too: a grant or a revoke made elsewhere changes the sections.
+  const { access, loading, error, can } = useIamAccess(scope?.value ?? undefined, client, { reload: nonce });
 
   if (!scope) return null;
 

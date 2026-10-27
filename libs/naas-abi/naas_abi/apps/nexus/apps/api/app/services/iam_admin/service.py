@@ -17,6 +17,7 @@ this service adds is
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -200,9 +201,13 @@ class IamAdminService:
         owner = _owner_of(scope)
 
         def decide(session: IIAMService) -> dict[str, bool]:
-            result: dict[str, bool] = {}
+            # At a scope, what only the platform administers is not asked: it is False there.
+            result: dict[str, bool] = (
+                dict.fromkeys(_PLATFORM_ONLY, False) if scope is not None else {}
+            )
             for action, kind in _WILDCARD_TYPE.items():
-                result[action] = session.authorize(action, self._wildcard(kind, owner)).allowed
+                if action not in result:
+                    result[action] = session.authorize(action, self._wildcard(kind, owner)).allowed
             for action in _ATTACHMENT_ACTIONS:
                 # Any policy, or at least one of the roles an admin grants below owner.
                 result[action] = any(
@@ -210,16 +215,22 @@ class IamAdminService:
                     for policy in ("*", *roles.ROLES)
                 )
             for action in _KEY_ACTIONS:
-                result[action] = session.authorize(action, key_resource("*", "*")).allowed
-            if scope is not None:
-                result.update(dict.fromkeys(_PLATFORM_ONLY, False))
+                if action not in result:
+                    result[action] = session.authorize(action, key_resource("*", "*")).allowed
             return result
 
-        actions = await self._read(user, decide)
-        actions["nexus:ReadSystem"] = scope is None and await self._reads_system(user)
         org = _organization_of(scope)
-        for action in _ROLE_FEATURE_ACTIONS:
-            actions[f"nexus:{action}"] = org is not None and await self._may(user, action, org)
+        actions, reads_system, *role_features = await asyncio.gather(
+            self._read(user, decide),
+            self._reads_system(user) if scope is None else _false(),
+            *(
+                self._may(user, action, org) if org is not None else _false()
+                for action in _ROLE_FEATURE_ACTIONS
+            ),
+        )
+        actions["nexus:ReadSystem"] = reads_system
+        for action, allowed in zip(_ROLE_FEATURE_ACTIONS, role_features, strict=True):
+            actions[f"nexus:{action}"] = allowed
         return {"actions": actions}
 
     async def grantable(self, user: Any, scope: str) -> dict[str, Any]:
@@ -978,6 +989,10 @@ def _owner_of(scope: str | None) -> str:
     if workspace == "*":
         return scope_name(org, NONE)
     return scope
+
+
+async def _false() -> bool:
+    return False
 
 
 def _organization_of(scope: str | None) -> str | None:

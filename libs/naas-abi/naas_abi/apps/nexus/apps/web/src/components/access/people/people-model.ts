@@ -1,7 +1,7 @@
 import type { AttachmentView, GroupView, PrincipalKind } from '@/lib/iam-admin/types';
 import type { ScopeMember } from '../access-directory';
 import { principalLabel } from '../attachments/attachments-model';
-import { roleOfPolicy, type BuiltInRole } from '../roles/role-change';
+import { isRoleCompanion, roleOfPolicy, type BuiltInRole } from '../roles/role-change';
 
 export type HeldPolicy = { id: string; name: string };
 
@@ -19,6 +19,9 @@ export type PersonRow = {
   member: boolean;
   /** Attached to them here; a user's role attachment is their `role`, not listed. */
   direct: AttachmentView[];
+  /** What IAM attached with the role (its features, the platform companions): shown with it,
+   *  never detached by hand. */
+  withRole: AttachmentView[];
   viaGroups: { groupId: string; groupLabel: string; policies: HeldPolicy[] }[];
 };
 
@@ -38,10 +41,10 @@ function higher(a: BuiltInRole | null, b: BuiltInRole | null): BuiltInRole | nul
  */
 export function peopleAt(attachments: AttachmentView[], members: ScopeMember[], groups: GroupView[]): PersonRow[] {
   const rows = new Map<string, PersonRow>();
-  const row = (id: string, init: () => Omit<PersonRow, 'direct' | 'viaGroups'>): PersonRow => {
+  const row = (id: string, init: () => Omit<PersonRow, 'direct' | 'withRole' | 'viaGroups'>): PersonRow => {
     let found = rows.get(id);
     if (!found) {
-      found = { ...init(), direct: [], viaGroups: [] };
+      found = { ...init(), direct: [], withRole: [], viaGroups: [] };
       rows.set(id, found);
     }
     return found;
@@ -80,6 +83,8 @@ export function peopleAt(attachments: AttachmentView[], members: ScopeMember[], 
     if (role) {
       // The directory's role is the effective one; an attachment alone (the platform) says it.
       if (!holder.member) holder.role = higher(holder.role, role);
+    } else if (isRoleCompanion(a.policy_id)) {
+      holder.withRole.push(a);
     } else {
       holder.direct.push(a);
     }

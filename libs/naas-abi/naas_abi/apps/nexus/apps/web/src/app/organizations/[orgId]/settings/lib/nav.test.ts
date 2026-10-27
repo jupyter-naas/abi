@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isOrgAdminRole, orgModulesPath, orgSettingsNavForRole } from './nav';
+import { isOrgAdminRole, orgModulesPath, orgSectionRedirect, orgSettingsNavForRole } from './nav';
 import { orgSettingsRedirect } from './redirects';
 
 describe('org settings nav', () => {
@@ -39,6 +39,23 @@ describe('org settings nav', () => {
     expect(orgSettingsNavForRole('admin').map((item) => item.slug)).not.toContain(
       'secrets'
     );
+  });
+});
+
+describe('orgSectionRedirect', () => {
+  it('waits for the access read before sending a member off Roles & permissions', () => {
+    // The org was read first (role known), /access is still in flight.
+    expect(orgSectionRedirect({ section: 'roles', role: 'member', holdsIam: false, accessSettled: false })).toBeNull();
+    // It answers: a delegated IAM admin stays, anyone else goes to General.
+    expect(orgSectionRedirect({ section: 'roles', role: 'member', holdsIam: true, accessSettled: true })).toBeNull();
+    expect(orgSectionRedirect({ section: 'roles', role: 'member', holdsIam: false, accessSettled: true })).toBe('general');
+  });
+
+  it('decides admin-only sections by role alone, and nothing before the role is known', () => {
+    expect(orgSectionRedirect({ section: 'users', role: 'member', holdsIam: false, accessSettled: false })).toBe('general');
+    expect(orgSectionRedirect({ section: 'users', role: 'admin', holdsIam: false, accessSettled: false })).toBeNull();
+    expect(orgSectionRedirect({ section: 'roles', role: null, holdsIam: false, accessSettled: true })).toBeNull();
+    expect(orgSectionRedirect({ section: 'general', role: 'member', holdsIam: false, accessSettled: true })).toBeNull();
   });
 });
 

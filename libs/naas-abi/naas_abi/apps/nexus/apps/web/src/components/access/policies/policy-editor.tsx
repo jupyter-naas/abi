@@ -106,17 +106,18 @@ export function PolicyEditor({
       if (on) selected.add(key);
       else selected.delete(key);
     }
-    setStatements(fromDocument({ version, statements: [...split.rest, ...builderStatements(builder, selected)] }));
+    setStatements(fromDocument({ version, statements: [...split.rest, ...builderStatements(builder, selected, split.rest)] }));
     setSaveError(null);
   };
 
+  // Nothing is an empty policy again: what a role brought never stays behind.
   const startFrom = (policyId: string) => {
     setStarting(policyId);
     const role = roles.find((r) => r.id === policyId);
-    if (!role) return;
-    setStatements(fromDocument(role.document));
-    setVersion(role.document.version);
+    setStatements(role ? fromDocument(role.document) : []);
+    setVersion(role ? role.document.version : POLICY_VERSION);
     setSwitchError(null);
+    setSaveError(null);
   };
 
   const showText = () => {
@@ -313,9 +314,10 @@ export function PolicyEditor({
             </ul>
           )}
           {validation.failure && <p className="access-policy-error">{validation.failure}</p>}
-          {verdict?.valid && !validation.pending && (
+          {/* Valid is not granted: once a save was refused, the refusal alone speaks. */}
+          {verdict?.valid && !validation.pending && !saveError && (
             <p className="access-policy-ok">
-              <CheckCircle2 size={14} /> IAM accepts this policy.
+              <CheckCircle2 size={14} /> Valid policy.
             </p>
           )}
           {validation.pending && <p className="access-policy-muted">Checking with IAM…</p>}

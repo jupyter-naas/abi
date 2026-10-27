@@ -32,6 +32,27 @@ export function roleOfPolicy(policyId: string): BuiltInRole | null {
   return (BUILT_IN_ROLES as string[]).includes(role) ? (role as BuiltInRole) : null;
 }
 
+/**
+ * What IAM attaches beside a role and detaches with it (core `roles.py`): its feature policies
+ * (`builtin.features.<role>`, `.<org>.<role>`) and the platform companions
+ * (`builtin.platform.member`, `.viewer`). They belong to the role: never detached or attached
+ * by hand, or the person loses (or keeps) their features until their next role change.
+ */
+export function isRoleCompanion(policyId: string): boolean {
+  return (
+    policyId.startsWith('builtin.features.') ||
+    policyId === 'builtin.platform.member' ||
+    policyId === 'builtin.platform.viewer'
+  );
+}
+
+/** A principal's kind from its IAM id (`usr_`, `grp_`, `sa_`), for an id typed by hand. */
+export function principalKindOf(id: string): 'user' | 'group' | 'service_account' {
+  if (id.startsWith('grp_')) return 'group';
+  if (id.startsWith('sa_')) return 'service_account';
+  return 'user';
+}
+
 /** The roles a page may give: never owner (owners come from the configuration or a transfer);
  *  an organization has no viewers. */
 export function assignableRoles(level: AccessLevel): BuiltInRole[] {

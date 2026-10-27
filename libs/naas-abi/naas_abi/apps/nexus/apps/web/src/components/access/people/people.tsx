@@ -45,21 +45,36 @@ export function PeopleView({ api, can, scope, directory, nonce = 0, changeRole =
   const [members, setMembers] = useState<ScopeMember[]>([]);
   const [rows, setRows] = useState<PersonRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // What could not be read while the rest did: shown above the table, never swallowed.
+  const [notices, setNotices] = useState<string[]>([]);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
 
   const load = useCallback(async () => {
     try {
+      const missing: string[] = [];
       const [found, people] = await Promise.all([
         api.listAttachments(scope.value ? { scope: scope.value } : {}),
-        directory.members(scope).catch(() => [] as ScopeMember[]),
+        directory.members(scope).catch((e: unknown) => {
+          missing.push(`The members could not be read (${message(e)}): roles are shown from what is attached here, and cannot be changed.`);
+          return [] as ScopeMember[];
+        }),
       ]);
       // At the platform, what is attached everywhere; an org's or a workspace's attachments are theirs.
       const here = found.items.filter((a) => a.scope === scope.value);
-      const groups = await Promise.all(groupHolders(here).map((id) => api.getGroup(id).catch(() => null)));
+      const groups = await Promise.all(
+        groupHolders(here).map((id) =>
+          api.getGroup(id).catch((e: unknown) => {
+            const name = here.find((a) => a.principal_id === id)?.principal?.name ?? id;
+            missing.push(`The members of ${name} could not be read (${message(e)}): what the group gives them is not shown.`);
+            return null;
+          }),
+        ),
+      );
       setAttachments(here);
       setMembers(people);
       setRows(peopleAt(here, people, groups.flatMap((g) => (g ? [g] : []))));
+      setNotices(missing);
       setError(null);
     } catch (e) {
       setAttachments([]);
@@ -113,6 +128,11 @@ export function PeopleView({ api, can, scope, directory, nonce = 0, changeRole =
         />
       </div>
       {error && <p className="access-source-note" role="alert">{error}</p>}
+      {notices.map((notice) => (
+        <p key={notice} className="access-source-note" role="status" data-people-notice="">
+          {notice}
+        </p>
+      ))}
       <div className="access-table-wrap">
         <table className="access-table">
           <thead>
@@ -165,6 +185,15 @@ export function PeopleView({ api, can, scope, directory, nonce = 0, changeRole =
                           </span>
                         )}
                       </span>
+                    )}
+                    {person.withRole.length > 0 && (
+                      <p
+                        className="access-people-with-role"
+                        data-with-role=""
+                        title="IAM attaches these with the role and removes them with it."
+                      >
+                        With the role: {person.withRole.map((a) => a.policy_name ?? a.policy_id).join(', ')}
+                      </p>
                     )}
                   </td>
                   <td>

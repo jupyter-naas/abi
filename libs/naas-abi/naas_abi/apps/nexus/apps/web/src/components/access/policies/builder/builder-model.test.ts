@@ -131,18 +131,54 @@ describe('statements', () => {
     const selected = new Set(['module:agent/acme.people/Recruiter', 'module:workflow/acme.people/workflow.sync', 'feature:chat']);
     const statements = builderStatements(groups, selected);
     expect(statements).toEqual([
-      { sid: 'UseAgent', effect: 'Allow', actions: ['module:UseAgent'], resources: ['${scope}:module:agent/acme.people/Recruiter'] },
+      { sid: 'ModuleUseAgent', effect: 'Allow', actions: ['module:UseAgent'], resources: ['${scope}:module:agent/acme.people/Recruiter'] },
       {
-        sid: 'RunWorkflowReadWorkflowRuns',
+        sid: 'ModuleRunWorkflowModuleReadWorkflowRuns',
         effect: 'Allow',
         actions: ['module:RunWorkflow', 'module:ReadWorkflowRuns'],
         resources: ['${scope}:module:workflow/acme.people/workflow.sync'],
       },
-      { sid: 'UseFeature', effect: 'Allow', actions: ['nexus:UseFeature'], resources: ['${scope}:nexus:feature/chat'] },
+      { sid: 'NexusUseFeature', effect: 'Allow', actions: ['nexus:UseFeature'], resources: ['${scope}:nexus:feature/chat'] },
     ]);
     const back = splitStatements(groups, statements);
     expect([...back.selected].sort()).toEqual([...selected].sort());
     expect(back.rest).toEqual([]);
+  });
+
+  it('gives every statement its own sid, never one a kept statement has', () => {
+    const crm: ModuleScopesEntry = {
+      ...market,
+      module: 'crm',
+      agents: [],
+      declared: {
+        service: 'crm',
+        version: 1,
+        resource_types: [{ name: 'record', description: '', resource: '${scope}:crm:record/*' }],
+        actions: [{ action: 'crm:Query', level: 'read', resource_types: ['record'], description: '' }],
+      },
+    };
+    const erp: ModuleScopesEntry = {
+      ...crm,
+      module: 'erp',
+      declared: { ...crm.declared!, service: 'erp', resource_types: [{ name: 'record', description: '', resource: '${scope}:erp:record/*' }], actions: [{ action: 'erp:Query', level: 'read', resource_types: ['record'], description: '' }] },
+    };
+    const both: GrantableView = {
+      scope: 'abi:o:w',
+      catalogs: [
+        { service: 'crm', actions: [{ action: 'crm:Query', resources: ['${scope}:crm:*'], excluded: [] }] },
+        { service: 'erp', actions: [{ action: 'erp:Query', resources: ['${scope}:erp:*'], excluded: [] }] },
+        ...admin.catalogs,
+      ],
+    };
+    const offered = builderGroups(both, [people, crm, erp], []);
+    const kept = [{ sid: 'ModuleUseAgent', effect: 'Allow' as const, actions: ['nexus:ListFiles'], resources: ['${scope}:nexus:file/*'] }];
+    const statements = builderStatements(
+      offered,
+      new Set(['declared:crm:Query@${scope}:crm:record/*', 'declared:erp:Query@${scope}:erp:record/*', 'module:agent/acme.people/Coach']),
+      kept,
+    );
+    expect(statements.map((s) => s.sid)).toEqual(['ModuleUseAgent2', 'CrmQuery', 'ErpQuery']);
+    for (const sid of statements.map((s) => s.sid!)) expect(sid).toMatch(/^[A-Za-z0-9]{1,64}$/);
   });
 
   it('keeps what the builder cannot show as statements of their own', () => {

@@ -67,6 +67,19 @@ describe('AttachForm', () => {
     expect(options()).toEqual(['builtin.viewer', 'pol_1']);
   });
 
+  it('never offers what comes with a role, and tells a typed id’s kind by its prefix', async () => {
+    const features = { id: 'builtin.features.admin', name: 'Features of admin', description: '', managed: true };
+    const api = formApi({ attachable: vi.fn().mockResolvedValue({ items: [features, viewer, reader] }) });
+    mounted = await mount(AttachForm, { api, scope: 'abi:acme:ws-1', principals: [], onAttached: vi.fn() });
+    await mounted.flush();
+    await mounted.type(field('Principal to attach to'), 'usr_typed');
+    expect(options()).toEqual(['pol_1']);
+    await mounted.type(field('Principal to attach to'), 'grp_typed');
+    expect(options()).toEqual(['builtin.viewer', 'pol_1']);
+    await mounted.type(field('Principal to attach to'), 'sa_typed');
+    expect(options()).toEqual(['builtin.viewer', 'pol_1']);
+  });
+
   it('attaches to a fixed principal, platform-wide without a scope', async () => {
     const api = formApi();
     mounted = await mount(AttachForm, { api, scope: null, principals: [], principalId: 'grp_1', onAttached: vi.fn() });
