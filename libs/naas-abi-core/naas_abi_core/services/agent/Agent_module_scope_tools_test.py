@@ -65,7 +65,7 @@ def _turn(workflow: ExportReport) -> str:
                 AIMessage(content="done"),
             ]
         ),
-        tools=workflow.as_tools(),
+        tools=[*workflow.as_tools()],
         agents=[],
         memory=MemorySaver(),
         state=AgentSharedState(thread_id="module-scope-tools"),

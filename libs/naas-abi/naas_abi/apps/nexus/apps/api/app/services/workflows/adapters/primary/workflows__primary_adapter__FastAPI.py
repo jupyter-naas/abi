@@ -294,19 +294,20 @@ async def list_own_runs(
 ) -> Any:
     """The runs the caller started in the workspace, of the workflows and
     pipelines whose runs they may still read there."""
-    owners = await _call(service.own_runs(user.id, workspace_id))
+    # Workflows' runs and pipelines' runs are read with different actions.
+    by_action: dict[str, list[RunOwner]] = {}
+    for owner in await _call(service.own_runs(user.id, workspace_id)):
+        by_action.setdefault(
+            runs_action(workflow_scope(owner.module_id, owner.workflow)), []
+        ).append(owner)
     readable: list[RunOwner] = []
-    for kind_scope_action in {runs_action(workflow_scope(o.module_id, o.workflow)) for o in owners}:
+    for action, owners in by_action.items():
         readable += await authz.filter_scopes(
-            [
-                o
-                for o in owners
-                if runs_action(workflow_scope(o.module_id, o.workflow)) == kind_scope_action
-            ],
+            owners,
             user=user,
             workspace=workspace_id,
             scope_of=lambda o: workflow_scope(o.module_id, o.workflow),
-            action=kind_scope_action,
+            action=action,
         )
     readable.sort(key=lambda o: o.started_at, reverse=True)
     return {"runs": [_own_run_view(o) for o in readable]}
