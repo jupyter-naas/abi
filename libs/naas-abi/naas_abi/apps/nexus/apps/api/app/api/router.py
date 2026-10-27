@@ -79,6 +79,9 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.handlers import router a
 from naas_abi.apps.nexus.apps.api.app.services.workflows.handlers import (
     router as workflows_router,
 )
+from naas_abi.apps.nexus.apps.api.app.services.workflows.handlers import (
+    workspace_router as workspace_workflows_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.handlers import (
     router as workspaces_router,
 )
@@ -140,3 +143,6 @@ api_router.include_router(analytics.router, prefix="/analytics", tags=["analytic
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(sysadmin_router, prefix="/admin/system", tags=["sysadmin"])
 api_router.include_router(workflows_router, prefix="/workflows", tags=["workflows"])
+api_router.include_router(
+    workspace_workflows_router, prefix="/workspaces/{workspace_id}/workflows", tags=["workflows"]
+)

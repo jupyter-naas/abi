@@ -958,3 +958,22 @@ class InvitationModel(Base):
     accepted_user_id = Column(String, nullable=True)
     # JSON object: the member profile set at invitation (see ``invites.port.PROFILE_FIELDS``).
     profile = Column(Text, nullable=True)
+
+
+# ============================================
+# Workflow runs started from a workspace
+# ============================================
+
+
+class WorkflowRunOwnerModel(Base):
+    """Who started a workflow or pipeline run, and in which workspace: job runs
+    carry no owner of their own (``services/workflows``)."""
+
+    __tablename__ = "workflow_run_owners"
+
+    module_id = Column(String(255), primary_key=True)
+    run_id = Column(String(255), primary_key=True)
+    workflow = Column(String(255), nullable=False)
+    user_id = Column(String(255), nullable=False)
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    started_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)

@@ -10,6 +10,7 @@ trigger, no audit record.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import time
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
@@ -22,6 +23,7 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs_service import JobsAdminService
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.port import SourceUnavailable
+from naas_abi.apps.nexus.apps.api.app.services.workflows.port import RunOwner, RunOwnersPort
 from naas_abi.apps.nexus.apps.api.app.services.workflows.workflows import (
     MAX_WAIT_SECONDS,
     Caller,
@@ -41,6 +43,8 @@ POLL_MAX_SECONDS = 1.0
 # window (2 minutes), which answers with the first start's run.
 CLOCK_SKEW = timedelta(seconds=30)
 DUPLICATE_WINDOW = timedelta(minutes=2)
+# The most runs a user's listing of a workspace shows.
+MAX_OWN_RUNS = 50
 
 
 class WorkflowsService:
@@ -51,8 +55,10 @@ class WorkflowsService:
         sleep: Callable[[float], Awaitable[Any]] = asyncio.sleep,
         monotonic: Callable[[], float] = time.monotonic,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        owners: RunOwnersPort | None = None,
     ) -> None:
         self._jobs = jobs
+        self._owners = owners
         self._sleep = sleep
         self._monotonic = monotonic
         self._clock = clock
@@ -82,10 +88,11 @@ class WorkflowsService:
         *,
         wait: float | None = None,
         idempotency_key: str | None = None,
+        on_started: Callable[[str], Awaitable[Any]] | None = None,
     ) -> Started:
         """Start a run of ``name``. With ``wait`` (seconds, at most MAX_WAIT_SECONDS)
         the call returns once the run ended or the time is up, whichever is first;
-        the run goes on either way."""
+        the run goes on either way. ``on_started`` is told the run id first."""
         key = check_idempotency_key(idempotency_key)
         earliest = self._clock() - CLOCK_SKEW - (DUPLICATE_WINDOW if key else timedelta(0))
         run_id = await self._jobs.trigger(
@@ -97,6 +104,8 @@ class WorkflowsService:
             idempotency_key=key,
             workflow_only=True,
         )
+        if on_started is not None:
+            await on_started(run_id)
         queued = WorkflowRunView(JobRun(module_id, name, run_id, "QUEUED"), WorkflowDetail())
         if not wait or wait <= 0:
             return Started(run_id, await self._peek(module_id, run_id, queued, earliest))
@@ -143,6 +152,70 @@ class WorkflowsService:
                 return last
             await self._sleep(min(delay, remaining))
             delay = min(delay * 1.5, POLL_MAX_SECONDS)
+
+    # -- from a workspace: the caller's own runs ----------------------------------------
+
+    def _run_owners(self) -> RunOwnersPort:
+        if self._owners is None:
+            raise RuntimeError("Workflows started from a workspace need a run owners store")
+        return self._owners
+
+    async def start_in(
+        self,
+        caller: Caller,
+        workspace_id: str,
+        module_id: str,
+        name: str,
+        payload: dict[str, Any],
+        *,
+        wait: float | None = None,
+        idempotency_key: str | None = None,
+    ) -> Started:
+        """``start``, from a workspace: the run is recorded as the caller's there,
+        and an idempotency key is the caller's own in it (another user's same key
+        is another run, never theirs)."""
+        owners = self._run_owners()
+        key = check_idempotency_key(idempotency_key)
+        if key is not None:
+            key = hashlib.sha256(f"{workspace_id}/{caller.user_id}/{key}".encode()).hexdigest()
+        started_at = self._clock()
+
+        async def record(run_id: str) -> None:
+            await owners.record(
+                RunOwner(module_id, run_id, name, caller.user_id, workspace_id, started_at)
+            )
+
+        return await self.start(
+            caller,
+            module_id,
+            name,
+            payload,
+            wait=wait,
+            idempotency_key=key,
+            on_started=record,
+        )
+
+    async def own_run(
+        self, user_id: str, workspace_id: str, module_id: str, run_id: str
+    ) -> tuple[RunOwner, WorkflowRunView]:
+        """A run the user started from the workspace; ``RunNotFound`` for any other
+        (another user's, another workspace's, an older run under a reused id)."""
+        owner = await self._run_owners().get(module_id, run_id)
+        if owner is None or (owner.user_id, owner.workspace_id) != (user_id, workspace_id):
+            raise RunNotFound(module_id, run_id)
+        view = await self._view(module_id, run_id)
+        started_at = owner.started_at
+        if started_at.tzinfo is None:
+            started_at = started_at.replace(tzinfo=UTC)
+        if view.run.job != owner.workflow or not _fired_since(
+            view.run.fired_at, started_at - CLOCK_SKEW - DUPLICATE_WINDOW
+        ):
+            raise RunNotFound(module_id, run_id)
+        return owner, view
+
+    async def own_runs(self, user_id: str, workspace_id: str) -> list[RunOwner]:
+        """The runs the user started from the workspace, newest first."""
+        return await self._run_owners().list_for(user_id, workspace_id, MAX_OWN_RUNS)
 
     async def cancel(self, caller: Caller, module_id: str, run_id: str) -> None:
         await self._jobs.cancel(

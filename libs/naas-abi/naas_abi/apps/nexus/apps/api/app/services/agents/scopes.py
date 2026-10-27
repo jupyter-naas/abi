@@ -5,6 +5,10 @@ An agent of a module, engine or remote, is ``agent/<module>/<name>`` of the
 lists it and reaches it as a sub-agent. An agent a workspace builds itself
 (a model and a prompt, no module class) has no module scope: ``nexus:UseAgent``
 and the workspace's roles decide.
+
+An engine module's workflows and pipelines reach an agent as tools: a turn binds
+the ones the caller may run (``usable_process_scopes``), and the agent refuses
+the others (``naas_abi_core.services.agent.context.tool_scope_refused``).
 """
 
 from __future__ import annotations
@@ -19,6 +23,7 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import (
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
 from naas_abi.apps.nexus.apps.api.app.utils.public_urls import resolve_abi_module_path
 from naas_abi_core import logger
+from naas_abi_core.services.agent.context import MODULE_SCOPE_ATTRIBUTE
 from naas_abi_core.services.iam.module_scopes import AGENT
 
 
@@ -62,6 +67,38 @@ def agent_scope(
             return None
         return ModuleScope(AGENT, module_id, name)
     return class_scope(agent.class_name, (classes or {}).get(agent.class_name), module_of)
+
+
+def engine_process_scopes() -> list[ModuleScope]:
+    """The scope of every workflow and pipeline the engine's modules hold, as the
+    engine marked them (``EngineProcessBridge.tag_process_scopes``): an agent's
+    tool one of them exposes runs only within the caller's."""
+    try:
+        from naas_abi import ABIModule
+
+        modules = ABIModule.get_instance().engine.modules
+    except Exception:  # noqa: BLE001 - no engine loaded: no engine workflows
+        logger.debug("No engine modules for workflow scopes", exc_info=True)
+        return []
+    found: list[ModuleScope] = []
+    for module in modules.values():
+        for attribute in ("workflows", "pipelines"):
+            for instance in getattr(module, attribute, None) or []:
+                scope = getattr(instance, MODULE_SCOPE_ATTRIBUTE, None)
+                if scope is not None:
+                    found.append(ModuleScope(*scope))
+    return found
+
+
+async def usable_process_scopes(user: object, workspace_id: str) -> frozenset[tuple[str, str, str]]:
+    """The engine workflows and pipelines the caller may run in ``workspace_id``
+    (``agent_usable_module_scopes``)."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+
+    usable = await authz.filter_scopes(
+        engine_process_scopes(), user=user, workspace=workspace_id, scope_of=lambda s: s
+    )
+    return frozenset((s.type, s.module, s.name) for s in usable)
 
 
 def scope_resolver() -> Callable[[AgentRecord], ModuleScope | None]:

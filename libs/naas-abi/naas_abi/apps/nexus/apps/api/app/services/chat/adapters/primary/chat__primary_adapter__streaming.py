@@ -230,6 +230,7 @@ async def stream_chat_response(
 
     if request.workspace_id:
         from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
+            bind_usable_processes,
             caller_enabled_class_names,
             caller_feature_flags,
             caller_usable_agents,
@@ -257,6 +258,7 @@ async def stream_chat_response(
                 agent_workspace_enabled_class_names.set(
                     caller_enabled_class_names(workspace_agents, flags)
                 )
+                await bind_usable_processes(current_user, request.workspace_id)
         resolved_agent = pick_workspace_chat_agent_id(workspace_agents, request.agent)
         from naas_abi.agents.documents.policy import open_documents_slug
         from naas_abi.agents.sheets.policy import open_sheets_slug
@@ -383,7 +385,12 @@ async def stream_chat_response(
 
                         await bind_usable_agents(registry.agents, current_user, turn_workspace)
                 else:
+                    from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
+                        bind_usable_processes,
+                    )
+
                     agent_workspace_enabled_class_names.set(frozenset())
+                    await bind_usable_processes(current_user, None)
 
                 # Bind open Slides deck or Documents file + Coder sidecar.
                 client_ctx = request.context if isinstance(request.context, dict) else {}

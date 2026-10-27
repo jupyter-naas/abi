@@ -37,12 +37,15 @@ def _client(monkeypatch: pytest.MonkeyPatch, user_id: str = "admin") -> TestClie
         ws_secret: str | None = None,
         user_context_preamble: str | None = None,
         allowed: frozenset[str] | None = None,
+        processes: frozenset[tuple[str, str, str]] | None = None,
     ) -> AsyncGenerator[str, None]:
         STREAMED.append(allowed)
+        PROCESSES.append(processes)
         for piece in ["Hello", " world"]:
             yield piece
 
     STREAMED.clear()
+    PROCESSES.clear()
     aia = type("AiaAgent", (), {"name": "Aia"})
     monkeypatch.setattr(shim, "_stream_agent_text", _fake_stream)
     monkeypatch.setattr(shim, "_list_agent_model_ids", lambda: ["aia", "support"])
@@ -56,6 +59,7 @@ def _client(monkeypatch: pytest.MonkeyPatch, user_id: str = "admin") -> TestClie
     return TestClient(app)
 
 
+PROCESSES: list = []
 STREAMED: list[frozenset[str] | None] = []
 
 
@@ -198,6 +202,8 @@ def test_admins_and_owners_use_every_agent(
     assert client.post("/v1/chat/completions", json=_COMPLETION).status_code == 200
     # The agent reaches the sub-agents the caller may use there.
     assert STREAMED == [frozenset({_AIA_KEY})]
+    # And the module workflows its tools may run there (this engine has none).
+    assert PROCESSES == [frozenset()]
 
 
 @pytest.mark.parametrize("user", ["viewer", "member"])

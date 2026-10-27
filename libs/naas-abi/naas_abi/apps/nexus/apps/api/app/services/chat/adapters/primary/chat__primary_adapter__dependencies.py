@@ -190,7 +190,10 @@ async def bind_turn_agents(registry: Any, request: ChatRequest, current_user: Us
     """The agents an in-process turn may run and reach as sub-agents: those the
     caller may use in the workspace the turn is stored in (none without one)."""
     from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import bind_usable_agents
-    from naas_abi_core.services.agent.context import agent_workspace_enabled_class_names
+    from naas_abi_core.services.agent.context import (
+        agent_usable_module_scopes,
+        agent_workspace_enabled_class_names,
+    )
 
     conversation = (
         await registry.chat.get_conversation_for_user(
@@ -202,6 +205,7 @@ async def bind_turn_agents(registry: Any, request: ChatRequest, current_user: Us
     workspace = conversation.workspace_id if conversation is not None else request.workspace_id
     if workspace is None:
         agent_workspace_enabled_class_names.set(frozenset())
+        agent_usable_module_scopes.set(frozenset())
         return
     await bind_usable_agents(registry.agents, current_user, workspace)
 

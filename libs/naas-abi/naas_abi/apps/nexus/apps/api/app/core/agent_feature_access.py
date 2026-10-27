@@ -194,7 +194,8 @@ def filter_feature_agents(
 async def bind_usable_agents(agent_service: Any, user: object, workspace_id: str) -> frozenset[str]:
     """Set, for the rest of this request, the agent classes the caller may run
     and reach as sub-agents in ``workspace_id`` (the in-process runtime runs no
-    other): its enabled roster, its features, its module scopes."""
+    other: its enabled roster, its features, its module scopes), and the module
+    workflows and pipelines its agents may run as tools."""
     from naas_abi_core.services.agent.context import agent_workspace_enabled_class_names
 
     roster = await agent_service.list_workspace_agents(workspace_id)
@@ -202,4 +203,16 @@ async def bind_usable_agents(agent_service: Any, user: object, workspace_id: str
     usable = await caller_usable_agents(roster, user, workspace_id, flags)
     allowed = caller_enabled_class_names(usable, flags)
     agent_workspace_enabled_class_names.set(allowed)
+    await bind_usable_processes(user, workspace_id)
     return allowed
+
+
+async def bind_usable_processes(user: object, workspace_id: str | None) -> None:
+    """Set the module workflows and pipelines this request's agents may run as
+    tools: those the caller may run in ``workspace_id``; none without one."""
+    from naas_abi.apps.nexus.apps.api.app.services.agents.scopes import usable_process_scopes
+    from naas_abi_core.services.agent.context import agent_usable_module_scopes
+
+    agent_usable_module_scopes.set(
+        await usable_process_scopes(user, workspace_id) if workspace_id else frozenset()
+    )
