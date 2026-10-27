@@ -9,6 +9,7 @@ import type { CatalogsView, ModuleScopesView, PolicyView } from '@/lib/iam-admin
 import type { AccessViewProps } from '../access-props';
 import { ownedHere, ownerOf, type AccessScope } from '../access-scope';
 import { scopeLabel } from '../attachments/attachments-model';
+import { roleOfPolicy } from '../roles/role-change';
 import { builderGroups, type BuilderGroup } from './builder/builder-model';
 import { PolicyEditor } from './policy-editor';
 import './policies.css';
@@ -224,13 +225,14 @@ export function PoliciesView({ api, can, scope, nonce = 0 }: AccessViewProps) {
 
       {selection && (
         <PolicyEditor
-          key={selection.kind === 'new' ? `new@${builder ? 'builder' : 'plain'}` : `${selection.policy.id}@${selection.policy.revision}`}
+          key={selection.kind === 'new' ? 'new' : `${selection.policy.id}@${selection.policy.revision}`}
           api={api}
           policy={selection.kind === 'policy' ? selection.policy : null}
           catalogs={catalogs}
           modules={modules}
           builder={builder}
           scope={scope}
+          roles={policies.filter((p) => roleOfPolicy(p.id))}
           readOnly={selection.kind === 'policy' && (!editable(selection.policy) || !can('iam:UpdatePolicy'))}
           onSaved={(saved) => {
             setSelection({ kind: 'policy', policy: saved });

@@ -59,9 +59,15 @@ export function peopleAt(attachments: AttachmentView[], members: ScopeMember[], 
     }));
   }
 
+  // A member's account id is their IAM id, except an account linked from the old login,
+  // whose IAM user is found by its email: one person, one row.
+  const byEmail = new Map(members.filter((m) => m.email).map((m) => [m.email.toLowerCase(), m.userId]));
+  const rowId = (principalId: string, kind: PrincipalKind, email: string | null | undefined) =>
+    rows.has(principalId) || kind !== 'user' || !email ? principalId : (byEmail.get(email.toLowerCase()) ?? principalId);
+
   for (const a of attachments) {
     const kind = a.principal?.kind ?? 'user';
-    const holder = row(a.principal_id, () => ({
+    const holder = row(rowId(a.principal_id, kind, a.principal?.email), () => ({
       id: a.principal_id,
       kind,
       label: principalLabel(a.principal, a.principal_id),
@@ -86,7 +92,7 @@ export function peopleAt(attachments: AttachmentView[], members: ScopeMember[], 
     if (!held.length) continue;
     const groupLabel = group.name ?? group.display_name ?? group.id;
     for (const m of group.members) {
-      const person = row(m.id, () => ({
+      const person = row(rowId(m.id, m.kind, m.email), () => ({
         id: m.id,
         kind: m.kind,
         label: principalLabel(m, m.id),

@@ -55,3 +55,19 @@
   font-size: var(--font-size-xs);
   color: #b91c1c;
 }
+
+.access-builder-item {
+  min-width: 0;
+}
+
+.access-builder-item .access-checkbox {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.access-builder-item .access-checkbox span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

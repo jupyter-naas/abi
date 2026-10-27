@@ -42,6 +42,16 @@ describe('peopleAt', () => {
     expect(groupRow.direct.map((a) => a.policy_id)).toEqual(['pol_a']);
   });
 
+  it('joins a member whose account id is not their IAM id (a linked account) by email', () => {
+    const owner = member({ userId: 'user-1', name: 'Dev Admin', email: 'admin@example.com', role: 'owner' });
+    const held = attachment({ policy_id: 'pol_r', policy_name: 'Recruiters', principal_id: 'usr_1', principal: principal({ id: 'usr_1', email: 'admin@example.com', display_name: 'Dev Admin' }) });
+    const role = attachment({ id: 'att_o', policy_id: 'builtin.owner', principal_id: 'usr_1', principal: principal({ id: 'usr_1', email: 'admin@example.com' }) });
+    const rows = peopleAt([held, role], [owner], []);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ id: 'user-1', role: 'owner', member: true });
+    expect(rows[0].direct.map((a) => a.policy_id)).toEqual(['pol_r']);
+  });
+
   it('reads a role from its attachment where there is no member list (the platform)', () => {
     const admin = attachment({ policy_id: 'builtin.admin', principal_id: 'usr_root', principal: principal({ id: 'usr_root', display_name: 'Root' }), scope: null });
     expect(peopleAt([admin], [], [])[0]).toMatchObject({ id: 'usr_root', role: 'admin', member: false, direct: [] });

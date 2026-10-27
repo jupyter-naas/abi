@@ -143,6 +143,19 @@ describe('PoliciesView at a workspace', () => {
     });
   });
 
+  it('keeps what was typed when the builder arrives after the editor opened', async () => {
+    let arrive: (view: typeof adminGrantable) => void = () => undefined;
+    const grantable = vi.fn(() => new Promise((resolve) => (arrive = resolve)));
+    await open(() => true, { ...listed, grantable }, wsScope);
+    await mounted!.click(button('New policy') ?? null);
+    await mounted!.type(field('Policy name'), 'Recruiters');
+    arrive(adminGrantable);
+    await mounted!.flush();
+
+    expect((field('Policy name') as HTMLInputElement).value).toBe('Recruiters');
+    expect(field('acme.people: Recruiter')).not.toBeNull();
+  });
+
   it('shows IAM’s refusal beside the item it names', async () => {
     const refusal =
       'You cannot grant what you do not hold: statement 0 (UseAgent) allows module:UseAgent on ${scope}:module:agent/acme.people/Coach at abi:acme:ws-1, and you do not hold it there';
@@ -161,22 +174,21 @@ describe('PoliciesView at a workspace', () => {
     expect(document.querySelector('[data-builder-item="module:agent/acme.people/Recruiter"] [role="alert"]')).toBeNull();
   });
 
-  it('starts from a built-in role', async () => {
+  it('starts from a built-in role the caller’s list holds, and offers none other', async () => {
     const member = {
       ...managedPolicy,
       id: 'builtin.member',
       document: { version: '2026-10-13', statements: [{ effect: 'Allow' as const, actions: ['nexus:ListFiles'], resources: ['${scope}:nexus:file/*'] }] },
     };
-    const getPolicy = vi.fn().mockResolvedValue(member);
-    await open(() => true, { ...listed, getPolicy }, wsScope);
+    await open(() => true, { listPolicies: vi.fn().mockResolvedValue({ items: [owned, member], next_after: null }) }, wsScope);
     await mounted!.click(button('New policy') ?? null);
     await mounted!.flush();
     const start = field('Start from a built-in role') as HTMLSelectElement;
+    expect([...start.options].map((o) => o.value)).toEqual(['', 'builtin.member']);
     start.value = 'builtin.member';
     start.dispatchEvent(new Event('change', { bubbles: true }));
     await mounted!.flush();
 
-    expect(getPolicy).toHaveBeenCalledWith('builtin.member');
     expect(mounted!.host.textContent).toContain('1 other statement stays as written');
   });
 });

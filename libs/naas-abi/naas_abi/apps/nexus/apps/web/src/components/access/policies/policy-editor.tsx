@@ -1,11 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { IamAdminError, type IamAdminApi } from '@/lib/iam-admin/api';
 import type { CatalogsView, ModuleScopesView, PolicySource, PolicyView } from '@/lib/iam-admin/types';
 import { PLATFORM_ACCESS_SCOPE, ownerOf, type AccessScope } from '../access-scope';
-import { BUILT_IN_ROLES, ROLE_LABELS, rolePolicyId } from '../roles/role-change';
+import { ROLE_LABELS, roleOfPolicy } from '../roles/role-change';
 import { builderStatements, refusedItems, splitStatements, type BuilderGroup } from './builder/builder-model';
 import { PolicyBuilder } from './builder/policy-builder';
 import {
@@ -38,6 +38,7 @@ export function PolicyEditor({
   modules = null,
   builder = null,
   scope = PLATFORM_ACCESS_SCOPE,
+  roles = [],
   readOnly = false,
   onSaved,
   onCancel,
@@ -50,6 +51,8 @@ export function PolicyEditor({
   /** The builder's items; null: no builder (it could not be loaded, or the caller grants nothing). */
   builder?: BuilderGroup[] | null;
   scope?: AccessScope;
+  /** The built-in roles a new policy may start from: those the caller's policy list holds. */
+  roles?: PolicyView[];
   readOnly?: boolean;
   onSaved: (policy: PolicyView) => void;
   onCancel: () => void;
@@ -75,6 +78,14 @@ export function PolicyEditor({
   const owner = scope.value ?? undefined;
 
   const doc = useMemo(() => toDocument(statements, version), [statements, version]);
+
+  // The builder may arrive after the editor opened (what the caller may grant is read once the
+  // list is): a new policy nothing was written in yet opens in it then.
+  useEffect(() => {
+    if (builder && !policy && mode === 'visual' && statements.length === 0) setMode('builder');
+    // Only the builder's arrival decides it, not later edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [builder]);
   const split = useMemo(() => (builder ? splitStatements(builder, doc.statements) : null), [builder, doc]);
 
   const source: PolicySource = mode === 'text' ? { text } : { document: doc };
@@ -99,17 +110,13 @@ export function PolicyEditor({
     setSaveError(null);
   };
 
-  const startFrom = async (policyId: string) => {
+  const startFrom = (policyId: string) => {
     setStarting(policyId);
-    if (!policyId) return;
-    try {
-      const role = await api.getPolicy(policyId);
-      setStatements(fromDocument(role.document));
-      setVersion(role.document.version);
-      setSwitchError(null);
-    } catch (error) {
-      setSwitchError(error instanceof Error ? error.message : String(error));
-    }
+    const role = roles.find((r) => r.id === policyId);
+    if (!role) return;
+    setStatements(fromDocument(role.document));
+    setVersion(role.document.version);
+    setSwitchError(null);
   };
 
   const showText = () => {
@@ -241,19 +248,19 @@ export function PolicyEditor({
             onChange={(event) => setDescription(event.target.value)}
           />
         </label>
-        {!policy && !readOnly && (
+        {!policy && !readOnly && roles.length > 0 && (
           <label className="access-policy-field">
             <span>Start from</span>
             <select
               className="access-policy-input"
               aria-label="Start from a built-in role"
               value={starting}
-              onChange={(event) => void startFrom(event.target.value)}
+              onChange={(event) => startFrom(event.target.value)}
             >
               <option value="">Nothing</option>
-              {BUILT_IN_ROLES.map((role) => (
-                <option key={role} value={rolePolicyId(role)}>
-                  The {ROLE_LABELS[role]} role
+              {roles.map((role) => (
+                <option key={role.id} value={role.id}>
+                  The {ROLE_LABELS[roleOfPolicy(role.id)!] ?? role.name} role
                 </option>
               ))}
             </select>
