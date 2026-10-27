@@ -28,13 +28,19 @@ The readers live with the state they read, each kind keeping today's flag:
 
 ## Where it is checked
 
-`authz` asks it after IAM allows a module scope (`../iam/authz.py`): `decide_scope` /
-`require_scope` refuse one turned off (reason `hidden`, 403 "This <type> is turned off in this
-workspace"), `filter_scopes` leaves it out, `scope_allowed_in_any` skips the workspace. Every
-use of a module scope goes through them: chat, `/v1`, app links and remote grants, a workflow
-start and its runs, the agents and workflows an in-process turn may reach. Pass
-`include_hidden=True` only for who may turn it back on (`UpdateApp`, `UpdateAgent`,
-`ListWorkflowSettings`). An agent the workspace built has no module scope: chat checks its row's
+`authz` asks it after IAM allows the **use** of a module scope (its use action, `ModuleScope.is_use`;
+`../iam/authz.py`): `decide_scope` / `require_scope` refuse one turned off (reason `hidden`, 403
+"This <type> is turned off in this workspace"), `filter_scopes` leaves it out,
+`scope_allowed_in_any` skips the workspace (asked only where IAM allows, until one answers).
+Every use goes through them: chat, `/v1`, app links and remote grants, a workflow start, the
+agents and workflows an in-process turn may reach. Reading one's own runs of a workflow is not a
+use: turning it off keeps the runs already started readable.
+
+Who still lists one turned off is asked **on that resource**, as its toggle is guarded:
+`filter_scopes(include_hidden=<predicate>)`, fed by `authz.allowed_ids("UpdateApp" | "UpdateAgent",
+ids=...)` (the feature once, one IAM `filter` for the listing). A per-app or per-agent grant to switch
+it lists it while it is off. Settings › Workflows lists the whole set to who holds
+`ListWorkflowSettings`, never filtered by the caller's own right to run each one. An agent the workspace built has no module scope: chat checks its row's
 `enabled` (`chat/.../chat__primary_adapter__dependencies.authorize_agent_use`).
 
 ## Decisions

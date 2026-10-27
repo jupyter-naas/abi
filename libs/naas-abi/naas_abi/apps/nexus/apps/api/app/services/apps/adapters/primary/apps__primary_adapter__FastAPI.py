@@ -392,9 +392,10 @@ def _remote_app_info(app: Any) -> AppInfo:
     )
 
 
-async def _remote_apps_catalog() -> tuple[AppInfo, ...]:
+async def _remote_apps_catalog(*, strict: bool = False) -> tuple[AppInfo, ...]:
     """Apps of READY remote modules (NATS discovery); none when it is off or
-    unreachable, so the loaded modules' apps are always listed."""
+    unreachable, so the loaded modules' apps are always listed. ``strict``
+    raises instead, for a caller that says what it could not read."""
     from naas_abi.apps.nexus.apps.api.app.services.apps.remote.factory import (
         get_remote_app_directory,
     )
@@ -402,6 +403,8 @@ async def _remote_apps_catalog() -> tuple[AppInfo, ...]:
     try:
         apps = await get_remote_app_directory().list_apps()
     except Exception:  # noqa: BLE001 - discovery down: list the local apps
+        if strict:
+            raise
         _log.warning("Could not list remote module apps", exc_info=True)
         return ()
     return tuple(_remote_app_info(app) for app in apps)
@@ -480,10 +483,27 @@ def _existing_config(
     return partial(apps_service.get_app_config, workspace_id, app_id)
 
 
-async def _may_switch(current_user: User, workspace_id: str) -> bool:
-    """Whether the caller turns the workspace's apps on and off (``UpdateApp``):
-    they alone list the ones turned off, to turn them back on."""
-    return await authz.allowed("UpdateApp", user=current_user, workspace=workspace_id, id="-")
+async def _may_switch(current_user: User, workspace_id: str, app_id: str) -> bool:
+    """Whether the caller turns this app on and off in the workspace (``UpdateApp``
+    on it, as the toggle asks): they alone list it while it is off, to turn it
+    back on."""
+    return await authz.allowed("UpdateApp", user=current_user, workspace=workspace_id, id=app_id)
+
+
+async def _switchable(
+    current_user: User, workspace_id: str, app_ids: list[str]
+) -> Callable[[Any], Awaitable[bool]]:
+    """``filter_scopes``'s ``include_hidden`` for a listing: an app turned off is
+    listed to who may turn that one back on (``UpdateApp`` on it), all asked in
+    one call."""
+    may = await authz.allowed_ids(
+        "UpdateApp", user=current_user, workspace=workspace_id, ids=app_ids
+    )
+
+    async def switchable(app_id: str) -> bool:
+        return app_id in may
+
+    return switchable
 
 
 async def _ensure_in_set(workspace_id: str, app_id: str) -> None:
@@ -753,16 +773,15 @@ async def list_apps(
     except Exception:
         loaded_modules = {}
 
+    found = (*_scan_apps_catalog(), *await _remote_apps_catalog())
+    switchable = await _switchable(current_user, workspace_id, [a.app_id for a in found])
     catalog = await authz.filter_scopes(
-        await scope_sets.within_set(
-            (*_scan_apps_catalog(), *await _remote_apps_catalog()),
-            workspace=workspace_id,
-            scope_of=lambda app: app_scope(app.app_id),
-        ),
+        found,
         user=current_user,
         workspace=workspace_id,
         scope_of=lambda app: app_scope(app.app_id),
-        include_hidden=await _may_switch(current_user, workspace_id),
+        include_hidden=lambda app: switchable(app.app_id),
+        within_set=True,
     )
     workspace_slug = await _workspace_slug(workspace_id)
 
@@ -808,16 +827,15 @@ async def list_app_configs(
 ) -> list[dict]:
     """List the stored app configs of a workspace, for the apps of its set the
     caller may open (those turned off, for who may turn them on)."""
+    found = await apps_service.list_app_configs(workspace_id)
+    switchable = await _switchable(current_user, workspace_id, [r.app_id for r in found])
     records = await authz.filter_scopes(
-        await scope_sets.within_set(
-            await apps_service.list_app_configs(workspace_id),
-            workspace=workspace_id,
-            scope_of=lambda record: app_scope(record.app_id),
-        ),
+        found,
         user=current_user,
         workspace=workspace_id,
         scope_of=lambda record: app_scope(record.app_id),
-        include_hidden=await _may_switch(current_user, workspace_id),
+        include_hidden=lambda record: switchable(record.app_id),
+        within_set=True,
     )
     return [_serialize_record(r) for r in records]
 
@@ -862,7 +880,7 @@ async def get_app_config(
         scope,
         user=current_user,
         workspace=workspace_id,
-        include_hidden=await _may_switch(current_user, workspace_id),
+        include_hidden=await _may_switch(current_user, workspace_id, app_id),
     ):
         raise HTTPException(status_code=404, detail="App config not found")
     await _ensure_app_exists(app_id, _existing_config(apps_service, workspace_id, app_id))

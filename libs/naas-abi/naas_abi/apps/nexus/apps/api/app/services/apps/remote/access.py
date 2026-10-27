@@ -14,22 +14,17 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import HTTPException
-from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
-    resolve_app_enabled,
-    workspace_seed_for_slug,
-)
+from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import resolve_app_enabled
+from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import workspace_seed_apps
 from naas_abi.apps.nexus.apps.api.app.services.apps.scopes import app_scope
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 
 
 async def enabled_in(registry: Any, workspace: Any, app_id: str) -> bool:
-    """Whether the workspace enables the app: its stored state, else its seed."""
+    """Whether the workspace enables the app: its stored state, else its seed (its
+    stored catalog seed first, as the catalog reads it)."""
     states = await registry.apps.get_enabled_states(workspace.id)
-    seed = workspace_seed_for_slug(getattr(workspace, "slug", None))
-    seed_apps = {
-        str(app).strip() for app in (getattr(seed, "apps", None) or ()) if str(app).strip()
-    }
-    return resolve_app_enabled(app_id, states, seed_apps)
+    return resolve_app_enabled(app_id, states, workspace_seed_apps(workspace))
 
 
 async def choose_workspace(

@@ -22,21 +22,32 @@ export interface WorkspaceResources {
   features: string[];
   modules: ModuleResources[];
   totals: Record<ResourceKind, number>;
+  /** Kinds a source did not answer for (discovery, the jobs): their totals may be short. */
+  unavailable?: ResourceKind[];
 }
 
 type Fetcher = (url: string) => Promise<Response>;
 
-/** The workspace's resources; null when the caller may not read them (or the call fails). */
+/**
+ * The workspace's resources. `denied`: the caller may not read them (401, 403), a stable
+ * answer; `failed`: no answer this time (an error, the network), which is never kept.
+ */
+export type ResourcesAnswer =
+  | { kind: 'ok'; resources: WorkspaceResources }
+  | { kind: 'denied' }
+  | { kind: 'failed' };
+
 export async function fetchWorkspaceResources(
   workspaceId: string,
   fetcher: Fetcher = authFetch
-): Promise<WorkspaceResources | null> {
+): Promise<ResourcesAnswer> {
   try {
     const response = await fetcher(`/api/workspaces/${encodeURIComponent(workspaceId)}/resources`);
-    if (!response.ok) return null;
-    return (await response.json()) as WorkspaceResources;
+    if (response.status === 401 || response.status === 403) return { kind: 'denied' };
+    if (!response.ok) return { kind: 'failed' };
+    return { kind: 'ok', resources: (await response.json()) as WorkspaceResources };
   } catch {
-    return null;
+    return { kind: 'failed' };
   }
 }
 

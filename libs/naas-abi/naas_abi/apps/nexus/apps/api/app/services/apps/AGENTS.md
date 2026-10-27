@@ -26,8 +26,11 @@ its set; on or off for everyone in it is `app_configs.enabled`.
   is 403; turning one off, always allowed.
 - **Off is refused.** An app is on by its row, else the workspace's catalog seed, else off
   (`resolve_app_enabled`). One off is refused to everyone (`access-token`, `remote-grant`, the workspace a remote app
-  opens in: 403 "This app is turned off in this workspace") and listed only to who holds `UpdateApp`, to turn it back
-  on. A link minted before it was turned off works until it expires.
+  opens in: 403 "This app is turned off in this workspace") and listed only to who holds `UpdateApp` on that app, to
+  turn it back on. A link minted before it was turned off works until it expires.
+- **One seed rule.** The seed that turns an app on is the workspace's stored `catalog_seed`, else the config's
+  (`core/workspace_seed_catalog.workspace_seed_apps`): the catalog, the visibility, the remote apps' workspace
+  (`remote/access.py`) and the Apps agent's tools all read it, so what is shown is what is enforced.
 
 ## Tests
 

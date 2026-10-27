@@ -231,14 +231,11 @@ async def list_workspace_workflows(
     there; one turned off there is left out."""
     found = await _call(service.list())
     usable = await authz.filter_scopes(
-        await scope_sets.within_set(
-            found.workflows,
-            workspace=workspace_id,
-            scope_of=lambda d: workflow_scope(d.module_id, d.name),
-        ),
+        found.workflows,
         user=user,
         workspace=workspace_id,
         scope_of=lambda d: workflow_scope(d.module_id, d.name),
+        within_set=True,
     )
     return {
         "workflows": [
@@ -259,25 +256,20 @@ async def list_workspace_workflows(
 @workspace_router.get("/settings", dependencies=[guard("ListWorkflowSettings", literal="-")])
 async def list_workflow_settings(
     workspace_id: str,
-    user: User = Depends(get_current_user_required),
     service: WorkflowsService = Depends(get_workflows_service),
     store: WorkflowVisibilityPort = Depends(get_workflow_visibility),
 ) -> Any:
     """Every workflow and pipeline of the workspace's set (the jobs catalogs', and
-    those an engine module's agents run as tools), on or off there."""
+    those an engine module's agents run as tools), on or off there. Who may list
+    and switch them is ``ListWorkflowSettings`` / ``UpdateWorkflow``, never the
+    caller's own right to run each one."""
     from naas_abi.apps.nexus.apps.api.app.services.modules.scopes import (
         workflows as module_workflows,
     )
 
     found = {(i.type, i.module, i.name): i for i in await module_workflows(service)}
-    listed = await authz.filter_scopes(
-        await scope_sets.within_set(
-            found.values(), workspace=workspace_id, scope_of=lambda i: _scope(i)
-        ),
-        user=user,
-        workspace=workspace_id,
-        scope_of=lambda i: _scope(i),
-        include_hidden=True,
+    listed = await scope_sets.within_set(
+        found.values(), workspace=workspace_id, scope_of=lambda i: _scope(i)
     )
     off = {
         (s.type, s.module_id, s.name) for s in await store.list_for(workspace_id) if not s.enabled

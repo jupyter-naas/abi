@@ -1,12 +1,12 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useParams, usePathname } from 'next/navigation';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { Header } from '@/components/shell/header';
 import { SETTINGS_GROUPS, settingsItemFor, settingsItemShown } from '@/components/shell/settings-nav';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
-import { useWorkspaceResources } from '@/hooks/use-workspace-resources';
+import { reloadWorkspaceResources, useWorkspaceResources } from '@/hooks/use-workspace-resources';
 import { SettingsReloadProvider } from '@/components/settings/settings-reload';
 import { NotInWorkspace } from './not-in-workspace';
 
@@ -34,8 +34,14 @@ export default function SettingsLayout({
     [workspaceId]
   );
   useDevRouteWarmup(settingsHrefs);
+  // Reload: the workspaces and what this one has.
+  const reload = useCallback(
+    () => Promise.all([fetchWorkspaces(), reloadWorkspaceResources(workspaceId)]),
+    [fetchWorkspaces, workspaceId]
+  );
   // A page of something outside the workspace's set has nothing to manage here.
-  const { resources } = useWorkspaceResources(workspaceId);
+  // Read again each time the settings open: a set changed on Modules & features shows.
+  const { resources } = useWorkspaceResources(workspaceId, { refresh: true });
   const item = settingsItemFor(pathname ?? '');
   const outsideSet = Boolean(item && resources && !settingsItemShown(item, resources));
   const page = outsideSet && item && resources ? (
@@ -51,7 +57,7 @@ export default function SettingsLayout({
         subtitle={currentWorkspace?.name || 'Configure your workspace'}
       />}
 
-      <SettingsReloadProvider onReload={fetchWorkspaces}>
+      <SettingsReloadProvider onReload={reload}>
         {isFullPage ? (
           <div className="flex-1 overflow-hidden">{page}</div>
         ) : (

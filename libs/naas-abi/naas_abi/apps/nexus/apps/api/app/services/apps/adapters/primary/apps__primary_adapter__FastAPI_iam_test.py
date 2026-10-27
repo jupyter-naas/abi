@@ -383,3 +383,31 @@ async def test_an_app_turned_off_is_refused_to_everyone_and_listed_to_its_admins
         listed = (await http.get("/api/apps/?workspace_id=ws-1")).json()["apps"]
         assert [(a["app_id"], a["enabled"]) for a in listed] == [(APP, False)]
         assert (await http.get(f"/api/apps/ws-1/{APP}")).json()["enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_a_grant_to_switch_one_app_lists_that_app_while_it_is_off(shown) -> None:
+    """Who may turn an app back on is asked on that app, as the toggle is: a member
+    granted UpdateApp on it alone turns it off and still sees it to turn it on."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.names import nexus_resource
+
+    shown.iam.allow_scope("member", ModuleScope("app", "acme.ops", "map"), shown.scope)
+    app_resource = nexus_resource("app", org="o", workspace="w", id=APP).removeprefix("abi:o:w:")
+    shown.iam.allow("member", ["nexus:UpdateApp"], [f"${{scope}}:{app_resource}"], shown.scope)
+    async with shown.as_("member") as http:
+        assert (
+            await http.patch(f"/api/apps/ws-1/{APP}", json={"enabled": False})
+        ).status_code == 200
+        listed = (await http.get("/api/apps/?workspace_id=ws-1")).json()["apps"]
+        assert [(a["app_id"], a["enabled"]) for a in listed] == [(APP, False)]
+        assert (await http.get(f"/api/apps/ws-1/{APP}")).status_code == 200
+        assert (
+            await http.patch(f"/api/apps/ws-1/{APP}", json={"enabled": True})
+        ).status_code == 200
+    # Another member, with the app but not the right to switch it, sees nothing off.
+    shown.iam.grant("other", "member", shown.scope)
+    shown.iam.allow_scope("other", ModuleScope("app", "acme.ops", "map"), shown.scope)
+    async with shown.as_("admin") as http:
+        await http.patch(f"/api/apps/ws-1/{APP}", json={"enabled": False})
+    async with shown.as_("other") as http:
+        assert (await http.get("/api/apps/?workspace_id=ws-1")).json()["apps"] == []

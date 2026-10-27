@@ -302,7 +302,7 @@ def test_resources_are_what_the_workspace_has_read_only(monkeypatch, team) -> No
     (Settings: which pages it shows, General)."""
     from naas_abi.apps.nexus.apps.api.app.services.modules import scopes as module_scopes
 
-    async def gathered():
+    async def gathered(unavailable=None):
         return module_scopes.build(
             [
                 module_scopes.Exposed("agent", "acme.people", "A"),
@@ -326,4 +326,32 @@ def test_resources_are_what_the_workspace_has_read_only(monkeypatch, team) -> No
         {"module": "acme.people", "agents": 1, "apps": 0, "workflows": 0, "pipelines": 0},
     ]
     assert body["totals"] == {"agents": 1, "apps": 1, "workflows": 0, "pipelines": 0}
+    assert body["unavailable"] == []
     assert _client(user="member")[0].get("/api/workspaces/ws-1/resources").status_code == 403
+
+
+def test_resources_name_the_kinds_a_source_did_not_answer_for(monkeypatch, team) -> None:
+    """The jobs or discovery down: their kinds are named, so the settings never
+    take a short count for "the workspace has none"."""
+    from naas_abi.apps.nexus.apps.api.app.services.modules import scopes as module_scopes
+
+    async def jobs_down(service=None):
+        raise RuntimeError("no broker")
+
+    async def no_apps():
+        module_scopes._missing("apps")  # remote apps unreachable, in part
+        return []
+
+    monkeypatch.setattr(module_scopes, "engine_agents", lambda: [])
+    monkeypatch.setattr(module_scopes, "remote_agents", lambda: [])
+    monkeypatch.setattr(module_scopes, "apps", no_apps)
+    monkeypatch.setattr(module_scopes, "workflows", jobs_down)
+    monkeypatch.setattr(module_scopes, "declared_catalogs", lambda: [])
+    monkeypatch.setattr(module_scopes, "engine_modules", lambda: [])
+    client, service = _client(user="admin")
+    service.get_workspace.return_value = _record()
+
+    body = client.get("/api/workspaces/ws-1/resources").json()
+
+    assert body["unavailable"] == ["apps", "pipelines", "workflows"]
+    assert body["totals"] == {"agents": 0, "apps": 0, "workflows": 0, "pipelines": 0}

@@ -675,7 +675,9 @@ async def get_workspace_resources(
 
     ``features`` are the deployment's enabled features in the set; ``modules``
     each module with something in the set, with how many of its agents, apps,
-    workflows and pipelines are; ``totals`` add them up; ``can_edit_set`` is
+    workflows and pipelines are; ``totals`` add them up, and ``unavailable``
+    names the kinds a source did not answer for (discovery, the jobs), whose
+    totals may be short; ``can_edit_set`` is
     whether the caller may change the set (``iam:PutSet``), on the organization's
     Modules & features page."""
     from naas_abi.apps.nexus.apps.api.app.services.modules import scopes as module_scopes
@@ -684,7 +686,8 @@ async def get_workspace_resources(
     if record is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
     scope_set = await scope_sets.workspace_set(workspace_id)
-    modules = module_scopes.in_set(await module_scopes.gather(), scope_set)
+    unavailable: set[str] = set()
+    modules = module_scopes.in_set(await module_scopes.gather(unavailable), scope_set)
     can_edit = (
         await get_iam_admin_service().may_edit_set(current_user, record.organization_id, record.id)
         if record.organization_id
@@ -703,6 +706,8 @@ async def get_workspace_resources(
             plural: sum(entry[plural] for entry in modules)
             for plural in module_scopes.PLURAL.values()
         },
+        # Kinds a source did not answer for: their totals may be short.
+        "unavailable": sorted(unavailable),
     }
 
 

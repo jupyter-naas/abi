@@ -149,3 +149,26 @@ def test_what_a_workspace_has_is_each_module_with_its_items_in_the_set() -> None
         {"module": "naas_abi", "agents": 1, "apps": 0, "workflows": 0, "pipelines": 0},
     ]
     assert scopes.in_set(listed, ScopeSet("org-1", "ws-1", (), ())) == []
+
+
+@pytest.mark.asyncio
+async def test_discovery_down_names_the_apps_as_unavailable(monkeypatch) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.apps.adapters.primary import (
+        apps__primary_adapter__FastAPI as apps_api,
+    )
+
+    async def discovery_down(*, strict=False):
+        raise RuntimeError("no NATS")
+
+    async def nothing():
+        return []
+
+    monkeypatch.setattr(apps_api, "_scan_apps_catalog", lambda: ())
+    monkeypatch.setattr(apps_api, "_remote_apps_catalog", discovery_down)
+    for name in ("engine_agents", "remote_agents", "workflows"):
+        monkeypatch.setattr(scopes, name, nothing)
+    monkeypatch.setattr(scopes, "declared_catalogs", lambda: [])
+    monkeypatch.setattr(scopes, "engine_modules", lambda: [])
+    unavailable: set[str] = set()
+    assert await scopes.gather(unavailable) == []
+    assert unavailable == {"apps"}

@@ -78,10 +78,36 @@ async def test_without_a_workspace_the_first_that_enables_the_app(
 async def test_a_workspace_seed_enables_an_app_without_a_stored_state(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from naas_abi.apps.nexus.apps.api.app.core import workspace_seed_catalog
+
     monkeypatch.setattr(
-        access,
-        "workspace_seed_for_slug",
+        workspace_seed_catalog,
+        "_yaml_seed",
         lambda slug: SimpleNamespace(apps=[APP]) if slug == "ws-a" else None,
     )
 
     assert await access.choose_workspace(REGISTRY, "u-1", APP, "ws-a") == "ws-a"
+
+
+@pytest.mark.asyncio
+async def test_a_stored_catalog_seed_wins_over_the_config_as_the_catalog_reads_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from naas_abi.apps.nexus.apps.api.app.core import workspace_seed_catalog
+
+    monkeypatch.setattr(
+        workspace_seed_catalog, "_yaml_seed", lambda slug: SimpleNamespace(apps=[APP])
+    )
+    seeds = {"ws-a": {"apps": []}, "ws-c": {"apps": [APP]}}
+
+    async def get(workspace_id: str):
+        return SimpleNamespace(
+            id=workspace_id, slug=workspace_id, catalog_seed=seeds.get(workspace_id)
+        )
+
+    stored = Registry({"u-1": ["ws-a", "ws-c"]}, {})
+    stored.workspaces.get_workspace = get
+    # ws-a's stored seed names no app: the config's does not turn it on.
+    with pytest.raises(HTTPException):
+        await access.choose_workspace(stored, "u-1", APP, "ws-a")
+    assert await access.choose_workspace(stored, "u-1", APP, "ws-c") == "ws-c"

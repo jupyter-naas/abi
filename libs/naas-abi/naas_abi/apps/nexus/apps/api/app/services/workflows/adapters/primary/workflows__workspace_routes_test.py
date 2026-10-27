@@ -14,6 +14,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
     User,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
+from naas_abi.apps.nexus.apps.api.app.services.iam.testing import LEGACY_NEXUS_ISSUER
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.secondary.in_memory_jobs import (
     InMemoryJobCatalog,
     InMemoryJobControl,
@@ -39,6 +40,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workflows.adapters.secondary.in_m
 )
 from naas_abi.apps.nexus.apps.api.app.services.workflows.factory import get_workflows_service
 from naas_abi.apps.nexus.apps.api.app.services.workflows.service import WorkflowsService
+from naas_abi_core.engine.call_context import as_service_account
 
 NOW = datetime(2026, 10, 2, 13, 0, 0, tzinfo=UTC)
 WS = "/api/workspaces/ws-1/workflows"
@@ -314,3 +316,68 @@ def test_workflow_settings_list_the_set_and_turn_on_nothing_outside_it(switches)
     assert "not in the workspace's set" in refused.json()["detail"]
     # Off is always allowed.
     assert admin.put(f"{WS}/settings", json={**on, "enabled": False}).status_code == 200
+
+
+def test_turning_a_workflow_off_keeps_the_runs_already_started(switches) -> None:
+    """Off refuses starting it, not reading results someone already has."""
+    switches.iam.allow_scope("member", INGEST, switches.scope)
+    switches.iam.allow(
+        "member",
+        ["module:ReadWorkflowRuns"],
+        ["${scope}:module:workflow/acme.flows/ingest"],
+        switches.scope,
+    )
+    member = switches.client("member")
+    run_id = member.post(f"{WS}/acme.flows/ingest/runs", json={}).json()["run_id"]
+    switches.host_records(run_id)
+    off = {"type": "workflow", "module_id": "acme.flows", "name": "ingest", "enabled": False}
+    assert switches.client("admin").put(f"{WS}/settings", json=off).status_code == 200
+
+    assert [r["run_id"] for r in member.get(f"{WS}/runs").json()["runs"]] == [run_id]
+    read = member.get(f"{WS}/acme.flows/runs/{run_id}")
+    assert read.status_code == 200
+    assert read.json()["result"] == {"ok": True}
+    assert member.post(f"{WS}/acme.flows/ingest/runs", json={}).status_code == 403
+
+
+def test_workflow_settings_list_the_set_not_what_the_admin_may_run(switches) -> None:
+    """An admin denied running a module's pipelines still lists and switches them;
+    so does a group granted only the settings actions (no module scope)."""
+    switches.iam.allow(
+        "member",
+        ["nexus:ListWorkflowSettings", "nexus:UpdateWorkflow", "nexus:UseFeature"],
+        [
+            "${scope}:nexus:workflow/*",
+            "${scope}:nexus:feature/settings",
+        ],
+        switches.scope,
+    )
+    with as_service_account("engine"):
+        policy = switches.iam.iam.create_policy(
+            "no-pipelines",
+            {
+                "version": "2026-10-13",
+                "statements": [
+                    {
+                        "effect": "Deny",
+                        "actions": ["module:RunPipeline"],
+                        "resources": ["${scope}:module:pipeline/acme.flows/*"],
+                    }
+                ],
+            },
+        )
+        admin = switches.iam.iam.ensure_user(LEGACY_NEXUS_ISSUER, "admin", provider="nexus")
+        switches.iam.iam.attach_policy(policy.id, admin.id, switches.scope)
+    every = {("workflow", "ingest"), ("workflow", "map_item"), ("pipeline", "pipeline.daily")}
+    for who in ("admin", "member"):
+        client = switches.client(who)
+        listed = client.get(f"{WS}/settings")
+        assert listed.status_code == 200, who
+        assert {(w["type"], w["name"]) for w in listed.json()["workflows"]} == every, who
+    off = {
+        "type": "pipeline",
+        "module_id": "acme.flows",
+        "name": "pipeline.daily",
+        "enabled": False,
+    }
+    assert switches.client("admin").put(f"{WS}/settings", json=off).status_code == 200

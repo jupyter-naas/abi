@@ -57,12 +57,13 @@ all.
 | `POST /{module_id}/{name}/runs` | As the platform route, for the caller: 403 without the scope. The run is recorded as theirs in this workspace; an `Idempotency-Key` is theirs alone (hashed with the workspace and the user). |
 | `GET /runs` | `{runs: [{module_id, workflow, type, run_id, started_at}]}`: the runs the caller started here (50, newest first), of what they may still read (`ReadWorkflowRuns` / `ReadPipelineRuns`). |
 | `GET /{module_id}/runs/{run_id}` | A run the caller started here, as the platform route answers it; 404 for any other run (another user's, another workspace's, an old run under a reused id), 403 without `Read*Runs`. |
-| `GET /settings` | Workspace settings › Workflows (`nexus:ListWorkflowSettings`, admins): `{workflows: [{type, module_id, name, display_name, description, enabled}]}`, every workflow and pipeline of the set, the jobs catalogs' and those an engine module's agents run as tools (`modules/scopes.workflows`), off ones included. |
+| `GET /settings` | Workspace settings › Workflows (`nexus:ListWorkflowSettings`, admins): `{workflows: [{type, module_id, name, display_name, description, enabled}]}`, every workflow and pipeline of the set, the jobs catalogs' and those an engine module's agents run as tools (`modules/scopes.workflows`), off ones included; never filtered by the caller's own right to run each one (a Deny on running them, or a group granted only the settings actions, still lists and switches them). |
 | `PUT /settings` | `{type, module_id, name, enabled}` (`nexus:UpdateWorkflow`, admins): on or off for everyone in the workspace. Turning one on outside the set is 403; off, always. |
 
 **On or off.** One never switched is on. One switched off is refused to everyone in the workspace (403 "This
-workflow is turned off in this workspace"): listing, start, its runs, an agent's tool (`services/visibility`, asked by
-`authz` after IAM allows the module scope).
+workflow is turned off in this workspace"): listing, start, an agent's tool (`services/visibility`, asked by
+`authz` after IAM allows its use). The runs already started stay listed and readable (`/runs`, `/{module}/runs/{id}`):
+turning a workflow off refuses starting it, not reading results someone has.
 
 A start runs for the caller: the request's context names them (`identity_events/middleware.py`), and the job's host
 checks `discovery:TriggerJob` for them, which members hold on every module's workflows (`workflow/*`, never a plain job); the module scope is what tells workflows apart.

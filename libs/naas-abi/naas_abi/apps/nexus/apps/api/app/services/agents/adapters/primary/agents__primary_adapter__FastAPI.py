@@ -185,39 +185,41 @@ async def _workspace_slug(workspace_id: str) -> str | None:
         return result.scalar_one_or_none()
 
 
-async def _may_switch(current_user: User, workspace_id: str) -> bool:
-    """Whether the caller turns the workspace's agents on and off (``UpdateAgent``):
-    they alone list the ones turned off, to turn them back on."""
-    return await authz.allowed("UpdateAgent", user=current_user, workspace=workspace_id, id="-")
-
-
 async def _visible_to_caller(
-    agents: list[AgentRecord],
-    current_user: User,
-    workspace_id: str,
-    *,
-    include_hidden: bool = False,
+    agents: list[AgentRecord], current_user: User, workspace_id: str
 ) -> list[AgentRecord]:
     """The agents of ``workspace_id`` the caller may use: a module's agent must be
     in the workspace's set and needs its module scope (``module:UseAgent``), an
-    office agent its feature too. One turned off is left out unless
-    ``include_hidden`` (who may turn it back on)."""
+    office agent its feature too. One turned off (a module's hidden by the
+    workspace, or any row not enabled) is listed only to who may turn that one
+    back on."""
     flags = await caller_feature_flags(current_user, workspace_id, feature_keys_of(agents))
     classes = _get_agent_class_registry()
 
     def scope_of(agent: AgentRecord) -> ModuleScope | None:
         return agent_scope(agent, classes, _agent_class_modules)
 
+    # Who may turn each one back on (``UpdateAgent`` on it, as the toggle asks),
+    # in one call for the rows that are off.
+    switchable = await authz.allowed_ids(
+        "UpdateAgent",
+        user=current_user,
+        workspace=workspace_id,
+        ids=[agent.id for agent in agents if not agent.enabled],
+    )
+
+    async def may_switch(agent: AgentRecord) -> bool:
+        return agent.id in switchable
+
     usable = await authz.filter_scopes(
-        await scope_sets.within_set(
-            filter_feature_agents(agents, flags), workspace=workspace_id, scope_of=scope_of
-        ),
+        filter_feature_agents(agents, flags),
         user=current_user,
         workspace=workspace_id,
         scope_of=scope_of,
-        include_hidden=include_hidden,
+        include_hidden=may_switch,
+        within_set=True,
     )
-    return usable if include_hidden else [agent for agent in usable if agent.enabled]
+    return [agent for agent in usable if agent.enabled or agent.id in switchable]
 
 
 async def _ensure_in_set(agent: AgentRecord | AgentCreateInput) -> None:
@@ -1072,12 +1074,7 @@ async def _enriched_workspace_agents(
 
     return [
         _enrich_agent(agent, class_name_to_agent_class)
-        for agent in await _visible_to_caller(
-            agent_list,
-            current_user,
-            workspace_id,
-            include_hidden=await _may_switch(current_user, workspace_id),
-        )
+        for agent in await _visible_to_caller(agent_list, current_user, workspace_id)
     ]
 
 
@@ -1247,11 +1244,6 @@ async def get_agent(
     # Same rule as the listing: an office agent the caller's features do not
     # reach, or one turned off, is not addressable by id either, or the gate
     # would only hide it.
-    if not await _visible_to_caller(
-        [agent],
-        current_user,
-        agent.workspace_id,
-        include_hidden=await _may_switch(current_user, agent.workspace_id),
-    ):
+    if not await _visible_to_caller([agent], current_user, agent.workspace_id):
         raise HTTPException(status_code=404, detail="Agent not found")
     return agent

@@ -82,7 +82,8 @@ export const DEFAULT_SETTINGS_PATH = SETTINGS_GROUPS[0].items[0].href;
 /**
  * Whether the workspace has what an entry manages. With the workspace's resources
  * unknown (still loading, or the caller may not read them), the caller's own
- * feature flags decide the feature, and module resources are assumed.
+ * feature flags decide the feature, and module resources are assumed; so are those
+ * of a kind whose source did not answer (`unavailable`).
  */
 export function settingsItemShown(
   item: SettingsNavItem,
@@ -91,7 +92,11 @@ export function settingsItemShown(
 ): boolean {
   if (resources) {
     if (item.feature && !resources.features.includes(item.feature)) return false;
-    if (item.kinds && !item.kinds.some((kind) => (resources.totals[kind] ?? 0) > 0)) return false;
+    if (item.kinds) {
+      // A kind whose source did not answer may have items: never hidden for it.
+      const unknown = item.kinds.some((kind) => resources.unavailable?.includes(kind));
+      if (!unknown && !item.kinds.some((kind) => (resources.totals[kind] ?? 0) > 0)) return false;
+    }
     return true;
   }
   if (item.feature && flags && flags[item.feature] === false) return false;

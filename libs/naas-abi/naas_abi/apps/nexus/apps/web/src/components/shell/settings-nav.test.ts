@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   SETTINGS_GROUPS,
   settingsItemFor,
+  settingsItemShown,
   visibleSettingsGroups,
 } from '@/components/shell/settings-nav';
 import { describeModuleResources, type WorkspaceResources } from '@/lib/workspace-resources';
@@ -46,6 +47,16 @@ describe('workspace settings nav', () => {
     expect(shown).toContain('Agents');
     const pipelines = labels(visibleSettingsGroups(resources({ totals: { ...none, pipelines: 2 } })));
     expect(pipelines).toContain('Workflows');
+  });
+
+  it('never hides an entry for a kind whose source did not answer', () => {
+    const none = { agents: 0, apps: 0, workflows: 0, pipelines: 0 };
+    const down = resources({ totals: none, unavailable: ['workflows', 'pipelines'] });
+    const shown = labels(visibleSettingsGroups(down));
+    // The jobs did not answer: Workflows stays; Apps, answered with none, does not.
+    expect(shown).toContain('Workflows');
+    expect(shown).not.toContain('Apps');
+    expect(settingsItemShown(settingsItemFor('/workspace/ws-1/settings/workflows')!, down)).toBe(true);
   });
 
   it('follows the caller flags while the set is unknown', () => {

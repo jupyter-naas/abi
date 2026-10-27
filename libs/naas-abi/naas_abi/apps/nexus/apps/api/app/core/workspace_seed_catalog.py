@@ -83,6 +83,15 @@ def effective_seed_apps(slug: str | None, catalog_seed: dict[str, Any] | None) -
     return set()
 
 
+def workspace_seed_apps(workspace: Any) -> set[str]:
+    """The apps a workspace record's seed turns on (``effective_seed_apps``: its
+    stored ``catalog_seed`` first, then the config's), as the catalog and the
+    visibility read them."""
+    raw = getattr(workspace, "catalog_seed", None)
+    catalog_seed = raw if isinstance(raw, dict) or raw is None else parse_catalog_seed(raw)
+    return effective_seed_apps(getattr(workspace, "slug", None), catalog_seed)
+
+
 def _unique_sorted(values: Sequence[str]) -> list[str]:
     seen: set[str] = set()
     out: list[str] = []

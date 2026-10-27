@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Iterable
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -24,6 +25,17 @@ from naas_abi_core.services.iam import module_scopes
 from naas_abi_core.services.iam.catalog import ActionCatalog
 
 _log = logging.getLogger(__name__)
+
+# The kinds (``PLURAL`` values) a ``gather`` could not read in full: what it lists
+# of them may be short. A source that answers in part says so here.
+_unavailable: ContextVar[set[str] | None] = ContextVar("module_scopes_unavailable", default=None)
+
+
+def _missing(*kinds: str) -> None:
+    found = _unavailable.get()
+    if found is not None:
+        found.update(kinds)
+
 
 PLURAL = {
     module_scopes.AGENT: "agents",
@@ -191,7 +203,13 @@ async def apps() -> list[Exposed]:
     from naas_abi.apps.nexus.apps.api.app.services.apps.scopes import app_scope
 
     found: list[Exposed] = []
-    for app in (*apps_api._scan_apps_catalog(), *await apps_api._remote_apps_catalog()):
+    try:
+        remote = await apps_api._remote_apps_catalog(strict=True)
+    except Exception:  # noqa: BLE001 - discovery down: the loaded modules' apps
+        _log.warning("Module scopes: remote apps unavailable", exc_info=True)
+        _missing("apps")
+        remote = ()
+    for app in (*apps_api._scan_apps_catalog(), *remote):
         scope = app_scope(app.app_id)
         if scope is not None:
             found.append(
@@ -222,6 +240,7 @@ async def workflows(service: Any = None) -> list[Exposed]:
         listed = await (service or get_workflows_service()).list()
     except Exception:  # noqa: BLE001 - no broker, no jobs: the engine's own below
         _log.debug("Jobs catalogs unavailable for module scopes", exc_info=True)
+        _missing("workflows", "pipelines")
     else:
         for d in listed.workflows:
             scope = workflow_scope(d.module_id, d.name)
@@ -238,9 +257,18 @@ def declared_catalogs() -> list[ActionCatalog]:
     return [c for c in registry.all() if c.module] if registry is not None else []
 
 
-async def gather() -> list[dict[str, Any]]:
-    """Every module with its scopes, from every source that answers."""
+async def gather(unavailable: set[str] | None = None) -> list[dict[str, Any]]:
+    """Every module with its scopes, from every source that answers. The kinds a
+    source could not read in full are added to ``unavailable`` (``agents``,
+    ``apps``, ``workflows``, ``pipelines``): what is listed of them may be short."""
     exposed: list[Exposed] = []
+    token = _unavailable.set(unavailable if unavailable is not None else set())
+    kinds_of = {
+        "engine agents": ("agents",),
+        "remote agents": ("agents",),
+        "apps": ("apps",),
+        "workflows": ("workflows", "pipelines"),
+    }
 
     async def collect(name: str, source: Any) -> Any:
         try:
@@ -248,6 +276,7 @@ async def gather() -> list[dict[str, Any]]:
             return await result if hasattr(result, "__await__") else result
         except Exception:  # noqa: BLE001 - one source down leaves its part out
             _log.warning("Module scopes: %s unavailable", name, exc_info=True)
+            _missing(*kinds_of.get(name, ()))
             return []
 
     # The engine's sources read in process; discovery and the jobs are NATS calls,
@@ -259,6 +288,7 @@ async def gather() -> list[dict[str, Any]]:
         collect("workflows", workflows),
         collect("declared catalogs", declared_catalogs),
     )
+    _unavailable.reset(token)
     for part in parts:
         exposed.extend(part)
     return build(exposed, catalogs, engine_modules())

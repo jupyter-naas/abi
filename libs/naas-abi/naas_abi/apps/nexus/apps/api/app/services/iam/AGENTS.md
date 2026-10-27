@@ -96,11 +96,13 @@ workspace the request names, after the user's membership there. One source of tr
 ## Visibility
 
 A workspace's admins turn each agent, app, workflow and pipeline of its set on or off for everyone in it
-(`services/visibility`, workspace settings › Agents, Apps, Workflows). `authz` asks it after IAM allows a
-module scope: one turned off is refused (`decide_scope` reason `hidden`, 403 "This <type> is turned off in this
-workspace"), left out of `filter_scopes` and skipped by `scope_allowed_in_any`, for every role, the platform
-admin included. `include_hidden=True` is for who may turn it back on: the listings pass it when the caller holds
-`UpdateApp` / `UpdateAgent` (apps, agents) or `ListWorkflowSettings`. The settings actions are `nexus`'s
+(`services/visibility`, workspace settings › Agents, Apps, Workflows). `authz` asks it after IAM allows the
+use of a module scope (its use action; reading one's own runs is not a use): one turned off is refused
+(`decide_scope` reason `hidden`, 403 "This <type> is turned off in this workspace"), left out of `filter_scopes`
+and skipped by `scope_allowed_in_any`, for every role, the platform admin included. A listing still shows it to
+who may turn that one back on: `filter_scopes(include_hidden=<predicate>)` with `authz.allowed_ids` (`UpdateApp`
+/ `UpdateAgent` on each resource, in one `filter`). `filter_scopes(within_set=True)` is a listing of the
+workspace: its set first. The settings actions are `nexus`'s
 (`InstallApp`, `UpdateApp`, `UninstallApp`, `UpdateAgent`; `ListWorkflowSettings` and `UpdateWorkflow`,
 `catalog/workflows.py`, admin, feature `settings`); IAM never sees the state itself.
 

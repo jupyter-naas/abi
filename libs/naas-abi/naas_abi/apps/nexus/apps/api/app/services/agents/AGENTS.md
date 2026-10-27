@@ -23,7 +23,7 @@ the workspace built is `nexus:UseAgent` and the roles.
   effective set (`iam/sets.within_set`), for everyone, the platform admin included; an agent the workspace built is
   always its own. Turning a module's agent on, or creating a row for one, outside the set is 403.
 - **On or off for everyone.** `enabled` (with `enabled_override`, so a later sync keeps the choice) is the workspace's
-  switch. One off is listed only to who holds `UpdateAgent`, and refused to everyone when used: chat
+  switch. One off is listed only to who holds `UpdateAgent` on that agent, and refused to everyone when used: chat
   (`authorize_agent_use` checks the row), `/v1`, and as a sub-agent (the in-process runtime runs only the enabled
   roster, `core/agent_feature_access.bind_usable_agents`).
 

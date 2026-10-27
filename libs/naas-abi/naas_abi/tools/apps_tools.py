@@ -156,9 +156,11 @@ def _resolve_app_id(app_id: str) -> str | dict[str, str]:
 async def _enable_state(
     db: Any, user_id: str, workspace_id: str
 ) -> tuple[dict[str, bool], set[str]] | dict[str, str]:
-    """(DB rows, seed list) for the workspace, after the membership check."""
-    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
-        workspace_seed_for_slug,
+    """(DB rows, seed list) for the workspace, after the membership check: the
+    seed as the catalog and the visibility read it (its stored catalog seed first,
+    then the config's), so what is shown is what is enforced."""
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import (
+        workspace_seed_apps,
     )
     from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
         WorkspacePermissionError,
@@ -173,13 +175,7 @@ async def _enable_state(
         return {"error": "You do not have access to this workspace."}
     enabled_by_app_id = await _apps_service(db).get_enabled_states(workspace_id)
     workspace = await workspaces.get_workspace(workspace_id)
-    seed = workspace_seed_for_slug(getattr(workspace, "slug", None))
-    seed_apps = {
-        str(app_id).strip()
-        for app_id in (getattr(seed, "apps", None) or [])
-        if str(app_id).strip()
-    }
-    return enabled_by_app_id, seed_apps
+    return enabled_by_app_id, workspace_seed_apps(workspace)
 
 
 async def _in_set(catalog: list[Any], workspace_id: str) -> list[Any]:
@@ -200,7 +196,7 @@ async def _switch_refusal(
     from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 
     if not await authz.allowed(
-        "UpdateApp", user=user_id, workspace=workspace_id, id="-"
+        "UpdateApp", user=user_id, workspace=workspace_id, id=app.app_id
     ):
         return "You may not turn apps on or off in this workspace."
     if enabled and not await _in_set([app], workspace_id):
