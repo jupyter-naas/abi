@@ -66,11 +66,13 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import (
     APP_NAME_PATTERN,
     MODULE_ID_PATTERN,
 )
+from naas_abi.apps.nexus.apps.api.app.services.apps.scopes import app_scope
 from naas_abi.apps.nexus.apps.api.app.services.apps.service import (
     AppAlreadyConfiguredError,
     AppsService,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.registry import (
     ServiceRegistry,
@@ -79,6 +81,7 @@ from naas_abi.apps.nexus.apps.api.app.services.registry import (
 from naas_abi.apps.nexus.apps.api.app.utils.public_urls import (
     resolve_public_module_asset_url,
 )
+from naas_abi_core.services.iam.module_scopes import APP
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -487,7 +490,7 @@ class AppHtmlAccessTokenResponse(BaseModel):
 
 def _app_id_of_prefix(path_prefix: str | None) -> str:
     """The catalog app an ``/app-html/<module>/<app>/`` path lock names; ``-``
-    (any app) when there is no lock or it names none."""
+    when there is no lock or it names none (a link to no app is refused)."""
     if path_prefix:
         locked = path_prefix.strip().rstrip("/") + "/"
         for app in _scan_apps_catalog():
@@ -499,20 +502,19 @@ def _app_id_of_prefix(path_prefix: str | None) -> str:
 @router.post(
     "/access-token",
     response_model=AppHtmlAccessTokenResponse,
-    dependencies=[declares("UseApp")],
+    dependencies=[declares("module:OpenApp")],
 )
 async def create_app_html_access_token(
     body: AppHtmlAccessTokenRequest,
     current_user: User = Depends(get_current_user_required),
 ) -> AppHtmlAccessTokenResponse:
     """Issue a time-limited link accepted by ``/app-html/`` (alongside ABI_API_KEY):
-    a revocable IAM grant for this user, never a session."""
-    await authz.require(
-        "UseApp",
-        user=current_user,
-        workspace=body.workspace_id,
-        id=_app_id_of_prefix(body.path_prefix),
-    )
+    a revocable IAM grant for this user, never a session. It is locked to one
+    app (``path_prefix``), which the user may open in the workspace."""
+    scope = app_scope(_app_id_of_prefix(body.path_prefix))
+    if scope is None:
+        raise HTTPException(status_code=400, detail="path_prefix must name an app")
+    await authz.require_scope(scope, user=current_user, workspace=body.workspace_id)
     try:
         token, expires_in = await asyncio.to_thread(
             mint_app_html_access_token,
@@ -547,7 +549,7 @@ class RemoteAppGrantResponse(BaseModel):
 @router.post(
     "/remote-grant",
     response_model=RemoteAppGrantResponse,
-    dependencies=[declares("UseApp")],
+    dependencies=[declares("module:OpenApp")],
 )
 async def create_remote_app_grant(
     body: RemoteAppGrantRequest,
@@ -561,11 +563,10 @@ async def create_remote_app_grant(
     not as long as the access token it was asked with (minutes, refreshed in the
     background): it is an IAM grant, bound to its user. A logout or
     ``/remote-grant/revoke`` ends it."""
-    await authz.require(
-        "UseApp",
+    await authz.require_scope(
+        ModuleScope(APP, body.module_id, body.app),
         user=current_user,
         workspace=body.workspace_id,
-        id=f"remote/{body.module_id}:{body.app}",
     )
     from naas_abi.apps.nexus.apps.api.app.services.apps.remote import access
     from naas_abi.apps.nexus.apps.api.app.services.apps.remote.http_routes import (
@@ -663,8 +664,10 @@ async def list_apps(
     request: Request,
     workspace_id: str,
     apps_service: AppsService = Depends(get_apps_service),
+    current_user: User = Depends(get_current_user_required),
 ) -> AppsResponse:
-    """Return every app of the loaded modules and of READY remote modules.
+    """Return the apps of the loaded modules and of READY remote modules that
+    the caller may open in the workspace (``module:OpenApp``).
 
     Results carry the workspace's enable state. Apps without a stored record
     default to ``enabled=False``.
@@ -676,7 +679,12 @@ async def list_apps(
     except Exception:
         loaded_modules = {}
 
-    catalog = (*_scan_apps_catalog(), *await _remote_apps_catalog())
+    catalog = await authz.filter_scopes(
+        (*_scan_apps_catalog(), *await _remote_apps_catalog()),
+        user=current_user,
+        workspace=workspace_id,
+        scope_of=lambda app: app_scope(app.app_id),
+    )
     workspace_slug = await _workspace_slug(workspace_id)
 
     enabled_by_app_id = await apps_service.get_enabled_states(workspace_id)
@@ -717,9 +725,15 @@ async def list_apps(
 async def list_app_configs(
     workspace_id: str,
     apps_service: AppsService = Depends(get_apps_service),
+    current_user: User = Depends(get_current_user_required),
 ) -> list[dict]:
-    """List every stored app config for a workspace."""
-    records = await apps_service.list_app_configs(workspace_id)
+    """List the stored app configs of a workspace, for the apps the caller may open."""
+    records = await authz.filter_scopes(
+        await apps_service.list_app_configs(workspace_id),
+        user=current_user,
+        workspace=workspace_id,
+        scope_of=lambda record: app_scope(record.app_id),
+    )
     return [_serialize_record(r) for r in records]
 
 
@@ -751,8 +765,14 @@ async def get_app_config(
     workspace_id: str,
     app_id: str,
     apps_service: AppsService = Depends(get_apps_service),
+    current_user: User = Depends(get_current_user_required),
 ) -> dict:
-    """Get a single app config row."""
+    """Get a single app config row, of an app the caller may open."""
+    scope = app_scope(app_id)
+    if scope is not None and not await authz.allowed_scope(
+        scope, user=current_user, workspace=workspace_id
+    ):
+        raise HTTPException(status_code=404, detail="App config not found")
     await _ensure_app_exists(app_id, _existing_config(apps_service, workspace_id, app_id))
     record = await apps_service.get_app_config(workspace_id, app_id)
     if record is None:

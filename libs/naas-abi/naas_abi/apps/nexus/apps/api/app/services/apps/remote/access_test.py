@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote import access
-from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AuthzDenied
+from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AuthzDenied, ModuleScope
 
 APP = "remote/acme.research:console"
 
@@ -17,15 +17,15 @@ class Registry:
         self.members, self.enabled = members, enabled
         self.workspaces = SimpleNamespace(get_workspace=self._get, list_workspaces=self._list)
         self.apps = SimpleNamespace(get_enabled_states=self._states)
-        # IAM's ``nexus:UseApp``: the workspaces a user is a member of.
-        self.authz = SimpleNamespace(require=self._require, allowed=self._allowed)
+        # IAM's ``module:OpenApp`` on the app: the workspaces granting it.
+        self.authz = SimpleNamespace(require_scope=self._require, allowed_scope=self._allowed)
 
-    async def _allowed(self, action: str, *, user: str, workspace: str, id: str) -> bool:
-        assert (action, id) == ("UseApp", APP)
+    async def _allowed(self, scope: ModuleScope, *, user: str, workspace: str) -> bool:
+        assert scope == ModuleScope("app", "acme.research", "console")
         return workspace in self.members.get(user, [])
 
-    async def _require(self, action: str, *, user: str, workspace: str, id: str) -> None:
-        if not await self._allowed(action, user=user, workspace=workspace, id=id):
+    async def _require(self, scope: ModuleScope, *, user: str, workspace: str) -> None:
+        if not await self._allowed(scope, user=user, workspace=workspace):
             raise AuthzDenied(403, detail="You do not have access to this workspace")
 
     async def _get(self, workspace_id: str):

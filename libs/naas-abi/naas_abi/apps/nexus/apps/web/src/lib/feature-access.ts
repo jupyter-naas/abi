@@ -149,7 +149,9 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
   if (firstSegment === 'sheets') {
     return 'sheets';
   }
-  if (firstSegment === 'apps') {
+  // Opening apps is each app's module scope, which the API checks; the
+  // "apps" feature is the app projects (and the settings page).
+  if (firstSegment === 'apps' && parts[workspaceIndex + 3] === 'p') {
     return 'apps';
   }
   if (firstSegment === 'marketplace') {

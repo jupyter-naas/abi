@@ -102,7 +102,6 @@ function SectionContent({ section }: { section: SidebarSection }) {
   const canChat = useFeature('chat');
   const canFiles = useFeature('files');
   const canDatasets = useFeature('datasets');
-  const canApps = useFeature('apps');
   const canMarketplace = useFeature('marketplace');
   const canSearch = useFeature('search');
   const canOntology = useFeature('ontology');
@@ -122,7 +121,7 @@ function SectionContent({ section }: { section: SidebarSection }) {
   if (section === 'slides' && canSlides) return <SlidesSection collapsed={false} detailOnly />;
   if (section === 'documents' && canDocuments) return <DocumentsSection collapsed={false} detailOnly />;
   if (section === 'sheets' && canSheets) return <SheetsSection collapsed={false} detailOnly />;
-  if (section === 'apps' && canApps) return <AppsSection collapsed={false} detailOnly />;
+  if (section === 'apps') return <AppsSection collapsed={false} detailOnly />;
   if (section === 'marketplace' && canMarketplace) return <MarketplaceSection collapsed={false} detailOnly />;
   if (section === 'infrastructure' && canSettings) return <InfrastructureSection />;
   if (section === 'settings') return <SettingsSection collapsed={false} detailOnly />;

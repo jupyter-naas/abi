@@ -64,7 +64,8 @@ describe('getFeatureForWorkspacePath', () => {
     expect(getFeatureForWorkspacePath('/workspace/ws1/settings/infrastructure')).toBe('settings.workspace');
     expect(getFeatureForWorkspacePath('/workspace/ws1/organization')).toBe('settings.organization');
     expect(getFeatureForWorkspacePath('/workspace/ws1/organization/billing')).toBe('settings.organization');
-    expect(getFeatureForWorkspacePath('/workspace/ws1/apps')).toBe('apps');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/apps')).toBe(null);
+    expect(getFeatureForWorkspacePath('/workspace/ws1/apps/p/my-app')).toBe('apps');
     expect(getFeatureForWorkspacePath('/workspace/ws1/marketplace')).toBe('marketplace');
     expect(getFeatureForWorkspacePath('/workspace/ws1/help')).toBe('settings');
   });
@@ -197,7 +198,7 @@ describe('getWorkspaceSwitchPath', () => {
   it('falls back when the target workspace lacks the section', () => {
     expect(
       getWorkspaceSwitchPath({
-        pathname: '/workspace/ws-next-gen/apps',
+        pathname: '/workspace/ws-next-gen/marketplace',
         targetWorkspaceId: 'ws-member',
         role: 'member',
       }),

@@ -296,6 +296,11 @@ def test_a_configured_remote_app_stays_manageable_while_its_module_is_down(
     monkeypatch.setattr(factory, "get_remote_app_directory", InMemoryRemoteAppDirectory)
     configs = Configs()
 
+    async def may_open(scope, **_):
+        return True
+
+    monkeypatch.setattr(adapter.authz, "allowed_scope", may_open)
+
     def status(call) -> int:
         try:
             asyncio.run(call)

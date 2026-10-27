@@ -27,7 +27,7 @@ export type QuickOpenSection = {
 /** Surfaces the palette can jump to. Hrefs are workspace-relative. */
 export const QUICK_OPEN_SECTIONS: readonly QuickOpenSection[] = [
   { id: 'home', label: 'Home', href: '/home' },
-  { id: 'apps', label: 'Apps', href: '/apps', feature: 'apps' },
+  { id: 'apps', label: 'Apps', href: '/apps' },
   { id: 'files', label: 'Files', href: '/files', feature: 'files' },
   { id: 'chat', label: 'Chat', href: '/chat', feature: 'chat' },
   { id: 'search', label: 'Search', href: '/search', feature: 'search' },

@@ -14,6 +14,7 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.adapters.primary import (
     apps__primary_adapter__FastAPI as adapter,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.port import (
+    AppConfigCreateInput,
     AppConfigRecord,
     AppPersistencePort,
 )
@@ -23,6 +24,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
     get_current_user_required,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 
 APP = "acme.ops:map"
@@ -104,7 +106,7 @@ def _world(flags: FeatureFlagsConfig | None, monkeypatch):
         user["id"] = user_id
         return AsyncClient(transport=ASGITransport(app=app), base_url="http://t")
 
-    return nexus, as_, store
+    return nexus, as_, store, scope
 
 
 @pytest.fixture
@@ -114,23 +116,26 @@ def world(monkeypatch):
         enabled_features=["apps", "chat"],
         role_baseline={role: ["apps", "chat"] for role in ("owner", "admin", "member", "viewer")},
     )
-    nexus, as_, store = _world(flags, monkeypatch)
+    nexus, as_, store, scope = _world(flags, monkeypatch)
     # Links are grants IAM stores: the same IAM makes them.
     previous = credentials.configure_iam(lambda: nexus.iam)
     try:
         with nexus.installed():
-            yield SimpleNamespace(as_=as_, store=store)
+            yield SimpleNamespace(as_=as_, store=store, iam=nexus, scope=scope)
     finally:
         credentials.configure_iam(previous)
 
 
 @pytest.mark.asyncio
-async def test_every_role_lists_and_reads_apps_and_a_stranger_does_not(world) -> None:
+async def test_admins_list_every_app_viewers_and_members_none_and_a_stranger_nothing(
+    world,
+) -> None:
     for role in ("viewer", "member", "admin", "owner"):
         async with world.as_(role) as http:
             listed = await http.get("/api/apps/?workspace_id=ws-1")
             assert listed.status_code == 200, role
-            assert [a["app_id"] for a in listed.json()["apps"]] == [APP]
+            expected = [APP] if role in ("admin", "owner") else []
+            assert [a["app_id"] for a in listed.json()["apps"]] == expected, role
             assert (await http.get("/api/apps/ws-1")).status_code == 200
             assert (await http.get(f"/api/apps/ws-1/{APP}")).status_code == 404  # no row yet
     async with world.as_("stranger") as http:
@@ -139,6 +144,31 @@ async def test_every_role_lists_and_reads_apps_and_a_stranger_does_not(world) ->
         assert (await http.get(f"/api/apps/ws-1/{APP}")).status_code == 403
     async with world.as_("admin") as http:
         assert (await http.get("/api/apps/?workspace_id=ws-2")).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_a_grant_of_one_app_lists_and_opens_that_app_alone(world, monkeypatch) -> None:
+    catalog = adapter._scan_apps_catalog()
+    other = adapter._build_app_info("acme.ops", Path("/modules/chart"), {"name": "Chart"})
+    monkeypatch.setattr(adapter, "_scan_apps_catalog", lambda: (*catalog, other))
+    world.iam.allow_scope("member", ModuleScope("app", "acme.ops", "map"), world.scope)
+    for app_id in (APP, "acme.ops:chart"):
+        await world.store.create(
+            AppConfigCreateInput(workspace_id="ws-1", app_id=app_id, enabled=True)
+        )
+    link = {"workspace_id": "ws-1", "path_prefix": "/app-html/acme/ops/map/"}
+    async with world.as_("member") as http:
+        listed = await http.get("/api/apps/?workspace_id=ws-1")
+        assert [a["app_id"] for a in listed.json()["apps"]] == [APP]
+        assert [c["app_id"] for c in (await http.get("/api/apps/ws-1")).json()] == [APP]
+        assert (await http.get(f"/api/apps/ws-1/{APP}")).status_code == 200
+        assert (await http.get("/api/apps/ws-1/acme.ops:chart")).status_code == 404
+        assert (await http.post("/api/apps/access-token", json=link)).status_code == 200
+        chart = {**link, "path_prefix": "/app-html/acme/ops/chart/"}
+        assert (await http.post("/api/apps/access-token", json=chart)).status_code == 403
+        # Not in another workspace.
+        listed = await http.get("/api/apps/?workspace_id=ws-2")
+        assert listed.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -170,13 +200,24 @@ async def test_turning_an_app_on_or_off_is_for_admins(world) -> None:
 
 
 @pytest.mark.asyncio
-async def test_links_to_an_app_are_minted_for_the_workspace_users_only(world) -> None:
+async def test_links_to_an_app_are_minted_for_those_who_may_open_it(world) -> None:
     link = {"workspace_id": "ws-1", "path_prefix": "/app-html/acme/ops/map/"}
     remote = {"workspace_id": "ws-1", "module_id": "acme.research", "app": "console"}
+    for role in ("viewer", "member"):
+        async with world.as_(role) as http:
+            assert (await http.post("/api/apps/access-token", json=link)).status_code == 403, role
+            assert (await http.post("/api/apps/remote-grant", json=remote)).status_code == 403, role
+        world.iam.allow_scope(role, ModuleScope("app", "acme.ops", "map"), world.scope)
+        world.iam.allow_scope(role, ModuleScope("app", "acme.research", "console"), world.scope)
     for role in ("viewer", "member", "admin"):
         async with world.as_(role) as http:
             assert (await http.post("/api/apps/access-token", json=link)).status_code == 200, role
             assert (await http.post("/api/apps/remote-grant", json=remote)).status_code == 200, role
+    async with world.as_("admin") as http:
+        # A link opens one app: a lock naming none, or no lock, is refused.
+        for prefix in (None, "/app-html/", "/app-html/acme/ops/other/"):
+            unlocked = {**link, "path_prefix": prefix}
+            assert (await http.post("/api/apps/access-token", json=unlocked)).status_code == 400
     async with world.as_("stranger") as http:
         assert (await http.post("/api/apps/access-token", json=link)).status_code == 403
         assert (await http.post("/api/apps/remote-grant", json=remote)).status_code == 403
@@ -202,13 +243,14 @@ def test_a_path_lock_names_the_catalog_app_it_covers(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_the_apps_section_must_be_on_for_the_role(monkeypatch) -> None:
-    # The deployment defaults: members hold no "apps" section.
-    nexus, as_, _ = _world(None, monkeypatch)
+async def test_the_apps_section_does_not_gate_opening_an_app(monkeypatch) -> None:
+    # The deployment defaults: members hold no "apps" section, which is the
+    # settings page. The app's module scope alone decides who opens it.
+    nexus, as_, _, scope = _world(None, monkeypatch)
     with nexus.installed():
+        nexus.allow_scope("member", ModuleScope("app", "acme.ops", "map"), scope)
         async with as_("member") as http:
-            denied = await http.get("/api/apps/?workspace_id=ws-1")
+            listed = await http.get("/api/apps/?workspace_id=ws-1")
+            assert [a["app_id"] for a in listed.json()["apps"]] == [APP]
+            denied = await http.patch(f"/api/apps/ws-1/{APP}", json={"enabled": True})
             assert denied.status_code == 403
-            assert "not available" in denied.json()["detail"]
-        async with as_("admin") as http:
-            assert (await http.get("/api/apps/?workspace_id=ws-1")).status_code == 200
