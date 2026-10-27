@@ -973,6 +973,33 @@ async def _reconcile_workspace_agents(
     return reconciled
 
 
+async def workspace_roster(agent_service: AgentService, workspace_id: str) -> list[AgentRecord]:
+    """The workspace's agent rows, seeded from the modules when there are none yet
+    (a workspace whose roster no listing reconciled): a chat or ``/v1`` turn binds
+    the agents it may run from it, and an empty roster would refuse every one.
+    Seeding is the platform's own reconciliation, not a change of the caller's."""
+    agent_list = await agent_service.list_workspace_agents(workspace_id=workspace_id)
+    if agent_list:
+        return agent_list
+    async with _workspace_sync_lock(workspace_id):
+        agent_list = await agent_service.list_workspace_agents(workspace_id=workspace_id)
+        if agent_list:
+            return agent_list
+        try:
+            classes = _get_agent_class_registry()
+        except Exception:  # noqa: BLE001 - no engine loaded: no module agent to seed
+            logger.warning("No agent registry to seed workspace=%s", workspace_id, exc_info=True)
+            return agent_list
+        logger.info("Seeding the empty agent roster of workspace=%s for a turn", workspace_id)
+        return await _reconcile_workspace_agents(
+            agent_service=agent_service,
+            workspace_id=workspace_id,
+            agent_list=agent_list,
+            class_name_to_agent_class=classes,
+            remote_agents=await _discovered_remote_agents(),
+        )
+
+
 async def _enriched_workspace_agents(
     *,
     workspace_id: str,

@@ -241,6 +241,7 @@ async def stream_chat_response(
             pick_workspace_documents_agent_id,
             pick_workspace_sheets_agent_id,
             pick_workspace_slides_agent_id,
+            workspace_roster,
         )
         from naas_abi_core.services.agent.context import agent_workspace_enabled_class_names
 
@@ -248,7 +249,7 @@ async def stream_chat_response(
             with bind_registry(db) as registry:
                 # The turn was authorized (SendMessage) in this workspace; the roster
                 # only picks which of its agents answers.
-                workspace_agents = await registry.agents.list_workspace_agents(request.workspace_id)
+                workspace_agents = await workspace_roster(registry.agents, request.workspace_id)
                 flags = await caller_feature_flags(
                     current_user, request.workspace_id, feature_keys_of(workspace_agents)
                 )

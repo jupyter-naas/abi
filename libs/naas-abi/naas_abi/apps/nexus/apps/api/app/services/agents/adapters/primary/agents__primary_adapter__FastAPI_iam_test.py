@@ -225,3 +225,39 @@ async def test_no_workspace_lists_nothing(world) -> None:
     async with world.as_("viewer") as http:
         assert (await http.get("/")).json() == []
         assert (await http.post("/sync")).json() == []
+
+
+@pytest.mark.asyncio
+async def test_a_turn_in_a_fresh_workspace_seeds_its_roster_and_runs_for_an_owner(
+    team, monkeypatch
+) -> None:
+    """A workspace whose roster no listing reconciled has no rows: the turn seeds
+    it, so an owner (who holds every module scope) is not refused every agent."""
+    from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import bind_usable_agents
+    from naas_abi_core.services.agent.context import agent_workspace_enabled_class_names
+
+    agents = FakeAgents()
+    seeded = _agent("seeded-a", class_name=AGENT_A)
+
+    async def reconcile(*, agent_service, workspace_id, agent_list, **_):
+        assert agent_list == []
+        agent_service.records[seeded.id] = seeded
+        return [seeded]
+
+    async def no_remote():
+        return []
+
+    monkeypatch.setattr(adapter, "_reconcile_workspace_agents", reconcile)
+    monkeypatch.setattr(adapter, "_discovered_remote_agents", no_remote)
+    monkeypatch.setattr(adapter, "_get_agent_class_registry", lambda: {})
+    monkeypatch.setattr(adapter, "_agent_class_modules", {AGENT_A: "acme.p"})
+    token = agent_workspace_enabled_class_names.set(None)
+    try:
+        allowed = await bind_usable_agents(agents, "owner", "ws-1")
+        assert allowed == {AGENT_A}
+        # Seeded once: the next turn reads the rows.
+        assert await adapter.workspace_roster(agents, "ws-1") == [seeded]
+        # A member without the scope runs nothing, roster or not.
+        assert await bind_usable_agents(agents, "member", "ws-1") == frozenset()
+    finally:
+        agent_workspace_enabled_class_names.reset(token)
