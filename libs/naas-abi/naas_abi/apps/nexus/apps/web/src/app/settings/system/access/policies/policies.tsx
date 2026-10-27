@@ -1,9 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
 import { Plus, Trash2 } from 'lucide-react';
 import { IamAdminError } from '@/lib/iam-admin/api';
+import { useWorkspaceStore } from '@/stores/workspace';
 import type { CatalogsView, ModuleScopesView, PolicyView } from '@/lib/iam-admin/types';
 import type { AccessViewProps } from '../access-props';
 import { PolicyEditor } from './policy-editor';
@@ -24,7 +24,8 @@ export function PoliciesView({ api, can, nonce = 0 }: AccessViewProps) {
   const [catalogs, setCatalogs] = useState<CatalogsView | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [modules, setModules] = useState<ModuleScopesView | null>(null);
-  const workspaceId = (useParams()?.workspaceId as string | undefined) ?? undefined;
+  // The workspace the listing is read in: platform admins hold it in every one.
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId) ?? undefined;
   const [selection, setSelection] = useState<Selection>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [filter, setFilter] = useState('');

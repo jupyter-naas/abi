@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   getFeatureForWorkspacePath,
+  getGatingFeatureForWorkspacePath,
   getFirstAllowedWorkspacePath,
   getWorkspaceHomePath,
   getWorkspaceSwitchPath,
@@ -64,8 +65,11 @@ describe('getFeatureForWorkspacePath', () => {
     expect(getFeatureForWorkspacePath('/workspace/ws1/settings/infrastructure')).toBe('settings.workspace');
     expect(getFeatureForWorkspacePath('/workspace/ws1/organization')).toBe('settings.organization');
     expect(getFeatureForWorkspacePath('/workspace/ws1/organization/billing')).toBe('settings.organization');
-    expect(getFeatureForWorkspacePath('/workspace/ws1/apps')).toBe(null);
-    expect(getFeatureForWorkspacePath('/workspace/ws1/apps/p/my-app')).toBe('apps');
+    expect(getFeatureForWorkspacePath('/workspace/ws1/apps')).toBe('apps');
+    expect(getGatingFeatureForWorkspacePath('/workspace/ws1/apps')).toBe(null);
+    expect(getGatingFeatureForWorkspacePath('/workspace/ws1/apps?open=x')).toBe(null);
+    expect(getGatingFeatureForWorkspacePath('/workspace/ws1/apps/p/my-app')).toBe('apps');
+    expect(getGatingFeatureForWorkspacePath('/workspace/ws1/chat')).toBe('chat');
     expect(getFeatureForWorkspacePath('/workspace/ws1/marketplace')).toBe('marketplace');
     expect(getFeatureForWorkspacePath('/workspace/ws1/help')).toBe('settings');
   });

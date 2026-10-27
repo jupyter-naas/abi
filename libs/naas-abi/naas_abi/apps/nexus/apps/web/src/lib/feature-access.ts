@@ -149,9 +149,7 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
   if (firstSegment === 'sheets') {
     return 'sheets';
   }
-  // Opening apps is each app's module scope, which the API checks; the
-  // "apps" feature is the app projects (and the settings page).
-  if (firstSegment === 'apps' && parts[workspaceIndex + 3] === 'p') {
+  if (firstSegment === 'apps') {
     return 'apps';
   }
   if (firstSegment === 'marketplace') {
@@ -192,12 +190,26 @@ export function pathNeedsGraphExport(pathname: string | null | undefined): boole
   return getFeatureForWorkspacePath(pathname || '') === 'graph';
 }
 
+/**
+ * The feature a route needs to be opened: its section's, except the Apps page.
+ * Opening an app is that app's module scope, which the API checks (the page lists
+ * only the apps the caller may open); the "apps" feature is the app projects
+ * (`/apps/p/<slug>`) and the settings.
+ */
+export function getGatingFeatureForWorkspacePath(pathname: string): FeatureKey | null {
+  const feature = getFeatureForWorkspacePath(pathname);
+  if (feature !== 'apps') return feature;
+  const parts = pathWithoutQuery(pathname).split('/').filter(Boolean);
+  const workspaceIndex = parts.indexOf('workspace');
+  return parts[workspaceIndex + 3] === 'p' ? 'apps' : null;
+}
+
 export function isWorkspacePathAllowed(params: {
   pathname: string;
   role?: string;
   workspaceFlags?: WorkspaceFeatureFlags;
 }): boolean {
-  const feature = getFeatureForWorkspacePath(params.pathname);
+  const feature = getGatingFeatureForWorkspacePath(params.pathname);
   if (!feature) {
     return true;
   }
@@ -245,7 +257,7 @@ export function getWorkspaceSwitchPath(params: {
   role?: string;
   workspaceFlags?: WorkspaceFeatureFlags;
 }): string {
-  const feature = getFeatureForWorkspacePath(params.pathname);
+  const feature = getGatingFeatureForWorkspacePath(params.pathname);
   if (feature) {
     if (
       isFeatureEnabled({
