@@ -731,7 +731,8 @@ attachment per scope.
   hold these, not only `api`. A member holds `discovery:TriggerJob` on
   `workflow/*`, the second name of every job of kind `workflow` (a viewer
   nothing), as it holds `InvokeAgent` on `agent/*`: which workflow it starts is
-  the module scope's. Not reached by any role (platform admin, built-in accounts
+  the module scope's. An explicit Deny on a workflow's `job/…` name still refuses
+  it (discovery `trigger_decision`). Not reached by any role (platform admin, built-in accounts
   and explicit policies only): plain jobs and job runs, email senders and messages,
   `dataset:catalog`, `cache:service`, `vector_store:service`, `activity_log:service`,
   and unplaced data until placed or granted.

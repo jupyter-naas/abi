@@ -27,8 +27,9 @@ from naas_abi_core.services.discovery.discovery_ports import (
 )
 from naas_abi_core.services.discovery.iam_catalog import CATALOG
 from naas_abi_core.services.iam.guard import ServiceGuard
-from naas_abi_core.services.iam.IAMPorts import IIAMService
+from naas_abi_core.services.iam.IAMPorts import IIAMService, PermissionDeniedError
 from naas_abi_core.services.iam.modules import subject_token
+from naas_abi_core.services.iam.names import resource_name
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 
 
@@ -1243,6 +1244,46 @@ class DiscoveryService:
         await asyncio.to_thread(check)
 
 
+# A decision that refuses whatever else allows: an explicit Deny, a seal, a
+# suspended principal.
+_REFUSING = ("explicit_deny", "sealed", "suspended")
+
+
+def trigger_names(
+    project: str, module_id: str, job_name: str, *, workflow: bool
+) -> list[str]:
+    """The names ``TriggerJob`` is decided on: ``job/…``, and for a workflow
+    ``workflow/…`` too."""
+    parts = [project, module_id, job_name]
+    names = [resource_name("discovery", "job", parts, kind="path")]
+    if workflow:
+        names.append(resource_name("discovery", "workflow", parts, kind="path"))
+    return names
+
+
+def trigger_decision(
+    authorize: Callable[[str, str], Any],
+    project: str,
+    module_id: str,
+    job_name: str,
+    *,
+    workflow: bool = False,
+) -> tuple[bool, bool]:
+    """``(allowed, visible)`` of starting a job for the current caller, one rule
+    wherever it is decided (discovery, the engine's job host, the broker control
+    that hands the run its user): an explicit Deny on either name refuses, else
+    an Allow on either name passes. Evaluating the two names apart would lose a
+    Deny written on ``job/…`` before workflows had a second name."""
+    decisions = [
+        authorize("discovery:TriggerJob", name)
+        for name in trigger_names(project, module_id, job_name, workflow=workflow)
+    ]
+    visible = any(d.visible for d in decisions)
+    if any(d.reason in _REFUSING for d in decisions):
+        return False, visible
+    return any(d.allowed for d in decisions), visible
+
+
 def require_job(
     guard: ServiceGuard,
     project: str,
@@ -1257,20 +1298,24 @@ def require_job(
     its runs; the job's or the run's not-found when it cannot see it.
     Discovery asks it for a module's job host, the engine for its own.
 
-    A workflow (``kind="workflow"``) is also ``workflow/…``: ``TriggerJob`` on
-    either name starts it. Workspace members hold it on ``workflow/*`` only
+    A workflow (``kind="workflow"``) is also ``workflow/…``; ``trigger_decision``
+    is the rule. Workspace members hold ``TriggerJob`` on ``workflow/*`` only
     (``roles.PLATFORM_TYPES``), never on a plain job."""
     if operation == "trigger":
-        parts = [project, module_id, job_name]
-        if workflow and guard.allowed("TriggerJob", "workflow", parts):
+        iam = guard.iam
+        if iam is None:
             return
-        guard.require(
-            "TriggerJob",
-            "job",
-            parts,
-            not_found=_error("JOB_NOT_FOUND", job_name),
+        allowed, visible = trigger_decision(
+            iam.authorize, project, module_id, job_name, workflow=workflow
         )
-        return
+        if allowed:
+            return
+        if visible:
+            raise PermissionDeniedError(
+                "discovery:TriggerJob",
+                guard.name("job", [project, module_id, job_name]),
+            )
+        raise _error("JOB_NOT_FOUND", job_name)()
     _require(operation == "cancel", "INVALID_ARGUMENT", "Unknown job operation")
     guard.require(
         "CancelJobRun",

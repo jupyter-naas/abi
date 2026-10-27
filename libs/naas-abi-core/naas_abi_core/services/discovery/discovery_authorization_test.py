@@ -471,6 +471,22 @@ def test_a_member_triggers_a_module_s_workflows_never_its_plain_jobs():
         with pytest.raises(DiscoveryError, match="JOB_NOT_FOUND"):
             await service.authorize_job(trigger("sync"), PROVIDER, as_viewer)
 
+        # A Deny written on the job name holds against the workflow name.
+        careful = h.user("careful")
+        h.attach("builtin.platform.member", careful.id)
+        h.grant(
+            careful.id,
+            statement(
+                "Deny", ["discovery:TriggerJob"], [f"{MODULE}job/default/research/sync"]
+            ),
+        )
+        refused = CallContext(
+            principal=service_account("api"),
+            on_behalf_of=Principal(id=careful.id, kind="user"),
+        )
+        with pytest.raises(PermissionDeniedError):
+            await service.authorize_job(trigger("sync"), PROVIDER, refused)
+
         module = h.service_account("caller-module")
         h.grant(
             module.id,

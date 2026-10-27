@@ -341,7 +341,9 @@ class BrokerControl:
         ``engine``) triggers for a user who may trigger the job. None for a
         module's trigger (a module never hands a user to another, as with
         agents), for no user, or for an engine module's job (the engine runs it
-        for the user itself, from the host token)."""
+        for the user itself, from the host token). A trigger for a user who may
+        not start the job is refused: the run would otherwise execute as the
+        module alone, with none of the user's limits."""
         from naas_abi_core.services.iam.IAMPorts import (
             TOKEN_TYPE_SESSION,
             TokenExchange,
@@ -358,11 +360,21 @@ class BrokerControl:
             is None
         ):
             return None
+        from naas_abi_core.services.discovery.discovery_service import trigger_decision
+
         resource = _job_resource(project, module_id, job)
+        # The host's rule (a Deny on either name refuses). The kind of the job is
+        # the host's to know: decided as a workflow here, a plain job the user may
+        # only start as a workflow is refused by the host, its delegation unused.
         with use_call_context(context):
-            if not self.iam.authorize("discovery:TriggerJob", resource).allowed:
-                # The host refuses it: nothing to run, nothing to hand over.
-                return None
+            allowed, _visible = trigger_decision(
+                self.iam.authorize, project, module_id, job, workflow=True
+            )
+        if not allowed:
+            # Never store a run that would execute as the module alone.
+            raise Refused(
+                "PERMISSION_DENIED", f"{user.id} may not start {module_id}/{job}"
+            )
         try:
             with as_service_account("engine"):
                 issued = self.iam.exchange_token(

@@ -73,7 +73,12 @@ platform-level: `module/<project>/<module_id>`, `agent|model|app|job/<project>/<
   `workflow/*`. A job of kind `workflow` has that second name
   (`workflow/<project>/<module_id>/<name>`, `require_job(workflow=True)`): `TriggerJob`
   on either name starts it, so a module's manifest naming its jobs still covers its
-  workflows, and no role reaches a plain job. Which agent, app, workflow or pipeline a user uses in a
+  workflows, and no role reaches a plain job. An explicit Deny on either name
+  refuses (`trigger_decision`, one rule for discovery, the engine's job host and the
+  broker control): a Deny written on `job/…` before workflows had a second name
+  holds. The broker control refuses a trigger `api` or `engine` stores for a user
+  who may not start the job (`PERMISSION_DENIED`) rather than storing one that
+  would run as the module alone. Which agent, app, workflow or pipeline a user uses in a
   workspace is its module scope (`module:<type>/<module>/<name>`, core
   `services/iam/AGENTS.md`, "Module scopes"), which viewers and members do not
   hold by default. Nexus checks it first, in the workspace of the request, so no
