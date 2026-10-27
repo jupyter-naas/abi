@@ -15,7 +15,7 @@ import * as Tooltip from '@radix-ui/react-tooltip';
 import { AlertTriangle, Bot, MessageSquare, RefreshCw, Square, Waypoints, X } from 'lucide-react';
 import type { Failure } from '../data/data-api';
 import { absoluteTime, plural } from '../data/data-model';
-import { CopyButton, EmptyState, Field, Hint, IconTile, Notice, RelativeTime, SkeletonRows, StatusPill, useNow } from '../data/data-ui';
+import { CopyButton, EmptyState, Field, Hint, Notice, RelativeTime, SkeletonRows, StatusPill, useNow } from '../data/data-ui';
 import { Modal } from '../data/modal';
 import { ToastStack, useToasts } from '../data/toasts';
 import { formatMs, moduleLabel } from '../jobs/jobs-model';
@@ -418,11 +418,8 @@ export function AgentsTab({ api: injected, nonce = 0 }: { api?: AgentsApi; nonce
       <div className="data-explorer jobs-root">
         <section className="data-main jobs-main" aria-label="Agent runs">
           <header className="data-service-header">
-            <IconTile icon={Bot} size="lg" />
+            {/* The page's frame holds the title; this line is the summary. */}
             <div className="data-service-heading">
-              <div className="data-service-title-row">
-                <h2 className="data-service-title">Agents</h2>
-              </div>
               <p className="data-service-description">
                 {runs
                   ? `${plural(runs.length, 'run', 'runs')} shown · ${running} running`

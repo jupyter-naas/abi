@@ -9,7 +9,9 @@ import { useConfirm } from '@/components/ui/dialogs';
 import { OrgSettingsPageHeader } from '@/app/organizations/[orgId]/settings/components/org-settings-page-header';
 import { cellText, NULL_LABEL, REDACTED_LABEL, type CellValue } from '../../../lib/table-cells';
 import { platformTablePath } from '../../../lib/tables';
+import { useTablesView } from '../../../lib/tables-view';
 import '@/app/organizations/[orgId]/settings/users/users.css';
+import { readApiError, safeDecode } from '../../../lib/page-helpers';
 
 /** One row, as `GET /api/admin/tables/{name}/rows/{id}` returns it. */
 interface PlatformTableRow {
@@ -20,24 +22,6 @@ interface PlatformTableRow {
   primary_key: string[];
   columns: string[];
   row: Record<string, CellValue>;
-}
-
-async function readApiError(response: Response, fallback: string): Promise<string> {
-  try {
-    const data = await response.json();
-    if (typeof data?.detail === 'string') return data.detail;
-  } catch {
-    // ignore parse errors
-  }
-  return fallback;
-}
-
-function safeDecode(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
 }
 
 /** Grant or remove platform superadmin access from a users row. */
@@ -130,7 +114,9 @@ export default function PlatformTableRowPage() {
           setLoadError(await readApiError(res, `Failed to load this row (HTTP ${res.status}).`));
           return;
         }
-        setData(await res.json());
+        const loaded: PlatformTableRow = await res.json();
+        setData(loaded);
+        useTablesView.getState().rememberLabels([loaded]);
       } catch {
         if (!cancelled) setLoadError('Failed to load this row. Please try again.');
       } finally {

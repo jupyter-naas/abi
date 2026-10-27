@@ -9,8 +9,12 @@ import {
   tableFromLegacySlug,
 } from './tables';
 
-/** The first segments under /settings that Platform Settings serves. */
-export const PLATFORM_SETTINGS_SECTIONS: readonly string[] = ['tables', 'system', 'roles'];
+/** The first segments under /settings that Platform Settings serves, from its section paths. */
+export const PLATFORM_SETTINGS_SECTIONS: readonly string[] = [
+  PLATFORM_TABLES_PATH,
+  SYSTEM_PATH,
+  ROLES_PATH,
+].map((path) => path.split('/')[2]);
 
 // `/workspace/<id>/admin/...`, also behind an org's `/org/<slug>` prefix.
 const WORKSPACE_ADMIN = /^(?:\/org\/[^/]+)?\/workspace\/[^/]+\/admin\/(system|events)(?:\/.*)?$/;

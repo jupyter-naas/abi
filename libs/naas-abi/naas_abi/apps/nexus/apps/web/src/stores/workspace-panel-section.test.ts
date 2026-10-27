@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { useWorkspaceStore } from './workspace';
+import { dropRetiredPanelSections, useWorkspaceStore, type SidebarSection } from './workspace';
 
 describe('workspaces panel return section', () => {
   beforeEach(() => {
@@ -49,5 +49,37 @@ describe('workspaces panel return section', () => {
     useWorkspaceStore.getState().closeWorkspacesPanel();
 
     expect(useWorkspaceStore.getState().activePanelSection).toBe('chat');
+  });
+});
+
+describe('dropRetiredPanelSections', () => {
+  it('forgets a stored Events or Lab column, which the dock no longer has', () => {
+    const stored = {
+      expandedSections: ['chat', 'events', 'lab', 'files'],
+      activePanelSection: 'events' as SidebarSection,
+      lastActivePanelSection: 'lab' as SidebarSection,
+    };
+
+    dropRetiredPanelSections(stored);
+
+    expect(stored).toEqual({
+      expandedSections: ['chat', 'files'],
+      activePanelSection: null,
+      lastActivePanelSection: null,
+    });
+  });
+
+  it('keeps a column the dock has, and never restores a transient one', () => {
+    const stored = {
+      expandedSections: ['maps'],
+      activePanelSection: 'maps' as SidebarSection,
+      lastActivePanelSection: 'workspaces' as SidebarSection,
+    };
+
+    dropRetiredPanelSections(stored);
+
+    expect(stored.activePanelSection).toBe('maps');
+    expect(stored.expandedSections).toEqual(['maps']);
+    expect(stored.lastActivePanelSection).toBeNull();
   });
 });

@@ -47,8 +47,8 @@ export function platformRowPath(table: string, rowId: string): string {
 /**
  * Old workspace settings links (`/settings/<slug>`, from before settings moved
  * under /workspace/[id]) that the middleware still redirects to the workspace.
- * Every slug of SETTINGS_GROUPS in components/shell/settings-nav.tsx is one (a test
- * checks it); `servers` and `services` stay after their pages moved on.
+ * `getWorkspacePath(null, ...)` also yields them while no workspace is current.
+ * Every page under app/workspace/[workspaceId]/settings/ is one (a test checks it).
  */
 export const LEGACY_WORKSPACE_SETTINGS_SLUGS: readonly string[] = [
   'general',
@@ -66,6 +66,7 @@ export const LEGACY_WORKSPACE_SETTINGS_SLUGS: readonly string[] = [
   'apps',
   'models',
   'drives',
+  'infrastructure',
 ];
 
 /**

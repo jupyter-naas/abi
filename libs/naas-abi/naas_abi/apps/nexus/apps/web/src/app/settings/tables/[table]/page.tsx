@@ -32,11 +32,13 @@ import {
   type CellValue,
 } from '../../lib/table-cells';
 import { PLATFORM_TABLES_PATH, platformRowId, platformRowPath } from '../../lib/tables';
+import { useTablesView } from '../../lib/tables-view';
 import { matchesSearch } from '../../lib/search';
 import { pageWindow, TABLE_PAGE_SIZE } from '../../lib/pagination';
 import { fetchTableSchema, SchemaTable, type SchemaState } from '../../components/schema-table';
 import { SearchBox } from '@/components/settings/search-box';
 import '@/app/organizations/[orgId]/settings/users/users.css';
+import { countFacets, readApiError, safeDecode } from '../../lib/page-helpers';
 
 /** One table, as `GET /api/admin/tables/{name}` returns it. */
 interface PlatformTable {
@@ -53,34 +55,8 @@ interface PlatformTable {
 
 type SortDir = 'asc' | 'desc';
 
-function countFacets(values: string[]): FacetBucket[] {
-  const counts = new Map<string, number>();
-  for (const value of values) counts.set(value, (counts.get(value) || 0) + 1);
-  return [...counts.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([value, count]) => ({ value, count }));
-}
-
-async function readApiError(response: Response, fallback: string): Promise<string> {
-  try {
-    const data = await response.json();
-    if (typeof data?.detail === 'string') return data.detail;
-  } catch {
-    // ignore parse errors
-  }
-  return fallback;
-}
-
 function plural(count: number, word: string): string {
   return `${count} ${count === 1 ? word : `${word}s`}`;
-}
-
-function safeDecode(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
 }
 
 /**
@@ -130,7 +106,9 @@ export default function PlatformTablePage() {
           );
           return;
         }
-        setTable(await res.json());
+        const loaded: PlatformTable = await res.json();
+        setTable(loaded);
+        useTablesView.getState().rememberLabels([loaded]);
       } catch {
         if (!cancelled) setLoadError(`Failed to load ${tableName}. Please try again.`);
       } finally {

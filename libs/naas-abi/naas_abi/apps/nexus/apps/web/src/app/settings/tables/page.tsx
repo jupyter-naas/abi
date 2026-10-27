@@ -35,16 +35,7 @@ import {
 import { platformTablePath, type PlatformTableSummary } from '../lib/tables';
 import { useTablesView, type TablesColumnId as ColumnId } from '../lib/tables-view';
 import '@/app/organizations/[orgId]/settings/users/users.css';
-
-async function readApiError(response: Response, fallback: string): Promise<string> {
-  try {
-    const data = await response.json();
-    if (typeof data?.detail === 'string') return data.detail;
-  } catch {
-    // ignore parse errors
-  }
-  return fallback;
-}
+import { countFacets, readApiError } from '../lib/page-helpers';
 
 function formatCount(value: number | null): string {
   return value === null ? '—' : value.toLocaleString();
@@ -76,14 +67,6 @@ function compareRows(a: DashboardRow, b: DashboardRow, columnId: ColumnId): numb
   }
   if (columnId === 'table') return a.label.localeCompare(b.label);
   return a[columnId].localeCompare(b[columnId]);
-}
-
-function countFacets(values: string[]): FacetBucket[] {
-  const counts = new Map<string, number>();
-  for (const value of values) counts.set(value, (counts.get(value) || 0) + 1);
-  return [...counts.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([value, count]) => ({ value, count }));
 }
 
 /**
@@ -125,7 +108,9 @@ export default function NexusTablesPage() {
           setLoadError(await readApiError(res, `Failed to load tables (HTTP ${res.status}).`));
           return;
         }
-        setSummaries(await res.json());
+        const tables: PlatformTableSummary[] = await res.json();
+        setSummaries(tables);
+        useTablesView.getState().rememberLabels(tables);
       } catch {
         if (!cancelled) setLoadError('Failed to load tables. Please try again.');
       } finally {

@@ -11,10 +11,10 @@ import './traces.css';
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import * as Tooltip from '@radix-ui/react-tooltip';
-import { AlertTriangle, ChevronRight, RefreshCw, Search, Waypoints } from 'lucide-react';
+import { AlertTriangle, ChevronRight, RefreshCw, Search } from 'lucide-react';
 import type { Failure } from '../data/data-api';
 import { absoluteTime } from '../data/data-model';
-import { Badge, EmptyState, Hint, IconTile, Notice, RelativeTime, SkeletonRows } from '../data/data-ui';
+import { Badge, EmptyState, Hint, Notice, RelativeTime, SkeletonRows } from '../data/data-ui';
 import { Scatter } from './scatter';
 import { TraceView } from './trace-view';
 import { createTracesApi, type TracesApi } from './traces-api';
@@ -170,9 +170,8 @@ export function TracesTab({ api: injected, nonce = 0 }: { api?: TracesApi; nonce
       <div className="data-explorer traces-root">
         <section className="data-main" aria-label="Traces">
           <header className="data-service-header">
-            <IconTile icon={Waypoints} size="lg" />
+            {/* The page's frame holds the title; this line is the summary. */}
             <div className="data-service-heading">
-              <h2 className="data-service-title">Traces</h2>
               <p className="data-service-description">
                 Every request, NATS call, job and agent run, end to end across processes.
               </p>

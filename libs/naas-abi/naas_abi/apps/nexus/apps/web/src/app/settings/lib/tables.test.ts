@@ -13,6 +13,7 @@ import {
 } from './tables';
 
 const SETTINGS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
+const WORKSPACE_SETTINGS_DIR = join(SETTINGS_DIR, '..', 'workspace', '[workspaceId]', 'settings');
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -50,6 +51,14 @@ describe('table paths', () => {
     expect(tableFromLegacySlug('ontologies_table')).toBe('ontologies');
     // Only a legacy workspace path took the suffix.
     expect(tableFromLegacySlug('users_table')).toBe('users_table');
+  });
+
+  it('knows every workspace settings page, so its bare link still goes to the workspace', () => {
+    const pages = readdirSync(WORKSPACE_SETTINGS_DIR).filter((name) =>
+      statSync(join(WORKSPACE_SETTINGS_DIR, name)).isDirectory()
+    );
+    expect(pages).toContain('infrastructure');
+    for (const page of pages) expect(LEGACY_WORKSPACE_SETTINGS_SLUGS).toContain(page);
   });
 
   it('knows every legacy workspace settings path', () => {

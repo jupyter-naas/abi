@@ -20,6 +20,7 @@ import {
   type SystemView,
 } from '../system/system-tabs';
 import { PLATFORM_TABLES_PATH } from './tables';
+import { safeDecode } from './page-helpers';
 
 /**
  * Platform Settings, outside any organization or workspace. Each item names what
@@ -145,14 +146,6 @@ export interface PlatformSettingsRoute {
 }
 
 const PLATFORM_SETTINGS_PATH = /^\/settings(?:\/([^?#]*?))?\/?(?:[?#]|$)/;
-
-function safeDecode(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
 
 export function parsePlatformSettingsRoute(
   pathname: string | null | undefined

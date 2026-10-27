@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { ArrowLeft, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, RefreshCw, ShieldCheck } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
 import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access';
@@ -23,11 +23,13 @@ import {
   type PlatformSettingsNavItem,
 } from './lib/nav';
 import { PLATFORM_TABLES_PATH, platformTablePath } from './lib/tables';
+import { useTablesView } from './lib/tables-view';
 import { JobFailuresContext, useJobFailures } from './system/jobs/failures';
 import { createJobsApi } from './system/jobs/jobs-api';
 // Same shell as Organization Settings, so both settings areas look alike.
 import '@/app/organizations/[orgId]/settings/org-settings-layout.css';
 import '@/app/organizations/[orgId]/settings/components/org-settings-components.css';
+import '@/app/organizations/[orgId]/settings/users/users.css';
 import './platform-settings.css';
 
 function NavItem({
@@ -55,7 +57,8 @@ function NavItem({
 }
 
 /** No item for this caller, or not this one: the 403 of Platform Settings. */
-function PlatformSettingsForbidden({ error }: { error?: boolean }) {
+function PlatformSettingsForbidden({ onRetry }: { onRetry?: () => void }) {
+  const error = !!onRetry;
   return (
     <div className="org-settings-empty">
       <div className="org-settings-empty-icon">
@@ -66,9 +69,19 @@ function PlatformSettingsForbidden({ error }: { error?: boolean }) {
       </p>
       <p className="org-settings-empty-body">
         {error
-          ? 'Reload the page to try again.'
+          ? 'The permission service did not answer. Try again in a moment.'
           : 'Platform Settings shows what your permissions let you open. Ask a platform administrator for access.'}
       </p>
+      {error && (
+        <button
+          type="button"
+          className="org-settings-users-secondary-button platform-settings-retry"
+          onClick={onRetry}
+        >
+          <RefreshCw size={16} />
+          Try again
+        </button>
+      )}
     </div>
   );
 }
@@ -76,7 +89,7 @@ function PlatformSettingsForbidden({ error }: { error?: boolean }) {
 export default function PlatformSettingsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? PLATFORM_SETTINGS_INDEX;
   const router = useRouter();
-  const { status, actions } = usePlatformSettingsAccess({ fresh: true });
+  const { status, actions, retry } = usePlatformSettingsAccess({ fresh: true });
   const isMobile = useIsMobile();
   const currentWorkspaceId = useWorkspaceStore((state) => state.currentWorkspaceId);
   const groups = useMemo(() => visiblePlatformSettingsGroups(actions), [actions]);
@@ -118,8 +131,9 @@ export default function PlatformSettingsLayout({ children }: { children: React.R
     router.push(workspaceHref);
   };
 
+  const tableLabel = useTablesView((state) => (table ? state.labels[table] : undefined));
   const headerTitle = showMobileDetail
-    ? (table ?? item?.label ?? 'Platform Settings')
+    ? (table ? (tableLabel ?? table) : (item?.label ?? 'Platform Settings'))
     : 'Platform Settings';
 
   const ready = status === 'ready';
@@ -127,7 +141,7 @@ export default function PlatformSettingsLayout({ children }: { children: React.R
 
   let content: React.ReactNode;
   if (status === 'checking') content = <SettingsLoading />;
-  else if (status === 'error') content = <PlatformSettingsForbidden error />;
+  else if (status === 'error') content = <PlatformSettingsForbidden onRetry={retry} />;
   else if (!allowed) content = <PlatformSettingsForbidden />;
   else content = children;
 

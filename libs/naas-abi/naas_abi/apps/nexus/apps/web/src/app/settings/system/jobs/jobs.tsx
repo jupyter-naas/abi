@@ -11,10 +11,10 @@ import './jobs.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import * as Tooltip from '@radix-ui/react-tooltip';
-import { AlertTriangle, ChevronRight, RefreshCw, Search, Workflow } from 'lucide-react';
+import { AlertTriangle, ChevronRight, RefreshCw, Search } from 'lucide-react';
 import type { Failure } from '../data/data-api';
 import { absoluteTime, plural } from '../data/data-model';
-import { Hint, IconTile, Kbd, Notice } from '../data/data-ui';
+import { Hint, Kbd, Notice } from '../data/data-ui';
 import { ToastStack, useToasts } from '../data/toasts';
 import { createTracesApi, type TracesApi } from '../traces/traces-api';
 import { createJobsApi, type JobsApi } from './jobs-api';
@@ -331,13 +331,10 @@ export function JobsTab({
       <div className="data-explorer jobs-root">
         <section className="data-main jobs-main" aria-label="Jobs">
           <header className="data-service-header">
-            <IconTile icon={Workflow} size="lg" />
+            {/* The page's frame holds the title; this line is the summary. */}
             <div className="data-service-heading">
-              <div className="data-service-title-row">
-                <h2 className="data-service-title">Jobs</h2>
-                {overview && <span className="data-badge data-badge-mono">{overview.project}</span>}
-              </div>
               <p className="data-service-description">
+                {overview && <span className="data-badge data-badge-mono">{overview.project}</span>}{' '}
                 {overview
                   ? `${plural(jobs.length, 'job', 'jobs')}${workflows ? ` (${workflows} workflows)` : ''} · ${running} running${failing ? ` · ${failing} failing` : ''}`
                   : 'Schedules, triggers and every run of module jobs.'}

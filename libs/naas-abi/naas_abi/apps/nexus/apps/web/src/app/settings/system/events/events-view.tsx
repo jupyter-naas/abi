@@ -26,6 +26,7 @@ import {
 } from './event-graph-params';
 import { EventGraphCanvas } from './event-graph-canvas';
 import { EventsFeedPanel } from './events-feed-panel';
+import { EventsJsonCanvas } from './events-json-canvas';
 
 /**
  * Platform event stream, as BFO-shaped processes: the chronological feed
@@ -202,9 +203,10 @@ function EventsGraphPane() {
       </div>
 
       {showRaw && (
-        <pre className="max-h-64 flex-shrink-0 overflow-auto whitespace-pre-wrap border-t px-6 py-3 font-mono text-[11px]">
-          {JSON.stringify(selectedEvent, null, 2)}
-        </pre>
+        // The JSON view: the selected event, read-only, in the shared editor.
+        <div className="flex h-64 flex-shrink-0 flex-col border-t" aria-label="Event payload">
+          <EventsJsonCanvas event={selectedEvent} />
+        </div>
       )}
     </div>
   );

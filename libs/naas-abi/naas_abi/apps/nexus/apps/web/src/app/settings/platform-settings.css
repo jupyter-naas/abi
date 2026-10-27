@@ -340,3 +340,8 @@
 .platform-dashboard-schema-toggle:hover {
   color: var(--foreground-hex);
 }
+
+/* The "Try again" of the access error page, below its message. */
+.platform-settings-retry {
+  margin-top: var(--space-4);
+}

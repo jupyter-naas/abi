@@ -318,8 +318,8 @@ def _masked_row(table: str, columns: list[str], values: Any) -> dict[str, Any]:
 
 
 async def _primary_key(db: AsyncSession, table: str) -> list[str]:
-    """The columns of a row id. None when a key column is a secret: its value would be the
-    URL, and a lookup by it would tell whether a guessed secret exists."""
+    """The columns of a row id. Empty (no row pages) when a key column is a secret: its value
+    would be the URL, and a lookup by it would tell whether a guessed secret exists."""
     primary_key: list[str] = await db.run_sync(
         lambda session: list(
             inspect(session.connection()).get_pk_constraint(table).get("constrained_columns") or []

@@ -41,6 +41,7 @@ const SystemTraffic = dynamic(() => import('./system-traffic').then((m) => m.Sys
 const EventsView = dynamic(() => import('./events/events-view').then((m) => m.EventsView), { ssr: false, loading: Loading });
 
 // Views that lay out their own panes edge to edge (no padding, no page scroll).
+const OWN_REFRESH: SystemView[] = ['events', 'traffic', 'jobs', 'agents', 'traces'];
 const FLUSH: readonly SystemView[] = ['data', 'jobs', 'agents', 'traces', 'events'];
 
 function Failed({ state }: { state: Extract<Loaded<unknown>, { ok: false }> }) {
@@ -50,6 +51,16 @@ function Failed({ state }: { state: Extract<Loaded<unknown>, { ok: false }> }) {
 function View<T>({ state, render }: { state: Loaded<T> | null; render: (data: T) => React.ReactNode }) {
   if (state === null) return <Loading />;
   return state.ok ? <>{render(state.data)}</> : <Failed state={state} />;
+}
+
+/** A page's Refresh: reloads what it shows, beyond its own polling. */
+export function SystemRefresh({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" className="org-settings-users-secondary-button" onClick={onClick}>
+      <RefreshCw size={16} />
+      Refresh
+    </button>
+  );
 }
 
 /**
@@ -105,12 +116,8 @@ function SystemViewBody({ view }: { view: SystemView }) {
           : undefined
       }
       actions={
-        view === 'events' || view === 'traffic' ? undefined : (
-          <button type="button" className="org-settings-users-secondary-button" onClick={refresh}>
-            <RefreshCw size={16} />
-            Refresh
-          </button>
-        )
+        // Events and Live traffic stream; Jobs, Agents and Traces have their own refresh.
+        OWN_REFRESH.includes(view) ? undefined : <SystemRefresh onClick={refresh} />
       }
       flush={FLUSH.includes(view)}
     >

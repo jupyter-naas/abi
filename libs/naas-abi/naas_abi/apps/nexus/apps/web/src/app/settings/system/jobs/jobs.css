@@ -171,8 +171,12 @@ button.jobs-strip-cell:hover {
 
 .jobs-name-title {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 2px 6px;
+  min-width: 0;
+  /* A long name breaks inside the column, its badges wrap below it: neither runs into Schedule. */
+  overflow-wrap: anywhere;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
 }

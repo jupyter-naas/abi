@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { isPlatformSettingsPath, platformSettingsRedirect } from './redirects';
+import {
+  isPlatformSettingsPath,
+  PLATFORM_SETTINGS_SECTIONS,
+  platformSettingsRedirect,
+} from './redirects';
 import { LEGACY_WORKSPACE_SETTINGS_SLUGS } from './tables';
 
 describe('old table pages', () => {
@@ -25,6 +29,7 @@ describe('old table pages', () => {
     for (const path of ['/settings', '/settings/tables', '/settings/tables/users', '/settings/system', '/settings/system/jobs', '/settings/roles']) {
       expect(platformSettingsRedirect(path)).toBeNull();
     }
+    expect(platformSettingsRedirect('/settings/infrastructure')).toBeNull();
     for (const slug of LEGACY_WORKSPACE_SETTINGS_SLUGS) {
       expect(platformSettingsRedirect(`/settings/${slug}`)).toBeNull();
     }
@@ -62,6 +67,12 @@ describe('old System links', () => {
   it('leave the rest of a workspace alone', () => {
     expect(platformSettingsRedirect('/workspace/ws-1/admin/services')).toBeNull();
     expect(platformSettingsRedirect('/workspace/ws-1/chat')).toBeNull();
+  });
+});
+
+describe('PLATFORM_SETTINGS_SECTIONS', () => {
+  it('is the first segment of each section path', () => {
+    expect(PLATFORM_SETTINGS_SECTIONS).toEqual(['tables', 'system', 'roles']);
   });
 });
 
