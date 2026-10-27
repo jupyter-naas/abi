@@ -222,9 +222,9 @@ class BaseModule(JobsMixin, Generic[TConfig]):
     def on_load(self):
         logger.debug(f"on_load for module {self.__module__.split('.')[0]}")
         self.__load_ontologies()
-        from naas_abi_core.services.iam.module_scopes import load_module_catalog
+        from naas_abi_core.services.iam.module_scopes import declared_catalog
 
-        self.__iam_catalog = load_module_catalog(self.module_root_path, self.module_key)
+        self.__iam_catalog = declared_catalog(self.module_root_path, self.module_key)
 
         self.__agents = ModuleAgentLoader.load_agents(self.__class__)
         self.__orchestrations = ModuleOrchestrationLoader.load_orchestrations(

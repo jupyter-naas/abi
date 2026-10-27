@@ -2667,7 +2667,7 @@ class IAMService(IIAMService, PolicySource):
         policy, declared = modules.split_manifest(document)
         parsed = parse_policy_document(policy)
         _refuse_reserved_topics(parsed)
-        catalog = self._manifest_catalog(declared, module_id)
+        catalog = self._manifest_catalog(declared, module_id, project)
         raw = modules.manifest_document(parsed, catalog)
         sha256 = modules.manifest_sha256(raw)
         try:
@@ -2713,10 +2713,14 @@ class IAMService(IIAMService, PolicySource):
         return ManifestSubmission(approved, approved_now=True, in_force=True)
 
     def _manifest_catalog(
-        self, declared: Mapping[str, Any] | None, module_id: str
+        self, declared: Mapping[str, Any] | None, module_id: str, project: str
     ) -> ActionCatalog | None:
         """The catalog a manifest declares, checked as the module's own: refused
-        when it names a reserved service or one another module registered."""
+        when it names a reserved service or one another module registered.
+
+        A catalog's service comes from the module id alone, so the same module id
+        in two projects would share one: the module of another project whose
+        approved manifest declares it keeps it, and this one is refused."""
         if declared is None:
             return None
         catalog = module_scopes.module_catalog(declared, module_id)
@@ -2726,6 +2730,16 @@ class IAMService(IIAMService, PolicySource):
                 f"Catalog {catalog.service} is "
                 + (f"module {current.module!r}'s" if current.module else "reserved")
             )
+        for other in self.store.list_manifests(None, "approved"):
+            if (
+                other.module_id == module_id
+                and other.project != project
+                and modules.split_manifest(other.document)[1] is not None
+            ):
+                raise IAMConflictError(
+                    f"Catalog {catalog.service} is module {module_id!r}'s of project "
+                    f"{other.project!r}: one module id declares a catalog in one project"
+                )
         return catalog
 
     def get_manifest(
@@ -2876,7 +2890,7 @@ class IAMService(IIAMService, PolicySource):
         # The module's own catalog is part of what is approved: registered with
         # it, and the module's side of its declared actions joins its policy.
         declared = modules.split_manifest(record.document)[1]
-        catalog = self._manifest_catalog(declared, record.module_id)
+        catalog = self._manifest_catalog(declared, record.module_id, record.project)
         if catalog is not None:
             self._register_catalog(catalog)
             bound = replace(

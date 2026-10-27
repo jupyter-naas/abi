@@ -275,3 +275,52 @@ def test_members_reach_a_module_s_workflows_at_the_broker_never_its_jobs(h, iam)
     assert not h.allowed("discovery:TriggerJob", job, member)
     assert not h.allowed("discovery:TriggerJob", flow, viewer)
     assert not h.allowed("discovery:ListJobs", job, viewer)
+
+
+def test_a_refused_engine_catalog_is_skipped_never_stops_the_load(h, iam):
+    """Another module's service is a conflict: logged and skipped, the other
+    modules' catalogs registered (and the refused one's checks fail closed)."""
+    from naas_abi_core.engine.call_context import as_service_account
+
+    iam._register_catalog(module_catalog(DECLARED, "acme.people"))
+    taken = module_catalog(DECLARED, "acme-people")  # also acme_people
+    other = module_catalog(DECLARED, "acme.reports")
+    with as_service_account("engine"):
+        registered = module_scopes.register_module_catalogs(
+            iam, [_EngineModule(taken), _EngineModule(other)]
+        )
+    assert registered == ["acme_reports"]
+    assert iam.catalogs.get("acme_people").module == "acme.people"
+
+
+def test_a_malformed_catalog_file_leaves_the_module_without_one(tmp_path):
+    (tmp_path / module_scopes.CATALOG_FILE).write_text(
+        "resource_types:\n  - {name: report, placement: platform}\nactions: []\n"
+    )
+    with pytest.raises(ModuleCatalogError):
+        module_scopes.load_module_catalog(tmp_path, "acme.reports")
+    assert module_scopes.declared_catalog(tmp_path, "acme.reports") is None
+    (tmp_path / module_scopes.CATALOG_FILE).write_text(": not yaml: [")
+    assert module_scopes.declared_catalog(tmp_path, "acme.reports") is None
+
+
+def test_one_module_id_declares_a_catalog_in_one_project_only(h, iam):
+    """The service comes from the module id: the same id in another project
+    would replace the first's catalog, so its declaring manifest is refused."""
+    manifest = {
+        **document(statement("Allow", ["triple_store:Query"], ["*"])),
+        "catalog": DECLARED,
+    }
+    first = h.service_account("module/acme/acme.people")
+    with h.as_(first):
+        iam.submit_manifest("acme.people", "acme", manifest)
+    h.admin("approve_manifest", first.id)
+    second = h.service_account("module/other/acme.people")
+    with h.as_(second), pytest.raises(IAMConflictError):
+        iam.submit_manifest("acme.people", "other", manifest)
+    # Without a catalog, the other project's module is as before.
+    with h.as_(second):
+        plain = iam.submit_manifest(
+            "acme.people", "other", document(*manifest["statements"])
+        )
+    assert plain.manifest.status == "pending"

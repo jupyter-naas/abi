@@ -218,6 +218,20 @@ def load_module_catalog(directory: str | Path, module: str) -> ActionCatalog | N
     return module_catalog(data, module)
 
 
+def declared_catalog(directory: str | Path, module: str) -> ActionCatalog | None:
+    """``load_module_catalog``, for an engine module's load: a catalog that cannot
+    be used (unreadable, refused) is logged and left out, never stopping the
+    engine; the module's own checks of its actions are then refused (fail
+    closed)."""
+    from naas_abi_core import logger
+
+    try:
+        return load_module_catalog(directory, module)
+    except Exception as exc:  # noqa: BLE001 - one module's catalog never stops the engine
+        logger.error(f"{module}: its {CATALOG_FILE} is not used: {exc}")
+        return None
+
+
 def declared_resource(
     catalog: ActionCatalog,
     type_name: str,
@@ -242,12 +256,24 @@ def declared_resource(
 
 def register_module_catalogs(iam: Any, modules: Iterable[Any]) -> list[str]:
     """Register the catalog each engine module declares (``BaseModule.iam_catalog``),
-    as the caller (the engine, while it loads); the services registered."""
+    as the caller (the engine, while it loads); the services registered.
+
+    A catalog IAM refuses (another module owns its service, a version dropping an
+    action a policy names) is logged and skipped: it never stops the engine, and
+    the module's own checks of it are refused (fail closed)."""
+    from naas_abi_core import logger
+
     registered: list[str] = []
     for module in modules:
         catalog = getattr(module, "iam_catalog", None)
         if catalog is None:
             continue
-        iam.register_catalog(catalog)
+        try:
+            iam.register_catalog(catalog)
+        except Exception as exc:  # noqa: BLE001 - one module's catalog never stops the engine
+            logger.error(
+                f"Catalog {catalog.service} of {catalog.module} not registered: {exc}"
+            )
+            continue
         registered.append(catalog.service)
     return registered
