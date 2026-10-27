@@ -897,10 +897,14 @@ everything; for a workspace, whatever its org has).
 
 | Part | Items |
 |---|---|
-| `modules` | `<module>`: the whole module, every agent, app, workflow and pipeline (`module:<type>/<module>/*`) and every action of the catalog it declares; `<type>/<module>/<name>`: one agent, app, workflow or pipeline (`<name>` `*`: every one of that type); `<service>:<Action>`: one action of the catalog a module declares (`<service>` is `module_service(<module>)`) |
+| `modules` | `<module>`: the whole module, every agent, app, workflow and pipeline (`module:<type>/<module>/*`) and every action of the catalog it declares; `<type>/<module>/<name>`: one agent, app, workflow or pipeline (`<name>` `*`: every one of that type; `<type>/*/*`: every one of that type of every module, installed now or later); `<service>:<Action>`: one action of the catalog a module declares (`<service>` is `module_service(<module>)`; `<service>:*` all of them, `*:*` every module's) |
 | `features` | Nexus feature keys: `nexus:feature/<key>` |
 
-Items are written decoded, as the module names them; `normalize` sorts them, drops
+The wildcards of every module say "every module but only these agents" with no list of
+the modules running today: a catalog seed narrowing an org with no set records
+`agent/<m>/<a>`, `app/*/*`, `workflow/*/*`, `pipeline/*/*`, `*:*`. A whole module on one
+side of an intersection and such a wildcard on the other give that module's part
+(`people` and `agent/*/*`: `agent/people/*`). Items are written decoded, as the module names them; `normalize` sorts them, drops
 duplicates and refuses a malformed one (`SetValidationError`, a `ValueError`, listing each).
 A set is stored in IAM (`iam_scope_sets`, a JSON list per part, NULL for everything), cached
 with the policies and dropped on every change event, so a narrowed set applies at the next
@@ -914,8 +918,9 @@ acting directly, through a group, as the actor of a call or as the user a call a
 `_none`) meets W's. Denies, and every other action (files, graphs, …), are unchanged.
 
 - **Bounded:** every user, owners and admins of O and W included.
-- **Not bounded:** holders of `builtin.platform_admin` (they set the orgs' sets and support
-  every org), and service accounts (`engine`, `api`, modules, `ci/*`, `job/*`): their
+- **Not bounded:** holders of `builtin.platform_admin` attached unscoped (or at `abi:-:-`), directly or
+  through a group (they set the orgs' sets and support every org; an attachment of it at an org or a
+  workspace, which `attach_policy` refuses anyway, unbinds no one), and service accounts (`engine`, `api`, modules, `ci/*`, `job/*`): their
   manifests and enumerated policies bound them. On a Nexus call `api` acts for the user, so
   the user's side is bounded; a module acting for a user likewise.
 

@@ -174,6 +174,19 @@ def test_the_platform_admin_and_service_accounts_are_not_bounded(h):
     assert not h.allowed("module:UseAgent", agent("A"), module, on_behalf_of=bob)
 
 
+def test_a_platform_admin_attachment_at_a_scope_unbinds_no_one(h):
+    """Only the platform's own attachment of builtin.platform_admin takes its
+    holder out of the sets (attach_policy refuses one at a scope; the store may
+    still hold one)."""
+    from naas_abi_core.services.iam.IAMPorts import Attachment, new_id
+
+    olga = _with_role(h, roles.ADMIN, "olga")
+    h.iam.store.attach(Attachment(new_id("att"), roles.PLATFORM_ADMIN, olga.id, AT_ORG))
+    h.iam.invalidate()
+    _set(h, modules=["market"])
+    assert _reason(h, "module:UseAgent", agent("A"), olga) == "outside_set"
+
+
 def test_denies_and_other_actions_are_unchanged(h):
     bob = _with_role(h, roles.MEMBER, "bob")
     _set(h, modules=[], features=[])
@@ -299,7 +312,9 @@ def test_granting_outside_the_set_is_refused_naming_the_set(h):
             h.iam.create_policy(
                 "market app",
                 document(
-                    statement("Allow", ["module:OpenApp"], ["${scope}:module:app/market/*"])
+                    statement(
+                        "Allow", ["module:OpenApp"], ["${scope}:module:app/market/*"]
+                    )
                 ),
                 scope=AT_WS,
             )
@@ -326,14 +341,14 @@ def test_grantable_intersects_holdings_with_the_sets(h):
     def held(record, action):
         with h.as_(record):
             catalogs = {c.service: c for c in h.iam.grantable(AT_WS)}
-        found = {
-            a.action: a for c in catalogs.values() for a in c.actions
-        }.get(action)
+        found = {a.action: a for c in catalogs.values() for a in c.actions}.get(action)
         # What names the action's own type (a role's statement lists every
         # module type for each of its actions).
         kind = {"module:UseAgent": "agent", "module:OpenApp": "app"}.get(action, "")
         return sorted(
-            r for r in (found.resources if found else ()) if kind in r or r.endswith(":*")
+            r
+            for r in (found.resources if found else ())
+            if kind in r or r.endswith(":*")
         )
 
     assert held(ws_admin, "module:UseAgent") == [

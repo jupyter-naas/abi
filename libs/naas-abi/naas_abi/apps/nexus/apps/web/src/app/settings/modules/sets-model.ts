@@ -4,8 +4,10 @@
  * asks this file what a cell shows and what a click makes of the draft.
  *
  * Grammar of a module entry: `<module>` (the whole module), `<type>/<module>/<name>` (one agent,
- * app, workflow or pipeline; `*` for every item of the type) or `<service>:<Action>` (an action
- * the module declares). `null` is "nothing recorded": everything for an organization, whatever
+ * app, workflow or pipeline; `*` for every item of the type; `<type>/*\/*` every item of the type
+ * of every module, installed now or later) or `<service>:<Action>` (an action the module
+ * declares; `<service>:*` all of them, `*:*` every module's). The wildcards of every module are
+ * read as covering; editing a column lists them per module (`expandGlobals`). `null` is "nothing recorded": everything for an organization, whatever
  * its organization has for a workspace. `[]` is nothing.
  */
 import type { ModuleScopeItem, ModuleScopesEntry, SetParts } from '@/lib/iam-admin/types';
@@ -74,7 +76,43 @@ export function belongsTo(item: string, entry: ModuleScopesEntry): boolean {
   if (item === entry.module) return true;
   const match = ITEM_PATTERN.exec(item);
   if (match) return match[2] === entry.module;
+  if (entry.declared && item === `${entry.declared.service}:*`) return true;
   return declaredActions(entry).includes(item);
+}
+
+const EVERY_ACTION = '*:*';
+
+function everyModule(type: string): string {
+  return `${type}/*/*`;
+}
+
+/**
+ * The wildcards of every module (`<type>/*\/*`, `*:*`) and of one service (`<service>:*`) as
+ * the catalog's modules: what a column lists once someone edits it.
+ */
+export function expandGlobals(list: string[], catalog: SetCatalog): string[] {
+  const out: string[] = [];
+  for (const item of list) {
+    const global = ITEM_TYPES.find(({ type }) => item === everyModule(type));
+    if (global) {
+      for (const entry of catalog.modules) {
+        if (itemsOf(entry, global.type).length) out.push(wildcardEntry(global.type, entry.module));
+      }
+      continue;
+    }
+    if (item === EVERY_ACTION) {
+      for (const entry of catalog.modules) out.push(...declaredActions(entry));
+      continue;
+    }
+    const service = item.endsWith(':*') ? item.slice(0, -2) : null;
+    const owner = service ? catalog.modules.find((m) => m.declared?.service === service) : undefined;
+    if (owner) {
+      out.push(...declaredActions(owner));
+      continue;
+    }
+    out.push(item);
+  }
+  return unique(out);
 }
 
 /** Whether a module list holds one entry (itself, through its module, or a `*`). */
@@ -84,19 +122,40 @@ export function listCovers(list: string[] | null, item: string, catalog: SetCata
   const match = ITEM_PATTERN.exec(item);
   if (match) {
     const [, type, moduleId] = match;
-    return list.includes(moduleId) || list.includes(wildcardEntry(type as ItemType, moduleId));
+    if (moduleId === '*') return false;
+    return (
+      list.includes(moduleId) ||
+      list.includes(wildcardEntry(type as ItemType, moduleId)) ||
+      list.includes(everyModule(type))
+    );
   }
   if (item.includes(':')) {
+    if (list.includes(EVERY_ACTION)) return true;
+    const service = item.split(':', 1)[0];
+    if (service === '*') return false;
+    if (!item.endsWith(':*') && list.includes(`${service}:*`)) return true;
     const moduleId = moduleOfEntry(item, catalog);
     return moduleId !== null && list.includes(moduleId);
   }
   return false;
 }
 
-/** How much of a module a list holds: `<module>` is all of it, any item of it is some. */
+/**
+ * How much of a module a list holds: `<module>` is all of it, as is every item and declared
+ * action of it held through wildcards; any of it is some.
+ */
 export function moduleCoverage(list: string[] | null, entry: ModuleScopesEntry): Coverage {
   if (list === null || list.includes(entry.module)) return 'all';
-  return list.some((item) => belongsTo(item, entry)) ? 'some' : 'none';
+  const catalog: SetCatalog = { modules: [entry], features: [] };
+  const rows = [
+    ...ITEM_TYPES.flatMap(({ type }) =>
+      itemsOf(entry, type).map((item) => itemEntry(type, entry.module, item.name)),
+    ),
+    ...declaredActions(entry),
+  ];
+  const held = rows.filter((row) => listCovers(list, row, catalog));
+  if (rows.length && held.length === rows.length) return 'all';
+  return held.length || list.some((item) => belongsTo(item, entry)) ? 'some' : 'none';
 }
 
 function rowEntry(row: Exclude<SetRow, { kind: 'module' } | { kind: 'feature' }>): string {
@@ -299,7 +358,7 @@ export function toggleRow(
     };
     return { ...parts, features: features.sort((a, b) => order(a) - order(b)) };
   }
-  const list = materialiseModules(parts, bound, catalog);
+  const list = expandGlobals(materialiseModules(parts, bound, catalog), catalog);
   const entry = entryOf(catalog, row.module);
   if (row.kind === 'module') {
     const kept = list.filter((item) => (entry ? !belongsTo(item, entry) : item !== row.module));

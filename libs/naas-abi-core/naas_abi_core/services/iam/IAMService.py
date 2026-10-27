@@ -520,7 +520,11 @@ class IAMService(IIAMService, PolicySource):
             group = via.get(attachment.principal_id)
             if group is not None and group not in active_groups:
                 continue  # a suspended group grants nothing
-            platform_admin |= attachment.policy_id == roles.PLATFORM_ADMIN
+            # Only the platform's own attachment of it: one at an org or a
+            # workspace grants there and never takes its holder out of the sets.
+            platform_admin |= attachment.policy_id == roles.PLATFORM_ADMIN and (
+                attachment.scope in (None, PLATFORM_SCOPE)
+            )
             statements += self._statements_of(
                 attachment.policy_id, attachment, group, fresh=fresh
             )

@@ -74,7 +74,7 @@ from naas_abi_core.services.iam.policy import (
     check_owned_document,
     parse_policy_document,
 )
-from naas_abi_core.services.iam.sets import read_resource, write_resource
+from naas_abi_core.services.iam.sets import intersect, read_resource, write_resource
 from starlette.concurrency import run_in_threadpool
 
 T = TypeVar("T")
@@ -818,39 +818,63 @@ class IamAdminService:
         return self._directory
 
     @staticmethod
-    def _set_entry(
-        session: IIAMService, org: str, workspace: str, name: str
-    ) -> dict[str, Any] | None:
-        """One column of the page, or None when the caller may not read its set."""
-        if not session.authorize("iam:GetSet", read_resource(org, workspace)).allowed:
-            return None
-        return {
-            "id": workspace if workspace != NONE else org,
-            "name": name,
-            "set": views.scope_set(session.get_set(org, workspace)),
-            "effective": views.scope_set(session.effective_set(org, workspace)),
-            "editable": session.authorize("iam:PutSet", write_resource(org, workspace)).allowed,
-        }
-
-    def _org_entry(self, session: IIAMService, org: OrganizationScopes) -> dict[str, Any] | None:
-        workspaces = [
-            entry
-            for ws in org.workspaces
-            if (entry := self._set_entry(session, org.id, ws.id, ws.name)) is not None
+    def _set_rows(
+        session: IIAMService, organizations: list[OrganizationScopes]
+    ) -> list[dict[str, Any]]:
+        """The page's rows for ``organizations``: every column whose set the caller
+        may read, what it records, what it has within its org's, and whether the
+        caller may change it. Three calls whatever the size (two ``filter``, one
+        ``list_sets``); a workspace whose org's set the caller may not read has
+        its effective set asked of IAM, which bounds it by the org's."""
+        columns = [(o.id, NONE) for o in organizations] + [
+            (o.id, w.id) for o in organizations for w in o.workspaces
         ]
-        entry = self._set_entry(session, org.id, NONE, org.name)
-        if entry is None and not workspaces:
-            return None
-        if entry is None:
-            # Its workspaces are the caller's to see, not the org's own set.
-            entry = {
-                "id": org.id,
-                "name": org.name,
-                "set": None,
-                "effective": None,
-                "editable": False,
+        read_of = {c: read_resource(*c) for c in columns}
+        write_of = {c: write_resource(*c) for c in columns}
+        readable = set(session.filter("iam:GetSet", list(read_of.values())).allowed)
+        writable = set(session.filter("iam:PutSet", list(write_of.values())).allowed)
+        only = organizations[0].id if len(organizations) == 1 else None
+        recorded = {(s.org, s.workspace): s for s in session.list_sets(only)}
+
+        def column(org: str, workspace: str, name: str) -> dict[str, Any] | None:
+            if read_of[(org, workspace)] not in readable:
+                return None
+            own = recorded.get((org, workspace)) or ScopeSet(org, workspace)
+            if workspace == NONE:
+                effective = own
+            elif read_of[(org, NONE)] in readable:
+                effective = intersect(recorded.get((org, NONE)), own)
+            else:
+                effective = session.effective_set(org, workspace)
+            return {
+                "id": workspace if workspace != NONE else org,
+                "name": name,
+                "set": views.scope_set(own),
+                "effective": views.scope_set(effective),
+                "editable": write_of[(org, workspace)] in writable,
             }
-        return {**entry, "workspaces": workspaces}
+
+        rows: list[dict[str, Any]] = []
+        for org in organizations:
+            workspaces = [
+                found
+                for ws in org.workspaces
+                if (found := column(org.id, ws.id, ws.name)) is not None
+            ]
+            entry = column(org.id, NONE, org.name)
+            if entry is None and not workspaces:
+                continue
+            if entry is None:
+                # Its workspaces are the caller's to see, not the org's own set.
+                entry = {
+                    "id": org.id,
+                    "name": org.name,
+                    "set": None,
+                    "effective": None,
+                    "editable": False,
+                }
+            rows.append({**entry, "workspaces": workspaces})
+        return rows
 
     async def sets(self, user: Any, org_id: str | None = None) -> list[dict[str, Any]]:
         """The sets of every organization (or the one named) and its workspaces
@@ -860,11 +884,7 @@ class IamAdminService:
         organizations = await self._directory_or_fail().organizations(org_id)
 
         def read(session: IIAMService) -> list[dict[str, Any]]:
-            found = [
-                entry
-                for org in organizations
-                if (entry := self._org_entry(session, org)) is not None
-            ]
+            found = self._set_rows(session, organizations) if organizations else []
             if not found:
                 target = read_resource(org_id) if org_id else self._wildcard("set")
                 raise PermissionDeniedError("iam:GetSet", target)
@@ -911,12 +931,11 @@ class IamAdminService:
         await self._change(user, "put_set", where, put, detail=detail)
 
         def read(session: IIAMService) -> dict[str, Any]:
-            if workspace_id == NONE:
-                entry = self._org_entry(session, org)
-            else:
-                name = next(w.name for w in org.workspaces if w.id == workspace_id)
-                entry = self._set_entry(session, org_id, workspace_id, name)
-            if entry is None:
+            rows = self._set_rows(session, [org])
+            entry: dict[str, Any] | None = rows[0] if rows else None
+            if entry is not None and workspace_id != NONE:
+                entry = next((w for w in entry["workspaces"] if w["id"] == workspace_id), None)
+            if entry is None or (workspace_id == NONE and entry["set"] is None):
                 raise PermissionDeniedError("iam:GetSet", read_resource(org_id, workspace_id))
             return entry
 

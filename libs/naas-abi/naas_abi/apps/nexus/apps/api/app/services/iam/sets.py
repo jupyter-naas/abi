@@ -28,6 +28,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import NO_ORG
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam import module_scopes, roles
+from naas_abi_core.services.iam import sets as core_sets
 from naas_abi_core.services.iam.IAMPorts import ScopeSet
 from naas_abi_core.services.iam.policy import PolicyDocument, Statement
 from sqlalchemy import text
@@ -48,15 +49,24 @@ def _org(org_id: str | None) -> str:
 
 
 def effective_set(org_id: str | None, workspace_id: str | None = None) -> ScopeSet:
-    """What an org (or a workspace in it) may use; everything when IAM is not
-    there to say (tests of a route alone)."""
+    """What an org (or a workspace in it) may use. Without an IAM at all (a route
+    tested alone) nothing narrows; when IAM fails to answer, nothing is had: what
+    is shown from it is never wider than IAM would say, and the failure is
+    logged."""
     org = _org(org_id)
+    workspace = workspace_id or "-"
+    try:
+        iam = runtime.iam()
+    except runtime.IAMUnavailableError:
+        return ScopeSet(org, workspace)
     try:
         with as_service_account("engine"):
-            return runtime.iam().effective_set(org, workspace_id or "-")
-    except Exception:  # noqa: BLE001 - no IAM: nothing narrows
-        _log.debug("No effective set for %s/%s", org, workspace_id, exc_info=True)
-        return ScopeSet(org, workspace_id or "-")
+            return iam.effective_set(org, workspace)
+    except Exception:  # noqa: BLE001 - shown only: fail closed, never a 500
+        _log.warning(
+            "The set of %s/%s could not be read: shown as empty", org, workspace, exc_info=True
+        )
+        return ScopeSet(org, workspace, (), ())
 
 
 def effective_features(
@@ -77,7 +87,9 @@ async def user_feature_flags(
 ) -> dict[str, dict[str, bool]] | None:
     """For each ``(org, workspace)``, whether ``user`` may use each feature there:
     IAM's ``nexus:UseFeature`` (role defaults, the sets, and any policy granting
-    one), within the deployment's ``enabled`` features. None without IAM."""
+    one), within the deployment's ``enabled`` features, in one ``filter``. None
+    without IAM; when IAM fails to answer, every feature off (logged): the flags
+    are only shown, the API decides each call again."""
     from naas_abi.apps.nexus.apps.api.app.core.feature_flags import KNOWN_FEATURE_KEYS
     from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
     from naas_abi.apps.nexus.apps.api.app.services.iam.names import nexus_resource
@@ -85,24 +97,31 @@ async def user_feature_flags(
 
     ctx = AUTHZ.context(user)
     keys = [key for key in KNOWN_FEATURE_KEYS if key in set(enabled)]
+    names = {
+        (workspace_id, key): nexus_resource(
+            "feature", org=_org(org_id), workspace=workspace_id, id=key
+        )
+        for org_id, workspace_id in workspaces
+        for key in keys
+    }
 
     def run() -> dict[str, dict[str, bool]] | None:
         try:
             iam = runtime.iam()
-        except Exception:  # noqa: BLE001 - no IAM: the caller falls back to the roles
-            return None
-        flags: dict[str, dict[str, bool]] = {}
-        with use_call_context(ctx):
-            for org_id, workspace_id in workspaces:
-                name_of = {
-                    key: nexus_resource("feature", org=_org(org_id), workspace=workspace_id, id=key)
-                    for key in keys
-                }
-                allowed = set(iam.filter("nexus:UseFeature", list(name_of.values())).allowed)
-                flags[workspace_id] = {
-                    key: key in name_of and name_of[key] in allowed for key in KNOWN_FEATURE_KEYS
-                }
-        return flags
+        except runtime.IAMUnavailableError:
+            return None  # the caller falls back to the roles' defaults
+        try:
+            with use_call_context(ctx):
+                allowed = set(iam.filter("nexus:UseFeature", list(names.values())).allowed)
+        except Exception:  # noqa: BLE001 - shown only: fail closed, never a 500
+            _log.warning("Feature flags could not be read from IAM: shown off", exc_info=True)
+            allowed = set()
+        return {
+            workspace_id: {
+                key: names.get((workspace_id, key)) in allowed for key in KNOWN_FEATURE_KEYS
+            }
+            for _, workspace_id in workspaces
+        }
 
     return await run_in_threadpool(run)
 
@@ -118,46 +137,42 @@ class SeedItems:
     apps: frozenset[tuple[str, str]] | None
 
 
-def narrowed_by_seed(
-    modules: Sequence[str] | None,
-    exposed: Sequence[Mapping[str, Any]],
-    seed: SeedItems,
-) -> tuple[str, ...] | None:
+def narrowed_by_seed(modules: Sequence[str] | None, seed: SeedItems) -> tuple[str, ...] | None:
     """``modules`` (the org's items, None for every module) narrowed by the agents
-    and apps a catalog seed names: a module's agents (or apps) become the seeded
-    ones only; its workflows, pipelines and declared actions stay as the org has
-    them. ``exposed`` is the module scope listing (``modules/scopes.build``)."""
-    if seed.agents is None and seed.apps is None:
-        return tuple(modules) if modules is not None else None
-    every = modules is None
-    held = set(modules or ())
-    kept: set[str] = set()
+    and apps a catalog seed names: those types become the seeded items the org
+    has; every other type, and the actions modules declare, stay as the org has
+    them. An org with no set keeps every module, installed now or later, for
+    them (``<type>/*/*``, ``*:*``): nothing is a snapshot of what runs today. A
+    seed that names neither returns ``modules`` as they are."""
     seeded = {"agent": seed.agents, "app": seed.apps}
-    listed = {entry["module"]: entry for entry in exposed}
-    names = sorted(set(listed) | ({m for m in held if "/" not in m and ":" not in m}))
-    for module in names:
-        whole = every or module in held
-        entry = listed.get(module, {})
-        for type_name in module_scopes.TYPES:
-            plural = {"agent": "agents", "app": "apps"}.get(type_name)
-            chosen = seeded.get(type_name)
-            if chosen is None or plural is None:
-                if whole:
-                    kept.add(f"{type_name}/{module}/*")
-                continue
-            for item in entry.get(plural, ()):
-                name = item["name"]
-                inside = whole or f"{type_name}/{module}/{name}" in held
-                if inside and (module, name) in chosen:
-                    kept.add(f"{type_name}/{module}/{name}")
-        declared = entry.get("declared")
-        if whole and declared:
-            kept.update(a["action"] for a in declared.get("actions", ()))
-    # Items the org lists one by one that the seed does not narrow.
+    if all(chosen is None for chosen in seeded.values()):
+        return tuple(modules) if modules is not None else None
+    held = (
+        tuple(modules)
+        if modules is not None
+        else (*(f"{t}/*/*" for t in module_scopes.TYPES), "*:*")
+    )
+    kept: set[str] = set()
     for item in held:
-        type_name = item.split("/", 1)[0] if "/" in item else ""
-        if ":" in item or (type_name and seeded.get(type_name) is None):
+        parsed = core_sets.parse_item(item)
+        if parsed.kind == "module":
+            # The whole module: its types the seed leaves alone, its actions.
+            kept.update(
+                f"{t}/{parsed.module}/*" for t in module_scopes.TYPES if seeded.get(t) is None
+            )
+            try:
+                kept.add(f"{module_scopes.module_service(parsed.module)}:*")
+            except ValueError:
+                pass  # no catalog name: it declares no action
+        elif parsed.kind == "scope" and seeded.get(parsed.type) is not None:
+            continue  # replaced by the seeded items within it, below
+        else:
             kept.add(item)
+    for type_name, chosen in seeded.items():
+        for module, name in chosen or ():
+            entry = f"{type_name}/{module}/{name}"
+            if core_sets.within(held, entry):
+                kept.add(entry)
     return tuple(sorted(kept))
 
 
@@ -214,33 +229,32 @@ async def seed_workspace(
     features: Collection[str] | None = None,
     catalog_seed: Mapping[str, Any] | None = None,
 ) -> ScopeSet | None:
-    """Record a new workspace's set: its org's, narrowed to ``features`` and to
-    the agents and apps its catalog seed names. Nothing is recorded when nothing
-    narrows (the workspace then follows its org's set). A workspace in no org has
-    no set of its own to inherit, and gets one only from ``features``."""
-    from naas_abi.apps.nexus.apps.api.app.services.modules import scopes
-
+    """Record a new workspace's set, a part only where something narrows it:
+    ``modules`` when its catalog seed names agents or apps (``narrowed_by_seed``
+    of its org's), ``features`` when the create form chose them (within its
+    org's). A part left unrecorded follows the org's, now and after the org's
+    set changes; nothing narrowing, nothing is recorded."""
     seed = seed_items(catalog_seed)
     narrows_modules = seed.agents is not None or seed.apps is not None
-    exposed = await scopes.gather() if narrows_modules else []
+    if not narrows_modules and features is None:
+        return None
     org = _org(org_id)
 
     def work() -> ScopeSet | None:
         iam = runtime.iam()
         with as_service_account("engine"):
             org_set = iam.get_set(org) if org_id else ScopeSet(org)
-            modules = narrowed_by_seed(org_set.modules, exposed, seed)
-            chosen = None
+            modules = narrowed_by_seed(org_set.modules, seed) if narrows_modules else None
+            chosen: tuple[str, ...] | None = None
             if features is not None:
-                chosen = sorted(set(features))
-                if org_set.features is not None:
-                    chosen = [f for f in chosen if f in org_set.features]
-            wanted = ScopeSet(
-                org,
-                workspace_id,
-                modules,
-                tuple(chosen) if chosen is not None else org_set.features,
-            )
+                chosen = tuple(
+                    sorted(
+                        f
+                        for f in set(features)
+                        if org_set.features is None or f in org_set.features
+                    )
+                )
+            wanted = ScopeSet(org, workspace_id, modules, chosen)
             if not wanted.recorded:
                 return None
             return iam.put_set(org, workspace_id, modules=wanted.modules, features=wanted.features)
@@ -272,18 +286,23 @@ def plan_override_moves(
 ) -> list[OverrideMove]:
     """The pure part of ``migrate_feature_overrides``.
 
-    An ``off`` override leaves the feature out of the workspace's set; an ``on``
-    one keeps it there and, for each role whose defaults lack it, is kept for the
-    people holding that role there (``kept``). ``role_defaults`` are the role
-    features by org (None: an org with no overlay)."""
+    An ``off`` override leaves the feature out of the workspace's set, which is
+    every other feature known, enabled now or later, and always ``settings``
+    (``feature_set_from_overrides``, as a snapshot import); an ``on`` one keeps it
+    there and, for each role whose defaults lack it, is kept for the people holding
+    that role there (``kept``, enabled features only: a policy never brings back
+    one the deployment turned off). ``role_defaults`` are the role features by org
+    (None: an org with no overlay)."""
     moves: list[OverrideMove] = []
+    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import feature_set_from_overrides
+
     for workspace, found in sorted(overrides.items()):
         known = {k: bool(v) for k, v in found.items() if k in enabled}
-        if not known:
+        if not known and feature_set_from_overrides(found) is None:
             continue
         org_id = org_of.get(workspace)
-        off = {k for k, on in known.items() if not on}
-        features = tuple(k for k in enabled if k not in off) if off else None
+        found_set = feature_set_from_overrides(found)
+        features = tuple(found_set) if found_set is not None else None
         defaults = role_defaults.get(org_id) or role_defaults.get(None) or {}
         kept: dict[str, tuple[str, ...]] = {}
         for role in roles.ROLES:
@@ -310,8 +329,41 @@ def _kept_policy_document(features: Iterable[str]) -> PolicyDocument:
     )
 
 
+def _kept_policy(iam: Any, scope: str, features: tuple[str, ...]) -> Any:
+    """The workspace's policy keeping ``features``: the one an earlier, interrupted
+    run made, else a new one."""
+    document = _kept_policy_document(features)
+    after: str | None = None
+    while True:
+        page = iam.list_policies(scope=scope, limit=200, after=after)
+        for policy in page.items:
+            if (
+                policy.name == KEPT_FEATURES_POLICY
+                and policy.owner_scope == scope
+                and policy.document.statements == document.statements
+            ):
+                return policy
+        after = page.next_after
+        if after is None:
+            break
+    return iam.create_policy(
+        KEPT_FEATURES_POLICY,
+        document,
+        description=(
+            "Features an earlier feature override gave every role of the "
+            f"workspace: {', '.join(features)}. Attached to who held a role "
+            "there when the overrides became the workspace's feature set."
+        ),
+        scope=scope,
+    )
+
+
 def _apply_move(iam: Any, move: OverrideMove) -> None:
+    """One workspace's move. Each step may run again: setting the set, finding
+    the kept policy before making it, attaching what is attached."""
     scope = f"abi:{move.org}:{move.workspace}"
+    # Org owners and admins hold their role org-wide.
+    scopes = {scope, f"abi:{move.org}:*"}
     if move.features is not None:
         current = iam.get_set(move.org, move.workspace)
         iam.put_set(
@@ -323,22 +375,13 @@ def _apply_move(iam: Any, move: OverrideMove) -> None:
     holders: dict[str, set[str]] = {}
     for role, features in move.kept.items():
         for attachment in iam.list_attachments(policy_id=f"builtin.{role}"):
-            if attachment.scope == scope:
+            if attachment.scope in scopes:
                 holders.setdefault(attachment.principal_id, set()).update(features)
     by_features: dict[tuple[str, ...], list[str]] = {}
     for principal_id, features in holders.items():
         by_features.setdefault(tuple(sorted(features)), []).append(principal_id)
     for features, principals in sorted(by_features.items()):
-        policy = iam.create_policy(
-            KEPT_FEATURES_POLICY,
-            _kept_policy_document(features),
-            description=(
-                "Features an earlier feature override gave every role of the "
-                f"workspace: {', '.join(features)}. Attached to who held a role "
-                "there when the overrides became the workspace's feature set."
-            ),
-            scope=scope,
-        )
+        policy = _kept_policy(iam, scope, features)
         for principal_id in sorted(principals):
             iam.attach_policy(policy.id, principal_id, scope)
 
@@ -404,15 +447,30 @@ async def migrate_feature_overrides(db: AsyncSession, flags: Any) -> int:
         role_defaults=defaults,
     )
 
-    def work() -> None:
+    def work() -> list[str]:
         iam = runtime.iam()
+        failed: list[str] = []
         with as_service_account("engine"):
             for move in moves:
-                iam.put_scope(move.org)
-                iam.put_scope(move.org, move.workspace)
-                _apply_move(iam, move)
+                try:
+                    iam.put_scope(move.org)
+                    iam.put_scope(move.org, move.workspace)
+                    _apply_move(iam, move)
+                except Exception:  # noqa: BLE001 - one workspace never stops the others
+                    _log.warning(
+                        "The feature overrides of workspace %s were not moved; "
+                        "the next start tries again",
+                        move.workspace,
+                        exc_info=True,
+                    )
+                    failed.append(move.workspace)
+        return failed
 
-    await run_in_threadpool(work)
+    failed = await run_in_threadpool(work)
+    if failed:
+        # Not recorded: the next start moves them again (each step may), and
+        # the overrides stay until then.
+        return len(moves) - len(failed)
     await db.execute(text("UPDATE workspaces SET feature_overrides = NULL"))
     await db.execute(
         text("INSERT INTO iam_migrations (name, applied_at, report) VALUES (:n, :at, :r)"),

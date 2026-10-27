@@ -49,7 +49,12 @@ def _name(rest: str) -> object:
 
 def test_items_are_checked_and_sorted():
     modules, features = sets.normalize(
-        ["acme.people", "agent/naas_abi/Abi", "acme_people:ExportReport", "acme.people"],
+        [
+            "acme.people",
+            "agent/naas_abi/Abi",
+            "acme_people:ExportReport",
+            "acme.people",
+        ],
         ["chat", "files"],
     )
     assert modules == ("acme.people", "acme_people:ExportReport", "agent/naas_abi/Abi")
@@ -98,19 +103,28 @@ def test_what_a_set_allows(catalogs):
 
 
 def test_a_workspace_set_within_its_orgs():
-    org = ScopeSet("org-1", modules=("acme.people", "agent/naas_abi/Abi"), features=("chat",))
+    org = ScopeSet(
+        "org-1", modules=("acme.people", "agent/naas_abi/Abi"), features=("chat",)
+    )
     within = ScopeSet(
         "org-1",
         "ws-1",
-        modules=("agent/acme.people/Recruiter", "acme_people:ExportReport", "agent/naas_abi/Abi"),
+        modules=(
+            "agent/acme.people/Recruiter",
+            "acme_people:ExportReport",
+            "agent/naas_abi/Abi",
+        ),
         features=("chat",),
     )
     assert sets.outside(within, org) == []
     by_type = ScopeSet("org-1", modules=("workflow/crm/*",))
-    assert sets.outside(ScopeSet("org-1", "ws-1", modules=("workflow/crm/Sync",)), by_type) == []
-    assert sets.outside(ScopeSet("org-1", "ws-1", modules=("agent/crm/Sync",)), by_type) == [
-        "agent/crm/Sync"
-    ]
+    assert (
+        sets.outside(ScopeSet("org-1", "ws-1", modules=("workflow/crm/Sync",)), by_type)
+        == []
+    )
+    assert sets.outside(
+        ScopeSet("org-1", "ws-1", modules=("agent/crm/Sync",)), by_type
+    ) == ["agent/crm/Sync"]
     wider = ScopeSet(
         "org-1", "ws-1", modules=("naas_abi", "market"), features=("chat", "files")
     )
@@ -122,7 +136,11 @@ def test_a_workspace_set_within_its_orgs():
 
 
 def test_the_effective_set_is_the_intersection():
-    org = ScopeSet("org-1", modules=("acme.people", "agent/naas_abi/Abi"), features=("chat", "files"))
+    org = ScopeSet(
+        "org-1",
+        modules=("acme.people", "agent/naas_abi/Abi"),
+        features=("chat", "files"),
+    )
     workspace = ScopeSet(
         "org-1",
         "ws-1",
@@ -170,3 +188,57 @@ def test_names_of_a_set():
     assert sets.write_resource("org-1") == "abi:%2A:%2A:iam:set/org-1"
     assert sets.write_resource("org-1", "ws-1") == "abi:org-1:%2A:iam:set/ws-1"
     parse_resource_name(sets.write_resource("org-1", "ws-1"))
+
+
+def test_wildcards_of_every_module(catalogs):
+    every = ScopeSet(
+        "org-1", "ws-1", modules=("agent/acme.people/Recruiter", "app/*/*", "*:*")
+    )
+    assert sets.allows(
+        every, catalogs, "module:OpenApp", _name("module:app/later.module/X")
+    )
+    assert sets.allows(
+        every, catalogs, "acme_people:ExportReport", _name("acme_people:report/q3")
+    )
+    assert not sets.allows(
+        every, catalogs, "module:UseAgent", _name("module:agent/acme.people/Other")
+    )
+    one_service = ScopeSet("org-1", "ws-1", modules=("acme_people:*",))
+    assert sets.allows(
+        one_service, catalogs, "acme_people:ReadReport", _name("acme_people:report/q3")
+    )
+    # Within: a wildcard holds its own kind only.
+    assert sets.within(("app/*/*",), "app/crm/Sales")
+    assert sets.within(("app/*/*",), "app/crm/*")
+    assert not sets.within(("app/crm/*",), "app/*/*")
+    assert sets.within(("*:*",), "acme_people:*")
+    assert sets.within(("acme.people",), "acme_people:*")
+    assert not sets.within(("acme_people:*",), "*:*")
+    with pytest.raises(sets.SetValidationError):
+        sets.normalize(["agent/*/Recruiter", "*:Export"], None)
+
+
+def test_a_whole_module_meets_a_wildcard_of_every_module():
+    org = ScopeSet("org-1", modules=("people", "crm_x:Sync"))
+    workspace = ScopeSet(
+        "org-1", "ws-1", modules=("agent/people/A", "workflow/*/*", "*:*")
+    )
+    effective = sets.intersect(org, workspace)
+    assert effective.modules == (
+        "agent/people/A",
+        "crm_x:Sync",
+        "people:*",
+        "workflow/people/*",
+    )
+
+
+def test_held_patterns_of_every_module(catalogs):
+    found = ScopeSet("org-1", "ws-1", modules=("app/*/*", "*:*"))
+    scope = "abi:org-1:ws-1"
+    assert sets.held_patterns(found, catalogs, "module:OpenApp", scope) == (
+        "abi:org-1:ws-1:module:app/*",
+    )
+    assert sets.held_patterns(found, catalogs, "module:UseAgent", scope) == ()
+    assert sets.held_patterns(found, catalogs, "acme_people:ExportReport", scope) == (
+        "abi:org-1:ws-1:acme_people:report/*",
+    )

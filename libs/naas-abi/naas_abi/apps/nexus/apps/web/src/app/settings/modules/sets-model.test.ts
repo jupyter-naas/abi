@@ -195,3 +195,40 @@ describe('helpers', () => {
     expect(moduleMatches(crm, '  ')).toBe(true);
   });
 });
+
+describe('wildcards of every module', () => {
+  const seeded = {
+    modules: ['agent/acme.people/Recruiter', 'app/*/*', 'workflow/*/*', 'pipeline/*/*', '*:*'],
+    features: null,
+  };
+  const sales: SetRow = { kind: 'item', module: 'acme.crm', type: 'agent', name: 'Sales' };
+  const sync: SetRow = { kind: 'item', module: 'acme.crm', type: 'workflow', name: 'Sync' };
+
+  it('reads them as covering every module of their kind', () => {
+    expect(coverage(seeded, recruiter, catalog)).toBe('all');
+    expect(coverage(seeded, directory, catalog)).toBe('all');
+    expect(coverage(seeded, report, catalog)).toBe('all');
+    expect(coverage(seeded, sync, catalog)).toBe('all');
+    expect(coverage(seeded, sales, catalog)).toBe('none');
+    // People: Coach is out, so some of it; CRM: its workflow but not its agent.
+    expect(moduleCoverage(seeded.modules, people)).toBe('some');
+    expect(moduleCoverage(seeded.modules, crm)).toBe('some');
+    expect(listCovers(['acme_people:*'], 'acme_people:ExportReport', catalog)).toBe(true);
+  });
+
+  it('lists them per module once the column is edited', () => {
+    const next = toggleRow(seeded, sales, true, catalog);
+    expect(next.modules).toEqual(
+      expect.arrayContaining([
+        'agent/acme.people/Recruiter',
+        // CRM's only agent: listed as all of them.
+        'agent/acme.crm/*',
+        'app/acme.people/*',
+        'workflow/acme.crm/*',
+        'acme_people:ExportReport',
+      ]),
+    );
+    expect(next.modules).not.toContain('*:*');
+    expect(next.modules).not.toContain('app/*/*');
+  });
+});

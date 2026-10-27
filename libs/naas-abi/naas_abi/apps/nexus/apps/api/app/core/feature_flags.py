@@ -148,6 +148,17 @@ def parse_feature_overrides(raw: str | None) -> dict[str, bool] | None:
     }
 
 
+def feature_set_from_overrides(overrides: Mapping[str, bool] | None) -> list[str] | None:
+    """The feature set per-workspace overrides stand for: every known feature
+    but those turned off (a feature the deployment enables later included), and
+    always the pinned ones; None when none is off (nothing narrows). The one rule
+    of the start-up move (``services/iam/sets.py``) and the snapshot import."""
+    off = {key for key, on in (overrides or {}).items() if not on}
+    if not off:
+        return None
+    return [key for key in KNOWN_FEATURE_KEYS if key not in off or key in PINNED_FEATURES]
+
+
 def _resolve_enabled_catalog(enabled_features: list[str]) -> set[str]:
     known = {key for key in enabled_features if key in KNOWN_FEATURE_KEYS}
     if known:

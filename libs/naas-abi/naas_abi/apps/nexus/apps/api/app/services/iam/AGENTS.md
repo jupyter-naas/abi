@@ -143,26 +143,41 @@ with them (core `services/iam/AGENTS.md`, "Sets"). Nexus:
 
 - **Shows the user what IAM decides.** The `feature_flags` of a workspace in `/api/workspaces` are IAM's
   `UseFeature` for the user, one `filter` per workspace (`sets.user_feature_flags`), within `enabled_features`:
-  role defaults, the sets and any policy granting a feature, the platform admin's `*` included. Without an IAM
-  it falls back to the role's defaults within the set (`build_feature_flags(feature_set=)`). The features a
+  role defaults, the sets and any policy granting a feature, the platform admin's `*` included, in one `filter`
+  for every workspace listed. Without an IAM it falls back to the role's defaults within the set
+  (`build_feature_flags(feature_set=)`). **What is only shown fails closed:** when IAM fails to answer (a NATS
+  timeout), the flags are all off and a workspace's set reads as empty (`effective_set`), logged at warning
+  level, never a 500 and never wider than IAM would say; only an absent IAM (a route tested alone) reads as
+  everything. The features a
   workspace offers (`features` of the org's workspace list and of `/configuration`, the agents a workspace
   syncs) are the roles' defaults within its effective set.
 - **Edits sets as the user** through `services/iam_admin` (`/api/iam/admin/sets`, audited): the modules ×
   workspaces page. `settings` is added to every feature set it records (`PINNED_FEATURES`): a set never takes
   a workspace's settings away.
-- **Records a new workspace's set** (`seed_workspace`, as `engine`, part of the creation the route authorized):
-  its org's, narrowed by the create form's `features` and by its **catalog seed**. The seed (`catalog_seed`:
-  agents, apps, ontologies, maps) still says what the workspace is created with; its `agents` and `apps`
-  also narrow the set, for the modules within the org's: a module's agents (or apps) become the seeded ones
-  only, its workflows, pipelines and declared actions stay as the org has them (`<type>/<module>/*`, each
-  declared action). A seed with no `agents` (or `apps`) key narrows nothing of that type. Nothing narrowing,
-  nothing is recorded: the workspace follows its org's set. A new org records none: everything.
+- **Records a new workspace's set** (`seed_workspace`, as `engine`, part of the creation the route authorized),
+  a part only where something narrows it, so the rest follows its org's set, now and after the org's set
+  changes:
+  - `features`, when the create form chose them, within the org's;
+  - `modules`, when its **catalog seed** names agents or apps. The seed (`catalog_seed`: agents, apps,
+    ontologies, maps) still says what the workspace is created with; its `agents` and `apps` also narrow the
+    set: those types become the seeded items the org has (through a whole module, `<type>/<m>/*` or
+    `<type>/*/*`), every other type and the declared actions stay as the org has them (`<type>/<m>/*`,
+    `<service>:*` for a whole module). In an org with no set, the rest is every module's, installed now or
+    later (`workflow/*/*`, `pipeline/*/*`, `*:*`, and the type the seed leaves out): no snapshot of the
+    modules running at creation. A seed with no `agents` (or `apps`) key narrows nothing of that type.
+  A new org records none: everything.
 - **Moved the feature overrides once** (`migrate_feature_overrides`, at start after the role data, recorded in
   `iam_migrations` as `workspace_feature_sets_v1`): `workspaces.feature_overrides`, else the deprecated
   `feature_flags.workspace_overrides`. An override turning a feature off leaves it out of the workspace's
-  feature set; one turning it on keeps it there and, for each role whose defaults lack it, a workspace policy
-  (`Features kept from the workspace's overrides`) attached to the people holding that role there keeps it
-  for them. Nobody's features change; the column is cleared. Snapshot imports (`core/workspaces_import.py`)
+  feature set, which is every other known feature (one the deployment enables later included) and always
+  `settings` (`feature_set_from_overrides`, the snapshot import's rule too); one turning it on keeps it there
+  and, for each role whose defaults lack it, a workspace policy (`Features kept from the workspace's
+  overrides`, enabled features only) attached to the people holding that role there, at the workspace or
+  org-wide (the org's owners and admins), keeps it for them. Nobody's features change; the column is
+  cleared. Every step may run again (the set is put, the policy found by name and document before it is
+  made, attaching is idempotent): a workspace that fails is logged and the move is not recorded, so the next
+  start finishes it, and a failure never keeps the rest of startup's authorization (`sync_org_wide_roles`)
+  from running. Snapshot imports (`core/workspaces_import.py`)
   record a feature set from a snapshot's overrides likewise, where the workspace has none.
 - **Platform-level types.** A workspace role never reaches a platform-level resource. IAM keeps two
   managed policies in step with attachments: `builtin.platform.member` (held while the principal has a

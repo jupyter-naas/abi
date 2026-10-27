@@ -352,8 +352,13 @@ async def _prepare_iam() -> None:
             if report.applied:
                 log.info("Role data moved into IAM: %s", report)
             # The per-workspace feature overrides of earlier versions become the
-            # workspaces' feature sets, once.
-            await sets.migrate_feature_overrides(db, live_settings().feature_flags)
+            # workspaces' feature sets, once. A failure is retried at the next
+            # start and never keeps the rest of authorization from being set up.
+            try:
+                await sets.migrate_feature_overrides(db, live_settings().feature_flags)
+            except Exception:
+                await db.rollback()
+                log.exception("The workspace feature overrides were not moved into their sets")
             # Org owners and admins reach every workspace of their organization.
             made = await MEMBERSHIPS.sync_org_wide_roles()
             if made:

@@ -15,9 +15,16 @@ A set has two parts, each ``None`` when nothing is recorded (everything):
     declares;
   * ``<type>/<module>/<name>``: one agent, app, workflow or pipeline of it
     (``<type>`` is ``agent``, ``app``, ``workflow`` or ``pipeline``);
-    ``<type>/<module>/*`` is every one of that type;
+    ``<type>/<module>/*`` is every one of that type, ``<type>/*/*`` every one
+    of that type of every module, installed now or later;
   * ``<service>:<Action>``: one action of the catalog a module declares
-    (``<service>`` is ``module_service(<module>)``).
+    (``<service>`` is ``module_service(<module>)``); ``<service>:*`` every
+    action of it, ``*:*`` every action every module declares.
+
+  The wildcards say "every module but only these agents" without listing the
+  modules installed today (a catalog seed narrowing an org with no set:
+  ``agent/acme.people/Recruiter``, ``app/*/*``, ``workflow/*/*``,
+  ``pipeline/*/*``, ``*:*``).
 
   ``<module>`` is the module's stable identifier (``module_scopes``); names are
   written decoded, as the module names them.
@@ -51,7 +58,7 @@ ANY = "*"
 USE_FEATURE = "nexus:UseFeature"
 
 _MODULE = re.compile(r"^[^\s/:]{1,200}$")
-_DECLARED = re.compile(r"^([a-z][a-z0-9_]*):([A-Z][A-Za-z0-9]*)$")
+_DECLARED = re.compile(r"^([a-z][a-z0-9_]*|\*):([A-Z][A-Za-z0-9]*|\*)$")
 _FEATURE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _MAX_ITEMS = 2000
 
@@ -82,6 +89,10 @@ def parse_item(item: str) -> Item:
         raise SetValidationError(f"Invalid set item {item!r}")
     declared = _DECLARED.match(item)
     if declared:
+        if declared.group(1) == ANY and declared.group(2) != ANY:
+            raise SetValidationError(
+                f"Invalid set item {item!r}: an action of every module is *:*"
+            )
         return Item("action", service=declared.group(1), action=item)
     if "/" not in item:
         if not _MODULE.match(item):
@@ -89,10 +100,17 @@ def parse_item(item: str) -> Item:
         return Item("module", module=item)
     type_name, _, rest = item.partition("/")
     module, slash, name = rest.partition("/")
-    if type_name not in TYPES or not slash or not name or not _MODULE.match(module):
+    if (
+        type_name not in TYPES
+        or not slash
+        or not name
+        or not _MODULE.match(module)
+        or (module == ANY and name != ANY)
+    ):
         raise SetValidationError(
             f"Invalid set item {item!r}: <module>, <type>/<module>/<name> with type "
-            f"one of {', '.join(TYPES)}, or <service>:<Action>"
+            f"one of {', '.join(TYPES)} (<type>/*/* for every module), or "
+            "<service>:<Action>"
         )
     return Item("scope", module=module, type=type_name, name=name)
 
@@ -128,18 +146,26 @@ def normalize(
     return kept_modules, kept_features
 
 
-def _within(items: Sequence[str], item: str) -> bool:
-    """Whether ``item`` is in a list of module items, itself or through its
-    whole module."""
+def within(items: Sequence[str], item: str) -> bool:
+    """Whether ``item`` is in a list of module items: itself, through its whole
+    module, or through a wildcard of its type or service."""
     if item in items:
         return True
     parsed = parse_item(item)
     if parsed.kind == "scope":
-        return (
-            parsed.module in items
-            or f"{parsed.type}/{parsed.module}/{ANY}" in items
-        )
+        if parsed.module == ANY:
+            return False  # only itself holds every module's items
+        if f"{parsed.type}/{ANY}/{ANY}" in items:
+            return True
+        return parsed.module in items or f"{parsed.type}/{parsed.module}/{ANY}" in items
     if parsed.kind == "action":
+        if parsed.service == ANY or f"{ANY}:{ANY}" in items:
+            return f"{ANY}:{ANY}" in items
+        if (
+            parsed.action != f"{parsed.service}:{ANY}"
+            and f"{parsed.service}:{ANY}" in items
+        ):
+            return True
         return any(
             _is_module(other) and module_service(other) == parsed.service
             for other in items
@@ -159,7 +185,7 @@ def outside(child: ScopeSet, parent: ScopeSet | None) -> list[str]:
         return []
     extra: list[str] = []
     if child.modules is not None and parent.modules is not None:
-        extra += [m for m in child.modules if not _within(parent.modules, m)]
+        extra += [m for m in child.modules if not within(parent.modules, m)]
     if child.features is not None and parent.features is not None:
         extra += [f"feature {f}" for f in child.features if f not in parent.features]
     return extra
@@ -172,14 +198,24 @@ def _intersect_items(
         return b
     if b is None:
         return a
-    kept = {item for item in b if _within(a, item)}
-    kept |= {item for item in a if _within(b, item)}
+    kept = {item for item in b if within(a, item)}
+    kept |= {item for item in a if within(b, item)}
+    # A whole module on one side, a wildcard of every module on the other: that
+    # module's part of it.
+    for one, other in ((a, b), (b, a)):
+        for module in (m for m in one if _is_module(m)):
+            for item in other:
+                parsed = parse_item(item)
+                if parsed.kind == "scope" and parsed.module == ANY:
+                    kept.add(f"{parsed.type}/{module}/{ANY}")
+                elif parsed.kind == "action" and parsed.service == ANY:
+                    kept.add(f"{module_service(module)}:{ANY}")
     # An item its whole module also holds adds nothing.
     return tuple(
         sorted(
             item
             for item in kept
-            if _is_module(item) or not _within(sorted(kept - {item}), item)
+            if _is_module(item) or not within(sorted(kept - {item}), item)
         )
     )
 
@@ -242,12 +278,18 @@ def allows(
             module in items
             or f"{name.type}/{module}/{item_name}" in items
             or f"{name.type}/{module}/{ANY}" in items
+            or f"{name.type}/{ANY}/{ANY}" in items
         )
     catalog = catalogs.get(name.service)
     owner = catalog.module if catalog is not None else None
     if not owner:
         return False
-    return owner in items or action in items
+    return (
+        owner in items
+        or action in items
+        or f"{name.service}:{ANY}" in items
+        or f"{ANY}:{ANY}" in items
+    )
 
 
 def held_patterns(
@@ -289,15 +331,22 @@ def held_patterns(
                         f"{scope}:{service}:{type_name}/{encode_segment(parsed.module)}/*"
                     )
                 elif parsed.kind == "scope" and parsed.type == type_name:
+                    if parsed.module == ANY:
+                        patterns.append(f"{scope}:{service}:{type_name}/*")
+                        continue
                     last = "*" if parsed.name == ANY else encode_segment(parsed.name)
                     patterns.append(
                         f"{scope}:{service}:{type_name}/"
                         f"{encode_segment(parsed.module)}/{last}"
                     )
             elif (
-                parsed.kind == "module" and catalog is not None
+                parsed.kind == "module"
+                and catalog is not None
                 and catalog.module == parsed.module
-            ) or (parsed.kind == "action" and parsed.action == action):
+            ) or (
+                parsed.kind == "action"
+                and parsed.action in (action, f"{service}:{ANY}", f"{ANY}:{ANY}")
+            ):
                 patterns.append(f"{scope}:{service}:{type_name}/*")
     return tuple(dict.fromkeys(patterns))
 
@@ -321,7 +370,5 @@ def write_resource(org: str, workspace: str = NONE) -> str:
     from naas_abi_core.services.iam.names import ALL_ORGS, ALL_WORKSPACES
 
     if workspace == NONE:
-        return resource_name(
-            "iam", "set", org, org=ALL_ORGS, workspace=ALL_WORKSPACES
-        )
+        return resource_name("iam", "set", org, org=ALL_ORGS, workspace=ALL_WORKSPACES)
     return resource_name("iam", "set", workspace, org=org, workspace=ALL_WORKSPACES)

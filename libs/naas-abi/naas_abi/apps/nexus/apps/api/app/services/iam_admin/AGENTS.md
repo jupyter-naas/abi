@@ -119,7 +119,9 @@ Nexus adds no role check of its own.
   resource `<org>` or `<org>/<ws>`, the parts' sizes as detail), and `editable` is IAM's `iam:PutSet` decision.
   Consequences: the platform admin edits organizations' sets, an org's owners and admins its workspaces' (their
   org-wide role), a workspace admin reads their workspace's; nobody else sees the page. Names come from Nexus's
-  database (`ScopeDirectory`), which of them the caller sees from IAM.
+  database (`ScopeDirectory`), which of them the caller sees from IAM. The rows take three IAM calls whatever
+  the number of columns (`filter` for `GetSet`, `filter` for `PutSet`, one `list_sets`) and are intersected
+  here (`sets.intersect`); only a workspace whose org's set the caller may not read asks IAM its effective set.
 - **The simulator is `explain`.** "Can X do Y on Z" is IAM's `explain` on the principal (`iam:Explain`): the answer
   names the deciding side, policy, statement, attachment, scope and group, and shows the statement when the
   caller may read its policy.

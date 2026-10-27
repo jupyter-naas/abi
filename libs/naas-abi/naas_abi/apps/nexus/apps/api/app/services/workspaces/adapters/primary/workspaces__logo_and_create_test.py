@@ -132,8 +132,11 @@ def test_create_keeps_a_new_workspace_within_its_orgs_set(monkeypatch, team) -> 
 
     assert resp.status_code == 200
     found = _workspace_set(team)
-    assert found.modules == ("acme.people",)
+    # Only what the form narrowed is recorded: the modules follow the org's.
+    assert found.modules is None
     assert found.features == ("chat",)
+    with as_service_account("engine"):
+        assert team.iam.effective_set("org-1", "ws-1").modules == ("acme.people",)
 
 
 def test_create_rejects_unknown_features_before_creating() -> None:

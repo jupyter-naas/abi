@@ -35,7 +35,7 @@ import yaml
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
     KNOWN_FEATURE_KEYS,
-    PINNED_FEATURES,
+    feature_set_from_overrides,
 )
 from naas_abi.apps.nexus.apps.api.app.core.org_seed import _get_user_by_email, _normalize_email
 from naas_abi.apps.nexus.apps.api.app.core.users_import import _in_engine
@@ -87,12 +87,8 @@ def _feature_overrides(entry: dict[str, Any]) -> dict[str, bool] | None:
 
 
 def feature_set_of(overrides: dict[str, bool] | None) -> list[str] | None:
-    """The feature set a snapshot's overrides stand for: every feature but the
-    ones turned off; None when none is (nothing narrows)."""
-    off = {key for key, on in (overrides or {}).items() if not on}
-    if not off:
-        return None
-    return [key for key in KNOWN_FEATURE_KEYS if key not in off or key in PINNED_FEATURES]
+    """The feature set a snapshot's overrides stand for: ``feature_set_from_overrides``."""
+    return feature_set_from_overrides(overrides)
 
 
 async def import_workspaces(
