@@ -19,6 +19,7 @@ from naas_abi_core.services.agent.Agent import (
 from naas_abi_core.services.agent.Agent_return_direct_test import _ScriptedChatModel
 from naas_abi_core.services.agent.context import (
     agent_usable_module_scopes,
+    process_scope_of,
     tool_scope_refused,
 )
 from naas_abi_core.utils.Expose import Expose
@@ -42,12 +43,29 @@ class ExportReport(Expose):
         ]
 
 
+class LocalTool(Expose):
+    """Not any module's workflow: an agent's own tool class."""
+
+    def run(self, quarter: str) -> str:
+        return quarter
+
+    def as_tools(self) -> list[BaseTool]:
+        return [
+            StructuredTool.from_function(
+                func=self.run, name="local", description="Local."
+            )
+        ]
+
+
 @pytest.fixture
 def workflow() -> ExportReport:
-    instance = ExportReport()
-    module = SimpleNamespace(workflows=[instance], pipelines=[])
+    """An instance the agent builds itself, as BodoAgent does with
+    ``ExecutePythonCodeWorkflow(config)``: the module only declares the class."""
+    module = SimpleNamespace(
+        workflows=[], pipelines=[], workflow_classes=[ExportReport], pipeline_classes=[]
+    )
     assert tag_process_scopes({"acme.reports": module}) == 1
-    return instance
+    return ExportReport()
 
 
 def _turn(workflow: ExportReport) -> str:
@@ -78,8 +96,8 @@ def _turn(workflow: ExportReport) -> str:
     return "\n".join(str(s) for s in seen)
 
 
-def test_an_engine_workflow_is_marked_with_its_module_scope(workflow) -> None:
-    assert workflow._abi_module_scope == SCOPE
+def test_an_engine_workflow_class_has_its_module_scope(workflow) -> None:
+    assert process_scope_of(workflow) == SCOPE
     (tool,) = workflow.as_tools()
     assert tool_scope_refused(tool) is None  # an unbound turn
     token = agent_usable_module_scopes.set(frozenset())
@@ -110,8 +128,28 @@ def test_an_agent_runs_a_workflow_the_caller_may_run(workflow) -> None:
     assert workflow.ran == ["q3"]
 
 
+def test_a_subclass_of_a_module_workflow_is_bounded_like_it(workflow) -> None:
+    class Narrower(ExportReport):
+        pass
+
+    (tool,) = Narrower().as_tools()
+    token = agent_usable_module_scopes.set(frozenset())
+    try:
+        assert tool_scope_refused(tool) == SCOPE
+    finally:
+        agent_usable_module_scopes.reset(token)
+
+
+def test_a_class_two_modules_declare_keeps_the_first_scope(workflow) -> None:
+    other = SimpleNamespace(
+        workflows=[], pipelines=[], workflow_classes=[ExportReport], pipeline_classes=[]
+    )
+    assert tag_process_scopes({"acme.other": other}) == 0
+    assert process_scope_of(ExportReport()) == SCOPE
+
+
 def test_a_tool_of_no_module_workflow_is_not_bounded() -> None:
-    (tool,) = ExportReport().as_tools()
+    (tool,) = LocalTool().as_tools()
     token = agent_usable_module_scopes.set(frozenset())
     try:
         assert tool_scope_refused(tool) is None

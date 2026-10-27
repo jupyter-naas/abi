@@ -26,6 +26,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     NATSConfiguration,
 )
 from naas_abi_core.utils.process_api import (
+    process_class_slug,
     process_parameters_type,
     process_route_slug,
 )
@@ -111,28 +112,31 @@ def declare_process_workflow(module: Any, kind: str, instance: Any) -> str | Non
 
 
 def tag_process_scopes(modules: Mapping[str, Any]) -> int:
-    """Mark every ``Workflow`` and ``Pipeline`` instance of every module with its
-    module scope (``(type, module id, workflow name)``, IAM ``module_scopes``), so
-    an agent's tool it exposes is bounded by the caller's scopes
-    (``agent.context.tool_scope_refused``). In every engine, NATS or not: the
-    tools run in process. Returns how many were marked."""
-    from naas_abi_core.services.agent.context import MODULE_SCOPE_ATTRIBUTE
+    """Register the module scope (``(type, module id, workflow name)``, IAM
+    ``module_scopes``) of every ``Workflow`` and ``Pipeline`` class of every
+    module, found or instantiated, so a tool any instance of it exposes is
+    bounded by the caller's scopes (``agent.context.tool_scope_refused``),
+    including an instance an agent builds itself. In every engine, NATS or not:
+    the tools run in process. Returns how many classes were registered."""
+    from naas_abi_core.services.agent.context import register_process_scope
 
-    marked = 0
+    registered = 0
     for module_id, module in modules.items():
         for kind, attribute in PROCESS_KINDS:
-            for instance in getattr(module, attribute, None) or []:
-                try:
-                    scope = (kind, module_id, process_workflow_name(kind, instance))
-                    setattr(instance, MODULE_SCOPE_ATTRIBUTE, scope)
-                except Exception:  # noqa: BLE001 - an unnamed or frozen instance stays unbound
-                    logger.debug(
-                        f"No module scope for {type(instance).__name__} of {module_id}",
-                        exc_info=True,
+            classes = {
+                *(getattr(module, f"{kind}_classes", None) or ()),
+                *(type(i) for i in getattr(module, attribute, None) or ()),
+            }
+            for cls in sorted(classes, key=lambda c: c.__qualname__):
+                scope = (kind, module_id, f"{kind}.{process_class_slug(cls)}")
+                if register_process_scope(cls, scope):
+                    registered += 1
+                else:
+                    logger.warning(
+                        f"{cls.__qualname__} of {module_id}: another module declares "
+                        "it; its scope is that module's"
                     )
-                    continue
-                marked += 1
-    return marked
+    return registered
 
 
 def bridge_processes(

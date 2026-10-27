@@ -475,9 +475,15 @@ class AppHtmlAccessTokenRequest(BaseModel):
         description="Lifetime, eight hours at most; defaults to "
         "app_html_access_token_expire_minutes",
     )
+    app_id: str | None = Field(
+        default=None,
+        max_length=512,
+        description="The catalog app the link opens (<module_path>:<app>): its path lock "
+        "is the app's own folder",
+    )
     path_prefix: str | None = Field(
         default=None,
-        description="Optional path lock, e.g. /app-html/axi/devops/",
+        description="The app's path lock, /app-html/<module/path>/<app>/, when no app_id is given",
     )
 
 
@@ -488,15 +494,38 @@ class AppHtmlAccessTokenResponse(BaseModel):
     path_prefix: str | None = None
 
 
+def _app_html_root(app: AppInfo) -> str:
+    """An engine app's folder under ``/app-html/``: its link's path lock."""
+    return f"/app-html/{app.module_path.replace('.', '/')}/{app.app_name}/"
+
+
 def _app_id_of_prefix(path_prefix: str | None) -> str:
-    """The catalog app an ``/app-html/<module>/<app>/`` path lock names; ``-``
-    when there is no lock or it names none (a link to no app is refused)."""
+    """The catalog app an ``/app-html/<module/path>/<app>/`` path lock names;
+    ``-`` when there is no lock or it names none (a link to no app is refused)."""
     if path_prefix:
         locked = path_prefix.strip().rstrip("/") + "/"
         for app in _scan_apps_catalog():
-            if locked == f"/app-html/{app.module_path.replace('.', '/')}/{app.app_name}/":
+            if locked == _app_html_root(app):
                 return app.app_id
     return "-"
+
+
+def _link_target(body: AppHtmlAccessTokenRequest) -> tuple[str, str]:
+    """The app a link opens and its path lock: the app ``app_id`` names (the
+    lock, if given too, must be its folder), else the one ``path_prefix`` names.
+    400 for a link that opens no catalog app."""
+    if body.app_id:
+        app = next((a for a in _scan_apps_catalog() if a.app_id == body.app_id), None)
+        if app is None:
+            raise HTTPException(status_code=400, detail="app_id names no app")
+        root = _app_html_root(app)
+        if body.path_prefix and body.path_prefix.strip().rstrip("/") + "/" != root:
+            raise HTTPException(status_code=400, detail="path_prefix is not the app's folder")
+        return app.app_id, root
+    app_id = _app_id_of_prefix(body.path_prefix)
+    if app_id == "-":
+        raise HTTPException(status_code=400, detail="Name the app: app_id or its path_prefix")
+    return app_id, str(body.path_prefix).strip().rstrip("/") + "/"
 
 
 @router.post(
@@ -511,16 +540,17 @@ async def create_app_html_access_token(
     """Issue a time-limited link accepted by ``/app-html/`` (alongside ABI_API_KEY):
     a revocable IAM grant for this user, never a session. It is locked to one
     app (``path_prefix``), which the user may open in the workspace."""
-    scope = app_scope(_app_id_of_prefix(body.path_prefix))
+    app_id, path_prefix = _link_target(body)
+    scope = app_scope(app_id)
     if scope is None:
-        raise HTTPException(status_code=400, detail="path_prefix must name an app")
+        raise HTTPException(status_code=400, detail="Name the app: app_id or its path_prefix")
     await authz.require_scope(scope, user=current_user, workspace=body.workspace_id)
     try:
         token, expires_in = await asyncio.to_thread(
             mint_app_html_access_token,
             user_id=current_user.id,
             expires_minutes=body.expires_minutes,
-            path_prefix=body.path_prefix,
+            path_prefix=path_prefix,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -529,7 +559,7 @@ async def create_app_html_access_token(
     return AppHtmlAccessTokenResponse(
         access_token=token,
         expires_in=expires_in,
-        path_prefix=body.path_prefix,
+        path_prefix=path_prefix,
     )
 
 

@@ -165,6 +165,16 @@ class BaseModule(JobsMixin, Generic[TConfig]):
         return self.__pipelines
 
     @property
+    def workflow_classes(self) -> list[type[Workflow]]:
+        """The workflow classes ``on_load`` found, instantiated or not."""
+        return self.__workflow_classes
+
+    @property
+    def pipeline_classes(self) -> list[type[Pipeline]]:
+        """The pipeline classes ``on_load`` found, instantiated or not."""
+        return self.__pipeline_classes
+
+    @property
     def tools(self) -> list[object]:
         return self.__tools
 

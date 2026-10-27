@@ -23,7 +23,7 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import (
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
 from naas_abi.apps.nexus.apps.api.app.utils.public_urls import resolve_abi_module_path
 from naas_abi_core import logger
-from naas_abi_core.services.agent.context import MODULE_SCOPE_ATTRIBUTE
+from naas_abi_core.services.agent.context import process_scopes
 from naas_abi_core.services.iam.module_scopes import AGENT
 
 
@@ -70,24 +70,10 @@ def agent_scope(
 
 
 def engine_process_scopes() -> list[ModuleScope]:
-    """The scope of every workflow and pipeline the engine's modules hold, as the
-    engine marked them (``EngineProcessBridge.tag_process_scopes``): an agent's
-    tool one of them exposes runs only within the caller's."""
-    try:
-        from naas_abi import ABIModule
-
-        modules = ABIModule.get_instance().engine.modules
-    except Exception:  # noqa: BLE001 - no engine loaded: no engine workflows
-        logger.debug("No engine modules for workflow scopes", exc_info=True)
-        return []
-    found: list[ModuleScope] = []
-    for module in modules.values():
-        for attribute in ("workflows", "pipelines"):
-            for instance in getattr(module, attribute, None) or []:
-                scope = getattr(instance, MODULE_SCOPE_ATTRIBUTE, None)
-                if scope is not None:
-                    found.append(ModuleScope(*scope))
-    return found
+    """The scope of every workflow and pipeline class of the engine's modules, as
+    the engine registered them (``EngineProcessBridge.tag_process_scopes``): an
+    agent's tool any instance of one exposes runs only within the caller's."""
+    return [ModuleScope(*scope) for scope in process_scopes()]
 
 
 async def usable_process_scopes(user: object, workspace_id: str) -> frozenset[tuple[str, str, str]]:

@@ -232,6 +232,47 @@ async def test_links_to_an_app_are_minted_for_those_who_may_open_it(world) -> No
         assert (await http.post("/api/apps/access-token", json={})).status_code == 422
 
 
+@pytest.mark.asyncio
+async def test_an_app_of_a_dotted_module_path_opens_by_its_id_or_its_folder(
+    world, monkeypatch
+) -> None:
+    """``naas_abi_marketplace.domains.personnel:cockpit`` is served from
+    ``/app-html/naas_abi_marketplace/domains/personnel/cockpit/``: the link is
+    locked to that folder, whether the client names the app or the folder."""
+    module = "naas_abi_marketplace.domains.personnel"
+    cockpit = adapter._build_app_info(module, Path("/modules/cockpit"), {"name": "Cockpit"})
+    monkeypatch.setattr(adapter, "_scan_apps_catalog", lambda: (cockpit,))
+    folder = "/app-html/naas_abi_marketplace/domains/personnel/cockpit/"
+    async with world.as_("admin") as http:
+        by_id = await http.post(
+            "/api/apps/access-token", json={"workspace_id": "ws-1", "app_id": cockpit.app_id}
+        )
+        assert by_id.status_code == 200, by_id.text
+        assert by_id.json()["path_prefix"] == folder
+        by_folder = await http.post(
+            "/api/apps/access-token", json={"workspace_id": "ws-1", "path_prefix": folder}
+        )
+        assert by_folder.json()["path_prefix"] == folder
+        # The two-segment prefix an old client sent names no app.
+        truncated = {
+            "workspace_id": "ws-1",
+            "path_prefix": "/app-html/naas_abi_marketplace/domains/",
+        }
+        assert (await http.post("/api/apps/access-token", json=truncated)).status_code == 400
+        # An app_id and a lock that is not its folder disagree.
+        both = {"workspace_id": "ws-1", "app_id": cockpit.app_id, "path_prefix": "/app-html/x/"}
+        assert (await http.post("/api/apps/access-token", json=both)).status_code == 400
+        unknown = {"workspace_id": "ws-1", "app_id": "acme.ops:nothing"}
+        assert (await http.post("/api/apps/access-token", json=unknown)).status_code == 400
+    async with world.as_("member") as http:
+        refused = {"workspace_id": "ws-1", "app_id": cockpit.app_id}
+        assert (await http.post("/api/apps/access-token", json=refused)).status_code == 403
+    world.iam.allow_scope("member", ModuleScope("app", module, "cockpit"), world.scope)
+    async with world.as_("member") as http:
+        allowed = {"workspace_id": "ws-1", "app_id": cockpit.app_id}
+        assert (await http.post("/api/apps/access-token", json=allowed)).status_code == 200
+
+
 def test_a_path_lock_names_the_catalog_app_it_covers(monkeypatch) -> None:
     catalog = (adapter._build_app_info("acme.ops", Path("/modules/map"), {"name": "Map"}),)
     monkeypatch.setattr(adapter, "_scan_apps_catalog", lambda: catalog)

@@ -61,10 +61,32 @@ agent_usable_module_scopes: ContextVar[frozenset[tuple[str, str, str]] | None] =
 # A tool's metadata key naming the object that exposed it (``Expose.as_tools``):
 # a string, so tracing serializes it; ``exposer`` finds the object.
 EXPOSED_BY = "abi_exposed_by"
-# The attribute an engine sets on a module's workflow or pipeline instance: its
-# module scope, ``(type, module, name)``.
-MODULE_SCOPE_ATTRIBUTE = "_abi_module_scope"
 _exposers: weakref.WeakValueDictionary[str, object] = weakref.WeakValueDictionary()
+# The module scope of each module's workflow and pipeline classes, ``(type, module,
+# name)``: an instance an agent builds itself is bounded like the module's own.
+_scopes_by_class: dict[type, tuple[str, str, str]] = {}
+
+
+def register_process_scope(cls: type, scope: tuple[str, str, str]) -> bool:
+    """Record ``cls``'s module scope; False (kept as it was) when another module
+    already declared the class under another scope."""
+    known = _scopes_by_class.setdefault(cls, scope)
+    return known == scope
+
+
+def process_scopes() -> list[tuple[str, str, str]]:
+    """Every registered workflow and pipeline scope."""
+    return sorted(set(_scopes_by_class.values()))
+
+
+def process_scope_of(owner: object) -> tuple[str, str, str] | None:
+    """The module scope of a workflow or pipeline instance: its class's, or the
+    nearest registered base class's (a subclass of a module's workflow)."""
+    for cls in type(owner).__mro__:
+        scope = _scopes_by_class.get(cls)
+        if scope is not None:
+            return scope
+    return None
 
 
 def remember_exposer(owner: object) -> str | None:
@@ -87,10 +109,10 @@ def tool_scope_refused(tool: object) -> tuple[str, str, str] | None:
     metadata = getattr(tool, "metadata", None) or {}
     key = metadata.get(EXPOSED_BY)
     owner = _exposers.get(key) if isinstance(key, str) else None
-    scope = getattr(owner, MODULE_SCOPE_ATTRIBUTE, None)
-    if scope is None or tuple(scope) in usable:
+    scope = process_scope_of(owner) if owner is not None else None
+    if scope is None or scope in usable:
         return None
-    return tuple(scope)
+    return scope
 
 
 # Coding-workspace bridge: base URL + bearer secret of the exec sidecar running
