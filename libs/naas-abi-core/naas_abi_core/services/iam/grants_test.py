@@ -509,3 +509,33 @@ def test_a_deny_of_the_giver_s_variable_refuses_their_own_literal_id():
         )
         is None
     )
+
+
+def test_a_wildcard_reaches_the_bus_actions_on_topics_only():
+    """The bus has no catalog: a wildcard is checked for its two actions, on
+    the topics the broker acts on (never at a scope)."""
+    holdings = Holdings([_side(READER)], _registry())
+    topic = "abi:-:-:bus:topic/payments"
+    for actions in (["*"], ["bus:*"], ["*:Publish"], ["b*:*"]):
+        found = holdings.first_uncovered([_grant(actions, [topic])], None)
+        assert found is not None and found.action.startswith("bus:"), actions
+        assert found.resource == topic
+    # At a scope the bus's actions name no topic: nothing of them to hold.
+    assert (
+        holdings.first_uncovered(
+            [_grant(["triple_store:Q*y", "bus:*"], ["${scope}:*"])], "abi:o:w"
+        )
+        is None
+    )
+    bus = Holdings([_side(_allow(["*"], [topic]))], _registry())
+    assert bus.first_uncovered([_grant(["bus:*"], [topic])], None) is None
+
+
+def test_a_wildcard_of_a_service_with_no_catalog_is_taken_as_written():
+    holdings = Holdings([_side(_allow(["acme:Read"], ["*"]))], _registry())
+    found = holdings.first_uncovered([_grant(["acme:*"], ["abi:-:-:acme:x/1"])], None)
+    assert found is not None and found.action == "acme:*"
+    held = Holdings([_side(_allow(["acme:*"], ["*"]))], _registry())
+    assert (
+        held.first_uncovered([_grant(["acme:*"], ["abi:-:-:acme:x/1"])], None) is None
+    )

@@ -377,6 +377,56 @@ def run_delegated_approver(iam: IAMService, as_user: AsUser) -> None:
         assert approved.status == "approved"
 
 
+def run_bus_wildcards_are_checked(iam: IAMService, as_user: AsUser) -> None:
+    """The bus has no catalog, yet the broker turns ``bus:*``, ``*`` and
+    ``*:Publish`` into publishing and consuming a topic: each is checked as the
+    bus's names are."""
+    team(iam)
+    approvals = ["iam:ApproveManifest", "iam:GetManifest", "iam:ListManifests"]
+    payments = "abi:-:-:bus:topic/payments"
+    approver = custom(
+        iam,
+        "approver",
+        statement("Allow", approvals, ["abi:-:-:iam:manifest/*"]),
+        scope=None,
+    )
+    bus_holder = custom(
+        iam,
+        "bus holder",
+        statement("Allow", approvals, ["abi:-:-:iam:manifest/*"]),
+        statement("Allow", ["*"], [payments]),  # a policy names the bus so
+        scope=None,
+    )
+    with as_service_account("engine"):
+        account = iam.create_service_account("module/acme/payments")
+    with use_call_context(
+        CallContext(
+            principal=Principal(
+                id=account.id, kind="service_account", name=account.name
+            )
+        )
+    ):
+        iam.submit_manifest(
+            "payments", "acme", document(statement("Allow", ["*"], [payments]))
+        )
+    variants = (["*"], ["bus:*"], ["*:Publish", "*:Consume"], ["b*:*"])
+    with as_user(approver) as session:
+
+        def approve(actions: list[str]) -> Callable[[], Any]:
+            return lambda: session.approve_manifest(
+                account.id, document=document(statement("Allow", actions, [payments]))
+            )
+
+        for actions in variants:
+            refused(approve(actions), "bus:", payments)
+        refused(lambda: session.approve_manifest(account.id), "bus:Publish", payments)
+    with as_user(bus_holder) as session:
+        approved = session.approve_manifest(
+            account.id, document=document(statement("Allow", ["bus:*"], [payments]))
+        )
+        assert approved.status == "approved"
+
+
 def run_built_in_roles_keep_working(iam: IAMService, as_user: AsUser) -> None:
     t = team(iam)
     with as_service_account("engine"):
@@ -439,6 +489,7 @@ SCENARIOS = (
     run_invitation_to_a_role_the_inviter_lacks,
     run_idp_binding,
     run_delegated_approver,
+    run_bus_wildcards_are_checked,
     run_built_in_roles_keep_working,
     run_grantable,
 )

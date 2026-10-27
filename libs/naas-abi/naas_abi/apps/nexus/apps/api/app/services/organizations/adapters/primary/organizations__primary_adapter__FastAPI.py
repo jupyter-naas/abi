@@ -917,28 +917,51 @@ async def sync_org_member_workspaces(
     removed: list[str] = []
     skipped_owner: list[str] = []
 
-    # An org owner or admin assigns people to any workspace of the organization
-    # (they manage its catalog, whether or not they belong to a workspace), so
-    # these changes are made by ``api`` for no user, after the org-level check
-    # above. The owner protection IAM gives a workspace is kept here: the role
-    # granted is never ``owner`` (the schema), and a workspace owner is never
-    # taken out.
-    for workspace_id in sorted(desired_ids - current_ids):
-        await workspace_service.memberships.grant(
-            user_id, body.workspace_role, workspace_scope(org_id, workspace_id)
-        )
-        added.append(workspace_id)
-
-    held = await workspace_service.memberships.roles_of(user_id)
+    # Each change is the caller's, checked by IAM at the workspace it touches:
+    # an org owner or admin reaches every workspace of the organization through
+    # their org-wide role, and gives there no role that grants more than they
+    # hold. The role granted is never ``owner`` (the schema), and a workspace
+    # owner is never taken out.
+    iam_memberships = workspace_service.memberships
+    held = await iam_memberships.roles_of(user_id)
+    to_add = sorted(desired_ids - current_ids)
+    to_remove: list[str] = []
     for workspace_id in sorted(current_ids - desired_ids):
         if held.get(workspace_scope(org_id, workspace_id)) == "owner":
             skipped_owner.append(workspace_id)
-            continue
-        removed_ok = await workspace_service.memberships.revoke(
-            user_id, workspace_scope(org_id, workspace_id)
-        )
-        if removed_ok:
-            removed.append(workspace_id)
+        else:
+            to_remove.append(workspace_id)
+    try:
+        # Every right is checked before the first change, so a refusal of one
+        # leaves the member's workspaces as they were.
+        for workspace_id in to_add:
+            await iam_memberships.check(
+                user_id,
+                body.workspace_role,
+                workspace_scope(org_id, workspace_id),
+                by=current_user,
+            )
+        for workspace_id in to_remove:
+            await iam_memberships.check(
+                user_id, None, workspace_scope(org_id, workspace_id), by=current_user
+            )
+        # IAM's GrantNotHeldError (what the role grants beyond what the caller
+        # holds) is a 403 that names it, through the service handlers.
+        for workspace_id in to_add:
+            await iam_memberships.grant(
+                user_id,
+                body.workspace_role,
+                workspace_scope(org_id, workspace_id),
+                by=current_user,
+            )
+            added.append(workspace_id)
+        for workspace_id in to_remove:
+            if await iam_memberships.revoke(
+                user_id, workspace_scope(org_id, workspace_id), by=current_user
+            ):
+                removed.append(workspace_id)
+    except MembershipDenied as exc:
+        raise _member_denied(str(exc)) from exc
 
     refreshed = [
         {

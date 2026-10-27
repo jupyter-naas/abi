@@ -789,9 +789,22 @@ Attaching what is attached already, inviting again, binding again or adding a me
 group holds grants nothing new and is not checked.
 
 **The rule.** Take each Allow statement of the grant at the scope (`${scope}` filled; at a
-scope, `policy.within_scope` applied first). Every action it matches, wildcards expanded
-against the registered catalogs (a name no catalog registers is taken as written), must be
-allowed to the caller, on every resource it matches:
+scope, `policy.within_scope` applied first). Every action it matches must be allowed to the
+caller, on every resource it matches. Its actions (`Holdings._actions`):
+
+- **A wildcard is expanded against the registered catalogs, and the bus.** The bus has no
+  catalog, yet the broker turns `bus:*`, `*` or `*:Publish` into publishing and consuming a
+  topic: a wildcard matching `bus:Publish` or `bus:Consume` is checked for them, on the
+  bus's topics (`abi:-:-:bus:topic/<t>`, `grants.UNCATALOGUED`), like the names themselves.
+  A topic is never at a scope, so a scoped grant reaches none. A policy names the bus only
+  by such a wildcard (validation refuses `bus:Publish` as unregistered), so only a caller
+  holding one on the topics (the platform admin) gives it.
+- **A wildcard of one named service with no catalog** (`acme:*`) is taken as written: only
+  a caller whose actions match that pattern itself gives it. A concrete name no catalog
+  registers is taken as written too. A wildcard of every service (`*`) reaches the actions
+  the catalogs and the bus have; a service that has neither has no actions anyone checks.
+
+On every resource:
 
 - **Resources are languages.** `*` is any run, `:` and `/` included; `?` one character (one
   of the three of `%2F`). Only names of the action's resource types count,
@@ -832,7 +845,9 @@ named policy, or the credential's scope. Nexus answers it with a 403 carrying th
 
 **Built-in roles still work.** The roles are cumulative, so an admin attaches member and
 viewer, an owner owner, and an org's owners and admins assign roles in its workspaces through
-their org-wide role (`abi:<org>:*`). The owner's way to `nexus:UseFeature` beyond its feature
+their org-wide role (`abi:<org>:*`), on the workspace routes and on the organization's
+`PUT /organizations/<org>/members/<user>/workspaces` alike (as the caller, checked at each
+workspace before any change). The owner's way to `nexus:UseFeature` beyond its feature
 policy (a custom policy on `${scope}:nexus:feature/*`) is closed: a feature outside the
 caller's feature policy, and so outside `enabled_features`, is not theirs to give.
 
@@ -860,6 +875,7 @@ stands for. They are:
 | Placements (`put_placement`, `PLACEMENT_WRITER`) | They place resources; they grant nothing. |
 | Shared graph grants (`graph_grants.py`, `workspace.<ws>.graphs.*`) | Behind `nexus:UpdateResourceAccess` on the workspace, which offers only graphs the workspace holds, gives writing only to whoever may drop the graph, and sharing every graph only to platform administrators (`resource_access.py`). |
 | `abi iam` | The operator holding the project's IAM store and config. |
+| Workspace snapshot import (Nexus `core/workspaces_import.py`) | An operator command run with the project's engine, never a route: it makes the owner of a workspace it creates, as creating one does. |
 | `modules.auto_approve` | The `abi dev` overlay only: a module's manifest approved on submission. |
 
 Invitations and IdP group bindings made from Nexus are written as `api` **on behalf of the
@@ -1000,10 +1016,14 @@ signing key. HS256 and `NATS_JWT_SECRET` are gone, with no dual mode.
 
 ```python
 issued = iam.exchange_token(
-    TokenExchange(subject_token, subject_token_type, audience, resource=None, scope=None)
+    TokenExchange(
+        subject_token, subject_token_type, audience, resource=None, scope=None
+    )
 )  # IssuedToken, 10 minutes at most
 iam.revoke_tokens(user_id, include_keys=False)
-iam.create_key(user_id, audience=..., resource=..., scope=..., kind=...)  # personal / grant
+iam.create_key(
+    user_id, audience=..., resource=..., scope=..., kind=...
+)  # personal / grant
 iam.identity_authenticator = ...  # engine wiring: IdP tokens (`IdentityAuthenticator`, services/identity/token_authenticator.py)
 ```
 

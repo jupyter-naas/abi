@@ -36,6 +36,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Literal
 
+from naas_abi_core.services.iam.broker import BUS_ACTIONS, TOPIC_PREFIX
 from naas_abi_core.services.iam.catalog import CatalogRegistry
 from naas_abi_core.services.iam.IAMPorts import GrantableAction, GrantableCatalog
 from naas_abi_core.services.iam.names import (
@@ -151,6 +152,13 @@ def universe(service: str, resource_type: str) -> Tokens:
 
 
 EVERYTHING: Tokens = ((_RUN, ""),)
+
+# Actions the broker grants with no catalog to expand a wildcard against: the
+# bus's, on its topics, which are never at a scope (``abi:-:-:bus:topic/<t>``).
+# A wildcard reaching them is checked for them, like their names.
+UNCATALOGUED: dict[str, tuple[tuple[str, ...], Tokens]] = {
+    "bus": (BUS_ACTIONS, (*_glob(TOPIC_PREFIX), (_FIELD_ONE, ""), (_FIELD_RUN, ""))),
+}
 
 
 def _close(tokens: Tokens, states: Iterable[int]) -> frozenset[int]:
@@ -440,6 +448,8 @@ class Holdings:
         except ValueError:
             return [EVERYTHING]
         catalog = self.catalogs.get(service)
+        if catalog is None and service in UNCATALOGUED:
+            return [UNCATALOGUED[service][1]]
         spec = catalog.action(name) if catalog is not None else None
         if spec is None or not spec.resource_types:
             return [EVERYTHING]
@@ -447,12 +457,32 @@ class Holdings:
 
     def _actions(self, patterns: Iterable[str]) -> list[str]:
         """Each action a statement's patterns match: the registered ones a
-        wildcard matches, and a concrete name as it is."""
+        wildcard matches, the bus's it matches (``UNCATALOGUED``), and a
+        concrete name as it is. A wildcard of the actions of one named service
+        that has no catalog is taken as written, so only whoever holds it so
+        may give it."""
         found: dict[str, None] = {}
         for pattern in patterns:
-            if "*" in pattern or "?" in pattern:
-                found.update(dict.fromkeys(self.catalogs.matching(pattern)))
-            else:
+            if not ("*" in pattern or "?" in pattern):
+                found[pattern] = None
+                continue
+            found.update(dict.fromkeys(self.catalogs.matching(pattern)))
+            for service, (names, _within) in UNCATALOGUED.items():
+                if self.catalogs.get(service) is None:
+                    found.update(
+                        dict.fromkeys(
+                            f"{service}:{name}"
+                            for name in names
+                            if matches(pattern, f"{service}:{name}")
+                        )
+                    )
+            service, colon, _name = pattern.partition(":")
+            if (
+                colon
+                and not ("*" in service or "?" in service)
+                and service not in UNCATALOGUED
+                and self.catalogs.get(service) is None
+            ):
                 found[pattern] = None
         return list(found)
 
