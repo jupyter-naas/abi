@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { isPlatformSettingsPath, platformSettingsRedirect } from './app/settings/lib/redirects';
+import { orgSettingsRedirect } from './app/organizations/[orgId]/settings/lib/redirects';
 
 /**
  * Route protection, legacy redirects, and org-scoped routing.
@@ -9,7 +10,7 @@ import { isPlatformSettingsPath, platformSettingsRedirect } from './app/settings
  *   /account/*                        -> authed
  *   /settings, /settings/{tables,system,roles,modules}/... -> authed, Platform Settings
  *   /settings/<table>, /workspace/[id]/admin/{system,events} -> redirected there (old links)
- *   /organizations/[orgId]/settings   -> authed
+ *   /organizations/[orgId]/settings   -> authed (/settings/access -> /settings/roles)
  *   /org/[orgSlug]/login              -> public, org-branded login
  *   /org/[orgSlug]/workspace/[id]/... -> authed, rewritten to /workspace/[id]/...
  *   /auth/login                       -> public
@@ -43,7 +44,9 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Before the org rewrite: /org/<slug>/workspace/<id>/admin/system moved too.
-  const moved = platformSettingsRedirect(pathname, request.nextUrl.search);
+  const moved =
+    platformSettingsRedirect(pathname, request.nextUrl.search) ??
+    orgSettingsRedirect(pathname, request.nextUrl.search);
   if (moved) {
     return NextResponse.redirect(new URL(moved, request.url));
   }

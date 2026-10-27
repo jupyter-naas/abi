@@ -23,8 +23,15 @@ const labels = (groups: ReturnType<typeof visibleSettingsGroups>) =>
 
 describe('workspace settings nav', () => {
   it('lists every entry the set has', () => {
-    expect(labels(visibleSettingsGroups(resources()))).toEqual(
+    expect(labels(visibleSettingsGroups(resources(), undefined, SETTINGS_GROUPS, { holdsIam: true }))).toEqual(
       SETTINGS_GROUPS.flatMap((group) => group.items.map((item) => item.label))
+    );
+  });
+
+  it('shows Roles & permissions only to whoever holds an iam: action there', () => {
+    expect(labels(visibleSettingsGroups(resources()))).not.toContain('Roles & permissions');
+    expect(labels(visibleSettingsGroups(null, undefined, SETTINGS_GROUPS, { holdsIam: true }))).toContain(
+      'Roles & permissions'
     );
   });
 

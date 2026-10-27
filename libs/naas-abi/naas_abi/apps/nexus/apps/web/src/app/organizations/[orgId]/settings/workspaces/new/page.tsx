@@ -11,7 +11,7 @@ import { DEFAULT_THEME, PRESET_COLORS } from '@/stores/workspace';
 import { AccountPageHeader } from '@/app/account/components/account-page-header';
 import { AccountSectionCard } from '@/app/account/components/account-section-card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { featureLabel } from '../../lib/feature-labels';
+import { featureLabel } from '@/lib/feature-labels';
 import { orgSettingsSectionPath } from '../../lib/nav';
 import { WorkspaceGroupSelect } from '../workspace-group-select';
 import { WorkspaceOwnerSelect } from '../workspace-owner-select';

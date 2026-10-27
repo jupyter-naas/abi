@@ -7,6 +7,7 @@ import {
   Cpu,
   Download,
   HardDrive,
+  KeyRound,
   Shield,
   Users,
   Workflow,
@@ -25,6 +26,8 @@ export type SettingsNavItem = {
   feature?: string;
   /** The module resources the page lists: shown only when the set has one of them. */
   kinds?: ResourceKind[];
+  /** `iam`: shown to whoever holds an `iam:` action in the workspace (IAM says, `GET /access`). */
+  needs?: 'iam';
 };
 
 export type SettingsNavGroup = {
@@ -49,6 +52,7 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
     items: [
       { href: '/settings/general', label: 'General', icon: SlidersHorizontal },
       { href: '/settings/members', label: 'Members', icon: Users },
+      { href: '/settings/permissions', label: 'Roles & permissions', icon: KeyRound, needs: 'iam' },
       { href: '/settings/secrets', label: 'Secrets', icon: Shield },
       { href: '/settings/export', label: 'Data Export', icon: Download },
     ],
@@ -75,6 +79,12 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
     ],
   },
 ];
+
+/** The organization a workspace's IAM scope names: its own, or `_none`, the reserved org of a
+ *  personal workspace. */
+export function workspaceOrganization(workspace: { organizationId?: string } | null | undefined): string {
+  return workspace?.organizationId || '_none';
+}
 
 /** First settings item, used as the default landing for /settings. */
 export const DEFAULT_SETTINGS_PATH = SETTINGS_GROUPS[0].items[0].href;
@@ -103,16 +113,23 @@ export function settingsItemShown(
   return true;
 }
 
-/** The groups with only the entries the workspace has; an empty group is left out. */
+/**
+ * The groups with only the entries the workspace has, and the ones the caller may open: an
+ * entry that needs `iam` only for whoever holds an `iam:` action there (`holdsIam`). An empty
+ * group is left out.
+ */
 export function visibleSettingsGroups(
   resources: WorkspaceResources | null,
   flags?: Partial<Record<string, boolean>>,
-  groups: SettingsNavGroup[] = SETTINGS_GROUPS
+  groups: SettingsNavGroup[] = SETTINGS_GROUPS,
+  { holdsIam = false }: { holdsIam?: boolean } = {}
 ): SettingsNavGroup[] {
   return groups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => settingsItemShown(item, resources, flags)),
+      items: group.items.filter(
+        (item) => (item.needs !== 'iam' || holdsIam) && settingsItemShown(item, resources, flags)
+      ),
     }))
     .filter((group) => group.items.length > 0);
 }

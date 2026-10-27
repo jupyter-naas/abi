@@ -1,26 +1,25 @@
 'use client';
 
-import '../system/access/access.css';
-
 import { useState } from 'react';
-import { AccessTab } from '../system/access/access';
+import { RolesAndPermissions } from '@/components/access/roles-and-permissions';
+import { PLATFORM_ACCESS_SCOPE } from '@/components/access/access-scope';
 import { SystemFrame, SystemRefresh } from '../system/system';
 
+const SCOPES = [PLATFORM_ACCESS_SCOPE];
+
 /**
- * The platform's roles and permissions: today's Access UI (policies, attachments,
- * groups, service accounts, approvals, simulator, audit), each section shown when
- * IAM says the caller may list it. Refresh reloads it, for a change made from the CLI
- * or another tab. The shared Roles & permissions UI replaces it.
+ * The platform's roles and permissions: the shared Roles & permissions UI at platform
+ * scope. Refresh reloads it, for a change made from the CLI or another tab.
  */
 export default function PlatformRolesPage() {
   const [nonce, setNonce] = useState(0);
   return (
     <SystemFrame
       title="Roles & permissions"
-      subtitle="Policies, who holds them, groups, service accounts and module approvals, as IAM lets you see them"
+      subtitle="Who holds what on the platform, groups, policies, service accounts and module approvals, as IAM lets you see them"
       actions={<SystemRefresh onClick={() => setNonce((n) => n + 1)} />}
     >
-      <AccessTab nonce={nonce} />
+      <RolesAndPermissions scopes={SCOPES} nonce={nonce} />
     </SystemFrame>
   );
 }

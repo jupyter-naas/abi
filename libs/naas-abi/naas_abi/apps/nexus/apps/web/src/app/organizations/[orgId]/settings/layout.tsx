@@ -6,6 +6,8 @@ import { ArrowLeft, Building2 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { holdsIamAction } from '@/components/access/access-sections';
+import { useIamAccess } from '@/lib/iam-admin/use-access';
 import { SettingsLayoutNav } from '@/components/settings/settings-layout-nav';
 import {
   SettingsLayoutRoot,
@@ -56,7 +58,10 @@ export default function OrganizationSettingsLayout({
   const params = useParams();
   const orgId = params.orgId as string;
   const [viewerRole, setViewerRole] = useState<string | null>(null);
-  const visibleNav = useMemo(() => orgSettingsNavForRole(viewerRole), [viewerRole]);
+  // Roles & permissions is shown to whoever holds an `iam:` action at the organization.
+  const { access } = useIamAccess(orgId ? `abi:${orgId}:-` : undefined);
+  const holdsIam = holdsIamAction(access);
+  const visibleNav = useMemo(() => orgSettingsNavForRole(viewerRole, { holdsIam }), [viewerRole, holdsIam]);
   const sectionHrefs = useMemo(
     () => (orgId ? visibleNav.map((item) => orgSettingsSectionPath(orgId, item.slug)) : []),
     [orgId, visibleNav]

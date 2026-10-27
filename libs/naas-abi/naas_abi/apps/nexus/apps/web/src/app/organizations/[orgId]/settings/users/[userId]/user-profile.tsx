@@ -8,6 +8,7 @@ import { getApiUrl } from '@/lib/config';
 import { authFetch, useAuthStore } from '@/stores/auth';
 import { useOrganizationStore } from '@/stores/organization';
 import { useConfirm } from '@/components/ui/dialogs';
+import { ROLE_LABELS as BUILT_IN_ROLE_LABELS, assignableRoles, changeMemberRole, roleChangeable } from '@/components/access/roles/role-change';
 import { AccountPageHeader } from '@/app/account/components/account-page-header';
 import { AccountSectionCard } from '@/app/account/components/account-section-card';
 import { orgSettingsSectionPath } from '../../lib/nav';
@@ -140,7 +141,7 @@ export default function OrgUserProfilePage() {
   const { member, account, organization_profile: orgProfile, workspaces } = details;
   const isSelf = member.user_id === authUser?.id;
   const isOwner = member.role === 'owner';
-  const canEditOrgRole = !isOwner && !isSelf;
+  const canEditOrgRole = roleChangeable({ role: member.role, inherited: false, userId: member.user_id, selfId: authUser?.id });
   const canRemove = !isOwner && !isSelf;
   const changes = changedProfileFields(orgProfile, draft);
   const roleChanged = canEditOrgRole && orgRole !== member.role;
@@ -153,10 +154,9 @@ export default function OrgUserProfilePage() {
     setError('');
     setSaving(true);
     try {
-      await updateMemberProfile(orgId, member.user_id, {
-        ...changes,
-        ...(roleChanged ? { role: orgRole } : {}),
-      });
+      if (Object.keys(changes).length > 0) await updateMemberProfile(orgId, member.user_id, changes);
+      // The same role change as Roles & permissions › People & roles.
+      if (roleChanged) await changeMemberRole({ level: 'organization', organizationId: orgId }, member.user_id, orgRole);
       await load();
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -386,12 +386,13 @@ export default function OrgUserProfilePage() {
               }
             >
               {isOwner ? (
-                <option value="owner">Owner</option>
+                <option value="owner">{BUILT_IN_ROLE_LABELS.owner}</option>
               ) : (
-                <>
-                  <option value="member">Member</option>
-                  <option value="admin">Admin</option>
-                </>
+                assignableRoles('organization').map((role) => (
+                  <option key={role} value={role}>
+                    {BUILT_IN_ROLE_LABELS[role]}
+                  </option>
+                ))
               )}
             </select>
           </div>

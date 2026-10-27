@@ -11,7 +11,7 @@ import type {
   SetParts,
   WorkspaceSetView,
 } from '@/lib/iam-admin/types';
-import { featureLabel } from '@/app/organizations/[orgId]/settings/lib/feature-labels';
+import { featureLabel } from '@/lib/feature-labels';
 import {
   coverage,
   declaredActions,

@@ -6,7 +6,6 @@ import {
   Globe,
   FolderKanban,
   CreditCard,
-  Shield,
   KeyRound,
   Server,
   Boxes,
@@ -18,6 +17,8 @@ export type OrgSettingsNavItem = {
   label: string;
   icon: LucideIcon;
   adminOnly?: boolean;
+  /** `iam`: shown to whoever holds an `iam:` action at the organization, whatever their role. */
+  needs?: 'iam';
   /** Kept for deep-link labels; omitted from the settings sidebar. */
   hidden?: boolean;
 };
@@ -29,8 +30,8 @@ export const orgSettingsNav: OrgSettingsNavItem[] = [
   // Not admin-only: IAM decides who reads the sets, and the page says when the caller may not.
   { slug: 'modules', label: 'Modules & features', icon: Blocks },
   { slug: 'users', label: 'Users', icon: Users, adminOnly: true },
-  { slug: 'roles', label: 'Roles', icon: Shield, adminOnly: true },
-  { slug: 'access', label: 'Access', icon: KeyRound, adminOnly: true },
+  // IAM decides (the access of the organization's scope), not the membership role.
+  { slug: 'roles', label: 'Roles & permissions', icon: KeyRound, needs: 'iam' },
   { slug: 'domains', label: 'Domains', icon: Globe, adminOnly: true, hidden: true },
   { slug: 'servers', label: 'Servers', icon: Server, adminOnly: true, hidden: true },
   { slug: 'services', label: 'Services', icon: Boxes, adminOnly: true, hidden: true },
@@ -42,11 +43,14 @@ export function isOrgAdminRole(role: string | null | undefined): boolean {
 }
 
 export function orgSettingsNavForRole(
-  role: string | null | undefined
+  role: string | null | undefined,
+  { holdsIam = false }: { holdsIam?: boolean } = {}
 ): OrgSettingsNavItem[] {
-  const visible = orgSettingsNav.filter((item) => !item.hidden);
-  if (isOrgAdminRole(role)) return visible;
-  return visible.filter((item) => !item.adminOnly);
+  return orgSettingsNav.filter(
+    (item) =>
+      !item.hidden &&
+      (item.needs === 'iam' ? holdsIam : !item.adminOnly || isOrgAdminRole(role))
+  );
 }
 
 export function orgSettingsIndexPath(orgId: string): string {

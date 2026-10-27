@@ -1,0 +1,57 @@
+/* components/access/policies/builder — what the caller may grant, as checkboxes */
+
+.access-builder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.access-builder-group {
+  margin: 0;
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+}
+
+.access-builder-legend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-1);
+  font-weight: var(--font-weight-medium);
+}
+
+.access-builder-section + .access-builder-section {
+  margin-top: var(--space-2);
+}
+
+.access-builder-heading {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--muted-foreground-hex);
+}
+
+.access-builder-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.access-builder-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--muted-foreground-hex);
+}
+
+.access-builder-refused {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-xs);
+  color: #b91c1c;
+}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { isOrgAdminRole, orgModulesPath, orgSettingsNavForRole } from './nav';
+import { orgSettingsRedirect } from './redirects';
 
 describe('org settings nav', () => {
   it('hides admin sections from members', () => {
@@ -18,26 +19,38 @@ describe('org settings nav', () => {
     );
   });
 
-  it('shows access to admins and owners only', () => {
-    for (const role of ['admin', 'owner']) {
-      expect(orgSettingsNavForRole(role).map((item) => item.slug)).toContain('access');
+  it('shows Roles & permissions to whoever holds an iam: action there, whatever their role', () => {
+    for (const role of ['owner', 'admin', 'member', null]) {
+      expect(orgSettingsNavForRole(role).map((item) => item.slug)).not.toContain('roles');
+      expect(orgSettingsNavForRole(role, { holdsIam: true }).map((item) => item.slug)).toContain('roles');
     }
-    expect(orgSettingsNavForRole('member').map((item) => item.slug)).not.toContain('access');
+    expect(orgSettingsNavForRole('owner', { holdsIam: true }).map((item) => item.slug)).not.toContain('access');
   });
 
   it('shows branding to admins and hides domains, servers, services, and billing', () => {
-    expect(orgSettingsNavForRole('owner').map((item) => item.slug)).toEqual([
+    expect(orgSettingsNavForRole('owner', { holdsIam: true }).map((item) => item.slug)).toEqual([
       'general',
       'branding',
       'workspaces',
       'modules',
       'users',
       'roles',
-      'access',
     ]);
     expect(orgSettingsNavForRole('admin').map((item) => item.slug)).not.toContain(
       'secrets'
     );
+  });
+});
+
+describe('orgSettingsRedirect', () => {
+  it('sends the old Access section to Roles & permissions, with its query', () => {
+    expect(orgSettingsRedirect('/organizations/org-1/settings/access')).toBe('/organizations/org-1/settings/roles');
+    expect(orgSettingsRedirect('/organizations/org-1/settings/access/x', '?a=1')).toBe(
+      '/organizations/org-1/settings/roles?a=1'
+    );
+    expect(orgSettingsRedirect('/organizations/org-1/settings/roles')).toBeNull();
+    expect(orgSettingsRedirect('/organizations/org-1/settings/users')).toBeNull();
+    expect(orgSettingsRedirect('/organizations/org-1/settings/constructor')).toBeNull();
   });
 });
 

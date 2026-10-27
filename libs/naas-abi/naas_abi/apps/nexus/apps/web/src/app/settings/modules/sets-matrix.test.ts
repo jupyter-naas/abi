@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IamAdminError } from '@/lib/iam-admin/api';
 import type { OrganizationSetView } from '@/lib/iam-admin/types';
 import { mount, type Mounted } from '../system/system-render';
-import { fakeApi } from '../system/access/access-fixtures';
+import { fakeApi } from '@/components/access/access-fixtures';
 import { catalog, organization, setsView } from './sets-fixtures';
 import { NOT_IN_ORGANIZATION, SetsMatrix } from './sets-matrix';
 import { ModulesSetsView } from './modules';

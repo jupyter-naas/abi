@@ -30,7 +30,7 @@ import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
 import { rowMatchesColumnFilter } from '../users/users-table-filter';
 import { downloadTableExport, type UsersExportFormat } from '../users/users-table-export';
 import { isOrgAdminRole, orgModulesPath, orgSettingsSectionPath } from '../lib/nav';
-import { featureLabel } from '../lib/feature-labels';
+import { featureLabel } from '@/lib/feature-labels';
 import { BulkEditModal } from './bulk-edit-modal';
 import '../components/org-settings-components.css';
 import '../users/users.css';

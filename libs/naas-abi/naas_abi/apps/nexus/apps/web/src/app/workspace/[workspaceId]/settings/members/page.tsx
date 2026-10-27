@@ -13,6 +13,7 @@ import { IdpGroupBindings } from '@/components/invitations/idp-group-bindings';
 import { PendingInvitations } from '@/components/invitations/pending-invitations';
 import { useInviteProviders } from '@/components/invitations/use-invite-providers';
 import { classifyInviteAnswer, inviteSuccessMessage, providerHint } from '@/lib/invitations';
+import { ROLE_LABELS, assignableRoles, changeMemberRole, roleChangeable } from '@/components/access/roles/role-change';
 import {
   SettingsEmpty,
   SettingsLoading,
@@ -190,6 +191,7 @@ export default function MembersPage() {
     }
   };
 
+  // The same role change as Roles & permissions › People & roles: the membership route, IAM decides.
   const handleChangeRole = async (
     userId: string,
     newRole: 'admin' | 'member' | 'viewer'
@@ -197,18 +199,7 @@ export default function MembersPage() {
     if (!canManage) return;
     setActionError('');
     try {
-      const { authFetch } = await import('@/stores/auth');
-      const response = await authFetch(
-        `/api/workspaces/${workspaceId}/members/${userId}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ role: newRole }),
-        }
-      );
-      if (!response.ok) {
-        throw new Error(await readApiError(response, 'Failed to change role'));
-      }
+      await changeMemberRole({ level: 'workspace', workspaceId }, userId, newRole);
 
       setMembers(
         members.map((m) =>
@@ -388,7 +379,8 @@ export default function MembersPage() {
                 const initial = (member.name || member.email || '?').charAt(0).toUpperCase();
                 const inherited = member.source === 'organization';
                 const roleLocked =
-                  inherited || member.role === 'owner' || member.user_id === authUser?.id || !canManage;
+                  !canManage ||
+                  !roleChangeable({ role: member.role, inherited, userId: member.user_id, selfId: authUser?.id });
                 return (
                   <tr key={member.id} className={settingsTable.row}>
                     <td className={settingsTable.td}>
@@ -426,9 +418,11 @@ export default function MembersPage() {
                           }
                           className="h-8 w-32"
                         >
-                          <option value="member">Member</option>
-                          <option value="viewer">Viewer</option>
-                          <option value="admin">Admin</option>
+                          {assignableRoles('workspace').map((r) => (
+                            <option key={r} value={r}>
+                              {ROLE_LABELS[r]}
+                            </option>
+                          ))}
                         </Select>
                       )}
                     </td>

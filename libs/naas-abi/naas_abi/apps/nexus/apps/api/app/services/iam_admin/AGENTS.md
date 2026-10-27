@@ -27,7 +27,9 @@ Nexus adds no role check of its own.
 `/api/iam/admin` (session only, like the rest of `/api/iam/`):
 
 - `GET /access?scope=` the actions the caller may do (platform, or attachments and that level's policies and groups
-  at `scope`); `GET /catalogs?scope=`
+  at `scope`; at a scope, what the platform alone administers is false, and at an organization scope
+  `nexus:GetRoleFeatures` / `nexus:UpdateRoleFeatures` say who reads and edits its roles' feature defaults);
+  `GET /catalogs?scope=`
 - `GET /grantable?scope=` what the caller may grant at `scope` (IAM's `grantable`: per catalog, the actions and
   `${scope}:…` resource patterns they hold there, minus their Denies), for the policy builder; any caller, about
   themselves, like `/access`
@@ -76,22 +78,28 @@ Nexus adds no role check of its own.
   page and button; Nexus adds no role check and no list of "who is an admin". `GET /access` asks IAM which actions
   the caller holds, so the pages show only what will answer. `api` keeps its enumerated statements: acting as the
   user is what keeps `api` out of IAM's administration.
-- **Two places, one API.** Attachments, policies and groups are the IAM types placed in an org and workspace
-  (attachments at their scope, policies and groups at the scope that owns them: core `services/iam/AGENTS.md`,
-  "Owner scopes"), so an org or workspace admin holds, at their scope, the attachment actions and that level's
-  policies and groups, and nothing else of IAM; members and viewers hold none of it. Org settings, Access,
-  manages attachments at the org and its workspaces (the policies offered are the ones the caller may attach
-  there: `GET /attachable-policies`, which leaves out a policy owned by another org or workspace, and, at a
-  scope, a platform policy with a Deny outside `${scope}:` for anyone but the platform admin, as IAM refuses it). Service
-  accounts and keys, approvals, simulator and audit are platform-level and live in Platform Settings › Roles &
-  permissions (`/settings/roles`), available to whoever holds the matching actions. Every route takes the scope as a parameter: `POST /policies`
-  and `POST /groups` create at the body's `scope`, `GET /policies?scope=` and `GET /groups?scope=` list that
-  level's own plus what the caller may attach there from above (IAM's `list_policies` / `list_groups`), and
-  `GET /access?scope=`, `/catalogs?scope=` and `/policies/validate?scope=` answer for that level (an org-wide
-  scope, in these and in the lists, answers for its org). The
-  Platform Settings sidebar shows Roles & permissions for any platform-level `iam:` action `GET /access` grants,
-  and the tables and System only with `nexus:ReadSystem`: a delegated IAM admin without it sees Roles &
-  permissions alone, a stranger a 403. The shared Roles & permissions UI of every level replaces this page.
+- **One UI, one API, the scope a parameter.** Decision: attachments, policies and groups are the IAM types
+  placed in an org and workspace (attachments at their scope, policies and groups at the scope that owns them:
+  core `services/iam/AGENTS.md`, "Owner scopes"), and every route takes the scope as a parameter: `POST
+  /policies` and `POST /groups` create at the body's `scope`, `GET /policies?scope=` and `GET /groups?scope=`
+  list that level's own plus what the caller may attach there from above (IAM's `list_policies` /
+  `list_groups`), `GET /attachable-policies?scope=` the policies the caller may attach there (leaving out a
+  policy owned by another org or workspace and, at a scope, a platform policy with a Deny outside `${scope}:`
+  for anyone but the platform admin, as IAM refuses it), and `GET /access?scope=`, `/catalogs?scope=`,
+  `/grantable?scope=` and `/policies/validate?scope=` answer for that level (an org-wide scope, in these and in
+  the lists, answers for its org). One web module serves every level (Nexus `AGENTS.md`, "Roles & permissions
+  UI module"): Platform settings, Organization settings and Workspace settings › Roles & permissions mount it
+  with their scope, and `GET /access?scope=` alone decides its sections and buttons. Consequences: an org or
+  workspace admin holds, at their scope, the attachment actions and that level's policies and groups, and
+  nothing else of IAM; members and viewers hold none of it. Service accounts and keys, module approvals, the
+  simulator, IdP mappings and the audit are the platform's: `access` answers their actions (`_PLATFORM_ONLY`,
+  `nexus:ReadSystem`) false at any scope, the platform admin's included, so only the platform's page shows them.
+  The built-in roles' feature defaults are an organization's: `access` reports `nexus:GetRoleFeatures` and
+  `nexus:UpdateRoleFeatures` (as the routes of `/api/organizations/{org}/roles/features` decide them) at an
+  organization scope only, false elsewhere. The Platform Settings sidebar shows Roles & permissions for any
+  platform-level `iam:` action `GET /access` grants, and the tables and System only with `nexus:ReadSystem`:
+  a delegated IAM admin without it sees Roles & permissions alone, a stranger a 403; Organization and Workspace
+  settings show it for any `iam:` action at their scope.
 - **Every change is audited, fail-closed.** The System app's `run_audited` and `audit_logs` table are reused: a
   `requested` record is written first and nothing changes if it cannot be (503); `succeeded` or `failed` (the
   exception type only) follows. IAM's records are the rows `iam.<operation>` (`SqlAdminAuditLog` takes the action

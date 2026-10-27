@@ -9,7 +9,7 @@ import {
   SettingsSection,
 } from '@/components/settings/settings-ui';
 import { authFetch } from '@/stores/auth';
-import { featureLabel } from '@/app/organizations/[orgId]/settings/lib/feature-labels';
+import { featureLabel } from '@/lib/feature-labels';
 import { orgModulesPath } from '@/app/organizations/[orgId]/settings/lib/nav';
 import { useWorkspaceResources } from '@/hooks/use-workspace-resources';
 import { describeModuleResources } from '@/lib/workspace-resources';

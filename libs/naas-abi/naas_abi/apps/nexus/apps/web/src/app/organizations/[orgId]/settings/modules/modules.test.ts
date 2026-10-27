@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IamAdminError } from '@/lib/iam-admin/api';
 import { mount, type Mounted } from '@/app/settings/system/system-render';
-import { fakeApi } from '@/app/settings/system/access/access-fixtures';
+import { fakeApi } from '@/components/access/access-fixtures';
 import { setsView } from '@/app/settings/modules/sets-fixtures';
 import { OrgModulesView } from './modules';
 
