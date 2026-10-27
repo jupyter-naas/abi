@@ -1,3 +1,6 @@
+import re
+from dataclasses import replace
+
 from naas_abi.agents.feature.builder import FEATURE_RECURSION_LIMIT
 from naas_abi.agents.feature.registry import abi_handoff_line
 from naas_abi_core.services.agent.Agent import Agent
@@ -236,6 +239,42 @@ Respond only based on what your available agents and tools can actually deliver.
         return agents, agent_shared_state
 
     @staticmethod
+    def agents_section(agents: list) -> str:
+        """The ``<agents>`` section of Abi's prompt: one line per sub-agent."""
+        return "\n".join(f"- {agent.name}: {agent.description}" for agent in agents)
+
+    @staticmethod
+    def with_agents_section(
+        configuration: AgentConfiguration, agents: list
+    ) -> AgentConfiguration:
+        """A new configuration whose prompt lists ``agents`` alone, never the
+        given one changed: a turn's copy shares its template's, which every
+        other turn reads."""
+        prompt = configuration.system_prompt
+        if not isinstance(prompt, str):
+            return configuration
+        section = AbiAgent.agents_section(agents)
+        return replace(
+            configuration,
+            system_prompt=re.sub(
+                r"(<agents>)(.*?)(</agents>)",
+                lambda match: f"{match.group(1)}\n{section}\n{match.group(3)}",
+                prompt,
+                count=1,
+                flags=re.DOTALL,
+            ),
+        )
+
+    def _populate_duplicate_shell(self, clone: Agent) -> None:
+        """A copy left without some sub-agents (``duplicate(keep=)``, the agents
+        its caller may not use) names only the others in its prompt."""
+        super()._populate_duplicate_shell(clone)
+        if [a.name for a in clone._agents] != [a.name for a in self._agents]:
+            clone._configuration = AbiAgent.with_agents_section(
+                self._configuration, clone._agents
+            )
+
+    @staticmethod
     def get_intents(agents: list) -> list:
         # Define intents
         intents: list = []
@@ -322,10 +361,7 @@ Respond only based on what your available agents and tools can actually deliver.
                 "\n".join([f"- {tool.name}: {tool.description}" for tool in tools])
                 or ""
             )
-            agents_section = (
-                "\n".join([f"- {agent.name}: {agent.description}" for agent in agents])
-                or ""
-            )
+            agents_section = cls.agents_section(agents)
             agent_configuration = AgentConfiguration(
                 system_prompt=cls.system_prompt.replace(
                     "[TOOLS]", tools_section

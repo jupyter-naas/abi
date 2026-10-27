@@ -1516,18 +1516,8 @@ def _prune_inprocess_subagents_for_roster(agent: Any, allowed: frozenset[str]) -
         from naas_abi.agents.AbiAgent import AbiAgent
 
         agent._intents = AbiAgent.get_intents(agents=pruned)
-        configuration = getattr(agent, "configuration", None)
-        agents_section = "\n".join(f"- {sub.name}: {sub.description}" for sub in pruned) or ""
-        if configuration is not None and hasattr(configuration, "system_prompt"):
-            import re
-
-            configuration.system_prompt = re.sub(
-                r"(<agents>)(.*?)(</agents>)",
-                rf"\1\n{agents_section}\n\3",
-                configuration.system_prompt,
-                count=1,
-                flags=re.DOTALL,
-            )
+        # The copy's own configuration: the template's is shared by every turn.
+        agent._configuration = AbiAgent.with_agents_section(agent._configuration, pruned)
 
 
 def _duplicate_inprocess_agent(
