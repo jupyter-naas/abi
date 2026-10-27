@@ -795,6 +795,8 @@ async def complete_with_abi(
         import asyncio
 
         agent = await asyncio.to_thread(_duplicate_inprocess_agent, template_agent, thread_id)
+        if not _bound_to_caller(template_agent, agent):
+            raise PermissionError(f"You may not use the agent {config.model} here")
         if llm_model:
             _retarget_inprocess_chat_model(agent, llm_model)
 
@@ -1460,6 +1462,25 @@ def _inprocess_agent_class_name(agent: Any) -> str:
     return f"{cls.__module__}/{cls.__name__}"
 
 
+def _bound_to_caller(template_agent: Any, agent: Any) -> bool:
+    """Whether the caller may run ``template_agent``, and ``agent`` (its copy for
+    this turn) pruned to the sub-agents the caller may use.
+
+    A route sets the agents the caller may use where the turn runs (the roster,
+    the features and the module scopes it holds: ``agent_workspace_enabled_class_names``):
+    no other agent answers, whatever name the request gave. Unset (a caller
+    outside Nexus's routes), nothing is narrowed."""
+    from naas_abi_core.services.agent.context import agent_workspace_enabled_class_names
+
+    allowed = agent_workspace_enabled_class_names.get()
+    if allowed is None:
+        return True
+    if _inprocess_agent_class_name(template_agent) not in allowed:
+        return False
+    _prune_inprocess_subagents_for_roster(agent, allowed)
+    return True
+
+
 def _prune_inprocess_subagents_for_roster(agent: Any, allowed: frozenset[str]) -> None:
     """Drop sub-agents absent from the caller's enabled workspace roster."""
     from naas_abi.agents.feature.registry import spec_for_class_name
@@ -1475,12 +1496,12 @@ def _prune_inprocess_subagents_for_roster(agent: Any, allowed: frozenset[str]) -
         return class_name in allowed
 
     pruned = [sub for sub in subagents if keep(sub)]
+    for sub in pruned:
+        _prune_inprocess_subagents_for_roster(sub, allowed)
     if len(pruned) == len(subagents):
         return
 
     agent._agents = pruned
-    for sub in pruned:
-        _prune_inprocess_subagents_for_roster(sub, allowed)
 
     if type(agent).__name__ == "AbiAgent":
         from naas_abi.agents.AbiAgent import AbiAgent
@@ -1687,11 +1708,9 @@ async def stream_with_abi_inprocess(
     # two requests overlapped — see jupyter-naas/abi#991.
     assert thread_id is not None, "thread_id is required"
     agent = await asyncio.to_thread(_duplicate_inprocess_agent, template_agent, thread_id)
-    from naas_abi_core.services.agent.context import agent_workspace_enabled_class_names
-
-    allowed = agent_workspace_enabled_class_names.get()
-    if allowed:
-        _prune_inprocess_subagents_for_roster(agent, allowed)
+    if not _bound_to_caller(template_agent, agent):
+        yield f"\n\n**Error:** You may not use the agent {agent_name} here."
+        return
     if llm_model:
         try:
             _retarget_inprocess_chat_model(agent, llm_model)

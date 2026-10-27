@@ -229,3 +229,42 @@ def test_a_tool_response_keeps_its_chat_source_opt_out() -> None:
         "event": "tool_usage",
         "tool": "search",
     }
+
+
+class _Lead:
+    def __init__(self, *agents: object) -> None:
+        self._agents = list(agents)
+
+
+class _Helper(_Lead):
+    pass
+
+
+class _Hidden(_Lead):
+    pass
+
+
+def test_a_turn_runs_only_the_agents_its_caller_may_use() -> None:
+    """The route binds the caller's usable agents; the in-process runtime runs
+    no other and drops the rest from its sub-agents, however deep."""
+    from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
+        _bound_to_caller,
+        _inprocess_agent_class_name,
+    )
+    from naas_abi_core.services.agent.context import agent_workspace_enabled_class_names
+
+    hidden = _Hidden()
+    helper = _Helper(hidden)
+    lead = _Lead(helper, _Hidden())
+    names = {_inprocess_agent_class_name(a) for a in (lead, helper)}
+
+    token = agent_workspace_enabled_class_names.set(frozenset(names))
+    try:
+        assert _bound_to_caller(lead, lead)
+        assert lead._agents == [helper] and helper._agents == []
+        assert not _bound_to_caller(hidden, hidden)
+        agent_workspace_enabled_class_names.set(frozenset())
+        assert not _bound_to_caller(lead, lead)
+    finally:
+        agent_workspace_enabled_class_names.reset(token)
+    assert _bound_to_caller(hidden, hidden)

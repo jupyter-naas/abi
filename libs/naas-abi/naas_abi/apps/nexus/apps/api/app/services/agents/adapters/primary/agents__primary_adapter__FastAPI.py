@@ -33,6 +33,10 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import (
     REMOTE_PROVIDER,
     RemoteAgent,
 )
+from naas_abi.apps.nexus.apps.api.app.services.agents.scopes import (
+    agent_class_label,
+    agent_scope,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares
 from naas_abi.apps.nexus.apps.api.app.services.registry import (
@@ -60,6 +64,9 @@ router = APIRouter(dependencies=[Depends(get_current_user_required)])
 # reuse it for every subsequent request.
 # ---------------------------------------------------------------------------
 _agent_class_registry: dict[str, type[Agent]] | None = None
+# Registry key -> the engine module that loads the class (its configured path):
+# the ``<module>`` of the agent's module scope.
+_agent_class_modules: dict[str, str] = {}
 _agent_class_registry_lock = threading.Lock()
 
 # Serialize POST /sync per workspace inside one API worker. Cross-worker races
@@ -109,12 +116,14 @@ def _get_agent_class_registry() -> dict[str, type[Agent]]:
 
         abi_module = ABIModule.get_instance()
         candidate_classes: list[type[Agent]] = list(abi_module.agents)
+        owners: dict[type, str] = dict.fromkeys(abi_module.agents, type(abi_module).__module__)
 
-        for module in abi_module.engine.modules.values():
+        for module_key, module in abi_module.engine.modules.items():
             for agent_cls in module.agents:
                 if agent_cls is None:
                     continue
                 candidate_classes.append(agent_cls)
+                owners.setdefault(agent_cls, module_key)
 
         def _resolve(agent_cls: type[Agent]) -> tuple[str, type[Agent]] | None:
             name = _get_agent_class_name(agent_cls)
@@ -138,8 +147,17 @@ def _get_agent_class_registry() -> dict[str, type[Agent]]:
                     registry[class_name] = agent_cls
 
         logger.info("Agent class registry built: %d agents indexed", len(registry))
+        _agent_class_modules.update(
+            {key: owners[cls] for key, cls in registry.items() if cls in owners}
+        )
         _agent_class_registry = registry
         return _agent_class_registry
+
+
+def agent_class_modules() -> dict[str, str]:
+    """Registry key -> the engine module that loads the class."""
+    _get_agent_class_registry()
+    return _agent_class_modules
 
 
 class AgentsFastAPIPrimaryAdapter:
@@ -167,9 +185,16 @@ async def _workspace_slug(workspace_id: str) -> str | None:
 async def _visible_to_caller(
     agents: list[AgentRecord], current_user: User, workspace_id: str
 ) -> list[AgentRecord]:
-    """The agents of ``workspace_id`` the caller's features let them see."""
+    """The agents of ``workspace_id`` the caller may use: a module's agent needs
+    its module scope (``module:UseAgent``), an office agent its feature too."""
     flags = await caller_feature_flags(current_user, workspace_id, feature_keys_of(agents))
-    return filter_feature_agents(agents, flags)
+    classes = _get_agent_class_registry()
+    return await authz.filter_scopes(
+        filter_feature_agents(agents, flags),
+        user=current_user,
+        workspace=workspace_id,
+        scope_of=lambda agent: agent_scope(agent, classes, _agent_class_modules),
+    )
 
 
 async def _workspace_catalog_seed(workspace_id: str) -> dict | None:
@@ -402,12 +427,7 @@ def _extract_agent_suggestions(agent_cls: type) -> list[dict] | None:
 
 
 def _get_agent_class_name(agent_cls: type) -> str | None:
-    name = getattr(agent_cls, "name", None)
-    if isinstance(name, str):
-        return name
-    if isinstance(name, property):
-        name = getattr(agent_cls, "NAME", None)
-    return name if isinstance(name, str) else None
+    return agent_class_label(agent_cls)
 
 
 def _get_agent_class_description(agent_cls: type) -> str | None:
@@ -1018,9 +1038,11 @@ async def list_agents(
 ) -> list[AgentRecord]:
     """List a workspace's persisted agents, enriched for display.
 
-    Scoped to the caller: the naas_abi office agents of a feature this user
-    cannot open are left out (see ``core.agent_feature_access``), so two
-    members of one workspace can get different rosters.
+    Scoped to the caller: a module's agent the user holds no module scope for
+    (``module:UseAgent`` in the workspace) is left out, and so are the naas_abi
+    office agents of a feature this user cannot open (see
+    ``core.agent_feature_access``), so two members of one workspace can get
+    different rosters.
 
     When the workspace has no persisted agent rows yet, reconciles once with
     the code class registry (same work as ``POST /sync``) before returning,

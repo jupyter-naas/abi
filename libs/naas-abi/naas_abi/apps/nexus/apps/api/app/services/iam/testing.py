@@ -7,6 +7,7 @@ routes then decide. Nothing here fakes a decision.
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import Any
@@ -82,6 +83,35 @@ class NexusIam:
             self.iam.attach_policy(f"builtin.{role}", principal.id, scope)
             # As MEMBERSHIPS does: an org owner or admin reaches every workspace of the org.
             Memberships.mirror_org_wide(self.iam, principal.id, scope, role)
+
+    def allow(
+        self, user_id: str, actions: Sequence[str], resources: Sequence[str], scope: str
+    ) -> str:
+        """Attach to a Nexus user, at ``scope``, a policy allowing ``actions`` on
+        ``resources`` (``${scope}:`` patterns): a grant an admin makes, one
+        module scope at a time. Returns the policy id."""
+        with as_service_account("engine"):
+            principal = self.iam.ensure_user(LEGACY_NEXUS_ISSUER, user_id, provider="nexus")
+            policy = self.iam.create_policy(
+                f"allow-{user_id}-{uuid.uuid4().hex[:8]}",
+                {
+                    "version": "2026-10-13",
+                    "statements": [
+                        {
+                            "effect": "Allow",
+                            "actions": list(actions),
+                            "resources": list(resources),
+                        }
+                    ],
+                },
+            )
+            self.iam.attach_policy(policy.id, principal.id, scope)
+        return policy.id
+
+    def allow_scope(self, user_id: str, scope: Any, workspace_scope: str) -> str:
+        """Grant a user one module scope (``authz.ModuleScope``) at a workspace."""
+        resource = scope.resource("o", "w").removeprefix("abi:o:w:")
+        return self.allow(user_id, [scope.action()], [f"${{scope}}:{resource}"], workspace_scope)
 
     def platform_admin(self, user_id: str) -> None:
         with as_service_account("api"):

@@ -15,9 +15,14 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.port import AgentRecord
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
     get_current_user_required,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
 
 APPS = "naas_abi.agents.AppsAgent/AppsAgent"
 FILES = "naas_abi.agents.FilesAgent/FilesAgent"
+# Two agents of one module, P: ``agent/acme.p/A`` and ``agent/acme.p/B``.
+AGENT_A = "acme.p.agents.A/AAgent"
+AGENT_B = "acme.p.agents.B/BAgent"
+WS = "abi:org-1:ws-1"
 
 
 def _agent(agent_id: str, workspace: str = "ws-1", class_name: str | None = None) -> AgentRecord:
@@ -71,6 +76,8 @@ def world(team, monkeypatch):
         _agent("plain"),
         _agent("apps", class_name=APPS),
         _agent("files", class_name=FILES),
+        _agent("a", class_name=AGENT_A),
+        _agent("b", class_name=AGENT_B),
         _agent("elsewhere", workspace="ws-2"),
     )
     synced: list[str] = []
@@ -83,6 +90,11 @@ def world(team, monkeypatch):
         return []
 
     monkeypatch.setattr(adapter, "_get_agent_class_registry", lambda: {})
+    monkeypatch.setattr(
+        adapter,
+        "_agent_class_modules",
+        {APPS: "naas_abi", FILES: "naas_abi", AGENT_A: "acme.p", AGENT_B: "acme.p"},
+    )
     monkeypatch.setattr(adapter, "_reconcile_workspace_agents", reconcile)
     monkeypatch.setattr(adapter, "_discovered_remote_agents", no_remote)
     app = FastAPI()
@@ -95,25 +107,49 @@ def world(team, monkeypatch):
         user["id"] = user_id
         return AsyncClient(transport=ASGITransport(app=app), base_url="http://t")
 
-    return SimpleNamespace(as_=as_, agents=agents, synced=synced)
+    return SimpleNamespace(as_=as_, agents=agents, synced=synced, team=team)
+
+
+def _scope(module: str, name: str) -> ModuleScope:
+    return ModuleScope("agent", module, name)
 
 
 @pytest.mark.asyncio
 async def test_every_role_of_the_workspace_reads_the_roster_and_a_stranger_does_not(world) -> None:
-    for role in ("viewer", "member", "admin", "owner"):
+    # Zero trust: viewers and members see no module's agent, naas_abi's own
+    # included, until a policy grants it; admins and owners see them all.
+    for role in ("viewer", "member"):
         async with world.as_(role) as http:
             response = await http.get("/?workspace_id=ws-1")
             assert response.status_code == 200, role
-            assert {a["id"] for a in response.json()} >= {"plain", "files"}
+            assert {a["id"] for a in response.json()} == {"plain"}
+    for role in ("admin", "owner"):
+        async with world.as_(role) as http:
+            response = await http.get("/?workspace_id=ws-1")
+            assert {a["id"] for a in response.json()} == {"plain", "apps", "files", "a", "b"}
     async with world.as_("stranger") as http:
         assert (await http.get("/?workspace_id=ws-1")).status_code == 403
         assert (await http.get("/plain")).status_code == 403
 
 
 @pytest.mark.asyncio
+async def test_a_grant_of_one_agent_lists_that_one_and_leaves_the_other_refused(world) -> None:
+    world.team.allow_scope("member", _scope("acme.p", "AAgent"), WS)
+    async with world.as_("member") as http:
+        ids = {a["id"] for a in (await http.get("/?workspace_id=ws-1")).json()}
+        assert ids == {"plain", "a"}
+        assert (await http.get("/a")).status_code == 200
+        assert (await http.get("/b")).status_code == 404
+    async with world.as_("viewer") as http:
+        assert (await http.get("/a")).status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_an_office_agent_follows_the_features_the_caller_holds(world) -> None:
-    # Members and viewers hold no "apps" feature by default: the Apps agent is
-    # not offered to them, nor addressable by id; admins get it.
+    # Members hold no "apps" feature by default: granted both office agents,
+    # the Apps agent is still not offered to them, nor addressable by id.
+    world.team.allow_scope("member", _scope("naas_abi", "AppsAgent"), WS)
+    world.team.allow_scope("member", _scope("naas_abi", "FilesAgent"), WS)
     async with world.as_("member") as http:
         ids = {a["id"] for a in (await http.get("/?workspace_id=ws-1")).json()}
         assert "apps" not in ids and "files" in ids
@@ -173,7 +209,7 @@ async def test_sync_reconciles_for_writers_and_only_lists_for_viewers(world) -> 
     async with world.as_("viewer") as http:
         response = await http.post("/sync?workspace_id=ws-1")
         assert response.status_code == 200
-        assert {a["id"] for a in response.json()} >= {"plain", "files"}
+        assert {a["id"] for a in response.json()} == {"plain"}
     assert world.synced == []
     for role in ("member", "admin"):
         async with world.as_(role) as http:

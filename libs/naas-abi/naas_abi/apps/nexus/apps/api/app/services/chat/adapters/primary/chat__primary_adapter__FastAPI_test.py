@@ -33,6 +33,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.port import (
     ChatConversationRecord,
     ChatMessageRecord,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 
 NOW = datetime(2026, 1, 1, 12, 0, 0)
@@ -116,6 +117,11 @@ class FakeChat:
         )
 
 
+class FakeAgents:
+    async def list_workspace_agents(self, workspace_id):
+        return []
+
+
 class FakeDb:
     async def commit(self) -> None:
         return None
@@ -163,7 +169,7 @@ def world(team: NexusIam, monkeypatch: pytest.MonkeyPatch):
 
     @contextmanager
     def bind(db):
-        yield SimpleNamespace(chat=chat)
+        yield SimpleNamespace(chat=chat, agents=FakeAgents())
 
     class Session:
         async def __aenter__(self):
@@ -487,6 +493,35 @@ def test_an_agent_of_another_workspace_cannot_be_run(world) -> None:
     assert foreign_stream.status_code == 403
     assert own.status_code == 200
     assert world.chat.completed == [("member", "conv-m")]
+
+
+def test_a_module_agent_needs_its_module_scope(world) -> None:
+    """Zero trust: a member runs a module's agent (remote or in-process) only
+    once a policy grants that agent; another agent of the module stays refused."""
+    for agent_id, class_name, provider in (
+        ("remote-a", "acme.p/A", "remote"),
+        ("remote-b", "acme.p/B", "remote"),
+        ("abi", "naas_abi.agents.AbiAgent/AbiAgent", "abi"),
+    ):
+        world.chat.agents[agent_id] = ChatAgentRecord(
+            id=agent_id,
+            workspace_id="ws-1",
+            name=agent_id,
+            class_name=class_name,
+            model_id=None,
+            provider=provider,
+        )
+    world.chat.add("member", "conv-m")
+    turn = {"message": "hi", "conversation_id": "conv-m"}
+
+    def run(agent: str, user: str = "member"):
+        return call(world, user, "POST", "/api/chat/complete", json={**turn, "agent": agent})
+
+    assert run("remote-a").status_code == 403
+    world.iam.allow_scope("member", ModuleScope("agent", "acme.p", "A"), "abi:org-1:ws-1")
+    assert run("remote-a").status_code == 200
+    assert run("remote-b").status_code == 403
+    assert run("abi").status_code == 403
 
 
 # -- file ingestion ------------------------------------------------------------

@@ -53,6 +53,9 @@ def _install_fakes(monkeypatch, calls: list[dict[str, Any]]) -> None:
         async def build_remote_agent_preamble(self, **_kwargs) -> str:
             return "USER PROFILE"
 
+        async def get_conversation_for_user(self, **_kwargs):
+            return None
+
         async def create_streaming_message_pair(self, **_kwargs):
             return None, "assistant-msg-1"
 

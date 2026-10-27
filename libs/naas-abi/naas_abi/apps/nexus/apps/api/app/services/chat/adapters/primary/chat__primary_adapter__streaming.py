@@ -232,8 +232,8 @@ async def stream_chat_response(
         from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
             caller_enabled_class_names,
             caller_feature_flags,
+            caller_usable_agents,
             feature_keys_of,
-            filter_feature_agents,
         )
         from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__primary_adapter__FastAPI import (
             pick_workspace_chat_agent_id,
@@ -251,7 +251,9 @@ async def stream_chat_response(
                 flags = await caller_feature_flags(
                     current_user, request.workspace_id, feature_keys_of(workspace_agents)
                 )
-                workspace_agents = filter_feature_agents(workspace_agents, flags)
+                workspace_agents = await caller_usable_agents(
+                    workspace_agents, current_user, request.workspace_id, flags
+                )
                 agent_workspace_enabled_class_names.set(
                     caller_enabled_class_names(workspace_agents, flags)
                 )
@@ -363,24 +365,25 @@ async def stream_chat_response(
                 if email:
                     agent_user_email.set(str(email))
                 agent_chat_id.set(str(conversation_id))
-                if request.workspace_id is not None:
-                    agent_workspace_id.set(str(request.workspace_id))
+                # The agents this turn may run and reach as sub-agents: those
+                # the caller may use where the turn is stored, whatever the
+                # request names (the in-process runtime refuses any other).
+                turn_workspace = request.workspace_id
+                if turn_workspace is None:
+                    stored = await registry.chat.get_conversation_for_user(
+                        user_id=current_user.id, conversation_id=conversation_id
+                    )
+                    turn_workspace = stored.workspace_id if stored is not None else None
+                if turn_workspace is not None:
+                    agent_workspace_id.set(str(turn_workspace))
                     if agent_workspace_enabled_class_names.get() is None:
                         from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
-                            caller_enabled_class_names,
-                            caller_feature_flags,
-                            feature_keys_of,
-                            filter_feature_agents,
+                            bind_usable_agents,
                         )
 
-                        roster = await registry.agents.list_workspace_agents(request.workspace_id)
-                        flags = await caller_feature_flags(
-                            current_user, request.workspace_id, feature_keys_of(roster)
-                        )
-                        visible = filter_feature_agents(roster, flags)
-                        agent_workspace_enabled_class_names.set(
-                            caller_enabled_class_names(visible, flags)
-                        )
+                        await bind_usable_agents(registry.agents, current_user, turn_workspace)
+                else:
+                    agent_workspace_enabled_class_names.set(frozenset())
 
                 # Bind open Slides deck or Documents file + Coder sidecar.
                 client_ctx = request.context if isinstance(request.context, dict) else {}
