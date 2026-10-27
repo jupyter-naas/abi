@@ -202,3 +202,11 @@ def simulation_view(
         "principal": principal_view(principal),
         "statement": statement,
     }
+
+
+def scope_set(found: Any) -> dict[str, Any]:
+    """A set's two parts: a list each, or None for everything (``ScopeSet``)."""
+    return {
+        "modules": list(found.modules) if found.modules is not None else None,
+        "features": list(found.features) if found.features is not None else None,
+    }

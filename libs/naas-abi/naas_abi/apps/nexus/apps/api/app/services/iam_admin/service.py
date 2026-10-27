@@ -27,7 +27,12 @@ from naas_abi.apps.nexus.apps.api.app.services.iam_admin.narrowing import (
     is_unchanged,
     narrowing_errors,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam_admin.port import IamGateway
+from naas_abi.apps.nexus.apps.api.app.services.iam_admin.port import (
+    IamGateway,
+    IamUnavailableError,
+    OrganizationScopes,
+    ScopeDirectory,
+)
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import (
     AdminAction,
     AdminAuditLog,
@@ -41,6 +46,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     IIAMService,
     PermissionDeniedError,
     PrincipalKind,
+    ScopeSet,
 )
 from naas_abi_core.services.iam.IAMService import (
     attachment_resource,
@@ -68,6 +74,7 @@ from naas_abi_core.services.iam.policy import (
     check_owned_document,
     parse_policy_document,
 )
+from naas_abi_core.services.iam.sets import read_resource, write_resource
 from starlette.concurrency import run_in_threadpool
 
 T = TypeVar("T")
@@ -101,6 +108,8 @@ _WILDCARD_TYPE = {
     "iam:ListManifests": "manifest",
     "iam:ApproveManifest": "manifest",
     "iam:RejectManifest": "manifest",
+    "iam:GetSet": "set",
+    "iam:PutSet": "set",
 }
 _ATTACHMENT_ACTIONS = ("iam:ListAttachments", "iam:AttachPolicy", "iam:DetachPolicy")
 _KEY_ACTIONS = ("iam:ListKeys", "iam:CreateKey", "iam:RevokeKey")
@@ -114,10 +123,12 @@ class IamAdminService:
         audit: AdminAuditLog,
         *,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        directory: ScopeDirectory | None = None,
     ) -> None:
         self._gateway = gateway
         self._audit = audit
         self._clock = clock
+        self._directory = directory
 
     # -- plumbing ---------------------------------------------------------------------
 
@@ -798,6 +809,118 @@ class IamAdminService:
                 if operation is None or e.operation == operation
             ]
         }
+
+    # -- sets: what each organization and workspace may use ------------------------
+
+    def _directory_or_fail(self) -> ScopeDirectory:
+        if self._directory is None:
+            raise IamUnavailableError("No organizations to show sets for")
+        return self._directory
+
+    @staticmethod
+    def _set_entry(
+        session: IIAMService, org: str, workspace: str, name: str
+    ) -> dict[str, Any] | None:
+        """One column of the page, or None when the caller may not read its set."""
+        if not session.authorize("iam:GetSet", read_resource(org, workspace)).allowed:
+            return None
+        return {
+            "id": workspace if workspace != NONE else org,
+            "name": name,
+            "set": views.scope_set(session.get_set(org, workspace)),
+            "effective": views.scope_set(session.effective_set(org, workspace)),
+            "editable": session.authorize("iam:PutSet", write_resource(org, workspace)).allowed,
+        }
+
+    def _org_entry(self, session: IIAMService, org: OrganizationScopes) -> dict[str, Any] | None:
+        workspaces = [
+            entry
+            for ws in org.workspaces
+            if (entry := self._set_entry(session, org.id, ws.id, ws.name)) is not None
+        ]
+        entry = self._set_entry(session, org.id, NONE, org.name)
+        if entry is None and not workspaces:
+            return None
+        if entry is None:
+            # Its workspaces are the caller's to see, not the org's own set.
+            entry = {
+                "id": org.id,
+                "name": org.name,
+                "set": None,
+                "effective": None,
+                "editable": False,
+            }
+        return {**entry, "workspaces": workspaces}
+
+    async def sets(self, user: Any, org_id: str | None = None) -> list[dict[str, Any]]:
+        """The sets of every organization (or the one named) and its workspaces
+        that the caller may read, each with what it has once bounded by its org's
+        and whether the caller may change it. Read as the user: a refusal of
+        everything is a 403 (``iam:GetSet``)."""
+        organizations = await self._directory_or_fail().organizations(org_id)
+
+        def read(session: IIAMService) -> list[dict[str, Any]]:
+            found = [
+                entry
+                for org in organizations
+                if (entry := self._org_entry(session, org)) is not None
+            ]
+            if not found:
+                target = read_resource(org_id) if org_id else self._wildcard("set")
+                raise PermissionDeniedError("iam:GetSet", target)
+            return found
+
+        return await self._read(user, read)
+
+    async def may_edit_set(self, user: Any, org_id: str, workspace_id: str = NONE) -> bool:
+        """Whether the caller may change that set (``iam:PutSet``)."""
+
+        def decide(session: IIAMService) -> bool:
+            return session.authorize("iam:PutSet", write_resource(org_id, workspace_id)).allowed
+
+        try:
+            return await self._read(user, decide)
+        except (PermissionDeniedError, IamUnavailableError):
+            return False
+
+    async def put_set(
+        self,
+        user: Any,
+        org_id: str,
+        workspace_id: str = NONE,
+        *,
+        modules: list[str] | None,
+        features: list[str] | None,
+    ) -> dict[str, Any]:
+        """Record a set as the user, audited first; the page's entry for it after."""
+        organizations = await self._directory_or_fail().organizations(org_id)
+        org = next((o for o in organizations if o.id == org_id), None)
+        if org is None or (
+            workspace_id != NONE and all(w.id != workspace_id for w in org.workspaces)
+        ):
+            raise IAMNotFoundError("No such organization or workspace")
+        where = f"{org_id}/{workspace_id}" if workspace_id != NONE else org_id
+        detail = (
+            f"modules={'everything' if modules is None else len(modules)} "
+            f"features={'everything' if features is None else len(features)}"
+        )
+
+        def put(session: IIAMService) -> ScopeSet:
+            return session.put_set(org_id, workspace_id, modules=modules, features=features)
+
+        await self._change(user, "put_set", where, put, detail=detail)
+
+        def read(session: IIAMService) -> dict[str, Any]:
+            if workspace_id == NONE:
+                entry = self._org_entry(session, org)
+            else:
+                name = next(w.name for w in org.workspaces if w.id == workspace_id)
+                entry = self._set_entry(session, org_id, workspace_id, name)
+            if entry is None:
+                raise PermissionDeniedError("iam:GetSet", read_resource(org_id, workspace_id))
+            return entry
+
+        return await self._read(user, read)
 
 
 def _owner_of(scope: str | None) -> str:

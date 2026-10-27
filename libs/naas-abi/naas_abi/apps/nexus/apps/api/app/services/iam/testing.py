@@ -45,7 +45,6 @@ class NexusIam:
         flags: FeatureFlagsConfig | None = None,
         *,
         org_overlays: Mapping[str, Mapping[str, list[str]]] | None = None,
-        workspaces: Sequence[tuple[str, str | None, str | None]] = (),
     ) -> None:
         self.iam = IAMService(IAMStoreMemory())
         self.iam.bootstrap()
@@ -56,7 +55,6 @@ class NexusIam:
                 feature_plan(
                     flags or FeatureFlagsConfig(),
                     org_overlays=org_overlays or {},
-                    workspaces=workspaces,
                 )
             )
             self.iam.set_platform_grants(shared_repo_grants("abi/monorepo"))

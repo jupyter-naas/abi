@@ -17,6 +17,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary impor
     workspaces__primary_adapter__FastAPI as ws_api,
 )
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import WorkspaceRecord
+from naas_abi_core.engine.call_context import as_service_account
 
 NOW = datetime(2026, 1, 1)
 
@@ -72,13 +73,15 @@ def _record(**fields) -> WorkspaceRecord:
     )
 
 
-def test_create_saves_the_chosen_features(monkeypatch) -> None:
+def _workspace_set(team, workspace: str = "ws-1"):
+    with as_service_account("engine"):
+        return team.iam.get_set("org-1", workspace)
+
+
+def test_create_records_the_chosen_features_as_the_workspace_set(monkeypatch, team) -> None:
     monkeypatch.setattr(ws_api.placements, "place_new_workspace", AsyncMock())
     client, service = _client(user="admin")
     service.create_workspace.return_value = _record()
-    service.set_workspace_feature_overrides.return_value = _record(
-        feature_overrides={"maps": False, "graph": True}
-    )
 
     resp = client.post(
         "/api/workspaces",
@@ -86,19 +89,18 @@ def test_create_saves_the_chosen_features(monkeypatch) -> None:
             "name": "Audit",
             "slug": "audit",
             "organization_id": "org-1",
-            "feature_overrides": {"maps": False, "graph": True},
+            "features": ["chat", "graph"],
         },
     )
 
     assert resp.status_code == 200
-    service.set_workspace_feature_overrides.assert_awaited_once_with(
-        workspace_id="ws-1", overrides={"maps": False, "graph": True}
-    )
+    # Settings always stays reachable.
+    assert _workspace_set(team).features == ("chat", "graph", "settings")
     flags = resp.json()["feature_flags"]
-    assert flags["maps"] is False and flags["graph"] is True
+    assert flags["chat"] is True and flags["graph"] is True and flags["maps"] is False
 
 
-def test_create_without_features_keeps_the_role_defaults(monkeypatch) -> None:
+def test_create_without_features_keeps_the_orgs_set(monkeypatch, team) -> None:
     monkeypatch.setattr(ws_api.placements, "place_new_workspace", AsyncMock())
     client, service = _client(user="admin")
     service.create_workspace.return_value = _record()
@@ -108,11 +110,15 @@ def test_create_without_features_keeps_the_role_defaults(monkeypatch) -> None:
     )
 
     assert resp.status_code == 200
-    service.set_workspace_feature_overrides.assert_not_called()
+    assert _workspace_set(team).recorded is False
 
 
-def test_create_rejects_pinned_features_before_creating() -> None:
+def test_create_keeps_a_new_workspace_within_its_orgs_set(monkeypatch, team) -> None:
+    monkeypatch.setattr(ws_api.placements, "place_new_workspace", AsyncMock())
+    with as_service_account("engine"):
+        team.iam.put_set("org-1", modules=["acme.people"], features=["chat", "files"])
     client, service = _client(user="admin")
+    service.create_workspace.return_value = _record()
 
     resp = client.post(
         "/api/workspaces",
@@ -120,12 +126,25 @@ def test_create_rejects_pinned_features_before_creating() -> None:
             "name": "Audit",
             "slug": "audit",
             "organization_id": "org-1",
-            "feature_overrides": {"settings": False},
+            "features": ["chat", "graph"],
         },
     )
 
-    assert resp.status_code == 400
-    assert "settings" in resp.json()["detail"]
+    assert resp.status_code == 200
+    found = _workspace_set(team)
+    assert found.modules == ("acme.people",)
+    assert found.features == ("chat",)
+
+
+def test_create_rejects_unknown_features_before_creating() -> None:
+    client, service = _client(user="admin")
+
+    resp = client.post(
+        "/api/workspaces",
+        json={"name": "Audit", "slug": "audit", "organization_id": "org-1", "features": ["nope"]},
+    )
+
+    assert resp.status_code == 422
     service.create_workspace.assert_not_called()
 
 
@@ -134,18 +153,19 @@ def test_create_rejects_features_on_a_personal_workspace() -> None:
 
     resp = client.post(
         "/api/workspaces",
-        json={"name": "Mine", "slug": "mine", "feature_overrides": {"maps": True}},
+        json={"name": "Mine", "slug": "mine", "features": ["maps"]},
     )
 
     assert resp.status_code == 400
     assert "organization" in resp.json()["detail"]
     service.create_workspace.assert_not_called()
-    service.set_workspace_feature_overrides.assert_not_called()
 
 
-def test_configuration_lists_features_and_config_seeds(monkeypatch) -> None:
+def test_configuration_lists_features_and_config_seeds(monkeypatch, team) -> None:
     client, service = _client(user="admin")
-    service.get_workspace.return_value = _record(feature_overrides={"maps": False})
+    service.get_workspace.return_value = _record()
+    with as_service_account("engine"):
+        team.iam.put_set("org-1", "ws-1", features=["chat", "graph", "settings"])
     seeds = [
         OrganizationSeedConfig.model_validate(
             {"name": "Acme", "slug": "acme", "workspaces": [{"slug": "audit", "apps": ["kanban"]}]}
@@ -157,9 +177,8 @@ def test_configuration_lists_features_and_config_seeds(monkeypatch) -> None:
 
     assert resp.status_code == 200
     body = resp.json()
-    assert "maps" not in body["features"] and "chat" in body["features"]
-    assert body["feature_overrides"] == {"maps": False}
-    assert body["feature_overrides_source"] == "database"
+    assert body["features"] == ["chat", "graph", "settings"]
+    assert "feature_overrides" not in body
     assert body["pinned"] == ["settings"]
     assert body["seeds"] == [
         {
@@ -191,9 +210,11 @@ def test_configuration_lets_org_admins_edit_features(monkeypatch) -> None:
     assert body["can_edit_features"] is True
 
 
-def test_configuration_is_read_only_for_workspace_admins(monkeypatch) -> None:
-    # A workspace admin who is only an org member sees the features read-only.
-    client, service = _client(user="admin", org_role="member")
+def test_configuration_is_read_only_for_workspace_admins(monkeypatch, team) -> None:
+    # A workspace admin who is no admin of the org sees the features read-only:
+    # the workspace's set is the org's owners' and admins' (iam:PutSet).
+    team.grant("wanda", "admin", "abi:org-1:ws-1")
+    client, service = _client(user="wanda", org_role="member")
     service.get_workspace.return_value = _record()
 
     assert client.get("/api/workspaces/ws-1/configuration").json()["can_edit_features"] is False

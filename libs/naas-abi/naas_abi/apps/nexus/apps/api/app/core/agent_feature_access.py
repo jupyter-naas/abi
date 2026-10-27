@@ -44,8 +44,9 @@ async def caller_feature_flags(
     """Whether the caller may use each of ``keys`` in this workspace, from IAM.
 
     IAM's ``UseFeature`` is what the workspace listing sends the frontend (the
-    deployment's ``role_baseline``, the org overlay, the workspace overrides),
-    so the agents a user is offered match the sections they can open.
+    deployment's ``role_baseline``, the org overlay, the sets, any policy
+    granting a feature), so the agents a user is offered match the sections they
+    can open.
     """
     return {
         key: await authz.allowed("UseFeature", user=user, workspace=workspace_id, id=key)
@@ -56,8 +57,7 @@ async def caller_feature_flags(
 async def _workspace_feature_inputs(
     db: object,
     workspace_id: str,
-) -> tuple[str | None, str | None, dict[str, bool] | None, Mapping[str, list[str]] | None]:
-    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import parse_feature_overrides
+) -> tuple[str | None, Mapping[str, list[str]] | None]:
     from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
     from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
         OrganizationSecondaryAdapterPostgres,
@@ -66,16 +66,10 @@ async def _workspace_feature_inputs(
     from sqlalchemy import select
 
     result = await db.execute(  # type: ignore[attr-defined]
-        select(
-            WorkspaceModel.slug,
-            WorkspaceModel.organization_id,
-            WorkspaceModel.feature_overrides,
-        ).where(WorkspaceModel.id == workspace_id)
+        select(WorkspaceModel.organization_id).where(WorkspaceModel.id == workspace_id)
     )
     row = result.one_or_none()
-    slug = row[0] if row else None
-    organization_id = row[1] if row else None
-    workspace_override = parse_feature_overrides(row[2]) if row else None
+    organization_id = row[0] if row else None
 
     org_baseline = None
     if organization_id:
@@ -83,31 +77,30 @@ async def _workspace_feature_inputs(
         record = await org_service.get_role_features(org_id=organization_id)
         org_baseline = record.role_baseline if record is not None else None
 
-    return slug, organization_id, workspace_override, org_baseline
+    return organization_id, org_baseline
 
 
 async def workspace_union_feature_flags(db: object, workspace_id: str) -> dict[str, bool]:
-    """Features any baseline role may use in this workspace (for agent sync)."""
+    """Features any baseline role may use in this workspace, within its set (for
+    agent sync)."""
     from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
         BASELINE_ROLES,
         KNOWN_FEATURE_KEYS,
         build_feature_flags,
     )
     from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+    from naas_abi.apps.nexus.apps.api.app.services.iam.sets import effective_features_async
 
-    slug, organization_id, workspace_override, org_baseline = await _workspace_feature_inputs(
-        db, workspace_id
-    )
+    organization_id, org_baseline = await _workspace_feature_inputs(db, workspace_id)
+    feature_set = await effective_features_async(organization_id, workspace_id)
     merged = dict.fromkeys(KNOWN_FEATURE_KEYS, False)
     for role in BASELINE_ROLES:
         flags = build_feature_flags(
             role=role,
             feature_flags_config=live_settings().feature_flags,
-            workspace_slug=slug,
-            workspace_id=workspace_id,
             organization_id=organization_id,
             organization_override=org_baseline,
-            workspace_override=workspace_override,
+            feature_set=feature_set,
         )
         for key, value in flags.items():
             merged[key] = merged.get(key, False) or bool(value)

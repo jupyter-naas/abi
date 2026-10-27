@@ -5,10 +5,6 @@ from datetime import datetime
 from uuid import uuid4
 
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
-from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
-    dump_feature_overrides,
-    parse_feature_overrides,
-)
 from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import (
     dump_catalog_seed,
     parse_catalog_seed,
@@ -88,7 +84,6 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             font_family=model.font_family,
             description=model.description,
             workspace_group=model.workspace_group,
-            feature_overrides=parse_feature_overrides(getattr(model, "feature_overrides", None)),
             catalog_seed=parse_catalog_seed(getattr(model, "catalog_seed", None)),
             platform_drive_enabled=bool(model.platform_drive_enabled),
             system_drive_enabled=bool(model.system_drive_enabled),
@@ -186,20 +181,6 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
         self.db.add(workspace_model)
         await self.db.flush()
         return self._to_workspace_record(workspace_model)
-
-    async def set_workspace_feature_overrides(
-        self, workspace_id: str, overrides: dict[str, bool] | None
-    ) -> WorkspaceRecord | None:
-        result = await self.db.execute(
-            select(WorkspaceModel).where(WorkspaceModel.id == workspace_id)
-        )
-        workspace = result.scalar_one_or_none()
-        if workspace is None:
-            return None
-        workspace.feature_overrides = dump_feature_overrides(overrides)
-        workspace.updated_at = datetime.now(UTC).replace(tzinfo=None)
-        await self.db.flush()
-        return self._to_workspace_record(workspace)
 
     async def delete_workspace(self, workspace_id: str) -> bool:
         result = await self.db.execute(

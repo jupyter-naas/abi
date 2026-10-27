@@ -122,19 +122,3 @@ async def test_create_saves_the_description_and_a_trimmed_group(db) -> None:
         WorkspaceCreateInput(name="Three", slug="three", owner_id="founder", workspace_group="  ")
     )
     assert ungrouped.workspace_group is None
-
-
-@pytest.mark.asyncio
-async def test_feature_overrides_are_saved_and_none_restores_the_config(db) -> None:
-    adapter = WorkspaceSecondaryAdapterPostgres(db=db)
-
-    saved = await adapter.set_workspace_feature_overrides("ws-1", {"maps": False, "graph": True})
-    assert saved.feature_overrides == {"graph": True, "maps": False}
-    assert (await adapter.get_workspace_by_id("ws-1")).feature_overrides == {
-        "graph": True,
-        "maps": False,
-    }
-
-    cleared = await adapter.set_workspace_feature_overrides("ws-1", None)
-    assert cleared.feature_overrides is None
-    assert await adapter.set_workspace_feature_overrides("ws-missing", {}) is None

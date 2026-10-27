@@ -335,12 +335,12 @@ class _NoStore:
 
 async def _prepare_iam() -> None:
     """Register the ``nexus`` catalog and feature policies, then move the role
-    data Nexus kept itself into IAM and give org owners and admins their
-    organization-wide role. Without an IAM service every Nexus
+    data and the workspace feature overrides Nexus kept itself into IAM and give
+    org owners and admins their organization-wide role. Without an IAM service every Nexus
     decision is a refusal, so the failure is logged loudly and boot goes on."""
     from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
     from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
-    from naas_abi.apps.nexus.apps.api.app.services.iam import bootstrap
+    from naas_abi.apps.nexus.apps.api.app.services.iam import bootstrap, sets
     from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
 
     log = logging.getLogger(__name__)
@@ -351,6 +351,9 @@ async def _prepare_iam() -> None:
             report = await bootstrap.migrate_role_data(db)
             if report.applied:
                 log.info("Role data moved into IAM: %s", report)
+            # The per-workspace feature overrides of earlier versions become the
+            # workspaces' feature sets, once.
+            await sets.migrate_feature_overrides(db, live_settings().feature_flags)
             # Org owners and admins reach every workspace of their organization.
             made = await MEMBERSHIPS.sync_org_wide_roles()
             if made:

@@ -13,7 +13,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -21,7 +21,6 @@ from typing import Any
 from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig, settings
 from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
     KNOWN_FEATURE_KEYS,
-    parse_feature_overrides,
     resolve_role_baseline,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
@@ -56,25 +55,21 @@ def feature_plan(
     flags: FeatureFlagsConfig,
     *,
     org_overlays: Mapping[str, Mapping[str, list[str]]],
-    workspaces: Iterable[tuple[str, str | None, str | None]],
-    workspace_overrides: Mapping[str, Mapping[str, bool]] | None = None,
 ) -> dict[str, list[str]]:
     """``{feature policy key: features}`` for IAM's ``put_feature_policies``.
 
     The same resolution ``build_feature_flags`` applies for the UI: the
-    deployment's ``role_baseline``, the org overrides of the configuration, the
-    org's stored overlay, then the workspace overrides, all restricted to
-    ``enabled_features``. The overrides saved for a workspace in the app
-    (``workspace_overrides``, by workspace id; saved empty is still saved) replace
-    the deployment's (by slug or id). A key is only emitted where it differs from
-    the broader one, which IAM falls back to.
+    deployment's ``role_baseline``, the org overrides of the configuration, then
+    the org's stored overlay, all restricted to ``enabled_features``. A key is only
+    emitted where it differs from the broader one, which IAM falls back to. What a
+    workspace (or an org) has is its set, which IAM applies when it decides
+    (``services/iam/sets.py``): no feature policy is a workspace's.
     """
     enabled = _enabled(flags)
     base = resolve_role_baseline(flags)
     plan: dict[str, list[str]] = {
         role: sorted(k for k in base.get(role, []) if k in enabled) for role in ROLE_NAMES
     }
-    org_keys: dict[tuple[str, str], list[str]] = {}
     for org in sorted(set(flags.organization_overrides) | set(org_overlays)):
         resolved = resolve_role_baseline(
             flags, organization_id=org, organization_override=org_overlays.get(org)
@@ -83,25 +78,6 @@ def feature_plan(
             features = sorted(k for k in resolved.get(role, []) if k in enabled)
             if features != plan[role]:
                 plan[f"{org}.{role}"] = features
-            org_keys[(org, role)] = features
-    saved = workspace_overrides or {}
-    for workspace_id, slug, org_id in workspaces:
-        overrides = (
-            saved[workspace_id]
-            if workspace_id in saved
-            else flags.workspace_overrides.get(slug or "")
-            or flags.workspace_overrides.get(workspace_id)
-            or {}
-        )
-        if not overrides:
-            continue
-        org = org_id or NO_ORG
-        for role in ROLE_NAMES:
-            features = set(org_keys.get((org, role), plan[role]))
-            for key, on in overrides.items():
-                if key in enabled:
-                    (features.add if on else features.discard)(key)
-            plan[f"{org}.{workspace_id}.{role}"] = sorted(features)
     return plan
 
 
@@ -118,20 +94,7 @@ async def load_feature_plan(db: AsyncSession, flags: FeatureFlagsConfig) -> dict
             continue
         if isinstance(parsed, dict):
             overlays[str(org_id)] = {str(k): list(v) for k, v in parsed.items()}
-    rows = (
-        await db.execute(
-            text("SELECT id, slug, organization_id, feature_overrides FROM workspaces")
-        )
-    ).all()
-    workspaces = [(str(row[0]), row[1], row[2]) for row in rows]
-    saved: dict[str, dict[str, bool]] = {}
-    for row in rows:
-        overrides = parse_feature_overrides(row[3])
-        if overrides is not None:
-            saved[str(row[0])] = overrides
-    return feature_plan(
-        flags, org_overlays=overlays, workspaces=workspaces, workspace_overrides=saved
-    )
+    return feature_plan(flags, org_overlays=overlays)
 
 
 async def nexus_user_exists(user_id: str) -> bool:
@@ -181,7 +144,7 @@ async def register_catalog(db: AsyncSession | None, flags: FeatureFlagsConfig) -
     plan = (
         await load_feature_plan(db, flags)
         if db is not None
-        else feature_plan(flags, org_overlays={}, workspaces=())
+        else feature_plan(flags, org_overlays={})
     )
 
     grants = shared_repo_grants(settings.coding_repo_id)
@@ -197,8 +160,8 @@ async def register_catalog(db: AsyncSession | None, flags: FeatureFlagsConfig) -
 
 
 async def refresh_feature_policies(db: AsyncSession) -> None:
-    """Recompute the feature policies after an organization's overlay or a
-    workspace changed (the API enforces features through them)."""
+    """Recompute the feature policies after an organization's overlay changed
+    (the API enforces features through them)."""
     from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
 
     plan = await load_feature_plan(db, live_settings().feature_flags)

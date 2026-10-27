@@ -1,12 +1,7 @@
-import pytest
 from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig
 from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
-    InvalidFeatureOverridesError,
     build_feature_flags,
-    dump_feature_overrides,
-    effective_workspace_overrides,
     parse_feature_overrides,
-    validate_workspace_feature_overrides,
     workspace_features,
 )
 
@@ -41,30 +36,33 @@ class TestBuildFeatureFlags:
             "documents": True,
         }
 
-    def test_workspace_overrides_apply_on_top_of_role_baseline(self) -> None:
-        config = FeatureFlagsConfig(
-            workspace_overrides={
-                "demo": {
-                    "search": True,
-                    "apps": True,
-                    "marketplace": True,
-                    "chat": False,
-                }
-            }
-        )
-
+    def test_the_feature_set_bounds_the_role_baseline(self) -> None:
         flags = build_feature_flags(
             role="member",
-            feature_flags_config=config,
-            workspace_slug="demo",
-            workspace_id="ws-1",
+            feature_flags_config=FeatureFlagsConfig(),
+            feature_set=("chat", "apps"),
         )
 
-        assert flags["search"] is True
-        assert flags["apps"] is True
-        assert flags["marketplace"] is True
-        assert flags["chat"] is False
-        assert flags["files"] is True
+        # Within the set, the role's defaults: members have no apps by default.
+        assert flags["chat"] is True
+        assert flags["apps"] is False
+        assert flags["files"] is False
+        # Settings always stays reachable.
+        assert (
+            build_feature_flags(
+                role="owner", feature_flags_config=FeatureFlagsConfig(), feature_set=()
+            )["settings"]
+            is True
+        )
+
+    def test_the_deprecated_workspace_overrides_no_longer_apply(self) -> None:
+        config = FeatureFlagsConfig(workspace_overrides={"demo": {"chat": False}})
+
+        flags = build_feature_flags(
+            role="member", feature_flags_config=config, workspace_slug="demo"
+        )
+
+        assert flags["chat"] is True
 
     def test_unknown_role_denies_all_features(self) -> None:
         config = FeatureFlagsConfig()
@@ -156,75 +154,21 @@ class TestBuildFeatureFlags:
         assert flags["slides"] is False
 
 
-class TestWorkspaceOverrideFromTheApp:
-    CONFIG = FeatureFlagsConfig(workspace_overrides={"axa": {"maps": False, "graph": True}})
-
-    def test_a_saved_override_replaces_the_config_entry(self) -> None:
-        flags = build_feature_flags(
-            role="member",
-            feature_flags_config=self.CONFIG,
-            workspace_slug="axa",
-            workspace_id="ws-1",
-            workspace_override={"search": True},
-        )
-
-        # The config's maps: false and graph: true no longer apply.
-        assert (flags["maps"], flags["graph"], flags["search"]) == (True, False, True)
-
-    def test_an_empty_saved_override_falls_back_to_the_role_baseline(self) -> None:
-        flags = build_feature_flags(
-            role="member",
-            feature_flags_config=self.CONFIG,
-            workspace_slug="axa",
-            workspace_id="ws-1",
-            workspace_override={},
-        )
-
-        assert (flags["maps"], flags["graph"]) == (True, False)
-
-    def test_effective_overrides_report_their_source(self) -> None:
-        def effective(override):
-            return effective_workspace_overrides(
-                self.CONFIG, workspace_slug="axa", workspace_id="ws-1", workspace_override=override
-            )
-
-        assert effective(None) == ({"maps": False, "graph": True}, "deployment")
-        assert effective({"maps": True}) == ({"maps": True}, "database")
-        assert effective_workspace_overrides(
-            self.CONFIG, workspace_slug="other", workspace_id="ws-2", workspace_override=None
-        ) == ({}, None)
-
-    def test_workspace_features_are_the_union_over_roles(self) -> None:
+class TestWorkspaceFeatures:
+    def test_workspace_features_are_the_union_over_roles_within_the_set(self) -> None:
         features = workspace_features(
             roles=("owner", "member"),
-            feature_flags_config=self.CONFIG,
-            workspace_slug="axa",
-            workspace_id="ws-1",
+            feature_flags_config=FeatureFlagsConfig(),
+            feature_set=("chat", "graph", "settings"),
         )
 
-        assert "maps" not in features
-        assert "graph" in features
-        assert features[0] == "chat"
+        assert features == ["chat", "graph", "settings"]
 
-    def test_overrides_round_trip_through_json_and_drop_unknown_keys(self) -> None:
-        raw = dump_feature_overrides({"maps": False, "graph": True})
-
-        assert parse_feature_overrides(raw) == {"graph": True, "maps": False}
+    def test_saved_overrides_parse_for_the_move_and_drop_unknown_keys(self) -> None:
+        assert parse_feature_overrides('{"maps": false, "graph": true}') == {
+            "graph": True,
+            "maps": False,
+        }
         assert parse_feature_overrides('{"nope": true, "chat": "yes"}') == {}
         assert parse_feature_overrides(None) is None
         assert parse_feature_overrides("not json") is None
-
-
-class TestValidateWorkspaceFeatureOverrides:
-    def test_catalog_features_are_kept(self) -> None:
-        assert validate_workspace_feature_overrides(
-            FeatureFlagsConfig(), {"maps": False, "graph": True}
-        ) == {"maps": False, "graph": True}
-
-    def test_features_outside_the_catalog_are_rejected(self) -> None:
-        with pytest.raises(InvalidFeatureOverridesError, match="catalog: code"):
-            validate_workspace_feature_overrides(FeatureFlagsConfig(), {"code": True})
-
-    def test_pinned_features_are_rejected(self) -> None:
-        with pytest.raises(InvalidFeatureOverridesError, match="always on: settings"):
-            validate_workspace_feature_overrides(FeatureFlagsConfig(), {"settings": False})

@@ -20,6 +20,7 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 | `names.py` | Scopes and resource names; `NO_ORG` (`_none`) is the org of a workspace that has none |
 | `placements.py` | Which workspace owns the kernel resources Nexus keeps (`placement_source`, `place`, `place_existing`) |
 | `bootstrap.py` | Startup: register the catalog, compute the feature policies, move the old membership rows into IAM once (`iam_migrations`) |
+| `sets.py` | The organisation and workspace sets from Nexus's side: effective features of a workspace, a user's feature flags from IAM (`user_feature_flags`), a new workspace's set (`seed_workspace`, narrowed by its catalog seed), the one-time move of the feature overrides (`migrate_feature_overrides`) |
 | `runtime.py` | Where Nexus gets IAM (the engine's); tests install their own with `configure` |
 | `testing.py`, `../../conftest.py` | `NexusIam` (a real IAM on the memory store) and the `nexus_iam` / `team` / `nexus_db` fixtures |
 | `route_matrix_test.py` | Every route declares its action; write methods never authorize only a read; every `guard` is decided by level for viewer, member, admin, owner, stranger |
@@ -34,8 +35,9 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
   and add `declares(...)`. Kernel-bound routes declare the kernel action (`declares("triple_store:Query")`): the kernel
   decides as the same user.
 - **Features** (`UseFeature`) are policies IAM attaches beside each workspace role (`builtin.features.<key>`,
-  computed by `bootstrap.feature_plan` from `feature_flags`, org overlays and workspace overrides). An action of a
-  flagged section carries its `feature=` in the catalog; the API refuses it where the role lacks the feature.
+  computed by `bootstrap.feature_plan` from `feature_flags` and the org overlays), within the sets of the
+  workspace and its org ("Sets"). An action of a flagged section carries its `feature=` in the catalog; the API
+  refuses it where the user lacks the feature.
 - **Memberships change through `MEMBERSHIPS`** only: an admin cannot grant, demote or remove an owner, and the last
   owner stays (IAM answers, whichever API is used). An org owner or admin also holds their role organization-wide
   (`abi:<org>:*`, kept by `Memberships.mirror_org_wide` and `sync_org_wide_roles` at start): that is how they reach
@@ -124,16 +126,44 @@ a catalog, run the route matrix.
   their scope's attachments (Nexus reads members as `api`). Deleting a workspace or an org
   (`Memberships.drop_scope`, then IAM's `delete_scope`) deletes the policies and groups it owns, with their
   attachments.
-- **Features.** `UseFeature` is granted only by feature policies, `builtin.features.<role>`,
-  `builtin.features.<org>.<role>` and `builtin.features.<org>.<workspace>.<role>`, which IAM attaches beside
-  each workspace role and detaches with it. `bootstrap.feature_plan` computes them from
-  `feature_flags.role_baseline`, `organization_overrides`, the org overlay stored in
-  `organization_role_features` and the workspace overrides (`workspaces.feature_overrides`), restricted to
-  `enabled_features`; a key is emitted only where it differs from the broader one. A feature outside
-  `enabled_features` is reachable by no role, owner and admin included (only the platform admin's `*`).
-  Defaults: `owner` and `admin` get every enabled feature; `member` and `viewer` get `maps`, `chat`,
-  `files`, `datasets`, `skills`, `slides`, `documents` and `sheets`. An overlay or a workspace change
-  recomputes the policies. The role's own statements leave out the `feature` type.
+- **Features.** The role defaults come from feature policies, `builtin.features.<role>` and
+  `builtin.features.<org>.<role>`, which IAM attaches beside each workspace role and detaches with it.
+  `bootstrap.feature_plan` computes them from `feature_flags.role_baseline`, `organization_overrides` and the
+  org overlay stored in `organization_role_features`, restricted to `enabled_features`; a key is emitted only
+  where it differs from the broader one. A feature outside `enabled_features` is reachable by no role, owner
+  and admin included (only the platform admin's `*`). Defaults: `owner` and `admin` get every enabled feature;
+  `member` and `viewer` get `maps`, `chat`, `files`, `datasets`, `skills`, `slides`, `documents` and
+  `sheets`. An overlay change recomputes the policies. The role's own statements leave out the `feature` type.
+  What a workspace (and its org) has is its feature set ("Sets"): no feature policy is a workspace's any more.
+
+## Sets
+
+Core IAM keeps each org's and workspace's set (module items and features) and bounds every user's decision
+with them (core `services/iam/AGENTS.md`, "Sets"). Nexus:
+
+- **Shows the user what IAM decides.** The `feature_flags` of a workspace in `/api/workspaces` are IAM's
+  `UseFeature` for the user, one `filter` per workspace (`sets.user_feature_flags`), within `enabled_features`:
+  role defaults, the sets and any policy granting a feature, the platform admin's `*` included. Without an IAM
+  it falls back to the role's defaults within the set (`build_feature_flags(feature_set=)`). The features a
+  workspace offers (`features` of the org's workspace list and of `/configuration`, the agents a workspace
+  syncs) are the roles' defaults within its effective set.
+- **Edits sets as the user** through `services/iam_admin` (`/api/iam/admin/sets`, audited): the modules ×
+  workspaces page. `settings` is added to every feature set it records (`PINNED_FEATURES`): a set never takes
+  a workspace's settings away.
+- **Records a new workspace's set** (`seed_workspace`, as `engine`, part of the creation the route authorized):
+  its org's, narrowed by the create form's `features` and by its **catalog seed**. The seed (`catalog_seed`:
+  agents, apps, ontologies, maps) still says what the workspace is created with; its `agents` and `apps`
+  also narrow the set, for the modules within the org's: a module's agents (or apps) become the seeded ones
+  only, its workflows, pipelines and declared actions stay as the org has them (`<type>/<module>/*`, each
+  declared action). A seed with no `agents` (or `apps`) key narrows nothing of that type. Nothing narrowing,
+  nothing is recorded: the workspace follows its org's set. A new org records none: everything.
+- **Moved the feature overrides once** (`migrate_feature_overrides`, at start after the role data, recorded in
+  `iam_migrations` as `workspace_feature_sets_v1`): `workspaces.feature_overrides`, else the deprecated
+  `feature_flags.workspace_overrides`. An override turning a feature off leaves it out of the workspace's
+  feature set; one turning it on keeps it there and, for each role whose defaults lack it, a workspace policy
+  (`Features kept from the workspace's overrides`) attached to the people holding that role there keeps it
+  for them. Nobody's features change; the column is cleared. Snapshot imports (`core/workspaces_import.py`)
+  record a feature set from a snapshot's overrides likewise, where the workspace has none.
 - **Platform-level types.** A workspace role never reaches a platform-level resource. IAM keeps two
   managed policies in step with attachments: `builtin.platform.member` (held while the principal has a
   `member`, `admin` or `owner` attachment at a workspace or org-wide scope) and `builtin.platform.viewer`
@@ -207,6 +237,11 @@ a catalog, run the route matrix.
   (`workflow_run_owners`: run, user, workspace, time) and a user reads only the runs they started there, with
   `Read*Runs`. An idempotency key is the caller's own in the workspace (hashed with both), so another user's same
   key is another run. A run started elsewhere (the System tab, a schedule, an agent) has no owner here.
+- **The workspace's feature set replaces its feature overrides.** An override could add a feature to every
+  role; a set only bounds, so a feature beyond a role's defaults is given with a policy (the move made one for
+  who held it). `PUT /organizations/{org}/workspaces/{ws}/features` is gone; Org settings › Workspaces and
+  workspace settings › General link to the modules × workspaces page. The UI's flags are IAM's, so a policy
+  granting a feature shows in the UI as it is enforced.
 - **Known limits.** Under the default feature baseline members and viewers get 403 on the graph,
   ontology, search and settings sections (what the flags said, now enforced). `read_all` shares the graphs
   that exist when applied (`services/graph/AGENTS.md`). Per-object sharing beyond personal resources is an
