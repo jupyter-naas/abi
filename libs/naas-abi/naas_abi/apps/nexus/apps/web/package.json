@@ -10,7 +10,7 @@
     "deploy": "npm run build:cf && npx wrangler pages deploy .vercel/output/static",
     "deploy:staging": "npm run build:cf && npx wrangler pages deploy .vercel/output/static --env staging",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
