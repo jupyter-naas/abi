@@ -205,6 +205,7 @@ def test_a_loaded_module_named_remote_does_not_take_remote_app_urls(
     modules = [module_at("remote", tmp_path / "a"), module_at("acme.ops", tmp_path / "b")]
     monkeypatch.setattr(adapter, "_iter_loaded_modules", lambda: iter(modules))
     adapter._scan_apps_catalog.cache_clear()
+    adapter._scan_apps_html_assets.cache_clear()
     adapter._scan_apps_html_paths.cache_clear()
     try:
         with caplog.at_level(logging.WARNING):
@@ -212,6 +213,7 @@ def test_a_loaded_module_named_remote_does_not_take_remote_app_urls(
             paths = adapter._scan_apps_html_paths()
     finally:
         adapter._scan_apps_catalog.cache_clear()
+        adapter._scan_apps_html_assets.cache_clear()
         adapter._scan_apps_html_paths.cache_clear()
 
     assert [app.module_path for app in catalog] == ["acme.ops"]

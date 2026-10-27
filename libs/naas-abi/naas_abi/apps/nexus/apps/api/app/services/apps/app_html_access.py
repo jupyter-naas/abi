@@ -25,7 +25,19 @@ def validate_app_html_jwt(token: str, request: Request) -> bool:
     link = links.open_link(token, APP_AUDIENCE)
     if link is None or not link.resource.startswith(links.APP_HTML_ROOT):
         return False
-    return request.url.path.startswith(link.resource)
+    path = request.url.path
+    if not path.startswith(link.resource):
+        return False
+    if link.resource == links.APP_HTML_ROOT:
+        return True
+    # A lock is an app's folder: the file asked for must be that app's, not one
+    # of a module whose path continues it (``a.b`` app ``c`` vs module ``a.b.c``).
+    from naas_abi.apps.nexus.apps.api.app.services.apps.adapters.primary.apps__primary_adapter__FastAPI import (  # noqa: E501
+        app_html_root_of,
+    )
+
+    owner = app_html_root_of(path)
+    return owner is None or owner == link.resource
 
 
 def mint_app_html_access_token(

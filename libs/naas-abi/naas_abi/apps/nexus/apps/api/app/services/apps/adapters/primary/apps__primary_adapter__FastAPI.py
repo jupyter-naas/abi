@@ -319,6 +319,28 @@ _APP_ASSET_SUFFIXES = {
 
 @lru_cache(maxsize=1)
 def _scan_apps_html_paths() -> dict[str, str]:
+    """``_scan_apps_html_assets``: each asset's file."""
+    return {key: file for key, (file, _root) in _scan_apps_html_assets().items()}
+
+
+def app_html_root_of(path: str) -> str | None:
+    """The folder, ``/app-html/<module/path>/<app>/``, of the app whose file
+    ``/app-html/`` serves at ``path``; None for a path no engine app serves.
+
+    Module paths nest (``a.b`` app ``c`` and module ``a.b.c`` share the prefix
+    ``/app-html/a/b/c/``): a link locked to one app's folder opens that app's
+    files, never another app's below it."""
+    key = path.removeprefix(links.APP_HTML_ROOT)
+    try:
+        found = _scan_apps_html_assets().get(key)
+    except Exception:  # noqa: BLE001 - no engine loaded: /app-html/ serves nothing
+        _log.debug("No app assets to resolve %s", path, exc_info=True)
+        return None
+    return found[1] if found is not None else None
+
+
+@lru_cache(maxsize=1)
+def _scan_apps_html_assets() -> dict[str, tuple[str, str]]:
     """Build a URL map for safe browser assets under app directories.
 
     HTML entry points commonly import colocated scripts, styles, fonts,
@@ -326,7 +348,7 @@ def _scan_apps_html_paths() -> dict[str, str]:
     the same authenticated ``/app-html/`` namespace while excluding source
     and other non-browser files.
     """
-    html_map: dict[str, str] = {}
+    html_map: dict[str, tuple[str, str]] = {}
     for module in _iter_loaded_modules():
         module_root = getattr(module, "module_root_path", None)
         if not module_root:
@@ -347,7 +369,10 @@ def _scan_apps_html_paths() -> dict[str, str]:
                     continue
                 rel = asset_file.relative_to(app_dir).as_posix()
                 url_key = f"{module_path_url}/{app_dir.name}/{rel}"
-                html_map[url_key] = str(asset_file.resolve())
+                html_map[url_key] = (
+                    str(asset_file.resolve()),
+                    f"{links.APP_HTML_ROOT}{module_path_url}/{app_dir.name}/",
+                )
     _log.info("Apps browser asset map built: %d entries", len(html_map))
     return html_map
 
