@@ -48,21 +48,28 @@ function resultHtml(config, hit, tokens, query, facet = "", display = "") {
             : ""
         }
         ${
-          connections
-            ? `<p class="result-connections"><a href="${searchHref(config, {
-                query,
-                facet,
-                view: "connections",
-                display,
-                person: hit.slug,
-              })}">${escapeHtml(connections)}</a></p>`
-            : ""
-        }
-        ${
-          hit.linkedin_url
-            ? `<p class="result-contact"><a class="contact-link" href="${escapeHtml(hit.linkedin_url)}"
+          hit.linkedin_url || connections
+            ? `<p class="result-contact">${
+                hit.linkedin_url
+                  ? `<a class="contact-link" href="${escapeHtml(hit.linkedin_url)}"
                 target="_blank" rel="noopener noreferrer"
-                aria-label="${escapeHtml(`LinkedIn: ${hit.full_name || ""}`)}">${ICONS.linkedin_url}<span>LinkedIn</span></a></p>`
+                aria-label="${escapeHtml(`LinkedIn: ${hit.full_name || ""}`)}">${ICONS.linkedin_url}<span>LinkedIn</span></a>`
+                  : ""
+              }${
+                hit.linkedin_url && connections
+                  ? `<span class="result-contact-separator" aria-hidden="true">·</span>`
+                  : ""
+              }${
+                connections
+                  ? `<a class="result-connections" href="${searchHref(config, {
+                      query,
+                      facet,
+                      view: "connections",
+                      display,
+                      person: hit.slug,
+                    })}">${escapeHtml(connections)}</a>`
+                  : ""
+              }</p>`
             : ""
         }
       </div>
@@ -290,6 +297,7 @@ function tidyTabs(host) {
 
 function connectionHtml(config, item, query) {
   const place = [item.organization, item.position].filter(Boolean).join(" · ");
+  const connections = connectionsLabel(item.connections_count);
   return `
     <article class="result connection">
       <div class="result-body">
@@ -304,6 +312,15 @@ function connectionHtml(config, item, query) {
         ${
           item.connected_on
             ? `<p class="result-headline">Connected on ${escapeHtml(formatDate(item.connected_on))}</p>`
+            : ""
+        }
+        ${
+          connections
+            ? `<p class="result-contact"><a class="result-connections" href="${searchHref(config, {
+                query,
+                view: "connections",
+                person: item.slug,
+              })}">${escapeHtml(connections)}</a></p>`
             : ""
         }
       </div>
@@ -321,8 +338,8 @@ function formatDate(iso) {
 function connectionsEmptyHtml(person) {
   if (!person) {
     return `<div class="empty-state">
-      <h2>Whose connections?</h2>
-      <p>Search for a person by name, or open "N connections" under a result, to see who they are connected to.</p>
+      <h2>No one here has connections yet</h2>
+      <p>Connections come from LinkedIn data exports imported into this app.</p>
     </div>`;
   }
   return `<div class="empty-state">
@@ -339,7 +356,31 @@ async function connectionsPerson(state) {
   return personOfQuery(payload.results, state.query)?.slug || "";
 }
 
-/** The Connections tab: empty until a person is the input, then their connections. */
+/** The people of the search who have connections, most connected first. */
+async function mountMostConnected(config, state, stats, body) {
+  const { query, facet, display } = state;
+  let payload;
+  try {
+    payload = await fetchSearch({ query, facet, page: state.page, sort: "connections" });
+  } catch (error) {
+    body.innerHTML = errorHtml(error);
+    return;
+  }
+  const results = payload.results || [];
+  if (!results.length) {
+    stats.textContent = "";
+    body.innerHTML = connectionsEmptyHtml(null);
+    return;
+  }
+  stats.innerHTML = `${statsText(payload)} with connections${
+    query ? ` for “${escapeHtml(query)}”` : ""
+  }${payload.facet ? ` in ${escapeHtml(payload.facet)}` : ""}`;
+  body.innerHTML = `${results
+    .map((hit) => resultHtml(config, hit, payload.tokens || [], query, payload.facet, display))
+    .join("")}${pagerHtml(config, payload, query, "connections")}`;
+}
+
+/** The Connections tab: the most connected people, or one person's connections. */
 async function mountConnections(host, { config, state }) {
   const { query, facet, display } = state;
   host.innerHTML = `
@@ -359,8 +400,7 @@ async function mountConnections(host, { config, state }) {
     return null;
   }
   if (!slug) {
-    stats.textContent = "";
-    body.innerHTML = connectionsEmptyHtml(null);
+    await mountMostConnected(config, state, stats, body);
     return null;
   }
   const whose = (payload) => {

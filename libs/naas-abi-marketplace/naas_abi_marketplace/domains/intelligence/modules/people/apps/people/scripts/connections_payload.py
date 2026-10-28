@@ -128,7 +128,7 @@ def _connection(
 def connections(
     store: PeopleStore, config: dict[str, Any], *, slug: str
 ) -> dict[str, Any]:
-    """The person and everyone listed they are connected to, most recent first."""
+    """The person and everyone listed they are connected to, most connected first."""
     person = _people(store, config, [slug]).get(slug)
     if person is None:
         raise PersonNotFoundError(slug)
@@ -138,13 +138,19 @@ def connections(
         dates.setdefault(row["peer_slug"], row.get("connected_on"))
     peers = _people(store, config, sorted(dates))
     positions = _current_position(store, config, sorted(peers))
+    counts = connection_counts(store, config, sorted(peers))
     results = [
-        _connection(peers[peer], positions.get(peer), dates[peer]) for peer in peers
+        {
+            **_connection(peers[peer], positions.get(peer), dates[peer]),
+            "connections_count": counts.get(peer, 0),
+        }
+        for peer in peers
     ]
-    # Most recent first, undated last; by name within a date.
+    # Most connected first; then most recent, undated last; by name within a date.
     results.sort(key=lambda item: str(item.get("full_name") or ""))
     results.sort(key=lambda item: item["connected_on"] or "", reverse=True)
     results.sort(key=lambda item: item["connected_on"] is None)
+    results.sort(key=lambda item: -item["connections_count"])
     return {
         "person": _connection(
             person, _current_position(store, config, [slug]).get(slug), None

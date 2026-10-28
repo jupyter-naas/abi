@@ -183,6 +183,18 @@ def test_search_results_carry_their_connection_count(store, config) -> None:
     assert counts["emma_petit"] == 0
 
 
+def test_sorted_by_connections_drops_the_unconnected(store, config) -> None:
+    payload = search_payload.search(
+        store, config, query="", facet="", page=1, sort="connections"
+    )
+    counts = [result["connections_count"] for result in payload["results"]]
+    assert counts and all(counts)
+    assert counts == sorted(counts, reverse=True)
+    assert payload["results"][0]["slug"] == "alice_dupont"
+    assert payload["total"] == len(counts)
+    assert "emma_petit" not in {result["slug"] for result in payload["results"]}
+
+
 def test_the_connections_of_a_person_with_organization_position_and_date(
     store, config
 ) -> None:
@@ -195,10 +207,16 @@ def test_the_connections_of_a_person_with_organization_position_and_date(
         "organization": "AXA",
         "position": "Chief Risk Officer",
         "connected_on": "2025-10-23",
+        "connections_count": 2,
     }
-    # Most recent first.
-    dates = [item["connected_on"] for item in payload["results"]]
-    assert dates == sorted(dates, reverse=True)
+    # Most connected first, then most recent.
+    order = [
+        (-item["connections_count"], item["connected_on"]) for item in payload["results"]
+    ]
+    assert [count for count, _ in order] == sorted(count for count, _ in order)
+    for (count, date), (next_count, next_date) in zip(order, order[1:]):
+        if count == next_count:
+            assert date >= next_date
 
 
 def test_a_connection_two_exports_share_lists_both_owners(store, config) -> None:

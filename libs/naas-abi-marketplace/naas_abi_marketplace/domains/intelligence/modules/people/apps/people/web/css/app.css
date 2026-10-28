@@ -879,6 +879,10 @@ a.page:hover {
 
 /* A result's LinkedIn, when the directory publishes contact details. */
 .result-contact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   margin: 4px 0 0;
   font-size: 13px;
 }
@@ -2410,12 +2414,17 @@ body.is-ontology-view main > .ontology-page {
 
 /* "N connections" under a result's description: opens the Connections tab. */
 .result-connections {
-  margin: 4px 0 0;
-  font-size: 13px;
+  color: var(--result-link, var(--accent));
+  text-decoration: none;
 }
 
-.result-connections a {
-  color: var(--result-link, var(--accent));
+.result-connections:hover,
+.result-connections:focus-visible {
+  text-decoration: underline;
+}
+
+.result-contact-separator {
+  color: var(--muted);
 }
 
 .home-import {

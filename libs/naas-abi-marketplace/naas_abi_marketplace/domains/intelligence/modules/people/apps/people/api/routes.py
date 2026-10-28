@@ -16,7 +16,7 @@ import asyncio
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import Response
@@ -179,6 +179,7 @@ def build_router(config_path: Path | None = None) -> APIRouter:
         q: str = Query("", max_length=200),
         facet: str = Query("", max_length=120),
         page: int = Query(1, ge=1, le=1000),
+        sort: Literal["", "connections"] = Query(""),
         ctx: PeopleRequestContext = Depends(_people_context),
     ) -> dict:
         # In a thread: the routes share one event loop, and the page asks for
@@ -191,6 +192,7 @@ def build_router(config_path: Path | None = None) -> APIRouter:
                 query=q,
                 facet=facet,
                 page=page,
+                sort=sort,
             )
         except DatasetsMissingError as exc:
             raise HTTPException(status_code=404, detail=exc.as_detail()) from exc

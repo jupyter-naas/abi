@@ -35,11 +35,12 @@ async function readJson(path, response) {
   return body;
 }
 
-export function fetchSearch({ query = "", facet = "", page = 1 } = {}) {
+export function fetchSearch({ query = "", facet = "", page = 1, sort = "" } = {}) {
   const params = new URLSearchParams();
   if (query) params.set("q", query);
   if (facet) params.set("facet", facet);
   if (page > 1) params.set("page", String(page));
+  if (sort) params.set("sort", sort);
   const suffix = params.toString();
   return getJson(`/search${suffix ? `?${suffix}` : ""}`);
 }
