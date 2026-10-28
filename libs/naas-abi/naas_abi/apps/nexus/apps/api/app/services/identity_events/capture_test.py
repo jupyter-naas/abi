@@ -6,8 +6,10 @@ Runs against a real SQLite session and a real EventService so the whole path
 
 from __future__ import annotations
 
+import asyncio
 import datetime
 import json
+import threading
 
 import pytest
 import pytest_asyncio
@@ -69,6 +71,7 @@ async def env(tmp_path):
         publish=events.publish,
         site_iri=SITE,
         on_published=lambda count: published.append(count),
+        dispatch=lambda job: job(),
     )
     capture.install()
     maker = async_sessionmaker(engine, expire_on_commit=False)
@@ -354,3 +357,32 @@ async def test_bulk_statements_on_identity_tables_are_reported(env) -> None:
         capture.uninstall()
 
     assert bypassed == ["UPDATE users", "DELETE app_configs"]
+
+
+@pytest.mark.asyncio
+async def test_commit_does_not_wait_for_the_publish(tmp_path) -> None:
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'nexus.db'}")
+    async with engine.begin() as conn:
+        await conn.run_sync(UserModel.__table__.create)
+    release = threading.Event()
+    published: list[str] = []
+
+    def slow_publish(event) -> None:
+        release.wait(timeout=10)
+        published.append(type(event).__name__)
+
+    capture = IdentityEventCapture(publish=slow_publish, site_iri=SITE)
+    capture.install()
+    try:
+        await asyncio.wait_for(_seed_user(async_sessionmaker(engine, expire_on_commit=False)), 5)
+        assert published == []
+        release.set()
+        for _ in range(100):
+            if published:
+                break
+            await asyncio.sleep(0.05)
+        assert published == ["CreateUserEvent"]
+    finally:
+        release.set()
+        capture.uninstall()
+        await engine.dispose()

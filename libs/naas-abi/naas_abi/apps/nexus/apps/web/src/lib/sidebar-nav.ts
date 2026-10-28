@@ -4,6 +4,7 @@ export const DEFAULT_NAV_ORDER = [
   'apps',
   'files',
   'chat',
+  'tasks',
   'maps',
   'ontology',
   'graph',
@@ -36,13 +37,19 @@ export function shiftForReorder(index: number, from: number, to: number): number
   return 0;
 }
 
-/** Earlier defaults: a saved order still equal to one of them was never customised. */
+/**
+ * Earlier defaults: a saved order still equal to one of them was never customised.
+ * `board` is the id Tasks had before its rename.
+ */
 const PREVIOUS_DEFAULT_NAV_ORDERS: readonly (readonly string[])[] = [
   ['home', 'apps', 'files', 'chat', 'search', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'code', 'marketplace'],
+  ['home', 'search', 'apps', 'files', 'chat', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'code', 'marketplace'],
+  ['home', 'search', 'apps', 'files', 'chat', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'board', 'code', 'marketplace'],
 ];
 
 /**
- * Keep a persisted order, drop unknown ids, append anything new from the catalog.
+ * Keep a persisted order, drop unknown ids, and slot anything new from the
+ * catalog right after the section that precedes it there (first when none does).
  * An order that is still an earlier default follows the current default instead.
  */
 export function mergeNavOrder(
@@ -59,12 +66,12 @@ export function mergeNavOrder(
     seen.add(id);
     next.push(id as NavSectionId);
   }
-  for (const id of catalog) {
-    if (seen.has(id)) continue;
-    const catalogIndex = catalog.indexOf(id);
-    next.splice(Math.min(catalogIndex, next.length), 0, id);
+  catalog.forEach((id, catalogIndex) => {
+    if (seen.has(id)) return;
+    const previous = catalogIndex > 0 ? next.indexOf(catalog[catalogIndex - 1]) : -1;
+    next.splice(previous + 1, 0, id);
     seen.add(id);
-  }
+  });
   return next;
 }
 

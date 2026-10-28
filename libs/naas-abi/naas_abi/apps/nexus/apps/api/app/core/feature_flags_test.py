@@ -1,3 +1,4 @@
+import pytest
 from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig
 from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
     build_feature_flags,
@@ -34,7 +35,22 @@ class TestBuildFeatureFlags:
             "slides": True,
             "sheets": True,
             "documents": True,
+            "tasks": False,
         }
+
+    @pytest.mark.parametrize(
+        ("role", "expected"),
+        [("owner", True), ("admin", True), ("member", False), ("viewer", False)],
+    )
+    def test_tasks_defaults_to_owners_and_admins_only(self, role: str, expected: bool) -> None:
+        flags = build_feature_flags(
+            role=role,
+            feature_flags_config=FeatureFlagsConfig(),
+            workspace_slug="demo",
+            workspace_id="ws-1",
+        )
+
+        assert flags["tasks"] is expected
 
     def test_the_feature_set_bounds_the_role_baseline(self) -> None:
         flags = build_feature_flags(
