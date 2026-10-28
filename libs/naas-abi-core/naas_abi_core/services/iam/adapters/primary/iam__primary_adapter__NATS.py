@@ -316,6 +316,7 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
             req.document_json,
             description=req.description,
             scope=_opt(req, "scope"),
+            parent=_opt(req, "parent"),
         )
         return pb.CreatePolicyResponse(policy=codec.policy_to_pb(policy))
 
@@ -344,6 +345,7 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
             document=_opt(req, "document_json"),
             name=_opt(req, "name"),
             description=_opt(req, "description"),
+            parent=_opt(req, "parent"),
         )
         return pb.UpdatePolicyResponse(policy=codec.policy_to_pb(policy))
 
@@ -352,6 +354,16 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
     ) -> pb.DeletePolicyResponse:
         self._iam.delete_policy(req.policy_id)
         return pb.DeletePolicyResponse()
+
+    def _call_list_sub_policies(
+        self, req: pb.ListSubPoliciesRequest
+    ) -> pb.ListSubPoliciesResponse:
+        return pb.ListSubPoliciesResponse(
+            policies=[
+                codec.policy_to_pb(p)
+                for p in self._iam.list_sub_policies(req.policy_id)
+            ]
+        )
 
     def _call_attach_policy(
         self, req: pb.AttachPolicyRequest

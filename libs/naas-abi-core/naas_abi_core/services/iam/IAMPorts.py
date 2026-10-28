@@ -212,6 +212,9 @@ class Policy:
     # (``abi:<org>:<ws>``): it names the policy and bounds where it is attached.
     # Managed policies are the platform's.
     owner_scope: str = PLATFORM_SCOPE
+    # The policy this one is a sub-policy of: it never grants more than it
+    # (AGENTS.md, "Sub-policies"). Never set on a managed policy.
+    parent_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -575,21 +578,27 @@ class IAMStore(ABC):
 
     @abstractmethod
     def update_policy(self, policy: Policy, expected_revision: int) -> Policy:
-        """Replace name, description and document (never the owner scope);
-        the revision goes up by one.
+        """Replace name, description, document and parent (never the owner
+        scope); the revision goes up by one.
 
         ``RevisionConflictError`` when the stored revision is not
-        ``expected_revision``.
+        ``expected_revision``; ``IAMNotFoundError`` for a parent that does not
+        exist (on ``create_policy`` too).
         """
 
     @abstractmethod
+    def list_sub_policies(self, policy_id: str) -> list[Policy]:
+        """The policies whose parent is ``policy_id``, by ascending id."""
+
+    @abstractmethod
     def put_managed_policy(self, policy: Policy) -> Policy:
-        """Create or replace a managed policy. The revision goes up only when
-        its name, description or document changed."""
+        """Create or replace a managed policy, with no parent. The revision goes
+        up only when its name, description or document changed."""
 
     @abstractmethod
     def delete_policy(self, policy_id: str) -> None:
-        """``IAMConflictError`` while the policy is attached."""
+        """``IAMConflictError`` while the policy is attached, invited to or a
+        parent."""
 
     # -- attachments --------------------------------------------------------
 
@@ -794,6 +803,15 @@ class IAMSecrets(ABC):
 
 
 @dataclass(frozen=True)
+class Bound:
+    """One policy of a sub-policy's chain, as it bounds the sub-policy's Allows:
+    its Allow statements, with their index in its document."""
+
+    policy_id: str
+    allows: tuple[tuple[int, Statement], ...]
+
+
+@dataclass(frozen=True)
 class EffectiveStatement:
     """A statement as it reaches a principal: through which policy and attachment."""
 
@@ -803,6 +821,12 @@ class EffectiveStatement:
     attachment_id: str | None = None  # None for an implicit attachment (builtin.self)
     scope: str | None = None
     via_group: str | None = None
+    # An Allow of a sub-policy counts only where each policy of its chain,
+    # nearest first, allows too ("Sub-policies").
+    bounds: tuple[Bound, ...] = ()
+    # A statement of a parent reached through a sub-policy's attachment: the
+    # sub-policies it came through, the attached one first.
+    through: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -818,8 +842,22 @@ class Subject:
 
 
 @dataclass(frozen=True)
+class BoundingStatement:
+    """The statement of a parent that allowed what a sub-policy's Allow did."""
+
+    policy_id: str
+    statement_index: int
+    sid: str | None = None
+
+
+@dataclass(frozen=True)
 class DecidingStatement:
-    """Which statement decided, and whose it was: the actor's, the user's or the token's."""
+    """Which statement decided, and whose it was: the actor's, the user's or the token's.
+
+    For an Allow of a sub-policy, ``bounded_by`` names the statement of each
+    policy of its chain that allowed it too, nearest first; for a parent's
+    statement reached through a sub-policy, ``through`` names the sub-policies,
+    the attached one first."""
 
     side: Literal["actor", "user", "token"]
     principal_id: str
@@ -830,6 +868,8 @@ class DecidingStatement:
     attachment_id: str | None = None
     scope: str | None = None
     via_group: str | None = None
+    bounded_by: tuple[BoundingStatement, ...] = ()
+    through: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1159,8 +1199,10 @@ class IIAMService(ABC):
         *,
         description: str = "",
         scope: str | None = None,
+        parent: str | None = None,
     ) -> Policy:
-        """A customer policy owned by ``scope`` (the platform when None)."""
+        """A customer policy owned by ``scope`` (the platform when None), a
+        sub-policy of ``parent`` when given."""
 
     @abstractmethod
     def get_policy(self, policy_id: str) -> Policy: ...
@@ -1181,7 +1223,13 @@ class IIAMService(ABC):
         document: Any = None,
         name: str | None = None,
         description: str | None = None,
-    ) -> Policy: ...
+        parent: str | None = None,
+    ) -> Policy:
+        """``parent``: None keeps it, ``""`` removes it, an id sets it."""
+
+    @abstractmethod
+    def list_sub_policies(self, policy_id: str) -> list[Policy]:
+        """The direct sub-policies of ``policy_id`` the caller may list."""
 
     @abstractmethod
     def delete_policy(self, policy_id: str) -> None: ...

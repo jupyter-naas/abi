@@ -4,6 +4,7 @@ tests run on a store they downgrade by hand."""
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from unittest.mock import patch
 
 from naas_abi_core.services.iam.adapters.secondary import iam_sql
@@ -25,14 +26,22 @@ from naas_abi_core.services.iam.tests.iam__secondary_adapter__generic_test impor
     policy,
 )
 
-# What version 1 had: no owner scopes, and no sets (version 2 had no sets).
+# What version 1 had: no owner scopes, no sets and no parents (version 2 had no
+# sets, version 3 no parents).
+DOWNGRADE_TO_3 = (
+    "DROP INDEX {schema}iam_policies_parent",
+    "ALTER TABLE {schema}iam_policies DROP COLUMN parent_id",
+    "UPDATE {schema}iam_state SET schema_version = 3",
+)
 DOWNGRADE = (
+    *DOWNGRADE_TO_3[:2],
     "ALTER TABLE {schema}iam_policies DROP COLUMN owner_scope",
     "ALTER TABLE {schema}iam_principals DROP COLUMN owner_scope",
     "DROP TABLE {schema}iam_scope_sets",
     "UPDATE {schema}iam_state SET schema_version = 1",
 )
 DOWNGRADE_TO_2 = (
+    *DOWNGRADE_TO_3[:2],
     "DROP TABLE {schema}iam_scope_sets",
     "UPDATE {schema}iam_state SET schema_version = 2",
 )
@@ -105,9 +114,34 @@ def check_upgrade(
     again = open_store()
     try:
         assert again.get_principal(bound.id).owner_scope == "abi:org-1:-"
-        assert SCHEMA_VERSION == 3
+        assert SCHEMA_VERSION == 4
         again.put_scope_set(ScopeSet("org-1", modules=("acme.people",)))
         assert again.list_scope_sets() == [ScopeSet("org-1", modules=("acme.people",))]
+    finally:
+        again.close()
+
+
+def check_upgrade_from_3(
+    open_store: Callable[[], IAMStoreSQL], execute: Callable[[str], None]
+) -> None:
+    """A store of version 3 (no parents) opens with every policy at the top of
+    its own tree, and records parents from then on."""
+    store = open_store()
+    kept = store.create_policy(policy())
+    store.close()
+    for statement in DOWNGRADE_TO_3:
+        execute(statement)
+    upgraded = open_store()
+    try:
+        assert upgraded.get_policy(kept.id).parent_id is None
+        child = upgraded.create_policy(replace(policy(), parent_id=kept.id))
+        assert [p.id for p in upgraded.list_sub_policies(kept.id)] == [child.id]
+    finally:
+        upgraded.close()
+    # Opening it again changes nothing.
+    again = open_store()
+    try:
+        assert again.get_policy(child.id).parent_id == kept.id
     finally:
         again.close()
 

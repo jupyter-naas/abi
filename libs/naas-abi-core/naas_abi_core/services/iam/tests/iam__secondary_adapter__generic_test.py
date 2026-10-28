@@ -294,6 +294,58 @@ class IAMStoreContract(ABC):
         with pytest.raises(IAMNotFoundError):
             store.delete_policy(read.id)
 
+    def test_a_parent_is_kept_changed_and_lists_its_sub_policies(self, store: IAMStore):
+        from dataclasses import replace
+
+        parent = store.create_policy(policy())
+        other = store.create_policy(policy())
+        child = store.create_policy(replace(policy(), parent_id=parent.id))
+        assert parent.parent_id is None
+        assert store.get_policy(child.id).parent_id == parent.id
+        assert [p.id for p in store.list_sub_policies(parent.id)] == [child.id]
+        assert store.list_sub_policies(child.id) == []
+        moved = store.update_policy(replace(child, parent_id=other.id), 1)
+        assert (moved.parent_id, moved.revision) == (other.id, 2)
+        assert store.list_sub_policies(parent.id) == []
+        assert [p.id for p in store.list_sub_policies(other.id)] == [child.id]
+        freed = store.update_policy(replace(moved, parent_id=None), 2)
+        assert freed.parent_id is None
+        # A parent that does not exist is refused, on create and on update.
+        with pytest.raises(IAMNotFoundError):
+            store.create_policy(replace(policy(), parent_id=new_id("pol")))
+        with pytest.raises(IAMNotFoundError):
+            store.update_policy(replace(freed, parent_id=new_id("pol")), 3)
+        assert store.get_policy(child.id).revision == 3
+
+    def test_a_parent_with_sub_policies_cannot_be_deleted(self, store: IAMStore):
+        from dataclasses import replace
+
+        parent = store.create_policy(policy())
+        child = store.create_policy(replace(policy(), parent_id=parent.id))
+        with pytest.raises(IAMConflictError):
+            store.delete_policy(parent.id)
+        store.delete_policy(child.id)
+        store.delete_policy(parent.id)
+        with pytest.raises(IAMNotFoundError):
+            store.get_policy(parent.id)
+
+    def test_a_managed_policy_has_no_parent(self, store: IAMStore):
+        from dataclasses import replace
+
+        parent = store.create_policy(policy())
+        managed = store.put_managed_policy(
+            Policy(
+                id="builtin.viewer",
+                name="Viewer",
+                document=DOCUMENT,
+                managed=True,
+                parent_id=parent.id,
+            )
+        )
+        assert managed.parent_id is None
+        child = store.create_policy(replace(policy(), parent_id=managed.id))
+        assert child.parent_id == "builtin.viewer"
+
     # -- attachments --------------------------------------------------------------
 
     def test_attachments(self, store: IAMStore):

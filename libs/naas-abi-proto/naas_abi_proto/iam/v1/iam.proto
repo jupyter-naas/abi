@@ -63,6 +63,8 @@ message Policy {
   // The scope that owns the policy and names it, abi:-:- (the platform),
   // abi:<org>:- or abi:<org>:<ws>. Empty from an older engine: the platform.
   string owner_scope = 9;
+  // The policy this one is a sub-policy of; empty: none.
+  string parent_id = 10;
 }
 
 message Attachment {
@@ -174,7 +176,17 @@ message Decision {
   string reason = 3;
 }
 
+// The statement of a parent that allowed what a sub-policy's Allow did.
+message BoundingStatement {
+  string policy_id = 1;
+  int32 statement_index = 2;
+  optional string sid = 3;
+}
+
 // side: actor | user | token.
+// bounded_by: for an Allow of a sub-policy, the statement of each policy of its
+// chain that allowed it too, nearest first. through: for a parent's statement
+// reached through a sub-policy, the sub-policies, the attached one first.
 message DecidingStatement {
   string side = 1;
   string principal_id = 2;
@@ -185,6 +197,8 @@ message DecidingStatement {
   optional string attachment_id = 7;
   optional string scope = 8;
   optional string via_group = 9;
+  repeated BoundingStatement bounded_by = 10;
+  repeated string through = 11;
 }
 
 message Explanation {
@@ -499,6 +513,8 @@ message CreatePolicyRequest {
   string description = 4;
   // The owner: abi:-:- (the default), abi:<org>:- or abi:<org>:<ws>.
   optional string scope = 5;
+  // The policy it is a sub-policy of; absent: none.
+  optional string parent = 6;
 }
 message CreatePolicyResponse {
   abi.common.v1.CallError error = 1;
@@ -535,6 +551,8 @@ message UpdatePolicyRequest {
   optional string document_json = 4;
   optional string name = 5;
   optional string description = 6;
+  // Absent keeps the parent, "" removes it, an id sets it.
+  optional string parent = 7;
 }
 message UpdatePolicyResponse {
   abi.common.v1.CallError error = 1;
@@ -547,6 +565,16 @@ message DeletePolicyRequest {
 }
 message DeletePolicyResponse {
   abi.common.v1.CallError error = 1;
+}
+
+// The direct sub-policies of a policy the caller may list.
+message ListSubPoliciesRequest {
+  abi.common.v1.CallContext context = 1;
+  string policy_id = 2;
+}
+message ListSubPoliciesResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Policy policies = 2;
 }
 
 message AttachPolicyRequest {

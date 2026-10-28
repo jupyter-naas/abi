@@ -85,7 +85,9 @@ CATALOG = ActionCatalog(
     actions=(
         _action("ListPrincipals", "list", ("principal",), "list_principals"),
         _action("ListGroups", "list", ("group",), "list_groups"),
-        _action("ListPolicies", "list", ("policy",), "list_policies"),
+        _action(
+            "ListPolicies", "list", ("policy",), "list_policies", "list_sub_policies"
+        ),
         _action(
             "ListAttachments",
             "list",

@@ -87,6 +87,7 @@ OPERATIONS = {
         "list_policies",
         "update_policy",
         "delete_policy",
+        "list_sub_policies",
         "attach_policy",
         "detach_policy",
         "list_attachments",

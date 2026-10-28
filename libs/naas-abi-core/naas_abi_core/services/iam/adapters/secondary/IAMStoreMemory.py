@@ -248,6 +248,7 @@ class IAMStoreMemory(IAMStore):
         with self._lock:
             if policy.id in self._policies:
                 raise IAMConflictError(f"Policy {policy.id} exists")
+            self._require_parent(policy.parent_id)
             now = _now()
             stored = replace(policy, revision=1, created_at=now, updated_at=now)
             self._write()
@@ -285,11 +286,13 @@ class IAMStoreMemory(IAMStore):
                     f"Policy {policy.id} is at revision {current.revision}, "
                     f"not {expected_revision}"
                 )
+            self._require_parent(policy.parent_id)
             stored = replace(
                 current,
                 name=policy.name,
                 description=policy.description,
                 document=policy.document,
+                parent_id=policy.parent_id,
                 revision=current.revision + 1,
                 updated_at=_now(),
             )
@@ -303,7 +306,12 @@ class IAMStoreMemory(IAMStore):
             if current is None:
                 now = _now()
                 stored = replace(
-                    policy, managed=True, revision=1, created_at=now, updated_at=now
+                    policy,
+                    managed=True,
+                    parent_id=None,
+                    revision=1,
+                    created_at=now,
+                    updated_at=now,
                 )
             elif (current.name, current.description, current.document) == (
                 policy.name,
@@ -332,8 +340,21 @@ class IAMStoreMemory(IAMStore):
                 raise IAMConflictError(f"Policy {policy_id} is attached")
             if any(g.policy_id == policy_id for g in self._pending.values()):
                 raise IAMConflictError(f"Policy {policy_id} is granted to invitees")
+            if any(p.parent_id == policy_id for p in self._policies.values()):
+                raise IAMConflictError(f"Policy {policy_id} has sub-policies")
             self._write()
             del self._policies[policy_id]
+
+    def list_sub_policies(self, policy_id: str) -> list[Policy]:
+        with self._lock:
+            return sorted(
+                (p for p in self._policies.values() if p.parent_id == policy_id),
+                key=lambda p: p.id,
+            )
+
+    def _require_parent(self, parent_id: str | None) -> None:
+        if parent_id is not None and parent_id not in self._policies:
+            raise IAMNotFoundError(f"Policy {parent_id} not found")
 
     # -- attachments --------------------------------------------------------------
 
@@ -530,7 +551,9 @@ class IAMStoreMemory(IAMStore):
     def delete_scope_sets(self, org: str, workspace: str = "-") -> bool:
         with self._lock:
             keys = [
-                key for key in self._sets if key[0] == org and workspace in ("-", key[1])
+                key
+                for key in self._sets
+                if key[0] == org and workspace in ("-", key[1])
             ]
             if not keys:
                 return False
@@ -546,6 +569,7 @@ class IAMStoreMemory(IAMStore):
                 for key in sorted(self._sets)
                 if org is None or key[0] == org
             ]
+
     # -- catalogs -----------------------------------------------------------------
 
     def put_catalog(self, catalog: ActionCatalog) -> None:

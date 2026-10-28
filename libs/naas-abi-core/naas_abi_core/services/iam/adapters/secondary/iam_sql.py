@@ -51,6 +51,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     MetaData,
     String,
@@ -73,7 +74,8 @@ from sqlalchemy.exc import IntegrityError
 
 # 2: the owner scope of policies and groups (``owner_scope``).
 # 3: the sets of orgs and workspaces (``iam_scope_sets``, made by create_all).
-SCHEMA_VERSION = 3
+# 4: the parent of a policy (``iam_policies.parent_id``, "Sub-policies").
+SCHEMA_VERSION = 4
 
 metadata = MetaData()
 
@@ -157,6 +159,10 @@ policies = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
     Column("owner_scope", Text, nullable=False, default=PLATFORM_SCOPE),
+    # The policy this one is a sub-policy of; the store refuses one that does
+    # not exist, and deleting a parent while it has sub-policies.
+    Column("parent_id", String(255), nullable=True),
+    Index("iam_policies_parent", "parent_id"),
 )
 
 attachments = Table(
@@ -358,6 +364,7 @@ def _policy(row: Row) -> Policy:
         created_at=_aware(row.created_at),
         updated_at=_aware(row.updated_at),
         owner_scope=row.owner_scope,
+        parent_id=row.parent_id,
     )
 
 
@@ -479,6 +486,8 @@ class IAMStoreSQL(IAMStore):
         version = int(conn.execute(select(state.c.schema_version)).scalar() or 1)
         if version < 2:
             self._migrate_owner_scopes(conn)
+        if version < 4:
+            self._migrate_parents(conn)
         if version < SCHEMA_VERSION:
             conn.execute(update(state).values(schema_version=SCHEMA_VERSION))
 
@@ -534,6 +543,29 @@ class IAMStoreSQL(IAMStore):
             .values(owner_scope=literal("abi:") + principals.c.org + literal(":-"))
         )
         self._warn_old_platform_names(conn)
+
+    def _migrate_parents(self, conn: Connection) -> None:
+        """4: every policy starts with no parent (``parent_id`` NULL), indexed
+        to list a policy's sub-policies."""
+        name = f'"{self._schema}".{policies.name}' if self._schema else policies.name
+        add: str | None
+        if conn.dialect.name == "postgresql":
+            # The schema's advisory lock serializes two processes opening it, and
+            # a second one finds the column there.
+            add = "ADD COLUMN IF NOT EXISTS"
+        else:
+            columns = {
+                c["name"]
+                for c in inspect(conn).get_columns(policies.name, schema=self._schema)
+            }
+            add = None if "parent_id" in columns else "ADD COLUMN"
+        if add is not None:
+            conn.execute(text(f"ALTER TABLE {name} {add} parent_id VARCHAR(255)"))
+        conn.execute(
+            text(
+                f"CREATE INDEX IF NOT EXISTS iam_policies_parent ON {name} (parent_id)"
+            )
+        )
 
     def _warn_old_platform_names(self, conn: Connection) -> None:
         """Schema 2 names the platform's policies and groups
@@ -864,6 +896,7 @@ class IAMStoreSQL(IAMStore):
                 select(policies.c.id).where(policies.c.id == policy.id)
             ).first():
                 raise IAMConflictError(f"Policy {policy.id} exists")
+            self._require_parent(conn, policy.parent_id)
             conn.execute(
                 insert(policies).values(
                     id=policy.id,
@@ -873,6 +906,7 @@ class IAMStoreSQL(IAMStore):
                     managed=policy.managed,
                     revision=1,
                     owner_scope=policy.owner_scope,
+                    parent_id=policy.parent_id,
                     created_at=now,
                     updated_at=now,
                 )
@@ -907,6 +941,7 @@ class IAMStoreSQL(IAMStore):
 
     def update_policy(self, policy: Policy, expected_revision: int) -> Policy:
         with self._change() as conn:
+            self._require_parent(conn, policy.parent_id)
             result = conn.execute(
                 update(policies)
                 .where(
@@ -917,6 +952,7 @@ class IAMStoreSQL(IAMStore):
                     name=policy.name,
                     description=policy.description,
                     document=policy.document.to_json(),
+                    parent_id=policy.parent_id,
                     revision=policies.c.revision + 1,
                     updated_at=_now(),
                 )
@@ -988,9 +1024,34 @@ class IAMStoreSQL(IAMStore):
                 )
             ).first():
                 raise IAMConflictError(f"Policy {policy_id} is granted to invitees")
+            if conn.execute(
+                select(policies.c.id).where(policies.c.parent_id == policy_id)
+            ).first():
+                raise IAMConflictError(f"Policy {policy_id} has sub-policies")
             result = conn.execute(delete(policies).where(policies.c.id == policy_id))
             if result.rowcount == 0:
                 raise IAMNotFoundError(f"Policy {policy_id} not found")
+
+    def list_sub_policies(self, policy_id: str) -> list[Policy]:
+        with self._read() as conn:
+            return [
+                _policy(row)
+                for row in conn.execute(
+                    select(policies)
+                    .where(policies.c.parent_id == policy_id)
+                    .order_by(policies.c.id)
+                )
+            ]
+
+    @staticmethod
+    def _require_parent(conn: Connection, parent_id: str | None) -> None:
+        if (
+            parent_id is not None
+            and not conn.execute(
+                select(policies.c.id).where(policies.c.id == parent_id)
+            ).first()
+        ):
+            raise IAMNotFoundError(f"Policy {parent_id} not found")
 
     # -- attachments --------------------------------------------------------------
 

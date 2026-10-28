@@ -185,6 +185,13 @@ class IamClient:
             "abi.iam.v1.delete_policy", request, pb.DeletePolicyResponse
         )
 
+    async def list_sub_policies(
+        self, request: pb.ListSubPoliciesRequest
+    ) -> pb.ListSubPoliciesResponse:
+        return await self._transport.call(
+            "abi.iam.v1.list_sub_policies", request, pb.ListSubPoliciesResponse
+        )
+
     async def attach_policy(
         self, request: pb.AttachPolicyRequest
     ) -> pb.AttachPolicyResponse:

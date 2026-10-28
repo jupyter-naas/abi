@@ -95,3 +95,19 @@ def test_a_version_2_store_upgrades(tmp_path):
             conn.execute(statement.format(schema=""))
 
     check_upgrade_from_2(lambda: IAMStoreSQLite(path), execute)
+
+
+def test_a_version_3_store_upgrades(tmp_path):
+    import sqlite3
+
+    from naas_abi_core.services.iam.tests.iam_store_upgrade import (
+        check_upgrade_from_3,
+    )
+
+    path = str(tmp_path / "iam.sqlite")
+
+    def execute(statement: str) -> None:
+        with sqlite3.connect(path) as conn:
+            conn.execute(statement.format(schema=""))
+
+    check_upgrade_from_3(lambda: IAMStoreSQLite(path), execute)

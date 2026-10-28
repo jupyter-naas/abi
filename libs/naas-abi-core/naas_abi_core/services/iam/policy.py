@@ -30,6 +30,9 @@ POLICY_VERSION = "2026-10-13"
 MAX_DOCUMENT_BYTES = 32 * 1024
 MAX_STATEMENTS = 100
 MAX_PATTERNS = 100
+# How deep a policy may sit under parents (AGENTS.md, "Sub-policies"): the root
+# of a chain is at depth 1.
+MAX_DEPTH = 8
 
 Effect = Literal["Allow", "Deny"]
 

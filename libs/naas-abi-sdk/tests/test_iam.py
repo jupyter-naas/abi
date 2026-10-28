@@ -77,6 +77,42 @@ def test_policies_carry_their_document_as_a_mapping():
     assert json.loads(sent.document_json) == document
 
 
+def test_a_sub_policy_names_its_parent_and_is_listed_under_it():
+    document = {
+        "version": "2026-10-13",
+        "statements": [{"effect": "Allow", "actions": ["*"], "resources": ["*"]}],
+    }
+    record = pb.Policy(
+        id="pol_s",
+        name="sub",
+        document_json=json.dumps(document),
+        revision=1,
+        parent_id="pol_p",
+    )
+    client = AsyncMock()
+    client.create_policy.return_value = pb.CreatePolicyResponse(policy=record)
+    client.update_policy.return_value = pb.UpdatePolicyResponse(
+        policy=pb.Policy(id="pol_s", document_json=json.dumps(document), revision=2)
+    )
+    client.list_sub_policies.return_value = pb.ListSubPoliciesResponse(
+        policies=[record]
+    )
+    iam = IAMService(client)
+    created = run(iam.create_policy("sub", document, parent="pol_p"))
+    assert created["parent_id"] == "pol_p"
+    assert client.create_policy.call_args.args[0].parent == "pol_p"
+    # "" removes the parent; None, the default, keeps it (unset on the wire).
+    freed = run(iam.update_policy("pol_s", expected_revision=1, parent=""))
+    assert freed["parent_id"] is None
+    sent = client.update_policy.call_args.args[0]
+    assert sent.HasField("parent") and sent.parent == ""
+    run(iam.update_policy("pol_s", expected_revision=2, name="kept"))
+    assert not client.update_policy.call_args.args[0].HasField("parent")
+    listed = run(iam.list_sub_policies("pol_p"))
+    assert [p["id"] for p in listed] == ["pol_s"]
+    assert client.list_sub_policies.call_args.args[0].policy_id == "pol_p"
+
+
 def test_wire_errors_become_portable_exceptions():
     client = AsyncMock()
     client.get_principal.side_effect = RPCError("NOT_FOUND", "Principal x not found")

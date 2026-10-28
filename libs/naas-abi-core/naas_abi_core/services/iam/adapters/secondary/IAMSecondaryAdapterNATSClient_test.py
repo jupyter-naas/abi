@@ -34,6 +34,7 @@ from naas_abi_core.services.iam.IAMPorts import (
 from naas_abi_core.services.iam.IAMService import IAMService
 from naas_abi_core.services.iam.tests import grant_contract as grants
 from naas_abi_core.services.iam.tests import owned_scope_contract as owned
+from naas_abi_core.services.iam.tests import sub_policy_contract as subs
 from naas_abi_core.services.iam.tests.iam_harness import (
     TRIPLE_STORE,
     document,
@@ -513,6 +514,74 @@ def test_grant_scenarios_over_nats(iam_host, scenario):
             client.close()
 
     scenario(iam_host.service, as_user)
+
+
+@BROKER
+@pytest.mark.parametrize("scenario", subs.SCENARIOS, ids=lambda s: s.__name__)
+def test_sub_policy_scenarios_over_nats(iam_host, scenario):
+    """Sub-policies, each call made over NATS as the user: the same decisions,
+    and the same refusals by their code and message."""
+
+    @contextmanager
+    def as_user(record):
+        source = RenewingTokenSource(
+            record.id,
+            lambda: TEST_TOKENS.issue(record.id, subject=record.id, kind="user"),
+        )
+        client = IAMSecondaryAdapterNATSClient(iam_host.url, source)
+        try:
+            yield client
+        finally:
+            client.close()
+
+    scenario(iam_host.service, as_user)
+
+
+@BROKER
+def test_a_narrowed_parent_narrows_its_sub_policies_over_nats_at_once(iam_host):
+    """Parent P allows agents a and b, sub-policy S every agent: removing b from
+    P over NATS refuses b to S's holder at the next decision, on the serving
+    engine and in another process that hears the change event."""
+    import nats
+
+    t = subs.tree(iam_host.service)
+    api = iam_host.client("api")
+    for_bob = CallContext(
+        principal=Principal(id="api", kind="service_account", name="api"),
+        on_behalf_of=Principal(id=t.bob.id, kind="user"),
+    )
+    other = IAMService(iam_host.service.store)
+    heard = threading.Event()
+
+    async def listen():
+        nc = await nats.connect(iam_host.url)
+
+        async def on_change(_msg):
+            other.refresh_if_changed()
+            heard.set()
+
+        await nc.subscribe("abi.iam.v1.changed", cb=on_change)
+        await nc.flush()
+        return nc
+
+    nc = nats_runtime.run_coro(listen())
+    try:
+        with use_call_context(for_bob):
+            assert api.authorize(subs.USE, subs.agent("b")).allowed
+            assert other.authorize(subs.USE, subs.agent("b")).allowed
+        heard.clear()
+        narrowed = iam_host.client("engine").update_policy(
+            t.parent.id, expected_revision=1, document=subs.allow(subs.agents("a"))
+        )
+        assert narrowed.revision == 2
+        assert heard.wait(5)
+        with use_call_context(for_bob):
+            assert api.authorize(subs.USE, subs.agent("a")).allowed
+            assert not api.authorize(subs.USE, subs.agent("b")).allowed
+            assert other.authorize(subs.USE, subs.agent("a")).allowed
+            assert not other.authorize(subs.USE, subs.agent("b")).allowed
+    finally:
+        nats_runtime.run_coro(nc.close())
 
 
 @BROKER

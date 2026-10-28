@@ -239,6 +239,7 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
         *,
         description: str = "",
         scope: str | None = None,
+        parent: str | None = None,
     ) -> Policy:
         response = self._request(
             "create_policy",
@@ -246,6 +247,7 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
             document_json=_document_text(document),
             description=description,
             scope=scope,
+            parent=parent,
         )
         return codec.policy_from_pb(response.policy)
 
@@ -271,6 +273,7 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
         document: Any = None,
         name: str | None = None,
         description: str | None = None,
+        parent: str | None = None,
     ) -> Policy:
         response = self._request(
             "update_policy",
@@ -279,8 +282,13 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
             document_json=_document_text(document) if document is not None else None,
             name=name,
             description=description,
+            parent=parent,
         )
         return codec.policy_from_pb(response.policy)
+
+    def list_sub_policies(self, policy_id: str) -> list[Policy]:
+        response = self._request("list_sub_policies", policy_id=policy_id)
+        return [codec.policy_from_pb(p) for p in response.policies]
 
     def delete_policy(self, policy_id: str) -> None:
         self._request("delete_policy", policy_id=policy_id)

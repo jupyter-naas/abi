@@ -19,6 +19,7 @@ from naas_abi_core.services.iam.catalog import (
 )
 from naas_abi_core.services.iam.IAMPorts import (
     Attachment,
+    BoundingStatement,
     DecidingStatement,
     Decision,
     Explanation,
@@ -79,6 +80,7 @@ OPERATIONS = {
     "list_policies": "ListPolicies",
     "update_policy": "UpdatePolicy",
     "delete_policy": "DeletePolicy",
+    "list_sub_policies": "ListSubPolicies",
     "attach_policy": "AttachPolicy",
     "detach_policy": "DetachPolicy",
     "list_attachments": "ListAttachments",
@@ -243,6 +245,7 @@ def policy_to_pb(policy: Policy) -> pb.Policy:
         managed=policy.managed,
         revision=policy.revision,
         owner_scope=policy.owner_scope,
+        parent_id=policy.parent_id or "",
     )
     return _stamped(message, created_at=policy.created_at, updated_at=policy.updated_at)
 
@@ -258,6 +261,7 @@ def policy_from_pb(message: pb.Policy) -> Policy:
         created_at=_datetime(message, "created_at"),
         updated_at=_datetime(message, "updated_at"),
         owner_scope=message.owner_scope or PLATFORM_SCOPE,
+        parent_id=message.parent_id or None,
     )
 
 
@@ -484,6 +488,15 @@ def explanation_to_pb(explanation: Explanation) -> pb.Explanation:
                 attachment_id=statement.attachment_id,
                 scope=statement.scope,
                 via_group=statement.via_group,
+                bounded_by=[
+                    pb.BoundingStatement(
+                        policy_id=b.policy_id,
+                        statement_index=b.statement_index,
+                        sid=b.sid,
+                    )
+                    for b in statement.bounded_by
+                ],
+                through=list(statement.through),
             )
         )
     return message
@@ -503,6 +516,11 @@ def explanation_from_pb(message: pb.Explanation) -> Explanation:
             attachment_id=_optional(s, "attachment_id"),
             scope=_optional(s, "scope"),
             via_group=_optional(s, "via_group"),
+            bounded_by=tuple(
+                BoundingStatement(b.policy_id, b.statement_index, _optional(b, "sid"))
+                for b in s.bounded_by
+            ),
+            through=tuple(s.through),
         )
     return Explanation(
         allowed=message.allowed,

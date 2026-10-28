@@ -33,6 +33,8 @@ class FilterResult:
 def _policy(record: dict[str, Any]) -> dict[str, Any]:
     record = dict(record)
     record["document"] = json.loads(record.pop("document_json"))
+    # A policy with no parent: None, as the engine's record says it.
+    record["parent_id"] = record.get("parent_id") or None
     return record
 
 
@@ -244,9 +246,11 @@ class IAMService(ServiceProxy):
         *,
         description: str = "",
         scope: str | None = None,
+        parent: str | None = None,
     ) -> dict[str, Any]:
         """A policy owned by ``scope`` (the platform when None); an org's or a
-        workspace's names only ``${scope}:`` resources."""
+        workspace's names only ``${scope}:`` resources. With ``parent``, a
+        sub-policy of it: it never grants more than its parent, read live."""
         return _policy(
             await self._request(
                 "create_policy",
@@ -254,6 +258,7 @@ class IAMService(ServiceProxy):
                 document_json=_document(document),
                 description=description,
                 scope=scope,
+                parent=parent,
             )
         )
 
@@ -276,7 +281,9 @@ class IAMService(ServiceProxy):
         document: Mapping[str, Any] | str | None = None,
         name: str | None = None,
         description: str | None = None,
+        parent: str | None = None,
     ) -> dict[str, Any]:
+        """``parent``: None keeps it, ``""`` removes it, an id sets it."""
         return _policy(
             await self._request(
                 "update_policy",
@@ -285,8 +292,14 @@ class IAMService(ServiceProxy):
                 document_json=_document(document) if document is not None else None,
                 name=name,
                 description=description,
+                parent=parent,
             )
         )
+
+    async def list_sub_policies(self, policy_id: str) -> list[dict[str, Any]]:
+        """The direct sub-policies of ``policy_id`` the caller may list."""
+        found = await self._request("list_sub_policies", policy_id=policy_id)
+        return [_policy(p) for p in found]
 
     async def delete_policy(self, policy_id: str) -> None:
         await self._request("delete_policy", policy_id=policy_id)

@@ -15,7 +15,9 @@ Nothing is allowed without a matching Allow; an explicit Deny wins over any
 number of Allows; on behalf of a user, actor and user must both be allowed.
 A user's Allow on a module scope or a feature counts only within the sets of
 the resource's org and workspace (``sets.py``), unless the user holds
-``builtin.platform_admin``.
+``builtin.platform_admin``. An Allow of a sub-policy counts only where each
+policy of its chain allows too (``EffectiveStatement.bounds``); the chain's
+Denies reach the principal as statements of their own ("Sub-policies").
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ from typing import Literal
 from naas_abi_core.engine.call_context import CallContext
 from naas_abi_core.services.iam import sets
 from naas_abi_core.services.iam.IAMPorts import (
+    BoundingStatement,
     DecidingStatement,
     Decision,
     EffectiveStatement,
@@ -54,6 +57,11 @@ Outcome = Literal["allow", "explicit_deny", "implicit_deny"]
 class _Verdict:
     outcome: Outcome
     deciding: DecidingStatement | None = None
+
+
+# The statement of each policy of a sub-policy's chain that allowed what its
+# Allow did, nearest first.
+_Bounding = tuple[BoundingStatement, ...]
 
 
 class Evaluator:
@@ -296,17 +304,14 @@ def _values(
     }
 
 
-def _statement_matches(
-    effective: EffectiveStatement,
+def _matches(
+    statement: Statement,
+    values: dict[str, str | None],
     action: str,
     resource: str,
-    principal_id: str,
-    user_id: str | None,
 ) -> bool:
-    statement = effective.statement
     if not any(matches(pattern, action) for pattern in statement.actions):
         return False
-    values = _values(effective, principal_id, user_id)
     for pattern in statement.resources:
         expanded = substitute(pattern, values)
         if expanded is not None and matches(expanded, resource):
@@ -314,10 +319,53 @@ def _statement_matches(
     return False
 
 
+def _bounding(
+    effective: EffectiveStatement,
+    values: dict[str, str | None],
+    action: str,
+    resource: str,
+) -> _Bounding | None:
+    """For an Allow of a sub-policy, the statement of each policy of its chain
+    that allows the same, its variables filled as the sub-policy's; None when
+    one of them allows nothing of it. Empty for a policy with no parent."""
+    found: list[BoundingStatement] = []
+    for bound in effective.bounds:
+        allowing = next(
+            (
+                (index, statement)
+                for index, statement in bound.allows
+                if _matches(statement, values, action, resource)
+            ),
+            None,
+        )
+        if allowing is None:
+            return None
+        found.append(BoundingStatement(bound.policy_id, allowing[0], allowing[1].sid))
+    return tuple(found)
+
+
+def _statement_matches(
+    effective: EffectiveStatement,
+    action: str,
+    resource: str,
+    principal_id: str,
+    user_id: str | None,
+) -> _Bounding | None:
+    """None when ``effective`` does not match; else what bounded it (empty for a
+    statement that no chain bounds)."""
+    values = _values(effective, principal_id, user_id)
+    if not _matches(effective.statement, values, action, resource):
+        return None
+    if effective.statement.effect == "Deny" or not effective.bounds:
+        return ()
+    return _bounding(effective, values, action, resource)
+
+
 def _deciding(
     effective: EffectiveStatement,
     side: Literal["actor", "user", "token"],
     principal_id: str,
+    bounded_by: _Bounding = (),
 ) -> DecidingStatement:
     return DecidingStatement(
         side=side,
@@ -329,6 +377,8 @@ def _deciding(
         attachment_id=effective.attachment_id,
         scope=effective.scope,
         via_group=effective.via_group,
+        bounded_by=bounded_by,
+        through=effective.through,
     )
 
 
@@ -339,20 +389,23 @@ def _principal_decision(
     resource: str,
     user_id: str | None,
 ) -> _Verdict:
-    allow: EffectiveStatement | None = None
+    allow: tuple[EffectiveStatement, _Bounding] | None = None
     for effective in subject.statements:
-        if not _statement_matches(
+        bounded_by = _statement_matches(
             effective, action, resource, subject.principal_id, user_id
-        ):
+        )
+        if bounded_by is None:
             continue
         if effective.statement.effect == "Deny":
             return _Verdict(
                 "explicit_deny", _deciding(effective, side, subject.principal_id)
             )
         if allow is None:
-            allow = effective
+            allow = (effective, bounded_by)
     if allow is not None:
-        return _Verdict("allow", _deciding(allow, side, subject.principal_id))
+        return _Verdict(
+            "allow", _deciding(allow[0], side, subject.principal_id, allow[1])
+        )
     return _Verdict("implicit_deny")
 
 
@@ -399,7 +452,10 @@ def _token_allow(
 ) -> EffectiveStatement | None:
     for index, statement in enumerate(token_statements(ctx)):
         effective = EffectiveStatement(statement, "token", index)
-        if _statement_matches(effective, action, resource, actor.principal_id, user_id):
+        if (
+            _statement_matches(effective, action, resource, actor.principal_id, user_id)
+            is not None
+        ):
             return effective
     return None
 
@@ -437,6 +493,8 @@ def _spans_type(
             continue
         if statement.effect == "Deny":
             return False  # it may deny one of them: check each
+        if effective.bounds:
+            continue  # a sub-policy's parent may leave some of them out
         values = _values(effective, subject.principal_id, user_id)
         for pattern in statement.resources:
             expanded = substitute(pattern, values)

@@ -24,6 +24,11 @@ Variables keep their form: ``${principal.id}`` and ``${user.id}`` in a grant
 are covered by the giver holding the same variable at that place (or a ``*``),
 never by a literal id or a ``?``: a variable stands for a whole id. The module
 variables likewise.
+
+Sub-policies ("Sub-policies"): a sub-policy's grant is its own within its
+chain's, so the searches take each policy of the chain as one more automaton a
+name must be accepted by (``first_uncovered(parents=)``). What a giver holds
+through a sub-policy is narrowed without a search (``within_chain``).
 """
 
 from __future__ import annotations
@@ -253,28 +258,48 @@ def _compatible(a: str, b: str) -> bool:
     return pa.startswith(pb) or pb.startswith(pa)
 
 
+# A sub-policy's chain, for one action: per policy, the patterns it allows it on.
+Bounds = tuple[tuple[str, ...], ...]
+
+
 def _search(
     grant: str,
     others: tuple[str, ...],
     within: Tokens,
     goal: Literal["uncovered", "overlap"],
+    bounds: Bounds = (),
 ) -> bool:
-    """Whether some name of ``within`` matches ``grant`` and none of ``others``
+    """Whether some name of ``within`` that one pattern of each level of
+    ``bounds`` matches too matches ``grant`` and none of ``others``
     (``uncovered``), or ``grant`` and one of ``others`` (``overlap``)."""
     g, u = _glob(grant), within
     hs = [_glob(other) for other in others]
-    alphabet = _alphabet(g, u, *hs)
-    State = tuple[frozenset[int], frozenset[int], tuple[frozenset[int], ...]]
+    bs = [[_glob(pattern) for pattern in level] for level in bounds]
+    alphabet = _alphabet(g, u, *hs, *(b for level in bs for b in level))
+    State = tuple[
+        frozenset[int],
+        frozenset[int],
+        tuple[frozenset[int], ...],
+        tuple[tuple[frozenset[int], ...], ...],
+    ]
     start: State = (
         _close(g, (0,)),
         _close(u, (0,)),
         tuple(_close(h, (0,)) for h in hs),
+        tuple(tuple(_close(b, (0,)) for b in level) for level in bs),
     )
     seen = {start}
     queue = deque([start])
     while queue:
-        gs, us, hstates = queue.popleft()
-        if _accepts(g, gs) and _accepts(u, us):
+        gs, us, hstates, bstates = queue.popleft()
+        if (
+            _accepts(g, gs)
+            and _accepts(u, us)
+            and all(
+                any(_accepts(b, s) for b, s in zip(level, states))
+                for level, states in zip(bs, bstates)
+            )
+        ):
             held = any(_accepts(h, s) for h, s in zip(hs, hstates))
             if (goal == "uncovered" and not held) or (goal == "overlap" and held):
                 return True
@@ -283,8 +308,17 @@ def _search(
                 _step(g, gs, char),
                 _step(u, us, char),
                 tuple(_step(h, s, char) for h, s in zip(hs, hstates)),
+                tuple(
+                    tuple(_step(b, s, char) for b, s in zip(level, states))
+                    for level, states in zip(bs, bstates)
+                ),
             )
-            if not nxt[0] or not nxt[1] or (goal == "overlap" and not any(nxt[2])):
+            if (
+                not nxt[0]
+                or not nxt[1]
+                or (goal == "overlap" and not any(nxt[2]))
+                or not all(any(states) for states in nxt[3])
+            ):
                 continue
             if nxt not in seen:
                 if len(seen) >= STATE_BUDGET:
@@ -322,41 +356,114 @@ def _embeds(grant: str, held: str) -> bool:
     return within[0]
 
 
+def _bounds_for(grant: str, bounds: Bounds) -> Bounds | None:
+    """``bounds`` with the patterns no name of ``grant`` can match left out;
+    None when a level is left with none: ``grant`` reaches nothing within them."""
+    kept = tuple(tuple(b for b in level if _compatible(grant, b)) for level in bounds)
+    if any(not level for level in kept):
+        return None
+    # A level one of whose patterns embeds the grant bounds nothing more.
+    return tuple(level for level in kept if not any(_embeds(grant, b) for b in level))
+
+
 @lru_cache(maxsize=16384)
-def _covered(grant: str, held: tuple[str, ...], within: Tokens) -> bool:
+def _covered(
+    grant: str, held: tuple[str, ...], within: Tokens, bounds: Bounds = ()
+) -> bool:
     if grant in held or "*" in held:
         return True
     held = tuple(h for h in held if _compatible(grant, h))
     if any(_embeds(grant, h) for h in held):
         return True
+    narrowed = _bounds_for(grant, bounds)
+    if narrowed is None:
+        return True
     try:
-        return not _search(grant, held, within, "uncovered")
+        return not _search(grant, held, within, "uncovered", narrowed)
     except Unproven:
         return False
 
 
 @lru_cache(maxsize=16384)
-def _overlaps(grant: str, others: tuple[str, ...], within: Tokens) -> bool:
+def _overlaps(
+    grant: str, others: tuple[str, ...], within: Tokens, bounds: Bounds = ()
+) -> bool:
     others = tuple(o for o in others if _compatible(grant, o))
     if not others:
         return False
+    narrowed = _bounds_for(grant, bounds)
+    if narrowed is None:
+        return False
     try:
-        return _search(grant, others, within, "overlap")
+        return _search(grant, others, within, "overlap", narrowed)
     except Unproven:
         return True
 
 
-def covered(grant: str, held: Iterable[str], within: Tokens = EVERYTHING) -> bool:
-    """Whether every name of ``within`` that ``grant`` matches is matched by
-    one of ``held`` (so True when it matches none). False when that is not
-    proven; ``Exhausted`` past the budget of the check (``budget()``)."""
-    return _covered(grant, tuple(sorted(set(held))), within)
+def covered(
+    grant: str,
+    held: Iterable[str],
+    within: Tokens = EVERYTHING,
+    bounds: Bounds = (),
+) -> bool:
+    """Whether every name of ``within`` that ``grant`` matches, and one pattern
+    of each level of ``bounds`` too, is matched by one of ``held`` (so True when
+    it matches none). False when that is not proven; ``Exhausted`` past the
+    budget of the check (``budget()``)."""
+    return _covered(grant, tuple(sorted(set(held))), within, bounds)
 
 
-def overlaps(grant: str, others: Iterable[str], within: Tokens = EVERYTHING) -> bool:
-    """Whether some name of ``within`` matches ``grant`` and one of ``others``.
-    True when that is not disproven; ``Exhausted`` past the budget of the check."""
-    return _overlaps(grant, tuple(sorted(set(others))), within)
+def overlaps(
+    grant: str,
+    others: Iterable[str],
+    within: Tokens = EVERYTHING,
+    bounds: Bounds = (),
+) -> bool:
+    """Whether some name of ``within`` (within ``bounds``) matches ``grant`` and
+    one of ``others``. True when that is not disproven; ``Exhausted`` past the
+    budget of the check."""
+    return _overlaps(grant, tuple(sorted(set(others))), within, bounds)
+
+
+def _meet(ours: Iterable[str], theirs: Iterable[str]) -> tuple[str, ...]:
+    """Patterns each within one of ``ours`` and one of ``theirs``, shown without
+    a search: one of either side that a pattern of the other embeds. It may say
+    less than the intersection, never more."""
+    ours, theirs = tuple(ours), tuple(theirs)
+    found = dict.fromkeys(p for p in ours if any(_embeds(p, t) for t in theirs))
+    found.update(dict.fromkeys(t for t in theirs if any(_embeds(t, p) for p in ours)))
+    return tuple(found)
+
+
+def within_chain(
+    statement: Statement,
+    chain: Sequence[Sequence[Statement]],
+    scope: str | None,
+) -> list[Statement]:
+    """An Allow of a sub-policy, attached at ``scope``, as Allows with no chain:
+    each pair of action and resource patterns within its own and within an
+    Allow of every policy of ``chain`` (nearest first), shown without a search
+    (``_meet``, on held forms, ``${scope}`` filled). It may say less than the
+    sub-policy reaches, never more: what a giver holds through it, and what the
+    broker grants for it."""
+    own = [held_form(r, scope, canonical=False) for r in statement.resources]
+    parts = [(statement.actions, tuple(r for r in own if r is not None))]
+    for level in chain:
+        narrowed: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
+        for bound in level:
+            if bound.effect != "Allow":
+                continue
+            theirs = [held_form(r, scope, canonical=False) for r in bound.resources]
+            for actions, resources in parts:
+                met_actions = _meet(actions, bound.actions)
+                met_resources = _meet(resources, (r for r in theirs if r is not None))
+                if met_actions and met_resources:
+                    narrowed.append((met_actions, met_resources))
+        parts = narrowed
+    return [
+        Statement("Allow", actions, tuple(shown(r) for r in resources), statement.sid)
+        for actions, resources in parts
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -549,12 +656,18 @@ class Holdings:
     # -- the rule ----------------------------------------------------------------
 
     def first_uncovered(
-        self, statements: Sequence[Statement], scope: str | None
+        self,
+        statements: Sequence[Statement],
+        scope: str | None,
+        *,
+        parents: Sequence[Sequence[Statement]] = (),
     ) -> Uncovered | None:
         """The first (statement, action, resource) of the grant of
         ``statements`` at ``scope`` (None: unscoped) the giver does not hold.
-        Its searches share one budget (``CALL_BUDGET``): past it, what is left
-        is not proven, and refused."""
+        For a sub-policy, ``parents`` is its chain, each policy's statements,
+        nearest first: only what an Allow of each also names for the action is
+        granted. Its searches share one budget (``CALL_BUDGET``): past it, what
+        is left is not proven, and refused."""
         with budget():
             for index, raw in enumerate(statements):
                 if raw.effect != "Allow":
@@ -570,10 +683,13 @@ class Holdings:
                     if g is not None
                 ]
                 for action in self._actions(statement.actions):
+                    bounds = _chain_bounds(parents, action, scope)
+                    if bounds is None:
+                        continue  # the chain allows it nowhere: not granted
                     universes = self._universes(action)
                     for grant in grants:
                         try:
-                            reason = self._refusal(action, grant, universes)
+                            reason = self._refusal(action, grant, universes, bounds)
                         except Exhausted:
                             reason = TOO_COSTLY
                         if reason is not None:
@@ -582,14 +698,20 @@ class Holdings:
                             )
         return None
 
-    def _refusal(self, action: str, grant: str, universes: list[Tokens]) -> str | None:
+    def _refusal(
+        self,
+        action: str,
+        grant: str,
+        universes: list[Tokens],
+        bounds: Bounds = (),
+    ) -> str | None:
         for index, side in enumerate(self.sides):
             allowed = self._allowed(index, action)
-            if not all(covered(grant, allowed, u) for u in universes):
+            if not all(covered(grant, allowed, u, bounds) for u in universes):
                 return side.lacks
         for index in range(len(self.sides)):
             for pattern, policy_id in self._denied(index, action):
-                if any(overlaps(grant, (pattern,), u) for u in universes):
+                if any(overlaps(grant, (pattern,), u, bounds) for u in universes):
                     return (
                         f"a Deny of policy {policy_id} refuses {shown(pattern)}"
                         if policy_id
@@ -674,6 +796,29 @@ class Holdings:
                 )
             ),
         )
+
+
+def _chain_bounds(
+    parents: Sequence[Sequence[Statement]], action: str, scope: str | None
+) -> Bounds | None:
+    """Per policy of a chain, the patterns, in held form at ``scope``, its
+    Allows name ``action`` on; None when one names it nowhere."""
+    bounds: list[tuple[str, ...]] = []
+    for level in parents:
+        patterns = tuple(
+            dict.fromkeys(
+                held
+                for statement in level
+                if statement.effect == "Allow"
+                and any(matches(p, action) for p in statement.actions)
+                for r in statement.resources
+                if (held := held_form(r, scope, variables=True)) is not None
+            )
+        )
+        if not patterns:
+            return None
+        bounds.append(patterns)
+    return tuple(bounds)
 
 
 def _written_at(pattern: str, scope: str) -> str:

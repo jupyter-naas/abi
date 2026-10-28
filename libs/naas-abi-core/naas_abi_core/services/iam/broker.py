@@ -124,6 +124,7 @@ IAM_OPERATIONS = (
     "list_policies",
     "list_principals",
     "list_sets",
+    "list_sub_policies",
     "map_idp_group",
     "put_placement",
     "put_scope",

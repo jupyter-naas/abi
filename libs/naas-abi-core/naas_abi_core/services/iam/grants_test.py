@@ -370,6 +370,99 @@ def test_at_a_scope_only_the_scope_s_patterns_count():
     assert holdings.first_uncovered([statement], None) is not None
 
 
+def test_a_sub_policy_s_grant_is_its_own_within_its_chain():
+    """Only what each policy of the chain also allows counts; an action the chain
+    allows nowhere is not granted."""
+    holdings = Holdings([_side(READER)], _registry())
+    every_graph = [_grant(["triple_store:*"], ["${scope}:triple_store:graph/*"])]
+    assert holdings.first_uncovered(every_graph, "abi:o:w") is not None
+    parent = [_grant(["triple_store:Query"], ["${scope}:triple_store:graph/*"])]
+    assert holdings.first_uncovered(every_graph, "abi:o:w", parents=[parent]) is None
+    # A grandparent wider than the parent changes nothing; a narrower one bounds.
+    wide = [_grant(["*"], ["*"])]
+    assert (
+        holdings.first_uncovered(every_graph, "abi:o:w", parents=[parent, wide]) is None
+    )
+    insert = [_grant(["triple_store:Insert"], ["${scope}:triple_store:graph/*"])]
+    found = holdings.first_uncovered(every_graph, "abi:o:w", parents=[insert])
+    assert found is not None and found.action == "triple_store:Insert"
+    assert (
+        holdings.first_uncovered(every_graph, "abi:o:w", parents=[insert, parent])
+        is None
+    )
+    # The parent's Allows are bounds: one beyond ${scope} bounds a scoped grant.
+    sales = [_grant(["triple_store:Insert"], ["abi:*:*:triple_store:graph/sales"])]
+    found = holdings.first_uncovered(every_graph, "abi:o:w", parents=[sales])
+    assert found is not None and found.resource == "abi:o:w:triple_store:graph/*"
+
+
+def test_a_deny_of_the_giver_is_met_within_the_chain_only():
+    holdings = Holdings(
+        [
+            _side(
+                READER, _deny(["triple_store:Query"], ["abi:*:*:triple_store:graph/hr"])
+            )
+        ],
+        _registry(),
+    )
+    every_graph = [_grant(["triple_store:Query"], ["${scope}:triple_store:graph/*"])]
+    assert holdings.first_uncovered(every_graph, "abi:o:w") is not None
+    sales = [_grant(["triple_store:Query"], ["${scope}:triple_store:graph/sales*"])]
+    assert holdings.first_uncovered(every_graph, "abi:o:w", parents=[sales]) is None
+
+
+def test_what_a_sub_policy_of_the_giver_holds_is_bounded_by_its_chain():
+    """Its patterns within the chain's, as far as one embeds the other."""
+    child = _grant(["triple_store:*"], ["${scope}:triple_store:graph/*"])
+    chain = [
+        [
+            _grant(["triple_store:Query"], ["${scope}:triple_store:graph/sales*"]),
+            _grant(["triple_store:Insert"], ["abi:*:*:triple_store:graph/x"]),
+            _grant(["*"], ["*"], effect="Deny"),
+        ],
+        [_grant(["triple_store:*"], ["*"])],
+    ]
+    narrowed = grants.within_chain(child, chain, "abi:o:w")
+    assert narrowed == [
+        Statement(
+            "Allow", ("triple_store:Query",), ("abi:o:w:triple_store:graph/sales*",)
+        )
+    ]
+    holdings = Holdings(
+        [
+            _side(
+                *(
+                    grants.held_statement(
+                        n, "abi:o:w", principal_id="usr_x", user_id=None
+                    )
+                    for n in narrowed
+                )
+            )
+        ],
+        _registry(),
+    )
+    sales = [_grant(["triple_store:Query"], ["${scope}:triple_store:graph/sales-1"])]
+    hr = [_grant(["triple_store:Query"], ["${scope}:triple_store:graph/hr"])]
+    assert holdings.first_uncovered(sales, "abi:o:w") is None
+    assert holdings.first_uncovered(hr, "abi:o:w") is not None
+    # Variables keep their form; a chain level that allows nothing leaves nothing.
+    own = _grant(["triple_store:Query"], ["${scope}:triple_store:graph/*"])
+    mine = [
+        [
+            _grant(
+                ["triple_store:Query"], ["${scope}:triple_store:graph/${principal.id}"]
+            )
+        ]
+    ]
+    assert grants.within_chain(own, mine, "abi:o:w")[0].resources == (
+        "abi:o:w:triple_store:graph/${principal.id}",
+    )
+    assert (
+        grants.within_chain(own, [[_grant(["triple_store:Insert"], ["*"])]], "abi:o:w")
+        == []
+    )
+
+
 def test_every_side_must_hold_it():
     token = Side(
         (_allow(["triple_store:Query"], ["*"]),),

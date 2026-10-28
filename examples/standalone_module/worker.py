@@ -839,6 +839,10 @@ class ABIModule(BaseModule):
             "get_policy": {"policy_id": "builtin.platform_admin"},
             "update_policy": {"policy_id": "builtin.viewer", "expected_revision": 1},
             "delete_policy": {"policy_id": "builtin.viewer"},
+            # Sub-policies: deriving one from a built-in policy, moving one
+            # under another, and listing those below a policy are an
+            # administrator's; the broker refuses each to a module.
+            "list_sub_policies": {"policy_id": "builtin.viewer"},
             "attach_policy": {
                 "policy_id": "builtin.platform_admin",
                 "principal_id": user,
