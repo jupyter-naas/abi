@@ -15,8 +15,6 @@ import { AuditView } from './audit/audit';
 import { GroupsView } from './groups/groups';
 import { PeopleView } from './people/people';
 import { PoliciesView } from './policies/policies';
-import { RoleFeaturesView } from './roles/role-features';
-import type { RoleFeaturesApi } from './roles/role-features-model';
 import { ServiceAccountsView } from './service-accounts/service-accounts';
 import { SimulatorView } from './simulator/simulator';
 
@@ -29,18 +27,16 @@ export type RolesAndPermissionsProps = {
   /** Tests pass fakes; the pages use the real API and member routes. */
   api?: IamAdminApi;
   directory?: AccessDirectory;
-  roleFeatures?: RoleFeaturesApi;
   loadProviders?: () => Promise<InviteProviders>;
 };
 
 /**
  * Roles & permissions: the same components at every level, the scope as a parameter. IAM
  * says what the caller may do at the scope (`GET /api/iam/admin/access?scope=`) and that
- * alone decides the sections and buttons: People & roles, Groups, Policies, an organization's
- * Built-in roles, and what the platform administers (service accounts, module approvals,
- * the simulator, the audit). A caller who may do nothing there sees no section.
+ * alone decides the sections and buttons: People & roles, Groups, Policies, and what the
+ * platform administers (service accounts, module approvals, the simulator, the audit). A caller who may do nothing there sees no section.
  */
-export function RolesAndPermissions({ scopes, nonce = 0, api, directory, roleFeatures, loadProviders }: RolesAndPermissionsProps) {
+export function RolesAndPermissions({ scopes, nonce = 0, api, directory, loadProviders }: RolesAndPermissionsProps) {
   const client = useMemo(() => api ?? createIamAdminApi(), [api]);
   const people = useMemo(() => directory ?? createAccessDirectory(), [directory]);
   const [index, setIndex] = useState(0);
@@ -89,7 +85,6 @@ export function RolesAndPermissions({ scopes, nonce = 0, api, directory, roleFea
       people: <PeopleView {...props} />,
       groups: <GroupsView {...props} loadProviders={loadProviders} />,
       policies: <PoliciesView {...props} />,
-      'role-features': <RoleFeaturesView {...props} roleFeatures={roleFeatures} />,
       'service-accounts': <ServiceAccountsView {...props} />,
       approvals: <ApprovalsView {...props} />,
       simulator: <SimulatorView {...props} />,

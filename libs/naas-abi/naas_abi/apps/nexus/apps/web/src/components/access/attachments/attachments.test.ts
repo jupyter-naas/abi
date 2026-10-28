@@ -68,8 +68,8 @@ describe('AttachForm', () => {
   });
 
   it('never offers what comes with a role, and tells a typed id’s kind by its prefix', async () => {
-    const features = { id: 'builtin.features.admin', name: 'Features of admin', description: '', managed: true };
-    const api = formApi({ attachable: vi.fn().mockResolvedValue({ items: [features, viewer, reader] }) });
+    const companion = { id: 'builtin.platform.member', name: 'Platform member', description: '', managed: true };
+    const api = formApi({ attachable: vi.fn().mockResolvedValue({ items: [companion, viewer, reader] }) });
     mounted = await mount(AttachForm, { api, scope: 'abi:acme:ws-1', principals: [], onAttached: vi.fn() });
     await mounted.flush();
     await mounted.type(field('Principal to attach to'), 'usr_typed');

@@ -19,7 +19,7 @@ export type PersonRow = {
   member: boolean;
   /** Attached to them here; a user's role attachment is their `role`, not listed. */
   direct: AttachmentView[];
-  /** What IAM attached with the role (its features, the platform companions): shown with it,
+  /** What IAM attached with the role (the platform companions): shown with it,
    *  never detached by hand. */
   withRole: AttachmentView[];
   viaGroups: { groupId: string; groupLabel: string; policies: HeldPolicy[] }[];

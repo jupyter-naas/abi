@@ -91,10 +91,3 @@
 .org-create-workspace-new-group {
   margin-top: var(--space-2);
 }
-
-/* Create workspace: the new workspace's features, one checkbox each. */
-.org-create-workspace-features {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: var(--space-2) var(--space-4);
-}

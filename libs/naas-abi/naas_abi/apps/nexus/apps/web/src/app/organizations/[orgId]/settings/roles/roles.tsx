@@ -12,7 +12,7 @@ type OrgWorkspace = { id: string; name: string };
 /**
  * Organization Settings › Roles & permissions: the shared Roles & permissions UI at the
  * organization's scope, with each of its workspaces one pick away. IAM decides what the
- * caller sees at each; the built-in roles' feature defaults are the organization's.
+ * caller sees at each.
  */
 export default function OrgRolesPage() {
   const params = useParams();

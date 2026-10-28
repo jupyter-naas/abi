@@ -10,7 +10,7 @@ import type { AccessView } from '@/lib/iam-admin/types';
 import { mount, type Mounted } from '@/lib/testing/mount';
 import { catalogsView, fakeApi, fakeDirectory, orgScope, wsScope } from './access-fixtures';
 import { PLATFORM_ACCESS_SCOPE, type AccessScope } from './access-scope';
-import { opensRolesAndPermissions } from './access-sections';
+import { ACCESS_SECTIONS, opensRolesAndPermissions, parseAccessSection } from './access-sections';
 import { RolesAndPermissions } from './roles-and-permissions';
 
 let mounted: Mounted | null = null;
@@ -47,7 +47,6 @@ const PLATFORM_ONLY = [
   'iam:PutSet',
   'nexus:ReadSystem',
 ];
-const ROLE_FEATURES = ['nexus:GetRoleFeatures', 'nexus:UpdateRoleFeatures'];
 
 type Level = 'platform' | 'org' | 'ws';
 const levelOf = (scope?: string): Level => (scope === undefined ? 'platform' : scope.endsWith(':-') ? 'org' : 'ws');
@@ -55,8 +54,8 @@ const levelOf = (scope?: string): Level => (scope === undefined ? 'platform' : s
 /** What each caller holds, by level, as the API answers `access`. */
 const CALLERS: Record<string, (level: Level) => string[]> = {
   'platform admin': (level) =>
-    level === 'platform' ? [...LEVEL, ...PLATFORM_ONLY] : level === 'org' ? [...LEVEL, ...ROLE_FEATURES] : LEVEL,
-  'organization admin': (level) => (level === 'org' ? [...LEVEL, ...ROLE_FEATURES] : level === 'ws' ? LEVEL : []),
+    level === 'platform' ? [...LEVEL, ...PLATFORM_ONLY] : LEVEL,
+  'organization admin': (level) => (level === 'org' || level === 'ws' ? LEVEL : []),
   'workspace admin': (level) => (level === 'ws' ? LEVEL : []),
   'delegated lister': () => ['iam:ListPolicies'],
   viewer: () => [],
@@ -64,7 +63,7 @@ const CALLERS: Record<string, (level: Level) => string[]> = {
 };
 
 function answer(holds: string[]): AccessView {
-  const all = [...LEVEL, ...PLATFORM_ONLY, ...ROLE_FEATURES];
+  const all = [...LEVEL, ...PLATFORM_ONLY];
   return { actions: Object.fromEntries(all.map((a) => [a, holds.includes(a)])) };
 }
 
@@ -81,14 +80,9 @@ function apiFor(caller: string) {
   });
 }
 
-const roleFeatures = {
-  read: vi.fn().mockResolvedValue({ enabled_features: ['chat'], known_features: [], roles: ['owner', 'admin', 'member', 'viewer'], role_baseline: {} }),
-  save: vi.fn(),
-};
-
 async function render(caller: string, scope: AccessScope) {
   const api = apiFor(caller);
-  mounted = await mount(RolesAndPermissions, { scopes: [scope], api, directory: fakeDirectory([]), roleFeatures });
+  mounted = await mount(RolesAndPermissions, { scopes: [scope], api, directory: fakeDirectory([]) });
   await mounted.flush();
   await mounted.flush();
   return api;
@@ -108,12 +102,12 @@ const SCOPES: [string, AccessScope, string | undefined][] = [
 const EXPECTED: Record<string, Record<string, string[]>> = {
   'platform admin': {
     'the platform': ['people', 'groups', 'policies', 'service-accounts', 'approvals', 'simulator', 'audit'],
-    'an organization': ['people', 'groups', 'policies', 'role-features'],
+    'an organization': ['people', 'groups', 'policies'],
     'a workspace': ['people', 'groups', 'policies'],
   },
   'organization admin': {
     'the platform': [],
-    'an organization': ['people', 'groups', 'policies', 'role-features'],
+    'an organization': ['people', 'groups', 'policies'],
     'a workspace': ['people', 'groups', 'policies'],
   },
   'workspace admin': { 'the platform': [], 'an organization': [], 'a workspace': ['people', 'groups', 'policies'] },
@@ -145,10 +139,8 @@ describe('Roles & permissions, one UI for every level', () => {
         expect(opensRolesAndPermissions(access), `${caller} at ${level}`).toBe(EXPECTED_ANY(caller, level));
       }
     }
-    // An `iam:` action no section lists (the sets page's) opens nothing; an org's role
-    // feature defaults alone open Built-in roles.
+    // An `iam:` action no section lists (the sets page's) opens nothing.
     expect(opensRolesAndPermissions({ actions: { 'iam:GetSet': true } })).toBe(false);
-    expect(opensRolesAndPermissions({ actions: { 'nexus:GetRoleFeatures': true } })).toBe(true);
   });
 
   it('gives a delegated lister the policies to read, and no button to change them', async () => {
@@ -169,14 +161,17 @@ describe('Roles & permissions, one UI for every level', () => {
     expect(sections()).not.toContain('service-accounts');
   });
 
-  it('opens an organization’s built-in roles to its admin, and switches to one of its workspaces', async () => {
+  it('has no built-in roles section: features come from policies, like agents', () => {
+    expect(ACCESS_SECTIONS.map((s) => s.label)).not.toContain('Built-in roles');
+    // A section that no longer exists opens the first one the caller may.
+    expect(parseAccessSection('gone', answer(LEVEL))).toBe('people');
+  });
+
+  it('opens an organization to its admin, and switches to one of its workspaces', async () => {
     const api = apiFor('organization admin');
-    mounted = await mount(RolesAndPermissions, { scopes: [orgScope, wsScope], api, directory: fakeDirectory([]), roleFeatures });
+    mounted = await mount(RolesAndPermissions, { scopes: [orgScope, wsScope], api, directory: fakeDirectory([]) });
     await mounted.flush();
-    await mounted.click(document.querySelector('[data-section="role-features"]'));
-    await mounted.flush();
-    expect(roleFeatures.read).toHaveBeenCalledWith('acme');
-    expect(document.querySelector('[aria-label="Member can use Chat"]')).not.toBeNull();
+    expect(sections()).toEqual(['people', 'groups', 'policies']);
 
     const picker = document.querySelector('[aria-label="Scope"]') as HTMLSelectElement;
     picker.value = '1';

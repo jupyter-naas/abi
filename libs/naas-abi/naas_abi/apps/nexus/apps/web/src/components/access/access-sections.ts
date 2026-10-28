@@ -4,7 +4,6 @@ export type AccessSection =
   | 'people'
   | 'groups'
   | 'policies'
-  | 'role-features'
   | 'service-accounts'
   | 'approvals'
   | 'simulator'
@@ -14,13 +13,12 @@ export type AccessSection =
  * A section opens with the action that lists what it shows, as `GET /access?scope=` answers
  * it; the API refuses the section's calls otherwise. Nothing here depends on the level: the
  * API answers the platform-only actions (service accounts, approvals, the simulator, the
- * audit) false at an org or a workspace, and the role feature actions true only at an org.
+ * audit) false at an org or a workspace.
  */
 export const ACCESS_SECTIONS: { id: AccessSection; label: string; needs: string }[] = [
   { id: 'people', label: 'People & roles', needs: 'iam:ListAttachments' },
   { id: 'groups', label: 'Groups', needs: 'iam:ListGroups' },
   { id: 'policies', label: 'Policies', needs: 'iam:ListPolicies' },
-  { id: 'role-features', label: 'Built-in roles', needs: 'nexus:GetRoleFeatures' },
   { id: 'service-accounts', label: 'Service accounts', needs: 'iam:ListPrincipals' },
   { id: 'approvals', label: 'Module approvals', needs: 'iam:ListManifests' },
   { id: 'simulator', label: 'Simulator', needs: 'iam:Explain' },

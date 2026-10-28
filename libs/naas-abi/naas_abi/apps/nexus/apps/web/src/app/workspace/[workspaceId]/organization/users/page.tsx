@@ -7,7 +7,9 @@ import { useAuthStore } from '@/stores/auth';
 import { useOrganizationStore } from '@/stores/organization';
 import { PendingInvitations } from '@/components/invitations/pending-invitations';
 import { IdpGroupBindings } from '@/components/invitations/idp-group-bindings';
+import { InvitePolicyPicker } from '@/components/invitations/invite-policy-picker';
 import { useInviteProviders } from '@/components/invitations/use-invite-providers';
+import { organizationAccessScope } from '@/components/access/access-scope';
 import { inviteSuccessMessage, providerHint } from '@/lib/invitations';
 
 export default function OrgUsersPage() {
@@ -31,6 +33,8 @@ export default function OrgUsersPage() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'admin' | 'member'>('member');
+  // Policies attached at the organization with the role (features come from policies).
+  const [invitePolicyIds, setInvitePolicyIds] = useState<string[]>([]);
   const [inviteError, setInviteError] = useState('');
   const [inviteNotice, setInviteNotice] = useState('');
   const [invitationsKey, setInvitationsKey] = useState(0);
@@ -58,6 +62,7 @@ export default function OrgUsersPage() {
         email: inviteEmail.trim(),
         role: inviteRole,
         provider: providers.providerToSend(),
+        policyIds: invitePolicyIds,
       });
       if (answer.kind === 'invited') {
         setInviteNotice(inviteSuccessMessage(answer));
@@ -68,6 +73,7 @@ export default function OrgUsersPage() {
       setShowInviteModal(false);
       setInviteEmail('');
       setInviteRole('member');
+      setInvitePolicyIds([]);
     } catch (error: unknown) {
       setInviteError(
         error instanceof Error ? error.message : 'Failed to invite member'
@@ -275,6 +281,13 @@ export default function OrgUsersPage() {
                   <option value="admin">Admin</option>
                 </select>
               </div>
+
+              <InvitePolicyPicker
+                scope={organizationAccessScope(org.id).value}
+                value={invitePolicyIds}
+                onChange={setInvitePolicyIds}
+                disabled={inviteLoading}
+              />
             </div>
 
             <div className="mt-6 flex gap-2">
@@ -283,6 +296,7 @@ export default function OrgUsersPage() {
                   setShowInviteModal(false);
                   setInviteEmail('');
                   setInviteError('');
+                  setInvitePolicyIds([]);
                 }}
                 className="flex-1 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-accent transition-colors"
               >

@@ -9,8 +9,8 @@ import './attachments.css';
 export type PrincipalChoice = { id: string; label: string; kind?: PrincipalKind };
 
 /** A user's built-in role is a membership (People & roles' role column, Members), never a bare
- *  attachment; a group or a service account takes one. What comes with a role (its feature and
- *  platform companions) is IAM's to attach, offered to nobody. A principal not among the known
+ *  attachment; a group or a service account takes one. What comes with a role (its platform
+ *  companions) is IAM's to attach, offered to nobody. A principal not among the known
  *  ones is told by its id. */
 export function offeredTo(policy: AttachablePolicy, principal: PrincipalChoice | undefined): boolean {
   if (isRoleCompanion(policy.id)) return false;

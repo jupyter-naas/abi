@@ -33,17 +33,13 @@ export function roleOfPolicy(policyId: string): BuiltInRole | null {
 }
 
 /**
- * What IAM attaches beside a role and detaches with it (core `roles.py`): its feature policies
- * (`builtin.features.<role>`, `.<org>.<role>`) and the platform companions
- * (`builtin.platform.member`, `.viewer`). They belong to the role: never detached or attached
- * by hand, or the person loses (or keeps) their features until their next role change.
+ * What IAM attaches beside a role and detaches with it (core `roles.py`): the platform
+ * companions (`builtin.platform.member`, `.viewer`). They belong to the role: never detached
+ * or attached by hand, or the person loses (or keeps) them until their next role change.
+ * Features come with no role: a policy granting `nexus:UseFeature` gives them.
  */
 export function isRoleCompanion(policyId: string): boolean {
-  return (
-    policyId.startsWith('builtin.features.') ||
-    policyId === 'builtin.platform.member' ||
-    policyId === 'builtin.platform.viewer'
-  );
+  return policyId === 'builtin.platform.member' || policyId === 'builtin.platform.viewer';
 }
 
 /** A principal's kind from its IAM id (`usr_`, `grp_`, `sa_`), for an id typed by hand. */

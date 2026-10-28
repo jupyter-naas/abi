@@ -364,12 +364,11 @@ export type AuditEntry = {
  *  `iam:MapIdpGroup`, `iam:UnmapIdpGroup`, `iam:ListPrincipals`, `iam:CreateServiceAccount`,
  *  `iam:DeletePrincipal`, `iam:SuspendPrincipal`, `iam:ResumePrincipal`, `iam:ListKeys`,
  *  `iam:CreateKey`, `iam:RevokeKey`, `iam:ListManifests`, `iam:ApproveManifest`,
- *  `iam:RejectManifest`, `iam:Explain`, `iam:GetSet`, `iam:PutSet`, `nexus:ReadSystem` (the
- *  audit), `nexus:GetRoleFeatures` and `nexus:UpdateRoleFeatures`. Without a scope they are
- *  decided on the platform; with `?scope=abi:<org>:<workspace>` (`-` for the org itself) the
- *  attachment actions at that scope and the policy and group actions on that level's own, so
- *  an org admin may attach at their org and not on the platform. At a scope, what is
- *  administered at platform level only (principals and service accounts, keys, manifests,
- *  the simulator, IdP mappings, the audit) is false; the role feature actions are an
- *  organization's, true only at an org scope for whoever edits its roles' feature defaults. */
+ *  `iam:RejectManifest`, `iam:Explain`, `iam:GetSet`, `iam:PutSet` and `nexus:ReadSystem`
+ *  (the audit). Without a scope they are decided on the platform; with
+ *  `?scope=abi:<org>:<workspace>` (`-` for the org itself) the attachment actions at that
+ *  scope and the policy and group actions on that level's own, so an org admin may attach at
+ *  their org and not on the platform. At a scope, what is administered at platform level only
+ *  (principals and service accounts, keys, manifests, the simulator, IdP mappings, the audit)
+ *  is false. */
 export type AccessView = { actions: Record<string, boolean> };

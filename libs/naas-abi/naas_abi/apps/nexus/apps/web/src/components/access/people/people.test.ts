@@ -124,13 +124,13 @@ describe('PeopleView', () => {
   });
 
   it('shows what comes with a role as part of it, with no detach', async () => {
-    const features = attachment({ id: 'att_f', policy_id: 'builtin.features.member', policy_name: 'Features of member', principal_id: 'usr_bob', principal: principal({ id: 'usr_bob' }), scope: 'abi:acme:ws-1' });
-    const api = peopleApi({ listAttachments: vi.fn().mockResolvedValue({ items: [recruiters, roleRow, features] }) });
+    const companion = attachment({ id: 'att_p', policy_id: 'builtin.platform.member', policy_name: 'Platform member', principal_id: 'usr_bob', principal: principal({ id: 'usr_bob' }), scope: 'abi:acme:ws-1' });
+    const api = peopleApi({ listAttachments: vi.fn().mockResolvedValue({ items: [recruiters, roleRow, companion] }) });
     mounted = await mount(PeopleView, { api, can: () => true, scope: wsScope, directory: fakeDirectory([bob]), changeRole: vi.fn() });
     await mounted.flush();
-    expect(row('usr_bob')?.querySelector('[data-with-role]')?.textContent).toContain('Features of member');
-    expect(document.querySelector('[data-held="builtin.features.member"]')).toBeNull();
-    expect(field('Detach Features of member from Bob')).toBeNull();
+    expect(row('usr_bob')?.querySelector('[data-with-role]')?.textContent).toContain('Platform member');
+    expect(document.querySelector('[data-held="builtin.platform.member"]')).toBeNull();
+    expect(field('Detach Platform member from Bob')).toBeNull();
     expect(field('Detach Recruiters from Bob')).not.toBeNull();
   });
 
