@@ -49,8 +49,20 @@ RETIRED_POLICIES = (
     "builtin.transitional.module",
 )
 # The same, by prefix: the policies an older version generated per key from a
-# deployment's settings (``builtin.features.*``).
+# deployment's settings (``builtin.features.*``) and attached beside a role, at
+# the role's scope. The last dot-separated segment of the key names that role
+# (``builtin.features.org-1.admin`` rode with ``builtin.admin``).
 RETIRED_POLICY_PREFIXES = ("builtin.features.",)
+
+
+def retired_role(policy_id: str) -> str | None:
+    """The role a retired companion rode with (``RETIRED_POLICY_PREFIXES``), or
+    None for any other policy."""
+    prefix = next((p for p in RETIRED_POLICY_PREFIXES if policy_id.startswith(p)), None)
+    if prefix is None:
+        return None
+    role = f"builtin.{policy_id.removeprefix(prefix).rsplit('.', 1)[-1]}"
+    return role if role in ROLES else None
 
 ROLES = (VIEWER, MEMBER, ADMIN, OWNER)
 ROLE_LEVELS: dict[str, frozenset[Level]] = {

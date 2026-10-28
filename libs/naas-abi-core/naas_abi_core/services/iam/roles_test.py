@@ -220,7 +220,11 @@ def test_only_an_admin_action_is_owner_only():
 def test_the_flags_survive_the_catalog_format_and_the_wire():
     from naas_abi_core.services.iam.adapters import iam_nats_codec as codec
 
-    assert ActionCatalog.from_dict(NEXUS.to_dict()) == NEXUS
+    assert ActionCatalog.from_dict(NEXUS.to_dict(stored=True)) == NEXUS
+    # The stored form has the format; read back from a store without one, it
+    # is an older writer's.
+    assert "format" not in NEXUS.to_dict()
+    assert ActionCatalog.from_dict(NEXUS.to_dict(), stored=True).format == 1
     assert codec.catalog_from_pb(codec.catalog_to_pb(NEXUS)) == NEXUS
 
 

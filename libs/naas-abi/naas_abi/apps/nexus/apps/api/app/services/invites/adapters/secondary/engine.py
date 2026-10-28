@@ -149,6 +149,12 @@ class EngineGrantsGateway(GrantsGateway):
         iam = self._service()
         await _as_api(lambda: iam.revoke_pending_grant(grant_id))
 
+    async def pending(self, grant_ids: Sequence[str]) -> dict[str, tuple[str, str | None]]:
+        iam = self._service()
+        wanted = set(grant_ids)
+        found = await _as_api(lambda: iam.list_pending_grants())
+        return {str(g.id): (str(g.policy_id), g.scope) for g in found if str(g.id) in wanted}
+
     async def attach(
         self, user_id: str, policy_id: str, scope: str, *, by: str | None = None
     ) -> bool:

@@ -53,6 +53,8 @@ from starlette.concurrency import run_in_threadpool
 _log = logging.getLogger(__name__)
 
 MIGRATION_NAME = "role_features_v1"
+# Recorded once the old policies are gone: later starts look no more.
+RETIRED_NAME = "role_features_retired_v1"
 # The move of the workspace feature overrides reads the role features and the
 # overlay table this move drops: it runs first (``sets.migrate_feature_overrides``).
 AFTER = "workspace_feature_sets_v1"
@@ -156,6 +158,27 @@ class MoveReport:
     policies: int = 0
     # pending role grant id -> (pending feature grant id, its policy id)
     carried: dict[str, tuple[str, str]] = field(default_factory=dict)
+    # What could not be moved, named for the operator: the move goes on with
+    # the rest, then is not recorded (nothing is retired) until a start moves all.
+    failed: list[str] = field(default_factory=list)
+
+
+class MoveIncomplete(RuntimeError):
+    """Some of what the old policies grant could not be moved (``failed``)."""
+
+    def __init__(self, failed: Sequence[str]) -> None:
+        super().__init__(f"{len(failed)} item(s) of the role features were not moved")
+        self.failed = list(failed)
+
+
+def _step(report: MoveReport, what: str, step: Any) -> Any:
+    """Run one step of the move; a failure is named and the move goes on."""
+    try:
+        return step()
+    except Exception as exc:  # noqa: BLE001 - reported, and the move stays unrecorded
+        _log.warning("The role features could not move %s: %s", what, exc)
+        report.failed.append(f"{what}: {exc}")
+        return None
 
 
 class _Policies:
@@ -231,13 +254,17 @@ def move(
     # Every workspace's policies, held or not.
     for workspace, org_id in sorted(workspaces, key=lambda w: w[0]):
         org = org_id or NO_ORG
-        iam.put_scope(org)
-        iam.put_scope(org, workspace)
         scope = f"abi:{org}:{workspace}"
-        for role in ROLE_NAMES:
-            features = _features(role, scope, keys)
-            if features:
-                policies.get(scope, role, features)
+
+        def own(org: str = org, workspace: str = workspace, scope: str = scope) -> None:
+            iam.put_scope(org)
+            iam.put_scope(org, workspace)
+            for role in ROLE_NAMES:
+                features = _features(role, scope, keys)
+                if features:
+                    policies.get(scope, role, features)
+
+        _step(report, f"the policies of workspace {scope}", own)
     # Who held a role brings its features where they held it.
     for role_policy in roles.ROLES:
         role = role_policy.removeprefix("builtin.")
@@ -249,12 +276,23 @@ def move(
             if not features:
                 continue
             owner = owner_of(scope)
-            if owner is not None:
-                org, _ = _fields(owner)
-                iam.put_scope(org)
-            policy = policies.get(owner, role, features)
-            iam.attach_policy(policy.id, attachment.principal_id, scope)
-            report.attached += 1
+
+            def attach(
+                owner: str | None = owner,
+                role: str = role,
+                features: tuple[str, ...] = features,
+                principal_id: str = attachment.principal_id,
+                scope: str = scope,
+            ) -> bool:
+                if owner is not None:
+                    iam.put_scope(_fields(owner)[0])
+                policy = policies.get(owner, role, features)
+                iam.attach_policy(policy.id, principal_id, scope)
+                return True
+
+            what = f"{role_policy} of {attachment.principal_id} at {scope}"
+            if _step(report, what, attach):
+                report.attached += 1
     # Invitations still pending: their role's features come with them.
     for grant in iam.list_pending_grants():
         if grant.policy_id not in roles.ROLES or grant.scope is None:
@@ -270,10 +308,25 @@ def move(
         features = _features(role, scope, keys)
         if not features:
             continue
-        policy = policies.get(owner_of(scope), role, features)
-        carried = iam.create_pending_grant(grant.provider, grant.email, policy.id, scope)
-        report.carried[str(grant.id)] = (str(carried.id), str(policy.id))
+
+        def carry(
+            grant: Any = grant,
+            role: str = role,
+            features: tuple[str, ...] = features,
+            scope: str = scope,
+        ) -> tuple[str, str]:
+            policy = policies.get(owner_of(scope), role, features)
+            carried = iam.create_pending_grant(grant.provider, grant.email, policy.id, scope)
+            return str(carried.id), str(policy.id)
+
+        found = _step(
+            report, f"pending grant {grant.id} ({grant.policy_id} at {grant.scope})", carry
+        )
+        if found is not None:
+            report.carried[str(grant.id)] = found
     report.policies = policies.made
+    if report.failed:
+        raise MoveIncomplete(report.failed)
     return report
 
 
@@ -363,6 +416,28 @@ def _retire_old() -> list[str]:
         return iam.retire_policies(old) if old else []
 
 
+async def _retire_and_record(db: AsyncSession) -> None:
+    """Retire the old policies, then record that none is left, so later starts
+    look no more. A failure is logged and tried again at the next start: they
+    grant what the new ones do meanwhile."""
+    try:
+        retired = await run_in_threadpool(_retire_old)
+    except Exception:  # noqa: BLE001 - tried again at the next start
+        _log.warning("The old role feature policies were not retired yet", exc_info=True)
+        return
+    await db.execute(
+        text("INSERT INTO iam_migrations (name, applied_at, report) VALUES (:n, :at, :r)"),
+        {
+            "n": RETIRED_NAME,
+            "at": datetime.now(UTC).replace(tzinfo=None),
+            "r": json.dumps({"retired": retired}),
+        },
+    )
+    await db.commit()
+    if retired:
+        _log.info("The old role feature policies were retired: %s", ", ".join(retired))
+
+
 async def migrate_role_features(db: AsyncSession, flags: FeatureFlagsConfig) -> int | None:
     """Move the features roles brought into policies, once (see the module).
     Returns the number of attachments made, None when it did not run: done
@@ -370,8 +445,8 @@ async def migrate_role_features(db: AsyncSession, flags: FeatureFlagsConfig) -> 
     if await _recorded(db, MIGRATION_NAME):
         warn_deprecated_settings(flags)
         # A start that recorded the move but failed to retire finishes here.
-        if await run_in_threadpool(_retire_old):
-            _log.info("The old role feature policies were retired")
+        if not await _recorded(db, RETIRED_NAME):
+            await _retire_and_record(db)
         return None
     if not await _recorded(db, AFTER):
         _log.warning(
@@ -390,6 +465,13 @@ async def migrate_role_features(db: AsyncSession, flags: FeatureFlagsConfig) -> 
 
     try:
         report = await run_in_threadpool(work)
+    except MoveIncomplete as incomplete:
+        _log.warning(
+            "The role features were not all moved (%d item(s), listed above: clear "
+            "them, or the next start tries again); the old policies stay in force",
+            len(incomplete.failed),
+        )
+        return None
     except Exception:  # noqa: BLE001 - nothing is lost: the old policies stay in force
         _log.warning(
             "The role features were not moved: the old policies stay in force and "
@@ -417,10 +499,7 @@ async def migrate_role_features(db: AsyncSession, flags: FeatureFlagsConfig) -> 
     await db.execute(text(f"DROP TABLE IF EXISTS {OVERLAY_TABLE}"))
     await db.commit()
     # Recorded: the old policies go. A failure here is finished at the next start.
-    try:
-        await run_in_threadpool(_retire_old)
-    except Exception:  # noqa: BLE001 - they grant what the new ones do meanwhile
-        _log.warning("The old role feature policies were not retired yet", exc_info=True)
+    await _retire_and_record(db)
     _log.info(
         "The features roles brought became policies: %d made, %d attachments, "
         "%d pending invitations",
@@ -435,7 +514,9 @@ __all__ = [
     "AFTER",
     "DEPRECATED_SETTINGS",
     "MIGRATION_NAME",
+    "MoveIncomplete",
     "MoveReport",
+    "RETIRED_NAME",
     "key_for",
     "migrate_role_features",
     "move",

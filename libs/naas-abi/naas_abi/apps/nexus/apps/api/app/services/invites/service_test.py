@@ -183,6 +183,9 @@ class Grants(GrantsGateway):
     async def revoke(self, grant_id):
         self.live.pop(grant_id, None)
 
+    async def pending(self, grant_ids):
+        return {g: (self.live[g][2], self.live[g][3]) for g in grant_ids if g in self.live}
+
     async def attach(self, user_id, policy_id, scope, *, by=None):
         if policy_id in self.refuse:
             raise PermissionError(f"{by} may not attach {policy_id}")
@@ -684,3 +687,37 @@ async def test_a_refused_policy_attaches_none_of_the_others():
             by="usr-alice",
         )
     assert h.grants.attached == []
+
+
+@pytest.mark.asyncio
+async def test_renewing_keeps_a_carried_policy_at_its_own_scope():
+    """The move of the role features carried an organization's "Features of
+    owner" org-wide for an invitation pending then: renewing it keeps that grant
+    where it is, never moves it to the organization's own scope."""
+    from dataclasses import replace
+
+    h = Harness()
+    first = (
+        await h.invite(
+            workspace_id=None, workspace_role=None, org_role="owner", may_grant_owner=True
+        )
+    ).invitation
+    # As the move does: a pending grant at abi:org-1:* listed on the invitation.
+    h.grants.live["g-wide"] = ("builtin", "bob@example.com", "pol_org_features", "abi:org-1:*")
+    h.store.rows[first.id] = replace(
+        first,
+        grant_ids=(*first.grant_ids, "g-wide"),
+        policy_ids=("pol_org_features",),
+    )
+    again = await h.invite(
+        workspace_id=None,
+        workspace_role=None,
+        org_role="owner",
+        may_grant_owner=True,
+        policy_ids=["pol_org_features"],
+    )
+    assert "g-wide" in again.invitation.grant_ids
+    assert h.grants.live["g-wide"][3] == "abi:org-1:*"
+    assert not any(
+        v[2] == "pol_org_features" and v[3] == "abi:org-1:-" for v in h.grants.live.values()
+    )

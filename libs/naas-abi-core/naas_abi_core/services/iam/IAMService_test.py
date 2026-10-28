@@ -1434,9 +1434,7 @@ def _legacy_nexus_catalog() -> ActionCatalog:
             ActionSpec("UseFeature", "read", ("feature",)),
         ),
     )
-    data = found.to_dict()
-    del data["format"]
-    return ActionCatalog.from_dict(data)
+    return ActionCatalog.from_dict(found.to_dict(), stored=True)
 
 
 def _role_actions(iam, role):
@@ -1474,7 +1472,11 @@ def test_a_catalog_stored_before_the_flags_widens_no_role(h):
             {
                 "version": "2026-10-13",
                 "statements": [
-                    {"effect": "Allow", "actions": ["nexus:UseFeature"], "resources": ["*"]}
+                    {
+                        "effect": "Allow",
+                        "actions": ["nexus:UseFeature"],
+                        "resources": ["*"],
+                    }
                 ],
             },
         )
@@ -1502,3 +1504,62 @@ def test_a_catalog_stored_before_the_flags_widens_no_role(h):
     assert "nexus:UseFeature" not in nexus_of(roles.OWNER)
     assert "nexus:DeleteWorkspace" not in nexus_of(roles.ADMIN)
     assert "nexus:DeleteWorkspace" in nexus_of(roles.OWNER)
+
+
+def test_a_demoted_role_takes_its_old_features_with_it(h):
+    """Nexus changes a role by attaching the new one, then detaching the old:
+    the older version's companion of the old role goes with it, even though a
+    role is still held there."""
+    from naas_abi_core.services.iam.IAMPorts import Attachment
+
+    ws = "abi:org-1:ws-1"
+    admins = _old_feature_policy("builtin.features.org-1.admin")
+    h.iam.store.put_managed_policy(admins)
+    bob = h.user("bob")
+    h.attach(roles.ADMIN, bob.id, ws)
+    h.iam.store.attach(Attachment("att_old", admins.id, bob.id, ws))
+    with as_service_account("engine"):
+        h.iam.attach_policy(roles.VIEWER, bob.id, ws)
+        assert h.iam.store.list_attachments(policy_id=admins.id)  # admin still held
+        h.iam.detach_policy(roles.ADMIN, bob.id, ws)
+    assert h.iam.store.list_attachments(policy_id=admins.id) == []
+    assert roles.retired_role(admins.id) == roles.ADMIN
+    assert roles.retired_role("builtin.features.member") == roles.MEMBER
+    assert roles.retired_role("pol_x") is None
+
+
+def test_retiring_checks_every_id_before_dropping_any(h):
+    h.iam.store.put_managed_policy(_old_feature_policy())
+    with as_service_account("engine"), pytest.raises(ValueError):
+        h.iam.retire_policies(["builtin.features.org-1.member", roles.MEMBER])
+    assert h.iam.store.get_policy("builtin.features.org-1.member")
+
+
+def test_the_same_version_without_a_format_never_replaces_one_with(h):
+    """An older writer re-registering the same version (no format: flags
+    unknown) leaves the catalog whose flags are read in place."""
+    flagged = ActionCatalog(
+        service="acme",
+        version=3,
+        resource_types=(ResourceType("thing", policy_only=True),),
+        actions=(ActionSpec("UseThing", "read", ("thing",)),),
+    )
+    with as_service_account("engine"):
+        assert h.iam.register_catalog(flagged)
+        older = ActionCatalog.from_dict(
+            {
+                **flagged.to_dict(),
+                "resource_types": [
+                    {"name": "thing", "id": "opaque", "placement": "placed"}
+                ],
+            },
+            stored=True,
+        )
+        assert older.format == 1
+        assert h.iam.register_catalog(older) is False
+    assert (
+        h.iam.list_catalogs()
+        and next(c for c in h.iam.list_catalogs() if c.service == "acme")
+        .resource_types[0]
+        .policy_only
+    )

@@ -247,6 +247,11 @@ class GrantsGateway(ABC):
     async def revoke(self, grant_id: str) -> None: ...
 
     @abstractmethod
+    async def pending(self, grant_ids: Sequence[str]) -> dict[str, tuple[str, str | None]]:
+        """``{grant id: (policy id, scope)}`` of these pending grants that still
+        exist (Nexus's own read, for nobody)."""
+
+    @abstractmethod
     async def attach(
         self, user_id: str, policy_id: str, scope: str, *, by: str | None = None
     ) -> bool:

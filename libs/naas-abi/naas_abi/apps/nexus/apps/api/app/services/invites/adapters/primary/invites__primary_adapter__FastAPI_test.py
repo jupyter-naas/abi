@@ -210,9 +210,7 @@ def _held(team, user: str) -> set[tuple[str, str | None]]:
 
 
 @pytest.mark.asyncio
-async def test_adding_an_account_checks_its_policies_before_the_membership(
-    api, team, monkeypatch
-):
+async def test_adding_an_account_checks_its_policies_before_the_membership(api, team, monkeypatch):
     """Someone who has an account is added directly: the policies the invite
     carries are checked first, so a refused one leaves no membership behind."""
     from naas_abi.apps.nexus.apps.api.app.services.iam import role_features

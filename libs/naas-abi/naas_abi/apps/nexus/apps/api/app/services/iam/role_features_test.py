@@ -464,3 +464,67 @@ def test_a_configuration_that_still_sets_the_role_features_is_warned(caplog):
         "organization_overrides",
     ]
     assert "no longer do anything" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_what_cannot_move_is_named_and_the_rest_waits(nexus_db, monkeypatch, caplog):
+    """One attachment that fails (a stale row, say) is named for the operator;
+    the move goes on with the rest but is not recorded, so nothing is retired
+    and nobody loses a feature; the next start finishes it."""
+    nexus = _previous(_world())
+    with nexus.installed():
+        before = _decisions(nexus)
+        bob = nexus.principal("bob")
+        real = nexus.iam.attach_policy
+
+        def stale(policy_id, principal_id, scope=None):
+            if principal_id == bob:
+                raise RuntimeError("principal is gone")
+            return real(policy_id, principal_id, scope)
+
+        monkeypatch.setattr(nexus.iam, "attach_policy", stale)
+        async with nexus_db() as db:
+            await _previous_database(db, nexus)
+            assert await role_features.migrate_role_features(db, FLAGS) is None
+            assert f"builtin.member of {bob} at abi:org-1:ws-a" in caplog.text
+            assert not await role_features._recorded(db, role_features.MIGRATION_NAME)
+            assert _old_ids(nexus)
+            nexus.iam.invalidate()
+            assert _decisions(nexus) == before
+            monkeypatch.setattr(nexus.iam, "attach_policy", real)
+            assert await role_features.migrate_role_features(db, FLAGS)
+            assert await role_features._recorded(db, role_features.RETIRED_NAME)
+            # Retired and recorded: later starts look no more.
+            monkeypatch.setattr(nexus.iam, "retired_policies", lambda: pytest.fail("looked again"))
+            assert await role_features.migrate_role_features(db, FLAGS) is None
+        nexus.iam.invalidate()
+        assert _decisions(nexus) == before
+
+
+@pytest.mark.asyncio
+async def test_a_role_lowered_before_the_move_takes_the_old_features_of_the_higher(nexus_db):
+    """Nexus lowers a role by attaching the new one, then detaching the old: the
+    older version's admin features go with the admin role, never kept beside
+    viewer."""
+    nexus = _previous(_world())
+    carol = nexus.principal("carol")
+    with nexus.installed():
+        with as_service_account("api"):
+            nexus.iam.attach_policy(roles.VIEWER, carol, "abi:org-1:ws-b")
+            nexus.iam.detach_policy(roles.ADMIN, carol, "abi:org-1:ws-b")
+        held = {
+            a.policy_id
+            for a in nexus.iam.store.list_attachments(principal_id=carol)
+            if a.scope == "abi:org-1:ws-b"
+        }
+        assert not any(p.endswith(".admin") for p in held), held
+        async with nexus_db() as db:
+            await _previous_database(db, nexus)
+            await role_features.migrate_role_features(db, FLAGS)
+        held = {
+            p.name
+            for a in nexus.iam.store.list_attachments(principal_id=carol)
+            if a.scope == "abi:org-1:ws-b"
+            for p in [nexus.iam.store.get_policy(a.policy_id)]
+        }
+        assert "Features of admin" not in held

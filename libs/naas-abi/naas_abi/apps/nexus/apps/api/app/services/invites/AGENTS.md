@@ -89,7 +89,9 @@ IdP group bindings are the same idea for a whole group of a provider: the member
   invitation of that person lists, and a failed call takes back only the grants it made
   (`GrantMade.created`). The invitation row and the grants are written together or not at all.
 - Re-inviting the same email at the same place renews the invitation (roles and policies may
-  change; the grants it no longer needs are withdrawn).
+  change; the grants it no longer needs are withdrawn). A policy it carries already at a scope of its
+  own (an organization's "Features of <role>" the move of the role features carried org-wide, for an
+  invitation pending then) keeps that grant where it is (`_kept_carried`).
 - **Policies are checked like roles.** Each carried policy is a pending grant written as `api` on behalf
   of the inviting person: IAM refuses one they may not attach at the scope or whose grants they do not
   hold (`GrantNotHeldError`, a 403 naming it). The invitation stores them (`invitations.policy_ids`,

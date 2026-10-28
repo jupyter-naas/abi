@@ -172,13 +172,16 @@ a catalog, run the route matrix.
     Nexus invitation (`grant_ids`, `policy_ids`), so revoking it withdraws both.
 
   The old policies stay in force until the move is recorded, then are retired with their attachments
-  (`iam.retire_policies`; a start that recorded the move but failed to retire finishes it), and the overlay
+  (`iam.retire_policies`; a start that recorded the move but failed to retire finishes it; once none is
+  left, `role_features_retired_v1` is recorded and later starts look no more), and the overlay
   table is dropped (the move runs after the SQL migrations, so no numbered migration could; `0040` creates
-  nothing any more). Every step may run again; a failure leaves the move unrecorded and nothing retired, so
+  nothing any more). Every step may run again. An item that cannot move (a stale attachment, say) is named
+  in the log ("could not move builtin.member of usr_… at abi:…") and the rest goes on, but the move is not
+  recorded until a start moves everything; a failure leaves the move unrecorded and nothing retired, so
   nobody loses or gains a feature at any step, whatever the configuration says by then (tested on a database at
   the previous state, `role_features_test.py`; and across versions, an IAM store written by the previous
-  version's own code). Until the move, a role detached takes its old companion with it, as before; a role
-  attached brings none. Afterwards `role_baseline`, `organization_overrides` and `workspace_overrides` do
+  version's own code). Until the move, a role detached takes its own old companion with it (an admin made
+  viewer loses the admin's features), as before; a role attached brings none. Afterwards `role_baseline`, `organization_overrides` and `workspace_overrides` do
   nothing, and a configuration that still sets them gets a warning at each start. The repository's own root
   configurations and `abi new project`'s drop them: an existing deployment may too, since the move does not
   read them (the overrides' move still does, once, before it).

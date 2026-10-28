@@ -633,7 +633,10 @@ service's actions or types in its roles (`roles.py`):
   registered action of the catalog, on `<type>/<id>` patterns of its types. Only a
   first-party catalog (no `module`) declares them: a module's catalog grants nothing to
   every member, and validation refuses one that tries.
-- `format` (`catalog.CATALOG_FORMAT`, 2): written with every catalog, stored and over NATS.
+- `format` (`catalog.CATALOG_FORMAT`, 2): in the stored form (`to_dict(stored=True)`,
+  `from_dict(..., stored=True)`) and over NATS, never in what a module manifest hashes, so
+  no manifest changes hash on an upgrade. A same version registered again with a lower
+  format (an older writer) never replaces the stored one: it is ignored.
   A stored catalog written before the flags has none (format 1) and says nothing of them,
   which must never read as "nothing is policy only": a **first-party catalog whose flags
   are unknown holds nothing for the built-in roles or the platform companions** until it
@@ -819,10 +822,13 @@ attachment per scope.
   prefix (`roles.RETIRED_POLICY_PREFIXES`: the `builtin.features.*` it made from Nexus's
   settings and attached beside each role) are not: they stay in force, unchanged, until
   whoever made them has moved what they grant, then go with `iam.retire_policies(ids)`
-  (in process, `iam:DeletePolicy` on each; `iam.retired_policies()` lists them). Until
-  then such a policy still follows its role out: detaching the role at a scope detaches
-  it there (`_drop_retired_companions`), and adding a member to a group skips it as one of
-  the group's role companions. No new one is ever attached.
+  (in process, `iam:DeletePolicy` on each, every id checked before any goes;
+  `iam.retired_policies()` lists them). Until then such a policy follows **its own role**,
+  the last segment of its key (`builtin.features.org-1.admin` rode with `builtin.admin`,
+  `roles.retired_role`): detaching that role at a scope detaches it there, whatever role
+  is still held (an admin made viewer loses the admin's), and adding a member to a group
+  skips it as one of the group's role companions while that role is held
+  (`_retired_companions`, one rule for both). No new one is ever attached.
 - **`builtin.idp`**: the built-in IdP's own namespace, secrets and sender, for the
   built-in account `idp`. By default the IdP (`libs/naas-abi-idp`) runs as the
   module account `module/<project>/idp` with its approved manifest instead; the

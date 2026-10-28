@@ -117,9 +117,11 @@ class ActionCatalog:
     def action(self, name: str) -> ActionSpec | None:
         return next((a for a in self.actions if a.name == name), None)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, *, stored: bool = False) -> dict[str, Any]:
+        """The catalog format. ``stored``: with its ``format``, as a store keeps
+        it; left out otherwise, so what a module manifest hashes (its declared
+        catalog) is the same as before the format existed."""
         found: dict[str, Any] = {
-            "format": self.format,
             "service": self.service,
             "version": self.version,
             "resource_types": [
@@ -150,6 +152,8 @@ class ActionCatalog:
         }
         if self.module:
             found["module"] = self.module
+        if stored:
+            found["format"] = self.format
         if self.platform_access:
             found["platform_access"] = [
                 {
@@ -163,8 +167,11 @@ class ActionCatalog:
         return found
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> ActionCatalog:
-        """The catalog format (``AGENTS.md``, "Action catalogs"), as loaded from YAML or JSON."""
+    def from_dict(cls, data: Mapping[str, Any], *, stored: bool = False) -> ActionCatalog:
+        """The catalog format (``AGENTS.md``, "Action catalogs"), as loaded from YAML or JSON.
+        ``stored``: read back from a store, where a catalog with no ``format`` was
+        written before the flags existed (format 1); anything else is read as
+        written now."""
         try:
             return cls(
                 service=str(data["service"]),
@@ -205,7 +212,7 @@ class ActionCatalog:
                     for row in data.get("platform_access", ())
                 ),
                 # Stored before the flags: no "format" key.
-                format=int(data.get("format", 1)),
+                format=int(data.get("format", 1 if stored else CATALOG_FORMAT)),
             )
         except (KeyError, TypeError) as exc:
             raise CatalogError(f"Malformed catalog: {exc!r}") from exc

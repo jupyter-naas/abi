@@ -185,14 +185,20 @@ class InvitationService:
             (role_policy(role), scope)
             for role, scope in _scopes(organization_id, org_role, workspace_id, workspace_role)
         ]
+        # A policy the renewed invitation carries already, at a scope of its own
+        # (an organization's "Features of <role>" the move of the role features
+        # carried org-wide), keeps that grant as it is.
+        kept = await self._kept_carried(existing, carried, organization_id, workspace_id)
         grants += [
-            (policy_id, policy_scope(organization_id, workspace_id)) for policy_id in carried
+            (policy_id, policy_scope(organization_id, workspace_id))
+            for policy_id in carried
+            if policy_id not in kept
         ]
         elsewhere = await self._held_elsewhere(
             email, choice.name, existing.id if existing else None
         )
         made = await self._grant(choice.name, email, grants, by=invited_by)
-        grant_ids = [g.id for g in made]
+        grant_ids = [g.id for g in made] + list(kept.values())
         try:
             provisioned, skipped = await self._provision(
                 choice, email, name, organization_id, invited_by
@@ -288,6 +294,26 @@ class InvitationService:
             return await self.directory.provision(choice, email, name, by=invited_by), False
         except ProvisioningRefused:
             return None, True
+
+    async def _kept_carried(
+        self,
+        existing: Invitation | None,
+        carried: Sequence[str],
+        organization_id: str | None,
+        workspace_id: str | None,
+    ) -> dict[str, str]:
+        """``{policy id: grant id}`` of the policies ``existing`` carries already
+        at another scope than this invitation's (``policy_scope``), still asked
+        for: renewing keeps them where they are."""
+        if existing is None or not existing.policy_ids:
+            return {}
+        default = policy_scope(organization_id, workspace_id)
+        held = await self.grants.pending(existing.grant_ids)
+        return {
+            policy_id: grant_id
+            for grant_id, (policy_id, scope) in held.items()
+            if policy_id in carried and policy_id in existing.policy_ids and scope != default
+        }
 
     async def _held_elsewhere(self, email: str, provider: str, except_id: str | None) -> set[str]:
         """The pending grants other invitations of this person rely on: IAM keeps

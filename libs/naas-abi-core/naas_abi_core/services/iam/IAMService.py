@@ -824,8 +824,7 @@ class IAMService(IIAMService, PolicySource):
             ):
                 held.add(attachment.principal_id)
                 if attachment.policy_id in roles.ROLES:
-                    self._sync_platform_roles(attachment.principal_id)
-                    self._drop_retired_companions(attachment.principal_id)
+                    self._sync_role_companions(attachment.principal_id)
         return held
 
     def workspace_org(self, workspace: str) -> str | None:
@@ -947,6 +946,14 @@ class IAMService(IIAMService, PolicySource):
                 + (f", not module {catalog.module!r}'s" if catalog.module else "")
             )
         if current is not None and current.version > catalog.version:
+            return False
+        if (
+            current is not None
+            and current.version == catalog.version
+            and current.format > catalog.format
+        ):
+            # The same version from an older writer (no format: its flags
+            # unknown) never replaces the one whose flags are read.
             return False
         if current is not None:
             dropped = set(removed_actions(current, catalog))
@@ -2158,8 +2165,7 @@ class IAMService(IIAMService, PolicySource):
         detached = self.store.detach(policy_id, principal_id, scope)
         if detached:
             if policy_id in roles.ROLES:
-                self._sync_platform_roles(principal_id)
-                self._drop_retired_companions(principal_id)
+                self._sync_role_companions(principal_id)
             if scope is not None:
                 self._leave_groups_of(principal_id, scope_fields(scope)[0])
             self._changed()
@@ -2200,12 +2206,23 @@ class IAMService(IIAMService, PolicySource):
             None,
         )
 
-    def _sync_platform_roles(self, principal_id: str) -> None:
+    def _sync_role_companions(self, principal_id: str) -> None:
+        """After a role left: the platform companion, and the retired companions
+        that followed it (``_drop_retired_companions``), from one listing."""
+        attachments = self.store.list_attachments(principal_id=principal_id)
+        self._sync_platform_roles(principal_id, attachments)
+        self._drop_retired_companions(attachments)
+
+    def _sync_platform_roles(
+        self, principal_id: str, attachments: Sequence[Attachment] | None = None
+    ) -> None:
         """Hold ``builtin.platform.member`` while a member, admin or owner role is
         attached at a workspace or org-wide scope; ``.viewer`` with only viewer
         roles there. Org-level roles (``abi:<org>:-``) bring neither."""
         wanted = _platform_companion(
-            self.store.list_attachments(principal_id=principal_id)
+            attachments
+            if attachments is not None
+            else self.store.list_attachments(principal_id=principal_id)
         )
         for companion in (roles.PLATFORM_MEMBER, roles.PLATFORM_VIEWER):
             present = self._find_attachment(companion, principal_id, None) is not None
@@ -2383,12 +2400,7 @@ class IAMService(IIAMService, PolicySource):
         version attached beside a role (until it is moved and retired: it
         follows the role, ``_drop_retired_companions``). A platform policy
         attached by hand is not one of them."""
-        held = {a.scope for a in attachments if a.policy_id in roles.ROLES}
-        found: set[tuple[str, str | None]] = {
-            (a.policy_id, a.scope)
-            for a in attachments
-            if a.scope in held and a.policy_id.startswith(roles.RETIRED_POLICY_PREFIXES)
-        }
+        found: set[tuple[str, str | None]] = set(_retired_companions(attachments))
         platform = _platform_companion(attachments)
         if platform is not None:
             found.add((platform, None))
@@ -2619,8 +2631,7 @@ class IAMService(IIAMService, PolicySource):
         removed = False
         for group_id in self._binding_groups(provider, claim_value):
             if self.store.detach(policy_id, group_id, scope):
-                self._sync_platform_roles(group_id)
-                self._drop_retired_companions(group_id)
+                self._sync_role_companions(group_id)
                 removed = True
         if removed:
             self._changed()
@@ -3595,8 +3606,9 @@ class IAMService(IIAMService, PolicySource):
         prefix (``roles.RETIRED_POLICY_PREFIXES``), once what they granted was
         moved: they stay in force until then, so no grant is lost on the way.
         Needs ``iam:DeletePolicy`` on each. Returns the ones dropped."""
-        dropped: list[str] = []
-        for policy_id in policy_ids:
+        # Every id is checked before any goes: a refusal drops nothing.
+        found: list[str] = []
+        for policy_id in dict.fromkeys(policy_ids):
             if not policy_id.startswith(roles.RETIRED_POLICY_PREFIXES):
                 raise ValueError(f"{policy_id} is not a retired policy")
             policy = self._find_policy(policy_id)
@@ -3607,23 +3619,22 @@ class IAMService(IIAMService, PolicySource):
             self.require(
                 "iam:DeletePolicy", policy_resource(policy_id, policy.owner_scope)
             )
-            if self._drop_retired(policy_id):
-                dropped.append(policy_id)
+            found.append(policy_id)
+        dropped = [policy_id for policy_id in found if self._drop_retired(policy_id)]
         if dropped:
             self._changed()
         return dropped
 
-    def _drop_retired_companions(self, principal_id: str) -> None:
+    def _drop_retired_companions(self, attachments: Sequence[Attachment]) -> None:
         """A retired policy attached beside a role (an older version's
-        companion, until it is moved and retired) follows the role out: it is
-        detached where the principal holds no role any more."""
-        attachments = self.store.list_attachments(principal_id=principal_id)
-        held = {a.scope for a in attachments if a.policy_id in roles.ROLES}
+        companion, until it is moved and retired) follows its own role out: it
+        is detached where that role is no longer held, whatever else is
+        (an admin made viewer loses the admin's)."""
+        kept = _retired_companions(attachments)
         for attachment in attachments:
             if (
-                attachment.scope is not None
-                and attachment.scope not in held
-                and attachment.policy_id.startswith(roles.RETIRED_POLICY_PREFIXES)
+                roles.retired_role(attachment.policy_id) is not None
+                and (attachment.policy_id, attachment.scope) not in kept
             ):
                 self.store.detach(
                     attachment.policy_id, attachment.principal_id, attachment.scope
@@ -3834,6 +3845,20 @@ def _workspace_roles(
         org, workspace = scope_fields(attachment.scope)
         if org != NONE and workspace != NONE:
             yield attachment.policy_id, attachment.scope
+
+
+def _retired_companions(
+    attachments: Sequence[Attachment],
+) -> set[tuple[str, str | None]]:
+    """The (policy, scope) of the retired companions still held beside their
+    own role (``roles.retired_role``) at the same scope: an older version kept
+    them in step with that role, so they stay only while it does."""
+    held = {(a.policy_id, a.scope) for a in attachments if a.policy_id in roles.ROLES}
+    return {
+        (a.policy_id, a.scope)
+        for a in attachments
+        if (role := roles.retired_role(a.policy_id)) is not None and (role, a.scope) in held
+    }
 
 
 def _platform_companion(attachments: Iterable[Attachment]) -> str | None:

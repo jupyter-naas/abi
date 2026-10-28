@@ -1334,7 +1334,7 @@ class IAMStoreSQL(IAMStore):
     # -- catalogs -----------------------------------------------------------------
 
     def put_catalog(self, catalog: ActionCatalog) -> None:
-        document = json.dumps(catalog.to_dict(), sort_keys=True)
+        document = json.dumps(catalog.to_dict(stored=True), sort_keys=True)
         with self._read() as conn:
             current = conn.execute(
                 select(catalogs.c.document).where(catalogs.c.service == catalog.service)
@@ -1352,7 +1352,7 @@ class IAMStoreSQL(IAMStore):
     def list_catalogs(self) -> list[ActionCatalog]:
         with self._read() as conn:
             return [
-                ActionCatalog.from_dict(json.loads(document))
+                ActionCatalog.from_dict(json.loads(document), stored=True)
                 for document in conn.scalars(
                     select(catalogs.c.document).order_by(catalogs.c.service)
                 )
