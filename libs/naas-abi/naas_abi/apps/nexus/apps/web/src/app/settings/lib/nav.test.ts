@@ -57,6 +57,12 @@ describe('platformSettingsGroups', () => {
     ]);
   });
 
+  it('gives every group a heading of its own (the layout keys groups by it)', () => {
+    const labels = platformSettingsGroups.map((group) => group.label);
+    expect(labels.every((label) => label.length > 0)).toBe(true);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
   it('needs nexus:ReadSystem for the tables and System, any iam: action for Roles & permissions', () => {
     for (const item of [...platformSettingsGroups[0].items, ...platformSettingsGroups[1].items]) {
       expect(item.needs).toEqual({ action: 'nexus:ReadSystem' });
