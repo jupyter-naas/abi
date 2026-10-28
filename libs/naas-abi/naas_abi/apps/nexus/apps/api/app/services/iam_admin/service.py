@@ -46,6 +46,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     IAMNotFoundError,
     IIAMService,
     PermissionDeniedError,
+    Policy,
     PrincipalKind,
     ScopeSet,
 )
@@ -70,9 +71,11 @@ from naas_abi_core.services.iam.names import (
     within_owner,
 )
 from naas_abi_core.services.iam.policy import (
+    MAX_DEPTH,
     PolicyDocument,
     PolicyValidationError,
     check_owned_document,
+    denies_beyond_scope,
     parse_policy_document,
 )
 from naas_abi_core.services.iam.sets import intersect, read_resource, write_resource
@@ -450,18 +453,23 @@ class IamAdminService:
     ) -> dict[str, Any]:
         """The policies the caller may attach at ``scope``: IAM's rule for a scope
         (every Allow starts with ``${scope}:``) and the caller's own right to attach.
-        A policy not wholly within ``${scope}:`` (a Deny naming anything) is offered
-        at a scope only to whoever may attach it unscoped, as IAM decides."""
+        A policy with a Deny beyond ``${scope}:``, its own or its chain's, is offered
+        at a scope only to whoever may attach it unscoped, as IAM decides; one whose
+        chain names ``${scope}`` is never offered unscoped."""
         if scope is not None:
             validate_scope(scope)
 
         def read(session: IIAMService) -> dict[str, Any]:
+            every = self._gateway.policies()
+            documents = _chains(every)
             candidates = [
                 p
-                for p in self._gateway.policies()[:MAX_ATTACHABLE_SCAN]
+                for p in every[:MAX_ATTACHABLE_SCAN]
                 if within_owner(p.owner_scope, scope)
                 and (
-                    p.document.confined_to_scope if scope is not None else not p.document.uses_scope
+                    p.document.confined_to_scope
+                    if scope is not None
+                    else not any(d.uses_scope for d in documents[p.id])
                 )
             ]
             names = {attachment_resource(p.id, principal_id or "*", scope): p for p in candidates}
@@ -470,7 +478,7 @@ class IamAdminService:
                 unscoped = {
                     attachment_resource(p.id, principal_id or "*", None): name
                     for name, p in names.items()
-                    if name in allowed and not p.document.wholly_within_scope
+                    if name in allowed and denies_beyond_scope(documents[p.id])
                 }
                 reach = set(session.filter("iam:AttachPolicy", unscoped).allowed)
                 allowed -= {name for u, name in unscoped.items() if u not in reach}
@@ -1058,3 +1066,18 @@ def _actor_id(user: Any) -> str:
 
 
 __all__ = ["ACCESS_ACTIONS", "IamAdminService"]
+
+
+def _chains(policies: list[Policy]) -> dict[str, list[PolicyDocument]]:
+    """Each policy's document and those of its chain (its parent, and so on), as
+    IAM reads them to decide where it is attached ("Sub-policies")."""
+    by_id = {p.id: p for p in policies}
+    found: dict[str, list[PolicyDocument]] = {}
+    for policy in policies:
+        documents = [policy.document]
+        parent_id = policy.parent_id
+        while parent_id is not None and parent_id in by_id and len(documents) < MAX_DEPTH:
+            documents.append(by_id[parent_id].document)
+            parent_id = by_id[parent_id].parent_id
+        found[policy.id] = documents
+    return found

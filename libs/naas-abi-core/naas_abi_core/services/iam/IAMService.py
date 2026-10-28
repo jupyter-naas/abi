@@ -122,12 +122,12 @@ from naas_abi_core.services.iam.names import (
 )
 from naas_abi_core.services.iam.policy import (
     MAX_DEPTH,
-    SCOPE_PREFIX,
     PolicyDocument,
     PolicyValidationError,
     Statement,
     bind_variables,
     check_owned_document,
+    denies_beyond_scope,
     parse_policy_document,
     within_scope,
 )
@@ -1810,7 +1810,7 @@ class IAMService(IIAMService, PolicySource):
         """Whether a Deny of the policy or of its chain names anything outside
         ``${scope}:``: it refuses beyond the scope it is attached at."""
         chain, _whole = self._chain(policy)
-        return _denies_beyond_scope([policy.document, *(p.document for p in chain)])
+        return denies_beyond_scope([policy.document, *(p.document for p in chain)])
 
     def _uses_scope(self, policy: Policy) -> bool:
         """Whether the policy or a policy of its chain names ``${scope}``."""
@@ -3731,18 +3731,6 @@ def _as_owner(scope: str | None) -> str:
         return PLATFORM_SCOPE
     org, workspace = scope_fields(scope)
     return scope_name(org) if workspace == "*" else scope
-
-
-def _denies_beyond_scope(documents: Iterable[PolicyDocument]) -> bool:
-    """Whether a Deny of one of ``documents`` names anything outside
-    ``${scope}:``: then it refuses beyond the scope it is attached at."""
-    return any(
-        not pattern.startswith(SCOPE_PREFIX)
-        for document in documents
-        for statement in document.statements
-        if statement.effect == "Deny"
-        for pattern in statement.resources
-    )
 
 
 def _written_for(owner: str) -> list[str | None]:

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, Literal, cast
@@ -140,6 +140,19 @@ class PolicyDocument:
             for statement in self.statements
             for pattern in statement.resources
         )
+
+
+def denies_beyond_scope(documents: Iterable[PolicyDocument]) -> bool:
+    """Whether a Deny of one of ``documents`` (a policy and its chain) names
+    anything outside ``${scope}:``: then it refuses beyond the scope it is
+    attached at, and only whoever may attach it unscoped attaches it at one."""
+    return any(
+        not pattern.startswith(SCOPE_PREFIX)
+        for document in documents
+        for statement in document.statements
+        if statement.effect == "Deny"
+        for pattern in statement.resources
+    )
 
 
 def check_owned_document(document: PolicyDocument, owner: str) -> None:

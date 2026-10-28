@@ -1242,9 +1242,7 @@ def test_a_sub_policy_is_refused_as_iam_refuses_it(world, ws2):
     assert "derive only from a policy attached to you" in refused.json()["detail"]
     assert world.audit.phases("create_policy")[-1] == "failed"
     # A parent that does not exist, a cycle, an owner above the parent's.
-    missing = post(
-        world, "/policies", name="x", document=SCOPED_READER, parent="pol_" + "0" * 26
-    )
+    missing = post(world, "/policies", name="x", document=SCOPED_READER, parent="pol_" + "0" * 26)
     assert missing.status_code == 404
     cycle = world.client.put(
         f"/api/iam/admin/policies/{parent['id']}",
@@ -1255,3 +1253,46 @@ def test_a_sub_policy_is_refused_as_iam_refuses_it(world, ws2):
     ws_policy = post(world, "/policies", name="w", document=SCOPED_READER, scope=ws2).json()
     above = post(world, "/policies", name="x", document=SCOPED_READER, parent=ws_policy["id"])
     assert above.status_code == 422 and "or below it" in above.json()["detail"]
+
+
+def test_a_sub_policy_is_offered_where_iam_lets_it_be_attached(world, ws2):
+    """Its parent's Deny beyond ``${scope}:`` is its own: offered at a scope to the
+    platform admin only; its parent's ``${scope}`` keeps it from being offered
+    unscoped."""
+    parent = post(
+        world,
+        "/policies",
+        name="no hr anywhere",
+        document={
+            "version": "2026-10-13",
+            "statements": [
+                *SCOPED_READER["statements"],
+                {
+                    "effect": "Deny",
+                    "actions": ["triple_store:Query"],
+                    "resources": ["abi:*:*:triple_store:graph/hr"],
+                },
+            ],
+        },
+    ).json()
+    child = post(
+        world, "/policies", name="graphs", document=SCOPED_READER, parent=parent["id"]
+    ).json()
+
+    def offered(user: str, scope: str | None) -> set[str]:
+        query = f"?scope={scope}" if scope else ""
+        response = get(world, f"/attachable-policies{query}", user)
+        return {p["id"] for p in response.json()["items"]}
+
+    assert child["id"] not in offered("ws2admin", ws2)
+    assert child["id"] in offered("root", ws2)
+    assert child["id"] not in offered("root", None)
+    refused = post(
+        world,
+        "/attachments",
+        "ws2admin",
+        policy_id=child["id"],
+        principal_id=_principal_id(world, "colleague"),
+        scope=ws2,
+    )
+    assert refused.status_code == 403 and "unscoped" in refused.json()["detail"]
