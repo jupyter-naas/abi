@@ -1,5 +1,4 @@
 import pytest
-
 from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig
 from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
     build_feature_flags,
