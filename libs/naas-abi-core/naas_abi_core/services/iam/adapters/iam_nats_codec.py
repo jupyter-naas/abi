@@ -471,7 +471,7 @@ def catalog_from_pb(message: pb.ActionCatalog) -> ActionCatalog:
                 resources=tuple(row.resources),
                 viewer=tuple(row.viewer),
                 member=tuple(row.member),
-                self_=tuple(getattr(row, "self")),
+                self_=tuple(row.self),
             )
             for row in message.platform_access
         ),
