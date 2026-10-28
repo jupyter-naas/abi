@@ -97,12 +97,6 @@ modules:
             - slides
             - documents
             - code
-          role_baseline:
-            owner: [maps, chat, files, agents, skills, apps, marketplace, search, ontology, graph, datasets, settings, slides, documents, code]
-            admin: [maps, chat, files, agents, skills, apps, marketplace, search, ontology, graph, datasets, settings, slides, documents, code]
-            member: [maps, chat, files, datasets, skills, slides, documents, code]
-            viewer: [maps, chat, files, datasets, skills, slides, documents]
-          workspace_overrides: {}
         marketplace:
           pricing:
             maintenance_standard_usd: 499
