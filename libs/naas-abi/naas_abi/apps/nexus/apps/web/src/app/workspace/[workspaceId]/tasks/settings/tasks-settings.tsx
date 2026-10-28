@@ -306,7 +306,7 @@ export default function TasksSettingsPage() {
       )}
       {loaded && !settings.can_edit && (
         <div className="tasks-notice" role="status">
-          <span>Only workspace owners and admins can change these settings.</span>
+          <span>You cannot change these settings in this workspace. Owners and admins can, by default.</span>
         </div>
       )}
 

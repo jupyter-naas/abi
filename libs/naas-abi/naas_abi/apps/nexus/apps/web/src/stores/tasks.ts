@@ -7,6 +7,7 @@ import {
   tasksApi,
   iterationContaining,
   toIsoDate,
+  withCurrentIteration,
   type TaskActivity,
   type TaskIteration,
   type TasksFilterKind,
@@ -126,10 +127,9 @@ export const useTasksStore = create<TasksState>()((set, get) => {
             // The feed is a side panel: the rest of Tasks works without it.
             tasksApi.listFeed(workspaceId).catch(() => [] as TaskActivity[]),
           ]);
-          let all = iterations;
-          if (!iterationContaining(iterations, today)) {
-            all = [...iterations, await tasksApi.ensureIteration(workspaceId, today)];
-          }
+          const all = await withCurrentIteration(iterations, today, (day) =>
+            tasksApi.ensureIteration(workspaceId, day),
+          );
           if (get().workspaceId !== workspaceId) return;
           set({ settings, iterations: all.sort(byStart), members, tasks, feed, loaded: true, error: null });
         } catch (e) {

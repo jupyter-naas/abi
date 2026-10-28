@@ -1,13 +1,25 @@
+"""``/api/tasks`` decided by IAM: the ``tasks`` feature, then each route's action.
+
+A real IAM (``team``: ``owner``, ``admin``, ``member``, ``viewer`` of ``ws-1`` in
+``org-1``, and ``stranger``), the deployment's feature defaults (owners and
+admins have ``tasks``), and the routes as mounted. Requests act as the user the
+``X-User`` header names; ``X-Key-Scope: read`` narrows the call as a read-only
+personal key does.
+"""
+
 from __future__ import annotations
 
 import asyncio
-from types import SimpleNamespace
+from dataclasses import replace
 
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
-from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig
-from naas_abi.apps.nexus.apps.api.app.core.feature_flags import build_feature_flags
+from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
+    get_current_user_required,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_scope
+from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 from naas_abi.apps.nexus.apps.api.app.services.tasks.adapters.primary import (
     tasks__primary_adapter__FastAPI as api,
 )
@@ -16,77 +28,236 @@ from naas_abi.apps.nexus.apps.api.app.services.tasks.adapters.secondary.memory i
     InMemoryTasksStore,
 )
 from naas_abi.apps.nexus.apps.api.app.services.tasks.service import TasksService
+from naas_abi_core.engine.call_context import use_call_context
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 WS = "ws-1"
 OTHER_WS = "ws-2"
-USER = "u-1"
+ROLES = ("owner", "admin", "member", "viewer")
+# What a personal key limited to reading carries (its ``abi_scope``).
+READ_ONLY_KEY = (
+    {
+        "effect": "Allow",
+        "actions": ["nexus:UseFeature", "nexus:List*", "nexus:Get*"],
+        "resources": ["*"],
+    },
+)
+TASKS_FEATURE = ["nexus:UseFeature"], ["${scope}:nexus:feature/tasks"]
+
+
+class AsCaller:
+    """Run each request as ``X-User``: ``api`` on behalf of them, narrowed by
+    ``X-Key-Scope: read`` as a read-only key's call is."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        headers = dict(scope.get("headers") or [])
+        ctx = NexusIam.context(headers.get(b"x-user", b"").decode() or None)
+        if headers.get(b"x-key-scope") == b"read":
+            ctx = replace(ctx, scope=READ_ONLY_KEY)
+        with use_call_context(ctx):
+            await self.app(scope, receive, send)
 
 
 @pytest.fixture
-def client_for(monkeypatch):
+def client_for(team):
+    """``client_for(user)``: a client acting as ``user`` (``key="read"`` for a
+    read-only key). ``client_for.service`` adds records as anyone."""
     service = TasksService(
-        InMemoryTasksStore(), InMemoryTasksMemberDirectory({WS: {USER, "u-2"}, OTHER_WS: {USER}})
+        InMemoryTasksStore(),
+        InMemoryTasksMemberDirectory({WS: {*ROLES}, OTHER_WS: {"owner", "admin"}}),
     )
+    team.workspace("org-1", OTHER_WS)
+    app = FastAPI()
+    app.include_router(api.router, prefix="/api/tasks")
+    app.dependency_overrides[api.get_tasks_service] = lambda: service
 
-    def make(role: str | None, *, overrides: dict[str, bool] | None = None) -> TestClient:
-        async def access(user_id, workspace_id):
-            if role is None:
-                raise HTTPException(status_code=403, detail="no access")
-            return role
+    def current_user(request: Request):
+        from types import SimpleNamespace
 
-        async def flags(workspace_id, caller_role):
-            # The deployment defaults, as resolved for the workspace listing.
-            return build_feature_flags(
-                role=caller_role,
-                feature_flags_config=FeatureFlagsConfig(),
-                workspace_slug=None,
-                workspace_id=workspace_id,
-                workspace_override=overrides,
-            )
+        return SimpleNamespace(id=request.headers["x-user"], is_superadmin=False)
 
-        monkeypatch.setattr(api, "require_workspace_access", access)
-        monkeypatch.setattr(api, "_caller_flags", flags)
-        app = FastAPI()
-        app.include_router(api.router, prefix="/api/tasks")
-        app.dependency_overrides[api.get_current_user_required] = lambda: SimpleNamespace(id=USER)
-        app.dependency_overrides[api.get_tasks_service] = lambda: service
-        return TestClient(app)
+    app.dependency_overrides[get_current_user_required] = current_user
+    app.add_middleware(AsCaller)
 
-    # Lets a test add records as another user than the caller.
+    def make(user: str, *, key: str | None = None) -> TestClient:
+        headers = {"x-user": user}
+        if key:
+            headers["x-key-scope"] = key
+        return TestClient(app, headers=headers)
+
     make.service = service  # type: ignore[attr-defined]
+    make.iam = team  # type: ignore[attr-defined]
     return make
 
 
-@pytest.mark.parametrize("role", ["owner", "admin"])
-def test_owners_and_admins_use_tasks(client_for, role):
-    client = client_for(role)
-
-    res = client.post(f"/api/tasks/iterations?workspace_id={WS}", json={"date": "2026-10-22"})
-
-    assert res.status_code == 200
-    assert res.json()["start_date"] == "2026-10-19"
-    assert res.json()["end_date"] == "2026-10-25"
-    assert res.json()["iso_week"] == "2026-W43"
-
-
-@pytest.mark.parametrize("role", ["member", "viewer"])
-def test_members_and_viewers_are_refused_by_default(client_for, role):
-    client = client_for(role)
-
-    assert client.get(f"/api/tasks/iterations?workspace_id={WS}").status_code == 403
-    assert client.post(f"/api/tasks?workspace_id={WS}", json={"title": "T"}).status_code == 403
+def _settings_payload(settings: dict) -> dict:
+    keys = (
+        "iteration_weeks",
+        "iteration_start_day",
+        "stages",
+        "priorities",
+        "default_stage",
+        "suggested_labels",
+    )
+    return {**{k: settings[k] for k in keys}, "today": "2026-10-22"}
 
 
-def test_workspace_override_opens_tasks_to_members(client_for):
-    client = client_for("member", overrides={"tasks": True})
+def _grant_tasks(team: NexusIam, user: str) -> None:
+    """A feature policy giving ``user`` the ``tasks`` feature in ``ws-1``."""
+    team.allow(user, *TASKS_FEATURE, workspace_scope("org-1", WS))
 
-    assert client.get(f"/api/tasks/iterations?workspace_id={WS}").status_code == 200
+
+@pytest.mark.parametrize("user", ["owner", "admin"])
+def test_owners_and_admins_use_tasks_and_change_the_settings(client_for, user):
+    client = client_for(user)
+
+    iteration = client.post(f"/api/tasks/iterations?workspace_id={WS}", json={"date": "2026-10-22"})
+    assert iteration.status_code == 200, iteration.text
+    assert iteration.json()["iso_week"] == "2026-W43"
+    task = client.post(f"/api/tasks?workspace_id={WS}", json={"title": "T"})
+    assert task.status_code == 201, task.text
+    comment = client.post(
+        f"/api/tasks/{task.json()['id']}/comments?workspace_id={WS}", json={"body": "Hi"}
+    )
+    assert comment.status_code == 201
+
+    settings = client.get(f"/api/tasks/settings?workspace_id={WS}").json()
+    assert (settings["can_edit"], settings["can_moderate"]) == (True, True)
+    saved = client.put(
+        f"/api/tasks/settings?workspace_id={WS}",
+        json={**_settings_payload(settings), "iteration_weeks": 2},
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["iteration_weeks"] == 2
 
 
-def test_outsiders_are_refused(client_for):
-    client = client_for(None)
+@pytest.mark.parametrize("user", ["member", "viewer"])
+def test_members_and_viewers_are_refused_by_default(client_for, user):
+    client = client_for(user)
 
-    assert client.get(f"/api/tasks/iterations?workspace_id={WS}").status_code == 403
+    for res in (
+        client.get(f"/api/tasks/iterations?workspace_id={WS}"),
+        client.get(f"/api/tasks/settings?workspace_id={WS}"),
+        client.post(f"/api/tasks?workspace_id={WS}", json={"title": "T"}),
+    ):
+        assert res.status_code == 403
+        assert res.json()["detail"] == "This feature is not available to you in this workspace"
+
+
+def test_a_member_given_the_feature_by_a_policy_uses_tasks_but_not_the_settings(client_for):
+    _grant_tasks(client_for.iam, "member")
+    member = client_for("member")
+
+    task = member.post(f"/api/tasks?workspace_id={WS}", json={"title": "T"})
+    assert task.status_code == 201, task.text
+    assert member.get(f"/api/tasks?workspace_id={WS}").status_code == 200
+    settings = member.get(f"/api/tasks/settings?workspace_id={WS}").json()
+    assert (settings["can_edit"], settings["can_moderate"]) == (False, False)
+    assert (
+        member.put(
+            f"/api/tasks/settings?workspace_id={WS}", json=_settings_payload(settings)
+        ).status_code
+        == 403
+    )
+
+
+def test_a_member_given_the_feature_by_the_org_overlay_uses_tasks():
+    nexus = NexusIam(org_overlays={"org-1": {"member": ["chat", "tasks"]}})
+    scope = nexus.workspace("org-1", WS)
+    nexus.grant("member", "member", scope)
+    service = TasksService(InMemoryTasksStore(), InMemoryTasksMemberDirectory({WS: {"member"}}))
+    app = FastAPI()
+    app.include_router(api.router, prefix="/api/tasks")
+    app.dependency_overrides[api.get_tasks_service] = lambda: service
+    app.dependency_overrides[get_current_user_required] = lambda: type("U", (), {"id": "member"})
+    app.add_middleware(AsCaller)
+    with nexus.installed():
+        member = TestClient(app, headers={"x-user": "member"})
+        assert member.post(f"/api/tasks?workspace_id={WS}", json={"title": "T"}).status_code == 201
+        assert member.put(f"/api/tasks/settings?workspace_id={WS}", json={}).status_code == 403
+
+
+def test_a_viewer_given_the_feature_reads_and_writes_nothing(client_for):
+    _grant_tasks(client_for.iam, "viewer")
+    task = client_for("owner").post(f"/api/tasks?workspace_id={WS}", json={"title": "T"}).json()
+    viewer = client_for("viewer")
+
+    for url in (
+        f"/api/tasks?workspace_id={WS}",
+        f"/api/tasks/iterations?workspace_id={WS}",
+        f"/api/tasks/settings?workspace_id={WS}",
+        f"/api/tasks/feed?workspace_id={WS}",
+        f"/api/tasks/{task['id']}/comments?workspace_id={WS}",
+        f"/api/tasks/{task['id']}/activity?workspace_id={WS}",
+    ):
+        assert viewer.get(url).status_code == 200, url
+    for res in (
+        viewer.post(f"/api/tasks?workspace_id={WS}", json={"title": "T"}),
+        viewer.post(f"/api/tasks/iterations?workspace_id={WS}", json={"date": "2026-10-22"}),
+        viewer.patch(f"/api/tasks/{task['id']}?workspace_id={WS}", json={"title": "x"}),
+        viewer.post(f"/api/tasks/{task['id']}/comments?workspace_id={WS}", json={"body": "x"}),
+        viewer.delete(f"/api/tasks/{task['id']}?workspace_id={WS}"),
+    ):
+        assert res.status_code == 403
+
+
+def test_a_stranger_is_refused(client_for):
+    stranger = client_for("stranger")
+
+    res = stranger.get(f"/api/tasks/iterations?workspace_id={WS}")
+    assert res.status_code == 403
+    assert res.json()["detail"] == "You do not have access to this workspace"
+    assert stranger.post(f"/api/tasks?workspace_id={WS}", json={"title": "T"}).status_code == 403
+
+
+def test_a_workspace_without_tasks_in_its_set_refuses_all_but_the_platform_admin(client_for):
+    client_for.iam.put_set("org-1", WS, features=["chat", "settings"])
+    client_for.iam.platform_admin("root")
+
+    for user in ROLES:
+        assert client_for(user).get(f"/api/tasks?workspace_id={WS}").status_code == 403, user
+    root = client_for("root")
+    assert root.get(f"/api/tasks?workspace_id={WS}").status_code == 200
+    assert root.post(f"/api/tasks?workspace_id={WS}", json={"title": "T"}).status_code == 201
+
+
+def test_a_read_only_key_reads_and_cannot_write(client_for):
+    key = client_for("owner", key="read")
+
+    assert key.get(f"/api/tasks?workspace_id={WS}").status_code == 200
+    assert key.get(f"/api/tasks/settings?workspace_id={WS}").json()["can_edit"] is False
+    assert key.post(f"/api/tasks?workspace_id={WS}", json={"title": "T"}).status_code == 403
+    assert (
+        key.post(
+            f"/api/tasks/iterations?workspace_id={WS}", json={"date": "2026-10-22"}
+        ).status_code
+        == 403
+    )
+    # The same owner signed in writes: the narrowing was the key's.
+    assert (
+        client_for("owner").post(f"/api/tasks?workspace_id={WS}", json={"title": "T"}).status_code
+        == 201
+    )
+
+
+def test_authors_remove_their_comments_and_admins_anyones(client_for):
+    _grant_tasks(client_for.iam, "member")
+    owner, member = client_for("owner"), client_for("member")
+    task = owner.post(f"/api/tasks?workspace_id={WS}", json={"title": "T"}).json()
+    comments = f"/api/tasks/{task['id']}/comments"
+    theirs = owner.post(f"{comments}?workspace_id={WS}", json={"body": "Owner's"}).json()
+    mine = member.post(f"{comments}?workspace_id={WS}", json={"body": "Member's"}).json()
+
+    assert member.delete(f"{comments}/{theirs['id']}?workspace_id={WS}").status_code == 403
+    assert member.delete(f"{comments}/{mine['id']}?workspace_id={WS}").status_code == 204
+    again = member.post(f"{comments}?workspace_id={WS}", json={"body": "Again"}).json()
+    assert (
+        client_for("admin").delete(f"{comments}/{again['id']}?workspace_id={WS}").status_code == 204
+    )
+    assert [c["id"] for c in owner.get(f"{comments}?workspace_id={WS}").json()] == [theirs["id"]]
 
 
 def test_task_lifecycle_over_http(client_for):
@@ -103,15 +274,15 @@ def test_task_lifecycle_over_http(client_for):
     task = created.json()
     # Created in an iteration without a stage: the settings' default stage.
     assert task["stage"] == "ready"
-    assert task["created_by"] == USER
+    assert task["created_by"] == "admin"
 
     patched = client.patch(
         f"/api/tasks/{task['id']}?workspace_id={WS}",
-        json={"stage": "review", "assignee_ids": ["u-2"], "due_date": "2026-11-02"},
+        json={"stage": "review", "assignee_ids": ["member"], "due_date": "2026-11-02"},
     )
     assert patched.status_code == 200
     assert patched.json()["stage"] == "review"
-    assert patched.json()["assignee_ids"] == ["u-2"]
+    assert patched.json()["assignee_ids"] == ["member"]
     assert patched.json()["due_date"] == "2026-11-02"
     # Fields not sent stay as they were.
     assert patched.json()["labels"] == ["Feature"]
@@ -163,14 +334,11 @@ def test_comment_replies_and_removal_over_http(client_for):
     reply = owner.post(comments_url, json={"body": "Answer", "parent_id": root["id"]}).json()
     assert reply["parent_id"] == root["id"]
 
-    # A member (Tasks opened to members) cannot remove someone else's comment.
-    other = asyncio.run(client_for.service.add_comment(WS, task["id"], "Theirs", user_id="u-2"))
-    member = client_for("member", overrides={"tasks": True})
+    # Someone else's comment: the owner moderates it.
+    other = asyncio.run(client_for.service.add_comment(WS, task["id"], "Theirs", user_id="member"))
     one = f"/api/tasks/{task['id']}/comments/{other.id}?workspace_id={WS}"
-    assert member.delete(one).status_code == 403
-    # Owners and admins moderate; removing a comment removes its replies.
-    owner = client_for("owner")  # each client sets the role for the module
     assert owner.delete(one).status_code == 204
+    # Removing a comment removes its replies.
     root_url = f"/api/tasks/{task['id']}/comments/{root['id']}?workspace_id={WS}"
     assert owner.delete(root_url).status_code == 204
     assert owner.get(comments_url).json() == []
@@ -305,8 +473,9 @@ def test_settings_are_read_by_tasks_users_and_saved_by_owners_and_admins(client_
     payload["iteration_weeks"] = 9
     assert admin.put(f"/api/tasks/settings?workspace_id={WS}", json=payload).status_code == 422
 
-    # A member Tasks was opened to can read but not change the settings.
-    member = client_for("member", overrides={"tasks": True})
+    # A member given the feature reads the settings and cannot change them.
+    _grant_tasks(client_for.iam, "member")
+    member = client_for("member")
     read = member.get(f"/api/tasks/settings?workspace_id={WS}")
     assert read.status_code == 200 and read.json()["can_edit"] is False
     assert member.put(f"/api/tasks/settings?workspace_id={WS}", json=payload).status_code == 403

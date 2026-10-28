@@ -190,6 +190,22 @@ _ENTRIES: list[PlatformTableEntry] = [
         ("search_settings", "Search settings", "Search settings per workspace."),
         ("search_topics", "Search topics", "Search topics per workspace."),
     ),
+    *_section(
+        "Tasks",
+        ("tasks", "Tasks", "Tasks of each workspace: stage, iteration, assignees, labels."),
+        ("task_iterations", "Task iterations", "Iterations (runs of weeks) and their goals."),
+        ("task_comments", "Task comments", "Comments and replies on tasks."),
+        (
+            "task_activity",
+            "Task activity",
+            "Task events (changes, comments, deletions): each task's history and the feed.",
+        ),
+        (
+            "task_settings",
+            "Tasks settings",
+            "Tasks settings per workspace: rhythm, stages, priorities, labels, feed.",
+        ),
+    ),
 ]
 
 # Registry order is section order: Platform Settings lists the tables this way.

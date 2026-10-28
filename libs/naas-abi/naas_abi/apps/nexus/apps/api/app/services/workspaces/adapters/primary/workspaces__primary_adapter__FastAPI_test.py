@@ -44,6 +44,8 @@ def test_to_schema_includes_role_and_feature_flags_for_member() -> None:
             "slides": True,
             "documents": True,
             "sheets": True,
+            # Owners' and admins' by default.
+            "tasks": False,
         }
         flags = {**schema.feature_flags, "apps": True}
         assert _to_schema(record, "member", feature_flags=flags).feature_flags == flags

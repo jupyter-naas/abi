@@ -97,9 +97,10 @@ modules:
             - slides
             - documents
             - code
+            - tasks
           role_baseline:
-            owner: [maps, chat, files, agents, skills, apps, marketplace, search, ontology, graph, datasets, settings, slides, documents, code]
-            admin: [maps, chat, files, agents, skills, apps, marketplace, search, ontology, graph, datasets, settings, slides, documents, code]
+            owner: [maps, chat, files, agents, skills, apps, marketplace, search, ontology, graph, datasets, settings, slides, documents, code, tasks]
+            admin: [maps, chat, files, agents, skills, apps, marketplace, search, ontology, graph, datasets, settings, slides, documents, code, tasks]
             member: [maps, chat, files, datasets, skills, slides, documents, code]
             viewer: [maps, chat, files, datasets, skills, slides, documents]
           workspace_overrides: {}

@@ -1,6 +1,8 @@
 # Workspace Tasks and shared database views
 
-- **Status:** Accepted
+- **Status:** Accepted; access (decisions 1 and 2, and who changes the settings
+  or removes a comment) superseded: Tasks are decided by IAM, see "Workspace
+  tasks are IAM's" in `libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam/AGENTS.md`.
 - **Date:** 2026-10-23
 
 ## Context

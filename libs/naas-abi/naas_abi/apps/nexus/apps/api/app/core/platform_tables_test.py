@@ -112,6 +112,11 @@ def test_registry_lists_every_nexus_table_by_section() -> None:
         ("Ontology", "ontology_icons"),
         ("Search", "search_settings"),
         ("Search", "search_topics"),
+        ("Tasks", "tasks"),
+        ("Tasks", "task_iterations"),
+        ("Tasks", "task_comments"),
+        ("Tasks", "task_activity"),
+        ("Tasks", "task_settings"),
     ]
     # One section is one run of tables: the page groups them in this order.
     sections = [entry.section for entry in PLATFORM_TABLES.values()]
