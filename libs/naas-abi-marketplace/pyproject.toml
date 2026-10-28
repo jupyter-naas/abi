@@ -28,6 +28,13 @@ naas-abi-core = { path = "../naas-abi-core", editable = true }
 module = ["naas_abi.*"]
 ignore_missing_imports = true
 
+# domains/ is excluded from the type check (Makefile, check-marketplace). An
+# application that builds on a domain's vocabulary (the LinkedIn connections
+# pipeline uses the people module's graph builders) must not pull it back in.
+[[tool.mypy.overrides]]
+module = ["naas_abi_marketplace.domains.*"]
+follow_imports = "silent"
+
 [dependency-groups]
 dev = [
     "mypy>=1.19.0",

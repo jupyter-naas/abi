@@ -1,459 +1,389 @@
-import threading
-import time
-import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
-from datetime import UTC, datetime
+"""The acts of connection stated by one LinkedIn ``Connections.csv``.
+
+One row is one connection of the export owner. It becomes:
+
+- the connection, an ``abi:Person`` keyed on their LinkedIn profile URL, so the
+  same profile in a re-import, a newer export or a colleague's export is the
+  same node; a URL already known to the people graphs reuses that person;
+- one ``linkedin:ActOfConnection`` between the owner and the connection, dated
+  from ``Connected On`` and sourced from the export file;
+- one ``abi:ActOfWorking`` from ``Company`` and ``Position``, built by the people
+  module exactly as the corporate-website import builds its acts of working.
+
+The pipeline builds a graph and does not decide where it goes: it writes to the
+triple store only when the configuration names both a store and a graph, and
+never to the default graph.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import re
+from dataclasses import dataclass, field
+from datetime import date, datetime
 from enum import Enum
 from typing import Annotated
+from urllib.parse import unquote, urlsplit
 
 from langchain_core.tools import BaseTool, StructuredTool
-from naas_abi_core import logger
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
 from naas_abi_core.utils.Expose import APIRouter
-from naas_abi_core.utils.Graph import ABI
-from naas_abi_core.utils.SPARQL import SPARQLUtils
-from naas_abi_marketplace.applications.linkedin import ABIModule
-from naas_abi_marketplace.applications.linkedin.integrations.LinkedInExportIntegration import (
-    LinkedInExportIntegration,
-    LinkedInExportIntegrationConfiguration,
-)
 from naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn import (
     ActOfConnection,
     ConnectionRole,
-    ConnectionsExportFile,
-    CurrentJobPosition,
-    CurrentOrganization,
-    CurrentPublicURL,
-    EmailAddress,
-    ISO8601UTCDateTime,
-    Location,
-    Organization,
-    Person,
-    ProfilePage,
 )
-from naas_abi_marketplace.applications.linkedin.pipelines.LinkedInExportProfilePipeline import (
-    LinkedInExportProfilePipelineConfiguration,
+from naas_abi_marketplace.domains.intelligence.modules.people.ontologies.modules.PeopleOntology import (
+    ProfileDocument,
 )
-from pydantic import Field
+from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.utils.graph_builders import (
+    ABI,
+    PeopleGraphContext,
+    bind_graph_prefixes,
+    individual_uri,
+    utc_now,
+)
+from pydantic import BaseModel, Field
 from rdflib import Graph, Namespace, URIRef
+from rdflib.namespace import RDF
 
 LINKEDIN = Namespace("http://ontology.naas.ai/abi/linkedin/")
-UNKNOWN_VALUE = "UNKNOWN"
+CREATOR = "linkedin_connections_export"
+
+# The People app addresses a person by profile_slug, which must match
+# ^[a-z0-9][a-z0-9_-]{0,63}$ (people app, scripts/profile_payload.py).
+_SLUG_MAX = 64
+_VANITY = re.compile(r"^/(?:in|pub)/([^/?#]+)", re.IGNORECASE)
+_DATE_FORMATS = ("%d %b %Y", "%Y-%m-%d", "%d/%m/%Y", "%m/%d/%y")
+
+
+def normalize_linkedin_url(url: str | None) -> str | None:
+    """The canonical form of a LinkedIn profile URL, or ``None`` if it is not one.
+
+    ``http://www.linkedin.com/in/Jane-Doe/?trk=x`` and
+    ``https://linkedin.com/in/jane-doe`` are the same profile; both become
+    ``https://www.linkedin.com/in/jane-doe``. Keyed on this, an export, a
+    newer export and a colleague's export all name the same person.
+    """
+    if not url or not url.strip():
+        return None
+    raw = url.strip()
+    if "://" not in raw:
+        raw = f"https://{raw}"
+    parts = urlsplit(raw)
+    host = parts.netloc.lower().split(":")[0]
+    if not (host == "linkedin.com" or host.endswith(".linkedin.com")):
+        return None
+    match = _VANITY.match(parts.path)
+    if not match:
+        return None
+    vanity = unquote(match.group(1)).strip().lower()
+    if not vanity:
+        return None
+    return f"https://www.linkedin.com/in/{vanity}"
+
+
+def linkedin_vanity(normalized_url: str) -> str:
+    return normalized_url.rsplit("/", 1)[-1]
+
+
+def linkedin_key(normalized_url: str) -> str:
+    """An ASCII key for a profile, stable and unique per normalized URL.
+
+    A vanity name that is already ``[a-z0-9-]`` and short enough is used as is;
+    anything else (accents, percent-encoded scripts, very long names) keeps what
+    it can and adds a short hash of the URL, so two profiles never share a key.
+    """
+    vanity = linkedin_vanity(normalized_url)
+    ascii_part = re.sub(r"[^a-z0-9]+", "-", vanity).strip("-")
+    limit = _SLUG_MAX - len("li-")
+    if ascii_part == vanity and len(ascii_part) <= limit:
+        return ascii_part
+    digest = hashlib.sha1(normalized_url.encode("utf-8")).hexdigest()[:10]
+    return f"{ascii_part[: limit - len(digest) - 1].strip('-')}-{digest}".strip("-")
+
+
+def linkedin_person_uri(normalized_url: str) -> str:
+    return individual_uri(
+        str(ABI), "Person", f"linkedin-{linkedin_key(normalized_url)}"
+    )
+
+
+def linkedin_profile_slug(normalized_url: str) -> str:
+    return f"li-{linkedin_key(normalized_url)}"
+
+
+def parse_connected_on(value: str | None) -> date | None:
+    if not value:
+        return None
+    for fmt in _DATE_FORMATS:
+        try:
+            return datetime.strptime(value.strip(), fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+class KnownPerson(BaseModel):
+    """A person already in a people graph, found by their LinkedIn URL."""
+
+    uri: str
+    slug: str | None = None
+
+
+@dataclass
+class ConnectionsImportStats:
+    rows: int = 0
+    created: int = 0
+    matched: int = 0
+    skipped: int = 0
+    skipped_reasons: dict[str, int] = field(default_factory=dict)
+
+    def skip(self, reason: str) -> None:
+        self.skipped += 1
+        self.skipped_reasons[reason] = self.skipped_reasons.get(reason, 0) + 1
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "rows": self.rows,
+            "created": self.created,
+            "matched": self.matched,
+            "skipped": self.skipped,
+            "skipped_reasons": dict(self.skipped_reasons),
+        }
 
 
 @dataclass
 class ActOfConnectionsOnLinkedInExportPipelineConfiguration(PipelineConfiguration):
-    """Configuration for ActOfConnectionsOnLinkedInExportPipeline.
+    """Where the graph goes, if anywhere.
 
-    Attributes:
-        triple_store (ITripleStoreService): The triple store service
-        linkedin_export_configuration (LinkedInExportIntegrationConfiguration): The LinkedIn export integration configuration
-        limit (int | None): The limit of rows to process
-        workers (int): Number of worker threads for parallel processing
+    Both or neither: with a store and a graph name, ``run`` inserts the graph
+    there; otherwise it only returns it. There is no default graph.
     """
 
-    triple_store: ITripleStoreService
-    linkedin_export_configuration: LinkedInExportIntegrationConfiguration
-    linkedin_export_profile_pipeline_configuration: (
-        LinkedInExportProfilePipelineConfiguration
-    )
-    limit: int | None = None
-    workers: int = 20
+    triple_store: ITripleStoreService | None = None
+    graph_name: str | None = None
 
 
 class ActOfConnectionsOnLinkedInExportPipelineParameters(PipelineParameters):
-    """Parameters for LinkedInExportConnectionsPipeline.
-
-    Attributes:
-        file_name (str): Name of the CSV file to process
-    """
-
-    person_name: Annotated[
-        str,
+    owner_uri: Annotated[
+        str, Field(description="IRI of the abi:Person who owns the export")
+    ]
+    owner_name: Annotated[
+        str, Field(min_length=1, description="Full name of the export owner")
+    ]
+    owner_slug: Annotated[
+        str | None,
+        Field(description="profile_slug of the owner, when they have one already"),
+    ] = None
+    rows: Annotated[
+        list[dict[str, str]],
         Field(
-            description="LinkedIn public URL of the profile to process",
+            description="Rows of Connections.csv, as read_connections_csv returns them"
         ),
     ]
-    file_name: Annotated[
-        str,
+    source_path: Annotated[
+        str, Field(description="Where the Connections.csv the rows come from is kept")
+    ]
+    known_people: Annotated[
+        dict[str, KnownPerson],
         Field(
-            description="Name of the CSV file to process from the LinkedIn export",
+            description="People already in the people graphs, keyed on their normalized LinkedIn URL"
         ),
-    ] = "Connections.csv"
+    ] = {}
 
 
 class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
-    """Pipeline for importing data from Excel tables to the triple store."""
-
     __configuration: ActOfConnectionsOnLinkedInExportPipelineConfiguration
-    __sparql_utils: SPARQLUtils
 
     def __init__(
         self, configuration: ActOfConnectionsOnLinkedInExportPipelineConfiguration
     ):
         super().__init__(configuration)
         self.__configuration = configuration
-        self.__linkedin_export_integration = LinkedInExportIntegration(
-            configuration.linkedin_export_configuration
-        )
-        self.__sparql_utils = SPARQLUtils(configuration.triple_store)
+        self.stats = ConnectionsImportStats()
 
-    def get_person_entity_from_name(self, person_name: str) -> Person:
-        """
-        Get person URI and name using the public_url property from LinkedInProfilePage.
-        If not found, creates a new Person individual in the triple store.
-        Returns: (URIRef, label) if created, or (URIRef, label) if found, or (None, None)
-        """
-        sparql_query = """
-        PREFIX linkedin: <http://ontology.naas.ai/abi/linkedin/>
-        PREFIX abi: <http://ontology.naas.ai/abi/>
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX cco: <https://www.commoncoreontologies.org/>
+    def build(
+        self, parameters: ActOfConnectionsOnLinkedInExportPipelineParameters
+    ) -> tuple[Graph, ConnectionsImportStats]:
+        context = PeopleGraphContext(creator=CREATOR)
+        stats = ConnectionsImportStats(rows=len(parameters.rows))
 
-        SELECT ?personUri ?personName
-        WHERE {{
-            ?person a cco:ont00001262 ; # Person
-                   rdfs:label ?personName .
-            FILTER(CONTAINS(LCASE(STR(?personName)), LCASE("{person_name}")))
-        }}
-        """.format(person_name=person_name.replace('"', '\\"'))
-        results = self.__sparql_utils.results_to_list(
-            self.__configuration.triple_store.query(sparql_query)
+        first, _, last = parameters.owner_name.strip().partition(" ")
+        owner = context.ensure_person(first, last, uri=parameters.owner_uri)
+        if parameters.owner_slug:
+            context.set_profile_slug(owner, parameters.owner_slug)
+        owner_key = parameters.owner_uri.rstrip("/").rsplit("/", 1)[-1]
+
+        export_file = ProfileDocument(
+            _uri=individual_uri(str(LINKEDIN), "ConnectionsExportFile", owner_key),
+            label=f"LinkedIn connections export - {owner.label}",
+            source_url=parameters.source_path,
+            is_profile_document_of=[owner._uri],
+            created=utc_now(),
+            creator=CREATOR,
         )
-        if results and results[0].get("personUri"):
-            return Person(
-                _uri=str(results[0]["personUri"]), label=results[0]["personName"]
+        context.graph += export_file.rdf()
+        context.graph.add(
+            (URIRef(export_file._uri), RDF.type, LINKEDIN.ConnectionsExportFile)
+        )
+        context.graph.add(
+            (URIRef(owner._uri), ABI.hasProfileDocument, URIRef(export_file._uri))
+        )
+
+        seen: set[str] = set()
+        for row in parameters.rows:
+            url = normalize_linkedin_url(row.get("URL"))
+            if url is None:
+                stats.skip("no_linkedin_url")
+                continue
+            if url in seen:
+                stats.skip("duplicate_row")
+                continue
+            given = (row.get("First Name") or "").strip()
+            family = (row.get("Last Name") or "").strip()
+            if not (given or family):
+                stats.skip("no_name")
+                continue
+            seen.add(url)
+
+            known = parameters.known_people.get(url)
+            if known is not None and known.uri == owner._uri:
+                stats.skip("owner")
+                continue
+            uri = known.uri if known else linkedin_person_uri(url)
+            person = context.ensure_person(given, family, uri=uri)
+            person_key = f"li-{linkedin_key(url)}"
+            if known:
+                stats.matched += 1
+                if known.slug:
+                    context.set_profile_slug(person, known.slug)
+            else:
+                stats.created += 1
+                context.set_profile_slug(person, linkedin_profile_slug(url))
+            context.set_contact_details(
+                person,
+                email=(row.get("Email Address") or "").strip() or None,
+                linkedin_url=url,
             )
 
-        # If not found, create individual in the graph
-        person_uri = ABI[str(uuid.uuid4())]
-        return Person(_uri=str(person_uri), label=person_name, given_name=person_name)
-
-    def generate_graph_date(
-        self,
-        date: datetime | str,
-        date_format: str = "%d %b %Y",
-        target_date_format: str = "%Y-%m-%dT%H:%M:%S.%fZ",
-    ) -> ISO8601UTCDateTime:
-        """Generates a URI for a date based on the given datetime object using ISO8601UTCDateTime ontology class."""
-        if isinstance(date, datetime):
-            date_str = date.strftime(target_date_format)
-            date_epoch = int(date.timestamp() * 1000)
-            date_uri = ABI[str(date_epoch)]  # Create URI using timestamp
-        elif isinstance(date, str):
-            date_str = datetime.strptime(date, date_format).replace(tzinfo=UTC).strftime(target_date_format)
-            date_uri = ABI[date_str]
-
-        # Use ontology class to generate date entity
-        date_entity = ISO8601UTCDateTime(_uri=str(date_uri), label=date_str)  # type: ignore[call-arg]
-        return date_entity
-
-    def _process_row(
-        self,
-        row: dict,
-        row_index: int,
-        total_rows: int,
-        init_person_uri: str,
-        init_person_name: str,
-        export_file_uri: str,
-    ) -> Graph:
-        """
-        Process a single row from the CSV file and create entities with relationships.
-        Returns a graph with all entities from this row, ready to be inserted.
-
-        Args:
-            row: The row data as a dictionary
-            row_index: The index of the row (0-based)
-            total_rows: Total number of rows being processed
-            init_person_uri: URI of the person entity whose connections are being imported
-            init_person_name: Name of the initial person
-            export_file_uri: URI of the ConnectionsExportFile entity
-
-        Returns:
-            Graph containing all entities created from this row
-        """
-
-        print(
-            f"🔄 Worker thread processing row {row_index + 1}/{total_rows} "
-            f"(Thread: {threading.current_thread().name})"
-        )
-
-        # Get variables from row
-        first_name = row.get("First Name", UNKNOWN_VALUE).strip()
-        last_name = row.get("Last Name", UNKNOWN_VALUE).strip()
-        url = row.get("URL", UNKNOWN_VALUE).strip()
-        email_address = row.get("Email Address", UNKNOWN_VALUE).strip()
-        company = row.get("Company", UNKNOWN_VALUE).strip()
-        position = row.get("Position", UNKNOWN_VALUE).strip()
-        connected_on_str = row.get("Connected On", UNKNOWN_VALUE).strip()
-
-        # ============================================================
-        # PHASE 1: Create all entities (without relationships)
-        # ============================================================
-
-        # Create date entity
-        date_entity: ISO8601UTCDateTime | None = None
-        try:
-            connected_on_date = datetime.strptime(connected_on_str, "%d %b %Y").replace(tzinfo=UTC)
-            date_entity = self.generate_graph_date(connected_on_date)
-        except Exception as e:  # noqa: BLE001
-            logger.warning(
-                f"Could not parse 'Connected On' date '{connected_on_str}': {e}"
+            self._add_connection(
+                context,
+                owner=owner,
+                owner_key=owner_key,
+                person=person,
+                person_key=person_key,
+                connected_on=parse_connected_on(row.get("Connected On")),
+                export_file=export_file,
             )
-            date_entity = self.generate_graph_date(connected_on_str)
 
-        # Create person entity
-        person_name = f"{first_name} {last_name}"
-        person_entity = Person(
-            label=person_name,
-            first_name=first_name,
-            last_name=last_name,
-            given_name=person_name,
+            company = (row.get("Company") or "").strip()
+            position = (row.get("Position") or "").strip()
+            if company and position:
+                context.add_working(
+                    person=person,
+                    org=context.ensure_org(company),
+                    site=None,
+                    skills=[],
+                    profile=export_file,
+                    title=position,
+                    mission_label=position,
+                    mission_content=position,
+                    employment_type=None,
+                    start=None,
+                    end=None,
+                    duration=None,
+                    person_key=person_key,
+                )
+
+        bind_graph_prefixes(context.graph)
+        context.graph.bind("linkedin", LINKEDIN)
+        return context.graph, stats
+
+    @staticmethod
+    def _add_connection(
+        context: PeopleGraphContext,
+        *,
+        owner,
+        owner_key: str,
+        person,
+        person_key: str,
+        connected_on: date | None,
+        export_file: ProfileDocument,
+    ) -> str:
+        key = f"{owner_key}--{person_key}"
+        act_uri = individual_uri(str(LINKEDIN), "ActOfConnection", key)
+        temporal_uri = context.add_temporal_region(
+            key=f"{key}-connection",
+            label=f"Since {connected_on.strftime('%d %b %Y')}" if connected_on else "",
+            start=connected_on,
+            end=None,
         )
-
-        # Create profile page entity
-        profile_page_entity = ProfilePage(label=url)
-
-        # Create organization entity
-        organization_entity = Organization(label=company)
-        linkedin_org_entity = CurrentOrganization(label=company)
-
-        # Step 4: Create LinkedIn Current Public URL
-        linkedin_public_url_entity = CurrentPublicURL(label=url)
-
-        # Create LinkedIn Email Address
-        email_entity = EmailAddress(label=email_address)
-
-        # Step 6: Create LinkedIn Current Job Position
-        position_entity = CurrentJobPosition(label=position)
-
-        # Create connection role for initial person
-        connection_role_initial_entity = ConnectionRole(label=UNKNOWN_VALUE)
-
-        # Create act of connection entity
-        act_of_connection_label = f"{init_person_name} connected with {person_name} on LinkedIn the {connected_on_str}"
-        act_of_connection_entity = ActOfConnection(label=act_of_connection_label)
-
-        # Create URI references for shared entities
-        init_person_uriref = URIRef(init_person_uri)
-        export_file_uriref = URIRef(export_file_uri)
-
-        # ============================================================
-        # PHASE 2: Set all object properties between entities based on schema
-        # ============================================================
-
-        # WHAT
-        act_of_connection_entity.involves_agent = [init_person_uriref, person_entity]
-        act_of_connection_entity.connected_at = date_entity
-        act_of_connection_entity.concretizes = [export_file_uriref, profile_page_entity]
-        act_of_connection_entity.realizes = [connection_role_initial_entity]
-        act_of_connection_entity.has_associated_quality = [
-            email_entity,
-            position_entity,
-            linkedin_org_entity,
-            linkedin_public_url_entity,
-        ]
-
-        # WHO
-        person_entity.is_owner_of = [profile_page_entity]
-        person_entity.has_public_url = [linkedin_public_url_entity]
-        person_entity.has_email_address = [email_entity]
-        person_entity.has_current_job_position = [position_entity]
-        person_entity.has_current_organization = [linkedin_org_entity]
-        person_entity.has_connection_role = [connection_role_initial_entity]
-        # Note: init_person_entity relationship is handled via URI reference
-        organization_entity.holds_linkedin_quality = [linkedin_org_entity]
-
-        # HOW WE KNOW
-        profile_page_entity.is_owned_by = [person_entity]
-        profile_page_entity.is_concretized_by = [act_of_connection_entity]
-
-        # HOW IT IS
-        email_entity.inheres_in = [person_entity]
-        email_entity.concretizes = [export_file_uriref]
-        position_entity.inheres_in = [person_entity]
-        position_entity.concretizes = [export_file_uriref, profile_page_entity]
-        linkedin_org_entity.inheres_in = [person_entity, organization_entity]
-        linkedin_org_entity.concretizes = [export_file_uriref]
-        organization_entity.holds_linkedin_quality = [linkedin_org_entity]
-        linkedin_public_url_entity.inheres_in = [person_entity]
-        linkedin_public_url_entity.concretizes = [export_file_uriref]
-
-        # WHY
-        connection_role_initial_entity.inheres_in = [init_person_uriref, person_entity]
-        connection_role_initial_entity.has_realization = [act_of_connection_entity]
-
-        # Generate graph from all entities created in this row
-        row_graph = Graph()
-        row_graph.bind("linkedin", LINKEDIN)
-        row_entities = [
-            act_of_connection_entity,
-            person_entity,
-            profile_page_entity,
-            organization_entity,
-            linkedin_org_entity,
-            linkedin_public_url_entity,
-            email_entity,
-            position_entity,
-            connection_role_initial_entity,
-        ]
-        for entity in row_entities:
-            if entity is not None:
-                entity_graph = entity.rdf()
-                row_graph += entity_graph
-
-        return row_graph
+        roles = []
+        for suffix, bearer in (("owner", owner), ("connection", person)):
+            role = ConnectionRole(
+                _uri=individual_uri(str(LINKEDIN), "ConnectionRole", f"{key}-{suffix}"),
+                label=f"LinkedIn connection - {bearer.label}",
+                is_connection_role_of=[bearer._uri],
+                created=utc_now(),
+                creator=CREATOR,
+            )
+            context.graph += role.rdf()
+            context.graph.add(
+                (URIRef(bearer._uri), LINKEDIN.hasConnectionRole, URIRef(role._uri))
+            )
+            roles.append(role._uri)
+        act = ActOfConnection(
+            _uri=act_uri,
+            label=f"{owner.label} connected with {person.label}",
+            hasParticipant=[owner._uri, person._uri],
+            has_connection_owner=[owner._uri],
+            has_connected_person=[person._uri],
+            occupiesTemporalRegion=[temporal_uri] if temporal_uri else None,
+            realizes=roles,
+            hasSourceDocument=[export_file._uri],
+            created=utc_now(),
+            creator=CREATOR,
+        )
+        context.graph += act.rdf()
+        context.graph.add(
+            (URIRef(owner._uri), LINKEDIN.isConnectionOwnerIn, URIRef(act_uri))
+        )
+        context.graph.add(
+            (URIRef(person._uri), LINKEDIN.isConnectedPersonIn, URIRef(act_uri))
+        )
+        return act_uri
 
     def run(self, parameters: PipelineParameters) -> Graph:
         if not isinstance(
             parameters, ActOfConnectionsOnLinkedInExportPipelineParameters
         ):
             raise TypeError(
-                "Parameters must be of type ActOfConnectionsOnLinkedInExportPipelineParameters"
+                "ActOfConnectionsOnLinkedInExportPipeline.run expects "
+                "ActOfConnectionsOnLinkedInExportPipelineParameters"
             )
-
-        # Create shared entities that will be reused across all rows
-        person_entity = self.get_person_entity_from_name(parameters.person_name)
-
-        # Create linkedin location entity
-        linkedin_location_entity = Location(label=UNKNOWN_VALUE)
-
-        # Create export file entity
-        export_file_label = f"LinkedIn Connections Export File - {parameters.file_name}"
-        export_file_entity = ConnectionsExportFile(
-            label=export_file_label,
-            file_path=self.__configuration.linkedin_export_configuration.export_file_path,
-        )
-
-        # Create organization entity
-        linkedin_org_label = "LinkedIn"
-        linkedin_org_entity = Organization(label=linkedin_org_label)
-
-        # Create relationships between shared entities
-        person_entity.is_located_in = [linkedin_location_entity]
-        export_file_entity.is_owned_by = [linkedin_org_entity]
-        linkedin_org_entity.is_owner_of = [export_file_entity]
-
-        # Generate graph for shared entities and insert them once
-        logger.debug("==> Generating graph for shared entities")
-        shared_graph = Graph()
-        shared_graph.bind("linkedin", LINKEDIN)
-        shared_entities = [
-            person_entity,
-            linkedin_location_entity,
-            linkedin_org_entity,
-            export_file_entity,
-        ]
-        for entity in shared_entities:
-            if entity is not None:
-                entity_graph = entity.rdf()
-                shared_graph += entity_graph
-
-        # Insert shared entities into triple store
-        logger.debug("==> Inserting shared entities into triple store")
-        if len(shared_graph) > 0:
-            self.__configuration.triple_store.insert(
-                shared_graph,
-                graph_name=URIRef("http://ontology.naas.ai/graph/default"),
-            )
-
-        # Store URIs for reuse in row processing
-        init_person_uri = person_entity._uri
-        init_person_name = person_entity.label
-        export_file_uri = export_file_entity._uri
-
-        # Read CSV File
-        logger.debug(f"==> Reading CSV file '{parameters.file_name}'")
-        df = self.__linkedin_export_integration.read_csv(parameters.file_name).fillna(
-            UNKNOWN_VALUE
-        )
-        if len(df) == 0:
-            logger.warning(
-                f"❌ No rows to process in CSV file '{parameters.file_name}'"
-            )
-            return Graph()
-        logger.debug(f"✅ {len(df)} rows in CSV file to be processed")
-
-        # Processing rows from CSV file with multi-worker threading
-        print(
-            f"==> Starting parallel processing with {self.__configuration.workers} workers"
-        )
-        if self.__configuration.limit is not None:
-            df = df[: self.__configuration.limit]
-            logger.debug(f"Limited to {self.__configuration.limit} rows")
-
-        total_rows = len(df)
-        processed_count = 0
-        error_count = 0
-        start_time = time.time()
-
-        # Process rows in parallel using ThreadPoolExecutor
-        logger.debug(f"Submitting {total_rows} tasks to thread pool...")
-        with ThreadPoolExecutor(max_workers=self.__configuration.workers) as executor:
-            # Submit all tasks
-            future_to_row = {
-                executor.submit(
-                    self._process_row,
-                    row.to_dict(),
-                    idx,
-                    total_rows,
-                    init_person_uri,
-                    init_person_name,
-                    export_file_uri,
-                ): (idx, row)
-                for idx, (_, row) in enumerate(df.iterrows())
-            }
-            print(
-                f"✅ Submitted {len(future_to_row)} tasks to {self.__configuration.workers} workers"
-            )
-
-            # Collect results as they complete and insert immediately
-            logger.debug("Waiting for tasks to complete and inserting results...")
-            for future in as_completed(future_to_row):
-                idx, _row = future_to_row[future]
-                try:
-                    row_graph = future.result()
-                    # Insert row entities immediately into triple store
-                    if len(row_graph) > 0:
-                        self.__configuration.triple_store.insert(
-                            row_graph,
-                            graph_name=URIRef("http://ontology.naas.ai/graph/default"),
-                        )
-                    processed_count += 1
-                    if processed_count % 10 == 0 or processed_count == total_rows:
-                        elapsed = time.time() - start_time
-                        rate = processed_count / elapsed if elapsed > 0 else 0
-                        print(
-                            f"✅ Progress: {processed_count}/{total_rows} rows processed and inserted "
-                            f"({rate:.2f} rows/sec, {elapsed:.2f}s elapsed)"
-                        )
-                except Exception as e:  # noqa: BLE001
-                    error_count += 1
-                    logger.error(
-                        f"❌ Error processing row {idx + 1}/{total_rows}: {e}",
-                        exc_info=True,
-                    )
-                    continue
-
-        elapsed_time = time.time() - start_time
-        avg_rate = processed_count / elapsed_time if elapsed_time > 0 else 0
-        print(
-            f"✅ Completed processing: {processed_count}/{total_rows} rows successful, "
-            f"{error_count} errors, {elapsed_time:.2f}s total ({avg_rate:.2f} rows/sec)"
-        )
-
-        # Return the shared graph (row graphs were already inserted)
-        return shared_graph
+        graph, self.stats = self.build(parameters)
+        store = self.__configuration.triple_store
+        graph_name = self.__configuration.graph_name
+        if store is not None and graph_name and len(graph) > 0:
+            store.insert(graph, graph_name=URIRef(graph_name))
+        return graph
 
     def as_tools(self) -> list[BaseTool]:
+        def _run(**kwargs: object) -> str:
+            params = ActOfConnectionsOnLinkedInExportPipelineParameters.model_validate(
+                kwargs
+            )
+            graph = self.run(params)
+            return f"Built {len(graph)} triples: {self.stats.as_dict()}"
+
         return [
-            StructuredTool(
+            StructuredTool.from_function(
+                func=_run,
                 name="linkedin_export_connections_import_csv",
-                description="Import LinkedIn Connections data from a CSV file to the triple store",
-                func=lambda **kwargs: self.run(
-                    ActOfConnectionsOnLinkedInExportPipelineParameters(**kwargs)
+                description=(
+                    "Register the connections of a LinkedIn Connections.csv as acts "
+                    "of connection between the export owner and each connection."
                 ),
                 args_schema=ActOfConnectionsOnLinkedInExportPipelineParameters,
             )
@@ -468,38 +398,6 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
         description_stream: str = "",
         tags: list[str | Enum] | None = None,
     ) -> None:
-        if tags is None:
-            tags = []
-
-
-if __name__ == "__main__":
-    from naas_abi_core.engine.Engine import Engine
-
-    engine = Engine()
-    engine.load(module_names=["naas_abi_marketplace.applications.linkedin"])
-
-    module: ABIModule = ABIModule.get_instance()
-
-    linkedin_export_configuration = LinkedInExportIntegrationConfiguration(
-        export_file_path="storage/datastore/linkedin/export/alice-dupont/Complete_LinkedInDataExport_11-06-2025.zip (1).zip"
-    )
-    linkedin_export_profile_pipeline_configuration = (
-        LinkedInExportProfilePipelineConfiguration(
-            triple_store=module.engine.services.triple_store,
-            linkedin_export_configuration=linkedin_export_configuration,
-        )
-    )
-    person_name = "Alice Dupont"
-    limit = None
-
-    pipeline = ActOfConnectionsOnLinkedInExportPipeline(
-        ActOfConnectionsOnLinkedInExportPipelineConfiguration(
-            triple_store=module.engine.services.triple_store,
-            linkedin_export_configuration=linkedin_export_configuration,
-            linkedin_export_profile_pipeline_configuration=linkedin_export_profile_pipeline_configuration,
-            limit=limit,
-        )
-    )
-    graph = pipeline.run(
-        ActOfConnectionsOnLinkedInExportPipelineParameters(person_name=person_name)
-    )
+        # The import is driven by the app that receives the upload: a generic
+        # route here could not know whose export it is.
+        return None
