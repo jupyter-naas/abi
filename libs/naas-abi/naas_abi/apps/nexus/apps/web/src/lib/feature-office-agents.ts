@@ -35,6 +35,7 @@ export const FEATURE_OFFICE_AGENTS: Partial<Record<FeatureKey, FeatureOfficeAgen
   'settings.organization': { name: 'Settings', className: 'SettingsAgent' },
   agents: { name: 'Agent Catalog', className: 'AgentCatalogAgent' },
   skills: { name: 'Skills', className: 'SkillsAgent' },
+  tasks: { name: 'Tasks', className: 'TasksAgent' },
 };
 
 type OfficeAgentLike = { name?: string; class_name?: string | null };

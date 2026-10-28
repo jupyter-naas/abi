@@ -94,6 +94,12 @@ FEATURE_AGENTS: tuple[FeatureAgentSpec, ...] = (
         "the workspace's agents roster",
     ),
     FeatureAgentSpec(
+        "Tasks",
+        "TasksAgent",
+        ("tasks",),
+        "workspace tasks: creating, moving, assigning, commenting, iterations, the activity feed, tasks settings",
+    ),
+    FeatureAgentSpec(
         "Skills",
         "SkillsAgent",
         ("skills",),

@@ -22,8 +22,10 @@ write those changes through ORM objects instead.
 
 from __future__ import annotations
 
+import contextvars
 import json
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from naas_abi.apps.nexus.apps.api.app.models import (
@@ -262,6 +264,15 @@ def _warn_bypass(statement: str) -> None:
     )
 
 
+# One worker keeps events in commit order. Publishing crosses the bus and can
+# queue behind bulk traffic, so it never runs on the committing (event-loop) thread.
+_PUBLISHER = ThreadPoolExecutor(max_workers=1, thread_name_prefix="identity-events")
+
+
+def _publish_in_background(job: Callable[[], None]) -> None:
+    _PUBLISHER.submit(contextvars.copy_context().run, job)
+
+
 class IdentityEventCapture:
     """Install/uninstall the ORM listeners. One instance per publisher."""
 
@@ -271,8 +282,10 @@ class IdentityEventCapture:
         site_iri: str | None = None,
         on_published: Callable[[int], None] | None = None,
         on_bypass: Callable[[str], None] | None = None,
+        dispatch: Callable[[Callable[[], None]], Any] = _publish_in_background,
     ):
         self._publish = publish
+        self._dispatch = dispatch
         self._site_iri = site_iri
         self._on_published = on_published
         self._on_bypass = on_bypass or _warn_bypass
@@ -337,6 +350,10 @@ class IdentityEventCapture:
 
     def _after_commit(self, session: Session) -> None:
         pending: list[NexusIdentityEvent] = session.info.pop(self._key, [])
+        if pending:
+            self._dispatch(lambda: self._publish_pending(pending))
+
+    def _publish_pending(self, pending: list[NexusIdentityEvent]) -> None:
         published = 0
         for built in pending:
             try:

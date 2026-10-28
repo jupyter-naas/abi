@@ -31,6 +31,7 @@ import {
 import { useFeaturePaneStore } from '@/stores/feature-pane';
 import { useModelsStore, modelDisplayName } from '@/stores/models';
 import { noteSkillsToolResult, useSkillsStore, type Skill } from '@/stores/skills';
+import { noteTasksToolResult } from '@/stores/tasks';
 import { useSecretsStore } from '@/stores/secrets';
 import { dispatchDocumentUpdated, isDocumentsWriteTool, useDocumentsStore } from '@/stores/documents';
 import { dispatchSlidesDeckUpdated, isSlidesWriteTool, useSlidesStore } from '@/stores/slides';
@@ -2303,6 +2304,12 @@ export function ChatInterface({
           noteAppProjectToolResult(target.rawName || target.toolName || '', output);
           // After the Skills agent saves a skill, /<slug> must resolve at once.
           noteSkillsToolResult(
+            target.rawName || target.toolName || '',
+            output,
+            useWorkspaceStore.getState().currentWorkspaceId,
+          );
+          // After the Tasks agent changes tasks, the board beside the pane shows it.
+          noteTasksToolResult(
             target.rawName || target.toolName || '',
             output,
             useWorkspaceStore.getState().currentWorkspaceId,

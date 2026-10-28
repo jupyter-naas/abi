@@ -186,10 +186,11 @@ export interface GitCommit {
 }
 
 // Sidebar expandable sections
-export type SidebarSection = 'home' | 'workspaces' | 'maps' | 'chat' | 'search' | 'files' | 'datasets' | 'code' | 'slides' | 'documents' | 'sheets' | 'ontology' | 'graph' | 'apps' | 'marketplace' | 'settings' | 'infrastructure';
+export type SidebarSection = 'home' | 'workspaces' | 'maps' | 'chat' | 'search' | 'files' | 'datasets' | 'code' | 'slides' | 'documents' | 'sheets' | 'tasks' | 'ontology' | 'graph' | 'apps' | 'marketplace' | 'settings' | 'infrastructure';
 
 // Lab left the dock; Events moved to Platform Settings › System › Events.
-const RETIRED_PANEL_SECTIONS = new Set<string>(['lab', 'events']);
+// `board` is the panel id Tasks had before its rename.
+const RETIRED_PANEL_SECTIONS = new Set<string>(['lab', 'events', 'board']);
 
 /** Home is a full-bleed desk. Workspaces is a mark-owned directory. Neither is a last-panel restore target. */
 export function isTransientPanelSection(section: SidebarSection | null): boolean {
