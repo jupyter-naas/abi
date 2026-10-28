@@ -17,6 +17,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     IAMNotFoundError,
     KeyRefusedError,
     PermissionDeniedError,
+    ResourceNotFoundError,
     RevisionConflictError,
 )
 from naas_abi_core.services.iam.IAMService import (
@@ -1353,15 +1354,12 @@ def test_a_retired_managed_policy_and_its_attachments_go_at_boot(h):
         h.iam.store.get_policy(old.id)
 
 
-def test_the_retired_feature_policies_and_their_attachments_go_at_boot(h):
-    """An older version generated ``builtin.features.<key>`` from a deployment's
-    settings and attached them beside each role: Nexus turns them into its
-    workspaces' policies, and IAM drops them at boot."""
-    from naas_abi_core.services.iam.IAMPorts import Attachment, Policy
+def _old_feature_policy(policy_id="builtin.features.org-1.member"):
+    from naas_abi_core.services.iam.IAMPorts import Policy
     from naas_abi_core.services.iam.policy import PolicyDocument, Statement
 
-    old = Policy(
-        id="builtin.features.org-1.member",
+    return Policy(
+        id=policy_id,
         name="Features of org-1.member",
         document=PolicyDocument(
             statements=(
@@ -1370,13 +1368,137 @@ def test_the_retired_feature_policies_and_their_attachments_go_at_boot(h):
         ),
         managed=True,
     )
+
+
+def test_the_feature_policies_an_older_version_made_stay_until_moved(h):
+    """An older version generated ``builtin.features.*`` and attached them beside
+    each role: they stay in force at boot (nothing is lost before the module that
+    made them moved them), and ``retire_policies`` drops them with what is
+    attached once it has."""
+    from naas_abi_core.services.iam.IAMPorts import Attachment
+
+    old = _old_feature_policy()
     h.iam.store.put_managed_policy(old)
     bob = h.user("bob")
     h.iam.store.attach(Attachment("att_old", old.id, bob.id, "abi:org-1:ws-1"))
-    assert h.allowed(QUERY, graph("a", "org-1", "ws-1"), bob)
     h.iam.bootstrap()
     h.iam.invalidate()
+    assert h.allowed(QUERY, graph("a", "org-1", "ws-1"), bob)
+    with as_service_account("engine"):
+        assert [p.id for p in h.iam.retired_policies()] == [old.id]
+        with pytest.raises(ValueError):
+            h.iam.retire_policies([roles.MEMBER])
+        assert h.iam.retire_policies([old.id]) == [old.id]
+        assert h.iam.retire_policies([old.id]) == []
     assert not h.allowed(QUERY, graph("a", "org-1", "ws-1"), bob)
     with pytest.raises(IAMNotFoundError):
         h.iam.store.get_policy(old.id)
     assert h.iam.store.list_attachments(policy_id=old.id) == []
+
+
+def test_retiring_needs_the_right_to_delete(h):
+    h.iam.store.put_managed_policy(_old_feature_policy())
+    bob = h.user("bob")
+    with h.as_(bob), pytest.raises((PermissionDeniedError, ResourceNotFoundError)):
+        h.iam.retire_policies(["builtin.features.org-1.member"])
+    assert h.iam.store.get_policy("builtin.features.org-1.member")
+
+
+def test_an_old_companion_follows_its_role_out(h):
+    """Until it is moved, a retired policy attached beside a role leaves with
+    the role, as the older version's sync detached it."""
+    from naas_abi_core.services.iam.IAMPorts import Attachment
+
+    old = _old_feature_policy()
+    h.iam.store.put_managed_policy(old)
+    bob = h.user("bob")
+    h.attach(roles.MEMBER, bob.id, "abi:org-1:ws-1")
+    h.iam.store.attach(Attachment("att_old", old.id, bob.id, "abi:org-1:ws-1"))
+    with as_service_account("engine"):
+        h.iam.detach_policy(roles.MEMBER, bob.id, "abi:org-1:ws-1")
+    assert h.iam.store.list_attachments(policy_id=old.id) == []
+
+
+def _legacy_nexus_catalog() -> ActionCatalog:
+    """The ``nexus`` catalog as an older version stored it: no flags, no format."""
+    found = ActionCatalog(
+        service="nexus",
+        version=6,
+        resource_types=(
+            ResourceType("workspace", id="singleton"),
+            ResourceType("feature"),
+        ),
+        actions=(
+            ActionSpec("GetWorkspace", "read", ("workspace",)),
+            ActionSpec("DeleteWorkspace", "admin", ("workspace",)),
+            ActionSpec("UseFeature", "read", ("feature",)),
+        ),
+    )
+    data = found.to_dict()
+    del data["format"]
+    return ActionCatalog.from_dict(data)
+
+
+def _role_actions(iam, role):
+    return {a for s in iam.get_policy(role).document.statements for a in s.actions}
+
+
+def test_a_catalog_stored_before_the_flags_widens_no_role(h):
+    """IAM loads the stored catalogs at boot. One stored before the flags says
+    nothing of policy-only types or owner-only actions: until it is registered
+    again its service holds nothing for the roles, so no role reaches a feature
+    nor an admin the owners' delete, before the registration or after one that
+    fails."""
+    store = IAMStoreMemory()
+    legacy = _legacy_nexus_catalog()
+    assert legacy.format == 1 and not legacy.flags_known
+    store.put_catalog(legacy)
+    iam = IAMService(store)
+    iam.bootstrap()
+
+    def nexus_of(role):
+        with as_service_account("engine"):
+            return {a for a in _role_actions(iam, role) if a.startswith("nexus:")}
+
+    for role in roles.ROLES:
+        assert nexus_of(role) == set(), role
+    newer = ActionCatalog(
+        service="nexus",
+        version=7,
+        resource_types=(ResourceType("workspace", id="singleton"),),
+        actions=(ActionSpec("GetWorkspace", "read", ("workspace",)),),
+    )
+    with as_service_account("engine"):
+        policy = iam.create_policy(
+            "names an action v7 drops",
+            {
+                "version": "2026-10-13",
+                "statements": [
+                    {"effect": "Allow", "actions": ["nexus:UseFeature"], "resources": ["*"]}
+                ],
+            },
+        )
+        assert policy.id
+        with pytest.raises(IAMConflictError):
+            iam.register_catalog(newer)
+    for role in roles.ROLES:
+        assert nexus_of(role) == set(), role
+    flagged = ActionCatalog(
+        service="nexus",
+        version=7,
+        resource_types=(
+            ResourceType("workspace", id="singleton"),
+            ResourceType("feature", policy_only=True),
+        ),
+        actions=(
+            ActionSpec("GetWorkspace", "read", ("workspace",)),
+            ActionSpec("DeleteWorkspace", "admin", ("workspace",), owner_only=True),
+            ActionSpec("UseFeature", "read", ("feature",)),
+        ),
+    )
+    with as_service_account("engine"):
+        iam.register_catalog(flagged)
+    assert "nexus:GetWorkspace" in nexus_of(roles.VIEWER)
+    assert "nexus:UseFeature" not in nexus_of(roles.OWNER)
+    assert "nexus:DeleteWorkspace" not in nexus_of(roles.ADMIN)
+    assert "nexus:DeleteWorkspace" in nexus_of(roles.OWNER)

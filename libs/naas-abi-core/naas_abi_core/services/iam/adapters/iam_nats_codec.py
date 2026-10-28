@@ -424,6 +424,7 @@ def catalog_to_pb(catalog: ActionCatalog) -> pb.ActionCatalog:
             for a in catalog.actions
         ],
         module=catalog.module,
+        format=catalog.format,
         platform_access=[
             pb.PlatformAccess(
                 resources=list(row.resources),
@@ -466,6 +467,7 @@ def catalog_from_pb(message: pb.ActionCatalog) -> ActionCatalog:
             for a in message.actions
         ),
         module=message.module,
+        format=message.format or 1,
         platform_access=tuple(
             PlatformAccess(
                 resources=tuple(row.resources),

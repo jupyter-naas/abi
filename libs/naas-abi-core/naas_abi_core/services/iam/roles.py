@@ -269,7 +269,11 @@ def _admin_attachment_statements(registry: CatalogRegistry) -> list[Statement]:
 def role_policy(role: str, registry: CatalogRegistry) -> Policy:
     statements: list[Statement] = []
     for catalog in registry.all():
-        statements += _role_statements(role, catalog)
+        # A catalog whose flags are unknown (stored before they existed) holds
+        # nothing for the roles until it is registered again: read as
+        # unflagged, its policy-only types and owner-only actions would widen.
+        if catalog.flags_known:
+            statements += _role_statements(role, catalog)
     if role == ADMIN:
         statements += _admin_attachment_statements(registry)
     return _managed(
@@ -285,7 +289,7 @@ def _catalog_rows(registry: CatalogRegistry) -> list[_PlatformRow]:
     return [
         _platform_row(catalog.service, access)
         for catalog in registry.all()
-        if not catalog.module
+        if not catalog.module and catalog.flags_known
         for access in catalog.platform_access
     ]
 

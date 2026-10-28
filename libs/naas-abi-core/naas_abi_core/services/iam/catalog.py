@@ -25,6 +25,10 @@ Level = Literal["list", "read", "write", "admin"]
 Placement = Literal["placed", "platform"]
 
 LEVELS: tuple[Level, ...] = ("list", "read", "write", "admin")
+# The catalog format: 2 since the flags (``policy_only``, ``owner_only``,
+# ``platform_access``) exist. A catalog stored in format 1 says nothing about
+# them, which must never read as "no type is policy only".
+CATALOG_FORMAT = 2
 _ID_KINDS = ("opaque", "path", "singleton")
 _PLACEMENTS = ("placed", "platform")
 
@@ -88,6 +92,16 @@ class ActionCatalog:
     # What the platform companions of the roles reach of this catalog. A
     # first-party catalog's only: a module's grants nothing to every member.
     platform_access: tuple[PlatformAccess, ...] = ()
+    # The format it was written in. A first-party catalog of an older format
+    # (stored before the flags existed) holds nothing for the built-in roles
+    # until it is registered again (``roles.py``): its flags are unknown.
+    format: int = CATALOG_FORMAT
+
+    @property
+    def flags_known(self) -> bool:
+        """Whether its flags can be read: a module's catalog has none to read
+        (its types are module scopes), a first-party one from format 2."""
+        return bool(self.module) or self.format >= CATALOG_FORMAT
 
     def __post_init__(self) -> None:
         errors = _catalog_errors(self)
@@ -105,6 +119,7 @@ class ActionCatalog:
 
     def to_dict(self) -> dict[str, Any]:
         found: dict[str, Any] = {
+            "format": self.format,
             "service": self.service,
             "version": self.version,
             "resource_types": [
@@ -189,6 +204,8 @@ class ActionCatalog:
                     )
                     for row in data.get("platform_access", ())
                 ),
+                # Stored before the flags: no "format" key.
+                format=int(data.get("format", 1)),
             )
         except (KeyError, TypeError) as exc:
             raise CatalogError(f"Malformed catalog: {exc!r}") from exc

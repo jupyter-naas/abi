@@ -1370,6 +1370,16 @@ class IIAMService(ABC):
         serving engine's IAM only)."""
         raise NotImplementedError("Platform grants are set on the serving engine")
 
+    def retired_policies(self) -> list[Policy]:
+        """The retired managed policies still in force (the serving engine's IAM
+        only): ``roles.RETIRED_POLICY_PREFIXES``."""
+        raise NotImplementedError("Retired policies are moved on the serving engine")
+
+    def retire_policies(self, policy_ids: Iterable[str]) -> list[str]:
+        """Drop retired managed policies once what they granted was moved (the
+        serving engine's IAM only)."""
+        raise NotImplementedError("Retired policies are moved on the serving engine")
+
     # -- service accounts, keys and manifests ----------------------------------
 
     @abstractmethod

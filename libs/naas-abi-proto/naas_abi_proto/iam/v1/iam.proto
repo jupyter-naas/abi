@@ -181,6 +181,9 @@ message ActionCatalog {
   // The module that declared this catalog; empty for a kernel service's.
   string module = 5;
   repeated PlatformAccess platform_access = 6;
+  // The catalog format (services/iam/catalog.py CATALOG_FORMAT); 0 or 1: written
+  // before the flags existed, so a first-party catalog holds nothing for roles.
+  int32 format = 7;
 }
 
 // reason: allow | explicit_deny | implicit_deny | suspended | sealed.

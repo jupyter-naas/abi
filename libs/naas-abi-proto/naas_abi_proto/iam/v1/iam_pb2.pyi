@@ -215,20 +215,22 @@ class PlatformAccess(_message.Message):
     def __init__(self_, resources: _Optional[_Iterable[str]] = ..., viewer: _Optional[_Iterable[str]] = ..., member: _Optional[_Iterable[str]] = ..., self: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class ActionCatalog(_message.Message):
-    __slots__ = ("service", "version", "resource_types", "actions", "module", "platform_access")
+    __slots__ = ("service", "version", "resource_types", "actions", "module", "platform_access", "format")
     SERVICE_FIELD_NUMBER: _ClassVar[int]
     VERSION_FIELD_NUMBER: _ClassVar[int]
     RESOURCE_TYPES_FIELD_NUMBER: _ClassVar[int]
     ACTIONS_FIELD_NUMBER: _ClassVar[int]
     MODULE_FIELD_NUMBER: _ClassVar[int]
     PLATFORM_ACCESS_FIELD_NUMBER: _ClassVar[int]
+    FORMAT_FIELD_NUMBER: _ClassVar[int]
     service: str
     version: int
     resource_types: _containers.RepeatedCompositeFieldContainer[ResourceType]
     actions: _containers.RepeatedCompositeFieldContainer[ActionSpec]
     module: str
     platform_access: _containers.RepeatedCompositeFieldContainer[PlatformAccess]
-    def __init__(self, service: _Optional[str] = ..., version: _Optional[int] = ..., resource_types: _Optional[_Iterable[_Union[ResourceType, _Mapping]]] = ..., actions: _Optional[_Iterable[_Union[ActionSpec, _Mapping]]] = ..., module: _Optional[str] = ..., platform_access: _Optional[_Iterable[_Union[PlatformAccess, _Mapping]]] = ...) -> None: ...
+    format: int
+    def __init__(self, service: _Optional[str] = ..., version: _Optional[int] = ..., resource_types: _Optional[_Iterable[_Union[ResourceType, _Mapping]]] = ..., actions: _Optional[_Iterable[_Union[ActionSpec, _Mapping]]] = ..., module: _Optional[str] = ..., platform_access: _Optional[_Iterable[_Union[PlatformAccess, _Mapping]]] = ..., format: _Optional[int] = ...) -> None: ...
 
 class Decision(_message.Message):
     __slots__ = ("allowed", "visible", "reason")
