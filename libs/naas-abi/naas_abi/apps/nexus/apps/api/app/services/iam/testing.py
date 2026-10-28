@@ -95,11 +95,26 @@ class NexusIam:
             if role not in ("owner", "admin"):
                 return
             scope = f"abi:{org}:*"
-        features = role_features.role_features(
-            self.flags, None if org == NO_ORG else org, self.org_overlays
-        ).get(role, ())
+        features = self.role_features(None if org == NO_ORG else org).get(role, ())
         if features:
             self.give_features(principal_id, features, scope)
+
+    def role_features(self, org: str | None) -> dict[str, tuple[str, ...]]:
+        """``{role: features}`` ``flags`` gave each role in ``org``, within
+        ``enabled_features``: what this world's "Features of <role>" hold."""
+        from naas_abi.apps.nexus.apps.api.app.core.feature_flags import enabled_feature_catalog
+
+        resolved = role_features.resolve_role_baseline(
+            self.flags,
+            organization_id=org,
+            organization_override=self.org_overlays.get(org) if org else None,
+        )
+        return {
+            role: tuple(
+                k for k in enabled_feature_catalog(self.flags) if k in set(resolved.get(role) or ())
+            )
+            for role in role_features.ROLE_NAMES
+        }
 
     def give_features(self, principal_id: str, features: Sequence[str], scope: str) -> str:
         """Attach to a principal, at ``scope``, a policy allowing ``features``

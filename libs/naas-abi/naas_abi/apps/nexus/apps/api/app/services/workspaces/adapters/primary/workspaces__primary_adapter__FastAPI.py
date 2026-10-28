@@ -754,7 +754,8 @@ async def invite_workspace_member(
 
     # Someone with no account yet is invited through an identity provider (see
     # the organization invite); someone who has one is added directly.
-    if await invites.persistence.user_id_by_email(email) is None:
+    existing_user = await invites.persistence.user_id_by_email(email)
+    if existing_user is None:
         workspace = await service.get_workspace(workspace_id)
         organization = (
             await get_organization_service(db).get_organization(workspace.organization_id)
@@ -798,6 +799,23 @@ async def invite_workspace_member(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return invite_result(outcome)
 
+    workspace = await service.get_workspace(workspace_id)
+    # The policies the invitation carries, checked and attached as the inviting
+    # person before anything is made (IAM refuses one they may not attach or do
+    # not hold): a refusal leaves no membership behind.
+    carried: tuple[str, ...] = ()
+    if invite.policy_ids:
+        try:
+            carried = await invites.attach_policies(
+                user_id=existing_user,
+                organization_id=workspace.organization_id if workspace else None,
+                workspace_id=workspace_id,
+                policy_ids=invite.policy_ids,
+                by=current_user.id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     already_member = False
     try:
         member = await service.invite_workspace_member(
@@ -807,6 +825,13 @@ async def invite_workspace_member(
             by=current_user,
         )
     except MembershipDenied as exc:
+        if carried:
+            await invites.detach_policies(
+                user_id=existing_user,
+                organization_id=workspace.organization_id if workspace else None,
+                workspace_id=workspace_id,
+                policy_ids=carried,
+            )
         raise _member_denied(str(exc)) from exc
     except WorkspaceMemberAlreadyExistsError as exc:
         # Re-inviting is how an admin resends the notice that never arrived, so
@@ -821,21 +846,6 @@ async def invite_workspace_member(
 
     if member is None:
         raise HTTPException(status_code=500, detail="Failed to create or find user for invite")
-
-    workspace = await service.get_workspace(workspace_id)
-    # The policies the invitation carries, attached now as the inviting person
-    # (IAM refuses one they may not attach or do not hold).
-    if invite.policy_ids:
-        try:
-            await invites.attach_policies(
-                user_id=member.user_id,
-                organization_id=workspace.organization_id if workspace else None,
-                workspace_id=workspace_id,
-                policy_ids=invite.policy_ids,
-                by=current_user.id,
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     # The organization is the people directory (Org > Users): someone added
     # straight into a workspace shows up there too, as a member. Done as ``api``

@@ -158,19 +158,34 @@ a catalog, run the route matrix.
   offered nowhere and refused to everyone, the platform admin included, before IAM is asked
   (`authz.feature_exists`). What a workspace (and its org) has is its feature set ("Sets").
 - **The move of the role features** (`role_features.migrate_role_features`, at start after the overrides' move
-  and the org-wide roles, recorded in `iam_migrations` as `role_features_v1`). The features each role had in each
-  workspace (the deployment's `role_baseline`, the `organization_overrides` of the configuration, the
-  organization's overlay in `organization_role_features`, within `enabled_features`) become the workspace's
-  policy "Features of <role>" (made for every role that had features, held or not, for invitations to carry),
-  attached at the workspace to each principal holding that role there, directly or
-  through an organisation-wide role (a group holding the role included). Nobody's features change: tested on a
-  database at the previous state (`role_features_test.py`). Each step may run again; a failed workspace leaves
-  the move unrecorded and the overlay table in place for the next start. Once recorded, the overlay table is
-  dropped (the move runs after the SQL migrations, so no numbered migration could; `0040` creates nothing any
-  more); IAM drops the old `builtin.features.*` at boot. A role attached across organizations (`abi:*:…`,
-  which Nexus never made) is left out and logged: keeping it would widen. Afterwards `role_baseline`,
-  `organization_overrides` and `workspace_overrides` do nothing; a configuration that still sets them gets a
-  warning at each start. An existing deployment starts once with its old configuration before removing them.
+  and the org-wide roles, recorded in `iam_migrations` as `role_features_v1`). It reads what IAM has in force,
+  never the configuration: the stored `builtin.features.<key>` an older version made (from `role_baseline`,
+  `organization_overrides` and `organization_role_features`, within `enabled_features`) and the roles held now,
+  choosing for each role the most specific key as the older IAM did (`key_for`). Then:
+  - a role held at a workspace becomes the workspace's "Features of <role>", attached there; a role held
+    org-wide (`abi:<org>:*`) becomes the organization's "Features of <role>", attached org-wide, so it still
+    reaches the organization's workspaces made later; a group holding the role gets it like a person;
+  - each workspace has its "Features of <role>" for every role that had features there, held or not, for
+    invitations to carry;
+  - each pending invitation to a role (IAM's pending grant) gets the matching pending grant beside it (an
+    organization owner's or admin's: the organization's, org-wide, where the role is mirrored), listed on the
+    Nexus invitation (`grant_ids`, `policy_ids`), so revoking it withdraws both.
+
+  The old policies stay in force until the move is recorded, then are retired with their attachments
+  (`iam.retire_policies`; a start that recorded the move but failed to retire finishes it), and the overlay
+  table is dropped (the move runs after the SQL migrations, so no numbered migration could; `0040` creates
+  nothing any more). Every step may run again; a failure leaves the move unrecorded and nothing retired, so
+  nobody loses or gains a feature at any step, whatever the configuration says by then (tested on a database at
+  the previous state, `role_features_test.py`; and across versions, an IAM store written by the previous
+  version's own code). Until the move, a role detached takes its old companion with it, as before; a role
+  attached brings none. Afterwards `role_baseline`, `organization_overrides` and `workspace_overrides` do
+  nothing, and a configuration that still sets them gets a warning at each start. The repository's own root
+  configurations and `abi new project`'s drop them: an existing deployment may too, since the move does not
+  read them (the overrides' move still does, once, before it).
+- **The role features' actions stay declared.** `GetRoleFeatures` and `UpdateRoleFeatures` (and the
+  `role_features` type) have no route and authorize nothing: IAM refuses a catalog version dropping an action a
+  policy still names, which would stop Nexus's start, so they are kept, deprecated. `GET /access` reports
+  neither.
 
 ## Sets
 
@@ -288,7 +303,7 @@ with them (core `services/iam/AGENTS.md`, "Sets"). Nexus:
   key is another run. A run started elsewhere (the System tab, a schedule, an agent) has no owner here.
 - **No role brings a feature.** *Decision:* features are granted by policies only, like agents; the role
   features (`role_baseline`, `organization_overrides`, the organisation role features table, its routes
-  `/api/organizations/{org}/roles/features` and page, `nexus:GetRoleFeatures` / `UpdateRoleFeatures`) and the
+  `/api/organizations/{org}/roles/features` and page; the actions stay declared, deprecated) and the
   new-workspace form's feature choice (`WorkspaceCreate.features`, `GET /organizations/{org}/workspace-features`)
   are gone. *Consequences:* a new member has no feature until a policy grants one (an invitation can carry
   "Features of member"); a workspace's creator holds none in it either, unless a policy above it grants them;

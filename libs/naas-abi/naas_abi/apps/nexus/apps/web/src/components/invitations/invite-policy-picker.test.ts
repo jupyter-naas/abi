@@ -60,4 +60,14 @@ describe('the policies an invitation carries', () => {
     expect(attachable).not.toHaveBeenCalled();
     expect(document.querySelector('[data-invite-policies]')).toBeNull();
   });
+
+  it('says that what attaches at the organization reaches no workspace feature', async () => {
+    const attachable = vi.fn().mockResolvedValue({ items: [graph] });
+    await render(attachable, { scope: 'abi:acme:-' });
+    expect(document.querySelector('[data-invite-policies-org]')).not.toBeNull();
+    await mounted?.unmount();
+    mounted = null;
+    await render(vi.fn().mockResolvedValue({ items: [graph] }));
+    expect(document.querySelector('[data-invite-policies-org]')).toBeNull();
+  });
 });

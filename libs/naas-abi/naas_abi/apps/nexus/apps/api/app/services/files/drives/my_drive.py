@@ -173,7 +173,7 @@ class MyDriveWriter:
             logger.warning(f"[my-drive] object storage unavailable: {exc}")
             return
         # Written for no caller: a signup has no signed-in user, and the user's own
-        # right to the drive (``roles.PLATFORM_TYPES``) is theirs to use, not Nexus's.
+        # right to the drive (the roles' platform companions) is theirs to use, not Nexus's.
         with as_service_account("api"):
             for user_id, (manifest, created) in pending.items():
                 try:

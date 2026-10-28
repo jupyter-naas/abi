@@ -364,12 +364,41 @@ class InvitationService:
         """For someone who has an account already (added directly, not invited):
         attach the policies an invitation would carry, at the workspace, else the
         organization, as ``by`` (IAM checks the attachment and what it grants).
-        Returns the policies attached."""
+        Called before the membership is made: a refusal leaves nothing made
+        (what this call attached is taken back). Returns the policies it attached,
+        for ``detach_policies`` should the membership then fail."""
         carried = _policies(policy_ids)
         scope = policy_scope(organization_id, workspace_id)
-        for policy_id in carried:
-            await self.grants.attach(user_id, policy_id, scope, by=by)
-        return carried
+        made: list[str] = []
+        try:
+            for policy_id in carried:
+                if await self.grants.attach(user_id, policy_id, scope, by=by):
+                    made.append(policy_id)
+        except Exception:
+            await self.detach_policies(
+                user_id=user_id,
+                organization_id=organization_id,
+                workspace_id=workspace_id,
+                policy_ids=made,
+            )
+            raise
+        return tuple(made)
+
+    async def detach_policies(
+        self,
+        *,
+        user_id: str,
+        organization_id: str | None,
+        workspace_id: str | None,
+        policy_ids: Sequence[str],
+    ) -> None:
+        """Take back what ``attach_policies`` attached."""
+        scope = policy_scope(organization_id, workspace_id)
+        for policy_id in policy_ids:
+            try:
+                await self.grants.detach(user_id, policy_id, scope)
+            except Exception as exc:  # noqa: BLE001 - one left is logged, the rest go
+                logger.warning(f"Could not take back {policy_id} at {scope}: {exc}")
 
     # =========================================================================
     # Listing, resending, revoking

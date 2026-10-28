@@ -1,21 +1,34 @@
-"""The role features become policies of each workspace, once.
+"""The features roles brought become policies, once.
 
-Before, each built-in role brought features: the deployment's
-``feature_flags.role_baseline``, overlaid per organization by
-``feature_flags.organization_overrides`` and the ``organization_role_features``
-table, within ``enabled_features``. IAM generated ``builtin.features.*`` from them
-and attached them beside each role at a workspace or org-wide. No role brings a
-feature any more: a policy does.
+Before, each built-in role brought features: an older version computed
+``builtin.features.<key>`` (``<role>``, ``<org>.<role>``, ``<org>.<ws>.<role>``)
+from the deployment's ``feature_flags`` and the organizations' overlays, and IAM
+attached the most specific one beside each role held at a workspace or
+org-wide, at the role's own scope. No role brings a feature any more: a policy
+does.
 
-``migrate_role_features`` keeps every user's features as they were: for each
-workspace and each role, the features that role had there become the
-workspace's policy "Features of <role>", attached at the workspace to whoever
-holds that role there, directly or through an organization-wide role (a group
-holding the role included). IAM drops the old ``builtin.features.*`` at boot;
-this move reads the configuration and the overlay table, not them. Recorded in
-``iam_migrations``; each step may run again, and the overlay table is dropped
-once it is recorded. Afterwards the configuration's role features do nothing,
-and a configuration that still sets them gets a warning at each start.
+``migrate_role_features`` keeps every user's features exactly as they were,
+from what IAM has in force, never from the configuration: the stored
+``builtin.features.*`` and the roles held now.
+
+* Each role held at a workspace becomes the workspace's policy "Features of
+  <role>" attached there; a role held org-wide (``abi:<org>:*``) the
+  organization's "Features of <role>" attached org-wide, so it still covers the
+  organization's workspaces made later, as before. A group holding the role is
+  given it like a person.
+* Each workspace gets its "Features of <role>" for every role that had features
+  there, held or not: what an invitation carries for a newcomer.
+* A pending invitation to a role (IAM's pending grant) gets the matching pending
+  grant beside it, and the Nexus invitation lists it, so the invitee still has
+  the role's features at the first sign-in. An organization owner's or admin's
+  gets the organization's, org-wide, where the role is mirrored.
+
+The old policies stay in force until the move is recorded (``iam_migrations``,
+``role_features_v1``); then they are retired (``IAMService.retire_policies``),
+with their attachments, and the overlay table is dropped. Each step may run
+again: a failure leaves the move unrecorded, nothing retired, and the next start
+does it again. Afterwards the configuration's role features do nothing, and a
+configuration that still sets them gets a warning at each start.
 """
 
 from __future__ import annotations
@@ -23,12 +36,11 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
 from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig
-from naas_abi.apps.nexus.apps.api.app.core.feature_flags import enabled_feature_catalog
 from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import NO_ORG
 from naas_abi_core.engine.call_context import as_service_account
@@ -41,13 +53,18 @@ from starlette.concurrency import run_in_threadpool
 _log = logging.getLogger(__name__)
 
 MIGRATION_NAME = "role_features_v1"
-# The move of the workspace feature overrides reads the role features too: it
-# runs first (``sets.migrate_feature_overrides``).
+# The move of the workspace feature overrides reads the role features and the
+# overlay table this move drops: it runs first (``sets.migrate_feature_overrides``).
 AFTER = "workspace_feature_sets_v1"
 OVERLAY_TABLE = "organization_role_features"
+# The policies the older version generated: ``builtin.features.<key>``.
+OLD_PREFIX = "builtin.features."
 ROLE_NAMES = tuple(role.removeprefix("builtin.") for role in roles.ROLES)
-# The settings that gave roles their features, read by this move only.
+# The organization roles Nexus mirrors org-wide (``Memberships.mirror_org_wide``).
+ORG_WIDE_ROLES = ("owner", "admin")
+# The settings that gave roles their features, read by the overrides' move only.
 DEPRECATED_SETTINGS = ("role_baseline", "organization_overrides", "workspace_overrides")
+_FEATURE = ":nexus:feature/"
 
 
 def policy_name(role: str) -> str:
@@ -62,7 +79,7 @@ def resolve_role_baseline(
 ) -> dict[str, list[str]]:
     """The features of each role as the configuration gave them (later wins): the
     deployment's ``role_baseline``, the org's ``organization_overrides``, then
-    the org's stored overlay."""
+    the org's stored overlay. Read by the move of the feature overrides only."""
     baseline = {role: list(features) for role, features in flags.role_baseline.items()}
     if organization_id:
         for role, features in (flags.organization_overrides.get(organization_id) or {}).items():
@@ -70,51 +87,6 @@ def resolve_role_baseline(
     for role, features in (organization_override or {}).items():
         baseline[role] = list(features)
     return baseline
-
-
-def role_features(
-    flags: FeatureFlagsConfig,
-    org_id: str | None,
-    overlays: Mapping[str, Mapping[str, Sequence[str]]],
-) -> dict[str, tuple[str, ...]]:
-    """``{role: features}`` each role had in a workspace of ``org_id`` (None: a
-    workspace with no organization): its defaults, within ``enabled_features``,
-    in catalog order."""
-    enabled = enabled_feature_catalog(flags)
-    resolved = resolve_role_baseline(
-        flags,
-        organization_id=org_id,
-        organization_override=overlays.get(org_id) if org_id else None,
-    )
-    return {
-        role: tuple(key for key in enabled if key in set(resolved.get(role) or ()))
-        for role in ROLE_NAMES
-    }
-
-
-@dataclass(frozen=True)
-class WorkspaceFeatures:
-    """What one workspace's roles had: ``{role: features}``."""
-
-    org: str
-    workspace: str
-    by_role: Mapping[str, tuple[str, ...]]
-
-    @property
-    def scope(self) -> str:
-        return f"abi:{self.org}:{self.workspace}"
-
-
-def plan(
-    workspaces: Iterable[tuple[str, str | None]],
-    flags: FeatureFlagsConfig,
-    overlays: Mapping[str, Mapping[str, Sequence[str]]],
-) -> list[WorkspaceFeatures]:
-    """The pure part of ``migrate_role_features``: per ``(workspace, org)``."""
-    return [
-        WorkspaceFeatures(org_id or NO_ORG, workspace_id, role_features(flags, org_id, overlays))
-        for workspace_id, org_id in sorted(workspaces, key=lambda w: w[0])
-    ]
 
 
 def policy_document(features: Iterable[str]) -> PolicyDocument:
@@ -130,107 +102,187 @@ def policy_document(features: Iterable[str]) -> PolicyDocument:
     )
 
 
-def _workspace_policy(iam: Any, scope: str, role: str, features: tuple[str, ...]) -> Any:
-    """The workspace's "Features of <role>": the one an earlier, interrupted run
-    made, else a new one."""
-    name = policy_name(role)
-    document = policy_document(features)
-    after: str | None = None
-    while True:
-        page = iam.list_policies(scope=scope, limit=200, after=after)
-        for policy in page.items:
-            if (
-                policy.name == name
-                and policy.owner_scope == scope
-                and policy.document.statements == document.statements
-            ):
+# -- what was in force ---------------------------------------------------------------
+
+
+def stored_features(policies: Iterable[Any]) -> dict[str, tuple[str, ...]]:
+    """``{key: features}`` of the stored ``builtin.features.<key>``: the features
+    each allows (``${scope}:nexus:feature/<k>``), none for a key that overrode the
+    broader ones with nothing."""
+    found: dict[str, tuple[str, ...]] = {}
+    for policy in policies:
+        if not policy.id.startswith(OLD_PREFIX):
+            continue
+        features = {
+            resource.split(_FEATURE, 1)[1]
+            for statement in policy.document.statements
+            if statement.effect == "Allow" and "nexus:UseFeature" in statement.actions
+            for resource in statement.resources
+            if _FEATURE in resource
+        }
+        found[policy.id.removeprefix(OLD_PREFIX)] = tuple(sorted(features))
+    return found
+
+
+def key_for(role: str, org: str, workspace: str, keys: Mapping[str, tuple[str, ...]]) -> str | None:
+    """The key whose policy came with ``role`` at ``abi:<org>:<workspace>``: the
+    most specific that exists (workspace, then org, then the deployment's), as
+    the older IAM chose it."""
+    candidates = [f"{org}.{workspace}.{role}"] if workspace not in ("*", "-") else []
+    candidates += [f"{org}.{role}", role]
+    return next((c for c in candidates if c in keys), None)
+
+
+def _fields(scope: str) -> tuple[str, str]:
+    _abi, org, workspace = scope.split(":", 2)
+    return org, workspace
+
+
+def owner_of(scope: str) -> str | None:
+    """Who owns the policy that replaces a companion attached at ``scope``: the
+    workspace, the organization for an org-wide scope, the platform (None) for
+    one across organizations (which Nexus never makes)."""
+    org, workspace = _fields(scope)
+    if org == "*":
+        return None
+    if workspace == "*":
+        return f"abi:{org}:-"
+    return scope
+
+
+@dataclass
+class MoveReport:
+    attached: int = 0
+    policies: int = 0
+    # pending role grant id -> (pending feature grant id, its policy id)
+    carried: dict[str, tuple[str, str]] = field(default_factory=dict)
+
+
+class _Policies:
+    """The "Features of <role>" of each owner: found (an earlier, interrupted
+    run made it) or made, each owner's listed once."""
+
+    def __init__(self, iam: Any) -> None:
+        self._iam = iam
+        self._known: dict[str | None, list[Any]] = {}
+        self.made = 0
+
+    def _of(self, owner: str | None) -> list[Any]:
+        if owner not in self._known:
+            found: list[Any] = []
+            after: str | None = None
+            while True:
+                page = self._iam.list_policies(scope=owner, limit=200, after=after)
+                found += [p for p in page.items if p.owner_scope == (owner or "abi:-:-")]
+                after = page.next_after
+                if after is None:
+                    break
+            self._known[owner] = found
+        return self._known[owner]
+
+    def get(self, owner: str | None, role: str, features: tuple[str, ...]) -> Any:
+        name = policy_name(role)
+        document = policy_document(features)
+        known = self._of(owner)
+        for policy in known:
+            if policy.name == name and policy.document.statements == document.statements:
                 return policy
-        after = page.next_after
-        if after is None:
-            break
-    return iam.create_policy(
-        name,
-        document,
-        description=(
-            f"The features the {role} role had in this workspace when roles stopped "
-            "bringing any. Attach it to whoever should use them."
-        ),
-        scope=scope,
-    )
+        where = (
+            "platform" if owner is None else "organization" if owner.endswith(":-") else "workspace"
+        )
+        made = self._iam.create_policy(
+            name,
+            document,
+            description=(
+                f"The features the {role} role brought in this {where} when roles stopped "
+                "bringing any. Attach it to whoever should use them."
+            ),
+            scope=owner,
+        )
+        known.append(made)
+        self.made += 1
+        return made
 
 
-# (role, principal, org, workspace): ``role_attachments``.
-RoleAttachments = Sequence[tuple[str, str, str, str]]
+def _features(role: str, scope: str, keys: Mapping[str, tuple[str, ...]]) -> tuple[str, ...]:
+    org, workspace = _fields(scope)
+    key = key_for(role, org, workspace, keys)
+    return keys[key] if key is not None else ()
 
 
-def role_attachments(iam: Any) -> list[tuple[str, str, str, str]]:
-    """``(role, principal, org, workspace)`` of every role attached at a workspace
-    or org-wide scope (neither field ``-``): those that brought features.
+def _companion_scope(scope: str | None) -> str | None:
+    """Where a role at ``scope`` brought features: a workspace or org-wide scope
+    (neither field ``-``); an org-level role brought none."""
+    if scope is None:
+        return None
+    return None if "-" in _fields(scope) else scope
 
-    A role attached across organizations (``abi:*:…``, which Nexus never makes)
-    brought the deployment's features in every organization: kept, it would
-    widen where an organization's overlay gave less, so it is left out and
-    named in the log for the operator."""
-    found: list[tuple[str, str, str, str]] = []
-    for role in roles.ROLES:
-        for attachment in iam.list_attachments(policy_id=role):
-            if attachment.scope is None:
+
+def move(
+    iam: Any,
+    workspaces: Iterable[tuple[str, str | None]],
+    keys: Mapping[str, tuple[str, ...]],
+) -> MoveReport:
+    """The move, as ``engine``, from ``keys`` (``stored_features``). Each step may
+    run again: policies are found before they are made, attaching and pending
+    grants are idempotent."""
+    report = MoveReport()
+    policies = _Policies(iam)
+    # Every workspace's policies, held or not.
+    for workspace, org_id in sorted(workspaces, key=lambda w: w[0]):
+        org = org_id or NO_ORG
+        iam.put_scope(org)
+        iam.put_scope(org, workspace)
+        scope = f"abi:{org}:{workspace}"
+        for role in ROLE_NAMES:
+            features = _features(role, scope, keys)
+            if features:
+                policies.get(scope, role, features)
+    # Who held a role brings its features where they held it.
+    for role_policy in roles.ROLES:
+        role = role_policy.removeprefix("builtin.")
+        for attachment in iam.list_attachments(policy_id=role_policy):
+            scope = _companion_scope(attachment.scope)
+            if scope is None:
                 continue
-            _abi, org, workspace = attachment.scope.split(":", 2)
-            if "-" in (org, workspace):
+            features = _features(role, scope, keys)
+            if not features:
                 continue
-            if org == "*":
-                _log.warning(
-                    "%s is attached to %s at %s, across organizations: its features "
-                    "are not moved; grant them with a policy if they are still wanted",
-                    role,
-                    attachment.principal_id,
-                    attachment.scope,
-                )
-                continue
-            found.append((role.removeprefix("builtin."), attachment.principal_id, org, workspace))
-    return found
-
-
-def holders(
-    attachments: Iterable[tuple[str, str, str, str]], org: str, workspace: str
-) -> dict[str, set[str]]:
-    """``{role: principals}`` holding each role at the workspace, directly or
-    through a scope that covers it (organization-wide, ``abi:<org>:*``): who had
-    its features there."""
-    found: dict[str, set[str]] = {}
-    for role, principal_id, at_org, at_workspace in attachments:
-        if at_org == org and at_workspace in (workspace, "*"):
-            found.setdefault(role, set()).add(principal_id)
-    return found
-
-
-def apply(iam: Any, move: WorkspaceFeatures, attachments: RoleAttachments) -> int:
-    """One workspace's move, as ``engine``: a "Features of <role>" for each role
-    that had features there, attached to who holds the role; returns the
-    attachments it holds.
-    Each step may run again: finding the policy before making it, attaching
-    what is attached."""
-    iam.put_scope(move.org)
-    iam.put_scope(move.org, move.workspace)
-    attached = 0
-    held = holders(attachments, move.org, move.workspace)
-    # Every role that had features gets its policy, held or not: it is what an
-    # invitation to the workspace carries for a newcomer.
-    for role in ROLE_NAMES:
-        features = move.by_role.get(role) or ()
+            owner = owner_of(scope)
+            if owner is not None:
+                org, _ = _fields(owner)
+                iam.put_scope(org)
+            policy = policies.get(owner, role, features)
+            iam.attach_policy(policy.id, attachment.principal_id, scope)
+            report.attached += 1
+    # Invitations still pending: their role's features come with them.
+    for grant in iam.list_pending_grants():
+        if grant.policy_id not in roles.ROLES or grant.scope is None:
+            continue
+        role = grant.policy_id.removeprefix("builtin.")
+        org, workspace = _fields(grant.scope)
+        if workspace == "-" and org not in ("-", "*") and role in ORG_WIDE_ROLES:
+            scope: str | None = f"abi:{org}:*"  # mirrored org-wide at the claim
+        else:
+            scope = _companion_scope(grant.scope)
+        if scope is None:
+            continue
+        features = _features(role, scope, keys)
         if not features:
             continue
-        policy = _workspace_policy(iam, move.scope, role, features)
-        for principal_id in sorted(held.get(role, ())):
-            iam.attach_policy(policy.id, principal_id, move.scope)
-            attached += 1
-    return attached
+        policy = policies.get(owner_of(scope), role, features)
+        carried = iam.create_pending_grant(grant.provider, grant.email, policy.id, scope)
+        report.carried[str(grant.id)] = (str(carried.id), str(policy.id))
+    report.policies = policies.made
+    return report
+
+
+# -- the Nexus side ----------------------------------------------------------------
 
 
 async def read_overlays(db: AsyncSession) -> dict[str, dict[str, list[str]]]:
     """The organizations' stored role features (``organization_role_features``);
-    none once the table is gone."""
+    none once the table is gone. Read by the move of the feature overrides."""
     if not await _has_overlay_table(db):
         return {}
     overlays: dict[str, dict[str, list[str]]] = {}
@@ -258,6 +310,37 @@ async def _recorded(db: AsyncSession, name: str) -> bool:
     return found is not None
 
 
+async def _carry_into_invitations(db: AsyncSession, carried: Mapping[str, tuple[str, str]]) -> int:
+    """List each carried pending grant on the Nexus invitation of its role's, so
+    revoking or renewing the invitation withdraws it too."""
+    if not carried:
+        return 0
+    changed = 0
+    rows = (
+        await db.execute(
+            text("SELECT id, grant_ids, policy_ids FROM invitations WHERE status = 'pending'")
+        )
+    ).all()
+    for invitation_id, raw_grants, raw_policies in rows:
+        grants = list(json.loads(raw_grants or "[]"))
+        policies = list(json.loads(raw_policies or "[]"))
+        before = (len(grants), len(policies))
+        for role_grant in list(grants):
+            if str(role_grant) in carried:
+                grant_id, policy_id = carried[str(role_grant)]
+                if grant_id not in grants:
+                    grants.append(grant_id)
+                if policy_id not in policies:
+                    policies.append(policy_id)
+        if (len(grants), len(policies)) != before:
+            await db.execute(
+                text("UPDATE invitations SET grant_ids = :g, policy_ids = :p WHERE id = :i"),
+                {"g": json.dumps(grants), "p": json.dumps(policies), "i": invitation_id},
+            )
+            changed += 1
+    return changed
+
+
 def warn_deprecated_settings(flags: FeatureFlagsConfig) -> list[str]:
     """Warn about the role feature settings a configuration still sets: they do
     nothing once the move ran. Returns their names."""
@@ -272,78 +355,95 @@ def warn_deprecated_settings(flags: FeatureFlagsConfig) -> list[str]:
     return found
 
 
+def _retire_old() -> list[str]:
+    """Retire what is left of the old policies (the move is recorded)."""
+    iam = runtime.iam()
+    with as_service_account("engine"):
+        old = [p.id for p in iam.retired_policies() if p.id.startswith(OLD_PREFIX)]
+        return iam.retire_policies(old) if old else []
+
+
 async def migrate_role_features(db: AsyncSession, flags: FeatureFlagsConfig) -> int | None:
-    """Move the role features into each workspace's policies, once (see the
-    module). Returns the number of attachments made, None when it did not run:
-    done already, or waiting for the move of the workspace feature overrides."""
+    """Move the features roles brought into policies, once (see the module).
+    Returns the number of attachments made, None when it did not run: done
+    already, or waiting for the move of the workspace feature overrides."""
     if await _recorded(db, MIGRATION_NAME):
         warn_deprecated_settings(flags)
+        # A start that recorded the move but failed to retire finishes here.
+        if await run_in_threadpool(_retire_old):
+            _log.info("The old role feature policies were retired")
         return None
     if not await _recorded(db, AFTER):
         _log.warning(
             "The role features wait for the workspace feature overrides to move: "
-            "the next start tries again"
+            "the next start tries again (the old ones stay in force meanwhile)"
         )
         return None
-    overlays = await read_overlays(db)
     rows = (await db.execute(text("SELECT id, organization_id FROM workspaces"))).all()
-    moves = plan(((str(ws), str(org) if org else None) for ws, org in rows), flags, overlays)
+    workspaces = [(str(ws), str(org) if org else None) for ws, org in rows]
 
-    def work() -> tuple[int, list[str]]:
+    def work() -> MoveReport:
         iam = runtime.iam()
-        made, failed = 0, []
         with as_service_account("engine"):
-            attachments = role_attachments(iam)
-            for move in moves:
-                try:
-                    made += apply(iam, move, attachments)
-                except Exception:  # noqa: BLE001 - one workspace never stops the others
-                    _log.warning(
-                        "The role features of workspace %s were not moved; the next "
-                        "start tries again",
-                        move.workspace,
-                        exc_info=True,
-                    )
-                    failed.append(move.workspace)
-        return made, failed
+            keys = stored_features(iam.retired_policies())
+            return move(iam, workspaces, keys)
 
-    made, failed = await run_in_threadpool(work)
-    if failed:
-        # Not recorded: the next start moves them again from the same settings
-        # and the overlay table, which stays until then.
-        return made
+    try:
+        report = await run_in_threadpool(work)
+    except Exception:  # noqa: BLE001 - nothing is lost: the old policies stay in force
+        _log.warning(
+            "The role features were not moved: the old policies stay in force and "
+            "the next start tries again",
+            exc_info=True,
+        )
+        return None
+    invitations = await _carry_into_invitations(db, report.carried)
     await db.execute(
         text("INSERT INTO iam_migrations (name, applied_at, report) VALUES (:n, :at, :r)"),
         {
             "n": MIGRATION_NAME,
             "at": datetime.now(UTC).replace(tzinfo=None),
-            "r": json.dumps({"workspaces": len(moves), "attachments": made}),
+            "r": json.dumps(
+                {
+                    "workspaces": len(workspaces),
+                    "policies": report.policies,
+                    "attachments": report.attached,
+                    "pending_grants": len(report.carried),
+                    "invitations": invitations,
+                }
+            ),
         },
     )
     await db.execute(text(f"DROP TABLE IF EXISTS {OVERLAY_TABLE}"))
     await db.commit()
+    # Recorded: the old policies go. A failure here is finished at the next start.
+    try:
+        await run_in_threadpool(_retire_old)
+    except Exception:  # noqa: BLE001 - they grant what the new ones do meanwhile
+        _log.warning("The old role feature policies were not retired yet", exc_info=True)
     _log.info(
-        "The role features of %d workspaces became their policies (%d attachments)",
-        len(moves),
-        made,
+        "The features roles brought became policies: %d made, %d attachments, "
+        "%d pending invitations",
+        report.policies,
+        report.attached,
+        len(report.carried),
     )
-    return made
+    return report.attached
 
 
 __all__ = [
     "AFTER",
     "DEPRECATED_SETTINGS",
     "MIGRATION_NAME",
-    "WorkspaceFeatures",
-    "apply",
-    "holders",
+    "MoveReport",
+    "key_for",
     "migrate_role_features",
-    "plan",
+    "move",
+    "owner_of",
     "policy_document",
-    "role_attachments",
     "policy_name",
     "read_overlays",
     "resolve_role_baseline",
-    "role_features",
+    "stored_features",
     "warn_deprecated_settings",
 ]

@@ -140,7 +140,7 @@ LEVELS = {
     "admin": (False, False, True, True),
 }
 # Platform-level types are reached by the platform admin alone, bar the model
-# list the built-in roles carry (roles.PLATFORM_TYPES).
+# list the platform companions carry (the catalog's PLATFORM_ACCESS).
 PLATFORM_VIEWER_ACTIONS = {"ListProviderModels", "GetProviderModel"}
 
 

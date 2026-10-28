@@ -14,6 +14,11 @@ TYPES = (
     rtype("member"),
     rtype("domain"),
     rtype("billing", id="singleton"),
+    # Deprecated, no route: the organization's role feature defaults, gone with
+    # the role features. Kept declared so a policy that still names the actions
+    # never blocks the catalog's registration (IAM refuses dropping an action a
+    # policy names); they authorize nothing.
+    rtype("role_features", id="singleton"),
 )
 
 ACTIONS = (
@@ -37,6 +42,8 @@ ACTIONS = (
     action("RemoveOrganizationDomain", "admin", "domain"),
     action("GetBilling", "admin", "billing"),
     action("UpdateBilling", "admin", "billing"),
+    action("GetRoleFeatures", "admin", "role_features"),
+    action("UpdateRoleFeatures", "admin", "role_features"),
 )
 
 # Every user may create an organization (``builtin.self``).

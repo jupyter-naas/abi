@@ -249,10 +249,14 @@ class GrantsGateway(ABC):
     @abstractmethod
     async def attach(
         self, user_id: str, policy_id: str, scope: str, *, by: str | None = None
-    ) -> None:
+    ) -> bool:
         """Attach ``policy_id`` at ``scope`` to a Nexus user who exists already,
         as ``api`` on behalf of ``by``: IAM checks that they may attach it and
-        hold what it grants."""
+        hold what it grants. True when this call attached it (it was not)."""
+
+    @abstractmethod
+    async def detach(self, user_id: str, policy_id: str, scope: str) -> None:
+        """Take back what ``attach`` made (Nexus's own call, for nobody)."""
 
     @abstractmethod
     async def bind(

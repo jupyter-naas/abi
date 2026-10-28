@@ -63,6 +63,12 @@ export function InvitePolicyPicker({
         Attached here with the role (features come from policies): right away for someone with an
         account, at their first sign-in otherwise.
       </p>
+      {atOrganization(scope) ? (
+        <p className="text-xs text-muted-foreground" data-invite-policies-org>
+          These attach to the organization itself: they reach none of its workspaces&apos;
+          features. Invite to a workspace to give someone its &quot;Features of …&quot;.
+        </p>
+      ) : null}
       <div className="max-h-36 space-y-1.5 overflow-y-auto border border-border p-2">
         {policies.map((policy) => (
           <Checkbox
@@ -85,4 +91,9 @@ export function InvitePolicyPicker({
       </div>
     </fieldset>
   );
+}
+
+/** An organization's own scope (`abi:<org>:-`): what attaches there reaches no workspace. */
+export function atOrganization(scope: string | null): boolean {
+  return Boolean(scope && scope.endsWith(':-'));
 }

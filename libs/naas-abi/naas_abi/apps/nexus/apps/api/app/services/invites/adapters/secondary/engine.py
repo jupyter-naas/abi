@@ -151,12 +151,26 @@ class EngineGrantsGateway(GrantsGateway):
 
     async def attach(
         self, user_id: str, policy_id: str, scope: str, *, by: str | None = None
-    ) -> None:
+    ) -> bool:
         from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
 
         iam = self._service()
         principal_id = await MEMBERSHIPS.principal_id(user_id)
+        held = await _as_api(
+            lambda: any(
+                a.scope == scope
+                for a in iam.list_attachments(principal_id=principal_id, policy_id=policy_id)
+            )
+        )
         await _as_api(lambda: iam.attach_policy(policy_id, principal_id, scope), by=by)
+        return not held
+
+    async def detach(self, user_id: str, policy_id: str, scope: str) -> None:
+        from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+
+        iam = self._service()
+        principal_id = await MEMBERSHIPS.principal_id(user_id)
+        await _as_api(lambda: iam.detach_policy(policy_id, principal_id, scope))
 
     async def bind(
         self,

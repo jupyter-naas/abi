@@ -165,6 +165,7 @@ class Grants(GrantsGateway):
         self.granted_by: list[str | None] = []
         self.bound_by: list[str | None] = []
         self.attached: list[tuple] = []
+        self.refuse: set[str] = set()
 
     async def grant(self, provider, email, policy_id, scope, *, by=None):
         self.granted_by.append(by)
@@ -183,7 +184,13 @@ class Grants(GrantsGateway):
         self.live.pop(grant_id, None)
 
     async def attach(self, user_id, policy_id, scope, *, by=None):
+        if policy_id in self.refuse:
+            raise PermissionError(f"{by} may not attach {policy_id}")
         self.attached.append((user_id, policy_id, scope, by))
+        return True
+
+    async def detach(self, user_id, policy_id, scope):
+        self.attached = [a for a in self.attached if a[:3] != (user_id, policy_id, scope)]
 
     async def bind(self, provider, claim_value, policy_id, scope, *, by=None):
         self.bound_by.append(by)
@@ -662,3 +669,18 @@ async def test_someone_with_an_account_gets_the_policies_attached_as_the_inviter
     )
     assert attached == ("pol_a",)
     assert h.grants.attached == [("usr-bob", "pol_a", "abi:org-1:ws-1", "usr-alice")]
+
+
+@pytest.mark.asyncio
+async def test_a_refused_policy_attaches_none_of_the_others():
+    h = Harness()
+    h.grants.refuse = {"pol_b"}
+    with pytest.raises(PermissionError):
+        await h.service.attach_policies(
+            user_id="usr-bob",
+            organization_id="org-1",
+            workspace_id="ws-1",
+            policy_ids=["pol_a", "pol_b"],
+            by="usr-alice",
+        )
+    assert h.grants.attached == []

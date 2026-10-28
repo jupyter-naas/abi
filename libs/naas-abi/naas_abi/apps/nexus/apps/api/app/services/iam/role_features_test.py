@@ -1,8 +1,10 @@
-"""The move of the role features into workspace policies, on a database at the
+"""The move of the features roles brought into policies, on a database at the
 previous state: IAM holding the ``builtin.features.*`` the previous version
-generated and attached beside each role, Nexus holding the organizations'
-overlay table. Every user's ``UseFeature`` decisions are the same before and
-after, in every workspace; then no role brings a feature."""
+generated and attached beside each role (and invitations pending), Nexus holding
+the organizations' overlay table. Every user's ``UseFeature`` decisions are the
+same at every step (boot, an interrupted move, the move, a workspace made after
+it, a pending invitation claimed after it), whatever the configuration says by
+then; and no role brings a feature."""
 
 from __future__ import annotations
 
@@ -15,9 +17,14 @@ from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
     KNOWN_FEATURE_KEYS,
     enabled_feature_catalog,
 )
-from naas_abi.apps.nexus.apps.api.app.models import OrganizationModel, WorkspaceModel
+from naas_abi.apps.nexus.apps.api.app.models import (
+    InvitationModel,
+    OrganizationModel,
+    WorkspaceModel,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam import role_features
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import Memberships
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import NO_ORG, nexus_resource
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 from naas_abi_core.engine.call_context import as_service_account, use_call_context
@@ -28,6 +35,7 @@ from sqlalchemy import inspect, text
 
 NOW = datetime(2026, 1, 1)
 EVERY = [key for key in KNOWN_FEATURE_KEYS if key not in ("code", "tasks")]
+# What the previous version was configured with: its stored policies come from it.
 FLAGS = FeatureFlagsConfig(
     enabled_features=EVERY,
     role_baseline={
@@ -41,6 +49,8 @@ FLAGS = FeatureFlagsConfig(
 # The overlay of org-1 stored in ``organization_role_features``.
 OVERLAY = {"member": ["chat", "graph"], "admin": ["chat"]}
 WORKSPACES = {"ws-a": "org-1", "ws-b": "org-1", "ws-c": "org-2", "ws-d": None}
+# Made after the move: an org-wide holder's features reach it, as before.
+LATER = {"ws-later": "org-1", "ws-later-2": "org-2"}
 USERS = (
     "alice",  # owner of org-1: org-wide
     "bob",  # member of ws-a
@@ -53,6 +63,8 @@ USERS = (
     "ivan",  # nobody
     "root",  # the platform admin
 )
+BOB_TOO = "zoe@example.com"  # invited as a member of ws-a, pending
+OWNER_TOO = "olga@example.com"  # invited as an owner of org-1, pending
 
 
 def _old_plan(flags: FeatureFlagsConfig, overlays: dict) -> dict[str, list[str]]:
@@ -110,10 +122,7 @@ def _store_previous_state(nexus: NexusIam, plan: dict[str, list[str]]) -> None:
             _abi, org, workspace = attachment.scope.split(":", 2)
             if "-" in (org, workspace):
                 continue
-            name = role.removeprefix("builtin.")
-            keys = [f"{org}.{workspace}.{name}"] if workspace != "*" else []
-            keys += [f"{org}.{name}", name]
-            key = next(k for k in keys if k in plan)
+            key = role_features.key_for(role.removeprefix("builtin."), org, workspace, plan)
             count += 1
             store.attach(
                 Attachment(
@@ -128,9 +137,7 @@ def _store_previous_state(nexus: NexusIam, plan: dict[str, list[str]]) -> None:
 
 def _world() -> NexusIam:
     nexus = NexusIam(FLAGS, features_with_roles=False)
-    scopes = {
-        ws: nexus.workspace(org, ws) for ws, org in WORKSPACES.items()
-    }  # registers the orgs too
+    scopes = {ws: nexus.workspace(org, ws) for ws, org in WORKSPACES.items()}
     nexus.grant("alice", "owner", nexus.org("org-1"))
     nexus.grant("bob", "member", scopes["ws-a"])
     nexus.grant("carol", "viewer", scopes["ws-a"])
@@ -146,18 +153,26 @@ def _world() -> NexusIam:
         team = nexus.iam.create_group("team", scope=scopes["ws-b"])
         nexus.iam.attach_policy(roles.MEMBER, team.id, scopes["ws-b"])
         nexus.iam.add_group_member(team.id, nexus.principal("frank"))
+        nexus.iam.create_pending_grant("builtin", BOB_TOO, roles.MEMBER, scopes["ws-a"])
+        nexus.iam.create_pending_grant("builtin", OWNER_TOO, roles.OWNER, "abi:org-1:-")
     return nexus
 
 
-def _decisions(nexus: NexusIam) -> dict[tuple[str, str, str], bool]:
-    """IAM's ``UseFeature`` for every user, workspace and known feature."""
+def _previous(nexus: NexusIam) -> NexusIam:
+    _store_previous_state(nexus, _old_plan(FLAGS, {"org-1": OVERLAY}))
+    return nexus
+
+
+def _decisions(nexus: NexusIam, users=USERS) -> dict[tuple[str, str, str], bool]:
+    """IAM's ``UseFeature`` for every user, workspace (those made later
+    included) and known feature."""
     names = {
         (ws, key): nexus_resource("feature", org=org or NO_ORG, workspace=ws, id=key)
-        for ws, org in WORKSPACES.items()
+        for ws, org in {**WORKSPACES, **LATER}.items()
         for key in KNOWN_FEATURE_KEYS
     }
     found: dict[tuple[str, str, str], bool] = {}
-    for user in USERS:
+    for user in users:
         with use_call_context(NexusIam.context(user)):
             allowed = set(nexus.iam.filter("nexus:UseFeature", list(names.values())).allowed)
         for (ws, key), name in names.items():
@@ -165,7 +180,7 @@ def _decisions(nexus: NexusIam) -> dict[tuple[str, str, str], bool]:
     return found
 
 
-async def _previous_database(db) -> None:
+async def _previous_database(db, nexus: NexusIam) -> None:
     await db.execute(
         text(
             "CREATE TABLE IF NOT EXISTS iam_migrations (name VARCHAR(128) PRIMARY KEY, "
@@ -209,6 +224,27 @@ async def _previous_database(db) -> None:
                 updated_at=NOW,
             )
         )
+    with as_service_account("engine"):
+        pending = {g.email: g.id for g in nexus.iam.list_pending_grants()}
+    for email, org, workspace, role in (
+        (BOB_TOO, "org-1", "ws-a", "member"),
+        (OWNER_TOO, "org-1", None, "owner"),
+    ):
+        db.add(
+            InvitationModel(
+                id=f"inv-{email}",
+                email=email,
+                provider="builtin",
+                organization_id=org,
+                org_role=role if workspace is None else None,
+                workspace_id=workspace,
+                workspace_role=role if workspace else None,
+                grant_ids=json.dumps([pending[email]]),
+                status="pending",
+                created_at=NOW,
+                updated_at=NOW,
+            )
+        )
     await db.commit()
 
 
@@ -217,39 +253,50 @@ async def _has_table(db, name: str) -> bool:
     return await connection.run_sync(lambda sync: inspect(sync).has_table(name))
 
 
+def _old_ids(nexus: NexusIam) -> list[str]:
+    return [p.id for p in nexus.iam._all_policies() if p.id.startswith("builtin.features.")]
+
+
 @pytest.mark.asyncio
 async def test_every_user_keeps_exactly_their_features(nexus_db):
-    nexus = _world()
-    _store_previous_state(nexus, _old_plan(FLAGS, {"org-1": OVERLAY}))
+    nexus = _previous(_world())
     with nexus.installed():
         before = _decisions(nexus)
         # The previous state is not empty: the move has something to keep.
         assert before[("bob", "ws-a", "graph")] and not before[("bob", "ws-a", "files")]
         assert before[("alice", "ws-b", "settings")] and before[("frank", "ws-b", "graph")]
+        assert before[("alice", "ws-later", "chat")] and before[("gina", "ws-later-2", "chat")]
         assert before[("dave", "ws-c", "chat")] is False
-        nexus.iam.bootstrap()  # the engine starts: the old policies go
+        # The engine starts on this version: nothing changes before the move.
+        nexus.iam.bootstrap()
         nexus.iam.invalidate()
-        assert not before == _decisions(nexus)
+        assert _decisions(nexus) == before
         async with nexus_db() as db:
-            await _previous_database(db)
-            made = await role_features.migrate_role_features(db, FLAGS)
+            await _previous_database(db, nexus)
+            # Whatever the configuration says now (here: every default), the
+            # move reads what was in force.
+            made = await role_features.migrate_role_features(db, FeatureFlagsConfig())
             assert made
             assert not await _has_table(db, "organization_role_features")
             recorded = (
                 await db.execute(
-                    text("SELECT 1 FROM iam_migrations WHERE name = :n"),
+                    text("SELECT report FROM iam_migrations WHERE name = :n"),
                     {"n": role_features.MIGRATION_NAME},
                 )
-            ).first()
-            assert recorded is not None
-            after = _decisions(nexus)
-            assert after == before
+            ).scalar()
+            assert json.loads(recorded)["pending_grants"] == 2
+            assert _old_ids(nexus) == []
+            assert _decisions(nexus) == before
             # Once: a second start changes nothing, and adds no policy.
             policies = {p.id for p in nexus.iam._all_policies()}
             assert await role_features.migrate_role_features(db, FLAGS) is None
             assert {p.id for p in nexus.iam._all_policies()} == policies
-            assert _decisions(nexus) == before
-    assert not any(p.startswith("builtin.features.") for p in policies)
+        # Workspaces made after the move: the org-wide holders' features reach
+        # them as before, and nobody else's.
+        for ws, org in LATER.items():
+            nexus.workspace(org, ws)
+        nexus.iam.invalidate()
+        assert _decisions(nexus) == before
     owned = {(p.owner_scope, p.name) for p in nexus.iam._all_policies() if not p.managed}
     # Each workspace has one for every role that had features, held or not:
     # nobody is a member of ws-d, yet an invitation there can carry it.
@@ -257,41 +304,116 @@ async def test_every_user_keeps_exactly_their_features(nexus_db):
         assert (f"abi:{NO_ORG}:ws-d", f"Features of {role}") in owned
     # org-2's members had none: no policy to carry.
     assert ("abi:org-2:ws-c", "Features of member") not in owned
+    # The org-wide holders' are their organization's.
+    assert ("abi:org-1:-", "Features of owner") in owned
+    assert ("abi:org-2:-", "Features of admin") in owned
 
 
 @pytest.mark.asyncio
-async def test_an_interrupted_move_is_not_recorded_and_finishes_next_start(
+async def test_a_pending_invitation_keeps_its_roles_features(nexus_db):
+    """Invited before the move, claimed after: the invitee has what the role
+    brought then. The Nexus invitation lists the grant, so revoking it withdraws
+    both."""
+    nexus = _previous(_world())
+    expected = _old_plan(FLAGS, {"org-1": OVERLAY})
+    with nexus.installed():
+        async with nexus_db() as db:
+            await _previous_database(db, nexus)
+            await role_features.migrate_role_features(db, FLAGS)
+            rows = {
+                row[0]: (json.loads(row[1]), json.loads(row[2] or "[]"))
+                for row in (
+                    await db.execute(text("SELECT id, grant_ids, policy_ids FROM invitations"))
+                ).all()
+            }
+        with as_service_account("engine"):
+            pending = {g.id: g for g in nexus.iam.list_pending_grants()}
+            for invitation_id, (grant_ids, policy_ids) in rows.items():
+                assert len(grant_ids) == 2 and len(policy_ids) == 1, invitation_id
+                assert {pending[g].policy_id for g in grant_ids} - {policy_ids[0]} <= set(
+                    roles.ROLES
+                )
+            zoe = nexus.iam.ensure_user(
+                "https://idp.example", "zoe", provider="builtin", email=BOB_TOO, email_verified=True
+            )
+            olga = nexus.iam.ensure_user(
+                "https://idp.example",
+                "olga",
+                provider="builtin",
+                email=OWNER_TOO,
+                email_verified=True,
+            )
+            nexus.iam.claim_pending_grants(zoe.id)
+            nexus.iam.claim_pending_grants(olga.id)
+        # As Nexus does after the sign-in that claims an org role.
+        Memberships.mirror_org_wide(nexus.iam, olga.id, "abi:org-1:-", "owner")
+
+        def features(principal_id: str, workspace: str) -> set[str]:
+            names = {
+                key: nexus_resource("feature", org="org-1", workspace=workspace, id=key)
+                for key in KNOWN_FEATURE_KEYS
+            }
+            with use_call_context(NexusIam.context(principal_id)):
+                allowed = set(nexus.iam.filter("nexus:UseFeature", list(names.values())).allowed)
+            return {key for key, name in names.items() if name in allowed}
+
+        assert features(zoe.id, "ws-a") == set(expected["org-1.member"])
+        assert features(zoe.id, "ws-b") == set()
+        for workspace in ("ws-a", "ws-later"):
+            assert features(olga.id, workspace) == set(expected["owner"]), workspace
+
+
+@pytest.mark.asyncio
+async def test_an_interrupted_move_keeps_the_old_features_and_finishes_next_start(
     nexus_db, monkeypatch
 ):
-    nexus = _world()
-    _store_previous_state(nexus, _old_plan(FLAGS, {"org-1": OVERLAY}))
+    nexus = _previous(_world())
     with nexus.installed():
         before = _decisions(nexus)
         nexus.iam.bootstrap()
         async with nexus_db() as db:
-            await _previous_database(db)
-            real = role_features.apply
+            await _previous_database(db, nexus)
+            real = role_features.move
 
-            def failing(iam, move, attachments):
-                if move.workspace == "ws-b":
-                    raise RuntimeError("IAM went away")
-                return real(iam, move, attachments)
+            def failing(iam, workspaces, keys):
+                real(iam, [w for w in workspaces if w[0] != "ws-b"], keys)
+                raise RuntimeError("IAM went away")
 
-            monkeypatch.setattr(role_features, "apply", failing)
-            await role_features.migrate_role_features(db, FLAGS)
-            # Not recorded, and the overlay is kept for the next start.
+            monkeypatch.setattr(role_features, "move", failing)
+            assert await role_features.migrate_role_features(db, FLAGS) is None
+            # Not recorded: the old policies and the overlay stay, nobody lost anything.
             assert await _has_table(db, "organization_role_features")
-            monkeypatch.setattr(role_features, "apply", real)
+            assert _old_ids(nexus)
+            nexus.iam.invalidate()
+            assert _decisions(nexus) == before
+            monkeypatch.setattr(role_features, "move", real)
             assert await role_features.migrate_role_features(db, FLAGS)
             assert not await _has_table(db, "organization_role_features")
+            assert _old_ids(nexus) == []
         nexus.iam.invalidate()
         assert _decisions(nexus) == before
 
 
 @pytest.mark.asyncio
-async def test_the_move_waits_for_the_workspace_overrides(nexus_db):
-    nexus = _world()
+async def test_a_role_left_before_the_move_takes_its_old_features_with_it(nexus_db):
+    """Between the engine's start and the move, a role detached takes the old
+    companion with it, as the older IAM's sync did: never wider."""
+    nexus = _previous(_world())
     with nexus.installed():
+        with as_service_account("api"):
+            nexus.iam.detach_policy(roles.MEMBER, nexus.principal("bob"), "abi:org-1:ws-a")
+        assert not _decisions(nexus, ["bob"])[("bob", "ws-a", "chat")]
+        async with nexus_db() as db:
+            await _previous_database(db, nexus)
+            await role_features.migrate_role_features(db, FLAGS)
+        assert not any(_decisions(nexus, ["bob"]).values())
+
+
+@pytest.mark.asyncio
+async def test_the_move_waits_for_the_workspace_overrides(nexus_db):
+    nexus = _previous(_world())
+    with nexus.installed():
+        before = _decisions(nexus)
         async with nexus_db() as db:
             await db.execute(
                 text(
@@ -302,6 +424,8 @@ async def test_the_move_waits_for_the_workspace_overrides(nexus_db):
             assert await role_features.migrate_role_features(db, FLAGS) is None
             found = (await db.execute(text("SELECT name FROM iam_migrations"))).all()
             assert found == []
+        # Waiting loses nothing: the old policies are still in force.
+        assert _decisions(nexus) == before
 
 
 @pytest.mark.asyncio
@@ -330,9 +454,7 @@ async def test_a_disabled_feature_is_usable_by_nobody_the_platform_admin_include
         for user in ("root", "bob"):
             decision = await AUTHZ.decide("UseFeature", user=user, workspace="ws-1", id="tasks")
             assert (decision.allowed, decision.reason) == (False, "feature_disabled")
-            assert not await AUTHZ.allowed(
-                "ListTasks", user=user, workspace="ws-1", id="-"
-            )
+            assert not await AUTHZ.allowed("ListTasks", user=user, workspace="ws-1", id="-")
 
 
 def test_a_configuration_that_still_sets_the_role_features_is_warned(caplog):

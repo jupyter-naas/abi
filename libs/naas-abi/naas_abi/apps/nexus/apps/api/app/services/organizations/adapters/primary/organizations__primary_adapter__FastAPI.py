@@ -998,7 +998,8 @@ async def invite_org_member(
     # provider makes them exist, IAM holds the roles for their email, and the
     # first sign-in claims them. Someone who already has an account is added
     # directly.
-    if await invites.persistence.user_id_by_email(email) is None:
+    existing_user = await invites.persistence.user_id_by_email(email)
+    if existing_user is None:
         org = await service.get_organization(org_id)
         workspace = (
             await workspace_service.get_workspace(invite.workspace_id)
@@ -1034,6 +1035,22 @@ async def invite_org_member(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return invite_result(outcome)
 
+    # The policies the invitation carries, checked and attached as the inviting
+    # person before anything is made (IAM refuses one they may not attach or do
+    # not hold): a refusal leaves no membership behind.
+    carried: tuple[str, ...] = ()
+    if invite.policy_ids:
+        try:
+            carried = await invites.attach_policies(
+                user_id=existing_user,
+                organization_id=org_id,
+                workspace_id=invite.workspace_id,
+                policy_ids=invite.policy_ids,
+                by=current_user.id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     try:
         member = await service.invite_member(
             org_id=org_id,
@@ -1043,6 +1060,13 @@ async def invite_org_member(
             by=current_user,
         )
     except MembershipDenied as exc:
+        if carried:
+            await invites.detach_policies(
+                user_id=existing_user,
+                organization_id=org_id,
+                workspace_id=invite.workspace_id,
+                policy_ids=carried,
+            )
         raise _member_denied(str(exc)) from exc
     except OrganizationMemberAlreadyExistsError as exc:
         # Re-inviting is how an admin resends the notice that never arrived, so
@@ -1079,20 +1103,6 @@ async def invite_org_member(
             ws_member = None
         if ws_member is not None:
             workspace_member_id = ws_member.id
-
-    # The policies the invitation carries, attached now as the inviting person
-    # (IAM refuses one they may not attach or do not hold).
-    if invite.policy_ids:
-        try:
-            await invites.attach_policies(
-                user_id=member.user_id,
-                organization_id=org_id,
-                workspace_id=invite.workspace_id,
-                policy_ids=invite.policy_ids,
-                by=current_user.id,
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     org = await service.get_organization(org_id)
     workspace = (

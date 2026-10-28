@@ -185,46 +185,44 @@ export function WorkspaceInstancesSection({
         <p className="text-sm text-muted-foreground">Loading instance catalog…</p>
       ) : (
         <div className="space-y-6">
-          <>
-            <InstanceChecklist
-              title="Agents"
-              options={catalog.agents}
-              selected={agentSet}
-              disabled={disabled}
-              onChange={(next) =>
-                onDraftChange({
-                  ...draft,
-                  agents: [...next],
-                  default_agent:
-                    draft.default_agent && next.has(draft.default_agent)
-                      ? draft.default_agent
-                      : [...next][0],
-                })
-              }
-            />
-            {defaultAgentOptions.length > 0 && (
-              <div className="account-profile-field">
-                <label className="account-profile-field-label" htmlFor="default-agent">
-                  Default chat agent
-                </label>
-                <select
-                  id="default-agent"
-                  className="account-profile-field-input"
-                  disabled={disabled}
-                  value={draft.default_agent || defaultAgentOptions[0]}
-                  onChange={(event) =>
-                    onDraftChange({ ...draft, default_agent: event.target.value })
-                  }
-                >
-                  {defaultAgentOptions.map((ref) => (
-                    <option key={ref} value={ref}>
-                      {ref}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </>
+          <InstanceChecklist
+            title="Agents"
+            options={catalog.agents}
+            selected={agentSet}
+            disabled={disabled}
+            onChange={(next) =>
+              onDraftChange({
+                ...draft,
+                agents: [...next],
+                default_agent:
+                  draft.default_agent && next.has(draft.default_agent)
+                    ? draft.default_agent
+                    : [...next][0],
+              })
+            }
+          />
+          {defaultAgentOptions.length > 0 && (
+            <div className="account-profile-field">
+              <label className="account-profile-field-label" htmlFor="default-agent">
+                Default chat agent
+              </label>
+              <select
+                id="default-agent"
+                className="account-profile-field-input"
+                disabled={disabled}
+                value={draft.default_agent || defaultAgentOptions[0]}
+                onChange={(event) =>
+                  onDraftChange({ ...draft, default_agent: event.target.value })
+                }
+              >
+                {defaultAgentOptions.map((ref) => (
+                  <option key={ref} value={ref}>
+                    {ref}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <InstanceChecklist
             title="Apps"
             options={catalog.apps}
@@ -239,39 +237,37 @@ export function WorkspaceInstancesSection({
             disabled={disabled}
             onChange={(next) => onDraftChange({ ...draft, ontologies: [...next] })}
           />
-          <>
-            <InstanceChecklist
-              title="Map feeds"
-              options={catalog.map_feeds}
-              selected={mapFeedSet}
-              disabled={disabled}
-              onChange={(next) =>
-                onDraftChange({
-                  ...draft,
-                  maps: {
-                    ...draft.maps,
-                    feeds: [...next],
-                    basemaps: draft.maps?.basemaps,
-                  },
-                })
-              }
-            />
-            <InstanceChecklist
-              title="Basemaps"
-              options={catalog.basemaps}
-              selected={basemapSet}
-              disabled={disabled}
-              onChange={(next) =>
-                onDraftChange({
-                  ...draft,
-                  maps: {
-                    feeds: draft.maps?.feeds,
-                    basemaps: { custom: [...next] },
-                  },
-                })
-              }
-            />
-          </>
+          <InstanceChecklist
+            title="Map feeds"
+            options={catalog.map_feeds}
+            selected={mapFeedSet}
+            disabled={disabled}
+            onChange={(next) =>
+              onDraftChange({
+                ...draft,
+                maps: {
+                  ...draft.maps,
+                  feeds: [...next],
+                  basemaps: draft.maps?.basemaps,
+                },
+              })
+            }
+          />
+          <InstanceChecklist
+            title="Basemaps"
+            options={catalog.basemaps}
+            selected={basemapSet}
+            disabled={disabled}
+            onChange={(next) =>
+              onDraftChange({
+                ...draft,
+                maps: {
+                  feeds: draft.maps?.feeds,
+                  basemaps: { custom: [...next] },
+                },
+              })
+            }
+          />
         </div>
       )}
     </SettingsSection>

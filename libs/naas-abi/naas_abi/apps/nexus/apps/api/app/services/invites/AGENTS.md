@@ -45,8 +45,10 @@ IdP group bindings are the same idea for a whole group of a provider: the member
   one is a 400, the role is chosen as the role). For an email with no
   Nexus account they answer `{"status": "invited", "invitation", "provider", "user_created",
   "sign_in_email_sent", "renewed"}`; someone who already has an account is added directly and
-  mailed a notice with a sign-in link (`sign_in_email_sent`), and the policies are attached to them at
-  once, as the inviting person (`InvitationService.attach_policies`); with no provider configured an invite of
+  mailed a notice with a sign-in link (`sign_in_email_sent`); the policies are attached to them as the
+  inviting person **before** the membership is made (`InvitationService.attach_policies`), so a refused one
+  (400 not a customer policy, 403 not held, 404 not one they may see) leaves no membership behind, and a
+  refused membership takes back what was attached (`detach_policies`); with no provider configured an invite of
   someone with no account answers 400: Nexus has no login of its own to fall back to.
 - `GET /api/invitations/providers` → `{enabled, default_provider, providers:[{name,
   display_name, provisioning, managed_in_provider}]}`; `managed_in_provider` is

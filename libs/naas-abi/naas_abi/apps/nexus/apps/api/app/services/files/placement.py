@@ -7,7 +7,8 @@ sibling workspace names can: a prefix placement ends at a ``/``, and the kernel
 refuses ``.`` and ``..`` segments, so ``<ws>-2`` and ``<ws>/../<other>`` are
 never inside ``<ws>``. Every other tree (the platform drive, the migration and
 scaffolding markers, the analytics) belongs to the platform, and a user's own
-drives are reached through the platform-level types of ``roles.PLATFORM_TYPES``.
+drives are reached through the rows of the roles' platform companions: the
+kernel's (``roles.PLATFORM_TYPES``) and the ``nexus`` catalog's ``PLATFORM_ACCESS``.
 
 Placed at startup for the workspaces that exist (``place_existing``), when a
 workspace's drive is written (``place_workspace_drive_sync``) and, as a safety

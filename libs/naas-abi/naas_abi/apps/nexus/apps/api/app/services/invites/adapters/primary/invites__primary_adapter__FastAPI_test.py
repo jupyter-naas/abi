@@ -85,7 +85,7 @@ def _inviter(team) -> None:
 async def api(team, nexus_db, monkeypatch):
     now = datetime(2026, 1, 1)
     async with nexus_db() as db:
-        for user in ("owner", "admin", "inviter"):
+        for user in ("owner", "admin", "inviter", "carl"):
             db.add(
                 UserModel(
                     id=user,
@@ -201,3 +201,42 @@ async def test_an_idp_binding_to_a_role_the_binder_lacks_is_a_403_naming_it(api,
         response = await client.put("/api/idp-groups/workspaces/ws-1", json=binding)
         assert response.status_code == 200, response.text
         assert [b["group"] for b in response.json()["bindings"]] == ["Sales"]
+
+
+def _held(team, user: str) -> set[tuple[str, str | None]]:
+    with as_service_account("engine"):
+        found = team.iam.ensure_user(LEGACY_NEXUS_ISSUER, user, provider="nexus")
+        return {(a.policy_id, a.scope) for a in team.iam.list_attachments(principal_id=found.id)}
+
+
+@pytest.mark.asyncio
+async def test_adding_an_account_checks_its_policies_before_the_membership(
+    api, team, monkeypatch
+):
+    """Someone who has an account is added directly: the policies the invite
+    carries are checked first, so a refused one leaves no membership behind."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import role_features
+
+    async def known(email: str) -> str | None:
+        return "carl" if email == "carl@example.com" else None
+
+    monkeypatch.setattr(api.invites.persistence, "user_id_by_email", known)
+    with as_service_account("engine"):
+        features = team.iam.create_policy(
+            "Features of member", role_features.policy_document(["chat"]), scope=WS1
+        )
+    body = {"email": "carl@example.com", "role": "viewer", "policy_ids": [features.id]}
+    async with api.as_("inviter") as client:
+        refused = await client.post("/api/workspaces/ws-1/members/invite", json=body)
+    assert refused.status_code in (403, 404), refused.text
+    assert _held(team, "carl") == set()
+    async with api.as_("admin") as client:
+        wrong = await client.post(
+            "/api/workspaces/ws-1/members/invite",
+            json={**body, "policy_ids": ["builtin.owner"]},
+        )
+        assert wrong.status_code == 400, wrong.text
+        assert _held(team, "carl") == set()
+        added = await client.post("/api/workspaces/ws-1/members/invite", json=body)
+    assert added.status_code == 200, added.text
+    assert {("builtin.viewer", WS1), (features.id, WS1)} <= _held(team, "carl")
