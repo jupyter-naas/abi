@@ -19,6 +19,7 @@ import jinja2
 import yaml
 
 import naas_abi_cli
+from naas_abi_cli.cli.deploy.local import MIGRATE_TO_NATS_DOC
 from naas_abi_cli.cli.utils.Copier import Copier
 
 from .utils import to_pascal_case, to_snake_case
@@ -26,9 +27,26 @@ from .utils import to_pascal_case, to_snake_case
 TEMPLATES = Path(naas_abi_cli.__file__).parent / "cli/new/templates"
 COMPOSE_OVERRIDE = "docker-compose.override.yml"
 ABI_GIT_URL = "https://github.com/jupyter-naas/abi.git"
-# The ABI ref standalone modules install naas-abi-proto and naas-abi-sdk from,
-# until both are on PyPI. `--abi-ref` picks another branch, tag or commit.
-DEFAULT_ABI_GIT_REF = "main"
+# Standalone modules install naas-abi-proto and naas-abi-sdk from the ABI
+# repository until both are on PyPI, pinned by default to the release tag of
+# this CLI (semantic-release's tag_format), so they match the CLI that created
+# the module and never move. `--abi-ref` picks another branch, tag or commit.
+CLI_TAG_FORMAT = "naas-abi-cli-v{version}"
+
+
+def default_abi_git_ref() -> str:
+    """The release tag of the installed CLI: ``naas-abi-cli-v<version>``."""
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return CLI_TAG_FORMAT.format(version=version("naas-abi-cli"))
+    except PackageNotFoundError as exc:
+        raise click.ClickException(
+            "Cannot tell which naas-abi-cli release this is; pass --abi-ref "
+            "with the ABI tag or commit to install naas-abi-sdk from."
+        ) from exc
+
+
 # A dev module's name (EngineConfiguration_Dev.DevModuleConfiguration.name).
 _DEV_MODULE_NAME = re.compile(r"^[a-z][a-z0-9-]{0,62}$")
 # What reading a project config can raise: the file, its Jinja, its YAML, or
@@ -51,19 +69,37 @@ class Project:
         return self.root / "src"
 
     def nats(self) -> bool:
+        """Whether its Docker stack runs on NATS (``config.local.yaml`` first)."""
         from naas_abi_cli.cli.deploy.local import project_uses_nats
 
         return bool(project_uses_nats(str(self.root)))
 
+    def nats_anywhere(self) -> bool:
+        """Whether it runs on NATS natively or in Docker: either config has
+        a ``nats:`` block."""
+        from naas_abi_cli.cli.deploy.local import any_config_uses_nats
+
+        return any_config_uses_nats(str(self.root))
+
     def discovery_project(self) -> str:
-        """The configured discovery project, else the project's own name."""
+        """The configured discovery project, else the project's own name.
+
+        The Docker stack's config comes first: its engine hosts the discovery the
+        module's compose service registers in. `config.yaml` is what `abi dev up`
+        reads, and it hands its modules the project from there itself.
+        """
         from naas_abi_cli.cli.dev_modules import configured_discovery_project
 
-        try:
-            configured = configured_discovery_project(self.config)
-        except _CONFIG_ERRORS:  # an unreadable config falls back to the name
-            configured = None
-        return configured or to_snake_case(self.root.name) or "default"
+        for config in (self.root / "config.local.yaml", self.config):
+            if not config.is_file():
+                continue
+            try:
+                configured = configured_discovery_project(config)
+            except _CONFIG_ERRORS:  # an unreadable config is skipped
+                continue
+            if configured:
+                return configured
+        return to_snake_case(self.root.name) or "default"
 
 
 def find_project(start: Path) -> Project | None:
@@ -80,9 +116,9 @@ def find_project(start: Path) -> Project | None:
 _NON_PACKAGE_LEVELS = 3
 
 
-def is_remote_module(path: Path) -> bool:
-    """Whether ``path`` lies in a remote module: a package whose ``__init__.py``
-    (it, or a parent package's) builds on ``naas_abi_sdk``."""
+def module_package_root(path: Path) -> Path | None:
+    """The package of the remote module ``path`` lies in: the nearest folder, from
+    ``path`` up, whose ``__init__.py`` builds on ``naas_abi_sdk``."""
     folder = path
     while not folder.exists() and folder != folder.parent:
         folder = folder.parent
@@ -92,19 +128,20 @@ def is_remote_module(path: Path) -> bool:
         folder = folder.parent
     while (folder / "__init__.py").is_file():
         if "naas_abi_sdk" in (folder / "__init__.py").read_text(encoding="utf-8"):
-            return True
+            return folder
         folder = folder.parent
-    return False
+    return None
 
 
-# What a remote module does instead of the in-engine scaffolds (naas_abi_core).
+def is_remote_module(path: Path) -> bool:
+    """Whether ``path`` lies in a remote module: a package whose ``__init__.py``
+    (it, or a parent package's) builds on ``naas_abi_sdk``."""
+    return module_package_root(path) is not None
+
+
+# What a remote module does instead of the in-engine scaffolds that stay
+# refused (naas_abi_core). Workflows, pipelines and integrations have SDK ones.
 _REMOTE_ALTERNATIVES = {
-    "workflow": "put the logic in a plain async function and call it from an "
-    "agent tool or a @job on ABIModule",
-    "pipeline": "put the logic in a plain async function, write through "
-    "self.engine.services.triple_store, and run it from a @job on ABIModule",
-    "integration": "call the third-party API from plain Python (httpx, "
-    "requests) in the module, with its credentials from self.engine.services.secret",
     "orchestration": "declare a @job on ABIModule with Every/Cron/OnEvent "
     "triggers: remote modules schedule work on JetStream, not Dagster",
 }
@@ -123,6 +160,45 @@ def refuse_in_remote_module(scaffold: str, path: str) -> None:
             f"`abi new {scaffold}` scaffolds naas_abi_core code it cannot "
             f"import. Instead, {_REMOTE_ALTERNATIVES[scaffold]}. Or create an "
             "in-engine module: `abi new module <name> --in-engine`."
+        )
+
+
+def component_destination(path: str, folder: str, noun: str) -> tuple[str, bool]:
+    """Where ``abi new <noun>`` writes in a remote module, and whether discovery
+    finds it there.
+
+    The module serves what is under ``<package>/<folder>/`` only. The default
+    path (``.``) therefore means that folder, unless the working directory is in
+    it already. An explicit path elsewhere is kept, with a warning.
+    """
+    target = target_dir(path)
+    root = module_package_root(target)
+    if root is None:
+        return path, False
+    inside = root.resolve() / folder
+    resolved = target.resolve()
+    if resolved == inside or inside in resolved.parents:
+        return path, True
+    if path == ".":
+        return str(inside), True
+    click.echo(
+        f"Warning: {resolved} is not under {folder}/ of the module package "
+        f"({inside}), the only place the module looks for {noun}s: it will not be "
+        f"built or served there. Move it into {folder}/.",
+        err=True,
+    )
+    return path, False
+
+
+def ensure_package(folder: Path) -> None:
+    """Make ``folder`` a package: a scaffold's test imports its component
+    relatively, and discovery imports the component by its dotted name."""
+    folder.mkdir(parents=True, exist_ok=True)
+    init = folder / "__init__.py"
+    if not init.exists():
+        # Path(".") has no name: write an empty marker then.
+        init.write_text(
+            f'"""{folder.name}"""\n' if folder.name else "", encoding="utf-8"
         )
 
 
@@ -359,9 +435,10 @@ def create_in_project(project: Project, module_name: str, package: Path) -> None
     service = compose_service(project, name, package, discovery_project)
     if not project.nats():
         click.echo(
-            "- This project's config has no `nats:` block, so its Docker stack "
-            "has no broker for the module. See docs/migrate-to-nats.md; then add "
-            f"this service to {COMPOSE_OVERRIDE}:\n\n" + compose_snippet(name, service)
+            "- This project's Docker config has no `nats:` block, so its Docker "
+            f"stack has no broker for the module. See {MIGRATE_TO_NATS_DOC}; "
+            f"then add this service to {COMPOSE_OVERRIDE}:\n\n"
+            + compose_snippet(name, service)
         )
     elif not (project.root / "docker-compose.yml").exists():
         click.echo(

@@ -1,88 +1,54 @@
 'use client';
 
-import {
-  Activity,
-  Building2,
-  AlertTriangle,
-  Bell,
-  Brain,
-  CloudLightning,
-  Crosshair,
-  Flame,
-  Globe,
-  Laptop,
-  Layers,
-  LayoutGrid,
-  Map,
-  MapPin,
-  Mountain,
-  Newspaper,
-  Plane,
-  Rocket,
-  Satellite,
-  Ship,
-  Sparkles,
-  Thermometer,
-  Wind,
-} from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ChevronDown, ChevronRight, Layers, LayoutGrid, Map } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-is-mobile';
-import { useMapsStore } from '@/stores/maps';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from '@/components/shell/sidebar/collapsible-section';
+import { OntologyMultiPicker } from '@/components/shell/sidebar/ontology-multi-picker';
 import { getWorkspacePath } from '@/components/shell/sidebar/utils';
-import { ALL_LAYERS_ID, groupLayerEntries, type LayoutEntry } from '../lib/layouts';
-import { mapsAllLayersPath, mapsDatasetPath, mapsLibraryPath, parseMapsRoute } from '../lib/maps-route';
+import { MapsLayerBrandIcon } from './maps-layer-brand-icon';
+import { mapsIconMap } from '../lib/maps-icons';
+import { groupFeedLayers, groupLayerEntries, type LayoutEntry } from '../lib/layouts';
+import { mapsLayerPath, mapsLibraryPath, mapsPath } from '../lib/maps-route';
+import { layerPinColor } from '../lib/maps-layer-colors';
+import {
+  filterSidebarEntries,
+  sidebarFeedOptions,
+  sidebarFilterLabel,
+  sidebarGroupOptions,
+  toggleValue,
+} from '../lib/maps-sidebar-filter';
+import { resolveMapsPinImageUrl } from '../lib/maps-pin-image-url';
+import { useMapsLayerParams } from '../lib/use-maps-layer-params';
 import { useMapLayers } from '../lib/use-map-layouts';
+import { useMapsSidebarLayerCounts } from '../lib/use-maps-sidebar-layer-counts';
+import { useMapsStore } from '@/stores/maps';
 import './maps-components.css';
 
-export const mapsIconMap: Record<string, LucideIcon> = {
-  Activity,
-  Building2,
-  AlertTriangle,
-  Bell,
-  Brain,
-  CloudLightning,
-  Crosshair,
-  Flame,
-  Globe,
-  Laptop,
-  Layers,
-  LayoutGrid,
-  Map,
-  MapPin,
-  Mountain,
-  Newspaper,
-  Plane,
-  Rocket,
-  Satellite,
-  Ship,
-  Sparkles,
-  Thermometer,
-  Wind,
-};
+export { mapsIconMap } from '../lib/maps-icons';
 
 function LayerSwitch({
-  entry,
+  label,
   on,
   onChange,
 }: {
-  entry: LayoutEntry;
+  label: string;
   on: boolean;
   onChange: () => void;
 }) {
   const title = on
-    ? `On the map — click to leave ${entry.title} out`
-    : `Not on the map — click to add ${entry.title}`;
+    ? `On the map — click to leave ${label} out`
+    : `Not on the map — click to add ${label}`;
   return (
     <button
       type="button"
       role="switch"
       aria-checked={on}
-      aria-label={`Show ${entry.title} on the map`}
+      aria-label={`Show ${label} on the map`}
       title={title}
       onClick={onChange}
       className={cn(
@@ -100,6 +66,67 @@ function LayerSwitch({
   );
 }
 
+/** Swatch in the layer's color with its icon (feed layers). */
+function LayerSwatch({ entry }: { entry: LayoutEntry }) {
+  const Icon = mapsIconMap[entry.icon] ?? mapsIconMap.MapPin;
+  return (
+    <span
+      className="flex h-[14px] w-[14px] shrink-0 items-center justify-center text-white"
+      style={{ background: layerPinColor(entry) }}
+      aria-hidden
+    >
+      {Icon ? <Icon size={10} /> : null}
+    </span>
+  );
+}
+
+function PointCount({ count }: { count: number | undefined }) {
+  return count === undefined ? null : (
+    <span className="text-[10px] tabular-nums text-muted-foreground" title={`${count} data points`}>
+      {count}
+    </span>
+  );
+}
+
+function LayerRow({
+  entry,
+  workspaceId,
+  on,
+  active,
+  count,
+  nested = false,
+  onToggle,
+  onSelect,
+}: {
+  entry: LayoutEntry;
+  workspaceId: string | null;
+  on: boolean;
+  active: boolean;
+  count?: number;
+  nested?: boolean;
+  onToggle: () => void;
+  onSelect: () => void;
+}) {
+  return (
+    <div className={cn(rowClass(active), nested && 'pl-5')}>
+      <Link
+        href={mapsLayerPath(workspaceId, entry.id)}
+        aria-current={active ? 'page' : undefined}
+        title={entry.feedTitle && nested ? `${entry.feedTitle} · ${entry.title}` : entry.description}
+        onClick={onSelect}
+        className={cn('flex min-w-0 flex-1 items-center gap-2', !on && 'text-muted-foreground')}
+      >
+        {nested ? <LayerSwatch entry={entry} /> : <MapsLayerBrandIcon entry={entry} size={14} />}
+        <span className="flex-1 truncate">{entry.title}</span>
+        <PointCount count={count} />
+      </Link>
+      <LayerSwitch label={entry.title} on={on} onChange={onToggle} />
+    </div>
+  );
+}
+
+const NO_SELECTION: string[] = [];
+
 function rowClass(active: boolean) {
   return cn(
     'flex w-full items-center gap-2 rounded-md px-2 py-1 text-left search-sidebar-list-row transition-colors hover:bg-workspace-accent-10',
@@ -108,38 +135,90 @@ function rowClass(active: boolean) {
 }
 
 /**
- * Sidebar: All layers, then Public and Custom. Basemap is chosen on the map.
+ * Sidebar: Active layers, the Groups / Feeds filters, then each group's feeds
+ * and layers.
  */
 export function MapsDatasetGroups({
   dense,
 }: {
   dense?: boolean;
 }) {
-  const pathname = usePathname();
-  const { workspaceId, entries, isOn, error } = useMapLayers();
-  const setLayerOn = useMapsStore((s) => s.setLayerOn);
-  const setLayersOn = useMapsStore((s) => s.setLayersOn);
-  const { datasetId } = parseMapsRoute(pathname);
+  const { workspaceId, layerIds, hasLayerChoice, isOn, setLayerOn, setLayersOn, selectLayerExclusive } =
+    useMapsLayerParams();
+  const { entries, error, loading } = useMapLayers();
+  useMapsSidebarLayerCounts(workspaceId, entries, loading);
+  const layerCounts = useMapsStore((s) => s.layerCounts);
+  // Feeds start expanded while one of their layers is on; a click overrides.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  // Sidebar filters (empty = all); they narrow the list, not the map.
+  const [filter, setFilter] = useState<{ workspaceId: string | null; groups: string[]; feeds: string[] }>({
+    workspaceId,
+    groups: [],
+    feeds: [],
+  });
+  const sameWorkspace = filter.workspaceId === workspaceId;
+  const groups = sameWorkspace ? filter.groups : NO_SELECTION;
+  const feeds = sameWorkspace ? filter.feeds : NO_SELECTION;
+  const groupOptions = useMemo(() => sidebarGroupOptions(entries), [entries]);
+  const feedOptions = useMemo(() => sidebarFeedOptions(entries, groups), [entries, groups]);
+  const listed = useMemo(() => filterSidebarEntries(entries, { groups, feeds }), [entries, groups, feeds]);
+  const setGroups = (next: string[]) => {
+    // Feeds outside the chosen groups leave the selection with them.
+    const offered = new Set(sidebarFeedOptions(entries, next).map((option) => option.value));
+    setFilter({ workspaceId, groups: next, feeds: feeds.filter((feed) => offered.has(feed)) });
+  };
+  const setFeeds = (next: string[]) => setFilter({ workspaceId, groups, feeds: next });
   const combinable = entries.filter((e) => e.combinable);
-  const onCount = combinable.filter(isOn).length;
-  const allActive = datasetId === ALL_LAYERS_ID;
+  const onCount = layerIds.length;
+  const allActive = layerIds.length !== 1;
 
   return (
     <div className={cn('maps-section-list', dense && 'maps-section-list--dense')}>
       {error && <p className="maps-status maps-status--error">{error}</p>}
       <Link
-        href={mapsAllLayersPath(workspaceId)}
+        href={mapsPath(workspaceId, layerIds, { explicit: hasLayerChoice })}
         aria-current={allActive ? 'page' : undefined}
         className="shell-sidebar-home"
       >
         <LayoutGrid size={14} aria-hidden="true" />
-        <span>All layers</span>
+        <span>Active layers</span>
         <span className="text-[10px] text-muted-foreground">
           {onCount}/{combinable.length} on
         </span>
       </Link>
 
-      {groupLayerEntries(entries).map((group) => {
+      <div className="ontology-sidebar-filters shell-sidebar-home-gutter mb-2">
+        <OntologyMultiPicker
+          key={`groups:${workspaceId}`}
+          items={groupOptions}
+          value={groups}
+          onToggle={(value) => setGroups(toggleValue(groups, value))}
+          onClear={() => setGroups([])}
+          loading={loading}
+          error={null}
+          label={sidebarFilterLabel(groups, groupOptions, 'groups')}
+          noun="groups"
+          allLabel="All groups"
+        />
+        <OntologyMultiPicker
+          key={`feeds:${workspaceId}`}
+          items={feedOptions}
+          value={feeds}
+          onToggle={(value) => setFeeds(toggleValue(feeds, value))}
+          onClear={() => setFeeds([])}
+          loading={loading}
+          error={null}
+          label={sidebarFilterLabel(feeds, feedOptions, 'feeds')}
+          noun="feeds"
+          allLabel="All feeds"
+        />
+      </div>
+
+      {!loading && listed.length === 0 && entries.length > 0 && (
+        <p className="maps-status">No layers match these filters.</p>
+      )}
+
+      {groupLayerEntries(listed).map((group) => {
         const groupCombinable = group.entries.filter((e) => e.combinable);
         const allOn = groupCombinable.length > 0 && groupCombinable.every(isOn);
         return (
@@ -156,25 +235,75 @@ export function MapsDatasetGroups({
                 </button>
               )}
             </div>
-            {group.entries.map((entry) => {
-              const IconComponent = mapsIconMap[entry.icon] || Map;
-              const on = isOn(entry);
-              const active = datasetId === entry.id;
+            {groupFeedLayers(group.entries).map((item) => {
+              if (item.type === 'layer') {
+                return (
+                  <LayerRow
+                    key={item.entry.id}
+                    entry={item.entry}
+                    count={layerCounts[item.entry.id]}
+                    workspaceId={workspaceId}
+                    on={isOn(item.entry)}
+                    active={layerIds.length === 1 && layerIds[0] === item.entry.id}
+                    onToggle={() => setLayerOn(item.entry.id, !isOn(item.entry))}
+                    onSelect={() => selectLayerExclusive(item.entry.id)}
+                  />
+                );
+              }
+              const ids = item.layers.map((layer) => layer.id);
+              const onCount = item.layers.filter(isOn).length;
+              const open = expanded[item.feedId] ?? onCount > 0;
+              const logo = resolveMapsPinImageUrl(item.logoUrl);
               return (
-                <div key={entry.id} className={rowClass(active)}>
-                  <Link
-                    href={mapsDatasetPath(workspaceId, entry.id)}
-                    aria-current={active ? 'page' : undefined}
-                    title={entry.description}
-                    className={cn(
-                      'flex min-w-0 flex-1 items-center gap-2',
-                      !on && 'text-muted-foreground',
-                    )}
-                  >
-                    <IconComponent size={14} className="flex-shrink-0" />
-                    <span className="flex-1 truncate">{entry.title}</span>
-                  </Link>
-                  <LayerSwitch entry={entry} on={on} onChange={() => setLayerOn(entry.id, !on)} />
+                <div key={`feed:${item.feedId}`}>
+                  <div className={rowClass(false)}>
+                    <button
+                      type="button"
+                      className={cn(
+                        'flex min-w-0 flex-1 items-center gap-2 text-left',
+                        onCount === 0 && 'text-muted-foreground',
+                      )}
+                      aria-expanded={open}
+                      aria-label={`${item.title}: ${open ? 'hide' : 'show'} its layers`}
+                      title={`${item.title}: ${onCount} of ${item.layers.length} layers on`}
+                      onClick={() => setExpanded((current) => ({ ...current, [item.feedId]: !open }))}
+                    >
+                      {logo ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- feed logo (API or https)
+                        <img src={logo} alt="" width={14} height={14} className="shrink-0" />
+                      ) : (
+                        <Layers size={14} aria-hidden />
+                      )}
+                      <span className="min-w-0 truncate">{item.title}</span>
+                      {open ? (
+                        <ChevronDown size={12} className="shrink-0 text-muted-foreground" aria-hidden />
+                      ) : (
+                        <ChevronRight size={12} className="shrink-0 text-muted-foreground" aria-hidden />
+                      )}
+                      <span className="flex-1" />
+                      <PointCount count={layerCounts[`feed:${item.feedId}`]} />
+                    </button>
+                    <LayerSwitch
+                      label={`all layers of ${item.title}`}
+                      on={onCount === item.layers.length}
+                      onChange={() => setLayersOn(ids, onCount !== item.layers.length)}
+                    />
+                  </div>
+                  {open
+                    ? item.layers.map((layer) => (
+                        <LayerRow
+                          key={layer.id}
+                          entry={layer}
+                          nested
+                          count={layerCounts[layer.id]}
+                          workspaceId={workspaceId}
+                          on={isOn(layer)}
+                          active={layerIds.length === 1 && layerIds[0] === layer.id}
+                          onToggle={() => setLayerOn(layer.id, !isOn(layer))}
+                          onSelect={() => selectLayerExclusive(layer.id)}
+                        />
+                      ))
+                    : null}
                 </div>
               );
             })}

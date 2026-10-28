@@ -11,7 +11,7 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class Principal(_message.Message):
-    __slots__ = ("id", "kind", "status", "name", "issuer", "subject", "provider", "email", "email_verified", "display_name", "org", "owner_id", "created_at", "updated_at")
+    __slots__ = ("id", "kind", "status", "name", "issuer", "subject", "provider", "email", "email_verified", "display_name", "org", "owner_id", "created_at", "updated_at", "owner_scope")
     ID_FIELD_NUMBER: _ClassVar[int]
     KIND_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
@@ -26,6 +26,7 @@ class Principal(_message.Message):
     OWNER_ID_FIELD_NUMBER: _ClassVar[int]
     CREATED_AT_FIELD_NUMBER: _ClassVar[int]
     UPDATED_AT_FIELD_NUMBER: _ClassVar[int]
+    OWNER_SCOPE_FIELD_NUMBER: _ClassVar[int]
     id: str
     kind: str
     status: str
@@ -40,10 +41,11 @@ class Principal(_message.Message):
     owner_id: str
     created_at: _timestamp_pb2.Timestamp
     updated_at: _timestamp_pb2.Timestamp
-    def __init__(self, id: _Optional[str] = ..., kind: _Optional[str] = ..., status: _Optional[str] = ..., name: _Optional[str] = ..., issuer: _Optional[str] = ..., subject: _Optional[str] = ..., provider: _Optional[str] = ..., email: _Optional[str] = ..., email_verified: bool = ..., display_name: _Optional[str] = ..., org: _Optional[str] = ..., owner_id: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    owner_scope: str
+    def __init__(self, id: _Optional[str] = ..., kind: _Optional[str] = ..., status: _Optional[str] = ..., name: _Optional[str] = ..., issuer: _Optional[str] = ..., subject: _Optional[str] = ..., provider: _Optional[str] = ..., email: _Optional[str] = ..., email_verified: bool = ..., display_name: _Optional[str] = ..., org: _Optional[str] = ..., owner_id: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., owner_scope: _Optional[str] = ...) -> None: ...
 
 class Policy(_message.Message):
-    __slots__ = ("id", "name", "description", "document_json", "managed", "revision", "created_at", "updated_at")
+    __slots__ = ("id", "name", "description", "document_json", "managed", "revision", "created_at", "updated_at", "owner_scope")
     ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
@@ -52,6 +54,7 @@ class Policy(_message.Message):
     REVISION_FIELD_NUMBER: _ClassVar[int]
     CREATED_AT_FIELD_NUMBER: _ClassVar[int]
     UPDATED_AT_FIELD_NUMBER: _ClassVar[int]
+    OWNER_SCOPE_FIELD_NUMBER: _ClassVar[int]
     id: str
     name: str
     description: str
@@ -60,7 +63,8 @@ class Policy(_message.Message):
     revision: int
     created_at: _timestamp_pb2.Timestamp
     updated_at: _timestamp_pb2.Timestamp
-    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., description: _Optional[str] = ..., document_json: _Optional[str] = ..., managed: bool = ..., revision: _Optional[int] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    owner_scope: str
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., description: _Optional[str] = ..., document_json: _Optional[str] = ..., managed: bool = ..., revision: _Optional[int] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., owner_scope: _Optional[str] = ...) -> None: ...
 
 class Attachment(_message.Message):
     __slots__ = ("id", "policy_id", "principal_id", "scope", "created_at")
@@ -140,21 +144,41 @@ class Scope(_message.Message):
     workspace: str
     def __init__(self, org: _Optional[str] = ..., workspace: _Optional[str] = ...) -> None: ...
 
+class SetItems(_message.Message):
+    __slots__ = ("items",)
+    ITEMS_FIELD_NUMBER: _ClassVar[int]
+    items: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, items: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class ScopeSet(_message.Message):
+    __slots__ = ("org", "workspace", "modules", "features")
+    ORG_FIELD_NUMBER: _ClassVar[int]
+    WORKSPACE_FIELD_NUMBER: _ClassVar[int]
+    MODULES_FIELD_NUMBER: _ClassVar[int]
+    FEATURES_FIELD_NUMBER: _ClassVar[int]
+    org: str
+    workspace: str
+    modules: SetItems
+    features: SetItems
+    def __init__(self, org: _Optional[str] = ..., workspace: _Optional[str] = ..., modules: _Optional[_Union[SetItems, _Mapping]] = ..., features: _Optional[_Union[SetItems, _Mapping]] = ...) -> None: ...
+
 class ResourceType(_message.Message):
-    __slots__ = ("name", "id", "placement", "container", "personal", "description")
+    __slots__ = ("name", "id", "placement", "container", "personal", "description", "module_scope")
     NAME_FIELD_NUMBER: _ClassVar[int]
     ID_FIELD_NUMBER: _ClassVar[int]
     PLACEMENT_FIELD_NUMBER: _ClassVar[int]
     CONTAINER_FIELD_NUMBER: _ClassVar[int]
     PERSONAL_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    MODULE_SCOPE_FIELD_NUMBER: _ClassVar[int]
     name: str
     id: str
     placement: str
     container: bool
     personal: bool
     description: str
-    def __init__(self, name: _Optional[str] = ..., id: _Optional[str] = ..., placement: _Optional[str] = ..., container: bool = ..., personal: bool = ..., description: _Optional[str] = ...) -> None: ...
+    module_scope: bool
+    def __init__(self, name: _Optional[str] = ..., id: _Optional[str] = ..., placement: _Optional[str] = ..., container: bool = ..., personal: bool = ..., description: _Optional[str] = ..., module_scope: bool = ...) -> None: ...
 
 class ActionSpec(_message.Message):
     __slots__ = ("name", "level", "resource_types", "creates", "subjects", "description")
@@ -173,16 +197,18 @@ class ActionSpec(_message.Message):
     def __init__(self, name: _Optional[str] = ..., level: _Optional[str] = ..., resource_types: _Optional[_Iterable[str]] = ..., creates: bool = ..., subjects: _Optional[_Iterable[str]] = ..., description: _Optional[str] = ...) -> None: ...
 
 class ActionCatalog(_message.Message):
-    __slots__ = ("service", "version", "resource_types", "actions")
+    __slots__ = ("service", "version", "resource_types", "actions", "module")
     SERVICE_FIELD_NUMBER: _ClassVar[int]
     VERSION_FIELD_NUMBER: _ClassVar[int]
     RESOURCE_TYPES_FIELD_NUMBER: _ClassVar[int]
     ACTIONS_FIELD_NUMBER: _ClassVar[int]
+    MODULE_FIELD_NUMBER: _ClassVar[int]
     service: str
     version: int
     resource_types: _containers.RepeatedCompositeFieldContainer[ResourceType]
     actions: _containers.RepeatedCompositeFieldContainer[ActionSpec]
-    def __init__(self, service: _Optional[str] = ..., version: _Optional[int] = ..., resource_types: _Optional[_Iterable[_Union[ResourceType, _Mapping]]] = ..., actions: _Optional[_Iterable[_Union[ActionSpec, _Mapping]]] = ...) -> None: ...
+    module: str
+    def __init__(self, service: _Optional[str] = ..., version: _Optional[int] = ..., resource_types: _Optional[_Iterable[_Union[ResourceType, _Mapping]]] = ..., actions: _Optional[_Iterable[_Union[ActionSpec, _Mapping]]] = ..., module: _Optional[str] = ...) -> None: ...
 
 class Decision(_message.Message):
     __slots__ = ("allowed", "visible", "reason")
@@ -304,6 +330,30 @@ class AuthorizeResponse(_message.Message):
     decision: Decision
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., decision: _Optional[_Union[Decision, _Mapping]] = ...) -> None: ...
 
+class AuthorizeDeclaredRequest(_message.Message):
+    __slots__ = ("context", "action", "resource_type", "parts", "workspace_id")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    ACTION_FIELD_NUMBER: _ClassVar[int]
+    RESOURCE_TYPE_FIELD_NUMBER: _ClassVar[int]
+    PARTS_FIELD_NUMBER: _ClassVar[int]
+    WORKSPACE_ID_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    action: str
+    resource_type: str
+    parts: _containers.RepeatedScalarFieldContainer[str]
+    workspace_id: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., action: _Optional[str] = ..., resource_type: _Optional[str] = ..., parts: _Optional[_Iterable[str]] = ..., workspace_id: _Optional[str] = ...) -> None: ...
+
+class AuthorizeDeclaredResponse(_message.Message):
+    __slots__ = ("error", "decision", "resource")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    DECISION_FIELD_NUMBER: _ClassVar[int]
+    RESOURCE_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    decision: Decision
+    resource: str
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., decision: _Optional[_Union[Decision, _Mapping]] = ..., resource: _Optional[str] = ...) -> None: ...
+
 class FilterRequest(_message.Message):
     __slots__ = ("context", "action", "resources")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
@@ -343,6 +393,40 @@ class ExplainResponse(_message.Message):
     error: _common_pb2.CallError
     explanation: Explanation
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., explanation: _Optional[_Union[Explanation, _Mapping]] = ...) -> None: ...
+
+class GrantableAction(_message.Message):
+    __slots__ = ("action", "resources", "excluded")
+    ACTION_FIELD_NUMBER: _ClassVar[int]
+    RESOURCES_FIELD_NUMBER: _ClassVar[int]
+    EXCLUDED_FIELD_NUMBER: _ClassVar[int]
+    action: str
+    resources: _containers.RepeatedScalarFieldContainer[str]
+    excluded: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, action: _Optional[str] = ..., resources: _Optional[_Iterable[str]] = ..., excluded: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class GrantableCatalog(_message.Message):
+    __slots__ = ("service", "actions")
+    SERVICE_FIELD_NUMBER: _ClassVar[int]
+    ACTIONS_FIELD_NUMBER: _ClassVar[int]
+    service: str
+    actions: _containers.RepeatedCompositeFieldContainer[GrantableAction]
+    def __init__(self, service: _Optional[str] = ..., actions: _Optional[_Iterable[_Union[GrantableAction, _Mapping]]] = ...) -> None: ...
+
+class GrantableRequest(_message.Message):
+    __slots__ = ("context", "scope")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    SCOPE_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    scope: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., scope: _Optional[str] = ...) -> None: ...
+
+class GrantableResponse(_message.Message):
+    __slots__ = ("error", "catalogs")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    CATALOGS_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    catalogs: _containers.RepeatedCompositeFieldContainer[GrantableCatalog]
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., catalogs: _Optional[_Iterable[_Union[GrantableCatalog, _Mapping]]] = ...) -> None: ...
 
 class EnsureUserRequest(_message.Message):
     __slots__ = ("context", "issuer", "subject", "provider", "email", "email_verified", "display_name")
@@ -475,14 +559,16 @@ class DeletePrincipalResponse(_message.Message):
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., principal: _Optional[_Union[Principal, _Mapping]] = ...) -> None: ...
 
 class CreateGroupRequest(_message.Message):
-    __slots__ = ("context", "name", "org")
+    __slots__ = ("context", "name", "org", "scope")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     ORG_FIELD_NUMBER: _ClassVar[int]
+    SCOPE_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     name: str
     org: str
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., name: _Optional[str] = ..., org: _Optional[str] = ...) -> None: ...
+    scope: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., name: _Optional[str] = ..., org: _Optional[str] = ..., scope: _Optional[str] = ...) -> None: ...
 
 class CreateGroupResponse(_message.Message):
     __slots__ = ("error", "group")
@@ -509,14 +595,16 @@ class GetGroupResponse(_message.Message):
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., group: _Optional[_Union[Principal, _Mapping]] = ...) -> None: ...
 
 class ListGroupsRequest(_message.Message):
-    __slots__ = ("context", "limit", "after")
+    __slots__ = ("context", "limit", "after", "scope")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     LIMIT_FIELD_NUMBER: _ClassVar[int]
     AFTER_FIELD_NUMBER: _ClassVar[int]
+    SCOPE_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     limit: int
     after: str
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., limit: _Optional[int] = ..., after: _Optional[str] = ...) -> None: ...
+    scope: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., limit: _Optional[int] = ..., after: _Optional[str] = ..., scope: _Optional[str] = ...) -> None: ...
 
 class ListGroupsResponse(_message.Message):
     __slots__ = ("error", "groups", "next_after")
@@ -651,16 +739,18 @@ class ListIdpGroupMappingsResponse(_message.Message):
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., mappings: _Optional[_Iterable[_Union[GroupMapping, _Mapping]]] = ...) -> None: ...
 
 class CreatePolicyRequest(_message.Message):
-    __slots__ = ("context", "name", "document_json", "description")
+    __slots__ = ("context", "name", "document_json", "description", "scope")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     DOCUMENT_JSON_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    SCOPE_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     name: str
     document_json: str
     description: str
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., name: _Optional[str] = ..., document_json: _Optional[str] = ..., description: _Optional[str] = ...) -> None: ...
+    scope: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., name: _Optional[str] = ..., document_json: _Optional[str] = ..., description: _Optional[str] = ..., scope: _Optional[str] = ...) -> None: ...
 
 class CreatePolicyResponse(_message.Message):
     __slots__ = ("error", "policy")
@@ -687,14 +777,16 @@ class GetPolicyResponse(_message.Message):
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., policy: _Optional[_Union[Policy, _Mapping]] = ...) -> None: ...
 
 class ListPoliciesRequest(_message.Message):
-    __slots__ = ("context", "limit", "after")
+    __slots__ = ("context", "limit", "after", "scope")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     LIMIT_FIELD_NUMBER: _ClassVar[int]
     AFTER_FIELD_NUMBER: _ClassVar[int]
+    SCOPE_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     limit: int
     after: str
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., limit: _Optional[int] = ..., after: _Optional[str] = ...) -> None: ...
+    scope: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., limit: _Optional[int] = ..., after: _Optional[str] = ..., scope: _Optional[str] = ...) -> None: ...
 
 class ListPoliciesResponse(_message.Message):
     __slots__ = ("error", "policies", "next_after")
@@ -887,6 +979,80 @@ class DeleteScopeResponse(_message.Message):
     error: _common_pb2.CallError
     deleted: bool
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., deleted: bool = ...) -> None: ...
+
+class GetSetRequest(_message.Message):
+    __slots__ = ("context", "org", "workspace")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    ORG_FIELD_NUMBER: _ClassVar[int]
+    WORKSPACE_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    org: str
+    workspace: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., org: _Optional[str] = ..., workspace: _Optional[str] = ...) -> None: ...
+
+class GetSetResponse(_message.Message):
+    __slots__ = ("error", "scope_set")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    SCOPE_SET_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    scope_set: ScopeSet
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., scope_set: _Optional[_Union[ScopeSet, _Mapping]] = ...) -> None: ...
+
+class EffectiveSetRequest(_message.Message):
+    __slots__ = ("context", "org", "workspace")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    ORG_FIELD_NUMBER: _ClassVar[int]
+    WORKSPACE_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    org: str
+    workspace: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., org: _Optional[str] = ..., workspace: _Optional[str] = ...) -> None: ...
+
+class EffectiveSetResponse(_message.Message):
+    __slots__ = ("error", "scope_set")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    SCOPE_SET_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    scope_set: ScopeSet
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., scope_set: _Optional[_Union[ScopeSet, _Mapping]] = ...) -> None: ...
+
+class ListSetsRequest(_message.Message):
+    __slots__ = ("context", "org")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    ORG_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    org: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., org: _Optional[str] = ...) -> None: ...
+
+class ListSetsResponse(_message.Message):
+    __slots__ = ("error", "sets")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    SETS_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    sets: _containers.RepeatedCompositeFieldContainer[ScopeSet]
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., sets: _Optional[_Iterable[_Union[ScopeSet, _Mapping]]] = ...) -> None: ...
+
+class PutSetRequest(_message.Message):
+    __slots__ = ("context", "org", "workspace", "modules", "features")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    ORG_FIELD_NUMBER: _ClassVar[int]
+    WORKSPACE_FIELD_NUMBER: _ClassVar[int]
+    MODULES_FIELD_NUMBER: _ClassVar[int]
+    FEATURES_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    org: str
+    workspace: str
+    modules: SetItems
+    features: SetItems
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., org: _Optional[str] = ..., workspace: _Optional[str] = ..., modules: _Optional[_Union[SetItems, _Mapping]] = ..., features: _Optional[_Union[SetItems, _Mapping]] = ...) -> None: ...
+
+class PutSetResponse(_message.Message):
+    __slots__ = ("error", "scope_set")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    SCOPE_SET_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    scope_set: ScopeSet
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., scope_set: _Optional[_Union[ScopeSet, _Mapping]] = ...) -> None: ...
 
 class RegisterCatalogRequest(_message.Message):
     __slots__ = ("context", "catalog")

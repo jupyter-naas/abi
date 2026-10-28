@@ -1,8 +1,7 @@
 """A module's credential: its service key, exchanged for engine tokens.
 
 A module holds a service key (``ABI_SERVICE_KEY``, ``abi_sk_<key id>_<secret>``)
-and no signing secret (docs/specs/rfcs/20261013_identity-and-authorization.md,
-§8):
+and no signing secret:
 
 * it logs in to the broker with it (user ``sa``, the key as password), and the
   engine's auth callout gives the connection the subjects its approved policy
@@ -38,7 +37,7 @@ TOKEN_SUBJECT = "abi.iam.v1.token"
 EXCHANGE_SUBJECT = "abi.iam.v1.exchange_token"
 KEY_USER = "sa"
 NATS_AUDIENCE = "abi:nats"
-# A module acting for a user (RFC §9.3): what a host is handed to call the
+# A module acting for a user: what a host is handed to call the
 # kernel with for the user it serves, and renews (up to eight hours).
 AGENT_AUDIENCE = "abi:delegated:agent"
 TOKEN_EXCHANGE_GRANT = "urn:ietf:params:oauth:grant-type:token-exchange"

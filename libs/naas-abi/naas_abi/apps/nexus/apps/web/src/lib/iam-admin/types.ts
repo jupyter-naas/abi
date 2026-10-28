@@ -46,6 +46,66 @@ export type CatalogsView = {
   variables: string[];
 };
 
+/** One agent, app, workflow or pipeline of a module: a module scope (`GET /api/modules/scopes`). */
+export type ModuleScopeItem = {
+  name: string;
+  display_name: string;
+  description: string;
+  icon: string | null;
+  /** The pattern a policy names: `${scope}:module:<type>/<module>/<name>`. */
+  resource: string;
+  actions: string[];
+};
+
+export type ModuleScopesEntry = {
+  module: string;
+  agents: ModuleScopeItem[];
+  apps: ModuleScopeItem[];
+  workflows: ModuleScopeItem[];
+  pipelines: ModuleScopeItem[];
+  /** The catalog the module declares (its own service), if any. */
+  declared: {
+    service: string;
+    version: number;
+    resource_types: { name: string; description: string; resource: string }[];
+    actions: { action: string; level: string; resource_types: string[]; description: string }[];
+  } | null;
+};
+
+export type ModuleScopesView = { modules: ModuleScopesEntry[] };
+
+// -- sets: the module scopes and features usable in an organization or a workspace ------
+
+/**
+ * What an organization or a workspace may use. `null`: nothing recorded, so everything (for a
+ * workspace, whatever its organization has); `[]`: nothing. Module items are `<module>` (the
+ * whole module), `<type>/<module>/<name>` (`agent`, `app`, `workflow`, `pipeline`; `*` for every
+ * item of that type) or `<service>:<Action>` (an action the module declares). Features are
+ * Nexus feature keys (`chat`, `files`, ...).
+ */
+export type SetParts = { modules: string[] | null; features: string[] | null };
+
+export type WorkspaceSetView = {
+  id: string;
+  name: string;
+  /** What is recorded. */
+  set: SetParts;
+  /** What it has: the recorded set within its organization's. */
+  effective: SetParts;
+  /** Whether the caller may change it (`PUT`). */
+  editable: boolean;
+};
+
+export type OrganizationSetView = WorkspaceSetView & { workspaces: WorkspaceSetView[] };
+
+/** `GET /api/iam/admin/sets[?organization_id=]`: the rows (modules, features) and the columns. */
+export type SetsView = {
+  modules: ModuleScopesEntry[];
+  /** The deployment's enabled features, in order. */
+  features: string[];
+  organizations: OrganizationSetView[];
+};
+
 // -- policies -------------------------------------------------------------------------
 
 export type PolicyStatement = {
@@ -67,6 +127,8 @@ export type PolicyView = {
   /** Built-in and module policies: IAM writes them, they are read-only here. */
   managed: boolean;
   revision: number;
+  /** Who owns it: `abi:-:-` (the platform), `abi:<org>:-` or `abi:<org>:<ws>`. */
+  owner_scope?: string;
   document: PolicyDocument;
   created_at: string | null;
   updated_at: string | null;
@@ -77,7 +139,8 @@ export type Page<T> = { items: T[]; next_after: string | null };
 /** The document as the user wrote it: an object (visual editor) or text (YAML or JSON). */
 export type PolicySource = { document: PolicyDocument } | { text: string };
 
-export type PolicyCreate = PolicySource & { name: string; description?: string };
+/** `scope`: the owner, `abi:<org>:-` or `abi:<org>:<ws>`; none: the platform. */
+export type PolicyCreate = PolicySource & { name: string; description?: string; scope?: string | null };
 export type PolicyUpdate = Partial<PolicySource> & {
   expected_revision: number;
   name?: string;
@@ -108,6 +171,8 @@ export type PrincipalView = {
   provider: string | null;
   org: string | null;
   owner_id: string | null;
+  /** Groups: who owns them, `abi:-:-` (the platform), `abi:<org>:-` or `abi:<org>:<ws>`. */
+  owner_scope?: string;
   created_at: string | null;
 };
 
@@ -167,11 +232,25 @@ export type AttachmentCreate = {
 
 /** A policy the caller may attach at a scope (IAM's rules: only a policy whose
  *  every Allow starts with `${scope}:` goes at a scope). */
-export type AttachablePolicy = { id: string; name: string; description: string; managed: boolean };
+export type AttachablePolicy = {
+  id: string;
+  name: string;
+  description: string;
+  managed: boolean;
+  owner_scope?: string;
+};
 
 // -- module permission approvals --------------------------------------------------------
 
 export type ManifestStatus = 'pending' | 'approved' | 'rejected' | 'superseded';
+
+/** A module's own catalog, as its manifest declares it. */
+export type DeclaredCatalog = {
+  service: string;
+  version: number;
+  resource_types: { name: string; id?: string; description?: string }[];
+  actions: { name: string; level: string; resource_types: string[]; description?: string }[];
+};
 
 export type ManifestView = {
   principal_id: string;
@@ -182,6 +261,8 @@ export type ManifestView = {
   status: ManifestStatus;
   /** What the module asked for (variables unsubstituted). */
   document: PolicyDocument;
+  /** The actions the module declares under its own service, approved as submitted. */
+  catalog: DeclaredCatalog | null;
   submitted_at: string | null;
   decided_at: string | null;
   decided_by: string | null;
@@ -192,6 +273,19 @@ export type ManifestView = {
  *  actions and resources, never gain any; Deny statements stay as submitted. */
 export type ManifestApprove = { document?: PolicyDocument };
 export type ManifestReject = { reason: string };
+
+// -- what the caller may grant ------------------------------------------------------------
+
+/** One action the caller holds at a scope, and on which resources (`${scope}:...`);
+ *  `excluded` are Deny patterns that take back part of them. */
+export type GrantableAction = { action: string; resources: string[]; excluded: string[] };
+
+/** `GET /api/iam/admin/grantable?scope=`: per catalog (a kernel service, `nexus`, `module` or a
+ *  module's own service), what the caller may grant there, within the scope's sets. */
+export type GrantableView = {
+  scope: string;
+  catalogs: { service: string; actions: GrantableAction[] }[];
+};
 
 // -- the access simulator ---------------------------------------------------------------
 
@@ -214,7 +308,7 @@ export type DecidingStatement = {
 
 export type Simulation = {
   allowed: boolean;
-  /** `allow`, `explicit_deny`, `implicit_deny`, `suspended` or `sealed`. */
+  /** `allow`, `explicit_deny`, `implicit_deny`, `suspended`, `sealed` or `outside_set`. */
   reason: string;
   action: string;
   resource: string;
@@ -248,7 +342,12 @@ export type AuditEntry = {
  *  `iam:MapIdpGroup`, `iam:UnmapIdpGroup`, `iam:ListPrincipals`, `iam:CreateServiceAccount`,
  *  `iam:DeletePrincipal`, `iam:SuspendPrincipal`, `iam:ResumePrincipal`, `iam:ListKeys`,
  *  `iam:CreateKey`, `iam:RevokeKey`, `iam:ListManifests`, `iam:ApproveManifest`,
- *  `iam:RejectManifest`, `iam:Explain` and `nexus:ReadSystem` (the audit). Without a scope they
- *  are decided on the platform; with `?scope=abi:<org>:<workspace>` the attachment actions are
- *  decided at that scope (an org admin may attach at their org and not on the platform). */
+ *  `iam:RejectManifest`, `iam:Explain`, `iam:GetSet`, `iam:PutSet`, `nexus:ReadSystem` (the
+ *  audit), `nexus:GetRoleFeatures` and `nexus:UpdateRoleFeatures`. Without a scope they are
+ *  decided on the platform; with `?scope=abi:<org>:<workspace>` (`-` for the org itself) the
+ *  attachment actions at that scope and the policy and group actions on that level's own, so
+ *  an org admin may attach at their org and not on the platform. At a scope, what is
+ *  administered at platform level only (principals and service accounts, keys, manifests,
+ *  the simulator, IdP mappings, the audit) is false; the role feature actions are an
+ *  organization's, true only at an org scope for whoever edits its roles' feature defaults. */
 export type AccessView = { actions: Record<string, boolean> };

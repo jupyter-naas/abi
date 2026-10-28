@@ -37,6 +37,8 @@ class ChatAgentRecord:
     class_name: str | None
     model_id: str | None
     provider: str | None
+    # Turned off in its workspace: refused to everyone.
+    enabled: bool = True
 
 
 @dataclass
@@ -74,9 +76,7 @@ class ChatPersistencePort(ABC):
         pass
 
     @abstractmethod
-    async def get_conversation_by_id(
-        self, conversation_id: str
-    ) -> ChatConversationRecord | None:
+    async def get_conversation_by_id(self, conversation_id: str) -> ChatConversationRecord | None:
         pass
 
     @abstractmethod
@@ -111,15 +111,11 @@ class ChatPersistencePort(ABC):
         pass
 
     @abstractmethod
-    async def list_messages_by_conversation(
-        self, conversation_id: str
-    ) -> list[ChatMessageRecord]:
+    async def list_messages_by_conversation(self, conversation_id: str) -> list[ChatMessageRecord]:
         pass
 
     @abstractmethod
-    async def count_messages_for_conversations(
-        self, conversation_ids: list[str]
-    ) -> dict[str, int]:
+    async def count_messages_for_conversations(self, conversation_ids: list[str]) -> dict[str, int]:
         """Return message count keyed by conversation id (single round-trip)."""
         pass
 
@@ -188,7 +184,5 @@ class ChatPersistencePort(ABC):
         pass
 
     @abstractmethod
-    async def get_workspace_secret(
-        self, workspace_id: str, key: str
-    ) -> ChatSecretRecord | None:
+    async def get_workspace_secret(self, workspace_id: str, key: str) -> ChatSecretRecord | None:
         pass

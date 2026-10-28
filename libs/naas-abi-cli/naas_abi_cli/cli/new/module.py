@@ -1,4 +1,5 @@
 import os
+import shutil
 import sys
 from pathlib import Path
 from typing import Literal
@@ -15,9 +16,9 @@ from .new import new
 from .orchestration import new_orchestration
 from .pipeline import new_pipeline
 from .remote_module import (
-    DEFAULT_ABI_GIT_REF,
     create_in_project,
     create_standalone,
+    default_abi_git_ref,
     default_package_dir,
     find_project,
 )
@@ -43,6 +44,16 @@ ModuleKind = Literal["remote", "in-engine"]
     ),
 )
 @click.option(
+    "--remote",
+    "remote",
+    is_flag=True,
+    default=False,
+    help=(
+        "Create a remote module in a project without NATS too (the default in "
+        "a NATS project). It runs once the project is on NATS."
+    ),
+)
+@click.option(
     "--standalone",
     is_flag=True,
     default=False,
@@ -54,35 +65,38 @@ ModuleKind = Literal["remote", "in-engine"]
 )
 @click.option(
     "--abi-ref",
-    default=DEFAULT_ABI_GIT_REF,
-    show_default=True,
+    default=None,
     help=(
         "With --standalone: the ABI branch, tag or commit naas-abi-sdk and "
-        "naas-abi-proto install from (they are not on PyPI yet)."
+        "naas-abi-proto install from. Default: this CLI's release tag, "
+        "naas-abi-cli-v<version>."
     ),
 )
 def _new_module(
     module_name: str,
     module_path: str = ".",
     in_engine: bool = False,
+    remote: bool = False,
     standalone: bool = False,
-    abi_ref: str = DEFAULT_ABI_GIT_REF,
+    abi_ref: str | None = None,
 ):
     """Create a module. By default a remote module: it runs in its own process
     and reaches the engine only through NATS, with naas-abi-sdk.
 
     Inside a project it goes to src/<name>/, and `abi dev up` and `abi start`
     run it (dev.modules, docker-compose.override.yml). It registers itself
-    through discovery, so it is not added to `modules:`.
+    through discovery, so it is not added to `modules:`. In a project without
+    a `nats:` block the default is an in-engine module (--remote overrides).
     """
-    if in_engine and standalone:
+    if in_engine and (standalone or remote):
         raise click.UsageError(
-            "--standalone creates a remote module: drop --in-engine."
+            f"{'--standalone' if standalone else '--remote'} creates a remote "
+            "module: drop --in-engine."
         )
     new_module(
         module_name,
         module_path,
-        kind="in-engine" if in_engine else "remote",
+        kind="in-engine" if in_engine else "remote" if remote or standalone else None,
         standalone=standalone,
         abi_ref=abi_ref,
     )
@@ -100,15 +114,31 @@ def new_module(
     module_name: str,
     module_path: str = ".",
     quiet: bool = False,
-    kind: ModuleKind = "remote",
+    kind: ModuleKind | None = None,
     standalone: bool = False,
-    abi_ref: str = DEFAULT_ABI_GIT_REF,
+    abi_ref: str | None = None,
+    orchestration: bool | None = None,
 ):
     """``kind="remote"``: an SDK module, in the enclosing project's ``src/``
     or, outside a project or with ``standalone``, as a repository of its own.
-    ``kind="in-engine"``: the classic module the engine loads."""
+    ``kind="in-engine"``: the classic module the engine loads. None: in-engine
+    in a project without NATS, where nothing would run a remote one, else
+    remote.
+
+    ``orchestration``: whether an in-engine module gets a Dagster orchestration
+    (legacy). None: only in a project without NATS, or outside any project."""
     module_name = to_kebab_case(module_name)
     project = find_project(Path(os.getcwd()))
+    if kind is None:
+        classic = (
+            project is not None and not standalone and not project.nats_anywhere()
+        )
+        kind = "in-engine" if classic else "remote"
+        if classic:
+            click.echo(
+                "This project's config has no `nats:` block: creating an in-engine "
+                "module (--remote for one that runs once the project is on NATS)."
+            )
 
     if kind == "remote":
         if standalone or project is None:
@@ -120,7 +150,7 @@ def new_module(
             base = os.getcwd() if module_path == "." else module_path
             repository = Path(base).resolve() / module_name
             _empty_destination(str(repository))
-            create_standalone(module_name, repository, abi_ref)
+            create_standalone(module_name, repository, abi_ref or default_abi_git_ref())
         else:
             package = default_package_dir(
                 project, module_path, to_snake_case(module_name)
@@ -174,11 +204,16 @@ def new_module(
         extra_values={"module_name_snake": to_snake_case(module_name)},
     )
 
-    new_orchestration(
-        module_name,
-        os.path.join(module_path, "orchestrations"),
-        extra_values={"module_name_snake": to_snake_case(module_name)},
-    )
+    if orchestration is None:
+        orchestration = project is None or not project.nats_anywhere()
+    if orchestration:
+        new_orchestration(
+            module_name,
+            os.path.join(module_path, "orchestrations"),
+            extra_values={"module_name_snake": to_snake_case(module_name)},
+        )
+    else:
+        shutil.rmtree(os.path.join(module_path, "orchestrations"))
 
     new_app(
         module_name,

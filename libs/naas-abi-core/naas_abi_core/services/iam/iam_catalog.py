@@ -1,8 +1,11 @@
-"""IAM's own catalog (RFC §6.4, "iam") and the seals of RFC §11.3.
+"""IAM's own catalog and the seals.
 
 IAM authorizes its own operations with these actions, like any other service.
-Every resource type is platform-level except ``attachment``, which is named at
-its attachment's scope, so a workspace admin can manage that workspace's roles.
+Four resource types are named in an org or a workspace: ``attachment``, at its
+attachment's scope, ``policy`` and ``group``, at the scope that owns them, so
+the admins of a workspace or an org manage that level's roles, policies and
+groups, and ``set``, read at its own scope and written at the level above
+(``sets.py``). Every other type is platform-level.
 """
 
 from __future__ import annotations
@@ -35,20 +38,42 @@ def _action(
 
 CATALOG = ActionCatalog(
     service=SERVICE,
-    # 2: SubmitManifest, and the subjects of keys and manifests (#60).
-    # 3: RevokeTokens, and the exchange of tokens (#62).
+    # 2: SubmitManifest, and the subjects of keys and manifests.
+    # 3: RevokeTokens, and the exchange of tokens.
     # 4: ClaimPendingGrants, and the subjects of pending grants and IdP group
-    # bindings (#64).
-    version=4,
+    # bindings.
+    # 5: policies and groups are placed at the scope that owns them.
+    # 6: organisation and workspace sets (GetSet, PutSet).
+    version=6,
     resource_types=(
         ResourceType("principal", id="opaque", placement="platform"),
-        ResourceType("group", id="opaque", placement="platform"),
-        ResourceType("policy", id="opaque", placement="platform"),
+        ResourceType(
+            "group",
+            id="opaque",
+            placement="placed",
+            description="group/<group id>, at the scope that owns it.",
+        ),
+        ResourceType(
+            "policy",
+            id="opaque",
+            placement="placed",
+            description="policy/<policy id>, at the scope that owns it.",
+        ),
         ResourceType(
             "attachment",
             id="path",
             placement="placed",
             description="attachment/<policy id>/<principal id>, at its scope.",
+        ),
+        ResourceType(
+            "set",
+            id="opaque",
+            placement="placed",
+            description=(
+                "set/<org or workspace id>: what an org or a workspace may use, "
+                "read at its own scope, written at the level above "
+                "(abi:%2A:%2A:iam:set/<org>, abi:<org>:%2A:iam:set/<ws>)."
+            ),
         ),
         ResourceType("key", id="path", placement="platform", personal=True),
         ResourceType("manifest", id="opaque", placement="platform"),
@@ -138,9 +163,11 @@ CATALOG = ActionCatalog(
         _action("PutScope", "admin", ("scope",), "put_scope"),
         _action("DeleteScope", "admin", ("scope",), "delete_scope"),
         _action("RegisterCatalog", "admin", ("catalog",), "register_catalog"),
+        _action("GetSet", "read", ("set",), "get_set", "effective_set", "list_sets"),
+        _action("PutSet", "admin", ("set",), "put_set"),
     ),
 )
 
-# Sealed in code (RFC §11.3), each next to its service: no policy, no API and
+# Sealed in code, each next to its service: no policy, no API and
 # no OBO user opens them.
 SEALS: tuple[Seal, ...] = (*DOCUMENT_SEALS, *SECRET_SEALS)

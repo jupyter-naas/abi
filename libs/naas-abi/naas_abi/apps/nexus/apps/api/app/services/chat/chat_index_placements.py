@@ -1,4 +1,4 @@
-"""Where a conversation's file index lives, for the kernel (RFC §4.4).
+"""Where a conversation's file index lives, for the kernel.
 
 An ingested file is chunked and embedded into the vector collection
 ``chat_<conversation>``, and its embeddings are cached under

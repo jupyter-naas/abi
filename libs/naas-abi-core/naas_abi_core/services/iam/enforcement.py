@@ -1,6 +1,6 @@
 """How a domain service enforces IAM: one ``ResourceGuard`` per service.
 
-See docs/specs/rfcs/20261013_identity-and-authorization.md, §4.4, §5 and §6.3.
+See ``AGENTS.md``: "Placements", "Evaluation" and "Action catalogs".
 
 * Names are built from the request and placed by IAM (``name``), never taken
   from it: the org and workspace come from placements.

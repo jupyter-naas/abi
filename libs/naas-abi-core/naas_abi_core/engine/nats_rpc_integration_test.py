@@ -183,7 +183,7 @@ def overflow_broker(request, tmp_path):
 
 
 def test_values_above_the_broker_limit_overflow_both_ways(overflow_broker):
-    """docs/adr/20261003_nats-rpc-overflow.md, over a real broker."""
+    """RPC overflow, over a real broker."""
     import os
 
     from naas_abi_core.engine import nats_overflow

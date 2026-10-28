@@ -1,4 +1,4 @@
-"""Token exchange (RFC §9.4): narrow, engine-signed tokens, each with its own
+"""Token exchange: narrow, engine-signed tokens, each with its own
 audience, derived from an identity that was already verified."""
 
 from __future__ import annotations
@@ -151,7 +151,7 @@ def test_only_the_session_and_delegated_audiences_are_issued(h, iam, bob, audien
 
 
 def test_a_session_user_may_be_one_iam_has_no_record_of(h, iam):
-    # Nexus's own users are not in IAM until their login moves (#67).
+    # Nexus's own users are not in IAM until they link to an identity provider.
     claims = _verify(iam, _vouched(iam, "nexus-user-1", AGENT_AUDIENCE).token)
     assert claims.subject == "nexus-user-1"
 
@@ -390,7 +390,7 @@ def test_a_token_that_is_already_narrowed_is_not_narrowed_again(h, iam, bob):
 
 def test_groups_in_a_token_are_only_groups(h, iam, bob):
     """A user's or an account's id in the groups claim must not lend its policies
-    (the #57 review): only ids of active groups count."""
+    (a user's id never lends its policies): only ids of active groups count."""
     admin = h.user("admin")
     h.grant(admin.id, statement("Allow", [INSERT], [graph("*")]))
     sales = h.group("sales")

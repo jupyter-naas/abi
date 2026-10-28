@@ -277,6 +277,34 @@ class ModuleProxy:
             self.client.transport, self.client.project, self.module_id, descriptor
         )
 
+    async def get_workflow(
+        self, name: str, *, input_type: Any = None, output_type: Any = None
+    ):
+        """A workflow of this module, by name: ``start(input)`` or ``run(input)``.
+
+        ``input_type``/``output_type`` (pydantic models, duck-typed) check the
+        input before it is sent and give the output back as a model."""
+        from naas_abi_sdk.workflows import WorkflowProxy
+
+        descriptor = next(
+            (
+                j
+                for j in (await self.ready_instances())[0].jobs
+                if j.name == name and j.is_workflow
+            ),
+            None,
+        )
+        if descriptor is None:
+            raise RPCError("WORKFLOW_NOT_FOUND", name)
+        return WorkflowProxy(
+            self.client.transport,
+            self.client.project,
+            self.module_id,
+            descriptor,
+            input_type=input_type,
+            output_type=output_type,
+        )
+
     async def list_agents(self) -> tuple[AgentDescriptor, ...]:
         return (await self.ready_instances())[0].agents
 
@@ -515,7 +543,11 @@ def module_descriptor(
 
 def discovery_job_authorizer(session: DiscoverySession):
     """A job host's authorizer through discovery (``authorize_job``): the host's
-    lease, then the caller's policy, its token checked as of ``stored_at``."""
+    lease, then the caller's policy, its token checked as of ``stored_at``.
+
+    For an allowed trigger it returns the context the run executes in: the
+    delegation the engine stored with it (``DELEGATION_HEADER``) when it is for
+    the user discovery names and for this module, else None (as itself)."""
 
     async def authorize(
         operation: str,
@@ -523,8 +555,11 @@ def discovery_job_authorizer(session: DiscoverySession):
         run_id: str,
         headers: Mapping[str, str],
         stored_at: datetime | None,
-    ) -> None:
-        await session.client._call(
+    ) -> Any:
+        from naas_abi_sdk.call_context import delegation_context
+        from naas_abi_sdk.jobs import DELEGATION_HEADER
+
+        answer = await session.client._call(
             "authorize_job",
             pb.AuthorizeJobRequest(
                 instance_id=session.instance_id,
@@ -536,6 +571,13 @@ def discovery_job_authorizer(session: DiscoverySession):
                 stored_at=stored_at.timestamp() if stored_at is not None else 0.0,
             ),
             pb.AuthorizeJobResponse,
+        )
+        if operation != "trigger":
+            return None
+        return delegation_context(
+            headers.get(DELEGATION_HEADER, ""),
+            getattr(answer, "caller_identity", ""),
+            session.service_account,
         )
 
     return authorize

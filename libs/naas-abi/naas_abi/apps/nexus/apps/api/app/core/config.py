@@ -6,6 +6,7 @@ from functools import lru_cache
 from typing import Any, Literal
 
 from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
+from naas_abi.apps.nexus.maps_seed_config import WorkspaceMapsSeedConfig
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -207,17 +208,37 @@ class MarketplaceConfig(BaseModel):
     # Prices in USD per 1M tokens (May 2026 rates).
     model_pricing: dict[str, ModelPricingEntry] = Field(
         default_factory=lambda: {
-            "gpt-4o":           ModelPricingEntry(input_per_million=2.50,  output_per_million=10.00, label="GPT-4o"),
-            "gpt-4o-mini":      ModelPricingEntry(input_per_million=0.15,  output_per_million=0.60,  label="GPT-4o mini"),
-            "gpt-4":            ModelPricingEntry(input_per_million=30.00, output_per_million=60.00, label="GPT-4"),
-            "gpt-3.5-turbo":    ModelPricingEntry(input_per_million=0.50,  output_per_million=1.50,  label="GPT-3.5 Turbo"),
-            "o1":               ModelPricingEntry(input_per_million=15.00, output_per_million=60.00, label="o1"),
-            "o3-mini":          ModelPricingEntry(input_per_million=1.10,  output_per_million=4.40,  label="o3-mini"),
-            "claude-opus":      ModelPricingEntry(input_per_million=15.00, output_per_million=75.00, label="Claude Opus"),
-            "claude-sonnet":    ModelPricingEntry(input_per_million=3.00,  output_per_million=15.00, label="Claude Sonnet"),
-            "claude-haiku":     ModelPricingEntry(input_per_million=0.25,  output_per_million=1.25,  label="Claude Haiku"),
-            "gemini-1.5-pro":   ModelPricingEntry(input_per_million=3.50,  output_per_million=10.50, label="Gemini 1.5 Pro"),
-            "gemini-1.5-flash": ModelPricingEntry(input_per_million=0.075, output_per_million=0.30,  label="Gemini Flash"),
+            "gpt-4o": ModelPricingEntry(
+                input_per_million=2.50, output_per_million=10.00, label="GPT-4o"
+            ),
+            "gpt-4o-mini": ModelPricingEntry(
+                input_per_million=0.15, output_per_million=0.60, label="GPT-4o mini"
+            ),
+            "gpt-4": ModelPricingEntry(
+                input_per_million=30.00, output_per_million=60.00, label="GPT-4"
+            ),
+            "gpt-3.5-turbo": ModelPricingEntry(
+                input_per_million=0.50, output_per_million=1.50, label="GPT-3.5 Turbo"
+            ),
+            "o1": ModelPricingEntry(input_per_million=15.00, output_per_million=60.00, label="o1"),
+            "o3-mini": ModelPricingEntry(
+                input_per_million=1.10, output_per_million=4.40, label="o3-mini"
+            ),
+            "claude-opus": ModelPricingEntry(
+                input_per_million=15.00, output_per_million=75.00, label="Claude Opus"
+            ),
+            "claude-sonnet": ModelPricingEntry(
+                input_per_million=3.00, output_per_million=15.00, label="Claude Sonnet"
+            ),
+            "claude-haiku": ModelPricingEntry(
+                input_per_million=0.25, output_per_million=1.25, label="Claude Haiku"
+            ),
+            "gemini-1.5-pro": ModelPricingEntry(
+                input_per_million=3.50, output_per_million=10.50, label="Gemini 1.5 Pro"
+            ),
+            "gemini-1.5-flash": ModelPricingEntry(
+                input_per_million=0.075, output_per_million=0.30, label="Gemini Flash"
+            ),
         }
     )
 
@@ -239,6 +260,7 @@ FeatureKey = Literal[
     "slides",
     "documents",
     "sheets",
+    "tasks",
 ]
 
 
@@ -264,6 +286,7 @@ class FeatureFlagsConfig(BaseModel):
             "slides",
             "documents",
             "sheets",
+            "tasks",
         ]
     )
     role_baseline: dict[str, list[FeatureKey]] = Field(
@@ -284,6 +307,7 @@ class FeatureFlagsConfig(BaseModel):
                 "slides",
                 "documents",
                 "sheets",
+                "tasks",
             ],
             "admin": [
                 "maps",
@@ -301,17 +325,38 @@ class FeatureFlagsConfig(BaseModel):
                 "slides",
                 "documents",
                 "sheets",
+                "tasks",
             ],
-            "member": ["maps", "chat", "files", "datasets", "skills", "slides", "documents", "sheets"],
-            "viewer": ["maps", "chat", "files", "datasets", "skills", "slides", "documents", "sheets"],
+            "member": [
+                "maps",
+                "chat",
+                "files",
+                "datasets",
+                "skills",
+                "slides",
+                "documents",
+                "sheets",
+            ],
+            "viewer": [
+                "maps",
+                "chat",
+                "files",
+                "datasets",
+                "skills",
+                "slides",
+                "documents",
+                "sheets",
+            ],
         }
     )
+    # Deprecated: read once, when Nexus moves the per-workspace overrides into
+    # the workspaces' feature sets (IAM's; services/iam/sets.py). A feature
+    # turned off leaves the set; one turned on is kept for whoever held a role
+    # there then. Edit sets on the modules × workspaces page.
     workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)
     # Per-organization role_baseline overlays. Does not replace deployment
     # role_baseline; keyed by organization id.
-    organization_overrides: dict[str, dict[str, list[FeatureKey]]] = Field(
-        default_factory=dict
-    )
+    organization_overrides: dict[str, dict[str, list[FeatureKey]]] = Field(default_factory=dict)
 
 
 class UserSeedConfig(BaseModel):
@@ -322,8 +367,8 @@ class UserSeedConfig(BaseModel):
     email: EmailStr
     name: str
     avatar: str | None = None
-    company: str | None = None
-    role: str | None = None
+    organization: str | None = None
+    job_title: str | None = None
     bio: str | None = None
     is_superadmin: bool = False
 
@@ -338,7 +383,7 @@ class UserSeedConfig(BaseModel):
 
 
 class OrganizationMemberSeedConfig(BaseModel):
-    """Organization member assignment."""
+    """Deprecated: organization members are managed in the platform."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -347,7 +392,7 @@ class OrganizationMemberSeedConfig(BaseModel):
 
 
 class WorkspaceMemberSeedConfig(BaseModel):
-    """Workspace member assignment."""
+    """Deprecated: workspace members are managed in the platform."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -360,9 +405,15 @@ class WorkspaceSeedConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    name: str
     slug: str
+    # Name, owner, group and branding are managed in the app; config.workspaces.yaml
+    # snapshots them (core/workspaces_import replays it). Still accepted here,
+    # bootstrap only; a workspace created without a name is named after its slug.
+    name: str | None = None
+    # Defaults to the organization owner. Org owners and admins reach every
+    # workspace of their org without a membership row.
     owner_email: EmailStr | None = None
+    # Deprecated and ignored by the seed (kept so older configs still load).
     members: list[WorkspaceMemberSeedConfig] = Field(default_factory=list)
 
     logo_url: str | None = None
@@ -373,6 +424,11 @@ class WorkspaceSeedConfig(BaseModel):
     background_image_url: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
+    # Group in the workspace lists ("Others" when empty). Bootstrap only: applied
+    # when the workspace has no group yet, so a group changed in the UI stays.
+    group: str | None = Field(default=None, max_length=100)
+    # Client/module workspace default (``external.acme AcmeAgent``). When unset,
+    # sync uses engine ``default_agent`` (typically naas_abi AbiAgent).
     default_agent: str | None = None
     agents: list[str] | None = None
     apps: list[str] | None = None
@@ -383,6 +439,8 @@ class WorkspaceSeedConfig(BaseModel):
     ontologies: list[str] | None = Field(default_factory=list)
     # Exact data graph grants. Missing policy exposes owned graphs only.
     graphs: WorkspaceGraphPolicyConfig = Field(default_factory=WorkspaceGraphPolicyConfig)
+    # Initial Maps feeds and custom basemaps (see WorkspaceMapsSeedConfig).
+    maps: WorkspaceMapsSeedConfig | None = None
 
 
 class OrganizationSeedConfig(BaseModel):
@@ -393,6 +451,7 @@ class OrganizationSeedConfig(BaseModel):
     name: str
     slug: str
     owner_email: EmailStr | None = None
+    # Deprecated and ignored by the seed (kept so older configs still load).
     members: list[OrganizationMemberSeedConfig] = Field(default_factory=list)
     workspaces: list[WorkspaceSeedConfig] = Field(default_factory=list)
 
@@ -441,26 +500,20 @@ class Settings(BaseSettings):
 
     # Extra Slides seed trees for the template picker. Additive: ABI's own
     # seeds are always served, so this list holds only what a deploy adds.
-    slides_template_sources: list[SlidesTemplateSourceConfig] = Field(
-        default_factory=list
-    )
-    documents_template_sources: list[DocumentsTemplateSourceConfig] = Field(
-        default_factory=list
-    )
+    slides_template_sources: list[SlidesTemplateSourceConfig] = Field(default_factory=list)
+    documents_template_sources: list[DocumentsTemplateSourceConfig] = Field(default_factory=list)
     # Empty keeps ABI's own seed as the New Document default. A deploy that
     # adds sources can point this at one of those ids so a plain create
     # matches the picker, without ABI naming that source.
-    documents_default_template_id: str | None = Field(
-        default=None, max_length=96
-    )
+    documents_default_template_id: str | None = Field(default=None, max_length=96)
     # Qualified ids or bare stems omitted from the Documents picker. Create
     # and apply still accept them, so existing documents keep working.
     documents_hidden_template_ids: list[str] = Field(default_factory=list)
-    sheets_template_sources: list[SheetsTemplateSourceConfig] = Field(
-        default_factory=list
-    )
+    sheets_template_sources: list[SheetsTemplateSourceConfig] = Field(default_factory=list)
 
-    # User seed configs (upserted by email on startup)
+    # Bootstrap users (created by email on startup). Keep this to platform
+    # operators: everyone else is invited from the platform. is_superadmin
+    # only promotes; demote with PATCH /api/admin/users/{id}.
     users: list[UserSeedConfig] = Field(default_factory=list)
 
     # Organization seed configs (upserted by slug on startup)
@@ -510,7 +563,7 @@ class Settings(BaseSettings):
     # own key, never ``secret_key``: empty, it is generated and kept in the engine's
     # secret store as ``NEXUS_SECRETS_KEY`` (``core/secret_key.py``).
     secrets_encryption_key: str = ""
-    # Before RFC §13 this key signed Nexus's tokens and encrypted the secrets. It
+    # This key used to sign Nexus's tokens and encrypt the secrets. It
     # signs nothing now, and is read at start only to move what it encrypted under
     # ``secrets_encryption_key``; unset it once Nexus logged that it had.
     secret_key: str = ""
@@ -609,7 +662,6 @@ def current_secrets_key() -> str:
     key = settings.secrets_encryption_key
     if not key:
         raise RuntimeError(
-            "No secrets encryption key is loaded: the API resolves it at start "
-            "(core/secret_key.py)"
+            "No secrets encryption key is loaded: the API resolves it at start (core/secret_key.py)"
         )
     return key

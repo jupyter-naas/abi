@@ -1,5 +1,5 @@
 // NATS-RPC contract for identity: the OIDC providers the engine trusts.
-// See docs/specs/rfcs/20261013_identity-and-authorization.md, §12.1.
+// See core's services/identity/AGENTS.md.
 //
 // Subjects: abi.identity.v1.<operation>, one per Request/Response pair below
 // (abi.identity.v1.authenticate, abi.identity.v1.exchange_code, ...).

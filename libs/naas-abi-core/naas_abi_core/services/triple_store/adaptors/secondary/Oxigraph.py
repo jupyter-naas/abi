@@ -535,7 +535,7 @@ class Oxigraph(ITripleStorePort):
     @contextmanager
     def query_stream(self, query: str) -> Iterator[QueryStream]:
         """Read a query's result as Oxigraph writes it: TSV rows or N-Triples,
-        parsed line by line (docs/adr/20261003_nats-streamed-results.md)."""
+        parsed line by line."""
         with self._query_stream(query) as result:
             yield result
 

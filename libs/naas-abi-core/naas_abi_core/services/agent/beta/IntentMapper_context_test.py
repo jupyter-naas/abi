@@ -1,4 +1,4 @@
-"""The intent index embeds as whoever started the warmup (RFC §10.2).
+"""The intent index embeds as whoever started the warmup.
 
 The warmup runs on a background thread and splits the embeddings over a worker
 pool; neither inherits the caller's ``CallContext`` by itself.

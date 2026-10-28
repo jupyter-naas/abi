@@ -8,7 +8,7 @@
   at ``abi.iam.v1.jwks``. Neither needs credentials: each opens a short
   connection of its own.
 
-See docs/specs/rfcs/20261013_identity-and-authorization.md, §8.2 and §9.1.
+See ``engine/AGENTS.md``, "Tokens: signing, verification, sources".
 """
 
 from __future__ import annotations
@@ -134,7 +134,7 @@ def service_key_source(
 def client_engine_source(
     nats_url: str, key: str, iam: Any, *, timeout: float = 10.0
 ) -> RenewingTokenSource:
-    """The tokens of a client-role engine (RFC §8.2): its key exchanged at the
+    """The tokens of a client-role engine: its key exchanged at the
     serving engine, which also exchanges for the users it serves. ``iam`` is the
     engine's IAM client, which calls with this very key's token: the delegation
     is asked of the serving engine as ``engine``, whose policy decides."""
@@ -192,7 +192,7 @@ def nats_verifier(
 
 
 # The accounts a user may be delegated by: the engine's own, which verified the
-# user themselves (RFC §10.2).
+# user themselves.
 DELEGATING_ACCOUNTS = ("api", "engine")
 _HOST_ULID = re.compile(r"[0-9a-z]{26}")
 
@@ -206,7 +206,7 @@ def delegation(
     iam: Any, identity: str
 ) -> Callable[[Any, str | None, Any], IssuedToken]:
     """What a first-party ``identity`` calls to carry a user it verified: a
-    token exchange for ``abi:delegated:agent`` (RFC §9.4), as ``identity``.
+    token exchange for ``abi:delegated:agent``, as ``identity``.
 
     Without ``recipient`` the token acts as ``identity`` itself, for the kernel
     services; with one (a call to the module host whose subjects carry that

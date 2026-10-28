@@ -28,7 +28,7 @@ class {{pipeline_name_pascal}}PipelineParameters(PipelineParameters):
     pass
 
 
-class {{pipeline_name_pascal}}Pipeline(Pipeline[{{pipeline_name_pascal}}PipelineParameters]):
+class {{pipeline_name_pascal}}Pipeline(Pipeline):
     """Pipeline for adding a named individual."""
 
     __configuration: {{pipeline_name_pascal}}PipelineConfiguration
@@ -37,7 +37,8 @@ class {{pipeline_name_pascal}}Pipeline(Pipeline[{{pipeline_name_pascal}}Pipeline
         super().__init__(configuration)
         self.__configuration = configuration
 
-    def run(self, parameters: {{pipeline_name_pascal}}PipelineParameters) -> Graph:
+    # The concrete parameters type gives the auto-mounted POST route its schema.
+    def run(self, parameters: {{pipeline_name_pascal}}PipelineParameters) -> Graph:  # type: ignore[override]
         # Implement the pipeline logic here.
         pass
 
@@ -55,3 +56,6 @@ class {{pipeline_name_pascal}}Pipeline(Pipeline[{{pipeline_name_pascal}}Pipeline
 
     # as_api is inherited from Expose: POST /{slug} calls run() when this
     # method is not overridden. Override only for a custom HTTP surface.
+    # In NATS mode the engine also publishes a live typed run() as a one-step
+    # durable workflow named pipeline.<slug> (nats.workflows.bridge), so it can be
+    # launched and watched like any workflow. Nothing to do here for that.

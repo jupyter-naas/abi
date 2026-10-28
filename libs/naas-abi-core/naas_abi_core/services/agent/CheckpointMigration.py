@@ -14,7 +14,8 @@ writes are sent again (the first write of a task wins: repeats change nothing).
 Run it while no agent writes to the source.
 A thread whose schema 2 history does not grow out of the source's (an engine
 served it on documents before the copy) is reported as ``diverged``: its newer
-head hides the copied history.
+head hides the copied history. A thread continued after the copy is not: its
+stored chain passes through the source's head.
 """
 
 from __future__ import annotations
@@ -109,6 +110,31 @@ def migrate_checkpoints(
     return summary
 
 
+def _diverged(
+    target: DocumentCheckpointSaver, thread_id: str, history: list[CheckpointTuple]
+) -> bool:
+    """Whether the stored thread does not grow out of the source's: its head is
+    no source checkpoint (an incomplete copy's is) and the source's head is not
+    on its chain (a continuation's is)."""
+    stored = target.lineage(thread_id)
+    head = next(stored, None)
+    if head is None:
+        return False
+    source_ids = {item.config["configurable"]["checkpoint_id"] for item in history}
+    if head in source_ids:
+        return False
+    # ``history`` is newest first: the root namespace's first item is its head.
+    source_head = next(
+        (
+            item.config["configurable"]["checkpoint_id"]
+            for item in history
+            if item.config["configurable"]["checkpoint_ns"] == ""
+        ),
+        None,
+    )
+    return source_head is None or source_head not in stored
+
+
 def _copy_thread(
     target: DocumentCheckpointSaver,
     thread_id: str,
@@ -117,9 +143,7 @@ def _copy_thread(
     *,
     apply: bool,
 ) -> None:
-    source_ids = {item.config["configurable"]["checkpoint_id"] for item in history}
-    lineage = target.lineage(thread_id)
-    if lineage is not None and not source_ids & set(lineage):
+    if _diverged(target, thread_id, history):
         summary.diverged.append(thread_id)
     for item in reversed(history):
         stored = target.contains(item.config)

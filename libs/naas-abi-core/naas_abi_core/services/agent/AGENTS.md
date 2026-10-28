@@ -177,6 +177,25 @@ agent_workspace_id: ContextVar[str | None]  # workspace boundary
 
 Propagate across async tasks / raw threads with `contextvars.copy_context()`.
 
+`agent_user_id` and `agent_workspace_id` are views of the call's `CallContext`
+(`engine/call_context.py`, through the event service's `event_actor_user_id` and
+`event_actor_workspace_id`): there is no second source of identity. The context
+decides what an agent run may do, because every kernel service the agent's tools
+call authorizes the call's principal (`services/iam/AGENTS.md`, "Enforcing in a
+domain service"). So:
+
+- A run carries the context of the user who is chatting to its tools, and a
+  platform tool acts for that user, not for the process that built the agent.
+  An agent built once at boot as the engine is still checked for each user that
+  chats: model use (`model_registry:Chat`) is checked per invocation, in the
+  invoking call's context.
+- A raw `Thread`, a worker pool or a background warmup starts with an empty
+  context, which IAM denies as anonymous. Start it with
+  `contextvars.copy_context().run` (as `Agent`, `OpencodeAgent` and
+  `IntentMapper` do), or the work is denied. The intent-index warmup embeds as
+  whoever started it (`beta/IntentMapper_context_test.py`).
+- Jobs hosted for the engine (`AgentMemoryJobs`) run as the engine.
+
 ## Tests
 
 ```bash

@@ -3,7 +3,8 @@
 An admin stages an image (uploaded, or downloaded from a URL) into
 ``.home/tmp/``, previews it, then commits it: the draft moves to
 ``.home/background-img/``, every other wallpaper and draft is removed, and the
-workspace's ``background_image_url`` points at it. ``.home`` is a system folder
+workspace's ``background_image_url`` points at it. Removing the wallpaper moves it
+to ``.home/archives/<ts>_<name>`` (nothing is lost) and clears the pointer. ``.home`` is a system folder
 — the files API refuses writes there — so this module, going through
 FilesService directly, is the only writer.
 """
@@ -12,6 +13,7 @@ from __future__ import annotations
 
 import ipaddress
 import socket
+from datetime import datetime
 from urllib.parse import urlsplit
 from uuid import uuid4
 
@@ -156,6 +158,7 @@ class WorkspaceBackgroundImage:
         home = f"{workspace_drive_root(workspace_id)}/.home"
         self._tmp = f"{home}/tmp"  # nosec B108 - workspace drive folder, not the system temp dir
         self._current = f"{home}/background-img"
+        self._archives = f"{home}/archives"
         self._max_bytes = max_bytes
 
     def stage(self, content: bytes) -> str:
@@ -210,6 +213,22 @@ class WorkspaceBackgroundImage:
 
     def discard(self) -> None:
         self._clear(self._tmp)
+
+    def remove(self, now: datetime) -> str | None:
+        """Move the committed wallpaper to ``.home/archives``; drop drafts.
+
+        Returns the archived file name, or None when there was no wallpaper.
+        """
+        name = self.current_name()
+        self._clear(self._tmp)
+        if name is None:
+            return None
+        archived = f"{now.strftime('%Y%m%dT%H%M%SZ')}_{name}"
+        self._files.rename(
+            old_path=f"{self._current}/{name}", new_path=f"{self._archives}/{archived}"
+        )
+        self._clear(self._current)
+        return archived
 
     def _read(self, folder: str, name: str) -> RawFileData:
         self._check_name(name)

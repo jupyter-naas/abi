@@ -347,12 +347,12 @@ class NamespaceVersionRequest(_message.Message):
     def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., namespace: _Optional[str] = ...) -> None: ...
 
 class NamespaceVersionResponse(_message.Message):
-    __slots__ = ("snapshot_id", "error")
-    SNAPSHOT_ID_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("version", "error")
+    VERSION_FIELD_NUMBER: _ClassVar[int]
     ERROR_FIELD_NUMBER: _ClassVar[int]
-    snapshot_id: int
+    version: int
     error: DatasetError
-    def __init__(self, snapshot_id: _Optional[int] = ..., error: _Optional[_Union[DatasetError, _Mapping]] = ...) -> None: ...
+    def __init__(self, version: _Optional[int] = ..., error: _Optional[_Union[DatasetError, _Mapping]] = ...) -> None: ...
 
 class DropRequest(_message.Message):
     __slots__ = ("context", "name", "namespace")

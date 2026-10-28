@@ -9,7 +9,7 @@ Calls run side by side, up to ``max_concurrency`` at once for the whole service
 
 At a handover the service stops taking calls but answers those it already
 received (``stop_accepting``, ``requests_finished``); see
-docs/adr/20261006_single-serving-engine.md.
+``engine/ownership/AGENTS.md``.
 """
 
 from __future__ import annotations

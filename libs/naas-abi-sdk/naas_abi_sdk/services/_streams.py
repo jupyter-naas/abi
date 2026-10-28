@@ -1,4 +1,4 @@
-"""Read a domain's transfer/v1 stream (docs/adr/20261003_nats-streamed-results.md)."""
+"""Read a domain's transfer/v1 stream."""
 
 from __future__ import annotations
 

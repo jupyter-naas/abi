@@ -106,8 +106,13 @@ def test_iam_operations_need_iam_actions(h):
     h.grant(
         bob.id,
         statement(
-            "Allow", ["iam:CreatePolicy", "iam:GetPolicy"], ["abi:-:-:iam:policy/*"]
+            # The platform's policies are named for every org, abi:%2A:%2A.
+            "Allow",
+            ["iam:CreatePolicy", "iam:GetPolicy"],
+            ["abi:*:*:iam:policy/*"],
         ),
+        # What the policy allows: nobody writes a grant they do not hold.
+        statement("Allow", [QUERY], ["*"]),
     )
     with h.as_(bob):
         created = h.iam.create_policy("mine", doc)
@@ -151,7 +156,7 @@ def test_ensure_user_creates_once_and_refreshes_the_profile(h):
 
 
 def test_legacy_nexus_users_resolve_by_their_nexus_id(h):
-    """TRANSITIONAL until OIDC: Nexus names its users by Nexus id on calls."""
+    """Accounts of the old login keep their Nexus id on calls until they link."""
     record = h.admin("ensure_user", LEGACY_NEXUS_ISSUER, "user-0123456789ab")
     h.attach(roles.PLATFORM_ADMIN, record.id)
     from naas_abi_core.engine.call_context import (
@@ -260,7 +265,7 @@ def test_a_nexus_user_reaches_only_their_own_agent_runs(h, discovery, action):
 )
 def test_a_module_acting_for_a_user_follows_that_users_runs(h, discovery, action):
     """A run started for a user is the user's: a module delegating for that
-    user (a delegated token, #62) follows it, and still no one else's."""
+    user (a delegated token) follows it, and still no one else's."""
     from naas_abi_sdk.module import ModuleDependencies
     from naas_abi_sdk.permissions import default_manifest
 
@@ -756,7 +761,11 @@ def _api_for(user_id: str):
 def test_api_never_reaches_what_it_does_not_name(h):
     """api holds enumerated statements, not ``*``: whoever it acts for, it keeps
     out of IAM's administration and of the seals."""
-    h.iam._register_catalog(__import__("naas_abi_core.services.secret.iam_catalog", fromlist=["CATALOG"]).CATALOG)
+    h.iam._register_catalog(
+        __import__(
+            "naas_abi_core.services.secret.iam_catalog", fromlist=["CATALOG"]
+        ).CATALOG
+    )
     user = _member(h, "user-aaaaaaaaaaaa", "owner")
     h.attach(roles.PLATFORM_ADMIN, user.id)
     with _api_for("user-aaaaaaaaaaaa"):
@@ -801,7 +810,7 @@ def test_allows_every_is_a_safe_shortcut(h):
         assert not h.iam.allows_every("document:Get", "document", "document")
 
 
-# -- service accounts, keys and the exchange (RFC §8.1, §8.2) -------------------------
+# -- service accounts, keys and the exchange -------------------------
 
 
 def _module(h, name: str = "module/acme/people"):
@@ -1019,7 +1028,7 @@ def test_in_process_tokens_for_the_engine_and_api(iam):
         assert claims.name == name and claims.subject.startswith("sa_")
 
 
-# -- manifests (RFC §8.3) ---------------------------------------------------------------
+# -- manifests ---------------------------------------------------------------
 
 MANIFEST = document(
     statement(
@@ -1169,7 +1178,7 @@ def test_unapproved_modules_reach_nothing_but_their_bootstrap(h):
     assert not h.allowed(QUERY, "abi:-:-:triple_store:graph/people-a", account)
 
 
-# -- broker permissions (RFC §8.4) -------------------------------------------------------
+# -- broker permissions -------------------------------------------------------
 
 
 def test_broker_permissions_follow_the_approved_policy(h, iam):
@@ -1331,9 +1340,9 @@ def test_a_retired_managed_policy_and_its_attachments_go_at_boot(h):
     h.iam.store.put_managed_policy(old)
     record = h.admin("ensure_user", LEGACY_NEXUS_ISSUER, "user-0123456789ab")
     h.iam.store.attach(
-        __import__("naas_abi_core.services.iam.IAMPorts", fromlist=["Attachment"]).Attachment(
-            "att_x", old.id, record.id
-        )
+        __import__(
+            "naas_abi_core.services.iam.IAMPorts", fromlist=["Attachment"]
+        ).Attachment("att_x", old.id, record.id)
     )
     with _nexus_call("user-0123456789ab"):
         assert h.iam.authorize(QUERY, graph("a")).allowed

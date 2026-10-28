@@ -10,7 +10,8 @@ import logging
 import math
 import re
 import time
-from dataclasses import dataclass, field
+from contextlib import AbstractContextManager, nullcontext
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from functools import partial
 from typing import Any, Protocol
@@ -21,9 +22,13 @@ from naas_abi_proto.discovery.v1 import discovery_pb2 as discovery_pb
 
 from naas_abi_sdk import overflow
 from naas_abi_sdk.agent import TERMINAL, agent_subject
-from naas_abi_sdk.call_context import CallContext, Principal, use_call_context
+from naas_abi_sdk.broker_flush import flush_to_broker
+from naas_abi_sdk.call_context import (
+    CallContext,
+    delegation_context,
+    use_call_context,
+)
 from naas_abi_sdk.concurrency import DEFAULT_LIMIT, ConcurrentCalls
-from naas_abi_sdk.credentials import AGENT_AUDIENCE
 from naas_abi_sdk.messages import reply
 from naas_abi_sdk.services.errors import DocumentNotFound, VersionConflict
 from naas_abi_sdk.services.models import CollectionSpec
@@ -42,47 +47,6 @@ INLINE_UPDATE_BYTES = 32 * 1024
 # always asks discovery, which checks this provider is READY.
 AUTHORIZATION_SECONDS = 5.0
 MAX_AUTHORIZATIONS = 1024
-
-
-# An account's subject token when it is the account's own ULID (``sa_<ULID>``);
-# anything else cannot be turned back into an account id here.
-_OWN_ACCOUNT = re.compile(r"[0-9A-Za-z]{26}")
-
-
-def _delegation(token: str, caller: str, own: str = "") -> CallContext | None:
-    """The context a run executes in, from the delegation its submitter handed
-    over, or None (the run calls as the module itself).
-
-    The engine verifies every token it is sent; the host only checks that this
-    one is a delegation for the run's owner (``caller``: the user discovery
-    named), so a submitter cannot make the host call as someone else, and that
-    it names this host's own account as the actor (``own``: the account's
-    subject token, from its discovery record; a delegation for another module
-    is not this host's to carry). Anything else is dropped, never an error: the
-    run is the module's own."""
-    if not token:
-        return None
-    try:
-        payload = token.split(".")[1]
-        claims = json.loads(
-            base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4))
-        )
-        actor = claims["act"]["sub"]
-    except (IndexError, ValueError, KeyError, TypeError):
-        return None
-    if (
-        claims.get("aud") != AGENT_AUDIENCE
-        or claims.get("sub") != caller
-        or not isinstance(actor, str)
-        or not actor
-        or (_OWN_ACCOUNT.fullmatch(own or "") and actor != f"sa_{own}")
-    ):
-        return None
-    return CallContext(
-        principal=Principal(id=actor, kind="service_account"),
-        on_behalf_of=Principal(id=caller, kind="user"),
-        delegated_token=token,
-    )
 
 
 @dataclass
@@ -113,6 +77,69 @@ class _Run:
     cancel_reason: str = ""
     started: asyncio.Event = field(default_factory=asyncio.Event)
     watchers: set[str] = field(default_factory=set)  # inboxes receiving RunUpdates
+    # The user the run is for, when it acts for one: the handler's calls carry
+    # it, the host's own records (the run, its events, its claim) never do.
+    delegation: CallContext | None = None
+
+    def for_user(self) -> AbstractContextManager[Any]:
+        return use_call_context(self.delegation) if self.delegation else nullcontext()
+
+
+class _UserStream:
+    """A streaming handler's events, its whole stream consumed by one task made
+    in the run's user context (``_Run.for_user``): the handler keeps one context
+    from its first step to its last, what it sets across a ``yield`` included,
+    while the host stores each event as the module. One event at a time: the
+    handler resumes only once the host took the last."""
+
+    def __init__(self, run: _Run, stream_invoke: Any, prompt: Any) -> None:
+        self._queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=1)
+
+        async def produce() -> None:
+            stream = stream_invoke(prompt, run.context)
+            try:
+                async for event in stream:
+                    await self._queue.put(event)
+            finally:
+                if hasattr(stream, "aclose"):
+                    await stream.aclose()
+
+        with run.for_user():
+            self._producer = asyncio.create_task(produce())
+
+    async def next(self) -> dict | None:
+        """The next event; None once the stream ended. Raises the handler's error."""
+        if not self._queue.empty():
+            return self._queue.get_nowait()
+        getter = asyncio.ensure_future(self._queue.get())
+        try:
+            await asyncio.wait(
+                {getter, self._producer}, return_when=asyncio.FIRST_COMPLETED
+            )
+        except BaseException:
+            getter.cancel()
+            raise
+        if getter.done():
+            return getter.result()
+        getter.cancel()
+        if not self._queue.empty():
+            return self._queue.get_nowait()
+        self._producer.result()  # the handler's error, if it raised
+        return None
+
+    async def close(self) -> None:
+        """Stop the handler if it still runs (the run failed or was cancelled)."""
+        if not self._producer.done():
+            self._producer.cancel()
+        try:
+            await self._producer
+        except asyncio.CancelledError:
+            if not self._producer.cancelled():
+                raise
+        except Exception:  # next() raised it already, or the run failed
+            logging.getLogger(__name__).debug(
+                "Agent stream ended with an error", exc_info=True
+            )
 
 
 def _hash(*values: str) -> str:
@@ -153,6 +180,19 @@ def agent_events_collection(project: str) -> str:
 
 def _error(code: str, message: str) -> RPCError:
     return RPCError(code, message)
+
+
+def _agent_event(
+    sequence: int, stored: dict, *, data: str = "", parts: int = 0
+) -> pb.AgentEvent:
+    """One event on the wire. ``chat_source`` is set only when a tool opted
+    out of chat sources (False), as core's stream_invoke carries it."""
+    event = pb.AgentEvent(
+        sequence=sequence, event=stored["event"], data=data, parts=parts
+    )
+    if stored.get("chat_source") is False:
+        event.chat_source = False
+    return event
 
 
 class AgentHost:
@@ -225,7 +265,7 @@ class AgentHost:
                             ),
                         )
                     )
-            await nc.flush()
+            await flush_to_broker(nc)
         except BaseException:
             for sub in pending:
                 await sub.unsubscribe()
@@ -405,15 +445,15 @@ class AgentHost:
                     self.events_collection, f"{key}:{sequence}"
                 )
                 events.append(
-                    pb.AgentEvent(
-                        sequence=sequence,
-                        event=manifest.data["event"],
+                    _agent_event(
+                        sequence,
+                        manifest.data,
                         parts=manifest.data["parts"],
                     )
                 )
         else:
             events = [
-                pb.AgentEvent(sequence=i + 1, event=e["event"], data=e["data"])
+                _agent_event(i + 1, e, data=e["data"])
                 for i, e in enumerate(data["events"])
                 if i + 1 > after
             ][:64]
@@ -620,16 +660,19 @@ class AgentHost:
                 run.watchers.add(req.updates_inbox)
             run.progress_at = asyncio.get_running_loop().time()
             self.runs[key] = run
-            delegation = _delegation(
+            # The handler's calls are the module's, for the user: inside
+            # ``run.for_user()`` its transport sends the delegation. The
+            # host's records are the module's own, which no user holds.
+            run.delegation = delegation_context(
                 req.delegated_token, caller, self.session.service_account
             )
-            if delegation is None:
-                run.task = asyncio.create_task(self._execute(name, req, run))
-            else:
-                # The run's calls are the module's, for the user: the task
-                # copies this context, and its transport sends the delegation.
-                with use_call_context(delegation):
-                    run.task = asyncio.create_task(self._execute(name, req, run))
+            if run.delegation is not None and req.context.workspace_id:
+                # The workspace of the turn: IAM places what the run does for
+                # the user there (``require_action``), as for any call made in it.
+                run.delegation = replace(
+                    run.delegation, workspace_id=req.context.workspace_id
+                )
+            run.task = asyncio.create_task(self._execute(name, req, run))
             run.task.add_done_callback(self._observe_task)
             streamed = req.mode == "stream" and hasattr(
                 self.handlers[name], "stream_invoke"
@@ -688,18 +731,24 @@ class AgentHost:
         if run.context.cancelled.is_set():
             raise asyncio.CancelledError()
         if (
-            set(event) != {"event", "data"}
-            or not all(isinstance(v, str) for v in event.values())
+            not {"event", "data"} <= set(event) <= {"event", "data", "chat_source"}
+            or not isinstance(event["event"], str)
+            or not isinstance(event["data"], str)
+            or not isinstance(event.get("chat_source", True), bool)
             or len(event["event"]) > 64
         ):
-            raise _error("INVALID_STREAM", "Events must contain event/data strings")
+            raise _error(
+                "INVALID_STREAM",
+                "Events must contain event/data strings and may carry a "
+                "chat_source flag",
+            )
         sequence = run.data["last_sequence"] + 1
         parts = await self._store_output(run, sequence, event["data"])
+        manifest = {"event": event["event"], "parts": parts}
+        if event.get("chat_source") is False:
+            manifest["chat_source"] = False
         await self.documents.put(
-            self.events_collection,
-            f"{run.key}:{sequence}",
-            {"event": event["event"], "parts": parts},
-            if_version=0,
+            self.events_collection, f"{run.key}:{sequence}", manifest, if_version=0
         )
         # Publish the cursor only after every immutable fragment has committed.
         await self._save(run, last_sequence=sequence)
@@ -730,9 +779,9 @@ class AgentHost:
                 limit = min(INLINE_UPDATE_BYTES, nc.max_payload // 4)
                 inline = len(event["data"].encode()) <= limit
                 update = pb.RunUpdate(
-                    event=pb.AgentEvent(
-                        sequence=sequence,
-                        event=event["event"],
+                    event=_agent_event(
+                        sequence,
+                        event,
                         data=event["data"] if inline else "",
                         parts=0 if inline else parts,
                     )
@@ -760,9 +809,9 @@ class AgentHost:
             if req.mode == "stream" and hasattr(handler, "stream_invoke"):
                 messages = []
                 done = False
-                stream = handler.stream_invoke(req.prompt, run.context)
+                feed = _UserStream(run, handler.stream_invoke, req.prompt)
                 try:
-                    async for event in stream:
+                    while (event := await feed.next()) is not None:
                         if done:
                             raise _error("INVALID_STREAM", "Agent emitted after done")
                         await self._event(run, event)
@@ -770,13 +819,13 @@ class AgentHost:
                             messages.append(event["data"])
                         done = event["event"] == "done"
                 finally:
-                    if hasattr(stream, "aclose"):
-                        await stream.aclose()
+                    await feed.close()
                 result = "\n".join(messages)
                 if not done:
                     await self._event(run, {"event": "done", "data": "[DONE]"})
             else:
-                result = await handler.invoke(req.prompt, run.context)
+                with run.for_user():
+                    result = await handler.invoke(req.prompt, run.context)
                 if not isinstance(result, str):
                     raise _error("OUTPUT_LIMIT", "Agent result must be text")
                 await self._event(run, {"event": "message", "data": result})

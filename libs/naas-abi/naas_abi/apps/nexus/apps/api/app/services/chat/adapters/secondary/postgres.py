@@ -187,9 +187,7 @@ class ChatSecondaryAdapterPostgres(ChatPersistencePort):
         )
         return [self._to_message_record(row) for row in result.scalars().all()]
 
-    async def count_messages_for_conversations(
-        self, conversation_ids: list[str]
-    ) -> dict[str, int]:
+    async def count_messages_for_conversations(self, conversation_ids: list[str]) -> dict[str, int]:
         if not conversation_ids:
             return {}
         result = await self.db.execute(
@@ -215,7 +213,9 @@ class ChatSecondaryAdapterPostgres(ChatPersistencePort):
         result = await self.db.execute(
             select(MessageModel)
             .where(MessageModel.conversation_id.in_(conversation_ids))
-            .order_by(MessageModel.conversation_id, MessageModel.created_at, role_order, MessageModel.id)
+            .order_by(
+                MessageModel.conversation_id, MessageModel.created_at, role_order, MessageModel.id
+            )
         )
         by_conv: dict[str, list[ChatMessageRecord]] = {cid: [] for cid in conversation_ids}
         for row in result.scalars().all():
@@ -313,6 +313,7 @@ class ChatSecondaryAdapterPostgres(ChatPersistencePort):
             class_name=row.class_name,
             model_id=row.model_id,
             provider=row.provider,
+            enabled=bool(row.enabled),
         )
 
     async def list_agent_names_by_ids(self, agent_ids: set[str]) -> dict[str, str]:

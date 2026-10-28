@@ -1,4 +1,4 @@
-"""Pending grants and IdP group bindings (RFC §12.2): who may make them, and
+"""Pending grants and IdP group bindings: who may make them, and
 what they reach."""
 
 from __future__ import annotations
@@ -131,6 +131,18 @@ def test_the_first_sign_in_with_the_verified_email_claims_the_grants(h):
     assert h.admin("claim_pending_grants", bob.id) == []
     assert h.allowed("triple_store:Insert", graph("g", "acme", "ws1"), bob)
     assert not h.allowed("triple_store:Insert", graph("g", "acme", "ws2"), bob)
+
+
+def test_a_claimed_role_brings_its_feature_policy(h):
+    """As an attached role does: the invitee's Nexus features follow the role."""
+    from naas_abi_core.engine.call_context import as_service_account
+
+    with as_service_account("engine"):
+        h.iam.put_feature_policies({"member": ["chat"]})
+    h.admin("create_pending_grant", "builtin", BOB, roles.MEMBER, W1)
+    bob = sign_in(h)
+    h.admin("claim_pending_grants", bob.id)
+    assert (roles.feature_policy_id("member"), W1) in held(h, bob)
 
 
 def test_an_unverified_email_claims_nothing(h):

@@ -1,4 +1,4 @@
-"""Provisioning and invitations at sign-in (RFC §12.2): who may provision, what
+"""Provisioning and invitations at sign-in: who may provision, what
 each adapter does, and what a first sign-in claims."""
 
 from __future__ import annotations
@@ -180,6 +180,7 @@ def test_the_none_adapter_never_provisions():
 
 @pytest.fixture
 def builtin():
+    pytest.importorskip("naas_abi_idp")
     from naas_abi_idp.adapters.memory import (
         MemoryDocumentStore,
         MemoryMailer,

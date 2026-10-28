@@ -124,7 +124,10 @@ x-abi-template: &abi_template
     test: ["CMD-SHELL", "for i in 1 2 3; do curl -fsS http://localhost:9879/ >/dev/null || exit 1; sleep 2; done"]
     interval: 10s
     timeout: 15s
-    start_period: 30s
+    # A first boot loads every module and ontology: about three minutes. Failed
+    # probes inside start_period do not count, and `docker compose up` fails
+    # as soon as the engine is reported unhealthy.
+    start_period: 5m
     retries: 10
   networks:
     - abi-network
@@ -198,12 +201,19 @@ services:
         condition: service_healthy
     command:
       ["uv", "run", "--no-dev", "python", "-m", "naas_abi_core.apps.mcp.mcp_server"]
+    # The project and the venv the abi service synced (it is healthy first).
+    volumes:
+      - .:/app
+      - venv_cache:/app/.venv
     environment:
       - ABI_API_BASE=http://abi:9879
       - ABI_API_KEY=${ABI_API_KEY}
       - MCP_TRANSPORT=http
+      - MCP_HOST=0.0.0.0
     ports:
-      - 8000:8000
+      # The MCP server checks no credential and calls agents with ABI_API_KEY:
+      # from this machine only.
+      - 127.0.0.1:8000:8000
     networks:
       - abi-network
 
@@ -335,8 +345,8 @@ services:
       -c 'while true; do
             sleep "$$COMPACT_INTERVAL_SECONDS";
             echo "[fuseki-compact] triggering TDB2 compaction (deleteOld=true)...";
-            curl -fsS -u "admin:$$ADMIN_PASSWORD" -X POST "http://fuseki:3030/$$/compact/ds?deleteOld=true"
-              || echo "[fuseki-compact] compaction request failed";
+            curl -fsS -u "admin:$$ADMIN_PASSWORD" -X POST "http://fuseki:3030/$$/compact/ds?deleteOld=true" ||
+              echo "[fuseki-compact] compaction request failed";
           done'
     networks:
       - abi-network
@@ -418,7 +428,9 @@ services:
   # MinIO - S3-compatible Object Storage for Dagster Compute Logs
   # -----------------------------------------------------------------------------
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    # MinIO stopped publishing public images (quay.io/minio, minio/* on Docker Hub).
+    # pgsty/minio is a community fork built from MinIO source, drop-in compatible.
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     pull_policy: always
     restart: unless-stopped
     command: server /data --console-address :9001
@@ -440,7 +452,7 @@ services:
 
   # mc container to initialize the bucket on startup
   minio-init:
-    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+    image: pgsty/mc:RELEASE.2026-09-16T00-00-00Z
     pull_policy: always
     depends_on:
       minio:
@@ -495,11 +507,11 @@ services:
   nats:
 {% else %}
   # Opt-in: this project runs without NATS (no `nats:` block in its config).
-  # See docs/migrate-to-nats.md to move it over.
+  # To move it over: https://docs.naas.ai/user-guide/upgrade/migrate-to-3
   nats:
     profiles: ["nats"]
 {% endif %}
-    image: nats:2-alpine
+    image: nats:2.14.7-alpine
     pull_policy: always
     restart: unless-stopped
     environment:

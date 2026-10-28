@@ -1,4 +1,4 @@
-"""Organizations (RFC §6.5). Org-level resources: ``abi:<org>:-:nexus:...``.
+"""Organizations. Org-level resources: ``abi:<org>:-:nexus:...``.
 
 The org directory (members, domains, their verification tokens) and billing are
 the owners' and admins' to read (#1346), so their list and get actions are
@@ -24,7 +24,8 @@ ACTIONS = (
     action("DeleteOrganization", "admin", "organization"),
     # The org's full workspace catalog, every workspace and its memberships.
     action("ListOrganizationCatalog", "admin", "organization"),
-    action("CreateWorkspace", "write", "organization"),
+    # Only the organization's owners and admins add a workspace to it.
+    action("CreateWorkspace", "admin", "organization"),
     action("ListOrganizationMembers", "admin", "member"),
     action("InviteOrganizationMember", "admin", "member"),
     action("UpdateOrganizationMember", "admin", "member"),

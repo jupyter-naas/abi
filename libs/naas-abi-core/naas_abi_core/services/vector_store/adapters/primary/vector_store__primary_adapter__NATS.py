@@ -292,7 +292,7 @@ class VectorStorePrimaryAdapterNATS(ServiceWithTransfers):
             # process, plus nats-py's own PING/PONG handling.
             response = await self._dispatch.call(call, parsed_request, caller)
         except (PermissionDeniedError, ResourceNotFoundError) as exc:
-            # The caller's authorization outcome (RFC §5.4), decided by the domain.
+            # The caller's authorization outcome, decided by the domain.
             await self._respond_error(
                 request,
                 response_cls,

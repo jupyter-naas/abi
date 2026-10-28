@@ -1,4 +1,4 @@
-"""Features (RFC §6.5): ``UseFeature`` is granted by feature policies only."""
+"""Features: ``UseFeature`` is granted by feature policies only."""
 
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog.dsl import action, rtype
 

@@ -138,7 +138,9 @@ export default function WorkspaceShellLayout({
   const pathname = usePathname();
   const router = useRouter();
 
-  const { workspaces, fetchWorkspaces } = useWorkspaceStore();
+  // Narrow selectors: this shell must not re-render on every streamed chat chunk.
+  const workspaceCount = useWorkspaceStore((s) => s.workspaces.length);
+  const fetchWorkspaces = useWorkspaceStore((s) => s.fetchWorkspaces);
   const token = useAuthStore(selectSession);
   const [authReady, setAuthReady] = useState(false);
   const [membershipChecked, setMembershipChecked] = useState(false);
@@ -199,10 +201,10 @@ export default function WorkspaceShellLayout({
 
   useEffect(() => {
     if (!membershipChecked || !token) return;
-    if (workspaces.length === 0) {
+    if (workspaceCount === 0) {
       router.replace('/no-workspace');
     }
-  }, [membershipChecked, token, workspaces.length, router]);
+  }, [membershipChecked, token, workspaceCount, router]);
 
   const showShell = authReady && !!token;
 

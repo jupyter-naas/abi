@@ -6,6 +6,12 @@ Command Line Interface (CLI) tool for building and managing ABI (Agentic Brain I
 
 `naas-abi-cli` provides a comprehensive set of commands to create, configure, deploy, and interact with ABI projects. It serves as the primary entry point for developers working with the ABI framework, enabling quick project setup, agent interaction, and cloud deployment.
 
+Since 3.0, `abi new project` creates projects that run on NATS and `abi new
+module` creates remote modules (`naas-abi-sdk`). Dagster and RabbitMQ are
+legacy extras for projects without NATS, removed in the next major. Upgrading
+a 2.x project: [Migrate from 2.x to 3.0](https://docs.naas.ai/user-guide/upgrade/migrate-to-3).
+Every command: [CLI Reference](https://docs.naas.ai/user-guide/reference/cli). Start with [Install and prerequisites](https://docs.naas.ai/user-guide/get-started/install) and the [Quickstart](https://docs.naas.ai/user-guide/get-started/quickstart); deploy with [Docker](https://docs.naas.ai/user-guide/deploy/local-docker), [Dokploy](https://docs.naas.ai/user-guide/deploy/dokploy) or [production](https://docs.naas.ai/user-guide/deploy/production).
+
 ## Installation
 
 Install the CLI tool using pip:
@@ -18,7 +24,7 @@ pip install naas-abi-cli
 
 ### Project Management
 
-#### `abi new project <project-name> [project-path] [--with-local-deploy/--without-local-deploy] [--without-nats]`
+#### `abi new project <project-name> [project-path] [--with-local-deploy/--without-local-deploy] [--without-nats] [--abi-source <url|path>]`
 Creates a new ABI project with all necessary starter files and dependencies.
 
 **What it does:**
@@ -41,7 +47,10 @@ schedules. Check the broker with `curl -s localhost:8222/healthz` and
 `curl -s localhost:8222/connz`.
 
 NATS mode installs `naas-abi-proto` and `naas-abi-sdk` from the `.abi`
-submodule (they are not on PyPI yet), so it refuses `--without-abi-submodule`.
+submodule, at the framework's revision, so it refuses `--without-abi-submodule`.
+`--abi-source` clones that submodule from another git URL or a local ABI
+checkout (its HEAD) instead of GitHub, to try framework changes not published
+yet.
 `--without-nats` creates the classic in-process project (RabbitMQ in Docker,
 no broker for `abi dev`). The project's own module (`src/<project>/`, holding
 the default agent) is an in-engine module either way.
@@ -53,7 +62,7 @@ abi new project my-abi-project --without-local-deploy
 abi new project my-abi-project --without-nats   # classic, in-process
 ```
 
-#### `abi new module <name> [path] [--in-engine] [--standalone] [--abi-ref <ref>]`
+#### `abi new module <name> [path] [--in-engine | --remote] [--standalone] [--abi-ref <ref>]`
 Creates a module. By default a **remote module**: a `naas-abi-sdk` package that
 runs in its own process, reaches the engine only through NATS, and never
 imports `naas_abi_core`. It has an agent (an SDK `IntentAgent` on the engine's
@@ -66,26 +75,37 @@ holds no signing secret.
   to `src/<name>/` with an SDK-only `Dockerfile`, gets a `dev.modules` entry in
   `config.yaml` (`abi dev up` runs it) and a service in
   `docker-compose.override.yml` (`abi start` runs it; `abi deploy local
-  --regenerate` never touches that file). It is not added to `modules:`: it
+  --regenerate` never touches that file). Its service key goes in `.env`
+  (`<NAME>_SERVICE_KEY`, from `abi iam service-account create ... --key`),
+  and its permission manifest waits for `abi iam module approve`. It is not
+  added to `modules:`: it
   registers itself through discovery, and Nexus lists its agent once the
   module logs `READY`.
 - **`--standalone`** (the default outside a project) creates a repository of
-  its own: `pyproject.toml` (`naas-abi-sdk[agent,otel]` and `naas-abi-proto`
-  from git at `--abi-ref`, default `main`), `Dockerfile`, `README.md`,
-  `AGENTS.md`, ready for `git init`.
+  its own: `pyproject.toml` (`naas-abi-sdk[agent,otel,workflows,rdf]` and `naas-abi-proto`
+  from git at `--abi-ref`, by default this CLI's release tag
+  `naas-abi-cli-v<version>`, so they match the CLI and never move),
+  `Dockerfile`, `README.md`, `AGENTS.md`, ready for `git init`.
 - **`--in-engine`** (alias `--local`) creates the classic module the engine
   loads (agents, integrations, pipelines, workflows, orchestrations,
-  ontologies); add it under `modules:`.
+  ontologies); add it under `modules:`. It is the default in a project whose
+  config has no `nats:` block, where nothing would run a remote module;
+  **`--remote`** creates a remote one there anyway, ready for when the
+  project moves to NATS.
 
 Inside a remote module, `abi new agent` writes an SDK agent and `abi new app`
 adds an app the module serves through Nexus, with an optional backend
-(`self.expose_app(name, asgi_app)`); `abi new workflow`,
-`pipeline`, `integration` and `orchestration` scaffold core code, so they
-refuse and say what to use instead.
+(`self.expose_app(name, asgi_app)`). `abi new workflow`, `abi new pipeline`
+and `abi new integration` write `naas-abi-sdk` classes (`Workflow`, `Pipeline`,
+`Integration`, no `naas_abi_core`) with a test beside them: put them in the
+module's `workflows/`, `pipelines/` and `integrations/` folders, and the module
+finds and builds the workflows and pipelines, whose agents call them with
+`as_tools()`. `abi new orchestration` scaffolds core code, so it refuses and says
+to declare a `@job` instead.
 
 **Example:**
 ```bash
-abi new module research                 # remote, in the project
+abi new module research                 # remote, in a NATS project
 abi new module research --standalone    # its own repository
 abi new module legacy --in-engine       # loaded by the engine
 ```
@@ -129,6 +149,18 @@ Lists all available agents across all loaded modules.
 abi agent list
 ```
 
+#### `abi agent migrate-memory [--from postgres|documents-v1] [--thread <id>]... [--apply]`
+Copies agent memory into the Document Service (checkpoint schema 2), from
+LangGraph's PostgreSQL tables (`--source-url`, default `$POSTGRES_URL`) or from
+document schema 1. A dry run unless `--apply`; running it again copies only
+what is missing. Stop the engines first. In NATS mode the engine runs the same
+copy as the `agent_memory_migrate` job.
+
+#### `abi agent prune-memory [--keep-last N] [--min-age S] [--thread <id>]... [--apply]`
+Deletes old checkpoints, keeping each thread's newest `--keep-last` (default
+20); the conversation stays whole in them. A dry run unless `--apply`. In NATS
+mode the engine runs it daily as the `agent_memory_prune` job.
+
 ### Configuration Management
 
 #### `abi config validate [--configuration-file <path>]`
@@ -168,8 +200,8 @@ abi module list
 
 ### Local dev stack
 
-#### `abi dev up [--service <name>]... [-d] [--without-nats] [--with-tracing]`
-Runs the stack natively (no Docker). By default the engine runs in NATS mode: oxigraph, nats, api, nexus-web, then the `dev.modules`. Dagster is left out (module jobs replace it). It needs `nats-server` on `PATH` and fails with an install hint without it, rather than falling back to in-process mode. `--without-nats` runs the engine in-process with oxigraph, api, dagster and nexus-web, even when the project config has a `nats:` block (the overlay sets `nats: null`). `--with-tracing` adds Jaeger. `abi dev down`, `abi dev status`, `abi dev logs <name> [-f]` manage it; pids and logs live in `.abi/dev/`. The discovery project is the config's `nats.discovery.project`, else the folder name.
+#### `abi dev up [--service <name>]... [-d] [--with-nats/--without-nats] [--with-tracing]`
+Runs the stack natively (no Docker). When the project config has a `nats:` block, the engine runs in NATS mode: oxigraph, nats, api, nexus-web, then the `dev.modules`. Dagster is left out (module jobs replace it). It needs `nats-server` 2.14 or later on `PATH` and fails with an install hint without it (or with an older one), rather than falling back to in-process mode. A project without a `nats:` block runs in-process with oxigraph, api, dagster and nexus-web. `--with-nats` and `--without-nats` choose the mode whatever the config says; `--without-nats` on a NATS project writes an overlay that sets `nats: null`. `--with-tracing` adds Jaeger. `abi dev down`, `abi dev status`, `abi dev logs <name> [-f]` manage it; pids and logs live in `.abi/dev/`. The discovery project is the config's `nats.discovery.project`, else the folder name.
 
 In NATS mode, the SDK modules listed under `dev.modules` in the project config (`abi new module` adds them) start once the api is ready, each under a supervisor that restarts it when it exits on its own (backing off from 1 s to 30 s):
 
@@ -216,6 +248,28 @@ start without it).
 
 ### Deployment
 
+#### `abi deploy local [--regenerate] [--no-backup] [--headscale] [--coding]`
+Writes the project's Docker Compose stack (`docker-compose.yml`, `.deploy/`).
+`--regenerate` re-renders it from the current templates, after a backup.
+
+- A project with a `nats:` block gets the NATS stack: a `nats` service the
+  engine waits for, no Dagster, RabbitMQ behind the `rabbitmq` profile.
+- A project without one keeps the classic stack (Dagster and RabbitMQ, legacy)
+  with a `nats` service behind the `nats` profile, and `uv add`s the
+  `naas-abi-core[dagster,rabbitmq]` extras it needs (commit `pyproject.toml`
+  and `uv.lock`).
+- It writes `.deploy/docker/nats/nats.conf` (the broker users `engine` and
+  `auth`, and the auth callout that admits every module with its approved
+  permissions) and generates `NATS_ENGINE_PASSWORD`, `NATS_AUTH_PASSWORD`,
+  `NATS_AUTH_CALLOUT_SEED` and `NATS_AUTH_CALLOUT_ISSUER` in `.env`. Regenerate
+  after each CLI upgrade.
+- It stops before writing anything when `.env` is not writable, and prints the
+  `chown` to run.
+- `docker-compose.override.yml` (remote modules) is never rewritten.
+
+`abi deploy local-up [-d]`, `local-down` and `local-logs` run Docker Compose
+with the override file.
+
 #### `abi deploy naas [-e/--env <environment>]`
 Deploys your ABI project to Naas cloud infrastructure.
 
@@ -238,6 +292,43 @@ Deploys your ABI project to Naas cloud infrastructure.
 abi deploy naas
 abi deploy naas --env prod
 ```
+
+#### `abi deploy dokploy [--domain <domain>] [--coding] [--regenerate] [--wildcard-cert-resolver <name>]`
+Renders the project for a [Dokploy](https://dokploy.com) server, where Traefik
+replaces the local Caddy edge.
+
+**What it does:**
+- Writes `docker-compose.dokploy.yml`: no Caddy and no host ports; Traefik
+  labels on the external `dokploy-network` route `nexus.<domain>` to Nexus,
+  `/app-html/*` on it and `api.<domain>` to the API, and with `--coding`
+  `coder.`, `*.coder.` and `git.` to Coder and Forgejo. `abi` is built from the
+  project `Dockerfile` on each deploy, with no source mount
+- Writes `config.dokploy.yaml` (from `config.local.yaml`, read with
+  `ENV=dokploy`) and the `.deploy/docker` files the compose mounts. A dotenv
+  secret adapter on the `abi_secrets` volume takes the place of the project's
+  `.env` one, and the project's adapters are kept line for line, so secrets
+  the engine writes survive redeploys. The Environment tab wins over that
+  file
+- Writes the gitignored `.env.dokploy` with generated passwords and keys, to
+  paste into Dokploy's Environment tab; the config secrets it has no value for
+  are commented out. Reruns keep its values; `--regenerate` replaces them and
+  backs the old file up
+- With `--coding`, the minted Coder/Forgejo admin tokens live on the
+  `coding_secrets` volume, which the engine reads through a read-only dotenv
+  secret adapter, so they survive redeploys. `--wildcard-cert-resolver` names
+  a DNS-challenge resolver in Dokploy's Traefik for the `*.coder` certificate;
+  without it, no wildcard certificate is requested
+- Calls between services use stack-unique aliases (`<ABI_STACK_NAME>-abi`,
+  ...), so several stacks can share a server
+- `--headscale` is not supported on Dokploy yet
+
+**Example:**
+```bash
+abi deploy dokploy --domain example.com
+abi deploy dokploy --domain example.com --coding
+```
+
+Guide: [Deploy with Dokploy](https://docs.naas.ai/user-guide/deploy/dokploy).
 
 ### Stack Management
 
@@ -458,6 +549,6 @@ The CLI integrates seamlessly with the ABI ecosystem:
 
 ## See Also
 
-- [ABI Main README](../../../README.md) - Complete ABI framework documentation
-- [naas-abi-core](../naas-abi-core/) - Core engine documentation
-- [naas-abi-marketplace](../naas-abi-marketplace/) - Marketplace modules documentation
+- [ABI Main README](https://github.com/jupyter-naas/abi/blob/main/README.md) - Complete ABI framework documentation
+- [naas-abi-core](https://github.com/jupyter-naas/abi/tree/main/libs/naas-abi-core) - Core engine documentation
+- [naas-abi-marketplace](https://github.com/jupyter-naas/abi/tree/main/libs/naas-abi-marketplace) - Marketplace modules documentation

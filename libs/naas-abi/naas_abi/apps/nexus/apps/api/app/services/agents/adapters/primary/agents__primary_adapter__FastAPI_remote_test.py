@@ -100,6 +100,14 @@ def _record(
     )
 
 
+class _NoSession:
+    async def __aenter__(self):
+        return None
+
+    async def __aexit__(self, *exc):
+        return False
+
+
 @pytest.fixture
 def seed(monkeypatch):
     """Set the workspace seed: None (no config entry) or an ``agents:`` list."""
@@ -109,11 +117,26 @@ def seed(monkeypatch):
         return "ws"
 
     monkeypatch.setattr(sync, "_workspace_slug", slug)
-    monkeypatch.setattr(sync, "workspace_seed_for_slug", lambda s: state["seed"])
+
+    async def catalog_seed(workspace_id):
+        return state["seed"]
+
+    async def union_flags(db, workspace_id):
+        return {}
+
+    monkeypatch.setattr(sync, "_workspace_catalog_seed", catalog_seed)
+    monkeypatch.setattr(
+        "naas_abi.apps.nexus.apps.api.app.core.agent_feature_access.workspace_union_feature_flags",
+        union_flags,
+    )
+    monkeypatch.setattr(
+        "naas_abi.apps.nexus.apps.api.app.core.database.AsyncSessionLocal",
+        lambda: _NoSession(),
+    )
     monkeypatch.setattr(sync, "_get_engine_default_agent_class_name", lambda: ZEN)
 
     def set_seed(agents):
-        state["seed"] = SimpleNamespace(agents=agents, default_agent=None)
+        state["seed"] = {"agents": agents}
 
     return set_seed
 

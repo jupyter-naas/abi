@@ -1,4 +1,4 @@
-"""Authorization inside a kernel domain service (RFC §4.4, §5.4, §5.5, §6.3).
+"""Authorization inside a kernel domain service.
 
 A domain service builds one ``ServiceGuard`` from its catalog and checks every
 operation through it, before the backend is touched:
@@ -47,7 +47,7 @@ NotFound = Callable[[], BaseException]
 # create it authorized. The caller needs the create action, never iam:PutPlacement.
 PLACEMENT_WRITER = "engine"
 
-# Wire codes shared by every kernel service (RFC §5.4).
+# Wire codes shared by every kernel service.
 PERMISSION_DENIED = "PERMISSION_DENIED"
 NOT_FOUND = "NOT_FOUND"
 
@@ -74,7 +74,7 @@ class Creation:
     iam: IIAMService | None
 
     def record(self) -> None:
-        """Record the placement, once the create succeeded (RFC §4.4)."""
+        """Record the placement, once the create succeeded."""
         if self.iam is None or not (self.record_exact or self.record_prefix):
             return
         with as_service_account(PLACEMENT_WRITER):
@@ -200,7 +200,7 @@ class ServiceGuard:
         *,
         not_found: NotFound | None = None,
     ) -> Creation:
-        """The create rule of RFC §4.4 for a resource that may not exist yet.
+        """The create rule (``AGENTS.md``, "Placements") for a resource that may not exist yet.
 
         A name an existing placement covers takes that placement, and the call's
         target workspace must be empty or match it. Otherwise the target
@@ -280,7 +280,7 @@ class ServiceGuard:
 
     def place_new(self, type: str, parts: Parts) -> None:
         """Place a resource the backend just created under an id it chose (a sent
-        message), in the call's target workspace (RFC §4.4). The create was
+        message), in the call's target workspace. The create was
         authorized on what names it (the sender); nothing is recorded for the
         platform or for a workspace IAM does not know."""
         iam = self.iam
@@ -303,7 +303,7 @@ class ServiceGuard:
         ).record()
 
     def forget(self, type: str, parts: Parts) -> None:
-        """Drop the placements a create recorded for this resource (RFC §4.4)."""
+        """Drop the placements a create recorded for this resource."""
         iam = self.iam
         if iam is None:
             return

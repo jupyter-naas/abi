@@ -3,7 +3,7 @@
 Transfers, model streams and parked overflow replies live in one process. Their
 subjects carry an owner id, so their later messages reach that process only.
 In an engine that id is the engine's instance id, the one its lease is held
-under (docs/adr/20261006_single-serving-engine.md): hosts built inside
+under: hosts built inside
 ``owned_by(instance_id)`` take it.
 
 At a handover the engine ends its shared (queue-grouped) subscriptions first
@@ -13,7 +13,8 @@ deadline passes (``nats.engine.drain_seconds``), then closes what is left. A
 kernel primary (``ServicePrimary``) counts the one-shot calls it has received as
 sessions.
 
-No NATS import: the engine loads this module in every mode.
+No NATS import: the engine loads this module in every mode (``flush_to_broker``
+is the SDK's, which imports nothing from nats-py).
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from typing import Any
 from uuid import uuid4
 
 from naas_abi_core import logger
+from naas_abi_sdk.broker_flush import flush_to_broker
 
 # How often a host looks whether its sessions have finished.
 POLL_SECONDS = 0.05
@@ -78,7 +80,7 @@ async def stop_delivery(subscriptions: Iterable[Any]) -> None:
     (reproduced with concurrent requests on nats-server 2.14).
 
     Reaches into nats-py: ``Subscription._conn`` and ``_id``,
-    ``Client._send_unsubscribe`` and ``_flush_pending``.
+    ``Client._send_unsubscribe`` and, in ``flush_to_broker``, ``_flush_pending``.
     """
     connections: dict[int, Any] = {}
     for subscription in subscriptions:
@@ -86,8 +88,7 @@ async def stop_delivery(subscriptions: Iterable[Any]) -> None:
         await nc._send_unsubscribe(subscription._id)
         connections[id(nc)] = nc
     for nc in connections.values():
-        await nc._flush_pending(force_flush=True)  # on the socket...
-        await nc.flush()  # ...and processed by the broker
+        await flush_to_broker(nc)
 
 
 class SessionHost(ABC):

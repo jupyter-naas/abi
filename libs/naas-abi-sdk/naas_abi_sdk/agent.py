@@ -29,7 +29,7 @@ def agent_subject(
     project: str, service_account: str, instance_id: str, name: str, operation: str
 ) -> str:
     """``service_account``: the instance's, from its discovery record. The
-    broker lets a module subscribe to its own only (RFC §8.4)."""
+    broker lets a module subscribe to its own only."""
     digest = hashlib.sha256(name.encode()).hexdigest()
     sa = service_account or "-"
     return f"abi.agent.{project}.{sa}.{instance_id}.{digest}.v1.{operation}"
@@ -59,6 +59,16 @@ class InvocationStatus:
     last_sequence: int
 
 
+def _event(value: pb.AgentEvent, data: str) -> dict:
+    """``{"sequence", "event", "data"}``, plus ``"chat_source": False`` for a
+    tool response whose tool opted out of chat sources, as in core's
+    stream_invoke."""
+    event = {"sequence": value.sequence, "event": value.event, "data": data}
+    if value.HasField("chat_source") and not value.chat_source:
+        event["chat_source"] = False
+    return event
+
+
 def _status(value: pb.Invocation) -> InvocationStatus:
     return InvocationStatus(
         value.invocation_id,
@@ -69,10 +79,7 @@ def _status(value: pb.Invocation) -> InvocationStatus:
         value.error_message,
         value.owner_instance_id,
         value.owner_available,
-        tuple(
-            {"sequence": e.sequence, "event": e.event, "data": e.data}
-            for e in value.events
-        ),
+        tuple(_event(e, e.data) for e in value.events),
         value.last_sequence,
     )
 
@@ -187,7 +194,7 @@ class InvocationHandle:
                         else pushed.data
                     )
                     cursor = pushed.sequence
-                    yield {"sequence": cursor, "event": pushed.event, "data": data}
+                    yield _event(pushed, data)
                     continue
                 try:
                     status = await asyncio.wait_for(
@@ -291,7 +298,7 @@ class AgentProxy:
         if operation == "submit":
             # The delegation for the run's own calls: the token this call
             # carries to the host when it carries the current call's user
-            # (RFC §9.4), handed over again so the run outlives the call.
+            # handed over again so the run outlives the call.
             held = await transport.delegated_token(host=host_recipient(subject))
             if held:
                 request.delegated_token = held
@@ -375,7 +382,7 @@ class AgentProxy:
         *,
         invocation_id: str | None = None,
         timeout: float | None = None,
-    ) -> AsyncIterator[dict[str, str]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         if timeout is not None and (
             not math.isfinite(timeout) or not 1 <= timeout <= 3600
         ):
@@ -389,7 +396,7 @@ class AgentProxy:
             ),
         )
         async for event in handle.events(timeout=timeout):
-            yield {"event": event["event"], "data": event["data"]}
+            yield {k: v for k, v in event.items() if k != "sequence"}
 
     def duplicate(
         self, queue=None, agent_shared_state: AgentState | None = None

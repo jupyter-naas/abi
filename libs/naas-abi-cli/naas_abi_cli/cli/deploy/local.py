@@ -1,12 +1,16 @@
 import os
 import re
 import secrets
+import shlex
 import shutil
+import subprocess
+import tomllib
 from datetime import UTC, datetime
 from ipaddress import ip_address
 from pathlib import Path
 from uuid import uuid4
 
+import click
 from rich.prompt import Prompt
 
 import naas_abi_cli
@@ -16,17 +20,24 @@ from ..admin_credentials import (
     ensure_nats_callout_seed,
     ensure_nats_passwords,
 )
+from ..private_dir import keep_out_of_git
 from ..utils.Copier import Copier
 
 LOCAL_ENV_MARKER = "# Added by abi deploy local command execution"
 HEADSCALE_SERVICE_MARKER = "  headscale:"
 BACKUP_DIRECTORY = os.path.join(".abi-backups", "deploy-local")
 MIGRATE_TO_NATS_DOC = (
-    "https://github.com/jupyter-naas/abi/blob/main/docs/migrate-to-nats.md"
+    "https://docs.naas.ai/user-guide/upgrade/migrate-to-3"
 )
 # The configs a project's mode is read from, the one docker-compose runs first.
 _PROJECT_CONFIGS = ("config.local.yaml", "config.yaml")
 _NATS_BLOCK = re.compile(r"^nats\s*:", re.MULTILINE)
+# The naas-abi-core extras a project without NATS installs: Dagster schedules
+# its orchestrations, RabbitMQ is its bus. Legacy, not in naas-abi-core[all].
+LEGACY_EXTRAS = ("dagster", "rabbitmq")
+_CORE_REQUIREMENT = re.compile(
+    r"^\s*naas[-_.]abi[-_.]core(?![\w.-])\s*(?:\[([^\]]*)\])?(.*)$", re.IGNORECASE
+)
 
 DEFAULT_ENV_VALUES: dict[str, str] = {
     "BASE_DOMAIN": "localhost",
@@ -185,26 +196,92 @@ def project_uses_nats(project_path: str) -> bool | None:
     return None
 
 
+def any_config_uses_nats(project_path: str) -> bool:
+    """Whether ``config.local.yaml`` or ``config.yaml`` has a top-level
+    ``nats:`` block: a project run natively on NATS (`abi dev up` reads
+    ``config.yaml``) may keep a classic Docker config."""
+    for name in _PROJECT_CONFIGS:
+        path = os.path.join(project_path, name)
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as config_file:
+                if _NATS_BLOCK.search(config_file.read()):
+                    return True
+    return False
+
+
 def _print_classic_stack_notice() -> None:
     print(
         "This project runs without NATS (its config has no `nats:` block), so "
         "the stack keeps RabbitMQ and Dagster, and the `nats` service stays "
-        "behind the `nats` profile.\n"
+        "behind the `nats` profile. Dagster and RabbitMQ are legacy and will be "
+        "removed in the next major.\n"
         f"To move it to NATS, follow {MIGRATE_TO_NATS_DOC}\n"
     )
+
+
+def legacy_extras_requirement(project_path: str) -> str | None:
+    """The naas-abi-core requirement that adds the legacy extras to the
+    project's ``pyproject.toml``, keeping its other extras and version; None
+    when it has them already, or has no ``pyproject.toml``."""
+    path = Path(project_path) / "pyproject.toml"
+    if not path.is_file():
+        return None
+    with open(path, "rb") as pyproject:
+        dependencies = tomllib.load(pyproject).get("project", {}).get(
+            "dependencies", []
+        )
+    matches = [m for d in dependencies if (m := _CORE_REQUIREMENT.match(d))]
+    extras = {
+        extra.strip()
+        for match in matches
+        for extra in (match.group(1) or "").split(",")
+        if extra.strip()
+    }
+    if set(LEGACY_EXTRAS) <= extras:
+        return None
+    rest = matches[0].group(2).strip() if matches else ""
+    return f"naas-abi-core[{','.join(sorted(extras | set(LEGACY_EXTRAS)))}]{rest}"
+
+
+def ensure_legacy_extras(project_path: str) -> None:
+    """Add Dagster and RabbitMQ to a project without NATS that lacks them.
+
+    Before 3.0 naas-abi-core installed them by default; the stack's `dagster`
+    service and a `rabbitmq` bus still need them.
+    """
+    requirement = legacy_extras_requirement(project_path)
+    if requirement is None:
+        return
+    command = ["uv", "add", requirement]
+    print(
+        "Adding the legacy Dagster and RabbitMQ extras, which this project's "
+        f"stack runs on: {shlex.join(command)}"
+    )
+    if shutil.which("uv") is None:
+        print(f"uv is not on PATH: run `{shlex.join(command)}` in {project_path}.")
+        return
+    if subprocess.run(command, cwd=project_path, check=False).returncode != 0:
+        print(
+            f"`{shlex.join(command)}` failed (see above): run it in "
+            f"{project_path} before starting the stack."
+        )
+
+
+def compose_project_name(project_path: str) -> str:
+    """Compose's default project name: the directory basename, lowercased,
+    with non-``[a-z0-9_-]`` stripped."""
+    base = os.path.basename(os.path.abspath(project_path)).lower()
+    return re.sub(r"[^a-z0-9_-]", "", base) or "abi"
 
 
 def _compose_project_network(project_path: str) -> str:
     """The docker network the coding workspaces attach to.
 
-    Compose derives its default project name from the directory basename
-    (lowercased, non-``[a-z0-9_-]`` stripped); the bridge network is then
-    ``<project>_abi-network``. Users can override CODING_WORKSPACE_DOCKER_NETWORK
-    in .env (e.g. when they set COMPOSE_PROJECT_NAME).
+    The bridge network is ``<compose project>_abi-network``. Users can override
+    CODING_WORKSPACE_DOCKER_NETWORK in .env (e.g. when they set
+    COMPOSE_PROJECT_NAME).
     """
-    base = os.path.basename(os.path.abspath(project_path)).lower()
-    project = re.sub(r"[^a-z0-9_-]", "", base) or "abi"
-    return f"{project}_abi-network"
+    return f"{compose_project_name(project_path)}_abi-network"
 
 
 def _copy_coding_templates(deploy_path: str, values: dict[str, object]) -> None:
@@ -461,6 +538,8 @@ def _backup_local_deploy_files(
     backup_timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     backup_path = os.path.join(backup_root, backup_timestamp)
     os.makedirs(backup_path, exist_ok=False)
+    # The backup holds a copy of .env.
+    keep_out_of_git(Path(backup_root).parent)
 
     for source_path in existing_paths:
         destination_path = os.path.join(backup_path, os.path.basename(source_path))
@@ -470,6 +549,17 @@ def _backup_local_deploy_files(
             shutil.copy2(source_path, destination_path)
 
     return backup_path
+
+
+def _require_writable_env(path: str) -> None:
+    """Fail before writing anything when .env cannot be rewritten: a 2.x
+    container running as root rewrites the bind-mounted .env as root."""
+    if os.path.exists(path) and not os.access(path, os.W_OK):
+        raise click.ClickException(
+            f"{path} is not writable by this user (a container running as root "
+            "rewrote it). Give it back, then run the command again:\n"
+            f"  sudo chown {os.getuid()}:{os.getgid()} {shlex.quote(path)}"
+        )
 
 
 def setup_local_deploy(
@@ -489,6 +579,7 @@ def setup_local_deploy(
     never switches it to NATS; a directory without a config gets NATS.
     """
     project_path = os.path.abspath(os.path.expanduser(project_path))
+    _require_writable_env(os.path.join(project_path, ".env"))
     if nats is None:
         detected = project_uses_nats(project_path)
         nats = True if detected is None else detected

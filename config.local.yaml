@@ -28,6 +28,33 @@ global_config:
   ai_mode: "cloud"
   public_api_host: "{{ secret.NEXUS_API_URL }}"
 
+# Q: How do the engine, its kernel services and remote modules talk to each other?
+# A: Through the `nats` service (NATS + JetStream): kernel services, the bus, module
+#    jobs and discovery. Remote modules (`abi new module`) run in their own
+#    containers and register here. `abi stack start` generates their secrets into
+#    .env. `abi stack start --legacy` turns this block off and runs the legacy
+#    stack instead (RabbitMQ bus, Dagster).
+nats:
+  # The Compose service, logged in as the broker user `engine` (nats.conf); the
+  # engine answers the broker's auth callout as `auth`, admitting each module with
+  # the subjects its approved permission manifest allows.
+  nats_url: "nats://engine:{{ secret.NATS_ENGINE_PASSWORD }}@nats:4222"
+  auth_callout:
+    nats_url: "nats://auth:{{ secret.NATS_AUTH_PASSWORD }}@nats:4222"
+    issuer_seed: "{{ secret.NATS_AUTH_CALLOUT_SEED }}"
+  # One engine per project hosts the module registry: the `abi` service. The
+  # default stack runs no second engine (Dagster is behind the `legacy` profile,
+  # and joins as a client when started).
+  discovery:
+    project: "abi"
+    # Outlives an engine restart: remote modules renew instead of dropping
+    # out. A crashed module stays listed up to this long; a clean stop
+    # (SIGTERM) unregisters at once.
+    lease_seconds: 180
+  # The broker's HTTP monitoring port, read by the Nexus System app. No auth:
+  # reachable on the Compose network and on 127.0.0.1 only.
+  monitoring_url: "http://nats:8222"
+
 # 2. MODULES: what the system does
 # Q: Which modules do you want to load at startup?
 # A: Set enabled: true to turn one on, false to turn it off without deleting its config.
@@ -109,38 +136,26 @@ modules:
             name: "Local Member"
 
         # Q: How is the organization structured into workspaces and roles?
-        # A: Define orgs, their workspaces, and who belongs to each with what role.
-        #    role: owner | admin | member | viewer
+        # A: Define orgs and their workspaces here; people are invited and given
+        #    roles in the platform (Organization > Users, workspace Members).
+        #    Org owners/admins reach every workspace of the org.
         organizations:
           - name: "ABI"
             slug: "abi"
             owner_email: "admin@example.com"
             primary_color: "#34D399"
             accent_color: "#34D399"
-            members:
-              - email: "admin@example.com"
-                role: "owner"
             workspaces:
               - name: "Primary"
                 slug: "primary"
                 owner_email: "admin@example.com"
                 primary_color: "#34D399"
                 accent_color: "#34D399"
-                members:
-                  - email: "admin@example.com"
-                    role: "owner"
-                  - email: "member@example.com"
-                    role: "admin"
               - name: "Secondary"
                 slug: "secondary"
                 owner_email: "admin@example.com"
                 primary_color: "#34D399"
                 accent_color: "#34D399"
-                members:
-                  - email: "admin@example.com"
-                    role: "owner"
-                  - email: "member@example.com"
-                    role: "member"
 
   # Q: How do I add ChatGPT (OpenAI) as an AI provider?
   # A: Enable the module and give it your OpenAI API key.
@@ -200,7 +215,6 @@ modules:
 # Q: Which technology does each service use?
 # A: Each entry has one adapter. Change the adapter name to swap the technology.
 #    Lighter options that need no extra Docker container:
-#      bus          -> "python_queue"   (in-memory)
 #      triple_store -> "fs"             (files on disk)
 #      vector_store -> "python"         (in-memory)
 #      kv           -> "python"         (in-memory)
@@ -231,7 +245,7 @@ services:
         secret_access_key: "{{ secret.MINIO_ROOT_PASSWORD }}"
         endpoint_url: "http://minio:9000"
 
-  # Who may do what (identity and authorization RFC 20261013). Policies are
+  # Who may do what. Policies are
   # enforced: "authorizer: allow_all" is an explicit opt-out that warns at boot.
   # Reuse the existing database, with a dedicated IAM schema.
   iam:
@@ -282,12 +296,8 @@ services:
         port: 6333
 
   # Q: How do background tasks get queued between services?
-  # A: RabbitMQ acts as the message broker. Swap to "python_queue" for no-server local dev.
-  bus:
-    bus_adapter:
-      adapter: "rabbitmq"
-      config:
-        rabbitmq_url: "amqp://{{ secret.RABBITMQ_USER }}:{{ secret.RABBITMQ_PASSWORD }}@rabbitmq:5672"
+  # A: No `bus:` block: with the `nats:` block above, the bus is JetStream on the
+  #    `nats` service. The legacy RabbitMQ bus comes with `abi stack start --legacy`.
 
   # Q: Where is the durable event log stored, and how do live listeners find each other?
   # A: SQLite holds every published event for query and replay; the bus above carries

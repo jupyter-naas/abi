@@ -308,7 +308,7 @@ def test_core_registry_returns_proxies_and_keeps_registration_local(broker):  # 
         nc = await nats.connect(broker[0])
         host = ModelRegistryNATS(owner, SECRET)
         await host.start(nc)
-        client = ModelRegistryNATSClient(owner, broker[0], SECRET)
+        client = ModelRegistryNATSClient(owner, broker[0], TEST_TOKENS.source("engine"))
         try:
             client.register(
                 "chat",

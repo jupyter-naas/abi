@@ -1,4 +1,4 @@
-import { mapsJson } from '../_lib';
+import { mapsPinResponse } from '../_lib';
 import {
   collectFlightPins,
   parseFlightsQuery,
@@ -28,9 +28,7 @@ export async function GET(req: Request) {
       query.mode === 'viewport'
         ? `${query.radiusNm}nm around map center`
         : 'global sample';
-    return mapsJson({
-      pins,
-      count: pins.length,
+    return mapsPinResponse(pins, {
       empty: pins.length === 0,
       source: fetched.source,
       attribution,
@@ -45,11 +43,10 @@ export async function GET(req: Request) {
           : undefined,
     });
   } catch (err) {
-    return mapsJson(
+    return mapsPinResponse(
+      [],
       {
         error: err instanceof Error ? err.message : 'Flights fetch failed',
-        pins: [],
-        count: 0,
         empty: true,
         source: 'flights',
       },

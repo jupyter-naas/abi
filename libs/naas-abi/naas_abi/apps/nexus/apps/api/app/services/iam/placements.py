@@ -1,4 +1,4 @@
-"""Which workspace owns the kernel resources Nexus keeps for it (RFC §4.4, §13).
+"""Which workspace owns the kernel resources Nexus keeps for it.
 
 A kernel service names a resource inside the org and workspace IAM *placed* it
 in. Nexus places what it creates for a workspace (its files' prefix, its
@@ -127,6 +127,21 @@ async def forget(placement: Placement) -> None:
             runtime.iam().delete_placement(placement.service, placement.id_key())
 
     await run_in_threadpool(work)
+
+
+async def forget_workspace(workspace_id: str) -> int:
+    """Drop every placement in a workspace whose creation was undone; returns
+    how many."""
+
+    def work() -> int:
+        iam = runtime.iam()
+        with as_service_account("api"):
+            found = [p for p in iam.list_placements() if p.workspace == workspace_id]
+            for placement in found:
+                iam.delete_placement(placement.service, placement.id_key)
+        return len(found)
+
+    return await run_in_threadpool(work)
 
 
 async def place_existing(db: AsyncSession) -> int:

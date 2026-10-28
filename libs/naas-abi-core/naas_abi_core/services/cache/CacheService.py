@@ -81,7 +81,7 @@ class SingleTierCacheService:
 
     Instances are never created directly by callers — they are exposed through
     :attr:`CacheService.hot` and :attr:`CacheService.cold`. Wired into an
-    engine, ``guard`` authorizes each operation on ``key/<key>`` (RFC §6.4):
+    engine, ``guard`` authorizes each operation on ``key/<key>``:
     a key the caller may not see is missing.
     """
 
@@ -306,7 +306,7 @@ class SingleTierCacheService:
     ) -> CacheKeyPage:
         """A page of this tier's keys, ascending; pass ``page.next_after`` as ``after``.
 
-        Only the keys the caller may list, paged after filtering (RFC §5.5).
+        Only the keys the caller may list, paged after filtering.
         """
         check_page_limit(limit)
         return _allowed_keys(
@@ -459,7 +459,7 @@ class CacheService(ServiceBase, ICacheService):
             raise ValueError("CacheService requires at least one adapter")
         self._adapters: list[tuple[str, ICacheAdapter]] = adapters
         # Wired into an engine, every operation is authorized on its key, here
-        # and in each tier view (RFC §6.4).
+        # and in each tier view.
         self._guard = ResourceGuard.of(CATALOG, self)
         # One view per configured adapter, in order: names may repeat (an
         # entry's tier defaults to "cold"), positions never do.
@@ -635,7 +635,7 @@ class CacheService(ServiceBase, ICacheService):
         ``limit`` of their union are exactly the merged page. An unavailable tier
         is skipped with a warning (as in ``get``); if every tier fails, the last
         error is raised. Only the keys the caller may list, paged after
-        filtering (RFC §5.5).
+        filtering.
         """
         check_page_limit(limit)
         return _allowed_keys(self._guard, prefix, limit, after, self._merged_keys)
@@ -746,7 +746,7 @@ def _allowed_keys(
     after: str | None,
     fetch: Callable[[str, int, str | None], CacheKeyPage],
 ) -> CacheKeyPage:
-    """A page of the keys the caller may list (RFC §5.5), paged after filtering."""
+    """A page of the keys the caller may list, paged after filtering."""
     if guard is None or guard.iam is None or guard.allows_every("ListKeys", KEY):
         return fetch(prefix, limit, after)
 

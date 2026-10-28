@@ -9,6 +9,8 @@ from pathlib import Path
 
 from naas_abi_sdk import BaseModule, ModuleDependencies, run_module
 from naas_abi_sdk.discovery import AgentDescriptor, DiscoveryConfiguration
+from naas_abi_sdk.permissions import default_manifest
+from naas_abi_sdk.services.errors import NotFound, PermissionDenied
 from naas_abi_sdk.transport import RPCError
 
 ROOT = Path(os.environ["DISCOVERY_REPORT_DIR"])
@@ -30,8 +32,23 @@ class ResearchAgent:
         yield {"event": "done", "data": "[DONE]"}
 
 
+# The actions the provider declares: its own catalog, ``demo_research``, sent
+# with its manifest and registered when the manifest is approved.
+BRIEFS = {
+    "resource_types": [
+        {"name": "brief", "id": "path", "description": "A research brief."}
+    ],
+    "actions": [
+        {"name": "ExportBrief", "level": "read", "resource_types": ["brief"]},
+        {"name": "DeleteBrief", "level": "write", "resource_types": ["brief"]},
+    ],
+}
+CONSUMER_DEPENDENCIES = ModuleDependencies(modules=("demo.research",))
+
+
 class Provider(BaseModule):
     module_id = "demo.research"
+    iam_catalog = BRIEFS
     agents = (
         AgentDescriptor(
             "Researcher",
@@ -45,13 +62,40 @@ class Provider(BaseModule):
         self.expose_agent("Researcher", ResearchAgent())
 
     async def run(self):
+        # Its own actions, for itself: the approval let it act on its catalog.
+        await self.require_action("ExportBrief", "brief", "q3")
         (ROOT / "provider-ready").write_text(str(os.getpid()))
         await asyncio.Event().wait()
 
 
 class Consumer(BaseModule):
     module_id = "demo.consumer"
-    dependencies = ModuleDependencies(modules=("demo.research",))
+    dependencies = CONSUMER_DEPENDENCIES
+    # Granted the provider's ExportBrief, not its DeleteBrief.
+    permissions = {
+        **default_manifest(CONSUMER_DEPENDENCIES),
+        "statements": [
+            *default_manifest(CONSUMER_DEPENDENCIES)["statements"],
+            {
+                "sid": "ExportResearchBriefs",
+                "effect": "Allow",
+                "actions": ["demo_research:ExportBrief"],
+                "resources": ["abi:*:*:demo_research:brief/*"],
+            },
+        ],
+    }
+
+    async def declared_actions(self) -> dict[str, str]:
+        """IAM decides on the provider's declared actions for this module."""
+        iam = self.engine.services.iam
+        found = {}
+        for action in ("ExportBrief", "DeleteBrief"):
+            try:
+                await iam.require_declared(f"demo_research:{action}", "brief", ["q3"])
+                found[action] = "allowed"
+            except (PermissionDenied, NotFound):
+                found[action] = "refused"
+        return found
 
     async def run(self):
         provider = self.engine.modules["demo.research"]
@@ -74,6 +118,8 @@ class Consumer(BaseModule):
         while (await handle.status()).status == "CANCELLING":
             await asyncio.sleep(0.05)
         assert (await handle.status()).status == "CANCELLED"
+        declared = await self.declared_actions()
+        assert declared == {"ExportBrief": "allowed", "DeleteBrief": "refused"}
         (ROOT / "agent-proxy.json").write_text(
             json.dumps(
                 {
@@ -81,6 +127,7 @@ class Consumer(BaseModule):
                     "stream_events": events,
                     "deduplicated": True,
                     "cancelled": True,
+                    "declared_actions": declared,
                 }
             )
         )

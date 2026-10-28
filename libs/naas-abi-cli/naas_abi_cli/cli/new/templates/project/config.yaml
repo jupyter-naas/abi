@@ -44,7 +44,7 @@ nats:
 # module over NATS: users sign in with a code emailed to them, which the local
 # email adapter writes to storage/email/) and, since this config names no
 # identity provider, makes it the default one. To use your own provider
-# (Okta, Entra, Zitadel, Keycloak: docs/identity-providers.md), add an
+# (Okta, Entra, Zitadel, Keycloak: https://docs.naas.ai), add an
 # `identity:` block with it: `abi dev up` then runs no built-in IdP, unless a
 # provider there has `provisioning: builtin`.
 {% raw %}# identity:
@@ -90,16 +90,10 @@ modules:
           - name: "Dev"
             slug: "dev"
             owner_email: "admin@example.com"
-            members:
-              - email: "admin@example.com"
-                role: "owner"
             workspaces:
               - name: "Default"
                 slug: "default"
                 owner_email: "admin@example.com"
-                members:
-                  - email: "admin@example.com"
-                    role: "owner"
 
   # OpenRouter — the only AI provider enabled by default. One gateway key
   # serves both the default chat model (Gemma 4 26B-A4B) and the default
@@ -139,7 +133,7 @@ default_agent: "{{ project_name_snake }} {{ project_name_pascal }}Agent"
 
 {% raw %}
 services:
-  # Who may do what (identity and authorization RFC 20261013): SQLite here.
+  # Who may do what: SQLite here.
   # Policies are enforced; "authorizer: allow_all" is an explicit opt-out
   # that warns at boot.
   iam:
@@ -168,6 +162,13 @@ services:
     secret_adapters:
       - adapter: "dotenv"
         config: {}
+  # The built-in identity provider emails a sign-in code: here it is a file
+  # (`abi dev code` prints the newest). Point it at SMTP or SES to mail it.
+  email:
+    email_adapter:
+      adapter: "filesystem"
+      config:
+        directory: "storage/email"
   object_storage:
     object_storage_adapter:
       adapter: "fs"

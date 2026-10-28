@@ -1,4 +1,4 @@
-"""The ``source_control`` action catalog (RFC §6.4, "source_control").
+"""The ``source_control`` action catalog.
 
 A repository is a placed container: ``repo/<owner>%2F<name>``, by the
 service's own id, with its branches (``branch/<repo>/<name>``) and proposals

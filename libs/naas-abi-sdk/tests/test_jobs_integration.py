@@ -9,13 +9,12 @@ import contextlib
 import itertools
 import json
 import shutil
-import socket
-import subprocess
 import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
 from nats.js.errors import NotFoundError
+from nats_broker import running_broker
 
 from naas_abi_sdk.job_host import JobHost, ensure_stream
 from naas_abi_sdk.jobs import (
@@ -95,33 +94,8 @@ class Documents:
 
 @pytest.fixture
 def broker(tmp_path):
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        port = s.getsockname()[1]
-    process = subprocess.Popen(
-        [
-            "nats-server",
-            "-a",
-            "127.0.0.1",
-            "-p",
-            str(port),
-            "-js",
-            "-sd",
-            str(tmp_path / "js"),
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    deadline = time.time() + 5
-    while time.time() < deadline:
-        try:
-            socket.create_connection(("127.0.0.1", port), timeout=0.2).close()
-            break
-        except OSError:
-            time.sleep(0.05)
-    yield f"nats://127.0.0.1:{port}"
-    process.terminate()
-    process.wait(timeout=5)
+    with running_broker(tmp_path) as url:
+        yield url
 
 
 def _host(url, documents, jobs, **kwargs):
@@ -474,6 +448,7 @@ def test_a_module_triggers_its_own_job_once_per_idempotency_key(broker):
     first, again, other = asyncio.run(scenario())
 
     assert first.run_id == again.run_id != other.run_id
+    assert (first.duplicate, again.duplicate, other.duplicate) == (False, True, False)
     assert sorted(r["payload"]["n"] for r in docs.runs("work")) == [1, 2]
 
 

@@ -30,16 +30,39 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check the release commit is on main
+        id: channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Only a release cut from main moves :latest. A release from v2 (2.x
+          # fixes, which runs its own copy of this workflow) or dev (prereleases)
+          # carries a commit main does not contain. The compare API answers
+          # "identical" or "ahead" when main contains the tagged commit.
+          STATUS=$(gh api "repos/${{ github.repository }}/compare/${{ github.sha }}...main" --jq .status)
+          echo "main compared with ${{ github.sha }}: ${STATUS}"
+          case "$STATUS" in
+            identical|ahead) echo "latest=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "latest=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
       - name: Compute image tags
         id: tags
         run: |
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           RELEASE_TAG="${{ github.event.release.tag_name }}"
           VERSION="${RELEASE_TAG#naas-abi-v}"
+          IMAGE="ghcr.io/${OWNER}/nexus-web"
 
-          echo "image=ghcr.io/${OWNER}/nexus-web" >> "$GITHUB_OUTPUT"
-          echo "release_tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
-          echo "version_tag=${VERSION}" >> "$GITHUB_OUTPUT"
+          {
+            echo "list<<EOF"
+            if [ "${{ steps.channel.outputs.latest }}" = "true" ]; then
+              echo "${IMAGE}:latest"
+            fi
+            echo "${IMAGE}:${VERSION}"
+            echo "${IMAGE}:${RELEASE_TAG}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build and push image
         uses: docker/build-push-action@v6
@@ -48,7 +71,4 @@ jobs:
           file: libs/naas-abi/naas_abi/apps/nexus/Dockerfile.release
           push: true
           platforms: linux/amd64, linux/arm64
-          tags: |
-            ${{ steps.tags.outputs.image }}:latest
-            ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.version_tag }}
-            ${{ steps.tags.outputs.image }}:${{ steps.tags.outputs.release_tag }}
+          tags: ${{ steps.tags.outputs.list }}

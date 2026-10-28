@@ -134,3 +134,16 @@ def test_nats_login_puts_the_user_and_password_in_the_url(url):
         nats_login(url, "module", "nats-pw_1")
         == "nats://module:nats-pw_1@127.0.0.1:13042"
     )
+
+
+def test_rabbitmq_credentials_are_generated_once(tmp_path):
+    from naas_abi_cli.cli.admin_credentials import ensure_rabbitmq_credentials
+
+    env = tmp_path / ".env"
+    env.write_text("RABBITMQ_PASSWORD=abi\n")
+
+    user, password = ensure_rabbitmq_credentials(env)
+
+    assert user == "abi" and password != "abi" and len(password) >= 24
+    assert ensure_rabbitmq_credentials(env) == (user, password)
+    assert _env(env)["RABBITMQ_PASSWORD"] == password

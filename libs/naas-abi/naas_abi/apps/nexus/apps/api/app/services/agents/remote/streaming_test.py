@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
 from naas_abi.apps.nexus.apps.api.app.services.agents.remote.adapters.in_memory import (
     InMemoryRemoteAgentDirectory,
 )
 from naas_abi.apps.nexus.apps.api.app.services.agents.remote.contracts import RESEARCHER
 from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import RemoteAgentUnavailable
 from naas_abi.apps.nexus.apps.api.app.services.agents.remote.streaming import (
+    NoUserMessage,
     stream_with_remote_agent,
 )
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import Message, ProviderConfig
@@ -20,7 +22,7 @@ class _Directory:
     async def list_agents(self):
         return [RESEARCHER]
 
-    async def stream(self, key, prompt, *, thread_id, invocation_id=None):
+    async def stream(self, key, prompt, *, thread_id, invocation_id=None, workspace_id=None):
         self.calls.append((key, prompt, thread_id, invocation_id))
         if self.error:
             raise self.error
@@ -85,16 +87,20 @@ def test_maps_agent_events_like_in_process_agents():
     ]
 
 
-def test_a_remote_tool_that_opts_out_of_chat_sources_stays_out():
-    directory = _Directory(
-        [
-            {"event": "tool_response", "data": "3 hits", "chat_source": False},
-            {"event": "done", "data": "[DONE]"},
-        ]
+def test_a_tool_that_opts_out_of_chat_sources_stays_out_of_them():
+    chunks = _run(
+        _Directory(
+            [
+                {"event": "tool_response", "data": "https://a.example"},
+                {"event": "tool_response", "data": "https://b.example", "chat_source": False},
+                {"event": "ai_message", "data": "answer"},
+            ]
+        )
     )
 
-    assert _run(directory) == [
-        {"event": "tool_response", "output": "3 hits", "chat_source": False}
+    assert chunks[:2] == [
+        {"event": "tool_response", "output": "https://a.example"},
+        {"event": "tool_response", "output": "https://b.example", "chat_source": False},
     ]
 
 
@@ -116,3 +122,111 @@ def test_works_with_the_in_memory_directory():
         return f"fact: {prompt}"
 
     assert _run(InMemoryRemoteAgentDirectory({RESEARCHER: answer})) == ["fact: what is JetStream?"]
+
+
+def test_a_chat_completion_joins_the_remote_agents_text(monkeypatch):
+    # POST /api/chat/complete: the same stream, its text without the steps.
+    from naas_abi.apps.nexus.apps.api.app.services import provider_runtime
+    from naas_abi.apps.nexus.apps.api.app.services.agents.remote import factory
+
+    directory = _Directory(
+        [
+            {"event": "ai_message", "data": "Jet"},
+            {"event": "tool_usage", "data": "search"},
+            {"event": "ai_message", "data": "Stream"},
+            {"event": "done", "data": "[DONE]"},
+        ]
+    )
+    monkeypatch.setattr(factory, "get_remote_agent_directory", lambda: directory)
+
+    text = asyncio.run(
+        provider_runtime.complete_chat(
+            [Message(role="user", content="what is JetStream?")],
+            _config(),
+            None,
+            thread_id="conv-1",
+            injection_preamble="USER PROFILE",
+        )
+    )
+
+    assert text == "JetStream"
+    assert directory.calls == [
+        (RESEARCHER.key, "USER PROFILE\n\nwhat is JetStream?", "conv-1", None)
+    ]
+
+
+def test_the_stream_reads_on_to_the_runs_end_after_done():
+    # Breaking out at done closed the directory's stream, which cancels the
+    # run while the module still holds the conversation.
+    finished = []
+
+    class _Draining(_Directory):
+        async def stream(self, key, prompt, *, thread_id, invocation_id=None, workspace_id=None):
+            async for event in super().stream(
+                key, prompt, thread_id=thread_id, invocation_id=invocation_id
+            ):
+                yield event
+            finished.append(True)
+
+    chunks = _run(
+        _Draining([{"event": "ai_message", "data": "hi"}, {"event": "done", "data": "[DONE]"}])
+    )
+
+    assert chunks == ["hi"]
+    assert finished == [True]
+
+
+def _complete(monkeypatch, directory, messages=None):
+    from naas_abi.apps.nexus.apps.api.app.services import provider_runtime
+    from naas_abi.apps.nexus.apps.api.app.services.agents.remote import factory
+
+    monkeypatch.setattr(factory, "get_remote_agent_directory", lambda: directory)
+    return asyncio.run(
+        provider_runtime.complete_chat(
+            messages or [Message(role="user", content="what is JetStream?")],
+            _config(),
+            None,
+            thread_id="conv-1",
+            injection_preamble=None,
+        )
+    )
+
+
+def test_a_chat_completion_raises_when_the_agent_is_unavailable(monkeypatch):
+    # Not a 200 whose stored answer is the error text: the service marks the
+    # provider "(error)", as for an in-process agent.
+    unavailable = _Directory(error=RemoteAgentUnavailable(RESEARCHER.key, "NO_RESPONDERS"))
+    with pytest.raises(RemoteAgentUnavailable, match="NO_RESPONDERS"):
+        _complete(monkeypatch, unavailable)
+
+
+def test_a_chat_completion_without_a_user_message_raises(monkeypatch):
+    with pytest.raises(NoUserMessage):
+        _complete(monkeypatch, _Directory(), [Message(role="assistant", content="hi")])
+
+
+class _FailsAfterDone(_Directory):
+    """A run whose answer is done, then ends FAILED while the module saves it."""
+
+    async def stream(self, key, prompt, *, thread_id, invocation_id=None, workspace_id=None):
+        yield {"event": "ai_message", "data": "JetStream"}
+        yield {"event": "done", "data": "[DONE]"}
+        raise RemoteAgentUnavailable(key, "AGENT_FAILED")
+
+
+def test_a_failure_after_done_leaves_the_answer_as_it_was(monkeypatch, caplog):
+    assert _run(_FailsAfterDone()) == ["JetStream"]
+    assert "AGENT_FAILED" in caplog.text
+    assert _complete(monkeypatch, _FailsAfterDone()) == "JetStream"
+
+
+def test_a_failure_before_done_still_ends_the_stream_with_an_error():
+    class _FailsMidway(_Directory):
+        async def stream(self, key, prompt, *, thread_id, invocation_id=None, workspace_id=None):
+            yield {"event": "ai_message", "data": "Jet"}
+            raise RemoteAgentUnavailable(key, "WAIT_TIMEOUT")
+
+    chunks = _run(_FailsMidway())
+
+    assert chunks[0] == "Jet"
+    assert "**Error:**" in chunks[1] and "WAIT_TIMEOUT" in chunks[1]

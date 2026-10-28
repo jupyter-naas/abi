@@ -1,21 +1,163 @@
 # CHANGELOG
 
+## Upgrade notes (next release): module scopes
+
+- **Workspace members and viewers need a grant to use what modules expose.** Every
+  agent, app, workflow and pipeline of a module, naas_abi's own included (Abi too), is
+  now a module scope, `module:<type>/<module>/<name>`, granted per workspace. The
+  built-in `viewer` and `member` roles hold none, and the upgrade adds no grant: after
+  it, members and viewers see no module agent in the pickers, no app on the Apps page
+  and no workflow, and chat, `/v1` and app links refuse them, until a policy allows
+  them in their workspace. Admins and owners keep everything. Give access in
+  Nexus (IAM, Policies; the editor suggests the ids) with a policy such as
+  `module:UseAgent` on `${scope}:module:agent/naas_abi/*` (every naas_abi agent) or
+  `module:OpenApp` on `${scope}:module:app/<module>/<app>`, attached to the people or
+  group at the workspace. To keep the old behaviour for a workspace, attach a policy
+  allowing `module:*` on `${scope}:module:*` to its members.
+- The `apps` feature now governs only the apps settings and app projects; opening an
+  app is its module scope.
+- Workspace users start workflows and read their own runs at
+  `/api/workspaces/{ws}/workflows`; Nexus migration `0063` adds `workflow_run_owners`.
+- A module may declare actions of its own (`iam_catalog.yaml` beside an engine
+  module, the manifest's `catalog` for a remote one); see core
+  `services/iam/AGENTS.md`, "Module scopes".
+
 <!-- version list -->
 
-### Upgrade notes
+## v3.1.0 (2026-10-26)
 
-- **Agent memory moves to the Document Service.** In NATS mode, engine agents
-  keep conversation memory in the Document Service, not in the `POSTGRES_URL`
-  database. Right after deploying, a super admin runs `agent_memory_migrate`
-  from the Nexus System app (Jobs tab, Run now): `{}` for a dry run, then
-  `{"apply": true}`. Until then, earlier conversations have no memory, and a
-  thread continued in between is reported as `diverged`. Without NATS mode,
-  use `abi agent migrate-memory`. `agent_memory_prune` now runs daily and keeps
-  each thread's newest 20 checkpoints.
-- **Activity log history.** The activity log now defaults to the Document
-  Service. To keep the per-actor SQLite history, run `activity_log_migrate`
-  with `{"data_dir": "storage/activity_log"}`, then add `"apply": true`.
-- Runbook: `docs/migrate-to-nats.md`.
+### Bug Fixes
+
+- Review findings of the durable workflows task
+  ([`f2d12d8`](https://github.com/jupyter-naas/abi/commit/f2d12d8a8e61352e4f06eea466a48ac643a24a3c))
+
+- **core**: Bridge results, lazy loader creation and sync flow cancellation
+  ([`3bf7f14`](https://github.com/jupyter-naas/abi/commit/3bf7f146989c275e77cc251fc94b57ac22c8ce3c))
+
+- **remote-modules**: Close review findings on processes and ontologies
+  ([`b5312b0`](https://github.com/jupyter-naas/abi/commit/b5312b0ea30719c8a1075c499b98f0ed3efe0548))
+
+- **sdk**: Bound a process's deadline, and answer every describe and cancellation
+  ([`e42d345`](https://github.com/jupyter-naas/abi/commit/e42d345f74e3b6b8ca8a206cd9a84f256f46c1b4))
+
+- **triple-store**: A schema source never removes a triple another one asserts
+  ([`a75fe2f`](https://github.com/jupyter-naas/abi/commit/a75fe2f93be0a5e3500468e33504d375c5d0c669))
+
+- **triple-store**: Type the shared-triple check and the schema tests for mypy
+  ([`691f81d`](https://github.com/jupyter-naas/abi/commit/691f81d6cdb4fba31c90b4ab4719d6d93170a34a))
+
+- **workflows**: One result encoding for engine and SDK classes
+  ([`118b159`](https://github.com/jupyter-naas/abi/commit/118b1590f7936312f80b7c550a8769c3e4566ffc))
+
+### Documentation
+
+- Decisions in AGENTS.md instead of the removed ADR tree
+  ([`07369f6`](https://github.com/jupyter-naas/abi/commit/07369f6ade0083273ef6101c832e1b58bafb600f))
+
+### Features
+
+- **core**: Durable workflows for engine modules and the Workflow/Pipeline bridge
+  ([`605fc99`](https://github.com/jupyter-naas/abi/commit/605fc99c2a777d6af291c23aef2e4e22705d62da))
+
+- **discovery**: Declare and authorize remote workflows and pipelines
+  ([`c695729`](https://github.com/jupyter-naas/abi/commit/c695729215aa1bc644c4d30bbeff687e796fbb17))
+
+- **sdk**: Durable workflows on the jobs runtime
+  ([`479b06b`](https://github.com/jupyter-naas/abi/commit/479b06b483a909124154e5a563592e8466bc3a80))
+
+- **triple-store**: Load remote module ontologies into the schema graph
+  ([`90b1795`](https://github.com/jupyter-naas/abi/commit/90b179511f642035796cc36a4aea3ef16bcc6466))
+
+### Refactoring
+
+- **workflows**: Core's sync workflows reuse the SDK's declaration
+  ([`dcfd468`](https://github.com/jupyter-naas/abi/commit/dcfd4684a3e12ce6fa03c6b75973ae04410d2be7))
+
+- **workspace-features**: Update agent feature access and registry
+  ([`c898df7`](https://github.com/jupyter-naas/abi/commit/c898df7846fe43200d34aa8f8fb910f46df2092d))
+
+### Testing
+
+- **core**: The bridge encoding test uses no hard-coded tmp path
+  ([`82a7c1a`](https://github.com/jupyter-naas/abi/commit/82a7c1a2398c3a78d0c1b57d7ca1a35bce9e2cb4))
+
+
+## v3.0.1 (2026-10-21)
+
+### Bug Fixes
+
+- **cli**: Keep docs/reference; stop copying into docs/site
+  ([#1380](https://github.com/jupyter-naas/abi/pull/1380),
+  [`2a96b60`](https://github.com/jupyter-naas/abi/commit/2a96b603a9fde09b9a02b5a29dd154a7be3f19d2))
+
+### Documentation
+
+- Drop Zen naming from docs pointers ([#1380](https://github.com/jupyter-naas/abi/pull/1380),
+  [`2a96b60`](https://github.com/jupyter-naas/abi/commit/2a96b603a9fde09b9a02b5a29dd154a7be3f19d2))
+
+- Fix NATS deep link (no .md in docs.naas.ai URL)
+  ([#1380](https://github.com/jupyter-naas/abi/pull/1380),
+  [`2a96b60`](https://github.com/jupyter-naas/abi/commit/2a96b603a9fde09b9a02b5a29dd154a7be3f19d2))
+
+- Remove narrative docs from ABI; point to docs.naas.ai
+  ([#1380](https://github.com/jupyter-naas/abi/pull/1380),
+  [`2a96b60`](https://github.com/jupyter-naas/abi/commit/2a96b603a9fde09b9a02b5a29dd154a7be3f19d2))
+
+- Remove narrative docs; point to docs.naas.ai
+  ([#1380](https://github.com/jupyter-naas/abi/pull/1380),
+  [`2a96b60`](https://github.com/jupyter-naas/abi/commit/2a96b603a9fde09b9a02b5a29dd154a7be3f19d2))
+
+- Retarget package README and CLI links to docs.naas.ai
+  ([#1380](https://github.com/jupyter-naas/abi/pull/1380),
+  [`2a96b60`](https://github.com/jupyter-naas/abi/commit/2a96b603a9fde09b9a02b5a29dd154a7be3f19d2))
+
+
+## v3.0.0 (2026-10-20)
+
+
+### Upgrade notes (3.0)
+
+- **NATS mode.** A top-level `nats:` block runs the engine on a NATS broker:
+  kernel services on `abi.svc.<service>.v1.*`, the JetStream bus, module jobs,
+  discovery for remote modules, one serving engine per NATS account. Without
+  the block the engine keeps its in-process wiring.
+- **Dagster and RabbitMQ are legacy extras.** `naas-abi-core` no longer
+  installs Dagster and `[all]` leaves out `dagster` and `rabbitmq`: a project
+  without NATS adds `naas-abi-core[all,dagster,rabbitmq]`. Both are removed in
+  the next major. `[all]` now includes `nats` and `otel`.
+- **Agent memory and the activity log** move to the Document Service in NATS
+  mode. Right after the switch, run `agent_memory_migrate` (`{}`, then
+  `{"apply": true}`) and `activity_log_migrate` from the Nexus System app.
+  `agent_memory_prune` runs daily.
+- Custom adapters must implement the ports' new abstract methods.
+- Upgrade `naas-abi-core`, `naas-abi` and `naas-abi-cli` together.
+- Guide: [Migrate from 2.x to 3.0](https://docs.naas.ai/user-guide/upgrade/migrate-to-3).
+  Every change: [Breaking changes in 3.0](https://docs.naas.ai/user-guide/upgrade/breaking-changes-3).
+
+## v2.44.0 (2026-10-20)
+
+### Bug Fixes
+
+- **slides**: Satisfy CI lint checks
+  ([`48c9102`](https://github.com/jupyter-naas/abi/commit/48c9102a3614a96edb8b0daafb030bc2299d8fa4))
+
+### Features
+
+- **slides**: Preserve semantic editor contributions
+  ([`6f244f6`](https://github.com/jupyter-naas/abi/commit/6f244f6b5165e2fd98850b6c00f3b9cbd1a0057e))
+
+## v2.43.0 (2026-10-14)
+
+### Chores
+
+- **nexus-map**: Commit staged changes and push
+  ([`df724fe`](https://github.com/jupyter-naas/abi/commit/df724fe722b9bf76d6508ac88c6ae26b2aa3a29f))
+
+### Features
+
+- **maps**: Add new map icons and layer colors
+  ([`36ab3d9`](https://github.com/jupyter-naas/abi/commit/36ab3d9544a495a2cf34983c4045b1a100c12807))
+
 
 ## v2.42.1 (2026-10-12)
 

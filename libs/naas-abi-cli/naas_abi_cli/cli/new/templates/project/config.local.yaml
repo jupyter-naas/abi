@@ -122,8 +122,8 @@ modules:
         users:
           - email: "admin@example.com"
             name: "ABI Admin"
-            # Platform-wide admin (admin console, live event stream). Kept in
-            # config so it is reconciled on every boot — flip to false to demote.
+            # Platform-wide admin (admin console, live event stream). Config only
+            # promotes on boot; manage superadmins in Platform Settings > Users.
             is_superadmin: true
         organizations:
           - name: "ABI"
@@ -133,18 +133,12 @@ modules:
             accent_color: "#34D399"
             login_footer_text: "© ABI"
             show_powered_by: false
-            members:
-              - email: "admin@example.com"
-                role: "owner"
             workspaces:
               - name: "ABI"
                 slug: "abi"
                 owner_email: "admin@example.com"
                 primary_color: "#34D399"
                 accent_color: "#34D399"
-                members:
-                  - email: "admin@example.com"
-                    role: "owner"
 
   # OpenRouter — the only AI provider enabled by default. One gateway key
   # serves both the default chat model (Gemma 4 26B-A4B) and the default
@@ -217,7 +211,7 @@ services:
         access_key_id: "{{ secret.MINIO_ROOT_USER }}"
         secret_access_key: "{{ secret.MINIO_ROOT_PASSWORD }}"
         endpoint_url: "http://minio:9000"
-  # Who may do what (identity and authorization RFC 20261013). Policies are
+  # Who may do what. Policies are
   # enforced: "authorizer: allow_all" is an explicit opt-out that warns at boot.
   # Reuse the existing database, with a dedicated IAM schema.
   iam:

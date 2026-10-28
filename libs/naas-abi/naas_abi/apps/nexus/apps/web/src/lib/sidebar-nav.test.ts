@@ -43,8 +43,28 @@ describe('mergeNavOrder', () => {
   });
 
   it('leaves a customised order where the user put search', () => {
-    const custom = ['home', 'chat', 'apps', 'files', 'search', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'code', 'marketplace'];
+    const custom = ['home', 'chat', 'tasks', 'apps', 'files', 'search', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'code', 'marketplace'];
     expect(mergeNavOrder(custom)).toEqual(custom);
+  });
+
+  it('follows the new default when the saved order is the one before Tasks', () => {
+    const beforeTasks = ['home', 'search', 'apps', 'files', 'chat', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'code', 'marketplace'];
+    expect(mergeNavOrder(beforeTasks)).toEqual([...DEFAULT_NAV_ORDER]);
+  });
+
+  it('puts tasks right below chat', () => {
+    expect(DEFAULT_NAV_ORDER.indexOf('tasks')).toBe(DEFAULT_NAV_ORDER.indexOf('chat') + 1);
+    // The order saved while the feature was still called Board and sat after
+    // Sheets was never customised.
+    const boardAfterSheets = ['home', 'search', 'apps', 'files', 'chat', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'board', 'code', 'marketplace'];
+    expect(mergeNavOrder(boardAfterSheets)).toEqual([...DEFAULT_NAV_ORDER]);
+  });
+
+  it('slots a new section into a customised order after its catalog predecessor', () => {
+    const custom = ['home', 'chat', 'apps', 'files', 'search', 'maps', 'ontology', 'graph', 'datasets', 'slides', 'documents', 'sheets', 'code', 'marketplace'];
+    const merged = mergeNavOrder(custom);
+    expect(merged.indexOf('tasks')).toBe(merged.indexOf('chat') + 1);
+    expect(merged.filter((id) => id !== 'tasks')).toEqual(custom);
   });
 });
 

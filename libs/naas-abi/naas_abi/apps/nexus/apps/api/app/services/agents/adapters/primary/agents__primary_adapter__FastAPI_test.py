@@ -8,6 +8,7 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__p
     _canonical_agent_sort_key,
     _class_declared_model_ids,
     _nexus_abi_class_name,
+    _resolve_workspace_default_class_name,
     _roster_alignment,
     _workspace_agent_roster,
     pick_workspace_chat_agent_id,
@@ -85,6 +86,11 @@ def test_workspace_agent_roster_uses_seed_when_present() -> None:
 
 def test_workspace_agent_roster_unseeded_is_default_only() -> None:
     assert _workspace_agent_roster(None, "mod/Default") == {"mod/Default"}
+
+
+def test_resolve_workspace_default_falls_back_to_abi() -> None:
+    registry = {"naas_abi.agents.AbiAgent/AbiAgent": object()}
+    assert _resolve_workspace_default_class_name(registry) == "naas_abi.agents.AbiAgent/AbiAgent"
 
 
 def test_nexus_abi_class_name_only_matches_our_orchestrator() -> None:

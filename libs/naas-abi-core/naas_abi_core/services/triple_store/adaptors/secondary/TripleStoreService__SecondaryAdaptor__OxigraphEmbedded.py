@@ -181,7 +181,7 @@ class TripleStoreService__SecondaryAdaptor__OxigraphEmbedded(ITripleStorePort):
 
     @contextmanager
     def _query_stream(self, query: str, **options: Any) -> Iterator[QueryStream]:
-        """Iterate pyoxigraph's lazy result (docs/adr/20261003_nats-streamed-results.md).
+        """Iterate pyoxigraph's lazy result.
 
         pyoxigraph results are bound to the thread that ran the query (another
         thread touching them aborts the process): open and read a stream on

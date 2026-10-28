@@ -14,6 +14,11 @@ from .utils import to_pascal_case
 @click.argument("orchestration_name", required=True)
 @click.argument("orchestration_path", required=False, default=".")
 def _new_orchestration(orchestration_name: str, orchestration_path: str = "."):
+    """Create a Dagster orchestration, for a project without NATS.
+
+    Legacy, to be removed in the next major: NATS projects schedule with module
+    jobs. Needs the naas-abi-core[dagster] extra.
+    """
     refuse_in_remote_module("orchestration", orchestration_path)
     new_orchestration(orchestration_name, orchestration_path)
 

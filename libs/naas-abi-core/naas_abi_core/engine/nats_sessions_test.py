@@ -19,6 +19,7 @@ from naas_abi_core.engine.nats_tracing import add_traced_service
 from naas_abi_core.engine.nats_transfer import TransferError, TransferHost
 from naas_abi_proto.transfer.v1 import transfer_pb2 as pb
 from naas_abi_sdk import no_responders
+from naas_abi_sdk.broker_flush import flush_to_broker
 from naas_abi_sdk.transfer import Transfer, transfer_subject
 from nats.errors import NoRespondersError
 from nats.errors import TimeoutError as NATSTimeoutError
@@ -403,7 +404,7 @@ class SlowEcho(ServicePrimary):
     async def start(self, nc) -> None:
         self._service = await add_traced_service(nc, name="handover", version="1.0.0")
         await self._service.add_endpoint(name="echo", subject=CALLS, handler=self._echo)
-        await nc.flush()  # subscribed at the broker
+        await flush_to_broker(nc)  # subscribed at the broker
 
     async def _echo(self, request) -> None:
         self.received.append(request.data)
@@ -433,7 +434,7 @@ def test_a_queue_member_drained_under_load_loses_no_request(broker):
         old = await old_nc.subscribe(CALLS, queue="q", cb=answer)
         await new_nc.subscribe(CALLS, queue="q", cb=answer)
         for nc in (old_nc, new_nc):
-            await nc.flush()
+            await flush_to_broker(nc)
         lost, sending = [], asyncio.Event()
         sending.set()
 

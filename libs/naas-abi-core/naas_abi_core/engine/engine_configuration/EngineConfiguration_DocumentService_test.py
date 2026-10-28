@@ -153,10 +153,12 @@ def test_custom_adapter_uses_standard_loader(tmp_path):
         adapter.close()
 
 
-@pytest.mark.parametrize("scaffold", [False, True])
-def test_remote_configuration_explicitly_uses_deployment_postgresql(scaffold):
+# The scaffold renders a NATS project (`abi new project`) or a classic one
+# (`--without-nats`); None reads the repository's own config.remote.yaml.
+@pytest.mark.parametrize("nats", [None, False, True])
+def test_remote_configuration_explicitly_uses_deployment_postgresql(nats):
     root = Path(__file__).resolve().parents[5]
-    if scaffold:
+    if nats is not None:
         path = (
             root
             / "libs/naas-abi-cli/naas_abi_cli/cli/new/templates/project/config.remote.yaml"
@@ -164,7 +166,9 @@ def test_remote_configuration_explicitly_uses_deployment_postgresql(scaffold):
         content = (
             Environment(undefined=StrictUndefined, autoescape=False)  # nosec B701
             .from_string(path.read_text())
-            .render(project_name_snake="example", project_name_pascal="Example", nats=True)
+            .render(
+                project_name_snake="example", project_name_pascal="Example", nats=nats
+            )
         )
     else:
         content = (root / "config.remote.yaml").read_text()

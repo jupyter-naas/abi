@@ -231,4 +231,3 @@ class PrincipalGateway(ABC):
     @abstractmethod
     async def is_active(self, principal_id: str) -> bool:
         """Not suspended or deleted, checked on every request (cached briefly)."""
-

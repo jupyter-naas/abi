@@ -1,4 +1,4 @@
-"""Credentials: which kinds the Nexus API reads, and where (RFC §9.3)."""
+"""Credentials: which kinds the Nexus API reads, and where."""
 
 from __future__ import annotations
 
@@ -125,7 +125,7 @@ def test_a_token_signed_with_the_old_secret_is_no_credential(claims):
 
 
 def test_the_secret_key_signs_and_reads_no_token():
-    """RFC §13: ``secret_key`` signs no token. Nothing in Nexus imports a JWT
+    """``secret_key`` signs no token. Nothing in Nexus imports a JWT
     signer with it, and no module makes or reads a session of its own."""
     import re
     from pathlib import Path
@@ -149,9 +149,7 @@ def test_the_session_modules_of_the_old_login_are_gone():
 
     for name in ("refresh_token", "auth.default_passwords"):
         with pytest.raises(ModuleNotFoundError):
-            importlib.import_module(
-                f"naas_abi.apps.nexus.apps.api.app.services.{name}"
-            )
+            importlib.import_module(f"naas_abi.apps.nexus.apps.api.app.services.{name}")
     from naas_abi.apps.nexus.apps.api.app.services.auth import service
 
     for name in ("create_access_token", "decode_token", "is_session_token", "verify_password"):

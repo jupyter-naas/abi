@@ -18,7 +18,7 @@ from urllib.parse import urlsplit
 
 from naas_abi_sdk.module import ModuleConfiguration
 
-# The access and ID tokens of a provider live ten minutes at most (RFC §9).
+# The access and ID tokens of a provider live ten minutes at most.
 MAX_TOKEN_SECONDS = 600
 CLIENT_ID = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 GRANT_TYPES = ("authorization_code", "refresh_token", "client_credentials")

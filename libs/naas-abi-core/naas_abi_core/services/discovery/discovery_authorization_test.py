@@ -378,3 +378,124 @@ def test_listing_shows_only_the_modules_and_agents_the_caller_may_list():
         assert [a.name for a in instance.descriptor.agents] == ["Researcher"]
 
     asyncio.run(scenario())
+
+
+def test_a_caller_who_may_get_a_module_sees_its_instances():
+    """GetModule is what reading one module needs: a module looking itself up
+    (its bootstrap allows GetModule on its own module, not ListModules) sees
+    its instances, each still showing only what it may list."""
+
+    async def scenario():
+        iam = contract_iam()
+        h = IAMHarness(iam)
+        service = DiscoveryService(MemoryRegistry(), iam=iam)
+        await _ready(service)
+        bob = h.user()
+        get = pb.GetModuleRequest(module_id="research", contract_major=1)
+        h.grant(
+            bob.id,
+            statement(
+                "Allow",
+                ["discovery:GetModule", "discovery:ListJobs"],
+                [f"{MODULE}module/default/research", f"{MODULE}job/default/research/*"],
+            ),
+        )
+        with h.as_(actor="api", on_behalf_of=bob):
+            (instance,) = (await service.get_module(get)).instances
+        assert instance.descriptor.module_id == "research"
+        assert [j.name for j in instance.descriptor.jobs] == ["ingest"]
+        assert list(instance.descriptor.agents) == []  # no ListAgents
+        # Without GetModule the module is not found.
+        eve = h.user("eve")
+        with (
+            h.as_(actor="api", on_behalf_of=eve),
+            pytest.raises(DiscoveryError, match="MODULE_NOT_FOUND"),
+        ):
+            await service.get_module(get)
+
+    asyncio.run(scenario())
+
+
+def test_a_member_triggers_a_module_s_workflows_never_its_plain_jobs():
+    """Members hold ``TriggerJob`` on ``workflow/*`` (the module scope tells
+    workflows apart in Nexus), never on a plain job; a grant on ``job/…`` still
+    covers a workflow, as a module's own manifest names its jobs."""
+
+    async def scenario():
+        iam = contract_iam()
+        h = IAMHarness(iam)
+        service = DiscoveryService(MemoryRegistry(), iam=iam)
+        req = _provider()
+        req.descriptor.jobs.add(
+            name="sync",
+            contract_major=1,
+            kind="workflow",
+            max_concurrency=1,
+            max_attempts=1,
+        )
+        with as_service_account("engine"):
+            await service.register(req, PROVIDER)
+            await service.renew(
+                pb.RenewRequest(
+                    instance_id="instance",
+                    lease_token=req.lease_token,
+                    initialized=True,
+                ),
+                PROVIDER,
+            )
+
+        def trigger(job: str):
+            return pb.AuthorizeJobRequest(
+                instance_id="instance",
+                lease_token=req.lease_token,
+                job_name=job,
+                operation="trigger",
+            )
+
+        member = h.user("member")
+        h.attach("builtin.platform.member", member.id)
+        caller = CallContext(
+            principal=service_account("api"),
+            on_behalf_of=Principal(id=member.id, kind="user"),
+        )
+        await service.authorize_job(trigger("sync"), PROVIDER, caller)
+        with pytest.raises(DiscoveryError, match="JOB_NOT_FOUND"):
+            await service.authorize_job(trigger("ingest"), PROVIDER, caller)
+
+        viewer = h.user("viewer")
+        h.attach("builtin.platform.viewer", viewer.id)
+        as_viewer = CallContext(
+            principal=service_account("api"),
+            on_behalf_of=Principal(id=viewer.id, kind="user"),
+        )
+        with pytest.raises(DiscoveryError, match="JOB_NOT_FOUND"):
+            await service.authorize_job(trigger("sync"), PROVIDER, as_viewer)
+
+        # A Deny written on the job name holds against the workflow name.
+        careful = h.user("careful")
+        h.attach("builtin.platform.member", careful.id)
+        h.grant(
+            careful.id,
+            statement(
+                "Deny", ["discovery:TriggerJob"], [f"{MODULE}job/default/research/sync"]
+            ),
+        )
+        refused = CallContext(
+            principal=service_account("api"),
+            on_behalf_of=Principal(id=careful.id, kind="user"),
+        )
+        with pytest.raises(PermissionDeniedError):
+            await service.authorize_job(trigger("sync"), PROVIDER, refused)
+
+        module = h.service_account("caller-module")
+        h.grant(
+            module.id,
+            statement(
+                "Allow", ["discovery:TriggerJob"], [f"{MODULE}job/default/research/*"]
+            ),
+        )
+        own = CallContext(principal=service_account("caller-module"))
+        await service.authorize_job(trigger("sync"), PROVIDER, own)
+        await service.authorize_job(trigger("ingest"), PROVIDER, own)
+
+    asyncio.run(scenario())

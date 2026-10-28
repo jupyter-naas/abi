@@ -1,4 +1,4 @@
-"""Where each kind of credential is refused (task #62's regression tests).
+"""Where each kind of credential is refused (its regression tests).
 
 A coding agent's key, an app-html link, a preview link and a remote app grant
 each open their own route and nothing else: every one is refused on ``/api/*``
@@ -130,7 +130,7 @@ def _engine_token(iam, record, audience, **fields) -> str:
 
 
 # What an older Nexus signed with its ``secret_key``: sessions, links, coding agents.
-# Nexus signs nothing now (RFC §13), and none of it is read.
+# Nexus signs nothing now, and none of it is read.
 OLD_SECRET = "the-key-nexus-used-to-sign-with"
 
 

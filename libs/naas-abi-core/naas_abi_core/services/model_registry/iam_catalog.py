@@ -1,4 +1,4 @@
-"""The ``model_registry`` action catalog (RFC §6.4, "model_registry").
+"""The ``model_registry`` action catalog.
 
 Every model is platform-level, by canonical model id. Chatting with a model,
 streamed or not, and embedding are read actions.
@@ -11,9 +11,8 @@ from naas_abi_core.services.iam.catalog import ActionCatalog, ActionSpec, Resour
 SERVICE = "model_registry"
 SUBJECT_PREFIX = "abi.svc.model_registry.v1"
 
-# A large chat, stream or embedding call goes through a transfer session
-# (docs/adr/20261003_nats-streamed-results.md); the operation it opens is
-# checked by the registry like the direct call.
+# A large chat, stream or embedding call goes through a transfer session; the
+# operation it opens is checked by the registry like the direct call.
 TRANSFER = tuple(
     f"{SUBJECT_PREFIX}.transfer.{operation}"
     for operation in ("open", "*.write", "*.start", "*.read", "*.close")

@@ -363,7 +363,7 @@ def test_forwarded_headers_are_trusted_only_from_private_proxies(monkeypatch):
 
 
 def test_an_api_key_caller_acts_as_the_api_account():
-    """TRANSITIONAL until #62: a verified ABI_API_KEY holder calls as ``api``,
+    """A verified ABI_API_KEY holder calls as ``api``,
     and a request already acting for a signed-in user keeps its context."""
     import contextvars
 
@@ -392,7 +392,7 @@ def test_an_api_key_caller_acts_as_the_api_account():
     assert contextvars.copy_context().run(signed_in) == nexus
 
 
-# -- keys of IAM stay off the core API's invocation routes (task #62) ----------------------------
+# -- keys of IAM stay off the core API's invocation routes (delegated tokens and API keys) ----------------------------
 
 ROUTER_PREFIXES = ("/agents", "/pipelines", "/workflows", "/tools")
 

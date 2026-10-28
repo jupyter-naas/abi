@@ -54,6 +54,10 @@ const SheetsSection = dynamic(() => import('./sheets-section').then((m) => m.She
   ssr: false,
   loading: sectionLoading,
 });
+const TasksSection = dynamic(() => import('./tasks-section').then((m) => m.TasksSection), {
+  ssr: false,
+  loading: sectionLoading,
+});
 const MarketplaceSection = dynamic(
   () => import('./marketplace-section').then((m) => m.MarketplaceSection),
   { ssr: false, loading: sectionLoading },
@@ -64,10 +68,6 @@ const AppsSection = dynamic(() => import('./apps-section').then((m) => m.AppsSec
 });
 const InfrastructureSection = dynamic(() => import('@/app/workspace/[workspaceId]/settings/infrastructure/infrastructure-section').then(m => m.InfrastructureSection), { ssr: false, loading: sectionLoading });
 const SettingsSection = dynamic(() => import('./settings-section').then((m) => m.SettingsSection), {
-  ssr: false,
-  loading: sectionLoading,
-});
-const EventsSection = dynamic(() => import('./events-section').then((m) => m.EventsSection), {
   ssr: false,
   loading: sectionLoading,
 });
@@ -89,11 +89,11 @@ const SECTION_CHUNK: Partial<Record<SidebarSection, () => Promise<unknown>>> = {
   slides: () => import('./slides-section'),
   documents: () => import('./documents-section'),
   sheets: () => import('./sheets-section'),
+  tasks: () => import('./tasks-section'),
   marketplace: () => import('./marketplace-section'),
   apps: () => import('./apps-section'),
   infrastructure: () => import('@/app/workspace/[workspaceId]/settings/infrastructure/infrastructure-section'),
   settings: () => import('./settings-section'),
-  events: () => import('./events-section'),
   workspaces: () => import('./workspaces-section'),
 };
 
@@ -107,7 +107,6 @@ function SectionContent({ section }: { section: SidebarSection }) {
   const canChat = useFeature('chat');
   const canFiles = useFeature('files');
   const canDatasets = useFeature('datasets');
-  const canApps = useFeature('apps');
   const canMarketplace = useFeature('marketplace');
   const canSearch = useFeature('search');
   const canOntology = useFeature('ontology');
@@ -115,6 +114,7 @@ function SectionContent({ section }: { section: SidebarSection }) {
   const canSlides = useFeature('slides');
   const canDocuments = useFeature('documents');
   const canSheets = useFeature('sheets');
+  const canTasks = useFeature('tasks');
 
   if (section === 'maps' && canMaps) return <MapsSection collapsed={false} detailOnly />;
   if (section === 'search' && canSearch) return <SearchSection collapsed={false} detailOnly />;
@@ -127,12 +127,11 @@ function SectionContent({ section }: { section: SidebarSection }) {
   if (section === 'slides' && canSlides) return <SlidesSection collapsed={false} detailOnly />;
   if (section === 'documents' && canDocuments) return <DocumentsSection collapsed={false} detailOnly />;
   if (section === 'sheets' && canSheets) return <SheetsSection collapsed={false} detailOnly />;
-  if (section === 'apps' && canApps) return <AppsSection collapsed={false} detailOnly />;
+  if (section === 'tasks' && canTasks) return <TasksSection collapsed={false} detailOnly />;
+  if (section === 'apps') return <AppsSection collapsed={false} detailOnly />;
   if (section === 'marketplace' && canMarketplace) return <MarketplaceSection collapsed={false} detailOnly />;
   if (section === 'infrastructure' && canSettings) return <InfrastructureSection />;
   if (section === 'settings') return <SettingsSection collapsed={false} detailOnly />;
-  // Superadmin-only route; the dock only offers it to superadmins.
-  if (section === 'events') return <EventsSection collapsed={false} detailOnly />;
   // Opened by the workspace mark (workspace-switcher.tsx).
   if (section === 'workspaces') return <WorkspacesSection />;
   return null;

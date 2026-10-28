@@ -1,7 +1,6 @@
 """Expose already-loaded engine services over NATS, if configured to.
 
-See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md and
-``EngineConfiguration.NATSConfiguration``'s docstring for the design this
+See ``EngineConfiguration.NATSConfiguration``'s docstring for the design this
 implements: ``config.yaml``'s top-level ``nats:`` block is what turns this
 on at all -- no per-service opt-in flag. When present, every loaded service
 that has a NATS primary adapter available gets one started automatically,
@@ -18,7 +17,7 @@ Every primary verifies its callers' engine tokens against IAM's JWKS: in
 this process when it holds IAM (the serving engine), else over NATS.
 
 ``secret`` is exposed too; the ``Secret`` domain service it wraps checks each
-caller per key against IAM (RFC §6.4), as every exposed domain service does. It
+caller per key against IAM, as every exposed domain service does. It
 also has its own re-exposure guard shape (see ``expose_services`` below):
 ``Secret`` fans out over a *list* of adapters, not one, so only its local
 adapters are served: a NATS client in the fanout is left out, preventing
@@ -155,7 +154,7 @@ class EngineNATSLoader:
         """Start this process's RPC overflow host when it exposes primaries.
 
         Replies above the broker limit are parked there and uploaded requests
-        read from there (docs/adr/20261003_nats-rpc-overflow.md). Returns the
+        read from there. Returns the
         started host, stopped at shutdown with the primaries.
         """
         nats_config = self.__configuration.nats
@@ -207,7 +206,7 @@ class EngineNATSLoader:
         """Start a NATS primary adapter for every loaded service that has one.
 
         Returns the started primary-adapter instances -- there's no shutdown
-        hook yet to hand them to (see the RFC's open questions), but a
+        hook yet to hand them to, but a
         caller that wants to keep a reference for later can.
         """
         nats_config = self.__configuration.nats

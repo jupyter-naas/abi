@@ -302,6 +302,65 @@ def test_job_descriptors_are_validated():
             asyncio.run(register(request))
 
 
+def test_workflow_descriptors_are_validated():
+    import json
+
+    async def register(request):
+        service = DiscoveryService(
+            MemoryRegistry(), lease_seconds=20, clock=lambda: 0.0
+        )
+        await service.register(request, "owner")
+
+    schema = json.dumps({"type": "object", "properties": {"n": {"type": "integer"}}})
+    flow = _job(
+        "report",
+        kind="cron",
+        spec="0 0 6 * * *",
+        input_schema=schema,
+        output_schema=schema,
+    )
+    flow.kind = "workflow"
+    flow.triggers[0].input = '{"filter": "db"}'
+    asyncio.run(register(_with_jobs(registration("m", "i"), flow, _job("plain"))))
+
+    def broken(**fields):
+        job = _job("report", **fields.pop("job", {}))
+        job.kind = fields.pop("kind", "workflow")
+        for name, value in fields.items():
+            setattr(job, name, value)
+        return job
+
+    oversized = json.dumps({"description": "x" * (16 * 1024)})
+    invalid = [
+        broken(kind="saga"),
+        broken(input_schema="not json"),
+        broken(input_schema="[1, 2]"),  # a schema is an object
+        broken(output_schema=oversized),
+        broken(input_schema=oversized),
+    ]
+    too_big_input = broken()
+    too_big_input.triggers[0].input = json.dumps({"x": "y" * 5000})
+    bad_input = broken()
+    bad_input.triggers[0].input = "[1]"
+    invalid += [too_big_input, bad_input]
+    for job in invalid:
+        with pytest.raises(DiscoveryError, match="INVALID_ARGUMENT"):
+            asyncio.run(register(_with_jobs(registration("m", "i"), job)))
+
+
+def test_a_job_written_before_workflows_existed_is_still_valid():
+    async def register(request):
+        service = DiscoveryService(
+            MemoryRegistry(), lease_seconds=20, clock=lambda: 0.0
+        )
+        await service.register(request, "owner")
+
+    old = _job()
+    assert old.kind == ""  # the field did not exist
+
+    asyncio.run(register(_with_jobs(registration("m", "i"), old)))
+
+
 def test_replicas_must_declare_identical_jobs():
     async def scenario():
         service = DiscoveryService(
@@ -1112,5 +1171,18 @@ def test_replicas_must_declare_the_same_apps():
         other = _with_app(registration("m", "two"), title="Different")
         with pytest.raises(DiscoveryError, match="DESCRIPTOR_CONFLICT"):
             await service.register(other, "owner")
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("instance_id", ["victim.x", "a.b.c", "*", ">", "x y", ""])
+def test_an_instance_id_is_one_subject_token(instance_id):
+    """Callers bind the token they send to the subject's instance token: an id
+    ``<other>.x`` would let a module receive tokens bound to another instance."""
+
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        with pytest.raises(DiscoveryError, match="INVALID_ARGUMENT"):
+            await service.register(registration("acme.c", instance_id), "acme.c")
 
     asyncio.run(scenario())

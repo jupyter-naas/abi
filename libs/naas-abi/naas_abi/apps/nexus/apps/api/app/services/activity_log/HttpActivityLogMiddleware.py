@@ -18,6 +18,7 @@ account, with ``anonymous: true``, so failed sign-ins stay on the record.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import time
@@ -64,13 +65,15 @@ DEFAULT_SKIP_BODY_PATH_PREFIXES: tuple[str, ...] = (
     "/api/auth/",
     "/api/admin/system/resources/",
 )
+# Liveness probes (container healthcheck, proxy) hit these every few seconds;
+# recording them would fill the anonymous log with noise.
+DEFAULT_SKIP_RECORD_PATHS: frozenset[str] = frozenset({"/", "/health"})
 
 
 def _redact(value: Any) -> Any:
     if isinstance(value, dict):
         return {
-            k: (REDACTED if k.lower() in SENSITIVE_KEYS else _redact(v))
-            for k, v in value.items()
+            k: (REDACTED if k.lower() in SENSITIVE_KEYS else _redact(v)) for k, v in value.items()
         }
     if isinstance(value, list):
         return [_redact(v) for v in value]
@@ -131,14 +134,16 @@ class HttpActivityLogMiddleware:
         max_body_bytes: int = DEFAULT_MAX_BODY_BYTES,
         skip_body_path_prefixes: tuple[str, ...] = DEFAULT_SKIP_BODY_PATH_PREFIXES,
         capture_request_body: bool = True,
+        skip_record_paths: frozenset[str] = DEFAULT_SKIP_RECORD_PATHS,
     ) -> None:
         self.app = app
+        self.skip_record_paths = frozenset(skip_record_paths)
         self.max_body_bytes = max_body_bytes
         self.skip_body_path_prefixes = tuple(skip_body_path_prefixes)
         self.capture_request_body = capture_request_body
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http":
+        if scope["type"] != "http" or scope.get("path", "") in self.skip_record_paths:
             await self.app(scope, receive, send)
             return
 
@@ -212,15 +217,16 @@ class HttpActivityLogMiddleware:
                     )
                     if exc is not None:
                         attrs["error"] = type(exc).__name__
-                    self._record(service, headers, attrs)
+                    # record() is a blocking call (it may cross the bus): keep it
+                    # off the event loop so a slow log cannot stall every request.
+                    # to_thread copies the context, so the caller's identity follows.
+                    await asyncio.to_thread(self._record, service, headers, attrs)
             except Exception:
                 # Activity logging must never break the request path.
                 pass
 
     @staticmethod
-    def _record(
-        service: ActivityLogService, headers: Headers, attrs: dict[str, Any]
-    ) -> None:
+    def _record(service: ActivityLogService, headers: Headers, attrs: dict[str, Any]) -> None:
         def record() -> None:
             # The service names the actor from the call; this is its fallback
             # for a log not wired with IAM.
@@ -293,9 +299,7 @@ class HttpActivityLogMiddleware:
 
         if body_skipped_reason is not None:
             try:
-                size_hint = (
-                    int(content_length_header) if content_length_header else None
-                )
+                size_hint = int(content_length_header) if content_length_header else None
             except ValueError:
                 size_hint = None
             attrs["request_body"] = (

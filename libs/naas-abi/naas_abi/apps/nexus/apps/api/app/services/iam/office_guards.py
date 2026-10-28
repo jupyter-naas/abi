@@ -64,7 +64,7 @@ def project_guard(
 async def readable_projects(
     projects: Sequence[_P], *, kind: str, workspace_id: str, user: Any
 ) -> list[_P]:
-    """The projects of a list the user may read (RFC §5.5): a policy may deny one
+    """The projects of a list the user may read: a policy may deny one
     deck of a workspace whose others the role reaches."""
     org = await authz_module.AUTHZ.org_of(workspace_id)
     if org is None:

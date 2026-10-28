@@ -489,7 +489,7 @@ def test_nats_configuration_rejects_conflicting_bus_and_cache_topologies():
         )
 
 
-# --- RPC overflow host (docs/adr/20261003_nats-rpc-overflow.md)
+# --- RPC overflow host
 
 
 def _overflow_loader(monkeypatch, run_coro, **overflow):

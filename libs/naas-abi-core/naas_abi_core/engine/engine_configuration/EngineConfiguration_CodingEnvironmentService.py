@@ -58,8 +58,7 @@ class CodingEnvironmentAdapterNATSConfiguration(BaseModel):
     """Coding environment adapter NATS RPC client configuration.
 
     Talks to a remote ``CodingEnvironmentPrimaryAdapterNATS`` over NATS
-    request/reply -- see docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
-    (Stage 1) and naas_abi_core/proto/coding_environment/v1/coding_environment.proto.
+    request/reply -- see naas_abi_core/proto/coding_environment/v1/coding_environment.proto.
 
     coding_environment_adapter:
       adapter: "nats_rpc"

@@ -1,13 +1,13 @@
 """Canonical resource names, action names and their wildcard patterns.
 
-See docs/specs/rfcs/20261013_identity-and-authorization.md, §3.3 and §4:
+Grammar and encoding: ``AGENTS.md``, "Resource names":
 
     abi:<org>:<workspace>:<service>:<type>/<id>
 
 Ids are percent-encoded UTF-8 (every octet outside RFC 3986 ``unreserved``),
 so a canonical name never holds a raw ``*`` or ``?`` and a wildcard can never
 be read as a literal. Callers build and parse names here, never by string
-formatting. ``naas_abi_sdk.iam_names`` mirrors this module for SDK modules.
+formatting.
 """
 
 from __future__ import annotations
@@ -26,13 +26,23 @@ NONE = "-"
 # which no workspace id can be. Only org-wide attachments are named with it, so
 # "abi:<org>:*" patterns reach them and "abi:<org>:-:" ones never do.
 ALL_WORKSPACES = "%2A"
-# The org field of what spans every org: only unscoped attachments, named
-# abi:%2A:%2A:iam:attachment/... No ${scope} expands to it (no org id is "%2A"),
-# so attaching at any scope, the platform's abi:-:- included, never reaches
-# them: only grants written for every org ("*", "abi:*:...") do.
+# The org field of what spans every org: unscoped attachments, named
+# abi:%2A:%2A:iam:attachment/..., and the platform's own policies and groups,
+# abi:%2A:%2A:iam:policy/... and iam:group/.... No ${scope} expands to it (no
+# org id is "%2A"), so a role at any scope, the platform's abi:-:- included,
+# never reaches them: only grants written for every org ("*", "abi:*:...") do.
 ALL_ORGS = "%2A"
-# The only resource type the two markers above may name.
+# The only resource type the workspace marker may name, with an org (org-wide).
 ORG_WIDE_TYPE = ("iam", "attachment")
+# Sets are written where only the level above reaches (``sets.write_resource``):
+# an org's at abi:%2A:%2A:iam:set/<org>, a workspace's at abi:<org>:%2A:iam:set/<ws>.
+SET_TYPE = ("iam", "set")
+# The resource types the workspace marker may name, with an org.
+ORG_WIDE_TYPES = frozenset({ORG_WIDE_TYPE, SET_TYPE})
+# The resource types the org marker may name, with the workspace marker.
+EVERY_ORG_TYPES = frozenset(
+    {ORG_WIDE_TYPE, ("iam", "policy"), ("iam", "group"), SET_TYPE}
+)
 PREFIX = "abi:"
 PLATFORM_SCOPE = "abi:-:-"
 
@@ -79,7 +89,7 @@ def encode_segment(value: str) -> str:
 
 
 def encode_id(parts: str | Sequence[str], kind: IdKind = "opaque") -> str:
-    """The canonical id of a resource (RFC §4.3).
+    """The canonical id of a resource.
 
     * ``opaque``: one value, wholly encoded (a ``/`` inside becomes ``%2F``);
     * ``path``: each part encoded on its own, joined with a raw ``/``;
@@ -155,7 +165,7 @@ def scope_name(org: str = NONE, workspace: str = NONE) -> str:
 
 
 def validate_scope(scope: str) -> str:
-    """Check an attachment scope (RFC §3.4): ``abi:<org>:<ws>``, ``abi:<org>:-``,
+    """Check an attachment scope: ``abi:<org>:<ws>``, ``abi:<org>:-``,
     ``abi:<org>:*`` or ``abi:-:-``."""
     if not scope.startswith(PREFIX):
         raise ValueError(f"A scope starts with 'abi:': {scope!r}")
@@ -177,13 +187,48 @@ def scope_fields(scope: str) -> tuple[str, str]:
     return org, workspace
 
 
+def validate_owner_scope(scope: str) -> str:
+    """Check the scope that owns a policy or a group: the platform ``abi:-:-``,
+    an org ``abi:<org>:-`` or a workspace ``abi:<org>:<ws>``, never org-wide."""
+    if scope_fields(scope)[1] == "*":
+        raise ValueError(
+            "A policy or a group is owned by the platform, an org or a workspace, "
+            f"not {scope!r}"
+        )
+    return scope
+
+
+def within_owner(owner: str, scope: str | None) -> bool:
+    """Whether an attachment at ``scope`` is at ``owner``'s level or below: an
+    org's at the org, org-wide or at any of its workspaces, a workspace's at
+    that workspace only, the platform's anywhere (unscoped included)."""
+    if owner == PLATFORM_SCOPE:
+        return True
+    if scope is None:
+        return False
+    owner_org, owner_workspace = scope_fields(owner)
+    org, workspace = scope_fields(scope)
+    return org == owner_org and owner_workspace in (NONE, workspace)
+
+
+def owner_ancestors(scope: str) -> list[str]:
+    """The owner scopes above ``scope``, nearest first: a workspace's org, then
+    the platform; an org's platform; none for the platform."""
+    org, workspace = scope_fields(validate_owner_scope(scope))
+    if org == NONE:
+        return []
+    if workspace == NONE:
+        return [PLATFORM_SCOPE]
+    return [scope_name(org), PLATFORM_SCOPE]
+
+
 def _check_org(org: str, workspace: str, service: str, type: str) -> None:
     if org == ALL_ORGS:
-        # Only unscoped attachments span every org.
-        if (service, type) != ORG_WIDE_TYPE or workspace != ALL_WORKSPACES:
+        # Only unscoped attachments and the platform's policies and groups.
+        if (service, type) not in EVERY_ORG_TYPES or workspace != ALL_WORKSPACES:
             raise ValueError(
-                f"Org {ALL_ORGS} names unscoped attachments only, "
-                f"abi:{ALL_ORGS}:{ALL_WORKSPACES}:iam:attachment/..."
+                f"Org {ALL_ORGS} names unscoped attachments, the platform's "
+                f"policies and groups, and the orgs' sets only, abi:{ALL_ORGS}:{ALL_WORKSPACES}:iam:..."
             )
         return
     _check_scope_id(org, "org")
@@ -191,10 +236,13 @@ def _check_org(org: str, workspace: str, service: str, type: str) -> None:
 
 def _check_workspace(workspace: str, org: str, service: str, type: str) -> None:
     if workspace == ALL_WORKSPACES:
-        # Only org-wide attachments span every workspace of an org (RFC §6.4).
-        if (service, type) != ORG_WIDE_TYPE:
+        if org == ALL_ORGS:
+            return  # checked with the org
+        # Only org-wide attachments and workspace sets span every workspace.
+        if (service, type) not in ORG_WIDE_TYPES:
             raise ValueError(
-                f"Workspace {ALL_WORKSPACES} names org-wide attachments only, "
+                f"Workspace {ALL_WORKSPACES} names org-wide attachments and "
+                f"workspace sets only, "
                 f"not {service}:{type}"
             )
         if org == NONE:
@@ -239,7 +287,7 @@ def is_valid_action_name(name: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Wildcard patterns (RFC §3.3, §4.5): "*" any run, "?" one character.
+# Wildcard patterns: "*" any run, "?" one character.
 # ---------------------------------------------------------------------------
 
 
@@ -281,8 +329,7 @@ def variables(pattern: str) -> list[str]:
 def substitute(pattern: str, values: dict[str, str | None]) -> str | None:
     """``pattern`` with its variables replaced; None when one is unresolved.
 
-    A statement whose resource holds an unresolved variable matches nothing
-    (RFC §3.4).
+    A statement whose resource holds an unresolved variable matches nothing.
     """
     unresolved = False
 

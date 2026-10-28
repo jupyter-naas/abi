@@ -9,6 +9,7 @@ from jinja2 import ChainableUndefined, Environment, FileSystemLoader
 from naas_abi_core import logger
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_ActivityLogService import (
     ActivityLogAdapterConfiguration,
+    ActivityLogAdapterSqliteConfiguration,
     ActivityLogServiceConfiguration,
 )
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_BusService import (
@@ -97,7 +98,7 @@ from rich.prompt import Prompt
 
 
 class ServicesConfiguration(BaseModel):
-    # Always loaded, first: every other service asks it (RFC 20261013 §11).
+    # Always loaded, first: every other service asks it.
     iam: IAMServiceConfiguration = Field(default_factory=IAMServiceConfiguration)
     document: DocumentServiceConfiguration = Field(
         default_factory=DocumentServiceConfiguration
@@ -230,7 +231,7 @@ class ServicesConfiguration(BaseModel):
         """For each owned service whose data stays on this host, where it is.
 
         A deploy that hands over without downtime needs every service the engine
-        owns on a shared backend (docs/adr/20261006_single-serving-engine.md).
+        owns on a shared backend.
         ``owned`` names services as in this configuration (``document``, ``kv``,
         ...). The bus is never listed: in NATS mode it is the broker's JetStream.
         """
@@ -320,7 +321,7 @@ class NATSModelConfiguration(BaseModel):
 
 class NATSRPCOverflowConfiguration(BaseModel):
     """RPC payloads above the broker limit travel as transfer frames instead of
-    failing with PAYLOAD_TOO_LARGE (docs/adr/20261003_nats-rpc-overflow.md).
+    failing with PAYLOAD_TOO_LARGE.
 
     ``enabled: false`` keeps PAYLOAD_TOO_LARGE for every call over the limit.
     Budgets are per process: parked replies are held in memory, uploaded
@@ -387,8 +388,23 @@ class NATSJobsConfiguration(BaseModel):
     )
 
 
+class NATSWorkflowsConfiguration(BaseModel):
+    """Durable workflows of engine modules (decision in ``module/AGENTS.md``).
+
+    ``bridge`` publishes every ``Workflow`` and ``Pipeline`` instance of an engine
+    module that has a live typed ``run()`` (the ones that get a ``POST /workflows|/pipelines``
+    route) as a one-step durable workflow named ``workflow.<slug>`` or
+    ``pipeline.<slug>``, so it can be launched, watched and awaited like any
+    workflow. The classes themselves are unchanged: agent tools and REST routes
+    keep calling ``run()`` in-process. ``bridge: false`` declares none of them.
+    Workflows run on the jobs runtime, so they follow ``jobs.enabled``.
+    """
+
+    bridge: bool = True
+
+
 class NATSEngineConfiguration(BaseModel):
-    """Which engine serves the kernel services (docs/adr/20261006_single-serving-engine.md).
+    """Which engine serves the kernel services.
 
     One engine per NATS account serves them, holding a lease it renews every
     quarter of ``lease_seconds``. Another serving engine fails to start, unless
@@ -445,7 +461,7 @@ class NATSEngineConfiguration(BaseModel):
 
 
 class NATSAuthCalloutConfiguration(BaseModel):
-    """The broker's auth callout, answered by the serving engine (RFC §8.4).
+    """The broker's auth callout, answered by the serving engine.
 
     ``nats.conf`` declares ``auth_callout { issuer: <account public key>,
     auth_users: [engine, auth] }``; the responder logs in as ``auth``
@@ -484,14 +500,13 @@ class NATSConfiguration(BaseModel):
     deadline per call.
 
     Every call carries an ES256 token the engine signs (IAM's token issuer,
-    docs/specs/rfcs/20261013_identity-and-authorization.md §9): there is no
-    shared signing secret. The serving engine signs its own; a client-role
+    ``services/iam/AGENTS.md``, "Tokens"): there is no shared signing secret. The serving engine signs its own; a client-role
     engine exchanges the engine's service key: ``service_key``, else the one
     the serving engine keeps in the secret service.
 
     With ``auth_callout``, the serving engine answers the broker's auth
     callout: every module connection logs in with its service key and gets
-    the subjects its approved policy allows (RFC §8.4).
+    the subjects its approved policy allows.
 
     nats:
       nats_url: "nats://engine:{{ secret.NATS_ENGINE_PASSWORD }}@127.0.0.1:4222"
@@ -520,6 +535,9 @@ class NATSConfiguration(BaseModel):
         default_factory=NATSRPCOverflowConfiguration
     )
     jobs: NATSJobsConfiguration = Field(default_factory=NATSJobsConfiguration)
+    workflows: NATSWorkflowsConfiguration = Field(
+        default_factory=NATSWorkflowsConfiguration
+    )
     engine: NATSEngineConfiguration = Field(default_factory=NATSEngineConfiguration)
     # The broker's HTTP monitoring endpoint (``nats-server -m 8222``), read by the
     # Nexus SysAdmin app (/varz, /connz, /jsz). It has no auth: keep it private.
@@ -531,8 +549,7 @@ class NATSConfiguration(BaseModel):
         if isinstance(data, dict) and "jwt_secret" in data:
             raise ValueError(
                 "nats.jwt_secret is retired: the engine signs its tokens with ES256 "
-                "keys IAM holds, and modules hold service keys. Remove it "
-                "(docs/adr/20261013_engine-tokens-service-accounts-broker.md)."
+                "keys IAM holds, and modules hold service keys. Remove it."
             )
         return data
 
@@ -690,7 +707,7 @@ class EngineConfiguration(BaseModel):
     global_config: GlobalConfig
 
     nats: NATSConfiguration | None = None
-    # The OIDC identity providers the engine trusts (RFC 20261013 §12.1):
+    # The OIDC identity providers the engine trusts:
     # engine-wide, never per organization.
     identity: IdentityConfiguration = Field(default_factory=IdentityConfiguration)
     telemetry: TelemetryConfiguration = Field(default_factory=TelemetryConfiguration)
@@ -719,6 +736,18 @@ class EngineConfiguration(BaseModel):
     @model_validator(mode="after")
     def validate_modules(self) -> Self:
         self.ensure_default_modules()
+        if self.nats is None and "activity_log" not in self.services.model_fields_set:
+            # The Document Service default is for NATS mode, where engines share
+            # it. Without NATS, keep the 2.x SQLite default: it would otherwise
+            # load the Document Service, and agent memory would follow it
+            # (https://docs.naas.ai/user-guide/upgrade/breaking-changes-3). Still an engine default, not config.
+            self.services.activity_log = ActivityLogServiceConfiguration(
+                activity_log_adapter=ActivityLogAdapterConfiguration(
+                    adapter="sqlite",
+                    config=ActivityLogAdapterSqliteConfiguration(),
+                )
+            )
+            self.services.model_fields_set.discard("activity_log")
         if self.nats is not None:
             bus = self.services.bus.bus_adapter
             if "bus" in self.services.model_fields_set:
@@ -888,9 +917,14 @@ class EngineConfiguration(BaseModel):
             with open("config.yaml", "r") as file:
                 config_yaml = file.read()
 
-            bootstrap_dotenv_adapter = (
-                cls._load_bootstrap_dotenv_adapter_from_yaml_content(config_yaml)
-            )
+            try:
+                bootstrap_dotenv_adapter = (
+                    cls._load_bootstrap_dotenv_adapter_from_yaml_content(config_yaml)
+                )
+            except FileNotFoundError:
+                # No .env yet (a fresh clone, before `abi dev up` writes one):
+                # no ENV from it. Loading the engine still requires the file.
+                bootstrap_dotenv_adapter = None
             if bootstrap_dotenv_adapter is not None:
                 env_from_bootstrap = bootstrap_dotenv_adapter.get("ENV")
                 if env_from_bootstrap is not None:

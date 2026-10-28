@@ -25,6 +25,7 @@ from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreSe
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
+from naas_abi.apps.nexus.maps_seed_config import WorkspaceMapsSeedConfig
 
 
 def _initialize_nexus_service_registry() -> None:
@@ -202,6 +203,8 @@ FeatureKey = Literal[
     "documents",
     # Business sheets (Forgejo HTML workbook + XLSX export).
     "sheets",
+    # Workspace tasks (weekly iterations, board view). Owners and admins by default.
+    "tasks",
 ]
 
 # Default catalog (excludes opt-in features like "code").
@@ -221,6 +224,7 @@ _ALL_FEATURES: list[FeatureKey] = [
     "slides",
     "documents",
     "sheets",
+    "tasks",
 ]
 
 
@@ -248,6 +252,9 @@ class FeatureFlagsConfig(BaseModel):
     role_baseline: dict[str, list[FeatureKey]] = Field(
         default_factory=_default_role_baseline
     )
+    # Deprecated: workspace feature overrides are managed in Organization
+    # Settings > Workspaces (workspaces.feature_overrides). Still read as a
+    # fallback for workspaces that never saved any.
     workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)
 
 
@@ -332,10 +339,15 @@ class WorkspaceSeedConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    name: str
     slug: str
+    # Name, owner, group and branding are managed in the app; config.workspaces.yaml
+    # snapshots them (core/workspaces_import replays it). Still accepted here,
+    # bootstrap only; a workspace created without a name is named after its slug.
+    name: str | None = None
     owner_email: EmailStr | None = None
     members: list[WorkspaceMemberSeedConfig] = Field(default_factory=list)
+    # Group in the workspace lists ("Others" when empty); bootstrap only.
+    group: str | None = Field(default=None, max_length=100)
 
     # Workspace-level theming
     logo_url: str | None = None
@@ -361,6 +373,8 @@ class WorkspaceSeedConfig(BaseModel):
     ontologies: list[str] | None = Field(default_factory=list)
     # Exact data graph grants. Missing policy exposes owned graphs only.
     graphs: WorkspaceGraphPolicyConfig = Field(default_factory=WorkspaceGraphPolicyConfig)
+    # Initial Maps feeds and custom basemaps (see WorkspaceMapsSeedConfig).
+    maps: WorkspaceMapsSeedConfig | None = None
 
 
 class OrganizationSeedConfig(BaseModel):
@@ -405,7 +419,7 @@ class OrganizationSeedConfig(BaseModel):
     default_theme: str | None = None
 
 
-# Settings of the login Nexus had before RFC §13: password, magic link, one-time
+# Settings of the login Nexus used to have: password, magic link, one-time
 # code and refresh tokens. Accepted and ignored so an older configuration loads.
 NEXUS_REMOVED_LOGIN_SETTINGS = frozenset(
     {
@@ -439,7 +453,7 @@ class NexusConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _accept_the_login_settings_nexus_dropped(cls, data: Any) -> Any:
-        """A project that configured the login Nexus no longer has (RFC §13) still
+        """A project that configured the login Nexus used to have still
         loads: those keys are ignored, with a note saying why; ``secret_key`` and
         two renamed settings keep their value."""
         if not isinstance(data, dict):

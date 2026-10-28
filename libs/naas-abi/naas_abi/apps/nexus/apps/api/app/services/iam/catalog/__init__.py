@@ -1,4 +1,4 @@
-"""The ``nexus`` action catalog (RFC §6.5), registered with IAM at startup.
+"""The ``nexus`` action catalog, registered with IAM at startup.
 
 Every Nexus authorization decision is an action of this catalog on a resource
 ``abi:<org>:<workspace>:nexus:<type>/<id>``. The built-in roles are generated
@@ -23,6 +23,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import (
     realtime,
     search,
     settings,
+    workflows,
     workspaces,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog.dsl import NexusAction
@@ -30,7 +31,7 @@ from naas_abi_core.services.iam.catalog import ActionCatalog, ResourceType
 
 SERVICE = "nexus"
 # Raise when the catalog changes; IAM keeps the highest version it has seen.
-VERSION = 2
+VERSION = 6
 
 _MODULES = (
     organizations,
@@ -44,18 +45,15 @@ _MODULES = (
     office,
     knowledge,
     apps,
+    workflows,
     code,
     settings,
     platform,
     realtime,
 )
 
-RESOURCE_TYPES: tuple[ResourceType, ...] = tuple(
-    t for module in _MODULES for t in module.TYPES
-)
-NEXUS_ACTIONS: tuple[NexusAction, ...] = tuple(
-    a for module in _MODULES for a in module.ACTIONS
-)
+RESOURCE_TYPES: tuple[ResourceType, ...] = tuple(t for module in _MODULES for t in module.TYPES)
+NEXUS_ACTIONS: tuple[NexusAction, ...] = tuple(a for module in _MODULES for a in module.ACTIONS)
 
 NEXUS_CATALOG = ActionCatalog(
     service=SERVICE,

@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { isPlatformSettingsPath, platformSettingsRedirect } from './app/settings/lib/redirects';
+import { orgSettingsRedirect } from './app/organizations/[orgId]/settings/lib/redirects';
 
 /**
  * Route protection, legacy redirects, and org-scoped routing.
  *
  * Routing hierarchy:
  *   /account/*                        -> authed
- *   /organizations/[orgId]/settings   -> authed
+ *   /settings, /settings/{tables,system,roles,modules}/... -> authed, Platform Settings
+ *   /settings/<table>, /workspace/[id]/admin/{system,events} -> redirected there (old links)
+ *   /organizations/[orgId]/settings   -> authed (/settings/access -> /settings/roles)
  *   /org/[orgSlug]/login              -> public, org-branded login
  *   /org/[orgSlug]/workspace/[id]/... -> authed, rewritten to /workspace/[id]/...
  *   /auth/login                       -> public
@@ -26,6 +30,11 @@ function resolveDefaultWorkspace(request: NextRequest): string {
 
 const legacyRoutes = ['/home', '/maps', '/chat', '/search', '/lab', '/ontology', '/graph', '/apps', '/marketplace', '/help', '/files', '/settings'];
 
+// Platform Settings owns /settings and its sections (Nexus tables, System, Roles &
+// permissions, isPlatformSettingsPath); old table pages and System links redirect
+// into them, and the legacy workspace settings links (/settings/members, ...) keep
+// redirecting to the workspace.
+
 const authRoutes = ['/auth/login', '/login'];
 
 const orgWorkspaceRegex = /^\/org\/([^/]+)\/workspace\/([^/]+)(\/.*)?$/;
@@ -33,6 +42,14 @@ const orgAuthRegex = /^\/org\/([^/]+)\/login(\/.*)?$/;
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Before the org rewrite: /org/<slug>/workspace/<id>/admin/system moved too.
+  const moved =
+    platformSettingsRedirect(pathname, request.nextUrl.search) ??
+    orgSettingsRedirect(pathname, request.nextUrl.search);
+  if (moved) {
+    return NextResponse.redirect(new URL(moved, request.url));
+  }
 
   if (pathname.match(orgAuthRegex)) {
     return NextResponse.next();
@@ -63,7 +80,9 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(newUrl);
   }
 
-  const isLegacyRoute = legacyRoutes.some(r => pathname === r || pathname.startsWith(`${r}/`));
+  const isLegacyRoute =
+    !isPlatformSettingsPath(pathname) &&
+    legacyRoutes.some(r => pathname === r || pathname.startsWith(`${r}/`));
   if (isLegacyRoute) {
     const newUrl = new URL(`/workspace/${resolveDefaultWorkspace(request)}${pathname}`, request.url);
     newUrl.search = request.nextUrl.search;
@@ -94,6 +113,7 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/workspace/') ||
     pathname.startsWith('/organizations/') ||
     pathname.startsWith('/account/') ||
+    isPlatformSettingsPath(pathname) ||
     pathname === '/no-workspace' ||
     pathname.startsWith('/no-workspace/');
   const isAuthRoute = authRoutes.some(r => pathname === r || pathname.startsWith(`${r}/`));

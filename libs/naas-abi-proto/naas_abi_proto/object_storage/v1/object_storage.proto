@@ -1,6 +1,6 @@
 // NATS-RPC contract for the object_storage kernel domain.
 // Mirrors naas_abi_core/services/object_storage/ObjectStoragePort.py 1:1 for
-// the non-streaming methods. See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md.
+// the non-streaming methods.
 //
 // Scope of this v1 contract, deliberately: `get_object_stream`/`put_object_stream`
 // are NOT included. Streaming multi-gigabyte binary content through a single
@@ -10,7 +10,7 @@
 // this contract MUST reject those two operations explicitly rather than
 // silently buffering a stream into memory.
 //
-// Subjects (see "Protobuf contract shapes" in the RFC):
+// Subjects:
 //   abi.svc.object_storage.v1.get_object
 //   abi.svc.object_storage.v1.put_object
 //   abi.svc.object_storage.v1.delete_object

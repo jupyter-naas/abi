@@ -354,7 +354,8 @@ async def join_admin_events(sid, data=None):
 
     Membership is the platform administrator's (``nexus:ManageSystem``, decided
     by IAM on every join, so a role granted or taken away after the socket
-    connected counts); anyone else receives an error and is not added to the
+    connected counts; managed with PATCH /api/admin/users/{id}, bootstrapped from
+    config ``users``); anyone else receives an error and is not added to the
     room. Once joined, the client receives every ``platform_event`` emitted by
     the EventService relay.
     """

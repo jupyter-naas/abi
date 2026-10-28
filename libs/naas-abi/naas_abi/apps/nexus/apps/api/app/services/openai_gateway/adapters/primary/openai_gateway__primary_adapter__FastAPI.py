@@ -6,7 +6,10 @@ Continue VS Code extension (or any OpenAI-compatible client) inside a coding
 workspace talk to abi agents: the OpenAI ``model`` field is the abi agent name.
 
 Auth is the normal Nexus bearer token (the workspace is provisioned with a
-per-user token). The agent-invocation and agent-listing are kept as module-level
+per-user token). Every abi agent is a module scope: a caller lists and runs
+only the agents it may use (``module:UseAgent``) in a workspace whose chat it
+holds, the one it names (``?workspace_id=``) or else any of its own, and the
+agent reaches only the sub-agents the caller may use there. The agent-invocation and agent-listing are kept as module-level
 functions (`_stream_agent_text`, `_list_agent_model_ids`) so the OpenAI
 translation layer is unit-testable without running a real agent.
 """
@@ -19,20 +22,31 @@ import time
 import uuid
 from collections.abc import AsyncGenerator
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
 )
+from naas_abi.apps.nexus.apps.api.app.services.agents.scopes import (
+    class_scope,
+    usable_process_scopes,
+)
 from naas_abi.apps.nexus.apps.api.app.services.chat.service import render_user_context_block
 from naas_abi.apps.nexus.apps.api.app.services.iam.any_workspace import (
-    allowed_in_any_workspace,
     require_in_any_workspace,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.authz import (
+    AUTHZ,
+    AuthzDenied,
+    ModuleScope,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares
+from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
 from naas_abi_core.services.agent.context import (
+    agent_usable_module_scopes,
+    agent_workspace_enabled_class_names,
     coder_workspace_base,
     coder_workspace_secret,
 )
@@ -118,8 +132,12 @@ async def _stream_agent_text(
     ws_base: str | None = None,
     ws_secret: str | None = None,
     user_context_preamble: str | None = None,
+    allowed: frozenset[str] | None = None,
+    processes: frozenset[tuple[str, str, str]] | None = None,
 ) -> AsyncGenerator[str, None]:
-    """Invoke an abi agent in-process and yield text deltas only."""
+    """Invoke an abi agent in-process and yield text deltas only; ``allowed``
+    are the agent classes the caller may use (the agent and its sub-agents),
+    ``processes`` the module workflows and pipelines its tools may run."""
     from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
         Message,
         ProviderConfig,
@@ -132,6 +150,10 @@ async def _stream_agent_text(
     if ws_base:
         coder_workspace_base.set(ws_base)
         coder_workspace_secret.set(ws_secret)
+    if allowed is not None:
+        agent_workspace_enabled_class_names.set(allowed)
+    if processes is not None:
+        agent_usable_module_scopes.set(processes)
 
     pr_messages = [Message(role=_coerce_role(m.role), content=m.content) for m in messages]
     config = ProviderConfig(id="abi", name="abi", type="abi", enabled=True, model=model)
@@ -160,6 +182,73 @@ def _list_agent_model_ids() -> list[str]:
         return names or ["aia"]
     except Exception:
         return ["aia"]
+
+
+def _agent_classes() -> tuple[dict[str, type], dict[str, str]]:
+    """The engine's agent classes by registry key, and the module of each."""
+    from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary import (
+        agents__primary_adapter__FastAPI as agents_api,
+    )
+
+    return agents_api._get_agent_class_registry(), agents_api.agent_class_modules()
+
+
+def _agent_scope_of(model: str) -> tuple[str, ModuleScope] | None:
+    """The registry key and module scope of the agent ``model`` runs, as the
+    in-process runtime resolves the name; None when it names no agent."""
+    from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
+        _inprocess_agent_class_name,
+        _resolve_inprocess_abi_agent,
+    )
+
+    agent = _resolve_inprocess_abi_agent(model)
+    if agent is None:
+        return None
+    key = _inprocess_agent_class_name(agent)
+    _classes, module_of = _agent_classes()
+    scope = class_scope(key, type(agent), module_of)
+    return (key, scope) if scope is not None else None
+
+
+def _model_scopes() -> dict[str, ModuleScope]:
+    """Each name ``/v1/models`` lists, with the module scope of its agent."""
+    from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
+        _build_local_agent_index,
+    )
+
+    classes, module_of = _agent_classes()
+    by_module = {key.partition("/")[0]: key for key in classes}
+    _index, hints = _build_local_agent_index()
+    found: dict[str, ModuleScope] = {}
+    for hint in hints:
+        module_path, _, model_id = hint.rpartition("/")
+        key = by_module.get(module_path)
+        scope = class_scope(key, classes[key], module_of) if key else None
+        if scope is not None:
+            found[model_id] = scope
+    return found
+
+
+async def _chat_workspaces(user: User, workspace: str | None) -> list[tuple[str, str]]:
+    """The workspaces, as ``(org, workspace)``, whose chat the caller may hold: the
+    one it names, else its own. ``AuthzDenied`` when there is none."""
+    await require_in_any_workspace("UseFeature", user=user, workspace=workspace, id="chat")
+    if workspace:
+        org = await AUTHZ.org_of(workspace)
+        return [(org, workspace)] if org is not None else []
+    return list(await MEMBERSHIPS.workspaces_of(user.id))
+
+
+async def _usable_classes(user: User, workspace: str) -> frozenset[str]:
+    """The agent classes the caller may use in ``workspace``."""
+    classes, module_of = await run_in_threadpool(_agent_classes)
+    usable = await AUTHZ.filter_scopes(
+        list(classes.items()),
+        user=user,
+        workspace=workspace,
+        scope_of=lambda item: class_scope(item[0], item[1], module_of),
+    )
+    return frozenset(key for key, _cls in usable)
 
 
 def _chunk(
@@ -193,10 +282,19 @@ async def _sse(
     ws_secret: str | None = None,
     marker: str = "",
     user_context_preamble: str | None = None,
+    allowed: frozenset[str] | None = None,
+    processes: frozenset[tuple[str, str, str]] | None = None,
 ) -> AsyncGenerator[str, None]:
     yield f"data: {json.dumps(_chunk(completion_id, model, role='assistant'))}\n\n"
     async for delta in _stream_agent_text(
-        model, messages, thread_id, ws_base, ws_secret, user_context_preamble
+        model,
+        messages,
+        thread_id,
+        ws_base,
+        ws_secret,
+        user_context_preamble,
+        allowed=allowed,
+        processes=processes,
     ):
         yield f"data: {json.dumps(_chunk(completion_id, model, content=delta))}\n\n"
     if marker:
@@ -276,15 +374,29 @@ async def _workspace_target(request: Request) -> tuple[str | None, str | None]:
 
 @router.get(
     "/models",
-    dependencies=[
-        declares("UseAgent"),
-        allowed_in_any_workspace("UseAgent", id="-", feature="chat"),
-    ],
+    dependencies=[declares("UseFeature"), declares("module:UseAgent")],
 )
 async def list_models(
+    request: Request,
     current_user: User = Depends(get_current_user_required),
 ) -> dict:
-    model_ids = await run_in_threadpool(_list_agent_model_ids)
+    """The agents the caller may use in a workspace whose chat it holds."""
+    workspaces = await _chat_workspaces(current_user, request.query_params.get("workspace_id"))
+    scopes = await run_in_threadpool(_model_scopes)
+    usable: set[str] = set()
+    for _org, workspace in workspaces:
+        if not await AUTHZ.allowed("UseFeature", user=current_user, workspace=workspace, id="chat"):
+            continue
+        usable.update(
+            name
+            for name, _scope in await AUTHZ.filter_scopes(
+                list(scopes.items()),
+                user=current_user,
+                workspace=workspace,
+                scope_of=lambda item: item[1],
+            )
+        )
+    model_ids = [m for m in await run_in_threadpool(_list_agent_model_ids) if m in usable]
     created = int(time.time())
     return {
         "object": "list",
@@ -298,7 +410,7 @@ async def list_models(
 @router.post(
     "/chat/completions",
     response_model=None,
-    dependencies=[declares("UseAgent")],
+    dependencies=[declares("UseFeature"), declares("module:UseAgent")],
 )
 async def chat_completions(
     body: ChatCompletionRequest,
@@ -307,13 +419,26 @@ async def chat_completions(
 ) -> StreamingResponse | dict:
     # The agent is the ``model`` of the body, so the check waits for it; a client
     # that names a workspace (``?workspace_id=``) is held to that one.
-    await require_in_any_workspace(
-        "UseAgent",
-        user=current_user,
-        workspace=request.query_params.get("workspace_id"),
-        id=body.model or "-",
-        feature="chat",
-    )
+    named = request.query_params.get("workspace_id")
+    workspaces = await _chat_workspaces(current_user, named)
+    resolved = await run_in_threadpool(_agent_scope_of, body.model or "")
+    if resolved is None:
+        raise HTTPException(status_code=404, detail=f"Unknown model {body.model!r}")
+    _key, scope = resolved
+    if named:
+        await AUTHZ.require_scope(scope, user=current_user, workspace=named, feature="chat")
+        where: str | None = named
+    else:
+        where = await AUTHZ.scope_allowed_in_any(
+            scope,
+            user=current_user,
+            workspaces=workspaces,
+            feature="chat",
+        )
+    if where is None:
+        raise AuthzDenied(403, detail="You may not use this agent")
+    allowed = await _usable_classes(current_user, where)
+    processes = await usable_process_scopes(current_user, where)
     completion_id = f"chatcmpl-{uuid.uuid4().hex}"
     # Stable per-conversation thread id (recovered from / embedded in the reply)
     # so follow-up turns keep the agent's checkpointer memory.
@@ -334,13 +459,22 @@ async def chat_completions(
                 ws_secret,
                 marker,
                 preamble,
+                allowed,
+                processes,
             ),
             media_type="text/event-stream",
         )
 
     text = ""
     async for delta in _stream_agent_text(
-        body.model, body.messages, thread_id, ws_base, ws_secret, preamble
+        body.model,
+        body.messages,
+        thread_id,
+        ws_base,
+        ws_secret,
+        preamble,
+        allowed=allowed,
+        processes=processes,
     ):
         text += delta
     text += marker

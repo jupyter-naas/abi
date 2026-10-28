@@ -1,7 +1,7 @@
 """The ``CallContext`` of a NATS request, from its verified credentials.
 
 Every kernel NATS primary adapter builds the context of a call here, and only
-here (docs/specs/rfcs/20261013_identity-and-authorization.md, §10.2):
+here (``engine/AGENTS.md``, "The call context"):
 
 * the ``Nats-Auth-Token`` is an engine token, verified against the JWKS
   (``nats_auth.TokenVerifier``) for an audience the endpoint accepts;
@@ -69,7 +69,7 @@ def caller_context(
 
 
 def token_context(claims: TokenClaims) -> CallContext:
-    """The ``CallContext`` a verified token stands for (RFC §10.2)."""
+    """The ``CallContext`` a verified token stands for."""
     groups = frozenset(claims.groups)
     sub = Principal(
         id=claims.subject,

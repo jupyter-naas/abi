@@ -1,4 +1,4 @@
-"""ServiceGuard: names placed by IAM, the create rule of RFC §4.4, placements."""
+"""ServiceGuard: names placed by IAM, the create rule, placements."""
 
 from __future__ import annotations
 
@@ -125,7 +125,7 @@ def test_a_mismatch_is_not_found_for_a_caller_who_cannot_see_it(h, guard):
 
 
 def test_an_unknown_target_workspace_places_on_the_platform(h, guard, bob):
-    """TRANSITIONAL until #65 registers Nexus's workspaces with IAM."""
+    """A workspace IAM has no scope for places the resource on the platform."""
     with _as(bob, "ws-unregistered"):
         creation = guard.create("CreateBox", "box", "b")
     assert creation.name == "abi:-:-:boxes:box/b"

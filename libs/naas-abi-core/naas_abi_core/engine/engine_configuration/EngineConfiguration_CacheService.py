@@ -96,8 +96,7 @@ class CacheAdapterNATSConfiguration(BaseModel):
     """Cache adapter NATS RPC client configuration.
 
     Talks to a remote ``CachePrimaryAdapterNATS`` over NATS request/reply --
-    see docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
-    (Stage 1) and naas_abi_core/proto/cache/v1/cache.proto. Like any other
+    see naas_abi_core/proto/cache/v1/cache.proto. Like any other
     cache adapter, this is a single-tier ``ICacheAdapter`` -- plug it in as
     one entry in the ``adapters`` list below, with its own ``tier``.
 

@@ -1,5 +1,5 @@
 """
-Authentication: Nexus has no login of its own (RFC §13).
+Authentication: Nexus has no login of its own.
 
 People sign in at an identity provider (``/api/auth/oidc``, covered by
 ``app/services/oidc/oidc_sign_in_test.py``); the API reads the session cookie that

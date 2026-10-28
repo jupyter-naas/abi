@@ -10,7 +10,10 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.primary import (
     organizations__primary_adapter__FastAPI as org_api,
 )
-from naas_abi.apps.nexus.apps.api.app.services.organizations.port import OrganizationRecord
+from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
+    OrganizationRecord,
+    UserRecord,
+)
 from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
     OrganizationService,
 )
@@ -25,10 +28,10 @@ def client_for(team):
     def make(user: str) -> TestClient:
         adapter = SimpleNamespace(
             get_organization_by_id=AsyncMock(return_value=ORG),
+            list_organization_member_profiles=AsyncMock(return_value={}),
             get_users_by_ids=AsyncMock(
                 side_effect=lambda ids: {
-                    i: SimpleNamespace(id=i, email=f"{i}@example.com", name=i.title())
-                    for i in ids
+                    i: UserRecord(id=i, email=f"{i}@example.com", name=i.title()) for i in ids
                 }
             ),
         )

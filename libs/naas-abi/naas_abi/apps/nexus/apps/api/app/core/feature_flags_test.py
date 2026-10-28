@@ -1,5 +1,10 @@
+import pytest
 from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig
-from naas_abi.apps.nexus.apps.api.app.core.feature_flags import build_feature_flags
+from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
+    build_feature_flags,
+    parse_feature_overrides,
+    workspace_features,
+)
 
 
 class TestBuildFeatureFlags:
@@ -28,34 +33,52 @@ class TestBuildFeatureFlags:
             "settings": False,
             "code": False,
             "slides": True,
-            "documents": True,
             "sheets": True,
+            "documents": True,
+            "tasks": False,
         }
 
-    def test_workspace_overrides_apply_on_top_of_role_baseline(self) -> None:
-        config = FeatureFlagsConfig(
-            workspace_overrides={
-                "demo": {
-                    "search": True,
-                    "apps": True,
-                    "marketplace": True,
-                    "chat": False,
-                }
-            }
-        )
-
+    @pytest.mark.parametrize(
+        ("role", "expected"),
+        [("owner", True), ("admin", True), ("member", False), ("viewer", False)],
+    )
+    def test_tasks_defaults_to_owners_and_admins_only(self, role: str, expected: bool) -> None:
         flags = build_feature_flags(
-            role="member",
-            feature_flags_config=config,
+            role=role,
+            feature_flags_config=FeatureFlagsConfig(),
             workspace_slug="demo",
             workspace_id="ws-1",
         )
 
-        assert flags["search"] is True
-        assert flags["apps"] is True
-        assert flags["marketplace"] is True
-        assert flags["chat"] is False
-        assert flags["files"] is True
+        assert flags["tasks"] is expected
+
+    def test_the_feature_set_bounds_the_role_baseline(self) -> None:
+        flags = build_feature_flags(
+            role="member",
+            feature_flags_config=FeatureFlagsConfig(),
+            feature_set=("chat", "apps"),
+        )
+
+        # Within the set, the role's defaults: members have no apps by default.
+        assert flags["chat"] is True
+        assert flags["apps"] is False
+        assert flags["files"] is False
+        # Settings always stays reachable.
+        assert (
+            build_feature_flags(
+                role="owner", feature_flags_config=FeatureFlagsConfig(), feature_set=()
+            )["settings"]
+            is True
+        )
+
+    def test_the_deprecated_workspace_overrides_no_longer_apply(self) -> None:
+        config = FeatureFlagsConfig(workspace_overrides={"demo": {"chat": False}})
+
+        flags = build_feature_flags(
+            role="member", feature_flags_config=config, workspace_slug="demo"
+        )
+
+        assert flags["chat"] is True
 
     def test_unknown_role_denies_all_features(self) -> None:
         config = FeatureFlagsConfig()
@@ -145,3 +168,23 @@ class TestBuildFeatureFlags:
         assert flags["files"] is False
         assert flags["skills"] is False
         assert flags["slides"] is False
+
+
+class TestWorkspaceFeatures:
+    def test_workspace_features_are_the_union_over_roles_within_the_set(self) -> None:
+        features = workspace_features(
+            roles=("owner", "member"),
+            feature_flags_config=FeatureFlagsConfig(),
+            feature_set=("chat", "graph", "settings"),
+        )
+
+        assert features == ["chat", "graph", "settings"]
+
+    def test_saved_overrides_parse_for_the_move_and_drop_unknown_keys(self) -> None:
+        assert parse_feature_overrides('{"maps": false, "graph": true}') == {
+            "graph": True,
+            "maps": False,
+        }
+        assert parse_feature_overrides('{"nope": true, "chat": "yes"}') == {}
+        assert parse_feature_overrides(None) is None
+        assert parse_feature_overrides("not json") is None

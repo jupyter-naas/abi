@@ -3,11 +3,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Files, Database, Code, Presentation, FileText, Table2, LayoutGrid, Store, Settings, Activity, Home, Blocks, MoreHorizontal, Server,
+  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Files, Database, Code, Presentation, FileText, Table2, SquareKanban, LayoutGrid, Store, Settings, Home, Blocks, MoreHorizontal,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { useAuthStore } from '@/stores/auth';
 import { useFeature } from '@/hooks/use-feature';
 import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { useFilesStore } from '@/stores/files';
@@ -39,14 +38,14 @@ type SectionDef = {
   label: string;
   description: string;
   href: string;
-  feature?: 'maps' | 'chat' | 'files' | 'datasets' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'code' | 'slides' | 'documents' | 'sheets' | 'settings.workspace';
+  feature?: 'maps' | 'chat' | 'files' | 'datasets' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'code' | 'slides' | 'documents' | 'sheets' | 'tasks' | 'settings.workspace';
   extraHref?: string;
 };
 
 const SECTIONS: SectionDef[] = [
   { id: 'home',        icon: <Home size={18} />,          label: 'Home',        description: 'Workspace overview and shortcuts',     href: '/home' },
   { id: 'search',      icon: <Search size={18} />,        label: 'Search',      description: 'Search people, organizations and more',     href: '/search',      feature: 'search' },
-  { id: 'apps',        icon: <LayoutGrid size={18} />,    label: 'Apps',        description: 'Installed and available apps',          href: '/apps',        feature: 'apps' },
+  { id: 'apps',        icon: <LayoutGrid size={18} />,    label: 'Apps',        description: 'Installed and available apps',          href: '/apps' },
   { id: 'files',       icon: <Files size={18} />,         label: 'Files',       description: 'Browse and manage workspace files',     href: '/files',       feature: 'files' },
   { id: 'chat',        icon: <MessageSquare size={18} />, label: 'Chat',        description: 'Conversations with Abi and your team',  href: '/chat',        feature: 'chat' },
   { id: 'maps',        icon: <MapIcon size={18} />,       label: 'Maps',        description: 'Geographic and network presence maps',  href: '/maps',        feature: 'maps' },
@@ -56,6 +55,7 @@ const SECTIONS: SectionDef[] = [
   { id: 'slides',      icon: <Presentation size={18} />,  label: 'Slides',      description: 'Create and edit presentation decks',    href: '/slides',      feature: 'slides' },
   { id: 'documents',   icon: <FileText size={18} />,      label: 'Documents',   description: 'Create and edit rich documents',        href: '/documents',   feature: 'documents' },
   { id: 'sheets',      icon: <Table2 size={18} />,        label: 'Sheets',      description: 'Spreadsheets with HTML source and XLSX export', href: '/sheets', feature: 'sheets' },
+  { id: 'tasks',       icon: <SquareKanban size={18} />,  label: 'Tasks',       description: 'Project tasks in weekly iterations',    href: '/tasks',       feature: 'tasks' },
   { id: 'code',        icon: <Code size={18} />,          label: 'Code',        description: 'Code editor and repositories',          href: '/code',        feature: 'code' },
   { id: 'marketplace', icon: <Store size={18} />,        label: 'Marketplace', description: 'Discover and install new apps',          href: '/marketplace', feature: 'marketplace' },
 ];
@@ -143,8 +143,8 @@ export function Sidebar() {
   const canSlides = useFeature('slides');
   const canDocuments = useFeature('documents');
   const canSheets = useFeature('sheets');
+  const canTasks = useFeature('tasks');
   const canSettingsWorkspace = useFeature('settings.workspace');
-  const isSuperadmin = useAuthStore((s) => !!s.user?.is_superadmin);
 
   useEffect(() => {
     setMounted(true);
@@ -230,10 +230,8 @@ export function Sidebar() {
       return;
     }
     if (!urlSection) {
-      // Events is an admin route with its own feed panel; the rest of /admin/
-      // is full-bleed.
-      if (pathname.includes('/admin/events')) applyPanelFromRoute('events');
-      else if (pathname.includes('/admin/')) applyPanelFromRoute(null);
+      // /admin/ is full-bleed.
+      if (pathname.includes('/admin/')) applyPanelFromRoute(null);
       return;
     }
     // Home is a desk, not a column. A mark-opened Workspaces panel may stay open.
@@ -262,6 +260,7 @@ export function Sidebar() {
     if (feature === 'slides') return !!canSlides;
     if (feature === 'documents') return !!canDocuments;
     if (feature === 'sheets') return !!canSheets;
+    if (feature === 'tasks') return !!canTasks;
     if (feature === 'settings.workspace') return !!canSettingsWorkspace;
     return true;
   };
@@ -287,7 +286,7 @@ export function Sidebar() {
       .filter((s) => isFeatureEnabled(s.feature))
       .sort((a, b) => (index.get(a.id) ?? 999) - (index.get(b.id) ?? 999));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sidebarNavOrder, canMaps, canChat, canFiles, canDatasets, canApps, canMarketplace, canSearch, canOntology, canGraph, canCode, canSlides, canDocuments, canSheets]);
+  }, [sidebarNavOrder, canMaps, canChat, canFiles, canDatasets, canApps, canMarketplace, canSearch, canOntology, canGraph, canCode, canSlides, canDocuments, canSheets, canTasks]);
 
   const dockLayout = layoutDockNav(
     navMeasure?.available ?? Number.POSITIVE_INFINITY,
@@ -305,7 +304,7 @@ export function Sidebar() {
   const getDefaultPath = useCallback((sectionId: SidebarSection): string | undefined => {
     switch (sectionId) {
       case 'home':     return getWorkspacePath(currentWorkspaceId, '/home');
-      case 'maps':     return getWorkspacePath(currentWorkspaceId, '/maps/presence');
+      case 'maps':     return getWorkspacePath(currentWorkspaceId, '/maps');
       case 'search':   return getWorkspacePath(currentWorkspaceId, '/search');
       case 'chat':     return getWorkspacePath(currentWorkspaceId, '/chat');
       case 'ontology': {
@@ -319,12 +318,12 @@ export function Sidebar() {
       case 'slides':   return getWorkspacePath(currentWorkspaceId, '/slides');
       case 'documents': return getWorkspacePath(currentWorkspaceId, '/documents');
       case 'sheets':    return getWorkspacePath(currentWorkspaceId, '/sheets');
+      case 'tasks':     return getWorkspacePath(currentWorkspaceId, '/tasks');
       case 'apps':         return getWorkspacePath(currentWorkspaceId, '/apps');
       case 'marketplace':  return getWorkspacePath(currentWorkspaceId, '/marketplace');
       case 'infrastructure': return getWorkspacePath(currentWorkspaceId, '/settings/infrastructure');
       case 'settings':     return getWorkspacePath(currentWorkspaceId, '/settings');
       case 'workspaces':   return getWorkspacePath(currentWorkspaceId, '/home');
-      case 'events':       return getWorkspacePath(currentWorkspaceId, '/admin/events');
     }
   }, [currentWorkspaceId]);
 
@@ -767,8 +766,6 @@ export function Sidebar() {
         )}
       >
         {[
-          { key: 'admin-events', href: '/admin/events', label: 'Events', description: 'Recent platform activity', icon: <Activity size={18} />, section: 'events' as SidebarSection, visible: isSuperadmin },
-          { key: 'admin-system', href: '/admin/system', label: 'System', description: 'Kernel services, modules and the NATS network', icon: <Server size={18} />, section: null as SidebarSection | null, visible: isSuperadmin },
           { key: 'infrastructure', href: '/settings/infrastructure', label: 'Infrastructure', description: 'Explore ABI layers, components and dependencies', icon: <Blocks size={18} />, section: 'infrastructure' as SidebarSection, visible: canSettingsWorkspace },
         ].filter((item) => item.visible).map((item) => {
           const base = getWorkspacePath(currentWorkspaceId, item.href);
@@ -778,7 +775,7 @@ export function Sidebar() {
               key={item.key}
               onClick={() => { showPanel(item.section); router.push(base); }}
               onPointerEnter={(e) => {
-                if (item.section) prefetchSectionPanel(item.section);
+                prefetchSectionPanel(item.section);
                 router.prefetch(base);
                 showHoverTip({ id: item.key, ...item }, e.currentTarget);
               }}

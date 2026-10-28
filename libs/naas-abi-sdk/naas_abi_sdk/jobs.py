@@ -15,9 +15,13 @@ A module triggers its own jobs once they are hosted: ``self.trigger_job(name,
 payload, idempotency_key=...)`` from sync code, ``await self.atrigger_job(...)``
 from async code.
 
+A workflow is a job with a typed input and output whose handler checkpoints its
+steps (``naas_abi_sdk.workflows``; decision in the package's AGENTS.md):
+its descriptor has ``kind="workflow"`` and JSON Schemas. ``Cron``/``Every`` can carry
+an ``input``, the schedule message body, delivered as the run's payload.
+
 JetStream message schedules (NATS >= 2.12, time zones >= 2.14) produce the
-triggers; one durable consumer per job hands each trigger to one replica. See
-docs/adr/20261001_nats-jobs.md.
+triggers; one durable consumer per job hands each trigger to one replica.
 """
 
 from __future__ import annotations
@@ -41,6 +45,14 @@ from naas_abi_sdk.telemetry import client_span
 JOB_CONTRACT_MAJOR = 1
 MAX_TRIGGERS = 16
 TRIGGER_HEADER = "Abi-Job-Trigger"
+# Set on a schedule that has an input: a changed input is a changed schedule.
+INPUT_HASH_HEADER = "Abi-Job-Input-Hash"
+JOB_KINDS = ("job", "workflow")
+# Descriptors travel in discovery's registry snapshot, which holds every module
+# and is capped at 512 KiB: a schema, a trigger input and a whole descriptor are bounded.
+MAX_SCHEMA_BYTES = 16 * 1024
+MAX_TRIGGER_INPUT_BYTES = 4 * 1024
+MAX_DESCRIPTOR_BYTES = 64 * 1024
 _NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:-]{0,255}")
 _CRON_ALIASES = {
     "@yearly",
@@ -80,6 +92,47 @@ def _hash(*values: str) -> str:
     return hashlib.sha256(json.dumps(values, ensure_ascii=True).encode()).hexdigest()
 
 
+def _canonical(value: Any) -> str:
+    """Stable JSON: the same value is the same bytes on every replica."""
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
+def _normalize_input(value: dict[str, Any] | None) -> dict[str, Any] | None:
+    """A trigger's input as a plain JSON object, or None (empty is no input)."""
+    if not value:
+        return None
+    if not isinstance(value, dict):
+        raise TypeError("A trigger input must be a dict (a JSON object)")
+    try:
+        encoded = _canonical(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"A trigger input must be JSON: {exc}") from exc
+    if len(encoded.encode()) > MAX_TRIGGER_INPUT_BYTES:
+        raise ValueError(
+            f"A trigger input is at most {MAX_TRIGGER_INPUT_BYTES} bytes of JSON"
+        )
+    return json.loads(encoded)
+
+
+def schema_json(value: dict[str, Any] | str | None, what: str = "schema") -> str:
+    """A JSON Schema (a JSON object) as the canonical string a descriptor holds."""
+    if value is None or value == "":
+        return ""
+    try:
+        parsed = json.loads(value) if isinstance(value, str) else value
+        encoded = _canonical(parsed)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"The {what} must be a JSON Schema object: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError(f"The {what} must be a JSON Schema object")  # noqa: TRY004 - one error for any bad schema
+    if len(encoded.encode()) > MAX_SCHEMA_BYTES:
+        raise ValueError(
+            f"The {what} is {len(encoded.encode())} bytes; at most "
+            f"{MAX_SCHEMA_BYTES} (keep descriptors small, link to docs for the rest)"
+        )
+    return encoded
+
+
 def go_duration_seconds(duration: str) -> float:
     """Seconds in a Go duration (``"1h30m"``, ``"1.5s"``), as NATS headers write them."""
     if not isinstance(duration, str) or not _DURATION.fullmatch(duration):
@@ -93,12 +146,39 @@ def go_duration_seconds(duration: str) -> float:
 # --- triggers -------------------------------------------------------------------------
 
 
+class _ScheduleInput:
+    """The input a schedule carries: its message body, the run's payload."""
+
+    input: dict[str, Any] | None
+
+    @property
+    def input_json(self) -> str:
+        return _canonical(self.input) if self.input else ""
+
+    @property
+    def body(self) -> bytes:
+        return self.input_json.encode() if self.input else b"{}"
+
+    @property
+    def input_hash(self) -> str:
+        return hashlib.sha256(self.input_json.encode()).hexdigest()[:32]
+
+    def _input_headers(self) -> dict[str, str]:
+        # Only with an input: a schedule written before inputs existed (no
+        # header) stays the same schedule, and its interval keeps running.
+        return {INPUT_HASH_HEADER: self.input_hash} if self.input else {}
+
+
 @dataclass(frozen=True)
-class Cron:
-    """6-field cron with seconds (``"0 30 9 * * mon-fri"``) or an alias (``"@daily"``)."""
+class Cron(_ScheduleInput):
+    """6-field cron with seconds (``"0 30 9 * * mon-fri"``) or an alias (``"@daily"``).
+
+    ``input`` (a JSON object, at most 4 KiB) is each tick's payload. Changing it
+    changes the schedule, which is published again."""
 
     expression: str
     time_zone: str = ""
+    input: dict[str, Any] | None = field(default=None, hash=False)
     kind = "cron"
 
     def __post_init__(self) -> None:
@@ -110,6 +190,7 @@ class Cron:
             raise ValueError(
                 "Cron needs 6 fields (seconds first), as NATS schedules do"
             )
+        object.__setattr__(self, "input", _normalize_input(self.input))
 
     @property
     def spec(self) -> str:
@@ -119,17 +200,22 @@ class Cron:
         headers = {"Nats-Schedule": self.spec}
         if self.time_zone:
             headers["Nats-Schedule-Time-Zone"] = self.time_zone
-        return headers
+        return {**headers, **self._input_headers()}
 
 
 @dataclass(frozen=True, init=False)
-class Every:
-    """Fixed interval, as a Go duration (``"1h30m"``) or a timedelta; at least 1s."""
+class Every(_ScheduleInput):
+    """Fixed interval, as a Go duration (``"1h30m"``) or a timedelta; at least 1s.
+
+    ``input`` is as for ``Cron``."""
 
     interval: str
+    input: dict[str, Any] | None = field(default=None, hash=False)
     kind = "every"
 
-    def __init__(self, interval: str | timedelta):
+    def __init__(
+        self, interval: str | timedelta, *, input: dict[str, Any] | None = None
+    ):
         if isinstance(interval, timedelta):
             seconds = interval.total_seconds()
             if seconds < 1 or seconds != int(seconds):
@@ -138,6 +224,7 @@ class Every:
         if go_duration_seconds(interval) < 1:
             raise ValueError("NATS schedules fire at most once per second")
         object.__setattr__(self, "interval", interval)
+        object.__setattr__(self, "input", _normalize_input(input))
 
     @property
     def spec(self) -> str:
@@ -148,7 +235,7 @@ class Every:
         return ""
 
     def headers(self) -> dict[str, str]:
-        return {"Nats-Schedule": f"@every {self.interval}"}
+        return {"Nats-Schedule": f"@every {self.interval}", **self._input_headers()}
 
 
 @dataclass(frozen=True, init=False)
@@ -197,10 +284,11 @@ Trigger = Cron | Every | OnEvent
 
 
 def _trigger_from_pb(value: pb.JobTrigger) -> Trigger:
+    scheduled_input = json.loads(value.input) if value.input else None
     if value.kind == "cron":
-        return Cron(value.spec, time_zone=value.time_zone)
+        return Cron(value.spec, time_zone=value.time_zone, input=scheduled_input)
     if value.kind == "every":
-        return Every(value.spec)
+        return Every(value.spec, input=scheduled_input)
     if value.kind == "event":
         return OnEvent(
             value.spec, filter=json.loads(value.filter) if value.filter else None
@@ -213,6 +301,12 @@ def _trigger_from_pb(value: pb.JobTrigger) -> Trigger:
 
 @dataclass(frozen=True)
 class JobDescriptor:
+    """A job, or (``kind="workflow"``) a job with a typed input and output.
+
+    ``input_schema`` and ``output_schema`` are JSON Schema objects as canonical
+    strings (``schema_json``): at most 16 KiB each, and the whole descriptor at
+    most 64 KiB, because discovery's registry snapshot holds every module."""
+
     name: str
     description: str = ""
     triggers: tuple[Trigger, ...] = ()
@@ -220,6 +314,9 @@ class JobDescriptor:
     timeout: timedelta | None = None
     max_attempts: int = 1
     contract_major: int = JOB_CONTRACT_MAJOR
+    kind: str = "job"
+    input_schema: str = ""
+    output_schema: str = ""
 
     def __post_init__(self) -> None:
         if not _NAME.fullmatch(self.name):
@@ -232,7 +329,25 @@ class JobDescriptor:
             raise ValueError("timeout must be positive")
         if len(self.triggers) > MAX_TRIGGERS:
             raise ValueError(f"At most {MAX_TRIGGERS} triggers per job")
+        if self.kind not in JOB_KINDS:
+            raise ValueError(f"Job kind must be one of {JOB_KINDS}, not {self.kind!r}")
         object.__setattr__(self, "triggers", tuple(self.triggers))
+        object.__setattr__(
+            self, "input_schema", schema_json(self.input_schema, "input schema")
+        )
+        object.__setattr__(
+            self, "output_schema", schema_json(self.output_schema, "output schema")
+        )
+        size = self.to_pb().ByteSize()
+        if size > MAX_DESCRIPTOR_BYTES:
+            raise ValueError(
+                f"Job {self.name!r} describes itself in {size} bytes; "
+                f"at most {MAX_DESCRIPTOR_BYTES}"
+            )
+
+    @property
+    def is_workflow(self) -> bool:
+        return self.kind == "workflow"
 
     @property
     def schedules(self) -> tuple[Cron | Every, ...]:
@@ -255,12 +370,16 @@ class JobDescriptor:
                     filter=json.dumps(t.filter, sort_keys=True)
                     if isinstance(t, OnEvent) and t.filter
                     else "",
+                    input=t.input_json if isinstance(t, (Cron, Every)) else "",
                 )
                 for t in self.triggers
             ],
             max_concurrency=self.max_concurrency,
             max_attempts=self.max_attempts,
             timeout_seconds=self.timeout.total_seconds() if self.timeout else 0.0,
+            kind=self.kind,
+            input_schema=self.input_schema,
+            output_schema=self.output_schema,
         )
 
     @classmethod
@@ -275,6 +394,51 @@ class JobDescriptor:
             else None,
             max_attempts=value.max_attempts,
             contract_major=value.contract_major,
+            # A descriptor written before the field existed has none: a job.
+            kind=value.kind or "job",
+            input_schema=value.input_schema,
+            output_schema=value.output_schema,
+        )
+
+
+def process_workflow_name(kind: str, name: str) -> str:
+    """The durable workflow of a ``Workflow`` or ``Pipeline`` class:
+    ``workflow.greet``, ``pipeline.ingest``, as core names its bridged classes.
+
+    Derived, so it is stable across restarts and replicas; a slug is lowercase
+    ASCII, digits and ``_`` (no ``:``, which run ids use as their separator).
+    """
+    return f"{kind}.{name}"
+
+
+@dataclass(frozen=True)
+class JobSettings:
+    """How the durable workflow of a ``Workflow`` or ``Pipeline`` class runs
+    (``Process.job``).
+
+    Every such class is a workflow that callers start by name; declaring
+    ``job`` adds schedules or events (``triggers``) and sets its limits.
+    Defaults are ``@workflow``'s.
+    """
+
+    triggers: tuple[Trigger, ...] = ()
+    timeout: timedelta | None = None
+    max_attempts: int = 1
+    max_concurrency: int = 1
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "triggers", tuple(self.triggers))
+        # The descriptor's own checks (ranges, trigger count), at declaration.
+        self.descriptor("check")
+
+    def descriptor(self, name: str, description: str = "") -> JobDescriptor:
+        return JobDescriptor(
+            name=name,
+            description=description,
+            triggers=self.triggers,
+            max_concurrency=self.max_concurrency,
+            timeout=self.timeout,
+            max_attempts=self.max_attempts,
         )
 
 
@@ -341,6 +505,16 @@ class JobsNotHosted(RuntimeError):
     """A module's jobs are triggered before (or after) its job host runs."""
 
 
+class JobsSealed(RuntimeError):
+    """A job is declared after the module's jobs were handed to its job host."""
+
+
+class NonRetryable(Exception):
+    """Raised by a handler for a failure another attempt cannot fix (a bad
+    input, a result over its cap): the run fails at once, whatever attempts
+    ``max_attempts`` leaves."""
+
+
 class JobsMixin:
     """Job declarations for a module class: ``jobs``, ``@job`` methods, ``expose_job``.
 
@@ -386,10 +560,15 @@ class JobsMixin:
         """Bound handlers by job name; @job methods are bound on first access."""
         handlers = self.__dict__.get("_abi_job_handlers")
         if handlers is None:
-            handlers = {
-                name: getattr(self, attr_name)
-                for name, attr_name in self._decorated_jobs.items()
-            }
+            handlers = {}
+            for name, attr_name in self._decorated_jobs.items():
+                bound = getattr(self, attr_name)
+                spec = getattr(bound, "__abi_workflow__", None)
+                if spec is not None:  # @workflow: validated input, typed output
+                    from naas_abi_sdk.workflows import workflow_handler
+
+                    bound = workflow_handler(bound, spec)
+                handlers[name] = bound
             self.__dict__["_abi_job_handlers"] = handlers
         return handlers
 
@@ -403,14 +582,95 @@ class JobsMixin:
             raise TypeError("Job handler must be an async callable taking a JobContext")
         self._job_handlers[name] = handler
 
+    def declare_job(
+        self, descriptor: JobDescriptor, handler: Callable[..., Any]
+    ) -> None:
+        """Declare a job and bind its handler at runtime, for jobs that are not
+        known when the class is written (core's Workflow/Pipeline bridge).
+
+        Declare before the module's jobs go to its job host: SDK modules in
+        ``on_load`` (the descriptor discovery shows is taken after it), engine
+        modules before their host starts. Replicas must declare identical sets:
+        discovery refuses a replica whose jobs differ. ``JobsSealed`` afterwards.
+        """
+        if self.__dict__.get("_abi_jobs_sealed"):
+            raise JobsSealed(
+                f"{type(self).__name__}'s jobs already went to its job host: "
+                "declare jobs earlier (on_load, or before the host starts)"
+            )
+        if any(j.name == descriptor.name for j in self.jobs):
+            raise ValueError(
+                f"Duplicate job names on {type(self).__name__}: {descriptor.name}"
+            )
+        if not (is_async_callable(handler) or (self._sync_jobs and callable(handler))):
+            raise TypeError("Job handler must be an async callable taking a JobContext")
+        self.__dict__["jobs"] = (*self.jobs, descriptor)
+        self._job_handlers[descriptor.name] = handler
+
+    def declare_workflow(
+        self,
+        name: str,
+        handler: Callable[..., Any],
+        *,
+        input_type: Any = None,
+        output_type: Any = None,
+        input_schema: dict[str, Any] | str | None = None,
+        output_schema: dict[str, Any] | str | None = None,
+        description: str = "",
+        triggers: tuple[Trigger, ...] = (),
+        max_concurrency: int = 1,
+        timeout: timedelta | None = None,
+        max_attempts: int = 1,
+    ) -> JobDescriptor:
+        """``declare_job`` for a workflow: ``async handler(ctx, inp)``, with the
+        schemas of ``input_type``/``output_type`` (pydantic v2 models, duck-typed)
+        or explicit ``input_schema``/``output_schema`` for dicts. Returns the descriptor."""
+        from naas_abi_sdk.workflows import declare_workflow
+
+        return declare_workflow(
+            self,
+            name,
+            handler,
+            input_type=input_type,
+            output_type=output_type,
+            input_schema=input_schema,
+            output_schema=output_schema,
+            description=description,
+            triggers=triggers,
+            max_concurrency=max_concurrency,
+            timeout=timeout,
+            max_attempts=max_attempts,
+        )
+
+    def _seal_jobs(self) -> None:
+        """Runtimes call it as they hand the jobs to the job host."""
+        self.__dict__["_abi_jobs_sealed"] = True
+
     def missing_job_handlers(self) -> set[str]:
         return {j.name for j in self.jobs} - set(self._job_handlers)
+
+    def workflow_spec(self, name: str) -> Any:
+        """The ``WorkflowSpec`` (input and output types) of one of this module's workflows."""
+        specs = self.__dict__.get("_abi_workflow_specs", {})
+        if name in specs:
+            return specs[name]
+        attr_name = self._decorated_jobs.get(name)
+        spec = (
+            getattr(getattr(self, attr_name), "__abi_workflow__", None)
+            if attr_name
+            else None
+        )
+        if spec is None:
+            raise ValueError(f"{type(self).__name__} has no workflow named {name!r}")
+        return spec
 
     # A module's own triggers go through its job host, on the host's loop.
 
     def _bind_job_host(self, host: Any, loop: asyncio.AbstractEventLoop | None) -> None:
         """Set by the runtime once the host started (``None`` once it stopped)."""
         self.__dict__["_abi_job_host"] = (host, loop) if host is not None else None
+        if host is not None:
+            self._seal_jobs()
 
     def _job_host(self) -> tuple[Any, asyncio.AbstractEventLoop]:
         bound = self.__dict__.get("_abi_job_host")
@@ -466,6 +726,16 @@ class JobsMixin:
             host.trigger(name, payload, idempotency_key=idempotency_key), loop
         ).result(timeout)
 
+    def get_workflow(self, name: str) -> Any:
+        """One of this module's own workflows, through its bound host: a
+        ``WorkflowProxy`` (``start``, ``run``), typed by its declared input and
+        output. Its methods are safe to await from any loop; they run on the
+        host's. ``JobsNotHosted`` before the host starts and after it stops."""
+        from naas_abi_sdk.workflows import host_workflow
+
+        host, loop = self._job_host()
+        return host_workflow(host, loop, name, self.workflow_spec(name))
+
 
 # --- subjects and storage -------------------------------------------------------------
 
@@ -489,11 +759,16 @@ TRIGGER_SENDER_HEADERS = (
 # other (``verify_trigger``): the server answers JetStream requests on the reply
 # subject the requester chose, and the jobs stream would store a forged one.
 SEAL_HEADER = "Abi-Job-Seal"
+# A manual trigger a first-party service (Nexus, the engine) stored for a user:
+# the delegation the run executes with (``abi:delegated:agent``, ``act`` the
+# job's module, ``sub`` the user). The engine writes it, never a sender.
+DELEGATION_HEADER = "Abi-Job-Delegation"
 SEALED_HEADERS = (
     "Abi-Claim-Check",
     "Abi-Claim-Check-Size",
     "Abi-Claim-Check-Chunks",
     "Abi-Claim-Check-Sha256",
+    DELEGATION_HEADER,
 )
 
 
@@ -528,7 +803,34 @@ async def store_trigger(
     kind: str = "manual",
     on_behalf_of: bool = True,
 ) -> int:
-    """Store a trigger for a job; its stream sequence. Through the engine when
+    """Store a trigger for a job; its stream sequence (``store_trigger_ack``)."""
+    sequence, _ = await store_trigger_ack(
+        transport,
+        project,
+        module_id,
+        job,
+        body,
+        headers,
+        kind=kind,
+        on_behalf_of=on_behalf_of,
+    )
+    return sequence
+
+
+async def store_trigger_ack(
+    transport: Any,
+    project: str,
+    module_id: str,
+    job: str,
+    body: bytes,
+    headers: dict[str, str],
+    *,
+    kind: str = "manual",
+    on_behalf_of: bool = True,
+) -> tuple[int, bool]:
+    """Store a trigger for a job: its stream sequence, and whether it repeated a
+    message id within the stream's duplicate window (nothing was stored, and the
+    sequence is the first trigger's). Through the engine when
     it answers (a module behind the broker's auth callout writes nothing into
     the jobs stream), else published here. ``kind`` is ``manual`` or
     ``event`` (the engine grants ``event`` to the job's own module only).
@@ -553,7 +855,7 @@ async def store_trigger(
         kind=kind,
     )
     if answer is not None:
-        return int(answer["seq"])
+        return int(answer["seq"]), bool(answer.get("duplicate"))
     # No engine answered. Behind the broker's auth callout nothing is stored
     # here (a module may not write the jobs stream, and its token must never
     # reach the job's host): the engine is away, so try again.
@@ -570,7 +872,7 @@ async def store_trigger(
         },
         stream=stream_name(project),
     )
-    return ack.seq
+    return ack.seq, bool(ack.duplicate)
 
 
 async def store_cancel(
@@ -623,6 +925,12 @@ class JobSubjects:
     @property
     def cancel(self) -> str:
         return f"abi.jobs.{self.project}.cancel.{self.module_hash}"
+
+    @property
+    def done(self) -> str:
+        """Core-NATS completion notices of this job's runs. Outside the jobs
+        stream's subjects, so that no notice is stored."""
+        return f"abi.jobdone.{self.project}.{self.module_hash}.{self.job_hash}"
 
     @property
     def consumer(self) -> str:
@@ -696,7 +1004,11 @@ async def _unconfined_credentials(
 
 
 class JobRun:
-    """A triggered run: read its record, wait for it, or ask its host to cancel it."""
+    """A triggered run: read its record, wait for it, or ask its host to cancel it.
+
+    ``duplicate`` is true when the trigger repeated an ``idempotency_key``
+    within the stream's duplicate window: JetStream stored nothing, and this
+    is the first trigger's run."""
 
     def __init__(
         self,
@@ -706,9 +1018,12 @@ class JobRun:
         job_name: str,
         run_id: str,
         documents: Any = None,
+        *,
+        duplicate: bool = False,
     ):
         self.transport, self.project, self.module_id = transport, project, module_id
         self.job, self.run_id = job_name, run_id
+        self.duplicate = duplicate
         self._documents = documents
 
     def _docs(self) -> Any:
@@ -782,7 +1097,8 @@ class JobProxy:
         """Store a trigger; the run starts when a host takes it, once the caller
         this transport names may trigger the job (discovery:TriggerJob). A
         repeated ``idempotency_key`` within the stream's duplicate window
-        (2 minutes) is the same run (JetStream message-id dedup).
+        (2 minutes) is the same run (JetStream message-id dedup), returned with
+        ``duplicate`` set.
 
         ``on_behalf_of``: also name the current call's user, when the transport
         forwards users. A module triggering its own job does so as itself."""
@@ -807,7 +1123,7 @@ class JobProxy:
                 reserve=trigger_reserve(len(body)),
                 store=claim_check.ThroughEngine(for_transport(self.transport)),
             )
-            sequence = await store_trigger(
+            sequence, duplicate = await store_trigger_ack(
                 self.transport,
                 self.project,
                 self.module_id,
@@ -823,4 +1139,5 @@ class JobProxy:
             self.name,
             run_key(self.name, sequence),
             self._documents,
+            duplicate=duplicate,
         )

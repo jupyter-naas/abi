@@ -144,6 +144,50 @@ def test_threads_continued_before_the_migration_are_reported(source, target):
     assert summary.diverged == ["pending"]
 
 
+def test_threads_continued_after_the_migration_are_not_reported(source, target):
+    # agent_memory_migrate listed a chat continued after the cutover as
+    # diverged: its new head descends from the copied one.
+    migrate_checkpoints(source, target)
+    approval_graph().compile(checkpointer=target).invoke(
+        Command(resume="yes"), thread("pending")
+    )
+
+    summary = migrate_checkpoints(source, target, apply=False)
+
+    assert summary.diverged == []
+    assert summary.missing == 0
+
+
+def test_a_source_that_moved_on_since_the_copy_is_not_reported(source, target):
+    # The stored head is an older source checkpoint: the copy is behind, and
+    # the next applied run completes it.
+    migrate_checkpoints(source, target)
+    approval_graph().compile(checkpointer=source).invoke(
+        Command(resume="no"), thread("pending")
+    )
+
+    summary = migrate_checkpoints(source, target, apply=False)
+
+    assert summary.diverged == []
+    assert summary.missing > 0
+
+
+def test_a_thread_continued_on_both_sides_since_the_copy_is_reported(
+    source, target
+):
+    migrate_checkpoints(source, target)
+    approval_graph().compile(checkpointer=target).invoke(
+        Command(resume="yes"), thread("pending")
+    )
+    approval_graph().compile(checkpointer=source).invoke(
+        Command(resume="no"), thread("pending")
+    )
+
+    summary = migrate_checkpoints(source, target, apply=False)
+
+    assert summary.diverged == ["pending"]
+
+
 def test_selected_threads_only(source, target):
     summary = migrate_checkpoints(source, target, threads=["nested"])
     assert summary.threads == 1

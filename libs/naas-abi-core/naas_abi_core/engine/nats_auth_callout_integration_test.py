@@ -2,7 +2,7 @@
 
 A real ``nats-server`` with ``auth_callout``, the engine's responder and IAM in
 this process, and modules logging in with their service keys through the SDK
-transport (docs/specs/rfcs/20261013_identity-and-authorization.md, §8.4).
+transport.
 """
 
 from __future__ import annotations
@@ -1563,6 +1563,11 @@ def test_a_trigger_for_a_user_stores_a_host_token_naming_the_user_and_the_caller
     )
     api = iam.store.find_service_account("api")
     assert api is not None
+    # A platform admin: a user who may not start the job is refused, never
+    # stored to run as the module alone.
+    with as_service_account("engine"):
+        admin = iam.ensure_user("https://idp.example", "admin")
+        iam.attach_policy("builtin.platform_admin", admin.id)
     api_tokens = nats_credentials.issuer_source(iam, "api")
 
     async def scenario(served):
@@ -1585,7 +1590,7 @@ def test_a_trigger_for_a_user_stores_a_host_token_naming_the_user_and_the_caller
             )
             with use_call_context(
                 CallContext(
-                    principal=service_account("api"), on_behalf_of=user("usr_admin")
+                    principal=service_account("api"), on_behalf_of=user(admin.id)
                 )
             ):
                 await store_trigger(
@@ -1598,7 +1603,7 @@ def test_a_trigger_for_a_user_stores_a_host_token_naming_the_user_and_the_caller
             token = stored.headers["Nats-Auth-Token"]
             assert "Abi-On-Behalf-Of" not in stored.headers
             claims = jwt.decode(token, options={"verify_signature": False})
-            assert (claims["sub"], claims["act"]["sub"]) == ("usr_admin", api.id)
+            assert (claims["sub"], claims["act"]["sub"]) == (admin.id, api.id)
             assert claims["aud"] == host_audience(subject_token(people))
             # No kernel service accepts it; discovery does, from that host.
             from naas_abi_core.engine.nats_auth import InvalidServiceTokenError
@@ -1607,22 +1612,22 @@ def test_a_trigger_for_a_user_stores_a_host_token_naming_the_user_and_the_caller
                 iam.verifier().verify(token)
             hosts = iam.verifier().for_audiences((), prefixes=(HOST_AUDIENCE_PREFIX,))
             verified = hosts.verify(token)
-            assert verified.subject == "usr_admin" and verified.actor == api.id
+            assert verified.subject == admin.id and verified.actor == api.id
             assert verified.scope is None
             # A key's limit goes into the stored token: the job runs for the
             # user within what the key may do, not within what the user may.
-            read_only = (
+            limited = (
                 {
                     "effect": "Allow",
-                    "actions": ["triple_store:Query"],
+                    "actions": ["triple_store:Query", "discovery:TriggerJob"],
                     "resources": ["*"],
                 },
             )
             with use_call_context(
                 CallContext(
                     principal=service_account("api"),
-                    on_behalf_of=user("usr_admin"),
-                    scope=read_only,
+                    on_behalf_of=user(admin.id),
+                    scope=limited,
                 )
             ):
                 await store_trigger(
@@ -1632,7 +1637,7 @@ def test_a_trigger_for_a_user_stores_a_host_token_naming_the_user_and_the_caller
                 "ABI_JOBS_default", subject=subject
             )
             scoped = hosts.verify(stored.headers["Nats-Auth-Token"])
-            assert scoped.subject == "usr_admin" and scoped.scope == read_only
+            assert scoped.subject == admin.id and scoped.scope == limited
         finally:
             await engine.close()
             await hosting.close()

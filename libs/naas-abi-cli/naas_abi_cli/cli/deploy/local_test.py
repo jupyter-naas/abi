@@ -7,11 +7,16 @@ import subprocess
 import time
 from pathlib import Path
 
+import click
 import pytest
 import yaml
 
+from naas_abi_cli.cli.deploy import local
 from naas_abi_cli.cli.deploy.local import (
+    MIGRATE_TO_NATS_DOC,
     _build_nexus_api_url,
+    ensure_legacy_extras,
+    legacy_extras_requirement,
     project_uses_nats,
     setup_local_deploy,
 )
@@ -26,12 +31,6 @@ def _assert_nats_is_opt_in(services: dict) -> None:
     for name, service in services.items():
         if name != "nats" and not service.get("profiles"):
             assert "nats" not in service.get("depends_on", {})
-
-
-def test_nats_stays_opt_in_in_the_repository_compose() -> None:
-    """The ABI repository's own stack is not a generated project."""
-    repo_root = Path(__file__).resolve().parents[5]
-    _assert_nats_is_opt_in(_services(repo_root / "docker-compose.yml"))
 
 
 def test_a_generated_stack_runs_on_nats_by_default(tmp_path: Path) -> None:
@@ -104,6 +103,27 @@ def test_a_classic_stack_has_no_idp(tmp_path: Path) -> None:
     assert "idp" not in _services(tmp_path / "docker-compose.yml")
 
 
+def _seconds(duration: str) -> int:
+    value, unit = re.fullmatch(r"(\d+)([sm])", duration).groups()  # type: ignore[union-attr]
+    return int(value) * (60 if unit == "m" else 1)
+
+
+@pytest.mark.parametrize("nats", [True, False])
+def test_the_engine_has_time_to_boot_before_it_is_unhealthy(
+    tmp_path: Path, nats: bool
+) -> None:
+    # A first boot loads every module and ontology and runs the Nexus
+    # migrations: about three minutes on a laptop. An engine reported unhealthy
+    # before that makes `docker compose up` fail on a stack that is coming up.
+    setup_local_deploy(str(tmp_path), base_domain="localhost", nats=nats)
+    health = _services(tmp_path / "docker-compose.yml")["abi"]["healthcheck"]
+
+    budget = _seconds(health["start_period"]) + health["retries"] * _seconds(
+        health["interval"]
+    )
+    assert budget >= 300
+
+
 def test_a_classic_stack_keeps_nats_opt_in(tmp_path: Path) -> None:
     setup_local_deploy(str(tmp_path), base_domain="localhost", nats=False)
     services = _services(tmp_path / "docker-compose.yml")
@@ -134,7 +154,7 @@ def test_regenerating_an_older_project_does_not_switch_it_to_nats(
     setup_local_deploy(str(tmp_path), base_domain="localhost", regenerate=True)
 
     _assert_nats_is_opt_in(_services(tmp_path / "docker-compose.yml"))
-    assert "docs/migrate-to-nats.md" in capsys.readouterr().out
+    assert MIGRATE_TO_NATS_DOC in capsys.readouterr().out
 
 
 def test_regenerating_a_nats_project_keeps_it_on_nats(tmp_path: Path, capsys) -> None:
@@ -142,7 +162,82 @@ def test_regenerating_a_nats_project_keeps_it_on_nats(tmp_path: Path, capsys) ->
     setup_local_deploy(str(tmp_path), base_domain="localhost", regenerate=True)
 
     assert "profiles" not in _services(tmp_path / "docker-compose.yml")["nats"]
-    assert "migrate-to-nats" not in capsys.readouterr().out
+    assert MIGRATE_TO_NATS_DOC not in capsys.readouterr().out
+
+
+def _pyproject(project: Path, *dependencies: str) -> None:
+    listed = "".join(f'    "{d}",\n' for d in dependencies)
+    (project / "pyproject.toml").write_text(
+        f'[project]\nname = "demo"\ndependencies = [\n{listed}]\n',
+        encoding="utf-8",
+    )
+
+
+@pytest.mark.parametrize(
+    ("dependencies", "requirement"),
+    [
+        # A project made before 3.0: [all] used to pull Dagster and pika.
+        (["naas-abi-core[all]>=2.0"], "naas-abi-core[all,dagster,rabbitmq]>=2.0"),
+        (["naas_abi_core [qdrant] >= 2"], "naas-abi-core[dagster,qdrant,rabbitmq]>= 2"),
+        (["naas-abi-core"], "naas-abi-core[dagster,rabbitmq]"),
+        (["naas-abi-core[all,rabbitmq]"], "naas-abi-core[all,dagster,rabbitmq]"),
+        (["naas-abi", "naas-abi-cli"], "naas-abi-core[dagster,rabbitmq]"),
+        (["naas-abi-core[all,dagster,rabbitmq]"], None),
+        (["naas-abi-core[all]", "naas-abi-core[dagster,rabbitmq]"], None),
+        # naas-abi-core-extras is another package.
+        (["naas-abi-core-extras[dagster,rabbitmq]"], "naas-abi-core[dagster,rabbitmq]"),
+    ],
+)
+def test_legacy_extras_requirement(tmp_path: Path, dependencies, requirement) -> None:
+    _pyproject(tmp_path, *dependencies)
+
+    assert legacy_extras_requirement(str(tmp_path)) == requirement
+
+
+def test_no_legacy_extras_without_a_pyproject(tmp_path: Path) -> None:
+    assert legacy_extras_requirement(str(tmp_path)) is None
+
+
+def test_ensure_legacy_extras_adds_them_with_uv(tmp_path: Path, monkeypatch) -> None:
+    _pyproject(tmp_path, "naas-abi-core[all]>=2.0")
+    commands: list = []
+    monkeypatch.setattr(local.shutil, "which", lambda _cmd: "/usr/bin/uv")
+
+    def run(cmd, **kwargs):
+        commands.append((cmd, kwargs["cwd"]))
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(local.subprocess, "run", run)
+
+    ensure_legacy_extras(str(tmp_path))
+
+    assert commands == [
+        (["uv", "add", "naas-abi-core[all,dagster,rabbitmq]>=2.0"], str(tmp_path))
+    ]
+
+
+def test_ensure_legacy_extras_leaves_a_project_that_has_them(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _pyproject(tmp_path, "naas-abi-core[all,dagster,rabbitmq]")
+    monkeypatch.setattr(
+        local.subprocess, "run", lambda *a, **k: pytest.fail("nothing to add")
+    )
+
+    ensure_legacy_extras(str(tmp_path))
+
+
+def test_ensure_legacy_extras_without_uv_prints_the_command(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    _pyproject(tmp_path, "naas-abi-core[all]")
+    monkeypatch.setattr(local.shutil, "which", lambda _cmd: None)
+
+    ensure_legacy_extras(str(tmp_path))
+
+    assert (
+        "run `uv add 'naas-abi-core[all,dagster,rabbitmq]'`" in capsys.readouterr().out
+    )
 
 
 def test_project_mode_is_read_from_the_compose_config_first(tmp_path: Path) -> None:
@@ -454,7 +549,9 @@ def test_setup_local_deploy_makes_no_admin_password(tmp_path: Path) -> None:
     values = _env_values(tmp_path / ".env")
     assert values["NEXUS_USER_ADMIN_EMAIL"] == "admin@example.com"
     # The admin signs in at the identity provider with a mailed code.
-    assert not [key for key in values if key.startswith("NEXUS_USER_") and "PASSWORD" in key]
+    assert not [
+        key for key in values if key.startswith("NEXUS_USER_") and "PASSWORD" in key
+    ]
     for content in (
         (tmp_path / ".env").read_text(),
         (tmp_path / "docker-compose.yml").read_text(),
@@ -619,3 +716,15 @@ def test_the_generated_broker_admits_only_its_users(tmp_path: Path) -> None:
     finally:
         server.terminate()
         server.wait(timeout=5)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root can write any file")
+def test_a_root_owned_env_stops_the_deploy_before_it_writes(tmp_path: Path) -> None:
+    env = tmp_path / ".env"
+    env.write_text("A=1\n")
+    env.chmod(0o444)
+
+    with pytest.raises(click.ClickException, match="chown"):
+        setup_local_deploy(str(tmp_path), base_domain="localhost", nats=False)
+
+    assert not (tmp_path / "docker-compose.yml").exists()

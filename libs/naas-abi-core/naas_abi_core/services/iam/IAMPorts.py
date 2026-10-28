@@ -10,7 +10,7 @@
   token signing keys and the engine's own service key (the secret service,
   under ``iam/``, sealed to ``engine``).
 
-See docs/specs/rfcs/20261013_identity-and-authorization.md, §2, §3, §5 and §11.
+The specification is ``services/iam/AGENTS.md``.
 """
 
 from __future__ import annotations
@@ -26,11 +26,14 @@ from typing import Any, Literal
 from naas_abi_core.engine.call_context import CallContext
 from naas_abi_core.engine.nats_auth import IssuedToken
 from naas_abi_core.services.iam.catalog import ActionCatalog, CatalogRegistry
+from naas_abi_core.services.iam.names import PLATFORM_SCOPE
 from naas_abi_core.services.iam.policy import PolicyDocument, Statement
 
 PrincipalKind = Literal["user", "group", "service_account"]
 Status = Literal["active", "suspended", "deleted"]
-Reason = Literal["allow", "explicit_deny", "implicit_deny", "suspended", "sealed"]
+Reason = Literal[
+    "allow", "explicit_deny", "implicit_deny", "suspended", "sealed", "outside_set"
+]
 
 KIND_PREFIXES: dict[PrincipalKind, str] = {
     "user": "usr",
@@ -78,7 +81,7 @@ class RevisionConflictError(IAMError):
 
 
 class PermissionDeniedError(IAMError, PermissionError):
-    """The caller can see the resource but may not perform this action (RFC §5.4).
+    """The caller can see the resource but may not perform this action.
 
     Wire code ``PERMISSION_DENIED``. A caller who cannot see the resource at
     all gets the service's own not-found error instead.
@@ -90,6 +93,42 @@ class PermissionDeniedError(IAMError, PermissionError):
         self.action = action
         self.resource = resource
         super().__init__(message or f"{action} is not allowed on {resource}")
+
+
+class GrantNotHeldError(PermissionDeniedError):
+    """A change would let someone do, at a scope, what the caller cannot do
+    there ("Grant only what you hold"). The message names the first statement,
+    action and resource the caller does not hold. Wire code ``GRANT_NOT_HELD``."""
+
+    def __init__(
+        self,
+        action: str = "",
+        resource: str = "",
+        *,
+        policy_id: str | None = None,
+        statement: int | None = None,
+        sid: str | None = None,
+        scope: str | None = None,
+        reason: str = "",
+        message: str | None = None,
+    ) -> None:
+        self.policy_id = policy_id
+        self.statement = statement
+        self.sid = sid
+        self.scope = scope
+        self.reason = reason
+        if message is None:
+            which = f"statement {statement}" if statement is not None else "a statement"
+            if sid:
+                which += f" ({sid})"
+            if policy_id:
+                which += f" of {policy_id}"
+            at = f" at {scope}" if scope is not None else ""
+            message = (
+                f"You cannot grant what you do not hold: {which} allows {action} "
+                f"on {resource}{at}, and {reason}"
+            )
+        super().__init__(action, resource, message=message)
 
 
 class KeyRefusedError(IAMError):
@@ -133,12 +172,17 @@ class PrincipalRecord:
     email: str | None = None
     email_verified: bool = False
     display_name: str | None = None
-    # Groups: the org they belong to, None for a platform group.
+    # Groups: the org of their owner scope, None for a platform group. A group
+    # made before owner scopes may name an org while platform-owned.
     org: str | None = None
     # Service accounts: the user who created them, for scripts and CI.
     owner_id: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    # Groups: the platform (``abi:-:-``), an org (``abi:<org>:-``) or a
+    # workspace (``abi:<org>:<ws>``) that owns them and names them. Users and
+    # service accounts are the platform's.
+    owner_scope: str = PLATFORM_SCOPE
 
     @property
     def active(self) -> bool:
@@ -147,7 +191,7 @@ class PrincipalRecord:
 
 @dataclass(frozen=True)
 class GroupMapping:
-    """An IdP group claim value mapped to an ABI group (RFC §2)."""
+    """An IdP group claim value mapped to an ABI group."""
 
     provider: str
     claim_value: str
@@ -164,11 +208,15 @@ class Policy:
     revision: int = 1
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    # The platform (``abi:-:-``), an org (``abi:<org>:-``) or a workspace
+    # (``abi:<org>:<ws>``): it names the policy and bounds where it is attached.
+    # Managed policies are the platform's.
+    owner_scope: str = PLATFORM_SCOPE
 
 
 @dataclass(frozen=True)
 class Attachment:
-    """A policy bound to a principal, optionally at a scope (RFC §3.4)."""
+    """A policy bound to a principal, optionally at a scope."""
 
     id: str
     policy_id: str
@@ -180,7 +228,7 @@ class Attachment:
 @dataclass(frozen=True)
 class PendingGrant:
     """A policy attached at a scope to someone who has not signed in yet: the
-    person an invitation names, by email, on one identity provider (RFC §12.2).
+    person an invitation names, by email, on one identity provider.
 
     It becomes an ``Attachment`` of the user's principal when that user first
     signs in through ``provider`` with this email verified; on no other
@@ -228,6 +276,33 @@ class ScopeRecord:
 
 
 @dataclass(frozen=True)
+class ScopeSet:
+    """The set of an org (``workspace`` ``-``) or of a workspace in it: the
+    module items and the Nexus features usable there, each part ``None`` when
+    nothing is recorded (everything). See ``sets.py``."""
+
+    org: str
+    workspace: str = "-"
+    modules: tuple[str, ...] | None = None
+    features: tuple[str, ...] | None = None
+
+    @property
+    def scope(self) -> str:
+        return f"abi:{self.org}:{self.workspace}"
+
+    @property
+    def recorded(self) -> bool:
+        """Whether it narrows anything: a set of everything is not stored."""
+        return self.modules is not None or self.features is not None
+
+    def label(self) -> str:
+        """How an error names it."""
+        if self.workspace != "-":
+            return f"the set of workspace {self.workspace}"
+        return f"the set of organization {self.org}"
+
+
+@dataclass(frozen=True)
 class Page:
     items: list[Any]
     next_after: str | None = None
@@ -235,7 +310,7 @@ class Page:
 
 KeyKind = Literal["service", "personal", "grant"]
 
-# RFC 8693 token exchange (RFC §9.4): the kinds of subject token.
+# RFC 8693 token exchange: the kinds of subject token.
 GRANT_TYPE_TOKEN_EXCHANGE = "urn:ietf:params:oauth:grant-type:token-exchange"
 TOKEN_TYPE_JWT = "urn:ietf:params:oauth:token-type:jwt"  # an engine token
 TOKEN_TYPE_ID_TOKEN = "urn:ietf:params:oauth:token-type:id_token"  # an IdP's
@@ -255,7 +330,7 @@ SUBJECT_TOKEN_TYPES = (
 
 @dataclass(frozen=True)
 class TokenExchange:
-    """A token exchange request (RFC §9.4).
+    """A token exchange request.
 
     ``resource``: the discovery resource a token for ``abi:delegated:agent`` is
     for (a module, one of its agents, apps or models); IAM reads the acting
@@ -290,7 +365,7 @@ class IdentityAuthenticator(ABC):
 
 @dataclass(frozen=True)
 class KeyRecord:
-    """A key (RFC §8.1): only ``sha256(secret)`` is stored; the key is shown once.
+    """A key: only ``sha256(secret)`` is stored; the key is shown once.
 
     ``kind``: ``service`` (``abi_sk_``, a service account's), ``personal``
     (``abi_pk_``, a user's) or ``grant`` (``abi_gk_``, the link of an app or a
@@ -326,7 +401,7 @@ ManifestStatus = Literal["pending", "approved", "rejected", "superseded"]
 
 @dataclass(frozen=True)
 class ManifestRecord:
-    """A module's permission manifest, one per submitted version (RFC §8.3).
+    """A module's permission manifest, one per submitted version.
 
     ``document`` is the submitted policy document (JSON form), variables
     unsubstituted. An approved version is also the managed policy
@@ -371,7 +446,7 @@ class ManifestSubmission:
 
 @dataclass(frozen=True)
 class SigningKeyRecord:
-    """The public half and the schedule of a token signing key (RFC §9.1).
+    """The public half and the schedule of a token signing key.
 
     It is published from ``created_at``, signs from ``activates_at``, and
     stays published until ``retires_at`` (set when a newer key takes over).
@@ -433,8 +508,10 @@ class IAMStore(ABC):
         *,
         limit: int = 100,
         after: str | None = None,
+        owner_scopes: Sequence[str] | None = None,
     ) -> Page:
-        """Principals by ascending id, strictly after ``after``."""
+        """Principals by ascending id, strictly after ``after``; with
+        ``owner_scopes``, only those owned by one of them."""
 
     @abstractmethod
     def update_principal(self, record: PrincipalRecord) -> PrincipalRecord:
@@ -486,11 +563,20 @@ class IAMStore(ABC):
     def get_policy(self, policy_id: str) -> Policy: ...
 
     @abstractmethod
-    def list_policies(self, *, limit: int = 100, after: str | None = None) -> Page: ...
+    def list_policies(
+        self,
+        *,
+        limit: int = 100,
+        after: str | None = None,
+        owner_scopes: Sequence[str] | None = None,
+    ) -> Page:
+        """Policies by ascending id, strictly after ``after``; with
+        ``owner_scopes``, only those owned by one of them."""
 
     @abstractmethod
     def update_policy(self, policy: Policy, expected_revision: int) -> Policy:
-        """Replace name, description and document; the revision goes up by one.
+        """Replace name, description and document (never the owner scope);
+        the revision goes up by one.
 
         ``RevisionConflictError`` when the stored revision is not
         ``expected_revision``.
@@ -578,6 +664,22 @@ class IAMStore(ABC):
 
     @abstractmethod
     def list_scopes(self, org: str | None = None) -> list[ScopeRecord]: ...
+
+    # -- sets -----------------------------------------------------------------
+
+    @abstractmethod
+    def put_scope_set(self, scope_set: ScopeSet) -> None:
+        """Create or replace the set of ``(org, workspace)``; one that narrows
+        nothing (``recorded`` false) is deleted instead."""
+
+    @abstractmethod
+    def delete_scope_sets(self, org: str, workspace: str = "-") -> bool:
+        """Delete a workspace's set, or an org's (``workspace`` ``-``) with the
+        sets of its workspaces."""
+
+    @abstractmethod
+    def list_scope_sets(self, org: str | None = None) -> list[ScopeSet]:
+        """The recorded sets, ordered by org then workspace (``-`` first)."""
 
     # -- catalogs -----------------------------------------------------------
 
@@ -673,7 +775,7 @@ class IAMStore(ABC):
 
 class IAMSecrets(ABC):
     """IAM's secrets outside its store: names under ``iam/`` in the secret
-    service, which seals them to ``engine`` (RFC §11.3)."""
+    service, which seals them to ``engine``."""
 
     @abstractmethod
     def get(self, name: str) -> str | None: ...
@@ -710,6 +812,9 @@ class Subject:
     principal_id: str  # as the call names it: ${principal.id}
     status: Status
     statements: tuple[EffectiveStatement, ...] = ()
+    # Whether the org and workspace sets bound its Allows: a user who does not
+    # hold builtin.platform_admin. Service accounts are bound by their policies.
+    bounded: bool = False
 
 
 @dataclass(frozen=True)
@@ -739,7 +844,7 @@ class Decision:
 @dataclass(frozen=True)
 class FilterResult:
     """The allowed items, in input order, and the literal prefixes every allowed
-    item starts with (RFC §5.5). ``[""]`` means no prefix can narrow the scan."""
+    item starts with. ``[""]`` means no prefix can narrow the scan."""
 
     allowed: list[str]
     prefix_hints: list[str] = field(default_factory=list)
@@ -776,7 +881,7 @@ class Seal:
 
 class IAuthorizer(ABC):
     """Shaped like OpenFGA's API, so a relationship-based adapter can replace
-    the policy one without touching callers (RFC §11.2)."""
+    the policy one without touching callers."""
 
     name: str
 
@@ -816,10 +921,39 @@ class PolicySource(ABC):
     @abstractmethod
     def catalogs(self) -> CatalogRegistry: ...
 
+    def has_sets(self) -> bool:
+        """Whether any org or workspace has a set recorded (a shortcut)."""
+        return False
+
+    def scope_sets(
+        self, org: str, workspace: str
+    ) -> tuple[ScopeSet | None, ScopeSet | None]:
+        """The recorded sets of ``org`` and of ``workspace`` (None: everything)."""
+        return None, None
+
 
 # ---------------------------------------------------------------------------
 # What callers use: the in-process service, or a NATS client of it
 # ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class GrantableAction:
+    """An action the caller may grant at a scope, on these resource patterns
+    (``${scope}:…``); ``excluded`` are the patterns a Deny of theirs takes back,
+    written as the resources are where they fall under the scope."""
+
+    action: str
+    resources: tuple[str, ...]
+    excluded: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class GrantableCatalog:
+    """What the caller may grant of one catalog (a kernel service or a module)."""
+
+    service: str
+    actions: tuple[GrantableAction, ...]
 
 
 class IIAMService(ABC):
@@ -856,6 +990,39 @@ class IIAMService(ABC):
         raise not_found() if not_found is not None else ResourceNotFoundError(resource)
 
     @abstractmethod
+    def authorize_declared(
+        self,
+        action: str,
+        resource_type: str,
+        parts: Sequence[str],
+        *,
+        workspace: str | None = None,
+    ) -> tuple[Decision, str]:
+        """The decision on an action a module declares (``module_scopes.py``),
+        and the resource IAM named for it: ``<type>/<parts>`` of the action's
+        catalog, in ``workspace`` or else the call's (``CallContext.workspace_id``),
+        platform-level without one. ``IAMNotFoundError`` when no module declares
+        the action or the type."""
+
+    def require_declared(
+        self,
+        action: str,
+        resource_type: str,
+        parts: Sequence[str],
+        *,
+        workspace: str | None = None,
+    ) -> None:
+        """``require`` for an action a module declares."""
+        decision, resource = self.authorize_declared(
+            action, resource_type, parts, workspace=workspace
+        )
+        if decision.allowed:
+            return
+        if decision.visible:
+            raise PermissionDeniedError(action, resource)
+        raise ResourceNotFoundError(resource)
+
+    @abstractmethod
     def filter(self, action: str, resources: Iterable[str]) -> FilterResult: ...
 
     def allows_every(self, action: str, service: str, resource_type: str) -> bool:
@@ -867,6 +1034,12 @@ class IIAMService(ABC):
     def explain(
         self, action: str, resource: str, *, principal_id: str | None = None
     ) -> Explanation: ...
+
+    @abstractmethod
+    def grantable(self, scope: str) -> list[GrantableCatalog]:
+        """What the caller may grant at ``scope``: per catalog, the actions they
+        hold there and the resource patterns (``${scope}:…``) they hold them on,
+        minus their Denies. About the caller only, so it needs no permission."""
 
     # -- principals -------------------------------------------------------------
 
@@ -934,13 +1107,22 @@ class IIAMService(ABC):
     # -- groups -----------------------------------------------------------------
 
     @abstractmethod
-    def create_group(self, name: str, *, org: str | None = None) -> PrincipalRecord: ...
+    def create_group(
+        self, name: str, *, org: str | None = None, scope: str | None = None
+    ) -> PrincipalRecord:
+        """A group owned by ``scope`` (``abi:<org>:-`` when only ``org`` is
+        given, else the platform)."""
 
     @abstractmethod
     def get_group(self, group_id: str) -> PrincipalRecord: ...
 
     @abstractmethod
-    def list_groups(self, *, limit: int = 100, after: str | None = None) -> Page: ...
+    def list_groups(
+        self, *, limit: int = 100, after: str | None = None, scope: str | None = None
+    ) -> Page:
+        """The groups the caller may list; with ``scope``, those it owns, plus
+        its org's groups at a workspace for whoever lists that workspace's
+        attachments."""
 
     @abstractmethod
     def delete_group(self, group_id: str) -> PrincipalRecord: ...
@@ -971,14 +1153,24 @@ class IIAMService(ABC):
 
     @abstractmethod
     def create_policy(
-        self, name: str, document: Any, *, description: str = ""
-    ) -> Policy: ...
+        self,
+        name: str,
+        document: Any,
+        *,
+        description: str = "",
+        scope: str | None = None,
+    ) -> Policy:
+        """A customer policy owned by ``scope`` (the platform when None)."""
 
     @abstractmethod
     def get_policy(self, policy_id: str) -> Policy: ...
 
     @abstractmethod
-    def list_policies(self, *, limit: int = 100, after: str | None = None) -> Page: ...
+    def list_policies(
+        self, *, limit: int = 100, after: str | None = None, scope: str | None = None
+    ) -> Page:
+        """The policies the caller may list; with ``scope``, those it owns, plus
+        those of the levels above that the caller may attach there."""
 
     @abstractmethod
     def update_policy(
@@ -1009,7 +1201,7 @@ class IIAMService(ABC):
         self, *, principal_id: str | None = None, policy_id: str | None = None
     ) -> list[Attachment]: ...
 
-    # -- invitations and IdP group bindings (RFC §12.2) --------------------------
+    # -- invitations and IdP group bindings --------------------------
 
     @abstractmethod
     def create_pending_grant(
@@ -1076,7 +1268,7 @@ class IIAMService(ABC):
         """The placement covering a resource (exact key, else the longest
         prefix), or None when none does: a new top-level name or container.
 
-        Read by the service owning the resource, in process, to apply RFC §4.4;
+        Read by the service owning the resource, in process, to apply the placement rules (``AGENTS.md``, "Placements");
         it is not an authorization decision and needs no action.
         """
 
@@ -1095,6 +1287,33 @@ class IIAMService(ABC):
     @abstractmethod
     def delete_scope(self, org: str, workspace: str = "-") -> bool: ...
 
+    # -- sets ---------------------------------------------------------------
+
+    @abstractmethod
+    def get_set(self, org: str, workspace: str = "-") -> ScopeSet:
+        """The set recorded for an org or a workspace (both parts None when
+        none is): ``iam:GetSet`` at its scope."""
+
+    @abstractmethod
+    def effective_set(self, org: str, workspace: str = "-") -> ScopeSet:
+        """A workspace's set within its org's, or an org's own."""
+
+    @abstractmethod
+    def list_sets(self, org: str | None = None) -> list[ScopeSet]:
+        """The recorded sets the caller may read."""
+
+    @abstractmethod
+    def put_set(
+        self,
+        org: str,
+        workspace: str = "-",
+        *,
+        modules: Iterable[str] | None = None,
+        features: Iterable[str] | None = None,
+    ) -> ScopeSet:
+        """Record a set (``iam:PutSet`` at the level above); a workspace's must
+        be within its org's (``SetValidationError``, a ``ValueError``)."""
+
     @abstractmethod
     def register_catalog(self, catalog: Any) -> bool: ...
 
@@ -1104,11 +1323,11 @@ class IIAMService(ABC):
         raise NotImplementedError("Platform grants are set on the serving engine")
 
     def put_feature_policies(self, grants: Mapping[str, Sequence[str]]) -> None:
-        """Replace the feature policies (``UseFeature`` grants, RFC §7). The
+        """Replace the feature policies (``UseFeature`` grants). The
         serving engine's IAM only: Nexus runs there."""
         raise NotImplementedError("Feature policies are set on the serving engine")
 
-    # -- service accounts, keys and manifests (RFC §8) ----------------------------------
+    # -- service accounts, keys and manifests ----------------------------------
 
     @abstractmethod
     def find_service_account(self, name: str) -> PrincipalRecord: ...

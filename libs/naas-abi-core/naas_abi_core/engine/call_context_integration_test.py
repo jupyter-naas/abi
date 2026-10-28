@@ -130,7 +130,7 @@ pytestmark = pytest.mark.skipif(
 
 # What every kernel endpoint accepts: a service's token, or a delegation.
 SECRET = TEST_TOKENS.verifier
-# Nexus serving a signed-in user: the RFC's "api on behalf of the user".
+# Nexus serving a signed-in user: "api on behalf of the user".
 CALLER = CallContext(
     principal=service_account("api"),
     on_behalf_of=user("usr-ada"),

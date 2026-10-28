@@ -50,9 +50,7 @@ def test_a_session_opens_no_app_html_page(iam: IAMService) -> None:
     with as_service_account("engine"):
         ada = iam.ensure_user("https://idp.example", "ada")
     with as_service_account("api"):
-        session = iam.exchange_token(
-            TokenExchange(ada.id, TOKEN_TYPE_SESSION, "abi:session")
-        ).token
+        session = iam.exchange_token(TokenExchange(ada.id, TOKEN_TYPE_SESSION, "abi:session")).token
     old = jwt.encode(
         {
             "sub": "user-1",
@@ -127,3 +125,32 @@ def test_mint_rejects_invalid_path_prefix() -> None:
             user_id="user-1",
             path_prefix="/not-app-html/",
         )
+
+
+def test_a_link_to_one_app_opens_no_app_of_a_module_nested_below_it(iam, monkeypatch) -> None:
+    """Module ``a.b`` app ``c`` is ``/app-html/a/b/c/``; module ``a.b.c`` app ``d``
+    is ``/app-html/a/b/c/d/``, under the same prefix. A link locked to the first
+    opens its files, never the second's."""
+    from naas_abi.apps.nexus.apps.api.app.services.apps.adapters.primary import (
+        apps__primary_adapter__FastAPI as adapter,
+    )
+
+    assets = {
+        "a/b/c/index.html": ("/m/ab/apps/c/index.html", "/app-html/a/b/c/"),
+        "a/b/c/d/index.html": ("/m/abc/apps/d/index.html", "/app-html/a/b/c/d/"),
+        "a/b/c/js/app.js": ("/m/ab/apps/c/js/app.js", "/app-html/a/b/c/"),
+    }
+    monkeypatch.setattr(adapter, "_scan_apps_html_assets", lambda: assets)
+    token, _ = app_html_access.mint_app_html_access_token(
+        user_id="user-1", expires_minutes=10, path_prefix="/app-html/a/b/c/"
+    )
+    assert app_html_access.validate_app_html_jwt(token, _request("/app-html/a/b/c/index.html"))
+    assert app_html_access.validate_app_html_jwt(token, _request("/app-html/a/b/c/js/app.js"))
+    assert not app_html_access.validate_app_html_jwt(
+        token, _request("/app-html/a/b/c/d/index.html")
+    )
+    # The nested app's own link opens it.
+    nested, _ = app_html_access.mint_app_html_access_token(
+        user_id="user-1", expires_minutes=10, path_prefix="/app-html/a/b/c/d/"
+    )
+    assert app_html_access.validate_app_html_jwt(nested, _request("/app-html/a/b/c/d/index.html"))

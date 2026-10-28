@@ -48,6 +48,46 @@ def test_resolved_remote_provider_passes_the_request_schema() -> None:
     assert config.type == "remote"
 
 
+def test_a_remote_run_is_placed_in_its_agents_workspace_not_the_requests() -> None:
+    """The workspace ``authorize_agent_use`` cleared the agent in: a turn naming
+    another workspace, or none (a conversation id only), changes nothing."""
+    from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__primary_adapter__schemas import (
+        ProviderConfigRequest,
+    )
+
+    service = ChatService(adapter=AsyncMock())
+    agent = ChatAgentRecord(
+        id="a-9",
+        workspace_id="ws-1",
+        name="Researcher",
+        class_name="acme.research/Researcher",
+        model_id=None,
+        provider="remote",
+    )
+    service.get_agent = AsyncMock(return_value=agent)  # type: ignore[method-assign]
+
+    for named in ("ws-2", None):
+        resolved = asyncio.run(
+            service.resolve_provider(
+                provider=None, has_images=False, agent_id="a-9", workspace_id=named
+            )
+        )
+        assert resolved is not None and resolved.run_workspace_id == "ws-1", named
+    # A client never sets it through a provider payload.
+    forged = ProviderConfigRequest.model_validate(
+        {
+            "id": "x",
+            "name": "x",
+            "type": "openai",
+            "enabled": True,
+            "model": "m",
+            "run_workspace_id": "ws-2",
+            "_run_workspace_id": "ws-2",
+        }
+    )
+    assert forged.run_workspace_id is None
+
+
 def test_a_client_cannot_pick_a_remote_agent_through_the_provider_payload() -> None:
     service = ChatService(adapter=AsyncMock())
     service.get_agent = AsyncMock(return_value=None)  # type: ignore[method-assign]

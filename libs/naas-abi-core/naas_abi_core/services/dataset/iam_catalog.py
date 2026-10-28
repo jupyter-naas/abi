@@ -1,4 +1,4 @@
-"""dataset's action catalog (RFC §6.4, "dataset").
+"""dataset's action catalog.
 
 ``namespace/<ns>`` is a placed container holding ``dataset/<ns>/<name>``;
 ``catalog/-`` is the platform-level catalog of snapshots.
@@ -6,7 +6,7 @@
 ``QueryUnchecked`` on ``catalog/-`` runs SQL the query check cannot vouch for:
 catalog maintenance (``DESCRIBE``, ``ALTER``, ``CALL ducklake_*``) and, with it,
 DuckDB's file-reading functions on the engine host. It is the engine's own;
-both transitional grants deny it.
+``builtin.api`` denies it.
 """
 
 from __future__ import annotations

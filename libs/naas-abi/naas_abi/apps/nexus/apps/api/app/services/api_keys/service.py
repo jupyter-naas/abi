@@ -1,4 +1,4 @@
-"""Personal API keys, kept by IAM (RFC §8.1, §9.3).
+"""Personal API keys, kept by IAM.
 
 A personal API key is ``abi_pk_<id>_<secret>``: a credential of its owner for
 scripts and tools. IAM stores only a hash of the secret, so the key is shown
@@ -9,7 +9,7 @@ once, when it is made. It
 * may be narrowed to a subset of what its owner may do (a scope, the token's
   ``abi_scope``): *read only*, or statements of the owner's own writing. A key
   can never do more than its owner's policies allow, and the owner's side
-  decides as well (RFC §5.3);
+  decides as well;
 * is exchanged for the audience ``abi:delegated:api-key``, which every route
   but the account and the keys' own management takes (``credentials.py``).
 

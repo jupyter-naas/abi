@@ -4,6 +4,13 @@ on:
     branches:
       - dev
       - main
+  # Uploads the files of an existing GitHub release to PyPI (job publish-existing).
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag whose files to upload to PyPI, e.g. naas-abi-sdk-v0.1.0
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -14,7 +21,7 @@ jobs:
 
   release:
     runs-on: ubuntu-latest
-    if: github.repository == 'jupyter-naas/abi'
+    if: github.repository == 'jupyter-naas/abi' && github.event_name == 'push'
     concurrency:
       group: ${{ github.workflow }}-release-${{ github.ref_name }}
       cancel-in-progress: false
@@ -24,9 +31,11 @@ jobs:
 
     env:
       # Released in dependency order: naas-abi-core's nats/otel extras need
-      # naas-abi-proto and naas-abi-sdk, and naas-abi needs naas-abi-core[nats].
+      # naas-abi-proto and naas-abi-sdk, naas-abi-idp (the built-in identity
+      # provider) needs both, and naas-abi needs naas-abi-core[nats].
       naas_abi_proto_dir: libs/naas-abi-proto
       naas_abi_sdk_dir: libs/naas-abi-sdk
+      naas_abi_idp_dir: libs/naas-abi-idp
       naas_abi_core_dir: libs/naas-abi-core
       naas_abi_marketplace_dir: libs/naas-abi-marketplace
       naas_abi_dir: libs/naas-abi
@@ -75,6 +84,11 @@ jobs:
         working-directory: ${{ env.naas_abi_sdk_dir }}
         run: semantic-release -v version
 
+      - name: Release naas-abi-idp
+        id: release-naas-abi-idp
+        working-directory: ${{ env.naas_abi_idp_dir }}
+        run: semantic-release -v version
+
       - name: Release naas-abi-core
         id: release-naas-abi-core
         working-directory: ${{ env.naas_abi_core_dir }}
@@ -104,6 +118,11 @@ jobs:
         if: steps.release-naas-abi-sdk.outputs.released == 'true'
         working-directory: ${{ env.naas_abi_sdk_dir }}
         run: semantic-release publish --tag "${{ steps.release-naas-abi-sdk.outputs.tag }}"
+
+      - name: Publish | Upload naas-abi-idp to GitHub Release Assets
+        if: steps.release-naas-abi-idp.outputs.released == 'true'
+        working-directory: ${{ env.naas_abi_idp_dir }}
+        run: semantic-release publish --tag "${{ steps.release-naas-abi-idp.outputs.tag }}"
 
       - name: Publish | Upload naas-abi-core to GitHub Release Assets
         if: steps.release-naas-abi-core.outputs.released == 'true'
@@ -145,6 +164,12 @@ jobs:
         with:
           packages-dir: ${{ format('{0}/dist', env.naas_abi_sdk_dir) }}
 
+      - name: Publish | Upload naas-abi-idp to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
+        if: steps.release-naas-abi-idp.outputs.released == 'true'
+        with:
+          packages-dir: ${{ format('{0}/dist', env.naas_abi_idp_dir) }}
+
       - name: Publish | Upload naas-abi-core to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
         if: steps.release-naas-abi-core.outputs.released == 'true'
@@ -169,3 +194,31 @@ jobs:
         if: steps.release-naas-abi-cli.outputs.released == 'true'
         with:
           packages-dir: ${{ format('{0}/dist', env.naas_abi_cli_dir) }}
+
+  # A release whose upload failed (a missing or wrong trusted publisher) is not
+  # released again: its tag exists, so semantic-release has nothing to do. Run this
+  # job from main (Actions > Release > Run workflow) with the tag, one package at a
+  # time and in dependency order: naas-abi-proto, naas-abi-sdk, naas-abi-idp, naas-abi-core,
+  # naas-abi-marketplace, naas-abi, naas-abi-cli. It runs in this file so that the
+  # trusted publishers (workflow release.yml, environment pypi) apply. Versions
+  # already on PyPI are skipped.
+  publish-existing:
+    runs-on: ubuntu-latest
+    if: github.repository == 'jupyter-naas/abi' && github.event_name == 'workflow_dispatch'
+    environment:
+      name: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download | Files of the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir dist
+
+      - name: Publish | Upload to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
+        with:
+          packages-dir: dist
+          skip-existing: true

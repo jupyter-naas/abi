@@ -57,8 +57,7 @@ class EventAdapterNATSConfiguration(BaseModel):
     """Event adapter NATS RPC client configuration.
 
     Talks to a remote ``EventPrimaryAdapterNATS`` over NATS request/reply --
-    see docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
-    (Stage 1) and naas_abi_core/proto/event/v1/event.proto. Only the six
+    see naas_abi_core/proto/event/v1/event.proto. Only the six
     ``IEventAdapter`` methods are remoted this way; the bus-backed parts of
     ``EventService`` (``publish``'s broadcast, ``subscribe``) keep running
     100% locally wherever this configuration is loaded -- see

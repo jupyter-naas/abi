@@ -195,7 +195,7 @@ DOMAIN_ERRORS = (
     DatasetSnapshotNotFoundError,
     DatasetSnapshotConflictError,
     DatasetSchemaError,
-    # The caller's authorization outcome (RFC §5.4), and a request it refuses.
+    # The caller's authorization outcome, and a request it refuses.
     PermissionDeniedError,
     ResourceNotFoundError,
     *REFUSALS,
@@ -232,7 +232,7 @@ class DatasetPrimaryAdapterNATS(ServiceWithTransfers):
         self._verifier = verifier
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
         self._service: TracedService | None = None
-        # Streamed reads (docs/adr/20261003_nats-streamed-results.md).
+        # Streamed reads.
         self._transfer = TransferHost(
             TRANSFER_PREFIX,
             verifier,
@@ -673,9 +673,9 @@ class DatasetPrimaryAdapterNATS(ServiceWithTransfers):
         self, req: dataset_pb2.NamespaceVersionRequest
     ) -> dataset_pb2.NamespaceVersionResponse:
         version = self._adapter.namespace_version(req.namespace)
-        if version is None:
+        if version is None:  # never held a dataset: no arm of the oneof
             return dataset_pb2.NamespaceVersionResponse()
-        return dataset_pb2.NamespaceVersionResponse(snapshot_id=version)
+        return dataset_pb2.NamespaceVersionResponse(version=version)
 
     async def _handle_drop(self, request: Request) -> None:
         await self._handle(

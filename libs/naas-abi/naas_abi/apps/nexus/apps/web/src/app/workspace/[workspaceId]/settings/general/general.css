@@ -1,0 +1,100 @@
+/* Workspace Settings → General: the logo stays square (account avatars are round). */
+.workspace-logo-square {
+  border-radius: 0 !important;
+}
+
+/* Save changes uses the workspace accent, like the other workspace buttons
+   (Save wallpaper), not the Account Settings colour (--color-primary). */
+.workspace-general-save.account-profile-save-button {
+  background-color: var(--workspace-accent, #22c55e);
+  color: #fff;
+}
+
+.workspace-general-save.account-profile-save-button:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--workspace-accent, #22c55e) 90%, black);
+}
+
+.workspace-general-save.account-profile-save-button-saved {
+  background-color: color-mix(in srgb, var(--workspace-accent, #22c55e) 30%, transparent);
+  color: var(--workspace-accent, #22c55e);
+}
+
+/* Focused fields use the workspace accent, not the default focus colour. */
+.workspace-general .account-profile-field-input:focus,
+.workspace-general .account-profile-field-textarea:focus {
+  border-color: var(--workspace-accent, #22c55e);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--workspace-accent, #22c55e) 30%, transparent);
+}
+
+/* The description box is half the height of the account bio. */
+.workspace-general .account-profile-field-textarea {
+  min-height: 144px;
+}
+
+@media (max-width: 767px) {
+  .workspace-general .account-profile-field-textarea {
+    min-height: 100px;
+  }
+}
+
+/* Help under a field (the read-only slug), in the label style but not shouted. */
+.workspace-general-hint {
+  margin-top: var(--space-1);
+  font-weight: var(--font-weight-normal, 400);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* Features: the link to the organization's Modules & features, where the workspace's set is edited. */
+.workspace-general-modules-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--background-hex);
+  font-size: var(--font-size-sm);
+  color: var(--foreground-hex);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.workspace-general-modules-link:hover {
+  background-color: var(--muted-bg-hex);
+}
+
+/* Modules: the workspace's set, read-only, one row per module. */
+.workspace-general-modules {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workspace-general-modules-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-4);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border-hex);
+  font-size: var(--font-size-sm);
+}
+
+.workspace-general-modules-row:first-child {
+  border-top: none;
+}
+
+.workspace-general-modules-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--foreground-hex);
+}
+
+.workspace-general-modules-items {
+  color: var(--muted-foreground-hex);
+}

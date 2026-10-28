@@ -14,11 +14,11 @@ import {
   Zap,
   type LucideIcon,
 } from 'lucide-react';
-import { useAdminEventsLog } from '@/app/workspace/[workspaceId]/admin/events/admin-events-log';
+import { useAdminEventsLog } from '@/app/settings/system/events/admin-events-log';
 import {
   projectEventToFeedItem,
   type EventKind,
-} from '@/app/workspace/[workspaceId]/admin/events/event-feed';
+} from '@/app/settings/system/events/event-feed';
 import { cn } from '@/lib/utils';
 
 const KIND_ICON: Record<EventKind, { icon: LucideIcon; color: string; bg: string }> = {

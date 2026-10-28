@@ -25,7 +25,7 @@ docker/
 
 ### **compose/**
 Contains Docker Compose configurations for orchestrating multi-container applications:
-- **`docker-compose.yml`** - Main service orchestration (Apache Jena Fuseki, PostgreSQL, Dagster, etc.)
+- **`docker-compose.yml`** - Main service orchestration (Apache Jena Fuseki, PostgreSQL, NATS, etc.; Dagster and RabbitMQ, legacy, behind the `legacy` profile)
 
 ### **images/**
 Contains all Dockerfile variants for different deployment scenarios:

@@ -1,4 +1,4 @@
-"""Linking an identity provider's identity to a user that already exists (#67):
+"""Linking an identity provider's identity to a user that already exists:
 the built-in login's users keep their principal, roles, groups and data when they
 first sign in through the built-in identity provider."""
 

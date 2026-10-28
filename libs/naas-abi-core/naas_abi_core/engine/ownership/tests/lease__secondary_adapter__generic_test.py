@@ -1,4 +1,4 @@
-"""Contract every engine lease adapter must meet (docs/adr/20261006_single-serving-engine.md).
+"""Contract every engine lease adapter must meet.
 
 An adapter's test subclasses ``GenericLeaseAdapterTest`` and implements
 ``open_lease``: an async context manager yielding a lease on an empty store.

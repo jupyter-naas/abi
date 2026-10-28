@@ -4,6 +4,7 @@ and a test double that answers through plain async callables."""
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from typing import Any
 
 from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import (
     RemoteAgent,
@@ -21,8 +22,14 @@ class InMemoryRemoteAgentDirectory:
         return list(self.agents)
 
     async def stream(
-        self, key: str, prompt: str, *, thread_id: str, invocation_id: str | None = None
-    ) -> AsyncIterator[dict[str, str]]:
+        self,
+        key: str,
+        prompt: str,
+        *,
+        thread_id: str,
+        invocation_id: str | None = None,
+        workspace_id: str | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         answer = next((fn for agent, fn in self.agents.items() if agent.key == key), None)
         if answer is None:
             raise RemoteAgentUnavailable(key, "not published")

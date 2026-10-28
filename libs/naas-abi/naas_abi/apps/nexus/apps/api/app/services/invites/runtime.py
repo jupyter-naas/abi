@@ -25,11 +25,17 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.adapters.secondary.mailer
 from naas_abi.apps.nexus.apps.api.app.services.invites.adapters.secondary.postgres import (
     InvitationSecondaryAdapterPostgres,
 )
-from naas_abi.apps.nexus.apps.api.app.services.invites.port import InvitationMailer
+from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
+    PROFILE_FIELDS,
+    InvitationMailer,
+)
 from naas_abi.apps.nexus.apps.api.app.services.invites.service import InvitationService
 from naas_abi.apps.nexus.apps.api.app.services.oidc.adapters.secondary.engine import (
     default_iam,
     default_identity,
+)
+from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
+    OrganizationSecondaryAdapterPostgres,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -71,6 +77,21 @@ class InvitationRuntime:
             accepted = await service.claim(
                 user_id=user.id, email=user.email, provider=token.provider
             )
+            # What the inviting admin set about the person in the organization.
+            for invitation in accepted:
+                if invitation.organization_id and invitation.profile:
+                    await OrganizationSecondaryAdapterPostgres(
+                        db
+                    ).update_organization_member_profile(
+                        invitation.organization_id,
+                        user.id,
+                        name=None,
+                        **{field: invitation.profile.get(field) for field in PROFILE_FIELDS},
+                    )
+                    await db.commit()
+            # An org owner or admin reaches every workspace of the organization.
+            if any(invitation.org_role for invitation in accepted):
+                await MEMBERSHIPS.sync_org_wide_roles(user.id)
             # What derives from who belongs to a workspace (shared graphs) follows.
             for invitation in accepted:
                 if invitation.workspace_id:

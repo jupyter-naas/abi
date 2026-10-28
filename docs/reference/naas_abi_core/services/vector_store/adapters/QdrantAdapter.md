@@ -1,81 +1,101 @@
 # QdrantAdapter
 
 ## What it is
-- A Qdrant-backed implementation of `IVectorStorePort` for creating collections, storing vectors, searching, retrieving, updating, deleting, and counting vector documents.
-- Wraps `qdrant_client.QdrantClient` and translates between Qdrant points and the project’s `VectorDocument` / `SearchResult` models.
+- A Qdrant-backed implementation of `IVectorStorePort`.
+- Manages collections and vector documents in Qdrant, mapping between Qdrant points and the project models:
+  - `VectorDocument`, `SearchResult`, `VectorPage`, `CollectionInfo`.
 
 ## Public API
+
 ### Class: `QdrantAdapter(IVectorStorePort)`
+Qdrant adapter that wraps `qdrant_client.QdrantClient`.
+
 #### `__init__(host="localhost", port=6333, api_key=None, https=False, timeout=300)`
-- Configures connection parameters; does **not** connect until `initialize()` is called.
+- Stores connection parameters; does not create the client until `initialize()`.
 
 #### `initialize() -> None`
-- Creates a `QdrantClient` if not already created.
+- Creates `QdrantClient` if not already initialized.
 
 #### `create_collection(collection_name: str, dimension: int, distance_metric: str = "cosine", **kwargs) -> None`
-- Creates a Qdrant collection with a single vector configuration:
-  - `size=dimension`
-  - `distance` mapped from `distance_metric` (`cosine`, `euclidean`, `dot`; defaults to cosine on unknown values).
+- Creates a collection with a single vector config:
+  - `VectorParams(size=dimension, distance=<mapped>)`
+- `distance_metric` mapping:
+  - `"cosine"`, `"euclidean"`, `"dot"`; defaults to cosine if unknown.
 
 #### `delete_collection(collection_name: str) -> None`
-- Deletes a collection.
+- Deletes the collection.
 
-#### `list_collections() -> List[str]`
+#### `list_collections() -> list[str]`
 - Returns collection names.
 
-#### `store_vectors(collection_name: str, documents: List[VectorDocument]) -> None`
-- Upserts points built from `VectorDocument`:
-  - `id` from `doc.id`
-  - `vector` from `doc.vector.tolist()`
-  - payload merges:
-    - `doc.metadata` (top-level keys)
-    - `doc.payload` stored under key `"payload"` if provided
-- Raises `RuntimeError` if the upsert status is not `COMPLETED`.
+#### `store_vectors(collection_name: str, documents: list[VectorDocument]) -> None`
+- Upserts documents as Qdrant points (`PointStruct`):
+  - `id = doc.id`
+  - `vector = doc.vector.tolist()`
+  - payload:
+    - merges `doc.metadata` at top-level
+    - stores `doc.payload` under reserved key `"payload"`
+- Raises `RuntimeError` if Qdrant update status is not `COMPLETED`.
 
-#### `search(collection_name: str, query_vector: np.ndarray, k: int = 10, filter: Optional[Dict[str, Any]] = None, include_vectors: bool = False, include_metadata: bool = True) -> List[SearchResult]`
-- Executes a nearest-neighbor query with optional exact-match filtering:
-  - `filter` is converted into Qdrant `Filter(must=[FieldCondition(key=..., match=MatchValue(value=...))...])`
-- Controls returned fields:
-  - `include_vectors` toggles `with_vectors`
-  - `include_metadata` toggles `with_payload`
-- Builds `SearchResult`:
-  - `id` as `str(hit.id)`
-  - `score` from Qdrant
-  - `vector` as `np.array(hit.vector)` if present
-  - `metadata` as `dict(hit.payload)` when payload is present and `include_metadata=True`
-  - `payload` extracted from `hit.payload["payload"]` when present
+#### `search(collection_name: str, query_vector: np.ndarray, k: int = 10, filter: dict[str, Any] | None = None, include_vectors: bool = False, include_metadata: bool = True) -> list[SearchResult]`
+- Executes `query_points`:
+  - `query = query_vector.tolist()`
+  - `limit = k`
+  - optional exact-match filter:
+    - builds `Filter(must=[FieldCondition(key=..., match=MatchValue(value=...)), ...])`
+  - `with_vectors = include_vectors`
+  - `with_payload = include_metadata`
+- Maps hits into `SearchResult`:
+  - `id = str(hit.id)`
+  - `score = hit.score`
+  - `vector = np.array(hit.vector)` if present, else `None`
+  - `metadata = dict(hit.payload)` if payload present and `include_metadata=True`, else `None`
+  - `payload = hit.payload.get("payload")` if present, else `None`
 
-#### `get_vector(collection_name: str, vector_id: str, include_vector: bool = True) -> Optional[VectorDocument]`
-- Retrieves a single point by id.
-- Always requests payload (`with_payload=True`); vector is optional via `include_vector`.
+#### `get_vector(collection_name: str, vector_id: str, include_vector: bool = True) -> VectorDocument | None`
+- Retrieves a single point by ID via `retrieve(ids=[vector_id])`.
+- Always requests payload; vector inclusion controlled by `include_vector`.
 - Returns `None` if not found.
-- Maps payload:
+- Metadata/payload mapping:
   - `metadata` = payload entries excluding `"payload"`
-  - `payload` = payload entry `"payload"` (if present)
+  - `payload` = payload `"payload"` (if present)
+  - if no vector is returned, `vector` is `np.array([])`.
 
-#### `update_vector(collection_name: str, vector_id: str, vector: Optional[np.ndarray] = None, metadata: Optional[Dict[str, Any]] = None, payload: Optional[Dict[str, Any]] = None) -> None`
-- If `vector` is provided: updates vector via `update_vectors`.
-- If `metadata` and/or `payload` is provided: sets payload via `set_payload`:
-  - merges `metadata` keys at top-level
-  - stores `payload` under `"payload"`
+#### `update_vector(collection_name: str, vector_id: str, vector: np.ndarray | None = None, metadata: dict[str, Any] | None = None, payload: dict[str, Any] | None = None) -> None`
+- If `vector` is provided: updates vector via `update_vectors([PointVectors(...)])`.
+- If `metadata` and/or `payload` provided: sets payload via `set_payload`:
+  - merges `metadata` at top-level
+  - stores `payload` under `"payload"`.
 
-#### `delete_vectors(collection_name: str, vector_ids: List) -> None`
-- Deletes points by id list via `PointIdsList`.
-- Accepts ids castable to `List[Union[int, str, UUID]]`.
+#### `delete_vectors(collection_name: str, vector_ids: list) -> None`
+- Deletes points by IDs using `PointIdsList(points=<casted ids>)`.
 
 #### `count_vectors(collection_name: str) -> int`
 - Returns `collection_info.indexed_vectors_count` or `0`.
 
+#### `list_vectors(collection_name: str, limit: int = 100, cursor: str | None = None, include_vectors: bool = False) -> VectorPage`
+- Scrolls points in point-id order using `client.scroll`.
+- Cursor semantics:
+  - cursor is a point id as text; if it is digit-only, it is converted to `int`, otherwise left as `str`.
+- Always includes payload; vectors are included only if `include_vectors=True`.
+- Returns `VectorPage(documents=[...], next_cursor=<next_offset as str or None>)`.
+- Raises `ValueError` if `limit <= 0`.
+
+#### `get_collection_info(collection_name: str) -> CollectionInfo`
+- Fetches Qdrant collection info and returns:
+  - name, dimension, distance_metric (string), size (`points_count`).
+- Intended for single-vector collections; named vectors are not handled explicitly.
+
 #### `close() -> None`
-- Closes the underlying Qdrant client and resets it to `None`.
+- Closes the underlying client (if any) and resets it to `None`.
 
 ## Configuration/Dependencies
-- Requires:
+- Dependencies:
   - `qdrant-client`
   - `numpy`
 - Connection parameters:
   - `host`, `port`, `api_key`, `https`, `timeout`
-- Must call `initialize()` before any operation; otherwise raises `RuntimeError("Adapter not initialized")`.
+- All operations require prior `initialize()`; otherwise `RuntimeError("Adapter not initialized")`.
 
 ## Usage
 ```python
@@ -86,37 +106,38 @@ from naas_abi_core.services.vector_store.IVectorStorePort import VectorDocument
 adapter = QdrantAdapter(host="localhost", port=6333)
 adapter.initialize()
 
-adapter.create_collection(collection_name="docs", dimension=3, distance_metric="cosine")
+adapter.create_collection("docs", dimension=3, distance_metric="cosine")
 
-docs = [
-    VectorDocument(
-        id="doc-1",
-        vector=np.array([0.1, 0.2, 0.3], dtype=float),
-        metadata={"source": "demo"},
-        payload={"text": "hello"},
-    )
-]
-adapter.store_vectors("docs", docs)
+adapter.store_vectors(
+    "docs",
+    [
+        VectorDocument(
+            id="doc-1",
+            vector=np.array([0.1, 0.2, 0.3], dtype=float),
+            metadata={"source": "demo"},
+            payload={"text": "hello"},
+        )
+    ],
+)
 
-results = adapter.search(
+hits = adapter.search(
     "docs",
     query_vector=np.array([0.1, 0.2, 0.25], dtype=float),
     k=5,
     filter={"source": "demo"},
-    include_vectors=False,
-    include_metadata=True,
 )
-print([(r.id, r.score, r.payload) for r in results])
+print([(h.id, h.score, h.payload) for h in hits])
 
-doc = adapter.get_vector("docs", "doc-1", include_vector=True)
-print(doc.id, doc.metadata, doc.payload, doc.vector)
+page = adapter.list_vectors("docs", limit=10, include_vectors=False)
+print([d.id for d in page.documents], page.next_cursor)
 
 adapter.close()
 ```
 
 ## Caveats
-- Payload handling reserves the `"payload"` key:
+- Reserved payload key: `"payload"`
   - `VectorDocument.payload` is stored under `"payload"`.
-  - All other payload keys are treated as metadata.
-- `search(include_metadata=False)` disables returning any payload/metadata (and thus `SearchResult.payload` will be `None` even if stored).
-- `count_vectors()` uses `indexed_vectors_count`, which may differ from total stored points depending on Qdrant indexing/state.
+  - all other stored payload keys are treated as `metadata` on read.
+- `search(include_metadata=False)` disables payload retrieval; `SearchResult.payload`/`metadata` will be `None` even if stored.
+- `count_vectors()` uses `indexed_vectors_count` (may differ from total points depending on Qdrant state/indexing).
+- When a vector is not returned (e.g., `include_vector=False`), `get_vector()` and `list_vectors()` set `vector` to `np.array([])`.

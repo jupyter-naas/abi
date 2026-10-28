@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { isOrgAdminRole, orgSettingsNavForRole } from './nav';
+import { isOrgAdminRole, orgModulesPath, orgSectionRedirect, orgSettingsNavForRole } from './nav';
+import { orgSettingsRedirect } from './redirects';
 
 describe('org settings nav', () => {
   it('hides admin sections from members', () => {
@@ -8,6 +9,7 @@ describe('org settings nav', () => {
     expect(orgSettingsNavForRole('member').map((item) => item.slug)).toEqual([
       'general',
       'workspaces',
+      'modules',
     ]);
   });
 
@@ -17,10 +19,61 @@ describe('org settings nav', () => {
     );
   });
 
-  it('shows access to admins and owners only', () => {
-    for (const role of ['admin', 'owner']) {
-      expect(orgSettingsNavForRole(role).map((item) => item.slug)).toContain('access');
+  it('shows Roles & permissions to whoever holds an iam: action there, whatever their role', () => {
+    for (const role of ['owner', 'admin', 'member', null]) {
+      expect(orgSettingsNavForRole(role).map((item) => item.slug)).not.toContain('roles');
+      expect(orgSettingsNavForRole(role, { holdsIam: true }).map((item) => item.slug)).toContain('roles');
     }
-    expect(orgSettingsNavForRole('member').map((item) => item.slug)).not.toContain('access');
+    expect(orgSettingsNavForRole('owner', { holdsIam: true }).map((item) => item.slug)).not.toContain('access');
+  });
+
+  it('shows branding to admins and hides domains, servers, services, and billing', () => {
+    expect(orgSettingsNavForRole('owner', { holdsIam: true }).map((item) => item.slug)).toEqual([
+      'general',
+      'branding',
+      'workspaces',
+      'modules',
+      'users',
+      'roles',
+    ]);
+    expect(orgSettingsNavForRole('admin').map((item) => item.slug)).not.toContain(
+      'secrets'
+    );
+  });
+});
+
+describe('orgSectionRedirect', () => {
+  it('waits for the access read before sending a member off Roles & permissions', () => {
+    // The org was read first (role known), /access is still in flight.
+    expect(orgSectionRedirect({ section: 'roles', role: 'member', holdsIam: false, accessSettled: false })).toBeNull();
+    // It answers: a delegated IAM admin stays, anyone else goes to General.
+    expect(orgSectionRedirect({ section: 'roles', role: 'member', holdsIam: true, accessSettled: true })).toBeNull();
+    expect(orgSectionRedirect({ section: 'roles', role: 'member', holdsIam: false, accessSettled: true })).toBe('general');
+  });
+
+  it('decides admin-only sections by role alone, and nothing before the role is known', () => {
+    expect(orgSectionRedirect({ section: 'users', role: 'member', holdsIam: false, accessSettled: false })).toBe('general');
+    expect(orgSectionRedirect({ section: 'users', role: 'admin', holdsIam: false, accessSettled: false })).toBeNull();
+    expect(orgSectionRedirect({ section: 'roles', role: null, holdsIam: false, accessSettled: true })).toBeNull();
+    expect(orgSectionRedirect({ section: 'general', role: 'member', holdsIam: false, accessSettled: true })).toBeNull();
+  });
+});
+
+describe('orgSettingsRedirect', () => {
+  it('sends the old Access section to Roles & permissions, with its query', () => {
+    expect(orgSettingsRedirect('/organizations/org-1/settings/access')).toBe('/organizations/org-1/settings/roles');
+    expect(orgSettingsRedirect('/organizations/org-1/settings/access/x', '?a=1')).toBe(
+      '/organizations/org-1/settings/roles?a=1'
+    );
+    expect(orgSettingsRedirect('/organizations/org-1/settings/roles')).toBeNull();
+    expect(orgSettingsRedirect('/organizations/org-1/settings/users')).toBeNull();
+    expect(orgSettingsRedirect('/organizations/org-1/settings/constructor')).toBeNull();
+  });
+});
+
+describe('orgModulesPath', () => {
+  it('opens Modules & features, at a workspace when given', () => {
+    expect(orgModulesPath('org-1')).toBe('/organizations/org-1/settings/modules');
+    expect(orgModulesPath('org-1', 'ws 1')).toBe('/organizations/org-1/settings/modules?workspace=ws%201');
   });
 });

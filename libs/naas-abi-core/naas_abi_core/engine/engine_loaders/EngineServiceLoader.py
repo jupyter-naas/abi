@@ -109,7 +109,7 @@ class EngineServiceLoader:
         self, module_dependencies: dict[str, ModuleDependencies]
     ) -> dict[str, str]:
         """Of the services this engine will load, those whose data stays on this
-        host, and where (docs/adr/20261006_single-serving-engine.md)."""
+        host, and where."""
         services_to_load = self._services_to_load(module_dependencies)
         owned = [
             name
@@ -162,7 +162,7 @@ class EngineServiceLoader:
         )
         services = IEngine.Services(
             iam=iam,
-            # The OIDC providers the engine trusts (RFC §12.1): users are IAM's.
+            # The OIDC providers the engine trusts: users are IAM's.
             identity=self.__configuration.identity.load(iam),
             document=self.__configuration.services.document.load()
             if self._should_load_service(DocumentService, services_to_load)
@@ -216,7 +216,7 @@ class EngineServiceLoader:
 
     @staticmethod
     def _wire_identity_exchange(services: IEngine.Services) -> None:
-        """IAM exchanges an identity provider's token for a session (RFC §9.4):
+        """IAM exchanges an identity provider's token for a session:
         hand it the identity service, which it holds no reference to."""
         from naas_abi_core.services.iam.IAMService import IAMService
         from naas_abi_core.services.identity.token_authenticator import (

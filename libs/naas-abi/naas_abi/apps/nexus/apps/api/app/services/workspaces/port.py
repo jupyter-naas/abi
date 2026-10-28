@@ -20,6 +20,10 @@ class WorkspaceRecord:
     background_image_url: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
+    description: str | None = None
+    workspace_group: str | None = None
+    # Saved in Organization Settings > Workspaces; None = config overrides apply.
+    catalog_seed: dict[str, object] | None = None
     platform_drive_enabled: bool = False
     system_drive_enabled: bool = False
     created_at: datetime | None = None
@@ -42,6 +46,9 @@ class WorkspaceCreateInput:
     background_image_url: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
+    description: str | None = None
+    workspace_group: str | None = None
+    catalog_seed: dict[str, object] | None = None
 
 
 @dataclass
@@ -55,6 +62,9 @@ class WorkspaceUpdateInput:
     background_image_url: str | None = None
     sidebar_color: str | None = None
     font_family: str | None = None
+    description: str | None = None
+    workspace_group: str | None = None
+    owner_id: str | None = None
     platform_drive_enabled: bool | None = None
     system_drive_enabled: bool | None = None
 
@@ -76,6 +86,9 @@ class WorkspaceMemberRecord:
     email: str | None = None
     name: str | None = None
     created_at: datetime | None = None
+    # "workspace": explicit membership row. "organization": no row, the role is
+    # inherited from being an owner/admin of the workspace's organization.
+    source: str = "workspace"
 
 
 @dataclass
@@ -159,6 +172,11 @@ class WorkspacePermissionPort(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def rollback(self) -> None:
+        """Discard what this unit of work wrote and has not committed."""
+        raise NotImplementedError
+
+    @abstractmethod
     async def update_workspace(
         self, workspace_id: str, updates: WorkspaceUpdateInput
     ) -> WorkspaceRecord | None:
@@ -193,5 +211,7 @@ class WorkspacePermissionPort(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def set_workspace_logo(self, workspace_id: str, logo_url: str) -> WorkspaceRecord | None:
+    async def set_workspace_logo(
+        self, workspace_id: str, logo_url: str | None
+    ) -> WorkspaceRecord | None:
         raise NotImplementedError

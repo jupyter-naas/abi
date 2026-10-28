@@ -1,4 +1,4 @@
-"""Built-in managed policies (RFC §7), generated from the registered catalogs.
+"""Built-in managed policies, generated from the registered catalogs.
 
 Roles are attached at a scope: "viewer on workspace W" is ``builtin.viewer``
 attached with scope ``abi:<org>:W``. They are cumulative (viewer ⊆ member ⊆
@@ -6,12 +6,12 @@ admin ⊆ owner) and stored with explicit action lists, so ``explain`` shows rea
 statements. IAM regenerates them whenever a catalog changes.
 
 Also here: ``builtin.engine`` and ``builtin.api``, the two first-party service
-accounts, as enumerated statements with a ``sid`` that says what needs each
-(subtask 11, #65). Every caller holds only what its policies allow: no principal
-has implicit full access.
+accounts, as enumerated statements with a ``sid`` that says what needs each.
+Every caller holds only what its policies allow: no principal has implicit
+full access.
 
 ``builtin.module_bootstrap`` is what every module's service account holds,
-approved or not (RFC §8.3): its own discovery record and its own manifest.
+approved or not: its own discovery record and its own manifest.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from dataclasses import dataclass
 
 from naas_abi_core.services.iam.catalog import ActionCatalog, CatalogRegistry, Level
 from naas_abi_core.services.iam.IAMPorts import Policy
+from naas_abi_core.services.iam.module_scopes import SERVICE as MODULE_SCOPES
 from naas_abi_core.services.iam.policy import PolicyDocument, Statement
 
 VIEWER = "builtin.viewer"
@@ -53,6 +54,8 @@ ROLE_LEVELS: dict[str, frozenset[Level]] = {
 }
 # The workspace roles that bring builtin.platform.member; viewer brings .viewer.
 PLATFORM_MEMBER_ROLES = frozenset({MEMBER, ADMIN, OWNER})
+# The roles that hold module scopes (``module_scopes.py``) by themselves.
+MODULE_SCOPE_ROLES = frozenset({ADMIN, OWNER})
 
 # The built-in service accounts and the policy each holds.
 SERVICE_ACCOUNTS: dict[str, str] = {"engine": ENGINE, "api": API, "idp": IDP}
@@ -62,12 +65,17 @@ _FEATURE_TYPE = ("nexus", "feature")
 # Kept from admins: they are the owner's.
 _OWNER_ONLY_ACTIONS = frozenset({"nexus:DeleteWorkspace", "nexus:DeleteOrganization"})
 _ATTACHMENT_TYPE = ("iam", "attachment")
+# IAM administration (policies, groups, attachments at the scope) is the
+# admins' and owners': viewers and members get nothing of the iam catalog.
+_ADMIN_ONLY_SERVICES = frozenset({"iam"})
+# IdP group mappings stay the platform admin's: no role maps a claim.
+_PLATFORM_ONLY_ACTIONS = frozenset({"iam:MapIdpGroup", "iam:UnmapIdpGroup"})
 _MAX_ACTIONS = 100
 
 
 @dataclass(frozen=True)
 class _PlatformRow:
-    """A row of RFC §7 "Platform types": who reaches a platform-level type."""
+    """A row of the platform types table (``AGENTS.md``, "Built-in policies"): who reaches a platform-level type."""
 
     service: str
     resources: tuple[str, ...]
@@ -90,6 +98,11 @@ PLATFORM_TYPES: tuple[_PlatformRow, ...] = (
         member=("InvokeAgent",),
     ),
     _PlatformRow("discovery", ("model/*",), member=("ChatModel",)),
+    # Starting a module's workflow or pipeline (a job of kind ``workflow``, also
+    # named ``workflow/…``), as with invoking its agent: the broker's check for a
+    # member. Which one is the module scope's (``module:RunWorkflow`` /
+    # ``RunPipeline``), which Nexus checks first. A plain job is never a role's.
+    _PlatformRow("discovery", ("workflow/*",), member=("TriggerJob",)),
     _PlatformRow(
         "discovery",
         ("run/${principal.id}/*",),
@@ -165,7 +178,7 @@ PLATFORM_TYPES: tuple[_PlatformRow, ...] = (
 
 def feature_policy_id(key: str) -> str:
     """``builtin.features.<key>``, with ``<key>`` one of ``<role>``,
-    ``<org>.<role>`` or ``<org>.<workspace>.<role>`` (RFC §7 "Features")."""
+    ``<org>.<role>`` or ``<org>.<workspace>.<role>``."""
     return f"{FEATURES_PREFIX}{key}"
 
 
@@ -242,10 +255,16 @@ def _chunks(actions: Sequence[str]) -> list[tuple[str, ...]]:
 def _role_statements(role: str, catalog: ActionCatalog) -> list[Statement]:
     """One statement per (catalog, kind of resource) for ``role``'s levels."""
     levels = ROLE_LEVELS[role]
+    if catalog.service in _ADMIN_ONLY_SERVICES and role in (VIEWER, MEMBER):
+        return []
     placed = [
         t
         for t in catalog.resource_types
-        if t.placement == "placed" and (catalog.service, t.name) != _FEATURE_TYPE
+        if t.placement == "placed"
+        and (catalog.service, t.name) != _FEATURE_TYPE
+        # Zero trust: viewers and members reach a module scope only through a
+        # policy granting it; admins and owners hold every one at their scope.
+        and not (t.module_scope and role not in MODULE_SCOPE_ROLES)
     ]
     groups: dict[bool, tuple[list[str], list[str]]] = {
         False: ([], []),
@@ -265,6 +284,8 @@ def _role_statements(role: str, catalog: ActionCatalog) -> list[Statement]:
             ):
                 continue
             qualified = catalog.qualified(action.name)
+            if qualified in _PLATFORM_ONLY_ACTIONS:
+                continue
             if role != OWNER and action.level == "admin":
                 if (catalog.service, resource_type.name) == _ATTACHMENT_TYPE:
                     continue
@@ -294,7 +315,9 @@ def _role_statements(role: str, catalog: ActionCatalog) -> list[Statement]:
 
 
 def _admin_attachment_statements(registry: CatalogRegistry) -> list[Statement]:
-    """Admins grant and revoke the roles below owner, never owner (RFC §7)."""
+    """Admins grant and revoke the roles below owner, never owner, and the
+    customer policies (``pol_…``) they may attach there: their scope's own, and
+    those of the levels above (IAM refuses a policy owned elsewhere)."""
     if registry.get("iam") is None:
         return []
     return [
@@ -306,7 +329,13 @@ def _admin_attachment_statements(registry: CatalogRegistry) -> list[Statement]:
                 for role in (ADMIN, MEMBER, VIEWER)
             ),
             sid="AdminGrantsRolesBelowOwner",
-        )
+        ),
+        Statement(
+            effect="Allow",
+            actions=("iam:AttachPolicy", "iam:DetachPolicy"),
+            resources=("${scope}:iam:attachment/pol_*/*",),
+            sid="AdminAttachesCustomerPolicies",
+        ),
     ]
 
 
@@ -425,8 +454,7 @@ def _managed(
     )
 
 
-# What the first-party service accounts hold (RFC §7, "Built-in service
-# accounts"): enumerated statements, each with a ``sid`` that says what needs it.
+# What the first-party service accounts hold: enumerated statements, each with a ``sid`` that says what needs it.
 # Neither holds ``*``: a service Nexus or the engine does not use is reached by
 # neither, and the user a Nexus call acts for still bounds every call.
 _API_FOR_USERS = (
@@ -476,7 +504,28 @@ def _everything_of(sid: str, service: str) -> Statement:
     )
 
 
-def api_policy() -> Policy:
+def _module_scope_statements(
+    registry: CatalogRegistry | None, sid: str
+) -> list[Statement]:
+    """Every module scope and every action a module declares (``module_scopes.py``).
+
+    The first-party accounts check them for the user they serve, who bounds the
+    call, and run the engine modules' code that enforces them. Generated from
+    the registry, so a module's catalog joins them when it registers."""
+    if registry is None:
+        return []
+    services = [
+        c.service for c in registry.all() if c.module or c.service == MODULE_SCOPES
+    ]
+    return [
+        Statement(
+            effect="Allow", actions=chunk, resources=("*",), sid=_sid(sid, str(i))
+        )
+        for i, chunk in enumerate(_chunks([f"{s}:*" for s in services]))
+    ]
+
+
+def api_policy(registry: CatalogRegistry | None = None) -> Policy:
     """What Nexus holds as ``api``: its own catalog, the kernel services it calls
     for its users (each user bounds the call), the identity calls of sign-in, and
     the IAM calls that keep memberships, scopes and placements."""
@@ -486,6 +535,7 @@ def api_policy() -> Policy:
             _everything_of(f"ForUsers{name}", service)
             for name, service, _need in _API_FOR_USERS
         ),
+        *_module_scope_statements(registry, "ForUsersModuleScopes"),
         Statement(
             effect="Allow",
             actions=("secret:Get", "secret:Set"),
@@ -521,7 +571,7 @@ def api_policy() -> Policy:
                 "iam:DeletePlacement",
                 "iam:ListPlacements",
                 # The keys Nexus makes for users (links, coding agents, API keys)
-                # and the sessions it ends (#62): the user's side allows them too.
+                # and the sessions it ends: the user's side allows them too.
                 "iam:CreateKey",
                 "iam:ListKeys",
                 "iam:RevokeKey",
@@ -577,7 +627,7 @@ def api_policy() -> Policy:
     )
 
 
-def engine_policy() -> Policy:
+def engine_policy(registry: CatalogRegistry | None = None) -> Policy:
     """What the engine holds: IAM's administration (catalogs, placements, service
     accounts, manifests), and the kernel services it uses to boot, run its
     modules' jobs and schedulers."""
@@ -587,6 +637,7 @@ def engine_policy() -> Policy:
             _everything_of(f"Engine{name}", service)
             for name, service in _ENGINE_SERVICES
         ),
+        *_module_scope_statements(registry, "EngineModuleScopes"),
     ]
     return _managed(
         ENGINE,
@@ -610,10 +661,11 @@ def job_account_name(module_id: str) -> str:
     return f"job/{module_id}"
 
 
-def job_policy() -> Policy:
+def job_policy(registry: CatalogRegistry | None = None) -> Policy:
     """Held by the account of each engine module's jobs (``job/<module_id>``): the
-    kernel services a job works with, and read access to secrets (sealed ones
-    stay the engine's)."""
+    kernel services a job works with, read access to secrets (sealed ones stay
+    the engine's), and the module scopes a run for a user checks (the user
+    bounds them)."""
     statements = [
         *(
             _everything_of(f"Job{name}", service)
@@ -626,6 +678,7 @@ def job_policy() -> Policy:
             resources=("*",),
             sid="JobReadsSecrets",
         ),
+        *_module_scope_statements(registry, "JobModuleScopes"),
     ]
     return _managed(
         JOB,
@@ -636,7 +689,7 @@ def job_policy() -> Policy:
 
 
 def idp_policy() -> Policy:
-    """The built-in IdP's own namespace, secrets and sender (RFC §12.3)."""
+    """The built-in IdP's own namespace, secrets and sender."""
     return _managed(
         IDP,
         "Built-in IdP",
@@ -676,7 +729,7 @@ DELEGATION_SIDS = ("OwnHosted", "OwnRuns")
 
 
 def module_bootstrap_policy() -> Policy:
-    """Held by every module's service account, approved or not (RFC §8.3).
+    """Held by every module's service account, approved or not.
 
     ``${module.project}`` and ``${module.id}`` come from the account's name,
     ``module/<project>/<module_id>``: the module reaches its own discovery
@@ -702,7 +755,7 @@ def module_bootstrap_policy() -> Policy:
             ),
             # ``default``, which the SDK uses when a module names none and
             # which modules share, is a module's only dataset namespace until
-            # #60's manifests. Not ``${principal.id}``: a module named by a
+            # a module's approved manifest names its own. Not ``${principal.id}``: a module named by a
             # plain identifier (dev ``sales``) would own a real namespace other
             # principals use. The catalog's snapshots come with it.
             Statement(
@@ -712,7 +765,7 @@ def module_bootstrap_policy() -> Policy:
                 sid="OwnManifest",
             ),
             # Nexus calls a module's agent, app or model with a delegation that
-            # names the module as the actor and the user it acts for (RFC §9.3):
+            # names the module as the actor and the user it acts for:
             # the call is allowed only if the module's own side allows it too,
             # so a module may serve what it hosts. Never another module's, and
             # nothing a user could not do: the user's policy decides as well.
@@ -802,9 +855,9 @@ def builtin_policies(
                 ),
             ],
         ),
-        engine_policy(),
-        api_policy(),
-        job_policy(),
+        engine_policy(registry),
+        api_policy(registry),
+        job_policy(registry),
         idp_policy(),
         module_bootstrap_policy(),
     ]

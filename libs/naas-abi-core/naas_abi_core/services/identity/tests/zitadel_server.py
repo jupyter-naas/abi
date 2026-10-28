@@ -473,7 +473,7 @@ class ZitadelHarness:
         self.server = server
         self.redirect_uri = redirect_uri
         self.issuer = server.issuer
-        # Ten-minute tokens, as ABI expects of every provider (RFC §9.2).
+        # Ten-minute tokens, as ABI expects of every provider.
         server.api(
             "PUT",
             "/admin/v1/settings/oidc",

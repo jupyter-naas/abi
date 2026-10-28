@@ -21,7 +21,7 @@ async def _nothing() -> AsyncIterator[Any]:
 
 @dataclass
 class QueryStream:
-    """A SPARQL result read as it arrives (docs/adr/20261003_nats-streamed-results.md).
+    """A SPARQL result read as it arrives.
 
     ``rows`` (SELECT: variable name -> rdflib term, unbound variables absent) and
     ``triples`` (CONSTRUCT/DESCRIBE) are single-use async iterators, valid inside
@@ -137,7 +137,7 @@ class TripleStoreService:
             (await self._call("query_view", view=view, query=query)).success
         )
 
-    # Streamed reads over transfer frames (docs/adr/20261003_nats-streamed-results.md).
+    # Streamed reads over transfer frames.
 
     @asynccontextmanager
     async def query_stream(self, query: str) -> AsyncIterator[QueryStream]:
@@ -201,6 +201,26 @@ class TripleStoreService:
             _rdf().URIRef(name)
             for name in (await self._call("list_graphs")).graph_names.graph_names
         ]
+
+    async def load_schema(self, source: str, content: str | bytes) -> bool:
+        """Load Turtle ``content`` into the engine's schema graph under ``source``.
+
+        ``source`` is ``module/<module_id>/<relative path ending in .ttl>``; the engine
+        accepts a module only under its own id (``PERMISSION_DENIED`` otherwise) and
+        refuses content that is not Turtle (``INVALID_ARGUMENT``, nothing written).
+        Returns True when the schema graph was written, False when ``source`` already
+        held this content. Loading is additive: nothing unloads a file later removed.
+        ``run_module`` sends a module's ``ontologies/`` this way; call it directly only
+        for ontologies the module builds at runtime.
+        """
+        response = await self._call(
+            "load_schema",
+            source=source,
+            content_ttl=content.encode("utf-8")
+            if isinstance(content, str)
+            else content,
+        )
+        return response.changed
 
     def subscribe(self, *args, **kwargs):
         raise NotImplementedError(

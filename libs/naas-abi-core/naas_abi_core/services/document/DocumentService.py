@@ -1,4 +1,6 @@
-from collections.abc import Iterable, Iterator, Mapping
+import inspect
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from typing import Any
 
 from naas_abi_core.services.document.DocumentPort import (
     CollectionNotFound,
@@ -26,6 +28,20 @@ from naas_abi_core.services.iam.enforcement import ResourceGuard
 from naas_abi_core.services.ServiceBase import ServiceBase
 
 
+def _max_bytes(find: Callable[..., Any], max_bytes: int | None) -> dict[str, int]:
+    """A byte budget, for an adapter whose ``find`` takes one: an adapter
+    written before the keyword answers unbounded pages, which the NATS primary
+    still sends whole (RPC overflow)."""
+    if max_bytes is None:
+        return {}
+    parameters = inspect.signature(find).parameters
+    if "max_bytes" not in parameters and not any(
+        p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()
+    ):
+        return {}
+    return {"max_bytes": max_bytes}
+
+
 class DocumentService(ServiceBase):
     """Namespace-bound collections. One document is the unit of atomicity.
 
@@ -44,7 +60,7 @@ class DocumentService(ServiceBase):
 
     Wired into an engine, every operation is authorized on
     ``namespace/<ns>``, ``collection/<ns>/<c>`` or ``document/<ns>/<c>/<id>``
-    (RFC §6.4), for whoever calls, in process or over NATS: the namespace a
+    for whoever calls, in process or over NATS: the namespace a
     view is bound to is a name like any other, which the caller's policies
     must cover. A collection the caller may not see is ``CollectionNotFound``,
     a document ``DocumentNotFound``. Namespace administration (``Namespaces``,
@@ -123,7 +139,7 @@ class DocumentService(ServiceBase):
         )
 
     def ensure_collection(self, spec: CollectionSpec) -> None:
-        """Declare a collection; a create (RFC §4.4): a new namespace is
+        """Declare a collection; a create: a new namespace is
         placed in the call's target workspace, or on the platform."""
         namespace = self.namespace
         name = validate_name(spec.name)
@@ -148,7 +164,7 @@ class DocumentService(ServiceBase):
 
     def collections(self) -> list[str]:
         """The namespace's collections the caller may list; none when it may
-        not see the namespace (RFC §5.5)."""
+        not see the namespace."""
         namespace = self.namespace
         try:
             self._guard.require_visible(
@@ -227,7 +243,7 @@ class DocumentService(ServiceBase):
         (see ``IDocumentAdapter.find``); follow ``cursor`` until it is None."""
         where = validate_query(where, order_by, limit)
         validate_max_bytes(max_bytes)
-        # Checked once, on the collection: results are not filtered (RFC §5.5).
+        # Checked once, on the collection: results are not filtered.
         self.__collection("Find", validate_name(collection))
         return self.__adapter.find(
             self.namespace,
@@ -236,7 +252,7 @@ class DocumentService(ServiceBase):
             order_by,
             limit,
             cursor,
-            max_bytes=max_bytes,
+            **_max_bytes(self.__adapter.find, max_bytes),
         )
 
     def iterate(
@@ -263,7 +279,7 @@ class DocumentService(ServiceBase):
                 order_by,
                 batch,
                 cursor,
-                max_bytes=max_bytes,
+                **_max_bytes(self.__adapter.find, max_bytes),
             )
             yield from page.items
             cursor = page.cursor

@@ -1,5 +1,4 @@
-"""Stored events on the wire, and the frames of a streamed ``query``
-(docs/adr/20261003_nats-streamed-results.md).
+"""Stored events on the wire, and the frames of a streamed ``query``.
 
 Shared by the NATS primary and client; no new protobuf messages: each frame
 is a ``StoredEvents`` batch of about ``FRAME_BYTES``.

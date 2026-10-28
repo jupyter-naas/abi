@@ -20,19 +20,21 @@ class AgentDescriptor(_message.Message):
     def __init__(self, name: _Optional[str] = ..., description: _Optional[str] = ..., contract_major: _Optional[int] = ..., capabilities: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class JobTrigger(_message.Message):
-    __slots__ = ("kind", "spec", "time_zone", "filter")
+    __slots__ = ("kind", "spec", "time_zone", "filter", "input")
     KIND_FIELD_NUMBER: _ClassVar[int]
     SPEC_FIELD_NUMBER: _ClassVar[int]
     TIME_ZONE_FIELD_NUMBER: _ClassVar[int]
     FILTER_FIELD_NUMBER: _ClassVar[int]
+    INPUT_FIELD_NUMBER: _ClassVar[int]
     kind: str
     spec: str
     time_zone: str
     filter: str
-    def __init__(self, kind: _Optional[str] = ..., spec: _Optional[str] = ..., time_zone: _Optional[str] = ..., filter: _Optional[str] = ...) -> None: ...
+    input: str
+    def __init__(self, kind: _Optional[str] = ..., spec: _Optional[str] = ..., time_zone: _Optional[str] = ..., filter: _Optional[str] = ..., input: _Optional[str] = ...) -> None: ...
 
 class JobDescriptor(_message.Message):
-    __slots__ = ("name", "description", "contract_major", "triggers", "max_concurrency", "max_attempts", "timeout_seconds")
+    __slots__ = ("name", "description", "contract_major", "triggers", "max_concurrency", "max_attempts", "timeout_seconds", "kind", "input_schema", "output_schema")
     NAME_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     CONTRACT_MAJOR_FIELD_NUMBER: _ClassVar[int]
@@ -40,6 +42,9 @@ class JobDescriptor(_message.Message):
     MAX_CONCURRENCY_FIELD_NUMBER: _ClassVar[int]
     MAX_ATTEMPTS_FIELD_NUMBER: _ClassVar[int]
     TIMEOUT_SECONDS_FIELD_NUMBER: _ClassVar[int]
+    KIND_FIELD_NUMBER: _ClassVar[int]
+    INPUT_SCHEMA_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_SCHEMA_FIELD_NUMBER: _ClassVar[int]
     name: str
     description: str
     contract_major: int
@@ -47,7 +52,10 @@ class JobDescriptor(_message.Message):
     max_concurrency: int
     max_attempts: int
     timeout_seconds: float
-    def __init__(self, name: _Optional[str] = ..., description: _Optional[str] = ..., contract_major: _Optional[int] = ..., triggers: _Optional[_Iterable[_Union[JobTrigger, _Mapping]]] = ..., max_concurrency: _Optional[int] = ..., max_attempts: _Optional[int] = ..., timeout_seconds: _Optional[float] = ...) -> None: ...
+    kind: str
+    input_schema: str
+    output_schema: str
+    def __init__(self, name: _Optional[str] = ..., description: _Optional[str] = ..., contract_major: _Optional[int] = ..., triggers: _Optional[_Iterable[_Union[JobTrigger, _Mapping]]] = ..., max_concurrency: _Optional[int] = ..., max_attempts: _Optional[int] = ..., timeout_seconds: _Optional[float] = ..., kind: _Optional[str] = ..., input_schema: _Optional[str] = ..., output_schema: _Optional[str] = ...) -> None: ...
 
 class Dependency(_message.Message):
     __slots__ = ("module_id", "contract_major")

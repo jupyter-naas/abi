@@ -1,45 +1,48 @@
 # ModuleOrchestrationLoader
 
 ## What it is
-- A utility loader that discovers and imports `Orchestrations` subclasses located in an `orchestrations/` package next to a given module’s root.
-- Intended to dynamically register orchestration classes for a module based on filesystem contents.
+- A loader that discovers and imports orchestration classes from an `orchestrations/` folder located at the root of the package containing a given class.
+- Returns orchestration classes that subclass `naas_abi_core.orchestrations.Orchestrations.Orchestrations`.
 
 ## Public API
 - `class ModuleOrchestrationLoader`
-  - `@classmethod load_orchestrations(class_: type) -> List[type[Orchestrations]]`
-    - Scans `<module_root>/orchestrations` for Python files (excluding `*test.py`), imports them, and returns a list of classes that:
-      - are subclasses of `naas_abi_core.orchestrations.Orchestrations.Orchestrations`
-      - belong to the same top-level package as `class_`
-      - define a `New` attribute (expected to be a method)
+  - `@classmethod load_orchestrations(class_: type) -> list[type[Orchestrations]]`
+    - Locates `<module_root>/orchestrations`.
+    - Imports each `*.py` file in that folder (excluding files ending with `test.py`).
+    - Collects classes from those modules that:
+      - are `type` objects
+      - are subclasses of `Orchestrations`
+      - have the same top-level package as `class_` (`value.__module__.split(".")[0] == class_.__module__.split(".")[0]`)
+      - define a `New` attribute (otherwise logs an error and skips)
+    - If an import fails with `ModuleNotFoundError` tied to a recognized “legacy extra”, the module is skipped and later reported via `logger.info`.
+    - Returns the list of collected orchestration classes.
 
 ## Configuration/Dependencies
 - Depends on:
-  - `naas_abi_core.module.ModuleUtils.find_class_module_root_path` to locate the module root directory for `class_`
-  - `naas_abi_core.orchestrations.Orchestrations.Orchestrations` as the base class filter
-  - `naas_abi_core.utils.Logger.logger` for debug/error logging
-- Filesystem conventions:
-  - Orchestrations must live in a folder named `orchestrations` under the module root.
-  - Each orchestration module must be importable as:  
-    `f"{class_.__module__}.orchestrations.<filename_without_py>"`
+  - `naas_abi_core.module.ModuleUtils.find_class_module_root_path` (to find the root path for `class_`)
+  - `naas_abi_core.module.ModuleUtils.module_package` (to build the import path)
+  - `naas_abi_core.orchestrations.Orchestrations.Orchestrations` (base class filter)
+  - `naas_abi_core.utils.LegacyExtras.legacy_extra_of`, `install_hint`, `LEGACY_NOTICE` (for handling missing optional/legacy extras)
+  - `naas_abi_core.utils.Logger.logger` (debug/info/error logging)
+- Filesystem/import convention:
+  - Orchestrations must live under `<module_root>/orchestrations/`.
+  - Each file is imported as: `f"{module_package(class_)}.orchestrations.<module_name>"`.
 
 ## Usage
-Minimal example (assuming your package layout includes `my_pkg/orchestrations/*.py`):
-
 ```python
 from naas_abi_core.module.ModuleOrchestrationLoader import ModuleOrchestrationLoader
-
-# Any class defined under your module/package
 from my_pkg.some_module import SomeClass
 
-orchestration_classes = ModuleOrchestrationLoader.load_orchestrations(SomeClass)
+orch_classes = ModuleOrchestrationLoader.load_orchestrations(SomeClass)
 
-for orch_cls in orchestration_classes:
-    # The loader requires a `New` attribute to exist on each class
+for orch_cls in orch_classes:
+    # Loader requires orchestrations to expose a "New" attribute (typically a constructor/factory).
     orch = orch_cls.New()
 ```
 
 ## Caveats
-- Only `.py` files are loaded; files ending with `test.py` are skipped.
-- Only classes whose top-level package matches `class_.__module__.split(".")[0]` are included.
-- Classes missing a `New` attribute are skipped and an error is logged.
-- If `orchestrations/` does not exist, an empty list is returned.
+- Only `.py` files are considered; files ending with `test.py` are ignored.
+- Only orchestrations from the same top-level package as the provided `class_` are loaded.
+- Classes missing a `New` attribute are skipped (an error is logged).
+- If `orchestrations/` does not exist, returns an empty list.
+- Some orchestration modules may be skipped if they require an uninstalled “legacy extra”; these are reported via an info log rather than raising.

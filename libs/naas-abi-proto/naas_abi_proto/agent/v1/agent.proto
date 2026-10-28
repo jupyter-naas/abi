@@ -1,7 +1,15 @@
 syntax = "proto3";
 package abi.agent.v1;
 import "naas_abi_proto/common/v1/common.proto";
-message AgentEvent { uint64 sequence = 1; string event = 2; string data = 3; uint32 parts = 4; }
+message AgentEvent {
+  uint64 sequence = 1;
+  string event = 2;
+  string data = 3;
+  uint32 parts = 4;
+  // False on a tool_response whose tool opted out of chat sources
+  // (metadata {"chat_source": false}); unset otherwise.
+  optional bool chat_source = 5;
+}
 message Invocation {
   string invocation_id = 1;
   string thread_id = 2;
@@ -27,7 +35,7 @@ message SubmitRequest {
   // there, so the submitter need not poll Status. Empty: no updates.
   string updates_inbox = 8;
   // The delegation for the run's own calls: an abi:delegated:agent token naming
-  // this agent's module as the actor and the user the run is for (RFC §9.4).
+  // this agent's module as the actor and the user the run is for.
   // The host uses it, in place of its own token, for the kernel calls the run
   // makes for that user, and drops it unless it names the run's owner. Never
   // stored. Empty: the run calls as the module itself.

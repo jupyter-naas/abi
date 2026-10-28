@@ -90,6 +90,9 @@ def _install_fakes(monkeypatch: pytest.MonkeyPatch, capture: _Capture) -> None:
         async def build_abi_injection_preamble(self, **_kwargs) -> None:
             return None
 
+        async def get_conversation_for_user(self, **_kwargs):
+            return None
+
         async def create_streaming_message_pair(self, **_kwargs):
             return None, "assistant-msg-1"
 

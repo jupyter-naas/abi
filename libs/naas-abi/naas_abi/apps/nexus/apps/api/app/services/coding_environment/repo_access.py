@@ -1,6 +1,6 @@
 """Which repositories and environments a Nexus workspace owns, and who may use them.
 
-A repository id from a request is never trusted on its own (bug (b) of #44):
+A repository id from a request is never trusted on its own (a repo id a client names):
 
 * it must belong to the request's workspace: IAM places it there (repositories
   created through Nexus are placed in their workspace), or it is the
@@ -151,7 +151,7 @@ def place_created_repo(
 ) -> None:
     """Make sure a repository this request just created (``create_repo``, in the
     workspace's call context) is placed in its workspace, with its branches and
-    proposals (RFC §4.4).
+    proposals.
 
     The kernel's create rule places it when IAM knows the workspace. When it
     could not, the repository sits on the platform and is placed here, as
@@ -196,7 +196,7 @@ async def workspace_repositories(db: AsyncSession) -> list[Placement]:
     """The repositories Nexus recorded for a workspace (its default repository,
     the repository of each of its environments) that nothing places yet.
 
-    A recorded repository id was once a client's word (bug (b)), so only a
+    A recorded repository id was once a client's word, so only a
     repository claimed by exactly one workspace and still on the platform is
     placed; one claimed by several is left alone and logged. The deployment's
     shared repository belongs to no workspace.

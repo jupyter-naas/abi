@@ -1,11 +1,11 @@
 // NATS-RPC contract for the triple_store kernel domain.
 // Mirrors naas_abi_core/services/triple_store/TripleStorePorts.py::ITripleStorePort 1:1 --
 // the adapter-level secondary port (11 methods). It deliberately does NOT cover the richer
-// ITripleStoreService (subscribe/load_schema/get_schema_graph): those are domain-only,
-// never crossed by a secondary adapter, and stay 100% local.
-// See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md.
+// ITripleStoreService (subscribe/get_schema_graph): those are domain-only, never crossed by a
+// secondary adapter, and stay 100% local. The one exception is load_schema below, which takes
+// the schema's content (not a file path of the engine) so a remote module can send its ontology.
 //
-// Wire-encoding decisions, deliberate, do not relitigate without re-reading the RFC:
+// Wire-encoding decisions, deliberate, change them only with the clients in mind:
 //
 //  * Graph <-> bytes: N-Triples specifically (`graph.serialize(format="nt",
 //    encoding="utf-8")` / `Graph().parse(data=..., format="nt")`) -- unambiguous, no
@@ -37,7 +37,7 @@
 //    alongside `abi.common.v1.CallError` on every response that can raise it, so a client
 //    reconstructs the exact exception rather than losing those fields into free text.
 //
-// Subjects (see "Protobuf contract shapes" in the RFC):
+// Subjects:
 //   abi.svc.triple_store.v1.insert
 //   abi.svc.triple_store.v1.remove
 //   abi.svc.triple_store.v1.get
@@ -49,6 +49,7 @@
 //   abi.svc.triple_store.v1.clear_graph
 //   abi.svc.triple_store.v1.drop_graph
 //   abi.svc.triple_store.v1.list_graphs
+//   abi.svc.triple_store.v1.load_schema
 syntax = "proto3";
 
 package abi.triple_store.v1;
@@ -227,4 +228,24 @@ message ListGraphsResponse {
 }
 message GraphNames {
   repeated string graph_names = 1;
+}
+
+// Loads one Turtle file into the engine's schema graph (TripleStoreService.load_schema_content),
+// for an ontology that is not a file of the engine: a remote module's.
+//
+// `source` is the key the schema is stored under (internal:filePath):
+// `module/<module_id>/<relative path ending in .ttl>`, no `..`, bounded length. The engine
+// authorizes the caller on that source with IAM (triple_store's catalog: a module's manifest
+// covers its own sources) and refuses the call with PERMISSION_DENIED otherwise.
+// `content_ttl` is the file's text (UTF-8 Turtle), which travels through RPC overflow when above
+// the broker limit. Invalid Turtle is INVALID_ARGUMENT and writes nothing.
+message LoadSchemaRequest {
+  abi.common.v1.CallContext context = 1;
+  string source = 2;
+  bytes content_ttl = 3;
+}
+// `changed`: the schema graph was written (false: `source` already held this content).
+message LoadSchemaResponse {
+  optional abi.common.v1.CallError error = 1;
+  bool changed = 2;
 }

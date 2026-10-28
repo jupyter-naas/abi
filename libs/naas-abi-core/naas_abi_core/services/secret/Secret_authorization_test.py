@@ -1,4 +1,4 @@
-"""The secret service passes the authorization contract (RFC §6.4, "secret")."""
+"""The secret service passes the authorization contract."""
 
 from __future__ import annotations
 

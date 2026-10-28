@@ -2,9 +2,9 @@
 
 A module of this package exports ``TYPES`` (its resource types) and ``ACTIONS``
 (its actions), built with ``rtype`` and ``action``. ``__init__`` aggregates them
-into the ``nexus`` catalog (RFC §6.5), registered with IAM at startup.
+into the ``nexus`` catalog, registered with IAM at startup.
 
-Level is what the built-in roles are generated from (RFC §7):
+Level is what the built-in roles are generated from:
 
 * ``list`` and ``read``: viewers and up. A viewer reads everything it may see;
 * ``write``: members and up. Every state change is at least ``write``;
@@ -12,7 +12,7 @@ Level is what the built-in roles are generated from (RFC §7):
   ``naas_abi_core.services.iam.roles``).
 
 ``feature`` is the ``FeatureKey`` whose ``UseFeature`` the action also needs
-(RFC §6.5, "features"), checked first by ``authz``.
+(see "Roles, features and platform types" in ``services/iam/AGENTS.md``), checked first by ``authz``.
 """
 
 from __future__ import annotations

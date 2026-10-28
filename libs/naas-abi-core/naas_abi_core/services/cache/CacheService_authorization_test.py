@@ -1,4 +1,4 @@
-"""The cache service passes the authorization contract (RFC §6.4, "cache")."""
+"""The cache service passes the authorization contract."""
 
 from __future__ import annotations
 
@@ -62,7 +62,12 @@ class TestCacheAuthorization(DataServiceContract):
 
     def build_remote(self, url, identity):
         return CacheService(
-            [("cold", CacheSecondaryAdapterNATSClient(url, TEST_TOKENS.source(identity)))]
+            [
+                (
+                    "cold",
+                    CacheSecondaryAdapterNATSClient(url, TEST_TOKENS.source(identity)),
+                )
+            ]
         )
 
     def close_remote(self, remote):

@@ -20,7 +20,8 @@ from naas_abi_core.services.document.DocumentService import DocumentService
 
 
 @pytest.fixture(autouse=True)
-def _unbound():
+def _unbound(monkeypatch):
+    monkeypatch.delenv("POSTGRES_URL", raising=False)
     set_default_agent_checkpointer(None)
     yield
     set_default_agent_checkpointer(None)
@@ -67,6 +68,16 @@ def test_an_engine_without_documents_keeps_the_standalone_fallback(
 ):
     set_default_agent_checkpointer(object())  # type: ignore[arg-type]
     loaded = engine(tmp_path, monkeypatch, [])
+    loaded.load()
+    assert get_default_agent_checkpointer() is None
+    loaded.shutdown()
+
+
+def test_without_nats_postgres_url_keeps_the_2x_memory(tmp_path, monkeypatch):
+    # A 2.x deploy's conversations stay in POSTGRES_URL until the NATS
+    # migration copies them (https://docs.naas.ai/user-guide/upgrade/migrate-to-3).
+    monkeypatch.setenv("POSTGRES_URL", "postgresql://abi@127.0.0.1:1/abi")
+    loaded = engine(tmp_path, monkeypatch, [DocumentService])
     loaded.load()
     assert get_default_agent_checkpointer() is None
     loaded.shutdown()

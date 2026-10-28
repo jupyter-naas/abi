@@ -25,6 +25,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     Decision,
     Explanation,
     FilterResult,
+    GrantableCatalog,
     GroupMapping,
     IdpBinding,
     IIAMService,
@@ -40,6 +41,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalKind,
     PrincipalRecord,
     ScopeRecord,
+    ScopeSet,
     TokenExchange,
 )
 from naas_abi_core.services.iam.policy import PolicyDocument
@@ -75,6 +77,23 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
         response = self._request("authorize", action=action, resource=resource)
         return codec.decision_from_pb(response.decision)
 
+    def authorize_declared(
+        self,
+        action: str,
+        resource_type: str,
+        parts: Sequence[str],
+        *,
+        workspace: str | None = None,
+    ) -> tuple[Decision, str]:
+        response = self._request(
+            "authorize_declared",
+            action=action,
+            resource_type=resource_type,
+            parts=list(parts),
+            workspace_id=workspace or "",
+        )
+        return codec.decision_from_pb(response.decision), response.resource
+
     def filter(self, action: str, resources: Iterable[str]) -> FilterResult:
         response = self._request("filter", action=action, resources=list(resources))
         return FilterResult(list(response.allowed), list(response.prefix_hints))
@@ -86,6 +105,10 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
             "explain", action=action, resource=resource, principal_id=principal_id
         )
         return codec.explanation_from_pb(response.explanation)
+
+    def grantable(self, scope: str) -> list[GrantableCatalog]:
+        response = self._request("grantable", scope=scope)
+        return [codec.grantable_from_pb(c) for c in response.catalogs]
 
     # -- principals ---------------------------------------------------------------------
 
@@ -147,9 +170,11 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
 
     # -- groups -------------------------------------------------------------------------
 
-    def create_group(self, name: str, *, org: str | None = None) -> PrincipalRecord:
+    def create_group(
+        self, name: str, *, org: str | None = None, scope: str | None = None
+    ) -> PrincipalRecord:
         return codec.principal_from_pb(
-            self._request("create_group", name=name, org=org).group
+            self._request("create_group", name=name, org=org, scope=scope).group
         )
 
     def get_group(self, group_id: str) -> PrincipalRecord:
@@ -157,8 +182,10 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
             self._request("get_group", group_id=group_id).group
         )
 
-    def list_groups(self, *, limit: int = 100, after: str | None = None) -> Page:
-        response = self._request("list_groups", limit=limit, after=after)
+    def list_groups(
+        self, *, limit: int = 100, after: str | None = None, scope: str | None = None
+    ) -> Page:
+        response = self._request("list_groups", limit=limit, after=after, scope=scope)
         return Page(
             [codec.principal_from_pb(g) for g in response.groups],
             response.next_after if response.HasField("next_after") else None,
@@ -206,13 +233,19 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
     # -- policies and attachments -----------------------------------------------------
 
     def create_policy(
-        self, name: str, document: Any, *, description: str = ""
+        self,
+        name: str,
+        document: Any,
+        *,
+        description: str = "",
+        scope: str | None = None,
     ) -> Policy:
         response = self._request(
             "create_policy",
             name=name,
             document_json=_document_text(document),
             description=description,
+            scope=scope,
         )
         return codec.policy_from_pb(response.policy)
 
@@ -221,8 +254,10 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
             self._request("get_policy", policy_id=policy_id).policy
         )
 
-    def list_policies(self, *, limit: int = 100, after: str | None = None) -> Page:
-        response = self._request("list_policies", limit=limit, after=after)
+    def list_policies(
+        self, *, limit: int = 100, after: str | None = None, scope: str | None = None
+    ) -> Page:
+        response = self._request("list_policies", limit=limit, after=after, scope=scope)
         return Page(
             [codec.policy_from_pb(p) for p in response.policies],
             response.next_after if response.HasField("next_after") else None,
@@ -373,6 +408,37 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
 
     def delete_scope(self, org: str, workspace: str = "-") -> bool:
         return self._request("delete_scope", org=org, workspace=workspace).deleted
+
+    def get_set(self, org: str, workspace: str = "-") -> ScopeSet:
+        response = self._request("get_set", org=org, workspace=workspace)
+        return codec.scope_set_from_pb(response.scope_set)
+
+    def effective_set(self, org: str, workspace: str = "-") -> ScopeSet:
+        response = self._request("effective_set", org=org, workspace=workspace)
+        return codec.scope_set_from_pb(response.scope_set)
+
+    def list_sets(self, org: str | None = None) -> list[ScopeSet]:
+        response = self._request("list_sets", org=org)
+        return [codec.scope_set_from_pb(s) for s in response.sets]
+
+    def put_set(
+        self,
+        org: str,
+        workspace: str = "-",
+        *,
+        modules: Iterable[str] | None = None,
+        features: Iterable[str] | None = None,
+    ) -> ScopeSet:
+        response = self._request(
+            "put_set",
+            org=org,
+            workspace=workspace,
+            modules=codec.set_items_to_pb(None if modules is None else list(modules)),
+            features=codec.set_items_to_pb(
+                None if features is None else list(features)
+            ),
+        )
+        return codec.scope_set_from_pb(response.scope_set)
 
     def register_catalog(self, catalog: Any) -> bool:
         if not isinstance(catalog, ActionCatalog):

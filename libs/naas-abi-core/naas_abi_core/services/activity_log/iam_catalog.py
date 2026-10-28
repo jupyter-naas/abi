@@ -1,4 +1,4 @@
-"""The ``activity_log`` action catalog (RFC §6.4, "activity_log").
+"""The ``activity_log`` action catalog.
 
 An actor's log is a personal resource: ``actor/<principal id>``. The actor of a
 recorded event is the call's user (or, for no user, the calling service
@@ -13,7 +13,7 @@ from naas_abi_core.services.iam.catalog import ActionCatalog, ActionSpec, Resour
 SERVICE = "activity_log"
 SUBJECT_PREFIX = "abi.svc.activity_log.v1"
 
-# A streamed query's transfer subjects (docs/adr/20261003_nats-streamed-results.md).
+# A streamed query's transfer subjects.
 STREAM = tuple(
     f"{SUBJECT_PREFIX}.transfer.{operation}"
     for operation in ("open", "*.write", "*.start", "*.read", "*.close")

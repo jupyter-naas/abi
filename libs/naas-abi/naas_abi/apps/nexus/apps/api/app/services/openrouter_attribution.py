@@ -12,11 +12,7 @@ from naas_abi.apps.nexus.apps.api.app.core.config import settings
 
 def openrouter_attribution_headers() -> dict[str, str]:
     referer = (settings.frontend_url or "").strip().rstrip("/") or "http://localhost:3000"
-    title = (
-        (settings.email_app_name or "").strip()
-        or (settings.app_name or "").strip()
-        or "Nexus"
-    )
+    title = (settings.email_app_name or "").strip() or (settings.app_name or "").strip() or "Nexus"
     return {
         "HTTP-Referer": referer,
         "X-Title": title,

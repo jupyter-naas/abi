@@ -1,4 +1,4 @@
-"""The key a coding environment's agent holds (RFC §9.3, bug (a))."""
+"""The key a coding environment's agent holds."""
 
 from __future__ import annotations
 
@@ -59,9 +59,7 @@ def test_the_key_is_a_personal_key_for_the_coding_audience_bound_to_the_sidecar(
 
 
 def test_it_is_narrowed_to_the_environments_workspace_and_the_platforms_models(iam, ada):
-    agent_credentials.mint_agent_key(
-        user_id=ada.id, workspace_id="ws-1", sidecar_base=SIDECAR
-    )
+    agent_credentials.mint_agent_key(user_id=ada.id, workspace_id="ws-1", sidecar_base=SIDECAR)
     [record] = iam.store.list_keys(ada.id)
     [statement] = record.scope
     assert statement["effect"] == "Allow" and statement["actions"] == ["*"]
@@ -83,13 +81,9 @@ def test_a_workspace_iam_does_not_know_gets_the_platforms_models_only(iam, ada):
     ]
 
 
-def test_it_lives_as_long_as_the_configuration_says_and_never_past_a_year(
-    iam, ada, monkeypatch
-):
+def test_it_lives_as_long_as_the_configuration_says_and_never_past_a_year(iam, ada, monkeypatch):
     monkeypatch.setattr(settings, "coding_agent_token_days", 30)
-    agent_credentials.mint_agent_key(
-        user_id=ada.id, workspace_id="ws-1", sidecar_base=SIDECAR
-    )
+    agent_credentials.mint_agent_key(user_id=ada.id, workspace_id="ws-1", sidecar_base=SIDECAR)
     monkeypatch.setattr(settings, "coding_agent_token_days", 5000)
     agent_credentials.mint_agent_key(
         user_id=ada.id, workspace_id="ws-1", sidecar_base="http://coder-ada-other:8378"
@@ -136,9 +130,7 @@ def test_a_deletion_never_fails_for_a_key(ada, monkeypatch):
 
 
 def test_an_environment_with_no_sidecar_still_gets_a_key_that_names_no_sidecar(iam, ada):
-    value = agent_credentials.mint_agent_key(
-        user_id=ada.id, workspace_id="ws-1", sidecar_base=None
-    )
+    value = agent_credentials.mint_agent_key(user_id=ada.id, workspace_id="ws-1", sidecar_base=None)
     found = credential(value)
     assert found is not None and found.resource == f"coding/{ada.id}"
 
@@ -147,9 +139,7 @@ def test_without_the_engine_there_is_no_key():
     previous = credentials.configure_iam(lambda: None)
     try:
         with pytest.raises(agent_credentials.AgentCredentialsUnavailable):
-            agent_credentials.mint_agent_key(
-                user_id="u", workspace_id="ws", sidecar_base=SIDECAR
-            )
+            agent_credentials.mint_agent_key(user_id="u", workspace_id="ws", sidecar_base=SIDECAR)
     finally:
         credentials.configure_iam(previous)
 

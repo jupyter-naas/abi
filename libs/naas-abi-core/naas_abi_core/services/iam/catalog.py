@@ -1,4 +1,4 @@
-"""Action catalogs: what each service lets a policy name (RFC §6).
+"""Action catalogs: what each service lets a policy name.
 
 Every service declares one next to its domain code (``iam_catalog.py`` in core,
 ``iam_catalog.yaml`` in a module package) and registers it while it loads.
@@ -41,6 +41,10 @@ class ResourceType:
     container: bool = False
     personal: bool = False
     description: str = ""
+    # A module scope: what a module exposes (its agents, apps, workflows,
+    # pipelines and the actions it declares). The built-in viewer and member
+    # roles never reach one (``roles.py``); admins and owners hold them all.
+    module_scope: bool = False
 
 
 @dataclass(frozen=True)
@@ -59,6 +63,9 @@ class ActionCatalog:
     version: int
     resource_types: tuple[ResourceType, ...] = ()
     actions: tuple[ActionSpec, ...] = ()
+    # The module that declared this catalog (``module_scopes.py``), empty for
+    # a kernel service's and Nexus's: a module's catalog is its own alone.
+    module: str = ""
 
     def __post_init__(self) -> None:
         errors = _catalog_errors(self)
@@ -75,7 +82,7 @@ class ActionCatalog:
         return next((a for a in self.actions if a.name == name), None)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        found: dict[str, Any] = {
             "service": self.service,
             "version": self.version,
             "resource_types": [
@@ -86,6 +93,7 @@ class ActionCatalog:
                     "container": t.container,
                     "personal": t.personal,
                     "description": t.description,
+                    **({"module_scope": True} if t.module_scope else {}),
                 }
                 for t in self.resource_types
             ],
@@ -101,10 +109,13 @@ class ActionCatalog:
                 for a in self.actions
             ],
         }
+        if self.module:
+            found["module"] = self.module
+        return found
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> ActionCatalog:
-        """The catalog format of RFC §6.2, as loaded from YAML or JSON."""
+        """The catalog format (``AGENTS.md``, "Action catalogs"), as loaded from YAML or JSON."""
         try:
             return cls(
                 service=str(data["service"]),
@@ -117,6 +128,7 @@ class ActionCatalog:
                         container=bool(t.get("container", False)),
                         personal=bool(t.get("personal", False)),
                         description=str(t.get("description", "")),
+                        module_scope=bool(t.get("module_scope", False)),
                     )
                     for t in data.get("resource_types", ())
                 ),
@@ -131,6 +143,7 @@ class ActionCatalog:
                     )
                     for a in data.get("actions", ())
                 ),
+                module=str(data.get("module", "") or ""),
             )
         except (KeyError, TypeError) as exc:
             raise CatalogError(f"Malformed catalog: {exc!r}") from exc
@@ -153,6 +166,11 @@ def _catalog_errors(catalog: ActionCatalog) -> list[str]:
         if t.placement not in _PLACEMENTS:
             errors.append(
                 f"resource type {t.name}: placement must be one of {_PLACEMENTS}"
+            )
+        if t.module_scope and (t.placement != "placed" or t.personal or t.container):
+            errors.append(
+                f"resource type {t.name}: a module scope is placed in a workspace, "
+                "neither personal nor a container"
             )
     action_names = [a.name for a in catalog.actions]
     if len(set(action_names)) != len(action_names):
@@ -212,7 +230,7 @@ class CatalogRegistry:
     def actions_on(self, service: str, resource_type: str) -> list[str]:
         """The actions of ``service`` whose catalog lists ``resource_type``.
 
-        They decide whether a resource is visible to a caller (RFC §5.4).
+        They decide whether a resource is visible to a caller.
         """
         catalog = self.get(service)
         if catalog is None:

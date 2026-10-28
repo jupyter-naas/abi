@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import shutil
@@ -14,6 +15,7 @@ from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
     ontology_matches_seed,
 )
 from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import (
+    OntologyExportData,
     OntologyFileItemData,
     OntologyItemData,
     OntologyOverviewAggregateStatsData,
@@ -32,6 +34,15 @@ from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import 
 from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology_imports import (
     clear_catalog_import_caches,
     load_catalog_import_graph,
+)
+from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology_source import (
+    RemoteOntologyReader,
+    content_version,
+    install_reader,
+    is_remote_id,
+    load_remote_graph,
+    parse_remote_graph,
+    parse_remote_id,
 )
 from naas_abi_core import logger
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
@@ -76,6 +87,9 @@ def clear_graph_caches() -> None:
 
 
 def _load_ontology_graph(ontology_path: str, add_imports: bool = False) -> Graph:
+    if is_remote_id(ontology_path):
+        # A remote id is a key of the schema graph, never a file to open.
+        return load_remote_graph(ontology_path)
     extension = Path(ontology_path).suffix.lower()
     parse_format = {
         ".ttl": "turtle",
@@ -268,16 +282,22 @@ def _load_ontology_graph_with_imports_cached(path: str) -> Graph:
                     # base (e.g. Docker /app/src/... vs local /home/.../src/).
                     # Match by the suffix "{pythonPackage}/{ontologyResource}" which is
                     # env-independent and captured in _suffix_to_dynamic_path.
-                    uri_file_path = uri_str[len("file://"):]
+                    uri_file_path = uri_str[len("file://") :]
                     matched_path = next(
-                        (dp for sfx, dp in _suffix_to_dynamic_path.items() if uri_file_path.endswith(sfx)),
+                        (
+                            dp
+                            for sfx, dp in _suffix_to_dynamic_path.items()
+                            if uri_file_path.endswith(sfx)
+                        ),
                         None,
                     )
                     if matched_path:
                         nested = _load_ontology_graph_with_imports_cached(matched_path)
                         target += nested
                     else:
-                        logger.warning(f"Cannot resolve file:// import {uri_str}: no matching module found")
+                        logger.warning(
+                            f"Cannot resolve file:// import {uri_str}: no matching module found"
+                        )
                 else:
                     try:
                         nested.parse(uri_str)
@@ -322,14 +342,14 @@ _BFO_NS = "http://purl.obolibrary.org/obo/"
 _ABI_TO_BFO_BUCKET_ROOT: dict[str, str] = {
     f"{_ABI_NS}{abi_name}": f"{_BFO_NS}{bfo_id}"
     for abi_name, bfo_id in (
-        ("MaterialEntity", "BFO_0000040"),                  # WHO
-        ("Site", "BFO_0000029"),                            # WHERE
+        ("MaterialEntity", "BFO_0000040"),  # WHO
+        ("Site", "BFO_0000029"),  # WHERE
         ("GenericallyDependentContinuant", "BFO_0000031"),  # HOW WE KNOW
-        ("Quality", "BFO_0000019"),                         # HOW IT IS
-        ("Role", "BFO_0000017"),        # BFO Role ⊆ Realizable (WHY)
-        ("Disposition", "BFO_0000017"), # BFO Disposition ⊆ Realizable (WHY)
-        ("Process", "BFO_0000015"),                         # WHAT
-        ("TemporalRegion", "BFO_0000008"),                  # WHEN
+        ("Quality", "BFO_0000019"),  # HOW IT IS
+        ("Role", "BFO_0000017"),  # BFO Role ⊆ Realizable (WHY)
+        ("Disposition", "BFO_0000017"),  # BFO Disposition ⊆ Realizable (WHY)
+        ("Process", "BFO_0000015"),  # WHAT
+        ("TemporalRegion", "BFO_0000008"),  # WHEN
         ("TemporalInstant", "BFO_0000008"),  # zero-dim temporal region ⊆ temporal region
     )
 }
@@ -600,6 +620,7 @@ def _parse_ttl(content: str, file_path: str) -> ReferenceOntologyData:
 def _get_uri_metadata_from_graph(graph: Graph, uri: str) -> dict:
     """Read label/definition/subClassOf etc. directly from an in-memory rdflib Graph."""
     from rdflib import Namespace
+
     SKOS = Namespace("http://www.w3.org/2004/02/skos/core#")
     subject = URIRef(uri)
     label = next((str(o) for o in graph.objects(subject, RDFS.label)), None)
@@ -716,6 +737,13 @@ class OntologyService:
         self._abi_module_getter = abi_module_getter
         # In-memory storage (replace with persistence later)
         self._ontology_items: list[OntologyItemData] = []
+        # Remote modules' ontologies live in the schema graph of the engine's
+        # triple store; the module-level graph loaders read them through this.
+        self._remote = RemoteOntologyReader(self._get_triple_store)
+        install_reader(self._remote)
+        # The listing row of each remote file, by id, for the content it was
+        # built from: a file nobody changed is not parsed again.
+        self._remote_items: dict[str, tuple[tuple[int, int], OntologyFileItemData | None]] = {}
 
     # ── Internal ──────────────────────────────────────────────────────────────
 
@@ -755,21 +783,17 @@ class OntologyService:
 
     async def clear_cache(self, catalog_refs: list[str] | None = None) -> None:
         """Workspace refresh only invalidates permission-keyed graph snapshots."""
+        self._remote.clear()
+        self._remote_items = {}
         if catalog_refs is not None:
             clear_catalog_import_caches()
         else:
             clear_graph_caches()
 
-    async def list_items(
-        self, catalog_refs: list[str] | None = None
-    ) -> list[OntologyItemData]:
+    async def list_items(self, catalog_refs: list[str] | None = None) -> list[OntologyItemData]:
         """List all ontology items (OWL Classes and Object Properties)."""
-        classes = await self.list_classes(
-            ontology_path=None, catalog_refs=catalog_refs
-        )
-        relations = await self.list_relations(
-            ontology_path=None, catalog_refs=catalog_refs
-        )
+        classes = await self.list_classes(ontology_path=None, catalog_refs=catalog_refs)
+        relations = await self.list_relations(ontology_path=None, catalog_refs=catalog_refs)
         return [*classes, *relations]
 
     async def workspace_dictionary(self, catalog_refs: list[str] | None) -> dict[str, Any]:
@@ -788,7 +812,13 @@ class OntologyService:
                 sources.append((source, _load_ontology_graph(file.path)))
             except Exception:
                 logger.exception("Could not read dictionary source %s", file.path)
-                errors.append({"path": file.path, "name": file.name, "message": "Could not read this ontology file."})
+                errors.append(
+                    {
+                        "path": file.path,
+                        "name": file.name,
+                        "message": "Could not read this ontology file.",
+                    }
+                )
         declarations = build_workspace_dictionary(sources, include_ontologies=True)
         # The dictionary itself never follows imports, but a class's BFO bucket
         # and the label of a class it points at usually sit beyond them
@@ -805,12 +835,16 @@ class OntologyService:
                 if link["name"] == _local_name(link["id"]):
                     link["name"] = resolver.label(link["id"], preferred) or link["name"]
                 if is_class:
-                    link["bfoBucket"], link["bfoAncestors"] = resolver.classify(link["id"], preferred)
+                    link["bfoBucket"], link["bfoAncestors"] = resolver.classify(
+                        link["id"], preferred
+                    )
         return {
             "items": [item for item in declarations if item["type"] != "ontology"],
             "ontologies": [item for item in declarations if item["type"] == "ontology"],
-            "file_count": len(files), "loaded_file_count": len(sources),
-            "errors": errors, "complete": not errors,
+            "file_count": len(files),
+            "loaded_file_count": len(sources),
+            "errors": errors,
+            "complete": not errors,
         }
 
     async def process_slices(
@@ -826,6 +860,9 @@ class OntologyService:
         """
         files = await self.list_ontology_files(catalog_refs=catalog_refs)
         if path not in {file.path for file in files}:
+            return []
+        if is_remote_id(path):
+            # The slice files of a remote module stay in the module.
             return []
         try:
             content = Path(path).read_text(encoding="utf-8")
@@ -846,31 +883,52 @@ class OntologyService:
             except Exception:
                 logger.exception("Could not read process slice %s", slice_path)
                 continue
-            header = next((s for s in graph.subjects(RDF.type, OWL.Ontology) if isinstance(s, URIRef)), None)
-            title = header and (graph.value(header, DCTERMS.title) or graph.value(header, RDFS.label))
+            header = next(
+                (s for s in graph.subjects(RDF.type, OWL.Ontology) if isinstance(s, URIRef)), None
+            )
+            title = header and (
+                graph.value(header, DCTERMS.title) or graph.value(header, RDFS.label)
+            )
             classes = {
-                subject for subject in graph.subjects(RDFS.subClassOf, None) if isinstance(subject, URIRef)
-            } | {subject for subject in graph.subjects(RDF.type, OWL.Class) if isinstance(subject, URIRef)}
+                subject
+                for subject in graph.subjects(RDFS.subClassOf, None)
+                if isinstance(subject, URIRef)
+            } | {
+                subject
+                for subject in graph.subjects(RDF.type, OWL.Class)
+                if isinstance(subject, URIRef)
+            }
             restrictions = []
             for subject in sorted(classes, key=str):
                 for restriction in graph.objects(subject, RDFS.subClassOf):
                     prop = graph.value(restriction, OWL.onProperty)
-                    for predicate in (OWL.someValuesFrom, OWL.allValuesFrom, OWL.onClass, OWL.hasValue):
+                    for predicate in (
+                        OWL.someValuesFrom,
+                        OWL.allValuesFrom,
+                        OWL.onClass,
+                        OWL.hasValue,
+                    ):
                         target = graph.value(restriction, predicate)
                         if isinstance(prop, URIRef) and isinstance(target, URIRef):
-                            restrictions.append({"subject": str(subject), "property": str(prop), "target": str(target)})
-            slices.append({
-                "id": str(header) if header else slice_path.stem,
-                "name": str(title) if title else slice_path.stem,
-                "path": str(slice_path),
-                "classes": sorted(str(item) for item in classes),
-                "restrictions": restrictions,
-            })
+                            restrictions.append(
+                                {
+                                    "subject": str(subject),
+                                    "property": str(prop),
+                                    "target": str(target),
+                                }
+                            )
+            slices.append(
+                {
+                    "id": str(header) if header else slice_path.stem,
+                    "name": str(title) if title else slice_path.stem,
+                    "path": str(slice_path),
+                    "classes": sorted(str(item) for item in classes),
+                    "restrictions": restrictions,
+                }
+            )
         return slices
 
-    async def refresh_bfo_bucket(
-        self, iri: str, catalog_refs: list[str] | None
-    ) -> str | None:
+    async def refresh_bfo_bucket(self, iri: str, catalog_refs: list[str] | None) -> str | None:
         """Forget the cached bucket of ``iri`` and resolve it again."""
         key = _bfo_bucket_cache_key(iri)
         if _bfo_bucket_cache.exists(key):
@@ -968,6 +1026,83 @@ class OntologyService:
                 )
         return sorted(by_iri.values(), key=lambda item: item.name.lower())
 
+    @staticmethod
+    def _file_item(graph: Graph, path: str, module_name: str) -> OntologyFileItemData | None:
+        """The catalog row of an ontology graph, or None without an ``owl:Ontology``."""
+        ontology_uri = next(graph.subjects(RDF.type, OWL.Ontology), None)
+        if ontology_uri is None:
+            return None
+        subject = URIRef(str(ontology_uri))
+        title = graph.value(subject, DCTERMS.title)
+        label = graph.value(subject, RDFS.label)
+        description = graph.value(subject, DCTERMS.description)
+        license_val = graph.value(subject, DCTERMS.license)
+        contributors = list(graph.objects(subject, DCTERMS.contributor))
+        date = graph.value(subject, DCTERMS.date)
+        imports = list(graph.objects(subject, OWL.imports))
+        return OntologyFileItemData(
+            name=str(title) if title else str(label),
+            description=str(description) if description else None,
+            license=str(license_val) if license_val else None,
+            contributors=[str(c) for c in contributors],
+            date=str(date) if date else None,
+            path=path,
+            module_name=module_name,
+            submodule_name=None,
+            imports=[str(i) for i in imports],
+        )
+
+    def _list_remote_ontology_files(
+        self, catalog_refs: list[str] | None
+    ) -> list[OntologyFileItemData]:
+        """Ontologies remote modules pushed to the engine's schema graph.
+
+        Same filters as the in-engine files: an ``owl:Ontology`` is required and
+        ``sandbox`` and ``processes`` slices are skipped. ``module_name`` is the
+        remote module id. The schema graph being unreachable never hides the
+        in-engine ontologies.
+        """
+        try:
+            files = self._remote.files()
+        except Exception as exc:
+            logger.warning(f"Could not list remote module ontologies: {exc}")
+            return []
+        known = self._remote_items
+        current: dict[str, tuple[tuple[int, int], OntologyFileItemData | None]] = {}
+        items: list[OntologyFileItemData] = []
+        for source, text in files:
+            parsed = parse_remote_id(source)
+            if parsed is None:
+                continue
+            module_id, relative = parsed
+            folders = {part.lower() for part in relative.split("/")}
+            if "sandbox" in relative.lower() or "processes" in folders:
+                continue
+            if catalog_refs is not None and not ontology_matches_seed(
+                source, module_id, catalog_refs
+            ):
+                continue
+            version = content_version(text)
+            cached = known.get(source)
+            if cached is not None and cached[0] == version:
+                item = cached[1]
+            else:
+                try:
+                    item = self._file_item(parse_remote_graph(source, text), source, module_id)
+                except Exception as exc:
+                    logger.warning(f"Skipping unreadable remote ontology {source}: {exc}")
+                    continue
+            current[source] = (version, item)
+            if item is not None:
+                items.append(item)
+        # Rows a seed filter skipped this time stay; those of removed files go.
+        present = {source for source, _ in files}
+        self._remote_items = {
+            **{source: row for source, row in known.items() if source in present},
+            **current,
+        }
+        return items
+
     async def list_ontology_files(
         self, catalog_refs: list[str] | None = None
     ) -> list[OntologyFileItemData]:
@@ -988,6 +1123,11 @@ class OntologyService:
                     continue
                 seen.add(ontology)
 
+                # An in-engine path is a file. What looks like a remote id is
+                # never opened as one: remote files are listed below.
+                if is_remote_id(ontology):
+                    continue
+
                 # Only ontologies are listed: any ontologies/**/*.ttl declaring
                 # owl:Ontology (checked below), except process slices. Slices are
                 # consolidated into ontologies/modules/<Module>Ontology.ttl, which
@@ -1006,7 +1146,9 @@ class OntologyService:
                     module_name = parts[idx - 1] if idx > 0 else ""
                 except ValueError:
                     module_name = parts[0] if parts else ""
-                if catalog_refs is not None and not ontology_matches_seed(ontology, module_name, catalog_refs):
+                if catalog_refs is not None and not ontology_matches_seed(
+                    ontology, module_name, catalog_refs
+                ):
                     continue
 
                 # The module lists its files at boot: one moved, deleted or broken
@@ -1018,34 +1160,14 @@ class OntologyService:
                     logger.warning(f"Skipping unreadable ontology file {ontology}: {exc}")
                     continue
 
-                ontology_uri = next(ontology_graph.subjects(RDF.type, OWL.Ontology), None)
-                if ontology_uri is None:
-                    continue
+                item = self._file_item(ontology_graph, ontology, module_name.replace("_", " "))
+                if item is not None:
+                    ontology_files.append(item)
 
-                title = ontology_graph.value(URIRef(str(ontology_uri)), DCTERMS.title)
-                label = ontology_graph.value(URIRef(str(ontology_uri)), RDFS.label)
-                description = ontology_graph.value(URIRef(str(ontology_uri)), DCTERMS.description)
-                license_val = ontology_graph.value(URIRef(str(ontology_uri)), DCTERMS.license)
-                contributors = list(
-                    ontology_graph.objects(URIRef(str(ontology_uri)), DCTERMS.contributor)
-                )
-                date = ontology_graph.value(URIRef(str(ontology_uri)), DCTERMS.date)
-                imports = list(ontology_graph.objects(URIRef(str(ontology_uri)), OWL.imports))
-
-                ontology_files.append(
-                    OntologyFileItemData(
-                        name=str(title) if title else str(label),
-                        description=str(description) if description else None,
-                        license=str(license_val) if license_val else None,
-                        contributors=[str(c) for c in contributors],
-                        date=str(date) if date else None,
-                        path=ontology,
-                        module_name=module_name.replace("_", " "),
-                        submodule_name=None,
-                        imports=[str(i) for i in imports],
-                    )
-                )
-
+            # Blocking triple store reads and Turtle parsing: off the event loop.
+            ontology_files.extend(
+                await asyncio.to_thread(self._list_remote_ontology_files, catalog_refs)
+            )
             ontology_files.sort(key=lambda item: (item.module_name.lower(), item.name.lower()))
             return filter_ontology_catalog(ontology_files, catalog_refs)
         except OntologyServiceUnavailableError:
@@ -1204,7 +1326,12 @@ class OntologyService:
                     # module-only graph: used for all queries (classes, properties, restrictions)
                     graph = _load_ontology_graph(path)
                     # imports graph: used only for BFO ancestor resolution — not for queries
-                    ancestor_graph = load_catalog_import_graph(path, [item.path for item in ontologies], _IMPORT_URI_TO_LOCAL, bundled_dir=str(_ABI_IMPORTS_DIR))
+                    ancestor_graph = load_catalog_import_graph(
+                        path,
+                        [item.path for item in ontologies],
+                        _IMPORT_URI_TO_LOCAL,
+                        bundled_dir=str(_ABI_IMPORTS_DIR),
+                    )
 
                     for prefix, namespace in graph.namespaces():
                         p = str(prefix)
@@ -1221,7 +1348,11 @@ class OntologyService:
                         definition = data.get("definition")
                         comment = data.get("comment", "Unknown")
                         parent_iri = data.get("subClassOf", "Unknown")
-                        parent_data = _get_uri_metadata_from_graph(ancestor_graph, parent_iri) if parent_iri else None
+                        parent_data = (
+                            _get_uri_metadata_from_graph(ancestor_graph, parent_iri)
+                            if parent_iri
+                            else None
+                        )
                         parent_label = parent_data.get("label", "Unknown") if parent_data else None
                         if _is_bfo_entity_iri(class_iri):
                             parent_iri = class_iri
@@ -1275,7 +1406,9 @@ class OntologyService:
                         lbl = d.get("label", "Unknown")
                         typ = d.get("subClassOf")
                         typ_lbl = (
-                            _get_uri_metadata_from_graph(_ag, typ).get("label", "Unknown") if typ else None
+                            _get_uri_metadata_from_graph(_ag, typ).get("label", "Unknown")
+                            if typ
+                            else None
                         )
                         if _is_bfo_entity_iri(iri):
                             typ = iri
@@ -1393,7 +1526,9 @@ class OntologyService:
                     s_str, o_str = str(sg), str(og)
                     if s_str not in classes_by_iri or o_str not in classes_by_iri:
                         continue
-                    non_canon, canon = (o_str, s_str) if s_str.startswith(_ABI_NS) else (s_str, o_str)
+                    non_canon, canon = (
+                        (o_str, s_str) if s_str.startswith(_ABI_NS) else (s_str, o_str)
+                    )
                     equiv_map[non_canon] = canon
 
                 for non_canon in list(equiv_map):
@@ -1442,11 +1577,18 @@ class OntologyService:
                     if not ontology_iri or ontology_iri in ontologies_by_iri:
                         continue
                     subject = URIRef(ontology_iri)
-                    meta = {key: graph.value(subject, predicate) for key, predicate in {
-                        "label": RDFS.label, "comment": RDFS.comment, "versionInfo": OWL.versionInfo,
-                        "title": DCTERMS.title, "description": DCTERMS.description,
-                        "license": DCTERMS.license, "date": DCTERMS.date,
-                    }.items()}
+                    meta = {
+                        key: graph.value(subject, predicate)
+                        for key, predicate in {
+                            "label": RDFS.label,
+                            "comment": RDFS.comment,
+                            "versionInfo": OWL.versionInfo,
+                            "title": DCTERMS.title,
+                            "description": DCTERMS.description,
+                            "license": DCTERMS.license,
+                            "date": DCTERMS.date,
+                        }.items()
+                    }
                     meta["date"] = meta["date"] or graph.value(subject, DC.date)
                     title = meta.get("title", "")
                     label = meta.get("label", "")
@@ -1542,7 +1684,12 @@ class OntologyService:
 
         ontologies = await self.list_ontology_files(catalog_refs=catalog_refs)
         self._resolve_ontology_paths(ontology_path, ontologies)
-        ancestor_graph = load_catalog_import_graph(ontology_path, [item.path for item in ontologies], _IMPORT_URI_TO_LOCAL, bundled_dir=str(_ABI_IMPORTS_DIR))
+        ancestor_graph = load_catalog_import_graph(
+            ontology_path,
+            [item.path for item in ontologies],
+            _IMPORT_URI_TO_LOCAL,
+            bundled_dir=str(_ABI_IMPORTS_DIR),
+        )
 
         # Build equivalence normalisation map: BFO IRI → canonical ABI IRI
         _cp_equiv: dict[str, str] = {}
@@ -1591,7 +1738,11 @@ class OntologyService:
                 raw_lbl = d.get("label")
                 lbl = raw_lbl or super_iri.rstrip("/").rsplit("#", 1)[-1].rsplit("/", 1)[-1]
                 typ = d.get("subClassOf")
-                typ_lbl = _get_uri_metadata_from_graph(ancestor_graph, typ).get("label", "Unknown") if typ else None
+                typ_lbl = (
+                    _get_uri_metadata_from_graph(ancestor_graph, typ).get("label", "Unknown")
+                    if typ
+                    else None
+                )
                 if _is_bfo_entity_iri(super_iri):
                     typ = super_iri
                     typ_lbl = "entity"
@@ -1655,7 +1806,12 @@ class OntologyService:
 
         ontologies = await self.list_ontology_files(catalog_refs=catalog_refs)
         self._resolve_ontology_paths(ontology_path, ontologies)
-        ancestor_graph = load_catalog_import_graph(ontology_path, [item.path for item in ontologies], _IMPORT_URI_TO_LOCAL, bundled_dir=str(_ABI_IMPORTS_DIR))
+        ancestor_graph = load_catalog_import_graph(
+            ontology_path,
+            [item.path for item in ontologies],
+            _IMPORT_URI_TO_LOCAL,
+            bundled_dir=str(_ABI_IMPORTS_DIR),
+        )
 
         # 1. Collect every (sub, super) edge in the upward closure with one SPARQL query.
         iris_values = " ".join(f"<{iri}>" for iri in class_iris)
@@ -1750,7 +1906,9 @@ class OntologyService:
             label = raw_lbl or iri.rstrip("/").rsplit("#", 1)[-1].rsplit("/", 1)[-1]
             parent_iri = d.get("subClassOf")
             parent_label = (
-                _get_uri_metadata_from_graph(ancestor_graph, parent_iri).get("label", "Unknown") if parent_iri else None
+                _get_uri_metadata_from_graph(ancestor_graph, parent_iri).get("label", "Unknown")
+                if parent_iri
+                else None
             )
             if _is_bfo_entity_iri(iri):
                 parent_iri = iri
@@ -1838,11 +1996,25 @@ class OntologyService:
             raise OntologyParseError("Failed to parse ontology file") from exc
 
     async def export_ontology_file(self, ontology_path: str) -> Path:
+        """The file of an in-engine ontology. A remote id is not a file."""
         path = Path(ontology_path)
-        if not path.exists() or not path.is_file():
+        if is_remote_id(ontology_path) or not path.exists() or not path.is_file():
             from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import (
                 OntologyFileNotFoundError,
             )
 
             raise OntologyFileNotFoundError("Ontology file does not exist")
         return path
+
+    async def export_ontology(self, ontology_path: str) -> OntologyExportData:
+        """An ontology to download, whichever kind: a file, or a remote text."""
+        if not is_remote_id(ontology_path):
+            path = await self.export_ontology_file(ontology_path)
+            return OntologyExportData(filename=path.name, path=path)
+        try:
+            text = self._remote.read(ontology_path)
+        except OntologyPathNotFoundError:
+            raise
+        except Exception as exc:
+            raise OntologyServiceUnavailableError("Failed to read the remote ontology") from exc
+        return OntologyExportData(filename=Path(ontology_path).name, content=text.encode("utf-8"))

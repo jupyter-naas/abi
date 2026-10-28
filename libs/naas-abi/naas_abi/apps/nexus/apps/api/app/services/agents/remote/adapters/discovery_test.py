@@ -51,11 +51,17 @@ class _Discovery:
 
 class _Handle:
     def __init__(self, proxy, prompt):
+        from naas_abi_core.engine.call_context import current_call_context
+
         self.proxy, self.prompt, self.cancelled = proxy, prompt, False
+        # The context the submit was made in (its transport sends its workspace).
+        self.workspace = current_call_context().workspace_id
 
     async def events(self, *, timeout=None):
         if self.prompt == "boom":
             raise RPCError("AGENT_FAILED", "handler raised")
+        if self.prompt == "quiet":  # as the SDK's InvocationHandle.events() yields
+            yield {"sequence": 1, "event": "tool_response", "data": "u", "chat_source": False}
         yield {"event": "ai_message", "data": f"fact: {self.prompt}"}
         if self.prompt == "slow":
             await asyncio.sleep(10)
@@ -105,6 +111,23 @@ def test_runs_on_the_conversation_thread(directory):
     asyncio.run(run())
 
     assert _Proxy.handles[0].proxy.thread_id == "conv-7"
+
+
+def test_the_submit_carries_the_workspace_of_the_turn(directory):
+    async def run(**kwargs):
+        return [e async for e in directory.stream(RESEARCHER.key, "q", thread_id="c", **kwargs)]
+
+    asyncio.run(run(workspace_id="ws-1"))
+    asyncio.run(run())
+
+    assert [h.workspace for h in _Proxy.handles] == ["ws-1", None]
+
+
+def test_a_tool_response_keeps_its_chat_source_opt_out(directory):
+    async def run():
+        return [e async for e in directory.stream(RESEARCHER.key, "quiet", thread_id="c")]
+
+    assert asyncio.run(run())[0] == {"event": "tool_response", "data": "u", "chat_source": False}
 
 
 def test_failed_run_is_unavailable_with_its_code(directory):

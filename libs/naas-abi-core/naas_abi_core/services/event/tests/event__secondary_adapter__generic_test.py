@@ -22,7 +22,8 @@ A, B = "urn:Type:A", "urn:Type:B"
 
 def _ts(offset_seconds: int = 0) -> str:
     return (
-        datetime.datetime(2026, 1, 1) + datetime.timedelta(seconds=offset_seconds)
+        datetime.datetime(2026, 1, 1)
+        + datetime.timedelta(seconds=offset_seconds)
     ).isoformat()
 
 

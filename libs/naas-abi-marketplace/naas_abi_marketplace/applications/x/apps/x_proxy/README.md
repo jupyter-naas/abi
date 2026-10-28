@@ -575,8 +575,7 @@ to the distinct values of the loaded rows.
 `filters` is `{column: {contains, values}}` - substring OR exact set, OR within
 a column, AND across columns.
 
-This replaced two live SPARQL routes (`api/tweets`, `api/tweets/values`); see
-`docs/adr/20260728_x_app_live_tweet_search.md` for the design that preceded it.
+This replaced two live SPARQL routes (`api/tweets`, `api/tweets/values`).
 
 ### Serving is middleware, not routes
 

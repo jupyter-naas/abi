@@ -1,8 +1,7 @@
 // NATS-RPC contract for the cache kernel domain.
 // Mirrors naas_abi_core/services/cache/CachePort.py::ICacheAdapter 1:1 -- the
 // raw adapter surface each cache tier wraps, not the multi-tier
-// CacheService/SingleTierCacheService orchestration built on top of it. See
-// docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md.
+// CacheService/SingleTierCacheService orchestration built on top of it.
 //
 // Scope of this v1 contract, deliberately: tiering (hot/cold) and event
 // publishing (CacheSet/CacheDeleted/CacheError) are entirely client-side
@@ -12,7 +11,7 @@
 // There is nothing tier- or event-aware to put on the wire; this contract
 // only needs to mirror the raw adapter's methods.
 //
-// Subjects (see "Protobuf contract shapes" in the RFC):
+// Subjects:
 //   abi.svc.cache.v1.get
 //   abi.svc.cache.v1.set
 //   abi.svc.cache.v1.set_if_absent

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import dynamic from 'next/dynamic';
 import { Sidebar } from './sidebar';
@@ -25,6 +25,8 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { PresenceIndicator } from '@/components/presence-indicator';
 import { getWorkspacePath } from './sidebar/utils';
 import { pathNeedsAgentCatalog } from '@/lib/feature-access';
+import { rememberWorkspacePath } from '@/lib/workspace-return-path';
+import { loadOrgBranding, resolveWorkspaceOrgId } from '@/lib/org-branding';
 import { OfficeCreateOverlay } from '@/components/office/office-create-overlay';
 
 const AIPane = dynamic(() => import('./ai-pane').then((m) => m.AIPane), { ssr: false });
@@ -100,58 +102,44 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
     fetchWorkspaces();
   }, [fetchWorkspaces]);
 
-  // Fetch org branding to get border radius AND theme
+  // Org branding (border radius AND theme). The org id comes from the loaded
+  // workspace record; branding is cached per org, so switching between
+  // workspaces of one org costs no request (see lib/org-branding).
+  const workspaceLoaded = workspaces.some((w) => w.id === currentWorkspaceId);
+  const workspaceOrgId = workspaces.find((w) => w.id === currentWorkspaceId)?.organizationId;
+  const [brandingVersion, setBrandingVersion] = useState(0);
   useEffect(() => {
-    const fetchOrgBranding = async () => {
-      const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId);
-      if (!currentWorkspace) return;
+    const handleBrandingUpdate = () => setBrandingVersion((v) => v + 1);
+    window.addEventListener('org-branding-updated', handleBrandingUpdate);
+    return () => window.removeEventListener('org-branding-updated', handleBrandingUpdate);
+  }, []);
 
-      // Check if user has explicitly overridden theme
+  useEffect(() => {
+    if (!currentWorkspaceId || !workspaceLoaded) return;
+    // A slow reply for the previous workspace/org must not overwrite this one.
+    let cancelled = false;
+    const applyOrgBranding = async () => {
+      const orgId = await resolveWorkspaceOrgId(currentWorkspaceId, workspaceOrgId);
+      const branding = orgId ? await loadOrgBranding(orgId) : null;
+      if (cancelled) return;
+      setOrgBorderRadius(branding?.borderRadius ?? '0');
+      // A failed lookup leaves the current theme alone.
+      if (!branding) return;
+      // Apply org theme ONLY if user hasn't explicitly overridden it
       const hasUserOverride = localStorage.getItem('nexus-theme-user-override') === 'true';
-
-      // Fetch workspace details to get organization_id
-      try {
-        const { authFetch } = await import('@/stores/auth');
-        const wsResponse = await authFetch(`/api/workspaces/${currentWorkspaceId}`);
-        if (wsResponse.ok) {
-          const wsData = await wsResponse.json();
-          if (wsData.organization_id) {
-            // Fetch org branding
-            const orgResponse = await authFetch(`/api/organizations/${wsData.organization_id}`);
-            if (orgResponse.ok) {
-              const orgData = await orgResponse.json();
-              // Handle border radius - allow 0, only fallback if undefined/null
-              const radius = orgData.loginBorderRadius ?? orgData.login_border_radius ?? '0';
-              console.log('[WorkspaceLayout] Org border radius:', radius, 'from org:', wsData.organization_id);
-              setOrgBorderRadius(radius);
-
-              // Apply org theme ONLY if user hasn't explicitly overridden it
-              if (!hasUserOverride) {
-                const orgTheme = orgData.defaultTheme || orgData.default_theme;
-                if (orgTheme && (orgTheme === 'light' || orgTheme === 'dark' || orgTheme === 'system')) {
-                  console.log('[WorkspaceLayout] Applying org theme (no user override):', orgTheme);
-                  setTheme(orgTheme);
-                } else {
-                  console.log('[WorkspaceLayout] No org theme set, defaulting to light');
-                  // Default to light when org has no theme
-                  setTheme('light');
-                }
-              } else {
-                console.log('[WorkspaceLayout] User has overridden theme, skipping org theme');
-              }
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Failed to fetch org branding:', error);
-      }
+      // Default to light when org has no theme
+      if (!hasUserOverride) setTheme(branding.defaultTheme ?? 'light');
     };
+    applyOrgBranding();
+    return () => {
+      cancelled = true;
+    };
+    // setTheme is omitted: it caused infinite loops.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentWorkspaceId, workspaceLoaded, workspaceOrgId, brandingVersion]);
 
-    if (currentWorkspaceId) {
-      fetchOrgBranding();
-    }
-
-    // Listen for real-time theme changes from branding page
+  // Listen for real-time theme changes from branding page
+  useEffect(() => {
     const handleThemeChange = (event: CustomEvent) => {
       const newTheme = event.detail;
       console.log('[WorkspaceLayout] Theme change event:', newTheme);
@@ -165,9 +153,8 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
 
     window.addEventListener('org-theme-changed', handleThemeChange as EventListener);
     return () => window.removeEventListener('org-theme-changed', handleThemeChange as EventListener);
-    // REMOVED workspaces and setTheme - they cause infinite loops
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentWorkspaceId]);
+  }, []);
 
   // Agents/skills belong to chat, agent settings, and the open AI pane.
   // Fetching them on every workspace switch (including Apps) POSTed
@@ -182,8 +169,10 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
     if (!needsAgents || !currentWorkspaceId) return;
     const loadAgents = async () => {
       const { ensureAgentsSynced, useAgentsStore } = await import('@/stores/agents');
-      // The pane binds per-section office agents: pick up roster changes once.
-      if (contextPanelOpen) await ensureAgentsSynced(currentWorkspaceId);
+      // Chat and agent settings need a reconciled roster; Apps only need GET.
+      if (contextPanelOpen || pathNeedsAgentCatalog(pathname)) {
+        await ensureAgentsSynced(currentWorkspaceId);
+      }
       await useAgentsStore.getState().fetchAgents(currentWorkspaceId);
     };
     const loadSkills = async () => {
@@ -192,7 +181,7 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
     };
     loadAgents();
     loadSkills();
-  }, [currentWorkspaceId, contextPanelOpen, needsAgents]);
+  }, [currentWorkspaceId, contextPanelOpen, needsAgents, pathname]);
 
   // Keyboard shortcut: Cmd+K to toggle the side chat pane (desktop only).
   // Capture phase so Monaco / editors do not swallow ⌘K as a chord starter.
@@ -252,7 +241,14 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
   const chatRoute = parseChatRoute(pathname);
   const { isChatRoute, isThread } = chatRoute;
   const { isFilesRoute, isBrowse: isFilesBrowse } = parseFilesRoute(pathname);
-  const { isMapsRoute, isDataset: isMapsDataset } = parseMapsRoute(pathname);
+  const searchParams = useSearchParams();
+  // Settings pages (Organization, Platform) send the user back to this page.
+  const searchKey = searchParams?.toString() ?? '';
+  useEffect(() => {
+    if (pathname) rememberWorkspacePath(searchKey ? `${pathname}?${searchKey}` : pathname);
+  }, [pathname, searchKey]);
+  const mapsRoute = parseMapsRoute(pathname, searchParams);
+  const { isMapsRoute, isMapView: isMapsDataset } = mapsRoute;
   const { isDatasetsRoute, isTable: isDatasetsTable } = parseDatasetsRoute(pathname);
   const showMobileChatThread = isMobile && isMobileChatThreadOpen(chatRoute, mobilePendingChatSlug);
   const showMobileChatList = isMobile && isChatRoute && !showMobileChatThread;

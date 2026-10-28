@@ -1,10 +1,9 @@
 """``abi iam``: service accounts, their keys, and module permission manifests.
 
-docs/specs/rfcs/20261013_identity-and-authorization.md, §8. The commands open
-the project's IAM store from its config (``services.iam``), as the operator
-who holds that config, and act as the engine's own service account. After a
-change they tell a running engine (``abi.iam.v1.changed``) so it drops its
-cache at once instead of within a minute.
+The commands open the project's IAM store from its config (``services.iam``),
+as the operator who holds that config, and act as the engine's own service
+account. After a change they tell a running engine (``abi.iam.v1.changed``) so
+it drops its cache at once instead of within a minute.
 
     abi iam service-account create ci/nightly --key
     abi iam service-account list
@@ -23,7 +22,7 @@ cache at once instead of within a minute.
     abi iam group unbind acme "Data readers" --workspace W --org O --role viewer
     abi iam group list
 
-``invite`` and ``group`` act through the engine's services (RFC §12.2), like
+``invite`` and ``group`` act through the engine's services, like
 ``abi chat``: the running engine when there is one, as its own account. They
 work with IAM's own names, an org id and a workspace id (the ones Nexus shows),
 and never send mail: the Nexus invite (``abi user invite``) sends the
@@ -47,8 +46,13 @@ import click
 IAMOpener = Callable[[], tuple[Any, Callable[[], None]]]
 
 
-def open_project_iam() -> tuple[Any, Callable[[], None]]:
-    """The project's IAM, from its config, and a change notifier."""
+def open_project_iam(
+    nats_url: str | None = None,
+) -> tuple[Any, Callable[[], None]]:
+    """The project's IAM, from its config, and a change notifier.
+
+    ``nats_url``: the broker to tell about a change, when it is not the one the
+    config names (``abi dev up``'s own broker listens on another port)."""
     from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
         EngineConfiguration,
     )
@@ -59,9 +63,10 @@ def open_project_iam() -> tuple[Any, Callable[[], None]]:
     try:
         configuration = EngineConfiguration.load_configuration()
         settings, secret = configuration.services.iam, configuration.services.secret
-        nats_url = configuration.nats.nats_url if configuration.nats else None
+        configured_url = configuration.nats.nats_url if configuration.nats else None
     except Exception:  # noqa: BLE001 - a secret IAM does not need is missing
-        settings, secret, nats_url = _iam_blocks()
+        settings, secret, configured_url = _iam_blocks()
+    nats_url = nats_url or configured_url
     if settings.store.adapter == "memory":
         raise click.ClickException(
             "services.iam.store is in memory: only the engine holding it can "
@@ -108,6 +113,9 @@ def _iam_blocks() -> tuple[Any, Any, str | None]:
     return settings, secret, None
 
 
+NOTIFY_TIMEOUT_SECONDS = 5.0
+
+
 def notify_engine(nats_url: str, revision: int) -> None:
     """Publish ``abi.iam.v1.changed``: a running engine drops its IAM cache.
     Best effort: without one, changes reach it within a minute anyway."""
@@ -129,9 +137,13 @@ def notify_engine(nats_url: str, revision: int) -> None:
         finally:
             await nc.close()
 
-    # No engine running: nothing to tell.
+    # No engine running: nothing to tell. The client retries an unreachable
+    # server for as long as it is let, so the whole notice has a deadline.
+    async def bounded() -> None:
+        await asyncio.wait_for(publish(), timeout=NOTIFY_TIMEOUT_SECONDS)
+
     with contextlib.suppress(Exception):
-        asyncio.run(publish())
+        asyncio.run(bounded())
 
 
 @contextmanager
@@ -611,7 +623,8 @@ def group_bind(
 ) -> None:
     """Give the members of PROVIDER's group GROUP a role in an org or a workspace.
 
-    Without --workspace the role is the organization's own (--org).
+    Without --workspace the role is the organization's own (--org). The ABI group
+    that carries it belongs to that organization (``idp:<provider>:<group>``).
     """
     with _services(ctx) as services:
         binding = services.iam.bind_idp_group(

@@ -1,4 +1,4 @@
-"""Web apps a module serves over NATS (docs/adr/20261012_remote-module-apps.md).
+"""Web apps a module serves over NATS.
 
 A module ships an app as a folder next to its package, as in-engine modules do:
 ``apps/<name>/manifest.json`` plus its HTML, scripts and styles. Discovery
@@ -22,6 +22,8 @@ from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 APP_NAME = re.compile(r"[A-Za-z0-9_-]{1,64}")
 MAX_APPS = 16
 DEFAULT_ENTRY = "index.html"
+# The largest request body an app takes when its manifest sets none.
+DEFAULT_MAX_UPLOAD_BYTES = 1024 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -33,7 +35,7 @@ class AppDescriptor:
     icon_emoji: str = ""
     entry: str = DEFAULT_ENTRY
     contract_major: int = 1
-    # Largest request body Nexus forwards to it; 0: Nexus's default (1 GiB).
+    # Largest request body it takes; 0: DEFAULT_MAX_UPLOAD_BYTES (1 GiB).
     max_upload_bytes: int = 0
     # The folder its files are served from; None: the ASGI app serves everything.
     root: Path | None = None
@@ -48,6 +50,12 @@ class AppDescriptor:
             raise ValueError(f"App {self.name}: entry must be a relative path")
         if self.max_upload_bytes < 0:
             raise ValueError(f"App {self.name}: max_upload_bytes must not be negative")
+
+    @property
+    def upload_limit(self) -> int:
+        """The largest request body the app takes: Nexus refuses more, and the
+        module stops reading past it whatever the request says."""
+        return self.max_upload_bytes or DEFAULT_MAX_UPLOAD_BYTES
 
     def to_pb(self) -> pb.AppDescriptor:
         return pb.AppDescriptor(

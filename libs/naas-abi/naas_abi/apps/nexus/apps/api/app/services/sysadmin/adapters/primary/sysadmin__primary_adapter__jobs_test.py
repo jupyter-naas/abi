@@ -125,6 +125,9 @@ def test_overview_shape(client):
         "description",
         "location",
         "instances",
+        "kind",
+        "input_schema",
+        "output_schema",
         "triggers",
         "next_at",
         "max_concurrency",
@@ -142,6 +145,7 @@ def test_overview_shape(client):
             "kind": "cron",
             "spec": "0 0 6 * * *",
             "time_zone": "UTC",
+            "input": None,
             "summary": "Every day at 06:00 UTC",
             "next_at": "2026-10-03T06:00:00+00:00",
         }
@@ -183,7 +187,8 @@ def test_runs_with_filters_and_cursor(client):
 def test_run_detail(client):
     body = client.get(f"{BASE}/runs/acme.jobs/nightly:3").json()
 
-    assert set(body) == RUN_KEYS | {"payload", "result", "logs", "trace_url"}
+    assert set(body) == RUN_KEYS | {"payload", "result", "logs", "trace_url", "workflow"}
+    assert body["workflow"] is None  # a plain job has no steps
     assert body["result"] == {"rows": 3} and body["logs"] == ["synced 3 rows"]
     assert body["trace_url"] == "http://jaeger:16686/trace/" + "b" * 32
     assert client.get(f"{BASE}/runs/acme.jobs/sync:9").json()["trace_url"] is None

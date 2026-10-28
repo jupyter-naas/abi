@@ -56,7 +56,7 @@ ALICE = IdentityUser(
     name="Alice Martin",
     email="alice@example.com",
     created_at=T0,
-    company="Acme",
+    organization="Acme",
     job_title="CTO",
     is_superadmin=True,
 )

@@ -1,4 +1,4 @@
-"""ID token verification against the configured providers (RFC §9.4, §12.1).
+"""ID token verification against the configured providers.
 
 A token is accepted only when:
 

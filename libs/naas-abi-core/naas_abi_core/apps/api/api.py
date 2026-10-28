@@ -260,8 +260,8 @@ async def is_token_valid(token: str = Depends(api_key_scheme)):
     or a tool and decide nothing themselves: only the core-service calls made
     further down are checked by IAM, so a key's limit and its owner's policies
     would not bound what the invocation does, nor what it does with the
-    deployment's own credentials. They come back when the routes enforce IAM
-    (#65); until then the deployment key is the one credential here."""
+    deployment's own credentials. The deployment key is the one credential
+    here."""
     from naas_abi_core.apps.api.abi_api_key_auth import is_abi_api_token_valid
 
     if not is_abi_api_token_valid(token):
@@ -277,8 +277,8 @@ async def is_token_valid(token: str = Depends(api_key_scheme)):
 def _call_as_api_key_holder() -> None:
     """The rest of this request runs as ``api``: the deployment's key holder.
 
-    TRANSITIONAL until ``api`` is enumerated (#65): the deployment's one shared
-    key is the credential of these routes, and it calls as ``api``. A request
+    The deployment's one shared key is the credential of these routes, and it
+    calls as ``api``, which holds the enumerated ``builtin.api`` policy. A request
     already acting for a signed-in user keeps its context. Set in the request's
     own task, so the endpoint (and a sync endpoint's worker thread, which
     copies the context) sees it, and no other request does.

@@ -1,8 +1,13 @@
 import os
 from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
 
 import pytest
+from naas_abi_core.services.dataset.adapters.secondary import (
+    DatasetSecondaryAdapterDuckLake as ducklake_module,
+)
 from naas_abi_core.services.dataset.adapters.secondary.DatasetSecondaryAdapterDuckLake import (
+    CATALOG_ALIAS,
     DatasetSecondaryAdapterDuckLake,
     _S3Settings,
 )
@@ -480,6 +485,104 @@ def test_postgres_catalog_concurrent_writers_preserve_acknowledged_appends(tmp_p
         assert [row["id"] for row in result.rows] == list(range(8))
 
 
+def _two_tables(adapter: DatasetSecondaryAdapterDuckLake) -> None:
+    for name in ("slow", "busy"):
+        adapter.create(
+            DatasetSpec(
+                name=name,
+                columns=(ColumnSpec(name="id", type="integer"),),
+                primary_key=("id",),
+            )
+        )
+
+
+def _racing_write(
+    catalog: str, data_path: str, *, commit_retries: int
+) -> tuple[int, Exception | None]:
+    """A write to ``slow`` while another writer commits to ``busy``: how many
+    times the slow write's transaction ran, and what it raised."""
+    slow = DatasetSecondaryAdapterDuckLake(
+        catalog=catalog,
+        data_path=data_path,
+        max_retries=0,
+        commit_retries=commit_retries,
+    )
+    busy = DatasetSecondaryAdapterDuckLake(catalog=catalog, data_path=data_path)
+    runs = 0
+
+    def operation(con):
+        nonlocal runs
+        runs += 1
+        con.execute(
+            "INSERT INTO abi_datasets.default.slow VALUES (?)",  # nosec B608
+            [runs],
+        )
+        if runs == 1:  # another writer commits while this one is still open
+            busy.write("busy", [{"id": 1}])
+
+    try:
+        slow._write_transaction(operation)
+    except Exception as exc:  # noqa: BLE001 - returned for the assertion
+        return runs, exc
+    return runs, None
+
+
+def test_commits_on_other_tables_no_longer_fail_a_running_write(tmp_path):
+    adapter = DatasetSecondaryAdapterDuckLake(
+        catalog=f"sqlite:{tmp_path / 'datasets.sqlite'}",
+        data_path=str(tmp_path / "datasets"),
+        commit_retries=3,
+    )
+    con = adapter._connect()
+    try:
+        setting = con.execute(
+            "SELECT current_setting('ducklake_max_retry_count')"
+        ).fetchone()
+    finally:
+        con.close()
+    assert int(setting[0]) == 3
+    with pytest.raises(ValueError, match="commit_retries"):
+        DatasetSecondaryAdapterDuckLake(
+            catalog=f"sqlite:{tmp_path / 'datasets.sqlite'}",
+            data_path=str(tmp_path / "datasets"),
+            commit_retries=-1,
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.environ.get("ABI_TEST_DUCKLAKE_POSTGRES") != "1",
+    reason="set ABI_TEST_DUCKLAKE_POSTGRES=1 to run the PostgreSQL catalog test",
+)
+def test_postgres_catalog_write_survives_a_commit_to_another_table(tmp_path):
+    """wise_list_transactions failed with INTERNAL on 2026-10-13: its 46 s write
+    lost every commit race to a writer committing elsewhere once a second."""
+    from testcontainers.postgres import PostgresContainer
+
+    with PostgresContainer(
+        "postgres:16-alpine",
+        username="ducklake",
+        password="ducklake",
+        dbname="ducklake",
+    ) as postgres:
+        catalog = f"postgres:{postgres.get_connection_url(driver=None)}"
+        data_path = str(tmp_path / "datasets")
+        _two_tables(DatasetSecondaryAdapterDuckLake(catalog, data_path))
+
+        # Without DuckLake's own commit retry, the unrelated commit fails it.
+        runs, error = _racing_write(catalog, data_path, commit_retries=0)
+        assert runs == 1
+        assert error is not None and "retry count of 0" in str(error)
+
+        # With it, only the commit is redone: the transaction ran once.
+        runs, error = _racing_write(catalog, data_path, commit_retries=10)
+        assert (runs, error) == (1, None)
+        result = DatasetSecondaryAdapterDuckLake(catalog, data_path).query(
+            "SELECT count(*) AS n FROM slow"
+        )
+        assert result.rows == [{"n": 1}]
+
+
 class TestObjectStoreDataPath:
     """``data_path`` may use S3-compatible storage when explicitly configured."""
 
@@ -795,12 +898,205 @@ def test_inlined_row_count_waits_for_a_write_on_a_sqlite_catalog(tmp_path):
     counts: list[int] = []
 
     with adapter._catalog_lock.exclusive():
-        reader = threading.Thread(
-            target=lambda: counts.append(adapter.inlined_row_count("t"))
-        )
+        reader = threading.Thread(target=lambda: counts.append(adapter.inlined_row_count("t")))
         reader.start()
         reader.join(timeout=0.3)
         assert reader.is_alive(), "inlined_row_count read the catalog during a write"
 
     reader.join(timeout=10)
     assert not reader.is_alive() and len(counts) == 1  # runs once the write is done
+
+
+# --- compaction and snapshot expiry ---------------------------------------------------
+
+
+def _files(adapter: DatasetSecondaryAdapterDuckLake, data_path) -> dict[str, int]:
+    """Live data and delete files, files waiting for deletion, snapshots, and
+    Parquet files on disk."""
+    metadata = f'"__ducklake_metadata_{CATALOG_ALIAS}"'
+    queries = {
+        "data": f"SELECT count(*) FROM {metadata}.ducklake_data_file WHERE end_snapshot IS NULL",
+        "deletes": f"SELECT count(*) FROM {metadata}.ducklake_delete_file WHERE end_snapshot IS NULL",
+        "scheduled": f"SELECT count(*) FROM {metadata}.ducklake_files_scheduled_for_deletion",
+        "snapshots": f"SELECT count(*) FROM {metadata}.ducklake_snapshot",
+    }
+    con = adapter._connect()
+    try:
+        counts = {key: con.execute(sql).fetchone()[0] for key, sql in queries.items()}
+    finally:
+        con.close()
+    counts["on_disk"] = sum(1 for _ in data_path.rglob("*.parquet"))
+    return counts
+
+
+def _upserted_table(tmp_path, **options) -> DatasetSecondaryAdapterDuckLake:
+    """A table written like the signal pulls: one full load, then daily upserts
+    touching a few rows, each leaving a data file and a delete file."""
+    adapter = DatasetSecondaryAdapterDuckLake(
+        catalog=f"sqlite:{tmp_path / 'datasets.sqlite'}",
+        data_path=str(tmp_path / "datasets"),
+        data_inlining_row_limit=0,
+        **options,
+    )
+    adapter.create(
+        DatasetSpec(
+            name="messages",
+            columns=(
+                ColumnSpec(name="id", type="integer"),
+                ColumnSpec(name="subject", type="string"),
+            ),
+            primary_key=("id",),
+        )
+    )
+    adapter.write(
+        "messages",
+        [{"id": n, "subject": f"first-{n}"} for n in range(1000)],
+        mode="replace",
+    )
+    for day in range(6):
+        adapter.write(
+            "messages",
+            [{"id": n, "subject": f"day{day}-{n}"} for n in range(day * 10, day * 10 + 5)]
+            + [{"id": 5000 + day, "subject": "new"}],
+            mode="upsert",
+        )
+    return adapter
+
+
+def _contents(adapter: DatasetSecondaryAdapterDuckLake) -> list[dict]:
+    return adapter.query("SELECT id, subject FROM messages ORDER BY id").rows
+
+
+def test_compaction_rewrites_files_with_deletes(tmp_path):
+    adapter = _upserted_table(tmp_path)
+    before = _files(adapter, tmp_path / "datasets")
+    rows = _contents(adapter)
+    assert before["deletes"] == 1 and before["data"] > 1
+
+    result = adapter.compact("messages")
+
+    after = _files(adapter, tmp_path / "datasets")
+    assert (after["data"], after["deletes"]) == (1, 0)
+    assert _contents(adapter) == rows
+    assert result.columns[0] == "step"
+    steps = {row["step"]: row for row in result.rows}
+    assert steps["rewrite"]["files_processed"] == 1
+    assert steps["merge"]["files_processed"] == before["data"]
+    assert steps["merge"]["files_created"] == 1
+    # The replaced files wait for clean_up; nothing is deleted yet.
+    assert after["scheduled"] > before["scheduled"]
+    assert after["on_disk"] >= before["on_disk"]
+
+
+def test_compaction_leaves_files_below_the_delete_threshold(tmp_path):
+    adapter = _upserted_table(tmp_path, compaction_delete_threshold=0.5)
+
+    adapter.compact("messages")
+
+    # 30 deleted rows of 1000 are below half: the big file keeps its deletes.
+    assert _files(adapter, tmp_path / "datasets")["deletes"] == 1
+
+
+def test_clean_up_deletes_replaced_files_and_keeps_every_snapshot(
+    tmp_path, monkeypatch
+):
+    adapter = _upserted_table(tmp_path)
+    query = "SELECT count(*) AS n, max(subject) AS last FROM messages"
+    history = {
+        snapshot.snapshot_id: adapter.query(query, snapshot_id=snapshot.snapshot_id).rows
+        for snapshot in adapter.list_snapshots()[2:]
+    }
+    adapter.compact("messages")
+    compacted = _files(adapter, tmp_path / "datasets")
+
+    dry = adapter.clean_up(dry_run=True)
+    assert dry == {
+        "dry_run": True,
+        "retention_days": None,
+        "snapshots_expired": 0,
+        "files_deleted": compacted["scheduled"],
+    }
+    assert _files(adapter, tmp_path / "datasets") == compacted
+
+    # A SQLite catalog does not honour the grace (local catalogs only).
+    monkeypatch.setattr(ducklake_module, "CLEANUP_GRACE", timedelta(0))
+    report = adapter.clean_up()
+
+    cleaned = _files(adapter, tmp_path / "datasets")
+    assert report["files_deleted"] == compacted["scheduled"] > 0
+    assert cleaned["scheduled"] == 0
+    assert cleaned["on_disk"] == compacted["on_disk"] - compacted["scheduled"]
+    assert cleaned["snapshots"] == compacted["snapshots"]
+    adapter._snapshot_connections.clear()
+    for snapshot_id, rows in history.items():
+        assert adapter.query(query, snapshot_id=snapshot_id).rows == rows
+
+
+def test_clean_up_expires_snapshots_past_the_retention(tmp_path, monkeypatch):
+    adapter = _upserted_table(tmp_path, snapshot_retention_days=0)
+    adapter.compact("messages")
+    rows = _contents(adapter)
+    snapshots = _files(adapter, tmp_path / "datasets")["snapshots"]
+
+    dry = adapter.clean_up(dry_run=True)
+    assert dry["snapshots_expired"] == snapshots - 1
+    assert _files(adapter, tmp_path / "datasets")["snapshots"] == snapshots
+
+    monkeypatch.setattr(ducklake_module, "CLEANUP_GRACE", timedelta(0))
+    report = adapter.clean_up()
+
+    cleaned = _files(adapter, tmp_path / "datasets")
+    assert report["retention_days"] == 0
+    assert report["snapshots_expired"] == snapshots - 1
+    assert cleaned["snapshots"] == 1
+    assert cleaned["on_disk"] == 1 and cleaned["scheduled"] == 0
+    assert _contents(adapter) == rows
+
+
+def test_maintenance_options_are_checked(tmp_path):
+    for options in ({"snapshot_retention_days": -1}, {"compaction_delete_threshold": 2}):
+        with pytest.raises(ValueError):
+            DatasetSecondaryAdapterDuckLake(
+                catalog=f"sqlite:{tmp_path / 'datasets.sqlite'}",
+                data_path=str(tmp_path / "datasets"),
+                **options,
+            )
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.environ.get("ABI_TEST_DUCKLAKE_POSTGRES") != "1",
+    reason="set ABI_TEST_DUCKLAKE_POSTGRES=1 to run the PostgreSQL catalog test",
+)
+def test_postgres_catalog_clean_up_waits_out_the_grace(tmp_path, monkeypatch):
+    from testcontainers.postgres import PostgresContainer
+
+    with PostgresContainer(
+        "postgres:16-alpine",
+        username="ducklake",
+        password="ducklake",
+        dbname="ducklake",
+    ) as postgres:
+        catalog = f"postgres:{postgres.get_connection_url(driver=None)}"
+        data_path = tmp_path / "datasets"
+        adapter = DatasetSecondaryAdapterDuckLake(
+            catalog=catalog, data_path=str(data_path), data_inlining_row_limit=0
+        )
+        adapter.create(
+            DatasetSpec(name="events", columns=(ColumnSpec(name="id", type="integer"),))
+        )
+        for _ in range(3):
+            adapter.write("events", [{"id": n} for n in range(100)], mode="replace")
+        for n in range(3):
+            adapter.write("events", [{"id": 100 + n}])
+        adapter.compact("events")
+        scheduled = _files(adapter, data_path)["scheduled"]
+        assert scheduled > 0
+
+        # Files scheduled within the grace stay, for reads still using them.
+        assert adapter.clean_up()["files_deleted"] == 0
+
+        monkeypatch.setattr(ducklake_module, "CLEANUP_GRACE", timedelta(0))
+        assert adapter.clean_up()["files_deleted"] == scheduled
+        assert _files(adapter, data_path)["scheduled"] == 0
+        assert adapter.query("SELECT count(*) AS n FROM events").rows == [{"n": 103}]

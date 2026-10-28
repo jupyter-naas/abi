@@ -1,4 +1,4 @@
-"""Memberships are IAM's role attachments (RFC §7, §13): the only record of who
+"""Memberships are IAM's role attachments: the only record of who
 holds which role in an organization or a workspace.
 
 A role is ``builtin.<role>`` attached to the user's principal at the scope of
@@ -44,6 +44,11 @@ _T = TypeVar("_T")
 _PRINCIPAL_ID = re.compile(r"^usr_[0-9a-z]{26}$")
 
 ROLE_NAMES = ("owner", "admin", "member", "viewer")
+# Organization owners and admins reach every workspace of their organization
+# (``services/iam/AGENTS.md``, "Org owners and admins reach every workspace"): the org role is also held
+# organization-wide (``abi:<org>:*``), which IAM reaches into every workspace.
+# Members and viewers of an organization inherit nothing.
+INHERITING_ROLES = ("owner", "admin")
 _RANK = {name: len(ROLE_NAMES) - index for index, name in enumerate(ROLE_NAMES)}
 _POLICY_OF = {name: f"builtin.{name}" for name in ROLE_NAMES}
 
@@ -58,6 +63,13 @@ class Member:
     role: str
     principal_id: str
     since: datetime | None = None
+
+
+def wide_scope(scope: str) -> str | None:
+    """The organization-wide scope (``abi:<org>:*``) of an organization's own scope
+    (``abi:<org>:-``); None for any other scope."""
+    org, workspace = scope_fields(scope)
+    return f"abi:{org}:*" if workspace == "-" and org != "-" else None
 
 
 def role_of_policy(policy_id: str) -> str | None:
@@ -204,9 +216,80 @@ class Memberships:
 
         return await self._run(work)
 
+    async def platform_admins(self) -> set[str]:
+        """The users who hold ``builtin.platform_admin``, by the id Nexus names them."""
+
+        def work(iam: Any) -> set[str]:
+            found: set[str] = set()
+            for attachment in iam.list_attachments(policy_id=roles.PLATFORM_ADMIN):
+                try:
+                    found.add(self._user_id(iam, attachment.principal_id))
+                except (IAMNotFoundError, ResourceNotFoundError):
+                    continue
+            return found
+
+        return await self._run(work)
+
+    async def set_platform_admin(self, user_id: str, on: bool, *, by: Any = None) -> None:
+        """Attach or detach ``builtin.platform_admin`` for a user Nexus knows. Done
+        as ``by`` (``api`` on their behalf), so IAM decides whether they may."""
+        vouched = await self._vouched(user_id)
+
+        def work(iam: Any) -> None:
+            principal_id = self._find_principal(iam, user_id, vouched=vouched)
+            if principal_id is None:
+                raise UnknownUserError(user_id)
+            if on:
+                iam.attach_policy(roles.PLATFORM_ADMIN, principal_id)
+            else:
+                iam.detach_policy(roles.PLATFORM_ADMIN, principal_id)
+
+        await self._run(work, as_api=by is None, user=by)
+
     async def role_at(self, user_id: str, scope: str) -> str | None:
         """The highest role the user holds directly at ``scope``."""
         return (await self.roles_of(user_id)).get(scope)
+
+    async def inherited_role(self, user_id: str, org_id: str) -> str | None:
+        """The role the user holds in every workspace of ``org_id`` through their
+        organization role (an owner or admin of the organization), if any."""
+        return (await self.roles_of(user_id)).get(f"abi:{org_id}:*")
+
+    async def org_wide_orgs_of(self, user_id: str) -> list[str]:
+        """The orgs whose every workspace the user reaches (they hold a role
+        organization-wide there: an org owner or admin)."""
+        found = []
+        for scope in await self.roles_of(user_id):
+            org, workspace = scope_fields(scope)
+            if workspace == "*" and org != "-":
+                found.append(org)
+        return sorted(found)
+
+    async def sync_org_wide_roles(self, user_id: str | None = None) -> int:
+        """Hold the organization-wide role of every org owner and admin (of one user,
+        when given: after the sign-in that claimed their invitation). Idempotent,
+        and it only adds: run at start, it gives the owners and admins of an older
+        install their reach; an organization-wide role someone attached on purpose
+        is left alone. Returns how many attachments were made."""
+
+        def work(iam: Any) -> int:
+            made = 0
+            only = self._find_principal(iam, user_id, vouched=False) if user_id else None
+            if user_id and only is None:
+                return 0
+            with as_service_account("api"):
+                for role in INHERITING_ROLES:
+                    for attachment in iam.list_attachments(policy_id=_POLICY_OF[role]):
+                        if only is not None and attachment.principal_id != only:
+                            continue
+                        wide = wide_scope(attachment.scope) if attachment.scope else None
+                        if wide is None or role in self._held(iam, attachment.principal_id, wide):
+                            continue
+                        iam.attach_policy(_POLICY_OF[role], attachment.principal_id, wide)
+                        made += 1
+            return made
+
+        return await self._run(work)
 
     async def roles_of(self, user_id: str) -> dict[str, str]:
         """``{scope: role}`` of every role the user holds directly."""
@@ -261,6 +344,24 @@ class Memberships:
         return found
 
     @staticmethod
+    def mirror_org_wide(iam: Any, principal_id: str, scope: str, role: str | None) -> None:
+        """Hold the organization-wide role an organization ``role`` (``None``: no
+        role) carries, and no other. Made as ``api`` for no user: IAM keeps
+        organization-wide attachments from an org admin, so the change that
+        asked for ``role`` was authorized at the organization's own scope first."""
+        wide = wide_scope(scope)
+        if wide is None:
+            return
+        wanted = role if role in INHERITING_ROLES else None
+        with as_service_account("api"):
+            held = Memberships._held(iam, principal_id, wide)
+            if wanted is not None and wanted not in held:
+                iam.attach_policy(_POLICY_OF[wanted], principal_id, wide)
+            for other in held:
+                if other != wanted:
+                    iam.detach_policy(_POLICY_OF[other], principal_id, wide)
+
+    @staticmethod
     def _require_all(
         iam: Any, principal_id: str, scope: str, needed: list[tuple[str, str]]
     ) -> None:
@@ -270,9 +371,7 @@ class Memberships:
             except (PermissionDeniedError, ResourceNotFoundError) as exc:
                 raise MembershipDenied(role) from exc
 
-    async def check(
-        self, user_id: str, role: str | None, scope: str, *, by: Any = None
-    ) -> None:
+    async def check(self, user_id: str, role: str | None, scope: str, *, by: Any = None) -> None:
         """Raise ``MembershipDenied`` unless ``by`` may give the user ``role`` at
         ``scope`` (``None``: take their roles away), changing nothing. Callers
         with rules of their own (an owner must remain) ask this first, so the
@@ -324,6 +423,7 @@ class Memberships:
             for other in held:
                 if other != role:
                     iam.detach_policy(_POLICY_OF[other], principal_id, scope)
+            self.mirror_org_wide(iam, principal_id, scope, role)
 
         await self._run(work, as_api=by is None, user=by)
         await self._notify(scope)
@@ -343,11 +443,13 @@ class Memberships:
                 held = self._held(iam, principal_id, scope)
                 if (held and not replace) or held == [role]:
                     kept += 1
+                    self.mirror_org_wide(iam, principal_id, scope, best(held))
                     continue
                 iam.attach_policy(_POLICY_OF[role], principal_id, scope)
                 for other in held:
                     if other != role:
                         iam.detach_policy(_POLICY_OF[other], principal_id, scope)
+                self.mirror_org_wide(iam, principal_id, scope, role)
                 granted += 1
             return granted, kept
 
@@ -369,6 +471,7 @@ class Memberships:
             self._require_all(iam, principal_id, scope, [("iam:DetachPolicy", r) for r in held])
             for role in held:
                 iam.detach_policy(_POLICY_OF[role], principal_id, scope)
+            self.mirror_org_wide(iam, principal_id, scope, None)
             return bool(held)
 
         revoked = await self._run(work, as_api=by is None, user=by)
@@ -401,10 +504,11 @@ class Memberships:
                 *_POLICY_OF.values(),
                 *(roles.feature_policy_id(key) for key in iam.feature_policy_keys()),
             ]
+            scopes = {scope, wide_scope(scope)} - {None}
             for policy_id in held_policies:
                 for attachment in iam.list_attachments(policy_id=policy_id):
-                    if attachment.scope == scope:
-                        iam.detach_policy(policy_id, attachment.principal_id, scope)
+                    if attachment.scope in scopes:
+                        iam.detach_policy(policy_id, attachment.principal_id, attachment.scope)
             iam.delete_scope(org, workspace_id or "-")
 
         await self._run(work)

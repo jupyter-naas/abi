@@ -98,9 +98,7 @@ def _catalog_class_counts_combined(
     }
 
 
-def _catalog_class_counts_one_graph(
-    store: QueryStore, graph_uri: str
-) -> dict[str, dict[str, Any]]:
+def _catalog_class_counts_one_graph(store: QueryStore, graph_uri: str) -> dict[str, dict[str, Any]]:
     batch = rows(
         store,
         f"""
@@ -240,9 +238,7 @@ def catalog(
     return {
         "graphs": list(graph_catalog.values()),
         "selected_graphs": graphs,
-        "classes": sorted(
-            classes.values(), key=lambda c: (c["label"].lower(), c["uri"])
-        ),
+        "classes": sorted(classes.values(), key=lambda c: (c["label"].lower(), c["uri"])),
     }
 
 
@@ -281,9 +277,7 @@ def _is_transient(exc: Exception) -> bool:
     return getattr(exc, "status_code", None) in (502, 503, 504)
 
 
-def _snapshot_metric(
-    snapshot: dict[str, Any], metric: str, graph_uri: str, compute: Any
-) -> None:
+def _snapshot_metric(snapshot: dict[str, Any], metric: str, graph_uri: str, compute: Any) -> None:
     """Store one metric, or record it as unavailable instead of failing the dashboard.
 
     A store that cannot decode some nodes (e.g. a damaged TDB2 node table) fails
@@ -292,9 +286,7 @@ def _snapshot_metric(
     try:
         compute()
     except Exception as exc:
-        logger.warning(
-            "Explorer metric %r unavailable for %s: %s", metric, graph_uri, exc
-        )
+        logger.warning("Explorer metric %r unavailable for %s: %s", metric, graph_uri, exc)
         snapshot["unavailable"].append(metric)
         if _is_transient(exc):
             snapshot["transient"].append(metric)
@@ -307,8 +299,13 @@ SCHEMA_TYPES = """VALUES ?schemaType { owl:Class rdfs:Class owl:Ontology
 _SCHEMA_TYPE_URIS = {
     "http://www.w3.org/2002/07/owl#" + name
     for name in (
-        "Class", "Ontology", "ObjectProperty", "DatatypeProperty",
-        "AnnotationProperty", "Restriction", "Axiom",
+        "Class",
+        "Ontology",
+        "ObjectProperty",
+        "DatatypeProperty",
+        "AnnotationProperty",
+        "Restriction",
+        "Axiom",
     )
 } | {
     "http://www.w3.org/2000/01/rdf-schema#Class",
@@ -318,9 +315,7 @@ _SCHEMA_TYPE_URIS = {
 RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
 
 
-def graph_snapshot(
-    store: QueryStore, graph_uri: str, skip: Iterable[str] = ()
-) -> dict[str, Any]:
+def graph_snapshot(store: QueryStore, graph_uri: str, skip: Iterable[str] = ()) -> dict[str, Any]:
     """Dashboard statistics for one named graph, as JSON-serialisable data.
 
     Queries are shaped for TDB2 on multi-million-triple graphs: each is an index
@@ -343,9 +338,7 @@ def graph_snapshot(
     snapshot: dict[str, Any] = {
         "graph_uri": graph_uri,
         "triples": int(
-            rows(store, f"SELECT (COUNT(*) AS ?n) WHERE {{ {scope} {{ ?s ?p ?o }} }}")[
-                0
-            ]["n"]
+            rows(store, f"SELECT (COUNT(*) AS ?n) WHERE {{ {scope} {{ ?s ?p ?o }} }}")[0]["n"]
         ),
         **dict.fromkeys(SNAPSHOT_METRICS),
         "unreadable_predicates": [],
@@ -397,7 +390,9 @@ def graph_snapshot(
                     raise
                 logger.warning(
                     "Explorer: unreadable objects for %s in %s: %s",
-                    predicate, graph_uri, exc,
+                    predicate,
+                    graph_uri,
+                    exc,
                 )
                 snapshot["unreadable_predicates"].append(predicate)
                 continue
@@ -411,18 +406,18 @@ def graph_snapshot(
 
     def instance_counts() -> None:
         schema_typed = f"{SCHEMA_TYPES} ?s a ?schemaType"
-        snapshot["instances"] = count(
-            "?s a ?instanceType . FILTER(isIRI(?s))"
-        ) - count(f"{schema_typed} FILTER(isIRI(?s))")
+        snapshot["instances"] = count("?s a ?instanceType . FILTER(isIRI(?s))") - count(
+            f"{schema_typed} FILTER(isIRI(?s))"
+        )
         snapshot["named_individuals"] = count(
             "?s a owl:NamedIndividual . FILTER(isIRI(?s))"
         ) - count(f"{schema_typed} . ?s a owl:NamedIndividual")
 
     def labeled() -> None:
         label = "?s rdfs:label ?label . FILTER(isIRI(?s) && isLiteral(?label) && STRLEN(STR(?label)) > 0)"
-        snapshot["labeled_instances"] = count(
-            f"{label} FILTER EXISTS {{ ?s a ?anyType }}"
-        ) - count(f"{SCHEMA_TYPES} ?s a ?schemaType . {label}")
+        snapshot["labeled_instances"] = count(f"{label} FILTER EXISTS {{ ?s a ?anyType }}") - count(
+            f"{SCHEMA_TYPES} ?s a ?schemaType . {label}"
+        )
 
     def classes() -> None:
         overlap = {
@@ -482,9 +477,7 @@ def _graph_kpis(snapshot: dict[str, Any]) -> dict[str, int | None]:
     }
     kpis["relations"] = snapshot["relations"]
     kpis["literal_values"] = snapshot["literal_values"]
-    kpis["predicates"] = (
-        None if snapshot["predicates"] is None else len(snapshot["predicates"])
-    )
+    kpis["predicates"] = None if snapshot["predicates"] is None else len(snapshot["predicates"])
     kpis["classes"] = (
         None
         if snapshot["classes"] is None
@@ -515,9 +508,7 @@ def consolidate(
         elif key == "predicates":
             kpis[key] = len({p for s in available for p in s["predicates"]})
         elif key == "classes":
-            kpis[key] = len(
-                {uri for s in available for uri, n in s["classes"].items() if n > 0}
-            )
+            kpis[key] = len({uri for s in available for uri, n in s["classes"].items() if n > 0})
         else:
             kpis[key] = sum(s[key] for s in available)
     return kpis, excluded
@@ -723,17 +714,13 @@ def instances(
 ) -> dict[str, Any]:
     if not graphs:
         return {"items": [], "has_more": False}
-    page_pairs, has_more = _instance_page_pairs(
-        store, graphs, class_uris, search, offset, limit
-    )
+    page_pairs, has_more = _instance_page_pairs(store, graphs, class_uris, search, offset, limit)
     if not page_pairs:
         return {"items": [], "has_more": has_more}
     page = [{"g": g, "s": s} for g, s in page_pairs]
     pairs = (
         "VALUES (?g ?s) { "
-        + " ".join(
-            f"({sparql_iri(str(r['g']))} {sparql_iri(str(r['s']))})" for r in page
-        )
+        + " ".join(f"({sparql_iri(str(r['g']))} {sparql_iri(str(r['s']))})" for r in page)
         + " }"
     )
     items: dict[tuple[str, str], dict[str, Any]] = {
@@ -776,9 +763,7 @@ def instances(
         preferred = candidates & set(class_uris)
         item["class_uri"] = min(preferred or candidates or {NAMED})
         item["class_label"] = local_name(item["class_uri"])
-    class_values = " ".join(
-        map(sparql_iri, sorted({i["class_uri"] for i in items.values()}))
-    )
+    class_values = " ".join(map(sparql_iri, sorted({i["class_uri"] for i in items.values()})))
     for row in _try_rows(
         store,
         f"""
@@ -808,9 +793,7 @@ def instances(
           WHERE {{ {pairs} GRAPH ?g {{ ?s ?p ?o . FILTER(isLiteral(?o)) }} }} GROUP BY ?g ?s
         """,
         ):
-            items[str(row["g"]), str(row["s"])]["properties_count"] = int(
-                row["properties"]
-            )
+            items[str(row["g"]), str(row["s"])]["properties_count"] = int(row["properties"])
         for row in rows(
             store,
             f"""
@@ -818,9 +801,7 @@ def instances(
           WHERE {{ {pairs} GRAPH ?g {{ ?other ?p ?s . FILTER(?p != rdf:type) }} }} GROUP BY ?g ?s
         """,
         ):
-            items[str(row["g"]), str(row["s"])]["range_relations_count"] = int(
-                row["incoming"]
-            )
+            items[str(row["g"]), str(row["s"])]["range_relations_count"] = int(row["incoming"])
     return {"items": list(items.values()), "has_more": has_more}
 
 
@@ -851,8 +832,7 @@ def network(
     seeds = (
         "VALUES (?g ?seed) { "
         + " ".join(
-            f"({sparql_iri(item['graph_uri'])} {sparql_iri(item['uri'])})"
-            for item in page["items"]
+            f"({sparql_iri(item['graph_uri'])} {sparql_iri(item['uri'])})" for item in page["items"]
         )
         + " }"
     )

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { History, MessageSquare, MoreHorizontal, Plus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { downloadConversationTranscript } from '@/lib/chat-transcript-export';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAgentsStore } from '@/stores/agents';
 import { useFeaturePaneStore } from '@/stores/feature-pane';
@@ -13,6 +13,7 @@ import { bindFeaturePaneAgent, pickPaneAgentForSurface } from '@/lib/feature-age
 import {
   appAgentRefForPane,
   featureOpenResource,
+  routeWithSearch,
   getPaneSurfaceForPath,
 } from '@/lib/feature-office-agents';
 import { ColumnResizeHandle } from './column-resize-handle';
@@ -59,11 +60,12 @@ export function AIPane() {
   // default (Abi when there is none). An open item (deck, app, dataset)
   // forces it over a picker choice.
   const pathname = usePathname();
+  const search = useSearchParams()?.toString();
   const surface = getPaneSurfaceForPath(pathname);
   const slidesSlug = useSlidesStore((s) => s.selectedSlug);
   const featureResource = useFeaturePaneStore((s) => s.resource);
   const agents = useAgentsStore((s) => s.agents);
-  const openResource = featureOpenResource(pathname, featureResource);
+  const openResource = featureOpenResource(routeWithSearch(pathname, search), featureResource);
   const openItemId =
     surface === 'slides' ? slidesSlug : (openResource?.id ?? null);
   const appAgentRef = appAgentRefForPane(pathname, featureResource);

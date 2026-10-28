@@ -71,7 +71,7 @@ export function ResourceAccessEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
-  const pending = useRef<AbortController>();
+  const pending = useRef<AbortController | undefined>(undefined);
   const title = kind === 'ontologies' ? 'Ontologies' : 'Graphs';
   const endpoint = `${getApiUrl()}/api/workspaces/${encodeURIComponent(workspaceId)}/resource-access/${kind}`;
   const dirty =

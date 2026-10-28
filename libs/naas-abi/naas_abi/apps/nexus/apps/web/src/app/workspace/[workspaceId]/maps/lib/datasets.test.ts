@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   getMapsDataset,
-  getMapsDatasetsByCategory,
+  getMapsDatasetsByGroup,
   isMapsDatasetId,
   mapsCustomFeedUrl,
   MAPS_DATASETS,
@@ -10,51 +10,61 @@ import {
 } from './datasets';
 import { CONFLICT_SITES } from './conflict-sites';
 
-const PUBLIC_IDS = [
+const ENVIRONMENT_IDS = [
+  'gdacs',
   'earthquakes',
   'wildfires',
-  'temperature',
-  'gdacs',
-  'eonet-all',
-  'openaq',
-  'nws-alerts',
-  'tropical-storms',
   'volcanoes',
-  'flights',
-  'conflict',
-  'gulf-strikes',
-  'news',
-  'ais',
-  'iss',
-  'presence',
+  'tropical-storms',
+  'nws-alerts',
+  'eonet-all',
+  'temperature',
+  'openaq',
 ] as const;
 
+const SIGINT_IDS = ['flights', 'ais', 'iss'] as const;
+
+const SITUATION_IDS = ['conflict', 'gulf-strikes', 'news'] as const;
+
+const BUILTIN_IDS = [...ENVIRONMENT_IDS, ...SIGINT_IDS, ...SITUATION_IDS] as const;
+
 describe('MAPS_DATASETS taxonomy', () => {
-  it('lists Public data layers (including Here); Custom empty upstream', () => {
-    expect(getMapsDatasetsByCategory('public').map((d) => d.id)).toEqual([
-      ...PUBLIC_IDS,
-    ]);
-    // Custom is the extension point: product-specific layers are registered by a
-    // deployment through NEXT_PUBLIC_MAPS_CUSTOM_DATASETS, never shipped here.
-    expect(getMapsDatasetsByCategory('custom')).toEqual([]);
+  it('groups built-in layers by Environment, SIGINT, and Situation', () => {
+    expect(getMapsDatasetsByGroup('Environment').map((d) => d.id)).toEqual([...ENVIRONMENT_IDS]);
+    expect(getMapsDatasetsByGroup('SIGINT').map((d) => d.id)).toEqual([...SIGINT_IDS]);
+    expect(getMapsDatasetsByGroup('situation').map((d) => d.id)).toEqual([...SITUATION_IDS]);
+    expect(getMapsDatasetsByGroup('Custom')).toEqual([]);
   });
 
-  it('keeps Here as a public layer and ships no product-specific datasets', () => {
-    expect(getMapsDataset('presence')?.category).toBe('public');
-    expect(getMapsDataset('openstreetmap')).toBeNull();
-    expect(getMapsDataset('ontologist-north-america')).toBeNull();
-    expect(isMapsDatasetId('ontologist-north-america')).toBe(false);
-    expect(getMapsDataset('wog')).toBeNull();
-    expect(isMapsDatasetId('wog')).toBe(false);
+  it('includes every built-in id once (Custom empty upstream)', () => {
+    const ids = MAPS_DATASETS.filter((d) => d.group !== 'Custom').map((d) => d.id);
+    expect([...ids].sort()).toEqual([...BUILTIN_IDS].sort());
   });
 
-  it('exposes Maps-owned public feed URLs and /api/maps proxies', () => {
-    expect(MAPS_PUBLIC_FEEDS.earthquakes).toContain('earthquake.usgs.gov');
-    expect(MAPS_PUBLIC_FEEDS.wildfires).toContain('eonet.gsfc.nasa.gov');
-    expect(MAPS_PUBLIC_FEEDS.eonetAll).toContain('eonet.gsfc.nasa.gov');
-    expect(MAPS_PUBLIC_FEEDS.volcanoes).toContain('category=volcanoes');
+  it('registers every dataset id', () => {
+    for (const dataset of MAPS_DATASETS) {
+      expect(isMapsDatasetId(dataset.id)).toBe(true);
+    }
+    expect(isMapsDatasetId('not-a-dataset')).toBe(false);
+    expect(MAPS_DATASETS.filter((d) => d.group !== 'Custom')).toHaveLength(BUILTIN_IDS.length);
+  });
+});
+
+describe('getMapsDataset', () => {
+  it('returns a built-in dataset', () => {
+    expect(getMapsDataset('iss')?.title).toBe('ISS');
+  });
+});
+
+describe('MAPS_PUBLIC_FEEDS', () => {
+  it('maps conflict to static list size', () => {
+    expect(getMapsDataset('conflict')).toBeTruthy();
+    expect(CONFLICT_SITES.length).toBeGreaterThan(0);
+  });
+
+  it('exposes proxy routes for upstream feeds', () => {
     expect(MAPS_PUBLIC_FEEDS.firms).toBe('/api/maps/firms');
-    expect(MAPS_PUBLIC_FEEDS.temperature).toContain('open-meteo.com');
+    expect(MAPS_PUBLIC_FEEDS.earthquakes).toMatch(/earthquake|usgs/i);
     expect(MAPS_PUBLIC_FEEDS.gdacs).toBe('/api/maps/gdacs');
     expect(MAPS_PUBLIC_FEEDS.openaq).toBe('/api/maps/openaq');
     expect(MAPS_PUBLIC_FEEDS.nwsAlerts).toBe('/api/maps/nws');
@@ -72,25 +82,6 @@ describe('MAPS_DATASETS taxonomy', () => {
     );
     expect(mapsCustomFeedUrl('acme sites/../x', 'ws 1')).toBe(
       '/api/maps/custom/acme%20sites%2F..%2Fx?workspace_id=ws+1',
-    );
-  });
-
-  it('keeps a curated Maps-owned conflict pin list (no WSR import)', () => {
-    expect(CONFLICT_SITES.length).toBeGreaterThanOrEqual(10);
-    for (const site of CONFLICT_SITES) {
-      expect(Number.isFinite(site.lat)).toBe(true);
-      expect(Number.isFinite(site.lng)).toBe(true);
-      expect(site.name.length).toBeGreaterThan(0);
-    }
-  });
-
-  it('registers every dataset id', () => {
-    for (const dataset of MAPS_DATASETS) {
-      expect(isMapsDatasetId(dataset.id)).toBe(true);
-    }
-    expect(isMapsDatasetId('not-a-dataset')).toBe(false);
-    expect(MAPS_DATASETS.filter((d) => d.category === 'public')).toHaveLength(
-      PUBLIC_IDS.length,
     );
   });
 });

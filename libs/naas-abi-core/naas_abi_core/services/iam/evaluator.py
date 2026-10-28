@@ -1,4 +1,4 @@
-"""The evaluation algorithm of RFC §5.3, over a ``PolicySource``.
+"""The evaluation algorithm (``AGENTS.md``, "Evaluation"), over a ``PolicySource``.
 
     decide(ctx, action, resource):
       1. the actor or the OBO user is not active        -> DENY (suspended)
@@ -6,11 +6,16 @@
       3. d_P = principal_decision(P); d_U likewise, ALLOW without a user
       4. either is EXPLICIT_DENY                        -> DENY (explicit)
       5. either is not ALLOW                            -> DENY (implicit)
-      6. the token narrows and no statement matches     -> DENY (implicit)
-      7.                                                -> ALLOW
+      6. a bounded side, a module scope or a feature,
+         outside the org's or the workspace's set       -> DENY (outside_set)
+      7. the token narrows and no statement matches     -> DENY (implicit)
+      8.                                                -> ALLOW
 
 Nothing is allowed without a matching Allow; an explicit Deny wins over any
 number of Allows; on behalf of a user, actor and user must both be allowed.
+A user's Allow on a module scope or a feature counts only within the sets of
+the resource's org and workspace (``sets.py``), unless the user holds
+``builtin.platform_admin``.
 """
 
 from __future__ import annotations
@@ -21,6 +26,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from naas_abi_core.engine.call_context import CallContext
+from naas_abi_core.services.iam import sets
 from naas_abi_core.services.iam.IAMPorts import (
     DecidingStatement,
     Decision,
@@ -108,6 +114,12 @@ class Evaluator:
             return False
         user_id = _user_id(ctx)
         sides = [actor] if user is None else [actor, user]
+        if (
+            any(side.bounded for side in sides)
+            and self._source.has_sets()
+            and sets.bounded(self._source.catalogs, service, resource_type)
+        ):
+            return False  # a set may leave some of them out
         return all(
             _spans_type(side, action, service, resource_type, user_id) for side in sides
         )
@@ -152,13 +164,36 @@ class Evaluator:
         for verdict in (d_p, d_u):
             if verdict.outcome != "allow":
                 return denied("implicit_deny", verdict.deciding)
-        # 6. A narrowed token only narrows.
+        # 6. The sets bound a user's Allow on module scopes and features.
+        if (actor.bounded or (user is not None and user.bounded)) and not (
+            self._within_sets(action, resource)
+        ):
+            return denied("outside_set")
+        # 7. A narrowed token only narrows.
         if ctx.scope is not None:
             narrowing = _token_allow(ctx, action, resource, actor, user_id)
             if narrowing is None:
                 return denied("implicit_deny")
-        # 7.
+        # 8.
         return Explanation(True, "allow", action, resource, d_p.deciding)
+
+    def _within_sets(self, action: str, resource: str) -> bool:
+        """Whether the sets of the resource's org and workspace have it (true
+        for a resource they do not bound)."""
+        if not self._source.has_sets():
+            return True
+        try:
+            name = parse_resource_name(resource)
+        except ValueError:
+            return True
+        if not sets.bounded(self._source.catalogs, name.service, name.type):
+            return True
+        org_set, workspace_set = self._source.scope_sets(name.org, name.workspace)
+        return all(
+            sets.allows(found, self._source.catalogs, action, name)
+            for found in (org_set, workspace_set)
+            if found is not None
+        )
 
     def _visible(
         self,
@@ -206,7 +241,7 @@ class Evaluator:
                 _hints(
                     (
                         EffectiveStatement(statement, "token", index)
-                        for index, statement in enumerate(_token_statements(ctx))
+                        for index, statement in enumerate(token_statements(ctx))
                     ),
                     action,
                     actor.principal_id,
@@ -334,7 +369,7 @@ def _patterns(value: object) -> tuple[str, ...]:
     return tuple(value)
 
 
-def _token_statements(ctx: CallContext) -> list[Statement]:
+def token_statements(ctx: CallContext) -> list[Statement]:
     """The token's ``abi_scope``: Allow statements only; anything else matches nothing."""
     statements: list[Statement] = []
     for raw in ctx.scope or ():
@@ -362,7 +397,7 @@ def _token_allow(
     actor: Subject,
     user_id: str | None,
 ) -> EffectiveStatement | None:
-    for index, statement in enumerate(_token_statements(ctx)):
+    for index, statement in enumerate(token_statements(ctx)):
         effective = EffectiveStatement(statement, "token", index)
         if _statement_matches(effective, action, resource, actor.principal_id, user_id):
             return effective

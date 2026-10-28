@@ -56,6 +56,8 @@ SETTINGS_PATH_PREFIXES: tuple[str, ...] = (
     "/api/apps",
     "/api/search/topics",
     "/api/graph/list",
+    # The workspaces' sets: a change narrows what their settings pages list.
+    "/api/iam/admin/sets",
 )
 
 _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
@@ -138,7 +140,10 @@ def default_entry_variant(scope: Scope) -> str | None:
     credential = (scope.get("state") or {}).get("nexus_credential")
     if credential is None:
         return ""  # no credential in the scope: the resolver of the user speaks alone
-    if getattr(credential, "kind", None) != "session" or getattr(credential, "scope", None) is not None:
+    if (
+        getattr(credential, "kind", None) != "session"
+        or getattr(credential, "scope", None) is not None
+    ):
         return None
     groups = "\n".join(sorted(str(g) for g in getattr(credential, "groups", ()) or ()))
     return hashlib.sha256(groups.encode()).hexdigest()[:16]

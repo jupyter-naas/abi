@@ -8,7 +8,7 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.service import GraphMapLayer
 
 def test_catalog_and_feed_enforce_graph_grants_before_query():
     catalog = MapsCatalog()
-    feed = Mock(return_value={"pins": []})
+    feed = Mock(return_value={"type": "FeatureCollection", "features": [], "count": 0})
     catalog.register(
         GraphMapLayer(
             "example-offices", "Example offices", "Published locations", "urn:allowed", feed
@@ -22,5 +22,5 @@ def test_catalog_and_feed_enforce_graph_grants_before_query():
     scope = GraphAccessScope("workspace", frozenset({"urn:allowed"}), frozenset())
     assert catalog.list_layers(scope)[0]["id"] == "example-offices"
     store = Mock()
-    assert catalog.feed("example-offices", scope, store)["pins"] == []
+    assert catalog.feed("example-offices", scope, store)["features"] == []
     feed.assert_called_once_with(store)

@@ -1,4 +1,4 @@
-"""Policy documents: schema and validation (RFC §3.1).
+"""Policy documents: schema and validation.
 
 A document is ``{"version": "2026-10-13", "statements": [...]}``; each statement
 has an optional ``sid``, an ``effect`` (``Allow`` or ``Deny``), ``actions`` and
@@ -19,6 +19,7 @@ import yaml
 
 from naas_abi_core.services.iam.catalog import CatalogRegistry
 from naas_abi_core.services.iam.names import (
+    PLATFORM_SCOPE,
     PREFIX,
     has_wildcard,
     split_action,
@@ -32,9 +33,9 @@ MAX_PATTERNS = 100
 
 Effect = Literal["Allow", "Deny"]
 
-# Variables a stored policy may use in its resources (RFC §3.4). The module
-# ones resolve for a module's service account, ``module/<project>/<id>``
-# (RFC §8.3); for any other principal they match nothing.
+# Variables a stored policy may use in its resources. The module ones resolve
+# for a module's service account, ``module/<project>/<id>``, and are bound when
+# its manifest is approved; for any other principal they match nothing.
 MODULE_VARIABLES = frozenset({"module.id", "module.project"})
 POLICY_VARIABLES = frozenset({"scope", "principal.id", "user.id"}) | MODULE_VARIABLES
 # What a policy attached at a scope must start each resource pattern with.
@@ -125,6 +126,41 @@ class PolicyDocument:
             if statement.effect == "Allow"
             for pattern in statement.resources
         )
+
+    @property
+    def wholly_within_scope(self) -> bool:
+        """Whether every resource pattern, a Deny's included, starts with
+        ``${scope}:``: what a policy owned by an org or a workspace is, so that,
+        attached to anyone, it neither grants nor refuses beyond its scope."""
+        return all(
+            pattern.startswith(SCOPE_PREFIX)
+            for statement in self.statements
+            for pattern in statement.resources
+        )
+
+
+def check_owned_document(document: PolicyDocument, owner: str) -> None:
+    """A policy owned by an org or a workspace (``owner``) is written for its
+    scope: its Allow and Deny patterns all start with ``${scope}:``, so it is
+    always attached at a scope and reaches nothing beyond it, whoever holds it.
+    ``PolicyValidationError`` names each pattern that does not."""
+    if owner == PLATFORM_SCOPE or document.wholly_within_scope:
+        return
+    outside = sorted(
+        {
+            pattern
+            for statement in document.statements
+            for pattern in statement.resources
+            if not pattern.startswith(SCOPE_PREFIX)
+        }
+    )
+    raise PolicyValidationError(
+        [
+            f"A policy of {owner} names only resources under ${{scope}}: "
+            f"{pattern!r} is not"
+            for pattern in outside
+        ]
+    )
 
 
 def within_scope(statement: Statement) -> Statement | None:

@@ -1,4 +1,4 @@
-"""Object storage passes the authorization contract (RFC §6.4, "object_storage")."""
+"""Object storage passes the authorization contract."""
 
 from __future__ import annotations
 
@@ -327,7 +327,7 @@ def test_a_file_named_like_a_denied_folder_is_still_listed(tmp_path):
 
 
 def test_a_suspended_user_sees_no_folder_at_once(tmp_path):
-    """Suspension takes effect immediately (#44): no folder above the user's
+    """Suspension takes effect immediately: no folder above the user's
     prefixes, through a broad actor."""
     from naas_abi_core.engine.call_context import (
         CallContext,

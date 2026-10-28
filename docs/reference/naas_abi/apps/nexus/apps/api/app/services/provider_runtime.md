@@ -5,104 +5,120 @@ Provider runtime/service utilities for routing chat completion and streaming req
 
 - Anthropic (Claude) via `anthropic` SDK
 - OpenAI via `openai` SDK
-- OpenAI-compatible HTTP APIs (e.g., XAI, Mistral, OpenRouter, etc.)
+- OpenAI-compatible HTTP APIs (XAI, Mistral, OpenRouter, etc.)
 - Ollama (local HTTP API; supports images; optional tool-calls loop)
 - Cloudflare Workers AI
-- ABI server and ABI in-process agents (`inprocess://...`)
+- ABI server (HTTP) and ABI in-process agents (`inprocess://...`)
+- Remote, module-published agents (`type="remote"`)
 
-Includes endpoint safety validation and basic URL redaction for logs.
+Includes provider endpoint safety validation and URL query redaction for logs.
 
 ## Public API
 
 ### Data models
-- `ProviderConfig (pydantic.BaseModel)`
-  - Frontend-provided provider configuration.
-  - Fields: `id`, `name`, `type`, `enabled`, `endpoint`, `api_key`, `account_id`, `model`.
-- `Message (pydantic.BaseModel)`
-  - Chat message (supports optional images).
-  - Fields: `role` (`"user"|"assistant"|"system"`), `content`, `images` (list of base64 strings).
+- `ProviderConfig(BaseModel)`
+  - Provider configuration from frontend.
+  - Fields:
+    - `id: str`, `name: str`, `type: str`, `enabled: bool`
+    - `endpoint: str | None`
+    - `api_key: str | None`
+    - `account_id: str | None` (Cloudflare)
+    - `model: str`
+    - `llm_model: str | None` (in-process ABI override)
+- `Message(BaseModel)`
+  - Chat message; supports optional images (base64 strings).
+  - Fields: `role: Literal["user","assistant","system"]`, `content: str`, `images: list[str] | None`
 
 ### Exceptions
 - `UnsafeProviderEndpointError(ValueError)`
   - Raised when a provider endpoint URL fails safety checks.
 
-### Endpoint and logging helpers
+### Endpoint/logging helpers
 - `redact_url_for_logs(url: str) -> str`
-  - Redacts sensitive query keys (e.g., `token`, `api_key`, `authorization`) in a URL string for safe logging.
+  - Redacts sensitive query keys (e.g., `token`, `api_key`, `authorization`) for safe logging.
 - `validated_provider_endpoint(config: ProviderConfig) -> str | None`
-  - Validates/normalizes `config.endpoint` based on `config.type` and returns a sanitized endpoint (no trailing `/`).
-  - Enforces HTTPS for official/custom endpoints; allows localhost for Ollama and some ABI cases.
+  - Validates/normalizes `config.endpoint` based on `config.type`.
+  - Returns a sanitized endpoint (no trailing `/`) or `None`.
 - `is_multimodal_model(model_name: str) -> bool`
-  - Returns `True` if the model name matches known vision/multimodal patterns.
+  - Returns `True` if `model_name` matches known multimodal/vision patterns.
 
 ### Chat completion (non-streaming)
-- `complete_chat(messages, config, system_prompt=None, thread_id=None) -> str`
-  - Routes to the appropriate provider based on `config.type`.
+- `complete_chat(messages, config, system_prompt, *, thread_id=None, injection_preamble) -> str`
+  - Routes completion to the provider defined by `config.type`.
+  - Provider types handled: `anthropic`, `openai`, `ollama`, `cloudflare`, `custom`, `abi`, `remote`.
 - Provider-specific completions:
-  - `complete_with_anthropic(messages, config, system_prompt=None) -> str`
-  - `complete_with_openai(messages, config, system_prompt=None) -> str`
-  - `complete_with_ollama(messages, config, system_prompt=None) -> str`
-  - `complete_with_cloudflare(messages, config, system_prompt=None) -> str`
-  - `complete_with_custom(messages, config, system_prompt=None) -> str` (OpenAI-compatible `/v1/chat/completions`)
-  - `complete_with_abi(messages, config, system_prompt=None, thread_id=None) -> str`
-    - Supports `inprocess://` endpoints (invokes local agent) or remote ABI HTTP endpoint.
+  - `complete_with_anthropic(messages, config, system_prompt) -> str`
+  - `complete_with_openai(messages, config, system_prompt) -> str`
+  - `complete_with_ollama(messages, config, system_prompt) -> str` (supports `Message.images`)
+  - `complete_with_cloudflare(messages, config, system_prompt) -> str`
+  - `complete_with_custom(messages, config, system_prompt) -> str` (POSTs to `.../v1/chat/completions`)
+  - `complete_with_abi(messages, config, system_prompt, *, thread_id=None, injection_preamble) -> str`
+    - Supports `inprocess://` endpoints (local in-process agent) or remote ABI HTTP endpoint.
+  - `complete_with_remote_agent(messages, config, *, thread_id, injection_preamble) -> str`
+    - Joins streamed chunks from a remote agent, ignoring step events.
 
 ### Streaming APIs
-All streaming functions return `AsyncGenerator[...]` yielding text chunks (and in one case, structured events).
-
-- `stream_with_ollama(messages, config, system_prompt=None) -> AsyncGenerator[str, None]`
-  - Streams JSON-lines from Ollama `/api/chat`.
-- `stream_with_openai_compatible(messages, config, system_prompt=None) -> AsyncGenerator[str, None]`
-  - Streams SSE `data:` lines from `{endpoint}/chat/completions`.
-- `stream_with_cloudflare(messages, config, system_prompt=None) -> AsyncGenerator[str, None]`
+- `stream_with_ollama(messages, config, system_prompt) -> AsyncGenerator[str, None]`
+  - Streams JSON-lines from Ollama `POST {endpoint}/api/chat`.
+- `stream_with_openai_compatible(messages, config, system_prompt) -> AsyncGenerator[str, None]`
+  - Streams SSE-style `data:` lines from `POST {endpoint}/chat/completions`.
+  - Adds OpenRouter attribution headers when endpoint contains `"openrouter"`.
+- `stream_with_cloudflare(messages, config, system_prompt) -> AsyncGenerator[str, None]`
   - Streams SSE from Cloudflare Workers AI.
-- `stream_with_abi(messages, config, system_prompt=None) -> AsyncGenerator[str, None]`
-  - Streams SSE from ABI server `/agents/{agent}/stream-completion?token=...`.
-- `stream_with_abi_inprocess(messages, config, thread_id=None) -> AsyncGenerator[str | dict[str, Any], None]`
-  - Streams by invoking an in-process ABI agent.
-  - May yield:
-    - text deltas (`str`)
-    - UI/tool status events (`dict`) extracted from Opencode-style events (e.g., `{"event": "tool", ...}`).
+- `stream_with_abi(messages, config, system_prompt=None) -> AsyncGenerator[str | dict[str, Any], None]`
+  - Streams SSE from ABI server `POST {endpoint}/agents/{agent}/stream-completion?token=...`.
+  - May also yield dict step events (tool usage/response, routing, model calls).
+- `stream_with_abi_inprocess(messages, config, thread_id, *, user_context_preamble) -> AsyncGenerator[str | dict[str, Any], None]`
+  - Streams from an in-process ABI agent.
+  - May yield text deltas (`str`) and structured UI/tool events (`dict`).
 - `stream_with_ollama_tools(messages, config, system_prompt=None, tools=None) -> AsyncGenerator[str, None]`
-  - Streams from Ollama and executes tool calls (see `AVAILABLE_TOOLS`) via local API.
+  - Streams from Ollama, detects tool calls, executes tools, then continues streaming.
 
 ### Tools
 - `AVAILABLE_TOOLS: list[dict]`
-  - Currently includes a `search_web` function tool schema.
+  - Tool schema list (currently includes `search_web`).
 - `execute_tool(tool_name: str, arguments: dict) -> str`
-  - Executes `search_web` by POSTing to `http://localhost:8000/api/search/web` and returns formatted results.
+  - Executes `search_web` by POSTing to `http://localhost:8000/api/search/web`.
 
 ### Health/status
-- `check_ollama_status(endpoint: str = "http://localhost:11434") -> dict`
-  - Returns `{status, models, multimodal_models, ...}`; on failure returns `{status:"offline", error:...}`.
+- `check_ollama_status(endpoint: str | None = None) -> dict`
+  - Calls `GET {endpoint}/api/tags` and returns `{status, models, multimodal_models, ...}`.
+
+### In-process ABI model routing hook
+- `register_inprocess_llm_model_resolver(resolver: Callable[[str, str|None], str|None]) -> None`
+  - Registers a resolver used by `resolve_inprocess_llm_model_for_turn(...)`.
+- `resolve_inprocess_llm_model_for_turn(agent_name: str, config_llm: str | None) -> str | None`
+  - Computes the effective chat model id for an in-process ABI agent turn.
 
 ## Configuration/Dependencies
 
-### Python dependencies
-- `httpx` (required)
-- `pydantic` (required)
+- Required:
+  - `httpx`
+  - `pydantic`
 - Optional SDKs:
-  - `anthropic` (required only for `complete_with_anthropic`)
-  - `openai` (required only for `complete_with_openai`)
+  - `anthropic` (required for `complete_with_anthropic`)
+  - `openai` (required for `complete_with_openai`)
+- Settings fallback (from `naas_abi.apps.nexus.apps.api.app.core.config.settings`):
+  - `settings.anthropic_api_key`
+  - `settings.openai_api_key`
+  - `settings.cloudflare_api_token`
+  - `settings.cloudflare_account_id`
+- Ollama endpoint resolution:
+  - `naas_abi.apps.nexus.apps.api.app.services.ollama.resolve_endpoint()`
 
-### Settings (imported from `naas_abi.apps.nexus.apps.api.app.core.config.settings`)
-Used as fallback when not provided in `ProviderConfig`:
-- `settings.anthropic_api_key`
-- `settings.openai_api_key`
-- `settings.cloudflare_api_token`
-- `settings.cloudflare_account_id`
+### Endpoint safety validation
+`validated_provider_endpoint()` enforces (via `_validate_endpoint_url`):
 
-### Endpoint safety rules (enforced by `validated_provider_endpoint`)
-- Only `http`/`https` schemes allowed.
-- Optional HTTPS requirement depending on provider type.
-- Credentials in URL are rejected.
-- Query/fragment in provider endpoint are rejected (except ABI remote call constructs its own query later).
-- Local/private IP ranges and `.local` are blocked unless explicitly allowed (e.g., Ollama, some ABI).
-- For known official providers, host must match the official host (even if a custom endpoint is supplied).
+- Only `http`/`https` schemes.
+- Optional HTTPS requirement (e.g., official/custom endpoints require HTTPS).
+- No credentials in URL.
+- No query/fragment in endpoint URL.
+- Blocks metadata hosts (`169.254.169.254`, `metadata.google.internal`).
+- Blocks local/private IPs and `.local` hostnames unless explicitly allowed (Ollama allows localhost/private LAN; ABI allows localhost for non-`inprocess://`).
 
 ## Usage
 
-### Minimal completion via `complete_chat` (Ollama)
+### Minimal completion (Ollama)
 ```python
 import asyncio
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
@@ -112,20 +128,20 @@ from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
 async def main():
     cfg = ProviderConfig(
         id="ollama1",
-        name="Local Ollama",
+        name="Ollama",
         type="ollama",
         enabled=True,
         endpoint="http://localhost:11434",
         model="llama3.1",
     )
     messages = [Message(role="user", content="Say hello in one sentence.")]
-    text = await complete_chat(messages, cfg)
+    text = await complete_chat(messages, cfg, system_prompt=None, injection_preamble=None)
     print(text)
 
 asyncio.run(main())
 ```
 
-### Minimal streaming (OpenAI-compatible endpoint)
+### Minimal streaming (OpenAI-compatible)
 ```python
 import asyncio
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
@@ -138,19 +154,22 @@ async def main():
         name="XAI",
         type="xai",
         enabled=True,
-        endpoint=None,          # uses official endpoint for type when omitted
+        endpoint=None,   # uses official endpoint for known provider types
         api_key="YOUR_KEY",
         model="grok-2-latest",
     )
     messages = [Message(role="user", content="Stream three words.")]
-    async for chunk in stream_with_openai_compatible(messages, cfg):
+    async for chunk in stream_with_openai_compatible(messages, cfg, system_prompt=None):
         print(chunk, end="")
 
 asyncio.run(main())
 ```
 
 ## Caveats
-- `complete_with_openai_compatible`/`stream_with_openai_compatible` require a valid `config.api_key`; no settings fallback is used there.
-- `complete_with_custom` posts to `"{endpoint}/v1/chat/completions"` (note the `/v1`), while `stream_with_openai_compatible` posts to `"{endpoint}/chat/completions"` (no `/v1`).
-- ABI remote completion embeds the token as a query parameter (`...?token=...`); use `redact_url_for_logs()` when logging such URLs.
-- `stream_with_abi_inprocess` may yield dictionaries (UI/tool events) in addition to text; consumers must handle both.
+- `complete_chat(...)` requires `injection_preamble` (no default); pass `None` explicitly if not used.
+- `stream_with_openai_compatible(...)` uses `config.api_key` directly (no settings fallback) and will fail if it is missing.
+- Custom endpoint paths differ:
+  - `complete_with_custom`: `POST {endpoint}/v1/chat/completions`
+  - `stream_with_openai_compatible`: `POST {endpoint}/chat/completions`
+- `stream_with_abi(...)` and `stream_with_abi_inprocess(...)` may yield structured dict events in addition to text; consumers must handle both types.
+- `execute_tool("search_web", ...)` calls a local Nexus API at `http://localhost:8000/...`; it will fail if that service is not available.

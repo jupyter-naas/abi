@@ -107,6 +107,8 @@ class OrganizationWorkspaceRecord:
     updated_at: datetime | None = None
     logo_url: str | None = None
     logo_emoji: str | None = None
+    workspace_group: str | None = None
+    # Saved in Organization Settings > Workspaces; None = config overrides apply.
 
 
 @dataclass
@@ -118,6 +120,49 @@ class OrganizationMemberRecord:
     email: str | None = None
     name: str | None = None
     created_at: datetime | None = None
+    avatar: str | None = None
+    organization: str | None = None
+    job_title: str | None = None
+    bio: str | None = None
+    service_line: str | None = None
+    country: str | None = None
+    interest: str | None = None
+
+
+@dataclass
+class OrganizationMemberAccountRecord:
+    """The member's platform account (users row), as the account settings show it."""
+
+    user_id: str
+    email: str | None = None
+    name: str | None = None
+    avatar: str | None = None
+    organization: str | None = None
+    job_title: str | None = None
+    bio: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass
+class OrganizationMemberProfileRecord:
+    """What this organization set for the member; None falls back to the account."""
+
+    name: str | None = None
+    avatar: str | None = None
+    organization: str | None = None
+    job_title: str | None = None
+    bio: str | None = None
+    service_line: str | None = None
+    country: str | None = None
+    interest: str | None = None
+
+
+@dataclass
+class OrganizationMemberDetailsRecord:
+    member: OrganizationMemberRecord
+    account: OrganizationMemberAccountRecord
+    organization_profile: OrganizationMemberProfileRecord
 
 
 @dataclass
@@ -128,10 +173,19 @@ class OrganizationWorkspaceMembershipRecord:
 
 
 @dataclass
+class UserOrganizationMembershipRecord:
+    user_id: str
+    organization_id: str
+    organization_name: str
+    role: str
+
+
+@dataclass
 class UserRecord:
     id: str
     email: str
     name: str | None = None
+    bio: str | None = None
 
 
 @dataclass
@@ -207,6 +261,50 @@ class OrganizationPermissionPort(ABC):
 
     @abstractmethod
     async def get_user_by_email(self, email: str) -> UserRecord | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_member_account(self, user_id: str) -> OrganizationMemberAccountRecord | None:
+        """The member's platform account (users row), as the account settings show it."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_organization_member_profile(
+        self, org_id: str, user_id: str
+    ) -> OrganizationMemberProfileRecord | None:
+        """What this organization set for the member; None when it set nothing."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def list_organization_member_profiles(
+        self, org_id: str
+    ) -> dict[str, OrganizationMemberProfileRecord]:
+        """Every member profile this organization set, by user id."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def update_organization_member_profile(
+        self,
+        org_id: str,
+        user_id: str,
+        *,
+        name: str | None,
+        organization: str | None,
+        job_title: str | None,
+        bio: str | None,
+        service_line: str | None = None,
+        country: str | None = None,
+        interest: str | None = None,
+    ) -> OrganizationMemberProfileRecord:
+        """Set the member's profile in this org (kept from the first edit on);
+        ``None`` leaves a field unchanged."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def set_organization_member_avatar(
+        self, org_id: str, user_id: str, avatar: str | None
+    ) -> str | None:
+        """Set (or clear, with ``None``) the org avatar; returns the previous org avatar."""
         raise NotImplementedError
 
     @abstractmethod

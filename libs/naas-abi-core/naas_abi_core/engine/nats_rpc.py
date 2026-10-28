@@ -92,8 +92,7 @@ class RequestPayloadError(Exception):
 async def request_payload(request: Request) -> bytes:
     """The request's protobuf body, read from its overflow upload when it has one.
 
-    Primaries call this instead of reading ``request.data`` (see
-    docs/adr/20261003_nats-rpc-overflow.md).
+    Primaries call this instead of reading ``request.data``.
     """
     headers = request.headers or {}
     transfer_id = headers.get(overflow.REQUEST_HEADER)
@@ -238,11 +237,21 @@ def upload_chunks(pieces: Iterable[bytes], size: int) -> Iterator[bytes]:
         yield bytes(buffer)
 
 
+def _check_deadline(deadline: float | None) -> None:
+    if deadline is not None and time.monotonic() >= deadline:
+        raise TimeoutError("The stream did not finish within its deadline")
+
+
 def _stream_frames(
-    exchange: Callable[[Any, Any], Any], transfer_id: str
+    exchange: Callable[[Any, Any], Any],
+    transfer_id: str,
+    deadline: float | None = None,
 ) -> Iterator[bytes]:
+    """The stream's frames; ``deadline`` (``time.monotonic()``) bounds the
+    wait for them."""
     sequence, frame = 0, bytearray()
     while True:
+        _check_deadline(deadline)
         reply = exchange(
             transfer_pb.ReadRequest(id=transfer_id, sequence=sequence),
             transfer_pb.ReadResponse,
@@ -598,7 +607,7 @@ class NatsRPCClient:
 
     # ------------------------------------------------------------------
     # Overflow: payloads above the broker limit travel as transfer frames
-    # (naas_abi_sdk.overflow, docs/adr/20261003_nats-rpc-overflow.md).
+    # (naas_abi_sdk.overflow).
     # ------------------------------------------------------------------
 
     def _chunk_envelope(self, request: Message) -> common_pb2.CallContext:
@@ -683,7 +692,7 @@ class NatsRPCClient:
 
     # ------------------------------------------------------------------
     # Streamed reads: a domain's transfer/v1 stream, read as the caller
-    # iterates (docs/adr/20261003_nats-streamed-results.md).
+    # iterates.
     # ------------------------------------------------------------------
 
     @contextmanager
@@ -694,12 +703,18 @@ class NatsRPCClient:
         metadata: bytes,
         raise_error: Callable[[Any], None],
         upload: Iterable[bytes] | None = None,
+        timeout_seconds: float | None = None,
     ) -> Iterator[Iterator[bytes] | None]:
         """Yield the frames of one stream, or ``None`` when no host answers the
         open (an engine without it: use the unary call). ``upload`` is sent
         first, read lazily in negotiated chunks, then the stream starts.
         ``raise_error`` raises the domain's exception for an error reply.
+        ``timeout_seconds`` bounds the whole stream with ``TimeoutError``
+        (``None``: each exchange has the client's deadline, the stream none).
         Leaving closes the session, which discards an unfinished upload."""
+        deadline = (
+            None if timeout_seconds is None else time.monotonic() + timeout_seconds
+        )
         # One span for the whole stream (totals as attributes), not one per frame.
         with transfer_span(prefix, operation) as trace:
             nc = self._run_coro(self._ensure_connection_async())
@@ -740,6 +755,7 @@ class NatsRPCClient:
                 for sequence, chunk in enumerate(
                     upload_chunks(upload or (), opened.chunk_bytes)
                 ):
+                    _check_deadline(deadline)
                     exchange(
                         transfer_pb.WriteRequest(
                             id=opened.id, sequence=sequence, data=chunk
@@ -749,7 +765,7 @@ class NatsRPCClient:
                 exchange(
                     transfer_pb.StartRequest(id=opened.id), transfer_pb.StartResponse
                 )
-                yield _stream_frames(exchange, opened.id)
+                yield _stream_frames(exchange, opened.id, deadline)
             finally:
                 try:
                     exchange(

@@ -49,8 +49,14 @@ async def feed(
         raise HTTPException(403, str(exc)) from exc
 
 
-def register_map_layer(app, layer: GraphMapLayer):
+def install_maps_layers(app) -> MapsCatalog:
+    """Mount ``/api/maps/layers`` once: an empty list until a module registers a layer
+    (the web asks for graph layers on every map load)."""
     if not hasattr(app.state, "maps_catalog"):
         app.state.maps_catalog = MapsCatalog()
         app.include_router(router)
-    app.state.maps_catalog.register(layer)
+    return app.state.maps_catalog
+
+
+def register_map_layer(app, layer: GraphMapLayer):
+    install_maps_layers(app).register(layer)

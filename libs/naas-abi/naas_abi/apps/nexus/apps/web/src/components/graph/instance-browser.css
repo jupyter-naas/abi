@@ -4,7 +4,6 @@
 .graph-class-browser > header { display:flex; justify-content:space-between; padding:4px 8px 8px; font-size:12px; font-weight:500; }
 .graph-class-browser > header > span:last-child { color:var(--muted-foreground-hex); font-weight:400; }
 .graph-browser-search { display:flex; align-items:center; gap:6px; min-width:0; border:1px solid var(--border-hex); padding:6px 8px; color:var(--muted-foreground-hex); background:var(--background-hex); }
-.graph-browser-search:focus-within { border-color:var(--workspace-accent,var(--color-primary)); }
 .graph-browser-search input { width:100%; min-width:0; padding:0; border:0; border-radius:0; outline:none; box-shadow:none; font:inherit; background:transparent; color:var(--foreground-hex); }
 .graph-browser-scope { margin:0; padding:8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted-foreground-hex); font-size:11px; }
 .graph-class-list, .graph-instance-list, .graph-inspector-relations { list-style:none; margin:0; padding:0; }

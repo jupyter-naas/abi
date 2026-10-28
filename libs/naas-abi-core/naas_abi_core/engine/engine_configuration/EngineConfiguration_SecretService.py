@@ -25,11 +25,17 @@ class DotenvSecretConfiguration(BaseModel):
       - adapter: "dotenv"
         config:
           path: ".env"
+          # A file another process owns: read, never written.
+          read_only: false
+          # Read the process environment before the file.
+          environment_first: false
     """
 
     model_config = ConfigDict(extra="forbid")
 
     path: str = ".env"
+    read_only: bool = False
+    environment_first: bool = False
 
 
 class NaasSecretConfiguration(BaseModel):
@@ -75,11 +81,10 @@ class SecretAdapterNATSConfiguration(BaseModel):
     """Secret adapter NATS RPC client configuration.
 
     Talks to a remote ``SecretPrimaryAdapterNATS`` over NATS request/reply
-    -- see docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
-    (Stage 1) and naas_abi_core/proto/secret/v1/secret.proto.
+    -- see naas_abi_core/proto/secret/v1/secret.proto.
 
     Authorization: the remote process's ``Secret`` service checks the
-    caller this client's token names per key against IAM (RFC §6.4).
+    caller this client's token names per key against IAM.
 
     Plugs into the existing multi-adapter fan-out exactly like dotenv/naas/
     base64 already do -- add it as one more entry in secret_adapters, not

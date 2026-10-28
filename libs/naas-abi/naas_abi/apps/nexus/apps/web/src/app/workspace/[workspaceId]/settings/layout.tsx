@@ -1,12 +1,14 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useParams, usePathname } from 'next/navigation';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { Header } from '@/components/shell/header';
-import { SETTINGS_GROUPS } from '@/components/shell/settings-nav';
+import { SETTINGS_GROUPS, settingsItemFor, settingsItemShown } from '@/components/shell/settings-nav';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
+import { reloadWorkspaceResources, useWorkspaceResources } from '@/hooks/use-workspace-resources';
 import { SettingsReloadProvider } from '@/components/settings/settings-reload';
+import { NotInWorkspace } from './not-in-workspace';
 
 // Service embeds and architecture visualization use the full content area instead of
 // the centered card layout every other settings page uses.
@@ -32,6 +34,21 @@ export default function SettingsLayout({
     [workspaceId]
   );
   useDevRouteWarmup(settingsHrefs);
+  // Reload: the workspaces and what this one has.
+  const reload = useCallback(
+    () => Promise.all([fetchWorkspaces(), reloadWorkspaceResources(workspaceId)]),
+    [fetchWorkspaces, workspaceId]
+  );
+  // A page of something outside the workspace's set has nothing to manage here.
+  // Read again each time the settings open: a set changed on Modules & features shows.
+  const { resources } = useWorkspaceResources(workspaceId, { refresh: true });
+  const item = settingsItemFor(pathname ?? '');
+  const outsideSet = Boolean(item && resources && !settingsItemShown(item, resources));
+  const page = outsideSet && item && resources ? (
+    <NotInWorkspace label={item.label} resources={resources} workspaceId={workspaceId ?? ''} />
+  ) : (
+    children
+  );
 
   return (
     <div className="flex h-full flex-col">
@@ -40,12 +57,12 @@ export default function SettingsLayout({
         subtitle={currentWorkspace?.name || 'Configure your workspace'}
       />}
 
-      <SettingsReloadProvider onReload={fetchWorkspaces}>
+      <SettingsReloadProvider onReload={reload}>
         {isFullPage ? (
-          <div className="flex-1 overflow-hidden">{children}</div>
+          <div className="flex-1 overflow-hidden">{page}</div>
         ) : (
           <div className="flex-1 overflow-auto px-4 py-6">
-            <div className="mx-auto max-w-4xl">{children}</div>
+            <div className="mx-auto max-w-4xl">{page}</div>
           </div>
         )}
       </SettingsReloadProvider>

@@ -1,4 +1,4 @@
-"""The identity domain service: configured providers, verified users (RFC §12.1).
+"""The identity domain service: configured providers, verified users.
 
 Every operation is authorized with the ``identity`` catalog on the provider it
 concerns (``abi:-:-:identity:provider/<name>``), for the caller of the current
@@ -51,7 +51,7 @@ from naas_abi_core.services.identity.token_verifier import (
 )
 
 # A relying party re-verifies its user at the provider at least this often
-# (RFC §9.2 and §12.1: no access token lives longer than ten minutes).
+# (no access token lives longer than ten minutes).
 MAX_SESSION_TOKEN_SECONDS = 600
 # Who writes the user a sign-in resolves: the engine, for the caller whose
 # sign-in it authorized.
@@ -98,6 +98,8 @@ class IdentityIAM(Protocol):
     def get_principal(self, principal_id: str) -> PrincipalRecord: ...
 
     def filter(self, action: str, resources: Iterable[str]) -> FilterResult: ...
+
+    def identity_at(self, principal_id: str, issuer: str) -> str | None: ...
 
 
 def _email(value: str) -> str:
@@ -276,7 +278,7 @@ class IdentityService(IIdentityService):
         )
 
     # =========================================================================
-    # Provisioning (an invitation's first step, RFC §12.2)
+    # Provisioning (an invitation's first step)
     # =========================================================================
 
     def provision_user(

@@ -85,6 +85,7 @@ async def cleanup_old_rate_limit_events() -> None:
             {"cutoff": cutoff},
         )
 
+
 def get_rate_limit_identifier(request: Request, user_id: str | None = None) -> str:
     """Get the identifier for rate limiting (user_id if authenticated, otherwise IP)."""
     if user_id:

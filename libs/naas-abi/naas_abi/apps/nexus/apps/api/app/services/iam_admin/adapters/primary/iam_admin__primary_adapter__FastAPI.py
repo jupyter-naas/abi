@@ -18,6 +18,11 @@ from collections.abc import Awaitable
 from typing import Any, Literal, TypeVar
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
+    enabled_feature_catalog,
+    with_pinned,
+)
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
     get_current_user_required,
     require_superadmin,
@@ -89,6 +94,8 @@ class PolicySourceBody(BaseModel):
 class PolicyCreateBody(PolicySourceBody):
     name: str = Field(min_length=1, max_length=128)
     description: str = Field(default="", max_length=1000)
+    # The owner: abi:-:- (the default), abi:<org>:- or abi:<org>:<ws>.
+    scope: str | None = None
 
 
 class PolicyUpdateBody(PolicySourceBody):
@@ -106,6 +113,8 @@ class AttachBody(BaseModel):
 class GroupCreateBody(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     org: str | None = None
+    # The owner: abi:-:- (the default), abi:<org>:- or abi:<org>:<ws>.
+    scope: str | None = None
 
 
 class IdpMappingBody(BaseModel):
@@ -130,6 +139,19 @@ class RejectBody(BaseModel):
     reason: str = Field(default="", max_length=500)
 
 
+class SetBody(BaseModel):
+    """A set: each part a list of items, or None for everything (core
+    ``services/iam/sets.py``: ``<module>``, ``<type>/<module>/<name>``,
+    ``<service>:<Action>``; feature keys)."""
+
+    modules: list[str] | None = Field(default=None, max_length=2000)
+    features: list[str] | None = Field(default=None, max_length=200)
+
+    def pinned_features(self) -> list[str] | None:
+        """The features, with those that always stay reachable (settings)."""
+        return with_pinned(self.features)
+
+
 class SimulateBody(BaseModel):
     principal_id: str = Field(min_length=1)
     action: str = Field(min_length=1)
@@ -149,9 +171,21 @@ async def access(
     return await _call(service.access(user, scope))
 
 
+@router.get("/grantable")
+async def grantable(
+    scope: str = Query(..., min_length=1),
+    user: User = Signed,
+    service: IamAdminService = Service,
+) -> dict[str, Any]:
+    """What the caller may grant at ``scope``: the policy builder offers only this."""
+    return await _call(service.grantable(user, scope))
+
+
 @router.get("/catalogs", dependencies=[declares("iam:ListPolicies")])
-async def catalogs(user: User = Signed, service: IamAdminService = Service) -> dict[str, Any]:
-    return await _call(service.catalogs(user))
+async def catalogs(
+    scope: str | None = None, user: User = Signed, service: IamAdminService = Service
+) -> dict[str, Any]:
+    return await _call(service.catalogs(user, scope))
 
 
 # -- policies -----------------------------------------------------------------------------
@@ -159,16 +193,22 @@ async def catalogs(user: User = Signed, service: IamAdminService = Service) -> d
 
 @router.post("/policies/validate", dependencies=[declares("iam:CreatePolicy")])
 async def validate_policy(
-    body: PolicySourceBody, user: User = Signed, service: IamAdminService = Service
+    body: PolicySourceBody,
+    scope: str | None = None,
+    user: User = Signed,
+    service: IamAdminService = Service,
 ) -> dict[str, Any]:
-    return await _call(service.validate_policy(user, body.source()))
+    return await _call(service.validate_policy(user, body.source(), scope))
 
 
 @router.get("/policies", dependencies=[declares("iam:ListPolicies")])
 async def list_policies(
-    after: str | None = None, user: User = Signed, service: IamAdminService = Service
+    after: str | None = None,
+    scope: str | None = None,
+    user: User = Signed,
+    service: IamAdminService = Service,
 ) -> dict[str, Any]:
-    return await _call(service.list_policies(user, after))
+    return await _call(service.list_policies(user, after, scope))
 
 
 @router.get("/policies/{policy_id}", dependencies=[declares("iam:GetPolicy")])
@@ -182,7 +222,9 @@ async def get_policy(
 async def create_policy(
     body: PolicyCreateBody, user: User = Signed, service: IamAdminService = Service
 ) -> dict[str, Any]:
-    return await _call(service.create_policy(user, body.name, body.source(), body.description))
+    return await _call(
+        service.create_policy(user, body.name, body.source(), body.description, body.scope)
+    )
 
 
 @router.put("/policies/{policy_id}", dependencies=[declares("iam:UpdatePolicy")])
@@ -298,8 +340,10 @@ async def resume_principal(
 
 
 @router.get("/groups", dependencies=[declares("iam:ListGroups")])
-async def list_groups(user: User = Signed, service: IamAdminService = Service) -> dict[str, Any]:
-    return await _call(service.list_groups(user))
+async def list_groups(
+    scope: str | None = None, user: User = Signed, service: IamAdminService = Service
+) -> dict[str, Any]:
+    return await _call(service.list_groups(user, scope))
 
 
 @router.get("/groups/{group_id}", dependencies=[declares("iam:GetGroup")])
@@ -313,7 +357,7 @@ async def get_group(
 async def create_group(
     body: GroupCreateBody, user: User = Signed, service: IamAdminService = Service
 ) -> dict[str, Any]:
-    return await _call(service.create_group(user, body.name, body.org))
+    return await _call(service.create_group(user, body.name, body.org, body.scope))
 
 
 @router.delete("/groups/{group_id}", status_code=204, dependencies=[declares("iam:DeleteGroup")])
@@ -478,6 +522,70 @@ async def reject_manifest(
 ) -> dict[str, Any]:
     reason = body.reason if body is not None else ""
     return await _call(service.reject_manifest(user, principal_id, sha256, reason))
+
+
+# -- sets: the modules × workspaces page ------------------------------------------------------
+
+
+@router.get("/sets", dependencies=[declares("iam:GetSet")])
+async def list_sets(
+    organization_id: str | None = None,
+    user: User = Signed,
+    service: IamAdminService = Service,
+) -> dict[str, Any]:
+    """The sets of the organizations (or the one named) and their workspaces the
+    caller may read, with every module's scopes and the deployment's features: the
+    rows of the page."""
+    from naas_abi.apps.nexus.apps.api.app.services.modules import scopes
+
+    organizations = await _call(service.sets(user, organization_id))
+    return {
+        "modules": await scopes.gather(),
+        "features": enabled_feature_catalog(settings.feature_flags),
+        "organizations": organizations,
+    }
+
+
+@router.put("/sets/{organization_id}", dependencies=[declares("iam:PutSet")])
+async def put_organization_set(
+    organization_id: str,
+    body: SetBody,
+    user: User = Signed,
+    service: IamAdminService = Service,
+) -> dict[str, Any]:
+    """An organization's set: the platform admin's to change."""
+    return await _call(
+        service.put_set(
+            user,
+            organization_id,
+            modules=body.modules,
+            features=body.pinned_features(),
+        )
+    )
+
+
+@router.put(
+    "/sets/{organization_id}/workspaces/{workspace_id}",
+    dependencies=[declares("iam:PutSet")],
+)
+async def put_workspace_set(
+    organization_id: str,
+    workspace_id: str,
+    body: SetBody,
+    user: User = Signed,
+    service: IamAdminService = Service,
+) -> dict[str, Any]:
+    """A workspace's set, within its organization's: the organization's owners'
+    and admins' to change."""
+    return await _call(
+        service.put_set(
+            user,
+            organization_id,
+            workspace_id,
+            modules=body.modules,
+            features=body.pinned_features(),
+        )
+    )
 
 
 # -- the simulator and the audit --------------------------------------------------------------

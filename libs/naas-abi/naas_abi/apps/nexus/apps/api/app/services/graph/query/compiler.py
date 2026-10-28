@@ -156,7 +156,9 @@ def _lower_path(path: tuple[Hop, ...], start_var: str, prefix: str) -> tuple[lis
         if hop.target_class_uris:
             tvar = f"?{prefix}_{i}_t"
             values = " ".join(sparql_iri(u) for u in hop.target_class_uris)
-            triples.append(f"{scope.triple(f'{nxt} a {tvar} .', f'{prefix}_{i}t')} VALUES {tvar} {{ {values} }}")
+            triples.append(
+                f"{scope.triple(f'{nxt} a {tvar} .', f'{prefix}_{i}t')} VALUES {tvar} {{ {values} }}"
+            )
         cur = nxt
     return triples, cur
 
@@ -196,10 +198,11 @@ def _bind_column(col: Column, var: str, ctx: CompileContext) -> str:
         if src.show == "uri":
             triples.append(f"BIND({end} AS {var})")
         else:
-            lbl = _scope().triple(f"{end} <http://www.w3.org/2000/01/rdf-schema#label> ?{col.id}_lbl .", f"{col.id}L")
+            lbl = _scope().triple(
+                f"{end} <http://www.w3.org/2000/01/rdf-schema#label> ?{col.id}_lbl .", f"{col.id}L"
+            )
             triples.append(
-                f"OPTIONAL {{ {lbl} }} "
-                f"BIND(COALESCE(?{col.id}_lbl, STR({end})) AS {var})"
+                f"OPTIONAL {{ {lbl} }} BIND(COALESCE(?{col.id}_lbl, STR({end})) AS {var})"
             )
         return " ".join(triples)
     raise GraphQuerySpecError(f"aggregate/measure columns not yet supported: {col.id!r}")
@@ -239,8 +242,14 @@ def _value_expr(var: str, datatype: str, operator: str, value: object) -> str:
         lo, hi = value  # type: ignore[misc]
         return f"({var} >= {_lit(lo, datatype)} && {var} <= {_lit(hi, datatype)})"
     sym = {
-        "eq": "=", "neq": "!=", "is": "=", "isNot": "!=",
-        "lt": "<", "lte": "<=", "gt": ">", "gte": ">=",
+        "eq": "=",
+        "neq": "!=",
+        "is": "=",
+        "isNot": "!=",
+        "lt": "<",
+        "lte": "<=",
+        "gt": ">",
+        "gte": ">=",
     }.get(operator)
     if sym is None:
         raise GraphQuerySpecError(f"unsupported operator: {operator!r}")
@@ -248,7 +257,9 @@ def _value_expr(var: str, datatype: str, operator: str, value: object) -> str:
     return f"{var} {sym} {_lit(value, lit_datatype)}"
 
 
-def _branch_block(source: object, operator: str, value: object, prefix: str, root_var: str = "?root") -> str:
+def _branch_block(
+    source: object, operator: str, value: object, prefix: str, root_var: str = "?root"
+) -> str:
     """An EXISTS body: lower the source path from ``root_var`` and constrain the reached node."""
     path = getattr(source, "path", ())
     triples, end = _lower_path(path, root_var, prefix)
@@ -259,18 +270,21 @@ def _branch_block(source: object, operator: str, value: object, prefix: str, roo
         # Constrain the reached node by its display value (label, else STR(uri)) so it matches
         # the facet values the UI offers. Covers in / notIn / is / isNot on related entities.
         dv = f"?{prefix}_dv"
-        lbl = _scope().triple(f"{end} <http://www.w3.org/2000/01/rdf-schema#label> ?{prefix}_lbl .", f"{prefix}L")
-        triples.append(
-            f"OPTIONAL {{ {lbl} }} "
-            f"BIND(COALESCE(?{prefix}_lbl, STR({end})) AS {dv})"
+        lbl = _scope().triple(
+            f"{end} <http://www.w3.org/2000/01/rdf-schema#label> ?{prefix}_lbl .", f"{prefix}L"
         )
+        triples.append(f"OPTIONAL {{ {lbl} }} BIND(COALESCE(?{prefix}_lbl, STR({end})) AS {dv})")
         op = {"is": "eq", "isNot": "neq"}.get(operator, operator)
         triples.append(f"FILTER({_value_expr(dv, 'string', op, value)})")
         return " ".join(triples)
     if isinstance(source, PropertySource):
         pred = sparql_iri(source.predicate)
         if operator == "eq":
-            triples.append(_scope().triple(f"{end} {pred} {_lit(value, _infer_datatype(value))} .", f"{prefix}L"))
+            triples.append(
+                _scope().triple(
+                    f"{end} {pred} {_lit(value, _infer_datatype(value))} .", f"{prefix}L"
+                )
+            )
         else:
             vbind = f"?{prefix}_v"
             triples.append(_scope().triple(f"{end} {pred} {vbind} .", f"{prefix}L"))
@@ -296,7 +310,9 @@ def _agg_expr(fn: str, target: str, of_kind: str | None) -> str:
     raise GraphQuerySpecError(f"unsupported aggregate fn: {fn!r}")
 
 
-def _agg_subquery(col_id: str, start_var: str, triples: list[str], agg: str, zero_fill: bool) -> list[str]:
+def _agg_subquery(
+    col_id: str, start_var: str, triples: list[str], agg: str, zero_fill: bool
+) -> list[str]:
     """A correlated ``OPTIONAL { SELECT start_var (agg AS …) … GROUP BY start_var }``.
 
     ``zero_fill`` wraps the result in ``COALESCE(…, 0)`` (count/sum) so a row with no reached
@@ -346,7 +362,7 @@ def _measure_fragment(col: Column, start_var: str = "?root") -> list[str]:
 # across engines (review portability §6) — never feed it into a snapshot hash.
 def _collapse_agg(collapse: str, target: str) -> str:
     if collapse == "concat":
-        return f"GROUP_CONCAT(DISTINCT STR({target}); SEPARATOR=\", \")"
+        return f'GROUP_CONCAT(DISTINCT STR({target}); SEPARATOR=", ")'
     if collapse == "count":
         return f"COUNT(DISTINCT {target})"
     if collapse in ("min", "first"):
@@ -366,17 +382,20 @@ def _collapse_fragment(
     triples, end = _lower_path(getattr(src, "path", ()), start_var, col.id)
     if isinstance(src, PropertySource):
         vbind = f"?{col.id}_v"
-        triples.append(_scope().triple(f"{end} {sparql_iri(src.predicate)} {vbind} .", f"{col.id}L"))
+        triples.append(
+            _scope().triple(f"{end} {sparql_iri(src.predicate)} {vbind} .", f"{col.id}L")
+        )
         target = vbind
     elif isinstance(src, NodeSource):
         if src.show == "uri":
             target = end
         else:
             lbl = f"?{col.id}_lbl"
-            lbl_triple = _scope().triple(f"{end} <http://www.w3.org/2000/01/rdf-schema#label> {lbl} .", f"{col.id}L")
+            lbl_triple = _scope().triple(
+                f"{end} <http://www.w3.org/2000/01/rdf-schema#label> {lbl} .", f"{col.id}L"
+            )
             triples.append(
-                f"OPTIONAL {{ {lbl_triple} }} "
-                f"BIND(COALESCE({lbl}, STR({end})) AS ?{col.id}_v)"
+                f"OPTIONAL {{ {lbl_triple} }} BIND(COALESCE({lbl}, STR({end})) AS ?{col.id}_v)"
             )
             target = f"?{col.id}_v"
     else:  # pragma: no cover - guarded earlier
@@ -396,7 +415,9 @@ def _is_aggregated(source: object) -> bool:
 class _FilterEmitter:
     """Lowers the boolean tree to WHERE lines, tracking branch ids + referenced columns."""
 
-    def __init__(self, columns_by_id: dict[str, Column], var_for_column: dict[str, str], ctx: CompileContext):
+    def __init__(
+        self, columns_by_id: dict[str, Column], var_for_column: dict[str, str], ctx: CompileContext
+    ):
         self._cols = columns_by_id
         self._vars = var_for_column
         self._ctx = ctx
@@ -416,20 +437,32 @@ class _FilterEmitter:
             self.referenced_columns.add(col.id)
             # A measure / collapsed column is filtered as a HAVING-equivalent on ?col_<id>.
             if _is_aggregated(col.source):
-                return "expr", _value_expr(self._vars[col.id], col.datatype, cond.operator, cond.value)
+                return "expr", _value_expr(
+                    self._vars[col.id], col.datatype, cond.operator, cond.value
+                )
             # Presence checks read the projected display var directly.
             if cond.operator in ("isEmpty", "isNotEmpty"):
-                return "expr", _value_expr(self._vars[col.id], col.datatype, cond.operator, cond.value)
+                return "expr", _value_expr(
+                    self._vars[col.id], col.datatype, cond.operator, cond.value
+                )
             # Related-entity (node) columns must constrain the REACHED node, not the projected
             # label var — otherwise the value never binds and the filter matches every row.
             if isinstance(col.source, NodeSource):
-                return "exists", _branch_block(col.source, cond.operator, cond.value, self._next_prefix())
+                return "exists", _branch_block(
+                    col.source, cond.operator, cond.value, self._next_prefix()
+                )
             if _is_single_valued(col.source, self._ctx):
-                return "expr", _value_expr(self._vars[col.id], col.datatype, cond.operator, cond.value)
+                return "expr", _value_expr(
+                    self._vars[col.id], col.datatype, cond.operator, cond.value
+                )
             # to-many property column → existential over its own path
-            return "exists", _branch_block(col.source, cond.operator, cond.value, self._next_prefix())
+            return "exists", _branch_block(
+                col.source, cond.operator, cond.value, self._next_prefix()
+            )
         if isinstance(target, FilterSourceTarget):
-            return "exists", _branch_block(target.source, cond.operator, cond.value, self._next_prefix())
+            return "exists", _branch_block(
+                target.source, cond.operator, cond.value, self._next_prefix()
+            )
         raise GraphQuerySpecError("unknown filter target")
 
     def as_expr(self, node: FilterNode) -> str:
@@ -480,7 +513,10 @@ def _anchor_lines(root: object, row_var: str = "?root", cls_var: str = "?cls") -
         return [f"VALUES {row_var} {{ {values} }}"]
     assert isinstance(root, ClassAnchor)
     values = " ".join(sparql_iri(u) for u in root.class_uris)
-    return [f"VALUES {cls_var} {{ {values} }}", _scope().triple(f"{row_var} a {cls_var} .", "anchor")]
+    return [
+        f"VALUES {cls_var} {{ {values} }}",
+        _scope().triple(f"{row_var} a {cls_var} .", "anchor"),
+    ]
 
 
 # ── Validation / classification ───────────────────────────────────────────────
@@ -504,7 +540,10 @@ def _validate_filter_refs(node: FilterNode | None, columns_by_id: dict[str, Colu
     if node is None:
         return
     if isinstance(node, FilterCondition):
-        if isinstance(node.target, FilterColumnTarget) and node.target.column_id not in columns_by_id:
+        if (
+            isinstance(node.target, FilterColumnTarget)
+            and node.target.column_id not in columns_by_id
+        ):
             raise GraphQuerySpecError(f"filter references unknown column {node.target.column_id!r}")
     elif isinstance(node, FilterGroup):
         for c in node.children:
@@ -514,7 +553,10 @@ def _validate_filter_refs(node: FilterNode | None, columns_by_id: dict[str, Colu
 
 
 def _conjunctive_positive_columns(
-    node: FilterNode | None, columns_by_id: dict[str, Column], ctx: CompileContext, conjunctive: bool = True
+    node: FilterNode | None,
+    columns_by_id: dict[str, Column],
+    ctx: CompileContext,
+    conjunctive: bool = True,
 ) -> set[str]:
     """Columns whose value is required for a row to match (positive op, single-valued,
     in a purely-conjunctive non-negated context) → eligible for a pruning required join."""
@@ -567,7 +609,9 @@ def _and(terms: list[str]) -> str:
     return terms[0] if len(terms) == 1 else "(" + " && ".join(terms) + ")"
 
 
-def _keyset_after_filter(spec: ListSpec, var_for_column: dict[str, str], columns_by_id: dict[str, Column], after: tuple) -> str:
+def _keyset_after_filter(
+    spec: ListSpec, var_for_column: dict[str, str], columns_by_id: dict[str, Column], after: tuple
+) -> str:
     """The lexicographic "strictly after the cursor" filter for ORDER BY <keys>, ?root."""
     *vals, root = after
     clauses: list[str] = []
@@ -606,7 +650,11 @@ def compile_list(spec: ListSpec, ctx: CompileContext, page: object | None = None
     for col in spec.columns:
         var = f"?col_{col.id}"
         var_for_column[col.id] = var
-        metas.append(ColumnMeta(id=col.id, label=col.label or col.id, datatype=col.datatype, role=_column_role(col)))
+        metas.append(
+            ColumnMeta(
+                id=col.id, label=col.label or col.id, datatype=col.datatype, role=_column_role(col)
+            )
+        )
         if col.visible:
             select_vars.append(var)
         explicit_collapse = getattr(col.source, "collapse", None)
@@ -661,7 +709,9 @@ def compile_list(spec: ListSpec, ctx: CompileContext, page: object | None = None
     elif not keyset_ok and page is not None and getattr(page, "offset", 0):
         tail = f"LIMIT {limit} OFFSET {int(page.offset)}"
 
-    page_inner = "\n    ".join(anchor + required_prop + optional_prop + measure_lines + filter_lines + after_lines)
+    page_inner = "\n    ".join(
+        anchor + required_prop + optional_prop + measure_lines + filter_lines + after_lines
+    )
     page_sparql = (
         f"SELECT {' '.join(select_vars)} WHERE {{\n    {scope.group(page_inner)}\n}}\n"
         f"ORDER BY {' '.join(order_terms)} {tail}"
@@ -700,9 +750,15 @@ def _dimension_fragment(dim: Dimension) -> str:
     triples, end = _lower_path(dim.path, "?fact", dim.id)
     dvar = f"?dim_{dim.id}"
     if dim.show_kind == "property":
-        triples.append(_scope().triple(f"{end} {sparql_iri(dim.show_predicate or '')} {dvar} .", f"{dim.id}L"))
+        triples.append(
+            _scope().triple(f"{end} {sparql_iri(dim.show_predicate or '')} {dvar} .", f"{dim.id}L")
+        )
     elif dim.show_kind == "node-label":
-        triples.append(_scope().triple(f"{end} <http://www.w3.org/2000/01/rdf-schema#label> {dvar} .", f"{dim.id}L"))
+        triples.append(
+            _scope().triple(
+                f"{end} <http://www.w3.org/2000/01/rdf-schema#label> {dvar} .", f"{dim.id}L"
+            )
+        )
     elif dim.show_kind == "node-uri":
         triples.append(f"BIND(STR({end}) AS {dvar})")
     else:
@@ -715,7 +771,9 @@ def _aggregate_measure(measure: Measure) -> tuple[str, list[str]]:
     if not measure.path and measure.of_kind in (None, "node"):
         if measure.fn in ("count", "countDistinct"):
             return "COUNT(DISTINCT ?fact)", []
-        raise GraphQuerySpecError(f"measure {measure.id!r}: {measure.fn} needs a property/path target")
+        raise GraphQuerySpecError(
+            f"measure {measure.id!r}: {measure.fn} needs a property/path target"
+        )
     triples, end = _lower_path(measure.path, "?fact", measure.id)
     if measure.of_kind == "property":
         vbind = f"?m_{measure.id}_v"
@@ -723,7 +781,9 @@ def _aggregate_measure(measure: Measure) -> tuple[str, list[str]]:
         target = vbind
     else:
         if measure.fn in ("sum", "avg", "min", "max"):
-            raise GraphQuerySpecError(f"measure {measure.id!r}: {measure.fn} needs a property target")
+            raise GraphQuerySpecError(
+                f"measure {measure.id!r}: {measure.fn} needs a property target"
+            )
         target = end
     agg = _agg_expr(measure.fn, target, measure.of_kind)
     return agg, [f"OPTIONAL {{ {' '.join(triples)} }}"]
@@ -744,7 +804,9 @@ def _flatten_and(node: FilterNode) -> list[FilterCondition] | None:
     return None
 
 
-def compile_aggregate(spec: AggregateSpec, ctx: CompileContext, page: object | None = None) -> CompiledQuery:
+def compile_aggregate(
+    spec: AggregateSpec, ctx: CompileContext, page: object | None = None
+) -> CompiledQuery:
     if not spec.group_by:
         raise GraphQuerySpecError("aggregate mode requires at least one group-by dimension")
     if not spec.measures:
@@ -768,7 +830,9 @@ def compile_aggregate(spec: AggregateSpec, ctx: CompileContext, page: object | N
         dim_ids.add(dim.id)
         group_keys.append(dvar)
         select_parts.append(dvar)
-        metas.append(ColumnMeta(id=dim.id, label=dim.label or dim.id, datatype="string", role="dimension"))
+        metas.append(
+            ColumnMeta(id=dim.id, label=dim.label or dim.id, datatype="string", role="dimension")
+        )
         where_lines.append(_dimension_fragment(dim))
 
     for measure in spec.measures:
@@ -777,7 +841,11 @@ def compile_aggregate(spec: AggregateSpec, ctx: CompileContext, page: object | N
         agg, extra = _aggregate_measure(measure)
         measure_agg[measure.id] = agg
         select_parts.append(f"({agg} AS {mvar})")
-        metas.append(ColumnMeta(id=measure.id, label=measure.label or measure.id, datatype="number", role="measure"))
+        metas.append(
+            ColumnMeta(
+                id=measure.id, label=measure.label or measure.id, datatype="number", role="measure"
+            )
+        )
         where_lines.extend(extra)
 
     # Filters (v1): a conjunction of conditions. Dimension/fact conditions → WHERE; measure
@@ -786,21 +854,33 @@ def compile_aggregate(spec: AggregateSpec, ctx: CompileContext, page: object | N
     if spec.filters is not None:
         conds = _flatten_and(spec.filters)
         if conds is None:
-            raise GraphQuerySpecError("aggregate filters support only a conjunction (AND) of conditions in v1")
+            raise GraphQuerySpecError(
+                "aggregate filters support only a conjunction (AND) of conditions in v1"
+            )
         branch_n = 0
         for cond in conds:
             target = cond.target
             if isinstance(target, FilterSourceTarget):
-                where_lines.append(f"FILTER EXISTS {{ {_branch_block(target.source, cond.operator, cond.value, f'b{branch_n}', '?fact')} }}")
+                where_lines.append(
+                    f"FILTER EXISTS {{ {_branch_block(target.source, cond.operator, cond.value, f'b{branch_n}', '?fact')} }}"
+                )
                 branch_n += 1
             elif isinstance(target, FilterColumnTarget) and target.column_id in dim_ids:
-                where_lines.append(f"FILTER({_value_expr(var_for_column[target.column_id], 'string', cond.operator, cond.value)})")
+                where_lines.append(
+                    f"FILTER({_value_expr(var_for_column[target.column_id], 'string', cond.operator, cond.value)})"
+                )
             elif isinstance(target, FilterColumnTarget) and target.column_id in measure_agg:
-                having_exprs.append(_value_expr(measure_agg[target.column_id], "number", cond.operator, cond.value))
+                having_exprs.append(
+                    _value_expr(measure_agg[target.column_id], "number", cond.operator, cond.value)
+                )
             else:
-                raise GraphQuerySpecError(f"aggregate filter references unknown column {getattr(target, 'column_id', '?')!r}")
+                raise GraphQuerySpecError(
+                    f"aggregate filter references unknown column {getattr(target, 'column_id', '?')!r}"
+                )
 
-    sorted_vars = [var_for_column[sk.column_id] for sk in spec.sort if sk.column_id in var_for_column]
+    sorted_vars = [
+        var_for_column[sk.column_id] for sk in spec.sort if sk.column_id in var_for_column
+    ]
     order_terms = [
         f"{'DESC' if sk.direction == 'desc' else 'ASC'}({var_for_column[sk.column_id]})"
         for sk in spec.sort
@@ -845,7 +925,11 @@ def _strip_column_filter(node: FilterNode | None, column_id: str) -> FilterNode 
             return None
         return node
     if isinstance(node, FilterGroup):
-        kept = [c for c in (_strip_column_filter(ch, column_id) for ch in node.children) if c is not None]
+        kept = [
+            c
+            for c in (_strip_column_filter(ch, column_id) for ch in node.children)
+            if c is not None
+        ]
         if not kept:
             return None
         return kept[0] if len(kept) == 1 else FilterGroup(node.op, tuple(kept))
@@ -855,7 +939,9 @@ def _strip_column_filter(node: FilterNode | None, column_id: str) -> FilterNode 
     return node  # pragma: no cover
 
 
-def compile_facet(spec: ListSpec, ctx: CompileContext, *, target_column_id: str, search: str = "", limit: int = 50) -> str:
+def compile_facet(
+    spec: ListSpec, ctx: CompileContext, *, target_column_id: str, search: str = "", limit: int = 50
+) -> str:
     """Distinct values + per-value root counts for one column, under all OTHER columns' filters.
 
     The target column's own filter is stripped. Returns one SPARQL query: ``?v`` is the
@@ -881,11 +967,10 @@ def compile_facet(spec: ListSpec, ctx: CompileContext, *, target_column_id: str,
         if src.show == "uri":
             triples.append(f"BIND({end} AS ?v)")
         else:
-            vlbl = scope.triple(f"{end} <http://www.w3.org/2000/01/rdf-schema#label> ?vlbl .", "fvL")
-            triples.append(
-                f"OPTIONAL {{ {vlbl} }} "
-                f"BIND(COALESCE(?vlbl, STR({end})) AS ?v)"
+            vlbl = scope.triple(
+                f"{end} <http://www.w3.org/2000/01/rdf-schema#label> ?vlbl .", "fvL"
             )
+            triples.append(f"OPTIONAL {{ {vlbl} }} BIND(COALESCE(?vlbl, STR({end})) AS ?v)")
 
     # Other-column filters are emitted with an empty-cardinality context so they lower to
     # self-contained EXISTS branches (no reliance on projected ?col_<id> vars, which the

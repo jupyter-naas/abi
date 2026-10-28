@@ -35,9 +35,7 @@ class AppsService:
             return []
         return await self.adapter.list_by_workspace(workspace_id)
 
-    async def get_app_config(
-        self, workspace_id: str, app_id: str
-    ) -> AppConfigRecord | None:
+    async def get_app_config(self, workspace_id: str, app_id: str) -> AppConfigRecord | None:
         if self.adapter is None:
             return None
         return await self.adapter.get(workspace_id, app_id)

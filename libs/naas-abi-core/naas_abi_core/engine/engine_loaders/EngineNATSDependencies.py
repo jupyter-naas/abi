@@ -92,11 +92,27 @@ class RemoteTripleStoreService(TripleStoreService):
         # Only the owning domain bootstraps schema state.
         pass
 
-    def insert(self, triples: Graph, graph_name: URIRef) -> None:
-        return self.adapter.insert(triples, graph_name)
+    def insert(
+        self,
+        triples: Graph,
+        graph_name: URIRef,
+        *,
+        timeout_seconds: float | None = None,
+    ) -> None:
+        return self.adapter.insert(
+            triples, graph_name, **self._deadline(self.adapter.insert, timeout_seconds)
+        )
 
-    def remove(self, triples: Graph, graph_name: URIRef) -> None:
-        return self.adapter.remove(triples, graph_name)
+    def remove(
+        self,
+        triples: Graph,
+        graph_name: URIRef,
+        *,
+        timeout_seconds: float | None = None,
+    ) -> None:
+        return self.adapter.remove(
+            triples, graph_name, **self._deadline(self.adapter.remove, timeout_seconds)
+        )
 
 
 class EngineNATSDependencies:

@@ -57,6 +57,7 @@ def chunk_markdown(
 # These produce deterministic vectors but carry NO semantic meaning.
 # ---------------------------------------------------------------------------
 
+
 def embed_text_hash(text: str, embedding_model: str, embedding_dimension: int) -> np.ndarray:
     if embedding_dimension <= 0:
         raise ValueError("embedding_dimension must be positive")
@@ -91,6 +92,7 @@ def embed_many_hash(
 # ---------------------------------------------------------------------------
 # Real embedding helpers (OpenAI / LangChain-compatible)
 # ---------------------------------------------------------------------------
+
 
 def _build_openai_embedder(embedding_model: str, embedding_dimension: int):
     """Build an Embeddings instance for ``embedding_model``.

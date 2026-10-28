@@ -5,6 +5,10 @@ from datetime import datetime
 from uuid import uuid4
 
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
+from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import (
+    dump_catalog_seed,
+    parse_catalog_seed,
+)
 from naas_abi.apps.nexus.apps.api.app.models import (
     AgentConfigModel,
     ConversationModel,
@@ -78,6 +82,9 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             background_image_url=model.background_image_url,
             sidebar_color=model.sidebar_color,
             font_family=model.font_family,
+            description=model.description,
+            workspace_group=model.workspace_group,
+            catalog_seed=parse_catalog_seed(getattr(model, "catalog_seed", None)),
             platform_drive_enabled=bool(model.platform_drive_enabled),
             system_drive_enabled=bool(model.system_drive_enabled),
             created_at=model.created_at,
@@ -165,12 +172,18 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             background_image_url=workspace.background_image_url,
             sidebar_color=workspace.sidebar_color,
             font_family=workspace.font_family,
+            description=(workspace.description or "").strip() or None,
+            workspace_group=(workspace.workspace_group or "").strip() or None,
+            catalog_seed=dump_catalog_seed(workspace.catalog_seed),
             created_at=now,
             updated_at=now,
         )
         self.db.add(workspace_model)
         await self.db.flush()
         return self._to_workspace_record(workspace_model)
+
+    async def rollback(self) -> None:
+        await self.db.rollback()
 
     async def delete_workspace(self, workspace_id: str) -> bool:
         result = await self.db.execute(
@@ -202,12 +215,20 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             "background_image_url": updates.background_image_url,
             "sidebar_color": updates.sidebar_color,
             "font_family": updates.font_family,
+            "description": updates.description,
+            "workspace_group": updates.workspace_group,
             "platform_drive_enabled": updates.platform_drive_enabled,
             "system_drive_enabled": updates.system_drive_enabled,
         }
         for field, value in update_data.items():
             if value is not None:
                 setattr(workspace, field, value)
+        if updates.workspace_group is not None:
+            # A blank group clears it (the workspace lists under "Others").
+            workspace.workspace_group = updates.workspace_group.strip() or None
+        if updates.owner_id is not None and updates.owner_id != workspace.owner_id:
+            # The owner's role is IAM's: the service moves it (``update_workspace``).
+            workspace.owner_id = updates.owner_id
         workspace.updated_at = datetime.now(UTC).replace(tzinfo=None)
         await self.db.flush()
         return self._to_workspace_record(workspace)
@@ -341,7 +362,9 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
         await self.db.commit()
         return True
 
-    async def set_workspace_logo(self, workspace_id: str, logo_url: str) -> WorkspaceRecord | None:
+    async def set_workspace_logo(
+        self, workspace_id: str, logo_url: str | None
+    ) -> WorkspaceRecord | None:
         result = await self.db.execute(
             select(WorkspaceModel).where(WorkspaceModel.id == workspace_id)
         )

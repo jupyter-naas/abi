@@ -1,4 +1,4 @@
-"""Frames of a streamed dataset query (docs/adr/20261003_nats-streamed-results.md).
+"""Frames of a streamed dataset query.
 
 Shared by the NATS primary and client; no new protobuf messages. The first
 frame is a ``QueryResult`` with the columns only, then each frame is a

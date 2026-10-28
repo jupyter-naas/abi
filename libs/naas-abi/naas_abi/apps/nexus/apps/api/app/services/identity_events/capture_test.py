@@ -6,8 +6,10 @@ Runs against a real SQLite session and a real EventService so the whole path
 
 from __future__ import annotations
 
+import asyncio
 import datetime
 import json
+import threading
 
 import pytest
 import pytest_asyncio
@@ -69,6 +71,7 @@ async def env(tmp_path):
         publish=events.publish,
         site_iri=SITE,
         on_published=lambda count: published.append(count),
+        dispatch=lambda job: job(),
     )
     capture.install()
     maker = async_sessionmaker(engine, expire_on_commit=False)
@@ -140,12 +143,12 @@ async def test_profile_changes_name_the_fields_but_never_log_personal_values(env
         user = await session.get(UserModel, "usr-1")
         user.name = "Alice Martin"
         user.email = "alice.martin@example.com"
-        user.company = "Acme"
+        user.organization = "Acme"
         await session.commit()
 
     event = _payloads(events)[-1]
     assert _kind(event) == "UpdateUser"
-    assert sorted(event["changed_fields"]) == ["company", "email", "name"]
+    assert sorted(event["changed_fields"]) == ["email", "name", "organization"]
     raw = json.dumps(event)
     assert "Alice Martin" not in raw and "alice.martin@" not in raw
     assert event["updates"] == [str(user_account_iri("usr-1"))]
@@ -305,7 +308,7 @@ async def test_workspace_context_is_stamped(env) -> None:
     token = event_actor_workspace_id.set("ws-ctx")
     try:
         async with maker() as session:
-            (await session.get(UserModel, "usr-1")).company = "Acme"
+            (await session.get(UserModel, "usr-1")).organization = "Acme"
             await session.commit()
     finally:
         event_actor_workspace_id.reset(token)
@@ -344,7 +347,7 @@ async def test_bulk_statements_on_identity_tables_are_reported(env) -> None:
     try:
         async with maker() as session:
             await session.execute(
-                update(UserModel).where(UserModel.id == "usr-1").values(company="Acme")
+                update(UserModel).where(UserModel.id == "usr-1").values(organization="Acme")
             )
             await session.execute(
                 delete(AppConfigModel).where(AppConfigModel.workspace_id == "ws-x")
@@ -354,3 +357,32 @@ async def test_bulk_statements_on_identity_tables_are_reported(env) -> None:
         capture.uninstall()
 
     assert bypassed == ["UPDATE users", "DELETE app_configs"]
+
+
+@pytest.mark.asyncio
+async def test_commit_does_not_wait_for_the_publish(tmp_path) -> None:
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'nexus.db'}")
+    async with engine.begin() as conn:
+        await conn.run_sync(UserModel.__table__.create)
+    release = threading.Event()
+    published: list[str] = []
+
+    def slow_publish(event) -> None:
+        release.wait(timeout=10)
+        published.append(type(event).__name__)
+
+    capture = IdentityEventCapture(publish=slow_publish, site_iri=SITE)
+    capture.install()
+    try:
+        await asyncio.wait_for(_seed_user(async_sessionmaker(engine, expire_on_commit=False)), 5)
+        assert published == []
+        release.set()
+        for _ in range(100):
+            if published:
+                break
+            await asyncio.sleep(0.05)
+        assert published == ["CreateUserEvent"]
+    finally:
+        release.set()
+        capture.uninstall()
+        await engine.dispose()

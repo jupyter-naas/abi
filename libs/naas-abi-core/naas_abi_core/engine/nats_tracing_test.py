@@ -238,7 +238,7 @@ class _Client:
         self.subscriptions.append((subject, queue, cb))
         return NS(subject=subject)
 
-    async def flush(self):
+    async def flush(self, timeout=10):
         self.flushed = True
 
 

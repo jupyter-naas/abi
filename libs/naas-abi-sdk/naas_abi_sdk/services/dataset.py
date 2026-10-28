@@ -22,7 +22,7 @@ TRANSFER_PREFIX = "abi.svc.dataset.v1.transfer"
 
 @dataclass
 class RowStream:
-    """A query's rows as they arrive (docs/adr/20261003_nats-streamed-results.md):
+    """A query's rows as they arrive:
     ``rows`` is a single-use async iterator, valid inside the block."""
 
     columns: list[str]
@@ -40,8 +40,7 @@ class DatasetService(_GeneratedDatasetService):
         snapshot_id: int | None = None,
     ) -> DatasetInfo:
         """``write`` for rows read once from a (sync or async) iterator, uploaded
-        as they are read and committed in one snapshot: all or none
-        (docs/adr/20261003_nats-streamed-results.md). ``ValueError`` for NaN
+        as they are read and committed in one snapshot: all or none. ``ValueError`` for NaN
         or an infinity; nothing is written then."""
         request = message(
             pb.WriteRequest,

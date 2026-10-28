@@ -344,7 +344,7 @@ def test_simultaneous_first_requests_share_completed_connection(monkeypatch):
     asyncio.run(scenario())
 
 
-# --- overflow: payloads above the broker limit (docs/adr/20261003_nats-rpc-overflow.md)
+# --- overflow: payloads above the broker limit
 
 OWNER = "b" * 32
 

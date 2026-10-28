@@ -85,6 +85,15 @@ export async function commitBackgroundImage(
   return data.background_image_url;
 }
 
+/**
+ * Remove the wallpaper: the API moves the file to the workspace drive's
+ * `.home/archives` and clears the workspace's `background_image_url`.
+ */
+export async function removeBackgroundImage(workspaceId: string): Promise<void> {
+  const response = await authFetch(base(workspaceId), { method: 'DELETE' });
+  if (!response.ok) throw new Error(await errorDetail(response, 'Could not remove the background image'));
+}
+
 /** True for a wallpaper served by the API (needs the auth header, so no plain CSS url()). */
 export function isApiBackgroundUrl(url: string | undefined): boolean {
   return Boolean(url && /\/api\/workspaces\/[^/]+\/background-image(\?|$)/.test(url));

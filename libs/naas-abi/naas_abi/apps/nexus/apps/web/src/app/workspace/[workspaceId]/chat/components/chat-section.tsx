@@ -6,6 +6,7 @@ import { MessageSquare, ChevronRight, MoreVertical, Edit2, Trash2, Star, Zap } f
 import { useRouter, usePathname } from 'next/navigation';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { useWorkspaceConversationSummaries } from '@/stores/conversation-list-selectors';
 import { useAgentsStore } from '@/stores/agents';
 import { useSkillsStore } from '@/stores/skills';
 import { useAuthStore } from '@/stores/auth';
@@ -34,37 +35,33 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   const [showAllSkills, setShowAllSkills] = useState(false);
   const [skillMenuId, setSkillMenuId] = useState<string | null>(null);
 
-  const {
-    activeConversationId,
-    setActiveConversation,
-    setMobilePendingChatSlug,
-    projects,
-    currentWorkspaceId,
-    conversations: storeConversations,
-    selectedAgent,
-    agentExplicitlySelected,
-    setSelectedAgent,
-    togglePinConversation,
-    toggleArchiveConversation,
-    renameConversation,
-    deleteConversation,
-  } = useWorkspaceStore();
+  // Narrow selectors: streamed tokens rebuild `conversations` on every chunk and
+  // must not re-render the sidebar unless listed metadata changes.
+  const activeConversationId = useWorkspaceStore((s) => s.activeConversationId);
+  const setActiveConversation = useWorkspaceStore((s) => s.setActiveConversation);
+  const setMobilePendingChatSlug = useWorkspaceStore((s) => s.setMobilePendingChatSlug);
+  const projects = useWorkspaceStore((s) => s.projects);
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const selectedAgent = useWorkspaceStore((s) => s.selectedAgent);
+  const agentExplicitlySelected = useWorkspaceStore((s) => s.agentExplicitlySelected);
+  const setSelectedAgent = useWorkspaceStore((s) => s.setSelectedAgent);
+  const togglePinConversation = useWorkspaceStore((s) => s.togglePinConversation);
+  const toggleArchiveConversation = useWorkspaceStore((s) => s.toggleArchiveConversation);
+  const renameConversation = useWorkspaceStore((s) => s.renameConversation);
+  const deleteConversation = useWorkspaceStore((s) => s.deleteConversation);
+  const allConversations = useWorkspaceConversationSummaries();
 
-  const { agents, setDefaultAgent, fetchAgents } = useAgentsStore();
+  const agents = useAgentsStore((s) => s.agents);
+  const setDefaultAgent = useAgentsStore((s) => s.setDefaultAgent);
+  const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const canManageAgents = useFeature('agents');
   const canUseSkills = useFeature('skills');
-  const { skillsByWorkspace, deleteSkill } = useSkillsStore();
+  const skillsByWorkspace = useSkillsStore((s) => s.skillsByWorkspace);
+  const deleteSkill = useSkillsStore((s) => s.deleteSkill);
   const currentUserId = useAuthStore((s) => s.user?.id);
   const setPendingComposerText = useWorkspaceStore((s) => s.setPendingComposerText);
   const safeAgents = useMemo(() => (Array.isArray(agents) ? agents : []), [agents]);
 
-  const allConversations = useMemo(
-    () =>
-      currentWorkspaceId
-        ? storeConversations.filter((c) => c.workspaceId === currentWorkspaceId)
-        : [],
-    [storeConversations, currentWorkspaceId]
-  );
   const safeProjects = useMemo(() => (Array.isArray(projects) ? projects : []), [projects]);
   const conversations = useMemo(() => allConversations.filter((c) => !c.archived), [allConversations]);
   const isChatRoute = pathname.startsWith(getWorkspacePath(currentWorkspaceId, '/chat'));
@@ -163,6 +160,26 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
     setActiveConversation(id);
     router.push(getWorkspacePath(currentWorkspaceId, `/chat/${id}`));
   }, [setMobilePendingChatSlug, setActiveConversation, router, currentWorkspaceId]);
+
+  // Stable row callbacks: ConversationItem is memoized, so inline closures here
+  // would re-render every row whenever this section renders.
+  const handleStartRename = useCallback((id: string) => setRenamingId(id), []);
+  const handleCancelRename = useCallback(() => setRenamingId(null), []);
+  const handleRename = useCallback(
+    (id: string, newTitle: string) => {
+      renameConversation(id, newTitle);
+      setRenamingId(null);
+    },
+    [renameConversation]
+  );
+  const handleDelete = useCallback(
+    (id: string, title: string) => {
+      if (confirm(`Delete "${title}"?`)) {
+        deleteConversation(id);
+      }
+    },
+    [deleteConversation]
+  );
 
   useEffect(() => {
     if (!currentWorkspaceId) return;
@@ -404,21 +421,14 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
               title={conv.title}
               pinned
               isActive={isChatRoute && activeConversationId === conv.id}
-              onClick={() => handleSelectConversation(conv.id)}
-              onPin={() => togglePinConversation(conv.id)}
-              onArchive={() => toggleArchiveConversation(conv.id)}
+              onClick={handleSelectConversation}
+              onPin={togglePinConversation}
+              onArchive={toggleArchiveConversation}
               isRenaming={renamingId === conv.id}
-              onStartRename={() => setRenamingId(conv.id)}
-              onRename={(newTitle) => {
-                renameConversation(conv.id, newTitle);
-                setRenamingId(null);
-              }}
-              onCancelRename={() => setRenamingId(null)}
-              onDelete={() => {
-                if (confirm(`Delete "${conv.title}"?`)) {
-                  deleteConversation(conv.id);
-                }
-              }}
+              onStartRename={handleStartRename}
+              onRename={handleRename}
+              onCancelRename={handleCancelRename}
+              onDelete={handleDelete}
               {...listItemProps}
             />
           ))}
@@ -435,18 +445,10 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
           onPin={togglePinConversation}
           onArchive={toggleArchiveConversation}
           renamingId={renamingId}
-          onStartRename={(id) => setRenamingId(id)}
-          onRename={(id, newTitle) => {
-            renameConversation(id, newTitle);
-            setRenamingId(null);
-          }}
-          onCancelRename={() => setRenamingId(null)}
-          onDelete={(id) => {
-            const conv = conversations.find((c) => c.id === id);
-            if (conv && confirm(`Delete "${conv.title}"?`)) {
-              deleteConversation(id);
-            }
-          }}
+          onStartRename={handleStartRename}
+          onRename={handleRename}
+          onCancelRename={handleCancelRename}
+          onDelete={handleDelete}
           {...listItemProps}
         />
       ))}
@@ -460,21 +462,14 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
               id={conv.id}
               title={conv.title}
               isActive={isChatRoute && activeConversationId === conv.id}
-              onClick={() => handleSelectConversation(conv.id)}
-              onPin={() => togglePinConversation(conv.id)}
-              onArchive={() => toggleArchiveConversation(conv.id)}
+              onClick={handleSelectConversation}
+              onPin={togglePinConversation}
+              onArchive={toggleArchiveConversation}
               isRenaming={renamingId === conv.id}
-              onStartRename={() => setRenamingId(conv.id)}
-              onRename={(newTitle) => {
-                renameConversation(conv.id, newTitle);
-                setRenamingId(null);
-              }}
-              onCancelRename={() => setRenamingId(null)}
-              onDelete={() => {
-                if (confirm(`Delete "${conv.title}"?`)) {
-                  deleteConversation(conv.id);
-                }
-              }}
+              onStartRename={handleStartRename}
+              onRename={handleRename}
+              onCancelRename={handleCancelRename}
+              onDelete={handleDelete}
               {...listItemProps}
             />
           ))}

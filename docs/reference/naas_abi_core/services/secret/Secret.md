@@ -1,57 +1,65 @@
 # Secret
 
 ## What it is
-- A secret management service that provides a unified interface to retrieve, store, remove, and list secrets across multiple backends via pluggable adapters.
-- Acts as a facade over a list of `ISecretAdapter` implementations.
+- A secret management service that provides a single interface to **get**, **set**, **remove**, and **list** secrets across multiple storage backends via pluggable adapters.
+- Acts as a facade over an ordered list of `ISecretAdapter` implementations.
 
 ## Public API
 - `class Secret(ServiceBase, ISecretService)`
-  - `__init__(adapters: List[ISecretAdapter])`
-    - Create the service with an ordered list of secret adapters.
+  - `__init__(adapters: list[ISecretAdapter])`
+    - Construct the service with an ordered list of secret adapters.
+  - `adapters -> list[ISecretAdapter]` (property)
+    - Exposes the wrapped adapters (e.g., for introspection by other components).
   - `get(key: str, default: Any = None) -> str`
-    - Return the first non-`None` value for `key` found when querying adapters in order; otherwise return `default`.
+    - Query adapters in order and return the **first non-None** value; otherwise return `default`.
   - `set(key: str, value: str) -> None`
-    - Set `key/value` on **all** configured adapters.
+    - Call `set` on **all** adapters.
+    - Publishes `SecretSet` on success; publishes `SecretError` and re-raises on exception.
   - `remove(key: str) -> None`
-    - Remove `key` from **all** configured adapters.
-  - `list() -> Dict[str, str | None]`
-    - Merge secrets from all adapters into one dictionary.
-    - If a key exists in multiple adapters, the **earlier** adapter in the configured list has precedence.
+    - Call `remove` on **all** adapters.
+    - Publishes `SecretRemoved` on success; publishes `SecretError` and re-raises on exception.
+  - `list() -> dict[str, str | None]`
+    - Merge `adapter.list()` from all adapters into one dict.
+    - **Earlier adapters take precedence** on key conflicts (implemented by updating from adapters in reverse order).
 
 ## Configuration/Dependencies
 - Requires:
-  - A list of adapter instances implementing `naas_abi_core.services.secret.SecretPorts.ISecretAdapter`.
+  - `adapters: list[ISecretAdapter]` implementing `naas_abi_core.services.secret.SecretPorts.ISecretAdapter`.
 - Inherits from:
   - `naas_abi_core.services.ServiceBase.ServiceBase`
 - Implements:
   - `naas_abi_core.services.secret.SecretPorts.ISecretService`
+- Optional event publishing:
+  - If `ServiceBase` is wired and events are available, emits:
+    - `SecretSet`, `SecretRemoved`, `SecretError` (from `naas_abi_core.services.secret.ontologies.modules.SecretEventOntology`).
+  - Event publishing failures are caught and logged; secret operations remain the source of truth.
 
 ## Usage
 ```python
 from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.secret.adapters import EnvVarSecretAdapter, FileSecretAdapter
 
-adapters = [
+secret_service = Secret([
     EnvVarSecretAdapter(),                # higher priority
     FileSecretAdapter("/path/to/secrets")  # lower priority
-]
-secrets = Secret(adapters)
+])
 
 # Read with fallback
-api_key = secrets.get("API_KEY", default="default_key")
+api_key = secret_service.get("API_KEY", default="default_key")
 
 # Write to all backends
-secrets.set("API_KEY", "your-secret-api-key")
+secret_service.set("API_KEY", "your-secret-api-key")
 
 # List merged view (earlier adapters override later ones)
-all_secrets = secrets.list()
+all_secrets = secret_service.list()
 
 # Remove from all backends
-secrets.remove("API_KEY")
+secret_service.remove("API_KEY")
 ```
 
 ## Caveats
 - Adapter order matters:
   - `get()` returns the first non-`None` value found in adapter order.
-  - `list()` merges adapters such that earlier adapters override later ones.
-- `set()` and `remove()` do not perform error handling in this module; any exceptions are not caught here.
+  - `list()` merges such that earlier adapters override later ones.
+- `set()`/`remove()`:
+  - If any adapter raises, the method publishes `SecretError` (when possible) and **re-raises** the exception.

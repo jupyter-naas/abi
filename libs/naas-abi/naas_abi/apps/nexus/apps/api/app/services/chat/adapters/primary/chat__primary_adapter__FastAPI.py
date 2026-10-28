@@ -21,6 +21,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
     authorize_turn,
     authorize_turn_standalone,
     bind_registry,
+    bind_turn_agents,
     conversation_for_file,
     get_chat_service,
     get_object_storage_service,
@@ -348,6 +349,7 @@ async def complete_chat(
 ) -> ChatResponse:
     with bind_registry(db) as registry:
         await authorize_turn(registry.chat, request, current_user)
+        await bind_turn_agents(registry, request, current_user)
         try:
             result = await registry.chat.complete_chat_request(
                 user_id=current_user.id,
@@ -395,7 +397,7 @@ async def update_conversation(
     await chat_service.update_conversation(
         user_id=current_user.id,
         conversation_id=conversation_id,
-        now=datetime.now(UTC),
+        now=datetime.now(UTC).replace(tzinfo=None),
         title=updates.get("title"),
         pinned=updates.get("pinned"),
         archived=updates.get("archived"),

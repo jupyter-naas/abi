@@ -26,7 +26,7 @@ from naas_abi_core.services.ServiceBase import ServiceBase
 
 class ObjectStorageService(ServiceBase, IObjectStorageDomain):
     """Objects by prefix and key. Wired into an engine, every operation is
-    authorized on ``object/<prefix>/<key>`` (RFC §6.4): an object the caller
+    authorized on ``object/<prefix>/<key>``: an object the caller
     may not see is ``ObjectNotFound``, and listings hold only the objects the
     caller may list."""
 
@@ -39,7 +39,7 @@ class ObjectStorageService(ServiceBase, IObjectStorageDomain):
 
     @staticmethod
     def __plain(prefix: str, key: str | None = None) -> None:
-        """Refuse a prefix or key that is not a plain path (RFC §4.3).
+        """Refuse a prefix or key that is not a plain path.
 
         IAM checks the name ``prefix/key`` as written, a backend opens what the
         path resolves to: ``ws1/../ws2/x`` matches ``ws1/*`` and opens ``ws2/x``,
@@ -76,7 +76,7 @@ class ObjectStorageService(ServiceBase, IObjectStorageDomain):
         *,
         folders: bool = False,
     ) -> list[str]:
-        """``listing`` filtered to the objects the caller may list (RFC §5.5).
+        """``listing`` filtered to the objects the caller may list.
 
         With ``folders``, an entry the caller may not list as an object is
         still shown when it is a folder holding something it may list, and a

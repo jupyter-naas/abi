@@ -1,8 +1,7 @@
 // NATS-RPC contract for the email kernel domain.
 // Mirrors naas_abi_core/services/email/EmailPorts.py 1:1 for its one method.
-// See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md.
 //
-// Subjects (see "Protobuf contract shapes" in the RFC):
+// Subjects:
 //   abi.svc.email.v1.send
 syntax = "proto3";
 
@@ -51,7 +50,7 @@ message SendResponse {
 message SentEmailSummary {
   string message_id = 1;
   string sent_at = 2;  // ISO 8601
-  int64 size = 3;      // bytes of the RFC 5322 message
+  int64 size = 3;      // size of the message in bytes (RFC 5322 format)
   string subject = 4;
   string to = 5;
   string sender = 6;

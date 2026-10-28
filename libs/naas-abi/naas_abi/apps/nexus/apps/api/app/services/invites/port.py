@@ -1,15 +1,18 @@
-"""Ports of Nexus's invitations (RFC §12.2): who was invited where, the identity
+"""Ports of Nexus's invitations: who was invited where, the identity
 provider that makes the person exist, and the IAM grants that wait for them."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
 InvitationStatus = Literal["pending", "accepted", "revoked"]
+# What an organization admin may set about a person when inviting them: their
+# profile in that organization, written at their first sign-in.
+PROFILE_FIELDS = ("organization", "job_title", "bio", "service_line", "country", "interest")
 Provisioning = Literal["builtin", "zitadel", "keycloak", "none"]
 
 
@@ -32,6 +35,8 @@ class Invitation:
     created_at: datetime | None = None
     accepted_at: datetime | None = None
     accepted_user_id: str | None = None
+    # The member profile to write in ``organization_id`` once the person exists.
+    profile: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -165,7 +170,9 @@ class InvitationPersistencePort(ABC):
         grant_ids: Sequence[str],
         invited_by: str | None,
         now: datetime,
-    ) -> Invitation: ...
+        profile: Mapping[str, str] | None = None,
+    ) -> Invitation:
+        """``profile``: replaces the stored one when given (``None``: kept)."""
 
     @abstractmethod
     async def mark_accepted(self, invitation_id: str, *, user_id: str, now: datetime) -> bool:
@@ -212,11 +219,18 @@ class DirectoryGateway(ABC):
 
 class GrantsGateway(ABC):
     """IAM's pending grants and IdP group bindings, as Nexus writes them: as
-    ``api``, once the route authorized the inviting person."""
+    ``api`` on behalf of the inviting person (``by``), so IAM checks that they may
+    attach the role and hold what it grants; for nobody when the system invites."""
 
     @abstractmethod
     async def grant(
-        self, provider: str, email: str, policy_id: str, scope: str | None
+        self,
+        provider: str,
+        email: str,
+        policy_id: str,
+        scope: str | None,
+        *,
+        by: str | None = None,
     ) -> GrantMade:
         """The pending grant, and whether this call made it."""
 
@@ -225,7 +239,13 @@ class GrantsGateway(ABC):
 
     @abstractmethod
     async def bind(
-        self, provider: str, claim_value: str, policy_id: str, scope: str | None
+        self,
+        provider: str,
+        claim_value: str,
+        policy_id: str,
+        scope: str | None,
+        *,
+        by: str | None = None,
     ) -> None: ...
 
     @abstractmethod

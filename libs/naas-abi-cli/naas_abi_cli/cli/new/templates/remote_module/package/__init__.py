@@ -20,7 +20,8 @@ from naas_abi_sdk import (
     ModuleConfiguration,
     ModuleDependencies,
 )
-from naas_abi_sdk.jobs import Every, JobContext, job
+from naas_abi_sdk.jobs import Cron, Every, JobContext, job
+from naas_abi_sdk.workflows import FlowContext, workflow
 
 from {{module_name_snake}} import jobs
 from {{module_name_snake}}.agents.{{module_name_pascal}}Agent import (
@@ -36,6 +37,8 @@ MODULE_ID = "{{module_id}}"
 AGENT_INVOKE = ("agent.invoke.v1",)
 
 logger = logging.getLogger(__name__)
+# While discovery has not made the module READY, run() says so this often.
+NOT_READY_NOTICE_SECONDS = 15.0
 
 
 @dataclass
@@ -49,13 +52,22 @@ class ABIModule(BaseModule[{{module_name_pascal}}Configuration]):
     module_id = MODULE_ID
     package_version = "0.1.0"
     # Services this module calls on the engine. Undeclared ones are refused.
-    dependencies = ModuleDependencies(services=("model_registry", "document"))
+    # triple_store: ontologies/ is sent to the engine's schema graph through it.
+    dependencies = ModuleDependencies(
+        services=("model_registry", "document", "triple_store")
+    )
     # Published in discovery; Nexus lists them with the engine's agents.
     agents = (AgentDescriptor(NAME, DESCRIPTION, capabilities=AGENT_INVOKE),)
 
     async def on_initialized(self) -> None:
         # Runs once the engine's services are reachable, before the module is
-        # READY: bind every agent declared above here.
+        # READY: bind every agent declared above here. Workflows and pipelines
+        # (workflows/, pipelines/) are built after this hook; an agent takes its
+        # tools when it is built, so build them first to give it theirs:
+        #     await self.build_processes()
+        #     tools = self.get_workflow_instance("my_workflow").as_tools()
+        # and pass `tools=tools` to create_agent. Other modules start each one as
+        # the durable workflow "workflow.my_workflow" (or "pipeline.<name>").
         agent = await create_agent(
             self.engine, MODULE_ID, chat_model=self.configuration.chat_model
         )
@@ -66,10 +78,34 @@ class ABIModule(BaseModule[{{module_name_pascal}}Configuration]):
         """Hourly example job: JetStream schedules it, this process runs it."""
         return await jobs.heartbeat(self, ctx)
 
+    @workflow(
+        triggers=(Cron("0 0 6 * * *", time_zone="UTC", input={"topic": "news"}),),
+        timeout=timedelta(minutes=10),
+        max_attempts=2,
+    )
+    async def digest(
+        self, ctx: FlowContext, inp: jobs.DigestInput
+    ) -> jobs.DigestOutput:
+        """Daily example workflow: journaled steps with a typed input and output."""
+        return await jobs.digest(self, ctx, inp)
+
     async def run(self) -> None:
-        # Agents and jobs are served in the background; stay up until stopped.
+        # Agents, jobs and workflows are served in the background; stay up until stopped.
         # SIGTERM drains the module: it finishes running work and unregisters.
-        while self.discovery_status != "READY":
-            await asyncio.sleep(0.5)
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        notice = started + NOT_READY_NOTICE_SECONDS
+        while (status := self.discovery_status) != "READY":
+            if loop.time() >= notice:  # say why nothing happens yet
+                logger.warning(
+                    "%s not READY after %.0f s (discovery status %s): is the "
+                    "engine's discovery running, ABI_SERVICE_KEY this module's, "
+                    "and its manifest approved (abi iam module approve)?",
+                    MODULE_ID,
+                    loop.time() - started,
+                    status,
+                )
+                notice += NOT_READY_NOTICE_SECONDS
+            await asyncio.sleep(min(0.5, NOT_READY_NOTICE_SECONDS))
         logger.info("%s READY: registered in discovery, serving %s", MODULE_ID, NAME)
         await asyncio.Event().wait()

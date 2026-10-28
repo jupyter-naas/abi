@@ -15,7 +15,7 @@ A credential of a kind the route does not take (a coding key on ``/api/chat``,
 an API key on ``/api/auth/*``) names nobody either, and is marked so
 (``request.state.nexus_credential_refused``) for a 403. A key narrows the
 context: its scope is the context's ``scope``, intersected with the user's own
-policy (RFC §5.3).
+policy.
 
 Without a bearer token, the session cookie of a sign-in through an identity
 provider names the user (``services/oidc``): its IAM principal id, with the

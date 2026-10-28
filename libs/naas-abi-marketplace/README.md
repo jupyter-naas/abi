@@ -443,3 +443,9 @@ To add a new module to the marketplace:
 
 MIT License
 
+## Documentation
+
+- [Install a marketplace module](https://docs.naas.ai/user-guide/build/modules/marketplace/marketplace-install)
+- [Marketplace overview](https://docs.naas.ai/user-guide/build/modules/marketplace/marketplace-overview)
+- [Publish a module](https://docs.naas.ai/user-guide/build/modules/marketplace/marketplace-publish)
+- [Quickstart](https://docs.naas.ai/user-guide/get-started/quickstart)

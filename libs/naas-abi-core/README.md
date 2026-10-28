@@ -13,6 +13,9 @@ The ABI Library is the core implementation of ABI's concepts, designed to build 
 - **Modules**: Modular system for organizing agents, integrations, pipelines, and workflows
 - **Agents**: LangGraph-based AI agents with tool binding and conversation management
 - **Applications**: Ready-to-use interfaces (REST API, Terminal, MCP Protocol)
+- **NATS mode** (3.0): the engine serves its kernel services on a NATS broker, the bus is JetStream, module jobs replace Dagster, and modules can run in their own process with `naas-abi-sdk`
+
+Upgrading from 2.x: [Migrate from 2.x to 3.0](https://docs.naas.ai/user-guide/upgrade/migrate-to-3) and [Breaking changes in 3.0](https://docs.naas.ai/user-guide/upgrade/breaking-changes-3).
 
 ## Installation
 
@@ -23,21 +26,52 @@ pip install naas-abi-core
 ### Optional Dependencies
 
 ```bash
-# For Qdrant vector store support
-pip install naas-abi-core[qdrant]
+# NATS mode: naas-abi-proto, naas-abi-sdk, nats-py (needed by naas-abi)
+pip install naas-abi-core[nats]
 
-# For AWS S3 object storage support
-pip install naas-abi-core[aws]
+# OpenTelemetry tracing
+pip install naas-abi-core[otel]
 
-# For SSH tunnel support
-pip install naas-abi-core[ssh]
+# Qdrant vector store, AWS S3 object storage, SSH tunnels, Redis, OpenRouter
+pip install naas-abi-core[qdrant,aws,ssh,redis,openrouter]
 
-# For OpenRouter integration
-pip install naas-abi-core[openrouter]
-
-# Install all optional dependencies
+# Every supported extra (nats and otel included)
 pip install naas-abi-core[all]
+
+# Legacy, for projects without NATS, removed in the next major: Dagster, RabbitMQ
+pip install 'naas-abi-core[all,dagster,rabbitmq]'
 ```
+
+`naas-abi-core[all]` does not include the legacy `dagster` and `rabbitmq`
+extras. Without them, `DagsterOrchestration.New()`, the RabbitMQ bus adapter
+and the Dagster app raise `MissingLegacyExtra`, which prints the install
+command.
+
+## NATS mode
+
+A top-level `nats:` block in the config switches the engine to NATS mode:
+
+```yaml
+nats:
+  nats_url: "nats://engine:{{ secret.NATS_ENGINE_PASSWORD }}@127.0.0.1:4222"
+  auth_callout:
+    nats_url: "nats://auth:{{ secret.NATS_AUTH_PASSWORD }}@127.0.0.1:4222"
+    issuer_seed: "{{ secret.NATS_AUTH_CALLOUT_SEED }}"
+  discovery:
+    project: "my_project"
+```
+
+- Every kernel service is served on `abi.svc.<service>.v1.*` (protobuf
+  contracts from `naas-abi-proto`), and modules reach services through NATS
+  facades, even in one process.
+- The bus is NATS JetStream; module jobs (`naas_abi_core.module.jobs`: `@job`,
+  `Cron`, `Every`, `OnEvent`) run scheduled and event-driven work.
+- One engine serves per NATS account (`nats.engine.role`, `ABI_ROLLOUT_ID` for
+  handovers); discovery registers remote modules.
+- Agent memory and the activity log live in the Document Service.
+
+Architecture: [NATS and the Kernel Services](https://docs.naas.ai/developer-guide/architecture/nats),
+[Remote Modules and Jobs](https://docs.naas.ai/developer-guide/architecture/remote-modules).
 
 ## Core Architecture
 
@@ -484,21 +518,33 @@ api:
 global_config:
   ai_mode: "cloud"  # or "local" or "airgap"
 
+nats:
+  nats_url: "nats://engine:{{ secret.NATS_ENGINE_PASSWORD }}@127.0.0.1:4222"
+  auth_callout:
+    nats_url: "nats://auth:{{ secret.NATS_AUTH_PASSWORD }}@127.0.0.1:4222"
+    issuer_seed: "{{ secret.NATS_AUTH_CALLOUT_SEED }}"
+
 services:
   triple_store:
-    type: "oxigraph"
-    url: "http://localhost:7878"
-  
+    triple_store_adapter:
+      adapter: "oxigraph"
+      config:
+        oxigraph_url: "http://localhost:7878"
   vector_store:
-    type: "qdrant"
-    url: "http://localhost:6333"
-  
+    vector_store_adapter:
+      adapter: "qdrant"
+      config:
+        host: "localhost"
+        port: 6333
   object_storage:
-    type: "minio"
-    endpoint: "http://localhost:9000"
-  
+    object_storage_adapter:
+      adapter: "fs"
+      config:
+        base_path: "storage/datastore"
   secret:
-    type: "env"
+    secret_adapters:
+      - adapter: "dotenv"
+        config: {}
 
 modules:
   - module: "naas_abi"
@@ -506,14 +552,18 @@ modules:
   - path: "./src/my_module"
     enabled: true
     config:
-      api_key: "${MY_API_KEY}"
+      api_key: "{{ secret.MY_API_KEY }}"
 ```
+
+The full reference, with every service and the `nats:`, `telemetry:` and
+`dev:` blocks: [Configuration Reference](https://docs.naas.ai/user-guide/get-started/configuration).
 
 ## Key Dependencies
 
 - **rdflib**: RDF and ontology management
 - **langgraph**: Agent conversation management
-- **langgraph-checkpoint-postgres**: Conversation persistence
+- **langgraph-checkpoint-postgres**: Conversation persistence (NATS off)
+- **naas-abi-sdk**, **naas-abi-proto**, **nats-py** (`[nats]` extra): NATS mode
 - **fastapi**: REST API framework
 - **sparqlwrapper**: SPARQL query execution
 - **pydantic**: Data validation and configuration
@@ -567,11 +617,20 @@ uv build
 
 ## See Also
 
-- [ABI Main README](../../README.md) - Complete ABI framework documentation
-- [naas-abi-cli](../naas-abi-cli/) - CLI tool for ABI projects
-- [naas-abi-marketplace](../naas-abi-marketplace/) - Marketplace modules and agents
+- [ABI Main README](https://github.com/jupyter-naas/abi/blob/main/README.md) - Complete ABI framework documentation
+- [naas-abi-cli](https://github.com/jupyter-naas/abi/tree/main/libs/naas-abi-cli) - CLI tool for ABI projects
+- [naas-abi-marketplace](https://github.com/jupyter-naas/abi/tree/main/libs/naas-abi-marketplace) - Marketplace modules and agents
 
 ## License
 
 MIT License
 
+## Documentation
+
+- [Install and prerequisites](https://docs.naas.ai/user-guide/get-started/install)
+- [Quickstart](https://docs.naas.ai/user-guide/get-started/quickstart)
+- [Configuration](https://docs.naas.ai/user-guide/get-started/configuration)
+- [Module jobs and scheduling](https://docs.naas.ai/user-guide/build/modules/module-jobs)
+- [Architecture](https://docs.naas.ai/developer-guide/architecture/nats)
+- [Contribute to ABI](https://docs.naas.ai/developer-guide/contributing/overview)
+- [Testing](https://docs.naas.ai/developer-guide/contributing/testing)

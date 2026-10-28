@@ -70,7 +70,7 @@ def test_sdk_modules_reach_iam_over_nats(broker):  # noqa: F811 - imported fixtu
             url, TEST_TOKENS.token("module/acme/people", subject=account.id)
         )
         try:
-            # An administrator (engine's transitional policy) sets things up.
+            # An administrator (the engine's policy) sets things up.
             admin = ServicesProxy(engine, ModuleDependencies(), "admin").iam
             bob = await admin.ensure_user("https://idp.example", "bob")
             policy = await admin.create_policy(
@@ -81,7 +81,7 @@ def test_sdk_modules_reach_iam_over_nats(broker):  # noqa: F811 - imported fixtu
             )
             assert policy["document"]["statements"][0]["sid"] == "ReadPolicies"
             attachment = await admin.attach_policy(
-                roles.VIEWER, bob["id"], "abi:org-1:ws-1"
+                roles.ADMIN, bob["id"], "abi:org-1:ws-1"
             )
             assert attachment["scope"] == "abi:org-1:ws-1"
             explanation = await admin.explain(
@@ -90,7 +90,7 @@ def test_sdk_modules_reach_iam_over_nats(broker):  # noqa: F811 - imported fixtu
                 principal_id=bob["id"],
             )
             assert explanation["allowed"] and explanation["statement"]["policy_id"] == (
-                roles.VIEWER
+                roles.ADMIN
             )
             with pytest.raises(Conflict):
                 await admin.delete_policy(roles.VIEWER)

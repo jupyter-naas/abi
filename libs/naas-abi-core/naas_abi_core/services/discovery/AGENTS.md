@@ -16,7 +16,7 @@ caller identity plus a lease token. Each handler runs under the caller's
 `discovery_factory.py` composes the service. Engine exposure is explicit opt-in;
 replicas use a project queue group and share the same JetStream CAS snapshot. No silent in-memory fallback.
 
-## Authorization (`iam_catalog.py`, RFC §6.4)
+## Authorization (`iam_catalog.py`)
 `start_discovery(..., iam=)` wires IAM (the serving engine passes its own); every
 operation is then checked in the domain service with the `discovery` catalog.
 Without IAM (unit tests of the registry) nothing is authorized. Names are
@@ -27,10 +27,13 @@ platform-level: `module/<project>/<module_id>`, `agent|model|app|job/<project>/<
   provider's context. A module id is held by one principal at a time: another
   principal cannot register it while live instances of it exist (so nobody can
   join a running module and take its requests). A module account
-  (`module/<project>/<module_id>`, from #60) registers only its own module.
-- **Listing**: `list_modules` and `get_module` show the modules the caller may
-  list (`ListModules`, `GetModule`, not found otherwise), each with only the
-  agents, apps and jobs it may list (`ListAgents`, `ListApps`, `ListJobs`).
+  (`module/<project>/<module_id>`) registers only its own module.
+- **Listing**: `list_modules` shows the modules the caller may list
+  (`ListModules`); `get_module` needs `GetModule` on the module it names (not
+  found otherwise) and shows its instances, so a module looking itself up (its
+  bootstrap allows `GetModule`, not `ListModules`) sees them. Each instance shows
+  only the agents, apps and jobs the caller may list (`ListAgents`, `ListApps`,
+  `ListJobs`).
 - **Use**: `authorize_agent`, `authorize_model`, `authorize_app` and
   `authorize_job` are a lease check by the hosting module and the check of its
   **caller**. The host forwards the token it received (`caller_token`; the
@@ -42,7 +45,7 @@ platform-level: `module/<project>/<module_id>`, `agent|model|app|job/<project>/<
   host whose account it names (`DiscoveryNATS._is_for_host`), so a module that read
   one from a request replays it nowhere, not even at another host. The caller of
   the checks below is then the module acting for the user, and both sides must
-  allow (RFC §5.3): the module's own side is `builtin.module_bootstrap`'s
+  allow (`services/iam/AGENTS.md`, "Evaluation"): the module's own side is `builtin.module_bootstrap`'s
   `OwnHosted` and `OwnRuns` statements (what it hosts, and the runs of the user it
   acts for), which open no broker subject. Then: `InvokeAgent` on
   the agent for a submit, `GetAgentRun` / `CancelAgentRun` on the run for a poll
@@ -57,9 +60,31 @@ platform-level: `module/<project>/<module_id>`, `agent|model|app|job/<project>/<
   it. The SDK job host asks before it runs a manual trigger (refused: the run is
   recorded FAILED and the message terminated) or honours a cancel. Engine-hosted
   jobs have no lease: `EngineJobLoader.job_authorizer` runs the same check
-  (`require_job`) in process. Scheduled and event triggers are the host's own:
-  until broker permissions (#60) restrict who may publish on a trigger subject,
-  their kind header is trusted.
+  (`require_job`) in process. Scheduled and event triggers are the host's own and
+  are not asked about: the host drops any trigger the engine did not seal. A
+  workflow is a job (`kind`): starting one is `TriggerJob`, its runs are job runs.
+  Every attempt of a manual trigger is asked about, and a trigger `api` or
+  `engine` stored for a user runs as the module for that user (engine
+  `AGENTS.md`, "Who a run runs as"): `caller_identity` names the user the
+  stored delegation must be for.
+- **Module scopes.** Discovery's grants are the broker-side check of using a
+  module's agent, app or workflow, platform-wide: `builtin.platform.member` holds
+  `InvokeAgent` on `agent/*`, `OpenApp` on `app/*` and `TriggerJob` on
+  `workflow/*`. A job of kind `workflow` has that second name
+  (`workflow/<project>/<module_id>/<name>`, `require_job(workflow=True)`): `TriggerJob`
+  on either name starts it, so a module's manifest naming its jobs still covers its
+  workflows, and no role reaches a plain job. An explicit Deny on either name
+  refuses (`trigger_decision`, one rule for discovery, the engine's job host and the
+  broker control): a Deny written on `job/…` before workflows had a second name
+  holds. The broker control refuses a trigger `api` or `engine` stores for a user
+  who may not start the job (`PERMISSION_DENIED`) rather than storing one that
+  would run as the module alone. Which agent, app, workflow or pipeline a user uses in a
+  workspace is its module scope (`module:<type>/<module>/<name>`, core
+  `services/iam/AGENTS.md`, "Module scopes"), which viewers and members do not
+  hold by default. Nexus checks it first, in the workspace of the request, so no
+  user reaches a module's resource in a workspace without it; discovery does not
+  check it (it has no workspace). A remote module's identifier in a scope is its
+  `module_id`, the same as in these names, without the project.
 
 ## Eviction (platform administration)
 `evict` removes a registration whatever its lease: `discovery:Evict` on its
@@ -70,6 +95,14 @@ with a fresh lease token, so eviction clears crashed or stuck registrations;
 stopping a module means stopping its process. Registering an instance id whose
 record expired or was evicted is a new registration (STARTING until its next
 initialized renewal).
+
+## Job descriptors
+A job's `kind` is `job` or `workflow` (empty, from a module written before
+workflows, is a job). Its `input_schema` and `output_schema` are JSON objects of
+at most 16 KiB each, a trigger's `input` a JSON object of at most 4 KiB, and a
+whole job descriptor at most 64 KiB (`INVALID_ARGUMENT` otherwise): descriptors
+travel in the registry snapshot, which holds every module. These are the SDK's
+bounds (`naas_abi_sdk.jobs`). Replica equality covers the new fields.
 
 ## Generations
 Replicas of one generation (the same rollout id, or none on both) must declare
@@ -84,7 +117,7 @@ last write (stored statuses), even if its rollout became incomplete; else the
 oldest. A completing rollout drains older rollouts of its modules, complete or
 not. The cycle check reads edges per generation (own cohort, then the serving
 or one other live generation for the rest) and refuses only cycles through the
-registering module. See the ADR, "Serving generation and dependency cycles".
+registering module.
 
 ## Agent authorization
 `authorize_agent` with `new_invocation` false (status, event and cancel polls)
@@ -103,6 +136,18 @@ once at a time, each write taking every mutation waiting, applied in order on
 its own copy of the registry, in one compare-and-swap. Run side by side, the
 compare-and-swaps on the one registry document would exhaust their five retries
 (`REGISTRY_BUSY`). Reads do not wait for writes.
+
+## Decisions
+**Authorization lives in the registry's domain service, and a module id is bound to its account.**
+*Decision.* Every operation is checked with the `discovery` catalog (platform-level names only), by the registry for
+registration and listing and by the hosting module for use: the host forwards the caller's token and asks discovery
+(`authorize_*`), which verifies it and checks the caller. A module account (`module/<project>/<module_id>`) registers
+only its own module, and a module id is held by one principal at a time. Hosting subjects carry the account's token, and
+a call to a host carries a host token (`abi:host:<sa>`) that discovery accepts only from that host.
+*Consequences.* No module can join a running module's requests, evict another's registration (`discovery:Evict` is a
+policy, not a hard-coded identity), or replay a delegation at another host. An unapproved module is not listed until its
+manifest is approved (`services/iam/AGENTS.md`, "Service accounts, keys, tokens and manifests"). Callers never build
+hosting subjects: they read them from the discovery record.
 
 ## Tests
 Use `uv run pytest .../services/discovery --import-mode=importlib`. Unit tests inject

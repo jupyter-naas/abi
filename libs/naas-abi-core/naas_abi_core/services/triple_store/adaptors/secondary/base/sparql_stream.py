@@ -4,8 +4,7 @@ Shared by the HTTP triple store adapters (Apache Jena TDB2, Oxigraph). They
 ask for line-based formats (``ACCEPT``): tab-separated results for SELECT and
 ASK, N-Triples for CONSTRUCT and DESCRIBE, so a result is parsed as it is read
 and memory stays bounded by one batch. JSON results and Turtle are still read,
-whole, for servers that cannot send those. See
-docs/adr/20261003_nats-streamed-results.md.
+whole, for servers that cannot send those.
 """
 
 from __future__ import annotations

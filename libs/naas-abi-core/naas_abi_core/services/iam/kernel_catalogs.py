@@ -1,7 +1,7 @@
 """The kernel services' action catalogs, registered with IAM at engine boot.
 
-Each catalog lives next to its domain code (``services/<name>/iam_catalog.py``,
-RFC §6.2). They are registered whether or not the service is loaded, so a
+Each catalog lives next to its domain code (``services/<name>/iam_catalog.py``).
+They are registered whether or not the service is loaded, so a
 policy can name any kernel action and the built-in roles cover every kernel
 resource type.
 """
@@ -26,6 +26,7 @@ def kernel_catalogs() -> tuple[ActionCatalog, ...]:
     from naas_abi_core.services.document.iam_catalog import CATALOG as DOCUMENT
     from naas_abi_core.services.email.iam_catalog import CATALOG as EMAIL
     from naas_abi_core.services.event.iam_catalog import CATALOG as EVENT
+    from naas_abi_core.services.iam.module_scopes import CATALOG as MODULE_SCOPES
     from naas_abi_core.services.identity.iam_catalog import CATALOG as IDENTITY
     from naas_abi_core.services.keyvalue.iam_catalog import CATALOG as KEYVALUE
     from naas_abi_core.services.model_registry.iam_catalog import (
@@ -46,7 +47,7 @@ def kernel_catalogs() -> tuple[ActionCatalog, ...]:
     )
 
     return (
-        # Runtime services (subtask 5).
+        # Runtime services.
         ACTIVITY_LOG,
         CODING_ENVIRONMENT,
         DISCOVERY,
@@ -55,7 +56,7 @@ def kernel_catalogs() -> tuple[ActionCatalog, ...]:
         IDENTITY,
         MODEL_REGISTRY,
         SOURCE_CONTROL,
-        # Data services (subtask 4).
+        # Data services.
         CACHE,
         DATASET,
         DOCUMENT,
@@ -64,6 +65,8 @@ def kernel_catalogs() -> tuple[ActionCatalog, ...]:
         SECRET,
         TRIPLE_STORE,
         VECTOR_STORE,
+        # What modules expose, grantable per workspace (not a service).
+        MODULE_SCOPES,
     )
 
 

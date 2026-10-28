@@ -1,6 +1,6 @@
 [project]
 name = "naas-abi-marketplace"
-version = "3.60.0"
+version = "3.62.0"
 authors = [{ name = "Grace Lambert", email = "maxime@naas.ai" },{ name = "Alice Dupont", email = "florent@naas.ai" }, { name = "Emma Petit", email = "jeremy@naas.ai" }]
 description = "Add your description here"
 readme = "README.md"
@@ -33,6 +33,9 @@ dev = [
     "mypy>=1.19.0",
     "pytest>=9.0.1",
     "python-semantic-release>=9.21.0",
+    # The X and PubMed orchestrations import Dagster, a legacy extra of core
+    # since 3.0: type-check them without making it a dependency.
+    "naas-abi-core[dagster]",
 ]
 
 [tool.semantic_release]

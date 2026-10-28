@@ -208,6 +208,10 @@ class {cls}(ServiceProxy):
         request_name = "".join(p.title() for p in m.name.split("_")) + "Request"
         if request_name not in pb.DESCRIPTOR.message_types_by_name:
             continue
+        # A core deadline (timeout_seconds) is no request field: leave it out.
+        for i in reversed(range(len(m.args.kwonlyargs))):
+            if m.args.kwonlyargs[i].arg == "timeout_seconds":
+                del m.args.kwonlyargs[i], m.args.kw_defaults[i]
         args = ast.unparse(m.args).replace("builtins.list", "list")
         args = args.replace("WriteMode", "str")
         returns = (

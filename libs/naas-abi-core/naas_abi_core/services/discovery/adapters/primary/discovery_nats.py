@@ -25,6 +25,7 @@ from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
 from naas_abi_core.services.iam.modules import subject_token
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 from naas_abi_sdk import overflow
+from naas_abi_sdk.broker_flush import flush_to_broker
 from naas_abi_sdk.concurrency import ConcurrentCalls
 from naas_abi_sdk.messages import reply
 from nats.aio.client import Client
@@ -91,7 +92,7 @@ class DiscoveryNATS:
                         ),
                     )
                 )
-            await nc.flush()
+            await flush_to_broker(nc)
         except BaseException:
             await self.stop()
             raise

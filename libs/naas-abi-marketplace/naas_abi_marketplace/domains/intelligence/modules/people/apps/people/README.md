@@ -132,8 +132,8 @@ goes to the Nexus web host and 404s. An instance shown in Nexus therefore also
 mounts itself beside its page, at `/app-html/<module>/<app>/api`, and its page
 sets `data-people-api-base` on `<html>` to that mount before loading the shell.
 `web/lib/config.js` reads it, and `apiUrl()` moves URLs the data states under the
-declared prefix (portraits) onto it. The Forvis Mazars instance in bob
-(`intelligence.people_intelligence.apps.people`, `web/boot.js`) does exactly this.
+declared prefix (portraits) onto it. A deployment's own instance does this from its
+`web/boot.js`.
 
 Everything per-instance is resolved against the folder holding the config: brand
 files, `data.graph.file`, and `data.portrait_prefix`. Run one locally with

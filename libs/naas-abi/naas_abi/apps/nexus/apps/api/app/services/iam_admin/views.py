@@ -6,6 +6,7 @@ the answer that made it (``created_key``).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -14,12 +15,14 @@ from naas_abi_core.services.iam.IAMPorts import (
     Attachment,
     CreatedKey,
     Explanation,
+    GrantableCatalog,
     KeyRecord,
     ManifestRecord,
     Policy,
     PrincipalRecord,
 )
 from naas_abi_core.services.iam.keys import PREFIXES
+from naas_abi_core.services.iam.modules import split_manifest
 from naas_abi_core.services.iam.policy import POLICY_VARIABLES, Statement
 
 # The service accounts the engine itself holds (``roles.SERVICE_ACCOUNTS``) and the
@@ -44,6 +47,7 @@ def principal_view(record: PrincipalRecord) -> dict[str, Any]:
         "provider": record.provider,
         "org": record.org,
         "owner_id": record.owner_id,
+        "owner_scope": record.owner_scope,
         "created_at": iso(record.created_at),
     }
 
@@ -68,6 +72,7 @@ def policy_view(policy: Policy) -> dict[str, Any]:
         "description": policy.description,
         "managed": policy.managed,
         "revision": policy.revision,
+        "owner_scope": policy.owner_scope,
         "document": policy.document.to_dict(),
         "created_at": iso(policy.created_at),
         "updated_at": iso(policy.updated_at),
@@ -117,6 +122,9 @@ def created_key(created: CreatedKey) -> dict[str, Any]:
 
 
 def manifest_view(record: ManifestRecord, account_name: str | None) -> dict[str, Any]:
+    """A manifest version: its policy ``document`` (what an admin may narrow) and
+    the ``catalog`` it declares (approved as submitted, or None)."""
+    policy, catalog = split_manifest(record.document)
     return {
         "principal_id": record.principal_id,
         "account_name": account_name,
@@ -124,7 +132,8 @@ def manifest_view(record: ManifestRecord, account_name: str | None) -> dict[str,
         "module_id": record.module_id,
         "project": record.project,
         "status": record.status,
-        "document": record.document,
+        "document": dict(policy) if isinstance(policy, Mapping) else policy.to_dict(),
+        "catalog": dict(catalog) if catalog is not None else None,
         "submitted_at": iso(record.submitted_at),
         "decided_at": iso(record.decided_at),
         "decided_by": record.decided_by,
@@ -144,6 +153,20 @@ def catalogs_view(catalogs: list[ActionCatalog]) -> dict[str, Any]:
     return {
         "catalogs": [catalog_view(c) for c in catalogs],
         "variables": sorted(POLICY_VARIABLES),
+    }
+
+
+def grantable_view(catalog: GrantableCatalog) -> dict[str, Any]:
+    return {
+        "service": catalog.service,
+        "actions": [
+            {
+                "action": a.action,
+                "resources": list(a.resources),
+                "excluded": list(a.excluded),
+            }
+            for a in catalog.actions
+        ],
     }
 
 
@@ -178,4 +201,12 @@ def simulation_view(
         "resource": explanation.resource,
         "principal": principal_view(principal),
         "statement": statement,
+    }
+
+
+def scope_set(found: Any) -> dict[str, Any]:
+    """A set's two parts: a list each, or None for everything (``ScopeSet``)."""
+    return {
+        "modules": list(found.modules) if found.modules is not None else None,
+        "features": list(found.features) if found.features is not None else None,
     }

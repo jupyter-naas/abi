@@ -2,6 +2,201 @@
 
 <!-- version list -->
 
+## v3.2.0 (2026-10-26)
+
+
+## v3.1.0 (2026-10-26)
+
+### Bug Fixes
+
+- **cli**: Keep rdflib out of the remote module template's own test
+  ([`ada1ac6`](https://github.com/jupyter-naas/abi/commit/ada1ac6c1bbc04ec9debb7291095ffd7f23ab601))
+
+- **core**: Bridge results, lazy loader creation and sync flow cancellation
+  ([`3bf7f14`](https://github.com/jupyter-naas/abi/commit/3bf7f146989c275e77cc251fc94b57ac22c8ce3c))
+
+- **remote-modules**: Close review findings on processes and ontologies
+  ([`b5312b0`](https://github.com/jupyter-naas/abi/commit/b5312b0ea30719c8a1075c499b98f0ed3efe0548))
+
+### Documentation
+
+- **sdk**: Record remote workflows, pipelines and ontologies, and smoke them
+  ([`c4816c4`](https://github.com/jupyter-naas/abi/commit/c4816c486390102ed118dffab3c3c97b0144ef6a))
+
+### Features
+
+- **cli**: SDK workflow, pipeline and integration scaffolds in remote modules
+  ([`f970c2e`](https://github.com/jupyter-naas/abi/commit/f970c2e9331d6691953d37d4bed8e0ae2048e9e6))
+
+- **cli**: Workflow example in the remote module template
+  ([`0de301b`](https://github.com/jupyter-naas/abi/commit/0de301b5455106ca54554a731beee0deb6e87940))
+
+- **core**: Durable workflows for engine modules and the Workflow/Pipeline bridge
+  ([`605fc99`](https://github.com/jupyter-naas/abi/commit/605fc99c2a777d6af291c23aef2e4e22705d62da))
+
+- **sdk**: Build_processes() so an agent built in on_initialized gets workflow and pipeline tools
+  ([`01c8d74`](https://github.com/jupyter-naas/abi/commit/01c8d744b6b2c04e96fec8c290755b945233747e))
+
+- **triple-store**: Load remote module ontologies into the schema graph
+  ([`90b1795`](https://github.com/jupyter-naas/abi/commit/90b179511f642035796cc36a4aea3ef16bcc6466))
+
+### Testing
+
+- **cli**: The scaffold test's discovery stand-in has a task
+  ([`954fd4b`](https://github.com/jupyter-naas/abi/commit/954fd4bbb03c6a74aa60e9b2c4d28fad08a92d0c))
+
+
+## v3.0.1 (2026-10-21)
+
+### Bug Fixes
+
+- **cli**: Keep docs/reference; stop copying into docs/site
+  ([#1380](https://github.com/jupyter-naas/abi/pull/1380),
+  [`2a96b60`](https://github.com/jupyter-naas/abi/commit/2a96b603a9fde09b9a02b5a29dd154a7be3f19d2))
+
+### Documentation
+
+- Drop Zen naming from docs pointers ([#1380](https://github.com/jupyter-naas/abi/pull/1380),
+  [`2a96b60`](https://github.com/jupyter-naas/abi/commit/2a96b603a9fde09b9a02b5a29dd154a7be3f19d2))
+
+- Fix NATS deep link (no .md in docs.naas.ai URL)
+  ([#1380](https://github.com/jupyter-naas/abi/pull/1380),
+  [`2a96b60`](https://github.com/jupyter-naas/abi/commit/2a96b603a9fde09b9a02b5a29dd154a7be3f19d2))
+
+- Remove narrative docs from ABI; point to docs.naas.ai
+  ([#1380](https://github.com/jupyter-naas/abi/pull/1380),
+  [`2a96b60`](https://github.com/jupyter-naas/abi/commit/2a96b603a9fde09b9a02b5a29dd154a7be3f19d2))
+
+- Remove narrative docs; point to docs.naas.ai
+  ([#1380](https://github.com/jupyter-naas/abi/pull/1380),
+  [`2a96b60`](https://github.com/jupyter-naas/abi/commit/2a96b603a9fde09b9a02b5a29dd154a7be3f19d2))
+
+- Retarget package README and CLI links to docs.naas.ai
+  ([#1380](https://github.com/jupyter-naas/abi/pull/1380),
+  [`2a96b60`](https://github.com/jupyter-naas/abi/commit/2a96b603a9fde09b9a02b5a29dd154a7be3f19d2))
+
+
+## v3.0.0 (2026-10-20)
+
+### Bug Fixes
+
+- Map layers reach the chat context, a forced catalog load refetches, short remote app grants renew
+  in time, dokploy --regenerate keeps hosts and own values, bounded kg_sparql_query count, GDACS
+  pins take turns
+  ([`d695d85`](https://github.com/jupyter-naas/abi/commit/d695d8511431e8d4ddd5bd5b2a464ac815a5ee71))
+
+- **cli**: `uv run pytest` runs a generated project's module tests
+  ([`a3e856e`](https://github.com/jupyter-naas/abi/commit/a3e856eb349854eb6572dd21d3262b94079f5bfa))
+
+- **cli**: A config that does not load ends `abi new project` with a message
+  ([`4fe22d6`](https://github.com/jupyter-naas/abi/commit/4fe22d6934cc631a7879b171573f5edb25113cfb))
+
+- **cli**: A new project keeps its secrets out of git and out of the image
+  ([`85ade46`](https://github.com/jupyter-naas/abi/commit/85ade46edd41866333b7731520450218439a4341))
+
+- **cli**: A new remote module joins the discovery project of the Docker config
+  ([`8b0fb3b`](https://github.com/jupyter-naas/abi/commit/8b0fb3b7d63e52ac0bc8ef7a18bc275fd893252c))
+
+- **cli**: Abi stack start does not hold a terminal on a host without a display
+  ([`e2acba4`](https://github.com/jupyter-naas/abi/commit/e2acba4742ca18fad97dee13dfcd60f00d0be287))
+
+- **cli**: Commands that load the engine reach the broker abi dev up runs
+  ([`dd23e1a`](https://github.com/jupyter-naas/abi/commit/dd23e1afeeba3470e3ab0449d2f177ffab8432fd))
+
+- **cli**: Generated images and workflow run Python 3.12, which the project requires
+  ([`10098be`](https://github.com/jupyter-naas/abi/commit/10098befec76af2f398d9a8db703270e6362fdf9))
+
+- **cli**: Give the engine five minutes to boot before the stack calls it unhealthy
+  ([`250e03a`](https://github.com/jupyter-naas/abi/commit/250e03ab6273d9957874b22a383cacbff18c114d))
+
+- **cli**: Point the dokploy messages at the site, fix a cron example in the module template
+  ([`1c7d986`](https://github.com/jupyter-naas/abi/commit/1c7d986ec06b3e9908714a5bac42947950077bdc))
+
+- **cli**: The deploy backup and the snapshots ignore themselves in git
+  ([`1faf1cc`](https://github.com/jupyter-naas/abi/commit/1faf1cc7b16b6ad46c61675104ed2f373c117e6f))
+
+- **cli**: The Dokploy stack compacts Fuseki
+  ([`8481d7d`](https://github.com/jupyter-naas/abi/commit/8481d7dce505d2edf3ff5c3810c8a470bf271f3f))
+
+- **cli**: The Dokploy stack pulls the MinIO and NATS images the local stack does
+  ([`171b783`](https://github.com/jupyter-naas/abi/commit/171b7839cc3ac890c55ba966443f599f55c9a034))
+
+- **core**: Find the config before its .env exists
+  ([`e271a19`](https://github.com/jupyter-naas/abi/commit/e271a19db160248635b37fa25ebe6b3837425ff3))
+
+### Chores
+
+- Project lockfiles follow the 2.x versions main released
+  ([`db051c0`](https://github.com/jupyter-naas/abi/commit/db051c0bd348f9a411321ea59061bf28e5cbc694))
+
+### Continuous Integration
+
+- **cli**: End-to-end smoke test of the CLI on every PR into main
+  ([`63bd065`](https://github.com/jupyter-naas/abi/commit/63bd065fdd0807b336cb1a012d916d9aa43363c9))
+
+### Documentation
+
+- Split the site into a User guide and a Developer guide
+  ([`7af3a58`](https://github.com/jupyter-naas/abi/commit/7af3a581fbcd480599735f0cbc199361873da1ad))
+
+- **cli**: `abi new project --abi-source` and its non-interactive validate
+  ([`9f79f1d`](https://github.com/jupyter-naas/abi/commit/9f79f1db05ae089e6f07a0d142a665e2f4a6aa72))
+
+- **cli**: Document every command and option, and test it
+  ([`e6fd17c`](https://github.com/jupyter-naas/abi/commit/e6fd17ca962eabc4cf6c769b3922424b623f6b2a))
+
+- **cli**: Say where proto and the SDK come from without claiming they are unpublished
+  ([`29097a5`](https://github.com/jupyter-naas/abi/commit/29097a5ab341b1a6fd2b21aa22d5cc3059d48f70))
+
+### Features
+
+- **cli**: `abi new project --abi-source` clones .abi from a local checkout
+  ([`2db6199`](https://github.com/jupyter-naas/abi/commit/2db6199599979eb8e3ba43fe28fe2772d32e6e3e))
+
+- **repo**: Run the ABI repository on NATS by default
+  ([`72fd2f2`](https://github.com/jupyter-naas/abi/commit/72fd2f2131e555e6ac60cb75ffaa3f7eed62f447))
+
+### Testing
+
+- **cli**: Abi dev tests run outside the repository
+  ([`1e128c0`](https://github.com/jupyter-naas/abi/commit/1e128c0859683a159e0dae6bb63fa4508722d84c))
+
+- **cli**: Type the command lists the new project tests collect
+  ([`d9e7449`](https://github.com/jupyter-naas/abi/commit/d9e74491947ce8f91b471f40bd79e51dae541c32))
+
+
+### Upgrade notes (3.0)
+
+- `abi new project` creates NATS projects (`--without-nats` for the classic
+  one), and `abi new module` creates remote modules in them (`--in-engine` for
+  a module the engine loads).
+- `abi dev up` runs `nats-server` (2.14 or later), the engine with discovery
+  and the `dev.modules` remote modules in a NATS project; `--with-tracing`
+  adds Jaeger. Dagster is left out in NATS mode.
+- `abi deploy local` writes the NATS stack for a project with a `nats:` block;
+  for one without, it keeps the classic stack and adds the legacy
+  `naas-abi-core[dagster,rabbitmq]` extras to `pyproject.toml` (`uv add`).
+- New commands: `abi module key`, `abi agent migrate-memory`,
+  `abi agent prune-memory`.
+- Guide: [Migrate from 2.x to 3.0](https://docs.naas.ai/user-guide/upgrade/migrate-to-3).
+  Every change: [Breaking changes in 3.0](https://docs.naas.ai/user-guide/upgrade/breaking-changes-3).
+
+## v2.28.0 (2026-10-15)
+
+
+## v2.27.1 (2026-10-14)
+
+### Bug Fixes
+
+- **maps**: Update feed and geojson debug handling
+  ([`f1cad6c`](https://github.com/jupyter-naas/abi/commit/f1cad6c1bbff5792716049a4c5f971138f3eae3a))
+
+### Refactoring
+
+- **files**: Reorganize file drives and add platform drive
+  ([`ad0eed4`](https://github.com/jupyter-naas/abi/commit/ad0eed46afa5d61217b7ab07f63cf35ba1502d72))
+
+
 ## v2.27.0 (2026-10-07)
 
 ### Features

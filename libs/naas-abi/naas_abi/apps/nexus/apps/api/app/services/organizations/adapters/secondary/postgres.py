@@ -3,9 +3,12 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from datetime import datetime
+from uuid import uuid4
 
+from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.models import (
     OrganizationDomainModel,
+    OrganizationMemberModel,
     OrganizationModel,
     OrganizationRoleFeaturesModel,
     UserModel,
@@ -15,6 +18,8 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     OrganizationCreateInput,
     OrganizationDomainCreateInput,
     OrganizationDomainRecord,
+    OrganizationMemberAccountRecord,
+    OrganizationMemberProfileRecord,
     OrganizationPermissionPort,
     OrganizationRecord,
     OrganizationRoleFeaturesRecord,
@@ -53,7 +58,7 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             return {}
         result = await self.db.execute(select(UserModel).where(UserModel.id.in_(user_ids)))
         return {
-            user.id: UserRecord(id=user.id, email=user.email, name=user.name)
+            user.id: UserRecord(id=user.id, email=user.email, name=user.name, bio=user.bio)
             for user in result.scalars().all()
         }
 
@@ -190,6 +195,7 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             updated_at=row.updated_at,
             logo_url=row.logo_url,
             logo_emoji=row.logo_emoji,
+            workspace_group=row.workspace_group,
         )
 
     async def get_user_by_email(self, email: str) -> UserRecord | None:
@@ -198,7 +204,113 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
         user = result.scalar_one_or_none()
         if user is None:
             return None
-        return UserRecord(id=user.id, email=user.email, name=user.name)
+        return UserRecord(id=user.id, email=user.email, name=user.name, bio=user.bio)
+
+    async def get_member_account(self, user_id: str) -> OrganizationMemberAccountRecord | None:
+        user = (
+            await self.db.execute(select(UserModel).where(UserModel.id == user_id))
+        ).scalar_one_or_none()
+        if user is None:
+            return None
+        return OrganizationMemberAccountRecord(
+            user_id=user_id,
+            email=user.email,
+            name=user.name,
+            avatar=user.avatar,
+            organization=user.organization,
+            job_title=user.job_title,
+            bio=user.bio,
+            created_at=user.created_at,
+            updated_at=user.updated_at,
+        )
+
+    @staticmethod
+    def _to_profile(row: OrganizationMemberModel) -> OrganizationMemberProfileRecord:
+        return OrganizationMemberProfileRecord(
+            name=row.name,
+            avatar=row.avatar,
+            organization=row.organization_name,
+            job_title=row.job_title,
+            bio=row.bio,
+            service_line=row.service_line,
+            country=row.country,
+            interest=row.interest,
+        )
+
+    async def _find_profile_row(self, org_id: str, user_id: str) -> OrganizationMemberModel | None:
+        result = await self.db.execute(
+            select(OrganizationMemberModel).where(
+                (OrganizationMemberModel.organization_id == org_id)
+                & (OrganizationMemberModel.user_id == user_id)
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def _profile_row(self, org_id: str, user_id: str) -> OrganizationMemberModel:
+        """The row a member's profile is kept in, made on the first edit. Who holds
+        which role is IAM's: ``role`` here is only the column's placeholder."""
+        row = await self._find_profile_row(org_id, user_id)
+        if row is None:
+            row = OrganizationMemberModel(
+                id=str(uuid4()),
+                organization_id=org_id,
+                user_id=user_id,
+                role="member",
+                created_at=datetime.now(UTC).replace(tzinfo=None),
+            )
+            self.db.add(row)
+        return row
+
+    async def get_organization_member_profile(
+        self, org_id: str, user_id: str
+    ) -> OrganizationMemberProfileRecord | None:
+        row = await self._find_profile_row(org_id, user_id)
+        return self._to_profile(row) if row is not None else None
+
+    async def list_organization_member_profiles(
+        self, org_id: str
+    ) -> dict[str, OrganizationMemberProfileRecord]:
+        result = await self.db.execute(
+            select(OrganizationMemberModel).where(OrganizationMemberModel.organization_id == org_id)
+        )
+        return {row.user_id: self._to_profile(row) for row in result.scalars().all()}
+
+    async def update_organization_member_profile(
+        self,
+        org_id: str,
+        user_id: str,
+        *,
+        name: str | None,
+        organization: str | None,
+        job_title: str | None,
+        bio: str | None,
+        service_line: str | None = None,
+        country: str | None = None,
+        interest: str | None = None,
+    ) -> OrganizationMemberProfileRecord:
+        row = await self._profile_row(org_id, user_id)
+        for field, value in (
+            ("name", name),
+            ("organization_name", organization),
+            ("job_title", job_title),
+            ("bio", bio),
+            ("service_line", service_line),
+            ("country", country),
+            ("interest", interest),
+        ):
+            if value is not None:
+                setattr(row, field, value)
+        await self.db.flush()
+        return self._to_profile(row)
+
+    async def set_organization_member_avatar(
+        self, org_id: str, user_id: str, avatar: str | None
+    ) -> str | None:
+        row = await self._profile_row(org_id, user_id)
+        previous = row.avatar
+        row.avatar = avatar
+        await self.db.flush()
+        return previous
 
     async def list_organization_domains(self, org_id: str) -> list[OrganizationDomainRecord]:
         result = await self.db.execute(

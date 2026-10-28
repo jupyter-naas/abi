@@ -12,7 +12,10 @@ readme = "README.md"
 dependencies = [
     "naas-abi",
     "naas-abi-cli",
-    "naas-abi-core[all]",
+    # This repository runs on NATS, but tests Dagster and RabbitMQ and runs
+    # them in its legacy stack (`abi stack start --legacy`, `abi dev up
+    # --without-nats`): the legacy extras are not in [all].
+    "naas-abi-core[all,dagster,rabbitmq]",
     "naas-abi-idp",
     "naas-abi-marketplace[ai-chatgpt]",
     "naas-abi-marketplace[ai-claude]",
@@ -114,7 +117,7 @@ dependencies = [
 [project.scripts]
 abi = "naas_abi_cli.cli:main"
 api = "naas_abi_core.apps.api.api:api"
-mcp-server = "naas_abi_core.apps.mcp_server:run"
+mcp-server = "naas_abi_core.apps.mcp.mcp_server:run"
 
 [project.optional-dependencies]
 dev = [

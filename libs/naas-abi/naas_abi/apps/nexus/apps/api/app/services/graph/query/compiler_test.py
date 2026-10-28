@@ -157,9 +157,7 @@ def _spec_c() -> ListSpec:
         graph_uris=(G,),
         root=ClassAnchor((DOC + "PDFPaperFile",)),
         columns=(Column("path", "string", PropertySource(DOC + "path")),),
-        filters=FilterNot(
-            FilterCondition(FilterSourceTarget(branch), "eq", "gpt-5-mini")
-        ),
+        filters=FilterNot(FilterCondition(FilterSourceTarget(branch), "eq", "gpt-5-mini")),
     )
 
 
@@ -230,7 +228,9 @@ def test_node_column_in_filter_constrains_reached_node() -> None:
     spec = ListSpec(
         graph_uris=(G,),
         root=ClassAnchor((DOC + "ExtractedItem",)),
-        columns=(Column("by", "iri", NodeSource((Hop(DOC + "extracted_by", "out"),), show="label")),),
+        columns=(
+            Column("by", "iri", NodeSource((Hop(DOC + "extracted_by", "out"),), show="label")),
+        ),
         filters=FilterCondition(FilterColumnTarget("by"), "in", (DOC + "extr_other",)),
     )
     q = _norm(compile_list(spec, CompileContext()).sparql)
@@ -266,7 +266,9 @@ def test_to_many_column_without_collapse_is_auto_collapsed() -> None:
 
 
 def test_aggregate_mode_requires_dimensions_and_measures() -> None:
-    spec = AggregateSpec(graph_uris=(G,), fact=ClassAnchor((DOC + "ExtractedItem",)), group_by=(), measures=())
+    spec = AggregateSpec(
+        graph_uris=(G,), fact=ClassAnchor((DOC + "ExtractedItem",)), group_by=(), measures=()
+    )
     with pytest.raises(GraphQuerySpecError):
         compile_query(spec, CompileContext())
 
@@ -280,10 +282,19 @@ def _spec_1() -> ListSpec:
         root=ClassAnchor((DOC + "User",)),
         columns=(
             Column("name", "string", PropertySource(LBL)),
-            Column("chats", "number", AggregateSource("count", path=(Hop(DOC + "hasChat", "out"),), of_kind="node")),
             Column(
-                "messages", "number",
-                AggregateSource("count", path=(Hop(DOC + "hasChat", "out"), Hop(DOC + "hasMessage", "out")), of_kind="node"),
+                "chats",
+                "number",
+                AggregateSource("count", path=(Hop(DOC + "hasChat", "out"),), of_kind="node"),
+            ),
+            Column(
+                "messages",
+                "number",
+                AggregateSource(
+                    "count",
+                    path=(Hop(DOC + "hasChat", "out"), Hop(DOC + "hasMessage", "out")),
+                    of_kind="node",
+                ),
             ),
         ),
         filters=FilterCondition(FilterColumnTarget("messages"), "gt", 0),
@@ -341,11 +352,17 @@ def _spec_b() -> AggregateSpec:
         fact=ClassAnchor((DOC + "ExtractedItem",)),
         group_by=(
             Dimension(
-                "paper", "property",
+                "paper",
+                "property",
                 path=(Hop(DOC + "extracted_from_chunk", "out"), Hop(DOC + "chunk_of", "out")),
                 show_predicate=DOC + "path",
             ),
-            Dimension("pipeline", "property", path=(Hop(DOC + "extracted_by", "out"),), show_predicate=DOC + "pipeline_name"),
+            Dimension(
+                "pipeline",
+                "property",
+                path=(Hop(DOC + "extracted_by", "out"),),
+                show_predicate=DOC + "pipeline_name",
+            ),
         ),
         measures=(Measure("items", "count", of_kind="node"),),
         sort=(SortKey("paper", "asc"),),
@@ -389,16 +406,26 @@ def test_aggregate_filter_dimension_where_measure_having() -> None:
         graph_uris=(G,),
         fact=ClassAnchor((DOC + "ExtractedItem",)),
         group_by=(
-            Dimension("paper", "property", path=(Hop(DOC + "extracted_from_chunk", "out"), Hop(DOC + "chunk_of", "out")), show_predicate=DOC + "path"),
+            Dimension(
+                "paper",
+                "property",
+                path=(Hop(DOC + "extracted_from_chunk", "out"), Hop(DOC + "chunk_of", "out")),
+                show_predicate=DOC + "path",
+            ),
         ),
         measures=(Measure("items", "count", of_kind="node"),),
-        filters=FilterGroup("and", (
-            FilterCondition(FilterColumnTarget("paper"), "contains", "pubmed"),
-            FilterCondition(FilterColumnTarget("items"), "gt", 5),
-        )),
+        filters=FilterGroup(
+            "and",
+            (
+                FilterCondition(FilterColumnTarget("paper"), "contains", "pubmed"),
+                FilterCondition(FilterColumnTarget("items"), "gt", 5),
+            ),
+        ),
     )
     sparql = compile_query(spec, CompileContext()).sparql
-    assert 'FILTER(CONTAINS(LCASE(STR(?dim_paper)), "pubmed"))' in _norm(sparql)  # dimension → WHERE
+    assert 'FILTER(CONTAINS(LCASE(STR(?dim_paper)), "pubmed"))' in _norm(
+        sparql
+    )  # dimension → WHERE
     assert f'HAVING(COUNT(DISTINCT ?fact) > "5"^^<{XSD_INT}>)' in _norm(sparql)  # measure → HAVING
 
 
@@ -406,12 +433,22 @@ def test_aggregate_filter_complex_or_is_rejected() -> None:
     spec = AggregateSpec(
         graph_uris=(G,),
         fact=ClassAnchor((DOC + "ExtractedItem",)),
-        group_by=(Dimension("pipeline", "property", path=(Hop(DOC + "extracted_by", "out"),), show_predicate=DOC + "pipeline_name"),),
+        group_by=(
+            Dimension(
+                "pipeline",
+                "property",
+                path=(Hop(DOC + "extracted_by", "out"),),
+                show_predicate=DOC + "pipeline_name",
+            ),
+        ),
         measures=(Measure("items", "count", of_kind="node"),),
-        filters=FilterGroup("or", (
-            FilterCondition(FilterColumnTarget("items"), "gt", 5),
-            FilterCondition(FilterColumnTarget("pipeline"), "eq", "causes"),
-        )),
+        filters=FilterGroup(
+            "or",
+            (
+                FilterCondition(FilterColumnTarget("items"), "gt", 5),
+                FilterCondition(FilterColumnTarget("pipeline"), "eq", "causes"),
+            ),
+        ),
     )
     with pytest.raises(GraphQuerySpecError):
         compile_query(spec, CompileContext())
@@ -425,11 +462,17 @@ def test_collapse_to_many_concat_uses_group_concat_subquery() -> None:
         graph_uris=(G,),
         root=ClassAnchor((DOC + "User",)),
         columns=(
-            Column("chat_titles", "string", NodeSource(path=(Hop(DOC + "hasChat", "out"),), show="label", collapse="concat")),
+            Column(
+                "chat_titles",
+                "string",
+                NodeSource(path=(Hop(DOC + "hasChat", "out"),), show="label", collapse="concat"),
+            ),
         ),
     )
     sparql = _norm(compile_list(spec, CompileContext()).sparql)
-    assert 'GROUP_CONCAT(DISTINCT STR(?chat_titles_v); SEPARATOR=", ") AS ?col_chat_titles' in sparql
+    assert (
+        'GROUP_CONCAT(DISTINCT STR(?chat_titles_v); SEPARATOR=", ") AS ?col_chat_titles' in sparql
+    )
     assert "GROUP BY ?root }" in sparql  # the collapse is a per-root subquery, not an inline join
 
 
@@ -437,11 +480,19 @@ def test_collapse_count_filter_is_having() -> None:
     spec = ListSpec(
         graph_uris=(G,),
         root=ClassAnchor((DOC + "User",)),
-        columns=(Column("chat_count", "number", NodeSource(path=(Hop(DOC + "hasChat", "out"),), show="uri", collapse="count")),),
+        columns=(
+            Column(
+                "chat_count",
+                "number",
+                NodeSource(path=(Hop(DOC + "hasChat", "out"),), show="uri", collapse="count"),
+            ),
+        ),
         filters=FilterCondition(FilterColumnTarget("chat_count"), "gt", 1),
     )
     sparql = _norm(compile_list(spec, CompileContext()).sparql)
-    assert f'FILTER(?col_chat_count > "1"^^<{XSD_INT}>)' in sparql  # collapsed column filters as HAVING-equiv
+    assert (
+        f'FILTER(?col_chat_count > "1"^^<{XSD_INT}>)' in sparql
+    )  # collapsed column filters as HAVING-equiv
 
 
 # ── Keyset pagination ────────────────────────────────────────────────────────────
@@ -457,7 +508,9 @@ def _name_sorted_spec() -> ListSpec:
 
 
 def test_keyset_first_page_forces_required_sort_column() -> None:
-    compiled = compile_list(_name_sorted_spec(), CompileContext(single_valued_predicates=frozenset({LBL})))
+    compiled = compile_list(
+        _name_sorted_spec(), CompileContext(single_valued_predicates=frozenset({LBL}))
+    )
     sparql = _norm(compiled.sparql)
     assert compiled.uses_offset_fallback is False
     assert compiled.order_columns == ("name",)
@@ -469,7 +522,9 @@ def test_keyset_first_page_forces_required_sort_column() -> None:
 
 def test_keyset_next_page_emits_after_filter() -> None:
     page = Page(limit=2, after=("Bob", DOC + "u2"))
-    compiled = compile_list(_name_sorted_spec(), CompileContext(single_valued_predicates=frozenset({LBL})), page)
+    compiled = compile_list(
+        _name_sorted_spec(), CompileContext(single_valued_predicates=frozenset({LBL})), page
+    )
     sparql = _norm(compiled.sparql)
     assert f'FILTER( ?col_name > "Bob" || (?col_name = "Bob" && STR(?root) > "{DOC}u2") )' in sparql
     assert sparql.endswith("LIMIT 2")
@@ -483,23 +538,34 @@ def test_compile_facet_strips_target_filter_keeps_others() -> None:
             Column("by", "iri", NodeSource(path=(Hop(DOC + "extracted_by", "out"),), show="uri")),
             Column("text", "string", PropertySource(DOC + "extracted_text")),
         ),
-        filters=FilterGroup("and", (
-            FilterCondition(FilterColumnTarget("by"), "is", DOC + "extr_gpt"),  # stripped when faceting 'by'
-            FilterCondition(FilterColumnTarget("text"), "contains", "sport"),   # survives
-        )),
+        filters=FilterGroup(
+            "and",
+            (
+                FilterCondition(
+                    FilterColumnTarget("by"), "is", DOC + "extr_gpt"
+                ),  # stripped when faceting 'by'
+                FilterCondition(FilterColumnTarget("text"), "contains", "sport"),  # survives
+            ),
+        ),
     )
     sparql = _norm(compile_facet(spec, CompileContext(), target_column_id="by"))
     assert "(COUNT(DISTINCT ?root) AS ?cnt)" in sparql
     assert "GROUP BY ?v ORDER BY DESC(?cnt) ?v LIMIT 51" in sparql
     assert "extr_gpt" not in sparql  # the target column's own filter was removed
-    assert '"sport"' in sparql       # the other column's filter survives
+    assert '"sport"' in sparql  # the other column's filter survives
 
 
 def test_compile_facet_refuses_measure() -> None:
     spec = ListSpec(
         graph_uris=(G,),
         root=ClassAnchor((DOC + "User",)),
-        columns=(Column("chats", "number", AggregateSource("count", path=(Hop(DOC + "hasChat", "out"),), of_kind="node")),),
+        columns=(
+            Column(
+                "chats",
+                "number",
+                AggregateSource("count", path=(Hop(DOC + "hasChat", "out"),), of_kind="node"),
+            ),
+        ),
     )
     with pytest.raises(GraphQuerySpecError):
         compile_facet(spec, CompileContext(), target_column_id="chats")
@@ -527,15 +593,22 @@ def test_multigraph_uses_per_hop_graph_scoping() -> None:
         root=ClassAnchor((DOC + "ExtractedItem",)),
         columns=(
             Column(
-                "paperPath", "string",
-                PropertySource(DOC + "path", path=(Hop(DOC + "extracted_from_chunk", "out"), Hop(DOC + "chunk_of", "out"))),
+                "paperPath",
+                "string",
+                PropertySource(
+                    DOC + "path",
+                    path=(Hop(DOC + "extracted_from_chunk", "out"), Hop(DOC + "chunk_of", "out")),
+                ),
             ),
         ),
     )
     q = _norm(compile_list(spec, _ctx_a()).sparql)
     # Anchor + every hop + the leaf are each scoped over BOTH selected graphs, independently.
     assert f"VALUES ?g_anchor {{ <{G}> <{G2}> }} GRAPH ?g_anchor {{ ?root a ?cls . }}" in q
-    assert f"VALUES ?g_paperPath_0 {{ <{G}> <{G2}> }} GRAPH ?g_paperPath_0 {{ ?root <{DOC}extracted_from_chunk> ?paperPath_0 . }}" in q
+    assert (
+        f"VALUES ?g_paperPath_0 {{ <{G}> <{G2}> }} GRAPH ?g_paperPath_0 {{ ?root <{DOC}extracted_from_chunk> ?paperPath_0 . }}"
+        in q
+    )
     assert f"GRAPH ?g_paperPath_1 {{ ?paperPath_0 <{DOC}chunk_of> ?paperPath_1 . }}" in q
     assert f"GRAPH ?g_paperPathL {{ ?paperPath_1 <{DOC}path> ?col_paperPath . }}" in q
     # No single-graph wrapper and no FROM anywhere.
@@ -546,5 +619,9 @@ def test_multigraph_uses_per_hop_graph_scoping() -> None:
 def test_measure_sort_falls_back_to_offset() -> None:
     compiled = compile_list(_spec_1(), CompileContext(single_valued_predicates=frozenset({LBL})))
     assert compiled.uses_offset_fallback is True  # sort key is a measure → not keyset-eligible
-    page2 = compile_list(_spec_1(), CompileContext(single_valued_predicates=frozenset({LBL})), Page(limit=50, offset=50))
+    page2 = compile_list(
+        _spec_1(),
+        CompileContext(single_valued_predicates=frozenset({LBL})),
+        Page(limit=50, offset=50),
+    )
     assert _norm(page2.sparql).endswith("LIMIT 50 OFFSET 50")

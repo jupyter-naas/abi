@@ -30,7 +30,7 @@ def api_token() -> Any:
 
 def api_delegate() -> Any:
     """What ``Transport(delegate=...)`` calls to carry the signed-in user the
-    request acts for: a delegation (``abi:delegated:agent``, RFC §9.4) naming
+    request acts for: a delegation (``abi:delegated:agent``) naming
     ``api`` as the actor for a kernel service, or the module behind the host
     being called. IAM signs it in this process and refuses a user it
     suspended: such a call fails, it is never made as ``api`` alone. Replaces

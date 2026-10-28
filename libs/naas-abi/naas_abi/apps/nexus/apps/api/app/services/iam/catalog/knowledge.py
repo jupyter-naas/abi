@@ -15,6 +15,13 @@ TYPES = (
     rtype("icon"),
     rtype("layout"),
     rtype("layer"),
+    # The Maps catalog (``services/maps/AGENTS.md``): a feed is a
+    # ``layout``; its layers, the basemaps, what the catalog read returns and who
+    # may share what across workspaces are named here.
+    rtype("feed_layer"),
+    rtype("basemap"),
+    rtype("maps_catalog", id="singleton"),
+    rtype("maps_access", id="singleton"),
 )
 
 ACTIONS = (
@@ -44,4 +51,20 @@ ACTIONS = (
     action("PreviewLayout", "admin", "layout", feature="maps"),
     action("ListLayers", "list", "layer", feature="maps"),
     action("GetLayer", "read", "layer", feature="maps"),
+    # A feed's layers (views on one feed) follow the feed: everybody reads, admins author.
+    action("ListFeedLayers", "list", "feed_layer", feature="maps"),
+    action("GetFeedLayer", "read", "feed_layer", feature="maps"),
+    action("UpdateFeedLayer", "admin", "feed_layer", feature="maps"),
+    action("DeleteFeedLayer", "admin", "feed_layer", feature="maps"),
+    action("ListBasemaps", "list", "basemap", feature="maps"),
+    action("GetBasemap", "read", "basemap", feature="maps"),
+    action("UpdateBasemap", "admin", "basemap", feature="maps"),
+    action("DeleteBasemap", "admin", "basemap", feature="maps"),
+    action("SetBasemapVisibility", "admin", "basemap", feature="maps"),
+    action("GetMapsCatalog", "read", "maps_catalog", feature="maps"),
+    # Which workspaces may use each deployment item and each custom one: the
+    # administrators' (changing a deployment item or sharing with every workspace
+    # is further narrowed to a platform administrator by ``permissions/service``).
+    action("GetMapsAccess", "admin", "maps_access", feature="maps"),
+    action("UpdateMapsAccess", "admin", "maps_access", feature="maps"),
 )

@@ -13,7 +13,7 @@ activity_log/
 ├── ActivityLogFactory.py
 ├── ActivityLogPort.py             # IActivityLogAdapter, IActivityLogDomain, DTOs
 ├── ActivityLogService.py          # public service
-├── iam_catalog.py                 # the activity_log:* actions (RFC §6.4)
+├── iam_catalog.py                 # the activity_log:* actions
 ├── adapters/activity_log_stream_codec.py   # event <-> protobuf, stream frames
 ├── adapters/secondary/
 │   ├── ActivityLogDocumentAdapter.py   # default: the engine's Document Service
@@ -56,7 +56,7 @@ shutdown()                               # close adapter resources
 ### Streamed queries
 
 `query_stream(actor_id, query)` reads what `query` returns, as the caller
-iterates, inside the `with` (docs/adr/20261003_nats-streamed-results.md). The
+iterates, inside the `with`. The
 snapshot is pinned when the block opens (bounded below the actor's newest
 `seq`), so events recorded while it is read are not included and the stream
 always ends. The port's default (`paged_events`) reads `STREAM_PAGE` (500)
@@ -72,8 +72,13 @@ pin the snapshot before opening and have no unary fallback.
 
 `ActivityLogService` checks every operation with IAM when it is wired with it
 (an owner); a facade over NATS is not, and the owner it calls checks, as the
-request's verified caller. An actor's log is the personal resource
-`actor/<principal id>`.
+request's verified caller (the guard is described in
+[`services/iam/AGENTS.md`](../iam/AGENTS.md), "Enforcing in a domain service").
+An actor's log is the personal resource `actor/<principal id>` (opaque id,
+platform-level, owner = the id): a role reaches it only through its owner, as
+`actor/${principal.id}`. The other resource is the singleton `service/-`.
+Levels: `ListActors` list; `Query`, `QueryStream` read; `Record` write;
+`Shutdown` admin. Subjects are the operations under `abi.svc.activity_log.v1.`.
 
 | Operation | Action | Resource |
 |---|---|---|
@@ -109,8 +114,7 @@ request's verified caller. An actor's log is the personal resource
 `ActivityLogService.set_services` (`wire_services`), as cache tiers do. In NATS
 mode that is the NATS facade. Each actor's `seq` is the next number after its
 newest event, written create-only, and retried on conflict, so two engines
-recording for one actor lose nothing. Decision and trade-offs:
-`docs/adr/20261006_shared-event-and-activity-log-storage.md`.
+recording for one actor lose nothing.
 
 ## Copying the SQLite logs into documents
 
@@ -182,13 +186,13 @@ delegated token (`abi:delegated:agent`, `act` the acting service, `sub` the user
 made by IAM's token exchange, never a header (the old `Abi-On-Behalf-Of` header is
 refused); trace and target workspace come from the request's `context`. Never read identity from request fields
 (`principal_id` and `tenant_id` are reserved). Clients of `api` and `engine` send a
-delegation for the current call's user, and the call's trace and workspace. Nothing authorizes on it yet.
+delegation for the current call's user, and the call's trace and workspace. The domain service then authorizes the call (see "Authorization").
 
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception
 mapping in the adapter. Primaries use `respond_protobuf` for bounded replies.
 Requests and replies above the broker limit (8 MiB, or lower) overflow as
-transfer frames up to 256 MiB (docs/adr/20261003_nats-rpc-overflow.md); above
+transfer frames up to 256 MiB; above
 that, at the overflow host's capacity, or with an older peer, the call fails
 with non-retryable `PAYLOAD_TOO_LARGE`. Micro-service error headers raise
 instead of becoming an empty success. Overflowed values are held whole in

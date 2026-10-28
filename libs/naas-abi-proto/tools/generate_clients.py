@@ -38,10 +38,10 @@ class {cls}:
         return await self._transport.call("abi.svc.{domain}.v1.{method}", request, pb.{name}Response)
 """
     if domain == "iam":
-        # IAM is not a data service: its subjects are abi.iam.v1.* (RFC §11.1).
+        # IAM is not a data service: its subjects are abi.iam.v1.*.
         text = text.replace('"abi.svc.iam.v1.', '"abi.iam.v1.')
     if domain == "identity":
-        # Identity is a kernel service like IAM: abi.identity.v1.* (RFC §12.1).
+        # Identity is a kernel service like IAM: abi.identity.v1.*.
         text = text.replace('"abi.svc.identity.v1.', '"abi.identity.v1.')
     if domain == "model_registry":
         text = text.replace(
@@ -143,6 +143,35 @@ class ABIClient:
         from naas_abi_sdk.jobs import JobDescriptor, JobProxy
 
         return JobProxy(self._transport, project, module_id, JobDescriptor(name))
+
+    def get_workflow(
+        self,
+        module_id: str,
+        name: str,
+        *,
+        project: str = "default",
+        input_type=None,
+        output_type=None,
+    ):
+        """A workflow of any module by name, engine modules included (not in discovery).
+
+        ``start(input)`` returns a ``WorkflowRun``; ``run(input)`` returns the
+        output. Nothing is checked until a start: an unknown workflow's runs stay
+        QUEUED. ``input_type``/``output_type`` (pydantic models) check the input
+        and give the output back as a model. Prefer ``ModuleProxy.get_workflow``
+        for discovered modules, which also knows the schemas.
+        """
+        from naas_abi_sdk.jobs import JobDescriptor
+        from naas_abi_sdk.workflows import WorkflowProxy
+
+        return WorkflowProxy(
+            self._transport,
+            project,
+            module_id,
+            JobDescriptor(name, kind="workflow"),
+            input_type=input_type,
+            output_type=output_type,
+        )
 
     async def close(self) -> None:
         """Release this client's connection; never shut down a remote service."""

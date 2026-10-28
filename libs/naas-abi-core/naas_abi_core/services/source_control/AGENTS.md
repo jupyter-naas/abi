@@ -31,10 +31,21 @@ See its public methods for orchestration beyond the adapter contract.
 
 ## Authorization
 
-Every operation is checked inside `SourceControlService` (`iam_catalog.py`,
-RFC §6.4 "source_control") once the service is wired with IAM, so in-process
-and NATS callers are checked alike. A NATS facade is not wired and checks
-nothing itself: the owner it calls does.
+Every operation is checked inside `SourceControlService` (`iam_catalog.py`)
+once the service is wired with IAM, so in-process and NATS callers are checked
+alike. A NATS facade is not wired and checks nothing itself: the owner it calls
+does. The guard is described in [`services/iam/AGENTS.md`](../iam/AGENTS.md)
+("Enforcing in a domain service").
+
+Actions by resource (the NATS subject is the operation under
+`abi.svc.source_control.v1.`, in snake case: `UpsertFile` is `upsert_file`):
+
+| Level | Action: resource |
+|---|---|
+| list | `ListRepos`: each `repo`; `ListContents`, `ListCommits`, `ListWorkflowRuns`: `repo`; `ListBranches`: each `branch`; `ListProposals`: each `proposal`; `ListProposalCommits`, `ListComments`, `ListReviews`, `ListChecks`: `proposal` |
+| read | `GetFile`, `GetDiff`: `repo`; `GetProposal`, `GetProposalDiff`: `proposal` |
+| write | `EnsureRepo`: `repo` (creates; `create_repo` is the same action); `UpsertFile`, `UpsertFiles`: `branch/<repo>/<branch>`; `CreateBranch`, `DeleteBranch`: `branch`; `CreateProposal`: `proposal/<repo>/-` (creates); `AddComment`, `SubmitReview`, `Merge`: `proposal`; `MintGitToken`: `forge_user/<principal>` |
+| admin | `DeleteRepo`, `AddCollaborator`: `repo`; `SetBranchProtection`: `branch`; `EnsureUser`: `forge_user/<principal>` |
 
 - **Resources.** `repo/<owner>%2F<name>` is a placed container (the service's id,
   never a Nexus value); its branches `branch/<repo>/<name>` and proposals
@@ -47,14 +58,30 @@ nothing itself: the owner it calls does.
   (`AccessDeniedError`). `mint_git_token` mints for that forge user only:
   `user_id` and `external_id` in requests are ignored. Every user holds
   `EnsureUser` and `MintGitToken` on their own forge user (`builtin.self`).
-- **`ensure_repo`** applies the create rule of RFC §4.4: placed in the call's target
+  An existing forge account is the caller's only when it is bound to it, or
+  when it predates the binding (its `login_name` is empty or its own login), a
+  first party (`api`, `engine`: `vouched_by_first_party()`) vouches for the
+  email it carries and it is the account's email, and the caller has no account
+  yet; an account bound to another principal is never handed over, and neither
+  is an administrator. One principal has one forge account: a new username renames it.
+- **IAM names a repository by its lowercase id** (`repo_key`), because forges
+  look repositories up case-insensitively.
+- **`ensure_repo`** applies the create rule (see `services/iam/AGENTS.md`): placed in the call's target
   workspace (exact id and `<id>/*`), on the platform without one. A repository that
   exists with no placement predates IAM and is recorded on the platform, so no
-  workspace can claim it. TRANSITIONAL (#65): a target workspace IAM has no scope
+  workspace can claim it. A target workspace IAM has no scope
   for places the repository on the platform. `delete_repo` drops its placements.
+- **`create_repo` is create-only.** Unlike `ensure_repo` it never hands back a
+  repository that exists (`RepoExistsError`, for one with that id in any
+  letter case) and places nothing then, so a caller that places or grants access
+  to what it gets back knows it created it. A repository's owner and name are
+  plain segments (letters, digits, `.`, `_`, `-`); any other id is not found.
 - **`add_collaborator` is `AddCollaborator`, an admin action.** Nexus grants a member
   write on a workspace repository after its own check, as `api`
-  (`apps/nexus/.../coding_environment/repo_access.py`).
+  (`apps/nexus/.../coding_environment/repo_access.py`): only when the repository is
+  placed in the route's workspace (or is the deployment's shared repository), the
+  caller's role there is member or above, and IAM allows `source_control:UpsertFile`
+  for them. Another workspace's repository answers as a missing one.
 - Lists (`list_repos`, `list_branches`, `list_proposals`) keep the items the caller
   may list; branch and proposal lists first need the repository to be visible.
 - Wire codes `PERMISSION_DENIED` and `NOT_FOUND`; an invisible repository, branch
@@ -105,13 +132,13 @@ delegated token (`abi:delegated:agent`, `act` the acting service, `sub` the user
 made by IAM's token exchange, never a header (the old `Abi-On-Behalf-Of` header is
 refused); trace and target workspace come from the request's `context`. Never read identity from request fields
 (`principal_id` and `tenant_id` are reserved). Clients of `api` and `engine` send a
-delegation for the current call's user, and the call's trace and workspace. Nothing authorizes on it yet.
+delegation for the current call's user, and the call's trace and workspace. The domain service then authorizes the call (see "Authorization").
 
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception
 mapping in the adapter. Primaries use `respond_protobuf` for bounded replies.
 Requests and replies above the broker limit (8 MiB, or lower) overflow as
-transfer frames up to 256 MiB (docs/adr/20261003_nats-rpc-overflow.md); above
+transfer frames up to 256 MiB; above
 that, at the overflow host's capacity, or with an older peer, the call fails
 with non-retryable `PAYLOAD_TOO_LARGE`. Micro-service error headers raise
 instead of becoming an empty success. Overflowed values are held whole in

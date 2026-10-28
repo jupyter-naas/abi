@@ -185,12 +185,12 @@ quoting it as if it were production behaviour.
 
 ---
 
-## 8. Architecture decisions get an ADR
+## 8. Architecture decisions go in the module's AGENTS.md
 
 New boundaries, cross-cutting config, a new dependency, a derived read model — write
-`docs/adr/YYYYMMDD_topic.md` with **Status, Date, Context, Decision, Consequences**.
-Put the measured numbers in Consequences, and list the costs and risks you accepted, not
-only the wins. See `docs/adr/20260812_x_app_parquet_projection.md` for a worked example.
+a **Decision / Consequences** section in the module's `AGENTS.md` (the repository keeps
+no ADR tree). Put the measured numbers in Consequences, and list the costs and risks you
+accepted, not only the wins.
 
 ---
 
@@ -222,7 +222,7 @@ Copy into the new module's `AGENTS.md`:
 - [ ] Equivalence-checked against the source of truth on real data
 - [ ] Before/after measured on the same harness
 - [ ] `make check` and `make test` pass
-- [ ] ADR written if this introduced an architectural boundary
+- [ ] Decision / Consequences written in the module's `AGENTS.md` if this introduced an architectural boundary
 ```
 
 ---

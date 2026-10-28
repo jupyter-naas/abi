@@ -13,6 +13,7 @@ from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from itertools import islice
 from pathlib import Path
 from typing import IO, Any, TypeVar
@@ -57,6 +58,9 @@ DUCKDB_TYPES = {
 }
 
 _T = TypeVar("_T")
+# Files no snapshot needs any more are deleted once scheduled for this long, so
+# a read that started on a snapshot just expired can finish.
+CLEANUP_GRACE = timedelta(hours=1)
 FETCH_ROWS = 1000  # rows per fetch when streaming a query result
 STAGE_ROWS = 10_000  # rows validated and staged at a time by write_stream
 logger = logging.getLogger(__name__)
@@ -210,9 +214,12 @@ class _NoCatalogLock:
 class DatasetSecondaryAdapterDuckLake(IDatasetPort):
     """Store datasets in one DuckLake catalog and data warehouse.
 
-    Writes use a fresh DuckDB connection per attempt. Retriable catalog
-    conflicts replay the complete transaction against fresh state using bounded
-    exponential backoff with jitter.
+    Writes use a fresh DuckDB connection per attempt. A commit that loses the
+    race for the next snapshot to a commit that changed other data is retried
+    by DuckLake itself, up to ``commit_retries`` times: only the commit is
+    redone. Conflicts it cannot resolve (both changed the same table) replay
+    the complete transaction against fresh state, up to ``max_retries`` times,
+    using bounded exponential backoff with jitter.
 
     Reads (describe/list/query/list_snapshots) have no transaction to retry, so
     they instead share one lazily-created, kept-open connection: LOAD-ing the
@@ -231,6 +238,9 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         data_path: str,
         *,
         max_retries: int = 10,
+        commit_retries: int = 10,
+        compaction_delete_threshold: float = 0.0,
+        snapshot_retention_days: float | None = None,
         data_inlining_row_limit: int = 1000,
         retry_base_delay_seconds: float = 0.05,
         retry_max_delay_seconds: float = 1.0,
@@ -246,6 +256,12 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         self._data_inlining_row_limit = data_inlining_row_limit
         if max_retries < 0:
             raise ValueError("max_retries must be greater than or equal to zero")
+        if commit_retries < 0:
+            raise ValueError("commit_retries must be greater than or equal to zero")
+        if not 0 <= compaction_delete_threshold <= 1:
+            raise ValueError("compaction_delete_threshold must be between 0 and 1")
+        if snapshot_retention_days is not None and snapshot_retention_days < 0:
+            raise ValueError("snapshot_retention_days must be non-negative")
         if retry_base_delay_seconds < 0:
             raise ValueError("retry_base_delay_seconds must be non-negative")
         if retry_max_delay_seconds < retry_base_delay_seconds:
@@ -276,6 +292,13 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
                 f"{self._data_path!r}"
             )
         self._max_retries = max_retries
+        self._commit_retries = commit_retries
+        self._compaction_delete_threshold = compaction_delete_threshold
+        self.snapshot_retention = (
+            None
+            if snapshot_retention_days is None
+            else timedelta(days=snapshot_retention_days)
+        )
         self._retry_base_delay_seconds = retry_base_delay_seconds
         self._retry_max_delay_seconds = retry_max_delay_seconds
         self._catalog_lock = (
@@ -368,6 +391,7 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         namespace: str = "default",
         mode: WriteMode = "append",
         snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,  # in process: runs to completion
     ) -> DatasetInfo:
         def operation(con: Any) -> DatasetSpec:
             current_snapshot = self._current_snapshot(con)
@@ -419,6 +443,7 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         namespace: str = "default",
         mode: WriteMode = "append",
         snapshot_id: int | None = None,
+        timeout_seconds: float | None = None,  # in process: runs to completion
     ) -> DatasetInfo:
         """Validate and stage the rows ``STAGE_ROWS`` at a time into a local
         Parquet file, then commit them in one transaction, whose retries
@@ -627,8 +652,7 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         snapshot_id: int | None = None,
     ) -> Iterator[RowStream]:
         """Run the query, spool its rows to an anonymous temporary file, then
-        read them back as the caller iterates
-        (docs/adr/20261003_nats-streamed-results.md). Only the spool holds the
+        read them back as the caller iterates. Only the spool holds the
         cursor and, on a SQLite catalog, the shared lock, so a slow or
         abandoned reader never holds up writes, nor the reads queued behind
         them. Like ``query``, this never replays the SQL. The file goes when
@@ -768,7 +792,15 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         namespace: str = "default",
         timeout_seconds: float | None = None,  # in process: runs to completion
     ) -> QueryResult:
-        result = self._maintain(name, namespace=namespace, flush=True)
+        result = self._maintain(
+            name,
+            namespace=namespace,
+            sql=(
+                f"CALL ducklake_flush_inlined_data({self._sql_string(CATALOG_ALIAS)}, "
+                f"table_name => {self._sql_string(name)}, "
+                f"schema_name => {self._sql_string(namespace)})"
+            ),
+        )
         # Flush can drop inline tables from older schema versions. New reads
         # must attach again; existing cursors retain their connection reference.
         with self._read_connection_lock:
@@ -784,22 +816,87 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         namespace: str = "default",
         timeout_seconds: float | None = None,  # in process: runs to completion
     ) -> QueryResult:
-        return self._maintain(name, namespace=namespace, flush=False)
+        """Rewrite the files holding deleted rows (at least
+        ``compaction_delete_threshold`` of them; 0: any), then merge small
+        files. Each replace or upsert leaves a data file and a delete file,
+        and merging alone skips files with deletes. One row per step and
+        table, the step in ``step``. Snapshots keep reading the same rows:
+        the replaced files are scheduled for deletion (``clean_up``)."""
+        catalog, table = self._sql_string(CATALOG_ALIAS), self._sql_string(name)
+        schema = self._sql_string(namespace)
+        steps = {
+            "rewrite": (
+                f"CALL ducklake_rewrite_data_files({catalog}, {table}, "
+                f"schema => {schema}, "
+                f"delete_threshold => {float(self._compaction_delete_threshold)})"
+            ),
+            "merge": (
+                f"CALL ducklake_merge_adjacent_files({catalog}, {table}, "
+                f"schema => {schema})"
+            ),
+        }
+        columns: builtins.list[str] = ["step"]
+        rows: builtins.list[dict[str, Any]] = []
+        for step, sql in steps.items():
+            result = self._maintain(name, namespace=namespace, sql=sql)
+            columns += [column for column in result.columns if column not in columns]
+            rows += [{"step": step, **row} for row in result.rows]
+        return QueryResult(columns=columns, rows=rows)
 
-    def _maintain(self, name: str, *, namespace: str, flush: bool) -> QueryResult:
+    def clean_up(self, *, dry_run: bool = False) -> dict[str, Any]:
+        """Expire the snapshots older than ``snapshot_retention`` when one is
+        set (time travel ends there), then delete the files no snapshot uses
+        any more (replaced by compaction, or used only by expired snapshots)
+        that were scheduled at least ``CLEANUP_GRACE`` ago; the ones this call
+        schedules go on the next. ``dry_run`` changes nothing and reports what
+        would go: expiry's files are not scheduled yet, so not counted."""
+        now = datetime.now(UTC)
+        expired = 0
+        if self.snapshot_retention is not None:
+            expired = len(
+                self._catalog_call(
+                    "ducklake_expire_snapshots",
+                    dry_run,
+                    now - self.snapshot_retention,
+                ).rows
+            )
+        # A SQLite catalog stores the schedule time as text, and DuckLake may
+        # not honour the grace there: local catalogs only.
+        deleted = self._catalog_call(
+            "ducklake_cleanup_old_files", dry_run, now - CLEANUP_GRACE
+        )
+        return {
+            "dry_run": dry_run,
+            "retention_days": (
+                None
+                if self.snapshot_retention is None
+                else self.snapshot_retention / timedelta(days=1)
+            ),
+            "snapshots_expired": expired,
+            "files_deleted": len(deleted.rows),
+        }
+
+    def _catalog_call(
+        self, function: str, dry_run: bool, older_than: datetime
+    ) -> QueryResult:
+        return self._maintain(
+            None,
+            sql=(
+                f"CALL {function}({self._sql_string(CATALOG_ALIAS)}, "
+                f"dry_run => {'true' if dry_run else 'false'}, "
+                f"older_than => TIMESTAMPTZ {self._sql_string(older_than.isoformat())})"
+            ),
+        )
+
+    def _maintain(
+        self, name: str | None, *, namespace: str = "default", sql: str
+    ) -> QueryResult:
+        """Run a maintenance CALL in a write transaction, on table ``name``
+        (checked to be a dataset) or, without one, the catalog."""
+
         def operation(con: Any) -> QueryResult:
-            self._load_spec(con, namespace, name)
-            if flush:
-                sql = (
-                    f"CALL ducklake_flush_inlined_data({self._sql_string(CATALOG_ALIAS)}, "
-                    f"table_name => {self._sql_string(name)}, "
-                    f"schema_name => {self._sql_string(namespace)})"
-                )
-            else:
-                sql = (
-                    f"CALL ducklake_merge_adjacent_files({self._sql_string(CATALOG_ALIAS)}, "
-                    f"{self._sql_string(name)}, schema => {self._sql_string(namespace)})"
-                )
+            if name is not None:
+                self._load_spec(con, namespace, name)
             result = con.execute(sql)
             columns = [str(column[0]) for column in result.description or []]
             return QueryResult(
@@ -823,7 +920,9 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
             except duckdb.Error:
                 con.execute("INSTALL ducklake")
                 con.execute("LOAD ducklake")
-            con.execute("SET ducklake_max_retry_count = 0")
+            # With 0, a commit landing anywhere in the catalog while this
+            # transaction runs fails it, and the whole transaction is replayed.
+            con.execute(f"SET ducklake_max_retry_count = {int(self._commit_retries)}")
             self._configure_object_store(con)
             options = [
                 "AUTOMATIC_MIGRATION",

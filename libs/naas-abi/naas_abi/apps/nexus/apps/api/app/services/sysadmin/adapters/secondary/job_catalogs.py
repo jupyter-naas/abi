@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import weakref
 from collections.abc import Callable, Mapping
 from typing import Any
@@ -18,6 +19,17 @@ PAGE_SIZE = 100
 MAX_PAGES = 64
 
 
+def json_object(value: Any) -> dict[str, Any] | None:
+    """A JSON object given as one (SDK triggers) or as text (descriptors: a schema,
+    a trigger input); None when empty, not JSON or not an object."""
+    if isinstance(value, str):
+        try:
+            value = json.loads(value) if value.strip() else None
+        except ValueError:
+            return None
+    return dict(value) if isinstance(value, dict) and value else None
+
+
 def trigger_spec(trigger: Any) -> TriggerSpec:
     """Cron, Every and OnEvent (SDK or core stand-ins) as plain values."""
     kind = str(getattr(trigger, "kind", "") or "")
@@ -28,7 +40,12 @@ def trigger_spec(trigger: Any) -> TriggerSpec:
         or getattr(trigger, "subject", None)
         or ""
     )
-    return TriggerSpec(kind, str(spec), str(getattr(trigger, "time_zone", "") or ""))
+    return TriggerSpec(
+        kind,
+        str(spec),
+        str(getattr(trigger, "time_zone", "") or ""),
+        json_object(getattr(trigger, "input", None)),
+    )
 
 
 def definition(
@@ -45,6 +62,9 @@ def definition(
         max_attempts=int(getattr(descriptor, "max_attempts", 1) or 1),
         timeout_seconds=timeout.total_seconds() if timeout is not None else None,
         instances=instances,
+        kind="workflow" if getattr(descriptor, "kind", "job") == "workflow" else "job",
+        input_schema=json_object(getattr(descriptor, "input_schema", None)),
+        output_schema=json_object(getattr(descriptor, "output_schema", None)),
     )
 
 

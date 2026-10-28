@@ -91,7 +91,7 @@ class EventService(ServiceBase, IEventService):
     Wired with IAM (an owner), it checks every call against the ``event``
     catalog: ``Append`` and ``Query`` on ``event_type/<class IRI>``, cursors on
     ``cursor/<consumer>/<type>``. A read with no event type returns only the
-    types the caller may read (RFC §6.3). A facade over NATS is not wired, and
+    types the caller may read. A facade over NATS is not wired, and
     the owner it calls checks. ``emit`` appends a kernel service's own audit
     event as the engine.
     """
@@ -245,8 +245,7 @@ class EventService(ServiceBase, IEventService):
         search: str | None = None,
     ) -> Iterator[Iterator[Any]]:
         """:meth:`query`, reconstructed as the caller iterates, inside the
-        block (docs/adr/20261003_nats-streamed-results.md). Events appended
-        after the block opened are not included."""
+        block. Events appended after the block opened are not included."""
         event_type = str(event_class._class_uri) if event_class is not None else None
         with self._row_stream(
             "QueryStream",
@@ -382,7 +381,7 @@ class EventService(ServiceBase, IEventService):
         rows = self._adapter.query(since_seq=seq - 1, until_seq=seq, limit=1)
         if not rows or rows[0].seq != seq:
             raise not_found()
-        # Invisible and missing look the same (RFC §5.4).
+        # Invisible and missing look the same.
         self._guard.require(
             "Query", "event_type", rows[0].event_type, not_found=not_found
         )
@@ -560,7 +559,7 @@ class EventService(ServiceBase, IEventService):
                     return
 
     # ------------------------------------------------------------------
-    # authorization (RFC §6.4 "event")
+    # authorization
     # ------------------------------------------------------------------
 
     def _require(self, action: str, event_type: str) -> None:
@@ -593,8 +592,8 @@ class EventService(ServiceBase, IEventService):
     def _rows(
         self, action: str, *, event_type: str | None, **query: Any
     ) -> list[StoredEvent]:
-        """Stored rows of one type, or of every type the caller may read
-        (RFC §6.3); ``limit`` applies after filtering."""
+        """Stored rows of one type, or of every type the caller may read.
+        ``limit`` applies after filtering."""
         if event_type is not None:
             self._require(action, event_type)
             return self._adapter.query(event_type=event_type, **query)

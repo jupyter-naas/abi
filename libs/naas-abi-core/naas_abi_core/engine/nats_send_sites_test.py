@@ -8,7 +8,7 @@ RPC overflow (nats_rpc.py, sdk transport.py), transfer streams, claim checks
 
 A new raw send fails this test: route it through one of those helpers, or add
 it here with the reason it can never exceed the limit.
-(docs/adr/20261003_nats-rpc-overflow.md, docs/adr/20261003_nats-claim-check.md)
+
 """
 
 import re
@@ -96,10 +96,12 @@ REVIEWED = {
         ),
     ),
     "naas-abi-sdk/naas_abi_sdk/job_host.py": (
-        2,
+        3,
         (
-            "schedule messages carry b'{}'; the event bridge's trigger goes through "
-            "claim_check.prepare with trigger_reserve"
+            "schedule messages carry b'{}' or their trigger input (at most 4 KiB, "
+            "Cron/Every); the event bridge's trigger goes through "
+            "claim_check.prepare with trigger_reserve; completion notices are a run "
+            "id and a status"
         ),
     ),
     "naas-abi-sdk/naas_abi_sdk/broker_control.py": (

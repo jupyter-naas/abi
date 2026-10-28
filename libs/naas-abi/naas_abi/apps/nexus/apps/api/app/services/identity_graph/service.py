@@ -17,7 +17,7 @@ This graph is how an id gets back to a person, a workspace and a role:
 
 It is rebuilt from Postgres and the running configuration on every boot and
 after identity changes. IRIs come from ``iris.py`` so runtime events name the
-same individuals. See docs/adr/20260910_nexus-identity-graph-for-events.md.
+same individuals.
 """
 
 from __future__ import annotations
@@ -310,7 +310,8 @@ class _Builder:
         self.add(Person(_uri=str(person), label=user.name, full_name=user.name))
         profile = {
             "avatar_url": user.avatar,
-            "company": user.company,
+            # Account "Organization" field (users.organization), on nexus:company.
+            "company": user.organization,
             "job_title": user.job_title,
             "bio": user.bio,
         }

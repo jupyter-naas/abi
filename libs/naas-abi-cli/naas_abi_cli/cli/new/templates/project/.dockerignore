@@ -1,0 +1,11 @@
+# The image is built from the project folder (`COPY . .`): keep secrets and
+# local state out of it. Secrets reach the container as environment variables
+# or through a secret adapter, never as files baked into the image.
+.env
+.env.*
+.snapshots/
+.git
+.venv
+storage
+.dagster
+**/__pycache__

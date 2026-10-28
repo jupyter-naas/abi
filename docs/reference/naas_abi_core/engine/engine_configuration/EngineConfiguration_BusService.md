@@ -1,59 +1,70 @@
 # EngineConfiguration_BusService
 
 ## What it is
-Configuration models and loaders for wiring a `BusService` with a selectable bus adapter (`rabbitmq`, `python_queue`, or `custom`). Built on Pydantic for validation and a generic loader mechanism for custom adapters.
+Pydantic configuration models and a loader for creating a `BusService` wired to a selectable bus adapter (`rabbitmq`, `python_queue`, `nats_jetstream`, or `custom`). Includes validation of adapter-specific config and lazy imports of adapter implementations.
 
 ## Public API
 
 - `BusAdapterRabbitMQConfiguration (pydantic.BaseModel)`
-  - Purpose: Validates configuration for the RabbitMQ bus adapter.
+  - Purpose: Validate config for the RabbitMQ bus adapter.
   - Fields:
     - `rabbitmq_url: str` (default: `"amqp://abi:abi@127.0.0.1:5672"`)
-  - Notes: Extra keys are forbidden (`extra="forbid"`).
+  - Notes: Unknown keys are rejected (`extra="forbid"`).
 
 - `BusAdapterPythonQueueConfiguration (pydantic.BaseModel)`
-  - Purpose: Validates configuration for the Python-queue bus adapter.
+  - Purpose: Validate config for the Python queue bus adapter.
   - Fields:
     - `persistence_path: str | None` (default: `None`)
     - `journal_mode: Literal["DELETE","TRUNCATE","PERSIST","MEMORY","WAL","OFF"]` (default: `"WAL"`)
     - `busy_timeout_ms: int` (default: `5000`)
     - `poll_interval_seconds: float` (default: `0.05`)
     - `lock_timeout_seconds: float` (default: `1.0`)
-  - Notes: Extra keys are forbidden (`extra="forbid"`).
+  - Notes: Unknown keys are rejected (`extra="forbid"`).
+
+- `BusAdapterNATSConfiguration (pydantic.BaseModel)`
+  - Purpose: Validate config for the NATS JetStream bus adapter.
+  - Fields:
+    - `nats_url: str` (default: `"nats://127.0.0.1:4222"`)
+  - Notes: Unknown keys are rejected (`extra="forbid"`).
 
 - `BusAdapterConfiguration (GenericLoader)`
-  - Purpose: Selects and validates an adapter configuration; can also load a custom adapter via `GenericLoader`.
+  - Purpose: Select, validate, and load an `IBusAdapter` implementation.
   - Fields:
-    - `adapter: Literal["rabbitmq", "python_queue", "custom"]`
+    - `adapter: Literal["rabbitmq", "python_queue", "nats_jetstream", "custom"]`
     - `config: dict | None` (default: `None`)
   - Methods:
     - `validate_adapter() -> BusAdapterConfiguration`
-      - Validates `config` against the appropriate Pydantic model.
       - Enforces `config is not None` when `adapter != "custom"`.
-      - For `python_queue`, validation only occurs if `config` is provided.
+      - Validates `config` against the adapter’s Pydantic model:
+        - `rabbitmq`: always validates and requires `config`
+        - `python_queue`: validates only if `config` is not `None` (but see caveat)
+        - `nats_jetstream`: validates only if `config` is not `None`
     - `load() -> IBusAdapter`
-      - `rabbitmq`: lazy-imports and returns `RabbitMQAdapter(**config)`
-      - `python_queue`: lazy-imports and returns `PythonQueueAdapter(**config)` (requires `config` not `None`)
+      - `rabbitmq`: returns `RabbitMQAdapter(**config)` (requires `config`)
+      - `python_queue`: returns `PythonQueueAdapter(**config)` (requires `config`)
+      - `nats_jetstream`: returns `NATSJetStreamAdapter(**(config or {}))`
       - `custom`: delegates to `GenericLoader.load()`
-      - Otherwise: raises `ValueError`
+      - otherwise: raises `ValueError`
 
 - `BusServiceConfiguration (pydantic.BaseModel)`
   - Purpose: Top-level configuration for constructing a `BusService`.
   - Fields:
     - `bus_adapter: BusAdapterConfiguration`
+    - `emit_message_events: bool` (default: `False`) — if enabled, emits a durable event per bus message.
   - Methods:
-    - `load() -> BusService`: returns `BusService(adapter=self.bus_adapter.load())`
+    - `load() -> BusService`: returns `BusService(adapter=..., emit_message_events=...)`
 
 ## Configuration/Dependencies
 - Depends on:
-  - `pydantic` (`BaseModel`, `model_validator`, `ConfigDict`)
-  - `naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader.GenericLoader` (for `custom` adapter loading)
-  - `naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator.pydantic_model_validator`
-  - `naas_abi_core.services.bus.BusService.BusService`
-  - `naas_abi_core.services.bus.BusPorts.IBusAdapter`
-- Adapter implementations are imported lazily during `BusAdapterConfiguration.load()`:
+  - `pydantic` (`BaseModel`, `ConfigDict`, `model_validator`)
+  - `GenericLoader` (`naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader`)
+  - `pydantic_model_validator` utility (`naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator`)
+  - `BusService` (`naas_abi_core.services.bus.BusService`)
+  - `IBusAdapter` (`naas_abi_core.services.bus.BusPorts`)
+- Lazy-loaded adapter implementations (imported only in `BusAdapterConfiguration.load()`):
   - `RabbitMQAdapter` from `naas_abi_core.services.bus.adapters.secondary.RabbitMQAdapter`
   - `PythonQueueAdapter` from `naas_abi_core.services.bus.adapters.secondary.PythonQueueAdapter`
+  - `NATSJetStreamAdapter` from `naas_abi_core.services.bus.adapters.secondary.NATSJetStreamAdapter`
 
 ## Usage
 
@@ -64,15 +75,17 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_BusService im
 
 cfg = BusServiceConfiguration(
     bus_adapter={
-        "adapter": "rabbitmq",
-        "config": {"rabbitmq_url": "amqp://abi:abi@127.0.0.1:5672"},
-    }
+        "adapter": "nats_jetstream",
+        "config": {"nats_url": "nats://127.0.0.1:4222"},
+    },
+    emit_message_events=False,
 )
 
 bus_service = cfg.load()
 ```
 
 ## Caveats
-- `bus_adapter.config` is required for any adapter other than `"custom"`.
-- Despite comments stating the Python queue adapter “doesn't require configuration”, `load()` asserts that `config` is not `None` for `"python_queue"`. If you use `"python_queue"`, pass at least an empty dict: `config={}`.
-- Configuration models forbid unknown keys (`extra="forbid"`); extra fields will fail validation.
+- `bus_adapter.config` is required for any adapter other than `"custom"` (enforced by `assert` in validation).
+- `python_queue` is commented as “doesn't require configuration”, but `load()` asserts `config is not None`. Provide at least `{}`:
+  - `{"adapter": "python_queue", "config": {}}`
+- Adapter configuration models use `extra="forbid"`; unknown keys will fail validation.

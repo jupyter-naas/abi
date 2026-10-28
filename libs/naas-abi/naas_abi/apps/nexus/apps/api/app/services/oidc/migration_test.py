@@ -69,7 +69,10 @@ def test_apply_creates_what_is_missing_and_reports_the_rest():
     assert outcomes["u3"].outcome == "failed" and "refuses" in (outcomes["u3"].detail or "")
     assert outcomes["u4"].outcome == outcomes["u5"].outcome == "skipped"
     # Names travel; a failure of one never stops the others.
-    assert ("ada@example.com", "Ada") in provider.calls and ("bob@example.com", "Bob") in provider.calls
+    assert ("ada@example.com", "Ada") in provider.calls and (
+        "bob@example.com",
+        "Bob",
+    ) in provider.calls
 
 
 def test_running_again_creates_nobody_twice():

@@ -1,4 +1,6 @@
 import type { MapsPinMarker } from './leaflet-map';
+import { resolveMapsPinImageUrl } from './maps-pin-image-url';
+import { featureToPinPartial, isMapsFeatureCollection } from './maps-pin-geojson';
 import type { MapsFeedMeta } from './maps-view';
 import { authCredentials } from '@/stores/auth';
 
@@ -62,41 +64,11 @@ export interface MapsFeedResult extends MapsFeedMeta {
   empty?: boolean;
 }
 
-function featureToPinRecord(feature: unknown): Partial<MapsPinMarker> {
-  if (!feature || typeof feature !== 'object') return {};
-  const value = feature as Record<string, unknown>;
-  const props = value.properties && typeof value.properties === 'object'
-    ? value.properties as Record<string, unknown>
-    : {};
-  const geometry = value.geometry && typeof value.geometry === 'object'
-    ? value.geometry as {type?: string; coordinates?: unknown}
-    : undefined;
-  const coords = geometry?.type === 'Point' && Array.isArray(geometry.coordinates)
-    ? geometry.coordinates
-    : undefined;
-  const lat = typeof value.lat === 'number' ? value.lat
-    : typeof props.lat === 'number' ? props.lat
-    : typeof coords?.[1] === 'number' ? coords[1]
-    : undefined;
-  const lng = typeof value.lng === 'number' ? value.lng
-    : typeof props.lng === 'number' ? props.lng
-    : typeof coords?.[0] === 'number' ? coords[0]
-    : undefined;
-  return {
-    ...(props as Partial<MapsPinMarker>),
-    ...(value as Partial<MapsPinMarker>),
-    lat,
-    lng,
-    id: text(value.id) ?? text(props.id),
-    label: text(value.label) ?? text(props.label) ?? text(props.name),
-  };
-}
-
 function asPinRecords(value: unknown): Array<Partial<MapsPinMarker>> | undefined {
   if (Array.isArray(value)) {
     return value.map((item) => {
       if (item && typeof item === 'object' && (item as {type?: string}).type === 'Feature') {
-        return featureToPinRecord(item);
+        return featureToPinPartial(item);
       }
       return item as Partial<MapsPinMarker>;
     });
@@ -110,7 +82,7 @@ function asPinRecords(value: unknown): Array<Partial<MapsPinMarker>> | undefined
   }
   const records = values.map((item) => {
     const rec = item as Record<string, unknown>;
-    return rec.type === 'Feature' || rec.geometry ? featureToPinRecord(item) : item as Partial<MapsPinMarker>;
+    return rec.type === 'Feature' || rec.geometry ? featureToPinPartial(item) : item as Partial<MapsPinMarker>;
   });
   return records.some((record) => record.lat != null && record.lng != null) ? records : undefined;
 }
@@ -127,15 +99,21 @@ export function normalizeFeedLoad(loaded: unknown): MapsFeedResult {
   if (!loaded || typeof loaded !== 'object') {
     throw new TypeError('Map feed did not return locations');
   }
-  const data = loaded as MapsFeedPayload & {features?: unknown; type?: string; coveragePins?: unknown};
-  const pinRecords = asPinRecords(data.pins) ?? asPinRecords(data.features) ?? asPinRecords(data);
+  const feed = loaded as MapsFeedPayload & {features?: unknown; type?: string; coveragePins?: unknown};
+  const geoJson = isMapsFeatureCollection(loaded) ? (loaded as { features: unknown }) : null;
+  const pinRecords = geoJson
+    ? asPinRecords(geoJson.features)
+    : asPinRecords(feed.pins) ?? asPinRecords(feed.features) ?? asPinRecords(feed);
   const coverageObject =
-    data.coverage && typeof data.coverage === 'object' && !Array.isArray(data.coverage)
-      ? data.coverage as {pins?: unknown}
+    feed.coverage && typeof feed.coverage === 'object' && !Array.isArray(feed.coverage)
+      ? feed.coverage as {pins?: unknown; features?: unknown; type?: string}
       : undefined;
-  const coverageRecords = asPinRecords(coverageObject?.pins) ?? asPinRecords(data.coveragePins);
-  const looksLikeFeed = 'pins' in data || 'features' in data || 'coverage' in data
-    || 'coveragePins' in data || 'empty' in data || 'needsKey' in data;
+  const coverageRecords =
+    asPinRecords(coverageObject?.features)
+    ?? asPinRecords(coverageObject?.pins)
+    ?? asPinRecords(feed.coveragePins);
+  const looksLikeFeed = geoJson != null || 'pins' in feed || 'features' in feed || 'coverage' in feed
+    || 'coveragePins' in feed || 'empty' in feed || 'needsKey' in feed;
   if (pinRecords === undefined && coverageRecords === undefined && !looksLikeFeed) {
     throw new TypeError('Map feed did not return locations');
   }
@@ -145,22 +123,22 @@ export function normalizeFeedLoad(loaded: unknown): MapsFeedResult {
     ...pin, memberIds: pin.memberIds?.filter((id) => allowedIds.has(id)) ?? [],
   })) : undefined;
   const coverageLabel =
-    typeof data.coverageLabel === 'string'
-      ? data.coverageLabel
-      : typeof data.coverage === 'string'
-        ? data.coverage
+    typeof feed.coverageLabel === 'string'
+      ? feed.coverageLabel
+      : typeof feed.coverage === 'string'
+        ? feed.coverage
         : undefined;
   return {
     pins,
     coveragePins,
-    reason: data.reason || data.message,
-    empty: Boolean(data.empty || data.needsKey || pins.length === 0),
-    source: typeof data.source === 'string' ? data.source : undefined,
-    attribution: typeof data.attribution === 'string' ? data.attribution : undefined,
-    observedAt: typeof data.observedAt === 'string' ? data.observedAt : undefined,
-    stale: data.stale === true,
-    needsKey: data.needsKey === true,
-    status: typeof data.status === 'string' ? data.status : undefined,
+    reason: feed.reason || feed.message,
+    empty: Boolean(feed.empty || feed.needsKey || pins.length === 0),
+    source: typeof feed.source === 'string' ? feed.source : undefined,
+    attribution: typeof feed.attribution === 'string' ? feed.attribution : undefined,
+    observedAt: typeof feed.observedAt === 'string' ? feed.observedAt : undefined,
+    stale: feed.stale === true,
+    needsKey: feed.needsKey === true,
+    status: typeof feed.status === 'string' ? feed.status : undefined,
     coverage: coverageLabel,
   };
 }
@@ -170,14 +148,22 @@ export async function fetchMapsFeedPins(
   url: string,
   signal?: AbortSignal,
   headers?: HeadersInit,
+  cache: RequestCache = 'no-store',
 ): Promise<MapsFeedResult> {
   // A cookie session's cookie must go with the request.
-  const res = await fetch(url, { signal, headers, credentials: authCredentials(), cache: 'no-store' });
-  const data = (await res.json()) as MapsFeedPayload;
-  if (!res.ok && !(data.pins && Array.isArray(data.pins) && data.pins.length) && !data.empty && !data.needsKey) {
+  const res = await fetch(url, { signal, headers, credentials: authCredentials(), cache });
+  const data = (await res.json()) as MapsFeedPayload & {type?: string; features?: unknown[]};
+  const hasLocations =
+    (Array.isArray(data.pins) && data.pins.length > 0)
+    || (data.type === 'FeatureCollection' && Array.isArray(data.features) && data.features.length > 0);
+  if (!res.ok && !hasLocations && !data.empty && !data.needsKey) {
     throw new Error(data.error || data.message || `Feed ${res.status}`);
   }
   return normalizeFeedLoad(data);
+}
+
+function hexColor(value: unknown): string | undefined {
+  return typeof value === 'string' && /^#[0-9a-f]{3,8}$/i.test(value) ? value : undefined;
 }
 
 function parseFeedPins(input: Array<Partial<MapsPinMarker>> | undefined): MapsPinMarker[] {
@@ -195,10 +181,17 @@ function parseFeedPins(input: Array<Partial<MapsPinMarker>> | undefined): MapsPi
       color: /^#[0-9a-f]{3,8}$/i.test(p.color ?? '') ? p.color : undefined,
       size: typeof p.size === 'number' ? Math.min(30, Math.max(4, p.size)) : undefined,
       entityUri: text(p.entityUri), graphUri: text(p.graphUri), classLabel: text(p.classLabel),
+      classLabels: Array.isArray(p.classLabels) ? p.classLabels.filter((v): v is string => typeof v === 'string' && v.trim().length > 0) : undefined,
+      // Set on the combined map (layer / feed of the pin): grouping and badges need them.
+      layerId: text(p.layerId), layerColor: hexColor(p.layerColor),
+      feedId: text(p.feedId), feedColor: hexColor(p.feedColor), feedTitle: text(p.feedTitle),
+      featureId: text(p.featureId),
       country: text(p.country), precision: text(p.precision), observedAt: text(p.observedAt),
       sources: evidenceSources(p.sources),
       memberIds: Array.isArray(p.memberIds) ? p.memberIds.filter((id): id is string => typeof id === "string") : undefined,
       relationships: Array.isArray(p.relationships) ? p.relationships.filter((r) => r && typeof r.label === 'string' && typeof r.value === 'string').map((r) => ({label:r.label,value:r.value,entityUri:text(r.entityUri)})) : [],
+      markerIcon: text((p as { markerIcon?: unknown }).markerIcon),
+      markerLogoUrl: resolveMapsPinImageUrl((p as { markerLogoUrl?: unknown }).markerLogoUrl),
       address: text(p.address),
       photoUrl: httpsUrl(p.photoUrl),
       photoSource: httpsUrl(p.photoSource),

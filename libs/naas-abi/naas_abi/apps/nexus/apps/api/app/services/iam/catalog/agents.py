@@ -16,7 +16,8 @@ ACTIONS = (
     # per session, so it stays with the members who may write; for a viewer the
     # route answers with the listing alone.
     action("SyncAgents", "write", "agent"),
-    # Invoking an agent in chat or through ``/v1``.
+    # Invoking an agent the workspace built, in chat or through ``/v1``. A
+    # module's agent is its module scope instead (``module:UseAgent``).
     action("UseAgent", "read", "agent"),
     action("ListSkills", "list", "skill", feature="skills"),
     action("GetSkill", "read", "skill", feature="skills"),

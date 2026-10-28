@@ -1,4 +1,4 @@
-"""The datasets a SQL query reads, from DuckDB's parser (RFC §6.4, "dataset").
+"""The datasets a SQL query reads, from DuckDB's parser.
 
 ``dataset:Query`` needs ``Query`` on every dataset the SQL references. A
 reference is resolved against the query's namespace: ``orders`` is

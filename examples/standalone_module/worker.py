@@ -29,6 +29,10 @@ DEPENDENCIES = ModuleDependencies(services=(*OPERATIONS, "bus"))
 # Bus topics have no default: the manifest names the ones this module uses.
 BUS_TOPICS = ("demo.inbox", "demo.reply", "demo.jobs", "demo.outbox")
 
+# The identity the demo engine issues the worker's token for (engine_host): a module
+# loads schemas only under module/<its own identity>/.
+TOKEN_IDENTITY = "standalone-demo"
+
 
 class ABIModule(BaseModule):
     module_id = "standalone-demo"
@@ -309,9 +313,9 @@ class ABIModule(BaseModule):
         await call("compact")
         assert (await self.call("dataset", "list_snapshots")).snapshots.items
         version = await self.call("dataset", "namespace_version", namespace="default")
-        assert version.HasField("snapshot_id") and version.snapshot_id > 0
+        assert version.HasField("version") and version.version > 0
         unused = await self.call("dataset", "namespace_version", namespace="unused")
-        assert not unused.HasField("snapshot_id")
+        assert not unused.HasField("version")
         await call("drop")
         assert not any(
             i.name == "demo"
@@ -604,6 +608,26 @@ class ABIModule(BaseModule):
             graph
             not in (await self.call(domain, "list_graphs")).graph_names.graph_names
         )
+        # A module's ontology: stored once, nothing written for the same content, and
+        # refused under another module's id (its manifest asks LoadSchema on its own
+        # sources only, so another's does not exist for it) or when it is not Turtle.
+        source = f"module/{TOKEN_IDENTITY}/demo.ttl"
+        ontology = b"<urn:demo:Thing> a <http://www.w3.org/2002/07/owl#Class> .\n"
+        load = {"source": source, "content_ttl": ontology}
+        assert (await self.call(domain, "load_schema", **load)).changed
+        assert not (await self.call(domain, "load_schema", **load)).changed
+        for refused, code, content in (
+            ("module/another-module/demo.ttl", "NOT_FOUND", ontology),
+            (source, "INVALID_ARGUMENT", b"this is not turtle"),
+        ):
+            try:
+                await self.call(
+                    domain, "load_schema", source=refused, content_ttl=content
+                )
+            except RPCError as exc:
+                assert exc.code == code, exc
+            else:
+                raise AssertionError(f"load_schema of {refused} was not refused")
 
     async def bus(self):
         # Prove both directions against the engine, not a worker-only loopback.
@@ -740,8 +764,31 @@ class ABIModule(BaseModule):
             "iam", "filter", action="document:Find", resources=[other, own]
         )
         assert list(filtered.allowed) == [own]
+        # An action another module declares (discovery_demo's provider, approved
+        # before this worker runs): IAM names the brief and refuses it to a
+        # module its manifest does not grant.
+        declared = await self.call(
+            "iam",
+            "authorize_declared",
+            action="demo_research:ExportBrief",
+            resource_type="brief",
+            parts=["q3"],
+        )
+        assert not declared.decision.allowed
+        assert declared.resource == "abi:-:-:demo_research:brief/q3"
+        # What it may grant: what it holds, its own collections among it.
+        grantable = await self.call("iam", "grantable", scope="abi:-:-")
+        held = {
+            r
+            for c in grantable.catalogs
+            if c.service == "document"
+            for a in c.actions
+            if a.action == "document:Find"
+            for r in a.resources
+        }
+        assert any(r.startswith("${scope}:document:collection/") for r in held), held
         # The broker offers a module IAM's self-service and read-only questions
-        # (token, jwks, manifest, authorize, filter) and no more: the lists and
+        # (token, jwks, manifest, authorize, filter, grantable) and no more: the lists and
         # every change are refused before they reach IAM, whoever's token the
         # module holds (an agent host reads its caller's).
         at_broker = [
@@ -808,6 +855,14 @@ class ABIModule(BaseModule):
             "delete_placement": {"service": "document", "id_key": "standalone-demo"},
             "put_scope": {"org": "org-demo", "workspace": "-"},
             "delete_scope": {"org": "org-demo", "workspace": "-"},
+            # Sets (what an org or a workspace may use): read by the admins of
+            # that org or workspace, written by the platform admin and an org's
+            # owners and admins. A module holds no iam:GetSet or iam:PutSet, so
+            # the broker refuses each before it reaches IAM.
+            "get_set": {"org": "org-demo", "workspace": "ws-demo"},
+            "effective_set": {"org": "org-demo", "workspace": "ws-demo"},
+            "list_sets": {"org": "org-demo"},
+            "put_set": {"org": "org-demo", "workspace": "-"},
             "register_catalog": {
                 "catalog": pb.ActionCatalog(
                     service="standalone_demo",

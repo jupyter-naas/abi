@@ -465,6 +465,49 @@ def test_query_error_raises_request_error_with_query_operation():
     assert err.endpoint == adapter.query_endpoint
 
 
+@pytest.mark.parametrize(
+    "failure",
+    [
+        requests.ReadTimeout("Read timed out. (read timeout=30)"),
+        requests.ConnectionError("Connection aborted."),
+    ],
+)
+def test_an_update_without_an_answer_raises_a_request_error(failure):
+    """A post that waits behind another writer, or loses its connection, used to
+    escape as a bare requests exception: over NATS, an INTERNAL with no cause."""
+    adapter = _build_adapter()
+    adapter._session.post.side_effect = failure
+
+    graph = Graph()
+    graph.add(
+        (URIRef("http://example.org/s"), RDF.type, URIRef("http://example.org/C"))
+    )
+
+    with pytest.raises(Exceptions.RequestError) as exc_info:
+        adapter.insert(graph, URIRef("http://example.org/g"))
+
+    err = exc_info.value
+    assert err.operation == "update"
+    assert err.status_code is None
+    assert err.endpoint == adapter.update_endpoint
+    assert err.attempts == 1
+    assert err.__cause__ is failure
+    assert type(failure).__name__ in str(err)
+    assert adapter._session.post.call_count == 1  # an unanswered update is not replayed
+
+
+def test_a_query_without_an_answer_raises_a_request_error():
+    adapter = _build_adapter()
+    failure = requests.ReadTimeout("Read timed out.")
+    adapter._session.post.side_effect = failure
+
+    with pytest.raises(Exceptions.RequestError) as exc_info:
+        adapter.query("SELECT ?s WHERE { ?s ?p ?o }")
+
+    assert exc_info.value.operation == "query"
+    assert exc_info.value.__cause__ is failure
+
+
 def test_write_lock_is_present():
     """The adapter must expose a threading.Lock for write serialisation."""
     import threading
@@ -780,7 +823,7 @@ def test_test_connection_does_not_retry_non_retryable_status(mock_sleep):
     mock_sleep.assert_not_called()
 
 
-# --- streamed reads (docs/adr/20261003_nats-streamed-results.md)
+# --- streamed reads
 
 
 def _streaming_response(content_type: str, lines: list[str], status: int = 200) -> Mock:
@@ -865,7 +908,7 @@ def test_export_streams_a_graph_as_n_triples_without_query():
 
 
 def test_a_confined_query_sends_its_dataset_as_protocol_parameters():
-    # RFC §6.4: the parameters take precedence over the query's own FROM; the
+    # The parameters take precedence over the query's own FROM; the
     # union default graph is limited to the readable graphs, and Jena's name
     # for its own default graph joins it when that is readable too.
     from naas_abi_core.services.triple_store.TripleStorePorts import (

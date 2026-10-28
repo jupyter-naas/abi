@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 
 def call_actor() -> str | None:
-    """The actor of the current call (``call_subject``), RFC §10.1."""
+    """The actor of the current call (``call_subject``)."""
     return call_subject()
 
 

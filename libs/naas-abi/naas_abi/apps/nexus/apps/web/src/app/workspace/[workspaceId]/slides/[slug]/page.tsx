@@ -39,6 +39,7 @@ import {
   startNewPresentation,
 } from '@/lib/create-slides-project';
 import { copyDeckToMyDrive } from '@/lib/slides-my-drive';
+import { createOfficeSaveQueue, type OfficeSaveQueue } from '@/lib/office-save-queue';
 import { authFetch } from '@/stores/auth';
 import {
   SLIDES_DECK_UPDATED_EVENT,
@@ -221,6 +222,7 @@ export default function SlidesEditorPage() {
   const loadGenRef = useRef(0);
   const skipTokenEffectRef = useRef(true);
   const saveRef = useRef<() => Promise<void>>(async () => {});
+  const saveQueueRef = useRef<OfficeSaveQueue<{ commit_sha?: string }> | null>(null);
   const refreshRef = useRef<() => Promise<void>>(async () => {});
 
   useEffect(() => {
@@ -324,6 +326,7 @@ export default function SlidesEditorPage() {
             parseSlidesOutline(deck.html).length,
           ),
         );
+        saveQueueRef.current?.load(deck.html);
         setDirty(false);
         setDeckSource(
           deck.source === 'sidecar' || deck.source === 'forgejo' ? deck.source : null,
@@ -446,19 +449,16 @@ export default function SlidesEditorPage() {
     };
   }, [html, holdPreview]);
 
-  const save = useCallback(async () => {
-    const deck = htmlRef.current;
-    if (!workspaceId || !slug || !deck) return;
-    setSaving(true);
-    setError(null);
-    setStatus(null);
-    try {
+  // One save queue per deck: switching decks or unmounting makes in-flight saves stale.
+  useEffect(() => {
+    if (!workspaceId || !slug) return;
+    const queue = createOfficeSaveQueue(async (html: string) => {
       const res = await authFetch(`/api/slides/projects/${encodeURIComponent(slug)}/deck`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           workspace_id: workspaceId,
-          html: deck,
+          html,
           message: `chore(deck): update ${slug}`,
         }),
       });
@@ -466,15 +466,34 @@ export default function SlidesEditorPage() {
         const body = (await res.json().catch(() => ({}))) as { detail?: unknown };
         throw new Error(slidesApiErrorMessage(body.detail, `Save failed (${res.status})`));
       }
-      const body = (await res.json()) as { commit_sha?: string };
-      setDirty(false);
-      setStatus(body.commit_sha ? `Saved ${body.commit_sha.slice(0, 7)}` : 'Saved');
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
+      return (await res.json()) as { commit_sha?: string };
+    });
+    saveQueueRef.current = queue;
+    setSaving(false);
+    return () => {
+      queue.dispose();
+      if (saveQueueRef.current === queue) saveQueueRef.current = null;
+    };
   }, [workspaceId, slug]);
+
+  const save = useCallback(async () => {
+    const queue = saveQueueRef.current;
+    if (!queue) return;
+    setSaving(true);
+    setError(null);
+    setStatus(null);
+    const outcome = await queue.save();
+    if (outcome.status === 'stale' || queue !== saveQueueRef.current) return;
+    setSaving(queue.isSaving());
+    setDirty(queue.isDirty());
+    if (outcome.status === 'saved') {
+      const sha = outcome.result.commit_sha;
+      const saved = sha ? `Saved ${sha.slice(0, 7)}` : 'Saved';
+      setStatus(outcome.dirty ? `${saved}; newer edits not saved yet` : saved);
+    } else if (outcome.status === 'failed') {
+      setError((outcome.error as Error).message);
+    }
+  }, []);
 
   const saveToMyDrive = useCallback(async () => {
     if (!slug || !html) return;
@@ -604,6 +623,7 @@ export default function SlidesEditorPage() {
           setPreviewHtml(result.html);
         }
         setSelectedIndex(result.section_index);
+        saveQueueRef.current?.load(result.html || htmlRef.current);
         setDirty(false);
         setStatus(`${label} (${result.section_index + 1}/${result.section_count})`);
       } catch (e) {
@@ -696,6 +716,7 @@ export default function SlidesEditorPage() {
       if (next === htmlRef.current) return;
       setHoldPreview(true);
       setHtml(next);
+      saveQueueRef.current?.edit(next);
       setDirty(true);
       scheduleManualSave();
     },
@@ -871,6 +892,7 @@ export default function SlidesEditorPage() {
               onChange={(value) => {
                 setHoldPreview(false);
                 setHtml(value ?? '');
+                saveQueueRef.current?.edit(value ?? '');
                 setDirty(true);
               }}
               onMount={(editor, monaco) => {

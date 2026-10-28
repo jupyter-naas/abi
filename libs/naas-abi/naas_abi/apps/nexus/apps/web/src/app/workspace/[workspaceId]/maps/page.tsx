@@ -1,30 +1,20 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
 import { useIsMobile } from '@/hooks/use-is-mobile';
-import { mapsAllLayersPath } from './lib/maps-route';
+import { useMapsLayerParams } from './lib/use-maps-layer-params';
+import { MapsMapView } from './components/maps-map-view';
 
 /**
- * Desktop: /maps opens the All layers map. Mobile: library list (MapsSection).
+ * Desktop: map canvas (layers from `?layer=` query params).
+ * Mobile: layer list lives in the shell; map shows when `layer` params are set.
  */
-export default function MapsIndexPage() {
+export default function MapsPage() {
   const isMobile = useIsMobile();
-  const router = useRouter();
-  const params = useParams();
-  const workspaceId =
-    typeof params?.workspaceId === 'string' ? params.workspaceId : null;
+  const { layerIds } = useMapsLayerParams();
 
-  useEffect(() => {
-    if (isMobile) return;
-    router.replace(mapsAllLayersPath(workspaceId));
-  }, [isMobile, router, workspaceId]);
+  if (isMobile && layerIds.length === 0) {
+    return null;
+  }
 
-  if (isMobile) return null;
-
-  return (
-    <div className="flex h-full items-center justify-center">
-      <p className="text-sm text-muted-foreground">Opening All layers…</p>
-    </div>
-  );
+  return <MapsMapView />;
 }

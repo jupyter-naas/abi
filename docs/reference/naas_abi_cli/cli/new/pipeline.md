@@ -1,25 +1,32 @@
-# `pipeline` (new pipeline generator)
+# `new_pipeline`
 
 ## What it is
-- A small CLI-backed helper that scaffolds a new “pipeline” from a template directory into a target path.
-- Normalizes the pipeline name to PascalCase and copies template files using an internal `Copier`.
+- Implements the `naas-abi-cli new pipeline` command.
+- Scaffolds a pipeline from a bundled template into a target path, for the kind of module it runs in: a `naas_abi_core` pipeline in an in-engine module, a `naas_abi_sdk` one in a remote module.
 
 ## Public API
-- `new_pipeline(pipeline_name: str, pipeline_path: str = ".", extra_values: dict = {})`
-  - Creates the destination directory (if needed) and copies pipeline templates into it.
-  - Injects template values including `pipeline_name_pascal`.
-- CLI command: `new pipeline PIPELINE_NAME [PIPELINE_PATH]`
-  - Entry point registered via Click (`@new.command("pipeline")`), calls `new_pipeline(...)`.
+- `new_pipeline(pipeline_name: str, pipeline_path: str = ".", extra_values: dict | None = None, remote: bool = False)`
+  - Converts `pipeline_name` to PascalCase.
+  - Resolves `pipeline_path` (`"."` becomes `os.getcwd()`) and creates the directory if it does not exist.
+  - With `remote=True`, makes the folder a package (`ensure_package`): the scaffold's test imports the class relatively, and the module imports it by its dotted name.
+  - Copies the templates, chosen by `remote`:
+    - `remote=False` → `cli/new/templates/pipeline`
+    - `remote=True` → `cli/new/templates/remote_pipeline` (imports `naas_abi_sdk` only, with a `<Name>Pipeline_test.py` beside it)
+  - Template values: `pipeline_name_pascal`, `pipeline_name_snake` and `pipeline_name_upper`, merged with `extra_values` (dict union `|`).
+
+- Click command: `naas-abi-cli new pipeline PIPELINE_NAME [PIPELINE_NAME_PATH]`
+  - `_new_pipeline` detects the target with `is_remote_module(target_dir(pipeline_path))` and calls `new_pipeline(..., remote=remote)`.
+  - In a remote module it prints what to do next: the module builds the pipeline after `on_initialized` under its snake-case class name, other modules start it as the durable workflow `pipeline.<name>`, and an agent needs `await self.build_processes()` before `self.get_pipeline_instance(name).as_tools()`; it needs the `naas-abi-sdk[workflows,rdf]` extras.
+  - It does not refuse in a remote module (only `abi new orchestration` does).
 
 ## Configuration/Dependencies
-- **Dependencies**
-  - `click` for CLI command/arguments.
-  - `naas_abi_cli` to locate the built-in template directory.
-  - `naas_abi_cli.cli.utils.Copier.Copier` to perform the copy.
-  - `to_pascal_case` (local utility) for name normalization.
-- **Template location**
-  - Resolved at runtime to:  
-    `os.path.join(os.path.dirname(naas_abi_cli.__file__), "cli/new/templates/pipeline")`
+- **Python packages**
+  - `click` (CLI command wiring)
+  - `naas_abi_cli` (used to locate installed template files)
+- **Internal utilities**
+  - `Copier` from `naas_abi_cli.cli.utils.Copier` (copy/render step)
+  - `to_pascal_case`, `to_snake_case` from `.utils`
+  - `ensure_package`, `is_remote_module`, `target_dir` from `.remote_module`
 
 ## Usage
 
@@ -32,9 +39,11 @@ naas-abi-cli new pipeline MyPipeline .
 ```python
 from naas_abi_cli.cli.new.pipeline import new_pipeline
 
-new_pipeline("my_pipeline", ".")
+new_pipeline("my_pipeline", "./out")                 # naas_abi_core
+new_pipeline("my_pipeline", "./out", remote=True)    # naas_abi_sdk
 ```
 
 ## Caveats
-- `extra_values` has a mutable default (`{}`); avoid mutating it outside the function. Prefer passing a new dict explicitly.
-- If `pipeline_path` is `"."`, it resolves to the current working directory (`os.getcwd()`), and files will be copied there.
+- If `pipeline_path == "."`, it is replaced with `os.getcwd()`.
+- `pipeline_name` is converted to PascalCase; the template receives it under `pipeline_name_pascal`.
+- The remote scaffold's `run` is `async` and returns an rdflib `Graph`; other modules call the pipeline over NATS and it can declare `job = JobSettings(...)`.

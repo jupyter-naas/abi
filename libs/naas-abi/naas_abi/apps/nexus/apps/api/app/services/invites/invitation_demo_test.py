@@ -1,4 +1,4 @@
-"""The RFC's demo, end to end, with the built-in IdP and the local email adapter.
+"""The invitation demo, end to end, with the built-in IdP and the local email adapter.
 
 1. An admin invites ``bob@example.com`` as a member of workspace W.
 2. The built-in IdP creates Bob (the provisioning port, through its admin app).
@@ -50,6 +50,9 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.adapters.secondary.mailer
 from naas_abi.apps.nexus.apps.api.app.services.oidc import runtime as oidc_runtime
 from naas_abi.apps.nexus.apps.api.app.services.oidc.adapters.primary.oidc__primary_adapter__FastAPI import (  # noqa: E501
     router as oidc_router,
+)
+from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.primary import (
+    organizations__primary_adapter__FastAPI as org_api,
 )
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.primary.organizations__primary_adapter__FastAPI import (  # noqa: E501
     router as organizations_router,
@@ -133,6 +136,8 @@ def _app() -> FastAPI:
     app.include_router(invitations_router, prefix="/api/invitations")
     app.include_router(idp_groups_router, prefix="/api/idp-groups")
     app.add_middleware(RequestIdentityMiddleware)
+    # The drive profile sync (best effort) has no object storage here.
+    app.dependency_overrides[org_api._get_object_storage] = lambda: object()
     return app
 
 
@@ -295,6 +300,7 @@ async def test_the_rfc_demo_invite_bob_and_he_signs_in_a_member_of_w(nexus, idp,
             "role": "member",
             "workspace_id": WS,
             "workspace_role": "member",
+            "job_title": "CTO",
         },
     )
     assert invited.status_code == 200, invited.text
@@ -341,6 +347,9 @@ async def test_the_rfc_demo_invite_bob_and_he_signs_in_a_member_of_w(nexus, idp,
     assert me["email"] == "bob@example.com"
     assert await MEMBERSHIPS.role_at(me["id"], workspace_scope(ORG, WS)) == "member"
     assert await MEMBERSHIPS.role_at(me["id"], org_scope(ORG)) == "member"
+    # What the admin set about Bob when inviting him is his profile in the organization.
+    details = (await alice.get(f"/api/organizations/{ORG}/members/{me['id']}")).json()
+    assert details["organization_profile"]["job_title"] == "CTO"
     async with sessions() as db:
         stored = (await db.execute(select(InvitationModel))).scalar_one()
         assert (stored.status, stored.accepted_user_id) == ("accepted", me["id"])

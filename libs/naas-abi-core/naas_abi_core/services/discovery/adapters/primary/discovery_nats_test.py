@@ -319,7 +319,7 @@ class _Subscriber:
             unsubscribe=AsyncMock(), drain=AsyncMock(), _id=len(self.callbacks)
         )
 
-    async def flush(self):
+    async def flush(self, timeout=10):
         pass
 
 

@@ -73,10 +73,6 @@
   outline: none;
 }
 
-.chat-agent-selector-search:focus {
-  border-color: color-mix(in srgb, var(--workspace-accent, #22c55e) 40%, var(--border-hex));
-}
-
 .chat-agent-selector-toggle-row {
   display: flex;
   align-items: center;

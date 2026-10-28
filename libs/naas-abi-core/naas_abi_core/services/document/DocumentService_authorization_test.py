@@ -1,4 +1,4 @@
-"""The document service passes the authorization contract (RFC §6.4, "document").
+"""The document service passes the authorization contract.
 
 The built-in IdP's namespace is sealed to it: neither ``api`` nor ``engine``,
 both allowed everything else, can read it, in process or over NATS.

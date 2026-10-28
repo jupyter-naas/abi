@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  appHtmlPathPrefix,
   appIframeSandbox,
   isBundledAppHtmlUrl,
   REMOTE_APP_SANDBOX,
@@ -9,6 +8,8 @@ import {
   pagesSsoAudience,
   withAppHtmlAccessToken,
   withPagesSsoToken,
+  withRemoteAppWorkspace,
+  remoteGrantRenewDelayMs,
 } from './app-html';
 
 describe('app-html helpers', () => {
@@ -18,17 +19,6 @@ describe('app-html helpers', () => {
       true,
     );
     expect(isBundledAppHtmlUrl('/workspace/primary/apps')).toBe(false);
-  });
-
-  it('derives path_prefix locks for scoped JWTs', () => {
-    expect(appHtmlPathPrefix('/app-html/report/counter_uas/dashboard/')).toBe(
-      '/app-html/report/counter_uas/',
-    );
-    expect(
-      appHtmlPathPrefix(
-        'https://nexus.localhost/app-html/report/counter_uas/map/?report_date=2026-07-26',
-      ),
-    ).toBe('/app-html/report/counter_uas/');
   });
 
   it('appends token without dropping existing query params', () => {
@@ -105,5 +95,46 @@ describe('app-html helpers', () => {
     expect(appIframeSandbox('/app-html/report/counter_uas/dashboard/')).toContain(
       'allow-same-origin',
     );
+  });
+});
+
+describe('remote app links name their workspace', () => {
+  it('adds the workspace to a remote app catalog URL only', () => {
+    expect(withRemoteAppWorkspace('/app-html/remote/acme.research/console/index.html', 'ws 1')).toBe(
+      '/app-html/remote/acme.research/console/index.html?workspace_id=ws%201',
+    );
+    expect(withRemoteAppWorkspace('/app-html/remote/acme.research/console/?q=1#top', 'ws-1')).toBe(
+      '/app-html/remote/acme.research/console/?q=1&workspace_id=ws-1#top',
+    );
+    expect(withRemoteAppWorkspace('/app-html/report/counter_uas/index.html', 'ws-1')).toBe(
+      '/app-html/report/counter_uas/index.html',
+    );
+    expect(withRemoteAppWorkspace('/app-html/remote/acme.research/console/', '')).toBe(
+      '/app-html/remote/acme.research/console/',
+    );
+  });
+});
+
+describe('remote app grant renewal', () => {
+  it('reopens the app a minute before its grant expires', () => {
+    expect(remoteGrantRenewDelayMs(8 * 3600)).toBe(8 * 3600 * 1000 - 60_000);
+  });
+
+  it('does not reload a live app within five minutes of opening it when the grant lasts longer', () => {
+    expect(remoteGrantRenewDelayMs(6 * 60)).toBe(5 * 60_000);
+    expect(remoteGrantRenewDelayMs(10 * 60)).toBe(9 * 60_000);
+  });
+
+  it('renews a short grant before it expires', () => {
+    // remote_app_grant_expire_minutes can be 1: five minutes would be after expiry.
+    expect(remoteGrantRenewDelayMs(60)).toBe(30_000);
+    expect(remoteGrantRenewDelayMs(40)).toBe(20_000);
+    expect(remoteGrantRenewDelayMs(300)).toBe(240_000);
+  });
+
+  it('schedules nothing without a lifetime', () => {
+    expect(remoteGrantRenewDelayMs(undefined)).toBeNull();
+    expect(remoteGrantRenewDelayMs(0)).toBeNull();
+    expect(remoteGrantRenewDelayMs('soon')).toBeNull();
   });
 });

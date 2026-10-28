@@ -1,4 +1,4 @@
-"""document's action catalog (RFC §6.4, "document").
+"""document's action catalog.
 
 ``namespace/<ns>`` and ``collection/<ns>/<c>`` are placed containers holding
 ``document/<ns>/<c>/<id>``. Namespace administration is ``Namespaces``,
@@ -64,7 +64,7 @@ CATALOG = ActionCatalog(
     ),
 )
 
-# Sealed to the built-in IdP (RFC §11.3, §12.3), wherever a placement puts it.
+# Sealed to the built-in IdP, wherever a placement puts it.
 IDP_NAMESPACE = "idp"
 SEALS: tuple[Seal, ...] = (
     Seal(f"abi:*:*:document:namespace/{IDP_NAMESPACE}", "idp", module_id="idp"),

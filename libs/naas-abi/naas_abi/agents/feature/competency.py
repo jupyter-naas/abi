@@ -411,6 +411,36 @@ COMPETENCY_QUESTIONS: dict[str, tuple[CompetencyQuestion, ...]] = {
             ("agent",),
         ),
     ),
+    "Tasks": (
+        _q(
+            "What can I do with Tasks in Nexus?",
+            "capabilities",
+            terms=("iteration", "stage"),
+        ),
+        _q(
+            "How does Nexus Tasks keep a deleted task in the activity feed? Read the code and cite the files.",
+            "implementation",
+            SOURCE_TOOLS,
+            ("task_title", "task_activity", "0061"),
+        ),
+        _q(
+            "Create a Nexus task called 'Review the quarterly KPIs' in the current iteration.",
+            "operate",
+            ("create_task",),
+            ("review the quarterly kpis",),
+        ),
+        _q(
+            "Which Nexus tasks are in the current iteration?",
+            "operate",
+            ("list_tasks",),
+            ("task", "iteration"),
+        ),
+        _q(
+            "Quel rôle faut-il pour changer les étapes des tâches Nexus ?",
+            "other",
+            terms=("owner", "admin", "propriétaire"),
+        ),
+    ),
     "Skills": (
         _q(
             "What can I do with Skills in Nexus?",

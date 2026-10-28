@@ -9,7 +9,7 @@ import re
 from collections.abc import AsyncGenerator
 
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -62,6 +62,25 @@ _ALTER_CONSTRAINT_RE = re.compile(
 _DROP_COLUMN_RE = re.compile(r"^\s*ALTER\s+TABLE\s+\S+\s+DROP\s+COLUMN\b", re.IGNORECASE)
 
 
+# `ALTER TABLE t RENAME COLUMN a TO b` has no IF EXISTS form. Migrations re-run
+# on every boot, so the runner skips a rename whose old column is gone and whose
+# new column exists (already applied).
+_RENAME_COLUMN_RE = re.compile(
+    r'^\s*ALTER\s+TABLE\s+"?(\w+)"?\s+RENAME\s+COLUMN\s+"?(\w+)"?\s+TO\s+"?(\w+)"?\s*;?\s*$',
+    re.IGNORECASE,
+)
+
+
+def parse_rename_column(statement: str) -> tuple[str, str, str] | None:
+    """(table, old, new) for an `ALTER TABLE ... RENAME COLUMN ... TO ...`, else None."""
+    match = _RENAME_COLUMN_RE.match(statement)
+    return (match.group(1), match.group(2), match.group(3)) if match else None
+
+
+def rename_already_applied(columns: set[str], old: str, new: str) -> bool:
+    return old not in columns and new in columns
+
+
 def _adapt_statement_for_dialect(statement: str, dialect: str) -> list[str]:
     """Return the statement(s) to actually execute for the active dialect.
 
@@ -104,6 +123,7 @@ def _adapt_statement_for_dialect(statement: str, dialect: str) -> list[str]:
     for tail in parts[1:]:
         statements.append(f"{prefix} ADD COLUMN {tail.strip()}")
     return statements
+
 
 # Known tables for safe row count queries
 KNOWN_TABLES = frozenset(
@@ -236,9 +256,7 @@ async def init_db() -> None:
             stripped = line.strip()
             if stripped.lower().startswith("-- @dialect:"):
                 allowed_dialects = {
-                    d.strip().lower()
-                    for d in stripped.split(":", 1)[1].split(",")
-                    if d.strip()
+                    d.strip().lower() for d in stripped.split(":", 1)[1].split(",") if d.strip()
                 }
                 break
         if allowed_dialects is not None and current_dialect not in allowed_dialects:
@@ -273,6 +291,18 @@ async def init_db() -> None:
             for statement in adapted:
                 if not statement:
                     continue
+                rename = parse_rename_column(statement)
+                if rename is not None:
+                    table, old, new = rename
+                    async with async_engine.connect() as conn:
+                        columns = await conn.run_sync(
+                            lambda sync_conn, t=table: {
+                                c["name"] for c in inspect(sync_conn).get_columns(t)
+                            }
+                        )
+                    if rename_already_applied(columns, old, new):
+                        skipped += 1
+                        continue
                 try:
                     async with async_engine.begin() as conn:
                         await conn.execute(text(statement))
@@ -315,10 +345,7 @@ async def table_exists(table_name: str) -> bool:
     async with async_engine.begin() as conn:
         if _is_sqlite:
             result = await conn.execute(
-                text(
-                    "SELECT 1 FROM sqlite_master "
-                    "WHERE type = 'table' AND name = :name"
-                ),
+                text("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = :name"),
                 {"name": table_name},
             )
             return result.scalar() is not None

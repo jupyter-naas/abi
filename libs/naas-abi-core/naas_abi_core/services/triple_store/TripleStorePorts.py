@@ -31,6 +31,10 @@ class Exceptions:
     class GraphNotFoundError(Exception):
         pass
 
+    class InvalidSchemaError(Exception):
+        """Schema content that cannot be loaded: not parseable, or it writes the
+        service's own ``internal:`` vocabulary."""
+
     class GraphAlreadyExistsError(Exception):
         pass
 
@@ -93,7 +97,7 @@ class OntologyEvent(Enum):
 
 @dataclass
 class QueryStream:
-    """A SPARQL result read incrementally (docs/adr/20261003_nats-streamed-results.md).
+    """A SPARQL result read incrementally.
 
     ``result_type`` is rdflib's: SELECT, ASK, CONSTRUCT or DESCRIBE. ``rows``
     (SELECT: variable name -> term, unbound variables absent) and ``triples``
@@ -140,7 +144,7 @@ NO_GRAPH = URIRef("urn:abi:iam:no-graph")
 @dataclass(frozen=True)
 class QueryDataset:
     """The RDF dataset a query may read, for a caller who may not read every
-    graph (RFC §6.4). It replaces the query's own dataset clauses.
+    graph. It replaces the query's own dataset clauses.
 
     * ``default_graph``: the store's own default graph is part of the query's
       default graph;
@@ -274,7 +278,7 @@ class ITripleStorePort(ABC):
     def list_graphs(self) -> list[URIRef]:
         pass
 
-    # Streaming reads (docs/adr/20261003_nats-streamed-results.md). These
+    # Streaming reads. These
     # defaults read the materialized result; adapters that can stream from
     # their backend override them.
 
@@ -283,7 +287,7 @@ class ITripleStorePort(ABC):
         """Run a SPARQL query and read its result incrementally, inside the block."""
         yield QueryStream.from_result(self.query(query))
 
-    # Confined reads (RFC §6.4): a query over the graphs its caller may read.
+    # Confined reads: a query over the graphs its caller may read.
     # A store that cannot confine a query keeps these defaults, and such a
     # caller's queries are refused.
 
@@ -376,7 +380,13 @@ class ITripleStoreService(ABC):
     #     pass
 
     @abstractmethod
-    def insert(self, triples: Graph, graph_name: URIRef):
+    def insert(
+        self,
+        triples: Graph,
+        graph_name: URIRef,
+        *,
+        timeout_seconds: float | None = None,
+    ):
         """Insert triples from the provided graph into the store.
 
         This method takes a graph of triples and inserts them into the triple store. The triples
@@ -385,13 +395,23 @@ class ITripleStoreService(ABC):
         Args:
             triples (Graph): The RDF graph containing triples to insert
             graph_name (URIRef): Named graph URI target.
+            timeout_seconds: how long the caller waits when the store is served
+                by another process (a write can queue behind a long one); an
+                in-process store runs to completion. ``None`` keeps the
+                adapter's default.
 
         Returns:
             None
         """
 
     @abstractmethod
-    def remove(self, triples: Graph, graph_name: URIRef):
+    def remove(
+        self,
+        triples: Graph,
+        graph_name: URIRef,
+        *,
+        timeout_seconds: float | None = None,
+    ):
         """Remove triples from the provided graph from the store.
 
         This method takes a graph of triples and removes them from the triple store. The triples
@@ -400,6 +420,7 @@ class ITripleStoreService(ABC):
         Args:
             triples (Graph): The RDF graph containing triples to remove
             graph_name (URIRef): Named graph URI target.
+            timeout_seconds: as for ``insert``.
 
         Returns:
             None
@@ -455,11 +476,12 @@ class ITripleStoreService(ABC):
         """
 
     @abstractmethod
-    def create_graph(self, graph_name: URIRef):
+    def create_graph(self, graph_name: URIRef, *, timeout_seconds: float | None = None):
         """Create an empty named graph in the underlying store.
 
         Args:
             graph_name (URIRef): URI of the graph to create
+            timeout_seconds: as for ``insert``.
 
         Returns:
             None
@@ -469,11 +491,12 @@ class ITripleStoreService(ABC):
         """
 
     @abstractmethod
-    def clear_graph(self, graph_name: URIRef):
+    def clear_graph(self, graph_name: URIRef, *, timeout_seconds: float | None = None):
         """Clear triples from a graph.
 
         Args:
             graph_name (URIRef | None): Target named graph URI. If None, clear default graph.
+            timeout_seconds: as for ``insert``.
 
         Returns:
             None
@@ -483,11 +506,12 @@ class ITripleStoreService(ABC):
         """
 
     @abstractmethod
-    def drop_graph(self, graph_name: URIRef):
+    def drop_graph(self, graph_name: URIRef, *, timeout_seconds: float | None = None):
         """Drop a named graph and all its triples.
 
         Args:
             graph_name (URIRef): URI of the graph to drop
+            timeout_seconds: as for ``insert``.
 
         Returns:
             None
@@ -509,7 +533,7 @@ class ITripleStoreService(ABC):
         """Run a SPARQL query and read its result incrementally.
 
         Constant memory where the backend streams; read ``rows`` or ``triples``
-        inside the ``with`` block (docs/adr/20261003_nats-streamed-results.md).
+        inside the ``with`` block.
         """
 
     @abstractmethod
@@ -534,6 +558,27 @@ class ITripleStoreService(ABC):
 
         Example:
             >>> store.load_schema("path/to/schema.ttl")
+        """
+
+    @abstractmethod
+    def load_schema_content(
+        self,
+        source: str,
+        content: str,
+        file_last_update_time: float | None = None,
+    ) -> bool:
+        """Load Turtle ``content`` into the schema graph, keyed by ``source``.
+
+        Same bookkeeping as ``load_schema``, for a schema that is not a file of
+        this process (a remote module's ontology, ``module/<id>/<path>``).
+
+        Returns:
+            bool: True when the schema graph was written, False when ``source``
+                already held this content.
+
+        Raises:
+            Exceptions.InvalidSchemaError: Content that is not Turtle (nothing
+                is written), or that uses the service's ``internal:`` vocabulary.
         """
 
     @abstractmethod

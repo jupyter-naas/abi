@@ -1,4 +1,4 @@
-"""The authorization contract every kernel service passes (RFC §5.4).
+"""The authorization contract every kernel service passes.
 
 A service's test subclasses ``AuthorizationContract`` once per operation it
 wants to pin, and provides:

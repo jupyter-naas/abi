@@ -1,5 +1,5 @@
 """Coding environments authorize every operation, in process and over NATS
-alike (RFC §6.4); the owner and the user come from the call, never a request
+alike; the owner and the user come from the call, never a request
 field."""
 
 from __future__ import annotations

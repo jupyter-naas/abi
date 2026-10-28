@@ -1,4 +1,4 @@
-"""ResourceGuard: names, checks, list push-down and placements on create (RFC §4.4, §5)."""
+"""ResourceGuard: names, checks, list push-down and placements on create."""
 
 from __future__ import annotations
 

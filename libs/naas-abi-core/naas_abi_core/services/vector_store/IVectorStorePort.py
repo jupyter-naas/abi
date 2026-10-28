@@ -139,8 +139,7 @@ class IVectorStorePort(ABC):
         self, collection_name: str, *, include_vectors: bool = False
     ) -> Iterator[Iterator[VectorDocument]]:
         """Every document of the collection, in ``list_vectors`` order, read
-        lazily inside the block (docs/adr/20261003_nats-streamed-results.md).
-        Read it once; leaving the block releases it.
+        lazily inside the block. Read it once; leaving the block releases it.
 
         This default walks ``list_vectors`` pages of ``STREAM_PAGE`` documents,
         so memory holds one page and no lock is held between pages; adapters

@@ -1,6 +1,6 @@
 [project]
 name = "naas-abi-sdk"
-version = "0.1.0"
+version = "0.2.0"
 description = "Standalone ABI sdk package"
 requires-python = ">=3.10"
 dependencies = ["naas-abi-proto>=0.1.0", "nats-py>=2.16.0,<3"]
@@ -27,11 +27,16 @@ naas-abi-module = "naas_abi_sdk.module_runner:main"
 
 [project.optional-dependencies]
 models = ["langchain-core>=0.3.78,<2"]
-agents = ["langchain-core>=1,<2"]
+# naas-abi-core pins langchain-openai below 0.4 (langchain-core 0.3), and a
+# project installs both: the agent extras accept the same range as models.
+agents = ["langchain-core>=0.3.78,<2"]
 rdf = ["rdflib>=7,<8"]
+# Workflows and pipelines (naas_abi_sdk.workflow, .pipeline): pydantic parameters.
+# Pipelines also need [rdf]; as_tools() needs [agents] or [agent].
+workflows = ["pydantic>=2,<3"]
 langgraph = ["langgraph-checkpoint>=3.0.1,<4"]
 # Agents written like naas_abi_core agents (naas_abi_sdk.agents).
-agent = ["langchain-core>=1,<2", "langgraph>=1,<2", "langgraph-checkpoint>=3.0.1,<4"]
+agent = ["langchain-core>=0.3.78,<2", "langgraph>=1,<2", "langgraph-checkpoint>=3.0.1,<4"]
 # OpenTelemetry tracing over NATS (W3C trace context in message headers).
 otel = [
     "opentelemetry-api>=1.27,<2",

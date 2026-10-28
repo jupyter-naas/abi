@@ -69,6 +69,59 @@ def test_context_manager_calls_close():
     assert closed == [True]
 
 
+@pytest.mark.parametrize(
+    "operation, response",
+    [
+        ("insert", triple_store_pb2.InsertResponse()),
+        ("remove", triple_store_pb2.RemoveResponse()),
+    ],
+)
+def test_writes_send_the_callers_deadline(operation, response):
+    client = TripleStoreSecondaryAdapterNATSClient(
+        "nats://127.0.0.1:4222", TEST_TOKENS.source("api"), timeout_seconds=10.0
+    )
+    sent = []
+
+    def fake_call(subject, request, response_cls, **kwargs):
+        sent.append((request.context.timeout_ms, kwargs.get("timeout_seconds")))
+        return response
+
+    client._call = fake_call  # type: ignore[method-assign]
+    graph_name = URIRef("http://test.example.org/g")
+
+    getattr(client, operation)(Graph(), graph_name, timeout_seconds=900.0)
+    getattr(client, operation)(Graph(), graph_name)
+
+    assert sent == [(900_000, 900.0), (10_000, None)]
+
+
+@pytest.mark.parametrize(
+    "operation, response",
+    [
+        ("create_graph", triple_store_pb2.CreateGraphResponse()),
+        ("clear_graph", triple_store_pb2.ClearGraphResponse()),
+        ("drop_graph", triple_store_pb2.DropGraphResponse()),
+    ],
+)
+def test_graph_writes_send_the_callers_deadline(operation, response):
+    client = TripleStoreSecondaryAdapterNATSClient(
+        "nats://127.0.0.1:4222", TEST_TOKENS.source("api"), timeout_seconds=10.0
+    )
+    sent = []
+
+    def fake_call(subject, request, response_cls, **kwargs):
+        sent.append((request.context.timeout_ms, kwargs.get("timeout_seconds")))
+        return response
+
+    client._call = fake_call  # type: ignore[method-assign]
+    graph_name = URIRef("http://test.example.org/g")
+
+    getattr(client, operation)(graph_name, timeout_seconds=900.0)
+    getattr(client, operation)(graph_name)
+
+    assert sent == [(900_000, 900.0), (10_000, None)]
+
+
 # ---------------------------------------------------------------------------
 # Error-code -> exception mapping. Must stay exactly symmetric with how
 # TripleStorePrimaryAdapterNATS encodes CallError.code.
@@ -381,7 +434,9 @@ def nats_url(tmp_path_factory):
         # pattern in NATSJetStreamAdapter_test.py / ObjectStorageSecondaryAdapterNATSClient_test.py.
         from testcontainers.core.container import DockerContainer
 
-        with DockerContainer("nats:2-alpine").with_exposed_ports(4222) as container:
+        with DockerContainer("nats:2.14.7-alpine").with_exposed_ports(
+            4222
+        ) as container:
             host = container.get_container_host_ip()
             port = container.get_exposed_port(4222)
             url = f"nats://{host}:{port}"
@@ -477,7 +532,7 @@ def test_handle_view_event_round_trips_over_the_wire(nats_url):
         server.stop()
 
 
-# --- streamed reads over transfer frames (docs/adr/20261003_nats-streamed-results.md)
+# --- streamed reads over transfer frames
 
 
 class _StreamingPort(_InMemoryTripleStorePort):
@@ -608,3 +663,88 @@ def test_the_client_presents_its_credentials_token():
         "nats://127.0.0.1:4222", StaticTokenSource("token-1", "api")
     )
     assert client._current_token() == "token-1"
+
+
+@pytest.mark.integration
+def test_a_write_behind_a_long_one_waits_for_its_own_deadline(nats_url):
+    """A chat's graph write queued behind a billing apply (the store takes one
+    write at a time) fails at the client's default deadline, not with its own."""
+
+    class _BusyStore(_InMemoryTripleStorePort):
+        def insert(self, triples: Graph, graph_name: URIRef) -> None:
+            time.sleep(0.8)  # the write lock is held by another writer
+            super().insert(triples, graph_name)
+
+    wrapped = _BusyStore()
+    server = _PrimaryAdapterServer(nats_url, JWT_SECRET, wrapped)
+    server.start()
+    client = TripleStoreSecondaryAdapterNATSClient(
+        nats_url=nats_url,
+        credentials=TEST_TOKENS.source("engine"),
+        timeout_seconds=0.3,
+    )
+    graph_name = URIRef("http://test.example.org/chat")
+    triples = Graph()
+    triples.add(
+        (
+            URIRef("http://test.example.org/m"),
+            URIRef("http://test.example.org/p"),
+            URIRef("http://test.example.org/o"),
+        )
+    )
+    try:
+        client.list_graphs()  # warm the connection
+        with pytest.raises(TimeoutError):
+            client.insert(triples, graph_name)
+        client.insert(triples, graph_name, timeout_seconds=10.0)
+        assert len(wrapped.get()) == 1  # both writes landed: the same triple
+    finally:
+        client.close()
+        server.stop()
+
+
+@pytest.mark.integration
+def test_a_fuseki_update_without_an_answer_reaches_the_caller_as_a_request_error(
+    nats_url,
+):
+    """Not as RuntimeError("triple_store NATS RPC failed (INTERNAL)"): the caller
+    can tell a timeout behind another writer from a rejected update."""
+    from unittest.mock import MagicMock, patch
+
+    import requests
+    from naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2 import (
+        ApacheJenaTDB2,
+    )
+
+    session = MagicMock()
+    session.get.return_value = MagicMock(status_code=200)
+    with patch(
+        "naas_abi_core.services.triple_store.adaptors.secondary.ApacheJenaTDB2.requests.Session",
+        return_value=session,
+    ):
+        fuseki = ApacheJenaTDB2(jena_tdb2_url="http://fuseki:3030/ds", timeout=60)
+    session.post.side_effect = requests.ReadTimeout("Read timed out. (read timeout=60)")
+
+    server = _PrimaryAdapterServer(nats_url, JWT_SECRET, fuseki)
+    server.start()
+    client = TripleStoreSecondaryAdapterNATSClient(
+        nats_url=nats_url,
+        credentials=TEST_TOKENS.source("engine"),
+        timeout_seconds=10.0,
+    )
+    triples = Graph()
+    triples.add(
+        (
+            URIRef("http://test.example.org/m"),
+            URIRef("http://test.example.org/p"),
+            URIRef("http://test.example.org/o"),
+        )
+    )
+    try:
+        with pytest.raises(Exceptions.RequestError) as exc_info:
+            client.insert(triples, URIRef("http://test.example.org/chat"))
+        assert exc_info.value.operation == "update"
+        assert "ReadTimeout" in str(exc_info.value)
+    finally:
+        client.close()
+        server.stop()

@@ -1,21 +1,23 @@
 import Link from 'next/link';
 
 type NotAvailablePageProps = {
-  params: {
+  params: Promise<{
     workspaceId: string;
-  };
-  searchParams?: {
+  }>;
+  searchParams?: Promise<{
     from?: string;
-  };
+  }>;
 };
 
-export default function WorkspaceFeatureNotAvailablePage({
+export default async function WorkspaceFeatureNotAvailablePage({
   params,
   searchParams,
 }: NotAvailablePageProps) {
-  const fallbackPath = `/workspace/${params.workspaceId}/chat`;
+  const { workspaceId } = await params;
+  const from = (await searchParams)?.from;
+  const fallbackPath = `/workspace/${workspaceId}/chat`;
 
-  const blockedPath = searchParams?.from ? decodeURIComponent(searchParams.from) : null;
+  const blockedPath = from ? decodeURIComponent(from) : null;
 
   return (
     <div className="flex h-full w-full items-center justify-center bg-background p-6">

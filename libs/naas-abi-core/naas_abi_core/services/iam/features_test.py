@@ -1,4 +1,4 @@
-"""Feature policies: ``nexus:UseFeature`` comes only from them (RFC §7)."""
+"""Feature policies: ``nexus:UseFeature`` comes only from them."""
 
 import pytest
 

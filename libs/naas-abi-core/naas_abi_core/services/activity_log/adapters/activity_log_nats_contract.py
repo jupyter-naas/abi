@@ -18,8 +18,7 @@ full wire contract this pairs with.
 SERVICE_NAME = "activity_log"
 SERVICE_VERSION = "1.0.0"
 SUBJECT_PREFIX = "abi.svc.activity_log.v1"
-# Streamed queries: transfer/v1 sessions, operation ``query``
-# (docs/adr/20261003_nats-streamed-results.md).
+# Streamed queries: transfer/v1 sessions, operation ``query``.
 TRANSFER_PREFIX = f"{SUBJECT_PREFIX}.transfer"
 
 # Header carrying the caller's engine token (see naas_abi_core.engine.nats_auth).

@@ -3,7 +3,7 @@
 Runs the ownership domain (``naas_abi_core.engine.ownership``) for the
 synchronous engine: claim at load, renew while serving, stand by and take over
 during a deploy, release at shutdown. See
-docs/adr/20261006_single-serving-engine.md.
+``engine/ownership/AGENTS.md``.
 
 The lease lives on its own event loop thread and NATS connection, never on
 ``nats_runtime``'s: a renewal must not wait behind a busy service endpoint,

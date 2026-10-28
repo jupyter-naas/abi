@@ -47,14 +47,12 @@ async def test_load_snapshot_reads_every_identity_table(tmp_path, nexus_iam) -> 
                 id="usr-1",
                 email="alice@example.com",
                 name="Alice",
-                company="Acme",
-                role="CTO",
+                organization="Acme",
+                job_title="CTO",
                 is_superadmin=True,
                 created_at=T0,
             ),
-            UserModel(
-                id="usr-2", email="bob@example.com", name="Bob", created_at=T1
-            ),
+            UserModel(id="usr-2", email="bob@example.com", name="Bob", created_at=T1),
             OrganizationModel(
                 id="org-1",
                 name="Acme Group",
@@ -102,7 +100,7 @@ async def test_load_snapshot_reads_every_identity_table(tmp_path, nexus_iam) -> 
         "alice@example.com",
         T0,
     )
-    assert (alice.company, alice.job_title, alice.is_superadmin) == ("Acme", "CTO", True)
+    assert (alice.organization, alice.job_title, alice.is_superadmin) == ("Acme", "CTO", True)
     assert [u.id for u in snapshot.users] == ["usr-1", "usr-2"]
 
     [org] = snapshot.organizations

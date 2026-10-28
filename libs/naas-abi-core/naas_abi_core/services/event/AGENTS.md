@@ -17,7 +17,7 @@ Subscribers do **not** automatically replay history; for catch-up use `query` / 
 event/
 ├── EventPort.py            # IEventAdapter, IEventService, StoredEvent, exceptions
 ├── EventService.py         # main service
-├── iam_catalog.py          # the event:* actions and resource types (RFC §6.4)
+├── iam_catalog.py          # the event:* actions and resource types
 ├── EventFactory.py         # EventSQLite_find_storage
 ├── EventCodec.py           # to_event_dict / serialize / from_event_dict / deserialize
 ├── EventFilter.py          # build_where (SQL pushdown) + matches (in-memory eval)
@@ -111,7 +111,16 @@ types as folders, events newest first. The log is append-only by design.
 
 `EventService` checks every operation with IAM when it is wired with it (an
 owner); a facade over NATS is not, and the owner it calls checks, as the
-request's verified caller. The catalog is `iam_catalog.py`, registered at boot.
+request's verified caller. The catalog is `iam_catalog.py`, registered at boot;
+the cross-cutting guard is described in
+[`services/iam/AGENTS.md`](../iam/AGENTS.md) ("Enforcing in a domain service").
+
+Resource types: `event_type/<class IRI>` (opaque id, placed by prefix) and
+`cursor/<consumer>/<event type>` (path id, placed). Levels: `ListEventTypes`
+list; `Query`, `QueryStream`, `MaxSeq`, `QueryForConsumer`, `GetCursor` read;
+`Append`, `SetCursor` write. The NATS subject of an action is the operation
+under `abi.svc.event.v1.` (`query`, `max_seq`, `append`, ...); a streamed read
+uses the `transfer.*` subjects.
 
 | Operation | Action | Resource |
 |---|---|---|
@@ -130,7 +139,7 @@ request's verified caller. The catalog is `iam_catalog.py`, registered at boot.
   as if it held no events; one who can see it but not perform the action gets
   `PermissionDeniedError` (`PERMISSION_DENIED`). `get_stored` of an invisible
   type's row and of a missing seq fail the same way.
-- A read with no type filters per type (RFC §6.3). `limit` applies after
+- A read with no type filters per type (an "all" call is filtered per item). `limit` applies after
   filtering; a type first appended after the types were listed is left out.
 - `subscribe` is checked once, when subscribing; live events are not checked one
   by one.
@@ -163,8 +172,7 @@ EventBridge-style: `eq`, `prefix`, `suffix`, `contains`, `in`, `gt`, `gte`, `lt`
 
 `EventPostgreSQLAdapter` filter semantics follow SQLite's, with two deliberate
 differences: numeric ranges ignore values that are not numbers, and LIKE
-wildcards in prefix, suffix and contains match literally. Decision:
-`docs/adr/20261006_shared-event-and-activity-log-storage.md`.
+wildcards in prefix, suffix and contains match literally.
 
 ### Archive (`EventPostgreSQLArchive.py`)
 
@@ -181,7 +189,7 @@ from service adapters. Each run:
    are deleted.
 
 Idle consumers are logged and left behind. Archived events are read with SQL on
-the dataset. Decision: `docs/adr/20261006_event-log-archive.md`.
+the dataset.
 
 ## Factory (`EventFactory.py`)
 
@@ -246,13 +254,13 @@ delegated token (`abi:delegated:agent`, `act` the acting service, `sub` the user
 made by IAM's token exchange, never a header (the old `Abi-On-Behalf-Of` header is
 refused); trace and target workspace come from the request's `context`. Never read identity from request fields
 (`principal_id` and `tenant_id` are reserved). Clients of `api` and `engine` send a
-delegation for the current call's user, and the call's trace and workspace. Nothing authorizes on it yet.
+delegation for the current call's user, and the call's trace and workspace. The domain service then authorizes the call (see "Authorization").
 
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception
 mapping in the adapter. Primaries use `respond_protobuf` for bounded replies.
 Requests and replies above the broker limit (8 MiB, or lower) overflow as
-transfer frames up to 256 MiB (docs/adr/20261003_nats-rpc-overflow.md); above
+transfer frames up to 256 MiB; above
 that, at the overflow host's capacity, or with an older peer, the call fails
 with non-retryable `PAYLOAD_TOO_LARGE`. Micro-service error headers raise
 instead of becoming an empty success. Overflowed values are held whole in
@@ -267,7 +275,7 @@ primary answers non-retryable `INVALID_FILTER`, and the client raises
 ### Streamed queries
 
 `IEventAdapter.query_stream(...)` reads what `query` returns, as the caller
-iterates, inside the `with` (docs/adr/20261003_nats-streamed-results.md). The
+iterates, inside the `with`. The
 highest `seq` (of `event_type` when given) is pinned when the block opens:
 events appended while it is read are not included, so the stream always ends.
 The port's default reads `STREAM_PAGE` (500) events at a time by keyset on

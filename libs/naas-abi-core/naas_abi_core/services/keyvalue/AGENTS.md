@@ -88,8 +88,9 @@ kv = KeyValueService(RedisAdapter(redis_url="redis://localhost:6379/0"))
 
 ## Authorization
 
-Every operation is checked in the domain service against IAM (RFC
-[§5, §6.4](../../../../../docs/specs/rfcs/20261013_identity-and-authorization.md)),
+Every operation is checked in the domain service against IAM
+(`ResourceGuard`, see "Enforcing in a data service" in
+[`../iam/AGENTS.md`](../iam/AGENTS.md)),
 for the caller of the current `CallContext`, so in process and over NATS answer
 the same. The catalog is `iam_catalog.py`, registered by the serving engine at
 boot. A caller who cannot see a resource gets `KVNotFoundError` (`KV_NOT_FOUND`; `exists` is False); one who can see it but not
@@ -98,7 +99,22 @@ an engine with IAM (a library use, a NATS facade whose server checks) does not
 check. The contract test is `KeyValueService_authorization_test.py`: no policy, granted and denied
 principals, in process and over NATS.
 
-* Each key is `key/<key>` (opaque), placed by key prefix.
+Resource type: `key/<key>` (`opaque`), placed by key prefix.
+
+| Action | Level | Resource | Subject (`abi.svc.keyvalue.v1.`) |
+|---|---|---|---|
+| `ListKeys` | list | each listed `key/<key>` | `list_keys` |
+| `Get` | read | `key/<key>` | `get` |
+| `Exists` | read | `key/<key>` | `exists` |
+| `GetTtl` | read | `key/<key>` | `get_ttl` |
+| `Set` | write | `key/<key>` | `set` |
+| `SetIfNotExists` | write | `key/<key>` | `set_if_not_exists` |
+| `Delete` | write | `key/<key>` | `delete` |
+| `DeleteIfValueMatches` | write | `key/<key>` | `delete_if_value_matches` |
+
+* `lock(key)` acquires with `set_if_not_exists` and releases with
+  `delete_if_value_matches`, so it needs `SetIfNotExists` and
+  `DeleteIfValueMatches` on the key.
 * `list_keys` pages after filtering: it scans only the key prefixes the
   caller's Allows name (`ResourceGuard.id_prefixes`), then drops what a Deny or
   a placement excludes.
@@ -133,13 +149,13 @@ delegated token (`abi:delegated:agent`, `act` the acting service, `sub` the user
 made by IAM's token exchange, never a header (the old `Abi-On-Behalf-Of` header is
 refused); trace and target workspace come from the request's `context`. Never read identity from request fields
 (`principal_id` and `tenant_id` are reserved). Clients of `api` and `engine` send a
-delegation for the current call's user, and the call's trace and workspace. Nothing authorizes on it yet.
+delegation for the current call's user, and the call's trace and workspace. The domain service authorizes the call on that context (see "Authorization").
 
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception
 mapping in the adapter. Primaries use `respond_protobuf` for bounded replies.
 Requests and replies above the broker limit (8 MiB, or lower) overflow as
-transfer frames up to 256 MiB (docs/adr/20261003_nats-rpc-overflow.md); above
+transfer frames up to 256 MiB (`naas_abi_core/engine/nats_rpc.py`); above
 that, at the overflow host's capacity, or with an older peer, the call fails
 with non-retryable `PAYLOAD_TOO_LARGE`. Micro-service error headers raise
 instead of becoming an empty success. Overflowed values are held whole in

@@ -1,26 +1,28 @@
-"""Per-caller visibility of the naas_abi feature office agents.
+"""Feature office agents: workspace roster + per-caller visibility.
 
-``agent_configs.enabled`` is workspace-scoped: it answers "does this
-workspace run this agent", which the ``agents:`` roster seed decides. It
-cannot answer "may *this* user see it", because two members of the same
-workspace hold different roles and therefore different feature access.
+On sync, naas_abi office agents are enabled when their Nexus feature is on
+for the workspace (union across roles). That keeps ``agent_configs`` aligned
+with Apps, Search, Ontology, and the other sections without listing every
+office agent in YAML.
 
-So the role rule is applied when a listing is rendered, never by writing
-``enabled``. A member who cannot open Ontology does not get the Ontology
-agent in the picker, and the right pane falls back to the workspace
-default there, while the owner in the same workspace still sees it.
+Per-caller filtering still applies at list/chat time: a member without
+Ontology does not see OntologyAgent in the picker, and Abi drops that
+sub-agent for their turn. Non-office agents (client modules, Abi itself)
+are not feature-gated.
 
-The rule covers the ``naas_abi`` office agents only: every other module's
-agents (and naas_abi's own Abi orchestrator) pass through untouched, since
-no feature flag governs them.
+Every agent of a module, naas_abi's own included, also needs its module
+scope (``module:UseAgent`` in the workspace, ``services/agents/scopes.py``):
+``caller_usable_agents`` is the roster a caller's turn may run and reach as
+sub-agents.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from typing import TypeVar
+from typing import Any, TypeVar
 
-from naas_abi.agents.feature.registry import spec_for_class_name
+from naas_abi.agents.feature.registry import feature_office_agent_specs, spec_for_class_name
+from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import resolve_agent_ref
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 
 AgentT = TypeVar("AgentT")
@@ -42,13 +44,110 @@ async def caller_feature_flags(
     """Whether the caller may use each of ``keys`` in this workspace, from IAM.
 
     IAM's ``UseFeature`` is what the workspace listing sends the frontend (the
-    deployment's ``role_baseline``, the org overlay, the workspace overrides),
-    so the agents a user is offered match the sections they can open.
+    deployment's ``role_baseline``, the org overlay, the sets, any policy
+    granting a feature), so the agents a user is offered match the sections they
+    can open.
     """
     return {
         key: await authz.allowed("UseFeature", user=user, workspace=workspace_id, id=key)
         for key in sorted(set(keys))
     }
+
+
+async def _workspace_feature_inputs(
+    db: object,
+    workspace_id: str,
+) -> tuple[str | None, Mapping[str, list[str]] | None]:
+    from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
+    from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
+        OrganizationSecondaryAdapterPostgres,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.organizations.service import OrganizationService
+    from sqlalchemy import select
+
+    result = await db.execute(  # type: ignore[attr-defined]
+        select(WorkspaceModel.organization_id).where(WorkspaceModel.id == workspace_id)
+    )
+    row = result.one_or_none()
+    organization_id = row[0] if row else None
+
+    org_baseline = None
+    if organization_id:
+        org_service = OrganizationService(adapter=OrganizationSecondaryAdapterPostgres(db=db))
+        record = await org_service.get_role_features(org_id=organization_id)
+        org_baseline = record.role_baseline if record is not None else None
+
+    return organization_id, org_baseline
+
+
+async def workspace_union_feature_flags(db: object, workspace_id: str) -> dict[str, bool]:
+    """Features any baseline role may use in this workspace, within its set (for
+    agent sync)."""
+    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
+        BASELINE_ROLES,
+        KNOWN_FEATURE_KEYS,
+        build_feature_flags,
+    )
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+    from naas_abi.apps.nexus.apps.api.app.services.iam.sets import effective_features_async
+
+    organization_id, org_baseline = await _workspace_feature_inputs(db, workspace_id)
+    feature_set = await effective_features_async(organization_id, workspace_id)
+    merged = dict.fromkeys(KNOWN_FEATURE_KEYS, False)
+    for role in BASELINE_ROLES:
+        flags = build_feature_flags(
+            role=role,
+            feature_flags_config=live_settings().feature_flags,
+            organization_id=organization_id,
+            organization_override=org_baseline,
+            feature_set=feature_set,
+        )
+        for key, value in flags.items():
+            merged[key] = merged.get(key, False) or bool(value)
+    return merged
+
+
+def feature_office_class_names_for_flags(
+    flags: Mapping[str, bool],
+    registry: Mapping[str, Any],
+) -> set[str]:
+    """Registry keys for naas_abi office agents whose feature is on."""
+    resolved: set[str] = set()
+    for spec in feature_office_agent_specs():
+        if not any(flags.get(key, False) for key in spec.feature_keys):
+            continue
+        class_name = resolve_agent_ref(spec.roster_ref, registry)
+        if class_name:
+            resolved.add(class_name)
+    return resolved
+
+
+async def caller_usable_agents(
+    agents: Iterable[AgentT], user: object, workspace_id: str, flags: Mapping[str, bool]
+) -> list[AgentT]:
+    """The roster entries the caller may use in this workspace: the office agents
+    of features it holds, then only the module agents it holds a scope for."""
+    from naas_abi.apps.nexus.apps.api.app.services.agents.scopes import scope_resolver
+
+    return await authz.filter_scopes(
+        filter_feature_agents(agents, flags),
+        user=user,
+        workspace=workspace_id,
+        scope_of=scope_resolver(),  # type: ignore[arg-type]
+    )
+
+
+def caller_enabled_class_names(
+    agents: Iterable[AgentT],
+    flags: Mapping[str, bool],
+) -> frozenset[str]:
+    """Enabled registry keys visible to this caller (roster ∩ feature access)."""
+    names = [
+        class_name
+        for agent in filter_feature_agents(agents, flags)
+        if getattr(agent, "enabled", False) and (class_name := getattr(agent, "class_name", None))
+    ]
+    return frozenset(names)
 
 
 def feature_agent_visible(class_name: str | None, flags: Mapping[str, bool]) -> bool:
@@ -83,3 +182,33 @@ def filter_feature_agents(
         or getattr(agent, "is_default", False)
         or feature_agent_visible(getattr(agent, "class_name", None), flags)
     ]
+
+
+async def bind_usable_agents(agent_service: Any, user: object, workspace_id: str) -> frozenset[str]:
+    """Set, for the rest of this request, the agent classes the caller may run
+    and reach as sub-agents in ``workspace_id`` (the in-process runtime runs no
+    other: its enabled roster, its features, its module scopes), and the module
+    workflows and pipelines its agents may run as tools."""
+    from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__primary_adapter__FastAPI import (  # noqa: E501
+        workspace_roster,
+    )
+    from naas_abi_core.services.agent.context import agent_workspace_enabled_class_names
+
+    roster = await workspace_roster(agent_service, workspace_id)
+    flags = await caller_feature_flags(user, workspace_id, feature_keys_of(roster))
+    usable = await caller_usable_agents(roster, user, workspace_id, flags)
+    allowed = caller_enabled_class_names(usable, flags)
+    agent_workspace_enabled_class_names.set(allowed)
+    await bind_usable_processes(user, workspace_id)
+    return allowed
+
+
+async def bind_usable_processes(user: object, workspace_id: str | None) -> None:
+    """Set the module workflows and pipelines this request's agents may run as
+    tools: those the caller may run in ``workspace_id``; none without one."""
+    from naas_abi.apps.nexus.apps.api.app.services.agents.scopes import usable_process_scopes
+    from naas_abi_core.services.agent.context import agent_usable_module_scopes
+
+    agent_usable_module_scopes.set(
+        await usable_process_scopes(user, workspace_id) if workspace_id else frozenset()
+    )

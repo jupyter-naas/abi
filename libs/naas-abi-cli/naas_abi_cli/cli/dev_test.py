@@ -34,6 +34,13 @@ def _spec(name: str, port: int) -> "ServiceSpec":
     return dev._service_spec(name, port)
 
 
+@pytest.fixture(autouse=True)
+def _outside_the_repository(monkeypatch, tmp_path) -> None:
+    """Run from an empty folder: launching the api generates ABI_API_KEY into
+    the project's .env, which must not be the repository's own."""
+    monkeypatch.chdir(tmp_path)
+
+
 # =============================================================================
 # Browser-facing URLs
 # =============================================================================
@@ -250,6 +257,24 @@ def test_every_service_that_loads_the_engine_config_gets_the_idp_issuer(
     assert captured["env"]["ABI_IDP_ISSUER"] == issuer
 
 
+def test_dagster_renders_the_same_public_hosts_as_the_api(monkeypatch) -> None:
+    # Project configs template {{ secret.PUBLIC_WEB_HOST }}; without it the
+    # code server fails to load its definitions (no TTY to prompt).
+    envs: dict = {}
+    monkeypatch.setattr(
+        dev,
+        "_spawn",
+        lambda spec, cmd, cwd, env: envs.update({spec.name: env}) or 1234,
+    )
+    monkeypatch.setattr(dev, "ensure_api_key", lambda path: "key")
+
+    dev._launch_api(_spec("api", PORTS["api"]), PORTS)
+    dev._launch_dagster(_spec("dagster", PORTS["dagster"]), PORTS)
+
+    for key in ("PUBLIC_WEB_HOST", "PUBLIC_API_HOST", "FRONTEND_URL", "NEXUS_API_URL"):
+        assert envs["dagster"][key] == envs["api"][key]
+
+
 # =============================================================================
 # Boot visibility
 #
@@ -445,7 +470,7 @@ def test_custom_browser_host_is_allowed_by_cors(monkeypatch) -> None:
 
 
 # =============================================================================
-# nats — added by NATS mode, the default (docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md)
+# nats — added by NATS mode, the default
 #
 # Unlike oxigraph (embedded via pyoxigraph), nats-server is a real external
 # binary this shells out to. It is not in ALL_SERVICES: NATS mode adds it
@@ -490,6 +515,7 @@ def test_nats_binds_the_ipv4_literal_and_both_ports(monkeypatch, tmp_path) -> No
         lambda spec, cmd, cwd, env: captured.update(cmd=cmd) or 1234,
     )
     monkeypatch.setattr(dev.shutil, "which", lambda name: "/usr/local/bin/nats-server")
+    monkeypatch.setattr(dev, "_nats_server_version", lambda binary: (2, 14, 7))
     # The launcher writes storage/nats/nats.conf and the passwords in .env.
     monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
 
@@ -518,6 +544,7 @@ def test_nats_is_started_with_a_config_file_raising_max_payload_to_8mb(
         lambda spec, cmd, cwd, env: captured.update(cmd=cmd) or 1234,
     )
     monkeypatch.setattr(dev.shutil, "which", lambda name: "/usr/local/bin/nats-server")
+    monkeypatch.setattr(dev, "_nats_server_version", lambda binary: (2, 14, 7))
     monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
 
     dev._launch_nats(_spec("nats", 13380))
@@ -535,6 +562,7 @@ def test_nats_config_file_is_rewritten_on_every_launch(monkeypatch, tmp_path) ->
     """A stale hand-edited file must not silently pin an old limit."""
     monkeypatch.setattr(dev, "_spawn", lambda spec, cmd, cwd, env: 1234)
     monkeypatch.setattr(dev.shutil, "which", lambda name: "/usr/local/bin/nats-server")
+    monkeypatch.setattr(dev, "_nats_server_version", lambda binary: (2, 14, 7))
     monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
     config_path = tmp_path / "storage" / "nats" / "nats.conf"
     config_path.parent.mkdir(parents=True)
@@ -565,6 +593,7 @@ def test_the_dev_broker_has_the_engine_and_auth_users_and_a_callout(
         dev, "_spawn", lambda spec, cmd, cwd, env: captured.update(cmd=cmd) or 1234
     )
     monkeypatch.setattr(dev.shutil, "which", lambda name: "/usr/local/bin/nats-server")
+    monkeypatch.setattr(dev, "_nats_server_version", lambda binary: (2, 14, 7))
     monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
 
     dev._launch_nats(_spec("nats", 13380))
@@ -908,6 +937,8 @@ def test_the_overlay_turns_tracing_on_when_asked(monkeypatch, tmp_path) -> None:
 
     monkeypatch.setattr(dev, "_project_root", lambda: tmp_path / "zen")
     monkeypatch.setattr(dev, "_dev_dir", lambda: tmp_path / "dev")
+    # No discovery project in a config: the service is named after the folder.
+    monkeypatch.setattr(dev, "_project_nats", lambda: None)
 
     path = dev._write_dev_overlay(
         {"nats": 13042, "jaeger": 15042},
@@ -952,7 +983,9 @@ def _modules(*names: str) -> dict:
     )
 
     return {
-        name: DevModuleConfiguration(name=name, module="probe", args=[name])
+        name: DevModuleConfiguration(
+            name=name, module="probe", module_id=f"acme.{name}", args=[name]
+        )
         for name in names
     }
 
@@ -1021,7 +1054,11 @@ def test_with_nats_starts_the_dev_modules_after_the_stack(stack) -> None:
     ]
 
 
-def test_up_runs_on_nats_with_the_dev_modules_by_default(stack) -> None:
+def test_up_runs_on_nats_by_default_when_the_config_has_a_nats_block(
+    stack, monkeypatch
+) -> None:
+    monkeypatch.setattr(dev, "_project_nats", lambda: {"jwt_secret": ""})
+
     result = _abi("up", "-d")
 
     assert result.exit_code == 0, result.output
@@ -1033,6 +1070,55 @@ def test_up_runs_on_nats_with_the_dev_modules_by_default(stack) -> None:
         "researcher",
         "orchestrator",
     ]
+
+
+def test_up_stays_in_process_by_default_without_a_nats_block(stack, tmp_path) -> None:
+    """A project without `nats:` keeps its mode: no broker, no modules, no overlay."""
+    result = _abi("up", "-d")
+
+    assert result.exit_code == 0, result.output
+    assert [name for _, name in stack] == list(dev.ALL_SERVICES)
+    assert not (tmp_path / dev.DEV_OVERLAY_FILENAME).exists()
+
+
+def _venv(root: Path, *, dagster: bool) -> None:
+    (root / ".venv" / "bin").mkdir(parents=True)
+    if dagster:
+        (root / ".venv" / "bin" / "dagster").write_text("")
+
+
+def test_in_process_leaves_dagster_out_when_the_project_lacks_it(
+    stack, tmp_path
+) -> None:
+    """Dagster is a legacy extra: a project without it starts the rest."""
+    _venv(tmp_path, dagster=False)
+
+    result = _abi("up", "-d")
+
+    assert result.exit_code == 0, result.output
+    assert [name for _, name in stack] == [
+        name for name in dev.ALL_SERVICES if name != "dagster"
+    ]
+    assert "uv add 'naas-abi-core[dagster]'" in result.output
+
+
+def test_in_process_starts_dagster_when_the_project_has_it(stack, tmp_path) -> None:
+    _venv(tmp_path, dagster=True)
+
+    result = _abi("up", "-d")
+
+    assert result.exit_code == 0, result.output
+    assert [name for _, name in stack] == list(dev.ALL_SERVICES)
+
+
+def test_dagster_asked_for_without_it_installed_is_refused(stack, tmp_path) -> None:
+    _venv(tmp_path, dagster=False)
+
+    result = _abi("up", "--service", "dagster", "-d")
+
+    assert result.exit_code != 0
+    assert "naas-abi-core[dagster]" in result.output
+    assert stack == []
 
 
 def test_without_nats_is_the_in_process_stack(stack, tmp_path) -> None:
@@ -1063,17 +1149,95 @@ def test_without_nats_turns_off_the_project_nats_block(
     assert "--without-nats" in result.output
 
 
+@pytest.mark.parametrize("mode", ["--with-nats", "--without-nats"])
+def test_up_seeds_the_secrets_of_the_project_nats_block(
+    stack, monkeypatch, tmp_path, mode
+) -> None:
+    """The engine renders the config's `nats:` block before the overlay turns
+    it off, and a missing secret fails without a TTY: seeded in both modes."""
+    from naas_abi_cli.cli import admin_credentials
+
+    monkeypatch.setattr(dev, "_project_nats", lambda: {"nats_url": ""})
+    monkeypatch.setattr(
+        dev, "ensure_nats_callout_seed", admin_credentials.ensure_nats_callout_seed
+    )
+    monkeypatch.setattr(dev, "_dev_modules", lambda strict=True: {})
+
+    result = _abi("up", mode, "-d")
+
+    assert result.exit_code == 0, result.output
+    env = (tmp_path / ".env").read_text()
+    for key in (
+        "NATS_ENGINE_PASSWORD",
+        "NATS_AUTH_PASSWORD",
+        "NATS_AUTH_CALLOUT_SEED",
+    ):
+        assert f"{key}=" in env
+
+
+def test_up_writes_no_nats_secret_for_a_project_without_nats(stack, tmp_path) -> None:
+    result = _abi("up", "-d")
+
+    assert result.exit_code == 0, result.output
+    env = tmp_path / ".env"
+    assert not env.exists() or "NATS_" not in env.read_text()
+
+
 def test_up_fails_before_starting_anything_without_nats_server(
     stack, monkeypatch
 ) -> None:
     monkeypatch.setattr(dev, "_nats_server_binary", _nats_server_binary)
     monkeypatch.setattr(dev.shutil, "which", lambda name: None)
 
-    result = _abi("up", "-d")
+    result = _abi("up", "--with-nats", "-d")
 
     assert result.exit_code != 0
     assert "nats-server" in result.output and "--without-nats" in result.output
     assert stack == []
+
+
+def _nats_server_reporting(monkeypatch, output: str) -> None:
+    import subprocess
+
+    monkeypatch.setattr(dev, "_nats_server_binary", _nats_server_binary)
+    monkeypatch.setattr(dev.shutil, "which", lambda name: "/opt/bin/nats-server")
+    monkeypatch.setattr(
+        dev.subprocess,
+        "run",
+        lambda *a, **k: subprocess.CompletedProcess(a[0], 0, stdout=output, stderr=""),
+    )
+
+
+def test_up_refuses_a_nats_server_older_than_2_14(stack, monkeypatch) -> None:
+    """Module job schedules need JetStream message schedules (2.14)."""
+    _nats_server_reporting(monkeypatch, "nats-server: v2.11.8\n")
+
+    result = _abi("up", "--with-nats", "-d")
+
+    assert result.exit_code != 0
+    assert "2.11.8" in result.output and "2.14" in result.output
+    assert stack == []
+
+
+def test_up_refuses_a_nats_server_whose_version_it_cannot_read(
+    stack, monkeypatch
+) -> None:
+    _nats_server_reporting(monkeypatch, "")
+
+    result = _abi("up", "--with-nats", "-d")
+
+    assert result.exit_code != 0
+    assert "version" in result.output
+    assert stack == []
+
+
+@pytest.mark.parametrize("output", ["nats-server: v2.14.7\n", "nats-server: v3.0.0\n"])
+def test_up_accepts_nats_server_2_14_and_later(stack, monkeypatch, output) -> None:
+    _nats_server_reporting(monkeypatch, output)
+
+    result = _abi("up", "--with-nats", "-d")
+
+    assert result.exit_code == 0, result.output
 
 
 def test_selecting_services_leaves_the_modules_alone(stack) -> None:
@@ -1298,3 +1462,106 @@ def test_only_the_idp_module_is_told_the_client_secret(monkeypatch, tmp_path) ->
         == "http://localhost:9942/api/auth/oidc/callback"
     )
     assert not any(k.startswith("ABI_IDP_") for k in spawned["researcher"])
+
+
+def test_nexus_web_keeps_its_open_key_next_to_nats() -> None:
+    """nats has no web page on its client port: `n` opens Nexus web."""
+    started = [
+        dev._service_spec(name, port)
+        for name, port in (("nats", 13042), ("api", 9879), ("nexus-web", 12042))
+    ]
+
+    assert dev._open_letter_map(started) == {"a": "api", "n": "nexus-web"}
+
+
+# =============================================================================
+# Commands that load the engine while `abi dev up` runs
+# =============================================================================
+
+
+def _running_dev_project(tmp_path: Path, *, alive: bool = True) -> Path:
+    """A project with the overlay `abi dev up` wrote and the api's pid file."""
+    (tmp_path / "pyproject.toml").write_text("[tool.uv.sources]\n")
+    dev_dir = tmp_path / ".abi" / "dev"
+    dev_dir.mkdir(parents=True)
+    overlay = dev_dir / "dev.overlay.yaml"
+    overlay.write_text('{"nats": null}\n')
+    (dev_dir / "instance.json").write_text(
+        '{"project_root": "x", "offset": 1, "ports": {"api": 9880}}'
+    )
+    # PID 1 is alive; a huge pid is not.
+    (dev_dir / "api.pid").write_text("1" if alive else "4194000")
+    return overlay
+
+
+def test_commands_use_the_overlay_of_the_running_dev_stack(
+    monkeypatch, tmp_path
+) -> None:
+    overlay = _running_dev_project(tmp_path)
+    monkeypatch.setenv("ABI_CONFIG_OVERLAY", "")
+
+    dev.use_running_dev_overlay(["chat"])
+
+    assert Path(dev.os.environ["ABI_CONFIG_OVERLAY"]) == overlay
+
+
+def test_a_subfolder_of_the_project_uses_the_overlay_too(monkeypatch, tmp_path) -> None:
+    overlay = _running_dev_project(tmp_path)
+    (tmp_path / "src").mkdir()
+    monkeypatch.chdir(tmp_path / "src")
+    monkeypatch.setenv("ABI_CONFIG_OVERLAY", "")
+
+    dev.use_running_dev_overlay(["agent", "list"])
+
+    assert Path(dev.os.environ["ABI_CONFIG_OVERLAY"]) == overlay
+    assert Path.cwd() == tmp_path / "src"
+
+
+def test_an_overlay_chosen_by_the_caller_wins(monkeypatch, tmp_path) -> None:
+    _running_dev_project(tmp_path)
+    monkeypatch.setenv("ABI_CONFIG_OVERLAY", "/somewhere/else.yaml")
+
+    dev.use_running_dev_overlay(["chat"])
+
+    assert dev.os.environ["ABI_CONFIG_OVERLAY"] == "/somewhere/else.yaml"
+
+
+def test_a_stopped_dev_stack_leaves_its_overlay_alone(monkeypatch, tmp_path) -> None:
+    _running_dev_project(tmp_path, alive=False)
+    monkeypatch.setenv("ABI_CONFIG_OVERLAY", "")
+
+    dev.use_running_dev_overlay(["chat"])
+
+    assert not dev.os.environ.get("ABI_CONFIG_OVERLAY")
+
+
+@pytest.mark.parametrize("command", ["dev", "stack", "start", "new", "deploy"])
+def test_commands_that_do_not_load_the_engine_keep_their_environment(
+    monkeypatch, tmp_path, command: str
+) -> None:
+    _running_dev_project(tmp_path)
+    monkeypatch.setenv("ABI_CONFIG_OVERLAY", "")
+
+    dev.use_running_dev_overlay([command, "up"])
+
+    assert not dev.os.environ.get("ABI_CONFIG_OVERLAY")
+
+
+def test_outside_a_dev_project_nothing_changes(monkeypatch) -> None:
+    monkeypatch.setenv("ABI_CONFIG_OVERLAY", "")
+
+    dev.use_running_dev_overlay(["chat"])
+
+    assert not dev.os.environ.get("ABI_CONFIG_OVERLAY")
+
+
+def test_a_project_without_nats_has_no_built_in_identity_provider(monkeypatch) -> None:
+    # The IdP is a module over NATS: the legacy project neither runs nor lists it.
+    monkeypatch.setattr(dev, "load_dev_modules", dict)
+    monkeypatch.setattr(dev, "_project_identity", lambda: None)
+
+    monkeypatch.setattr(dev, "_project_declares_nats", lambda: True)
+    assert "idp" in dev._dev_modules()
+
+    monkeypatch.setattr(dev, "_project_declares_nats", lambda: False)
+    assert dev._dev_modules() == {}

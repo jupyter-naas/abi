@@ -1,151 +1,163 @@
 # EngineConfiguration
 
 ## What it is
-- Pydantic-based configuration loader for the ABI engine.
-- Loads YAML configuration files, supports Jinja2 templating, and resolves secrets via:
-  - Environment variables
-  - A bootstrap `.env` secret adapter (for first-pass loading)
-  - The configured secret service (with optional interactive prompting)
+- Pydantic models and loader utilities for configuring the ABI engine from YAML.
+- Supports:
+  - Jinja2-templated YAML (including `{% include %}` relative to the config file directory).
+  - Two-pass secret resolution (bootstrap pass to load the secret service, then full pass).
+  - Optional deep-merged configuration overlay via an environment variable.
+  - Process-wide configuration caching for file-based loads.
 
 ## Public API
+
+### Functions
+- `deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]`
+  - Recursively merges mappings; non-mapping values replace base values.
+  - Special rule: if an overlay mapping contains `"adapter"`, it replaces the base mapping entirely (no deep merge for that node).
 
 ### Classes
 
 - `ServicesConfiguration`
-  - Holds service configurations and **provides defaults** for:
-    - object storage, triple store, vector store, secret service, bus, key-value, email, cache.
+  - Aggregates service configurations with defaults (document, object storage, dataset, triple store, vector store, secret, bus, kv, email, coding environment, source control, activity log, event, model registry, cache).
+  - Methods:
+    - `local_backends(owned: Iterable[str]) -> dict[str, str]`: returns a mapping of owned service names to their local storage locations (when applicable).
 
 - `ApiConfiguration`
-  - API/UI metadata and runtime settings:
-    - title, description, logo/favicon paths, CORS origins, reload flag.
+  - API server settings: `title`, `description`, `logo_path`, `favicon_path`, `cors_origins`, `reload`, `host`, `port`.
 
-- `OpencodeProviderConfiguration`
-  - Provider record: `id`, `key`, `type="api"`, `metadata`.
+- `DiscoveryConfiguration`
+  - NATS discovery settings: `project`, `lease_seconds`.
 
-- `OpencodeConfiguration`
-  - Opencode auth file path and providers list.
+- `NATSStreamingConfiguration`, `NATSModelStreamingConfiguration`, `NATSModelConfiguration`
+  - NATS streaming/model streaming limits and timeouts.
+
+- `NATSRPCOverflowConfiguration`
+  - Controls overflow handling for large NATS RPC payloads.
+
+- `NATSJobsRetentionConfiguration`
+  - Job retention policy controls.
+  - Method:
+    - `to_retention() -> Any`: returns an SDK `JobRetention` instance or `None` when disabled.
+
+- `NATSJobsConfiguration`
+  - Controls whether the engine hosts jobs and related behavior.
+
+- `NATSEngineConfiguration`
+  - Engine serving role/lease/standby/drain settings.
+  - Methods:
+    - `resolved(environ: Mapping[str, str]) -> NATSEngineConfiguration`: applies `ABI_ENGINE_ROLE` / `ABI_ROLLOUT_ID` overrides.
+    - `timing() -> Any`: returns an `OwnershipTiming` instance.
+
+- `NATSConfiguration`
+  - Top-level NATS boundary configuration: `nats_url`, `jwt_secret`, timeouts, concurrency, discovery, streaming, RPC overflow, jobs, engine, monitoring URL.
+
+- `TelemetryConfiguration`
+  - OpenTelemetry export settings: `enabled`, `otlp_endpoint`, `service_name`, `sample_ratio`, `ui_url`, `query_url`.
+
+- `OpencodeProviderConfiguration`, `OpencodeConfiguration`
+  - Opencode authentication configuration: `auth_file_path`, `providers`.
 
 - `FirstPassConfiguration`
-  - Minimal configuration used to load the secret service first.
-  - Contains nested `FirstPassServicesConfiguration(secret: SecretServiceConfiguration)`.
+  - Minimal schema used for the first pass to load the secret service (`services.secret` only).
 
 - `ModuleConfig`
-  - Module loading configuration:
-    - `path` or `module` (one must be provided), `enabled`, `config` dict.
-  - Validator enforces: **either** `path` **or** `module` is required.
+  - Module loading entry:
+    - Fields: `path` or `module` (at least one required), `enabled`, `config`.
+  - Validates that at least one of `path` / `module` is provided.
 
 - `GlobalConfig`
-  - Global engine flags:
-    - `ai_mode`: `"cloud" | "local" | "airgap"`
-    - `skip_ontology_loading`: bool
+  - Global settings: `ai_mode` (`"cloud" | "local" | "airgap"`), `skip_ontology_loading`, `public_api_host`.
+  - Applies env override:
+    - `ABI_SKIP_ONTOLOGY_LOADING` truthy value forces `skip_ontology_loading=True`.
 
 - `EngineConfiguration`
-  - Top-level configuration model containing:
-    - `api`, `deploy`, `services`, `global_config`, `modules`, `default_agent`, `opencode`.
-
-### `EngineConfiguration` methods
-
-- `ensure_default_modules() -> None`
-  - Ensures these modules are present in `modules` (added if missing, enabled=True):
-    - `naas_abi_core.modules.templatablesparqlquery`
-    - `naas_abi_core.modules.bfo`
-    - `naas_abi_core.modules.cco`
-
-- `from_yaml(yaml_path: str) -> EngineConfiguration`
-  - Loads and parses a YAML file.
-
-- `from_yaml_content(yaml_content: str) -> EngineConfiguration`
-  - Loads configuration from a YAML string.
-  - Two-pass process:
-    - Pass 1: resolve enough secrets to load the secret service.
-    - Pass 2: re-render YAML template with full secret service available, then parse.
-
-- `load_configuration(configuration_yaml: str | None = None) -> EngineConfiguration`
-  - Main entry point:
-    - If `configuration_yaml` is provided: parse it directly (useful for tests).
-    - Otherwise:
-      - Determine config file:
-        - If `ENV` is set and `config.{ENV}.yaml` exists, use it.
-        - Else use `config.yaml` if it exists.
-        - Else raise `FileNotFoundError`.
-      - Special case: if `ENV` is not set, but `config.yaml` exists and contains a dotenv secret adapter, it will attempt to read `ENV` from that `.env`.
+  - Top-level configuration model:
+    - `api`, `deploy`, `services`, `global_config`, `nats`, `telemetry`, `modules`, `default_agent`, `opencode`, `dev`.
+  - Methods:
+    - `ensure_default_modules() -> None`: ensures default modules are present in `modules`:
+      - `naas_abi_core.modules.templatablesparqlquery`
+      - `naas_abi_core.modules.bfo`
+      - `naas_abi_core.modules.cco`
+    - `render_without_secrets(yaml_content: str, base_dir: str | None = None) -> Any`: renders Jinja with empty/undefined secrets and parses YAML.
+    - `configuration_file() -> str`: selects `config.{ENV}.yaml` if present else `config.yaml`; may read `ENV` from bootstrap dotenv adapter declared in `config.yaml`.
+    - `from_yaml(yaml_path: str, overlay: dict[str, Any] | None = None) -> EngineConfiguration`: loads from a YAML file path.
+    - `from_yaml_content(yaml_content: str, base_dir: str | None = None, overlay: dict[str, Any] | None = None) -> EngineConfiguration`: loads from YAML string with two-pass secret resolution; optionally deep-merges `overlay`.
+    - `reset_configuration_cache() -> None`: clears process-wide cached configuration (intended for tests).
+    - `load_configuration(configuration_yaml: str | None = None) -> EngineConfiguration`:
+      - If `configuration_yaml` provided: loads from inline YAML and **does not cache**.
+      - Else: loads from selected file, applies optional overlay, and caches the result.
 
 ## Configuration/Dependencies
 
-### YAML templating
-- YAML is rendered using Jinja2 with a `secret` object available:
-  - Example usage in YAML: `{{ secret.SOME_KEY }}`
-- Full-line YAML comments (optional space/tab, then `#`) are not Jinja-rendered, so commented-out `{{ secret.X }}` / `{% ... %}` is left as-is and cannot hard-fail on a missing secret. Inline comments after a value are still rendered.
+### YAML rendering (Jinja2)
+- Jinja is evaluated before YAML parsing.
+- Base directory for includes:
+  - `from_yaml(...)`: config file’s directory.
+  - Inline content: current working directory.
+- Full-line YAML comments (lines whose first non-space/tab char is `#`) are wrapped in `{% raw %}` so Jinja expressions inside comments are **not evaluated**.
+- A helper is available in templates:
+  - `load_csv(path: str, **csv.DictReader kwargs) -> list[dict]` (path relative to the config directory).
 
-### Secret resolution order
-- During *first pass* (before secret service is loaded):
-  1. Environment variables
-  2. Bootstrap dotenv adapter (if configured in YAML under `services.secret.secret_adapters` with `adapter: dotenv`)
-  3. If still missing, a placeholder string is rendered into the template.
+### Secret resolution (two-pass)
+- Pass 1: renders YAML with a `secret` object that resolves:
+  - environment variables first,
+  - then a bootstrap dotenv adapter (if configured),
+  - else returns a placeholder string (does not raise).
+- Loads secret service from the parsed first-pass configuration.
+- Pass 2: re-renders YAML with `secret` backed by the loaded secret service:
+  - environment variables override secret service values,
+  - missing secrets:
+    - if no TTY: raises `ValueError`,
+    - else prompts via `rich.prompt.Prompt` and stores the value in the secret service.
 
-- During *second pass* (after secret service is loaded):
-  1. Environment variables
-  2. Configured secret service
-  3. If missing and TTY is available: prompt the user and store it in the secret service
-  4. If missing and **no TTY**: raises `ValueError`
+### Overlay file (optional)
+- Environment variable: `ABI_CONFIG_OVERLAY`
+- If set, must point to an existing YAML file containing a mapping.
+- The overlay is deep-merged over the rendered config data using `deep_merge`.
 
-### Bootstrap dotenv adapter detection
-- `_load_bootstrap_dotenv_adapter_from_yaml_content()` scans the YAML for:
-  - `services.secret.secret_adapters:`
-    - `- adapter: dotenv`
-      - `config.path` (defaults to `.env`)
-- If `config.path` is present but empty/invalid, it raises `ValueError`.
+### NATS mode validation
+When `EngineConfiguration.nats` is set:
+- If `services.bus` is explicitly set:
+  - it must use adapter `"nats_jetstream"`,
+  - its `nats_url` must match `nats.nats_url`.
+- Cache adapters cannot mix local and remote tiers in NATS mode:
+  - if any cache adapter is `"nats_rpc"`, then all must be `"nats_rpc"`.
 
-### External dependencies used
-- `pydantic` (models and validation)
-- `yaml` (PyYAML)
-- `jinja2` (templating)
-- `rich` (interactive prompting)
-- Various `naas_abi_core.engine.engine_configuration.*` configuration classes
-- `naas_abi_core.services.secret.Secret` and `ISecretAdapter`
+### Non-NATS activity log default tweak
+- If `nats is None` and `activity_log` was **not** explicitly set in `services`, the configuration forces the activity log adapter to SQLite (and treats it as a default, not user config).
 
 ## Usage
 
-### Load from default config files (`config.yaml` or `config.{ENV}.yaml`)
+### Load from default config file (with optional overlay)
 ```python
+import os
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import EngineConfiguration
 
+# Optional: overlay file path
+# os.environ["ABI_CONFIG_OVERLAY"] = "overlay.yaml"
+
 config = EngineConfiguration.load_configuration()
-print(config.api.title)
+print(config.api.host, config.api.port)
 ```
 
-### Load from an in-memory YAML string (useful for tests)
+### Load from in-memory YAML (no caching)
 ```python
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import EngineConfiguration
 
 yaml_text = """
-api:
-  title: "ABI API"
-  description: "API for ABI"
-  logo_path: "assets/logo.png"
-  favicon_path: "assets/favicon.ico"
-  cors_origins: ["http://localhost:9879"]
-  reload: true
-services:
-  secret:
-    secret_adapters:
-      - adapter: dotenv
-        config:
-          path: ".env"
+api: {}
+services: {}
 global_config:
   ai_mode: "local"
-  skip_ontology_loading: false
-modules:
-  - module: "naas_abi_core.modules.templatablesparqlquery"
-    enabled: true
-    config: {}
+modules: []
 """
 config = EngineConfiguration.load_configuration(configuration_yaml=yaml_text)
-print([m.module for m in config.modules])
+print([m.module for m in config.modules if m.module])
 ```
 
 ## Caveats
-- `modules` will be automatically augmented to include default modules if missing.
-- If a referenced secret is missing:
-  - In non-interactive environments (no TTY) it may raise `ValueError` during loading.
-- A bootstrap dotenv adapter is only used if explicitly configured under `services.secret.secret_adapters` with `adapter: dotenv`.
+- Missing secrets during the second pass:
+  - raise `ValueError` in non-interactive environments (no TTY),
+  - otherwise trigger an interactive prompt and are written into the configured secret service.
+- `load_configuration()` caches file-based loads process-wide; use `reset_configuration_cache()` in tests to avoid cross-test contamination.
+- In NATS mode, cache tier configuration cannot mix `"nats_rpc"` adapters with local cache adapters in the same process.

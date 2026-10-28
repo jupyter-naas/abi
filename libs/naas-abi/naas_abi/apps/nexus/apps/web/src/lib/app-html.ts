@@ -31,21 +31,6 @@ function toAppHtmlPath(url: string): string | null {
 }
 
 /**
- * Path lock for scoped ``app-html`` JWTs, e.g. ``/app-html/report/counter_uas/``.
- */
-export function appHtmlPathPrefix(url: string): string | null {
-  const path = toAppHtmlPath(url);
-  if (!path) return null;
-  const pathname = path.split('?')[0].split('#')[0];
-  const parts = pathname.split('/').filter(Boolean);
-  // app-html / <module> / <app> / …
-  if (parts.length < 3 || parts[0] !== 'app-html') {
-    return '/app-html/';
-  }
-  return `/${parts[0]}/${parts[1]}/${parts[2]}/`;
-}
-
-/**
  * A remote module's app (``/app-html/remote/<module>/<app>/<rest>``). It never
  * loads from this origin: the page asks the API for a grant
  * (POST /apps/remote-grant) and frames ``<apiBase>/app-remote/<grant>/…``,
@@ -64,6 +49,40 @@ export function remoteAppParts(url: string): RemoteAppParts | null {
 /** ``<apiBase><grant path><rest>``: the grant path ends with ``/``. */
 export function remoteAppGrantUrl(apiBase: string, grantPath: string, rest: string): string {
   return `${apiBase.replace(/\/+$/, '')}${grantPath}${rest.replace(/^\/+/, '')}`;
+}
+
+/** Reopen a remote app this long before its grant expires... */
+const REMOTE_GRANT_RENEW_MARGIN_MS = 60_000;
+/** ...but not sooner than this after opening it (a reload loses the page's state)... */
+const REMOTE_GRANT_RENEW_FLOOR_MS = 5 * 60_000;
+
+/**
+ * When to reopen a remote app under a fresh grant, given the grant's
+ * ``expires_in`` (seconds); null when the answer gives none.
+ */
+export function remoteGrantRenewDelayMs(expiresIn: unknown): number | null {
+  const seconds = Number(expiresIn);
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+  // ...except that a grant shorter than the floor (the API allows one minute)
+  // is renewed within its first half: later it is already expired.
+  const lifetimeMs = seconds * 1000;
+  return Math.max(
+    lifetimeMs - REMOTE_GRANT_RENEW_MARGIN_MS,
+    Math.min(REMOTE_GRANT_RENEW_FLOOR_MS, lifetimeMs / 2),
+  );
+}
+
+/**
+ * A remote app's catalog URL opening it in ``workspaceId`` (``?workspace_id=``):
+ * the API grants it there when the app is enabled in it. Other URLs unchanged.
+ */
+export function withRemoteAppWorkspace(url: string, workspaceId: string): string {
+  if (!workspaceId || !remoteAppParts(url)) return url;
+  const hashIndex = url.indexOf('#');
+  const withoutHash = hashIndex >= 0 ? url.slice(0, hashIndex) : url;
+  const hash = hashIndex >= 0 ? url.slice(hashIndex) : '';
+  const join = withoutHash.includes('?') ? '&' : '?';
+  return `${withoutHash}${join}workspace_id=${encodeURIComponent(workspaceId)}${hash}`;
 }
 
 /** Same flags as the API's CSP sandbox: no allow-same-origin for module code. */

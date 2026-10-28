@@ -1,4 +1,4 @@
-"""The search cache a workspace owns, placed in it (RFC §4.4).
+"""The search cache a workspace owns, placed in it.
 
 ``cache/key/search_topics_<digest>_*`` is the workspace's: the digest is
 ``SearchCache``'s, of fixed length, so a prefix never reaches another

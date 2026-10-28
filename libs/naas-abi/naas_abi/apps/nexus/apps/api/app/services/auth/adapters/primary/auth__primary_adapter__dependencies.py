@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from uuid import uuid4
+
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal, get_db
+from naas_abi.apps.nexus.apps.api.app.core.postgres_session_registry import (
+    PostgresSessionRegistry,
+)
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__schemas import (
     User,
 )
@@ -18,6 +23,8 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthUserRecord
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz as authz_module
 from naas_abi.apps.nexus.apps.api.app.services.iam.runtime import IAMUnavailableError
+from naas_abi.apps.nexus.apps.api.app.services.registry import ServiceRegistry
+from naas_abi.apps.nexus.apps.api.app.services.workspaces import WorkspacePermissionError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 _bearer = HTTPBearer(
@@ -41,8 +48,8 @@ def to_user_schema(user: AuthUserRecord, *, is_superadmin: bool | None = None) -
         email=user.email,
         name=user.name,
         avatar=user.avatar,
-        company=user.company,
-        role=user.role,
+        organization=user.organization,
+        job_title=user.job_title,
         bio=user.bio,
         is_superadmin=bool(is_superadmin),
         created_at=user.created_at,
@@ -103,29 +110,55 @@ async def with_platform_role(user: User) -> User:
     return user.model_copy(update={"is_superadmin": await is_platform_admin(user.id)})
 
 
+def _refuse(request: Request) -> HTTPException:
+    """Why the request has no user: a failed CSRF check, a credential of a kind
+    this route does not take, or none."""
+    if getattr(request.state, "nexus_csrf_failed", False):
+        return HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="CSRF token missing or invalid",
+        )
+    refused = getattr(request.state, "nexus_credential_refused", None)
+    if refused is not None:
+        # A real credential, of a kind this route does not take: a key on
+        # the account, a coding agent's key anywhere but the gateway.
+        return HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"A {refused} credential cannot be used here",
+        )
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
 async def get_current_user_required(
     request: Request, current_user: User | None = Depends(get_current_user)
 ) -> User:
     if not current_user:
-        if getattr(request.state, "nexus_csrf_failed", False):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="CSRF token missing or invalid",
-            )
-        refused = getattr(request.state, "nexus_credential_refused", None)
-        if refused is not None:
-            # A real credential, of a kind this route does not take: a key on
-            # the account, a coding agent's key anywhere but the gateway.
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"A {refused} credential cannot be used here",
-            )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise _refuse(request)
     return current_user
+
+
+async def get_current_user_released(
+    request: Request, token: str | None = Depends(bearer_token)
+) -> User:
+    """``get_current_user_required`` on its own short-lived session.
+
+    The request does not keep a pooled connection while it runs. Use it on hot
+    read paths that fire many requests at once (Maps layer data, logos): with
+    the request-scoped session, every waiting request holds a connection and
+    the pool runs dry.
+    """
+    credential = await request_credential(request, token)
+    user = None
+    if credential is not None:
+        async with AsyncSessionLocal() as db:
+            user = await AuthSecondaryAdapterPostgres(db=db).get_user_by_id(credential.user_id)
+    if user is None:
+        raise _refuse(request)
+    return to_user_schema(user)
 
 
 async def is_platform_admin(user_id: str) -> bool:
@@ -135,6 +168,45 @@ async def is_platform_admin(user_id: str) -> bool:
         return await authz_module.AUTHZ.allowed("ManageSystem", user=user_id)
     except IAMUnavailableError:
         return False  # no IAM, no platform admin; any other failure surfaces
+
+
+async def get_workspace_role(user_id: str, workspace_id: str) -> str | None:
+    async with AsyncSessionLocal() as db:
+        registry = ServiceRegistry.instance()
+        session_registry = PostgresSessionRegistry.instance()
+        session_id = f"sess-{uuid4().hex}"
+        session_registry.bind(session_id=session_id, db=db)
+        token = session_registry.set_current_session(session_id)
+        try:
+            return await registry.workspaces.get_workspace_role(
+                user_id=user_id,
+                workspace_id=workspace_id,
+            )
+        finally:
+            session_registry.reset_current_session(token)
+            session_registry.unbind(session_id)
+
+
+async def require_workspace_access(user_id: str, workspace_id: str) -> str:
+    async with AsyncSessionLocal() as db:
+        registry = ServiceRegistry.instance()
+        session_registry = PostgresSessionRegistry.instance()
+        session_id = f"sess-{uuid4().hex}"
+        session_registry.bind(session_id=session_id, db=db)
+        token = session_registry.set_current_session(session_id)
+        try:
+            return await registry.workspaces.require_workspace_access(
+                user_id=user_id,
+                workspace_id=workspace_id,
+            )
+        except WorkspacePermissionError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this workspace",
+            ) from exc
+        finally:
+            session_registry.reset_current_session(token)
+            session_registry.unbind(session_id)
 
 
 async def require_superadmin(
@@ -161,11 +233,14 @@ async def require_superadmin(
 
 __all__ = [
     "bearer_token",
+    "get_workspace_role",
     "is_platform_admin",
     "require_superadmin",
+    "require_workspace_access",
     "get_auth_service",
     "get_current_user",
     "get_current_user_required",
+    "get_current_user_released",
     "to_signed_in_user",
     "with_platform_role",
     "to_user_schema",

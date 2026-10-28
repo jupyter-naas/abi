@@ -81,11 +81,17 @@ Covers registration, provider pinning, fallback, off-catalog routing, defaults, 
 - **Off-catalog** model (provider knows how to build it on demand): call `register_chat_provider(provider, factory)` (or `register_embedding_provider`). The factory receives the canonical/model ID string and returns the live instance.
 - Always call `validate_defaults()` at startup if you set defaults via `InMemory(default_chat_model=..., default_embedding_model=...)`.
 
-## Authorization (`iam_catalog.py`, RFC §6.4)
+## Authorization (`iam_catalog.py`)
 
 Wired with IAM (the engine's owner always is; the NATS client never is), every
 operation is checked in the domain service, on `model/<canonical id>`
-(platform-level). An invisible model is `ModelNotFoundError` (`MODEL_NOT_FOUND`).
+(opaque id, platform-level). An invisible model is `ModelNotFoundError`
+(`MODEL_NOT_FOUND`). The guard is described in
+[`services/iam/AGENTS.md`](../iam/AGENTS.md) ("Enforcing in a domain service").
+Levels: `ListModels` list; `Resolve`, `Chat`, `ChatStream`, `Embed` read. Subjects
+are the operations under `abi.svc.model_registry.v1.` (`list_models`, `resolve`,
+`chat`, `embed`; `ChatStream` is one action for `stream_open`, `<owner>.stream_next`
+and `<owner>.stream_close`; a large call also uses the `transfer.*` subjects).
 
 - `get`, `get_chat_model`, `get_embedding_model` (and the defaults): `Resolve`.
 - `list_models`, `list_canonical_ids`, `list_registered_models`: filtered by
@@ -121,9 +127,7 @@ Contracts: `naas-abi-proto/naas_abi_proto/model_registry/v1/model_registry.proto
 SDK optional model codec/proxies stay core-free; core's NATS extra installs them.
 Tests: `uv run pytest examples/standalone_module/model_integration_test.py -q`
 from repository root, with native `nats-server`. Run `make demo-sdk` for the
-separate-process, wheel-installed model example. Defaults and limitations are
-in `docs/adr/20260924_remote-model-registry.md`.
+separate-process, wheel-installed model example.
 
 Independent requests use a queue group; stream/transfer IDs encode an owner.
-Never randomly distribute reads of an existing stream across replicas. See
-`20260924_nats-review-reliability.md` for routing and output persistence decisions.
+Never randomly distribute reads of an existing stream across replicas.

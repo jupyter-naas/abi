@@ -9,6 +9,10 @@ that cannot read or write its run (the store is down) is retried with backoff
 and uses none. A run whose host stopped on its last attempt, or whose trigger
 expired (``Nats-TTL``) before its retry, is never run again, so the host's
 upkeep fails it (``reap_lost_runs``).
+
+Workflows (``kind="workflow"``) run here as jobs, with a ``FlowContext``; the
+host also clears their journals with their run records, and publishes a
+core-NATS completion notice when a run is saved terminal (``JobSubjects.done``).
 """
 
 from __future__ import annotations
@@ -22,7 +26,10 @@ from collections.abc import Awaitable, Callable, Mapping
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from naas_abi_sdk.call_context import current_call_context, use_call_context
 from naas_abi_sdk.jobs import (
+    INPUT_HASH_HEADER,
+    MAX_TRIGGER_INPUT_BYTES,
     MAX_TRIGGERS,
     SEAL_HEADER,
     TERMINAL_STATUSES,
@@ -36,6 +43,7 @@ from naas_abi_sdk.jobs import (
     JobProxy,
     JobRetention,
     JobRun,
+    NonRetryable,
     OnEvent,
     go_duration_seconds,
     job_subjects,
@@ -48,6 +56,15 @@ from naas_abi_sdk.jobs import (
 from naas_abi_sdk.services.errors import DocumentNotFound, VersionConflict
 from naas_abi_sdk.services.models import CollectionSpec, FieldSpec
 from naas_abi_sdk.telemetry import current_trace_id, record_error, server_span
+from naas_abi_sdk.workflows import (
+    NOTICE_FALLBACK_POLL_SECONDS,
+    FlowContext,
+    FlowRuntime,
+    StepJournal,
+    delete_steps,
+    results_collection,
+    steps_collection,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +80,8 @@ SCHEDULE_HEADERS = (
     "Nats-Schedule-TTL",
     TRIGGER_HEADER,
     SEAL_HEADER,
+    # Present only on a schedule with an input (a changed input changes the schedule).
+    INPUT_HASH_HEADER,
 )
 WRONG_LAST_SEQUENCE = 10071  # JetStream: Nats-Expected-Last-Subject-Sequence failed
 
@@ -190,12 +209,13 @@ async def ensure_stream(js: Any, project: str) -> None:
 
 
 # (operation "trigger" | "cancel", job, run id, headers, stored at or None):
-# raises RPCError when the caller may not. Scheduled ("cron", "every") and
-# "event" triggers are the host's own and are not asked about: until broker
-# permissions (#60) restrict who may publish on a trigger subject, their kind
-# header is trusted.
+# raises RPCError when the caller may not. For an allowed trigger it returns the
+# CallContext the run executes in (the module acting for the user the trigger was
+# stored for), or None: the run is the module's own. Scheduled ("cron", "every")
+# and "event" triggers are the host's own and are not asked about: the host drops
+# any trigger the engine did not seal.
 JobAuthorizer = Callable[
-    [str, str, str, Mapping[str, str], "datetime | None"], Awaitable[None]
+    [str, str, str, Mapping[str, str], "datetime | None"], Awaitable[Any]
 ]
 # Codes that refuse a trigger for good; anything else is retried later.
 REFUSALS = frozenset(
@@ -254,6 +274,32 @@ async def ensure_consumer(js: Any, config: Any, project: str, *, update: bool) -
 
 # What a host says about each schedule; the target and the kind are the store's.
 SCHEDULE_FIELDS = ("Nats-Schedule", "Nats-Schedule-Time-Zone", "Nats-Schedule-TTL")
+# Besides those: the trigger's input, the canonical JSON of an object (the body).
+SCHEDULE_INPUT = "input"
+
+
+def schedule_input(value: Any) -> str:
+    """A schedule's ``input`` as its canonical JSON (empty: none), or ValueError:
+    a JSON object of at most ``MAX_TRIGGER_INPUT_BYTES``."""
+    if value in (None, ""):
+        return ""
+    if not isinstance(value, str) or len(value.encode()) > MAX_TRIGGER_INPUT_BYTES:
+        raise ValueError(
+            f"an input is the JSON text of an object of {MAX_TRIGGER_INPUT_BYTES} "
+            "bytes at most"
+        )
+    try:
+        parsed = json.loads(value)
+    except ValueError:
+        raise ValueError("an input is JSON") from None
+    if not isinstance(parsed, dict):
+        raise ValueError("an input is a JSON object")  # noqa: TRY004 - payload validation
+    # As ``Cron.input_json`` writes it: the same input is the same bytes.
+    return (
+        json.dumps(parsed, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+        if parsed
+        else ""
+    )
 
 
 async def set_schedules(
@@ -263,31 +309,39 @@ async def set_schedules(
     job: str,
     schedules: list[dict[str, str]],
     *,
-    seal: str | None = None,
+    seal: Callable[[bytes], str] | None = None,
 ) -> None:
     """A job's schedules, one message each, aimed at its own trigger; the
-    indexes beyond them purged. ``seal``: the engine's, copied by the server
-    onto every trigger a schedule fires."""
+    indexes beyond them purged. A schedule's ``input`` is its body, each fired
+    trigger's payload (``{}`` without one). ``seal``: the engine's, over that
+    body, copied by the server onto every trigger a schedule fires."""
     subjects = job_subjects(project, module_id, job)
     for index, fields in enumerate(schedules):
         headers = {k: v for k, v in fields.items() if k in SCHEDULE_FIELDS}
-        if seal:
-            headers[SEAL_HEADER] = seal
+        given = schedule_input(fields.get(SCHEDULE_INPUT))
+        body = given.encode() if given else b"{}"
+        if given:
+            # A changed input is a changed schedule (published again).
+            headers[INPUT_HASH_HEADER] = hashlib.sha256(given.encode()).hexdigest()[:32]
+        if seal is not None:
+            headers[SEAL_HEADER] = seal(body)
         headers["Nats-Schedule-Target"] = subjects.trigger
         headers[TRIGGER_HEADER] = "schedule"
-        await ensure_schedule(js, project, subjects.schedule(index), headers)
+        await ensure_schedule(js, project, subjects.schedule(index), headers, body)
     await remove_schedules(js, subjects, len(schedules))
 
 
 async def ensure_schedule(
-    js: Any, project: str, subject: str, headers: dict[str, str]
+    js: Any, project: str, subject: str, headers: dict[str, str], body: bytes = b"{}"
 ) -> None:
     """Publish a schedule only when it is missing or changed.
 
     Replacing a schedule message restarts an ``@every`` interval: hosts that
     restart more often than the interval would keep it from ever firing. The
     publish expects the sequence just read, so hosts starting together write
-    it once; the loser reads it again.
+    it once; the loser reads it again. ``body`` is the trigger's input
+    (``b"{}"`` without one), delivered as each run's payload; the input's hash
+    is in the headers, so a changed input publishes the schedule again.
     """
     from nats.js.errors import BadRequestError, NotFoundError
 
@@ -306,7 +360,7 @@ async def ensure_schedule(
         try:
             await js.publish(
                 subject,
-                b"{}",
+                body,
                 headers={
                     **headers,
                     "Nats-Expected-Last-Subject-Sequence": str(sequence),
@@ -358,6 +412,8 @@ class JobHost:
         completion_error_after_seconds: float = 60.0,
         authorize: JobAuthorizer | None = None,
         control: Any = None,
+        module_documents: Any = None,
+        workflow_poll_seconds: float = NOTICE_FALLBACK_POLL_SECONDS,
     ):
         """``authorize``: asks whether the caller named by a manual trigger or a
         cancel may trigger the job or cancel the run (discovery:TriggerJob,
@@ -389,6 +445,17 @@ class JobHost:
         self.completion_error_after_seconds = completion_error_after_seconds
         self.control = control
         self.collection = runs_collection(project)
+        # What workflow runs need: their journal's store, and how to read the runs
+        # of other modules (``module_documents(module_id)``; None: over the transport).
+        self.workflow_poll_seconds = workflow_poll_seconds
+        self._flow_runtime = FlowRuntime(
+            transport,
+            documents,
+            module_id,
+            project,
+            module_documents,
+            workflow_poll_seconds,
+        )
         self._running: dict[str, JobContext] = {}
         self._work: dict[str, asyncio.Task] = {}
         # Runs stopped by close(): retried elsewhere, never recorded as user cancels.
@@ -467,6 +534,8 @@ class JobHost:
                 ),
             )
         )
+        if any(d.kind == "workflow" for d, _ in self.handlers.values()):
+            await StepJournal(self.documents, self.project, "").ensure()
         nc = await self.transport.connect()
         js = nc.jetstream()
         cancel_subject = None
@@ -523,13 +592,22 @@ class JobHost:
         for subscription in self._subscriptions:
             with contextlib.suppress(Exception):
                 await subscription.unsubscribe()
-        for run_id, context in self._running.items():
+        # The first half of the grace lets runs end on their own and keep
+        # their outcome: a short run a deploy happens to catch is no failure.
+        # The rest are asked to stop, and retried elsewhere if they may be.
+        finish = self.close_grace_seconds / 2
+        if self._work:
+            await asyncio.wait(set(self._work.values()), timeout=finish)
+        for run_id, context in list(self._running.items()):
+            work = self._work.get(run_id)
+            if work is not None and work.done():
+                continue
             self._interrupted.add(run_id)
             context.cancelled.set()
         if not self._tasks:
             return
         _, pending = await asyncio.wait(
-            set(self._tasks), timeout=self.close_grace_seconds
+            set(self._tasks), timeout=self.close_grace_seconds - finish
         )
         if pending:
             # Ignored the cancel request: cancel the handlers themselves, so each run
@@ -587,9 +665,16 @@ class JobHost:
     async def reconcile_schedules(self, js: Any, descriptor: JobDescriptor) -> None:
         """One schedule message per Cron/Every trigger; stale indexes are purged.
         Through the engine when it answers: a module behind the broker's auth
-        callout writes nothing into the jobs stream."""
+        callout writes nothing into the jobs stream. A trigger's input travels
+        as ``input`` (its canonical JSON), the schedule's body."""
         schedules = [
-            {**trigger.headers(), "Nats-Schedule-TTL": scheduled_tick_ttl(trigger)}
+            {
+                **{
+                    k: v for k, v in trigger.headers().items() if k != INPUT_HASH_HEADER
+                },
+                "Nats-Schedule-TTL": scheduled_tick_ttl(trigger),
+                **({"input": trigger.input_json} if trigger.input else {}),
+            }
             for trigger in descriptor.schedules
         ]
         if self.control is not None and await self.control.request(
@@ -753,6 +838,7 @@ class JobHost:
                         if_version=doc.version,
                     )
                     reaped += 1
+                    await self._notify(descriptor, doc.id, "FAILED")
                 except (DocumentNotFound, VersionConflict):
                     continue  # its host is alive after all, or another replica reaped it
         return reaped
@@ -824,6 +910,7 @@ class JobHost:
         budget = retention.batch
         kept = [s for s in TERMINAL_STATUSES if s != "SKIPPED"]
         for name in self.handlers:
+            workflow = self.handlers[name][0].kind == "workflow"
             for statuses, max_age in (
                 (kept, retention.max_age),
                 (["SKIPPED"], retention.skipped_max_age),
@@ -838,6 +925,7 @@ class JobHost:
                         ("finished_at", "lt", cutoff),
                     ],
                     budget,
+                    workflow=workflow,
                 )
             if budget <= 0:
                 return retention.batch
@@ -847,16 +935,30 @@ class JobHost:
             )
             if excess > 0:
                 budget -= await self._delete(
-                    finished, min(excess, budget), order_by=("finished_at", "asc")
+                    finished,
+                    min(excess, budget),
+                    order_by=("finished_at", "asc"),
+                    workflow=workflow,
                 )
         return retention.batch - budget
 
-    async def _delete(self, where: list, limit: int, order_by: Any = None) -> int:
+    async def _delete(
+        self, where: list, limit: int, order_by: Any = None, workflow: bool = False
+    ) -> int:
         page = await self.documents.find(
             self.collection, where=where, order_by=order_by, limit=min(limit, 1000)
         )
         deleted = 0
         for doc in page.items[:limit]:
+            if workflow:
+                # Before the record: a failure here leaves the run for the next
+                # pass, which still finds it; after, its journal would stay forever.
+                await delete_steps(
+                    self.documents,
+                    steps_collection(self.project),
+                    results_collection(self.project),
+                    doc.id,
+                )
             try:
                 await self.documents.delete(
                     self.collection, doc.id, if_version=doc.version
@@ -865,6 +967,23 @@ class JobHost:
             except (DocumentNotFound, VersionConflict):
                 continue  # another replica pruned or updated it
         return deleted
+
+    async def _notify(
+        self, descriptor: JobDescriptor, run_id: str, status: str
+    ) -> None:
+        """Tell waiters a run ended (core NATS, at-most-once: they poll too). Sent
+        after the record is saved; never fails the run."""
+        try:
+            nc = await self.transport.connect()
+            # run id and status: a few hundred bytes at most
+            await nc.publish(
+                self._subjects(descriptor).done,
+                json.dumps({"run_id": run_id, "status": status}).encode(),
+            )
+        except Exception:
+            logger.warning(
+                "Could not publish the completion of run %s", run_id, exc_info=True
+            )
 
     async def _on_cancel(self, msg: Any) -> None:
         run_id = msg.data.decode(errors="replace")
@@ -1098,32 +1217,44 @@ class JobHost:
         descriptor: JobDescriptor,
         trigger: dict[str, str],
         error: Exception,
+        *,
+        retried: bool = False,
     ) -> str:
         """A trigger whose caller may not trigger the job: recorded as failed,
-        never run, never redelivered."""
+        never run, never redelivered, and waiters told. Refused on a retry (a
+        right revoked since the first attempt), the run keeps what its earlier
+        attempts recorded: it only ends FAILED."""
         logger.warning("Job trigger %s refused: %s", run_id, error)
+        refused = f"Trigger refused: {getattr(error, 'code', '') or error}"
         try:
-            await self._save(
-                run_id,
-                {
-                    "job": descriptor.name,
-                    "run_id": run_id,
-                    "module_id": self.module_id,
-                    "status": "FAILED",
-                    "attempt": 0,
-                    "max_attempts": descriptor.max_attempts,
-                    "trigger": trigger,
-                    "instance": self.instance_id,
-                    "sequence": msg.metadata.sequence.stream,
-                    "fired_at": _fired_at(msg),
-                    "finished_at": _now(),
-                    "error": f"Trigger refused: {getattr(error, 'code', '') or error}",
-                },
-                replace=True,
-            )
+            if retried:
+                await self._save(
+                    run_id,
+                    {"status": "FAILED", "finished_at": _now(), "error": refused},
+                )
+            else:
+                await self._save(
+                    run_id,
+                    {
+                        "job": descriptor.name,
+                        "run_id": run_id,
+                        "module_id": self.module_id,
+                        "status": "FAILED",
+                        "attempt": 0,
+                        "max_attempts": descriptor.max_attempts,
+                        "trigger": trigger,
+                        "instance": self.instance_id,
+                        "sequence": msg.metadata.sequence.stream,
+                        "fired_at": _fired_at(msg),
+                        "finished_at": _now(),
+                        "error": refused,
+                    },
+                    replace=True,
+                )
         except Exception as exc:  # noqa: BLE001 - logged and redelivered by _defer
             return await self._defer(msg, run_id, msg.metadata.num_delivered, exc)
         await msg.term()
+        await self._notify(descriptor, run_id, "FAILED")
         return "FAILED"
 
     async def _handle_delivery(
@@ -1195,15 +1326,21 @@ class JobHost:
             trigger["scheduler"] = headers["Nats-Scheduler"]
         elif trigger["kind"] == "schedule":
             trigger["kind"] = "manual"  # only the server fires a schedule
-        if attempt == 1 and trigger["kind"] == "manual" and self.authorize is not None:
+        # Every attempt of a manual trigger is asked about: a retry runs for the
+        # same user, and a right revoked since stops it.
+        run_as = None
+        if trigger["kind"] == "manual" and self.authorize is not None:
             try:
-                await self.authorize(
+                run_as = await self.authorize(
                     "trigger", descriptor.name, run_id, headers, _stored_at(msg)
                 )
             except Exception as exc:  # noqa: BLE001 - refused, or retried below
                 if getattr(exc, "code", "") not in REFUSALS:
                     return await self._defer(msg, run_id, delivery, exc)
-                return await self._refuse(msg, run_id, descriptor, trigger, exc)
+                return await self._refuse(
+                    msg, run_id, descriptor, trigger, exc, retried=attempt > 1
+                )
+        fired_at = _fired_at(msg)
         try:
             payload = await self._payload(msg)
             await self._save(
@@ -1219,7 +1356,7 @@ class JobHost:
                     "payload": payload,
                     "instance": self.instance_id,
                     "sequence": sequence,
-                    "fired_at": _fired_at(msg),
+                    "fired_at": fired_at,
                     "trigger_expires_at": _trigger_expires_at(msg),
                     "started_at": _now(),
                     "heartbeat_at": _now(),
@@ -1230,15 +1367,36 @@ class JobHost:
             )
         except Exception as exc:  # noqa: BLE001 - logged and redelivered by _defer
             return await self._defer(msg, run_id, delivery, exc)
-        context = JobContext(run_id, descriptor.name, attempt, trigger, payload)
+        context: JobContext
+        if descriptor.kind == "workflow":
+            context = FlowContext(
+                run_id,
+                descriptor.name,
+                attempt,
+                trigger,
+                payload,
+                runtime=self._flow_runtime,
+                fired_at=fired_at,
+                # Its journal, children and notices stay the module's own.
+                host_context=current_call_context(),
+            )
+        else:
+            context = JobContext(run_id, descriptor.name, attempt, trigger, payload)
         self._running[run_id] = context
         heartbeat = asyncio.create_task(self._heartbeat(msg))
         progress = asyncio.create_task(self._persist_progress(context))
-        work = asyncio.create_task(handler(context))
+        if run_as is None:
+            work = asyncio.create_task(handler(context))
+        else:
+            # The run's calls are the module's, for the user: the task copies
+            # this context, and the transport sends the delegation it holds.
+            with use_call_context(run_as):
+                work = asyncio.create_task(handler(context))
         self._work[run_id] = work
         timeout = descriptor.timeout.total_seconds() if descriptor.timeout else None
         result: Any = None
         error = ""
+        retryable = True
         try:
             done, _ = await asyncio.wait(
                 {work, heartbeat}, timeout=timeout, return_when=asyncio.FIRST_COMPLETED
@@ -1269,12 +1427,15 @@ class JobHost:
                     "FAILED",
                     f"{type(work.exception()).__name__}: {work.exception()}",
                 )
+                # A bad input, an oversized result: no attempt would do better.
+                retryable = not isinstance(work.exception(), NonRetryable)
             else:
                 result = self._result(work.result())
                 status = "SKIPPED" if context.skipped is not None else "SUCCEEDED"
             if (
                 status not in ("SUCCEEDED", "SKIPPED", "CANCELLED")
                 and attempt < descriptor.max_attempts
+                and retryable
             ):
                 status = "RETRYING"
             retry_delay = self._backoff(attempt)
@@ -1282,6 +1443,9 @@ class JobHost:
                 # JetStream would never redeliver it: the run would stay RETRYING.
                 status = "FAILED"
                 error = f"Trigger expired before it could be retried; {error}"
+            if isinstance(context, FlowContext):
+                # A cancelled run cancels its running children.
+                await context.finish(status)
             fields: dict[str, Any] = {
                 "status": status,
                 "logs": list(context.logs),
@@ -1302,6 +1466,8 @@ class JobHost:
                 await self._save(run_id, fields)
             else:
                 await self._save_completion(run_id, fields, heartbeat)
+            if status in TERMINAL_STATUSES:
+                await self._notify(descriptor, run_id, status)
             # Persist liveness until completion is durable, then stop before redelivery.
             progress.cancel()
             await asyncio.gather(progress, return_exceptions=True)
@@ -1312,6 +1478,8 @@ class JobHost:
             return status
         finally:
             context.cancelled.set()
+            if isinstance(context, FlowContext):
+                await context.close()
             for task in (heartbeat, progress, work):
                 task.cancel()
             await asyncio.gather(heartbeat, progress, work, return_exceptions=True)

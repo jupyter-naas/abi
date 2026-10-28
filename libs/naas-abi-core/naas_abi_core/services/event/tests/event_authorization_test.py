@@ -1,5 +1,4 @@
-"""The event log authorizes every operation, in process and over NATS alike
-(RFC §6.4 "event")."""
+"""The event log authorizes every operation, in process and over NATS alike."""
 
 from __future__ import annotations
 

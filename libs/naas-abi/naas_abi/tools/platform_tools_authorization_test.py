@@ -1,4 +1,4 @@
-"""The platform tools act for the user who is chatting (RFC §10.2).
+"""The platform tools act for the user who is chatting.
 
 They reach the kernel services in the chatting user's ``CallContext``, so the
 user's policy applies to what they return. The kernel service here is a stand-in

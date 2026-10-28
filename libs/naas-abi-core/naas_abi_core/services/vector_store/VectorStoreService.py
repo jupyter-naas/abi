@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 class VectorStoreService(ServiceBase):
     """Vector collections. Wired into an engine, every operation is authorized
-    on ``collection/<name>`` or ``vector/<collection>/<id>`` (RFC §6.4): a
+    on ``collection/<name>`` or ``vector/<collection>/<id>``: a
     collection the caller may not see is ``CollectionNotFoundError``, and
     lists hold only what the caller may list."""
 
@@ -59,7 +59,7 @@ class VectorStoreService(ServiceBase):
         )
 
     def __vectors(self, action: str, collection_name: str, ids: list[str]) -> None:
-        """``action`` on each vector; the first denial fails the call (§6.3)."""
+        """``action`` on each vector; the first denial fails the call."""
         self._guard.require_all(
             action,
             VECTOR,
@@ -285,7 +285,7 @@ class VectorStoreService(ServiceBase):
     ) -> list[SearchResult]:
         """The port's ``search``, as given; ``search_similar`` validates first.
 
-        Checked once, on the collection: hits are not filtered (RFC §5.5).
+        Checked once, on the collection: hits are not filtered.
         """
         self._ensure_initialized()
         self.__collection("Search", collection_name)
@@ -393,7 +393,7 @@ class VectorStoreService(ServiceBase):
         return self.adapter.count_vectors(collection_name)
 
     def list_collections(self) -> list[str]:
-        """The collections the caller may list (RFC §5.5); never fails for that."""
+        """The collections the caller may list; never fails for that."""
         self._ensure_initialized()
         return self._guard.filter(
             "ListCollections",
@@ -429,7 +429,7 @@ class VectorStoreService(ServiceBase):
 
         The collection must be visible to the caller; a page holds only the
         documents it may list, so it can be shorter than ``limit`` while
-        ``next_cursor`` continues (RFC §5.5).
+        ``next_cursor`` continues.
         """
         self._ensure_initialized()
         self.__visible(collection_name)

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  DESK_FALLBACK_COLOR,
-  HERO_OVERLAY,
+  DESK_ACCENT_TINT,
+  DESK_IMAGE_OVERLAY,
   deskFallbackColor,
   deskSurfaceIcons,
   isLightDeskColor,
@@ -25,13 +25,10 @@ describe('isLightDeskColor', () => {
 });
 
 describe('deskFallbackColor', () => {
-  it('uses the dark platform desk when the theme is white', () => {
-    expect(deskFallbackColor('#FFFFFF')).toBe(DESK_FALLBACK_COLOR);
-    expect(deskFallbackColor(undefined)).toBe(DESK_FALLBACK_COLOR);
-  });
-
-  it('keeps an already dark theme color', () => {
-    expect(deskFallbackColor('#111827')).toBe('#111827');
+  it('uses workspace accent at 30% opacity', () => {
+    expect(deskFallbackColor()).toBe(DESK_ACCENT_TINT);
+    expect(deskFallbackColor('#111827')).toBe(DESK_ACCENT_TINT);
+    expect(deskFallbackColor('#FFFFFF')).toBe(DESK_ACCENT_TINT);
   });
 });
 
@@ -49,16 +46,16 @@ describe('resolveDeskImageUrl', () => {
 });
 
 describe('wallpaperStyle', () => {
-  it('paints the hero overlay only when an image is set', () => {
+  it('layers the accent tint over the wallpaper image', () => {
     const styled = wallpaperStyle('/modules/example/assets/public/city.jpg', '#FFFFFF');
-    expect(styled.backgroundImage).toContain(HERO_OVERLAY);
+    expect(styled.backgroundImage).toContain(DESK_IMAGE_OVERLAY);
     expect(styled.backgroundImage).toContain('/modules/example/assets/public/city.jpg');
-    expect(styled.backgroundColor).toBe(DESK_FALLBACK_COLOR);
+    expect(styled.backgroundColor).toBe(DESK_ACCENT_TINT);
   });
 
-  it('falls back to a dark desk with no overlay when there is no image', () => {
+  it('paints the accent tint when there is no image', () => {
     expect(wallpaperStyle(undefined, '#FFFFFF')).toEqual({
-      backgroundColor: DESK_FALLBACK_COLOR,
+      backgroundColor: DESK_ACCENT_TINT,
     });
   });
 });

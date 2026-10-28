@@ -6,6 +6,7 @@ Shared by the NATS primary and the NATS client, so neither imports the other.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
@@ -21,6 +22,9 @@ from naas_abi_core.services.iam.IAMPorts import (
     DecidingStatement,
     Decision,
     Explanation,
+    GrantableAction,
+    GrantableCatalog,
+    GrantNotHeldError,
     GroupMapping,
     IAMConflictError,
     IAMNotFoundError,
@@ -35,7 +39,9 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalRecord,
     RevisionConflictError,
     ScopeRecord,
+    ScopeSet,
 )
+from naas_abi_core.services.iam.names import PLATFORM_SCOPE
 from naas_abi_core.services.iam.policy import PolicyDocument
 from naas_abi_proto.iam.v1 import iam_pb2 as pb
 
@@ -47,8 +53,10 @@ SERVICE_VERSION = "1.0.0"
 # Operation (subject suffix) -> message name, one per Request/Response pair.
 OPERATIONS = {
     "authorize": "Authorize",
+    "authorize_declared": "AuthorizeDeclared",
     "filter": "Filter",
     "explain": "Explain",
+    "grantable": "Grantable",
     "ensure_user": "EnsureUser",
     "create_service_account": "CreateServiceAccount",
     "get_principal": "GetPrincipal",
@@ -86,6 +94,10 @@ OPERATIONS = {
     "list_placements": "ListPlacements",
     "put_scope": "PutScope",
     "delete_scope": "DeleteScope",
+    "get_set": "GetSet",
+    "effective_set": "EffectiveSet",
+    "list_sets": "ListSets",
+    "put_set": "PutSet",
     "register_catalog": "RegisterCatalog",
     "token": "Token",
     "jwks": "Jwks",
@@ -101,13 +113,14 @@ OPERATIONS = {
     "approve_manifest": "ApproveManifest",
     "reject_manifest": "RejectManifest",
 }
-# Need no credentials: the key is one; the JWKS is public (RFC §8.2, §9.1).
+# Need no credentials: the key is one; the JWKS is public.
 PUBLIC_OPERATIONS = frozenset({"token", "jwks"})
 
 # Wire code -> exception. INVALID_ARGUMENT covers policy validation: its
 # message lists every error.
 ERRORS: dict[str, type[Exception]] = {
     "PERMISSION_DENIED": PermissionDeniedError,
+    "GRANT_NOT_HELD": GrantNotHeldError,
     "NOT_FOUND": IAMNotFoundError,
     "CONFLICT": IAMConflictError,
     "REVISION_CONFLICT": RevisionConflictError,
@@ -119,6 +132,8 @@ ERRORS: dict[str, type[Exception]] = {
 def error_code(exc: BaseException) -> str:
     if isinstance(exc, (KeyRefusedError, InvalidServiceTokenError)):
         return "UNAUTHENTICATED"
+    if isinstance(exc, GrantNotHeldError):
+        return "GRANT_NOT_HELD"
     if isinstance(exc, PermissionDeniedError):
         return "PERMISSION_DENIED"
     if isinstance(exc, IAMNotFoundError):
@@ -139,6 +154,8 @@ def raise_for(error: Any, *, subject_refusal: bool = False) -> None:
     that is not the key refusal is a subject that failed verification
     (``InvalidServiceTokenError``), as in process."""
     cls = ERRORS.get(error.code)
+    if cls is GrantNotHeldError:
+        raise GrantNotHeldError(message=error.message)
     if cls is PermissionDeniedError:
         raise PermissionDeniedError(message=error.message)
     if cls is KeyRefusedError and error.message == "invalid key":
@@ -192,6 +209,7 @@ def principal_to_pb(record: PrincipalRecord) -> pb.Principal:
         display_name=record.display_name,
         org=record.org,
         owner_id=record.owner_id,
+        owner_scope=record.owner_scope,
     )
     return _stamped(message, created_at=record.created_at, updated_at=record.updated_at)
 
@@ -212,6 +230,7 @@ def principal_from_pb(message: pb.Principal) -> PrincipalRecord:
         owner_id=_optional(message, "owner_id"),
         created_at=_datetime(message, "created_at"),
         updated_at=_datetime(message, "updated_at"),
+        owner_scope=message.owner_scope or PLATFORM_SCOPE,
     )
 
 
@@ -223,6 +242,7 @@ def policy_to_pb(policy: Policy) -> pb.Policy:
         document_json=policy.document.to_json(),
         managed=policy.managed,
         revision=policy.revision,
+        owner_scope=policy.owner_scope,
     )
     return _stamped(message, created_at=policy.created_at, updated_at=policy.updated_at)
 
@@ -237,6 +257,7 @@ def policy_from_pb(message: pb.Policy) -> Policy:
         revision=message.revision,
         created_at=_datetime(message, "created_at"),
         updated_at=_datetime(message, "updated_at"),
+        owner_scope=message.owner_scope or PLATFORM_SCOPE,
     )
 
 
@@ -341,6 +362,33 @@ def scope_from_pb(message: pb.Scope) -> ScopeRecord:
     return ScopeRecord(message.org, message.workspace or "-")
 
 
+def set_items_to_pb(items: Sequence[str] | None) -> pb.SetItems | None:
+    """A part of a set: no message is everything, an empty list nothing."""
+    return pb.SetItems(items=list(items)) if items is not None else None
+
+
+def set_items_from_pb(message: Any, field: str) -> tuple[str, ...] | None:
+    return tuple(getattr(message, field).items) if message.HasField(field) else None
+
+
+def scope_set_to_pb(scope_set: ScopeSet) -> pb.ScopeSet:
+    return pb.ScopeSet(
+        org=scope_set.org,
+        workspace=scope_set.workspace,
+        modules=set_items_to_pb(scope_set.modules),
+        features=set_items_to_pb(scope_set.features),
+    )
+
+
+def scope_set_from_pb(message: pb.ScopeSet) -> ScopeSet:
+    return ScopeSet(
+        message.org,
+        message.workspace or "-",
+        set_items_from_pb(message, "modules"),
+        set_items_from_pb(message, "features"),
+    )
+
+
 def catalog_to_pb(catalog: ActionCatalog) -> pb.ActionCatalog:
     return pb.ActionCatalog(
         service=catalog.service,
@@ -353,6 +401,7 @@ def catalog_to_pb(catalog: ActionCatalog) -> pb.ActionCatalog:
                 container=t.container,
                 personal=t.personal,
                 description=t.description,
+                module_scope=t.module_scope,
             )
             for t in catalog.resource_types
         ],
@@ -367,6 +416,7 @@ def catalog_to_pb(catalog: ActionCatalog) -> pb.ActionCatalog:
             )
             for a in catalog.actions
         ],
+        module=catalog.module,
     )
 
 
@@ -382,6 +432,7 @@ def catalog_from_pb(message: pb.ActionCatalog) -> ActionCatalog:
                 container=t.container,
                 personal=t.personal,
                 description=t.description,
+                module_scope=t.module_scope,
             )
             for t in message.resource_types
         ),
@@ -396,6 +447,7 @@ def catalog_from_pb(message: pb.ActionCatalog) -> ActionCatalog:
             )
             for a in message.actions
         ),
+        module=message.module,
     )
 
 
@@ -533,4 +585,26 @@ def manifest_from_pb(message: pb.Manifest) -> ManifestRecord:
         decided_at=_datetime(message, "decided_at"),
         decided_by=_optional(message, "decided_by"),
         reason=message.reason,
+    )
+
+
+def grantable_to_pb(catalog: GrantableCatalog) -> pb.GrantableCatalog:
+    return pb.GrantableCatalog(
+        service=catalog.service,
+        actions=[
+            pb.GrantableAction(
+                action=a.action, resources=list(a.resources), excluded=list(a.excluded)
+            )
+            for a in catalog.actions
+        ],
+    )
+
+
+def grantable_from_pb(message: pb.GrantableCatalog) -> GrantableCatalog:
+    return GrantableCatalog(
+        service=message.service,
+        actions=tuple(
+            GrantableAction(a.action, tuple(a.resources), tuple(a.excluded))
+            for a in message.actions
+        ),
     )

@@ -1,8 +1,12 @@
 # naas-abi-sdk
 
-Small, async Python clients for ABI engine services over NATS. Runtime dependencies:
+Small, async Python clients for ABI engine services over NATS, and the runtime
+of remote modules: modules that run in their own process and reach the engine
+only through NATS. Guide: [Build a Remote Module](https://docs.naas.ai/user-guide/build/sdk/build-a-remote-module);
+architecture: [Remote Modules and Jobs](https://docs.naas.ai/developer-guide/architecture/remote-modules). Runtime dependencies:
 `naas-abi-proto`, `protobuf` (transitive), and `nats-py`. No ABI core, LangChain,
-Dagster, RDF library, database drivers, or HTTP framework.
+Dagster, RDF library, database drivers, or HTTP framework (workflows and
+pipelines bring pydantic and rdflib through the `[workflows]` and `[rdf]` extras).
 
 ```python
 from dataclasses import dataclass
@@ -32,7 +36,7 @@ internal. Argument names and defaults follow the corresponding core methods wher
 the v1 contract supports them. No core classes are imported.
 
 Explicit protobuf access remains available through `engine.rpc` or the low-level
-`ABIClient`. Those clients cover all 117 v1 RPC endpoints in `catalog.py`.
+`ABIClient`. Those clients cover every v1 RPC endpoint listed in `catalog.py`.
 Services: activity_log, cache, coding_environment, dataset, document, email, event,
 keyvalue, object_storage, secret, source_control, triple_store, vector_store.
 The bus retains its native publish/subscribe and enqueue/dequeue API, including
@@ -66,7 +70,8 @@ chunked transfer contract described below. Agent invocation
 uses the separate contract described below. Cache v1 addresses
 the engine's cold adapter by default; `cache.tier(index)` selects an explicit tier. Decorators remain local. Event v1 is the durable
 log port; live messages use the bus. The engine's triple-store service rejects
-`handle_view_event`, an adapter-internal callback, with `NOT_SUPPORTED`.
+`handle_view_event`, an adapter-internal callback, with `NOT_SUPPORTED`. Its `load_schema`
+takes the content of a Turtle file, for ontologies (see Ontologies).
 
 See `../../examples/standalone_module/README.md` for the executable full-surface
 module and wheel-only dependency isolation check. Run `make deps test lint build`
@@ -187,6 +192,73 @@ engine's `services.cache.adapters` list. The default `client.cache` remains the
 v1 cold endpoint. Tier contracts use the same protobuf messages, with subjects
 `abi.svc.cache.v1.tier.<index>.<method>`.
 
+## Jobs
+
+A module declares jobs and runs them in its own process; JetStream schedules
+and delivers the triggers. One replica takes
+each trigger, and delivery is at least once.
+
+```python
+from datetime import timedelta
+from naas_abi_sdk.jobs import Cron, Every, JobContext, OnEvent, job
+
+
+class ABIModule(BaseModule):
+    @job(triggers=(Every("1h"),), timeout=timedelta(minutes=5), max_attempts=3)
+    async def refresh(self, ctx: JobContext) -> dict:
+        if not await self.has_work():
+            ctx.skip("nothing to do")  # SKIPPED, hidden by default
+            return {}
+        ctx.log("refreshing")
+        return {"ok": True}  # stored on the run record
+```
+
+- Triggers: `Cron` (six fields, seconds first, optional `time_zone`), `Every`
+  (a Go duration or a timedelta, at least 1 s), `OnEvent(subject)` or
+  `OnEvent(event_type=..., filter={...})`.
+- `max_concurrency` (default 1: no overlap), `timeout` (sets `ctx.cancelled`),
+  `max_attempts` (default 1).
+- `self.trigger_job(name, payload, idempotency_key=...)` (sync) or
+  `await self.atrigger_job(...)` triggers the module's own jobs; another
+  module's: `await self.engine.modules[id].get_job(name)`, then
+  `run = await job.trigger(payload)` and `run.status()`, `run.wait()`,
+  `run.cancel()`. A repeated `idempotency_key` within 2 minutes is the same run.
+- Runs are documents in the module's namespace (`QUEUED`, `RUNNING`,
+  `RETRYING`, `SUCCEEDED`, `SKIPPED`, `FAILED`, `TIMED_OUT`, `CANCELLED`),
+  pruned after 7 days (1 hour for skipped runs, at most 1,000 per job). Modules
+  host jobs only with discovery; the engine that hosts it creates the jobs
+  stream.
+
+### Workflows
+
+A workflow is a job with a typed input and output whose handler checkpoints its
+steps (the decision is in `AGENTS.md`): when a run is retried, the
+steps that finished return their stored results and only the rest run.
+
+```python
+from naas_abi_sdk.workflows import FlowContext, workflow
+
+
+class ABIModule(BaseModule):
+    @workflow(triggers=(Cron("0 0 * * * *", input={"topic": "db"}),), max_attempts=3)
+    async def digest(self, ctx: FlowContext, inp: DigestInput) -> DigestOutput:
+        items = await ctx.step("collect", self.collect, inp.topic, retries=2)
+        await ctx.map_call("map", "acme.items", "enrich", [{"id": i} for i in items])
+        return DigestOutput(count=len(items))
+```
+
+- Input and output are pydantic v2 models (duck-typed: the SDK does not depend on
+  pydantic) or `dict` with `input_schema=`/`output_schema=`. The JSON Schemas are in
+  the descriptor. An invalid input fails the run without a retry.
+- `ctx.step`, `ctx.map` (in-process fan-out), `ctx.call` and `ctx.map_call` (child
+  runs on any replica of any module). Step keys are unique per run and the same on
+  every attempt; a step result is JSON, at most 256 KiB.
+- Callers: `await ABIClient(...).get_workflow(module_id, name, project=...).run(input)`,
+  `await self.engine.modules[id].get_workflow(name)`, `self.get_workflow(name)`;
+  `start(input)` returns a `WorkflowRun` (`status`, `wait`, `result`, `steps`, `cancel`).
+- `Cron(..., input={...})` and `Every(..., input={...})` are the run's payload;
+  changing the input republishes that schedule only.
+
 ## Document state and LangGraph checkpoints
 
 Modules can declare `"document"`. `self.engine.services.document` binds requests
@@ -229,7 +301,7 @@ paging history; full snapshots remain subject to RPC payload limits.
 
 Existing core agents keep their current PostgreSQL/memory selection. This optional
 saver does not migrate old checkpoints, launch remote agents, or provide discovery.
-See the document-checkpoint ADR and remote-agent invocation RFC for those boundaries.
+Those are outside the saver's scope.
 
 ## Facade compatibility boundaries
 
@@ -459,7 +531,8 @@ inference cannot be forcibly interrupted: the adapter waits for its worker threa
 before releasing the claim. Completed side effects cannot be undone. Graph
 interrupt/resume is not yet part of this protocol.
 
-The host admits at most 32 active runs per module. Prompts remain bounded to
+The host admits at most 200 active runs per process (`MAX_ACTIVE_RUNS`),
+shared by every agent it hosts; one more fails with `AGENT_BUSY`. Prompts remain bounded to
 64 KiB. Events and results are stored separately as immutable 8 KiB fragments;
 there is no 64 KiB output limit or 1024-event cap. The run record holds committed
 sequence counters and stays small. Status returns up to 64 event references;
@@ -542,10 +615,157 @@ launches it in a separate environment containing LangChain, SDK and proto, with
 no ABI core installed. The base worker still verifies its four-package install.
 
 
+## Workflows, pipelines and integrations
+
+A module holds them like an in-engine module does, written on `naas_abi_sdk`
+only. They run in the module's process, for its own agents, and each workflow or
+pipeline class is also a durable workflow other modules start by name (see "Calling
+another module's workflows and pipelines").
+The decisions, with what stays out of scope, are in
+`AGENTS.md`, Decision (2026-10-26).
+
+```python
+# <package>/workflows/GreetWorkflow.py   (pip install 'naas-abi-sdk[workflows]')
+from naas_abi_sdk.workflow import Workflow, WorkflowConfiguration, WorkflowParameters
+
+
+class GreetWorkflowParameters(WorkflowParameters):
+    name: str
+
+
+class GreetWorkflow(Workflow[GreetWorkflowParameters]):
+    """Greets someone: an agent reads this to decide when to call it."""
+
+    async def run(self, parameters: GreetWorkflowParameters) -> dict:
+        return {"message": f"Hello, {parameters.name}!"}
+```
+
+- `Workflow[P]` and `Pipeline[P]` (`naas_abi_sdk.pipeline`, needs `[workflows,rdf]`)
+  have `async def run(self, parameters: P)`; parameters are a pydantic model
+  (`WorkflowParameters`, `PipelineParameters`). A workflow returns a
+  JSON-serializable value or a pydantic model, a pipeline an rdflib `Graph`.
+  Each has a `<Name>Configuration` dataclass. `Integration`,
+  `IntegrationConfiguration` and `IntegrationConnectionError`
+  (`naas_abi_sdk.integration`) are standard library only: a code pattern, as in
+  engine modules. The module neither finds nor serves integrations.
+- `BaseModule` finds the `Workflow` and `Pipeline` subclasses defined under the
+  package's `workflows/` and `pipelines/` (recursively; `*_test.py`, `test_*.py`,
+  `tests/`, abstract classes and classes that are only imported are skipped). Set
+  `workflows = (...)` or `pipelines = (...)` on the class to declare them instead.
+  `ABIModule.get_workflow_classes()` and `get_pipeline_classes()` return them by
+  name at class level, before the module registers. The name is the class name
+  in snake case (`GreetWorkflow` is `greet_workflow`), one NATS subject token,
+  unique per kind; its durable workflow is `workflow.greet_workflow`.
+- After `on_initialized` the module builds each one: `New(module)` (a
+  classmethod, sync or async) if the class defines it, else the class with an
+  empty `<Name>Configuration`. A class that needs arguments is bound in
+  `on_initialized` with `self.expose_workflow(name, instance)` or
+  `self.expose_pipeline(name, instance)`. A discovered class that is neither
+  buildable nor bound stops the module from starting, with a message naming it.
+- An agent takes its tools when it is built, and agents are built in
+  `on_initialized`, before that build. Call `await self.build_processes()` there
+  first (bind the classes that need arguments with `expose_*` before it); it builds
+  what is not bound yet, and is idempotent, so the build after `on_initialized`
+  leaves those instances alone:
+
+  ```python
+  async def on_initialized(self):
+      await self.build_processes()
+      tools = self.get_workflow_instance("greet_workflow").as_tools()
+      agent = IntentAgent(..., tools=tools)
+      self.expose_agent("greeter", agent.as_handler())
+  ```
+- `self.get_workflow_instance(name)`, `self.get_pipeline_instance(name)`,
+  `self.get_workflows()` and `self.get_pipelines()` return the built instances.
+  `self.get_workflow(name)` is the module's durable workflow (see "Workflows").
+- `instance.as_tools()` returns a LangChain `StructuredTool` (extra `[agents]` or
+  `[agent]`): named by the slug, described by the class docstring, taking the
+  parameters model, and running `run` on the module's loop (call it from
+  `on_initialized` after `build_processes()`, or later, on that loop). A pydantic result comes back as JSON
+  data and a graph as `{"format": "text/turtle", "triples": n, "data": ...}`.
+- `import naas_abi_sdk` needs none of pydantic, rdflib or LangChain. Importing
+  `Workflow` without pydantic, `Pipeline` without rdflib, or calling `as_tools()`
+  without LangChain raises an `ImportError` that names the extra.
+- `abi new workflow|pipeline|integration <Name> <folder>` inside a remote module
+  writes these classes and a test beside them.
+- A module with workflows or pipelines publishes them as durable workflows:
+  `run_module` needs `discovery=` and the `document` service in
+  `dependencies.services` (it raises before connecting without them).
+
+### Calling another module's workflows and pipelines
+
+Each `Workflow` and `Pipeline` class is published as a one-step durable workflow
+(see "Workflows"), as the engine publishes an in-engine module's classes:
+`workflow.<slug>` or `pipeline.<slug>`, the parameters model as input schema, the
+class docstring (cut to 512 UTF-8 bytes) as description, the `run` return
+annotation as output schema. Declare the module in `dependencies.modules`, then:
+
+```python
+a = self.engine.modules["a"]
+greet = await a.get_workflow("workflow.greet_workflow")
+result = await greet.run({"name": "Ada"})                  # a JSON value
+run = await greet.start({"name": "Ada"}, idempotency_key="ada")
+tools = greet.as_tools()                                   # one LangChain tool, "greet_workflow"
+
+out = await (await a.get_workflow("pipeline.load_pipeline")).run({"count": 3})
+graph = Graph().parse(data=out["data"], format="turtle")   # out["triples"] is the count
+```
+
+- A run is a job run: a run record, the System app's Jobs tab (with a launch form),
+  `run.cancel()` (which cancels `run`). Its one step, `run`, is journaled: a retried
+  run does not run a finished `run` again.
+- The result is JSON as pydantic dumps it (nested models, dataclasses, datetimes,
+  UUIDs, decimals). A graph is `{"format": "text/turtle", "triples": n, "data":
+  "<turtle>"}`, `data` left out with a `note` above 60 KiB; any other result above
+  60 KiB is `{"omitted": true, "bytes": n, "limit": 61440, "note": ...}`. Write a
+  large graph to the triple store from the pipeline itself.
+- The input is validated into the parameters model before `run`: an input it refuses
+  fails the run without a retry (`InvalidWorkflowInput`), naming the fields, not
+  their values.
+- `WorkflowProxy.as_tools()` (extra `[agents]`) returns one tool named after the
+  last segment of the workflow name, described by its descriptor, taking its input
+  schema.
+- Like any job, a workflow is started by publishing its trigger: any module of the
+  project may start it. There is no per-caller authorization.
+- The kernel REST API does not mount remote workflows and pipelines.
+
+### Workflows and pipelines on a schedule
+
+`job` on the class sets its workflow's triggers and limits:
+
+```python
+from datetime import timedelta
+from naas_abi_sdk.jobs import Cron, JobSettings
+
+
+class IngestPipeline(Pipeline[IngestParameters]):
+    """Loads the nightly export."""
+
+    job = JobSettings(
+        triggers=(Cron("0 0 2 * * *", input={"source": "export"}),),
+        timeout=timedelta(minutes=10),
+        max_attempts=3,
+    )
+
+    async def run(self, parameters: IngestParameters) -> Graph: ...
+```
+
+- `job` is a `JobSettings(triggers=(), timeout=None, max_attempts=1, max_concurrency=1)`
+  (`naas_abi_sdk.jobs`). A class without `job` has no trigger and these defaults:
+  one attempt and one run at a time. Callers start it by name either way.
+- A `Cron` or `Every` trigger's `input` (default `{}`) is the run's parameters. An
+  `OnEvent` run takes the event's `data`.
+- Startup fails (`run_module` raises before it connects) when a `Cron`/`Every`
+  input does not validate against the parameters model, when `job` is not a
+  `JobSettings`, or when `workflow.<slug>` is also an explicit `jobs`, `@job` or
+  `@workflow` name.
+- Delivery is at least once and `max_attempts` may retry: `run` must be safe to
+  repeat. `timeout` cancels `run` and ends the run `TIMED_OUT`.
+
 ## Apps
 
 A module serves web apps through Nexus without a port, hostname or route of its
-own (docs/adr/20261012_remote-module-apps.md). Each `apps/<name>/manifest.json`
+own. Each `apps/<name>/manifest.json`
 next to the module's package is an app: discovery announces it, Nexus lists it
 and forwards its requests under `/app-remote/<grant>/<module_id>/<name>/` over
 NATS, and the module answers. Files of the folder (HTML, scripts, styles,
@@ -560,7 +780,7 @@ api = FastAPI()
 
 @api.get("/api/report")
 async def report(request: Request):
-    user = request.scope["abi"]["user_id"]  # the signed-in Nexus user
+    user = request.scope["abi"]["user_id"]  # the user the caller's credential acts for
     return {"user": user}
 
 class ABIModule(BaseModule):
@@ -575,6 +795,16 @@ The app's page calls `fetch("api/report")`, relative to its folder. The ASGI
 app runs in the module's process with `root_path` set to the Nexus path, and its
 lifespan (startup and shutdown) runs with the module. Nexus checks the user's
 access, then forwards the request without the user's credential.
+
+`request.scope["abi"]` holds `user_id` (the user the caller's verified credential
+acts for, empty for a caller acting for nobody), `principal` (`id`, `kind`, `name`:
+whoever holds the credential, which may act for that user) and `workspace_id`
+(the Nexus workspace the user opened the app from, one where it is enabled;
+empty without a `user_id`). The app host takes the user and the principal from
+discovery's verification of the caller's token, never from the request, so
+another module can call an app, but never on behalf of a user it does not act
+for. Keep each workspace's data apart with `workspace_id`. A lifespan's state (`yield {...}`) reaches each request
+(`request.state`).
 
 The page runs sandboxed, in an opaque origin, apart from the Nexus session. The
 grant in its URL is its only credential:
@@ -599,12 +829,52 @@ async def upload(name: str, request: Request):
 ```
 
 A `StreamingResponse` (a download, server-sent events) leaves as the app sends
-it; when the browser leaves, the app is cancelled. Nexus refuses uploads above
-the app's `max_upload_bytes` (manifest; default 1 GiB). An app that neither
-reads nor answers for 60 s gets 504; there is no total limit. Multipart forms
+it; when the browser leaves, the app is cancelled, even while it waits for its
+next event. Set `Content-Length` when you know it: Nexus forwards it, and a
+browser then tells a cut download from a whole one (a stream that fails is
+aborted either way). When the module stops, a stream still open ends with an
+error. Nexus refuses uploads above the app's `max_upload_bytes` (manifest;
+default 1 GiB), and the module stops reading there too. Uploads run 16 at
+once per module process (`AppHost(max_uploads=)`), apart from other requests.
+An app that neither reads nor answers for 60 s gets 504; there is no total
+limit. An exception the app raises, an `RPCError` of a service it called
+included, is a 502 for the browser. Multipart forms
 work, but FastAPI's `UploadFile` spools each file (to disk above 1 MB): send a
 very large file as the raw body instead. No WebSockets yet. Declare `apps = (AppDescriptor(...),)` on the class instead
 of the folder for an app without files.
+
+## Ontologies
+
+A module sends its ontologies to the engine's schema graph, as an in-engine module does.
+Put `.ttl` files under `ontologies/` next to the package (for example
+`ontologies/modules/FooOntology.ttl`) and declare the `triple_store` service:
+
+```python
+class ABIModule(BaseModule):
+    module_id = "acme.foo"
+    dependencies = ModuleDependencies(services=("triple_store",))
+    # ontologies = None   # the default: every ontologies/**/*.ttl, except under "sandbox"
+    # ontologies = ("modules/FooOntology.ttl",)   # or name the files; () sends none
+```
+
+Once the instance is `READY` or `DEGRADED`, `run_module` sends each file as
+`module/<module_id>/<path relative to ontologies/>` (`module/acme.foo/modules/FooOntology.ttl`):
+the schema graph then holds an `internal:Schema` with that `filePath` and the file's triples.
+A restart with the same file writes nothing; a changed file applies the difference. A module
+can load only under its own id (`PERMISSION_DENIED` otherwise), and the engine refuses content
+that is not Turtle (`INVALID_ARGUMENT`).
+
+- A `STAGED` generation (behind a live one, in a rollout) sends nothing until it takes over,
+  and a process asked to drain first sends nothing at all.
+- Sending is in the background. A failure (the engine down, a timeout, invalid Turtle) is
+  logged as an error by `naas_abi_sdk.ontologies` and retried after 1 s, then twice as long
+  up to a minute; it never changes readiness or stops the module.
+- Loading is additive, as for in-engine modules: a file you remove or rename later stays in
+  the schema graph.
+- A module with ontologies that does not declare `triple_store`, or has a file name the engine
+  would refuse (letters, digits, `_`, `.`, `-`, ending in `.ttl`), stops at start with a message.
+- `await engine.services.triple_store.load_schema(source, content)` sends one ontology built at
+  runtime; it returns whether the graph was written.
 
 ## Object streams and transfer configuration
 
@@ -694,3 +964,10 @@ Expired leases use half the nominal lease as the cap.
 Authentication/configuration errors remain fatal and visible. Unexpected renewal
 or endpoint-binding failures receive at most three consecutive attempts. Failed
 endpoint rebinds clean up partial subscriptions and retain the previous bindings.
+
+## Documentation
+
+- [Quickstart](https://docs.naas.ai/user-guide/get-started/quickstart)
+- [Module jobs and scheduling](https://docs.naas.ai/user-guide/build/modules/module-jobs)
+- [SDK and proto internals](https://docs.naas.ai/developer-guide/sdk-and-proto)
+- [Deploy](https://docs.naas.ai/user-guide/deploy/overview)

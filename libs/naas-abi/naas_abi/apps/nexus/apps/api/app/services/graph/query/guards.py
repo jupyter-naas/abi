@@ -51,7 +51,9 @@ def _walk_filter(node: FilterNode, depth: int) -> int:
         value = node.value
         if node.operator in ("in", "notIn") and isinstance(value, (list, tuple)):
             if len(value) > QueryGuards.MAX_IN_SET:
-                raise GraphQuerySpecError(f"`{node.operator}` set exceeds {QueryGuards.MAX_IN_SET} values")
+                raise GraphQuerySpecError(
+                    f"`{node.operator}` set exceeds {QueryGuards.MAX_IN_SET} values"
+                )
         return 1
     if isinstance(node, FilterGroup):
         return 1 + sum(_walk_filter(c, depth + 1) for c in node.children)
@@ -62,7 +64,9 @@ def _walk_filter(node: FilterNode, depth: int) -> int:
 
 def validate_spec(spec: ListSpec | AggregateSpec) -> None:
     if len(spec.graph_uris) > QueryGuards.MAX_GRAPHS:
-        raise GraphQuerySpecError(f"too many graphs ({len(spec.graph_uris)} > {QueryGuards.MAX_GRAPHS})")
+        raise GraphQuerySpecError(
+            f"too many graphs ({len(spec.graph_uris)} > {QueryGuards.MAX_GRAPHS})"
+        )
     if not spec.graph_uris:
         raise GraphQuerySpecError("at least one graph_uri is required")
 
@@ -76,4 +80,6 @@ def validate_spec(spec: ListSpec | AggregateSpec) -> None:
     if spec.filters is not None:
         total = _walk_filter(spec.filters, depth=1)
         if total > QueryGuards.MAX_FILTER_NODES:
-            raise GraphQuerySpecError(f"filter tree too large ({total} > {QueryGuards.MAX_FILTER_NODES})")
+            raise GraphQuerySpecError(
+                f"filter tree too large ({total} > {QueryGuards.MAX_FILTER_NODES})"
+            )

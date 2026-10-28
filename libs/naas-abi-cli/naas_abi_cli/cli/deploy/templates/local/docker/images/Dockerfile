@@ -1,4 +1,4 @@
-FROM python:3.11
+FROM python:3.12
 WORKDIR /app
 
 # Install CA certificates and runtime libs required by opencv (libGL, libglib),

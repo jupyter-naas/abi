@@ -46,8 +46,20 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.adapters.primary.invites_
     idp_groups_router,
     invitations_router,
 )
+from naas_abi.apps.nexus.apps.api.app.services.maps.basemaps.handlers import (
+    router as maps_basemaps_router,
+)
+from naas_abi.apps.nexus.apps.api.app.services.maps.catalog.handlers import (
+    router as maps_catalog_router,
+)
+from naas_abi.apps.nexus.apps.api.app.services.maps.feed_layers.handlers import (
+    router as maps_feed_layers_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.handlers import (
     router as maps_layouts_router,
+)
+from naas_abi.apps.nexus.apps.api.app.services.maps.permissions.handlers import (
+    router as maps_permissions_router,
 )
 from naas_abi.apps.nexus.apps.api.app.services.modules.handlers import router as modules_router
 from naas_abi.apps.nexus.apps.api.app.services.oidc.adapters.primary.oidc__primary_adapter__FastAPI import (  # noqa: E501
@@ -64,6 +76,13 @@ from naas_abi.apps.nexus.apps.api.app.services.sheets.handlers import router as 
 from naas_abi.apps.nexus.apps.api.app.services.skills.handlers import router as skills_router
 from naas_abi.apps.nexus.apps.api.app.services.slides.handlers import router as slides_router
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.handlers import router as sysadmin_router
+from naas_abi.apps.nexus.apps.api.app.services.tasks.handlers import router as tasks_router
+from naas_abi.apps.nexus.apps.api.app.services.workflows.handlers import (
+    router as workflows_router,
+)
+from naas_abi.apps.nexus.apps.api.app.services.workflows.handlers import (
+    workspace_router as workspace_workflows_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.handlers import (
     router as workspaces_router,
 )
@@ -93,6 +112,7 @@ api_router.include_router(
 api_router.include_router(slides_router, prefix="/slides", tags=["slides"])
 api_router.include_router(documents_router, prefix="/documents", tags=["documents"])
 api_router.include_router(sheets_router, prefix="/sheets", tags=["sheets"])
+api_router.include_router(tasks_router, prefix="/tasks", tags=["tasks"])
 api_router.include_router(openai_gateway_router, prefix="/v1", tags=["openai"])
 api_router.include_router(code_review_router, prefix="/code-review", tags=["code-review"])
 api_router.include_router(platform_router, prefix="/platform", tags=["platform"])
@@ -107,6 +127,12 @@ api_router.include_router(apps_router, prefix="/apps", tags=["apps"])
 api_router.include_router(app_projects_router, prefix="/app-projects", tags=["app-projects"])
 api_router.include_router(files_router, prefix="/files", tags=["files"])
 api_router.include_router(maps_layouts_router, prefix="/maps/layouts", tags=["maps"])
+# Feeds are the layout records; /maps/feeds is the name the UI uses.
+api_router.include_router(maps_layouts_router, prefix="/maps/feeds", tags=["maps"])
+api_router.include_router(maps_feed_layers_router, prefix="/maps/feed-layers", tags=["maps"])
+api_router.include_router(maps_basemaps_router, prefix="/maps/basemaps", tags=["maps"])
+api_router.include_router(maps_catalog_router, prefix="/maps/catalog", tags=["maps"])
+api_router.include_router(maps_permissions_router, prefix="/maps/permissions", tags=["maps"])
 api_router.include_router(datasets_router, prefix="/datasets", tags=["datasets"])
 api_router.include_router(secrets.router, prefix="/secrets", tags=["secrets"])
 api_router.include_router(providers_router, prefix="/providers", tags=["providers"])
@@ -118,3 +144,7 @@ api_router.include_router(speech.router, prefix="/speech", tags=["speech"])
 api_router.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(sysadmin_router, prefix="/admin/system", tags=["sysadmin"])
+api_router.include_router(workflows_router, prefix="/workflows", tags=["workflows"])
+api_router.include_router(
+    workspace_workflows_router, prefix="/workspaces/{workspace_id}/workflows", tags=["workflows"]
+)

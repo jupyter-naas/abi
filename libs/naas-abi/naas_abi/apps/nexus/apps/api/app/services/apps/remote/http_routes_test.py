@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote import http_routes as http
@@ -14,18 +14,20 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.remote.adapters.in_memory im
     InMemoryRemoteAppDirectory,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import (
-    RemoteAppGrant,
     mint_remote_app_grant,
     read_remote_app_grant,
     redact_grant_path,
+    redact_request_target,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import (
     AppRequest,
     AppResponse,
     RemoteApp,
+    RemoteAppStreamFailed,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
 from naas_abi_core.apps.api.abi_api_key_auth import APP_HTML_TOKEN_COOKIE
+from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import IAMStoreMemory
 from naas_abi_core.services.iam.IAMService import IAMService
 
@@ -43,11 +45,34 @@ def engine_iam():
     credentials.configure_iam(previous)
 
 
-def _grant(module_id: str = "acme.research", app: str = "console", user_id: str = "u-42") -> str:
+@pytest.fixture(autouse=True)
+def workspaces(monkeypatch) -> list[tuple[str, str, str | None]]:
+    """The workspace a grant names (access.py checks it in the database):
+    the one asked for, else "ws-first"; "ws-off" enables no app."""
+    asked: list[tuple[str, str, str | None]] = []
+
+    async def remote_app_workspace(user_id: str, app_id: str, workspace_id: str | None) -> str:
+        asked.append((user_id, app_id, workspace_id))
+        if workspace_id == "ws-off":
+            raise HTTPException(status_code=403, detail="This app is not enabled in this workspace")
+        return workspace_id or "ws-first"
+
+    monkeypatch.setattr(http.access, "remote_app_workspace", remote_app_workspace)
+    return asked
+
+
+def _grant(
+    module_id: str = "acme.research",
+    app: str = "console",
+    user_id: str = "u-42",
+    workspace_id: str = "",
+) -> str:
     # Also called while the module loads (parameters), before any fixture ran.
     previous = credentials.configure_iam(lambda: IAM)
     try:
-        return mint_remote_app_grant(user_id=user_id, module_id=module_id, app=app)
+        return mint_remote_app_grant(
+            user_id=user_id, module_id=module_id, app=app, workspace_id=workspace_id
+        )
     finally:
         credentials.configure_iam(previous)
 
@@ -83,9 +108,13 @@ def _answering(monkeypatch, headers: tuple[tuple[str, str], ...], status: int = 
 def _client() -> TestClient:
     app = FastAPI()
     app.add_api_route(
-        "/app-html/remote/{module_id}/{app}/{path:path}", http.open_remote_app, methods=["GET"]
+        "/app-html/remote/{module_id}/{app}/{path:path}",
+        http.open_remote_app,
+        methods=http.METHODS,
     )
-    app.add_api_route("/app-html/remote/{module_id}/{app}", http.open_remote_app, methods=["GET"])
+    app.add_api_route(
+        "/app-html/remote/{module_id}/{app}", http.open_remote_app, methods=http.METHODS
+    )
     app.add_api_route(
         "/app-remote/{grant}/{module_id}/{app}/{path:path}",
         http.serve_remote_app,
@@ -181,7 +210,7 @@ def _grant_of(response) -> tuple[str, str, dict]:
     return prefix, rest, {"grant": grant, "key": record, "exp": record.expires_at.timestamp()}
 
 
-def test_the_catalog_url_redirects_to_a_fresh_grant(monkeypatch, forwarded):
+def test_the_catalog_url_redirects_to_a_fresh_grant(monkeypatch, forwarded, workspaces):
     _presenting(monkeypatch, "u-7")
 
     response = _client().get(
@@ -191,11 +220,14 @@ def test_the_catalog_url_redirects_to_a_fresh_grant(monkeypatch, forwarded):
     assert response.status_code == 307
     prefix, rest, claims = _grant_of(response)
     assert (prefix, rest) == ("app-remote", "acme.research/console/index.html?q=1")
-    assert read_remote_app_grant(claims["grant"]) == RemoteAppGrant(
-        "u-7", "acme.research", "console", read_remote_app_grant(claims["grant"]).scope
-    )
+    granted = read_remote_app_grant(claims["grant"])
+    assert granted is not None
+    assert (granted.user_id, granted.module_id, granted.app) == ("u-7", "acme.research", "console")
+    # An old link names no workspace: the first of the user's that enables it.
+    assert granted.workspace_id == "ws-first"
+    assert workspaces == [("u-7", "remote/acme.research:console", None)]
     # It opens this app and does nothing else at the kernel.
-    scope = read_remote_app_grant(claims["grant"]).scope
+    scope = granted.scope
     assert scope is not None and scope[0]["actions"] == ["discovery:OpenApp"]
     assert scope[0]["resources"] == ["abi:-:-:discovery:app/*/acme.research/console"]
     # IAM keeps it hashed: eight hours at most.
@@ -264,13 +296,26 @@ def test_the_request_is_forwarded_for_the_grants_user_narrowed_to_opening_the_ap
     assert context.scope[0]["actions"] == ["discovery:OpenApp"]
 
 
-def test_the_catalog_url_needs_a_user(monkeypatch, forwarded):
+def test_an_api_key_caller_is_answered_without_a_grant(monkeypatch, forwarded):
+    """A script with ABI_API_KEY has no user and no browser: no grant, the
+    module answers it directly, with no user and no workspace, any method."""
+    monkeypatch.setattr(http, "is_abi_api_token_valid", lambda token: True)
     _presenting(monkeypatch, "", minutes_left=None)  # ABI_API_KEY
 
-    response = _client().get("/app-html/remote/acme.research/console/", follow_redirects=False)
+    client = _client()
+    response = client.post(
+        "/app-html/remote/acme.research/console/api/save?q=1",
+        content=b'{"a": 1}',
+        follow_redirects=False,
+    )
 
-    assert response.status_code == 403
-    assert "location" not in response.headers
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
+    assert response.headers["content-security-policy"] == http.SANDBOX
+    (request,) = forwarded
+    assert (request.method, request.path, request.query) == ("POST", "/api/save", "q=1")
+    assert (request.user_id, request.workspace_id, request.body) == ("", "", b'{"a": 1}')
+    assert request.root_path == "/app-html/remote/acme.research/console"
 
 
 def test_a_grant_is_minted_and_read_for_a_user_and_an_app_only():
@@ -568,7 +613,7 @@ def test_a_streamed_answer_reaches_the_browser(monkeypatch):
 
 
 def test_uploads_to_one_module_are_capped():
-    uploads = http._Uploads()
+    uploads = http._Slots(http.MAX_UPLOADS_PER_MODULE, "busy")
     slots = [uploads.slot("m") for _ in range(http.MAX_UPLOADS_PER_MODULE)]
     for slot in slots:
         slot.__enter__()
@@ -580,6 +625,11 @@ def test_uploads_to_one_module_are_capped():
     for slot in slots:
         slot.__exit__(None, None, None)
     assert uploads.active == {}
+
+
+def _known_user(subject: str = "ada") -> str:
+    with as_service_account("engine"):
+        return IAM.ensure_user("https://idp.example", subject).id
 
 
 def _engine_session(user_id: str) -> str:
@@ -666,3 +716,524 @@ def test_the_access_log_hides_the_grant():
 
     assert GRANT not in record.getMessage()
     assert "/app-remote/[grant]/acme.research/console/index.html?x=1" in record.getMessage()
+
+
+def test_credential_parameters_are_redacted_from_request_targets():
+    assert (
+        redact_request_target("/app-html/a/b/index.html?token=eyJ.x.y&theme=dark")
+        == "/app-html/a/b/index.html?token=[redacted]&theme=dark"
+    )
+    assert (
+        redact_request_target("/x?Access_Token=a&api%5Fkey=b&code=c&X-Amz-Signature=d&q=e")
+        == "/x?Access_Token=[redacted]&api%5Fkey=[redacted]&code=[redacted]"
+        "&X-Amz-Signature=[redacted]&q=e"
+    )
+    assert redact_request_target("/x?token&tokens=1&a=b=c") == "/x?token&tokens=1&a=b=c"
+    assert redact_request_target(f"{ROOT}/api?token=t") == (
+        "/app-remote/[grant]/acme.research/console/api?token=[redacted]"
+    )
+
+
+def test_the_access_log_hides_the_app_html_token():
+    jwt_value = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1In0.c2lnbmF0dXJl"
+    record = logging.LogRecord(
+        "uvicorn.access",
+        logging.INFO,
+        __file__,
+        1,
+        '%s - "%s %s HTTP/%s" %d',
+        ("127.0.0.1:1", "GET", f"/app-html/system/index.html?token={jwt_value}&v=2", "1.1", 200),
+        None,
+    )
+
+    assert http.RedactGrantFilter().filter(record)
+
+    assert jwt_value not in record.getMessage()
+    assert "/app-html/system/index.html?token=[redacted]&v=2" in record.getMessage()
+
+
+# -- #48 review: grants end at logout, and name a workspace -----------------------
+
+
+def test_a_logout_ends_the_users_grants_on_every_device(monkeypatch, forwarded):
+    from naas_abi.apps.nexus.apps.api.app.services.apps import links
+
+    # A user of their own: the revocation reaches every grant a user holds.
+    client = _client()
+    mine = f"/app-remote/{_grant(user_id='u-out')}/acme.research/console"
+    other = f"/app-remote/{_grant(user_id='u-out')}/acme.research/console"
+    assert client.get(f"{mine}/").status_code == 200
+
+    assert links.revoke_remote_app_links("u-out") == 2
+
+    for response in (
+        client.get(f"{mine}/"),
+        client.post(f"{mine}/api/save", content=b"{}"),
+        client.get(mine, follow_redirects=False),
+        client.get(f"{other}/"),
+    ):
+        assert response.status_code == 401
+        assert response.headers["content-security-policy"] == http.SANDBOX
+    fresh = f"/app-remote/{_grant(user_id='u-out')}/acme.research/console"
+    assert client.get(f"{fresh}/").status_code == 200
+    # Another user's grants stay.
+    assert client.get(f"{ROOT}/").status_code == 200
+    assert (
+        client.get(f"/app-remote/{_grant(user_id='u-43')}/acme.research/console/").status_code
+        == 200
+    )
+
+
+def test_the_module_learns_the_workspace_of_the_grant(forwarded):
+    grant = _grant(workspace_id="ws-9")
+
+    _client().get(f"/app-remote/{grant}/acme.research/console/")
+
+    assert (forwarded[0].user_id, forwarded[0].workspace_id) == ("u-42", "ws-9")
+
+
+def test_the_catalog_url_opens_the_workspace_it_names(monkeypatch, forwarded, workspaces):
+    _presenting(monkeypatch, "u-7")
+    client = _client()
+
+    response = client.get(
+        "/app-html/remote/acme.research/console/?workspace_id=ws-2&q=1", follow_redirects=False
+    )
+
+    _, rest, claims = _grant_of(response)
+    assert read_remote_app_grant(claims["grant"]).workspace_id == "ws-2"
+    assert rest == "acme.research/console/?q=1"  # Nexus's parameter stays with Nexus
+    refused = client.get(
+        "/app-html/remote/acme.research/console/?workspace_id=ws-off", follow_redirects=False
+    )
+    assert refused.status_code == 403
+    assert "location" not in refused.headers
+
+
+def test_a_post_to_the_catalog_url_keeps_its_method(monkeypatch, forwarded):
+    """The catalog route takes every method; a 307 keeps the method and body."""
+    _presenting(monkeypatch, "u-7")
+
+    response = _client().post(
+        "/app-html/remote/acme.research/console/api/save", content=b"{}", follow_redirects=False
+    )
+
+    assert response.status_code == 307
+    assert response.headers["location"].endswith("/acme.research/console/api/save")
+
+
+# -- #48 review: the response headers an app's API needs ---------------------------
+
+
+def test_an_apis_response_headers_reach_the_page(monkeypatch):
+    _answering(
+        monkeypatch,
+        (
+            ("X-Request-Id", "r-1"),
+            ("X-RateLimit-Remaining", "9"),
+            ("Retry-After", "30"),
+            ("WWW-Authenticate", 'Bearer realm="app"'),
+            ("Link", '<page/2>; rel="next"'),
+            ("Location", "/items/5"),
+            ("X-Accel-Redirect", "/internal/secrets"),
+            ("X-Sendfile", "/etc/passwd"),
+            ("X-Forwarded-Host", "evil.example"),
+            ("X-Middleware-Rewrite", "/api/admin"),
+            ("X-Envoy-Upstream-Service-Time", "1"),
+            ("X-Amzn-Remapped-Host", "evil.example"),
+            ("X-LiteSpeed-Cache-Control", "public"),
+            ("X-Cache-Tags", "all"),
+        ),
+        status=201,
+    )
+
+    response = _client().post(f"{ROOT}/api/items", content=b"{}")
+
+    assert response.status_code == 201
+    assert response.headers["x-request-id"] == "r-1"
+    assert response.headers["x-ratelimit-remaining"] == "9"
+    assert response.headers["retry-after"] == "30"
+    assert response.headers["www-authenticate"] == 'Bearer realm="app"'
+    assert response.headers["link"] == '<page/2>; rel="next"'
+    # Not a redirect: the browser does not go there; the page reads it as sent.
+    assert response.headers["location"] == "/items/5"
+    for dropped in (
+        "x-accel-redirect",
+        "x-sendfile",
+        "x-forwarded-host",
+        "x-middleware-rewrite",
+        "x-envoy-upstream-service-time",
+        "x-amzn-remapped-host",
+        "x-litespeed-cache-control",
+        "x-cache-tags",
+    ):
+        assert dropped not in response.headers, dropped
+    # The page's fetch() is cross-origin: it may read them.
+    assert response.headers["access-control-expose-headers"] == "*"
+
+
+def test_headers_http_cannot_carry_are_dropped(monkeypatch):
+    """A23: a module's header value with a line break or outside latin-1 is
+    dropped, not a 500."""
+    _answering(
+        monkeypatch,
+        (
+            ("X-Label", "café ☕"),
+            ("X-Split", "a\r\nSet-Cookie: abi_app_html_token=x"),
+            ("X Bad Name", "1"),
+            ("X-Fine", "ok"),
+        ),
+    )
+
+    response = _client().get(f"{ROOT}/")
+
+    assert response.status_code == 200
+    assert response.headers["x-fine"] == "ok"
+    for dropped in ("x-label", "x-split", "set-cookie"):
+        assert dropped not in response.headers, dropped
+
+
+# -- #48 security review: cookie pairs and the joined request path ------------------
+
+
+def test_a_cookie_is_cut_at_its_first_semicolon_and_needs_a_name(monkeypatch):
+    _answering(
+        monkeypatch,
+        (
+            ("Set-Cookie", f"flag; Path={ROOT}/; x=y"),
+            ("Set-Cookie", f"bad name=1; Path={ROOT}/"),
+            ("Set-Cookie", f"=anonymous; Path={ROOT}/"),
+            ("Set-Cookie", f"theme=a=b; Path={ROOT}/; Secure"),
+        ),
+    )
+
+    response = _client().get(f"{ROOT}/")
+
+    assert response.headers.get_list("set-cookie") == [
+        f"{http.APP_COOKIE_PREFIX}theme=a=b; Path={ROOT}/; Secure"
+    ]
+
+
+def test_a_relative_redirect_from_a_dot_segment_path_is_dropped(monkeypatch):
+    """`%252e%252e` reaches the route as `%2e%2e`: joined to a relative
+    Location, the browser would read it as `..` and leave the app."""
+    _answering(monkeypatch, (("Location", "next"),), status=302)
+    client = _client()
+
+    escaped = client.get(f"{ROOT}/%252e%252e/%252e%252e/%252e%252e/x", follow_redirects=False)
+    plain = client.get(f"{ROOT}/api/x", follow_redirects=False)
+
+    assert "location" not in escaped.headers
+    assert plain.headers["location"] == f"{ROOT}/api/next"
+
+
+# -- A6, A23, A27, A29: bodies and queries pass as they are -------------------------
+
+
+def test_the_query_reaches_the_module_as_the_browser_sent_it(forwarded):
+    """A27: no re-encoding; only the access token is taken out."""
+    _client().get(f"{ROOT}/api/x?a=b%20c&flag&token={GRANT}&path=%2Fdocs&sig=x%2By&a=2")
+
+    assert forwarded[0].query == "a=b%20c&flag&path=%2Fdocs&sig=x%2By&a=2"
+
+
+def test_head_carries_the_length_get_would_send(monkeypatch):
+    _answering(monkeypatch, (("Content-Length", "1234"), ("Content-Type", "text/plain")))
+
+    async def head(request: AppRequest) -> AppResponse:
+        return AppResponse(200, (("Content-Length", "1234"),), b"")
+
+    _directory(monkeypatch, head)
+
+    response = _client().head(f"{ROOT}/report.txt")
+
+    assert response.headers["content-length"] == "1234"
+
+
+class _Body:
+    """A module's streamed body as the directory hands it over: closing it,
+    started or not, tells the module (discovery adapter: _Pulled)."""
+
+    def __init__(self, chunks, fail, closed):
+        self.chunks, self.fail, self.closed = list(chunks), fail, closed
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if self.chunks:
+            return self.chunks.pop(0)
+        if self.fail:
+            raise RemoteAppStreamFailed("the module's app failed")
+        raise StopAsyncIteration
+
+    async def aclose(self):
+        if self.closed is not None:
+            self.closed.append(True)
+
+
+def _streaming(monkeypatch, chunks, *, length=None, fail=False, closed=None):
+    async def answer(request: AppRequest) -> AppResponse:
+        headers = () if length is None else (("Content-Length", str(length)),)
+        return AppResponse(200, headers, body_stream=_Body(chunks, fail, closed))
+
+    _directory(monkeypatch, answer)
+
+
+def test_a_streamed_answer_carries_the_apps_length(monkeypatch):
+    _streaming(monkeypatch, [b"ab", b"cd"], length=4)
+
+    response = _client().get(f"{ROOT}/file.bin")
+
+    assert response.content == b"abcd"
+    assert response.headers["content-length"] == "4"
+    assert "transfer-encoding" not in response.headers
+
+
+def test_a_stream_that_breaks_off_fails_in_the_browser(monkeypatch):
+    """A6: the connection is aborted; a short body never looks whole."""
+    import socket
+    import threading
+    import time
+
+    import httpx
+    import uvicorn
+
+    app = _client().app
+    for length in (None, 6):
+        _streaming(monkeypatch, [b"abc"], length=length, fail=True)
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        server = uvicorn.Server(
+            uvicorn.Config(app, host="127.0.0.1", port=port, log_level="critical")
+        )
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            while not server.started:
+                time.sleep(0.02)
+            with pytest.raises(httpx.RemoteProtocolError):
+                httpx.get(f"http://127.0.0.1:{port}{ROOT}/file.bin", timeout=5)
+        finally:
+            server.should_exit = True
+            thread.join(timeout=5)
+
+
+def test_one_modules_streams_are_capped_per_worker(monkeypatch):
+    """A29: a module's open streams cannot take every worker slot; above the
+    cap the stream is closed (the module stops its app) and the browser gets 503."""
+    closed: list[bool] = []
+    _streaming(monkeypatch, [b"x"], closed=closed)
+    monkeypatch.setattr(http, "_streams", http._Slots(1, "Too many responses streaming"))
+    release = http._streams.acquire("acme.research")
+
+    refused = _client().get(f"{ROOT}/events")
+
+    assert refused.status_code == 503
+    assert refused.headers["content-security-policy"] == http.SANDBOX
+    assert closed == [True]
+    release()
+    assert _client().get(f"{ROOT}/events").content == b"x"
+    assert http._streams.active == {}
+
+
+def test_a_stream_stops_when_the_browser_leaves_while_it_is_idle():
+    """A22: no event to send, the browser leaves: the body is closed now."""
+    import asyncio
+
+    async def scenario():
+        closed = asyncio.Event()
+
+        async def idle():
+            try:
+                yield b"data: hello\n\n"
+                await asyncio.sleep(3600)
+            finally:
+                closed.set()
+
+        released = []
+        response = http._RemoteAppStream(idle(), lambda: released.append(True), 200)
+        sent: list[dict] = []
+        left = asyncio.Event()
+
+        async def receive():
+            await left.wait()
+            return {"type": "http.disconnect"}
+
+        async def send(message):
+            sent.append(message)
+
+        scope = {"type": "http", "asgi": {"spec_version": "2.4"}}
+        serving = asyncio.create_task(response(scope, receive, send))
+        while len(sent) < 2:
+            await asyncio.sleep(0.01)
+        left.set()
+        await asyncio.wait_for(serving, 1)
+        assert closed.is_set() and released == [True]
+
+    asyncio.run(scenario())
+
+
+def test_a_revoked_session_mints_no_grant(monkeypatch, forwarded):
+    """The token of a session the user's tokens were revoked for (a logout, here
+    or elsewhere) cannot open the app again."""
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        as_service_account,
+        service_account,
+        use_call_context,
+        user,
+    )
+
+    with as_service_account("engine"):
+        ada = IAM.ensure_user("https://idp.example", "ada")
+    token = _engine_session(ada.id)
+    client = _client()
+    url = "/app-html/remote/acme.research/console/"
+
+    opened = client.get(url, headers={"Authorization": f"Bearer {token}"}, follow_redirects=False)
+    assert opened.status_code == 307
+
+    with use_call_context(CallContext(principal=service_account("api"), on_behalf_of=user(ada.id))):
+        IAM.revoke_tokens(ada.id)
+    after = client.get(url, headers={"Authorization": f"Bearer {token}"}, follow_redirects=False)
+    assert after.status_code == 403
+    assert "location" not in after.headers
+
+    fresh = client.get(
+        url, headers={"Authorization": f"Bearer {_engine_session(ada.id)}"}, follow_redirects=False
+    )
+    assert fresh.status_code == 307
+
+
+def test_a_browser_leaving_mid_stream_is_not_an_error():
+    """Review round 1: a tab closed mid-download is no "Exception in ASGI
+    application"; a module's stream breaking off still is."""
+    import asyncio
+
+    async def scenario(body):
+        released: list[bool] = []
+        response = http._RemoteAppStream(body, lambda: released.append(True), 200)
+        disconnected = asyncio.Event()
+
+        async def receive():
+            await disconnected.wait()
+            return {"type": "http.disconnect"}
+
+        async def send(message):
+            if message["type"] == "http.response.body" and message.get("body"):
+                disconnected.set()
+                raise OSError("the client went away")
+
+        await response({"type": "http", "asgi": {"spec_version": "2.4"}}, receive, send)
+        assert released == [True]
+
+    closed: list[bool] = []
+    asyncio.run(scenario(_Body([b"a", b"b"], False, closed)))  # returns quietly
+    assert closed == [True]
+
+    async def breaks():
+        async def receive():
+            await asyncio.sleep(3600)
+
+        async def send(message):
+            pass
+
+        response = http._RemoteAppStream(_Body([b"a"], True, None), lambda: None, 200)
+        await response({"type": "http", "asgi": {"spec_version": "2.4"}}, receive, send)
+
+    with pytest.raises(RemoteAppStreamFailed):
+        asyncio.run(breaks())
+
+
+# -- what the app receives is what the browser sent ------------------------------
+
+
+def test_a_chunked_upload_above_the_apps_limit_is_refused(monkeypatch):
+    """No Content-Length to refuse it by, and small enough to travel inline."""
+    small = RemoteApp("acme.research", "console", max_upload_bytes=1000)
+
+    async def never(request):
+        raise AssertionError("not forwarded")
+
+    _directory(monkeypatch, never, small)
+
+    def chunks():
+        yield b"x" * 600
+        yield b"x" * 600
+
+    response = _client().put(f"{ROOT}/f", content=chunks())
+
+    assert response.status_code == 413
+    assert response.headers["content-security-policy"] == http.SANDBOX
+
+
+def test_only_the_nexus_token_leaves_the_query(forwarded):
+    response = _client().get(
+        f"{ROOT}/x?token=jwt&token=own&token={GRANT}&flag&q=a%2Bb+c",
+        headers={"Authorization": "Bearer jwt"},
+    )
+
+    assert response.status_code == 200
+    assert forwarded[0].query == "token=own&flag&q=a%2Bb+c"
+
+
+def test_the_apps_own_token_stays_without_an_authorization_header(forwarded):
+    """A sandboxed page sends no Authorization: the grant in the path is its
+    credential, and a token in its query is the app's."""
+    response = _client().get(f"{ROOT}/x?token=own&q=1")
+
+    assert response.status_code == 200
+    assert forwarded[0].query == "token=own&q=1"
+
+
+def test_a_nexus_token_leaves_the_query_whatever_authenticated_the_request(monkeypatch, forwarded):
+    session = _engine_session(_known_user())
+
+    response = _client().get(
+        f"{ROOT}/x?token={session}&q=1", headers={"Authorization": "Bearer other"}
+    )
+
+    assert response.status_code == 200
+    assert forwarded[0].query == "q=1"
+
+
+def test_an_expired_or_unlisted_nexus_credential_still_leaves_the_query(forwarded):
+    """A credential the engine issued is one whether or not it still opens
+    anything: a session token that expired, a key, a grant that ended never
+    reach the module's code."""
+    import jwt as pyjwt
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    expired = pyjwt.encode(
+        {"sub": "u-42", "aud": "abi:session", "exp": datetime.now(UTC) - timedelta(minutes=5)},
+        ec.generate_private_key(ec.SECP256R1()),
+        algorithm="ES256",
+    )
+    stale_grant = _grant(app="board", user_id="u-stale")
+    from naas_abi.apps.nexus.apps.api.app.services.apps import links
+
+    links.revoke_remote_app_links("u-stale")  # it opens nothing now
+
+    response = _client().get(
+        f"{ROOT}/x?token={expired}&token=abi_pk_aaaaaaaaaaaaaaaa_x"
+        f"&token={stale_grant}&token=own&q=1"
+    )
+
+    assert response.status_code == 200
+    assert forwarded[0].query == "token=own&q=1"
+
+
+def test_the_apps_cookies_pass_as_sent(forwarded):
+    prefix = http.APP_COOKIE_PREFIX
+    response = _client().get(
+        f"{ROOT}/x",
+        headers={
+            "Cookie": f'{prefix}theme="dark blue"; {APP_HTML_TOKEN_COOKIE}=jwt; '
+            f"nexus_session=s; {prefix}=x; {prefix}n=a%3Bb"
+        },
+    )
+
+    assert response.status_code == 200
+    assert dict(forwarded[0].headers)["cookie"] == 'theme="dark blue"; n=a%3Bb'

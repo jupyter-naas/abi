@@ -26,6 +26,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalRecord,
     RevisionConflictError,
     ScopeRecord,
+    ScopeSet,
     SigningKeyRecord,
 )
 
@@ -46,6 +47,7 @@ class IAMStoreMemory(IAMStore):
         self._pending: dict[str, PendingGrant] = {}
         self._placements: dict[tuple[str, str], Placement] = {}
         self._scopes: dict[tuple[str, str], ScopeRecord] = {}
+        self._sets: dict[tuple[str, str], ScopeSet] = {}
         self._catalogs: dict[str, ActionCatalog] = {}
         self._keys: dict[str, KeyRecord] = {}
         self._token_floors: dict[str, datetime] = {}
@@ -137,12 +139,15 @@ class IAMStoreMemory(IAMStore):
         *,
         limit: int = 100,
         after: str | None = None,
+        owner_scopes: Sequence[str] | None = None,
     ) -> Page:
         with self._lock:
             ids = sorted(
                 p.id
                 for p in self._principals.values()
-                if (kind is None or p.kind == kind) and (after is None or p.id > after)
+                if (kind is None or p.kind == kind)
+                and (after is None or p.id > after)
+                and (owner_scopes is None or p.owner_scope in owner_scopes)
             )
             return _page([self._principals[i] for i in ids], limit)
 
@@ -158,6 +163,7 @@ class IAMStoreMemory(IAMStore):
                 kind=current.kind,
                 issuer=current.issuer,
                 subject=current.subject,
+                owner_scope=current.owner_scope,
                 created_at=current.created_at,
                 updated_at=_now(),
             )
@@ -255,9 +261,20 @@ class IAMStoreMemory(IAMStore):
             except KeyError:
                 raise IAMNotFoundError(f"Policy {policy_id} not found") from None
 
-    def list_policies(self, *, limit: int = 100, after: str | None = None) -> Page:
+    def list_policies(
+        self,
+        *,
+        limit: int = 100,
+        after: str | None = None,
+        owner_scopes: Sequence[str] | None = None,
+    ) -> Page:
         with self._lock:
-            ids = sorted(i for i in self._policies if after is None or i > after)
+            ids = sorted(
+                i
+                for i, p in self._policies.items()
+                if (after is None or i > after)
+                and (owner_scopes is None or p.owner_scope in owner_scopes)
+            )
             return _page([self._policies[i] for i in ids], limit)
 
     def update_policy(self, policy: Policy, expected_revision: int) -> Policy:
@@ -499,6 +516,36 @@ class IAMStoreMemory(IAMStore):
                 key=lambda s: (s.org, s.workspace),
             )
 
+    # -- sets -------------------------------------------------------------------
+
+    def put_scope_set(self, scope_set: ScopeSet) -> None:
+        with self._lock:
+            self._write()
+            key = (scope_set.org, scope_set.workspace)
+            if scope_set.recorded:
+                self._sets[key] = scope_set
+            else:
+                self._sets.pop(key, None)
+
+    def delete_scope_sets(self, org: str, workspace: str = "-") -> bool:
+        with self._lock:
+            keys = [
+                key for key in self._sets if key[0] == org and workspace in ("-", key[1])
+            ]
+            if not keys:
+                return False
+            self._write()
+            for key in keys:
+                del self._sets[key]
+            return True
+
+    def list_scope_sets(self, org: str | None = None) -> list[ScopeSet]:
+        with self._lock:
+            return [
+                self._sets[key]
+                for key in sorted(self._sets)
+                if org is None or key[0] == org
+            ]
     # -- catalogs -----------------------------------------------------------------
 
     def put_catalog(self, catalog: ActionCatalog) -> None:

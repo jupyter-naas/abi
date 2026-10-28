@@ -1,0 +1,99 @@
+.access-approval {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.access-approval-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border-hex);
+  background-color: var(--card-hex);
+}
+
+.access-approval-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.access-approval-meta,
+.access-approval-list-title {
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground-hex);
+}
+
+.access-approval-status {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  color: var(--muted-foreground-hex);
+}
+
+.access-approval-statements {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.access-approval-statement {
+  padding: var(--space-2);
+  border: 1px solid var(--border-hex);
+}
+
+.access-approval-deny {
+  background-color: var(--muted-bg-hex);
+}
+
+.access-approval-effect {
+  margin-bottom: var(--space-1);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.access-approval-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.access-approval-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.access-approval-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.access-approval-summary {
+  font-size: var(--font-size-sm);
+}
+
+.access-approval-problem {
+  font-size: var(--font-size-sm);
+  color: var(--color-destructive, #b00020);
+}
+
+.access-approval-catalog {
+  font-size: var(--font-size-sm);
+}
+
+.access-approval-catalog h4 {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.access-approval-catalog ul {
+  margin: 0;
+  padding-left: var(--space-4);
+}

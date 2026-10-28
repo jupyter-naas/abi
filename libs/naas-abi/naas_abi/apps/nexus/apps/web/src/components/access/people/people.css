@@ -1,0 +1,77 @@
+/* components/access/people — People & roles */
+
+.access-people {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.access-people-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.access-people-name {
+  font-weight: var(--font-weight-medium);
+}
+
+.access-people-sub {
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground-hex);
+}
+
+.access-people-kind,
+.access-people-badge {
+  margin-left: var(--space-2);
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border-hex);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--muted-foreground-hex);
+}
+
+.access-people-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.access-people-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-hex);
+  font-size: var(--font-size-xs);
+}
+
+.access-people-chip-remove {
+  display: inline-flex;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--muted-foreground-hex);
+  cursor: pointer;
+}
+
+.access-people-chip-remove:hover {
+  color: var(--foreground-hex);
+}
+
+.access-people-via {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground-hex);
+}
+
+.access-people-with-role {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground-hex);
+}

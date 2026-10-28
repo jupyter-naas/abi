@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, create_autospec
 
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     NATSConfiguration,
@@ -316,3 +316,26 @@ def test_a_client_engine_keeps_the_upstream_routes_of_its_secret_fanout():
         assert len(view) == 1 and _is_own_endpoint(view[0])
     finally:
         client.close()
+
+
+def test_module_triple_store_writes_pass_their_deadline_to_the_client():
+    from naas_abi_core.engine.engine_loaders.EngineNATSDependencies import (
+        RemoteTripleStoreService,
+    )
+    from naas_abi_core.services.triple_store.adapters.secondary.TripleStoreSecondaryAdapterNATSClient import (
+        TripleStoreSecondaryAdapterNATSClient,
+    )
+    from rdflib import Graph, URIRef
+
+    client = create_autospec(TripleStoreSecondaryAdapterNATSClient, instance=True)
+    service = RemoteTripleStoreService(client)
+    graph_name = URIRef("http://example.org/graph/chat")
+
+    service.insert(Graph(), graph_name, timeout_seconds=900.0)
+    service.remove(Graph(), graph_name)
+
+    service.clear_graph(graph_name, timeout_seconds=900.0)
+
+    assert client.insert.call_args.kwargs == {"timeout_seconds": 900.0}
+    assert client.remove.call_args.kwargs == {}
+    assert client.clear_graph.call_args.kwargs == {"timeout_seconds": 900.0}

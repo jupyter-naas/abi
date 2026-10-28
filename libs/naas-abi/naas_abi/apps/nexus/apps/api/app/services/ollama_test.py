@@ -53,12 +53,9 @@ from naas_abi_marketplace.ai.ollama.endpoint import DEFAULT_BASE_URL
 assert DEFAULT_CHAT_MODEL_TAG and DEFAULT_BASE_URL
 print("ok")
 """
-    result = subprocess.run(
-        [sys.executable, "-c", script], capture_output=True, text=True
-    )
+    result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
     assert result.returncode == 0, (
-        "importing the ollama defaults/endpoint requires langchain_ollama:\n"
-        f"{result.stderr}"
+        f"importing the ollama defaults/endpoint requires langchain_ollama:\n{result.stderr}"
     )
     assert "ok" in result.stdout
 
@@ -146,14 +143,10 @@ def test_no_hardcoded_ollama_endpoint_in_the_api() -> None:
     for path in api_root.rglob("*.py"):
         if path.name.endswith("_test.py"):
             continue
-        for lineno, line in enumerate(
-            path.read_text(encoding="utf-8").splitlines(), start=1
-        ):
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
             if not literal.search(line) or line.lstrip().startswith("#"):
                 continue
-            is_the_allowed_fallback = (
-                path.name == "ollama.py" and "DEFAULT_BASE_URL =" in line
-            )
+            is_the_allowed_fallback = path.name == "ollama.py" and "DEFAULT_BASE_URL =" in line
             if not is_the_allowed_fallback:
                 offenders.append(f"{path.relative_to(api_root)}:{lineno}: {line.strip()}")
 

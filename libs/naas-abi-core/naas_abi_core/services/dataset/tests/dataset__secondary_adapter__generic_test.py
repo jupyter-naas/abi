@@ -410,20 +410,64 @@ class DatasetSecondaryAdapterContract(ABC):
             adapter.describe("github_commits", namespace="acme")
         assert adapter.list(namespace="acme") == []
 
-    def test_long_operations_accept_a_callers_deadline(self, adapter: IDatasetPort):
+    def test_namespace_version_moves_only_with_its_namespace(
+        self, adapter: IDatasetPort
+    ):
+        assert adapter.namespace_version("acme") is None
+        events = DatasetSpec(
+            name="events",
+            namespace="other",
+            columns=(ColumnSpec(name="id", type="integer"),),
+        )
         adapter.create(self._spec())
+        adapter.create(events)
+        created = adapter.namespace_version("acme")
+        assert created is not None
+
+        adapter.write("events", [{"id": 1}], namespace="other")
+        assert adapter.namespace_version("acme") == created
+
+        adapter.write("github_commits", [], namespace="acme", mode="replace")
         adapter.write(
             "github_commits",
             [
                 {
                     "sha": "a",
                     "project_id": "p",
-                    "author_date": "2026-08-02",
+                    "author_date": "2026-01-01",
                     "additions": 1,
                     "deletions": 0,
                 }
             ],
             namespace="acme",
+        )
+        written = adapter.namespace_version("acme")
+        assert written is not None and written > created
+
+        adapter.write("github_commits", [], namespace="acme", mode="replace")
+        replaced = adapter.namespace_version("acme")
+        assert replaced is not None and replaced > written
+
+        adapter.drop("github_commits", namespace="acme")
+        dropped = adapter.namespace_version("acme")
+        assert dropped is not None and dropped > replaced
+
+    def test_long_operations_accept_a_callers_deadline(self, adapter: IDatasetPort):
+        adapter.create(self._spec())
+        row = {
+            "sha": "a",
+            "project_id": "p",
+            "author_date": "2026-08-02",
+            "additions": 1,
+            "deletions": 0,
+        }
+        adapter.write("github_commits", [row], namespace="acme", timeout_seconds=60.0)
+        adapter.write_stream(
+            "github_commits",
+            iter([row]),
+            namespace="acme",
+            mode="replace",
+            timeout_seconds=60.0,
         )
 
         adapter.flush("github_commits", namespace="acme", timeout_seconds=60.0)
@@ -434,7 +478,7 @@ class DatasetSecondaryAdapterContract(ABC):
 
         assert result.rows == [{"sha": "a"}]
 
-    # --- streamed reads (docs/adr/20261003_nats-streamed-results.md)
+    # --- streamed reads
 
     def test_query_stream_reads_the_rows_query_returns(self, adapter: IDatasetPort):
         adapter.create(self._spec())
@@ -563,7 +607,7 @@ class DatasetSecondaryAdapterContract(ABC):
             [
                 {
                     "read_on": date(2026, 10, 4),
-                    "read_at": datetime(2026, 10, 4, 12, 30),  # naive on purpose
+                    "read_at": datetime(2026, 10, 4, 12, 30),
                     "ok": True,
                     "label": "café",
                 }
@@ -736,7 +780,7 @@ class DatasetSecondaryAdapterContract(ABC):
             {"n": 1, "seen_at": datetime(2026, 10, 4, 12, 30, tzinfo=paris)},
             {"n": 2, "seen_at": "2026-10-04T12:30:00+02:00"},
             {"n": 3, "seen_at": "2026-10-04T10:30:00Z"},
-            {"n": 4, "seen_at": datetime(2026, 10, 4, 10, 30)},  # naive: UTC
+            {"n": 4, "seen_at": datetime(2026, 10, 4, 10, 30)},
         ]
         if streamed:
             adapter.write_stream("visits", iter(rows), namespace="acme")
@@ -748,45 +792,3 @@ class DatasetSecondaryAdapterContract(ABC):
         )
 
         assert [row["seen_at"] for row in got.rows] == ["2026-10-04T10:30:00"] * 4
-
-    def test_namespace_version_moves_only_with_its_namespace(
-        self, adapter: IDatasetPort
-    ):
-        assert adapter.namespace_version("acme") is None
-        events = DatasetSpec(
-            name="events",
-            namespace="other",
-            columns=(ColumnSpec(name="id", type="integer"),),
-        )
-        adapter.create(self._spec())
-        adapter.create(events)
-        created = adapter.namespace_version("acme")
-        assert created is not None
-
-        adapter.write("events", [{"id": 1}], namespace="other")
-        assert adapter.namespace_version("acme") == created
-
-        adapter.write("github_commits", [], namespace="acme", mode="replace")
-        adapter.write(
-            "github_commits",
-            [
-                {
-                    "sha": "a",
-                    "project_id": "p",
-                    "author_date": "2026-01-01",
-                    "additions": 1,
-                    "deletions": 0,
-                }
-            ],
-            namespace="acme",
-        )
-        written = adapter.namespace_version("acme")
-        assert written is not None and written > created
-
-        adapter.write("github_commits", [], namespace="acme", mode="replace")
-        replaced = adapter.namespace_version("acme")
-        assert replaced is not None and replaced > written
-
-        adapter.drop("github_commits", namespace="acme")
-        dropped = adapter.namespace_version("acme")
-        assert dropped is not None and dropped > replaced

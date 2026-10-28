@@ -1,5 +1,5 @@
-"""The activity log authorizes every operation, in process and over NATS alike
-(RFC §6.4 "activity_log"); a recorded event's actor is the call's."""
+"""The activity log authorizes every operation, in process and over NATS alike;
+a recorded event's actor is the call's."""
 
 from __future__ import annotations
 

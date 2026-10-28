@@ -36,9 +36,6 @@
   font: inherit;
   color: var(--foreground-hex);
 }
-.graph-explorer-search:focus-within {
-  border-color: var(--workspace-accent, var(--color-primary));
-}
 .graph-explorer-tabs {
   display: flex;
   gap: 4px;

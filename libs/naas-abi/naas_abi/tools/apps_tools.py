@@ -156,9 +156,11 @@ def _resolve_app_id(app_id: str) -> str | dict[str, str]:
 async def _enable_state(
     db: Any, user_id: str, workspace_id: str
 ) -> tuple[dict[str, bool], set[str]] | dict[str, str]:
-    """(DB rows, seed list) for the workspace, after the membership check."""
-    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
-        workspace_seed_for_slug,
+    """(DB rows, seed list) for the workspace, after the membership check: the
+    seed as the catalog and the visibility read it (its stored catalog seed first,
+    then the config's), so what is shown is what is enforced."""
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import (
+        workspace_seed_apps,
     )
     from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
         WorkspacePermissionError,
@@ -173,13 +175,36 @@ async def _enable_state(
         return {"error": "You do not have access to this workspace."}
     enabled_by_app_id = await _apps_service(db).get_enabled_states(workspace_id)
     workspace = await workspaces.get_workspace(workspace_id)
-    seed = workspace_seed_for_slug(getattr(workspace, "slug", None))
-    seed_apps = {
-        str(app_id).strip()
-        for app_id in (getattr(seed, "apps", None) or [])
-        if str(app_id).strip()
-    }
-    return enabled_by_app_id, seed_apps
+    return enabled_by_app_id, workspace_seed_apps(workspace)
+
+
+async def _in_set(catalog: list[Any], workspace_id: str) -> list[Any]:
+    """The catalog's apps in the workspace's set: what its settings list."""
+    from naas_abi.apps.nexus.apps.api.app.services.apps.scopes import app_scope
+    from naas_abi.apps.nexus.apps.api.app.services.iam import sets as scope_sets
+
+    return await scope_sets.within_set(
+        catalog, workspace=workspace_id, scope_of=lambda app: app_scope(app.app_id)
+    )
+
+
+async def _switch_refusal(
+    user_id: str, workspace_id: str, app: Any, enabled: bool
+) -> str | None:
+    """Same rule as the Settings > Apps toggle: the caller turns apps on and off
+    there (``UpdateApp``), and turns on only one of the workspace's set."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+
+    if not await authz.allowed(
+        "UpdateApp", user=user_id, workspace=workspace_id, id=app.app_id
+    ):
+        return "You may not turn apps on or off in this workspace."
+    if enabled and not await _in_set([app], workspace_id):
+        return (
+            "This app is not in the workspace's set: its organization adds it on the "
+            "Modules & features page."
+        )
+    return None
 
 
 def _is_enabled(app_id: str, state: tuple[dict[str, bool], set[str]]) -> bool:
@@ -194,7 +219,7 @@ def _is_enabled(app_id: str, state: tuple[dict[str, bool], set[str]]) -> bool:
 def apps_tools() -> list[BaseTool]:
     @tool
     def list_workspace_apps(include_disabled: bool = True) -> Any:
-        """List the apps of this workspace: module apps and external shortcuts.
+        """List the apps of this workspace: module apps of its set and external shortcuts.
 
         Each row has app_id, name, source (module or external), module,
         category, enabled, embed (bundled or external). The Apps page only
@@ -211,7 +236,10 @@ def apps_tools() -> list[BaseTool]:
             state = await _enable_state(db, user_id, workspace_id)
             if isinstance(state, dict):
                 return state
-            rows = [_summary(app, _is_enabled(app.app_id, state)) for app in _catalog()]
+            rows = [
+                _summary(app, _is_enabled(app.app_id, state))
+                for app in await _in_set(_catalog(), workspace_id)
+            ]
             if not include_disabled:
                 rows = [row for row in rows if row["enabled"]]
             rows += [_external_summary(app) for app in _external_apps()]
@@ -256,7 +284,7 @@ def apps_tools() -> list[BaseTool]:
 
     @tool
     def set_app_enabled(enabled: bool, app_id: str = "") -> Any:
-        """Enable or disable a module app in this workspace.
+        """Enable or disable a module app in this workspace (one of its set).
 
         Same rule as the Settings > Apps toggle. Omit app_id to use the open
         app. External shortcuts come from tenant config and cannot be toggled.
@@ -287,6 +315,9 @@ def apps_tools() -> list[BaseTool]:
             state = await _enable_state(db, user_id, workspace_id)
             if isinstance(state, dict):
                 return state
+            refused = await _switch_refusal(user_id, workspace_id, app, bool(enabled))
+            if refused is not None:
+                return {"error": refused}
             record = await _apps_service(db).upsert_app_config(
                 workspace_id=workspace_id,
                 app_id=app.app_id,

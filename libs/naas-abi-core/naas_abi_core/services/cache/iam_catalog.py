@@ -1,4 +1,4 @@
-"""cache's action catalog (RFC §6.4, "cache").
+"""cache's action catalog.
 
 One ``key/<key>`` per cache key, opaque, placed by prefix; ``service/-`` for
 the service itself. The per-tier subjects are the engine's own.

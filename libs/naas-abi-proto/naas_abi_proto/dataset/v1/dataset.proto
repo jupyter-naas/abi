@@ -1,7 +1,6 @@
 // NATS-RPC contract for the dataset kernel domain.
 // Mirrors naas_abi_core/services/dataset/DatasetPort.py 1:1 -- IDatasetPort has no
-// streaming/callback members, so this is a full mapping, no exclusions. See
-// docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md.
+// streaming/callback members, so this is a full mapping, no exclusions.
 //
 // Structured error details: CallError (naas_abi_proto/common/v1/common.proto) is
 // shared across every kernel domain and carries only a code/message/retryable/status --
@@ -16,7 +15,7 @@
 // oneof-of-error-types per response message that would vary method to method for no
 // benefit.
 //
-// Subjects (see "Protobuf contract shapes" in the RFC):
+// Subjects:
 //   abi.svc.dataset.v1.create
 //   abi.svc.dataset.v1.describe
 //   abi.svc.dataset.v1.list
@@ -301,10 +300,10 @@ message NamespaceVersionRequest {
   abi.common.v1.CallContext context = 1;
   string namespace = 2;
 }
-// Neither arm set: the namespace never held a dataset (None in Python).
 message NamespaceVersionResponse {
+  // Neither set: the namespace never held a dataset.
   oneof result {
-    int64 snapshot_id = 1;
+    int64 version = 1;
     DatasetError error = 2;
   }
 }

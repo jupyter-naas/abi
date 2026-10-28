@@ -10,6 +10,7 @@ from naas_abi_core.services.discovery.discovery_factory import start_discovery
 from naas_abi_core.services.document.adapters.secondary.DocumentSecondaryAdapterNATSClient_test import (
     document_host,  # noqa: F401
 )
+from naas_abi_sdk.credentials import host_audience
 
 pytestmark = [
     pytest.mark.integration,
@@ -17,6 +18,12 @@ pytestmark = [
 ]
 
 LARGE = "large-event-" * 5000  # above the inline bound: read in parts
+
+
+def _host_token(name):
+    """What a module's call to another module's host carries: its token, addressed
+    to that host."""
+    return lambda recipient: TEST_TOKENS.token(name, audience=host_audience(recipient))
 
 
 def test_run_events_are_pushed_and_status_is_read_once(document_host):  # noqa: F811
@@ -98,6 +105,7 @@ def test_run_events_are_pushed_and_status_is_read_once(document_host):  # noqa: 
                 Provider,
                 url=document_host,
                 token=token,
+                host_token=_host_token("agent-updates-test"),
                 discovery=DiscoveryConfiguration(),
             )
         )
@@ -107,6 +115,7 @@ def test_run_events_are_pushed_and_status_is_read_once(document_host):  # noqa: 
                     Consumer,
                     url=document_host,
                     token=token,
+                    host_token=_host_token("agent-updates-test"),
                     discovery=DiscoveryConfiguration(refresh_seconds=0.05),
                 ),
                 60,

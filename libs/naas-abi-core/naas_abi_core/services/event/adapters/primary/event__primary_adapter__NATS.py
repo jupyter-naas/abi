@@ -163,7 +163,7 @@ class EventPrimaryAdapterNATS(ServiceWithTransfers):
         self._verifier = verifier
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
         self._service: TracedService | None = None
-        # Streamed queries (docs/adr/20261003_nats-streamed-results.md).
+        # Streamed queries.
         self._transfer = TransferHost(
             TRANSFER_PREFIX,
             verifier,

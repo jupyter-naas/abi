@@ -167,7 +167,7 @@ class VectorStoreService(ServiceProxy):
         self, collection_name: str, *, include_vectors: bool = False
     ) -> AsyncIterator[AsyncIterator[VectorDocument]]:
         """Every document of a collection, fetched as it is iterated, in the
-        engine's ``list_vectors`` order (docs/adr/20261003_nats-streamed-results.md).
+        engine's ``list_vectors`` order.
         Read it once, inside the block; leaving closes the stream."""
         request = pb.ListVectorsRequest(
             collection_name=collection_name, include_vectors=include_vectors

@@ -388,7 +388,7 @@ def test_sandbox_runtime_is_a_write_of_the_workspaces_repository(client: Client)
     assert resp.json()["ensured"] is True
 
 
-# --- bug (b): write access only on a repository the caller may write ---------------
+# --- write access only on a repository the caller may write ---------------
 
 
 def _other_workspace_repo(client: Client, name: str = "theirs") -> str:

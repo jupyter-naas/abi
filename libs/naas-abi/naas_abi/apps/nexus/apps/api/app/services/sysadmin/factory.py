@@ -391,6 +391,7 @@ def build_jobs_admin(engine: Any, audit_engine: Callable[[], Any]) -> Any:
         off = "NATS mode is off: module jobs run on NATS"
         catalogs.append(SourceUnavailable("discovery", "NATS mode is off"))
         runs: Any = SourceUnavailable("runs", off)
+        steps: Any = SourceUnavailable("steps", off)
         control: Any = SourceUnavailable("jobs", off)
         queue: Any = SourceUnavailable("queue", off)
     else:
@@ -423,6 +424,12 @@ def build_jobs_admin(engine: Any, audit_engine: Callable[[], Any]) -> Any:
                 lambda: engine.services.document_admin, project
             ),
         )
+        steps = _resource_source(
+            "steps",
+            lambda: _adapter("document_workflow_steps", "DocumentWorkflowSteps")(
+                lambda: engine.services.document_admin, project
+            ),
+        )
         control = _resource_source(
             "jobs", lambda: _adapter("nats_job_control", "NatsJobControl")(transports.get, project)
         )
@@ -437,6 +444,8 @@ def build_jobs_admin(engine: Any, audit_engine: Callable[[], Any]) -> Any:
         audit=_adapter("sql_audit_log", "SqlAdminAuditLog")(audit_engine),
         project=project,
         trace_ui_url=telemetry_info(configuration).ui_url,
+        steps=steps,
+        validator=_adapter("json_schema_validator", "JsonSchemaValidator")(),
     )
 
 

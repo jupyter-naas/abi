@@ -186,9 +186,11 @@ def export_conversation_as_response(
                     content += f"**Feedback detail:** {fb_detail}\n\n"
         steps = meta.get("steps", [])
         if steps:
-            content += f"🔧 **Steps ({len(steps)}):** " + ", ".join(
-                s.get("tool_name", "") for s in steps
-            ) + "\n\n"
+            content += (
+                f"🔧 **Steps ({len(steps)}):** "
+                + ", ".join(s.get("tool_name", "") for s in steps)
+                + "\n\n"
+            )
         content += f"{msg.content}\n\n"
         content += "---\n\n"
 

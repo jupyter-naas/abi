@@ -3,7 +3,7 @@
 ``/idp/...`` is the issuer URL of the built-in identity provider
 (``identity.providers[].issuer``, ``https://<host>/idp``). It is a dedicated,
 trusted route, unlike the sandboxed ``/app-remote/<grant>/`` of other modules'
-apps (docs/adr/20261012_remote-module-apps.md): a login page needs access before
+apps: a login page needs access before
 anyone is signed in, a cookie of its own and form posts.
 
 What makes it safe to let one module do that:

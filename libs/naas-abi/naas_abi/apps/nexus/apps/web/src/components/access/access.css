@@ -1,0 +1,52 @@
+/* components/access — the Roles & permissions shell: the scope picker and the section tabs */
+
+.access-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.access-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.access-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.access-subtab {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--radius-md);
+  background: none;
+  font-size: var(--font-size-sm);
+  color: var(--muted-foreground-hex);
+  cursor: pointer;
+}
+
+.access-subtab:hover {
+  color: var(--foreground-hex);
+}
+
+.access-subtab-active {
+  border-color: var(--color-primary);
+  color: var(--foreground-hex);
+}
+
+.access-scope-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--muted-foreground-hex);
+}
+
+.access-body {
+  min-height: 0;
+}

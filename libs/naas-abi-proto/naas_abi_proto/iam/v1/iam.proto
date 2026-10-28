@@ -1,5 +1,6 @@
 // NATS-RPC contract for IAM, the kernel service every other one asks.
-// See docs/specs/rfcs/20261013_identity-and-authorization.md, §5, §6.4 and §11.
+// Authorization, policies, tokens, service accounts and module manifests:
+// core's services/iam/AGENTS.md.
 //
 // Subjects: abi.iam.v1.<operation>, one per Request/Response pair below
 // (abi.iam.v1.authorize, abi.iam.v1.create_policy, ...).
@@ -7,12 +8,14 @@
 //
 // Token and Jwks need no credentials: a service key is exchanged at
 // abi.iam.v1.token for an abi:nats access token, and abi.iam.v1.jwks returns
-// the engine's public signing keys (RFC §8.2, §9.1).
+// the engine's public signing keys.
 //
 // Decisions (Authorize, Filter, Explain without principal_id) are about the
 // caller the server verifies from the request's credentials, never about a
 // request field. Every other operation is authorized with IAM's own iam:*
 // catalog. Errors: PERMISSION_DENIED (the caller can see the resource),
+// GRANT_NOT_HELD (a change would give more than the caller holds; the message
+// names the statement, action and resource),
 // NOT_FOUND (it cannot, or the record does not exist), CONFLICT (a taken
 // identity or name, an attached policy, a managed one), REVISION_CONFLICT,
 // INVALID_ARGUMENT (a policy's message lists every error).
@@ -42,9 +45,12 @@ message Principal {
   optional string owner_id = 12;
   google.protobuf.Timestamp created_at = 13;
   google.protobuf.Timestamp updated_at = 14;
+  // Groups: the scope that owns them and names them, abi:-:- (the platform),
+  // abi:<org>:- or abi:<org>:<ws>. Empty from an older engine: the platform.
+  string owner_scope = 15;
 }
 
-// A stored policy; the document is the JSON form of RFC §3.1.
+// A stored policy; the document is the JSON policy document.
 message Policy {
   string id = 1;
   string name = 2;
@@ -54,6 +60,9 @@ message Policy {
   int32 revision = 6;
   google.protobuf.Timestamp created_at = 7;
   google.protobuf.Timestamp updated_at = 8;
+  // The scope that owns the policy and names it, abi:-:- (the platform),
+  // abi:<org>:- or abi:<org>:<ws>. Empty from an older engine: the platform.
+  string owner_scope = 9;
 }
 
 message Attachment {
@@ -66,7 +75,7 @@ message Attachment {
 }
 
 // A policy attached at a scope to someone who has not signed in yet: claimed at
-// the first sign-in through `provider` with `email` verified (RFC 12.2).
+// the first sign-in through `provider` with `email` verified.
 message PendingGrant {
   string id = 1;
   string provider = 2;
@@ -108,7 +117,22 @@ message Scope {
   string workspace = 2;
 }
 
-// The catalog format of RFC §6.2.
+// Items of one part of a set. A part with no list is everything (nothing
+// recorded); an empty list is nothing.
+message SetItems {
+  repeated string items = 1;
+}
+
+// What an org (workspace "-") or a workspace may use: module items
+// (<module>, <type>/<module>/<name>, <service>:<Action>) and Nexus features.
+message ScopeSet {
+  string org = 1;
+  string workspace = 2;
+  SetItems modules = 3;
+  SetItems features = 4;
+}
+
+// The catalog format of a service's actions (services/iam/AGENTS.md).
 message ResourceType {
   string name = 1;
   // opaque | path | singleton
@@ -118,6 +142,9 @@ message ResourceType {
   bool container = 4;
   bool personal = 5;
   string description = 6;
+  // A module scope: what a module exposes, never reached by the viewer and
+  // member roles (services/iam/module_scopes.py).
+  bool module_scope = 7;
 }
 
 message ActionSpec {
@@ -135,6 +162,8 @@ message ActionCatalog {
   int32 version = 2;
   repeated ResourceType resource_types = 3;
   repeated ActionSpec actions = 4;
+  // The module that declared this catalog; empty for a kernel service's.
+  string module = 5;
 }
 
 // reason: allow | explicit_deny | implicit_deny | suspended | sealed.
@@ -169,7 +198,7 @@ message Explanation {
 // A key's record; the key itself is only ever in CreateKeyResponse.value.
 // kind: service (abi_sk_) | personal (abi_pk_) | grant (abi_gk_, a link).
 // audience, resource and scope_json: what narrows a personal key or a grant
-// (RFC §9.3): the one audience it is exchanged for, the environment or link
+// the one audience it is exchanged for, the environment or link
 // target it is bound to, and the token's abi_scope as a JSON list of Allow
 // statements (absent: no narrowing).
 message Key {
@@ -186,7 +215,7 @@ message Key {
   optional string scope_json = 11;
 }
 
-// A module's permission manifest version (RFC §8.3); document_json is the
+// A module's permission manifest version; document_json is the
 // policy document as submitted. status: pending | approved | rejected | superseded.
 message Manifest {
   string principal_id = 1;
@@ -219,6 +248,22 @@ message AuthorizeResponse {
   Decision decision = 2;
 }
 
+// A decision on an action a module declares (services/iam/module_scopes.py):
+// IAM names the resource, <type>/<parts> of the action's catalog, in
+// workspace_id or else the call's workspace, platform-level without one.
+message AuthorizeDeclaredRequest {
+  abi.common.v1.CallContext context = 1;
+  string action = 2;
+  string resource_type = 3;
+  repeated string parts = 4;
+  string workspace_id = 5;
+}
+message AuthorizeDeclaredResponse {
+  abi.common.v1.CallError error = 1;
+  Decision decision = 2;
+  string resource = 3;
+}
+
 message FilterRequest {
   abi.common.v1.CallContext context = 1;
   string action = 2;
@@ -240,6 +285,28 @@ message ExplainRequest {
 message ExplainResponse {
   abi.common.v1.CallError error = 1;
   Explanation explanation = 2;
+}
+
+// What the caller may grant at a scope: per catalog, the actions they hold
+// there and the resource patterns (${scope}:...) they hold them on, minus
+// their Denies. About the caller, so it needs no iam: action.
+message GrantableAction {
+  string action = 1;
+  repeated string resources = 2;
+  // What a Deny of the caller takes back from resources.
+  repeated string excluded = 3;
+}
+message GrantableCatalog {
+  string service = 1;
+  repeated GrantableAction actions = 2;
+}
+message GrantableRequest {
+  abi.common.v1.CallContext context = 1;
+  string scope = 2;
+}
+message GrantableResponse {
+  abi.common.v1.CallError error = 1;
+  repeated GrantableCatalog catalogs = 2;
 }
 
 // -- principals ------------------------------------------------------------------
@@ -321,7 +388,10 @@ message DeletePrincipalResponse {
 message CreateGroupRequest {
   abi.common.v1.CallContext context = 1;
   string name = 2;
+  // Alone: the group belongs to the org, abi:<org>:-.
   optional string org = 3;
+  // The owner: abi:-:- (the default), abi:<org>:- or abi:<org>:<ws>.
+  optional string scope = 4;
 }
 message CreateGroupResponse {
   abi.common.v1.CallError error = 1;
@@ -341,6 +411,9 @@ message ListGroupsRequest {
   abi.common.v1.CallContext context = 1;
   int32 limit = 2;
   optional string after = 3;
+  // The groups this scope owns (and, at a workspace, its org's the caller
+  // attaches to there); absent: every group the caller may list.
+  optional string scope = 4;
 }
 message ListGroupsResponse {
   abi.common.v1.CallError error = 1;
@@ -424,6 +497,8 @@ message CreatePolicyRequest {
   // A policy document as JSON (or YAML) text.
   string document_json = 3;
   string description = 4;
+  // The owner: abi:-:- (the default), abi:<org>:- or abi:<org>:<ws>.
+  optional string scope = 5;
 }
 message CreatePolicyResponse {
   abi.common.v1.CallError error = 1;
@@ -443,6 +518,9 @@ message ListPoliciesRequest {
   abi.common.v1.CallContext context = 1;
   int32 limit = 2;
   optional string after = 3;
+  // The policies this scope owns, and those above it the caller may attach
+  // there; absent: every policy the caller may list.
+  optional string scope = 4;
 }
 message ListPoliciesResponse {
   abi.common.v1.CallError error = 1;
@@ -553,6 +631,51 @@ message DeleteScopeResponse {
   bool deleted = 2;
 }
 
+// Sets: GetSet on the set at its own scope; PutSet on abi:%2A:%2A:iam:set/<org>
+// for an org's, abi:<org>:%2A:iam:set/<ws> for a workspace's. A workspace's
+// set wider than its org's is INVALID_ARGUMENT, the message naming the extras.
+message GetSetRequest {
+  abi.common.v1.CallContext context = 1;
+  string org = 2;
+  string workspace = 3;
+}
+message GetSetResponse {
+  abi.common.v1.CallError error = 1;
+  ScopeSet scope_set = 2;
+}
+
+// A workspace's set within its org's (or an org's own).
+message EffectiveSetRequest {
+  abi.common.v1.CallContext context = 1;
+  string org = 2;
+  string workspace = 3;
+}
+message EffectiveSetResponse {
+  abi.common.v1.CallError error = 1;
+  ScopeSet scope_set = 2;
+}
+
+message ListSetsRequest {
+  abi.common.v1.CallContext context = 1;
+  optional string org = 2;
+}
+message ListSetsResponse {
+  abi.common.v1.CallError error = 1;
+  repeated ScopeSet sets = 2;
+}
+
+message PutSetRequest {
+  abi.common.v1.CallContext context = 1;
+  string org = 2;
+  string workspace = 3;
+  SetItems modules = 4;
+  SetItems features = 5;
+}
+message PutSetResponse {
+  abi.common.v1.CallError error = 1;
+  ScopeSet scope_set = 2;
+}
+
 message RegisterCatalogRequest {
   abi.common.v1.CallContext context = 1;
   ActionCatalog catalog = 2;
@@ -563,7 +686,7 @@ message RegisterCatalogResponse {
   bool registered = 2;
 }
 
-// -- tokens (RFC §8.2, §9.1) -----------------------------------------------------
+// -- tokens -----------------------------------------------------------------------
 
 // abi.iam.v1.token: a service account's key for an access token. No
 // credentials: the key is one. Errors: UNAUTHENTICATED ("invalid key").
@@ -596,9 +719,9 @@ message JwksResponse {
   string jwks_json = 2;
 }
 
-// abi.iam.v1.exchange_token: RFC 8693 token exchange (RFC §9.4). The requester
+// abi.iam.v1.exchange_token: RFC 8693 token exchange. The requester
 // is the caller (the Nats-Auth-Token); it needs iam:ExchangeToken on the
-// audience. subject_token_type: the RFC's id_token, access_token or jwt, or
+// audience. subject_token_type: RFC 8693's id_token, access_token or jwt types, or
 // urn:abi:params:oauth:token-type:api_key (an abi_pk_ or abi_gk_ key) or
 // urn:abi:params:oauth:token-type:session (a signed-in user a first-party
 // service vouches for: the subject token is the user's principal id, groups and
@@ -643,7 +766,7 @@ message RevokeTokensResponse {
   abi.common.v1.CallError error = 1;
 }
 
-// -- service accounts and keys (RFC §8.1) ---------------------------------------------
+// -- service accounts and keys ------------------------------------------------------
 
 message FindServiceAccountRequest {
   abi.common.v1.CallContext context = 1;
@@ -659,7 +782,7 @@ message CreateKeyRequest {
   string principal_id = 2;
   string description = 3;
   google.protobuf.Timestamp expires_at = 4;
-  // A user's keys (RFC §9.3): kind personal (default) or grant, the audience,
+  // A user's keys: kind personal (default) or grant, the audience,
   // the resource it is bound to and its scope. A service account's: none.
   string kind = 5;
   string audience = 6;
@@ -692,7 +815,7 @@ message RevokeKeyResponse {
   Key key = 2;
 }
 
-// -- module manifests (RFC §8.3) -------------------------------------------------------
+// -- module manifests ---------------------------------------------------------------
 
 // The calling module's own manifest: the caller must be the service account
 // module/<project>/<module_id>. approved_now: this call approved it (auto

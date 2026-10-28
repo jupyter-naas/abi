@@ -10,7 +10,7 @@ import {
   AppWindow, ExternalLink, RefreshCw, AlertTriangle, Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { appIframeSandbox, isBundledAppHtmlUrl, remoteAppGrantUrl, remoteAppParts, resolveAppEmbedUrl, resolveAppExternalUrl, appHtmlPathPrefix, pagesSsoAudience, withAppHtmlAccessToken, withPagesSsoToken } from '@/lib/app-html';
+import { appIframeSandbox, isBundledAppHtmlUrl, remoteAppGrantUrl, remoteAppParts, resolveAppEmbedUrl, resolveAppExternalUrl, pagesSsoAudience, withAppHtmlAccessToken, withPagesSsoToken, withRemoteAppWorkspace, remoteGrantRenewDelayMs } from '@/lib/app-html';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { useTenant } from '@/contexts/tenant-context';
@@ -58,7 +58,7 @@ function EmbedView({
   onOpenProject: (project: AppProject) => void;
 }) {
   const url = record.url;
-  const workspaceId = useParams().workspaceId as string;
+  const workspaceId = (useParams().workspaceId as string | undefined) ?? '';
   const baseEmbedUrl = useMemo(() => resolveAppEmbedUrl(url), [url]);
   const [embedUrl, setEmbedUrl] = useState<string | null>(
     isBundledAppHtmlUrl(url) ? null : baseEmbedUrl,
@@ -111,28 +111,31 @@ function EmbedView({
     setEmbedUrl(null);
     const remote = remoteAppParts(url);
     if (remote) {
-      // A remote module's app runs from the API origin under a grant, sandboxed.
+      // A remote module's app runs from the API origin under a grant, sandboxed,
+      // in this workspace. The grant lasts hours (a logout ends it sooner): the
+      // app is opened again under a fresh one shortly before it expires.
+      let renew: ReturnType<typeof setTimeout> | undefined;
       (async () => {
         try {
           const res = await authFetch('/api/apps/remote-grant', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              workspace_id: workspaceId,
-              module_id: remote.moduleId,
-              app: remote.app,
-            }),
+            body: JSON.stringify({ module_id: remote.moduleId, app: remote.app, workspace_id: workspaceId }),
           });
           if (!res.ok) {
             throw new Error(`remote-grant HTTP ${res.status}`);
           }
-          const data = (await res.json()) as { path?: string };
+          const data = (await res.json()) as { path?: string; expires_in?: number };
           const path = String(data.path || '').trim();
           if (!path) {
             throw new Error('remote-grant response missing path');
           }
           if (!cancelled) {
             setEmbedUrl(remoteAppGrantUrl(getApiUrl(), path, remote.rest));
+            const delay = remoteGrantRenewDelayMs(data.expires_in);
+            if (delay !== null) {
+              renew = setTimeout(() => setReloadKey((k) => k + 1), delay);
+            }
           }
         } catch (err) {
           if (!cancelled) {
@@ -142,10 +145,10 @@ function EmbedView({
       })();
       return () => {
         cancelled = true;
+        if (renew) clearTimeout(renew);
       };
     }
 
-    const prefix = appHtmlPathPrefix(url);
     (async () => {
       try {
         const res = await authFetch('/api/apps/access-token', {
@@ -154,7 +157,8 @@ function EmbedView({
           body: JSON.stringify({
             workspace_id: workspaceId,
             expires_minutes: 60,
-            path_prefix: prefix,
+            // The API locks the link to the app's own folder.
+            app_id: record.id,
           }),
         });
         if (!res.ok) {
@@ -178,7 +182,7 @@ function EmbedView({
     return () => {
       cancelled = true;
     };
-  }, [url, baseEmbedUrl, reloadKey, workspaceId]);
+  }, [url, baseEmbedUrl, reloadKey, workspaceId, record.id]);
 
   const handleLoad = useCallback(() => {
     // Same-origin bundled apps are proxied via /app-html/ — never flag them blocked.
@@ -214,7 +218,7 @@ function EmbedView({
     setActivePanelSection('apps');
   };
 
-  const externalHref = embedUrl || resolveAppExternalUrl(url);
+  const externalHref = embedUrl || withRemoteAppWorkspace(resolveAppExternalUrl(url), workspaceId);
 
   useDocumentTitleDetail(record.name);
 

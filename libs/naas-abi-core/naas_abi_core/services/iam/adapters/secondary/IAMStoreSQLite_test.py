@@ -65,3 +65,33 @@ def test_closed_store_refuses_use(tmp_path):
     store.close()
     with pytest.raises(RuntimeError):
         store.get_principal(new_id("usr"))
+
+
+def test_a_version_1_store_upgrades(tmp_path):
+    import sqlite3
+
+    from naas_abi_core.services.iam.tests.iam_store_upgrade import check_upgrade
+
+    path = str(tmp_path / "iam.sqlite")
+
+    def execute(statement: str) -> None:
+        with sqlite3.connect(path) as conn:
+            conn.execute(statement.format(schema=""))
+
+    check_upgrade(lambda: IAMStoreSQLite(path), execute)
+
+
+def test_a_version_2_store_upgrades(tmp_path):
+    import sqlite3
+
+    from naas_abi_core.services.iam.tests.iam_store_upgrade import (
+        check_upgrade_from_2,
+    )
+
+    path = str(tmp_path / "iam.sqlite")
+
+    def execute(statement: str) -> None:
+        with sqlite3.connect(path) as conn:
+            conn.execute(statement.format(schema=""))
+
+    check_upgrade_from_2(lambda: IAMStoreSQLite(path), execute)

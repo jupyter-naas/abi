@@ -217,6 +217,8 @@ class AdminAction:
     resource_id: str
     # What changed in words (a name, a scope), kept with the record. Never a secret.
     detail: str = ""
+    # How the user signed in: a session, or their personal API key (``abi_pk_``).
+    via: Literal["user", "api_key"] = "user"
 
 
 Phase = Literal["requested", "succeeded", "failed"]

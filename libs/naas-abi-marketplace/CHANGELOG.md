@@ -2,6 +2,91 @@
 
 <!-- version list -->
 
+## v3.62.0 (2026-10-26)
+
+### Bug Fixes
+
+- Review findings of the durable workflows task
+  ([`f2d12d8`](https://github.com/jupyter-naas/abi/commit/f2d12d8a8e61352e4f06eea466a48ac643a24a3c))
+
+- **x**: A failing stage no longer stops the rest of a search or reprocess run
+  ([`00ad9f1`](https://github.com/jupyter-naas/abi/commit/00ad9f1cc237965f75e3cec4e3f4c96898118d57))
+
+- **x**: Give a poller a spare slot so an overlapping tick skips instead of queueing
+  ([`12088a6`](https://github.com/jupyter-naas/abi/commit/12088a60d798bf3ec2a4e80c3ee6b18d83fe8759))
+
+### Documentation
+
+- Decisions in AGENTS.md instead of the removed ADR tree
+  ([`07369f6`](https://github.com/jupyter-naas/abi/commit/07369f6ade0083273ef6101c832e1b58bafb600f))
+
+### Features
+
+- **x**: Run the recent-tweets flow as durable NATS workflows and jobs
+  ([`d63145c`](https://github.com/jupyter-naas/abi/commit/d63145cbfc49bdb374ca054c54e2968bdf347455))
+
+### Refactoring
+
+- Commit staged changes for various libs and apps
+  ([`3c52466`](https://github.com/jupyter-naas/abi/commit/3c5246681dfe4a341e18c43897439f1e8989e676))
+
+### Testing
+
+- **x**: A skipped mapping run is awaited by the search run and not synced
+  ([`3bdda86`](https://github.com/jupyter-naas/abi/commit/3bdda867a585ea32c021265e450fae8eef1c646d))
+
+
+## v3.61.1 (2026-10-21)
+
+### Bug Fixes
+
+- **cli**: Keep docs/reference; stop copying into docs/site
+  ([#1380](https://github.com/jupyter-naas/abi/pull/1380),
+  [`2a96b60`](https://github.com/jupyter-naas/abi/commit/2a96b603a9fde09b9a02b5a29dd154a7be3f19d2))
+
+### Documentation
+
+- Drop Zen naming from docs pointers ([#1380](https://github.com/jupyter-naas/abi/pull/1380),
+  [`2a96b60`](https://github.com/jupyter-naas/abi/commit/2a96b603a9fde09b9a02b5a29dd154a7be3f19d2))
+
+- Fix NATS deep link (no .md in docs.naas.ai URL)
+  ([#1380](https://github.com/jupyter-naas/abi/pull/1380),
+  [`2a96b60`](https://github.com/jupyter-naas/abi/commit/2a96b603a9fde09b9a02b5a29dd154a7be3f19d2))
+
+- Remove narrative docs from ABI; point to docs.naas.ai
+  ([#1380](https://github.com/jupyter-naas/abi/pull/1380),
+  [`2a96b60`](https://github.com/jupyter-naas/abi/commit/2a96b603a9fde09b9a02b5a29dd154a7be3f19d2))
+
+- Remove narrative docs; point to docs.naas.ai
+  ([#1380](https://github.com/jupyter-naas/abi/pull/1380),
+  [`2a96b60`](https://github.com/jupyter-naas/abi/commit/2a96b603a9fde09b9a02b5a29dd154a7be3f19d2))
+
+- Retarget package README and CLI links to docs.naas.ai
+  ([#1380](https://github.com/jupyter-naas/abi/pull/1380),
+  [`2a96b60`](https://github.com/jupyter-naas/abi/commit/2a96b603a9fde09b9a02b5a29dd154a7be3f19d2))
+
+
+## v3.61.0 (2026-10-20)
+
+### Bug Fixes
+
+- **cli**: Point the dokploy messages at the site, fix a cron example in the module template
+  ([`1c7d986`](https://github.com/jupyter-naas/abi/commit/1c7d986ec06b3e9908714a5bac42947950077bdc))
+
+### Build System
+
+- **marketplace**: Type-check the Dagster orchestrations with the legacy extra
+  ([`cfb15ac`](https://github.com/jupyter-naas/abi/commit/cfb15aca2a990b930c13327223a70bd1ba400a3a))
+
+### Chores
+
+- Project lockfiles follow the 2.x versions main released
+  ([`db051c0`](https://github.com/jupyter-naas/abi/commit/db051c0bd348f9a411321ea59061bf28e5cbc694))
+
+- **nexus-map**: Commit staged changes and push
+  ([`df724fe`](https://github.com/jupyter-naas/abi/commit/df724fe722b9bf76d6508ac88c6ae26b2aa3a29f))
+
+
 ## v3.60.0 (2026-10-13)
 
 ### Features

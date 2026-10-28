@@ -13,8 +13,7 @@ the domain, never directly on each other. Both
 instead.
 
 Authorization: whoever calls is checked per key by the ``Secret`` domain
-service against IAM (RFC §6.4), as in process. Before IAM, any holder of a
-service token could read every secret; that gap is closed.
+service against IAM, as in process.
 
 The endpoint also stays an allowlist (``may_use``), a layer before IAM: the
 ``engine`` account reaches every secret but the IdP's, the IdP (the account

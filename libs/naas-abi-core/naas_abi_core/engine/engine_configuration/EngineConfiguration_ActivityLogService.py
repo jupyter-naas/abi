@@ -41,8 +41,7 @@ class ActivityLogAdapterNATSConfiguration(BaseModel):
     """Activity log adapter NATS RPC client configuration.
 
     Talks to a remote ``ActivityLogPrimaryAdapterNATS`` over NATS
-    request/reply -- see docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
-    (Stage 1) and naas_abi_core/proto/activity_log/v1/activity_log.proto.
+    request/reply -- see naas_abi_core/proto/activity_log/v1/activity_log.proto.
 
     activity_log_adapter:
       adapter: "nats_rpc"

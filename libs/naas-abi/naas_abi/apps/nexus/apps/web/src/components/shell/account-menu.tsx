@@ -1,11 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { Building2, HelpCircle, LogOut, User } from 'lucide-react';
+import { Building2, HelpCircle, LogOut, ShieldCheck, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useFeature } from '@/hooks/use-feature';
+import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access';
+import { visiblePlatformSettingsGroups } from '@/app/settings/lib/nav';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { getWorkspacePath } from './sidebar/utils';
 
@@ -57,6 +59,11 @@ export function AccountMenuPanel({
   const router = useRouter();
   const logout = useAuthStore((s) => s.logout);
   const canOrganizationSettings = useFeature('settings.organization');
+  // Whenever any of its pages is open to the user: IAM decides, not a role name.
+  const platformSettings = usePlatformSettingsAccess();
+  const canPlatformSettings =
+    platformSettings.status === 'ready' &&
+    visiblePlatformSettingsGroups(platformSettings.actions).length > 0;
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const helpHref = getWorkspacePath(currentWorkspaceId, '/help');
 
@@ -64,7 +71,7 @@ export function AccountMenuPanel({
     <div
       role="menu"
       data-org-branded="true"
-      className={cn('z-[300] min-w-56 w-64 rounded-lg border bg-card p-2 shadow-lg', className)}
+      className={cn('z-[10000] min-w-56 w-64 rounded-none border bg-card p-2 shadow-lg', className)}
       style={style}
     >
       <div className="border-b border-border/50 px-4 py-3">
@@ -81,7 +88,7 @@ export function AccountMenuPanel({
           href="/account/profile"
           role="menuitem"
           onClick={onClose}
-          className="flex items-center gap-3 rounded-md px-4 py-2.5 text-sm transition-colors hover:bg-muted"
+          className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-muted"
         >
           <User size={16} className="shrink-0 text-muted-foreground" />
           Account Settings
@@ -91,17 +98,28 @@ export function AccountMenuPanel({
             href="/organizations"
             role="menuitem"
             onClick={onClose}
-            className="flex items-center gap-3 rounded-md px-4 py-2.5 text-sm transition-colors hover:bg-muted"
+            className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-muted"
           >
             <Building2 size={16} className="shrink-0 text-muted-foreground" />
             Organization Settings
+          </Link>
+        )}
+        {canPlatformSettings && (
+          <Link
+            href="/settings"
+            role="menuitem"
+            onClick={onClose}
+            className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-muted"
+          >
+            <ShieldCheck size={16} className="shrink-0 text-muted-foreground" />
+            Platform Settings
           </Link>
         )}
         <Link
           href={helpHref}
           role="menuitem"
           onClick={onClose}
-          className="flex items-center gap-3 rounded-md px-4 py-2.5 text-sm transition-colors hover:bg-muted"
+          className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-muted"
         >
           <HelpCircle size={16} className="shrink-0 text-muted-foreground" />
           Help
@@ -117,7 +135,7 @@ export function AccountMenuPanel({
             logout();
             router.push('/auth/login');
           }}
-          className="flex w-full items-center gap-3 rounded-md px-4 py-2.5 text-sm text-destructive transition-colors hover:bg-destructive/10"
+          className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-destructive transition-colors hover:bg-destructive/10"
         >
           <LogOut size={16} className="shrink-0" />
           Log Out

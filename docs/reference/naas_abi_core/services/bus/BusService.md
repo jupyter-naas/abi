@@ -1,27 +1,60 @@
 # BusService
 
 ## What it is
-- `BusService` is a thin service wrapper around an `IBusAdapter`.
-- It exposes topic-based publish/consume operations and delegates all work to the injected adapter.
+- `BusService` is a service wrapper around an `IBusAdapter` transport.
+- Provides pub/sub (`publish`/`subscribe`) and work-queue (`enqueue`/`dequeue`) operations.
+- Optionally emits telemetry events (`BusMessagePublished`, `BusMessageEnqueued`) for each message (off by default); always emits `BusError` on failures when an event service is available.
+- Includes a recursion guard for `"evt.*"` topics to avoid infinite loops when the event system itself uses the bus.
 
 ## Public API
-- **Class `BusService(adapter: IBusAdapter)`**
-  - Initializes the service with a bus adapter implementation.
+- **Class `BusService(adapter: IBusAdapter, emit_message_events: bool = False)`**
+  - Wraps a bus adapter.
+  - `emit_message_events` controls per-message event-log telemetry (default `False`).
 
-- **`topic_publish(topic: str, routing_key: str, payload: bytes) -> None`**
-  - Publishes `payload` to a `topic` using the given `routing_key`.
-  - Delegates to `IBusAdapter.topic_publish(...)`.
+- **Property `emit_message_events -> bool`**
+  - Returns whether message telemetry is enabled.
 
-- **`topic_consume(topic: str, routing_key: str, callback: Callable[[bytes], None]) -> Thread`**
-  - Starts consuming messages for `topic`/`routing_key`.
-  - Invokes `callback(payload_bytes)` for each received message.
-  - Returns a `threading.Thread` created/managed by the adapter via `IBusAdapter.topic_consume(...)`.
+- **Property `adapter -> IBusAdapter`**
+  - Exposes the owned transport adapter (for composition/shutdown outside this module).
+
+- **`publish(topic: str, routing_key: str, payload: bytes) -> None`**
+  - Pub/sub publish.
+  - On adapter exception: emits `BusError(operation="publish")` (if events service is wired/available) and re-raises.
+  - If telemetry enabled: emits `BusMessagePublished`.
+  - If `topic` starts with `"evt."`: bypasses telemetry to avoid recursion and delegates directly to the adapter.
+
+- **`publish_many(topic: str, messages: Sequence[tuple[str, bytes]]) -> None`**
+  - Batch pub/sub publish for `(routing_key, payload)` pairs.
+  - No-op if `messages` is empty.
+  - On adapter exception: emits `BusError(operation="publish_many")` using the first message routing key, then re-raises.
+  - If telemetry enabled: emits `BusMessagePublished` per message.
+  - If `topic` starts with `"evt."`: bypasses telemetry and delegates directly to the adapter.
+
+- **`subscribe(topic: str, routing_key: str, callback: Callable[[bytes], None]) -> Thread`**
+  - Pub/sub consume; delegates to `IBusAdapter.subscribe(...)`.
+  - Returns the `Thread` created/managed by the adapter.
+
+- **`enqueue(topic: str, routing_key: str, payload: bytes) -> None`**
+  - Work-queue publish (durable queue semantics are adapter-defined).
+  - On adapter exception: emits `BusError(operation="enqueue")` and re-raises.
+  - If telemetry enabled: emits `BusMessageEnqueued`.
+  - If `topic` starts with `"evt."`: bypasses telemetry and delegates directly to the adapter.
+
+- **`dequeue(topic: str, routing_key: str, callback: Callable[[bytes], None]) -> Thread`**
+  - Work-queue consume; delegates to `IBusAdapter.dequeue(...)`.
+  - Returns the `Thread` created/managed by the adapter.
 
 ## Configuration/Dependencies
 - Depends on:
-  - `naas_abi_core.services.bus.BusPorts.IBusAdapter` (must be provided).
-  - `naas_abi_core.services.ServiceBase.ServiceBase` (base class).
-- No configuration is defined in this module; behavior is determined by the provided adapter.
+  - `naas_abi_core.services.bus.BusPorts.IBusAdapter` (required; provides `publish`, `publish_many`, `subscribe`, `enqueue`, `dequeue`).
+  - `naas_abi_core.services.ServiceBase.ServiceBase` (used for wiring/accessing `self.services` and `services_wired`).
+  - Event ontology types:
+    - `BusError`, `BusMessagePublished`, `BusMessageEnqueued`
+  - `naas_abi_core.logger` (warnings when event publishing fails)
+- Telemetry/event emission requires:
+  - `services_wired` is true, and
+  - `self.services.events_available()` returns true, and
+  - `self.services.events.publish(event)` succeeds (failures are swallowed with a warning).
 
 ## Usage
 ```python
@@ -30,24 +63,39 @@ from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.bus.BusPorts import IBusAdapter
 
 class DummyAdapter(IBusAdapter):
-    def topic_publish(self, topic: str, routing_key: str, payload: bytes) -> None:
-        print("publish", topic, routing_key, payload)
+    def publish(self, topic: str, routing_key: str, payload: bytes) -> None:
+        print("publish:", topic, routing_key, payload)
 
-    def topic_consume(self, topic: str, routing_key: str, callback):
-        def run():
-            callback(b"example-message")
-        t = Thread(target=run, daemon=True)
+    def publish_many(self, topic: str, messages):
+        for rk, payload in messages:
+            self.publish(topic, rk, payload)
+
+    def subscribe(self, topic: str, routing_key: str, callback):
+        t = Thread(target=lambda: callback(b"hello"), daemon=True)
         t.start()
         return t
 
-bus = BusService(adapter=DummyAdapter())
+    def enqueue(self, topic: str, routing_key: str, payload: bytes) -> None:
+        print("enqueue:", topic, routing_key, payload)
 
-bus.topic_publish("events", "user.created", b'{"id": 1}')
+    def dequeue(self, topic: str, routing_key: str, callback):
+        t = Thread(target=lambda: callback(b"job"), daemon=True)
+        t.start()
+        return t
 
-t = bus.topic_consume("events", "user.*", lambda b: print("received", b))
-t.join()
+bus = BusService(adapter=DummyAdapter(), emit_message_events=False)
+
+bus.publish("events", "user.created", b'{"id": 1}')
+bus.publish_many("events", [("user.updated", b"u1"), ("user.deleted", b"d1")])
+
+sub_t = bus.subscribe("events", "user.*", lambda b: print("received:", b))
+job_t = bus.dequeue("jobs", "reindex", lambda b: print("job:", b))
+sub_t.join()
+job_t.join()
 ```
 
 ## Caveats
-- `topic_consume(...)` returns a `Thread` produced by the adapter; thread lifecycle (daemon/non-daemon, stopping, error handling) is adapter-defined.
-- `payload` is `bytes`; any serialization/deserialization is the caller’s responsibility.
+- `"evt.*"` topics bypass telemetry emission to prevent recursion with the event service.
+- `emit_message_events=True` can generate very high event-log volume (one durable event per bus message).
+- Thread lifecycle, shutdown, delivery guarantees, and batching behavior are adapter-defined.
+- Payloads are raw `bytes`; serialization/deserialization is caller responsibility.

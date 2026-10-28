@@ -13,13 +13,14 @@ email/
 ├── EmailPorts.py              # IEmailAdapter
 ├── EmailService.py            # public service
 ├── EmailFactory.py            # pre-wired builders
+├── iam_catalog.py             # the email:* actions and resource types
 ├── adapters/secondary/
 │   ├── SMTPAdapter.py
 │   ├── SESAdapter.py
 │   ├── SendGridAdapter.py
 │   └── FilesystemAdapter.py
 ├── ontologies/                # EmailSent, EmailError
-└── tests/
+└── tests/                     # incl. email_authorization_test.py (IAM, in process and over NATS)
 ```
 
 ## Port (`EmailPorts.py`)
@@ -62,6 +63,35 @@ send(to_email, subject, text_body, html_body=None, *,
 # → publishes EmailSent on success, EmailError on failure; returns the kept id
 list_sent(limit=100, before=None) / get_sent(id) / delete_sent(id)   # delegate
 ```
+
+## Authorization
+
+`EmailService` checks every operation with IAM when it is wired with it (an
+owner); a facade over NATS is not, and the owner it calls checks, as the
+request's verified caller (see [`services/iam/AGENTS.md`](../iam/AGENTS.md),
+"Enforcing in a domain service"). The catalog is `iam_catalog.py`, registered at
+boot. Resource types: `sender/<from address>` (opaque id, platform-level;
+`sender/default` when `from_email` is empty) and `message/<id>` (opaque id,
+placed: the id of a kept copy).
+
+| Operation | Action (level) | Resource |
+|---|---|---|
+| `send` | `email:Send` (write) | `sender/<from_email>`; creates `message/<id>` |
+| `list_sent` | `email:ListSent` (list) | each `message/<id>` listed |
+| `get_sent` | `email:GetSent` (read) | `message/<id>` |
+| `delete_sent` | `email:DeleteSent` (write) | `message/<id>` |
+
+- A kept copy is placed, as the engine, in the call's target workspace when it
+  is sent (`CallContext.workspace_id`), so the workspace's roles reach the
+  mail their members sent; deleting it forgets the placement.
+- `list_sent` filters per message: `limit` applies after filtering, so a page of
+  the adapter may yield fewer rows and the service pages on until it has
+  `limit` or the adapter runs out.
+- A caller who cannot see a kept message gets `SentEmailNotFound`
+  (`SENT_EMAIL_NOT_FOUND`), as for a missing id; one who can see it but not
+  perform the action gets `PermissionDeniedError` (`PERMISSION_DENIED`).
+- `EmailSent` / `EmailError` are recorded through `EventService.emit`: appended
+  as the engine, never raising, so the sender needs no right on the event log.
 
 ## Available Adapters
 
@@ -112,13 +142,13 @@ delegated token (`abi:delegated:agent`, `act` the acting service, `sub` the user
 made by IAM's token exchange, never a header (the old `Abi-On-Behalf-Of` header is
 refused); trace and target workspace come from the request's `context`. Never read identity from request fields
 (`principal_id` and `tenant_id` are reserved). Clients of `api` and `engine` send a
-delegation for the current call's user, and the call's trace and workspace. Nothing authorizes on it yet.
+delegation for the current call's user, and the call's trace and workspace. The domain service then authorizes the call (see "Authorization").
 
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception
 mapping in the adapter. Primaries use `respond_protobuf` for bounded replies.
 Requests and replies above the broker limit (8 MiB, or lower) overflow as
-transfer frames up to 256 MiB (docs/adr/20261003_nats-rpc-overflow.md); above
+transfer frames up to 256 MiB; above
 that, at the overflow host's capacity, or with an older peer, the call fails
 with non-retryable `PAYLOAD_TOO_LARGE`. Micro-service error headers raise
 instead of becoming an empty success. Overflowed values are held whole in

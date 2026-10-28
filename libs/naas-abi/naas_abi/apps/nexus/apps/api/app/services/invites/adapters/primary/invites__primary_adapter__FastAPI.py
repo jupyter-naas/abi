@@ -1,4 +1,4 @@
-"""Invitations and IdP group bindings (RFC §12.2).
+"""Invitations and IdP group bindings.
 
 ``/api/invitations``
 
@@ -277,10 +277,12 @@ async def _change(
     group: str,
     role: str,
     unbind: bool,
+    by: str | None = None,
 ) -> GroupBindingsView:
     """Bind or unbind, answering the same way for both: a role that cannot be
-    bound here, a provider or group name that is refused, a right IAM withholds,
-    or a binding that is not there are the caller's to read, never a 500."""
+    bound here, a provider or group name that is refused, a right IAM withholds
+    (a binding is made on behalf of ``by``, who must hold what it grants), or a
+    binding that is not there are the caller's to read, never a 500."""
     if role not in roles:
         raise HTTPException(status_code=400, detail=f"role must be one of {', '.join(roles)}")
     try:
@@ -290,7 +292,7 @@ async def _change(
             ):
                 raise HTTPException(status_code=404, detail="No such binding")
         else:
-            await invites.bind_group(provider=provider, group=group, role=role, scope=scope)
+            await invites.bind_group(provider=provider, group=group, role=role, scope=scope, by=by)
     except (NoProviderError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except PermissionDeniedError as exc:
@@ -303,7 +305,11 @@ async def _change(
 
 
 async def _bind(
-    invites: InvitationService, body: GroupBindingInput, scope: str, roles: list[str]
+    invites: InvitationService,
+    body: GroupBindingInput,
+    scope: str,
+    roles: list[str],
+    by: str,
 ) -> GroupBindingsView:
     return await _change(
         invites,
@@ -313,6 +319,7 @@ async def _bind(
         group=body.group,
         role=body.role,
         unbind=False,
+        by=by,
     )
 
 
@@ -340,7 +347,7 @@ async def bind_org_group(
     db: AsyncSession = Depends(get_db),
 ) -> GroupBindingsView:
     await require_org_admin(current_user, org_id, db)
-    return await _bind(invites, body, org_scope(org_id), ORG_ROLES)
+    return await _bind(invites, body, org_scope(org_id), ORG_ROLES, current_user.id)
 
 
 @idp_groups_router.delete(
@@ -400,7 +407,7 @@ async def bind_workspace_group(
 ) -> GroupBindingsView:
     await require_workspace_admin(current_user, workspace_id, db)
     scope = await _workspace_scope(workspace_id, db)
-    return await _bind(invites, body, scope, WORKSPACE_ROLES)
+    return await _bind(invites, body, scope, WORKSPACE_ROLES, current_user.id)
 
 
 @idp_groups_router.delete(

@@ -118,8 +118,7 @@ class EventService(ServiceProxy):
         newest_first: bool = False,
         search: str | None = None,
     ) -> AsyncIterator[AsyncIterator[Any]]:
-        """``query``, restored as the caller iterates, inside the block
-        (docs/adr/20261003_nats-streamed-results.md). The highest ``seq`` is
+        """``query``, restored as the caller iterates, inside the block. The highest ``seq`` is
         pinned when the block opens: events appended while it is read are not
         included. Leaving the block closes the session."""
         event_type = _type(event_class)

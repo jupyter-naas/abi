@@ -14,7 +14,11 @@ from naas_abi_cli.cli.admin_credentials import (
     ensure_nats_callout_seed,
     ensure_nats_passwords,
 )
-from naas_abi_cli.cli.deploy.local import _build_hosts_from_domain, setup_local_deploy
+from naas_abi_cli.cli.deploy.local import (
+    LEGACY_EXTRAS,
+    _build_hosts_from_domain,
+    setup_local_deploy,
+)
 from naas_abi_cli.cli.utils.Copier import Copier
 
 from .module import new_module
@@ -24,20 +28,20 @@ from .utils import to_kebab_case, to_pascal_case, to_snake_case
 ABI_SUBMODULE_URL = "https://github.com/jupyter-naas/abi.git"
 ABI_SUBMODULE_PATH = ".abi"
 
-# naas-abi-proto and naas-abi-sdk, which NATS mode needs, are not on PyPI yet:
-# a NATS project resolves the framework from the `.abi` submodule or not at all.
-# Falling back to PyPI would install a naas-abi-core without NATS support and a
-# project whose config the engine cannot load.
+# naas-abi-proto and naas-abi-sdk, which NATS mode needs, must be the revision
+# of the framework the project runs: a NATS project resolves all of them from
+# the `.abi` submodule or not at all. Falling back to PyPI could install a
+# naas-abi-core older than the config the project was generated with.
 NATS_NEEDS_SUBMODULE = (
     "A NATS project installs naas-abi-proto and naas-abi-sdk from the .abi "
-    "submodule; they are not on PyPI yet. Keep the submodule "
+    "submodule, at the revision of the framework it runs. Keep the submodule "
     "(--with-abi-submodule, the default), or create a classic project with "
     "--without-nats."
 )
 
 
-def _add_abi_submodule(project_path: str) -> bool:
-    """Add the upstream ABI repo as a git submodule at `.abi/`.
+def _add_abi_submodule(project_path: str, source: str = ABI_SUBMODULE_URL) -> bool:
+    """Add the ABI repo (``source``, GitHub by default) as a git submodule at `.abi/`.
 
     Agents working in the scaffolded project can then read framework
     docs/source locally instead of fetching them over the network, and
@@ -52,11 +56,12 @@ def _add_abi_submodule(project_path: str) -> bool:
         click.secho(
             "  git not found on PATH; skipping .abi submodule. "
             "Add it later with: git submodule add "
-            f"{ABI_SUBMODULE_URL} {ABI_SUBMODULE_PATH}",
+            f"{source} {ABI_SUBMODULE_PATH}",
             fg="yellow",
         )
         return False
 
+    url, git_options = _submodule_source(source)
     if not os.path.isdir(os.path.join(project_path, ".git")):
         subprocess.run(["git", "init", "-q"], cwd=project_path, check=True)
 
@@ -64,11 +69,12 @@ def _add_abi_submodule(project_path: str) -> bool:
         subprocess.run(
             [
                 "git",
+                *git_options,
                 "submodule",
                 "add",
                 "--depth",
                 "1",
-                ABI_SUBMODULE_URL,
+                url,
                 ABI_SUBMODULE_PATH,
             ],
             cwd=project_path,
@@ -78,7 +84,7 @@ def _add_abi_submodule(project_path: str) -> bool:
         click.secho(
             f"  failed to add .abi submodule ({e}); continuing without it. "
             "Add it later with: git submodule add "
-            f"{ABI_SUBMODULE_URL} {ABI_SUBMODULE_PATH}",
+            f"{url} {ABI_SUBMODULE_PATH}",
             fg="yellow",
         )
         return False
@@ -86,6 +92,21 @@ def _add_abi_submodule(project_path: str) -> bool:
     # A clone that succeeded but landed an unexpected layout is still unusable
     # as a dependency source, so check for the directory uv will be told about.
     return os.path.isdir(os.path.join(project_path, ABI_SUBMODULE_PATH, "libs"))
+
+
+def _submodule_source(source: str) -> tuple[str, list[str]]:
+    """The URL to clone ``source`` from, and the git options it needs.
+
+    A local checkout is passed by absolute path: git resolves a relative
+    submodule URL against the superproject's remote, not the caller's
+    directory. And git refuses the file transport for submodules unless allowed.
+    """
+    if not os.path.isdir(os.path.expanduser(source)):
+        return source, []
+    return os.path.abspath(os.path.expanduser(source)), [
+        "-c",
+        "protocol.file.allow=always",
+    ]
 
 
 def _cd_argument(project_path: str) -> str:
@@ -164,13 +185,26 @@ def _print_next_steps(project_path: str, nats: bool) -> None:
     ),
 )
 @click.option(
+    "--abi-source",
+    default=ABI_SUBMODULE_URL,
+    show_default=True,
+    help=(
+        "Git URL or local checkout the .abi submodule is cloned from (its "
+        "HEAD). A local ABI checkout tests framework changes that are not "
+        "on GitHub yet."
+    ),
+)
+@click.option(
     "--with-nats/--without-nats",
     default=True,
     help=(
         "Run the project on NATS (default): kernel services, the bus, jobs and "
         "module discovery go through a NATS broker, and modules can run in "
-        "their own process. --without-nats creates the classic in-process "
-        "project (RabbitMQ in docker-compose, no broker for `abi dev`)."
+        "their own process. --without-nats (legacy) creates the classic "
+        "in-process project (RabbitMQ in docker-compose, Dagster, no broker "
+        "for `abi dev`), with the legacy naas-abi-core[dagster,rabbitmq] "
+        "extras. Dagster, RabbitMQ and --without-nats are legacy and will be "
+        "removed in the next major."
     ),
 )
 @click.option(
@@ -192,6 +226,7 @@ def new_project(
     with_headscale: bool,
     with_coding: bool,
     with_abi_submodule: bool,
+    abi_source: str,
     with_nats: bool,
     base_domain: str,
 ):
@@ -221,7 +256,9 @@ def new_project(
     # Added before the templates are rendered: whether `.abi/libs` exists is
     # what decides if `pyproject.toml` resolves the framework from source or
     # from PyPI, and that has to be baked into the file we are about to write.
-    abi_submodule_added = with_abi_submodule and _add_abi_submodule(project_path)
+    abi_submodule_added = with_abi_submodule and _add_abi_submodule(
+        project_path, abi_source
+    )
     if with_nats and not abi_submodule_added:
         if created:
             shutil.rmtree(project_path, ignore_errors=True)
@@ -254,8 +291,13 @@ def new_project(
 
     # The project's own module holds the default agent, which the engine loads,
     # so it stays in-engine in both modes. `abi new module` adds remote ones.
+    # Only a classic project gets a Dagster orchestration: NATS ones use jobs.
     new_module(
-        project_name, os.path.join(project_path, "src"), quiet=True, kind="in-engine"
+        project_name,
+        os.path.join(project_path, "src"),
+        quiet=True,
+        kind="in-engine",
+        orchestration=not with_nats,
     )
 
     if with_local_deploy:
@@ -283,13 +325,15 @@ def new_project(
     # one gateway key serves both defaults — Gemma 4 for chat and
     # text-embedding-3-small for embeddings.
     # naas-abi-core[all] includes the nats extra. A NATS project also adds the
-    # SDK with its agent extra (the remote modules under src/ import it) and
-    # naas-abi-idp, the built-in identity provider.
+    # SDK with its agent extra, which the remote modules under src/ import, and
+    # naas-abi-idp, the built-in identity provider. A classic one adds the
+    # legacy extras, which [all] leaves out: Dagster and RabbitMQ.
+    core_extras = ",".join(("all",) if with_nats else ("all", *LEGACY_EXTRAS))
     subprocess.run(
         [
             "uv",
             "add",
-            "naas-abi-core[all]",
+            f"naas-abi-core[{core_extras}]",
             "naas-abi-marketplace[ai-openrouter]",
             "naas-abi",
             "naas-abi-cli",
@@ -301,10 +345,19 @@ def new_project(
         check=True,
     )
 
-    subprocess.run(
-        ["uv", "run", "abi", "config", "validate"],
-        cwd=project_path,
-        check=True,
-    )
+    try:
+        subprocess.run(
+            ["uv", "run", "abi", "config", "validate"],
+            cwd=project_path,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        # Without a TTY a secret the config names but nobody set (the AI
+        # provider's key) cannot be prompted for. The project is complete.
+        raise click.ClickException(
+            f"The project was created at {project_path}, but its configuration "
+            "does not load (see above). If a secret is missing, add it to the "
+            "project's .env (or export it), then run `abi config validate` there."
+        ) from exc
 
     _print_next_steps(project_path, with_nats)

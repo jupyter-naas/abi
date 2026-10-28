@@ -74,10 +74,15 @@ def test_discover_merges_data_and_ontology() -> None:
         tc=[_row(p=DOC + "extracted_by", tc=DOC + "Extraction", subjects=4)],
         ont=[
             # declared-but-empty datatype property (no instances) → ontology-only column
-            _row(prop=DOC + "annotated_label", ptype="http://www.w3.org/2002/07/owl#DatatypeProperty"),
+            _row(
+                prop=DOC + "annotated_label", ptype="http://www.w3.org/2002/07/owl#DatatypeProperty"
+            ),
         ],
     )
-    cols = {c.id: c for c in discover_columns(store, graph_uris=["g"], class_uris=[DOC + "ExtractedItem"])}
+    cols = {
+        c.id: c
+        for c in discover_columns(store, graph_uris=["g"], class_uris=[DOC + "ExtractedItem"])
+    }
 
     text = cols["extracted_text"]
     assert text.kind == "property" and text.datatype == "string" and text.is_functional
@@ -100,7 +105,10 @@ def test_discovers_incoming_relations() -> None:
         in_rel=[_row(p=DOC + "has_extracted_item", objects=4)],
         in_tc=[_row(p=DOC + "has_extracted_item", sc=DOC + "Chunk", objects=4)],
     )
-    cols = {c.id: c for c in discover_columns(store, graph_uris=["g"], class_uris=[DOC + "ExtractedItem"])}
+    cols = {
+        c.id: c
+        for c in discover_columns(store, graph_uris=["g"], class_uris=[DOC + "ExtractedItem"])
+    }
     inc = cols["has_extracted_item__in"]
     assert inc.kind == "relation" and inc.direction == "in" and inc.datatype == "iri"
     assert inc.label == "← has_extracted_item"
@@ -110,7 +118,9 @@ def test_discovers_incoming_relations() -> None:
 
 def test_non_functional_property_detected() -> None:
     # 12 (s,o) pairs over 4 subjects ⇒ some subject has multiple values ⇒ not functional.
-    store = _RoutedStore(dt=[_row(p=DOC + "tag", subjects=4, objs=12, distinct_objs=6, dt=XSD + "string")])
+    store = _RoutedStore(
+        dt=[_row(p=DOC + "tag", subjects=4, objs=12, distinct_objs=6, dt=XSD + "string")]
+    )
     col = discover_columns(store, graph_uris=["g"], class_uris=[DOC + "Item"])[0]
     assert col.is_functional is False
 
@@ -261,9 +271,18 @@ def test_generated_discovery_preserves_all_fields_and_workspace_scope() -> None:
     )
 
     memory, ex = _real_discovery_fixture()
-    allowed = frozenset(["urn:data", "urn:links", "urn:types", "http://ontology.naas.ai/graph/schema"])
-    store = GraphQueryTripleStoreAdapter(WorkspaceGraphStore(memory, GraphAccessScope("ws", allowed, frozenset())))
-    cols = discover_columns(store, graph_uris=["urn:data"], class_uris=[str(ex.Person), str(ex.Employee)], type_graph_uris=sorted(allowed))
+    allowed = frozenset(
+        ["urn:data", "urn:links", "urn:types", "http://ontology.naas.ai/graph/schema"]
+    )
+    store = GraphQueryTripleStoreAdapter(
+        WorkspaceGraphStore(memory, GraphAccessScope("ws", allowed, frozenset()))
+    )
+    cols = discover_columns(
+        store,
+        graph_uris=["urn:data"],
+        class_uris=[str(ex.Person), str(ex.Employee)],
+        type_graph_uris=sorted(allowed),
+    )
     by_predicate = {(c.predicate_uri, c.direction): c for c in cols}
     assert len(cols) == 7
     assert by_predicate[str(ex.age), "out"].datatype == "number"
@@ -274,26 +293,48 @@ def test_generated_discovery_preserves_all_fields_and_workspace_scope() -> None:
     assert by_predicate[str(ex.declaredOnly), "out"].source == "ontology"
     assert by_predicate[str(ex.employer), "out"].target_classes[0].uri == str(ex.Company)
     assert by_predicate[str(ex.adviser), "in"].target_classes[0].uri == str(ex.Case)
-    assert all("private" not in c.predicate_uri and c.predicate_uri != str(ex.notSelected) for c in cols)
+    assert all(
+        "private" not in c.predicate_uri and c.predicate_uri != str(ex.notSelected) for c in cols
+    )
 
 
 def test_discovery_executes_on_oxigraph_with_sparse_selected_class() -> None:
     import pytest
+
     ox = pytest.importorskip("pyoxigraph")
 
     memory, ex = _real_discovery_fixture()
     database = ox.Store()
     for graph in memory.list_graphs():
-        database.load(input=memory.dataset.graph(graph).serialize(format="nt"), format=ox.RdfFormat.N_TRIPLES, to_graph=ox.NamedNode(str(graph)))
+        database.load(
+            input=memory.dataset.graph(graph).serialize(format="nt"),
+            format=ox.RdfFormat.N_TRIPLES,
+            to_graph=ox.NamedNode(str(graph)),
+        )
     # A selected class is small relative to the graph. These unrelated values must
     # not produce columns or force joins over all instances' rdf:type bindings.
-    database.bulk_extend(ox.Quad(ox.NamedNode(f"urn:noise:{i}"), ox.NamedNode(str(ex.noise)), ox.Literal(str(i)), ox.NamedNode("urn:data")) for i in range(1500))
+    database.bulk_extend(
+        ox.Quad(
+            ox.NamedNode(f"urn:noise:{i}"),
+            ox.NamedNode(str(ex.noise)),
+            ox.Literal(str(i)),
+            ox.NamedNode("urn:data"),
+        )
+        for i in range(1500)
+    )
 
     class OxStore(IGraphQueryStore):
         def select(self, query: str) -> list[ResultRow]:
             result = database.query(query)
             names = [v.value for v in result.variables]
-            return [{name: Binding(value=row[name].value, is_uri=isinstance(row[name], ox.NamedNode)) for name in names if row[name] is not None} for row in result]
+            return [
+                {
+                    name: Binding(value=row[name].value, is_uri=isinstance(row[name], ox.NamedNode))
+                    for name in names
+                    if row[name] is not None
+                }
+                for row in result
+            ]
 
         def count(self, query: str) -> int:
             raise NotImplementedError("Discovery does not run standalone counts")
@@ -301,10 +342,20 @@ def test_discovery_executes_on_oxigraph_with_sparse_selected_class() -> None:
         def supports_fulltext(self) -> bool:
             return False
 
-    cols = discover_columns(OxStore(), graph_uris=["urn:data"], class_uris=[str(ex.Person)], type_graph_uris=["urn:data", "urn:links", "urn:types"])
+    cols = discover_columns(
+        OxStore(),
+        graph_uris=["urn:data"],
+        class_uris=[str(ex.Person)],
+        type_graph_uris=["urn:data", "urn:links", "urn:types"],
+    )
     assert len(cols) == 7
     assert all(c.instance_count == 1 for c in cols if c.source == "data")
     assert not any(c.predicate_uri == str(ex.noise) for c in cols)
-    multi = discover_columns(OxStore(), graph_uris=["urn:data"], class_uris=[str(ex.Person), str(ex.Employee)], type_graph_uris=["urn:data", "urn:links", "urn:types"])
+    multi = discover_columns(
+        OxStore(),
+        graph_uris=["urn:data"],
+        class_uris=[str(ex.Person), str(ex.Employee)],
+        type_graph_uris=["urn:data", "urn:links", "urn:types"],
+    )
     age = next(c for c in multi if c.predicate_uri == str(ex.age))
     assert age.instance_count == 2 and age.is_functional

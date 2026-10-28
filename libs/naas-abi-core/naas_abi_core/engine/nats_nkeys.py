@@ -1,4 +1,4 @@
-"""NATS nkeys and user JWTs, for the auth callout (RFC §8.4).
+"""NATS nkeys and user JWTs, for the auth callout.
 
 The broker's auth callout trusts one account key: ``nats.conf`` names its
 public half (``auth_callout.issuer``), and the engine signs every user it

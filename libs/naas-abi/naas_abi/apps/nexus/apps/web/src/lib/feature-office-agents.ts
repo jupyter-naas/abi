@@ -1,3 +1,4 @@
+import { parseMapsLayerIds } from '@/app/workspace/[workspaceId]/maps/lib/maps-route';
 import { getFeatureForWorkspacePath, type FeatureKey } from '@/lib/feature-access';
 
 export type FeatureOfficeAgentSpec = {
@@ -13,11 +14,13 @@ export type FeatureOfficeAgentSpec = {
  * Home and Chat have no row: they use the workspace default (Abi when the
  * workspace has none, see pickWorkspaceDefaultAgent). Keep in sync with
  * FEATURE_AGENTS in naas_abi/agents/feature/registry.py (a Python test checks
- * both sides). An agent only binds when the workspace roster lists it;
- * otherwise the pane keeps the workspace default.
+ * both sides). Sync also enables office agents when the workspace feature is on;
+ * the pane binds one when that agent is enabled and the caller has the feature.
  */
 export const FEATURE_OFFICE_AGENTS: Partial<Record<FeatureKey, FeatureOfficeAgentSpec>> = {
   slides: { name: 'Slides', className: 'SlidesAgent' },
+  documents: { name: 'Documents', className: 'DocumentsAgent' },
+  sheets: { name: 'Sheets', className: 'SheetsAgent' },
   apps: { name: 'Apps', className: 'AppsAgent' },
   marketplace: { name: 'Marketplace', className: 'MarketplaceAgent' },
   ontology: { name: 'Ontology', className: 'OntologyAgent' },
@@ -32,6 +35,7 @@ export const FEATURE_OFFICE_AGENTS: Partial<Record<FeatureKey, FeatureOfficeAgen
   'settings.organization': { name: 'Settings', className: 'SettingsAgent' },
   agents: { name: 'Agent Catalog', className: 'AgentCatalogAgent' },
   skills: { name: 'Skills', className: 'SkillsAgent' },
+  tasks: { name: 'Tasks', className: 'TasksAgent' },
 };
 
 type OfficeAgentLike = { name?: string; class_name?: string | null };
@@ -96,7 +100,25 @@ function decode(segment: string | undefined): string {
   }
 }
 
-/** Open items that live in the route itself (no page state needed). */
+/** The route's query string, without ``?`` and ``#``: ``/maps?layer=a#x`` -> ``layer=a``. */
+function routeQuery(route: string): string {
+  const start = route.indexOf('?');
+  return start < 0 ? '' : route.slice(start + 1).split('#')[0];
+}
+
+/** ``pathname`` and the search string of a route, joined (``usePathname()`` has no query). */
+export function routeWithSearch(
+  pathname: string | null | undefined,
+  search: string | null | undefined,
+): string {
+  const query = (search || '').replace(/^\?/, '');
+  return query ? `${pathname || ''}?${query}` : pathname || '';
+}
+
+/**
+ * Open items that live in the route itself (no page state needed). The map
+ * layers are in the query: pass ``routeWithSearch(pathname, search)``.
+ */
 export function resourceFromPath(pathname: string | null | undefined): FeatureResource | null {
   const path = pathname || '';
   const feature = getFeatureForWorkspacePath(path);
@@ -104,8 +126,14 @@ export function resourceFromPath(pathname: string | null | undefined): FeatureRe
   if (feature === 'datasets' && seg[1] && seg[2]) {
     return { feature, kind: 'dataset', id: `${decode(seg[1])}/${decode(seg[2])}` };
   }
-  if (feature === 'maps' && seg[1]) {
-    return { feature, kind: 'map_dataset', id: decode(seg[1]) };
+  if (feature === 'maps') {
+    const layers = parseMapsLayerIds(routeQuery(path));
+    if (layers.length === 1) {
+      return { feature, kind: 'map_dataset', id: layers[0] };
+    }
+    if (layers.length > 1) {
+      return { feature, kind: 'map_dataset', id: layers.join(',') };
+    }
   }
   if (feature === 'agents' && seg[2]) {
     return { feature, kind: 'agent', id: decode(seg[2]) };
@@ -173,5 +201,5 @@ export function featureChatContext(
     ? { kind: open.kind, id: open.id, ...(open.label ? { label: open.label } : {}) }
     : undefined;
   const errors = open?.errors?.length ? { errors: open.errors.slice(-5) } : {};
-  return { feature: { key, path, ...(resource ? { resource } : {}), ...errors } };
+  return { feature: { key, path: path.split(/[?#]/)[0], ...(resource ? { resource } : {}), ...errors } };
 }

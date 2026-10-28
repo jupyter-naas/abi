@@ -26,3 +26,25 @@ def test_subclasses_inherit_decorated_jobs():
 
     assert {j.name for j in Child.jobs} == {"explicit", "nightly", "hourly"}
     assert set(Child()._job_handlers) == {"nightly", "hourly"}
+
+
+def test_workflows_are_declared_without_the_sdk_and_not_run():
+    import pytest
+    from naas_abi_core.module.jobs_fallback import Cron, JobsNotHosted
+    from naas_abi_core.module.workflows_fallback import workflow
+
+    class Flows(JobsMixin):
+        @workflow(triggers=(Cron("0 0 * * * *", input={"filter": "db"}),))
+        def report(self, ctx, inp):
+            """Builds the report."""
+            return {}
+
+    (declared,) = Flows.jobs
+    assert declared.kind == "workflow" and declared.description == "Builds the report."
+    assert declared.triggers[0].input == {"filter": "db"}
+    flows = Flows()
+    flows.declare_workflow("workflow.bridged", lambda ctx, inp: None, description="x")
+    assert {j.name for j in flows.jobs} == {"report", "workflow.bridged"}
+    assert flows.missing_job_handlers() == set()  # the method and the lambda
+    with pytest.raises(JobsNotHosted):
+        flows.get_workflow("report")

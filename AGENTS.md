@@ -48,7 +48,7 @@ Every service AGENTS.md follows the same structure: **Purpose → Files → Port
 
 ## Built-in identity provider
 
-`libs/naas-abi-idp` is an SDK module, not a core service: the default OIDC provider of `abi dev up` and small installs (email-code sign-in, authorization code + PKCE, refresh tokens, JWKS, client credentials, an admin app for provisioning). It runs as `module/<project>/idp`, its data and keys are sealed to that account, Nexus serves it at `/idp` and the engine reads it over NATS. It is how everyone signs in to Nexus: Nexus has no login of its own (ADR `20261019_login-moves-out-of-nexus.md`), and accounts of the old login are linked at their first sign-in (`abi user migrate`, `iam.link_user`). The IAM admin pages (policies, attachments, groups, service accounts and keys, module approvals, simulator, audit) are Nexus `services/iam_admin`: [libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam_admin/AGENTS.md](libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam_admin/AGENTS.md). Invitations (`services/identity` provisioning port, IAM pending grants, Nexus `services/invites`) create people there: see [libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/invites/AGENTS.md](libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/invites/AGENTS.md). Read [libs/naas-abi-idp/AGENTS.md](libs/naas-abi-idp/AGENTS.md) before touching it, `services/identity/AGENTS.md` for the engine's side, and `docs/identity-providers.md` for plugging in another provider.
+`libs/naas-abi-idp` is an SDK module, not a core service: the default OIDC provider of `abi dev up` and small installs (email-code sign-in, authorization code + PKCE, refresh tokens, JWKS, client credentials, an admin app for provisioning). It runs as `module/<project>/idp`, its data and keys are sealed to that account, Nexus serves it at `/idp` and the engine reads it over NATS. It is how everyone signs in to Nexus: Nexus has no login of its own ([libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/oidc/AGENTS.md](libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/oidc/AGENTS.md): sign-in, sessions, credentials), and accounts of the old login are linked at their first sign-in (`abi user migrate`, `iam.link_user`). The IAM admin pages (policies, attachments, groups, service accounts and keys, module approvals, simulator, audit) are Nexus `services/iam_admin`: [libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam_admin/AGENTS.md](libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam_admin/AGENTS.md). Invitations (`services/identity` provisioning port, IAM pending grants, Nexus `services/invites`) create people there: see [libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/invites/AGENTS.md](libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/invites/AGENTS.md). Read [libs/naas-abi-idp/AGENTS.md](libs/naas-abi-idp/AGENTS.md) before touching it, [libs/naas-abi-core/naas_abi_core/services/identity/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/identity/AGENTS.md) for the engine's side and for plugging in another provider.
 
 ## Marketplace Map
 
@@ -95,7 +95,11 @@ cd ../../../../..
 #   POSTGRES_HOST=localhost (not postgres)
 #   QDRANT_HOST=localhost (not qdrant)
 #   MINIO_HOST=localhost (not minio)
-#   RABBITMQ_HOST=localhost (if using RabbitMQ)
+#   RABBITMQ_HOST=localhost (legacy RabbitMQ bus only)
+
+# 5. NATS: the repo runs on it by default. `abi dev up` needs nats-server 2.14+
+#    on PATH (https://github.com/nats-io/nats-server/releases); `abi stack start`
+#    runs it in Docker. Both generate its secrets into .env.
 ```
 
 Alternative bootstrap:
@@ -155,6 +159,10 @@ uv run pytest libs/naas-abi-core
 uv run pytest libs/naas-abi
 uv run pytest libs/naas-abi-cli
 uv run pytest libs/naas-abi-marketplace
+
+# CLI end to end: new project, modules, `abi dev up`, checks, `abi dev down`
+# (no Docker, no model). See libs/naas-abi-cli/AGENTS.md.
+scripts/cli_smoke.sh [nats|without-nats]
 ```
 
 Single-test execution (important):
@@ -238,17 +246,38 @@ Self-registration is off in Nexus (there is no signup route): add people by invi
 
 An older project upgrades with `abi user migrate` (dry run), then `abi user migrate --apply`: each account of the old password / magic-link login is made at the built-in provider with the same email; the person's first sign-in with the mailed code links it and keeps roles, groups and data. The API logs a reminder at start while accounts are not linked. `secret_key` no longer signs or encrypts anything: workspace secrets use `secrets_encryption_key` (generated as `NEXUS_SECRETS_KEY`; the API re-encrypts what is still under the old key at start).
 
+### Deploying with Dokploy
+
+`abi deploy dokploy --domain <domain> [--coding] [--wildcard-cert-resolver <name>]` renders `docker-compose.dokploy.yml`, `config.dokploy.yaml` and a gitignored `.env.dokploy` for a Dokploy server: Traefik labels instead of Caddy, no host ports, `abi` built from the project `Dockerfile`. Code: `libs/naas-abi-cli/naas_abi_cli/cli/deploy/dokploy.py`, template in `deploy/templates/dokploy/`, tests in `deploy/dokploy_test.py`. Guide: https://docs.naas.ai/user-guide/deploy/dokploy.
+
 ## Stack Management
 
+The repo runs on NATS by default, like a project from `abi new project`: its
+`config.yaml` (`abi dev up`) and `config.local.yaml` (`abi stack start`) have a
+`nats:` block. Kernel services, the bus (JetStream), module jobs and remote
+module discovery go through the broker. The broker's passwords
+(`NATS_ENGINE_PASSWORD`, `NATS_AUTH_PASSWORD`) and the seed of its auth callout
+(`NATS_AUTH_CALLOUT_SEED`) are generated into `.env` on first run (see
+`.env.example`); modules log in with their own service key, not a shared password.
+
+Dagster and the RabbitMQ bus are legacy, to be removed in the next major. In
+`docker-compose.yml` they sit behind the `legacy` profile, and nothing in the
+default stack depends on them.
+
 ```bash
-# Start full stack (requires RabbitMQ, Redis, Qdrant, MinIO)
+# Start the Docker stack on NATS (Postgres, Fuseki, Qdrant, Redis, MinIO, NATS, ...)
 abi stack start
 
-# Start only infrastructure (Postgres + Fuseki)
-docker compose up -d postgres fuseki
+# Legacy: also Dagster and RabbitMQ, the engine without NATS, its bus on RabbitMQ
+# (writes .abi/stack/legacy.overlay.yaml for the abi and dagster containers)
+abi stack start --legacy
 
-# Start with message bus
-docker compose up -d postgres fuseki rabbitmq
+# Start only infrastructure (Postgres + Fuseki + NATS). The nats service needs
+# its passwords in .env: run `abi stack start` once, or `make local-up`.
+docker compose up -d postgres fuseki nats
+
+# Legacy containers alone, next to the engine on NATS (Dagster joins it as a client)
+docker compose --profile legacy up -d dagster
 
 # Check status
 abi stack status
@@ -259,18 +288,34 @@ abi stack logs core     # Core API only
 abi stack logs api      # Nexus API only
 abi stack logs web      # Frontend only
 
-# Stop services
+# Stop services (the legacy profile's too)
 abi stack stop
 ```
+
+Without Docker, `abi dev up` runs the same engine on a native `nats-server`
+(see "Hosted development environment instructions" below); `abi dev up
+--without-nats` is the legacy in-process engine, with Dagster when the
+`naas-abi-core[dagster]` extra is installed.
+
+`abi chat`, `make api` and tests that build an `Engine()` from the root config
+are on NATS too: they need a broker at `127.0.0.1:4222`, the Docker stack's. To
+load the engine in-process without one, point `ABI_CONFIG_OVERLAY` at a YAML
+file holding `nats: null`.
 
 ### Configuration Adapters
 
 Services can be configured to use different adapters in `config.yaml`:
 
-**Bus Service:**
+**NATS (`nats:` block):** with it, the bus is JetStream on the broker and needs
+no `bus:` block (an explicit one must be `nats_jetstream`); other engines and
+remote modules reach the kernel services over NATS. Without it, the engine runs
+in-process and uses the `bus:` adapter below.
 
-- `rabbitmq` - Production message queue (requires Docker container)
-- `python_queue` - Local in-memory queue (no external deps)
+**Bus Service** (without NATS):
+
+- `python_queue` - SQLite-backed local queue (no external deps; the default)
+- `rabbitmq` - RabbitMQ (legacy, to be removed in the next major; needs the
+  `naas-abi-core[rabbitmq]` extra and the `legacy` compose profile)
 
 **Triple Store:**
 
@@ -333,8 +378,8 @@ Services can be configured to use different adapters in `config.yaml`:
 - Keep changes scoped; avoid broad refactors unless requested.
 - Preserve existing architecture patterns over stylistic rewrites.
 - If unsure, follow nearest module conventions.
-- When a change introduces or updates an architecture-level decision (boundaries, ownership, cross-cutting configuration, major tradeoffs), add/update an ADR in `docs/adr/`.
-- ADR files use `YYYYMMDD_topic.md` naming (e.g. `20260212_apache-jena-fuseki-default-triplestore.md`) and must include at least: Status, Date, Context, Decision, Consequences.
+- When a change introduces or updates an architecture-level decision (boundaries, ownership, cross-cutting configuration, major tradeoffs), write it into the nearest `AGENTS.md` (Decision / Consequences). Do not add narrative docs under `docs/`.
+- Product docs live at https://docs.naas.ai. Do not revive a docs site or ADR tree in this repository.
 
 ## Quick Cheat Sheet
 
@@ -351,14 +396,22 @@ make fmt            # Format code
 make test           # Run tests
 uv build            # Build packages
 
-# Stack management
+# Stack management (Docker, on NATS)
 abi stack start     # Start all services
 abi stack status    # Check health
 abi stack logs      # View logs
 abi stack stop      # Stop services
+abi stack start --legacy   # Legacy: + Dagster, RabbitMQ bus, engine without NATS
+
+# Dev runtime (no Docker, needs nats-server on PATH)
+uv run abi dev up -d   # oxigraph, nats, api, nexus-web
+abi dev status         # Services and ports
+abi dev down           # Stop them
+abi dev up -d --without-nats   # Legacy: in-process engine, no broker
 
 # Docker services
-docker compose up -d postgres fuseki rabbitmq  # Infrastructure
+docker compose up -d postgres fuseki nats       # Infrastructure
+docker compose --profile legacy up -d dagster   # Legacy containers
 docker compose ps                               # Check status
 docker compose logs -f <service>                # View logs
 ```
@@ -369,15 +422,16 @@ When creating or modifying secondary adapters, **ALL abstract methods from the p
 
 ## Hosted development environment instructions
 
-The Cloud VM has no Docker, so use the **no-Docker `abi dev` runtime** (backed by `config.yaml`: Oxigraph/SQLite/filesystem adapters). `abi stack start` and `config.local.yaml` require Docker (Postgres/Fuseki/Qdrant/RabbitMQ/Redis/MinIO) and will not work here. The update script installs deps (`uv sync --all-extras` + `pnpm install` for the web app) and Ollama if missing; it does **not** pull the ~2 GB models on every boot. Do not re-run those to "start" anything.
+The Cloud VM has no Docker, so use the **no-Docker `abi dev` runtime** (backed by `config.yaml`: Oxigraph/SQLite/filesystem adapters, on NATS). `abi stack start` and `config.local.yaml` require Docker (Postgres/Fuseki/Qdrant/Redis/MinIO/NATS) and will not work here. The update script installs deps (`uv sync --all-extras` + `pnpm install` for the web app) and Ollama if missing; it does **not** pull the ~2 GB models on every boot. Do not re-run those to "start" anything. `abi dev up` also needs **`nats-server` 2.14+ on `PATH`**: check with `nats-server --version`, and if it is missing install a release binary (https://github.com/nats-io/nats-server/releases) into `~/.local/bin`.
 
 Default is **local-first Ollama** (`qwen-2.5-3b` chat + `nomic-embed-text` embeddings). Before first chat: `ollama serve` (if not already running) and `make ollama-models`.
 
-Run all four services with `uv run abi dev up -d`, then `abi dev status` / `abi dev ports` / `abi dev logs <service> -f` (services: `oxigraph`, `api`, `dagster`, `nexus-web`). Standard lint/test/build commands are documented above (`make check`, `make test`, targeted `uv run pytest ...`).
+Run all four services with `uv run abi dev up -d`, then `abi dev status` / `abi dev ports` / `abi dev logs <service> -f` (services: `oxigraph`, `nats`, `api`, `nexus-web`; Dagster is legacy and only starts with `--without-nats`). Stop them with `abi dev down`. Standard lint/test/build commands are documented above (`make check`, `make test`, targeted `uv run pytest ...`).
 
 Non-obvious gotchas discovered during setup:
 
-- **`.env` is required and gitignored.** It is auto-created on first `abi dev up` (API key, broker passwords, the identity provider's client secret). The engine renders `config.yaml` through Jinja and **hard-fails non-interactively (no TTY) on missing `{{ secret.X }}` in active (non-comment) YAML**. Full-line YAML comments are left unrendered, so commented-out modules can keep example `{{ secret.X }}` placeholders. Root config is keyless-clean for AI/integrations; remaining deploy placeholders are in `.env.example` (`NAAS_API_KEY`, `ABI_API_KEY`, `NEXUS_API_URL`). Copy those if missing.
+- **`.env` is required and gitignored.** It is auto-created on first `abi dev up`, seeding `ABI_API_KEY`, the broker's secrets (`NATS_ENGINE_PASSWORD`, `NATS_AUTH_PASSWORD`, `NATS_AUTH_CALLOUT_SEED`) and the identity provider's client secret (there is no admin password). The engine renders `config.yaml` through Jinja and **hard-fails non-interactively (no TTY) on missing `{{ secret.X }}` in active (non-comment) YAML**. Full-line YAML comments are left unrendered, so commented-out modules can keep example `{{ secret.X }}` placeholders. Deploy placeholders are in `.env.example` (`NAAS_API_KEY`, `ABI_API_KEY`, `NEXUS_API_URL`): copy those if missing. The root config also names `OPENAI_API_KEY`, `OPENROUTER_API_KEY` and `GITHUB_ACCESS_TOKEN` in active YAML, so set them (a placeholder lets the API boot) through environment secrets or `.env`.
+- **NATS ports are offset too.** `abi dev up` starts its own `nats-server` on an offset client port and hands the api its URL through `.abi/dev/dev.overlay.yaml`; the `127.0.0.1:4222` in `config.yaml` is the Docker stack's broker. `abi dev ports` lists the live ones; the broker's monitoring endpoint is the client port + 1000 (`/healthz`, `/connz`).
 - **For capable cloud models:** set `global_config.ai_mode: "cloud"`, uncomment a cloud provider module in `config.yaml`, replace `SECRET_REF` with a real Jinja secret, and add its key via environment secrets or `.env`.
 - **First API boot is slow (~2-3 min):** the worker loads every module/ontology and runs Nexus SQLite migrations before serving. Watch `abi dev logs api`; it is ready when `/docs` returns 200 (`GET http://localhost:<api-port>/docs`).
 - **Ports are offset per worktree** (see `abi dev ports`), so they are not the config defaults. `abi dev` injects `OXIGRAPH_URL` into each service; the `config.yaml` default `:7878` is not the live port. To run a test that builds its own engine against the live triple store, pass `OXIGRAPH_URL=http://127.0.0.1:<oxigraph-port>`.

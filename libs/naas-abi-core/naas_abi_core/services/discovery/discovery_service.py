@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
+import json
 import math
 import re
 import secrets
@@ -26,8 +27,9 @@ from naas_abi_core.services.discovery.discovery_ports import (
 )
 from naas_abi_core.services.discovery.iam_catalog import CATALOG
 from naas_abi_core.services.iam.guard import ServiceGuard
-from naas_abi_core.services.iam.IAMPorts import IIAMService
+from naas_abi_core.services.iam.IAMPorts import IIAMService, PermissionDeniedError
 from naas_abi_core.services.iam.modules import subject_token
+from naas_abi_core.services.iam.names import resource_name
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 
 
@@ -44,6 +46,13 @@ def _require(ok: bool, code: str, message: str) -> None:
 
 def _name(value: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.:-]{0,255}", value))
+
+
+def _instance_id(value: str) -> bool:
+    """One NATS subject token: an instance id carries no ``.`` and no wildcard, so
+    an id ``<other>.x`` cannot be read as another instance's id where a subject
+    or a record names it."""
+    return bool(re.fullmatch(r"[A-Za-z0-9_-]{1,128}", value))
 
 
 def _rollout_id(value: str) -> bool:
@@ -78,14 +87,34 @@ def _depends_on_itself(
 
 
 JOB_TRIGGER_KINDS = ("cron", "every", "event")
+# A descriptor written before workflows existed has no kind: it is a job. The
+# bounds are the SDK's (jobs.MAX_SCHEMA_BYTES and friends): descriptors travel in
+# the registry snapshot, which holds every module.
+JOB_KINDS = ("", "job", "workflow")
+MAX_SCHEMA_BYTES = 16 * 1024
+MAX_TRIGGER_INPUT_BYTES = 4 * 1024
+MAX_JOB_DESCRIPTOR_BYTES = 64 * 1024
+
+
+def _json_object(value: str, max_bytes: int) -> bool:
+    """Empty (none), or a JSON object of at most ``max_bytes`` bytes."""
+    if not value:
+        return True
+    if len(value.encode()) > max_bytes:
+        return False
+    try:
+        return isinstance(json.loads(value), dict)
+    except ValueError:
+        return False
+
 
 # Who may evict registrations on a discovery with no IAM (tests, a bare
 # registry): the Nexus API and the engine, by their service-account names.
 # With IAM it is discovery:Evict.
 DEFAULT_ADMIN_IDENTITIES = ("api", "engine")
 
-# The service-account name form of a module (RFC §2): once IAM records module
-# accounts (#60), a module registers only under its own name.
+# The service-account name form of a module: a module account registers
+# only under its own name.
 MODULE_ACCOUNT_PREFIX = "module/"
 AGENT_OPERATIONS = ("submit", "status", "event", "cancel")
 JOB_OPERATIONS = ("trigger", "cancel")
@@ -109,12 +138,17 @@ def _valid_job(job: pb.JobDescriptor) -> bool:
             t.kind in JOB_TRIGGER_KINDS
             and 0 < len(t.spec) <= 256
             and len(t.time_zone) <= 64
+            and _json_object(t.input, MAX_TRIGGER_INPUT_BYTES)
             for t in job.triggers
         )
+        and job.kind in JOB_KINDS
+        and _json_object(job.input_schema, MAX_SCHEMA_BYTES)
+        and _json_object(job.output_schema, MAX_SCHEMA_BYTES)
+        and job.ByteSize() <= MAX_JOB_DESCRIPTOR_BYTES
     )
 
 
-# Apps a module serves over NATS (docs/adr/20261012_remote-module-apps.md): few
+# Apps a module serves over NATS: few
 # and small, so they stay a minor part of the bounded registry snapshot.
 MAX_APPS = 16
 MAX_APP_BYTES = 4096
@@ -220,16 +254,17 @@ class DiscoveryService:
         await asyncio.to_thread(check)
 
     async def _filter_instances(
-        self, instances: list[pb.Instance]
+        self, instances: list[pb.Instance], module_action: str = "ListModules"
     ) -> list[pb.Instance]:
-        """The instances of the modules the caller may list, each showing only
-        the agents, apps and jobs it may list (RFC §6.4)."""
+        """The instances of the modules the caller may list (``module_action``:
+        ``GetModule`` for the one module ``get_module`` names), each showing
+        only the agents, apps and jobs it may list."""
         if not self.guard.enforcing or not instances:
             return instances
 
         def visible() -> list[pb.Instance]:
             kept = self.guard.filter(
-                "ListModules",
+                module_action,
                 "module",
                 instances,
                 lambda i: self._parts(i.descriptor.module_id),
@@ -261,11 +296,11 @@ class DiscoveryService:
     def _bind_module(
         self, req: pb.RegisterRequest, owner: str, state: pb.RegistryState
     ) -> None:
-        """A module id is held by one principal at a time (RFC §6.4, Register).
+        """A module id is held by one principal at a time (``Register``).
 
-        A module account (``module/<project>/<module_id>``, recorded by IAM from
-        #60 on) registers only its own module. Until then a module's token names
-        it freely, so a module id is bound to the principal of its live
+        A module account (``module/<project>/<module_id>``, recorded by IAM)
+        registers only its own module. Any other principal may name a module
+        freely, so a module id is bound to the principal of its live
         instances: nobody else can join them, and so nobody can take requests
         meant for a running module.
         """
@@ -452,7 +487,7 @@ class DiscoveryService:
     def _validate(self, req: pb.RegisterRequest, state: pb.RegistryState) -> None:
         d = req.descriptor
         _require(
-            _name(d.module_id) and _name(req.instance_id),
+            _name(d.module_id) and _instance_id(req.instance_id),
             "INVALID_ARGUMENT",
             "Invalid module or instance identity",
         )
@@ -900,7 +935,11 @@ class DiscoveryService:
         ]
         _require(bool(matches), "INCOMPATIBLE_MODULE", req.module_id)
         ordered: list[pb.Instance] = sorted(matches, key=lambda r: r.instance_id)
-        return pb.GetModuleResponse(instances=await self._filter_instances(ordered))
+        # GetModule was required above: a caller who may read the module sees its
+        # instances (a module looking itself up holds GetModule, not ListModules).
+        return pb.GetModuleResponse(
+            instances=await self._filter_instances(ordered, "GetModule")
+        )
 
     async def list_modules(self, req: pb.ListModulesRequest) -> pb.ListModulesResponse:
         _require(1 <= req.limit <= 100, "INVALID_ARGUMENT", "Page size must be 1..100")
@@ -930,7 +969,7 @@ class DiscoveryService:
         owner: str,
         caller: CallContext | None = None,
     ) -> pb.AuthorizeAgentResponse:
-        """The provider's lease, then the caller's policy (RFC §6.4).
+        """The provider's lease, then the caller's policy.
 
         ``caller``: the provider's caller, verified from the token and the
         on-behalf-of user it forwarded. A submit needs ``InvokeAgent`` on the
@@ -1158,11 +1197,10 @@ class DiscoveryService:
         )
         record = await self._live_record(req.instance_id)
         self._authorize(record, req.lease_token, owner)
-        _require(
-            any(j.name == req.job_name for j in record.instance.descriptor.jobs),
-            "JOB_NOT_FOUND",
-            req.job_name,
+        declared = next(
+            (j for j in record.instance.descriptor.jobs if j.name == req.job_name), None
         )
+        _require(declared is not None, "JOB_NOT_FOUND", req.job_name)
         response = pb.AuthorizeJobResponse()
         if caller is not None:
             await self.require_job(
@@ -1171,6 +1209,7 @@ class DiscoveryService:
                 req.operation,
                 req.run_id,
                 caller,
+                workflow=declared is not None and declared.kind == "workflow",
             )
             response.caller_identity = run_owner(caller)
         return response
@@ -1182,18 +1221,67 @@ class DiscoveryService:
         operation: str,
         run_id: str,
         caller: CallContext,
+        *,
+        workflow: bool = False,
     ) -> None:
-        """``TriggerJob`` on ``job/…``, or ``CancelJobRun`` on ``job_run/…``."""
+        """``TriggerJob`` on ``job/…`` (or ``workflow/…``), or ``CancelJobRun`` on
+        ``job_run/…``."""
         if not self.guard.enforcing:
             return
 
         def check() -> None:
             with use_call_context(caller):
                 require_job(
-                    self.guard, self.project, module_id, job_name, operation, run_id
+                    self.guard,
+                    self.project,
+                    module_id,
+                    job_name,
+                    operation,
+                    run_id,
+                    workflow=workflow,
                 )
 
         await asyncio.to_thread(check)
+
+
+# A decision that refuses whatever else allows: an explicit Deny, a seal, a
+# suspended principal.
+_REFUSING = ("explicit_deny", "sealed", "suspended")
+
+
+def trigger_names(
+    project: str, module_id: str, job_name: str, *, workflow: bool
+) -> list[str]:
+    """The names ``TriggerJob`` is decided on: ``job/…``, and for a workflow
+    ``workflow/…`` too."""
+    parts = [project, module_id, job_name]
+    names = [resource_name("discovery", "job", parts, kind="path")]
+    if workflow:
+        names.append(resource_name("discovery", "workflow", parts, kind="path"))
+    return names
+
+
+def trigger_decision(
+    authorize: Callable[[str, str], Any],
+    project: str,
+    module_id: str,
+    job_name: str,
+    *,
+    workflow: bool = False,
+) -> tuple[bool, bool]:
+    """``(allowed, visible)`` of starting a job for the current caller, one rule
+    wherever it is decided (discovery, the engine's job host, the broker control
+    that hands the run its user): an explicit Deny on either name refuses, else
+    an Allow on either name passes. Evaluating the two names apart would lose a
+    Deny written on ``job/…`` before workflows had a second name."""
+    decisions = [
+        authorize("discovery:TriggerJob", name)
+        for name in trigger_names(project, module_id, job_name, workflow=workflow)
+    ]
+    visible = any(d.visible for d in decisions)
+    if any(d.reason in _REFUSING for d in decisions):
+        return False, visible
+    return any(d.allowed for d in decisions), visible
 
 
 def require_job(
@@ -1203,18 +1291,31 @@ def require_job(
     job_name: str,
     operation: str,
     run_id: str = "",
+    *,
+    workflow: bool = False,
 ) -> None:
     """Whether the current caller may trigger a module's job, or cancel one of
-    its runs (RFC §6.4); the job's or the run's not-found when it cannot see it.
-    Discovery asks it for a module's job host, the engine for its own."""
+    its runs; the job's or the run's not-found when it cannot see it.
+    Discovery asks it for a module's job host, the engine for its own.
+
+    A workflow (``kind="workflow"``) is also ``workflow/…``; ``trigger_decision``
+    is the rule. Workspace members hold ``TriggerJob`` on ``workflow/*`` only
+    (``roles.PLATFORM_TYPES``), never on a plain job."""
     if operation == "trigger":
-        guard.require(
-            "TriggerJob",
-            "job",
-            [project, module_id, job_name],
-            not_found=_error("JOB_NOT_FOUND", job_name),
+        iam = guard.iam
+        if iam is None:
+            return
+        allowed, visible = trigger_decision(
+            iam.authorize, project, module_id, job_name, workflow=workflow
         )
-        return
+        if allowed:
+            return
+        if visible:
+            raise PermissionDeniedError(
+                "discovery:TriggerJob",
+                guard.name("job", [project, module_id, job_name]),
+            )
+        raise _error("JOB_NOT_FOUND", job_name)()
     _require(operation == "cancel", "INVALID_ARGUMENT", "Unknown job operation")
     guard.require(
         "CancelJobRun",

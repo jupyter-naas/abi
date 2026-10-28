@@ -1,4 +1,4 @@
-import { mapsJson, mapsUpstreamGet } from '../_lib';
+import { mapsPinResponse, mapsUpstreamGet } from '../_lib';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,10 +14,7 @@ export async function GET() {
       { timeoutMs: 15000 },
     );
     if (!res.ok) {
-      return mapsJson(
-        { error: `NHC ${res.status}`, pins: [], count: 0 },
-        { status: 502 },
-      );
+      return mapsPinResponse([], { error: `NHC ${res.status}` }, { status: 502 });
     }
     const data = (await res.json()) as {
       activeStorms?: Array<{
@@ -58,17 +55,11 @@ export async function GET() {
       });
     }
 
-    return mapsJson(
-      { pins, source: 'nhc', count: pins.length },
-      { cacheSeconds: 300 },
-    );
+    return mapsPinResponse(pins, { source: 'nhc' }, { cacheSeconds: 300 });
   } catch (err) {
-    return mapsJson(
-      {
-        error: err instanceof Error ? err.message : 'NHC fetch failed',
-        pins: [],
-        count: 0,
-      },
+    return mapsPinResponse(
+      [],
+      { error: err instanceof Error ? err.message : 'NHC fetch failed' },
       { status: 502 },
     );
   }

@@ -3,7 +3,7 @@
 Behind the broker's auth callout a module may not create or change a stream
 or a consumer: their subjects and delivery subjects travel in the request
 body, which the broker never reads, so a module could capture or redirect any
-subject (docs/adr/20261013_engine-tokens-service-accounts-broker.md). It asks
+subject. It asks
 the engine instead, at ``abi.broker.v1.<operation>``, with its token; the
 engine checks the request against the module's approved policy and creates
 what is missing:

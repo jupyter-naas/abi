@@ -1,7 +1,100 @@
-/* organizations settings / workspaces — page chrome; grid still uses Tailwind in TSX */
+/* Organization Settings > Workspaces: the table reuses the Users table styles (users.css). */
 
-.org-settings-workspaces-page {
+.org-workspaces-open {
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.org-workspaces-actions {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-8);
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Create workspace: buttons, focus rings and pickers use org branding from SettingsLayoutRoot, not the workspace colour draft below. */
+.org-create-workspace.workspace-general .account-profile-field-input:focus,
+.org-create-workspace.workspace-general .account-profile-field-textarea:focus {
+  border-color: var(--workspace-accent, var(--color-primary));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--workspace-accent, var(--color-primary)) 30%, transparent);
+}
+
+/* Create workspace page. */
+.org-create-workspace-hint {
+  margin-top: var(--space-1);
+  font-weight: var(--font-weight-normal, 400);
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--destructive-hex);
+}
+
+/* Create workspace header: Save, then the close cross at the far right. */
+.org-create-workspace-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.org-create-workspace-actions .account-profile-save-button {
+  width: auto;
+  white-space: nowrap;
+}
+
+/* Row selection (bulk edit): checkboxes centred in their column. */
+.org-workspaces-select {
+  width: 2.5rem;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+
+.org-workspaces-select > span {
+  vertical-align: middle;
+}
+
+.org-workspaces-row-selected {
+  background-color: color-mix(in srgb, var(--color-primary, #22c55e) 8%, transparent);
+}
+
+/* Logos keep their aspect ratio inside the square (wide brand logos). */
+.org-workspaces-logo {
+  border-radius: 0 !important;
+  object-fit: contain;
+  background-color: var(--background, #fff);
+}
+
+/* Features cell: the workspace's features as chips (its set is edited on Modules & features). */
+.org-workspaces-features {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  max-width: 22rem;
+  padding: 2px;
+}
+
+.org-workspaces-feature {
+  padding: 1px 6px;
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  color: var(--foreground-hex, inherit);
+  background-color: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.org-workspaces-feature-more {
+  color: var(--muted-foreground-hex, inherit);
+}
+
+/* Create workspace: the new group name field under the Group dropdown. */
+.org-create-workspace-new-group {
+  margin-top: var(--space-2);
+}
+
+/* Create workspace: the new workspace's features, one checkbox each. */
+.org-create-workspace-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--space-2) var(--space-4);
 }

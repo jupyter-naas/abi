@@ -14,7 +14,6 @@ import json
 from decimal import Decimal
 from typing import Any
 
-
 # The proto fields holding one JSON object each, by message: shared by every
 # reader and writer (core codec, SDK codec, SDK DTO generator).
 JSON_OBJECT_FIELDS: dict[str, tuple[str, ...]] = {

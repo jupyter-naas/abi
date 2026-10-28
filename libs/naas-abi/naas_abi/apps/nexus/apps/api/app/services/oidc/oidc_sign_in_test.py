@@ -76,6 +76,8 @@ def _app() -> FastAPI:
     app = FastAPI()
     app.include_router(auth_router, prefix="/api/auth")
     app.include_router(oidc_router, prefix="/api/auth/oidc")
+    # The drive profile sync of a profile change (best effort) has no object storage here.
+    app.state.object_storage = object()
 
     @app.get("/api/whoami")
     async def whoami() -> dict:
@@ -143,7 +145,6 @@ class NexusHarness:
         return await client.get(callback)
 
 
-
 class NexusSignInContract(NexusHarness):
     """Every provider's sign-in: subclasses give the ``harness`` fixture."""
 
@@ -200,7 +201,9 @@ class NexusSignInContract(NexusHarness):
 
         async with sessions() as db:
             rows = (
-                await db.execute(text("SELECT action, success, details FROM audit_logs ORDER BY id"))
+                await db.execute(
+                    text("SELECT action, success, details FROM audit_logs ORDER BY id")
+                )
             ).all()
         actions = sorted((r.action, bool(r.success)) for r in rows)
         assert actions == [("login", False), ("login", True), ("logout", True)]
@@ -380,9 +383,7 @@ class NexusSignInContract(NexusHarness):
     async def test_an_email_domain_routes_to_its_provider(self, nexus, harness):
         client, _, sessions = nexus
         async with sessions() as db:
-            db.add(
-                UserModel(id="owner-1", email="owner@example.com", name="O")
-            )
+            db.add(UserModel(id="owner-1", email="owner@example.com", name="O"))
             db.add(OrganizationModel(id="org-1", name="Acme", slug="acme", owner_id="owner-1"))
             db.add(
                 OrganizationDomainModel(
@@ -603,7 +604,7 @@ LEGACY_ISSUER = "urn:abi:nexus"
 class NexusFirstSignInContract(NexusHarness):
     """A user of the old built-in login signs in for the first time through the
     built-in provider: matched by the verified email, linked to the principal
-    that holds its roles, nothing else (RFC §13)."""
+    that holds its roles, nothing else."""
 
     provisioning = "builtin"
 
@@ -617,9 +618,7 @@ class NexusFirstSignInContract(NexusHarness):
         return principal
 
     @pytest.mark.asyncio
-    async def test_the_first_sign_in_links_the_account_and_keeps_its_roles(
-        self, nexus, harness
-    ):
+    async def test_the_first_sign_in_links_the_account_and_keeps_its_roles(self, nexus, harness):
         client, iam, sessions = nexus
         email = f"lea-{os.urandom(3).hex()}@example.com"
         principal = await self._legacy_user(sessions, iam, email)
@@ -643,7 +642,9 @@ class NexusFirstSignInContract(NexusHarness):
             assert len((await db.execute(select(UserModel))).scalars().all()) == 1
         # Every kernel call names the Nexus id, which IAM resolves to the same user.
         assert (await client.get("/api/whoami")).json()["user"] == "user-legacy-1"
-        held = {(a.policy_id, a.scope) for a in iam.store.list_attachments(principal_id=principal.id)}
+        held = {
+            (a.policy_id, a.scope) for a in iam.store.list_attachments(principal_id=principal.id)
+        }
         assert ("builtin.member", "abi:acme:ws1") in held
         assert [
             p.id for p in iam.store.list_principals("user", limit=100).items if p.status == "active"
@@ -715,9 +716,7 @@ class TestFirstSignInWithFakeIdPSettingBuiltin(NexusFirstSignInContract):
             yield idp
 
     @pytest.mark.asyncio
-    async def test_a_linked_account_is_not_linked_again_to_another_identity(
-        self, nexus, harness
-    ):
+    async def test_a_linked_account_is_not_linked_again_to_another_identity(self, nexus, harness):
         client, iam, sessions = nexus
         email = f"pat-{os.urandom(3).hex()}@example.com"
         await self._legacy_user(sessions, iam, email)
@@ -764,7 +763,9 @@ class TestSettingsOtherThanBuiltinNeverLink(NexusHarness):
         identity = runtime.RUNTIME.identity._identity()
         configured = identity._providers[harness.provider_name]
         monkeypatch.setattr(
-            identity, "_providers", {harness.provider_name: replace(configured, provisioning=provisioning)}
+            identity,
+            "_providers",
+            {harness.provider_name: replace(configured, provisioning=provisioning)},
         )
         email = f"rex-{os.urandom(3).hex()}@example.com"
         async with sessions() as db:
@@ -825,16 +826,24 @@ class TestLinkingTheRows:
         linked = await adapter.link_user("u-ada", **fields)
         again = await adapter.link_user("u-ada", **fields)  # a second sign-in of the same person
 
-        assert (linked.id, linked.principal_id, linked.email) == ("u-ada", "usr_ada", "Ada@Example.com")
+        assert (linked.id, linked.principal_id, linked.email) == (
+            "u-ada",
+            "usr_ada",
+            "Ada@Example.com",
+        )
         assert again == linked
         assert await adapter.legacy_user_by_email("ada@example.com") is None
         # Another identity cannot take a linked row, nor can one identity take two rows.
         with pytest.raises(UserConflictError):
-            await adapter.link_user("u-ada", **{**fields, "subject": "s-other", "principal_id": "usr_x"})
+            await adapter.link_user(
+                "u-ada", **{**fields, "subject": "s-other", "principal_id": "usr_x"}
+            )
         with pytest.raises(UserConflictError):
             await adapter.link_user("u-bob", **fields)
         with pytest.raises(UserConflictError):
-            await adapter.link_user("u-missing", **{**fields, "subject": "s-m", "principal_id": "usr_m"})
+            await adapter.link_user(
+                "u-missing", **{**fields, "subject": "s-m", "principal_id": "usr_m"}
+            )
 
 
 class TestNexusSignInWithFakeIdP(NexusSignInContract):

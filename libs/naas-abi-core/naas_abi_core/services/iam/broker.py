@@ -1,4 +1,4 @@
-"""Broker permissions of a service account, from its policy (RFC §8.4).
+"""Broker permissions of a service account, from its policy.
 
 The NATS auth callout gives each module connection the subjects this module
 derives. The broker grants at the operation level: a service the account may
@@ -18,7 +18,8 @@ answers there only, ``naas_abi_sdk.messages.reply_allowed``).
 
 * **Always**: IAM's read-only and self-service request subjects
   (``IAM_ALWAYS``: ``token``, ``exchange_token``, ``jwks``, ``submit_manifest``, ``get_manifest``,
-  ``find_service_account``, ``authorize``, ``filter``; never a mutation, never
+  ``find_service_account``, ``authorize``, ``authorize_declared``, ``filter``, ``grantable``;
+  never a mutation, never
   ``abi.iam.v1.changed``); the others only for an ``iam:`` action the policy
   allows; the engine's broker
   control (``abi.broker.v1.<operation>``: it checks each request against the
@@ -39,10 +40,13 @@ answers there only, ``naas_abi_sdk.messages.reply_allowed``).
   the engine publishes for it on those modules' jobs only (``job_triggers``,
   ``job_cancels``), and their triggers' claim checks. A module's own named jobs
   are hosted: fetching from and acknowledging its consumers, its cancel
-  subject, reading its triggers' claim checks. A module writes nothing into
+  subject, reading its triggers' claim checks, and publishing their runs'
+  completion notices (``abi.jobdone.*``, core NATS). ``GetJobRun`` on a
+  module's runs subscribes to their notices. A module writes nothing into
   the jobs stream: its schedules make the server allow rollups there.
 * **Bus topics** named ``abi:-:-:bus:topic/<topic>`` (a concrete topic, none
-  under a reserved root), by action: ``bus:Publish`` publishes on the topic
+  under a reserved root, naming no variable: nothing here substitutes one), by
+  action: ``bus:Publish`` publishes on the topic
   and writes its claim checks; ``bus:Consume`` subscribes to it and fetches
   from and acknowledges the consumers of its queue stream. A Deny of an
   action on a topic keeps that topic from it.
@@ -81,6 +85,7 @@ IAM_OPERATIONS = (
     "approve_manifest",
     "attach_policy",
     "authorize",
+    "authorize_declared",
     "bind_idp_group",
     "claim_pending_grants",
     "create_group",
@@ -94,6 +99,7 @@ IAM_OPERATIONS = (
     "delete_principal",
     "delete_scope",
     "detach_policy",
+    "effective_set",
     "ensure_user",
     "exchange_token",
     "explain",
@@ -103,6 +109,8 @@ IAM_OPERATIONS = (
     "get_manifest",
     "get_policy",
     "get_principal",
+    "get_set",
+    "grantable",
     "jwks",
     "list_attachments",
     "list_group_members",
@@ -115,9 +123,11 @@ IAM_OPERATIONS = (
     "list_placements",
     "list_policies",
     "list_principals",
+    "list_sets",
     "map_idp_group",
     "put_placement",
     "put_scope",
+    "put_set",
     "register_catalog",
     "reject_manifest",
     "remove_group_member",
@@ -159,7 +169,9 @@ IAM_ALWAYS = (
     "get_manifest",
     "find_service_account",
     "authorize",
+    "authorize_declared",
     "filter",
+    "grantable",
 )
 ALWAYS_PUBLISH = (
     *(f"abi.iam.v1.{operation}" for operation in IAM_ALWAYS),
@@ -286,6 +298,13 @@ def job_hash(module_id: str, job: str) -> str:
     return _hash(module_id, job)[:32]
 
 
+def job_done_subject(project: str, module_id: str, job: str = "*") -> str:
+    """The core-NATS completion notices of a job's runs (``*``: every job of the
+    module). A notice only wakes a waiter, which reads the run record again."""
+    jh = "*" if job == "*" else job_hash(module_id, job)
+    return f"abi.jobdone.{project}.{module_hash(module_id)}.{jh}"
+
+
 def job_consumer(module_id: str, job: str) -> str:
     return f"job-{module_hash(module_id)[:16]}-{job_hash(module_id, job)[:16]}"
 
@@ -307,6 +326,9 @@ def topic_problem(topic: str) -> str | None:
         return "a bus topic is not empty"
     if any(c in topic for c in "*>? \t\r\n"):
         return f"bus topic {topic!r} has a wildcard or a space"
+    if "${" in topic:
+        # Nothing substitutes it here: the topic would be granted as written.
+        return f"bus topic {topic!r} names a variable, which no topic is filled with"
     tokens = topic.split(".")
     if any(not t for t in tokens):
         return f"bus topic {topic!r} has an empty token"
@@ -445,6 +467,7 @@ def derive(
                         reach = _job_subjects(action, resources, module)
                         add(job_triggers, reach.triggers)
                         add(job_cancels, reach.cancels)
+                        add(subscribe, reach.notices)
                         add(publish, reach.claim_writes)
                         if reach.claim_writes:
                             claim_checks = True
@@ -479,6 +502,8 @@ def derive(
             mh, jh = module_hash(module[1]), job_hash(module[1], job)
             add(job_triggers, (f"abi.jobs.{project}.trigger.{mh}.{jh}",))
             add(job_cancels, (f"abi.jobs.{project}.cancel.{mh}",))
+            # It tells waiters when a run of its own ends.
+            add(publish, (job_done_subject(project, module[1], job),))
             add(publish, _claim_check_api(job_claim_subjects(project, module[1])))
             claim_checks = True
     return BrokerPermissions(
@@ -648,6 +673,8 @@ class _JobReach:
     cancels: list[str] = field(default_factory=list)
     claim_writes: list[str] = field(default_factory=list)
     hosted: set[tuple[str, str]] = field(default_factory=set)
+    # Completion notices of the runs it may read (GetJobRun).
+    notices: list[str] = field(default_factory=list)
 
 
 def _job_subjects(
@@ -686,6 +713,12 @@ def _job_subjects(
                 reach.hosted.add((project, job))
         if "CancelJobRun" in actions:
             reach.cancels.append(f"abi.jobs.{project}.cancel.{mh}")
+        if "GetJobRun" in actions and type_ == "job_run":
+            run_job = parts[2] if len(parts) > 3 else "*"
+            concrete = run_job and "*" not in run_job and "?" not in run_job
+            reach.notices.append(
+                job_done_subject(project, module_id, run_job if concrete else "*")
+            )
     return reach
 
 

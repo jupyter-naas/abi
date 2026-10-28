@@ -9,14 +9,10 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import WorkspaceR
 
 def test_to_schema_includes_role_and_feature_flags_for_member() -> None:
     previous_config = settings.feature_flags
+    # Without flags from IAM, the role's defaults (the deprecated workspace
+    # overrides no longer apply: they became the workspaces' sets).
     settings.feature_flags = FeatureFlagsConfig(
-        workspace_overrides={
-            "demo": {
-                "search": True,
-                "ontology": True,
-                "graph": True,
-            }
-        }
+        workspace_overrides={"demo": {"search": True, "chat": False}}
     )
     try:
         record = WorkspaceRecord(
@@ -39,9 +35,9 @@ def test_to_schema_includes_role_and_feature_flags_for_member() -> None:
             "skills": True,
             "apps": False,
             "marketplace": False,
-            "search": True,
-            "ontology": True,
-            "graph": True,
+            "search": False,
+            "ontology": False,
+            "graph": False,
             "datasets": True,
             "settings": False,
             "code": False,
@@ -49,5 +45,7 @@ def test_to_schema_includes_role_and_feature_flags_for_member() -> None:
             "documents": True,
             "sheets": True,
         }
+        flags = {**schema.feature_flags, "apps": True}
+        assert _to_schema(record, "member", feature_flags=flags).feature_flags == flags
     finally:
         settings.feature_flags = previous_config

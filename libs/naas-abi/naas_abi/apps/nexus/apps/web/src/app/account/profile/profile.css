@@ -254,3 +254,10 @@
     justify-content: center;
   }
 }
+
+/* Save sits at the top right, in the page header (also on mobile). */
+.account-page-header .account-profile-save-button {
+  flex-shrink: 0;
+  width: auto;
+  white-space: nowrap;
+}

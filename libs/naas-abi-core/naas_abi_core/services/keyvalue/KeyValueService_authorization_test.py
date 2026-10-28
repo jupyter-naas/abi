@@ -1,4 +1,4 @@
-"""The key-value service passes the authorization contract (RFC §6.4, "keyvalue")."""
+"""The key-value service passes the authorization contract."""
 
 from __future__ import annotations
 

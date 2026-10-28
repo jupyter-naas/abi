@@ -331,6 +331,38 @@ def test_large_events_and_long_runs_preserve_output_in_bounded_documents():
     asyncio.run(scenario())
 
 
+def test_events_keep_a_chat_source_opt_out_and_refuse_other_keys():
+    from naas_abi_sdk.agent_host import _hash
+
+    async def scenario():
+        docs, handler = Documents(), Handler()
+        owner = host(docs, handler)
+        key = _hash("agent", "id")
+        await owner._submit("agent", key, "caller", request())
+        run = owner.runs[key]
+        await owner._event(run, {"event": "tool_response", "data": "a"})
+        await owner._event(
+            run, {"event": "tool_response", "data": "b", "chat_source": False}
+        )
+        await owner._event(
+            run, {"event": "tool_response", "data": "c", "chat_source": True}
+        )
+        for bad in (
+            {"event": "tool_response", "data": "d", "chat_source": "no"},
+            {"event": "tool_response", "data": "e", "other": 1},
+        ):
+            with pytest.raises(RPCError, match="INVALID_STREAM"):
+                await owner._event(run, bad)
+
+        events = (await owner._view(run.data)).events
+        assert [e.HasField("chat_source") for e in events] == [False, True, False]
+        assert events[1].chat_source is False
+        handler.finish.set()
+        await run.task
+
+    asyncio.run(scenario())
+
+
 def test_failed_rebind_rolls_back_partial_subscriptions():
     async def scenario():
         owner = host(Documents(), Handler())
@@ -834,7 +866,7 @@ def test_calls_run_side_by_side_and_close_answers_them_first():
     asyncio.run(scenario())
 
 
-# -- the delegation a run executes with (RFC §9.4) ----------------------------------------
+# -- the delegation a run executes with ----------------------------------------
 
 
 def _delegation_token(sub="caller", act="sa_module", aud="abi:delegated:agent"):
@@ -887,6 +919,123 @@ def test_a_run_executes_as_the_module_for_the_user_it_was_delegated():
         # The token is a credential: it is never written to the run's record.
         stored = await owner.documents.get(owner.runs_collection, "key")
         assert token not in repr(stored.data)
+
+    asyncio.run(scenario())
+
+
+class OwnDocuments(Documents):
+    """Documents recording whether each write carried a user's delegation."""
+
+    def __init__(self):
+        super().__init__()
+        self.delegated: list[str] = []
+
+    async def put(self, collection, id, data, if_version=None):
+        from naas_abi_sdk.call_context import current_call_context
+
+        if current_call_context().delegated_token:
+            self.delegated.append(f"{collection}/{id}")
+        return await super().put(collection, id, data, if_version=if_version)
+
+    async def delete(self, collection, id, if_version=None):
+        from naas_abi_sdk.call_context import current_call_context
+
+        if current_call_context().delegated_token:
+            self.delegated.append(f"delete {collection}/{id}")
+        return await super().delete(collection, id, if_version=if_version)
+
+
+class SeenStream(Seen):
+    async def stream_invoke(self, prompt, context):
+        self.contexts.append(self.current())
+        yield {"event": "message", "data": "one"}
+        self.contexts.append(self.current())
+        yield {"event": "done", "data": "[DONE]"}
+
+
+@pytest.mark.parametrize("mode", ["invoke", "stream"])
+def test_the_hosts_own_records_are_never_the_users(mode):
+    """The run, its events and its claim are the module's records, which a user
+    holds no right to: only the handler's calls carry the delegation."""
+
+    async def scenario():
+        seen, docs = SeenStream(), OwnDocuments()
+        owner = host(docs, seen)
+        token = _delegation_token()
+        submit = _delegated_request(token)
+        submit.mode = mode
+        await owner._submit("agent", "key", "caller", submit)
+        await owner.runs["key"].task
+        assert seen.contexts and all(c.delegated_token == token for c in seen.contexts)
+        assert docs.delegated == []
+        stored = await docs.get(owner.runs_collection, "key")
+        assert stored.data["status"] == "SUCCEEDED"
+
+    asyncio.run(scenario())
+
+
+def test_a_streaming_handler_keeps_one_context_across_its_steps():
+    """What a handler sets before a yield is there after it, and every step
+    (its first included) runs for the user; the host's writes never do."""
+    import contextvars
+
+    marker = contextvars.ContextVar("marker", default="unset")
+
+    class Stateful(Seen):
+        async def stream_invoke(self, prompt, context):
+            marker.set("set before the first yield")
+            self.contexts.append(self.current())
+            yield {"event": "message", "data": "one"}
+            self.contexts.append(self.current())
+            self.after = marker.get()
+            yield {"event": "done", "data": "[DONE]"}
+
+    async def scenario():
+        seen, docs = Stateful(), OwnDocuments()
+        owner = host(docs, seen)
+        token = _delegation_token()
+        submit = _delegated_request(token)
+        submit.mode = "stream"
+        await owner._submit("agent", "key", "caller", submit)
+        await owner.runs["key"].task
+        assert seen.after == "set before the first yield"
+        assert [c.delegated_token for c in seen.contexts] == [token, token]
+        assert docs.delegated == []
+        stored = await docs.get(owner.runs_collection, "key")
+        assert stored.data["status"] == "SUCCEEDED"
+
+    asyncio.run(scenario())
+
+
+def test_a_streaming_handler_that_raises_fails_the_run():
+    class Broken:
+        async def stream_invoke(self, prompt, context):
+            yield {"event": "message", "data": "one"}
+            raise RuntimeError("boom")
+
+    async def scenario():
+        docs = Documents()
+        owner = host(docs, Broken())
+        submit = request()
+        submit.mode = "stream"
+        await owner._submit("agent", "key", "caller", submit)
+        await owner.runs["key"].task
+        stored = await docs.get(owner.runs_collection, "key")
+        assert stored.data["status"] == "FAILED"
+
+    asyncio.run(scenario())
+
+
+def test_a_delegated_run_is_in_the_workspace_of_its_submit():
+    async def scenario():
+        seen = Seen()
+        owner = host(Documents(), seen)
+        submit = _delegated_request(_delegation_token())
+        submit.context.workspace_id = "ws-1"
+        await owner._submit("agent", "key", "caller", submit)
+        await owner.runs["key"].task
+        [context] = seen.contexts
+        assert context.workspace_id == "ws-1" and context.user is not None
 
     asyncio.run(scenario())
 

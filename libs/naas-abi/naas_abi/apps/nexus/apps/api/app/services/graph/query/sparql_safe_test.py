@@ -54,18 +54,18 @@ class TestSparqlIri:
     @pytest.mark.parametrize(
         "bad",
         [
-            "http://x/y z",          # space
-            "http://x/y>z",          # angle bracket — breaks out of <...>
+            "http://x/y z",  # space
+            "http://x/y>z",  # angle bracket — breaks out of <...>
             "http://x/y<z",
-            'http://x/y"z',          # quote
-            "http://x/y{z}",         # brace
-            "http://x/y|z",          # pipe
-            "http://x/y^z",          # caret
-            "http://x/y`z",          # backtick
-            "http://x/y\\z",         # backslash
-            "http://x/y\nz",         # newline (control)
-            "http://x/y\tz",         # tab (control)
-            "http://x\x00y",         # NUL byte (control char)
+            'http://x/y"z',  # quote
+            "http://x/y{z}",  # brace
+            "http://x/y|z",  # pipe
+            "http://x/y^z",  # caret
+            "http://x/y`z",  # backtick
+            "http://x/y\\z",  # backslash
+            "http://x/y\nz",  # newline (control)
+            "http://x/y\tz",  # tab (control)
+            "http://x\x00y",  # NUL byte (control char)
         ],
     )
     def test_illegal_characters_are_rejected(self, bad: str) -> None:
@@ -109,7 +109,7 @@ class TestSparqlTypedLiteral:
         out = sparql_typed_literal(1e-7, "number")
         lexical = out.split("^^")[0]  # the "<value>" part, before the datatype IRI
         assert "e" not in lexical and "E" not in lexical
-        assert out.endswith(f'^^<{XSD}decimal>')
+        assert out.endswith(f"^^<{XSD}decimal>")
 
     def test_non_finite_numbers_are_rejected(self) -> None:
         for bad in (float("inf"), float("-inf"), float("nan")):

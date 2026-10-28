@@ -25,3 +25,23 @@ This extraction preserves existing validation semantics: v1 currently has no
 Protovalidate annotations. The engine's adapters remain the validation boundary;
 this package does not claim client-side semantic validation. Introducing annotations
 and the corresponding runtime is a separate contract change.
+
+## Remote workflows and pipelines
+
+`discovery/v1/discovery.proto` lists what a module serves in `ModuleDescriptor.processes`
+(`ProcessDescriptor`: name, kind `workflow` or `pipeline`, description, contract major;
+field 9) and `AuthorizeProcessRequest`/`Response` let the serving module ask discovery
+whether a caller may call one. `process/v1/process.proto` (`abi.process.v1`) is the call:
+`RunRequest` (parameters as JSON, the caller's deadline) answers `RunResponse`
+(`result_json` for a workflow, `graph_nt`, N-Triples, for a pipeline), and
+`DescribeRequest`/`DescribeResponse` give the parameters' JSON schema. They travel on
+`abi.mod.<project>.<instance_id>.process.<kind>.<name>.run|describe`. A payload above one
+message follows from `parameters_inbox` / `body_inbox`, pulled with `abi.app.v1`
+`BodyPull`/`BodyChunk`. It has no client class: the SDK's `process_host` and
+`process_proxy` use the messages directly (`tools/generate_clients.py` skips the package).
+
+## Documentation
+
+- [SDK and proto internals](https://docs.naas.ai/developer-guide/sdk-and-proto)
+- [Build a Remote Module](https://docs.naas.ai/user-guide/build/sdk/build-a-remote-module)
+- [Releasing](https://docs.naas.ai/developer-guide/releasing/release-process)

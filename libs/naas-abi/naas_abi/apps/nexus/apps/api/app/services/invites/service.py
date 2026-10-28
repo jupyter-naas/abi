@@ -15,13 +15,13 @@ The invited person may not exist yet, so nothing is attached to an account:
    resend and revoke it, and marks it accepted once the person signs in (``claim``).
 
 The service never decides whether the inviting person may invite: the route
-did, before it called (RFC §6.5), and IAM's checks of the grants it writes run
+did, before it called, and IAM's checks of the grants it writes run
 as ``api`` for nobody (``GrantsGateway``).
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Collection, Iterable
+from collections.abc import Callable, Collection, Iterable, Mapping
 from datetime import datetime
 from uuid import uuid4
 
@@ -31,6 +31,7 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.names import (
     workspace_scope,
 )
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
+    PROFILE_FIELDS,
     Directory,
     DirectoryGateway,
     GrantMade,
@@ -126,6 +127,7 @@ class InvitationService:
         workspace_name: str | None = None,
         may_grant_owner: bool = False,
         may_renew_org_invitation: bool = False,
+        profile: Mapping[str, str] | None = None,
     ) -> InviteOutcome:
         """Invite ``email`` and send the invitation. Inviting again someone
         already invited here renews the invitation (new roles, a new email).
@@ -139,6 +141,10 @@ class InvitationService:
         organization *and* this workspace would rewrite that invitation without its
         organization role: it is refused unless they may, and then the organization
         role is kept.
+
+        ``profile``: what the organization sets about the person (``PROFILE_FIELDS``),
+        written as their profile in the organization when they sign in and their
+        account exists; with a renewal, it replaces the one kept.
 
         The provider makes the person exist only for an inviting user IAM lets
         create accounts there (``identity:ProvisionUser``), or for an address on a
@@ -169,7 +175,7 @@ class InvitationService:
         elsewhere = await self._held_elsewhere(
             email, choice.name, existing.id if existing else None
         )
-        made = await self._grant(choice.name, email, scopes)
+        made = await self._grant(choice.name, email, scopes, by=invited_by)
         grant_ids = [g.id for g in made]
         try:
             provisioned, skipped = await self._provision(
@@ -187,6 +193,11 @@ class InvitationService:
                         workspace_role=workspace_role,
                         invited_by=invited_by,
                         grant_ids=tuple(grant_ids),
+                        profile={
+                            key: value
+                            for key, value in (profile or {}).items()
+                            if key in PROFILE_FIELDS and value is not None
+                        },
                     ),
                     now=now,
                 )
@@ -198,6 +209,13 @@ class InvitationService:
                     grant_ids=grant_ids,
                     invited_by=invited_by,
                     now=now,
+                    profile={
+                        key: value
+                        for key, value in profile.items()
+                        if key in PROFILE_FIELDS and value is not None
+                    }
+                    if profile
+                    else None,
                 )
             await self.persistence.commit()
         except Exception:
@@ -261,12 +279,21 @@ class InvitationService:
         return {g for i in others if i.id != except_id for g in i.grant_ids}
 
     async def _grant(
-        self, provider: str, email: str, scopes: list[tuple[str, str]]
+        self,
+        provider: str,
+        email: str,
+        scopes: list[tuple[str, str]],
+        *,
+        by: str | None = None,
     ) -> list[GrantMade]:
+        """As ``by``, the inviting person: IAM refuses a role they may not attach
+        or that grants more than they hold (``GrantNotHeldError``)."""
         made: list[GrantMade] = []
         try:
             for role, scope in scopes:
-                made.append(await self.grants.grant(provider, email, role_policy(role), scope))
+                made.append(
+                    await self.grants.grant(provider, email, role_policy(role), scope, by=by)
+                )
         except Exception:
             await self._revoke([g.id for g in made if g.created])
             raise
@@ -386,11 +413,14 @@ class InvitationService:
     # IdP group bindings
     # =========================================================================
 
-    async def bind_group(self, *, provider: str, group: str, role: str, scope: str) -> None:
+    async def bind_group(
+        self, *, provider: str, group: str, role: str, scope: str, by: str | None = None
+    ) -> None:
+        """As ``by``: IAM checks that they may attach the role and hold what it grants."""
         known = await self.directory.directory()
         if known.get(provider) is None:
             raise NoProviderError(f"{provider!r} is not an identity provider")
-        await self.grants.bind(provider, group.strip(), role_policy(role), scope)
+        await self.grants.bind(provider, group.strip(), role_policy(role), scope, by=by)
 
     async def unbind_group(self, *, provider: str, group: str, role: str, scope: str) -> bool:
         return await self.grants.unbind(provider, group.strip(), role_policy(role), scope)
