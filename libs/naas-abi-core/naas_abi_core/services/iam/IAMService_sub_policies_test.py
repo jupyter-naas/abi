@@ -11,8 +11,13 @@ import pytest
 
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam import roles
-from naas_abi_core.services.iam.IAMPorts import IIAMService
+from naas_abi_core.services.iam.IAMPorts import (
+    IAMConflictError,
+    IAMNotFoundError,
+    IIAMService,
+)
 from naas_abi_core.services.iam.IAMService import IAMService
+from naas_abi_core.services.iam.policy import PolicyDocument
 from naas_abi_core.services.iam.tests import sub_policy_contract as contract
 from naas_abi_core.services.iam.tests.iam_harness import (
     IAMHarness,
@@ -246,3 +251,90 @@ def test_a_module_variable_of_a_parent_is_bound_for_the_module(h):
     platform = "abi:-:-:triple_store:graph/"
     assert h.allowed(QUERY, platform + "people-x", account)
     assert not h.allowed(QUERY, platform + "crm-x", account)
+
+
+def _ws_policy(h: IAMHarness, name: str, parent: str | None = None):
+    return h.admin(
+        "create_policy",
+        name,
+        document(statement("Allow", [QUERY], ["${scope}:triple_store:graph/*"])),
+        scope=WS1,
+        parent=parent,
+    )
+
+
+def test_deleting_a_scope_goes_through_a_cycle_its_policies_were_left_in(h):
+    """Two policies of ws-1 parents of each other (two concurrent writes): the
+    scope's deletion cuts the cycle and deletes them, its groups after."""
+    _scopes(h)
+    first = _ws_policy(h, "first")
+    second = _ws_policy(h, "second", parent=first.id)
+    h.iam.store.update_policy(replace(first, parent_id=second.id), first.revision)
+    group = h.admin("create_group", "analysts", scope=WS1)
+    h.admin("delete_scope", "org-1", "ws-1")
+    for gone in (first.id, second.id):
+        with pytest.raises(IAMNotFoundError):
+            h.iam.store.get_policy(gone)
+    assert h.iam.store.get_principal(group.id).status == "deleted"
+
+
+def test_deleting_a_scope_refuses_up_front_a_sub_policy_owned_elsewhere(h):
+    """Only a write that bypasses IAM makes one; nothing is detached or deleted."""
+    _scopes(h)
+    parent = _ws_policy(h, "ws-1's")
+    stray = h.admin(
+        "create_policy",
+        "ws-2's",
+        document(statement("Allow", [QUERY], ["${scope}:triple_store:graph/*"])),
+        scope="abi:org-1:ws-2",
+    )
+    h.iam.store.update_policy(replace(stray, parent_id=parent.id), stray.revision)
+    bob = h.user()
+    h.attach(parent.id, bob.id, WS1)
+    with pytest.raises(IAMConflictError, match=stray.id):
+        h.admin("delete_scope", "org-1", "ws-1")
+    assert h.iam.store.get_policy(parent.id).id == parent.id
+    assert h.iam.store.list_attachments(policy_id=parent.id)
+
+
+def test_a_chain_that_cannot_be_read_whole_is_refused_to_a_grant(h):
+    """Unchecked, it would grant what nobody was checked for once repaired."""
+    _scopes(h)
+    first = _ws_policy(h, "first")
+    second = _ws_policy(h, "second", parent=first.id)
+    h.iam.store.update_policy(replace(first, parent_id=second.id), first.revision)
+    h.iam.invalidate()
+    root, bob = h.user("root"), h.user("bob")
+    h.attach(roles.PLATFORM_ADMIN, root.id)
+    with h.as_(root), pytest.raises(IAMConflictError, match="cannot be read whole"):
+        h.iam.attach_policy(second.id, bob.id, WS1)
+
+
+def test_a_write_reads_the_chain_from_the_store_not_the_cache(h):
+    """A parent changed by another process, its event not heard yet: attaching
+    its sub-policy at a scope still meets the Deny the parent has now."""
+    _scopes(h)
+    parent = h.admin(
+        "create_policy",
+        "graphs",
+        document(statement("Allow", [QUERY], ["${scope}:triple_store:graph/*"])),
+    )
+    child = _ws_policy(h, "ws graphs", parent=parent.id)
+    admin, bob = h.user("admin"), h.user("bob")
+    h.attach(roles.ADMIN, admin.id, WS1)
+    with h.as_(admin):
+        h.iam.list_policies(scope=WS1)  # the chain is in the cache now
+    h.iam.store.update_policy(
+        replace(
+            parent,
+            document=PolicyDocument.from_dict(
+                document(
+                    statement("Allow", [QUERY], ["${scope}:triple_store:graph/*"]),
+                    statement("Deny", [QUERY], ["abi:*:*:triple_store:graph/hr"]),
+                )
+            ),
+        ),
+        parent.revision,
+    )
+    with h.as_(admin), pytest.raises(PermissionError, match="unscoped"):
+        h.iam.attach_policy(child.id, bob.id, WS1)

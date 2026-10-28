@@ -550,12 +550,18 @@ class IAMService(IIAMService, PolicySource):
         # ${module.*} name the module of a module's account; for any other
         # principal they match nothing.
         variables = modules.variables(record.name if record is not None else None)
+        # The statements of one attachment share their chain's bounds: bound once.
+        bound_chains: dict[int, tuple[Bound, ...]] = {}
+
+        def bound_chain(chain: tuple[Bound, ...]) -> tuple[Bound, ...]:
+            if not chain:
+                return chain
+            if id(chain) not in bound_chains:
+                bound_chains[id(chain)] = _bind_bounds(chain, variables)
+            return bound_chains[id(chain)]
+
         statements = [
-            replace(
-                effective,
-                statement=bound,
-                bounds=_bind_bounds(effective.bounds, variables),
-            )
+            replace(effective, statement=bound, bounds=bound_chain(effective.bounds))
             for effective in statements
             if (bound := bind_variables(effective.statement, variables)) is not None
         ]
@@ -1512,7 +1518,6 @@ class IAMService(IIAMService, PolicySource):
         chain: list[Policy] = []
         if parent:
             chain = self._new_chain(policy_id, owner, parent, height=1)
-            self._require_derivable(chain[0], owner)
         self._require_held(
             parsed,
             _written_for(owner),
@@ -1567,7 +1572,7 @@ class IAMService(IIAMService, PolicySource):
             unscoped = {
                 p.id: attachment_resource(p.id, "*", None)
                 for p in found
-                if p.id in inherited and self._denies_beyond_scope(p)
+                if p.id in inherited and self._denies_beyond_scope(p, fresh=False)
             }
             allowed = set(self.filter("iam:ListPolicies", own.values()).allowed)
             allowed |= set(self.filter("iam:AttachPolicy", inherited.values()).allowed)
@@ -1628,19 +1633,19 @@ class IAMService(IIAMService, PolicySource):
                 "start with ${scope}:"
             )
         reparented = parent_id != current.parent_id
+        changed = reparented or updated.document != current.document
+        below = self._below(policy_id) if changed else []
         if reparented and parent_id is not None:
+            # Its height with those below: one more than the deepest of them.
+            height = 1 + max((len(above) + 1 for _sub, above in below), default=0)
             chain = self._new_chain(
-                policy_id,
-                current.owner_scope,
-                parent_id,
-                height=self._height(policy_id),
+                policy_id, current.owner_scope, parent_id, height=height
             )
-            self._require_derivable(chain[0], current.owner_scope)
         else:
             chain, _whole = self._chain(updated, fresh=True)
-        if reparented or updated.document != current.document:
-            below = self._below(policy_id)
+        if changed:
             self._check_unscoped_chain(updated, chain, below)
+            self._check_new_denies(current, updated, chain, below)
             with grants.budget():  # one budget for this policy and those below
                 self._require_held(
                     updated.document,
@@ -1679,9 +1684,16 @@ class IAMService(IIAMService, PolicySource):
             raise IAMConflictError(f"{policy_id} is managed: only IAM removes it")
         subs = self.store.list_sub_policies(policy_id)
         if subs:
+            # Named as far as the caller may list them; the rest are counted.
+            names = {p.id: policy_resource(p.id, p.owner_scope) for p in subs}
+            listed = set(self.filter("iam:ListPolicies", names.values()).allowed)
+            shown = [f"{p.id} ({p.name})" for p in subs if names[p.id] in listed]
+            hidden = len(subs) - len(shown)
+            if hidden:
+                shown.append(f"{'and ' if shown else ''}{hidden} you may not list")
             raise IAMConflictError(
                 f"Policy {policy_id} has sub-policies: "
-                + ", ".join(f"{p.id} ({p.name})" for p in subs)
+                + ", ".join(shown)
                 + ". Delete them or give them another parent first"
             )
         self.store.delete_policy(policy_id)
@@ -1694,11 +1706,14 @@ class IAMService(IIAMService, PolicySource):
     ) -> list[Policy]:
         """The chain ``policy_id`` (owned by ``owner``, ``height`` policies deep
         with those below it) would have under ``parent_id``, nearest first.
-        Refuses a parent that does not exist (``IAMNotFoundError``), a cycle, a
-        chain deeper than ``MAX_DEPTH`` and an owner outside the parent's."""
+        Refuses a parent that does not exist (``IAMNotFoundError``), one the
+        caller may not derive from (``_require_derivable``, before anything of
+        the parent is said), a cycle, a chain deeper than ``MAX_DEPTH`` and an
+        owner outside the parent's."""
         parent = self._load_policy(parent_id)
         if parent is None:
             raise IAMNotFoundError(f"Policy {parent_id} not found")
+        self._require_derivable(parent, owner)
         above, whole = self._chain(parent, fresh=True)
         chain = [parent, *above]
         if any(p.id == policy_id for p in chain):
@@ -1718,32 +1733,21 @@ class IAMService(IIAMService, PolicySource):
             )
         return chain
 
-    def _height(self, policy_id: str) -> int:
-        """How many policies deep ``policy_id`` and those below it go (1: none
-        below), bounded by ``MAX_DEPTH`` plus one."""
-        level, height = [policy_id], 0
-        while level and height <= MAX_DEPTH:
-            height += 1
-            level = [p.id for i in level for p in self.store.list_sub_policies(i)]
-        return height
-
     def _below(self, policy_id: str) -> list[tuple[Policy, list[Policy]]]:
-        """Every policy below ``policy_id``, each with its chain up to, not
-        including, ``policy_id`` (nearest first)."""
+        """Every policy below ``policy_id``, read from the store, each with the
+        policies between it and ``policy_id`` (nearest first), at most
+        ``MAX_DEPTH`` levels down."""
         found: list[tuple[Policy, list[Policy]]] = []
         level: list[tuple[str, list[Policy]]] = [(policy_id, [])]
         seen = {policy_id}
         for _depth in range(MAX_DEPTH):
             following: list[tuple[str, list[Policy]]] = []
-            for parent_id, chain in level:
-                parent = None if not chain else chain[0]
+            for parent_id, above in level:
                 for sub in self.store.list_sub_policies(parent_id):
-                    if sub.id in seen:
-                        continue
-                    seen.add(sub.id)
-                    its_chain = [] if parent is None else [parent, *chain[1:]]
-                    found.append((sub, its_chain))
-                    following.append((sub.id, [sub, *its_chain]))
+                    if sub.id not in seen:
+                        seen.add(sub.id)
+                        found.append((sub, above))
+                        following.append((sub.id, [sub, *above]))
             level = following
         return found
 
@@ -1777,6 +1781,36 @@ class IAMService(IIAMService, PolicySource):
                     f"{held.id} is attached unscoped: its chain may not name ${{scope}}"
                 )
 
+    def _check_new_denies(
+        self,
+        current: Policy,
+        updated: Policy,
+        chain: Sequence[Policy],
+        below: Sequence[tuple[Policy, list[Policy]]],
+    ) -> None:
+        """A change that gives a policy, or one below it, a chain that denies
+        beyond ``${scope}:`` is that policy attached anew where it is attached
+        or invited at a scope: only whoever may attach it unscoped there (the
+        platform admin) makes it (``_require_attach``)."""
+        for held, above in [(updated, []), *below]:
+            before = [current] if held is updated else [held, *above, current]
+            after = [updated] if held is updated else [held, *above, updated]
+            old_chain, _whole = self._chain(before[-1], fresh=True)
+            if denies_beyond_scope(
+                p.document for p in [*before, *old_chain]
+            ) or not denies_beyond_scope(p.document for p in [*after, *chain]):
+                continue
+            targets = [
+                a.principal_id
+                for a in self.store.list_attachments(policy_id=held.id)
+                if a.scope is not None
+            ] + [
+                _invitee(g.provider, g.email)
+                for g in self.store.list_pending_grants(policy_id=held.id)
+            ]
+            for principal_id in dict.fromkeys(targets):
+                self._require_unscoped_attach(held.id, principal_id)
+
     def _widens(self, before: PolicyDocument, after: PolicyDocument) -> bool:
         """Whether ``after`` may allow something ``before`` does not: only then
         can a change of a parent widen what the policies below it grant. Its
@@ -1806,21 +1840,23 @@ class IAMService(IIAMService, PolicySource):
             for side, scope in zip(held.sides, (None, _ANY_SCOPE))
         )
 
-    def _denies_beyond_scope(self, policy: Policy) -> bool:
+    def _denies_beyond_scope(self, policy: Policy, *, fresh: bool = True) -> bool:
         """Whether a Deny of the policy or of its chain names anything outside
-        ``${scope}:``: it refuses beyond the scope it is attached at."""
-        chain, _whole = self._chain(policy)
+        ``${scope}:``: it refuses beyond the scope it is attached at. Read from
+        the store (a write's check), or from the cache (a list's)."""
+        chain, _whole = self._chain(policy, fresh=fresh)
         return denies_beyond_scope([policy.document, *(p.document for p in chain)])
 
     def _uses_scope(self, policy: Policy) -> bool:
-        """Whether the policy or a policy of its chain names ``${scope}``."""
-        chain, _whole = self._chain(policy)
+        """Whether the policy or a policy of its chain names ``${scope}``, its
+        chain read from the store."""
+        chain, _whole = self._chain(policy, fresh=True)
         return any(p.document.uses_scope for p in [policy, *chain])
 
     def _parents(self, policy: Policy) -> list[PolicyDocument] | None:
-        """The documents of a policy's chain, nearest first; None when it cannot
-        be read whole, and the policy grants nothing."""
-        chain, whole = self._chain(policy)
+        """The documents of a policy's chain, nearest first, read from the store;
+        None when it cannot be read whole (``_require_held`` then refuses)."""
+        chain, whole = self._chain(policy, fresh=True)
         return [p.document for p in chain] if whole else None
 
     def _require_derivable(self, parent: Policy, owner: str) -> None:
@@ -1900,11 +1936,7 @@ class IAMService(IIAMService, PolicySource):
                 if s.workspace != NONE
             ]
         changed = False
-        # Sub-policies first, the deepest first: a parent is never deleted
-        # while one is left (each is owned at or below its parent's owner).
-        owned = self._all_policies(owners)
-        depth = {p.id: len(self._chain(p, fresh=True)[0]) for p in owned}
-        for policy in sorted(owned, key=lambda p: -depth[p.id]):
+        for policy in self._deletion_order(self._all_policies(owners)):
             for attachment in self.store.list_attachments(policy_id=policy.id):
                 self.store.detach(policy.id, attachment.principal_id, attachment.scope)
             for grant in self.store.list_pending_grants(policy_id=policy.id):
@@ -1923,6 +1955,46 @@ class IAMService(IIAMService, PolicySource):
             if page.next_after is None:
                 return changed
             after = page.next_after
+
+    def _deletion_order(self, owned: list[Policy]) -> list[Policy]:
+        """``owned``, every sub-policy before its parent, from the store's parent
+        links. A cycle among them (concurrent writes) is cut first: they all go.
+        A sub-policy owned elsewhere (only a write to the store bypassing IAM
+        makes one) is refused before anything changes, so a deletion never
+        stops halfway."""
+        left = {p.id: p for p in owned}
+        children = {i: self.store.list_sub_policies(i) for i in left}
+        outside = [
+            (i, c) for i, subs in children.items() for c in subs if c.id not in left
+        ]
+        if outside:
+            raise IAMConflictError(
+                "Nothing deleted: "
+                + ", ".join(
+                    f"{c.id}, owned by {c.owner_scope}, is a sub-policy of {i}"
+                    for i, c in outside
+                )
+                + ". Give it another parent first"
+            )
+        order: list[Policy] = []
+        while left:
+            ready = [
+                p
+                for p in left.values()
+                if not any(c.id in left for c in children[p.id])
+            ]
+            if not ready:
+                for p in list(left.values()):
+                    if p.parent_id in left:
+                        left[p.id] = self.store.update_policy(
+                            replace(p, parent_id=None), p.revision
+                        )
+                children = {i: [] for i in left}
+                continue
+            for p in sorted(ready, key=lambda p: p.id):
+                order.append(p)
+                del left[p.id]
+        return order
 
     def _all_policies(self, owner_scopes: Sequence[str] | None = None) -> list[Policy]:
         found: list[Policy] = []
@@ -1979,6 +2051,11 @@ class IAMService(IIAMService, PolicySource):
             or not self._denies_beyond_scope(policy)
         ):
             return
+        self._require_unscoped_attach(policy_id, principal_id)
+
+    def _require_unscoped_attach(self, policy_id: str, principal_id: str) -> None:
+        """``iam:AttachPolicy`` on the unscoped attachment: what attaching, at a
+        scope, a policy whose chain denies beyond ``${scope}:`` takes."""
         unscoped = attachment_resource(policy_id, principal_id, None)
         if not self.authorize("iam:AttachPolicy", unscoped).allowed:
             raise PermissionDeniedError(
@@ -2152,15 +2229,21 @@ class IAMService(IIAMService, PolicySource):
     ) -> None:
         """``GrantNotHeldError`` unless the caller holds, at each scope, what
         ``document`` allows there, within ``parents`` for a sub-policy (its
-        chain, nearest first; None: a chain that cannot be read whole, which
-        grants nothing). A write a first-party account (``engine``, ``api``)
+        chain, nearest first; None: a chain that cannot be read whole, refused
+        with ``IAMConflictError``). A write a first-party account (``engine``, ``api``)
         makes for no user is its own: the route or the boot step that made it
         authorized what it stands for."""
         ctx = current_call_context()
         if ctx.on_behalf_of is None and self._first_party(ctx.principal):
             return
         if parents is None:
-            return
+            # Unchecked, it would grant what nobody was checked for once the
+            # chain is whole again.
+            raise IAMConflictError(
+                f"The chain of parents of {policy_id} cannot be read whole (a "
+                "parent missing, a cycle or deeper than "
+                f"{MAX_DEPTH}): give it a parent that exists first"
+            )
         chain = [p.statements for p in parents]
         with grants.budget():  # one budget for every scope
             for scope in dict.fromkeys(scopes):

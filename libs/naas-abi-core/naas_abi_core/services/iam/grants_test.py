@@ -396,6 +396,23 @@ def test_a_sub_policy_s_grant_is_its_own_within_its_chain():
     assert found is not None and found.resource == "abi:o:w:triple_store:graph/*"
 
 
+def test_a_wildcard_of_a_service_with_no_catalog_is_bounded_by_what_meets_it():
+    """``mymod:*`` kept as written, under a parent naming ``mymod:Read``: the
+    sub-policy grants ``mymod:Read`` there, which the giver must hold."""
+    holdings = Holdings([_side(READER)], _registry())
+    grant = [_grant(["mymod:*"], ["${scope}:mymod:thing/*"])]
+    parent = [_grant(["mymod:Read"], ["${scope}:mymod:thing/*"])]
+    found = holdings.first_uncovered(grant, "abi:o:w", parents=[parent])
+    assert found is not None and found.action == "mymod:*"
+    held = Holdings(
+        [_side(_allow(["mymod:*"], ["abi:o:w:mymod:thing/*"]))], _registry()
+    )
+    assert held.first_uncovered(grant, "abi:o:w", parents=[parent]) is None
+    # A parent naming another service's actions bounds nothing of it.
+    other = [_grant(["othermod:Read"], ["${scope}:othermod:thing/*"])]
+    assert holdings.first_uncovered(grant, "abi:o:w", parents=[other]) is None
+
+
 def test_a_deny_of_the_giver_is_met_within_the_chain_only():
     holdings = Holdings(
         [

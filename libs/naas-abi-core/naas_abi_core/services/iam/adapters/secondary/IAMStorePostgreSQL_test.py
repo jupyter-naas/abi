@@ -186,3 +186,50 @@ def test_dsn_and_schema_are_checked():
         sqlalchemy_url("mysql://h/db")
     with pytest.raises(ValueError):
         IAMStorePostgreSQL("postgresql://h/db", 'bad"; DROP')
+
+
+@pytest.mark.integration
+def test_writes_wait_for_each_other_on_the_state_row(schema):
+    """Every write locks the state row before it checks anything, so a delete of
+    a parent and a re-parent under it never both commit: the second one runs
+    after the first and sees what it wrote."""
+    import threading
+    import time
+    from dataclasses import replace
+
+    from naas_abi_core.services.iam.IAMPorts import IAMNotFoundError
+    from naas_abi_core.services.iam.tests.iam__secondary_adapter__generic_test import (
+        policy,
+    )
+    from sqlalchemy import create_engine, text
+
+    dsn, name = schema
+    store = IAMStorePostgreSQL(dsn, name)
+    parent = store.create_policy(policy())
+    child = store.create_policy(policy())
+    engine = create_engine(sqlalchemy_url(dsn))
+    first = engine.connect()
+    transaction = first.begin()
+    # Another writer holds the state row: the delete below waits for it.
+    first.execute(text(f'SELECT id FROM "{name}".iam_state FOR UPDATE'))
+    failures: list[BaseException] = []
+
+    def delete() -> None:
+        try:
+            store.delete_policy(parent.id)
+        except BaseException as exc:  # noqa: BLE001 - reported below
+            failures.append(exc)
+
+    other = threading.Thread(target=delete)
+    other.start()
+    time.sleep(0.5)
+    assert other.is_alive(), "the delete did not wait for the state row"
+    transaction.commit()
+    first.close()
+    other.join(timeout=30)
+    assert failures == []
+    # Deleted first: re-parenting under it now finds no parent.
+    with pytest.raises(IAMNotFoundError):
+        store.update_policy(replace(child, parent_id=parent.id), 1)
+    store.close()
+    engine.dispose()

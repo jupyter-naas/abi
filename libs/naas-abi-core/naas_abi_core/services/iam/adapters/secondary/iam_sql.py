@@ -639,9 +639,15 @@ class IAMStoreSQL(IAMStore):
 
     @contextmanager
     def _change(self) -> Iterator[Connection]:
-        """A write that bumps the revision; unique violations become conflicts."""
+        """A write that bumps the revision; unique violations become conflicts.
+
+        It locks the state row first, so writes are serialized (SQLite's
+        ``BEGIN IMMEDIATE`` already does it): a check made inside one, such as a
+        parent existing or a policy having no sub-policies, still holds when it
+        commits, whatever PostgreSQL's isolation level."""
         try:
             with self._write() as conn:
+                conn.execute(select(state.c.id).with_for_update())
                 yield conn
                 conn.execute(update(state).values(revision=state.c.revision + 1))
         except IntegrityError as exc:

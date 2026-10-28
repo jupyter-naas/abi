@@ -802,7 +802,10 @@ def _chain_bounds(
     parents: Sequence[Sequence[Statement]], action: str, scope: str | None
 ) -> Bounds | None:
     """Per policy of a chain, the patterns, in held form at ``scope``, its
-    Allows name ``action`` on; None when one names it nowhere."""
+    Allows name ``action`` on; None when one names it nowhere. ``action`` may
+    be a pattern (``Holdings._actions`` keeps a wildcard of a service with no
+    catalog as written): then every Allow whose actions may meet it bounds it,
+    so the bounds may say more than the chain grants, never less."""
     bounds: list[tuple[str, ...]] = []
     for level in parents:
         patterns = tuple(
@@ -810,7 +813,7 @@ def _chain_bounds(
                 held
                 for statement in level
                 if statement.effect == "Allow"
-                and any(matches(p, action) for p in statement.actions)
+                and any(_actions_meet(p, action) for p in statement.actions)
                 for r in statement.resources
                 if (held := held_form(r, scope, variables=True)) is not None
             )
@@ -819,6 +822,17 @@ def _chain_bounds(
             return None
         bounds.append(patterns)
     return tuple(bounds)
+
+
+def _actions_meet(pattern: str, action: str) -> bool:
+    """Whether some action matches both: ``action`` itself when it is concrete;
+    when it is a pattern, true unless shown otherwise."""
+    if not ("*" in action or "?" in action):
+        return matches(pattern, action)
+    try:
+        return overlaps(action, (pattern,))
+    except Exhausted:
+        return True
 
 
 def _written_at(pattern: str, scope: str) -> str:

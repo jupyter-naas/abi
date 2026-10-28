@@ -995,9 +995,12 @@ to a policy with none, nearest first.
   agent).
 - Nothing is copied: a change of a parent, or of anything above it, drops the policy cache
   like any change (in process at once, over NATS within `abi.iam.v1.changed`).
-- A chain IAM cannot read whole (a parent deleted under it, a cycle or a chain past the
-  depth two concurrent writes made) grants nothing: the sub-policy's Allows count for
-  nothing, its Denies and those of the chain it could read still apply.
+- A chain IAM cannot read whole (a cycle or a chain past the depth, which only a write
+  that bypasses IAM makes: every store write locks the state row first) grants nothing:
+  the sub-policy's Allows count for nothing, its Denies and those of the chain it could
+  read still apply. A grant of such a policy (attaching it, inviting to it, a member
+  joining a group holding it) is refused with `IAMConflictError` until its parent is
+  fixed, so a repaired chain never grants what nobody was checked for.
 
 | Parent P allows | Sub-policy S allows | A holder of S only |
 |---|---|---|
@@ -1005,7 +1008,9 @@ to a policy with none, nearest first.
 | `${scope}:module:agent/m/a` (b removed) | unchanged | uses a only, at the next decision |
 | `${scope}:module:agent/*`, Deny `${scope}:module:agent/m/b` | `${scope}:module:agent/*` | uses every agent but b |
 
-**Refused**, at create and update, with `ValueError` (`INVALID_ARGUMENT`) unless said:
+**Refused**, at create and update, with `ValueError` (`INVALID_ARGUMENT`) unless said. A
+parent that exists is first checked against "derive only from what you hold", so a caller
+who may not derive from it learns nothing more of it (its owner, its chain):
 
 - a **cycle**: a parent that is the policy itself or one of its sub-policies, at any depth;
 - a chain **deeper than 8** (`policy.MAX_DEPTH`): the root is at depth 1, and a policy, with
@@ -1038,6 +1043,10 @@ when there is one, plus an actor that is not first-party, as in "Grant only what
 **Grant only what you hold** checks the sub-policy's effective grant: its own Allows
 intersected with its chain's, at every scope it is checked at (see there).
 
+**Write-time checks read the store.** A chain is read from the policy cache when IAM
+decides, and from the store when it checks a write (attaching, inviting, binding, creating,
+updating, the scope rules), so a parent another process just changed is met as it is now.
+
 **Changing the parent** is an update with the optimistic revision (`update_policy(parent=)`:
 an id sets it, `""` removes it, None keeps it), checked like a create: the new chain is
 refused as above, the caller derives only from what they hold, and the sub-policy's
@@ -1047,6 +1056,10 @@ the same way. A change of a policy's parent, or of its document that may allow s
 the old one did not (`IAMService._widens`, its Allows compared as grants are), also checks,
 for each policy below it, its effective grant under the new chain at its own scopes:
 widening a parent widens them. Narrowing a parent is never refused for what is below it.
+A change that gives the policy, or one below it, a chain that denies beyond `${scope}:` it
+did not before is that policy attached anew wherever it is attached or invited at a scope:
+refused (`PermissionDeniedError`) to whoever may not attach it unscoped there, as attaching
+it would be (`IAMService._check_new_denies`).
 
 **Attaching a sub-policy.** The rules of "Policy language" read the chain:
 
@@ -1058,10 +1071,14 @@ widening a parent widens them. Narrowing a parent is never refused for what is b
   `list_policies(scope=)` only to them.
 
 **Deleting.** A policy that has sub-policies cannot be deleted: `IAMConflictError`
-(`CONFLICT`) naming each ("Policy pol_P has sub-policies: pol_S (W analysts). Delete them or
+(`CONFLICT`) naming each the caller may list (`iam:ListPolicies`) and counting the rest
+("Policy pol_P has sub-policies: pol_S (W analysts), and 1 you may not list. Delete them or
 give them another parent first"). The store refuses it too. `delete_scope` deletes what a
-scope owns from the deepest sub-policy up; a sub-policy is owned at or below its parent's
-owner, so deleting a parent's owner deletes its sub-policies with it.
+scope owns every sub-policy before its parent, from the store's parent links
+(`_deletion_order`); a sub-policy is owned at or below its parent's owner, so deleting a
+parent's owner deletes its sub-policies with it. A cycle among them is cut first; a
+sub-policy owned elsewhere (only a write bypassing IAM makes one) refuses the deletion
+before anything changes.
 
 **Reading.** A policy's record carries `parent_id`. `list_sub_policies(policy_id)` lists its
 direct sub-policies: `iam:GetPolicy` on the parent (not found otherwise), then each
@@ -1102,7 +1119,8 @@ caller, on every resource it matches. For a sub-policy, only the resources an Al
 policy of its chain also matches for that action count (`first_uncovered(parents=)`, the
 chain's patterns in the same product search, their `${scope}` the same scope): the grant is
 its effective one, its own within its parent's. An action the chain allows nowhere is not
-granted, and needs no cover. Its actions (`Holdings._actions`):
+granted, and needs no cover. An action kept as a pattern (a wildcard of a service with no
+catalog) is bounded by every Allow of the chain whose actions may meet it. Its actions (`Holdings._actions`):
 
 - **A wildcard is expanded against the registered catalogs, and the bus.** The bus has no
   catalog, yet the broker turns `bus:*`, `*` or `*:Publish` into publishing and consuming a
@@ -1799,7 +1817,7 @@ AGENTS.md there), and IAM is the only record afterwards:
 | Nexus users of the old login | users of issuer `urn:abi:nexus`, linked to the built-in IdP at first sign-in (`link_user`) |
 | IAM store schema 1 (no owner scopes) | schema 2, at the store's first open: every policy and group platform-owned, except the groups IdP bindings made (named `idp:<provider>:<claim>` and mapped from that claim, with an org) whose attachments are all under `abi:<org>:`, which belong to that org (`abi:<org>:-`). A binding group schema 1 shared with other orgs, the platform or an unscoped binding stays the platform's: owned by one org, its admins could add their users to what it holds elsewhere. Two processes may open the store at once (PostgreSQL adds the columns `IF NOT EXISTS`; SQLite serializes writes). The upgrade logs a warning for each stored customer policy whose patterns reached the platform's policies or groups as `abi:-:-:iam:…` (or `${scope}:iam:…` at `abi:-:-`) and no longer match them: rewrite them `abi:*:*:iam:policy/…`, `…:iam:group/…` |
 | IAM store schema 2 (no sets) | schema 3: the table `iam_scope_sets`, created empty at the store's first open (PostgreSQL behind an advisory lock, so the engine and the API opening it together both start). Every org and workspace starts with everything. |
-| IAM store schema 3 (no sub-policies) | schema 4: the nullable column `iam_policies.parent_id` and its index, added at the store's first open (PostgreSQL `IF NOT EXISTS`, behind the schema's advisory lock). Every existing policy has no parent. |
+| IAM store schema 3 (no sub-policies) | schema 4: the nullable column `iam_policies.parent_id` and its index, added at the store's first open (PostgreSQL `IF NOT EXISTS`, behind the schema's advisory lock). Every existing policy has no parent. No foreign key: every write locks the state row (`iam_state`) before it checks anything (`IAMStoreSQL._change`; SQLite's `BEGIN IMMEDIATE` already serializes), so "the parent exists" and "the policy has no sub-policies" still hold when the write commits, and a delete and a re-parent racing on PostgreSQL run one after the other. |
 | Per-workspace feature overrides (`workspaces.feature_overrides`, the deprecated `feature_flags.workspace_overrides`) | moved once by Nexus at start (`services/iam/sets.migrate_feature_overrides`, recorded in `iam_migrations`): a feature turned off leaves the workspace's feature set; one turned on stays in it and, for each role whose defaults lack it, a workspace policy keeps it for the people holding that role there then. No one's features change; later members follow the role defaults within the set. The column is cleared. |
 | Sessions, refresh tokens, app grants and preview tokens signed with `secret_key` | invalidated: users sign in again; workspace secrets get their own key (`secrets_encryption_key`) |
 
@@ -1976,8 +1994,11 @@ the intersection; a parent with sub-policies is not deleted.
 *Consequences.* Narrowing a parent narrows every sub-policy below it at the next decision, in
 process and over NATS, with nothing to rewrite; widening it widens them, so a change of a
 parent is checked for each policy below it. A decision reads up to eight policies per
-attachment, all cached. A chain broken by concurrent writes grants nothing rather than
-something. What a caller holds through a sub-policy counts in grant checks only where it is
+attachment, all cached. Store writes are serialized on the state row, so IAM's own checks
+keep chains whole; one broken by a write that bypasses IAM grants nothing rather than
+something, and grants of it are refused until it is repaired. A re-parent that brings a
+Deny beyond `${scope}:` is checked as attaching would be, so it never imposes that Deny
+where its holder could not attach it. What a caller holds through a sub-policy counts in grant checks only where it is
 shown without a search, so such a caller may be refused a grant they could prove the hard way.
 A parent's Deny beyond `${scope}:` makes each sub-policy a policy that only the platform admin
 attaches at a scope.

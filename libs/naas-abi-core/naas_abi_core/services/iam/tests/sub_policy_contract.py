@@ -418,6 +418,78 @@ def run_widening_a_parent_is_checked_below_it(iam: IAMService, as_user: AsUser):
         )
 
 
+def run_re_parenting_under_a_deny_beyond_scope_is_attaching_it(
+    iam: IAMService, as_user: AsUser
+):
+    """A workspace admin's own policy, attached at its workspace, moved under a
+    platform policy that denies in every org: as attaching it would be, refused
+    to anyone who may not attach it unscoped."""
+    t = team(iam)
+    s = tree(iam)
+    with as_service_account("engine"):
+        guarded = iam.create_policy(
+            "agents, no secret anywhere",
+            document(
+                statement("Allow", [USE], [AGENTS]),
+                statement("Deny", [USE], ["abi:*:*:module:agent/people/secret"]),
+            ),
+        )
+        iam.attach_policy(guarded.id, t.admin.id, WS1)
+    with as_user(t.admin) as session:
+        own = session.create_policy("own", allow(agents("a")), scope=WS1)
+        session.attach_policy(own.id, t.member.id, WS1)
+        with pytest.raises(PermissionDeniedError, match="unscoped"):
+            session.update_policy(own.id, expected_revision=1, parent=guarded.id)
+        assert session.get_policy(own.id).parent_id is None
+        mid = session.create_policy("mid", allow(agents("a")), scope=WS1)
+    # A policy below the one moved carries the Deny too: the same rule for it.
+    with as_service_account("engine"):
+        below = iam.create_policy("below", allow(agents("a")), scope=WS1, parent=mid.id)
+        iam.attach_policy(below.id, t.member.id, WS1)
+    with (
+        as_user(t.admin) as session,
+        pytest.raises(PermissionDeniedError, match=below.id),
+    ):
+        session.update_policy(mid.id, expected_revision=1, parent=guarded.id)
+    # The platform admin may: they attach anything unscoped.
+    with as_user(t.root) as session:
+        session.update_policy(mid.id, expected_revision=1, parent=guarded.id)
+        session.update_policy(own.id, expected_revision=1, parent=guarded.id)
+    assert s.child.parent_id == s.parent.id
+
+
+def run_a_refusal_names_only_what_the_caller_may_see(iam: IAMService, as_user: AsUser):
+    """Deleting a parent names the sub-policies the caller may list and counts
+    the rest; a parent the caller may not derive from is refused before its
+    owner is said."""
+    t = team(iam)
+    s = tree(iam)
+    deleter = custom(
+        iam,
+        "deleter",
+        statement(
+            "Allow",
+            ["iam:DeletePolicy", "iam:GetPolicy", "iam:ListPolicies"],
+            ["abi:%2A:%2A:iam:policy/*"],
+        ),
+        scope=None,
+    )
+    with as_service_account("engine"):
+        visible = iam.create_policy("platform sub", allow([AGENTS]), parent=s.parent.id)
+    with as_user(deleter) as session, pytest.raises(IAMConflictError) as refused:
+        session.delete_policy(s.parent.id)
+    message = str(refused.value)
+    assert visible.id in message and "1 you may not list" in message
+    assert s.child.id not in message and "W analysts" not in message
+    with as_service_account("engine"):
+        elsewhere = iam.create_policy("ws-2's", allow([AGENTS]), scope=WS2)
+    with as_user(t.admin) as session, pytest.raises(PermissionDeniedError) as denied:
+        session.create_policy("x", allow([AGENTS]), scope=WS1, parent=elsewhere.id)
+    assert WS2 not in str(denied.value) and not isinstance(
+        denied.value, GrantNotHeldError
+    )
+
+
 SCENARIOS = (
     run_a_sub_policy_grants_within_its_parent,
     run_a_deny_of_the_parent_refuses_through_the_sub_policy,
@@ -429,4 +501,6 @@ SCENARIOS = (
     run_derive_only_from_what_you_hold,
     run_grant_only_what_you_hold_reads_the_chain,
     run_widening_a_parent_is_checked_below_it,
+    run_re_parenting_under_a_deny_beyond_scope_is_attaching_it,
+    run_a_refusal_names_only_what_the_caller_may_see,
 )
