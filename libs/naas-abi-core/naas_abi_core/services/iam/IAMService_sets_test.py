@@ -20,9 +20,12 @@ from naas_abi_core.services.iam.tests.iam_harness import document, graph, statem
 NEXUS = ActionCatalog(
     service="nexus",
     version=1,
-    resource_types=(ResourceType("feature"),),
+    resource_types=(ResourceType("feature", policy_only=True),),
     actions=(ActionSpec("UseFeature", "read", ("feature",)),),
 )
+# The features each role's holders get here, from a policy beside the role
+# (Nexus's "Features of <role>"): no role brings any.
+ROLE_FEATURES = {roles.MEMBER: ("chat", "files"), roles.ADMIN: ("chat",)}
 ORG = "org-1"
 WS, WS2 = "ws-1", "ws-2"
 AT_WS = f"abi:{ORG}:{WS}"
@@ -54,13 +57,23 @@ def iam(iam):
         iam.put_scope(ORG)
         iam.put_scope(ORG, WS)
         iam.put_scope(ORG, WS2)
-        iam.put_feature_policies({"member": ["chat", "files"], "admin": ["chat"]})
     return iam
 
 
 def _with_role(h, role: str, subject: str, scope: str = AT_WS):
     person = h.user(subject)
     h.attach(role, person.id, scope)
+    keys = ROLE_FEATURES.get(role, ())
+    if keys:
+        h.grant(
+            person.id,
+            statement(
+                "Allow",
+                ["nexus:UseFeature"],
+                [f"${{scope}}:nexus:feature/{key}" for key in keys],
+            ),
+            scope=scope,
+        )
     return person
 
 

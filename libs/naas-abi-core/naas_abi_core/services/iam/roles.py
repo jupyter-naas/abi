@@ -19,7 +19,12 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
-from naas_abi_core.services.iam.catalog import ActionCatalog, CatalogRegistry, Level
+from naas_abi_core.services.iam.catalog import (
+    ActionCatalog,
+    CatalogRegistry,
+    Level,
+    PlatformAccess,
+)
 from naas_abi_core.services.iam.IAMPorts import Policy
 from naas_abi_core.services.iam.module_scopes import SERVICE as MODULE_SCOPES
 from naas_abi_core.services.iam.policy import PolicyDocument, Statement
@@ -37,13 +42,15 @@ API = "builtin.api"
 IDP = "builtin.idp"
 JOB = "builtin.job"
 MODULE_BOOTSTRAP = "builtin.module_bootstrap"
-FEATURES_PREFIX = "builtin.features."
 # Managed policies an older version stored, since removed: IAM drops them (and what
 # was attached) at boot, so no grant outlives its definition.
 RETIRED_POLICIES = (
     "builtin.transitional.nexus_user",
     "builtin.transitional.module",
 )
+# The same, by prefix: the policies an older version generated per key from a
+# deployment's settings (``builtin.features.*``).
+RETIRED_POLICY_PREFIXES = ("builtin.features.",)
 
 ROLES = (VIEWER, MEMBER, ADMIN, OWNER)
 ROLE_LEVELS: dict[str, frozenset[Level]] = {
@@ -60,10 +67,6 @@ MODULE_SCOPE_ROLES = frozenset({ADMIN, OWNER})
 # The built-in service accounts and the policy each holds.
 SERVICE_ACCOUNTS: dict[str, str] = {"engine": ENGINE, "api": API, "idp": IDP}
 
-# No role reaches UseFeature through its scope: features come from feature policies.
-_FEATURE_TYPE = ("nexus", "feature")
-# Kept from admins: they are the owner's.
-_OWNER_ONLY_ACTIONS = frozenset({"nexus:DeleteWorkspace", "nexus:DeleteOrganization"})
 _ATTACHMENT_TYPE = ("iam", "attachment")
 # IAM administration (policies, groups, attachments at the scope) is the
 # admins' and owners': viewers and members get nothing of the iam catalog.
@@ -75,7 +78,9 @@ _MAX_ACTIONS = 100
 
 @dataclass(frozen=True)
 class _PlatformRow:
-    """A row of the platform types table (``AGENTS.md``, "Built-in policies"): who reaches a platform-level type."""
+    """A row of the platform types table (``AGENTS.md``, "Built-in policies"): who
+    reaches a platform-level type. The kernel services' rows are here; a
+    first-party catalog declares its own (``ActionCatalog.platform_access``)."""
 
     service: str
     resources: tuple[str, ...]
@@ -134,26 +139,6 @@ PLATFORM_TYPES: tuple[_PlatformRow, ...] = (
         ("key/${principal.id}/*",),
         self_=("ListKeys", "CreateKey", "RevokeKey"),
     ),
-    _PlatformRow("nexus", ("organization/-",), self_=("CreateOrganization",)),
-    _PlatformRow(
-        "nexus",
-        ("provider_model/*",),
-        viewer=("ListProviderModels", "GetProviderModel"),
-    ),
-    # A user's own drive and storage, and the platform drive every workspace
-    # whose setting allows it shares: read by viewers, written by members.
-    _PlatformRow(
-        "nexus",
-        ("my_file/${principal.id}", "my_file/${principal.id}/*"),
-        viewer=("ListMyFiles", "GetMyFile"),
-        member=("PutMyFile", "DeleteMyFile"),
-    ),
-    _PlatformRow(
-        "nexus",
-        ("user_storage/${principal.id}", "user_storage/${principal.id}/*"),
-        viewer=("ListUserStorage", "GetUserStorage"),
-        member=("PutUserStorage",),
-    ),
     _PlatformRow(
         "object_storage",
         (
@@ -174,65 +159,6 @@ PLATFORM_TYPES: tuple[_PlatformRow, ...] = (
         member=("PutObject", "PutObjectStream", "DeleteObject"),
     ),
 )
-
-
-def feature_policy_id(key: str) -> str:
-    """``builtin.features.<key>``, with ``<key>`` one of ``<role>``,
-    ``<org>.<role>`` or ``<org>.<workspace>.<role>``."""
-    return f"{FEATURES_PREFIX}{key}"
-
-
-def feature_policy(key: str, features: Iterable[str]) -> Policy:
-    """The ``nexus:UseFeature`` grants of one feature key, confined to the
-    scope it is attached at. A key with no features is still a policy: it
-    overrides the broader keys with nothing."""
-    names = sorted(set(features))
-    statements = [
-        Statement(
-            effect="Allow",
-            actions=("nexus:UseFeature",),
-            resources=tuple(f"${{scope}}:nexus:feature/{name}" for name in names),
-            sid="UseFeatures",
-        )
-    ]
-    return _managed(
-        feature_policy_id(key),
-        f"Features of {key}",
-        f"The features the {key} role may use where it is attached.",
-        statements if names else [],
-    )
-
-
-def parse_feature_key(key: str) -> tuple[str | None, str | None, str]:
-    """``(org, workspace, role)`` of a feature key; ``ValueError`` if malformed."""
-    parts = key.split(".")
-    if not 1 <= len(parts) <= 3 or parts[-1] not in {
-        r.removeprefix("builtin.") for r in ROLES
-    }:
-        raise ValueError(f"Invalid feature policy key {key!r}")
-    role = parts[-1]
-    org = parts[0] if len(parts) >= 2 else None
-    workspace = parts[1] if len(parts) == 3 else None
-    for ident in (org, workspace):
-        if ident is not None and not ident:
-            raise ValueError(f"Invalid feature policy key {key!r}")
-    return org, workspace, role
-
-
-def feature_policy_for(
-    role_policy_id: str, scope_org: str, scope_workspace: str, available: Iterable[str]
-) -> str | None:
-    """The most specific feature policy that exists for a role attached at
-    ``abi:<org>:<workspace>``: workspace, then org, then the deployment's."""
-    role = role_policy_id.removeprefix("builtin.")
-    have = set(available)
-    candidates = []
-    if scope_workspace not in ("*", "-"):
-        candidates.append(f"{scope_org}.{scope_workspace}.{role}")
-    candidates += [f"{scope_org}.{role}", role]
-    return next(
-        (feature_policy_id(c) for c in candidates if feature_policy_id(c) in have), None
-    )
 
 
 def _sid(*words: str) -> str:
@@ -261,7 +187,8 @@ def _role_statements(role: str, catalog: ActionCatalog) -> list[Statement]:
         t
         for t in catalog.resource_types
         if t.placement == "placed"
-        and (catalog.service, t.name) != _FEATURE_TYPE
+        # Granted by a policy only: no role holds it.
+        and not t.policy_only
         # Zero trust: viewers and members reach a module scope only through a
         # policy granting it; admins and owners hold every one at their scope.
         and not (t.module_scope and role not in MODULE_SCOPE_ROLES)
@@ -289,7 +216,7 @@ def _role_statements(role: str, catalog: ActionCatalog) -> list[Statement]:
             if role != OWNER and action.level == "admin":
                 if (catalog.service, resource_type.name) == _ATTACHMENT_TYPE:
                     continue
-                if qualified in _OWNER_ONLY_ACTIONS:
+                if action.owner_only:
                     continue
             if qualified not in actions:
                 actions.append(qualified)
@@ -353,11 +280,31 @@ def role_policy(role: str, registry: CatalogRegistry) -> Policy:
     )
 
 
+def _catalog_rows(registry: CatalogRegistry) -> list[_PlatformRow]:
+    """The platform access first-party catalogs declare, as rows of the table."""
+    return [
+        _platform_row(catalog.service, access)
+        for catalog in registry.all()
+        if not catalog.module
+        for access in catalog.platform_access
+    ]
+
+
+def _platform_row(service: str, access: PlatformAccess) -> _PlatformRow:
+    return _PlatformRow(
+        service,
+        access.resources,
+        viewer=access.viewer,
+        member=access.member,
+        self_=access.self_,
+    )
+
+
 def _platform_statements(
     registry: CatalogRegistry, column: str, sid_prefix: str
 ) -> list[Statement]:
     statements: list[Statement] = []
-    for index, row in enumerate(PLATFORM_TYPES):
+    for index, row in enumerate((*PLATFORM_TYPES, *_catalog_rows(registry))):
         names = {
             "viewer": row.viewer,
             "member": row.viewer + row.member,

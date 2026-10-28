@@ -147,7 +147,6 @@ from naas_abi_core.services.iam.tokens import TokenIssuer, normalize_scope
 LEGACY_NEXUS_ISSUER = "urn:abi:nexus"
 
 _PRINCIPAL_ID = re.compile(r"^(usr|grp|sa)_[0-9a-z]{26}$")
-_FEATURE_NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _T = TypeVar("_T")
 
 AuthorizerFactory = Callable[[PolicySource], IAuthorizer]
@@ -330,7 +329,6 @@ class IAMService(IIAMService, PolicySource):
         self._subjects = _TTLCache(cache_ttl_seconds, cache_size)
         self._policies = _TTLCache(cache_ttl_seconds, cache_size)
         self._placements = _TTLCache(cache_ttl_seconds, 2)
-        self._feature_ids = _TTLCache(cache_ttl_seconds, 2)
         self._sets = _TTLCache(cache_ttl_seconds, 1)
         self._platform_grants: tuple[roles.PlatformGrant, ...] = ()
         self._floors = _TTLCache(cache_ttl_seconds, 1)
@@ -827,7 +825,6 @@ class IAMService(IIAMService, PolicySource):
                 held.add(attachment.principal_id)
                 if attachment.policy_id in roles.ROLES:
                     self._sync_platform_roles(attachment.principal_id)
-                    self._sync_feature_policies(attachment.principal_id)
         return held
 
     def workspace_org(self, workspace: str) -> str | None:
@@ -2107,7 +2104,6 @@ class IAMService(IIAMService, PolicySource):
         )
         if policy_id in roles.ROLES:
             self._sync_platform_roles(principal_id)
-            self._sync_feature_policies(principal_id)
         self._changed()
         return attachment
 
@@ -2162,7 +2158,6 @@ class IAMService(IIAMService, PolicySource):
         if detached:
             if policy_id in roles.ROLES:
                 self._sync_platform_roles(principal_id)
-                self._sync_feature_policies(principal_id)
             if scope is not None:
                 self._leave_groups_of(principal_id, scope_fields(scope)[0])
             self._changed()
@@ -2375,90 +2370,20 @@ class IAMService(IIAMService, PolicySource):
         return record is not None and record.name in FIRST_PARTY_ACCOUNTS
 
     # =========================================================================
-    # Feature policies: UseFeature comes only from them.
+    # Companions: what IAM keeps in step with the roles.
     # =========================================================================
-
-    def put_feature_policies(self, grants: Mapping[str, Sequence[str]]) -> None:
-        """Replace the feature policies: ``{key: [feature, ...]}``.
-
-        A key is ``<role>`` (the deployment's grant), ``<org>.<role>`` (an org's
-        overlay) or ``<org>.<workspace>.<role>`` (a workspace's override). Each
-        becomes the managed policy ``builtin.features.<key>``, and a role
-        attached at a workspace scope brings the most specific one that
-        exists, attached at the same scope. The set is replaced as a whole:
-        keys not named are removed with their attachments. Needs
-        ``iam:RegisterCatalog`` on ``nexus``, as the catalog that names the
-        features does.
-        """
-        self.require("iam:RegisterCatalog", catalog_resource("nexus"))
-        wanted: dict[str, Policy] = {}
-        for key, features in grants.items():
-            roles.parse_feature_key(key)
-            for feature in features:
-                if not _FEATURE_NAME.match(feature):
-                    raise ValueError(f"Invalid feature {feature!r}")
-            wanted[roles.feature_policy_id(key)] = roles.feature_policy(key, features)
-        existing = {p.id for p in self._all_policies() if _is_feature_policy(p.id)}
-        for policy in wanted.values():
-            self.store.put_managed_policy(policy)
-        for stale in existing - wanted.keys():
-            for attachment in self.store.list_attachments(policy_id=stale):
-                self.store.detach(stale, attachment.principal_id, attachment.scope)
-            self._delete_managed(stale)
-        holders = {
-            a.principal_id
-            for role in roles.ROLES
-            for a in self.store.list_attachments(policy_id=role)
-        }
-        for principal_id in sorted(holders):
-            self._sync_feature_policies(principal_id, available=set(wanted))
-        self._changed()
-
-    def feature_policy_keys(self) -> list[str]:
-        """The keys of the feature policies in force (public metadata)."""
-        return sorted(
-            p.id.removeprefix(roles.FEATURES_PREFIX)
-            for p in self._all_policies()
-            if _is_feature_policy(p.id)
-        )
-
-    def _feature_policy_ids(self) -> set[str]:
-        return self._feature_ids.get(
-            "ids",
-            lambda: {p.id for p in self._all_policies() if _is_feature_policy(p.id)},
-        )
 
     def _companions(
         self, attachments: Sequence[Attachment]
     ) -> set[tuple[str, str | None]]:
         """The (policy, scope) of ``attachments`` IAM's role sync keeps there:
-        the feature policies and the platform companion their roles bring. A
-        feature or platform policy attached by hand is not one of them."""
-        found: set[tuple[str, str | None]] = set(
-            _feature_companions(attachments, self._feature_policy_ids())
-        )
+        the platform companion their roles bring. A platform policy attached by
+        hand is not one of them."""
+        found: set[tuple[str, str | None]] = set()
         platform = _platform_companion(attachments)
         if platform is not None:
             found.add((platform, None))
         return found
-
-    def _sync_feature_policies(
-        self, principal_id: str, *, available: set[str] | None = None
-    ) -> None:
-        """Hold, at each workspace scope a role is attached at, the most
-        specific feature policy that exists for that role and scope."""
-        known = available if available is not None else self._feature_policy_ids()
-        attachments = self.store.list_attachments(principal_id=principal_id)
-        wanted = _feature_companions(attachments, known)
-        present = {
-            (a.policy_id, a.scope)
-            for a in attachments
-            if _is_feature_policy(a.policy_id) and a.scope is not None
-        }
-        for policy_id, scope in sorted(wanted - present):
-            self.store.attach(Attachment(new_id("att"), policy_id, principal_id, scope))
-        for policy_id, scope in sorted(present - wanted):
-            self.store.detach(policy_id, principal_id, scope)
 
     # =========================================================================
     # Invitations and IdP group bindings
@@ -2591,7 +2516,6 @@ class IAMService(IIAMService, PolicySource):
         if any(a.policy_id in roles.ROLES for a in claimed):
             # The roles' companions, as for attached ones: once for them all.
             self._sync_platform_roles(principal_id)
-            self._sync_feature_policies(principal_id)
         if claimed:
             self._changed()
         return claimed
@@ -2687,7 +2611,6 @@ class IAMService(IIAMService, PolicySource):
         for group_id in self._binding_groups(provider, claim_value):
             if self.store.detach(policy_id, group_id, scope):
                 self._sync_platform_roles(group_id)
-                self._sync_feature_policies(group_id)
                 removed = True
         if removed:
             self._changed()
@@ -2741,10 +2664,9 @@ class IAMService(IIAMService, PolicySource):
                 for attachment in self.store.list_attachments(
                     principal_id=group.id, policy_id=policy_id
                 ):
-                    if _is_feature_policy(attachment.policy_id) or (
-                        attachment.scope is None
-                        and attachment.policy_id
-                        in (roles.PLATFORM_MEMBER, roles.PLATFORM_VIEWER)
+                    if attachment.scope is None and attachment.policy_id in (
+                        roles.PLATFORM_MEMBER,
+                        roles.PLATFORM_VIEWER,
                     ):
                         continue  # IAM's companions of the roles, not bindings
                     found += [
@@ -3630,7 +3552,15 @@ class IAMService(IIAMService, PolicySource):
         self._changed()
 
     def _retire_policies(self) -> None:
-        for policy_id in roles.RETIRED_POLICIES:
+        retired = [
+            *roles.RETIRED_POLICIES,
+            *(
+                p.id
+                for p in self._all_policies()
+                if p.managed and p.id.startswith(roles.RETIRED_POLICY_PREFIXES)
+            ),
+        ]
+        for policy_id in retired:
             try:
                 self.store.get_policy(policy_id)
             except IAMNotFoundError:
@@ -3684,7 +3614,6 @@ class IAMService(IIAMService, PolicySource):
         self._subjects.clear()
         self._policies.clear()
         self._placements.clear()
-        self._feature_ids.clear()
         self._sets.clear()
         self._floors.clear()
 
@@ -3856,24 +3785,6 @@ def _platform_companion(attachments: Iterable[Attachment]) -> str | None:
     if roles.VIEWER in held:
         return roles.PLATFORM_VIEWER
     return None
-
-
-def _feature_companions(
-    attachments: Iterable[Attachment], known: set[str]
-) -> set[tuple[str, str]]:
-    """At each workspace scope a role is attached at, the most specific feature
-    policy of ``known`` for that role and scope."""
-    wanted: set[tuple[str, str]] = set()
-    for role, scope in _workspace_roles(attachments):
-        org, workspace = scope_fields(scope)
-        policy_id = roles.feature_policy_for(role, org, workspace, known)
-        if policy_id is not None:
-            wanted.add((policy_id, scope))
-    return wanted
-
-
-def _is_feature_policy(policy_id: str) -> bool:
-    return policy_id.startswith(roles.FEATURES_PREFIX)
 
 
 # Keys a principal may hold at once, per bucket: a service account's keys, a

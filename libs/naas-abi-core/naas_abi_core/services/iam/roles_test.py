@@ -1,26 +1,41 @@
+import inspect
+
+import pytest
+
 from naas_abi_core.services.iam import roles
 from naas_abi_core.services.iam.catalog import (
     ActionCatalog,
     ActionSpec,
+    CatalogError,
     CatalogRegistry,
+    PlatformAccess,
     ResourceType,
 )
 from naas_abi_core.services.iam.iam_catalog import CATALOG as IAM
 
+# What naas_abi declares: the flags say what the roles leave out.
 NEXUS = ActionCatalog(
     service="nexus",
     version=1,
     resource_types=(
         ResourceType("workspace", id="singleton"),
-        ResourceType("feature"),
+        ResourceType("feature", policy_only=True),
         ResourceType("conversation", id="path", personal=True),
+        ResourceType("organization", id="singleton"),
+        ResourceType("provider_model", placement="platform"),
     ),
     actions=(
         ActionSpec("GetWorkspace", "read", ("workspace",)),
         ActionSpec("UpdateWorkspace", "admin", ("workspace",)),
-        ActionSpec("DeleteWorkspace", "admin", ("workspace",)),
+        ActionSpec("DeleteWorkspace", "admin", ("workspace",), owner_only=True),
         ActionSpec("UseFeature", "read", ("feature",)),
         ActionSpec("GetConversation", "read", ("conversation",)),
+        ActionSpec("CreateOrganization", "write", ("organization",)),
+        ActionSpec("ListProviderModels", "list", ("provider_model",)),
+    ),
+    platform_access=(
+        PlatformAccess(("organization/-",), self_=("CreateOrganization",)),
+        PlatformAccess(("provider_model/*",), viewer=("ListProviderModels",)),
     ),
 )
 
@@ -54,7 +69,7 @@ def test_roles_are_cumulative_by_level():
     assert "nexus:UpdateWorkspace" not in actions_of(member)
 
 
-def test_no_role_reaches_features_and_deletes_are_the_owners():
+def test_no_role_reaches_a_policy_only_type_and_owner_only_actions_are_the_owners():
     found = registry()
     for role in roles.ROLES:
         policy = roles.role_policy(role, found)
@@ -115,6 +130,7 @@ def test_platform_and_self_policies_name_registered_actions_only():
         "iam:ListKeys",
         "iam:CreateKey",
         "iam:RevokeKey",
+        "nexus:CreateOrganization",
     }
 
 
@@ -139,3 +155,82 @@ def test_engine_and_api_hold_enumerated_statements_only():
     assert any(
         a == "iam:*" for s in by_id[roles.ENGINE].document.statements for a in s.actions
     )
+
+
+def _platform(policy_id: str, found: CatalogRegistry):
+    return next(p for p in roles.builtin_policies(found) if p.id == policy_id)
+
+
+def test_a_catalogs_platform_access_joins_the_platform_policies():
+    found = registry()
+    self_policy = _platform(roles.SELF, found)
+    viewer = _platform(roles.PLATFORM_VIEWER, found)
+    member = _platform(roles.PLATFORM_MEMBER, found)
+    assert "nexus:CreateOrganization" in actions_of(self_policy)
+    assert "abi:-:-:nexus:organization/-" in resources_of(self_policy)
+    for policy in (viewer, member):
+        assert "nexus:ListProviderModels" in actions_of(policy)
+        assert "abi:-:-:nexus:provider_model/*" in resources_of(policy)
+    assert "nexus:ListProviderModels" not in actions_of(self_policy)
+
+
+def test_a_modules_catalog_declares_no_platform_access():
+    with pytest.raises(CatalogError, match="platform access"):
+        ActionCatalog(
+            service="acme",
+            version=1,
+            resource_types=(ResourceType("deal"),),
+            actions=(ActionSpec("GetDeal", "read", ("deal",)),),
+            module="acme",
+            platform_access=(PlatformAccess(("deal/*",), viewer=("GetDeal",)),),
+        )
+
+
+@pytest.mark.parametrize(
+    "access, error",
+    [
+        (PlatformAccess(("ghost/*",), viewer=("GetWorkspace",)), "not <type>/<id>"),
+        (PlatformAccess(("workspace",), viewer=("GetWorkspace",)), "not <type>/<id>"),
+        (PlatformAccess(("workspace/*",), viewer=("Nope",)), "unknown action"),
+    ],
+)
+def test_platform_access_names_this_catalogs_types_and_actions(access, error):
+    with pytest.raises(CatalogError, match=error):
+        ActionCatalog(
+            service="acme",
+            version=1,
+            resource_types=(ResourceType("workspace"),),
+            actions=(ActionSpec("GetWorkspace", "read", ("workspace",)),),
+            platform_access=(access,),
+        )
+
+
+def test_only_an_admin_action_is_owner_only():
+    with pytest.raises(CatalogError, match="owner-only"):
+        ActionCatalog(
+            service="acme",
+            version=1,
+            resource_types=(ResourceType("workspace"),),
+            actions=(
+                ActionSpec("GetWorkspace", "read", ("workspace",), owner_only=True),
+            ),
+        )
+
+
+def test_the_flags_survive_the_catalog_format_and_the_wire():
+    from naas_abi_core.services.iam.adapters import iam_nats_codec as codec
+
+    assert ActionCatalog.from_dict(NEXUS.to_dict()) == NEXUS
+    assert codec.catalog_from_pb(codec.catalog_to_pb(NEXUS)) == NEXUS
+
+
+def test_core_roles_name_no_nexus_action_or_type():
+    """naas_abi is a module: its catalog's flags say what the roles leave out
+    (``builtin.api``, Nexus's own account, aside)."""
+    assert not any(row.service == "nexus" for row in roles.PLATFORM_TYPES)
+    source = inspect.getsource(roles).replace(
+        '_everything_of("NexusOwnActions", "nexus")', ""
+    )
+    assert "nexus:" not in source
+    assert '"nexus"' not in source
+    assert "feature" not in source.replace("builtin.features.", "")

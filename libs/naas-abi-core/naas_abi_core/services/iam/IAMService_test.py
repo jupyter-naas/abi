@@ -1351,3 +1351,32 @@ def test_a_retired_managed_policy_and_its_attachments_go_at_boot(h):
         assert not h.iam.authorize(QUERY, graph("a")).allowed
     with pytest.raises(IAMNotFoundError):
         h.iam.store.get_policy(old.id)
+
+
+def test_the_retired_feature_policies_and_their_attachments_go_at_boot(h):
+    """An older version generated ``builtin.features.<key>`` from a deployment's
+    settings and attached them beside each role: Nexus turns them into its
+    workspaces' policies, and IAM drops them at boot."""
+    from naas_abi_core.services.iam.IAMPorts import Attachment, Policy
+    from naas_abi_core.services.iam.policy import PolicyDocument, Statement
+
+    old = Policy(
+        id="builtin.features.org-1.member",
+        name="Features of org-1.member",
+        document=PolicyDocument(
+            statements=(
+                Statement("Allow", ("triple_store:Query",), ("${scope}:*",), "Old"),
+            )
+        ),
+        managed=True,
+    )
+    h.iam.store.put_managed_policy(old)
+    bob = h.user("bob")
+    h.iam.store.attach(Attachment("att_old", old.id, bob.id, "abi:org-1:ws-1"))
+    assert h.allowed(QUERY, graph("a", "org-1", "ws-1"), bob)
+    h.iam.bootstrap()
+    h.iam.invalidate()
+    assert not h.allowed(QUERY, graph("a", "org-1", "ws-1"), bob)
+    with pytest.raises(IAMNotFoundError):
+        h.iam.store.get_policy(old.id)
+    assert h.iam.store.list_attachments(policy_id=old.id) == []

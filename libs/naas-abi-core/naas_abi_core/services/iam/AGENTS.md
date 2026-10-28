@@ -177,8 +177,7 @@ attachments `att_`). Ids never change and are never reused.
 - **Where it is attached.** A group owned by an org or a workspace receives
   attachments only at its owner's scope or below (an org's at the org, org-wide or
   at any of its workspaces; a workspace's at that workspace), always at a scope.
-  IAM's own companions (`builtin.platform.*`, feature policies) follow its roles as
-  for any principal. Platform groups receive attachments anywhere.
+  IAM's own companions (`builtin.platform.*`) follow its roles as for any principal. Platform groups receive attachments anywhere.
 - **Mapped members** come from IdP group claims: a mapping `(provider name,
   claim value) -> group id` is set with `iam:MapIdpGroup`. Mappings stay the
   platform admin's, whatever owns the group: `MapIdpGroup` and `UnmapIdpGroup`
@@ -595,6 +594,7 @@ resource_types:
     placement: placed           # placed | platform
     container: false            # true: children's ids extend this id
     personal: false             # true: the id starts with the owner's principal id
+    policy_only: false          # true: no built-in role holds it, a policy grants it
     description: A named graph, by IRI. `default` is the default graph.
 actions:
   - name: Query
@@ -607,10 +607,34 @@ actions:
     resource_types: [graph]
     creates: true               # records a placement from CallContext.workspace_id
     subjects: ["abi.svc.triple_store.v1.create_graph"]
+  - name: DropGraph
+    level: admin
+    resource_types: [graph]
+    owner_only: false           # true: an admin action no role below owner holds
+platform_access:                # first-party catalogs only: what the roles' platform companions reach
+  - resources: ["view/*"]       # <type>/<id>, named abi:-:-:<service>:<type>/<id>
+    viewer: [QueryView]         # builtin.platform.viewer and .member
+    member: []                  # builtin.platform.member
+    self: []                    # builtin.self
 ```
 
-`iam/v1/iam.proto` defines `ActionCatalog`, `ResourceType` and `ActionSpec` with the
-same fields. Rules: action names are unique within a service; a new version may only
+`iam/v1/iam.proto` defines `ActionCatalog`, `ResourceType`, `ActionSpec` and
+`PlatformAccess` with the same fields.
+
+**What the built-in roles leave out is the catalog's to say**, so core names no
+service's actions or types in its roles (`roles.py`):
+
+- `policy_only` on a resource type: no role holds it at its scope, owners included; only
+  a policy grants it (Nexus's `feature`).
+- `owner_only` on an `admin` action: no role below owner holds it (Nexus's
+  `DeleteWorkspace`, `DeleteOrganization`). Validation refuses it on another level.
+- `platform_access`: rows of the platform types table ("Built-in policies") for this
+  catalog's platform-level resources: `viewer`, `member` and `self` actions, each a
+  registered action of the catalog, on `<type>/<id>` patterns of its types. Only a
+  first-party catalog (no `module`) declares them: a module's catalog grants nothing to
+  every member, and validation refuses one that tries.
+
+Rules: action names are unique within a service; a new version may only
 add actions or resource types, and removing one is refused while a policy still names
 it explicitly; `subjects` drives broker permissions (stream actions list their
 service's transfer subjects, in-process-only actions list none).
@@ -726,10 +750,10 @@ attachment per scope.
 
 | Policy | Allows on the scope's types | Excludes |
 |---|---|---|
-| `builtin.viewer` | every `list` and `read` action | the nexus `feature` type; the whole `iam` catalog; every module scope type |
-| `builtin.member` | viewer, plus every `write` action | the `feature` type; the whole `iam` catalog; every module scope type |
-| `builtin.admin` | member, plus every `admin` action, except on the `iam` `attachment` type; the scope's policies and groups (`ListPolicies`, `GetPolicy`, `CreatePolicy`, `UpdatePolicy`, `DeletePolicy`, `ListGroups`, `GetGroup`, `CreateGroup`, `DeleteGroup`, `AddGroupMember`, `RemoveGroupMember` on `${scope}:iam:policy/*` and `${scope}:iam:group/*`); `iam:ListAttachments` on `${scope}:iam:attachment/*`, and `iam:AttachPolicy` and `iam:DetachPolicy` on `${scope}:iam:attachment/builtin.admin/*`, `…/builtin.member/*`, `…/builtin.viewer/*` and `…/pol_*/*` (customer policies: the scope's own and those above it, IAM refusing one owned elsewhere) | the `feature` type; anything on `attachment/builtin.owner/*` and the other managed policies; `iam:MapIdpGroup`, `iam:UnmapIdpGroup`; `nexus:DeleteWorkspace`; `nexus:DeleteOrganization` |
-| `builtin.owner` | admin, plus every action on every `attachment/…` (owner included), `nexus:DeleteWorkspace` and `nexus:DeleteOrganization` | the `feature` type; `iam:MapIdpGroup`, `iam:UnmapIdpGroup` |
+| `builtin.viewer` | every `list` and `read` action | every `policy_only` type; the whole `iam` catalog; every module scope type |
+| `builtin.member` | viewer, plus every `write` action | every `policy_only` type; the whole `iam` catalog; every module scope type |
+| `builtin.admin` | member, plus every `admin` action, except on the `iam` `attachment` type; the scope's policies and groups (`ListPolicies`, `GetPolicy`, `CreatePolicy`, `UpdatePolicy`, `DeletePolicy`, `ListGroups`, `GetGroup`, `CreateGroup`, `DeleteGroup`, `AddGroupMember`, `RemoveGroupMember` on `${scope}:iam:policy/*` and `${scope}:iam:group/*`); `iam:ListAttachments` on `${scope}:iam:attachment/*`, and `iam:AttachPolicy` and `iam:DetachPolicy` on `${scope}:iam:attachment/builtin.admin/*`, `…/builtin.member/*`, `…/builtin.viewer/*` and `…/pol_*/*` (customer policies: the scope's own and those above it, IAM refusing one owned elsewhere) | every `policy_only` type; anything on `attachment/builtin.owner/*` and the other managed policies; `iam:MapIdpGroup`, `iam:UnmapIdpGroup`; every `owner_only` action |
+| `builtin.owner` | admin, plus every action on every `attachment/…` (owner included) and every `owner_only` action | every `policy_only` type; `iam:MapIdpGroup`, `iam:UnmapIdpGroup` |
 | `builtin.platform_admin` | `*` on `*` (attached without scope) | sealed resources |
 | `builtin.self` | held implicitly by every user (no attachment row, unknown users included; `explain` shows it with no attachment id) | none |
 
@@ -750,8 +774,10 @@ attachment per scope.
 - **Platform types.** A workspace-scoped role never reaches a platform-level
   resource (`abi:-:-:…`). Two more managed policies, kept in step with role
   attachments by IAM, carry what members need there (`roles.PLATFORM_TYPES` is the
-  table: models, discovery modules/agents/apps/runs, views, coding templates, the
-  user's own forge/coder/activity/key/principal resources, provider models, drives):
+  kernel services' table: models, discovery modules/agents/apps/runs, views, coding
+  templates, the user's own forge/coder/activity/key/principal resources, drives; a
+  first-party catalog adds its rows with `platform_access`, as Nexus does for creating
+  an organization, provider models and a user's own files and storage):
   `builtin.platform.member` while the principal has a `member`, `admin` or `owner`
   attachment at a workspace scope or an org-wide scope, `builtin.platform.viewer`
   while it has only `viewer` attachments there. Org-level attachments (`abi:<org>:-`)
@@ -764,17 +790,13 @@ attachment per scope.
   and explicit policies only): plain jobs and job runs, email senders and messages,
   `dataset:catalog`, `cache:service`, `vector_store:service`, `activity_log:service`,
   and unplaced data until placed or granted.
-- **Features.** `nexus:UseFeature` comes only from feature policies
-  `builtin.features.<role>` (`<role>`, `<org>.<role>` or `<org>.<ws>.<role>`), set as
-  a whole by `iam.put_feature_policies({key: [feature, ...]})` (needs
-  `iam:RegisterCatalog` on `nexus`; Nexus computes them from its `feature_flags`).
-  Each allows `UseFeature` on `${scope}:nexus:feature/<key>` for the role's features
-  that are also enabled: a feature outside `enabled_features` is reachable by no role,
-  only by the platform admin's `*`. A role attached at a workspace scope brings the
-  most specific policy that exists, attached at the same scope (detached with the
-  role); org-level roles bring none. No role reaches `UseFeature` through its scope
-  pattern, and no one grants a feature they do not hold (see "Grant only what you hold"),
-  so a custom policy cannot bring back one the deployment turned off.
+- **Zero trust for `policy_only` types.** No role holds one, owners included, and IAM
+  generates no policy for one: what reaches it is a policy someone attached, as for any
+  grant. Nexus's features are such a type: a member of a workspace uses no feature until
+  a policy grants one (a workspace's "Features of <role>", attached directly, through a
+  group or with an invitation). Core IAM has no feature logic; that a feature outside
+  Nexus's `enabled_features` is usable by nobody, the platform admin included, is Nexus's
+  rule, applied before it asks IAM (`services/iam/authz.py` there).
 - **First-party accounts.** `builtin.engine`, `builtin.api` and `builtin.job` are
   enumerated: one statement per service, each with a `sid` saying what needs it. The
   engine holds IAM's administration and the kernel services; `api` holds `nexus:*`, the
@@ -784,8 +806,9 @@ attachment per scope.
   `job/<module_id>` of an engine module's jobs holds. The three hold every module scope,
   `module:*` and each module's own catalog (`<service>:*`, generated as modules
   register), on behalf of users who must hold it too. Nobody holds `*` but the platform
-  admin. A retired policy (`roles.RETIRED_POLICIES`: the old `builtin.transitional.*`) is
-  dropped, with what was attached to it, at boot.
+  admin. A retired policy (`roles.RETIRED_POLICIES`: the old `builtin.transitional.*`;
+  by prefix, `roles.RETIRED_POLICY_PREFIXES`: the `builtin.features.*` an older version
+  generated from Nexus's settings) is dropped, with what was attached to it, at boot.
 - **`builtin.idp`**: the built-in IdP's own namespace, secrets and sender, for the
   built-in account `idp`. By default the IdP (`libs/naas-abi-idp`) runs as the
   module account `module/<project>/idp` with its approved manifest instead; the
@@ -1108,7 +1131,7 @@ through the SDK, the CLI and Nexus alike.
 | `create_policy` | the document, within its chain's for a sub-policy | its owner's (an org's or a workspace's); a platform policy as written unscoped and with `${scope}` as `abi:*:*` |
 | `update_policy` with a new document or a new parent | the new document within the new chain's; and, when the parent changes or the new document may let through what the old one did not, an Allow added or widened or a Deny lifted or narrowed (`IAMService._widens`), each policy below it within its new chain's | as `create_policy`, plus every scope it is attached or invited at; for each policy below, its own |
 | `attach_policy` (user, group, service account) | the policy | the attachment's |
-| `add_group_member` | every attachment of the group, but IAM's companions of its roles, which follow them: the feature policies and the unscoped `builtin.platform.*` its role sync wants for the group's roles (`IAMService._companions`). A feature or platform policy attached to the group by hand is checked like any other | each attachment's |
+| `add_group_member` | every attachment of the group, but IAM's companions of its roles, which follow them: the unscoped `builtin.platform.*` its role sync wants for the group's roles (`IAMService._companions`). A platform policy attached to the group by hand is checked like any other | each attachment's |
 | `create_pending_grant` | the policy | the invitation's |
 | `bind_idp_group` | the policy, before the group is made, unless the binding is there already | the binding's |
 | `approve_manifest`, narrowed or not | the approved document, its module variables bound | unscoped (the module's policy is attached unscoped) |
@@ -1207,9 +1230,9 @@ named policy, or the credential's scope. Nexus answers it with a 403 carrying th
 viewer, an owner owner, and an org's owners and admins assign roles in its workspaces through
 their org-wide role (`abi:<org>:*`), on the workspace routes and on the organization's
 `PUT /organizations/<org>/members/<user>/workspaces` alike (as the caller, checked at each
-workspace before any change). The owner's way to `nexus:UseFeature` beyond its feature
-policy (a custom policy on `${scope}:nexus:feature/*`) is closed: a feature outside the
-caller's feature policy, and so outside `enabled_features`, is not theirs to give.
+workspace before any change). No role holds a `policy_only` type, so an owner gives a
+feature only if a policy gives it to them: a custom policy on `${scope}:nexus:feature/*`
+is refused to whoever holds fewer features.
 
 **What may I grant.** `iam.grantable(scope)` (`abi.iam.v1.grantable`, the SDK's
 `iam.grantable`, Nexus `GET /api/iam/admin/grantable?scope=`) lists, for the caller at that
@@ -1231,14 +1254,14 @@ stands for. They are:
 | Path | Why it may |
 |---|---|
 | Boot: `IAMService.bootstrap`, `register_kernel_catalogs`, Nexus `register_catalog` | The root of trust: the managed policies and the built-in accounts. |
-| Feature policies: `put_feature_policies` (Nexus as `engine`, from `feature_flags`) | The deployment's and the orgs' feature settings, edited behind their own routes; `enabled_features` bounds every key. It needs `iam:RegisterCatalog` on `nexus`. |
-| Companions: `builtin.platform.*` and feature policies kept in step with roles, `claim_pending_grants` | They follow a role that was held when it was attached or invited. |
+| Companions: `builtin.platform.*` kept in step with roles, `claim_pending_grants` | They follow a role that was held when it was attached or invited. |
 | The org-wide mirror (`Memberships.mirror_org_wide`, `sync_org_wide_roles`) | It mirrors an org role the route just granted, checked as the user at the org's own scope, or the seeding below. |
 | Seeding: `Memberships.seed`, `org_seed.sync_platform_admins`, the owner of a new org or workspace (`grant(by=None)`) | The configuration's `users:`, the migration of old memberships, and the creator of what `nexus:CreateOrganization` / `CreateWorkspace` let them create. |
 | Placements (`put_placement`, `PLACEMENT_WRITER`) | They place resources; they grant nothing. |
 | Shared graph grants (`graph_grants.py`, `workspace.<ws>.graphs.*`) | Behind `nexus:UpdateResourceAccess` on the workspace, which offers only graphs the workspace holds, gives writing only to whoever may drop the graph, and sharing every graph only to platform administrators (`resource_access.py`). |
 | `abi iam` | The operator holding the project's IAM store and config. |
 | The move of the workspace feature overrides (Nexus `services/iam/sets.migrate_feature_overrides`, once at start) | Features an override gave every role of a workspace, kept for the people who held a role there then, so nobody's features change (a workspace policy attached at the workspace). |
+| The move of the role features (Nexus `services/iam/role_features.migrate_role_features`, once at start) | The features each role had in each workspace, kept for the people who held that role there then, so nobody's features change ("Features of <role>", a workspace policy attached at the workspace). |
 | Workspace snapshot import (Nexus `core/workspaces_import.py`) | An operator command run with the project's engine, never a route: it makes the owner of a workspace it creates, as creating one does. |
 | `modules.auto_approve` | The `abi dev` overlay only: a module's manifest approved on submission. |
 
@@ -1666,9 +1689,10 @@ iam.list_idp_bindings(provider=None, policy_id=None)
   never from an email the caller supplies, since `claim_pending_grants` reads the
   user's own record. The claim is one store step per grant
   (`IAMStore.claim_pending_grant`: delete the grant and attach, so racing sign-ins
-  attach it once) and keeps the companions of the roles in step, the platform ones and
-  the feature policies, as attaching the role does: an invitee gets the role's Nexus
-  features from the first sign-in.
+  attach it once) and keeps the companions of the roles in step (the platform ones), as
+  attaching the role does. An invitation carries any policy beside the role, each its own
+  pending grant at its scope: an invitee gets Nexus features only from a policy the
+  invitation carries ("Features of member", say), claimed at the same first sign-in.
 - **Authorized as the attachment it stands for.** Creating one needs
   `iam:AttachPolicy` and revoking one `iam:DetachPolicy` on
   `abi:<org>:<ws>:iam:attachment/<policy>/pending:<provider>:<email>`, so a
@@ -1813,7 +1837,7 @@ AGENTS.md there), and IAM is the only record afterwards:
 | `workspace_members.role`, the `workspaces.owner_id` fallback | `builtin.<role>` attachments at `abi:<org>:<ws>` (the fallback becomes an explicit owner attachment) |
 | `organization_members.role`, `organizations.owner_id` | `builtin.<role>` at `abi:<org>:-` |
 | `users.is_superadmin`, `users[].is_superadmin` | `builtin.platform_admin` |
-| `organization_role_features` | `builtin.features.<org>.<role>` |
+| The role features (`feature_flags.role_baseline`, `organization_overrides`, `organization_role_features`), and the `builtin.features.*` an older IAM generated from them | moved once by Nexus at start (`services/iam/role_features.migrate_role_features`, recorded in `iam_migrations` as `role_features_v1`): for each workspace and role, the features that role had there become the workspace's policy "Features of <role>", attached at the workspace to whoever holds that role there, directly, through an organisation-wide role or through a group. Every user's `UseFeature` decisions are the same before and after. `organization_role_features` is dropped; IAM drops the `builtin.features.*` at boot. |
 | Workspace graph policies and per-workspace prefixes and namespaces (object storage, documents, vectors, datasets) | placements (`iam:PutPlacement`), plus Allow statements in a workspace policy for shared graphs |
 | Every other existing container (module and engine namespaces, collections, repos, graphs) | platform placements, so no workspace can claim a name inside them |
 | Remote modules sharing `NATS_JWT_SECRET` | service accounts, keys and approved manifests (`abi dev up` regenerates them; deployed systems run `abi iam module approve`) |
@@ -1821,7 +1845,7 @@ AGENTS.md there), and IAM is the only record afterwards:
 | IAM store schema 1 (no owner scopes) | schema 2, at the store's first open: every policy and group platform-owned, except the groups IdP bindings made (named `idp:<provider>:<claim>` and mapped from that claim, with an org) whose attachments are all under `abi:<org>:`, which belong to that org (`abi:<org>:-`). A binding group schema 1 shared with other orgs, the platform or an unscoped binding stays the platform's: owned by one org, its admins could add their users to what it holds elsewhere. Two processes may open the store at once (PostgreSQL adds the columns `IF NOT EXISTS`; SQLite serializes writes). The upgrade logs a warning for each stored customer policy whose patterns reached the platform's policies or groups as `abi:-:-:iam:…` (or `${scope}:iam:…` at `abi:-:-`) and no longer match them: rewrite them `abi:*:*:iam:policy/…`, `…:iam:group/…` |
 | IAM store schema 2 (no sets) | schema 3: the table `iam_scope_sets`, created empty at the store's first open (PostgreSQL behind an advisory lock, so the engine and the API opening it together both start). Every org and workspace starts with everything. |
 | IAM store schema 3 (no sub-policies) | schema 4: the nullable column `iam_policies.parent_id` and its index, added at the store's first open (PostgreSQL `IF NOT EXISTS`, behind the schema's advisory lock). Every existing policy has no parent. No foreign key: every write locks the state row (`iam_state`) before it checks anything (`IAMStoreSQL._change`; SQLite's `BEGIN IMMEDIATE` already serializes), so "the parent exists" and "the policy has no sub-policies" still hold when the write commits, and a delete and a re-parent racing on PostgreSQL run one after the other. |
-| Per-workspace feature overrides (`workspaces.feature_overrides`, the deprecated `feature_flags.workspace_overrides`) | moved once by Nexus at start (`services/iam/sets.migrate_feature_overrides`, recorded in `iam_migrations`): a feature turned off leaves the workspace's feature set; one turned on stays in it and, for each role whose defaults lack it, a workspace policy keeps it for the people holding that role there then. No one's features change; later members follow the role defaults within the set. The column is cleared. |
+| Per-workspace feature overrides (`workspaces.feature_overrides`, the deprecated `feature_flags.workspace_overrides`) | moved once by Nexus at start (`services/iam/sets.migrate_feature_overrides`, recorded in `iam_migrations`): a feature turned off leaves the workspace's feature set; one turned on stays in it and, for each role whose defaults lack it, a workspace policy keeps it for the people holding that role there then. No one's features change. The column is cleared. |
 | Sessions, refresh tokens, app grants and preview tokens signed with `secret_key` | invalidated: users sign in again; workspace secrets get their own key (`secrets_encryption_key`) |
 
 ## Decisions
@@ -1965,6 +1989,22 @@ searches take more than `grants.CALL_BUDGET` together, is refused even if it is 
 Invitations and bindings from Nexus now need the inviting person to hold the role's grants.
 `grantable` may under-report a holding whose pattern straddles the scope's fields.
 
+**The catalogs say what the roles leave out; core's roles name no service.**
+*Decision.* What the built-in roles hold is generated from the catalogs by level, and what
+they leave out is flagged in the catalog that declares it: `policy_only` on a type no role
+holds, `owner_only` on an admin action no role below owner holds, and `platform_access` for
+the platform-level rows a first-party catalog's resources add to the platform companions.
+`roles.py` names its own kernel services' platform rows and no other service, Nexus
+included; `builtin.api`, Nexus's own account, keeps its enumerated statements. IAM generates
+no feature policy: `put_feature_policies`, `builtin.features.*` and their companions are
+gone, and the stored ones are retired at boot (`RETIRED_POLICY_PREFIXES`).
+*Consequences.* Nexus's features are a `policy_only` type: no role brings one, owners and
+admins included, and a member of a new workspace uses none until a policy grants it (Nexus
+moved what each role had into workspace policies once, so nobody's features changed). A
+module's catalog cannot declare `platform_access`: what it publishes reaches its users
+through policies only. Removing a flag is a catalog change like any other: the roles are
+regenerated at the next registration.
+
 **Sets bound users when IAM decides, and grants when they are made.**
 *Decision.* Each org and workspace has a set of module items and Nexus features, stored in
 IAM (`iam_scope_sets`, cached and dropped on change events like policies). An Allow of a
@@ -1981,7 +2021,7 @@ recorded is everything.
 next decision, owners and admins included, and from what they may grant; nothing needs
 detaching. A grant made before stays attached and counts again if the set widens. A
 workspace's feature set replaces the per-workspace feature overrides: a feature is reached
-by a role's defaults (or a policy) within the set, never added by the set. Items name
+by a policy within the set, never added by the set. Items name
 modules by their stable identifiers: a renamed module is a new item. Discovery's broker-side
 grants are not bounded by sets (they carry no workspace), as for module scopes.
 

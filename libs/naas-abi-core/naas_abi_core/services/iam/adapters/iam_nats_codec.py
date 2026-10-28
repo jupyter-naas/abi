@@ -15,6 +15,7 @@ from naas_abi_core.services.iam.catalog import (
     ActionCatalog,
     ActionSpec,
     CatalogError,
+    PlatformAccess,
     ResourceType,
 )
 from naas_abi_core.services.iam.IAMPorts import (
@@ -406,6 +407,7 @@ def catalog_to_pb(catalog: ActionCatalog) -> pb.ActionCatalog:
                 personal=t.personal,
                 description=t.description,
                 module_scope=t.module_scope,
+                policy_only=t.policy_only,
             )
             for t in catalog.resource_types
         ],
@@ -417,10 +419,20 @@ def catalog_to_pb(catalog: ActionCatalog) -> pb.ActionCatalog:
                 creates=a.creates,
                 subjects=list(a.subjects),
                 description=a.description,
+                owner_only=a.owner_only,
             )
             for a in catalog.actions
         ],
         module=catalog.module,
+        platform_access=[
+            pb.PlatformAccess(
+                resources=list(row.resources),
+                viewer=list(row.viewer),
+                member=list(row.member),
+                self=list(row.self_),
+            )
+            for row in catalog.platform_access
+        ],
     )
 
 
@@ -437,6 +449,7 @@ def catalog_from_pb(message: pb.ActionCatalog) -> ActionCatalog:
                 personal=t.personal,
                 description=t.description,
                 module_scope=t.module_scope,
+                policy_only=t.policy_only,
             )
             for t in message.resource_types
         ),
@@ -448,10 +461,20 @@ def catalog_from_pb(message: pb.ActionCatalog) -> ActionCatalog:
                 creates=a.creates,
                 subjects=tuple(a.subjects),
                 description=a.description,
+                owner_only=a.owner_only,
             )
             for a in message.actions
         ),
         module=message.module,
+        platform_access=tuple(
+            PlatformAccess(
+                resources=tuple(row.resources),
+                viewer=tuple(row.viewer),
+                member=tuple(row.member),
+                self_=tuple(getattr(row, "self")),
+            )
+            for row in message.platform_access
+        ),
     )
 
 

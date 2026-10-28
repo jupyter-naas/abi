@@ -165,7 +165,7 @@ class ScopeSet(_message.Message):
     def __init__(self, org: _Optional[str] = ..., workspace: _Optional[str] = ..., modules: _Optional[_Union[SetItems, _Mapping]] = ..., features: _Optional[_Union[SetItems, _Mapping]] = ...) -> None: ...
 
 class ResourceType(_message.Message):
-    __slots__ = ("name", "id", "placement", "container", "personal", "description", "module_scope")
+    __slots__ = ("name", "id", "placement", "container", "personal", "description", "module_scope", "policy_only")
     NAME_FIELD_NUMBER: _ClassVar[int]
     ID_FIELD_NUMBER: _ClassVar[int]
     PLACEMENT_FIELD_NUMBER: _ClassVar[int]
@@ -173,6 +173,7 @@ class ResourceType(_message.Message):
     PERSONAL_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     MODULE_SCOPE_FIELD_NUMBER: _ClassVar[int]
+    POLICY_ONLY_FIELD_NUMBER: _ClassVar[int]
     name: str
     id: str
     placement: str
@@ -180,37 +181,54 @@ class ResourceType(_message.Message):
     personal: bool
     description: str
     module_scope: bool
-    def __init__(self, name: _Optional[str] = ..., id: _Optional[str] = ..., placement: _Optional[str] = ..., container: bool = ..., personal: bool = ..., description: _Optional[str] = ..., module_scope: bool = ...) -> None: ...
+    policy_only: bool
+    def __init__(self, name: _Optional[str] = ..., id: _Optional[str] = ..., placement: _Optional[str] = ..., container: bool = ..., personal: bool = ..., description: _Optional[str] = ..., module_scope: bool = ..., policy_only: bool = ...) -> None: ...
 
 class ActionSpec(_message.Message):
-    __slots__ = ("name", "level", "resource_types", "creates", "subjects", "description")
+    __slots__ = ("name", "level", "resource_types", "creates", "subjects", "description", "owner_only")
     NAME_FIELD_NUMBER: _ClassVar[int]
     LEVEL_FIELD_NUMBER: _ClassVar[int]
     RESOURCE_TYPES_FIELD_NUMBER: _ClassVar[int]
     CREATES_FIELD_NUMBER: _ClassVar[int]
     SUBJECTS_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    OWNER_ONLY_FIELD_NUMBER: _ClassVar[int]
     name: str
     level: str
     resource_types: _containers.RepeatedScalarFieldContainer[str]
     creates: bool
     subjects: _containers.RepeatedScalarFieldContainer[str]
     description: str
-    def __init__(self, name: _Optional[str] = ..., level: _Optional[str] = ..., resource_types: _Optional[_Iterable[str]] = ..., creates: bool = ..., subjects: _Optional[_Iterable[str]] = ..., description: _Optional[str] = ...) -> None: ...
+    owner_only: bool
+    def __init__(self, name: _Optional[str] = ..., level: _Optional[str] = ..., resource_types: _Optional[_Iterable[str]] = ..., creates: bool = ..., subjects: _Optional[_Iterable[str]] = ..., description: _Optional[str] = ..., owner_only: bool = ...) -> None: ...
+
+class PlatformAccess(_message.Message):
+    __slots__ = ("resources", "viewer", "member", "self")
+    RESOURCES_FIELD_NUMBER: _ClassVar[int]
+    VIEWER_FIELD_NUMBER: _ClassVar[int]
+    MEMBER_FIELD_NUMBER: _ClassVar[int]
+    SELF_FIELD_NUMBER: _ClassVar[int]
+    resources: _containers.RepeatedScalarFieldContainer[str]
+    viewer: _containers.RepeatedScalarFieldContainer[str]
+    member: _containers.RepeatedScalarFieldContainer[str]
+    self: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self_, resources: _Optional[_Iterable[str]] = ..., viewer: _Optional[_Iterable[str]] = ..., member: _Optional[_Iterable[str]] = ..., self: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class ActionCatalog(_message.Message):
-    __slots__ = ("service", "version", "resource_types", "actions", "module")
+    __slots__ = ("service", "version", "resource_types", "actions", "module", "platform_access")
     SERVICE_FIELD_NUMBER: _ClassVar[int]
     VERSION_FIELD_NUMBER: _ClassVar[int]
     RESOURCE_TYPES_FIELD_NUMBER: _ClassVar[int]
     ACTIONS_FIELD_NUMBER: _ClassVar[int]
     MODULE_FIELD_NUMBER: _ClassVar[int]
+    PLATFORM_ACCESS_FIELD_NUMBER: _ClassVar[int]
     service: str
     version: int
     resource_types: _containers.RepeatedCompositeFieldContainer[ResourceType]
     actions: _containers.RepeatedCompositeFieldContainer[ActionSpec]
     module: str
-    def __init__(self, service: _Optional[str] = ..., version: _Optional[int] = ..., resource_types: _Optional[_Iterable[_Union[ResourceType, _Mapping]]] = ..., actions: _Optional[_Iterable[_Union[ActionSpec, _Mapping]]] = ..., module: _Optional[str] = ...) -> None: ...
+    platform_access: _containers.RepeatedCompositeFieldContainer[PlatformAccess]
+    def __init__(self, service: _Optional[str] = ..., version: _Optional[int] = ..., resource_types: _Optional[_Iterable[_Union[ResourceType, _Mapping]]] = ..., actions: _Optional[_Iterable[_Union[ActionSpec, _Mapping]]] = ..., module: _Optional[str] = ..., platform_access: _Optional[_Iterable[_Union[PlatformAccess, _Mapping]]] = ...) -> None: ...
 
 class Decision(_message.Message):
     __slots__ = ("allowed", "visible", "reason")

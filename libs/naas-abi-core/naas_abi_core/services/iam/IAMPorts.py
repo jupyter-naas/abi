@@ -1370,11 +1370,6 @@ class IIAMService(ABC):
         serving engine's IAM only)."""
         raise NotImplementedError("Platform grants are set on the serving engine")
 
-    def put_feature_policies(self, grants: Mapping[str, Sequence[str]]) -> None:
-        """Replace the feature policies (``UseFeature`` grants). The
-        serving engine's IAM only: Nexus runs there."""
-        raise NotImplementedError("Feature policies are set on the serving engine")
-
     # -- service accounts, keys and manifests ----------------------------------
 
     @abstractmethod

@@ -37,13 +37,20 @@ ORG_SCOPE, ORG_WIDE = f"abi:{ORG}:-", f"abi:{ORG}:*"
 QUERY, INSERT = "triple_store:Query", "triple_store:Insert"
 GRAPHS = "${scope}:triple_store:graph/*"
 
-# Nexus's feature type, as Nexus registers it: no role reaches it.
+# Nexus's feature type, as Nexus registers it: a policy grants it, no role.
 NEXUS = ActionCatalog(
     service="nexus",
     version=1,
-    resource_types=(ResourceType("feature", id="opaque"),),
+    resource_types=(ResourceType("feature", id="opaque", policy_only=True),),
     actions=(ActionSpec("UseFeature", "read", ("feature",)),),
 )
+
+
+def features(*keys: str) -> dict:
+    """A workspace's "Features of <role>": ``UseFeature`` on ``keys`` at its scope."""
+    return reader(
+        ["nexus:UseFeature"], [f"${{scope}}:nexus:feature/{key}" for key in keys]
+    )
 
 AsUser = Callable[..., AbstractContextManager[IIAMService]]
 
@@ -180,7 +187,8 @@ def run_owner_grants_a_feature_it_lacks(iam: IAMService, as_user: AsUser) -> Non
     t = team(iam)
     with as_service_account("engine"):
         iam.register_catalog(NEXUS)
-        iam.put_feature_policies({"owner": ["chat"], "member": ["chat"]})
+        chat_of_owner = iam.create_policy("Features of owner", features("chat"), scope=WS1)
+        iam.attach_policy(chat_of_owner.id, t.owner.id, WS1)
         every_feature = iam.create_policy(
             "every feature",
             reader(["nexus:UseFeature"], ["${scope}:nexus:feature/*"]),
@@ -251,32 +259,34 @@ def run_group_member_exceeds_adder(iam: IAMService, as_user: AsUser) -> None:
         session.add_group_member(owners.id, t.admin.id)
 
 
-def run_hand_attached_feature_policy_is_checked(
-    iam: IAMService, as_user: AsUser
-) -> None:
-    """A feature policy follows a role only where IAM's sync put it: attached to
-    a group by hand, it is checked like any other attachment."""
+def run_group_feature_policy_is_checked(iam: IAMService, as_user: AsUser) -> None:
+    """No role brings a feature: a group's feature policy is an attachment like
+    any other, so whoever adds a member holds what it grants."""
     t = team(iam)
     with as_service_account("engine"):
         iam.register_catalog(NEXUS)
-        iam.put_feature_policies(
-            {"owner": ["chat", "billing"], "admin": ["chat"], "member": ["chat"]}
+        of_owner = iam.create_policy(
+            "Features of owner", features("chat", "billing"), scope=WS1
         )
-        synced = iam.create_group("synced", scope=WS1)
-        iam.attach_policy(roles.MEMBER, synced.id, WS1)  # brings features.member
-        by_hand = iam.create_group("by hand", scope=WS1)
-        iam.attach_policy(roles.MEMBER, by_hand.id, WS1)
+        of_member = iam.create_policy("Features of member", features("chat"), scope=WS1)
+        iam.attach_policy(of_owner.id, t.owner.id, WS1)
+        iam.attach_policy(of_member.id, t.admin.id, WS1)
+        chat = iam.create_group("chat", scope=WS1)
+        iam.attach_policy(roles.MEMBER, chat.id, WS1)
+        iam.attach_policy(of_member.id, chat.id, WS1)
+        billing = iam.create_group("billing", scope=WS1)
+        iam.attach_policy(roles.MEMBER, billing.id, WS1)
     with as_user(t.owner) as session:
-        session.attach_policy(roles.feature_policy_id("owner"), by_hand.id, WS1)
+        session.attach_policy(of_owner.id, billing.id, WS1)
     with as_user(t.admin) as session:
-        session.add_group_member(synced.id, t.member.id)
+        session.add_group_member(chat.id, t.member.id)
         refused(
-            lambda: session.add_group_member(by_hand.id, t.member.id),
-            roles.feature_policy_id("owner"),
+            lambda: session.add_group_member(billing.id, t.member.id),
+            of_owner.id,
             "abi:org-1:ws-1:nexus:feature/billing",
         )
     with as_user(t.owner) as session:
-        session.add_group_member(by_hand.id, t.member.id)
+        session.add_group_member(billing.id, t.member.id)
 
 
 def _inviter(iam: IAMService):
@@ -603,7 +613,7 @@ SCENARIOS = (
     run_owner_grants_a_feature_it_lacks,
     run_narrowed_key_grants_no_write,
     run_group_member_exceeds_adder,
-    run_hand_attached_feature_policy_is_checked,
+    run_group_feature_policy_is_checked,
     run_invitation_to_a_role_the_inviter_lacks,
     run_idp_binding,
     run_delegated_approver,

@@ -45,6 +45,9 @@ class ResourceType:
     # pipelines and the actions it declares). The built-in viewer and member
     # roles never reach one (``roles.py``); admins and owners hold them all.
     module_scope: bool = False
+    # Reached through a policy only: no built-in role holds it at its scope,
+    # owners included (Nexus's features).
+    policy_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -55,6 +58,22 @@ class ActionSpec:
     creates: bool = False
     subjects: tuple[str, ...] = ()
     description: str = ""
+    # An ``admin`` action no role below owner holds (deleting the scope itself).
+    owner_only: bool = False
+
+
+@dataclass(frozen=True)
+class PlatformAccess:
+    """Platform-level resources of a catalog that a role's platform companions
+    reach (``roles.py``, "Platform types" in ``AGENTS.md``): ``viewer`` actions with
+    ``builtin.platform.viewer`` and ``.member``, ``member`` actions with
+    ``.member``, ``self_`` actions with ``builtin.self``. ``resources`` are
+    ``<type>/<id>`` patterns, named ``abi:-:-:<service>:<type>/<id>``."""
+
+    resources: tuple[str, ...]
+    viewer: tuple[str, ...] = ()
+    member: tuple[str, ...] = ()
+    self_: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -66,6 +85,9 @@ class ActionCatalog:
     # The module that declared this catalog (``module_scopes.py``), empty for
     # a kernel service's and Nexus's: a module's catalog is its own alone.
     module: str = ""
+    # What the platform companions of the roles reach of this catalog. A
+    # first-party catalog's only: a module's grants nothing to every member.
+    platform_access: tuple[PlatformAccess, ...] = ()
 
     def __post_init__(self) -> None:
         errors = _catalog_errors(self)
@@ -94,6 +116,7 @@ class ActionCatalog:
                     "personal": t.personal,
                     "description": t.description,
                     **({"module_scope": True} if t.module_scope else {}),
+                    **({"policy_only": True} if t.policy_only else {}),
                 }
                 for t in self.resource_types
             ],
@@ -105,12 +128,23 @@ class ActionCatalog:
                     "creates": a.creates,
                     "subjects": list(a.subjects),
                     "description": a.description,
+                    **({"owner_only": True} if a.owner_only else {}),
                 }
                 for a in self.actions
             ],
         }
         if self.module:
             found["module"] = self.module
+        if self.platform_access:
+            found["platform_access"] = [
+                {
+                    "resources": list(row.resources),
+                    "viewer": list(row.viewer),
+                    "member": list(row.member),
+                    "self": list(row.self_),
+                }
+                for row in self.platform_access
+            ]
         return found
 
     @classmethod
@@ -129,6 +163,7 @@ class ActionCatalog:
                         personal=bool(t.get("personal", False)),
                         description=str(t.get("description", "")),
                         module_scope=bool(t.get("module_scope", False)),
+                        policy_only=bool(t.get("policy_only", False)),
                     )
                     for t in data.get("resource_types", ())
                 ),
@@ -140,10 +175,20 @@ class ActionCatalog:
                         creates=bool(a.get("creates", False)),
                         subjects=tuple(a.get("subjects", ())),
                         description=str(a.get("description", "")),
+                        owner_only=bool(a.get("owner_only", False)),
                     )
                     for a in data.get("actions", ())
                 ),
                 module=str(data.get("module", "") or ""),
+                platform_access=tuple(
+                    PlatformAccess(
+                        resources=tuple(row.get("resources", ())),
+                        viewer=tuple(row.get("viewer", ())),
+                        member=tuple(row.get("member", ())),
+                        self_=tuple(row.get("self", ())),
+                    )
+                    for row in data.get("platform_access", ())
+                ),
             )
         except (KeyError, TypeError) as exc:
             raise CatalogError(f"Malformed catalog: {exc!r}") from exc
@@ -185,6 +230,22 @@ def _catalog_errors(catalog: ActionCatalog) -> list[str]:
         for name in a.resource_types:
             if name not in type_names:
                 errors.append(f"action {a.name}: unknown resource type {name!r}")
+        if a.owner_only and a.level != "admin":
+            errors.append(f"action {a.name}: only an admin action is owner-only")
+    if catalog.platform_access and catalog.module:
+        errors.append("a module's catalog declares no platform access")
+    for row in catalog.platform_access:
+        if not row.resources:
+            errors.append("platform access names no resource")
+        for resource in row.resources:
+            type_name, slash, rest = resource.partition("/")
+            if type_name not in type_names or not slash or not rest:
+                errors.append(
+                    f"platform access: {resource!r} is not <type>/<id> of this catalog"
+                )
+        for name in (*row.viewer, *row.member, *row.self_):
+            if name not in action_names:
+                errors.append(f"platform access: unknown action {name!r}")
     return errors
 
 

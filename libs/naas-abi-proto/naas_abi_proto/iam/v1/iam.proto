@@ -147,6 +147,8 @@ message ResourceType {
   // A module scope: what a module exposes, never reached by the viewer and
   // member roles (services/iam/module_scopes.py).
   bool module_scope = 7;
+  // Reached through a policy only: no built-in role holds it.
+  bool policy_only = 8;
 }
 
 message ActionSpec {
@@ -157,6 +159,18 @@ message ActionSpec {
   bool creates = 4;
   repeated string subjects = 5;
   string description = 6;
+  // An admin action no role below owner holds.
+  bool owner_only = 7;
+}
+
+// Platform-level resources of a first-party catalog that the roles' platform
+// companions reach (services/iam/roles.py): <type>/<id> patterns, and the
+// actions each column holds on them.
+message PlatformAccess {
+  repeated string resources = 1;
+  repeated string viewer = 2;
+  repeated string member = 3;
+  repeated string self = 4;
 }
 
 message ActionCatalog {
@@ -166,6 +180,7 @@ message ActionCatalog {
   repeated ActionSpec actions = 4;
   // The module that declared this catalog; empty for a kernel service's.
   string module = 5;
+  repeated PlatformAccess platform_access = 6;
 }
 
 // reason: allow | explicit_deny | implicit_deny | suspended | sealed.

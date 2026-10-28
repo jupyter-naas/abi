@@ -103,14 +103,13 @@ def test_an_actor_for_no_user_holds_no_user_variable(h):
 
 def test_first_party_writes_for_no_user_stay_allowed(h):
     """The org-wide mirror, seeding and the owner of what was just made are
-    ``api``'s for no user; boot and feature policies the engine's."""
+    ``api``'s for no user; boot the engine's."""
     t = contract.team(h.iam)
     with as_service_account("api"):
         h.iam.attach_policy(roles.OWNER, t.member.id, ORG_WIDE)
         h.iam.attach_policy(roles.PLATFORM_ADMIN, t.colleague.id)
     with as_service_account("engine"):
         h.iam.attach_policy(roles.OWNER, t.member.id, WS1)
-        h.iam.put_feature_policies({"member": ["chat"]})
 
 
 def test_an_existing_attachment_is_not_granted_again(h):
