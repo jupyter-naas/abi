@@ -1,3 +1,4 @@
+import { linkedInImportButton, linkedInImportEnabled } from "../../LinkedInImport.js";
 import { searchBoxHtml, wireSearch } from "../../SearchBox.js";
 import { logoHtml } from "../../../lib/config.js";
 import { escapeHtml } from "../../../lib/dom.js";
@@ -26,5 +27,11 @@ export function mountHome(view, { config }) {
       </p>
     </div>`;
   wireSearch(view, config);
+  if (linkedInImportEnabled(config)) {
+    view.querySelector(".home-ontology")?.before(
+      Object.assign(document.createElement("p"), { className: "home-import" }),
+    );
+    view.querySelector(".home-import")?.append(linkedInImportButton(config));
+  }
   return { showTopbarSearch: false };
 }

@@ -13,7 +13,18 @@ function apiPath(path) {
 }
 
 async function getJson(path) {
-  const response = await fetch(apiPath(path), { headers: nexusAuthHeaders() });
+  return readJson(path, await fetch(apiPath(path), { headers: nexusAuthHeaders() }));
+}
+
+/** A multipart POST (an upload), under the same session as the reads. */
+async function postForm(path, form) {
+  return readJson(
+    path,
+    await fetch(apiPath(path), { method: "POST", headers: nexusAuthHeaders(), body: form }),
+  );
+}
+
+async function readJson(path, response) {
   const body = await response.json().catch(() => null);
   if (!response.ok) {
     const error = new Error(`${path} → ${response.status}`);
@@ -28,6 +39,7 @@ export function fetchSearch({ query = "", facet = "", page = 1 } = {}) {
   const params = new URLSearchParams();
   if (query) params.set("q", query);
   if (facet) params.set("facet", facet);
+  if (page > 1) params.set("page", String(page));
   const suffix = params.toString();
   return getJson(`/search${suffix ? `?${suffix}` : ""}`);
 }
@@ -67,4 +79,28 @@ export function fetchQueryResults(slug, queryName, { maxRows = 50 } = {}) {
 
 export function fetchOntology() {
   return getJson("/ontology");
+}
+
+/** Who the person is connected to (the Connections tab). */
+export function fetchConnections(slug) {
+  return getJson(`/people/${encodeURIComponent(slug)}/connections`);
+}
+
+/** The person and their connections, as a graph page payload. */
+export function fetchConnectionsNetwork(slug) {
+  return getJson(`/people/${encodeURIComponent(slug)}/connections/network`);
+}
+
+/** Whose LinkedIn export the viewer may import: themselves, or anyone if admin. */
+export function fetchLinkedInOwners() {
+  return getJson("/linkedin/owners");
+}
+
+/** Start an import: ``form`` holds ``owner_id`` and the export's ``files``. */
+export function startLinkedInImport(form) {
+  return postForm("/linkedin/imports", form);
+}
+
+export function fetchLinkedInImport(runId) {
+  return getJson(`/linkedin/imports/${encodeURIComponent(runId)}`);
 }

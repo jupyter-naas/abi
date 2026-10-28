@@ -34,17 +34,28 @@ export function landingHref(config) {
   const page = (config.app?.pages || []).find((item) => item.page_id === pageId);
   if (!page) return "#/";
   if (pageId === "results") {
-    return searchHref(config, { view: config.app?.default_results_view || "" });
+    // default_results_view "network" is the People tab drawn as a network.
+    return searchHref(config, { display: config.app?.default_results_view || "" });
   }
   return `#/${page.url}`;
 }
 
-export function searchHref(config, { query = "", facet = "", page = 1, view = "" } = {}) {
+/**
+ * The results page for a search. ``view`` is the tab ("" People, "connections"),
+ * ``display`` how it is drawn ("" the list, "network"), ``person`` whose
+ * connections the Connections tab shows.
+ */
+export function searchHref(
+  config,
+  { query = "", facet = "", page = 1, view = "", display = "", person = "" } = {},
+) {
   const results = (config.app?.pages || []).find((item) => item.page_id === "results");
   const params = new URLSearchParams();
   if (query) params.set("q", query);
   if (facet) params.set("facet", facet);
   if (view) params.set("view", view);
+  if (display) params.set("display", display);
+  if (person) params.set("person", person);
   if (page > 1) params.set("page", String(page));
   const suffix = params.toString();
   return `#/${results?.url || "search"}${suffix ? `?${suffix}` : ""}`;

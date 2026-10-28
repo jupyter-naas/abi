@@ -201,7 +201,8 @@ def _validate_pages(app: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _results_view_token(value: Any, path: str) -> str:
-    """Browser ``view`` query value: ``""`` is People, ``network`` is Network."""
+    """Browser ``display`` value: ``people`` is the list, ``network`` the People
+    tab drawn as a network (it used to be a tab of its own)."""
     label = _text(value, path)
     if label not in RESULTS_VIEW_LABELS:
         raise ConfigError(f"{path} must be 'people' or 'network'")
@@ -611,6 +612,30 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
         },
         "data": _validate_data(_mapping(config.get("data"), "data"), app_root),
         "privacy": _validate_privacy(_mapping(config.get("privacy") or {}, "privacy")),
+        "imports": _validate_imports(_mapping(config.get("imports") or {}, "imports")),
+    }
+
+
+def _validate_imports(imports: dict[str, Any]) -> dict[str, Any]:
+    """Imports an instance offers from its pages. Off unless switched on.
+
+    ``linkedin``: the "Import LinkedIn data" button. The instance must mount
+    the routes it posts to (``<api>/linkedin/owners``, ``<api>/linkedin/imports``);
+    this app ships none, because whose export it is and where it goes are the
+    instance's decisions.
+    """
+    unknown = sorted(set(imports) - {"linkedin"})
+    if unknown:
+        raise ConfigError(f"imports: unknown import(s) {', '.join(unknown)}")
+    linkedin = _mapping(imports.get("linkedin") or {}, "imports.linkedin")
+    return {
+        "linkedin": {
+            "enabled": bool(linkedin.get("enabled", False)),
+            "label": _text(
+                linkedin.get("label") or "Import LinkedIn data",
+                "imports.linkedin.label",
+            ),
+        }
     }
 
 
@@ -650,6 +675,7 @@ def public_config(
         # The IRI and label name the graph on the Sources section. Where its TTL
         # sits on disk is the server's business.
         "knowledge_graph": {"iri": graph["iri"], "label": graph["label"]},
+        "imports": config["imports"],
     }
 
 

@@ -2358,3 +2358,131 @@ body.is-ontology-view main > .ontology-page {
     width: 152px;
   }
 }
+
+/* The tabs of a search, with the list/network toggle in their top right corner
+   (ResultsPage.js tabsHtml). The bar carries the rule the tabs used to. */
+.tabbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 14px;
+}
+
+.tabbar .tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+  border-bottom: 0;
+  margin-bottom: 0;
+}
+
+.view-toggle {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  gap: 2px;
+  margin-bottom: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.view-toggle-option {
+  padding: 3px 12px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.view-toggle-option:hover {
+  color: var(--ink);
+}
+
+.view-toggle-option[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--mark-text);
+}
+
+.view-toggle-option.is-loading::after {
+  content: "…";
+  margin-left: 2px;
+}
+
+/* "N connections" under a result's description: opens the Connections tab. */
+.result-connections {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+
+.result-connections a {
+  color: var(--result-link, var(--accent));
+}
+
+.home-import {
+  margin: 18px 0 0;
+}
+
+.topbar-end .linkedin-import-open {
+  margin-left: 8px;
+  padding: var(--topbar-control-padding, 6px 14px);
+  font-size: 13px;
+}
+
+/* The import dialog reuses the SPARQL modal's frame. */
+.linkedin-import-panel {
+  width: min(560px, 100%);
+}
+
+.linkedin-import-help {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.linkedin-import-owner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 12px 0;
+  font-size: 14px;
+}
+
+.linkedin-import-owner[hidden] {
+  display: none;
+}
+
+.linkedin-import-owner select {
+  font: inherit;
+  padding: 6px 8px;
+}
+
+.linkedin-import-pickers {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.linkedin-import-bar {
+  height: 6px;
+  background: var(--empty-surface, #f4f4f4);
+  margin: 8px 0 14px;
+}
+
+.linkedin-import-bar span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+.linkedin-import-summary {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.linkedin-import-progress[hidden],
+.linkedin-import-form[hidden],
+.linkedin-import-progress .actions[hidden] {
+  display: none;
+}

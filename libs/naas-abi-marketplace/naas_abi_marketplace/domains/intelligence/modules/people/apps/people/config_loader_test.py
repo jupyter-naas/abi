@@ -106,9 +106,14 @@ class TestPages:
         path = write_config(tmp_path, mutate)
         public = public_config(path, workspace_id="ws-test")
         assert public["app"]["default_page"] == "home"
-        assert public_config(path, workspace_id="ws-other")["app"]["default_page"] == "results"
+        assert (
+            public_config(path, workspace_id="ws-other")["app"]["default_page"]
+            == "results"
+        )
 
-    def test_default_results_view_must_be_people_or_network(self, tmp_path: Path) -> None:
+    def test_default_results_view_must_be_people_or_network(
+        self, tmp_path: Path
+    ) -> None:
         def mutate(raw: dict[str, Any]) -> None:
             raw["app"]["default_results_view"] = "map"
 
@@ -341,3 +346,50 @@ class TestPublicConfig:
         search = public_config()["search"]
         assert search["min_autocomplete_chars"] >= 1
         assert search["facet_label"]
+
+
+class TestLinkedInConnections:
+    def test_the_connections_table_defaults_when_an_instance_leaves_it_out(
+        self, tmp_path: Path
+    ) -> None:
+        config = load_config(
+            write_config(
+                tmp_path, lambda raw: raw["data"]["tables"].pop("connections", None)
+            )
+        )
+        assert config["data"]["tables"]["connections"] == "people_connections"
+
+    def test_supplementary_graphs_are_validated(self, tmp_path: Path) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["data"].setdefault("graph", {})["supplementary_suffixes"] = [
+                "/linkedin"
+            ]
+
+        config = load_config(write_config(tmp_path, mutate))
+        assert config["data"]["graph"]["supplementary_suffixes"] == ["/linkedin"]
+
+        def bad(raw: dict[str, Any]) -> None:
+            raw["data"].setdefault("graph", {})["supplementary_suffixes"] = "/linkedin"
+
+        fails(tmp_path, bad, "data.graph.supplementary_suffixes must be a list")
+
+    def test_the_linkedin_import_is_off_unless_switched_on(
+        self, tmp_path: Path
+    ) -> None:
+        assert public_config()["imports"]["linkedin"]["enabled"] is False
+
+        def mutate(raw: dict[str, Any]) -> None:
+            raw["imports"] = {"linkedin": {"enabled": True}}
+
+        public = public_config(write_config(tmp_path, mutate))
+        assert public["imports"]["linkedin"] == {
+            "enabled": True,
+            "label": "Import LinkedIn data",
+        }
+
+    def test_an_unknown_import_is_named(self, tmp_path: Path) -> None:
+        fails(
+            tmp_path,
+            lambda raw: raw.__setitem__("imports", {"crm": {"enabled": True}}),
+            "imports: unknown import(s) crm",
+        )

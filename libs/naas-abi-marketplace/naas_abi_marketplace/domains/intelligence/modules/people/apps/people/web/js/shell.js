@@ -5,6 +5,7 @@
  * hash into a page, and where to put what that page returns.
  */
 
+import { linkedInImportButton, linkedInImportEnabled } from "../components/LinkedInImport.js";
 import { searchBoxHtml, wireSearch } from "../components/SearchBox.js";
 import { applyBrand, applyTheme, loadAppConfig, logoHtml } from "../lib/config.js";
 import { escapeHtml } from "../lib/dom.js";
@@ -49,8 +50,14 @@ function topbarEndSlot() {
   return slot;
 }
 
+// The "Import LinkedIn data" button, beside whatever the page puts in the topbar.
+let importButton = null;
+
 function renderTopbar(state) {
-  topbarEndSlot().replaceChildren(...(state.topbarEnd ? [state.topbarEnd] : []));
+  if (!importButton && linkedInImportEnabled(config)) importButton = linkedInImportButton(config);
+  topbarEndSlot().replaceChildren(
+    ...[state.topbarEnd, importButton].filter(Boolean),
+  );
   if (!state.showTopbarSearch) {
     topbar.hidden = true;
     return;

@@ -173,10 +173,34 @@ The graph shows one person. To look at someone else, open their profile.
 
 ## Search views
 
-Results open on **People** (the ranked list, paged), then **Network**, which the
-People view starts loading in the background (a spinner on the tab until it is ready).
+Results have two tabs, **People** (the ranked list, paged) and **Connections**,
+and a **List / Network** toggle in the top right corner of the tabs that draws
+the current tab either way. The toggle and the tabs keep the search, the facet
+and the person (`#/search?q=&facet=&view=&display=&person=`, read by
+`web/lib/results-state.js`). An old `view=network` link opens the People tab as
+a network. The People list starts loading its network in the background (a
+spinner on the toggle until it is ready).
 
-The Network view is the same graph page focused on the search instead of a
+Each result shows how many people it is connected to, below its description,
+as a link to the Connections tab for that person. The Connections tab is empty
+until a person is the input of the search: the `person` in the URL, or the one
+result whose name is the query. It then lists their connections (name,
+organization, position, connection date), or draws only that person and their
+connections. Counts, list and network read the `connections` dataset table
+only (`scripts/connections_payload.py`, `GET <prefix>/people/<slug>/connections`
+and `/connections/network`); no request reads a graph.
+
+The connections table holds both directions of every act of connection
+(`find_connections`), and is united across datasets rather than taken from the
+one that lists the person. Graphs under `data.graph.supplementary_suffixes`
+(a user's LinkedIn graph) are read after the others, so a person they share
+with a people graph is listed from the people graph.
+
+An instance that mounts its own `linkedin/owners` and `linkedin/imports` routes
+can switch on `imports.linkedin` for an "Import LinkedIn data" button on the
+home page and the topbar (`web/components/LinkedInImport.js`).
+
+The People network is the same graph page focused on the search instead of a
 person (`ontologies/modules/SearchOntology.ttl`): the query at the centre, one
 search match per place its words were found, and what matched - an act of
 working by its organization, client, job title or mission, an act of studying,
@@ -188,7 +212,7 @@ hops out (query, match, act, person), and links each person to their profile.
 Each person leads on to their current organization (with its logo), and the
 rings are cut into one sector per organization (`graph.ring_cluster_class`), so
 who the search found at each organization is drawn together. People are ranked
-by search hits, highest first, on both tabs.
+by search hits, highest first, in the list and the network.
 
 `data.graph.file` may list several TTL files; they are read as one graph.
 
