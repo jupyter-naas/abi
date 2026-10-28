@@ -1052,10 +1052,13 @@ an id sets it, `""` removes it, None keeps it), checked like a create: the new c
 refused as above, the caller derives only from what they hold, and the sub-policy's
 effective grant under the new chain is checked at each scope it is written for, attached or
 invited at. Removing a parent widens the sub-policy to its own document, which is checked
-the same way. A change of a policy's parent, or of its document that may allow something
-the old one did not (`IAMService._widens`, its Allows compared as grants are), also checks,
-for each policy below it, its effective grant under the new chain at its own scopes:
-widening a parent widens them. Narrowing a parent is never refused for what is below it.
+the same way. A change of a policy's parent, or of its document that may let through
+something the old one did not (`IAMService._widens`: an Allow reaching beyond the old
+Allows, or an old Deny reaching beyond the new Denies, a Deny lifted or narrowed; both
+compared as grants are, unproven counting as a widening), also checks, for each policy
+below it, its effective grant under the new chain at its own scopes: widening a parent,
+its Denies included, widens them. Narrowing a parent (fewer Allows, more Denies) is never
+refused for what is below it.
 A change that gives the policy, or one below it, a chain that denies beyond `${scope}:` it
 did not before is that policy attached anew wherever it is attached or invited at a scope:
 refused (`PermissionDeniedError`) to whoever may not attach it unscoped there, as attaching
@@ -1103,7 +1106,7 @@ through the SDK, the CLI and Nexus alike.
 | Operation | The grant | Scopes |
 |---|---|---|
 | `create_policy` | the document, within its chain's for a sub-policy | its owner's (an org's or a workspace's); a platform policy as written unscoped and with `${scope}` as `abi:*:*` |
-| `update_policy` with a new document or a new parent | the new document within the new chain's; and, when the parent changes or the new document may allow what the old one did not (`IAMService._widens`), each policy below it within its new chain's | as `create_policy`, plus every scope it is attached or invited at; for each policy below, its own |
+| `update_policy` with a new document or a new parent | the new document within the new chain's; and, when the parent changes or the new document may let through what the old one did not, an Allow added or widened or a Deny lifted or narrowed (`IAMService._widens`), each policy below it within its new chain's | as `create_policy`, plus every scope it is attached or invited at; for each policy below, its own |
 | `attach_policy` (user, group, service account) | the policy | the attachment's |
 | `add_group_member` | every attachment of the group, but IAM's companions of its roles, which follow them: the feature policies and the unscoped `builtin.platform.*` its role sync wants for the group's roles (`IAMService._companions`). A feature or platform policy attached to the group by hand is checked like any other | each attachment's |
 | `create_pending_grant` | the policy | the invitation's |

@@ -1812,33 +1812,43 @@ class IAMService(IIAMService, PolicySource):
                 self._require_unscoped_attach(held.id, principal_id)
 
     def _widens(self, before: PolicyDocument, after: PolicyDocument) -> bool:
-        """Whether ``after`` may allow something ``before`` does not: only then
-        can a change of a parent widen what the policies below it grant. Its
-        Allows are compared as grants are, written unscoped and at any scope;
-        unproven is a widening."""
-        held = grants.Holdings(
-            [
-                grants.Side(
-                    tuple(
-                        grants.held_statement(
-                            statement, scope, principal_id="-", user_id=None
-                        )
-                        for statement in before.statements
-                        if statement.effect == "Allow"
-                    ),
-                    "",
-                )
-                for scope in (None, _ANY_SCOPE)
-            ],
-            self._registry,
-        )
-        return any(
-            grants.Holdings([side], self._registry).first_uncovered(
-                after.statements, scope
+        """Whether ``after`` may let through something ``before`` does not: only
+        then can a change of a parent widen what the policies below it grant.
+        It does when one of its Allows reaches beyond ``before``'s Allows, or when
+        one of ``before``'s Denies reaches beyond ``after``'s Denies (a Deny lifted
+        or narrowed lets through what it refused). Both are compared as grants
+        are, written unscoped and at any scope; unproven is a widening."""
+
+        def allowed(document: PolicyDocument, effect: str) -> list[Statement]:
+            return [
+                replace(statement, effect="Allow")
+                for statement in document.statements
+                if statement.effect == effect
+            ]
+
+        return self._beyond(
+            allowed(before, "Allow"), allowed(after, "Allow")
+        ) or self._beyond(allowed(after, "Deny"), allowed(before, "Deny"))
+
+    def _beyond(self, held: list[Statement], given: list[Statement]) -> bool:
+        """Whether ``given`` may reach what no statement of ``held`` does, unscoped
+        or at any scope; unproven is reaching beyond."""
+        if not given:
+            return False
+        for scope in (None, _ANY_SCOPE):
+            side = grants.Side(
+                tuple(
+                    grants.held_statement(s, scope, principal_id="-", user_id=None)
+                    for s in held
+                ),
+                "",
             )
-            is not None
-            for side, scope in zip(held.sides, (None, _ANY_SCOPE))
-        )
+            if (
+                grants.Holdings([side], self._registry).first_uncovered(given, scope)
+                is not None
+            ):
+                return True
+        return False
 
     def _denies_beyond_scope(self, policy: Policy, *, fresh: bool = True) -> bool:
         """Whether a Deny of the policy or of its chain names anything outside

@@ -490,6 +490,69 @@ def run_a_refusal_names_only_what_the_caller_may_see(iam: IAMService, as_user: A
     )
 
 
+def run_lifting_a_parent_s_deny_is_checked_below_it(iam: IAMService, as_user: AsUser):
+    """A Deny of a parent refuses through its sub-policies: lifting or narrowing
+    it widens them, so it is checked where they are attached. An admin of the
+    org's own level holds nothing in its workspaces."""
+    t = team(iam)
+    query = "triple_store:Query"
+    graphs = "${scope}:triple_store:graph/*"
+    secret = f"abi:{ORG}:ws-1:triple_store:graph/secret"
+
+    def guarded(denied: str) -> dict:
+        return document(
+            statement("Allow", [query], [graphs]),
+            statement("Deny", [query], [f"${{scope}}:triple_store:graph/{denied}"]),
+        )
+
+    with as_service_account("engine"):
+        parent = iam.create_policy("org graphs", guarded("secret"), scope=ORG_SCOPE)
+        child = iam.create_policy(
+            "ws graphs",
+            document(statement("Allow", [query], [graphs])),
+            scope=WS1,
+            parent=parent.id,
+        )
+        bob = iam.ensure_user("https://idp.example", "bob")
+        iam.attach_policy(child.id, bob.id, WS1)
+        eve = iam.ensure_user("https://idp.example", "eve")
+        iam.attach_policy(roles.ADMIN, eve.id, ORG_SCOPE)
+    with as_user(bob) as session:
+        assert not session.authorize(query, secret).allowed
+    with as_user(eve) as session:
+        assert not session.authorize(query, secret).allowed
+        lifted = document(statement("Allow", [query], [graphs]))
+        with pytest.raises(GrantNotHeldError) as refused:
+            session.update_policy(parent.id, expected_revision=1, document=lifted)
+        assert child.id in str(refused.value) and WS1 in str(refused.value)
+        # Narrowed to another graph, the Deny lets the secret through too.
+        with pytest.raises(GrantNotHeldError, match=child.id):
+            session.update_policy(
+                parent.id, expected_revision=1, document=guarded("secret-old")
+            )
+        # A Deny added narrows: never refused for what is below.
+        session.update_policy(
+            parent.id,
+            expected_revision=1,
+            document=document(
+                statement("Allow", [query], [graphs]),
+                statement("Deny", [query], ["${scope}:triple_store:graph/secret"]),
+                statement("Deny", [query], ["${scope}:triple_store:graph/hr"]),
+            ),
+        )
+    with as_user(bob) as session:
+        assert not session.authorize(query, secret).allowed
+    # Whoever holds the data there (the platform admin) lifts it.
+    with as_user(t.root) as session:
+        session.update_policy(
+            parent.id,
+            expected_revision=2,
+            document=document(statement("Allow", [query], [graphs])),
+        )
+    with as_user(bob) as session:
+        assert session.authorize(query, secret).allowed
+
+
 SCENARIOS = (
     run_a_sub_policy_grants_within_its_parent,
     run_a_deny_of_the_parent_refuses_through_the_sub_policy,
@@ -503,4 +566,5 @@ SCENARIOS = (
     run_widening_a_parent_is_checked_below_it,
     run_re_parenting_under_a_deny_beyond_scope_is_attaching_it,
     run_a_refusal_names_only_what_the_caller_may_see,
+    run_lifting_a_parent_s_deny_is_checked_below_it,
 )
