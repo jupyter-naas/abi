@@ -23,6 +23,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import (
     realtime,
     search,
     settings,
+    tasks,
     workflows,
     workspaces,
 )
@@ -31,7 +32,7 @@ from naas_abi_core.services.iam.catalog import ActionCatalog, ResourceType
 
 SERVICE = "nexus"
 # Raise when the catalog changes; IAM keeps the highest version it has seen.
-VERSION = 6
+VERSION = 7
 
 _MODULES = (
     organizations,
@@ -46,6 +47,7 @@ _MODULES = (
     knowledge,
     apps,
     workflows,
+    tasks,
     code,
     settings,
     platform,

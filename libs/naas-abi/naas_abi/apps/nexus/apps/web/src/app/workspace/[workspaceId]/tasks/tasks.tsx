@@ -578,7 +578,7 @@ export default function TasksPage() {
           onDelete={() => handleDelete(openTask)}
           onClose={() => navigate({ task: null })}
           currentUserId={currentUserId}
-          canModerate={settings.can_edit}
+          canModerate={settings.can_moderate}
           confirmRemoveComment={(comment) =>
             confirm({
               title: 'Remove comment?',

@@ -30,7 +30,8 @@ KNOWN_FEATURE_KEYS: tuple[str, ...] = (
     # Business sheets (Forgejo HTML workbook + XLSX export). Same default as slides.
     "sheets",
     # Workspace tasks (weekly iterations, board view). Owners and admins only by
-    # default; members and viewers get it through an org or workspace override.
+    # default; members and viewers get it through the org overlay or a policy
+    # granting it (IAM decides: ``services/iam/catalog/tasks.py``).
     "tasks",
 )
 

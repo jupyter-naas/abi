@@ -126,6 +126,7 @@ the caller's own id. One module per router family:
 | `files.py`, `datasets.py`, `office.py` | `file` (drive + path), `my_file`, `user_storage`, `root_storage`; `dataset`; `project` (slides, documents, sheets) |
 | `knowledge.py`, `search.py` | `view`, `graph_cache`, `ontology`, `icon`, `layout`, `layer`, `feed_layer`, `basemap`, `maps_catalog`, `maps_access`; `search`, `topic`, `search_scope` |
 | `code.py`, `settings.py`, `platform.py`, `realtime.py` | `code`, `code_settings`; `secret`, `provider_model`, `abi_server`; `analytics`, `system`; `presence`, `speech` |
+| `tasks.py` | `task` (`task/<id>`, `task/-` the board), `task_iteration`, `task_settings` (singleton); every action behind the `tasks` feature |
 
 The kernel services have catalogs of their own (core's `iam_catalog.py` of each service); a route that
 only forwards to the kernel declares the kernel action. Choices that differ from "viewers read, members
@@ -277,6 +278,19 @@ with them (core `services/iam/AGENTS.md`, "Sets"). Nexus:
   who held it). `PUT /organizations/{org}/workspaces/{ws}/features` is gone; Org settings › Workspaces and
   workspace settings › General link to the modules × workspaces page. The UI's flags are IAM's, so a policy
   granting a feature shows in the UI as it is enforced.
+- **Workspace tasks are IAM's.** Decision: `/api/tasks` and the Tasks agent's tools ask the `nexus` actions of
+  `catalog/tasks.py` (feature `tasks`) for the user, the routes with `guard`, the tools with the same names
+  (`naas_abi/tools/tasks_tools.py`: opening a call is `ListTasks`, then each tool's action). Levels: reading
+  (board, iterations, comments, history, feed, settings) is a viewer's, every change a member's, the settings
+  (`UpdateTaskSettings`) and removing someone else's comment (`ModerateTaskComments`) an admin's; a comment's
+  author removes their own with `DeleteTaskComment`, the domain service checking the authorship.
+  Consequences: the defaults give `tasks` to owners and admins; members and viewers get it from the org
+  overlay or a policy granting `UseFeature` on `feature/tasks`, and a workspace's set without `tasks` refuses
+  everyone but the platform admin. The settings answer `can_edit` and `can_moderate` from IAM for the UI. Tasks
+  have no placement (no kernel resource) and keep nothing in IAM: their rows go with the workspace (foreign
+  keys `ON DELETE CASCADE`, `services/tasks/workspace_deletion_test.py`). SQLite (`abi dev`) does not enforce
+  foreign keys, so there they stay behind, like every workspace table's rows, unreachable once the workspace's
+  scope is dropped.
 - **Known limits.** Under the default feature baseline members and viewers get 403 on the graph,
   ontology, search and settings sections (what the flags said, now enforced). `read_all` shares the graphs
   that exist when applied (`services/graph/AGENTS.md`). Per-object sharing beyond personal resources is an

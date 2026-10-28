@@ -21,7 +21,8 @@ TASKS_CODE_MAP = f"""API (hexagonal domain, mounted at /api/tasks):
 - {_SERVICE}/tasks__schema.py: Task, Iteration, Comment, ActivityEntry, TasksSettings, event kinds (ACTIVITY_KINDS), limits.
 - {_SERVICE}/service.py: TasksService (iterations, create/update/archive/delete, carry-over, comments and replies, activity, the sidebar feed, settings validation, GitHub issue URLs).
 - {_SERVICE}/port.py, {_SERVICE}/adapters/secondary/postgres.py, {_SERVICE}/adapters/secondary/memory.py: the store port and its adapters.
-- {_SERVICE}/adapters/primary/tasks__primary_adapter__FastAPI.py: the routes and their access rules (workspace access, `tasks` feature, owner/admin for settings).
+- {_API}/app/services/iam/catalog/tasks.py: the IAM actions of tasks and their levels.
+- {_SERVICE}/adapters/primary/tasks__primary_adapter__FastAPI.py: the routes, each declaring the IAM action it needs (the `tasks` feature first).
 - {_API}/migrations/0059_add_tasks.sql, 0060_task_settings.sql, 0061_task_events.sql, 0062_task_github_issue.sql: the tables.
 Web:
 - {_PAGE}/tasks.tsx: the page (scope tabs, Board / Table / Gallery / Calendar layouts, New task form, drawer).
@@ -36,11 +37,11 @@ Agent: naas_abi/agents/TasksAgent.py and naas_abi/tools/tasks_tools.py."""
 TASKS_CAPABILITIES = """- Tasks live in stages (Inbox first, Done last, custom stages between) and in weekly iterations: the Current, Last and Next iteration tabs, plus Inbox (requests to triage) and Backlog (triaged, no iteration).
 - Each task has a title, Markdown content, stage, assignees (workspace members), priority, labels, due date, iteration and an optional GitHub issue URL. Its workspace and created / updated by and at are set by the server.
 - Layouts: Board (stage columns, drag a card to change its stage, drop it on a tab to move it), Table, Gallery, Calendar; saved views per user with search, filters, sort and grouping.
-- Comments with one level of replies; authors remove their own comments, owners and admins remove anyone's.
+- Comments with one level of replies; authors remove their own comments, owners and admins (by default) remove anyone's.
 - Every change is recorded: the task's Activity tab and the sidebar activity feed (newest first, configurable in settings).
 - Archive (recoverable) or delete (for everyone). "Move unfinished to next" carries every task that is not Done to the next iteration.
-- Settings (owners and admins): iteration length and start day, stages, priorities, default stage of new tasks, suggested labels, activity feed (on/off, event kinds, length).
-- Feature flag `tasks`: owners and admins by default; an organization or workspace override can open it to members."""
+- Settings (owners and admins by default): iteration length and start day, stages, priorities, default stage of new tasks, suggested labels, activity feed (on/off, event kinds, length).
+- Feature `tasks`, decided by IAM: owners and admins by default; the organization's role defaults or a policy granting it open it to members and viewers (viewers read only). A workspace whose feature set leaves it out has no Tasks."""
 
 _HANDOFF_PHRASES = (
     "create a task",

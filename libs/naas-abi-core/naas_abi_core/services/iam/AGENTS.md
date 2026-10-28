@@ -643,7 +643,7 @@ operations map):
 | `iam` | `attachment` (path, at its scope), `policy` and `group` (opaque, at their owner scope), `set` (opaque, read at its scope, written at the level above: "Sets"); `principal`, `key` (personal for personal keys), `manifest`, `placement`, `scope`, `catalog`, `audience` (platform) |
 | `module` | `agent`, `app`, `workflow`, `pipeline` (path, module scopes): see "Module scopes" |
 | `<module service>` | a module's own catalog (`acme_people` for `acme.people`), every type a module scope: see "Module scopes" |
-| `nexus` | registered by Nexus at start, not by core: see `libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam_admin/AGENTS.md` |
+| `nexus` | registered by Nexus at start, not by core: its types and actions are in `libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam/AGENTS.md` ("The `nexus` catalog"), e.g. `task`, `task_iteration` (opaque) and `task_settings` (singleton) of workspace tasks |
 
 Rules that cut across services and are easy to get wrong:
 
@@ -759,7 +759,12 @@ attachment per scope.
   most specific policy that exists, attached at the same scope (detached with the
   role); org-level roles bring none. No role reaches `UseFeature` through its scope
   pattern, and no one grants a feature they do not hold (see "Grant only what you hold"),
-  so a custom policy cannot bring back one the deployment turned off.
+  so a custom policy cannot bring back one the deployment turned off. A Nexus action of
+  a flagged section needs `UseFeature` on its feature first, then its own Allow, which
+  the role holds by level: workspace tasks (`nexus:ListTasks` … `UpdateTaskSettings`)
+  need `tasks`, which the defaults give owners and admins only; with it, a viewer reads
+  them, a member writes them, and changing the settings or removing someone else's
+  comment (`UpdateTaskSettings`, `ModerateTaskComments`) are `admin`.
 - **First-party accounts.** `builtin.engine`, `builtin.api` and `builtin.job` are
   enumerated: one statement per service, each with a `sid` saying what needs it. The
   engine holds IAM's administration and the kernel services; `api` holds `nexus:*`, the

@@ -83,8 +83,10 @@ export type TasksSettings = {
   feed_limit: number;
   updated_by: string | null;
   updated_at: string | null;
-  /** Whether the caller may save changes (owners and admins). */
+  /** Whether the caller may save changes (IAM's `UpdateTaskSettings`: owners and admins by default). */
   can_edit: boolean;
+  /** Whether the caller may remove someone else's comment (IAM's `ModerateTaskComments`). */
+  can_moderate: boolean;
 };
 
 /** What a workspace without saved settings uses (mirrors the API defaults). */
@@ -114,6 +116,7 @@ export const DEFAULT_TASKS_SETTINGS: TasksSettings = {
   updated_by: null,
   updated_at: null,
   can_edit: false,
+  can_moderate: false,
 };
 
 /** Display label of a key; unknown keys (removed since) show as they are. */
@@ -280,6 +283,25 @@ export function iterationContaining(iterations: TaskIteration[], day: string): T
 }
 
 /**
+ * The iterations with today's, opened with `ensure` when missing. Opening one
+ * is a write: for a caller who may only read (a refusal), the board shows the
+ * iterations that exist.
+ */
+export async function withCurrentIteration(
+  iterations: TaskIteration[],
+  today: string,
+  ensure: (day: string) => Promise<TaskIteration>,
+): Promise<TaskIteration[]> {
+  if (iterationContaining(iterations, today)) return iterations;
+  try {
+    return [...iterations, await ensure(today)];
+  } catch (e) {
+    if ((e as { status?: number }).status === 403) return iterations;
+    throw e;
+  }
+}
+
+/**
  * A day inside an iteration scope, given the current iteration: what to ask
  * the API for when the scope's iteration does not exist yet. Null for Inbox
  * and Backlog.
@@ -414,7 +436,8 @@ async function call<T>(url: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { detail?: unknown };
     const detail = typeof body.detail === 'string' ? body.detail : `Request failed (${res.status})`;
-    throw new Error(detail);
+    // The status goes with the words: a refusal (403) is not a failure everywhere.
+    throw Object.assign(new Error(detail), { status: res.status });
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
@@ -508,7 +531,7 @@ export const tasksApi = {
       `/api/tasks/${encodeURIComponent(taskId)}/comments?${q({ workspace_id: workspaceId })}`,
       { method: 'POST', body: JSON.stringify({ body, parent_id: parentId ?? null }) },
     ),
-  /** Removes the comment and its replies (its author, or an owner or admin). */
+  /** Removes the comment and its replies (its author, or who may moderate: `can_moderate`). */
   deleteComment: (workspaceId: string, taskId: string, commentId: string) =>
     call<void>(
       `/api/tasks/${encodeURIComponent(taskId)}/comments/${encodeURIComponent(commentId)}?${q({ workspace_id: workspaceId })}`,

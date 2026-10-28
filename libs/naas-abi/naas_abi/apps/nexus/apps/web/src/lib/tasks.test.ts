@@ -23,6 +23,7 @@ import {
   taskInScope,
   toIsoDate,
   weekStart,
+  withCurrentIteration,
   type TaskIteration,
   type Task,
 } from './tasks';
@@ -236,5 +237,34 @@ describe('matchesAssignee', () => {
     expect(matchesAssignee(nobody, ['u-2'])).toBe(false);
     expect(matchesAssignee(nobody, [UNASSIGNED])).toBe(true);
     expect(matchesAssignee(mine, [UNASSIGNED])).toBe(false);
+  });
+});
+
+describe('withCurrentIteration', () => {
+  const week = (start: string, end: string): TaskIteration =>
+    ({ id: start, start_date: start, end_date: end }) as TaskIteration;
+  const existing = [week('2026-10-12', '2026-10-18')];
+  const refused = (status: number) => () => Promise.reject(Object.assign(new Error('no'), { status }));
+
+  it('keeps the iterations when today has one', async () => {
+    const withToday = [...existing, week('2026-10-19', '2026-10-25')];
+    expect(await withCurrentIteration(withToday, '2026-10-22', refused(500))).toBe(withToday);
+  });
+
+  it("opens today's iteration when it is missing", async () => {
+    const opened = week('2026-10-19', '2026-10-25');
+    const all = await withCurrentIteration(existing, '2026-10-22', async (day) => {
+      expect(day).toBe('2026-10-22');
+      return opened;
+    });
+    expect(all).toEqual([...existing, opened]);
+  });
+
+  it('shows what exists to a caller who may only read', async () => {
+    expect(await withCurrentIteration(existing, '2026-10-22', refused(403))).toEqual(existing);
+  });
+
+  it('lets any other failure through', async () => {
+    await expect(withCurrentIteration(existing, '2026-10-22', refused(500))).rejects.toThrow('no');
   });
 });
