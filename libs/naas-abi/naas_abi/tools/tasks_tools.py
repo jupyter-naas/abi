@@ -1,9 +1,10 @@
 """TasksAgent tools for Nexus Tasks (workspace tasks in weekly iterations).
 
 Every tool goes through the same ``TasksService`` as ``/api/tasks`` and the
-same access rules: workspace access, then the ``tasks`` feature for the
-caller's role; settings changes and removing someone else's comment also take
-the owner or admin role. The service runs on the tool's own DB session (tools
+same IAM actions on the workspace's tasks, each needing the ``tasks`` feature
+(which a policy grants, never a role): reading is ``ListTasks``, changing
+``UpdateTasks``, and the settings and removing someone else's comment
+``ManageTasks``. The service runs on the tool's own DB session (tools
 run on another event loop than the API, so they must not use its pool).
 
 The task open in the Tasks drawer (``?task=<id>``) arrives as the open feature
@@ -26,7 +27,7 @@ from naas_abi.agents.feature.runtime import (
     guarded,
     jsonable,
     matches,
-    require_member,
+    require_action,
     run_db,
     tool_context,
 )
@@ -46,7 +47,6 @@ TASK_WRITE_TOOLS = (
 )
 SCOPES = ("current", "last", "next", "inbox", "backlog")
 _FEATURE = "Tasks"
-_SETTINGS_ROLES = frozenset({"owner", "admin"})
 _MAX_LIST = 200
 _MAX_CONTENT = 4000
 
@@ -58,7 +58,8 @@ class TasksCall:
     service: Any
     workspace_id: str
     user_id: str
-    role: str
+    # ``ManageTasks``: the settings and others' comments.
+    may_manage: bool
     members: list[Any]
     today: date
 
@@ -83,11 +84,9 @@ def _shared_session(db: Any) -> Callable[[], Any]:
 
 
 async def _open_call(
-    db: Any, user_id: str, workspace_id: str
+    db: Any, user_id: str, workspace_id: str, action: str
 ) -> TasksCall | dict[str, str]:
-    from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
-        caller_feature_flags,
-    )
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
     from naas_abi.apps.nexus.apps.api.app.services.tasks.adapters.secondary.postgres import (
         PostgresTasksMemberDirectory,
         PostgresTasksStore,
@@ -97,12 +96,9 @@ async def _open_call(
         WorkspaceSecondaryAdapterPostgres,
     )
 
-    role = await require_member(db, user_id, workspace_id)
-    if isinstance(role, dict):
-        return role
-    flags = await caller_feature_flags(db, workspace_id, role)
-    if not flags.get("tasks", False):
-        return {"error": "Tasks are not enabled for your role in this workspace."}
+    denied = await require_action(user_id, workspace_id, action)
+    if denied is not None:
+        return denied
     session = _shared_session(db)
     members = await WorkspaceSecondaryAdapterPostgres(db=db).list_workspace_members(
         workspace_id=workspace_id
@@ -113,21 +109,24 @@ async def _open_call(
         ),
         workspace_id=workspace_id,
         user_id=user_id,
-        role=role,
+        may_manage=await AUTHZ.allowed(
+            "ManageTasks", user=user_id, workspace=workspace_id, id="-"
+        ),
         members=members,
         today=date.today(),
     )
 
 
-def _execute(op: Callable[[TasksCall], Awaitable[Any]]) -> Any:
-    """Run ``op`` for this turn's user and workspace, or return why it cannot."""
+def _execute(op: Callable[[TasksCall], Awaitable[Any]], action: str) -> Any:
+    """Run ``op`` for this turn's user and workspace, once IAM allows ``action``
+    there, or return why it cannot."""
     ctx = tool_context()
     if isinstance(ctx, dict):
         return ctx
     user_id, workspace_id = ctx
 
     async def _run(db: Any) -> Any:
-        call = await _open_call(db, user_id, workspace_id)
+        call = await _open_call(db, user_id, workspace_id, action)
         if isinstance(call, dict):
             return call
         return await op(call)
@@ -142,7 +141,7 @@ def _tasks_error(exc: Exception) -> dict[str, str] | None:
     return {"error": str(exc)} if isinstance(exc, TasksError) else None
 
 
-def _call(op: Callable[[TasksCall], Awaitable[Any]]) -> Any:
+def _call(op: Callable[[TasksCall], Awaitable[Any]], action: str = "ListTasks") -> Any:
     async def _safe(call: TasksCall) -> Any:
         try:
             return await op(call)
@@ -152,7 +151,7 @@ def _call(op: Callable[[TasksCall], Awaitable[Any]]) -> Any:
                 raise
             return known
 
-    return guarded(_FEATURE, lambda: _execute(_safe))
+    return guarded(_FEATURE, lambda: _execute(_safe, action))
 
 
 # ---------------------------------------------------------------------------
@@ -489,7 +488,7 @@ def tasks_tools() -> list[BaseTool]:
                 )
             }
 
-        return _call(op)
+        return _call(op, "UpdateTasks")
 
     @tool
     def update_task(
@@ -581,7 +580,7 @@ def tasks_tools() -> list[BaseTool]:
                 )
             }
 
-        return _call(op)
+        return _call(op, "UpdateTasks")
 
     @tool
     def archive_task(task: str = "", archived: bool = True) -> Any:
@@ -600,7 +599,7 @@ def tasks_tools() -> list[BaseTool]:
                 )
             }
 
-        return _call(op)
+        return _call(op, "UpdateTasks")
 
     @tool
     def delete_task(task: str = "", confirm: bool = False) -> Any:
@@ -620,7 +619,7 @@ def tasks_tools() -> list[BaseTool]:
             )
             return {"deleted": {"id": found.id, "title": found.title}}
 
-        return _call(op)
+        return _call(op, "UpdateTasks")
 
     @tool
     def add_task_comment(body: str, task: str = "", reply_to: str = "") -> Any:
@@ -644,7 +643,7 @@ def tasks_tools() -> list[BaseTool]:
                 }
             }
 
-        return _call(op)
+        return _call(op, "UpdateTasks")
 
     @tool
     def delete_task_comment(comment_id: str, task: str = "") -> Any:
@@ -658,11 +657,11 @@ def tasks_tools() -> list[BaseTool]:
                 found.id,
                 comment_id.strip(),
                 user_id=call.user_id,
-                can_moderate=call.role in _SETTINGS_ROLES,
+                can_moderate=call.may_manage,
             )
             return {"removed": {"task": found.title, "comment_id": comment_id}}
 
-        return _call(op)
+        return _call(op, "UpdateTasks")
 
     @tool
     def get_tasks_activity(task: str = "", limit: int = 20) -> Any:
@@ -704,7 +703,7 @@ def tasks_tools() -> list[BaseTool]:
                 "to_iteration": f"{result.iteration.start_date} to {result.iteration.end_date}",
             }
 
-        return _call(op)
+        return _call(op, "UpdateTasks")
 
     @tool
     def list_task_members() -> Any:
@@ -734,7 +733,7 @@ def tasks_tools() -> list[BaseTool]:
         async def op(call: TasksCall) -> Any:
             settings = await call.service.get_settings(call.workspace_id)
             out = jsonable(settings)
-            out["can_edit"] = call.role in _SETTINGS_ROLES
+            out["can_edit"] = call.may_manage
             return out
 
         return _call(op)
@@ -758,10 +757,6 @@ def tasks_tools() -> list[BaseTool]:
         feed_events: event kinds shown in the sidebar feed."""
 
         async def op(call: TasksCall) -> Any:
-            if call.role not in _SETTINGS_ROLES:
-                return {
-                    "error": "Only workspace owners and admins can change the tasks settings."
-                }
             raw = {
                 key: value
                 for key, value in {
@@ -784,7 +779,7 @@ def tasks_tools() -> list[BaseTool]:
             )
             return {"saved": jsonable(settings)}
 
-        return _call(op)
+        return _call(op, "ManageTasks")
 
     return [
         list_tasks,

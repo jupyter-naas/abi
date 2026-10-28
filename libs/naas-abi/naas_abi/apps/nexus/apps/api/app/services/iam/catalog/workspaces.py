@@ -15,7 +15,7 @@ ACTIONS = (
     action("GetWorkspaceConfiguration", "admin", "workspace"),
     action("UpdateWorkspace", "admin", "workspace"),
     action("UpdateWorkspaceTheme", "admin", "workspace"),
-    action("DeleteWorkspace", "admin", "workspace"),
+    action("DeleteWorkspace", "admin", "workspace", owner_only=True),
     # ``member`` is declared with the organizations: one type, named at the
     # org's or the workspace's level.
     action("ListWorkspaceMembers", "list", "member"),

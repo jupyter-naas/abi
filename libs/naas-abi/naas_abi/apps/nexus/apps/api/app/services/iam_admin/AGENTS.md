@@ -27,8 +27,8 @@ Nexus adds no role check of its own.
 `/api/iam/admin` (session only, like the rest of `/api/iam/`):
 
 - `GET /access?scope=` the actions the caller may do (platform, or attachments and that level's policies and groups
-  at `scope`; at a scope, what the platform alone administers is false, and at an organization scope
-  `nexus:GetRoleFeatures` / `nexus:UpdateRoleFeatures` say who reads and edits its roles' feature defaults);
+  at `scope`; at a scope, what the platform alone administers is false; no role feature defaults exist to
+  report: no role brings a feature, a policy does);
   `GET /catalogs?scope=`
 - `GET /grantable?scope=` what the caller may grant at `scope` (IAM's `grantable`: per catalog, the actions and
   `${scope}:…` resource patterns they hold there, minus their Denies), for the policy builder; any caller, about
@@ -98,9 +98,7 @@ Nexus adds no role check of its own.
   nothing else of IAM; members and viewers hold none of it. Service accounts and keys, module approvals, the
   simulator, IdP mappings and the audit are the platform's: `access` answers their actions (`_PLATFORM_ONLY`,
   `nexus:ReadSystem`) false at any scope, the platform admin's included, so only the platform's page shows them.
-  The built-in roles' feature defaults are an organization's: `access` reports `nexus:GetRoleFeatures` and
-  `nexus:UpdateRoleFeatures` (as the routes of `/api/organizations/{org}/roles/features` decide them) at an
-  organization scope only, false elsewhere. The Platform Settings sidebar shows Roles & permissions for any
+  The Platform Settings sidebar shows Roles & permissions for any
   platform-level `iam:` action `GET /access` grants, and the tables and System only with `nexus:ReadSystem`:
   a delegated IAM admin without it sees Roles & permissions alone, a stranger a 403; Organization and Workspace
   settings show it for any `iam:` action at their scope.

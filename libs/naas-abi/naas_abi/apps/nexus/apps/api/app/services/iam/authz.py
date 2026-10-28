@@ -12,7 +12,10 @@ IAM and no scope list.
   Never a request field.
 * **Features.** An action of a flagged section needs ``nexus:UseFeature`` on
   the feature first (``catalog.FEATURE_OF``, or ``feature=`` where the feature
-  depends on the resource, as for slides, documents and sheets).
+  depends on the resource, as for slides, documents and sheets). A policy
+  grants it, never a role. A feature outside the deployment's
+  ``enabled_features`` exists nowhere: it is refused to everyone, the platform
+  admin included, before IAM is asked (``feature_exists``).
 * **Denials.** A caller who may not perform the action but sees the workspace
   (or organization) gets 403. One who sees nothing of it gets 403 "no access".
   Another user's personal resource (a conversation) is not found: 404.
@@ -57,6 +60,15 @@ from naas_abi_core.engine.call_context import (
 )
 from naas_abi_core.services.iam import module_scopes
 from starlette.concurrency import run_in_threadpool
+
+
+def feature_exists(key: str) -> bool:
+    """Whether the deployment enables ``key`` (``enabled_features``): a feature
+    it does not is usable by nobody, whatever a policy says."""
+    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import feature_enabled
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+
+    return feature_enabled(live_settings().feature_flags, key)
 
 NEXUS_IDENTITY = "api"
 _T = TypeVar("_T")
@@ -180,6 +192,16 @@ class Authz:
 
     # -- decisions -----------------------------------------------------------
 
+    @staticmethod
+    def _feature_of(action: str, id: str | Sequence[str], feature: str | None) -> str | None:
+        """The feature a decision on ``action`` needs: the section's, or the one
+        ``UseFeature`` itself names."""
+        if feature is not None:
+            return feature
+        if action == "UseFeature" and isinstance(id, str):
+            return id
+        return FEATURE_OF.get(action)
+
     async def _decide(self, ctx: CallContext, action: str, resource: str) -> Decision:
         def run() -> Decision:
             with use_call_context(ctx):
@@ -200,10 +222,14 @@ class Authz:
     ) -> Decision:
         """The decision for ``action`` on its resource; the feature's first."""
         ctx = self.context(user)
+        flag = self._feature_of(action, id, feature)
+        if flag is not None and not feature_exists(flag):
+            return Decision(False, False, "feature_disabled")
         resource = await self.name(action, workspace=workspace, org=org, id=id)
         if resource is None:
             return Decision(False, False, "implicit_deny")
-        flag = feature if feature is not None else FEATURE_OF.get(action)
+        if action == "UseFeature":
+            return await self._decide(ctx, "nexus:UseFeature", resource)
         if flag is not None and workspace is not None:
             feature_resource = await self.name("feature", workspace=workspace, org=org, id=flag)
             assert feature_resource is not None
@@ -225,10 +251,10 @@ class Authz:
         perform ``action``: two ``filter`` calls over all of them (the feature
         switch, then the action), in one worker thread."""
         ctx = self.context(user)
-        flag = feature if feature is not None else FEATURE_OF.get(action)
+        flag = self._feature_of(action, id, feature)
         type_name = TYPE_OF[action]
         pairs = list(workspaces)
-        if not pairs:
+        if not pairs or (flag is not None and not feature_exists(flag)):
             return False
 
         def run() -> bool:
@@ -265,6 +291,8 @@ class Authz:
         ctx = self.context(user)
         flag = FEATURE_OF.get(action)
         if flag is not None:
+            if not feature_exists(flag):
+                return set()
             switch = nexus_resource("feature", org=org, workspace=workspace, id=flag)
             if not (await self._decide(ctx, "nexus:UseFeature", switch)).allowed:
                 return set()
@@ -389,7 +417,10 @@ class Authz:
         ctx = self.context(user)
         if feature is not None:
             switch = nexus_resource("feature", org=org, workspace=workspace, id=feature)
-            if not (await self._decide(ctx, "nexus:UseFeature", switch)).allowed:
+            if (
+                not feature_exists(feature)
+                or not (await self._decide(ctx, "nexus:UseFeature", switch)).allowed
+            ):
                 return Decision(False, False, "feature_disabled")
         decision = await self._decide(ctx, scope.action(action), scope.resource(org, workspace))
         if (
@@ -506,6 +537,8 @@ class Authz:
         """The first of ``workspaces`` (``(org, workspace)`` pairs) where the user
         may use ``scope`` and it is not turned off, else None."""
         ctx = self.context(user)
+        if feature is not None and not feature_exists(feature):
+            return None
 
         def allows(org: str, workspace: str) -> bool:
             iam = runtime.iam()
@@ -542,6 +575,7 @@ filter_scopes = AUTHZ.filter_scopes
 
 __all__ = [
     "AUTHZ",
+    "feature_exists",
     "ModuleScope",
     "NO_ORG",
     "TYPES_BY_NAME",

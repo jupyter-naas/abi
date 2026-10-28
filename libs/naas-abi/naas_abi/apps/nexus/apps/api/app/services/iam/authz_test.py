@@ -71,8 +71,6 @@ async def test_roles_are_cumulative_by_the_level_of_the_action(world) -> None:
             "RemoveOrganizationDomain",
             "GetBilling",
             "UpdateBilling",
-            "GetRoleFeatures",
-            "UpdateRoleFeatures",
         }:
             continue  # org- and platform-level: checked below
         resource_id = "x" if kind.id == "opaque" else ("a", "b") if kind.id == "path" else ()

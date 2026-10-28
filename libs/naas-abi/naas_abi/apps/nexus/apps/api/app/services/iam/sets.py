@@ -9,7 +9,7 @@ IAM keeps the sets and bounds every user's decision with them. Nexus
   platform admin included);
 * records the set of a workspace it creates, decided before the workspace
   exists (``plan_workspace_set``, then ``record_workspace_set``): its org's,
-  narrowed by the features and the catalog seed chosen on the create form;
+  narrowed by the catalog seed chosen on the create form;
 * moves the per-workspace feature overrides of earlier versions into IAM once
   (``migrate_feature_overrides``).
 
@@ -131,8 +131,8 @@ async def user_feature_flags(
     user: Any, workspaces: Sequence[tuple[str | None, str]], enabled: Collection[str]
 ) -> dict[str, dict[str, bool]] | None:
     """For each ``(org, workspace)``, whether ``user`` may use each feature there:
-    IAM's ``nexus:UseFeature`` (role defaults, the sets, and any policy granting
-    one), within the deployment's ``enabled`` features, in one ``filter``. None
+    IAM's ``nexus:UseFeature`` (the policies granting one, within the sets),
+    within the deployment's ``enabled`` features, in one ``filter``. None
     without IAM; when IAM fails to answer, every feature off (logged): the flags
     are only shown, the API decides each call again."""
     from naas_abi.apps.nexus.apps.api.app.core.feature_flags import KNOWN_FEATURE_KEYS
@@ -154,7 +154,7 @@ async def user_feature_flags(
         try:
             iam = runtime.iam()
         except runtime.IAMUnavailableError:
-            return None  # the caller falls back to the roles' defaults
+            return None  # no IAM at all: the caller shows every feature off
         try:
             with use_call_context(ctx):
                 allowed = set(iam.filter("nexus:UseFeature", list(names.values())).allowed)
@@ -291,19 +291,16 @@ def _seeded_agents(refs: Iterable[Any]) -> frozenset[tuple[str, str]] | None:
 async def plan_workspace_set(
     org_id: str | None,
     *,
-    features: Collection[str] | None = None,
     catalog_seed: Mapping[str, Any] | None = None,
 ) -> ScopeSet | None:
     """The set a new workspace of ``org_id`` gets, decided before it exists (its
-    ``workspace`` is ``-``): a part only where something narrows it,
-    ``modules`` when its catalog seed names agents or apps (``narrowed_by_seed``
-    of its org's), ``features`` when the create form chose them (within its
-    org's). A part left unrecorded follows the org's, now and after the org's
-    set changes; None when nothing narrows (nothing is recorded). Raises when
-    IAM cannot answer, so nothing is created on a guess."""
+    ``workspace`` is ``-``): ``modules`` when its catalog seed names agents or
+    apps (``narrowed_by_seed`` of its org's). A part left unrecorded follows the
+    org's, now and after the org's set changes; None when nothing narrows
+    (nothing is recorded). Raises when IAM cannot answer, so nothing is created
+    on a guess. The seed grants nothing: who uses what is a policy's."""
     seed = seed_items(catalog_seed)
-    narrows_modules = seed.agents is not None or seed.apps is not None
-    if not narrows_modules and features is None:
+    if seed.agents is None and seed.apps is None:
         return None
     org = _org(org_id)
 
@@ -311,9 +308,7 @@ async def plan_workspace_set(
         iam = runtime.iam()
         with as_service_account("engine"):
             org_set = iam.get_set(org) if org_id else ScopeSet(org)
-        modules = narrowed_by_seed(org_set.modules, seed) if narrows_modules else None
-        chosen = features_within(features, org_set) if features is not None else None
-        wanted = ScopeSet(org, "-", modules, chosen)
+        wanted = ScopeSet(org, "-", narrowed_by_seed(org_set.modules, seed), None)
         return wanted if wanted.recorded else None
 
     return await run_in_threadpool(work)
@@ -460,6 +455,9 @@ async def migrate_feature_overrides(db: AsyncSession, flags: Any) -> int:
     from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
         enabled_feature_catalog,
         parse_feature_overrides,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.iam.role_features import (
+        read_overlays,
         resolve_role_baseline,
     )
 
@@ -487,18 +485,7 @@ async def migrate_feature_overrides(db: AsyncSession, flags: Any) -> int:
         found = saved if saved is not None else configured
         if found:
             overrides[str(workspace_id)] = dict(found)
-    overlays: dict[str, dict[str, list[str]]] = {}
-    for org_id, raw in (
-        await db.execute(
-            text("SELECT organization_id, role_baseline FROM organization_role_features")
-        )
-    ).all():
-        try:
-            parsed = json.loads(raw)
-        except (TypeError, ValueError):
-            continue
-        if isinstance(parsed, dict):
-            overlays[str(org_id)] = {str(k): list(v) for k, v in parsed.items()}
+    overlays = await read_overlays(db)
     defaults: dict[str | None, Mapping[str, Sequence[str]]] = {None: resolve_role_baseline(flags)}
     for org_id in {o for o in org_of.values() if o}:
         defaults[org_id] = resolve_role_baseline(

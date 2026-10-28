@@ -28,6 +28,7 @@ from naas_abi.apps.nexus.apps.api.app.main_public_routes_test import PUBLIC_ROUT
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AuthzDenied
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import (
     LEVEL_OF,
+    NEXUS_ACTIONS,
     TYPE_OF,
     TYPES_BY_NAME,
 )
@@ -261,8 +262,8 @@ def _guards(table) -> list[tuple[tuple[str, str], Guard]]:
     )
 
 
-# Admin-level actions only an owner holds (roles.py ``_OWNER_ONLY_ACTIONS``).
-OWNER_ONLY_ACTIONS = {"DeleteWorkspace", "DeleteOrganization"}
+# Admin-level actions only an owner holds: flagged ``owner_only`` in the catalog.
+OWNER_ONLY_ACTIONS = {a.spec.name for a in NEXUS_ACTIONS if a.spec.owner_only}
 
 
 def _expected(guard: Guard) -> tuple[bool, ...]:

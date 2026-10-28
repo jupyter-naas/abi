@@ -149,6 +149,15 @@ class EngineGrantsGateway(GrantsGateway):
         iam = self._service()
         await _as_api(lambda: iam.revoke_pending_grant(grant_id))
 
+    async def attach(
+        self, user_id: str, policy_id: str, scope: str, *, by: str | None = None
+    ) -> None:
+        from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+
+        iam = self._service()
+        principal_id = await MEMBERSHIPS.principal_id(user_id)
+        await _as_api(lambda: iam.attach_policy(policy_id, principal_id, scope), by=by)
+
     async def bind(
         self,
         provider: str,

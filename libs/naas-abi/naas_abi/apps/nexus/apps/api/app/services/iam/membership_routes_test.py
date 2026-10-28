@@ -442,7 +442,6 @@ async def test_a_viewer_changes_nothing_in_an_organization(api) -> None:
         for method, path, body in (
             ("patch", "/api/organizations/org-1", {"name": "x"}),
             ("post", "/api/organizations/org-1/domains", {"domain": "example.org"}),
-            ("put", "/api/organizations/org-1/roles/features", {"role_baseline": {}}),
         ):
             sent = await http.request(method.upper(), path, json=body)
             assert sent.status_code == 403, (method, path, sent.text)

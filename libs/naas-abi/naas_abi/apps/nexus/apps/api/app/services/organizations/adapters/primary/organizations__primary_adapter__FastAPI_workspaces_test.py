@@ -25,8 +25,7 @@ from naas_abi_core.engine.call_context import as_service_account
 
 
 @pytest.fixture(autouse=True)
-def _team(team, monkeypatch):
-    monkeypatch.setattr(org_api, "refresh_feature_policies", AsyncMock())
+def _team(team):
     return team
 
 
@@ -48,7 +47,6 @@ def _client(*, role: str, store: dict[str, OrganizationWorkspaceRecord]) -> Test
     """``role``: the team member (``owner``, ``admin``, ``member``) who calls."""
     org_adapter = SimpleNamespace(
         db=None,
-        get_organization_role_features=AsyncMock(return_value=None),
         get_organization_by_id=AsyncMock(return_value=None),
         list_workspaces_for_org=AsyncMock(side_effect=lambda org_id: list(store.values())),
     )
@@ -126,28 +124,19 @@ def test_the_old_feature_overrides_route_is_gone() -> None:
     assert resp.status_code in (404, 405)
 
 
-def test_workspace_features_lists_the_catalog_and_role_defaults() -> None:
+def test_the_create_forms_feature_choice_is_gone() -> None:
+    """No role brings a feature and a new workspace grants none: the create form
+    chooses none, so the route that fed it is gone."""
     resp = _client(role="owner", store=_store()).get("/organizations/org-1/workspace-features")
-
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["pinned"] == ["settings"]
-    assert body["roles"] == ["owner", "admin", "member", "viewer"]
-    assert "maps" in body["role_baseline"]["member"]
-    assert "code" not in body["catalog"]
-    # No set recorded: the org offers every feature of the catalog.
-    assert body["available"] == body["catalog"]
+    assert resp.status_code in (404, 405)
 
 
-def test_workspace_features_offer_what_the_orgs_set_has(team) -> None:
-    with as_service_account("engine"):
-        team.iam.put_set("org-1", features=["chat", "files"])
-
-    body = (
-        _client(role="owner", store=_store()).get("/organizations/org-1/workspace-features").json()
-    )
-
-    assert body["available"] == ["chat", "files"]
+def test_the_role_features_routes_are_gone() -> None:
+    client = _client(role="owner", store=_store())
+    assert client.get("/organizations/org-1/roles/features").status_code in (404, 405)
+    assert client.put(
+        "/organizations/org-1/roles/features", json={"role_baseline": {}}
+    ).status_code in (404, 405)
 
 
 def test_listing_resolves_module_logo_paths(monkeypatch) -> None:

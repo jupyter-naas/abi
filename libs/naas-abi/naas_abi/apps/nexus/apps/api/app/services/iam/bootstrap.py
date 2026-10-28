@@ -1,8 +1,10 @@
-"""Nexus at startup: its catalog, its feature policies, and its role data in IAM.
+"""Nexus at startup: its catalog and its role data in IAM.
 
 * ``register_catalog`` gives IAM the ``nexus`` action catalog (the built-in
-  roles are regenerated from it) and the feature policies computed from the
-  deployment's ``feature_flags`` and each organization's overlay.
+  roles are regenerated from it; its flags say what they leave out: features,
+  the owners' deletes) and the platform grants of the shared repository. No
+  role brings a feature: ``role_features`` moved what they brought into each
+  workspace's policies.
 * ``migrate_role_data`` moves what Nexus kept itself into IAM, once: the
   organization and workspace memberships (and the ``owner_id`` fallbacks) as
   role attachments, the superadmin flags as ``builtin.platform_admin``, and a
@@ -13,16 +15,11 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig, settings
-from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
-    KNOWN_FEATURE_KEYS,
-    resolve_role_baseline,
-)
+from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import NEXUS_CATALOG
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
@@ -44,57 +41,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 MIGRATION_NAME = "iam_roles_v1"
-
-
-def _enabled(flags: FeatureFlagsConfig) -> set[str]:
-    known = {key for key in flags.enabled_features if key in KNOWN_FEATURE_KEYS}
-    return known or set(KNOWN_FEATURE_KEYS)
-
-
-def feature_plan(
-    flags: FeatureFlagsConfig,
-    *,
-    org_overlays: Mapping[str, Mapping[str, list[str]]],
-) -> dict[str, list[str]]:
-    """``{feature policy key: features}`` for IAM's ``put_feature_policies``.
-
-    The same resolution ``build_feature_flags`` applies for the UI: the
-    deployment's ``role_baseline``, the org overrides of the configuration, then
-    the org's stored overlay, all restricted to ``enabled_features``. A key is only
-    emitted where it differs from the broader one, which IAM falls back to. What a
-    workspace (or an org) has is its set, which IAM applies when it decides
-    (``services/iam/sets.py``): no feature policy is a workspace's.
-    """
-    enabled = _enabled(flags)
-    base = resolve_role_baseline(flags)
-    plan: dict[str, list[str]] = {
-        role: sorted(k for k in base.get(role, []) if k in enabled) for role in ROLE_NAMES
-    }
-    for org in sorted(set(flags.organization_overrides) | set(org_overlays)):
-        resolved = resolve_role_baseline(
-            flags, organization_id=org, organization_override=org_overlays.get(org)
-        )
-        for role in ROLE_NAMES:
-            features = sorted(k for k in resolved.get(role, []) if k in enabled)
-            if features != plan[role]:
-                plan[f"{org}.{role}"] = features
-    return plan
-
-
-async def load_feature_plan(db: AsyncSession, flags: FeatureFlagsConfig) -> dict[str, list[str]]:
-    overlays: dict[str, dict[str, list[str]]] = {}
-    for org_id, raw in (
-        await db.execute(
-            text("SELECT organization_id, role_baseline FROM organization_role_features")
-        )
-    ).all():
-        try:
-            parsed = json.loads(raw)
-        except (TypeError, ValueError):
-            continue
-        if isinstance(parsed, dict):
-            overlays[str(org_id)] = {str(k): list(v) for k, v in parsed.items()}
-    return feature_plan(flags, org_overlays=overlays)
 
 
 async def nexus_user_exists(user_id: str) -> bool:
@@ -135,40 +81,16 @@ def shared_repo_grants(repo_id: str) -> list[roles.PlatformGrant]:
     ]
 
 
-async def register_catalog(db: AsyncSession | None, flags: FeatureFlagsConfig) -> None:
-    """Register the ``nexus`` catalog and the feature policies, as the engine.
-
-    Without a database (tests of the catalog alone) only the deployment's
-    features are set.
-    """
-    plan = (
-        await load_feature_plan(db, flags)
-        if db is not None
-        else feature_plan(flags, org_overlays={})
-    )
-
+async def register_catalog() -> None:
+    """Register the ``nexus`` catalog and the shared repository's platform
+    grants, as the engine."""
     grants = shared_repo_grants(settings.coding_repo_id)
 
     def work() -> None:
         iam = runtime.iam()
         with as_service_account("engine"):
             iam.register_catalog(NEXUS_CATALOG)
-            iam.put_feature_policies(plan)
             iam.set_platform_grants(grants)
-
-    await run_in_threadpool(work)
-
-
-async def refresh_feature_policies(db: AsyncSession) -> None:
-    """Recompute the feature policies after an organization's overlay changed
-    (the API enforces features through them)."""
-    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
-
-    plan = await load_feature_plan(db, live_settings().feature_flags)
-
-    def work() -> None:
-        with as_service_account("engine"):
-            runtime.iam().put_feature_policies(plan)
 
     await run_in_threadpool(work)
 
@@ -280,9 +202,6 @@ __all__ = [
     "MEMBERSHIPS",
     "Memberships",
     "MigrationReport",
-    "feature_plan",
-    "load_feature_plan",
     "migrate_role_data",
-    "refresh_feature_policies",
     "register_catalog",
 ]

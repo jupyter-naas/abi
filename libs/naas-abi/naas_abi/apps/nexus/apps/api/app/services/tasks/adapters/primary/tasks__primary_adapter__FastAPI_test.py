@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import ExitStack
 from types import SimpleNamespace
 
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig
-from naas_abi.apps.nexus.apps.api.app.core.feature_flags import build_feature_flags
+from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary import (
+    auth__primary_adapter__dependencies as auth_dependencies,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 from naas_abi.apps.nexus.apps.api.app.services.tasks.adapters.primary import (
     tasks__primary_adapter__FastAPI as api,
 )
@@ -23,38 +26,36 @@ USER = "u-1"
 
 
 @pytest.fixture
-def client_for(monkeypatch):
+def client_for():
     service = TasksService(
         InMemoryTasksStore(), InMemoryTasksMemberDirectory({WS: {USER, "u-2"}, OTHER_WS: {USER}})
     )
+    stack = ExitStack()
 
-    def make(role: str | None, *, overrides: dict[str, bool] | None = None) -> TestClient:
-        async def access(user_id, workspace_id):
-            if role is None:
-                raise HTTPException(status_code=403, detail="no access")
-            return role
-
-        async def flags(workspace_id, caller_role):
-            # The deployment defaults, as resolved for the workspace listing.
-            return build_feature_flags(
-                role=caller_role,
-                feature_flags_config=FeatureFlagsConfig(),
-                workspace_slug=None,
-                workspace_id=workspace_id,
-                workspace_override=overrides,
-            )
-
-        monkeypatch.setattr(api, "require_workspace_access", access)
-        monkeypatch.setattr(api, "_caller_flags", flags)
+    def make(role: str | None, *, tasks: bool = True) -> TestClient:
+        """The caller holds ``role`` in both workspaces (None: no role there)
+        and, with ``tasks``, a policy granting the feature: no role brings it."""
+        nexus = NexusIam(features_with_roles=False)
+        nexus.user(USER)
+        for workspace in (WS, OTHER_WS):
+            scope = nexus.workspace("org-1", workspace)
+            if role is not None:
+                nexus.grant(USER, role, scope)
+                if tasks:
+                    nexus.give_features(nexus.principal(USER), ["tasks"], scope)
+        stack.enter_context(nexus.installed())  # the latest client's world is the module's
         app = FastAPI()
         app.include_router(api.router, prefix="/api/tasks")
-        app.dependency_overrides[api.get_current_user_required] = lambda: SimpleNamespace(id=USER)
+        caller = SimpleNamespace(id=USER)
+        app.dependency_overrides[api.get_current_user_required] = lambda: caller
+        app.dependency_overrides[auth_dependencies.get_current_user_required] = lambda: caller
         app.dependency_overrides[api.get_tasks_service] = lambda: service
         return TestClient(app)
 
     # Lets a test add records as another user than the caller.
     make.service = service  # type: ignore[attr-defined]
-    return make
+    with stack:
+        yield make
 
 
 @pytest.mark.parametrize("role", ["owner", "admin"])
@@ -69,18 +70,25 @@ def test_owners_and_admins_use_tasks(client_for, role):
     assert res.json()["iso_week"] == "2026-W43"
 
 
-@pytest.mark.parametrize("role", ["member", "viewer"])
-def test_members_and_viewers_are_refused_by_default(client_for, role):
-    client = client_for(role)
+@pytest.mark.parametrize("role", ["owner", "admin", "member", "viewer"])
+def test_no_role_brings_tasks(client_for, role):
+    client = client_for(role, tasks=False)
 
     assert client.get(f"/api/tasks/iterations?workspace_id={WS}").status_code == 403
     assert client.post(f"/api/tasks?workspace_id={WS}", json={"title": "T"}).status_code == 403
 
 
-def test_workspace_override_opens_tasks_to_members(client_for):
-    client = client_for("member", overrides={"tasks": True})
+def test_a_policy_granting_tasks_opens_them_to_a_member(client_for):
+    client = client_for("member")
 
     assert client.get(f"/api/tasks/iterations?workspace_id={WS}").status_code == 200
+
+
+def test_a_viewer_granted_tasks_reads_and_changes_nothing(client_for):
+    client = client_for("viewer")
+
+    assert client.get(f"/api/tasks/iterations?workspace_id={WS}").status_code == 200
+    assert client.post(f"/api/tasks?workspace_id={WS}", json={"title": "T"}).status_code == 403
 
 
 def test_outsiders_are_refused(client_for):
@@ -165,7 +173,7 @@ def test_comment_replies_and_removal_over_http(client_for):
 
     # A member (Tasks opened to members) cannot remove someone else's comment.
     other = asyncio.run(client_for.service.add_comment(WS, task["id"], "Theirs", user_id="u-2"))
-    member = client_for("member", overrides={"tasks": True})
+    member = client_for("member")
     one = f"/api/tasks/{task['id']}/comments/{other.id}?workspace_id={WS}"
     assert member.delete(one).status_code == 403
     # Owners and admins moderate; removing a comment removes its replies.
@@ -306,7 +314,7 @@ def test_settings_are_read_by_tasks_users_and_saved_by_owners_and_admins(client_
     assert admin.put(f"/api/tasks/settings?workspace_id={WS}", json=payload).status_code == 422
 
     # A member Tasks was opened to can read but not change the settings.
-    member = client_for("member", overrides={"tasks": True})
+    member = client_for("member")
     read = member.get(f"/api/tasks/settings?workspace_id={WS}")
     assert read.status_code == 200 and read.json()["can_edit"] is False
     assert member.put(f"/api/tasks/settings?workspace_id={WS}", json=payload).status_code == 403

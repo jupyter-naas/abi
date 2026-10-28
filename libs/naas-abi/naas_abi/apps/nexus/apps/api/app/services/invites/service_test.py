@@ -76,13 +76,23 @@ class Store(InvitationPersistencePort):
         ]
 
     async def update(
-        self, invitation_id, *, org_role, workspace_role, grant_ids, invited_by, now, profile=None
+        self,
+        invitation_id,
+        *,
+        org_role,
+        workspace_role,
+        grant_ids,
+        invited_by,
+        now,
+        profile=None,
+        policy_ids=(),
     ):
         row = replace(
             self.rows[invitation_id],
             org_role=org_role,
             workspace_role=workspace_role,
             grant_ids=tuple(grant_ids),
+            policy_ids=tuple(policy_ids),
             invited_by=invited_by,
         )
         if profile is not None:
@@ -154,6 +164,7 @@ class Grants(GrantsGateway):
         self.made = 0
         self.granted_by: list[str | None] = []
         self.bound_by: list[str | None] = []
+        self.attached: list[tuple] = []
 
     async def grant(self, provider, email, policy_id, scope, *, by=None):
         self.granted_by.append(by)
@@ -170,6 +181,9 @@ class Grants(GrantsGateway):
 
     async def revoke(self, grant_id):
         self.live.pop(grant_id, None)
+
+    async def attach(self, user_id, policy_id, scope, *, by=None):
+        self.attached.append((user_id, policy_id, scope, by))
 
     async def bind(self, provider, claim_value, policy_id, scope, *, by=None):
         self.bound_by.append(by)
@@ -599,3 +613,52 @@ async def test_an_organization_admin_renewing_through_the_workspace_keeps_the_or
         ("builtin.admin", "abi:org-1:-"),
         ("builtin.viewer", "abi:org-1:ws-1"),
     }
+
+
+@pytest.mark.asyncio
+async def test_an_invitation_carries_policies_at_its_workspace():
+    h = Harness()
+    outcome = await h.invite(policy_ids=["pol_features_member", "pol_features_member"])
+    assert outcome.invitation.policy_ids == ("pol_features_member",)
+    assert set(h.grants.live.values()) == {
+        ("builtin", "bob@example.com", "builtin.member", "abi:org-1:-"),
+        ("builtin", "bob@example.com", "builtin.member", "abi:org-1:ws-1"),
+        ("builtin", "bob@example.com", "pol_features_member", "abi:org-1:ws-1"),
+    }
+    # As the inviting person: IAM checks they may attach it and hold it.
+    assert set(h.grants.granted_by) == {"usr-alice"}
+    # Renewed without it, the policy's grant is withdrawn.
+    again = await h.invite()
+    assert again.invitation.policy_ids == ()
+    assert ("builtin", "bob@example.com", "pol_features_member", "abi:org-1:ws-1") not in set(
+        h.grants.live.values()
+    )
+
+
+@pytest.mark.asyncio
+async def test_an_organization_invitation_carries_policies_at_the_organization():
+    h = Harness()
+    await h.invite(workspace_id=None, workspace_role=None, policy_ids=["pol_x"])
+    assert ("builtin", "bob@example.com", "pol_x", "abi:org-1:-") in set(h.grants.live.values())
+
+
+@pytest.mark.asyncio
+async def test_an_invitation_carries_no_managed_policy():
+    h = Harness()
+    with pytest.raises(ValueError, match="customer policies"):
+        await h.invite(policy_ids=["builtin.owner"])
+    assert h.grants.live == {} and h.store.rows == {}
+
+
+@pytest.mark.asyncio
+async def test_someone_with_an_account_gets_the_policies_attached_as_the_inviter():
+    h = Harness()
+    attached = await h.service.attach_policies(
+        user_id="usr-bob",
+        organization_id="org-1",
+        workspace_id="ws-1",
+        policy_ids=["pol_a"],
+        by="usr-alice",
+    )
+    assert attached == ("pol_a",)
+    assert h.grants.attached == [("usr-bob", "pol_a", "abi:org-1:ws-1", "usr-alice")]

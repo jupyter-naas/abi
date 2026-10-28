@@ -18,7 +18,6 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     AppConfigModel,
     OrganizationMemberModel,
     OrganizationModel,
-    OrganizationRoleFeaturesModel,
     UserModel,
     WorkspaceMemberModel,
     WorkspaceModel,
@@ -51,7 +50,6 @@ _TABLES = (
     UserModel,
     OrganizationModel,
     OrganizationMemberModel,
-    OrganizationRoleFeaturesModel,
     WorkspaceModel,
     WorkspaceMemberModel,
     AppConfigModel,
@@ -220,7 +218,7 @@ async def test_workspace_updates_keep_non_personal_before_and_after(env) -> None
 
 
 @pytest.mark.asyncio
-async def test_organization_member_and_role_features(env) -> None:
+async def test_organization_and_member(env) -> None:
     maker, events, _ = env
     await _seed_user(maker)
     async with maker() as session:
@@ -232,18 +230,12 @@ async def test_organization_member_and_role_features(env) -> None:
                 id="om-1", organization_id="org-1", user_id="usr-1", role="owner"
             )
         )
-        session.add(
-            OrganizationRoleFeaturesModel(
-                organization_id="org-1", role_baseline='{"viewer": ["chat"]}'
-            )
-        )
         await session.commit()
 
     kinds = [_kind(e) for e in _payloads(events)][1:]
     assert kinds == [
         "CreateOrganization",
         "AddUserToOrganization",
-        "ConfigureOrganizationRoleFeatures",
     ]
     assert all(e["target_organization_id"] == "org-1" for e in _payloads(events)[1:])
 

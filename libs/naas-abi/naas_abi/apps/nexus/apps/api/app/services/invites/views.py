@@ -44,6 +44,8 @@ class InvitationView(BaseModel):
     workspace_id: str | None = None
     workspace_role: str | None = None
     invited_by: str | None = None
+    # The policies carried beside the roles, attached at its workspace (else its org).
+    policy_ids: list[str] = Field(default_factory=list)
     status: str
     created_at: datetime | None = None
 
@@ -81,6 +83,7 @@ def view(invitation: Invitation) -> InvitationView:
         workspace_id=invitation.workspace_id,
         workspace_role=invitation.workspace_role,
         invited_by=invitation.invited_by,
+        policy_ids=list(invitation.policy_ids),
         status=invitation.status,
         created_at=invitation.created_at,
     )

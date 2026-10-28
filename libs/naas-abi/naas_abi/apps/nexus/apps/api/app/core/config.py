@@ -289,6 +289,10 @@ class FeatureFlagsConfig(BaseModel):
             "tasks",
         ]
     )
+    # Deprecated: no role brings a feature, a policy does. Read once, when Nexus
+    # moves what each role had in each workspace into that workspace's policy
+    # "Features of <role>" (services/iam/role_features.py); a configuration
+    # that still sets it gets a warning at start, and it does nothing.
     role_baseline: dict[str, list[FeatureKey]] = Field(
         default_factory=lambda: {
             "owner": [
@@ -354,8 +358,8 @@ class FeatureFlagsConfig(BaseModel):
     # turned off leaves the set; one turned on is kept for whoever held a role
     # there then. Edit sets on the modules × workspaces page.
     workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)
-    # Per-organization role_baseline overlays. Does not replace deployment
-    # role_baseline; keyed by organization id.
+    # Deprecated, with role_baseline: per-organization role_baseline overlays,
+    # keyed by organization id. Read once, by the move of the role features.
     organization_overrides: dict[str, dict[str, list[FeatureKey]]] = Field(default_factory=dict)
 
 

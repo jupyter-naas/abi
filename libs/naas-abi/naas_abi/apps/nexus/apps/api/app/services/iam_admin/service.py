@@ -128,8 +128,6 @@ _PLATFORM_ONLY = frozenset(
         *_KEY_ACTIONS,
     }
 )
-# The built-in roles' feature defaults of an organization (Nexus `organization_role_features`).
-_ROLE_FEATURE_ACTIONS = ("GetRoleFeatures", "UpdateRoleFeatures")
 ACCESS_ACTIONS: tuple[str, ...] = (*_WILDCARD_TYPE, *_ATTACHMENT_ACTIONS, *_KEY_ACTIONS)
 
 
@@ -196,9 +194,7 @@ class IamAdminService:
         """Which actions the caller may perform: on the platform, or (the attachment
         actions, and the policies and groups of that level) at ``scope``. Decided by
         IAM, as for any call; ``nexus:ReadSystem`` for the audit. What is administered at
-        platform level only is False at a scope; at an org (or org-wide) scope,
-        ``nexus:GetRoleFeatures`` and ``nexus:UpdateRoleFeatures`` say who reads and edits
-        its built-in roles' feature defaults."""
+        platform level only is False at a scope."""
         if scope is not None:
             validate_scope(scope)
         owner = _owner_of(scope)
@@ -222,18 +218,11 @@ class IamAdminService:
                     result[action] = session.authorize(action, key_resource("*", "*")).allowed
             return result
 
-        org = _organization_of(scope)
-        actions, reads_system, *role_features = await asyncio.gather(
+        actions, reads_system = await asyncio.gather(
             self._read(user, decide),
             self._reads_system(user) if scope is None else _false(),
-            *(
-                self._may(user, action, org) if org is not None else _false()
-                for action in _ROLE_FEATURE_ACTIONS
-            ),
         )
         actions["nexus:ReadSystem"] = reads_system
-        for action, allowed in zip(_ROLE_FEATURE_ACTIONS, role_features, strict=True):
-            actions[f"nexus:{action}"] = allowed
         return {"actions": actions}
 
     async def grantable(self, user: Any, scope: str) -> dict[str, Any]:
@@ -248,12 +237,6 @@ class IamAdminService:
         from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 
         return await AUTHZ.allowed("ReadSystem", user=user)
-
-    async def _may(self, user: Any, action: str, org: str) -> bool:
-        """A Nexus action on an organization, as its route decides it."""
-        from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
-
-        return await AUTHZ.allowed(action, user=user, org=org)
 
     # -- catalogs and validation ------------------------------------------------------
 
@@ -1046,14 +1029,6 @@ def _owner_of(scope: str | None) -> str:
 
 async def _false() -> bool:
     return False
-
-
-def _organization_of(scope: str | None) -> str | None:
-    """The organization an org-level scope (``abi:<org>:-`` or ``abi:<org>:*``) names."""
-    if scope is None:
-        return None
-    org, workspace = scope_fields(scope)
-    return org if workspace in (NONE, "*") and org not in (NONE, "*") else None
 
 
 def _actor_id(user: Any) -> str:

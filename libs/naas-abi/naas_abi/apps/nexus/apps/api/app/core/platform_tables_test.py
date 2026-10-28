@@ -77,7 +77,6 @@ def test_registry_lists_every_nexus_table_by_section() -> None:
         ("People & access", "users"),
         ("People & access", "organizations"),
         ("People & access", "organization_members"),
-        ("People & access", "organization_role_features"),
         ("People & access", "organization_domains"),
         ("People & access", "workspaces"),
         ("People & access", "workspace_members"),

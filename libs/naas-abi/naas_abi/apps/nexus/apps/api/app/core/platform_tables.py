@@ -69,12 +69,6 @@ _ENTRIES: list[PlatformTableEntry] = [
             "Each user's profile in an organization (roles are IAM's attachments, not rows here).",
         ),
         (
-            "organization_role_features",
-            "Organization role features",
-            "Which features each role gets in an organization, set in Organization Settings > "
-            "Roles.",
-        ),
-        (
             "organization_domains",
             "Organization domains",
             "Email domains of an organization, with the identity provider their sign-in goes to.",

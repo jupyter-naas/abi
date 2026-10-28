@@ -103,8 +103,6 @@ def test_feature_flags_tenant_and_seeds_are_typed() -> None:
     platform = _load()
 
     assert platform.enabled_features == ["chat", "slides"]
-    assert platform.role_baseline["viewer"] == ["chat"]
-    assert platform.workspace_overrides == {"adqcc": {"agents": False}}
     assert platform.tenant["tab_title"] == "Bob AI Platform"
     seed = platform.workspace_seeds["adqcc"]
     assert seed.default_agent == "external.adqcc AdqccAgent"

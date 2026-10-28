@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import datetime
-import json
 
 import pytest
 from naas_abi.apps.nexus.apps.api.app.models import (
     AgentConfigModel,
     AppConfigModel,
     OrganizationModel,
-    OrganizationRoleFeaturesModel,
     UserModel,
     WorkspaceModel,
 )
@@ -23,7 +21,6 @@ T1 = datetime.datetime(2026, 5, 2, 9, 30)
 _TABLES = (
     UserModel,
     OrganizationModel,
-    OrganizationRoleFeaturesModel,
     WorkspaceModel,
     AppConfigModel,
     AgentConfigModel,
@@ -60,9 +57,6 @@ async def test_load_snapshot_reads_every_identity_table(tmp_path, nexus_iam) -> 
                 owner_id="usr-1",
                 primary_color="#0057B8",
                 created_at=T0,
-            ),
-            OrganizationRoleFeaturesModel(
-                organization_id="org-1", role_baseline=json.dumps({"viewer": ["chat"]})
             ),
             WorkspaceModel(
                 id="ws-1",
@@ -113,7 +107,6 @@ async def test_load_snapshot_reads_every_identity_table(tmp_path, nexus_iam) -> 
     assert [(m.organization_id, m.user_id, m.role) for m in snapshot.organization_memberships] == [
         ("org-1", "usr-2", "admin")
     ]
-    assert snapshot.organization_role_features == {"org-1": {"viewer": ["chat"]}}
 
     [ws] = snapshot.workspaces
     assert (ws.id, ws.slug, ws.organization_id, ws.owner_id) == ("ws-1", "acme", "org-1", "usr-1")
@@ -131,20 +124,3 @@ async def test_load_snapshot_reads_every_identity_table(tmp_path, nexus_iam) -> 
         True,
         True,
     )
-
-
-@pytest.mark.asyncio
-async def test_unparseable_role_features_are_skipped(tmp_path) -> None:
-    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'nexus.db'}")
-    async with engine.begin() as conn:
-        for model in _TABLES:
-            await conn.run_sync(model.__table__.create)
-    session = async_sessionmaker(engine, expire_on_commit=False)()
-    session.add(OrganizationRoleFeaturesModel(organization_id="org-1", role_baseline="{not json"))
-    await session.commit()
-
-    snapshot = await IdentitySourceSecondaryAdapterPostgres(session).load_snapshot()
-    await session.close()
-    await engine.dispose()
-
-    assert snapshot.organization_role_features == {}

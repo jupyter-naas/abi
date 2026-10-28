@@ -1,6 +1,7 @@
 """Workspace secrets, providers and ABI servers: the settings section."""
 
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog.dsl import action, rtype
+from naas_abi_core.services.iam.catalog import PlatformAccess
 
 TYPES = (
     rtype("secret"),
@@ -23,4 +24,9 @@ ACTIONS = (
     action("CreateAbiServer", "admin", "abi_server", feature="settings"),
     action("UpdateAbiServer", "admin", "abi_server", feature="settings"),
     action("DeleteAbiServer", "admin", "abi_server", feature="settings"),
+)
+
+# The provider models are read by every workspace viewer.
+PLATFORM_ACCESS = (
+    PlatformAccess(("provider_model/*",), viewer=("ListProviderModels", "GetProviderModel")),
 )

@@ -147,7 +147,6 @@ KNOWN_TABLES = frozenset(
         "rate_limit_events",
         "workspace_secrets",
         "model_catalog",
-        "organization_role_features",
     }
 )
 

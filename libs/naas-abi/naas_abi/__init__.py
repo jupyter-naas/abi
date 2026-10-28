@@ -195,7 +195,7 @@ FeatureKey = Literal[
     "graph",
     "datasets",
     "settings",
-    # Opt-in: only when listed in enabled_features + role_baseline.
+    # Opt-in: only when listed in enabled_features.
     "code",
     # Business slides (Forgejo decks + Monaco). On for members by default.
     "slides",
@@ -232,15 +232,6 @@ def _default_enabled_features() -> list[FeatureKey]:
     return list(_ALL_FEATURES)
 
 
-def _default_role_baseline() -> dict[str, list[FeatureKey]]:
-    return {
-        "owner": list(_ALL_FEATURES),
-        "admin": list(_ALL_FEATURES),
-        "member": ["maps", "chat", "files", "datasets", "skills", "slides", "documents", "sheets"],
-        "viewer": ["maps", "chat", "files", "datasets", "skills", "slides", "documents", "sheets"],
-    }
-
-
 class FeatureFlagsConfig(BaseModel):
     """Feature access policy exposed to Nexus frontend."""
 
@@ -249,13 +240,13 @@ class FeatureFlagsConfig(BaseModel):
     enabled_features: list[FeatureKey] = Field(
         default_factory=_default_enabled_features
     )
-    role_baseline: dict[str, list[FeatureKey]] = Field(
-        default_factory=_default_role_baseline
-    )
-    # Deprecated: workspace feature overrides are managed in Organization
-    # Settings > Workspaces (workspaces.feature_overrides). Still read as a
-    # fallback for workspaces that never saved any.
-    workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)
+    # Deprecated: no role brings a feature, a policy does. Nexus reads these once,
+    # when it moves what each role had into each workspace's policies, then
+    # warns while a configuration still sets them. Left unset (None), Nexus
+    # uses the defaults the role features had.
+    role_baseline: dict[str, list[FeatureKey]] | None = None
+    organization_overrides: dict[str, dict[str, list[FeatureKey]]] | None = None
+    workspace_overrides: dict[str, dict[FeatureKey, bool]] | None = None
 
 
 class SlidesTemplateSourceConfig(BaseModel):

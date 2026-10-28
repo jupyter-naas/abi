@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from naas_abi.apps.nexus.apps.api.app.models import (
     AgentConfigModel,
     AppConfigModel,
     OrganizationModel,
-    OrganizationRoleFeaturesModel,
     UserModel,
     WorkspaceModel,
 )
@@ -25,7 +23,6 @@ from naas_abi.apps.nexus.apps.api.app.services.identity_graph.port import (
     IdentityUser,
     IdentityWorkspace,
 )
-from naas_abi_core import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -85,9 +82,6 @@ class IdentitySourceSecondaryAdapterPostgres(IdentitySourcePort):
         organizations = await self._all(
             OrganizationModel, OrganizationModel.created_at, OrganizationModel.id
         )
-        role_features = await self._all(
-            OrganizationRoleFeaturesModel, OrganizationRoleFeaturesModel.organization_id
-        )
         workspaces = await self._all(WorkspaceModel, WorkspaceModel.created_at, WorkspaceModel.id)
         apps = await self._all(AppConfigModel, AppConfigModel.workspace_id, AppConfigModel.app_id)
         agents = await self._all(
@@ -108,18 +102,6 @@ class IdentitySourceSecondaryAdapterPostgres(IdentitySourcePort):
             )
         ]
         platform_admins = {u.id for u in users if await AUTHZ.allowed("ManageSystem", user=u.id)}
-
-        overlays: dict[str, dict[str, list[str]]] = {}
-        for row in role_features:
-            try:
-                baseline = json.loads(row.role_baseline or "{}")
-            except (TypeError, ValueError):
-                logger.warning(
-                    f"[identity-graph] unreadable role features for {row.organization_id}"
-                )
-                continue
-            if isinstance(baseline, dict):
-                overlays[row.organization_id] = {str(k): list(v or []) for k, v in baseline.items()}
 
         return IdentitySnapshot(
             users=[
@@ -157,7 +139,6 @@ class IdentitySourceSecondaryAdapterPostgres(IdentitySourcePort):
                 )
                 for org, m in organization_members
             ],
-            organization_role_features=overlays,
             workspaces=[
                 IdentityWorkspace(
                     id=w.id,

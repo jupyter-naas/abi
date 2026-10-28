@@ -196,17 +196,12 @@ def test_access_at_a_scope_answers_for_that_level_alone(world):
         assert root["iam:ListPolicies"] and root["iam:CreateGroup"] and root["iam:AttachPolicy"]
 
 
-def test_access_at_an_org_says_who_edits_its_roles_feature_defaults(world):
-    scope = org_scope("org-1")
-    for user in ("owner", "admin"):
-        actions = get(world, f"/access?scope={scope}", user).json()["actions"]
-        assert actions["nexus:GetRoleFeatures"] and actions["nexus:UpdateRoleFeatures"], user
-    member = get(world, f"/access?scope={scope}", "member").json()["actions"]
-    assert not member["nexus:GetRoleFeatures"] and not member["nexus:UpdateRoleFeatures"]
-    # They are the organization's: neither a workspace nor the platform has them.
-    workspace = get(world, f"/access?scope={workspace_scope('org-1', 'ws-1')}", "admin").json()
-    assert not workspace["actions"]["nexus:GetRoleFeatures"]
-    assert not get(world, "/access").json()["actions"]["nexus:GetRoleFeatures"]
+def test_access_reports_no_role_feature_defaults(world):
+    """No role brings a feature: there are no defaults to read or edit anywhere."""
+    for scope in (org_scope("org-1"), workspace_scope("org-1", "ws-1"), None):
+        query = f"?scope={scope}" if scope else ""
+        actions = get(world, f"/access{query}", "owner").json()["actions"]
+        assert not any("RoleFeatures" in action for action in actions), scope
 
 
 # -- policies --------------------------------------------------------------------------------
@@ -1108,10 +1103,8 @@ def test_an_owner_grants_no_feature_it_does_not_hold(world):
         "nexus:UseFeature",
         "abi:org-1:ws-1:nexus:feature/*",
     )
-    with as_service_account("engine"):
-        held = world.nexus.iam.get_policy("builtin.features.owner").document.statements[0]
-    one = held.resources[0]
-    assert one.startswith("${scope}:nexus:feature/")
+    # The owner holds chat through a policy (no role brings a feature): it gives that.
+    one = "${scope}:nexus:feature/chat"
     some = {"version": "2026-10-13", "statements": [{**every["statements"][0], "resources": [one]}]}
     made = post(world, "/policies", "owner", name="one feature", document=some, scope=ws1)
     assert made.status_code == 201, made.text

@@ -78,7 +78,9 @@ def _workspace_set(team, workspace: str = "ws-1"):
         return team.iam.get_set("org-1", workspace)
 
 
-def test_create_records_the_chosen_features_as_the_workspace_set(monkeypatch, team) -> None:
+def test_the_create_form_chooses_no_feature(monkeypatch, team) -> None:
+    """A new workspace grants no feature and records no feature set: who uses
+    one is a policy's. A ``features`` field is not part of the request."""
     monkeypatch.setattr(ws_api.placements, "place_new_workspace", AsyncMock())
     client, service = _client(user="admin")
     service.create_workspace.return_value = _record()
@@ -94,10 +96,8 @@ def test_create_records_the_chosen_features_as_the_workspace_set(monkeypatch, te
     )
 
     assert resp.status_code == 200
-    # Settings always stays reachable.
-    assert _workspace_set(team).features == ("chat", "graph", "settings")
-    flags = resp.json()["feature_flags"]
-    assert flags["chat"] is True and flags["graph"] is True and flags["maps"] is False
+    assert _workspace_set(team).recorded is False
+    assert "features" not in ws_api.WorkspaceCreate.model_fields
 
 
 def test_create_without_features_keeps_the_orgs_set(monkeypatch, team) -> None:
@@ -121,28 +121,28 @@ def test_create_keeps_a_new_workspace_within_its_orgs_set(monkeypatch, team) -> 
     service.create_workspace.return_value = _record()
 
     resp = client.post(
-        "/api/workspaces",
-        json={
-            "name": "Audit",
-            "slug": "audit",
-            "organization_id": "org-1",
-            "features": ["chat", "graph"],
-        },
+        "/api/workspaces", json={"name": "Audit", "slug": "audit", "organization_id": "org-1"}
     )
 
     assert resp.status_code == 200
-    found = _workspace_set(team)
-    # Only what the form narrowed is recorded: the modules follow the org's.
-    assert found.modules is None
-    assert found.features == ("chat",)
+    # Nothing narrows it: it follows the org's set, now and later.
+    assert _workspace_set(team).recorded is False
     with as_service_account("engine"):
-        assert team.iam.effective_set("org-1", "ws-1").modules == ("acme.people",)
+        found = team.iam.effective_set("org-1", "ws-1")
+    assert (found.modules, found.features) == (("acme.people",), ("chat", "files"))
 
 
-def _create_with_features(client):
+def _create_narrowed(client, monkeypatch):
+    """A create whose catalog seed narrows the new workspace's set."""
+    from naas_abi_core.services.iam.IAMPorts import ScopeSet
+
+    monkeypatch.setattr(
+        ws_api.scope_sets,
+        "plan_workspace_set",
+        AsyncMock(return_value=ScopeSet("org-1", "-", ("acme.people",), None)),
+    )
     return client.post(
-        "/api/workspaces",
-        json={"name": "Audit", "slug": "audit", "organization_id": "org-1", "features": ["chat"]},
+        "/api/workspaces", json={"name": "Audit", "slug": "audit", "organization_id": "org-1"}
     )
 
 
@@ -162,7 +162,7 @@ def test_create_is_undone_when_the_orgs_set_narrowed_meanwhile(monkeypatch, team
     client, service = _client(user="admin")
     service.create_workspace.return_value = _record()
 
-    resp = _create_with_features(client)
+    resp = _create_narrowed(client, monkeypatch)
 
     assert resp.status_code == 409
     assert "chat" in resp.json()["detail"]
@@ -179,7 +179,7 @@ def test_create_is_undone_when_placing_fails(monkeypatch, team) -> None:
     client, service = _client(user="admin")
     service.create_workspace.return_value = _record()
 
-    assert _create_with_features(client).status_code == 500
+    assert _create_narrowed(client, monkeypatch).status_code == 500
     forget.assert_awaited_once_with("ws-1")
     service.abandon_workspace.assert_awaited_once_with(_record())
     assert _workspace_set(team).recorded is False
@@ -195,7 +195,10 @@ def test_create_creates_nothing_when_iam_cannot_plan_the_set(monkeypatch) -> Non
     )
     client, service = _client(user="admin")
 
-    assert _create_with_features(client).status_code == 503
+    resp = client.post(
+        "/api/workspaces", json={"name": "Audit", "slug": "audit", "organization_id": "org-1"}
+    )
+    assert resp.status_code == 503
     service.create_workspace.assert_not_called()
 
 
@@ -210,31 +213,6 @@ async def test_placements_of_an_undone_workspace_are_forgotten(team) -> None:
     assert await placements.forget_workspace("ws-1") == 1
     with as_service_account("engine"):
         assert [p.workspace for p in team.iam.list_placements("files")] == ["ws-2"]
-
-
-def test_create_rejects_unknown_features_before_creating() -> None:
-    client, service = _client(user="admin")
-
-    resp = client.post(
-        "/api/workspaces",
-        json={"name": "Audit", "slug": "audit", "organization_id": "org-1", "features": ["nope"]},
-    )
-
-    assert resp.status_code == 422
-    service.create_workspace.assert_not_called()
-
-
-def test_create_rejects_features_on_a_personal_workspace() -> None:
-    client, service = _client(user="stranger", org_role=None)
-
-    resp = client.post(
-        "/api/workspaces",
-        json={"name": "Mine", "slug": "mine", "features": ["maps"]},
-    )
-
-    assert resp.status_code == 400
-    assert "organization" in resp.json()["detail"]
-    service.create_workspace.assert_not_called()
 
 
 def test_configuration_lists_features_and_config_seeds(monkeypatch, team) -> None:

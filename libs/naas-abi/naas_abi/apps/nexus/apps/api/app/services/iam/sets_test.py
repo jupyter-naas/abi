@@ -8,13 +8,15 @@ from datetime import datetime
 import pytest
 from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig
 from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
-    BASELINE_ROLES,
     KNOWN_FEATURE_KEYS,
     enabled_feature_catalog,
-    resolve_role_baseline,
 )
 from naas_abi.apps.nexus.apps.api.app.models import OrganizationModel, WorkspaceModel
 from naas_abi.apps.nexus.apps.api.app.services.iam import sets
+from naas_abi.apps.nexus.apps.api.app.services.iam.role_features import (
+    ROLE_NAMES,
+    resolve_role_baseline,
+)
 from naas_abi_core.engine.call_context import as_service_account
 from sqlalchemy import text
 
@@ -129,7 +131,7 @@ async def test_the_move_of_the_overrides_changes_no_ones_features(team, nexus_db
         moved = await sets.migrate_feature_overrides(db, FLAGS)
 
         assert moved == 1
-        for role in BASELINE_ROLES:
+        for role in ROLE_NAMES:
             flags = await sets.user_feature_flags(role, [("org-1", "ws-1")], ENABLED)
             assert flags is not None
             assert flags["ws-1"] == _old_flags(role, overrides), role
@@ -167,13 +169,6 @@ async def test_a_new_workspace_follows_its_org_unless_something_narrows(team):
         effective = team.iam.effective_set("org-1", "ws-1")
     assert effective.modules == ("market", "people")
     assert effective.features == ("chat", "maps")
-
-    # Features chosen: that part alone is recorded, the modules still follow.
-    planned = await sets.plan_workspace_set("org-1", features=["chat", "files"])
-    assert planned is not None
-    recorded = await sets.record_workspace_set("ws-1", planned)
-    assert recorded is not None
-    assert (recorded.modules, recorded.features) == (None, ("chat",))
 
 
 def test_the_move_runs_again_without_duplicates(team):

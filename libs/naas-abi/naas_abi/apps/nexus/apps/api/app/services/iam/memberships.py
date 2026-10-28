@@ -495,15 +495,12 @@ class Memberships:
 
     async def drop_scope(self, org_id: str | None, workspace_id: str | None) -> None:
         """Forget a deleted workspace (or, with no workspace, organization): its
-        role and feature attachments, then its scope."""
+        role attachments, then its scope."""
         scope = workspace_scope(org_id, workspace_id) if workspace_id else org_scope(org_id or "")
         org, _ = scope_fields(scope)
 
         def work(iam: Any) -> None:
-            held_policies = [
-                *_POLICY_OF.values(),
-                *(roles.feature_policy_id(key) for key in iam.feature_policy_keys()),
-            ]
+            held_policies = list(_POLICY_OF.values())
             scopes = {scope, wide_scope(scope)} - {None}
             for policy_id in held_policies:
                 for attachment in iam.list_attachments(policy_id=policy_id):

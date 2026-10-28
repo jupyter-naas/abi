@@ -27,7 +27,6 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     OrganizationMemberRecord,
     OrganizationPermissionPort,
     OrganizationRecord,
-    OrganizationRoleFeaturesRecord,
     OrganizationUpdateInput,
     OrganizationWorkspaceMembershipRecord,
     OrganizationWorkspaceRecord,
@@ -528,21 +527,4 @@ class OrganizationService:
         caller checked that ``provider`` is one."""
         return await self.adapter.set_organization_domain_provider(
             org_id=org_id, domain_id=domain_id, provider=provider
-        )
-
-    async def get_role_features(self, org_id: str) -> OrganizationRoleFeaturesRecord | None:
-        return await self.adapter.get_organization_role_features(org_id=org_id)
-
-    async def upsert_role_features(
-        self,
-        org_id: str,
-        role_baseline: dict[str, list[str]],
-        updated_by: str | None,
-        now: datetime,
-    ) -> OrganizationRoleFeaturesRecord:
-        return await self.adapter.upsert_organization_role_features(
-            org_id=org_id,
-            role_baseline=role_baseline,
-            updated_by=updated_by,
-            now=now,
         )

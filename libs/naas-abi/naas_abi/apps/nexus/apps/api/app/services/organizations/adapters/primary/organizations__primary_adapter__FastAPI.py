@@ -7,17 +7,10 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import User, get_current_user_required
-from naas_abi.apps.nexus.apps.api.app.core.config import FeatureKey, settings
+from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
-from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
-    BASELINE_ROLES,
-    KNOWN_FEATURE_KEYS,
-    PINNED_FEATURES,
-    enabled_feature_catalog,
-    resolve_role_baseline,
-    workspace_features,
-)
+from naas_abi.apps.nexus.apps.api.app.core.feature_flags import offered_features
 from naas_abi.apps.nexus.apps.api.app.services.auth import avatar_store, user_drive_profile
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__FastAPI import (  # noqa: E501
     ALLOWED_AVATAR_EXTENSIONS,
@@ -27,7 +20,6 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 from naas_abi.apps.nexus.apps.api.app.services.iam import sets as scope_sets
-from naas_abi.apps.nexus.apps.api.app.services.iam.bootstrap import refresh_feature_policies
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MembershipDenied
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_scope
@@ -286,6 +278,9 @@ class OrganizationMemberInvite(BaseModel):
     # The identity provider to invite through; by default the one the email's
     # domain routes to, else the default provider.
     provider: str | None = Field(default=None, min_length=1, max_length=32)
+    # Customer policies the new member gets beside the roles: at ``workspace_id``
+    # when given, else at the organization (no role brings a feature).
+    policy_ids: list[str] = Field(default_factory=list, max_length=20)
     # Member profile in this organization (Organization Settings > Users > Create user).
     organization: str | None = Field(default=None, max_length=200)
     job_title: str | None = Field(default=None, max_length=100)
@@ -309,10 +304,6 @@ class OrganizationMemberUpdate(BaseModel):
 class OrganizationMemberWorkspacesUpdate(BaseModel):
     workspace_ids: list[str] = Field(default_factory=list)
     workspace_role: str = Field(default="member", pattern=r"^(admin|member|viewer)$")
-
-
-class OrganizationRoleFeaturesUpdate(BaseModel):
-    role_baseline: dict[str, list[FeatureKey]]
 
 
 class OrganizationWorkspacesBulkUpdate(BaseModel):
@@ -619,10 +610,8 @@ def _workspace_payload(
     *,
     org_logo_url: str | None,
     org_logo_rect_url: str | None,
-    organization_override: dict[str, list[str]] | None = None,
     feature_set: tuple[str, ...] | None = None,
 ) -> dict:
-    flags = settings.feature_flags
     return {
         "id": ws.id,
         "name": ws.name,
@@ -636,22 +625,9 @@ def _workspace_payload(
         "workspace_group": ws.workspace_group,
         "organization_logo_url": resolve_stored_asset_url(org_logo_url),
         "organization_logo_rectangle_url": resolve_stored_asset_url(org_logo_rect_url),
-        # Features on for at least one role, within the workspace's set.
-        "features": workspace_features(
-            roles=BASELINE_ROLES,
-            feature_flags_config=flags,
-            organization_id=ws.organization_id,
-            organization_override=organization_override,
-            feature_set=feature_set,
-        ),
+        # The enabled features within the workspace's set: a policy gives them.
+        "features": offered_features(settings.feature_flags, feature_set),
     }
-
-
-async def _org_role_override(
-    org_id: str, service: OrganizationService
-) -> dict[str, list[str]] | None:
-    stored = await service.get_role_features(org_id=org_id)
-    return stored.role_baseline if stored is not None else None
 
 
 async def _org_workspace_payloads(
@@ -660,13 +636,11 @@ async def _org_workspace_payloads(
     workspaces: list[OrganizationWorkspaceRecord],
 ) -> list[dict]:
     org = await service.get_organization(org_id=org_id)
-    organization_override = await _org_role_override(org_id, service)
     return [
         _workspace_payload(
             ws,
             org_logo_url=org.logo_url if org else None,
             org_logo_rect_url=org.logo_rectangle_url if org else None,
-            organization_override=organization_override,
             feature_set=await scope_sets.effective_features_async(org_id, ws.id),
         )
         for ws in workspaces
@@ -753,45 +727,6 @@ async def get_org_workspace_seed_catalog() -> dict:
     return {
         key: [{"id": option.id, "label": option.label, "kind": option.kind} for option in options]
         for key, options in catalog.items()
-    }
-
-
-@router.get(
-    "/{org_id}/workspace-features",
-    dependencies=[
-        guard(
-            "ListOrganizationCatalog",
-            workspace=None,
-            org="org_id",
-            denied="Only admins can view workspace features",
-        )
-    ],
-)
-async def get_org_workspace_features(
-    org_id: str,
-    current_user: User = Depends(get_current_user_required),
-    service: OrganizationService = Depends(get_organization_service),
-) -> dict:
-    """What the workspace create form needs: the catalog, the role defaults and the
-    features the organization's set has (``available``), a new workspace's
-    feature set being within it."""
-    flags = settings.feature_flags
-    role_baseline = resolve_role_baseline(
-        flags,
-        organization_id=org_id,
-        organization_override=await _org_role_override(org_id, service),
-    )
-    catalog = enabled_feature_catalog(flags)
-    org_features = await scope_sets.effective_features_async(org_id)
-    return {
-        "catalog": catalog,
-        "available": [key for key in catalog if org_features is None or key in org_features],
-        "pinned": [key for key in PINNED_FEATURES if key in catalog],
-        "roles": list(BASELINE_ROLES),
-        "role_baseline": {
-            role_name: [key for key in role_baseline.get(role_name, []) if key in catalog]
-            for role_name in BASELINE_ROLES
-        },
     }
 
 
@@ -929,114 +864,6 @@ async def sync_org_member_workspaces(
         "removed": removed,
         "skipped_owner": skipped_owner,
     }
-
-
-@router.get(
-    "/{org_id}/roles/features",
-    dependencies=[
-        guard(
-            "GetRoleFeatures",
-            org="org_id",
-            denied="Only admins can view role features",
-        )
-    ],
-)
-async def get_org_role_features(
-    org_id: str,
-    current_user: User = Depends(get_current_user_required),
-    service: OrganizationService = Depends(get_organization_service),
-) -> dict:
-    flags = settings.feature_flags
-    stored = await service.get_role_features(org_id=org_id)
-    organization_override = stored.role_baseline if stored is not None else None
-    role_baseline = resolve_role_baseline(
-        flags,
-        organization_id=org_id,
-        organization_override=organization_override,
-    )
-    return {
-        "enabled_features": list(flags.enabled_features),
-        "role_baseline": {
-            role_name: list(role_baseline.get(role_name, [])) for role_name in BASELINE_ROLES
-        },
-        "known_features": list(KNOWN_FEATURE_KEYS),
-        "roles": list(BASELINE_ROLES),
-        "persistence": "database" if stored is not None else "deployment",
-        "updated_at": stored.updated_at.isoformat() if stored and stored.updated_at else None,
-        "updated_by": stored.updated_by if stored else None,
-        "note": (
-            "GET merges deployment nexus_config.feature_flags with a durable "
-            "per-organization overlay in organization_role_features. PUT upserts "
-            "that row for this organization only and never replaces the "
-            "deployment baseline."
-        ),
-    }
-
-
-@router.put(
-    "/{org_id}/roles/features",
-    dependencies=[
-        guard(
-            "UpdateRoleFeatures",
-            org="org_id",
-            denied="Only admins can update role features",
-        )
-    ],
-)
-async def update_org_role_features(
-    org_id: str,
-    body: OrganizationRoleFeaturesUpdate,
-    current_user: User = Depends(get_current_user_required),
-    service: OrganizationService = Depends(get_organization_service),
-) -> dict:
-    allowed_roles = set(BASELINE_ROLES)
-    unknown_roles = sorted(set(body.role_baseline) - allowed_roles)
-    if unknown_roles:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unknown roles: {', '.join(unknown_roles)}",
-        )
-    missing_roles = sorted(allowed_roles - set(body.role_baseline))
-    if missing_roles:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "role_baseline must include all baseline roles "
-                f"({', '.join(BASELINE_ROLES)}); missing: {', '.join(missing_roles)}"
-            ),
-        )
-
-    known = set(KNOWN_FEATURE_KEYS)
-    enabled = set(settings.feature_flags.enabled_features) or known
-    cleaned: dict[str, list[FeatureKey]] = {}
-    for role_name in BASELINE_ROLES:
-        features = body.role_baseline[role_name]
-        invalid = sorted({f for f in features if f not in known})
-        if invalid:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unknown features for {role_name}: {', '.join(invalid)}",
-            )
-        disabled = sorted({f for f in features if f not in enabled})
-        if disabled:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"Features not enabled in deployment catalog for {role_name}: "
-                    f"{', '.join(disabled)}"
-                ),
-            )
-        cleaned[role_name] = list(features)
-
-    await service.upsert_role_features(
-        org_id=org_id,
-        role_baseline={role_name: list(feats) for role_name, feats in cleaned.items()},
-        updated_by=current_user.id,
-        now=datetime.now(UTC).replace(tzinfo=None),
-    )
-    # The API enforces features through IAM: the org's overlay becomes policies.
-    await refresh_feature_policies(service.adapter.db)
-    return await get_org_role_features(org_id, current_user, service)
 
 
 @router.get(
@@ -1193,6 +1020,7 @@ async def invite_org_member(
                 workspace_name=workspace.name if workspace else None,
                 may_grant_owner=role == "owner",
                 profile=_invite_profile(invite),
+                policy_ids=invite.policy_ids,
             )
         except OwnerGrantRefusedError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
@@ -1251,6 +1079,20 @@ async def invite_org_member(
             ws_member = None
         if ws_member is not None:
             workspace_member_id = ws_member.id
+
+    # The policies the invitation carries, attached now as the inviting person
+    # (IAM refuses one they may not attach or do not hold).
+    if invite.policy_ids:
+        try:
+            await invites.attach_policies(
+                user_id=member.user_id,
+                organization_id=org_id,
+                workspace_id=invite.workspace_id,
+                policy_ids=invite.policy_ids,
+                by=current_user.id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     org = await service.get_organization(org_id)
     workspace = (

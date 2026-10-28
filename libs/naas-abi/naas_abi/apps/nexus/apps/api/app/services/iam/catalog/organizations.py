@@ -6,6 +6,7 @@ the owners' and admins' to read (#1346), so their list and get actions are
 """
 
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog.dsl import action, rtype
+from naas_abi_core.services.iam.catalog import PlatformAccess
 
 TYPES = (
     rtype("organization", id="singleton"),
@@ -13,7 +14,6 @@ TYPES = (
     rtype("member"),
     rtype("domain"),
     rtype("billing", id="singleton"),
-    rtype("role_features", id="singleton"),
 )
 
 ACTIONS = (
@@ -21,7 +21,7 @@ ACTIONS = (
     action("GetOrganization", "read", "organization"),
     action("CreateOrganization", "write", "organization"),
     action("UpdateOrganization", "admin", "organization"),
-    action("DeleteOrganization", "admin", "organization"),
+    action("DeleteOrganization", "admin", "organization", owner_only=True),
     # The org's full workspace catalog, every workspace and its memberships.
     action("ListOrganizationCatalog", "admin", "organization"),
     # Only the organization's owners and admins add a workspace to it.
@@ -37,6 +37,7 @@ ACTIONS = (
     action("RemoveOrganizationDomain", "admin", "domain"),
     action("GetBilling", "admin", "billing"),
     action("UpdateBilling", "admin", "billing"),
-    action("GetRoleFeatures", "admin", "role_features"),
-    action("UpdateRoleFeatures", "admin", "role_features"),
 )
+
+# Every user may create an organization (``builtin.self``).
+PLATFORM_ACCESS = (PlatformAccess(("organization/-",), self_=("CreateOrganization",)),)

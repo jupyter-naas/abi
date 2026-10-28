@@ -3,6 +3,12 @@
 ``NexusIam`` installs itself as Nexus's IAM (``runtime.configure``), so a test
 sets up memberships as the routes do (role attachments) and asserts what the
 routes then decide. Nothing here fakes a decision.
+
+No role brings a feature: a policy does. By default ``grant`` also attaches the
+features ``flags`` gave that role (``role_features``), as the policy "Features of
+<role>" an invitation carries; ``features_with_roles=False`` is the bare world,
+where a member uses no feature until a test grants one. While installed, the
+deployment's ``enabled_features`` are ``flags``'s.
 """
 
 from __future__ import annotations
@@ -14,11 +20,8 @@ from typing import Any
 
 from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz as authz_module
-from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
-from naas_abi.apps.nexus.apps.api.app.services.iam.bootstrap import (
-    feature_plan,
-    shared_repo_grants,
-)
+from naas_abi.apps.nexus.apps.api.app.services.iam import role_features, runtime
+from naas_abi.apps.nexus.apps.api.app.services.iam.bootstrap import shared_repo_grants
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import NEXUS_CATALOG
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS, Memberships
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
@@ -37,6 +40,7 @@ from naas_abi_core.services.iam import roles
 from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import IAMStoreMemory
 from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER, IAMService
 from naas_abi_core.services.iam.kernel_catalogs import register_kernel_catalogs
+from naas_abi_core.services.iam.names import scope_fields
 
 
 class NexusIam:
@@ -45,18 +49,17 @@ class NexusIam:
         flags: FeatureFlagsConfig | None = None,
         *,
         org_overlays: Mapping[str, Mapping[str, list[str]]] | None = None,
+        features_with_roles: bool = True,
     ) -> None:
+        self.flags = flags or FeatureFlagsConfig()
+        self.org_overlays = dict(org_overlays or {})
+        self.features_with_roles = features_with_roles
+        self._feature_policies: dict[tuple[str, ...], str] = {}
         self.iam = IAMService(IAMStoreMemory())
         self.iam.bootstrap()
         register_kernel_catalogs(self.iam)
         with as_service_account("engine"):
             self.iam.register_catalog(NEXUS_CATALOG)
-            self.iam.put_feature_policies(
-                feature_plan(
-                    flags or FeatureFlagsConfig(),
-                    org_overlays=org_overlays or {},
-                )
-            )
             self.iam.set_platform_grants(shared_repo_grants("abi/monorepo"))
         self.authz = authz_module.AUTHZ
 
@@ -81,6 +84,36 @@ class NexusIam:
             self.iam.attach_policy(f"builtin.{role}", principal.id, scope)
             # As MEMBERSHIPS does: an org owner or admin reaches every workspace of the org.
             Memberships.mirror_org_wide(self.iam, principal.id, scope, role)
+        if self.features_with_roles:
+            self._give_role_features(principal.id, role, scope)
+
+    def _give_role_features(self, principal_id: str, role: str, scope: str) -> None:
+        """Attach what ``role`` brought where it is held: at a workspace, and in
+        every workspace of the org for an org owner or admin (org-wide)."""
+        org, workspace = scope_fields(scope)
+        if workspace == "-":
+            if role not in ("owner", "admin"):
+                return
+            scope = f"abi:{org}:*"
+        features = role_features.role_features(
+            self.flags, None if org == NO_ORG else org, self.org_overlays
+        ).get(role, ())
+        if features:
+            self.give_features(principal_id, features, scope)
+
+    def give_features(self, principal_id: str, features: Sequence[str], scope: str) -> str:
+        """Attach to a principal, at ``scope``, a policy allowing ``features``
+        (one platform policy per set of features). Returns its id."""
+        key = tuple(sorted(set(features)))
+        with as_service_account("engine"):
+            policy_id = self._feature_policies.get(key)
+            if policy_id is None:
+                policy_id = self.iam.create_policy(
+                    f"Features {', '.join(key)}", role_features.policy_document(key)
+                ).id
+                self._feature_policies[key] = policy_id
+            self.iam.attach_policy(policy_id, principal_id, scope)
+        return policy_id
 
     def allow(
         self, user_id: str, actions: Sequence[str], resources: Sequence[str], scope: str
@@ -129,8 +162,12 @@ class NexusIam:
             self.iam.attach_policy(roles.PLATFORM_ADMIN, principal.id)
 
     def user(self, user_id: str) -> None:
+        self.principal(user_id)
+
+    def principal(self, user_id: str) -> str:
+        """The IAM principal of a Nexus user id, made on first sight."""
         with as_service_account("api"):
-            self.iam.ensure_user(LEGACY_NEXUS_ISSUER, user_id, provider="nexus")
+            return self.iam.ensure_user(LEGACY_NEXUS_ISSUER, user_id, provider="nexus").id
 
     @staticmethod
     def context(user_id: str | None) -> CallContext:
@@ -144,14 +181,21 @@ class NexusIam:
 
     @contextmanager
     def installed(self) -> Iterator[NexusIam]:
-        """Make this Nexus's IAM; the org cache of the authorizer starts empty."""
+        """Make this Nexus's IAM, and ``flags`` the deployment's features; the
+        org cache of the authorizer starts empty."""
+        from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+
         previous = runtime.configure(lambda: self.iam)
+        live = live_settings()
+        previous_flags = live.feature_flags
+        live.feature_flags = self.flags
         self.authz._orgs.clear()
         try:
             with use_call_context(self.context(None)):
                 yield self
         finally:
             self.authz._orgs.clear()
+            live.feature_flags = previous_flags
             runtime.configure(previous)
 
 

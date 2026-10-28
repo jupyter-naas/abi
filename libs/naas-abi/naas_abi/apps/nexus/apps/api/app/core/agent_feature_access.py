@@ -1,7 +1,7 @@
 """Feature office agents: workspace roster + per-caller visibility.
 
 On sync, naas_abi office agents are enabled when their Nexus feature is on
-for the workspace (union across roles). That keeps ``agent_configs`` aligned
+for the workspace (enabled, within its set). That keeps ``agent_configs`` aligned
 with Apps, Search, Ontology, and the other sections without listing every
 office agent in YAML.
 
@@ -44,9 +44,8 @@ async def caller_feature_flags(
     """Whether the caller may use each of ``keys`` in this workspace, from IAM.
 
     IAM's ``UseFeature`` is what the workspace listing sends the frontend (the
-    deployment's ``role_baseline``, the org overlay, the sets, any policy
-    granting a feature), so the agents a user is offered match the sections they
-    can open.
+    policies granting a feature, within the sets), so the agents a user is
+    offered match the sections they can open.
     """
     return {
         key: await authz.allowed("UseFeature", user=user, workspace=workspace_id, id=key)
@@ -54,57 +53,25 @@ async def caller_feature_flags(
     }
 
 
-async def _workspace_feature_inputs(
-    db: object,
-    workspace_id: str,
-) -> tuple[str | None, Mapping[str, list[str]] | None]:
-    from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
-    from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
-        OrganizationSecondaryAdapterPostgres,
+async def workspace_union_feature_flags(db: object, workspace_id: str) -> dict[str, bool]:
+    """Features the workspace offers (for agent sync): the deployment's enabled
+    ones within its set. Who uses one is a policy's, decided per caller."""
+    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
+        KNOWN_FEATURE_KEYS,
+        offered_features,
     )
-    from naas_abi.apps.nexus.apps.api.app.services.organizations.service import OrganizationService
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+    from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
+    from naas_abi.apps.nexus.apps.api.app.services.iam.sets import effective_features_async
     from sqlalchemy import select
 
     result = await db.execute(  # type: ignore[attr-defined]
         select(WorkspaceModel.organization_id).where(WorkspaceModel.id == workspace_id)
     )
     row = result.one_or_none()
-    organization_id = row[0] if row else None
-
-    org_baseline = None
-    if organization_id:
-        org_service = OrganizationService(adapter=OrganizationSecondaryAdapterPostgres(db=db))
-        record = await org_service.get_role_features(org_id=organization_id)
-        org_baseline = record.role_baseline if record is not None else None
-
-    return organization_id, org_baseline
-
-
-async def workspace_union_feature_flags(db: object, workspace_id: str) -> dict[str, bool]:
-    """Features any baseline role may use in this workspace, within its set (for
-    agent sync)."""
-    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
-        BASELINE_ROLES,
-        KNOWN_FEATURE_KEYS,
-        build_feature_flags,
-    )
-    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
-    from naas_abi.apps.nexus.apps.api.app.services.iam.sets import effective_features_async
-
-    organization_id, org_baseline = await _workspace_feature_inputs(db, workspace_id)
-    feature_set = await effective_features_async(organization_id, workspace_id)
-    merged = dict.fromkeys(KNOWN_FEATURE_KEYS, False)
-    for role in BASELINE_ROLES:
-        flags = build_feature_flags(
-            role=role,
-            feature_flags_config=live_settings().feature_flags,
-            organization_id=organization_id,
-            organization_override=org_baseline,
-            feature_set=feature_set,
-        )
-        for key, value in flags.items():
-            merged[key] = merged.get(key, False) or bool(value)
-    return merged
+    feature_set = await effective_features_async(row[0] if row else None, workspace_id)
+    offered = set(offered_features(live_settings().feature_flags, feature_set))
+    return {key: key in offered for key in KNOWN_FEATURE_KEYS}
 
 
 def feature_office_class_names_for_flags(

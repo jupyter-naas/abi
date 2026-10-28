@@ -334,13 +334,14 @@ class _NoStore:
 
 
 async def _prepare_iam() -> None:
-    """Register the ``nexus`` catalog and feature policies, then move the role
-    data and the workspace feature overrides Nexus kept itself into IAM and give
-    org owners and admins their organization-wide role. Without an IAM service every Nexus
-    decision is a refusal, so the failure is logged loudly and boot goes on."""
+    """Register the ``nexus`` catalog, then move the role data and the workspace
+    feature overrides Nexus kept itself into IAM, give org owners and admins
+    their organization-wide role, and move the features roles brought into each
+    workspace's policies. Without an IAM service every Nexus decision is a
+    refusal, so the failure is logged loudly and boot goes on."""
     from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
     from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
-    from naas_abi.apps.nexus.apps.api.app.services.iam import bootstrap, sets
+    from naas_abi.apps.nexus.apps.api.app.services.iam import bootstrap, role_features, sets
     from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
     from naas_abi.apps.nexus.apps.api.app.services.visibility import factory as visibility
 
@@ -350,7 +351,7 @@ async def _prepare_iam() -> None:
     visibility.install()
     try:
         async with AsyncSessionLocal() as db:
-            await bootstrap.register_catalog(db, live_settings().feature_flags)
+            await bootstrap.register_catalog()
             report = await bootstrap.migrate_role_data(db)
             if report.applied:
                 log.info("Role data moved into IAM: %s", report)
@@ -366,6 +367,14 @@ async def _prepare_iam() -> None:
             made = await MEMBERSHIPS.sync_org_wide_roles()
             if made:
                 log.info("Organization-wide roles given to %d owner(s) and admin(s)", made)
+            # No role brings a feature: what each role had in each workspace
+            # becomes that workspace's policy, once, for who holds the role there
+            # (after the org-wide roles above, which brought them too).
+            try:
+                await role_features.migrate_role_features(db, live_settings().feature_flags)
+            except Exception:
+                await db.rollback()
+                log.exception("The role features were not moved into workspace policies")
     except Exception:
         log.exception("Nexus could not set up its authorization in IAM: every request is refused")
 

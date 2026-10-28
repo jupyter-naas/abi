@@ -210,15 +210,6 @@ class OrganizationDomainCreateInput:
     created_at: datetime | None = None
 
 
-@dataclass
-class OrganizationRoleFeaturesRecord:
-    organization_id: str
-    role_baseline: dict[str, list[str]]
-    updated_by: str | None = None
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
-
-
 class OrganizationPermissionPort(ABC):
     """The organizations Nexus keeps. Who belongs to them and with which role is
     IAM's (``services/iam/memberships``), not this port's."""
@@ -347,20 +338,4 @@ class OrganizationPermissionPort(ABC):
         self, org_id: str, domain_id: str, provider: str | None
     ) -> OrganizationDomainRecord | None:
         """Route the domain's logins to ``provider`` (None: the default provider)."""
-        raise NotImplementedError
-
-    @abstractmethod
-    async def get_organization_role_features(
-        self, org_id: str
-    ) -> OrganizationRoleFeaturesRecord | None:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def upsert_organization_role_features(
-        self,
-        org_id: str,
-        role_baseline: dict[str, list[str]],
-        updated_by: str | None,
-        now: datetime,
-    ) -> OrganizationRoleFeaturesRecord:
         raise NotImplementedError
